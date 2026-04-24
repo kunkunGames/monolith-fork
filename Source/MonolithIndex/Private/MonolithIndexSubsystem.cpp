@@ -53,7 +53,7 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Database = MakeUnique<FMonolithIndexDatabase>();
 	FString DbPath = GetDatabasePath();
 
-	if (!Database->Open(DbPath))
+	if (!OpenWriteDatabase())
 	{
 		UE_LOG(LogMonolithIndex, Error, TEXT("Failed to open index database at %s"), *DbPath);
 		return;
@@ -214,6 +214,13 @@ void UMonolithIndexSubsystem::StartFullIndex()
 	bIsIndexing = true;
 	CloseQueryDatabase();
 
+	if (!OpenWriteDatabase())
+	{
+		UE_LOG(LogMonolithIndex, Error, TEXT("Failed to open index database for full indexing"));
+		bIsIndexing = false;
+		return;
+	}
+
 	// Reset the database for a full re-index
 	Database->ResetDatabase();
 
@@ -264,11 +271,7 @@ bool UMonolithIndexSubsystem::OpenQueryDatabase()
 		return false;
 	}
 
-	if (Database.IsValid() && Database->IsOpen())
-	{
-		// Finalize cached writer statements before opening an independent read-only snapshot.
-		Database->ClearStatementCache();
-	}
+	CloseWriteDatabase();
 
 	QueryDatabase = MakeUnique<FMonolithIndexDatabase>();
 	if (!QueryDatabase->OpenForQuery(DbPath))
@@ -285,6 +288,31 @@ void UMonolithIndexSubsystem::CloseQueryDatabase()
 	{
 		QueryDatabase->Close();
 		QueryDatabase.Reset();
+	}
+}
+
+bool UMonolithIndexSubsystem::OpenWriteDatabase()
+{
+	if (!Database.IsValid())
+	{
+		Database = MakeUnique<FMonolithIndexDatabase>();
+	}
+	if (Database->IsOpen())
+	{
+		return true;
+	}
+
+	CloseQueryDatabase();
+
+	const FString DbPath = GetDatabasePath();
+	return Database->Open(DbPath);
+}
+
+void UMonolithIndexSubsystem::CloseWriteDatabase()
+{
+	if (Database.IsValid() && Database->IsOpen())
+	{
+		Database->Close();
 	}
 }
 
@@ -305,6 +333,11 @@ FMonolithIndexDatabase* UMonolithIndexSubsystem::GetQueryDatabaseForRead()
 		return Database.Get();
 	}
 	return nullptr;
+}
+
+FMonolithIndexDatabase* UMonolithIndexSubsystem::GetDatabase()
+{
+	return GetQueryDatabaseForRead();
 }
 
 // ============================================================
@@ -1245,6 +1278,14 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 	CloseQueryDatabase();
 	UnregisterLiveCallbacks();
 
+	if (!OpenWriteDatabase())
+	{
+		UE_LOG(LogMonolithIndex, Error, TEXT("Failed to open index database for incremental indexing"));
+		bIsIndexing = false;
+		RegisterLiveCallbacks();
+		return;
+	}
+
 	IndexedPlugins = GatherMarketplacePluginPaths();
 
 	UE_LOG(LogMonolithIndex, Log, TEXT("Starting incremental index..."));
@@ -1635,8 +1676,12 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 	TArray<FPendingIndexChange> RawChanges = MoveTemp(PendingChanges);
 	PendingChanges.Reset();
 
-	if (!Database || !Database->IsOpen()) return;
 	CloseQueryDatabase();
+	if (!OpenWriteDatabase())
+	{
+		PendingChanges.Append(MoveTemp(RawChanges));
+		return;
+	}
 
 	// DEDUP: Collapse multiple changes to same path
 	TMap<FName, int32> PathToLastIndex;

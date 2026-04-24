@@ -69,8 +69,8 @@ public:
 	/** Get current indexing status message */
 	FString GetStatusMessage() const { return IndexingStatusMessage; }
 
-	/** Get the database (for queries). May be null if not initialized. */
-	FMonolithIndexDatabase* GetDatabase() { return Database.Get(); }
+	/** Get the query database. May be null if the index is unavailable. */
+	FMonolithIndexDatabase* GetDatabase();
 
 	// --- Query API (called by MCP actions) ---
 	TArray<FSearchResult> Search(const FString& Query, int32 Limit = 50);
@@ -113,6 +113,8 @@ private:
 	bool ShouldAutoIndex() const;
 	bool OpenQueryDatabase();
 	void CloseQueryDatabase();
+	bool OpenWriteDatabase();
+	void CloseWriteDatabase();
 	FMonolithIndexDatabase* GetQueryDatabaseForRead();
 
 	/** Gather mount paths for enabled marketplace plugins */

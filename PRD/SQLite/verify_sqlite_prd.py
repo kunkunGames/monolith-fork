@@ -49,6 +49,15 @@ def test_query_connection_uses_stable_database_file() -> None:
         fail("Query DB open must reject missing or zero-byte index files before read-only open.")
     if "ClearStatementCache" not in header + db_source + source:
         fail("Writer prepared statements must be releasable before opening the read-only query connection.")
+    if "CloseWriteDatabase();" not in source:
+        fail("Writer connection must close before opening the read-only query database.")
+    if (
+        "FMonolithIndexDatabase* UMonolithIndexSubsystem::GetDatabase()" not in source
+        or "return GetQueryDatabaseForRead();" not in source
+    ):
+        fail("Public GetDatabase() must expose the query connection, not the writer connection.")
+    if "OpenWriteDatabase()" not in source:
+        fail("Indexing and live updates must reopen the writer connection explicitly.")
 
 
 def test_full_text_search_uses_single_comparable_score() -> None:
