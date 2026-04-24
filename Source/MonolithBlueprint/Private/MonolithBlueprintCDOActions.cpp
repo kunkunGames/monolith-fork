@@ -10,6 +10,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "JsonObjectConverter.h"
 #include "ScopedTransaction.h"
+#include "MonolithBlueprintEditCradle.h"
 
 // --- Registration ---
 
@@ -408,11 +409,10 @@ FMonolithActionResult FMonolithBlueprintCDOActions::HandleSetCDOProperty(const T
 		}
 	}
 
-	// --- Fire the post-edit notification chain (this is what registers the change with
-	//     FOverridableManager and OnObjectModified — load-bearing for #29 fix) ---
-	FPropertyChangedEvent ChangedEvent(Prop, EPropertyChangeType::ValueSet);
-	FPropertyChangedChainEvent ChangedChainEvent(PropertyChain, ChangedEvent);
-	TargetObject->PostEditChangeChainProperty(ChangedChainEvent);
+	// Recursive cradle: fires PostEditChangeChainProperty for every nested
+	// sub-property that contains an object reference, ensuring FOverridableManager
+	// marks each inner TObjectPtr as overridden.
+	MonolithEditCradle::FireFullCradle(TargetObject, Prop);
 
 	// --- Read back new value for confirmation ---
 	FString NewValue;

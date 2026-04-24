@@ -21,7 +21,10 @@ public class MonolithCore : ModuleRules
 			"Projects",
 			"AssetRegistry",
 			"EditorSubsystem",
-			"UnrealEd"
+			"UnrealEd",
+			"SQLiteCore",
+			"Sockets",       // TCP probe for port bind verification
+			"Networking"     // Socket address utilities
 		});
 	}
 }

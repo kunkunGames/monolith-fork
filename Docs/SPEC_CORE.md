@@ -1,6 +1,6 @@
 # Monolith — Technical Specification
 
-**Version:** 0.14.1 (Beta)
+**Version:** 0.14.3 (Beta)
 **Wiki:** https://github.com/tumourlove/monolith/wiki
 **Engine:** Unreal Engine 5.7+
 **Platform:** Windows, macOS, Linux
@@ -12,7 +12,7 @@
 
 ## 1. Overview
 
-Monolith is a unified Unreal Engine editor plugin that consolidates 9 separate MCP (Model Context Protocol) servers and 4 C++ plugins into a single plugin with an embedded HTTP MCP server. It reduces ~220 individual tools down to 19 MCP tools (1226 total actions across 16 domains; 1181 active by default — 45 experimental town gen actions disabled), cutting AI assistant context consumption by ~95%. A CommonUI action pack (~50 actions, conditional on `WITH_COMMONUI`) is planned for a future release.
+Monolith is a unified Unreal Engine editor plugin that consolidates 9 separate MCP (Model Context Protocol) servers and 4 C++ plugins into a single plugin with an embedded HTTP MCP server. It reduces ~220 individual tools down to 19 MCP tools (1227 total actions across 16 domains; 1182 active by default — 45 experimental town gen actions disabled), cutting AI assistant context consumption by ~95%. A CommonUI action pack (~50 actions, conditional on `WITH_COMMONUI`) is planned for a future release.
 
 ### What It Replaces
 
@@ -34,10 +34,10 @@ Monolith is a unified Unreal Engine editor plugin that consolidates 9 separate M
 
 ```
 Monolith.uplugin
-  MonolithCore          — HTTP server, tool registry, discovery, settings, auto-updater
+  MonolithCore          — HTTP server (bind retry with port probe, Restart()), tool registry, discovery, settings, auto-updater
   MonolithBlueprint     — Blueprint inspection, variable/component/graph CRUD, node operations, compile, spawn (89 actions)
   MonolithMaterial      — Material inspection + graph editing + CRUD + function suite + tiling quality + texture preview (63 actions)
-  MonolithAnimation     — Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch (115 actions)
+  MonolithAnimation     — Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch (116 actions)
   MonolithNiagara       — Niagara particle systems, HLSL module/function creation, DI config, event handlers, sim stages, NPC, effect types, scalability (108 actions)
   MonolithEditor        — Build triggers, live compile, log capture, compile output, crash context, scene capture, texture import, GIF capture (20 actions)
   MonolithConfig        — Config/INI resolution and search (6 actions)
@@ -68,6 +68,7 @@ All domain modules register actions with `FMonolithToolRegistry` (central single
 - **Protocol version:** Echoes client's requested version; supports both `2024-11-05` and `2025-03-26` (defaults to `2025-03-26`)
 - **Transport:** HTTP with JSON-RPC 2.0 (POST for requests, GET for SSE stub, OPTIONS for CORS). Transport type in `.mcp.json` varies by client: `"http"` for Claude Code, `"streamableHttp"` for Cursor/Cline
 - **Endpoint:** `http://localhost:{port}/mcp` (default port 9316)
+- **Bind retry:** `FMonolithHttpServer::Start()` attempts up to 5 binds with exponential backoff and TCP port probe before failing. `Restart()` method available for runtime recovery. Console command: `Monolith.Restart`
 - **Batch support:** Yes (JSON-RPC arrays)
 - **Session management:** None — server is fully stateless (session tracking removed; no per-session state was ever stored)
 - **CORS:** `Access-Control-Allow-Origin: *`
@@ -89,6 +90,8 @@ All domain modules register actions with `FMonolithToolRegistry` (central single
 - IKRig
 - ControlRig
 - RigVM
+- Sockets
+- Networking
 - GeometryScripting (optional — enables Tier 5 mesh operations)
 - GameplayAbilities (optional — enables MonolithGAS module; `#if WITH_GBA` compile guard)
 
@@ -114,10 +117,10 @@ Each module has its own spec file under `specs/`. The table below is the index.
 
 | # | Module | Spec | Summary |
 |---|--------|------|---------|
-| 3.1 | MonolithCore | [specs/SPEC_MonolithCore.md](specs/SPEC_MonolithCore.md) | HTTP server, tool registry, discovery, settings, auto-updater |
+| 3.1 | MonolithCore | [specs/SPEC_MonolithCore.md](specs/SPEC_MonolithCore.md) | HTTP server (bind retry, Restart(), `Monolith.Restart` console cmd), tool registry, discovery, settings, auto-updater |
 | 3.2 | MonolithBlueprint | [specs/SPEC_MonolithBlueprint.md](specs/SPEC_MonolithBlueprint.md) | Blueprint inspection, variable/component/graph CRUD, node ops, compile, spawn (89 actions) |
 | 3.3 | MonolithMaterial | [specs/SPEC_MonolithMaterial.md](specs/SPEC_MonolithMaterial.md) | Material inspection + graph editing + CRUD + function suite (63 actions) |
-| 3.4 | MonolithAnimation | [specs/SPEC_MonolithAnimation.md](specs/SPEC_MonolithAnimation.md) | Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch (115 actions) |
+| 3.4 | MonolithAnimation | [specs/SPEC_MonolithAnimation.md](specs/SPEC_MonolithAnimation.md) | Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch (116 actions) |
 | 3.5 | MonolithNiagara | [specs/SPEC_MonolithNiagara.md](specs/SPEC_MonolithNiagara.md) | Niagara particle systems, HLSL module/function, DI config, event handlers, sim stages (108 actions) |
 | 3.6 | MonolithEditor | [specs/SPEC_MonolithEditor.md](specs/SPEC_MonolithEditor.md) | Build triggers, live compile, log capture, crash context, scene capture (20 actions) |
 | 3.7 | MonolithConfig | [specs/SPEC_MonolithConfig.md](specs/SPEC_MonolithConfig.md) | Config/INI resolution and search (6 actions) |
@@ -255,7 +258,7 @@ python Saved/monolith_offline.py <namespace> <action> [args...]
 
 | Skill | Trigger Words | Entry Point | Actions |
 |-------|--------------|-------------|---------|
-| unreal-animation | animation, montage, ABP, blend space, notify, curves, compression, PoseSearch | `animation_query()` | 115 |
+| unreal-animation | animation, montage, ABP, blend space, notify, curves, compression, PoseSearch | `animation_query()` | 116 |
 | unreal-audio | audio, sound, SoundCue, MetaSound, attenuation, submix, mixing | `audio_query()` | 81 |
 | unreal-blueprints | Blueprint, BP, event graph, node, variable | `blueprint_query()` | 86 |
 | unreal-build | build, compile, Live Coding, hot reload, rebuild | `editor_query()` | 19 |
@@ -440,7 +443,7 @@ See `TODO.md` for the full list. Key architectural constraints:
 | MonolithCore | monolith | 4 |
 | MonolithBlueprint | blueprint | 89 |
 | MonolithMaterial | material | 63 |
-| MonolithAnimation | animation | 115 |
+| MonolithAnimation | animation | 116 |
 | MonolithNiagara | niagara | 108 |
 | MonolithMesh | mesh | 242 (197 core + 45 experimental town gen) |
 | MonolithEditor | editor | 20 |
@@ -454,7 +457,7 @@ See `TODO.md` for the full list. Key architectural constraints:
 | MonolithLogicDriver | logicdriver | 66 |
 | MonolithAudio | audio | 81 |
 | MonolithBABridge | — | 0 (integration only) |
-| **Total** | | **1226** (1181 active by default) |
+| **Total** | | **1227** (1182 active by default) |
 
 **Note:** MonolithMesh includes 197 core actions (always registered) plus 45 experimental Procedural Town Generator actions (registered only when `bEnableProceduralTownGen = true`, default: false — known geometry issues). MonolithGAS is conditional on `#if WITH_GBA` — projects without GameplayAbilities register 0 GAS actions. MonolithComboGraph is conditional on `#if WITH_COMBOGRAPH` — projects without the ComboGraph plugin register 0 combograph actions. MonolithAI is conditional on `#if WITH_STATETREE` + `#if WITH_SMARTOBJECTS` — projects without these register 0 AI actions. MonolithLogicDriver is conditional on `#if WITH_LOGICDRIVER` — projects without Logic Driver Pro register 0 logicdriver actions. MonolithAudio MetaSound actions are conditional on `#if WITH_METASOUND` — projects without MetaSound get Sound Cue + CRUD + batch actions but no MetaSound graph building. MonolithBABridge registers no MCP actions — it only provides the `IMonolithGraphFormatter` IModularFeatures bridge consumed by `auto_layout` in the blueprint, material, animation, and niagara modules. The original Python server had higher tool counts (~231 tools) due to fragmented action design — Monolith consolidates these into 19 MCP tools with namespaced actions.
 
