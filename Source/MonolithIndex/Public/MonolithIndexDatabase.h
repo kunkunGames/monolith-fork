@@ -164,6 +164,9 @@ public:
 	/** Is the database currently open? */
 	bool IsOpen() const;
 
+	/** Release cached prepared statements without closing the database connection. */
+	void ClearStatementCache();
+
 	/** Wipe all data and recreate tables (for full re-index) */
 	bool ResetDatabase();
 

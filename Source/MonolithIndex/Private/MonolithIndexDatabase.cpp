@@ -423,6 +423,11 @@ bool FMonolithIndexDatabase::IsOpen() const
 	return Database != nullptr && Database->IsValid();
 }
 
+void FMonolithIndexDatabase::ClearStatementCache()
+{
+	StatementCache.Clear();
+}
+
 bool FMonolithIndexDatabase::ResetDatabase()
 {
 	if (!IsOpen()) return false;

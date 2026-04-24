@@ -256,8 +256,22 @@ bool UMonolithIndexSubsystem::OpenQueryDatabase()
 
 	CloseQueryDatabase();
 
+	const FString DbPath = GetDatabasePath();
+	const int64 DbFileSize = IFileManager::Get().FileSize(*DbPath);
+	if (DbFileSize <= 0)
+	{
+		UE_LOG(LogMonolithIndex, Warning, TEXT("Skipping query DB open because index DB is not ready: %s"), *DbPath);
+		return false;
+	}
+
+	if (Database.IsValid() && Database->IsOpen())
+	{
+		// Finalize cached writer statements before opening an independent read-only snapshot.
+		Database->ClearStatementCache();
+	}
+
 	QueryDatabase = MakeUnique<FMonolithIndexDatabase>();
-	if (!QueryDatabase->OpenForQuery(GetDatabasePath()))
+	if (!QueryDatabase->OpenForQuery(DbPath))
 	{
 		QueryDatabase.Reset();
 		return false;
@@ -1180,11 +1194,19 @@ void UMonolithIndexSubsystem::OnIndexingFinished(bool bSuccess)
 FString UMonolithIndexSubsystem::GetDatabasePath() const
 {
 	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Monolith"));
+	FString DbPath;
 	if (Plugin.IsValid())
 	{
-		return Plugin->GetBaseDir() / TEXT("Saved") / TEXT("ProjectIndex.db");
+		DbPath = Plugin->GetBaseDir() / TEXT("Saved") / TEXT("ProjectIndex.db");
 	}
-	return FPaths::ProjectPluginsDir() / TEXT("Monolith") / TEXT("Saved") / TEXT("ProjectIndex.db");
+	else
+	{
+		DbPath = FPaths::ProjectPluginsDir() / TEXT("Monolith") / TEXT("Saved") / TEXT("ProjectIndex.db");
+	}
+
+	DbPath = FPaths::ConvertRelativePathToFull(DbPath);
+	FPaths::NormalizeFilename(DbPath);
+	return DbPath;
 }
 
 bool UMonolithIndexSubsystem::ShouldAutoIndex() const

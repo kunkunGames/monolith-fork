@@ -36,6 +36,21 @@ def test_query_connection_is_read_only() -> None:
         fail("Search() must route through the resolved query-only connection when available.")
 
 
+def test_query_connection_uses_stable_database_file() -> None:
+    header = read("Source/MonolithIndex/Public/MonolithIndexDatabase.h")
+    source = read("Source/MonolithIndex/Private/MonolithIndexSubsystem.cpp")
+    db_source = read("Source/MonolithIndex/Private/MonolithIndexDatabase.cpp")
+    core_source = read("Source/MonolithCore/Private/MonolithSQLitePragmaPolicy.cpp")
+    if "ConvertRelativePathToFull" not in source or "NormalizeFilename" not in source:
+        fail("Project index path must be absolute and normalized before SQLite open.")
+    if "ConvertRelativePathToFull" not in core_source or "NormalizeFilename" not in core_source:
+        fail("Shared SQLite open helper must normalize paths before FSQLiteDatabase::Open().")
+    if "FileSize(*DbPath)" not in source:
+        fail("Query DB open must reject missing or zero-byte index files before read-only open.")
+    if "ClearStatementCache" not in header + db_source + source:
+        fail("Writer prepared statements must be releasable before opening the read-only query connection.")
+
+
 def test_full_text_search_uses_single_comparable_score() -> None:
     source = read("Source/MonolithIndex/Private/MonolithIndexDatabase.cpp")
     match = re.search(
@@ -132,6 +147,7 @@ def test_sqlite_fts_smoke() -> None:
 def main() -> int:
     tests = [
         test_query_connection_is_read_only,
+        test_query_connection_uses_stable_database_file,
         test_full_text_search_uses_single_comparable_score,
         test_persistent_statement_cache_present,
         test_available_ram_caps_pragma_preset,

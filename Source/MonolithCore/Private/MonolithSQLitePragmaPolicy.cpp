@@ -142,26 +142,29 @@ bool OpenMonolithSQLiteDatabase(
 	const FMonolithSQLiteOpenPolicy& Policy,
 	FMonolithSQLiteTuningResult* OutObserved)
 {
+	FString DbPath = FPaths::ConvertRelativePathToFull(Path);
+	FPaths::NormalizeFilename(DbPath);
+
 	FMonolithSQLiteTuningResult Observed;
 	Observed.OpenMode = GetMonolithSQLiteOpenMode(Policy.Intent);
 
 	const bool bWriteCapable = Observed.OpenMode != ESQLiteDatabaseOpenMode::ReadOnly;
 	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-	Observed.bFreshDatabase = !PlatformFile.FileExists(*Path);
+	Observed.bFreshDatabase = !PlatformFile.FileExists(*DbPath);
 
 	if (Observed.OpenMode == ESQLiteDatabaseOpenMode::ReadWriteCreate)
 	{
-		const FString Dir = FPaths::GetPath(Path);
+		const FString Dir = FPaths::GetPath(DbPath);
 		if (!Dir.IsEmpty() && !PlatformFile.DirectoryExists(*Dir))
 		{
 			PlatformFile.CreateDirectoryTree(*Dir);
 		}
 	}
 
-	if (!Database.Open(*Path, Observed.OpenMode))
+	if (!Database.Open(*DbPath, Observed.OpenMode))
 	{
 		UE_LOG(LogMonolith, Error, TEXT("Failed to open SQLite database: mode=%s path=%s error=%s"),
-			LexOpenMode(Observed.OpenMode), *Path, *Database.GetLastError());
+			LexOpenMode(Observed.OpenMode), *DbPath, *Database.GetLastError());
 		if (OutObserved)
 		{
 			*OutObserved = Observed;
@@ -211,7 +214,7 @@ bool OpenMonolithSQLiteDatabase(
 				Observed.bApplicationIdStamped = Database.SetApplicationId(MonolithSQLiteApplicationId);
 				if (!Observed.bApplicationIdStamped)
 				{
-					UE_LOG(LogMonolith, Warning, TEXT("SQLite legacy application_id stamp failed: %s"), *Path);
+					UE_LOG(LogMonolith, Warning, TEXT("SQLite legacy application_id stamp failed: %s"), *DbPath);
 				}
 				else
 				{
@@ -221,13 +224,13 @@ bool OpenMonolithSQLiteDatabase(
 			else
 			{
 				Observed.bLegacyApplicationIdPendingStamp = true;
-				UE_LOG(LogMonolith, Display, TEXT("SQLite legacy application_id pending writable open: %s"), *Path);
+				UE_LOG(LogMonolith, Display, TEXT("SQLite legacy application_id pending writable open: %s"), *DbPath);
 			}
 		}
 		else if (ApplicationId != MonolithSQLiteApplicationId)
 		{
 			UE_LOG(LogMonolith, Error, TEXT("Refusing foreign SQLite database: path=%s application_id=0x%08x expected=0x%08x"),
-				*Path, ApplicationId, MonolithSQLiteApplicationId);
+				*DbPath, ApplicationId, MonolithSQLiteApplicationId);
 			Database.Close();
 			if (OutObserved)
 			{
@@ -243,7 +246,7 @@ bool OpenMonolithSQLiteDatabase(
 		Observed.bIntegrityOk = Database.PerformQuickIntegrityCheck();
 		if (!Observed.bIntegrityOk)
 		{
-			UE_LOG(LogMonolith, Warning, TEXT("SQLite quick_check failed: %s"), *Path);
+			UE_LOG(LogMonolith, Warning, TEXT("SQLite quick_check failed: %s"), *DbPath);
 			Database.Close();
 			if (OutObserved)
 			{
