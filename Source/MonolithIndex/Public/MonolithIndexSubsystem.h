@@ -111,6 +111,9 @@ private:
 	void RegisterDefaultIndexers();
 	FString GetDatabasePath() const;
 	bool ShouldAutoIndex() const;
+	bool OpenQueryDatabase();
+	void CloseQueryDatabase();
+	FMonolithIndexDatabase* GetQueryDatabaseForRead();
 
 	/** Gather mount paths for enabled marketplace plugins */
 	TArray<FIndexedPluginInfo> GatherMarketplacePluginPaths() const;
@@ -148,6 +151,7 @@ private:
 	TArray<FIndexedPluginInfo> IndexedPlugins;
 
 	TUniquePtr<FMonolithIndexDatabase> Database;
+	TUniquePtr<FMonolithIndexDatabase> QueryDatabase;
 	TArray<TSharedPtr<IMonolithIndexer>> Indexers;
 	TMap<FString, TSharedPtr<IMonolithIndexer>> ClassToIndexer;
 

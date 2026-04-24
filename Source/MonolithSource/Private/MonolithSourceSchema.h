@@ -5,13 +5,13 @@
  * Must produce the EXACT same schema as Scripts/source_indexer/db/schema.py.
  *
  * Each DDL_* constant may contain multiple semicolon-separated statements.
- * Use ExecuteMulti() in MonolithSourceDatabase.cpp — FSQLiteDatabase::Execute() only
+ * Use ExecuteMonolithSQLiteMulti() — FSQLiteDatabase::Execute() only
  * runs the first statement of a multi-statement string.
  * Constants are split into logical groups so callers can execute them independently.
  */
 namespace MonolithSourceSchema
 {
-	static const int32 SchemaVersion = 1;
+	static const int32 SchemaVersion = 3;
 
 	// ----------------------------------------------------------------
 	// Core tables + indexes
@@ -47,6 +47,7 @@ namespace MonolithSourceSchema
 		TEXT("    access           TEXT,")
 		TEXT("    signature        TEXT,")
 		TEXT("    docstring        TEXT,")
+		TEXT("    search_tokens    TEXT DEFAULT '',")
 		TEXT("    is_ue_macro      INTEGER NOT NULL DEFAULT 0")
 		TEXT(");")
 
@@ -93,12 +94,16 @@ namespace MonolithSourceSchema
 	// ----------------------------------------------------------------
 	static const TCHAR* DDL_FTS =
 		TEXT("CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(")
-		TEXT("    name, qualified_name, docstring,")
-		TEXT("    content=symbols, content_rowid=id")
+		TEXT("    name, qualified_name, docstring, search_tokens,")
+		TEXT("    content=symbols, content_rowid=id,")
+		TEXT("    tokenize='unicode61 remove_diacritics 2',")
+		TEXT("    prefix='2 3 4'")
 		TEXT(");")
 
 		TEXT("CREATE VIRTUAL TABLE IF NOT EXISTS source_fts USING fts5(")
-		TEXT("    file_id UNINDEXED, line_number UNINDEXED, text")
+		TEXT("    file_id UNINDEXED, line_number UNINDEXED, text,")
+		TEXT("    tokenize='unicode61 remove_diacritics 2',")
+		TEXT("    prefix='2 3 4'")
 		TEXT(");");
 
 	// ----------------------------------------------------------------
@@ -106,19 +111,27 @@ namespace MonolithSourceSchema
 	// ----------------------------------------------------------------
 	static const TCHAR* DDL_Triggers =
 		TEXT("CREATE TRIGGER IF NOT EXISTS symbols_ai AFTER INSERT ON symbols BEGIN")
-		TEXT("    INSERT INTO symbols_fts(rowid, name, qualified_name, docstring)")
-		TEXT("    VALUES (new.id, new.name, new.qualified_name, new.docstring);")
+		TEXT("    INSERT INTO symbols_fts(rowid, name, qualified_name, docstring, search_tokens)")
+		TEXT("    VALUES (new.id, new.name, new.qualified_name, new.docstring, new.search_tokens);")
 		TEXT("END;")
 
 		TEXT("CREATE TRIGGER IF NOT EXISTS symbols_ad AFTER DELETE ON symbols BEGIN")
-		TEXT("    INSERT INTO symbols_fts(symbols_fts, rowid, name, qualified_name, docstring)")
-		TEXT("    VALUES ('delete', old.id, old.name, old.qualified_name, old.docstring);")
+		TEXT("    INSERT INTO symbols_fts(symbols_fts, rowid, name, qualified_name, docstring, search_tokens)")
+		TEXT("    VALUES ('delete', old.id, old.name, old.qualified_name, old.docstring, old.search_tokens);")
+		TEXT("END;")
+
+		TEXT("CREATE TRIGGER IF NOT EXISTS symbols_au AFTER UPDATE ON symbols BEGIN")
+		TEXT("    INSERT INTO symbols_fts(symbols_fts, rowid, name, qualified_name, docstring, search_tokens)")
+		TEXT("    VALUES ('delete', old.id, old.name, old.qualified_name, old.docstring, old.search_tokens);")
+		TEXT("    INSERT INTO symbols_fts(rowid, name, qualified_name, docstring, search_tokens)")
+		TEXT("    VALUES (new.id, new.name, new.qualified_name, new.docstring, new.search_tokens);")
 		TEXT("END;");
 
 	// ----------------------------------------------------------------
 	// DROP statements for ResetDatabase()
 	// ----------------------------------------------------------------
 	static const TCHAR* DDL_Drop =
+		TEXT("DROP TRIGGER IF EXISTS symbols_au;")
 		TEXT("DROP TRIGGER IF EXISTS symbols_ad;")
 		TEXT("DROP TRIGGER IF EXISTS symbols_ai;")
 		TEXT("DROP TABLE IF EXISTS symbols_fts;")

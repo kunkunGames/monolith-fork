@@ -43,7 +43,7 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	{
 		Database = MakeUnique<FMonolithIndexDatabase>();
 		FString DbPath = GetDatabasePath();
-		if (Database->Open(DbPath))
+		if (Database->OpenForQuery(DbPath))
 		{
 			UE_LOG(LogMonolithIndex, Log, TEXT("Commandlet mode — opened index DB read-only at %s"), *DbPath);
 		}
@@ -137,6 +137,8 @@ void UMonolithIndexSubsystem::Deinitialize()
 
 	TaskNotification.Reset();
 
+	CloseQueryDatabase();
+
 	if (Database.IsValid())
 	{
 		Database->Close();
@@ -210,6 +212,7 @@ void UMonolithIndexSubsystem::StartFullIndex()
 	}
 
 	bIsIndexing = true;
+	CloseQueryDatabase();
 
 	// Reset the database for a full re-index
 	Database->ResetDatabase();
@@ -244,38 +247,89 @@ float UMonolithIndexSubsystem::GetProgress() const
 	return static_cast<float>(IndexingTaskPtr->CurrentIndex) / static_cast<float>(IndexingTaskPtr->TotalAssets);
 }
 
+bool UMonolithIndexSubsystem::OpenQueryDatabase()
+{
+	if (bIsIndexing)
+	{
+		return false;
+	}
+
+	CloseQueryDatabase();
+
+	QueryDatabase = MakeUnique<FMonolithIndexDatabase>();
+	if (!QueryDatabase->OpenForQuery(GetDatabasePath()))
+	{
+		QueryDatabase.Reset();
+		return false;
+	}
+	return true;
+}
+
+void UMonolithIndexSubsystem::CloseQueryDatabase()
+{
+	if (QueryDatabase.IsValid())
+	{
+		QueryDatabase->Close();
+		QueryDatabase.Reset();
+	}
+}
+
+FMonolithIndexDatabase* UMonolithIndexSubsystem::GetQueryDatabaseForRead()
+{
+	if (QueryDatabase.IsValid() && QueryDatabase->IsOpen())
+	{
+		return QueryDatabase.Get();
+	}
+
+	if (!bIsIndexing && OpenQueryDatabase())
+	{
+		return QueryDatabase.Get();
+	}
+
+	if (Database.IsValid() && Database->IsOpen())
+	{
+		return Database.Get();
+	}
+	return nullptr;
+}
+
 // ============================================================
 // Query API wrappers
 // ============================================================
 
 TArray<FSearchResult> UMonolithIndexSubsystem::Search(const FString& Query, int32 Limit)
 {
-	if (!Database.IsValid() || !Database->IsOpen()) return {};
-	return Database->FullTextSearch(Query, Limit);
+	FMonolithIndexDatabase* ReadDatabase = GetQueryDatabaseForRead();
+	if (!ReadDatabase) return {};
+	return ReadDatabase->FullTextSearch(Query, Limit);
 }
 
 TSharedPtr<FJsonObject> UMonolithIndexSubsystem::FindReferences(const FString& PackagePath)
 {
-	if (!Database.IsValid() || !Database->IsOpen()) return nullptr;
-	return Database->FindReferences(PackagePath);
+	FMonolithIndexDatabase* ReadDatabase = GetQueryDatabaseForRead();
+	if (!ReadDatabase) return nullptr;
+	return ReadDatabase->FindReferences(PackagePath);
 }
 
 TArray<FIndexedAsset> UMonolithIndexSubsystem::FindByType(const FString& AssetClass, int32 Limit, int32 Offset)
 {
-	if (!Database.IsValid() || !Database->IsOpen()) return {};
-	return Database->FindByType(AssetClass, Limit, Offset);
+	FMonolithIndexDatabase* ReadDatabase = GetQueryDatabaseForRead();
+	if (!ReadDatabase) return {};
+	return ReadDatabase->FindByType(AssetClass, Limit, Offset);
 }
 
 TSharedPtr<FJsonObject> UMonolithIndexSubsystem::GetStats()
 {
-	if (!Database.IsValid() || !Database->IsOpen()) return nullptr;
-	return Database->GetStats();
+	FMonolithIndexDatabase* ReadDatabase = GetQueryDatabaseForRead();
+	if (!ReadDatabase) return nullptr;
+	return ReadDatabase->GetStats();
 }
 
 TSharedPtr<FJsonObject> UMonolithIndexSubsystem::GetAssetDetails(const FString& PackagePath)
 {
-	if (!Database.IsValid() || !Database->IsOpen()) return nullptr;
-	return Database->GetAssetDetails(PackagePath);
+	FMonolithIndexDatabase* ReadDatabase = GetQueryDatabaseForRead();
+	if (!ReadDatabase) return nullptr;
+	return ReadDatabase->GetAssetDetails(PackagePath);
 }
 
 TArray<FIndexedPluginInfo> UMonolithIndexSubsystem::GatherMarketplacePluginPaths() const
@@ -1111,6 +1165,11 @@ void UMonolithIndexSubsystem::OnIndexingFinished(bool bSuccess)
 		TaskNotification.Reset();
 	}
 
+	if (bSuccess)
+	{
+		OpenQueryDatabase();
+	}
+
 	OnComplete.Broadcast(bSuccess);
 	OnProgress.Clear();
 
@@ -1161,6 +1220,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 	check(IsInGameThread());
 	if (bIsIndexing) return;
 	bIsIndexing = true;
+	CloseQueryDatabase();
 	UnregisterLiveCallbacks();
 
 	IndexedPlugins = GatherMarketplacePluginPaths();
@@ -1293,6 +1353,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 	{
 		UE_LOG(LogMonolithIndex, Log, TEXT("No changes detected. Incremental index complete."));
 		bIsIndexing = false;
+		OpenQueryDatabase();
 		RegisterLiveCallbacks();
 		return;
 	}
@@ -1409,6 +1470,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 
 	UE_LOG(LogMonolithIndex, Log, TEXT("Incremental index complete."));
 	bIsIndexing = false;
+	OpenQueryDatabase();
 	RegisterLiveCallbacks();
 }
 
@@ -1552,6 +1614,7 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 	PendingChanges.Reset();
 
 	if (!Database || !Database->IsOpen()) return;
+	CloseQueryDatabase();
 
 	// DEDUP: Collapse multiple changes to same path
 	TMap<FName, int32> PathToLastIndex;
@@ -1713,4 +1776,6 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 	// Sentinels after commit (they manage own transactions)
 	if (PathsToDeepIndex.Num() > 0 || RemovedPaths.Num() > 0)
 		RunScopedSentinels(PathsToDeepIndex, RemovedPaths);
+
+	OpenQueryDatabase();
 }

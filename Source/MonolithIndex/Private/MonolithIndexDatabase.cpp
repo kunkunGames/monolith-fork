@@ -1,7 +1,9 @@
 #include "MonolithIndexDatabase.h"
+#include "MonolithSQLiteExec.h"
+#include "MonolithSQLiteMaintenance.h"
+#include "MonolithSQLitePragmaPolicy.h"
+#include "MonolithSQLiteSearchText.h"
 #include "SQLiteDatabase.h"
-#include "Misc/Paths.h"
-#include "HAL/PlatformFileManager.h"
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
 
@@ -10,7 +12,9 @@ DEFINE_LOG_CATEGORY(LogMonolithIndex);
 // ============================================================
 // Full table creation SQL
 // ============================================================
-static const TCHAR* GCreateTablesSQL = TEXT(R"SQL(
+static constexpr int32 GIndexSchemaVersion = 4;
+
+static const TCHAR* GCreateCoreTablesSQL = TEXT(R"SQL(
 
 -- Core asset table: every indexed asset
 CREATE TABLE IF NOT EXISTS assets (
@@ -20,6 +24,7 @@ CREATE TABLE IF NOT EXISTS assets (
     asset_class TEXT NOT NULL,
     module_name TEXT DEFAULT '',
     description TEXT DEFAULT '',
+    search_tokens TEXT DEFAULT '',
     file_size_bytes INTEGER DEFAULT 0,
     last_modified TEXT DEFAULT '',
     saved_hash TEXT DEFAULT '',
@@ -35,6 +40,7 @@ CREATE TABLE IF NOT EXISTS nodes (
     node_type TEXT NOT NULL,
     node_name TEXT NOT NULL,
     node_class TEXT DEFAULT '',
+    search_tokens TEXT DEFAULT '',
     properties TEXT DEFAULT '{}',
     pos_x INTEGER DEFAULT 0,
     pos_y INTEGER DEFAULT 0
@@ -152,32 +158,38 @@ CREATE TABLE IF NOT EXISTS datatable_rows (
 );
 CREATE INDEX IF NOT EXISTS idx_dt_asset ON datatable_rows(asset_id);
 
+)SQL");
+
+static const TCHAR* GCreateFtsTablesSQL = TEXT(R"SQL(
+
 -- FTS5 index over assets (name, class, description, path, module)
 CREATE VIRTUAL TABLE IF NOT EXISTS fts_assets USING fts5(
     asset_name,
     asset_class,
     description,
+    search_tokens,
     package_path,
     module_name,
     content=assets,
     content_rowid=id,
-    tokenize='porter unicode61'
+    tokenize='unicode61 remove_diacritics 2',
+    prefix='2 3 4'
 );
 
 -- FTS5 triggers to keep index in sync
 CREATE TRIGGER IF NOT EXISTS fts_assets_ai AFTER INSERT ON assets BEGIN
-    INSERT INTO fts_assets(rowid, asset_name, asset_class, description, package_path, module_name)
-    VALUES (new.id, new.asset_name, new.asset_class, new.description, new.package_path, new.module_name);
+    INSERT INTO fts_assets(rowid, asset_name, asset_class, description, search_tokens, package_path, module_name)
+    VALUES (new.id, new.asset_name, new.asset_class, new.description, new.search_tokens, new.package_path, new.module_name);
 END;
 CREATE TRIGGER IF NOT EXISTS fts_assets_ad AFTER DELETE ON assets BEGIN
-    INSERT INTO fts_assets(fts_assets, rowid, asset_name, asset_class, description, package_path, module_name)
-    VALUES ('delete', old.id, old.asset_name, old.asset_class, old.description, old.package_path, old.module_name);
+    INSERT INTO fts_assets(fts_assets, rowid, asset_name, asset_class, description, search_tokens, package_path, module_name)
+    VALUES ('delete', old.id, old.asset_name, old.asset_class, old.description, old.search_tokens, old.package_path, old.module_name);
 END;
 CREATE TRIGGER IF NOT EXISTS fts_assets_au AFTER UPDATE ON assets BEGIN
-    INSERT INTO fts_assets(fts_assets, rowid, asset_name, asset_class, description, package_path, module_name)
-    VALUES ('delete', old.id, old.asset_name, old.asset_class, old.description, old.package_path, old.module_name);
-    INSERT INTO fts_assets(rowid, asset_name, asset_class, description, package_path, module_name)
-    VALUES (new.id, new.asset_name, new.asset_class, new.description, new.package_path, new.module_name);
+    INSERT INTO fts_assets(fts_assets, rowid, asset_name, asset_class, description, search_tokens, package_path, module_name)
+    VALUES ('delete', old.id, old.asset_name, old.asset_class, old.description, old.search_tokens, old.package_path, old.module_name);
+    INSERT INTO fts_assets(rowid, asset_name, asset_class, description, search_tokens, package_path, module_name)
+    VALUES (new.id, new.asset_name, new.asset_class, new.description, new.search_tokens, new.package_path, new.module_name);
 END;
 
 -- FTS5 index over nodes (name, class, type)
@@ -185,24 +197,26 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts_nodes USING fts5(
     node_name,
     node_class,
     node_type,
+    search_tokens,
     content=nodes,
     content_rowid=id,
-    tokenize='porter unicode61'
+    tokenize='unicode61 remove_diacritics 2',
+    prefix='2 3 4'
 );
 
 CREATE TRIGGER IF NOT EXISTS fts_nodes_ai AFTER INSERT ON nodes BEGIN
-    INSERT INTO fts_nodes(rowid, node_name, node_class, node_type)
-    VALUES (new.id, new.node_name, new.node_class, new.node_type);
+    INSERT INTO fts_nodes(rowid, node_name, node_class, node_type, search_tokens)
+    VALUES (new.id, new.node_name, new.node_class, new.node_type, new.search_tokens);
 END;
 CREATE TRIGGER IF NOT EXISTS fts_nodes_ad AFTER DELETE ON nodes BEGIN
-    INSERT INTO fts_nodes(fts_nodes, rowid, node_name, node_class, node_type)
-    VALUES ('delete', old.id, old.node_name, old.node_class, old.node_type);
+    INSERT INTO fts_nodes(fts_nodes, rowid, node_name, node_class, node_type, search_tokens)
+    VALUES ('delete', old.id, old.node_name, old.node_class, old.node_type, old.search_tokens);
 END;
 CREATE TRIGGER IF NOT EXISTS fts_nodes_au AFTER UPDATE ON nodes BEGIN
-    INSERT INTO fts_nodes(fts_nodes, rowid, node_name, node_class, node_type)
-    VALUES ('delete', old.id, old.node_name, old.node_class, old.node_type);
-    INSERT INTO fts_nodes(rowid, node_name, node_class, node_type)
-    VALUES (new.id, new.node_name, new.node_class, new.node_type);
+    INSERT INTO fts_nodes(fts_nodes, rowid, node_name, node_class, node_type, search_tokens)
+    VALUES ('delete', old.id, old.node_name, old.node_class, old.node_type, old.search_tokens);
+    INSERT INTO fts_nodes(rowid, node_name, node_class, node_type, search_tokens)
+    VALUES (new.id, new.node_name, new.node_class, new.node_type, new.search_tokens);
 END;
 
 -- Metadata table for tracking index state
@@ -212,6 +226,37 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 
 )SQL");
+
+static bool MonolithIndexTableHasColumn(FSQLiteDatabase& Database, const TCHAR* TableName, const TCHAR* ColumnName)
+{
+	FSQLitePreparedStatement Stmt;
+	const FString SQL = FString::Printf(TEXT("PRAGMA table_info(%s);"), TableName);
+	if (!Stmt.Create(Database, *SQL, ESQLitePreparedStatementFlags::Persistent))
+	{
+		return false;
+	}
+
+	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		FString ExistingColumn;
+		Stmt.GetColumnValueByIndex(1, ExistingColumn);
+		if (ExistingColumn == ColumnName)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+static FString BuildIndexAssetSearchTokens(const FString& PackagePath, const FString& AssetName, const FString& AssetClass)
+{
+	return BuildMonolithSQLiteSearchText(FString::Printf(TEXT("%s %s %s"), *PackagePath, *AssetName, *AssetClass));
+}
+
+static FString BuildIndexNodeSearchTokens(const FString& NodeName, const FString& NodeClass, const FString& NodeType)
+{
+	return BuildMonolithSQLiteSearchText(FString::Printf(TEXT("%s %s %s"), *NodeName, *NodeClass, *NodeType));
+}
 
 // ============================================================
 // Constructor / Destructor
@@ -228,6 +273,11 @@ FMonolithIndexDatabase::~FMonolithIndexDatabase()
 
 bool FMonolithIndexDatabase::Open(const FString& InDbPath)
 {
+	return OpenForWrite(InDbPath);
+}
+
+bool FMonolithIndexDatabase::OpenForQuery(const FString& InDbPath)
+{
 	if (Database)
 	{
 		Close();
@@ -235,29 +285,49 @@ bool FMonolithIndexDatabase::Open(const FString& InDbPath)
 
 	DbPath = InDbPath;
 
-	// Ensure directory exists
-	FString Dir = FPaths::GetPath(DbPath);
-	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-	if (!PlatformFile.DirectoryExists(*Dir))
+	Database = new FSQLiteDatabase();
+	FMonolithSQLiteOpenPolicy Policy;
+	Policy.Intent = EMonolithSQLiteIntent::QueryOnly;
+	Policy.Role = EMonolithSQLiteConnectionRole::ReadMostly;
+	Policy.bEnableForeignKeys = false;
+	Policy.bVerifyIntegrity = false;
+	bRunOptimizeOnClose = false;
+	if (!OpenMonolithSQLiteDatabase(*Database, DbPath, Policy))
 	{
-		PlatformFile.CreateDirectoryTree(*Dir);
+		UE_LOG(LogMonolithIndex, Error, TEXT("Failed to open index database for query: %s"), *DbPath);
+		delete Database;
+		Database = nullptr;
+		return false;
 	}
 
+	UE_LOG(LogMonolithIndex, Log, TEXT("Index database opened for query: %s"), *DbPath);
+	return true;
+}
+
+bool FMonolithIndexDatabase::OpenForWrite(const FString& InDbPath)
+{
+	if (Database)
+	{
+		Close();
+	}
+
+	DbPath = InDbPath;
+
 	Database = new FSQLiteDatabase();
-	if (!Database->Open(*DbPath, ESQLiteDatabaseOpenMode::ReadWriteCreate))
+	FMonolithSQLiteOpenPolicy Policy;
+	Policy.Intent = EMonolithSQLiteIntent::CreateOrRebuild;
+	Policy.Role = EMonolithSQLiteConnectionRole::WriteHeavy;
+	Policy.bEnableForeignKeys = true;
+	Policy.bVerifyIntegrity = false;
+	bRunOptimizeOnClose = true;
+	FMonolithSQLiteTuningResult TuningResult;
+	if (!OpenMonolithSQLiteDatabase(*Database, DbPath, Policy, &TuningResult))
 	{
 		UE_LOG(LogMonolithIndex, Error, TEXT("Failed to open index database: %s"), *DbPath);
 		delete Database;
 		Database = nullptr;
 		return false;
 	}
-
-	// Force DELETE journal mode — WAL + ReadOnly on Windows silently returns 0 rows.
-	// Belt-and-suspenders: force DELETE here regardless of what the DB was created with.
-	ExecuteSQL(TEXT("PRAGMA journal_mode=DELETE;"));
-	ExecuteSQL(TEXT("PRAGMA synchronous=NORMAL;"));
-	ExecuteSQL(TEXT("PRAGMA foreign_keys=ON;"));
-	ExecuteSQL(TEXT("PRAGMA cache_size=-64000;")); // 64MB cache
 
 	if (!CreateTables())
 	{
@@ -266,10 +336,15 @@ bool FMonolithIndexDatabase::Open(const FString& InDbPath)
 		return false;
 	}
 
-	// Schema migration: v1 -> v2
+	// Schema migrations: v1/v2 -> v3
 	{
-		FString SchemaVersion = ReadMeta(TEXT("schema_version"));
-		if (SchemaVersion.IsEmpty() || FCString::Atoi(*SchemaVersion) < 2)
+		int32 HeaderSchemaVersion = 0;
+		Database->GetUserVersion(HeaderSchemaVersion);
+		const FString SchemaVersion = ReadMeta(TEXT("schema_version"));
+		const int32 MetaSchemaVersion = SchemaVersion.IsEmpty() ? 0 : FCString::Atoi(*SchemaVersion);
+		const int32 CurrentSchemaVersion = FMath::Max(HeaderSchemaVersion, MetaSchemaVersion);
+
+		if (CurrentSchemaVersion < 2)
 		{
 			// Check if saved_hash column already exists (fresh DBs have it from CreateTables)
 			bool bHasSavedHash = false;
@@ -293,12 +368,33 @@ bool FMonolithIndexDatabase::Open(const FString& InDbPath)
 				ExecuteSQL(TEXT("ALTER TABLE assets ADD COLUMN saved_hash TEXT DEFAULT '';"));
 				ExecuteSQL(TEXT("CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(saved_hash);"));
 			}
-			WriteMeta(TEXT("schema_version"), TEXT("2"));
 		}
+
+		if (!TuningResult.bFreshDatabase && CurrentSchemaVersion < GIndexSchemaVersion)
+		{
+			if (!MigrateFtsSchemaToV4())
+			{
+				UE_LOG(LogMonolithIndex, Error, TEXT("Failed to migrate index FTS schema to v%d"), GIndexSchemaVersion);
+				Close();
+				return false;
+			}
+		}
+
+		WriteMeta(TEXT("schema_version"), FString::FromInt(GIndexSchemaVersion));
+		Database->SetUserVersion(GIndexSchemaVersion);
 	}
 
 	// Ensure hash index exists (safe for both fresh and migrated DBs)
 	ExecuteSQL(TEXT("CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(saved_hash);"));
+
+	if (TuningResult.bFreshDatabase)
+	{
+		FMonolithSQLiteMaintenanceOptions MaintenanceOptions;
+		MaintenanceOptions.bRunPragmaOptimize = true;
+		MaintenanceOptions.bUseFullOptimizeScan = true;
+		RunMonolithSQLiteMaintenance(*Database, MaintenanceOptions);
+		Database->PerformQuickIntegrityCheck();
+	}
 
 	UE_LOG(LogMonolithIndex, Log, TEXT("Index database opened: %s"), *DbPath);
 	return true;
@@ -308,10 +404,18 @@ void FMonolithIndexDatabase::Close()
 {
 	if (Database)
 	{
+		StatementCache.Clear();
+		if (bRunOptimizeOnClose && Database->IsValid())
+		{
+			FMonolithSQLiteMaintenanceOptions MaintenanceOptions;
+			MaintenanceOptions.bRunPragmaOptimize = true;
+			RunMonolithSQLiteMaintenance(*Database, MaintenanceOptions);
+		}
 		Database->Close();
 		delete Database;
 		Database = nullptr;
 	}
+	bRunOptimizeOnClose = false;
 }
 
 bool FMonolithIndexDatabase::IsOpen() const
@@ -322,6 +426,8 @@ bool FMonolithIndexDatabase::IsOpen() const
 bool FMonolithIndexDatabase::ResetDatabase()
 {
 	if (!IsOpen()) return false;
+
+	StatementCache.Clear();
 
 	// Drop all tables and recreate — order matters for foreign keys
 	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_assets_ai;"));
@@ -346,7 +452,20 @@ bool FMonolithIndexDatabase::ResetDatabase()
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS meta;"));
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS assets;"));
 
-	return CreateTables();
+	const bool bCreated = CreateTables();
+	if (bCreated)
+	{
+		WriteMeta(TEXT("schema_version"), FString::FromInt(GIndexSchemaVersion));
+		Database->SetUserVersion(GIndexSchemaVersion);
+
+		FMonolithSQLiteMaintenanceOptions MaintenanceOptions;
+		MaintenanceOptions.bRunPragmaOptimize = true;
+		MaintenanceOptions.bUseFullOptimizeScan = true;
+		MaintenanceOptions.bRunIncrementalVacuum = true;
+		RunMonolithSQLiteMaintenance(*Database, MaintenanceOptions);
+		Database->PerformQuickIntegrityCheck();
+	}
+	return bCreated;
 }
 
 // ============================================================
@@ -376,18 +495,20 @@ int64 FMonolithIndexDatabase::InsertAsset(const FIndexedAsset& Asset)
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT INTO assets (package_path, asset_name, asset_class, module_name, description, file_size_bytes, last_modified, saved_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Asset.PackagePath);
-	Stmt.SetBindingValueByIndex(2, Asset.AssetName);
-	Stmt.SetBindingValueByIndex(3, Asset.AssetClass);
-	Stmt.SetBindingValueByIndex(4, Asset.ModuleName);
-	Stmt.SetBindingValueByIndex(5, Asset.Description);
-	Stmt.SetBindingValueByIndex(6, Asset.FileSizeBytes);
-	Stmt.SetBindingValueByIndex(7, Asset.LastModified);
-	Stmt.SetBindingValueByIndex(8, Asset.SavedHash);
+	const FString SearchTokens = BuildIndexAssetSearchTokens(Asset.PackagePath, Asset.AssetName, Asset.AssetClass);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertAsset"), TEXT("INSERT INTO assets (package_path, asset_name, asset_class, module_name, description, search_tokens, file_size_bytes, last_modified, saved_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, Asset.PackagePath);
+	Stmt->SetBindingValueByIndex(2, Asset.AssetName);
+	Stmt->SetBindingValueByIndex(3, Asset.AssetClass);
+	Stmt->SetBindingValueByIndex(4, Asset.ModuleName);
+	Stmt->SetBindingValueByIndex(5, Asset.Description);
+	Stmt->SetBindingValueByIndex(6, SearchTokens);
+	Stmt->SetBindingValueByIndex(7, Asset.FileSizeBytes);
+	Stmt->SetBindingValueByIndex(8, Asset.LastModified);
+	Stmt->SetBindingValueByIndex(9, Asset.SavedHash);
 
-	if (!Stmt.Execute()) return -1;
+	if (!Stmt->Execute()) return -1;
 	return Database->GetLastInsertRowId();
 }
 
@@ -395,23 +516,23 @@ TOptional<FIndexedAsset> FMonolithIndexDatabase::GetAssetByPath(const FString& P
 {
 	if (!IsOpen()) return {};
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT id, package_path, asset_name, asset_class, module_name, description, file_size_bytes, last_modified, saved_hash, indexed_at FROM assets WHERE package_path = ?;"));
-	Stmt.SetBindingValueByIndex(1, PackagePath);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetAssetByPath"), TEXT("SELECT id, package_path, asset_name, asset_class, module_name, description, file_size_bytes, last_modified, saved_hash, indexed_at FROM assets WHERE package_path = ?;"));
+	if (!Stmt) return {};
+	Stmt->SetBindingValueByIndex(1, PackagePath);
 
-	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	if (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FIndexedAsset Asset;
-		Stmt.GetColumnValueByIndex(0, Asset.Id);
-		Stmt.GetColumnValueByIndex(1, Asset.PackagePath);
-		Stmt.GetColumnValueByIndex(2, Asset.AssetName);
-		Stmt.GetColumnValueByIndex(3, Asset.AssetClass);
-		Stmt.GetColumnValueByIndex(4, Asset.ModuleName);
-		Stmt.GetColumnValueByIndex(5, Asset.Description);
-		Stmt.GetColumnValueByIndex(6, Asset.FileSizeBytes);
-		Stmt.GetColumnValueByIndex(7, Asset.LastModified);
-		Stmt.GetColumnValueByIndex(8, Asset.SavedHash);
-		Stmt.GetColumnValueByIndex(9, Asset.IndexedAt);
+		Stmt->GetColumnValueByIndex(0, Asset.Id);
+		Stmt->GetColumnValueByIndex(1, Asset.PackagePath);
+		Stmt->GetColumnValueByIndex(2, Asset.AssetName);
+		Stmt->GetColumnValueByIndex(3, Asset.AssetClass);
+		Stmt->GetColumnValueByIndex(4, Asset.ModuleName);
+		Stmt->GetColumnValueByIndex(5, Asset.Description);
+		Stmt->GetColumnValueByIndex(6, Asset.FileSizeBytes);
+		Stmt->GetColumnValueByIndex(7, Asset.LastModified);
+		Stmt->GetColumnValueByIndex(8, Asset.SavedHash);
+		Stmt->GetColumnValueByIndex(9, Asset.IndexedAt);
 		return Asset;
 	}
 	return {};
@@ -421,14 +542,14 @@ int64 FMonolithIndexDatabase::GetAssetId(const FString& PackagePath)
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT id FROM assets WHERE package_path = ?;"));
-	Stmt.SetBindingValueByIndex(1, PackagePath);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetAssetId"), TEXT("SELECT id FROM assets WHERE package_path = ?;"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, PackagePath);
 
-	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	if (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		int64 Id = 0;
-		Stmt.GetColumnValueByIndex(0, Id);
+		Stmt->GetColumnValueByIndex(0, Id);
 		return Id;
 	}
 	return -1;
@@ -448,17 +569,19 @@ int64 FMonolithIndexDatabase::InsertNode(const FIndexedNode& Node)
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT INTO nodes (asset_id, node_type, node_name, node_class, properties, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Node.AssetId);
-	Stmt.SetBindingValueByIndex(2, Node.NodeType);
-	Stmt.SetBindingValueByIndex(3, Node.NodeName);
-	Stmt.SetBindingValueByIndex(4, Node.NodeClass);
-	Stmt.SetBindingValueByIndex(5, Node.Properties);
-	Stmt.SetBindingValueByIndex(6, static_cast<int64>(Node.PosX));
-	Stmt.SetBindingValueByIndex(7, static_cast<int64>(Node.PosY));
+	const FString SearchTokens = BuildIndexNodeSearchTokens(Node.NodeName, Node.NodeClass, Node.NodeType);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertNode"), TEXT("INSERT INTO nodes (asset_id, node_type, node_name, node_class, search_tokens, properties, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?);"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, Node.AssetId);
+	Stmt->SetBindingValueByIndex(2, Node.NodeType);
+	Stmt->SetBindingValueByIndex(3, Node.NodeName);
+	Stmt->SetBindingValueByIndex(4, Node.NodeClass);
+	Stmt->SetBindingValueByIndex(5, SearchTokens);
+	Stmt->SetBindingValueByIndex(6, Node.Properties);
+	Stmt->SetBindingValueByIndex(7, static_cast<int64>(Node.PosX));
+	Stmt->SetBindingValueByIndex(8, static_cast<int64>(Node.PosY));
 
-	if (!Stmt.Execute()) return -1;
+	if (!Stmt->Execute()) return -1;
 	return Database->GetLastInsertRowId();
 }
 
@@ -467,21 +590,21 @@ TArray<FIndexedNode> FMonolithIndexDatabase::GetNodesForAsset(int64 AssetId)
 	TArray<FIndexedNode> Result;
 	if (!IsOpen()) return Result;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT id, asset_id, node_type, node_name, node_class, properties, pos_x, pos_y FROM nodes WHERE asset_id = ?;"));
-	Stmt.SetBindingValueByIndex(1, AssetId);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetNodesForAsset"), TEXT("SELECT id, asset_id, node_type, node_name, node_class, properties, pos_x, pos_y FROM nodes WHERE asset_id = ?;"));
+	if (!Stmt) return Result;
+	Stmt->SetBindingValueByIndex(1, AssetId);
 
-	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	while (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FIndexedNode Node;
-		Stmt.GetColumnValueByIndex(0, Node.Id);
-		Stmt.GetColumnValueByIndex(1, Node.AssetId);
-		Stmt.GetColumnValueByIndex(2, Node.NodeType);
-		Stmt.GetColumnValueByIndex(3, Node.NodeName);
-		Stmt.GetColumnValueByIndex(4, Node.NodeClass);
-		Stmt.GetColumnValueByIndex(5, Node.Properties);
-		Stmt.GetColumnValueByIndex(6, Node.PosX);
-		Stmt.GetColumnValueByIndex(7, Node.PosY);
+		Stmt->GetColumnValueByIndex(0, Node.Id);
+		Stmt->GetColumnValueByIndex(1, Node.AssetId);
+		Stmt->GetColumnValueByIndex(2, Node.NodeType);
+		Stmt->GetColumnValueByIndex(3, Node.NodeName);
+		Stmt->GetColumnValueByIndex(4, Node.NodeClass);
+		Stmt->GetColumnValueByIndex(5, Node.Properties);
+		Stmt->GetColumnValueByIndex(6, Node.PosX);
+		Stmt->GetColumnValueByIndex(7, Node.PosY);
 		Result.Add(MoveTemp(Node));
 	}
 	return Result;
@@ -495,15 +618,15 @@ int64 FMonolithIndexDatabase::InsertConnection(const FIndexedConnection& Conn)
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT INTO connections (source_node_id, source_pin, target_node_id, target_pin, pin_type) VALUES (?, ?, ?, ?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Conn.SourceNodeId);
-	Stmt.SetBindingValueByIndex(2, Conn.SourcePin);
-	Stmt.SetBindingValueByIndex(3, Conn.TargetNodeId);
-	Stmt.SetBindingValueByIndex(4, Conn.TargetPin);
-	Stmt.SetBindingValueByIndex(5, Conn.PinType);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertConnection"), TEXT("INSERT INTO connections (source_node_id, source_pin, target_node_id, target_pin, pin_type) VALUES (?, ?, ?, ?, ?);"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, Conn.SourceNodeId);
+	Stmt->SetBindingValueByIndex(2, Conn.SourcePin);
+	Stmt->SetBindingValueByIndex(3, Conn.TargetNodeId);
+	Stmt->SetBindingValueByIndex(4, Conn.TargetPin);
+	Stmt->SetBindingValueByIndex(5, Conn.PinType);
 
-	if (!Stmt.Execute()) return -1;
+	if (!Stmt->Execute()) return -1;
 	return Database->GetLastInsertRowId();
 }
 
@@ -512,19 +635,19 @@ TArray<FIndexedConnection> FMonolithIndexDatabase::GetConnectionsForAsset(int64 
 	TArray<FIndexedConnection> Result;
 	if (!IsOpen()) return Result;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT c.id, c.source_node_id, c.source_pin, c.target_node_id, c.target_pin, c.pin_type FROM connections c INNER JOIN nodes n ON c.source_node_id = n.id WHERE n.asset_id = ?;"));
-	Stmt.SetBindingValueByIndex(1, AssetId);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetConnectionsForAsset"), TEXT("SELECT c.id, c.source_node_id, c.source_pin, c.target_node_id, c.target_pin, c.pin_type FROM connections c INNER JOIN nodes n ON c.source_node_id = n.id WHERE n.asset_id = ?;"));
+	if (!Stmt) return Result;
+	Stmt->SetBindingValueByIndex(1, AssetId);
 
-	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	while (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FIndexedConnection Conn;
-		Stmt.GetColumnValueByIndex(0, Conn.Id);
-		Stmt.GetColumnValueByIndex(1, Conn.SourceNodeId);
-		Stmt.GetColumnValueByIndex(2, Conn.SourcePin);
-		Stmt.GetColumnValueByIndex(3, Conn.TargetNodeId);
-		Stmt.GetColumnValueByIndex(4, Conn.TargetPin);
-		Stmt.GetColumnValueByIndex(5, Conn.PinType);
+		Stmt->GetColumnValueByIndex(0, Conn.Id);
+		Stmt->GetColumnValueByIndex(1, Conn.SourceNodeId);
+		Stmt->GetColumnValueByIndex(2, Conn.SourcePin);
+		Stmt->GetColumnValueByIndex(3, Conn.TargetNodeId);
+		Stmt->GetColumnValueByIndex(4, Conn.TargetPin);
+		Stmt->GetColumnValueByIndex(5, Conn.PinType);
 		Result.Add(MoveTemp(Conn));
 	}
 	return Result;
@@ -538,17 +661,17 @@ int64 FMonolithIndexDatabase::InsertVariable(const FIndexedVariable& Var)
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT INTO variables (asset_id, var_name, var_type, category, default_value, is_exposed, is_replicated) VALUES (?, ?, ?, ?, ?, ?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Var.AssetId);
-	Stmt.SetBindingValueByIndex(2, Var.VarName);
-	Stmt.SetBindingValueByIndex(3, Var.VarType);
-	Stmt.SetBindingValueByIndex(4, Var.Category);
-	Stmt.SetBindingValueByIndex(5, Var.DefaultValue);
-	Stmt.SetBindingValueByIndex(6, static_cast<int64>(Var.bIsExposed ? 1 : 0));
-	Stmt.SetBindingValueByIndex(7, static_cast<int64>(Var.bIsReplicated ? 1 : 0));
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertVariable"), TEXT("INSERT INTO variables (asset_id, var_name, var_type, category, default_value, is_exposed, is_replicated) VALUES (?, ?, ?, ?, ?, ?, ?);"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, Var.AssetId);
+	Stmt->SetBindingValueByIndex(2, Var.VarName);
+	Stmt->SetBindingValueByIndex(3, Var.VarType);
+	Stmt->SetBindingValueByIndex(4, Var.Category);
+	Stmt->SetBindingValueByIndex(5, Var.DefaultValue);
+	Stmt->SetBindingValueByIndex(6, static_cast<int64>(Var.bIsExposed ? 1 : 0));
+	Stmt->SetBindingValueByIndex(7, static_cast<int64>(Var.bIsReplicated ? 1 : 0));
 
-	if (!Stmt.Execute()) return -1;
+	if (!Stmt->Execute()) return -1;
 	return Database->GetLastInsertRowId();
 }
 
@@ -557,22 +680,22 @@ TArray<FIndexedVariable> FMonolithIndexDatabase::GetVariablesForAsset(int64 Asse
 	TArray<FIndexedVariable> Result;
 	if (!IsOpen()) return Result;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT id, asset_id, var_name, var_type, category, default_value, is_exposed, is_replicated FROM variables WHERE asset_id = ?;"));
-	Stmt.SetBindingValueByIndex(1, AssetId);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetVariablesForAsset"), TEXT("SELECT id, asset_id, var_name, var_type, category, default_value, is_exposed, is_replicated FROM variables WHERE asset_id = ?;"));
+	if (!Stmt) return Result;
+	Stmt->SetBindingValueByIndex(1, AssetId);
 
-	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	while (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FIndexedVariable Var;
-		Stmt.GetColumnValueByIndex(0, Var.Id);
-		Stmt.GetColumnValueByIndex(1, Var.AssetId);
-		Stmt.GetColumnValueByIndex(2, Var.VarName);
-		Stmt.GetColumnValueByIndex(3, Var.VarType);
-		Stmt.GetColumnValueByIndex(4, Var.Category);
-		Stmt.GetColumnValueByIndex(5, Var.DefaultValue);
+		Stmt->GetColumnValueByIndex(0, Var.Id);
+		Stmt->GetColumnValueByIndex(1, Var.AssetId);
+		Stmt->GetColumnValueByIndex(2, Var.VarName);
+		Stmt->GetColumnValueByIndex(3, Var.VarType);
+		Stmt->GetColumnValueByIndex(4, Var.Category);
+		Stmt->GetColumnValueByIndex(5, Var.DefaultValue);
 		int32 Exposed = 0, Replicated = 0;
-		Stmt.GetColumnValueByIndex(6, Exposed);
-		Stmt.GetColumnValueByIndex(7, Replicated);
+		Stmt->GetColumnValueByIndex(6, Exposed);
+		Stmt->GetColumnValueByIndex(7, Replicated);
 		Var.bIsExposed = Exposed != 0;
 		Var.bIsReplicated = Replicated != 0;
 		Result.Add(MoveTemp(Var));
@@ -588,16 +711,16 @@ int64 FMonolithIndexDatabase::InsertParameter(const FIndexedParameter& Param)
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT INTO parameters (asset_id, param_name, param_type, param_group, default_value, source) VALUES (?, ?, ?, ?, ?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Param.AssetId);
-	Stmt.SetBindingValueByIndex(2, Param.ParamName);
-	Stmt.SetBindingValueByIndex(3, Param.ParamType);
-	Stmt.SetBindingValueByIndex(4, Param.ParamGroup);
-	Stmt.SetBindingValueByIndex(5, Param.DefaultValue);
-	Stmt.SetBindingValueByIndex(6, Param.Source);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertParameter"), TEXT("INSERT INTO parameters (asset_id, param_name, param_type, param_group, default_value, source) VALUES (?, ?, ?, ?, ?, ?);"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, Param.AssetId);
+	Stmt->SetBindingValueByIndex(2, Param.ParamName);
+	Stmt->SetBindingValueByIndex(3, Param.ParamType);
+	Stmt->SetBindingValueByIndex(4, Param.ParamGroup);
+	Stmt->SetBindingValueByIndex(5, Param.DefaultValue);
+	Stmt->SetBindingValueByIndex(6, Param.Source);
 
-	if (!Stmt.Execute()) return -1;
+	if (!Stmt->Execute()) return -1;
 	return Database->GetLastInsertRowId();
 }
 
@@ -609,13 +732,13 @@ int64 FMonolithIndexDatabase::InsertDependency(const FIndexedDependency& Dep)
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT INTO dependencies (source_asset_id, target_asset_id, dependency_type) VALUES (?, ?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Dep.SourceAssetId);
-	Stmt.SetBindingValueByIndex(2, Dep.TargetAssetId);
-	Stmt.SetBindingValueByIndex(3, Dep.DependencyType);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertDependency"), TEXT("INSERT INTO dependencies (source_asset_id, target_asset_id, dependency_type) VALUES (?, ?, ?);"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, Dep.SourceAssetId);
+	Stmt->SetBindingValueByIndex(2, Dep.TargetAssetId);
+	Stmt->SetBindingValueByIndex(3, Dep.DependencyType);
 
-	if (!Stmt.Execute()) return -1;
+	if (!Stmt->Execute()) return -1;
 	return Database->GetLastInsertRowId();
 }
 
@@ -624,17 +747,17 @@ TArray<FIndexedDependency> FMonolithIndexDatabase::GetDependenciesForAsset(int64
 	TArray<FIndexedDependency> Result;
 	if (!IsOpen()) return Result;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT id, source_asset_id, target_asset_id, dependency_type FROM dependencies WHERE source_asset_id = ?;"));
-	Stmt.SetBindingValueByIndex(1, AssetId);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetDependenciesForAsset"), TEXT("SELECT id, source_asset_id, target_asset_id, dependency_type FROM dependencies WHERE source_asset_id = ?;"));
+	if (!Stmt) return Result;
+	Stmt->SetBindingValueByIndex(1, AssetId);
 
-	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	while (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FIndexedDependency Dep;
-		Stmt.GetColumnValueByIndex(0, Dep.Id);
-		Stmt.GetColumnValueByIndex(1, Dep.SourceAssetId);
-		Stmt.GetColumnValueByIndex(2, Dep.TargetAssetId);
-		Stmt.GetColumnValueByIndex(3, Dep.DependencyType);
+		Stmt->GetColumnValueByIndex(0, Dep.Id);
+		Stmt->GetColumnValueByIndex(1, Dep.SourceAssetId);
+		Stmt->GetColumnValueByIndex(2, Dep.TargetAssetId);
+		Stmt->GetColumnValueByIndex(3, Dep.DependencyType);
 		Result.Add(MoveTemp(Dep));
 	}
 	return Result;
@@ -645,17 +768,17 @@ TArray<FIndexedDependency> FMonolithIndexDatabase::GetReferencersOfAsset(int64 A
 	TArray<FIndexedDependency> Result;
 	if (!IsOpen()) return Result;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT id, source_asset_id, target_asset_id, dependency_type FROM dependencies WHERE target_asset_id = ?;"));
-	Stmt.SetBindingValueByIndex(1, AssetId);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetReferencersOfAsset"), TEXT("SELECT id, source_asset_id, target_asset_id, dependency_type FROM dependencies WHERE target_asset_id = ?;"));
+	if (!Stmt) return Result;
+	Stmt->SetBindingValueByIndex(1, AssetId);
 
-	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	while (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FIndexedDependency Dep;
-		Stmt.GetColumnValueByIndex(0, Dep.Id);
-		Stmt.GetColumnValueByIndex(1, Dep.SourceAssetId);
-		Stmt.GetColumnValueByIndex(2, Dep.TargetAssetId);
-		Stmt.GetColumnValueByIndex(3, Dep.DependencyType);
+		Stmt->GetColumnValueByIndex(0, Dep.Id);
+		Stmt->GetColumnValueByIndex(1, Dep.SourceAssetId);
+		Stmt->GetColumnValueByIndex(2, Dep.TargetAssetId);
+		Stmt->GetColumnValueByIndex(3, Dep.DependencyType);
 		Result.Add(MoveTemp(Dep));
 	}
 	return Result;
@@ -669,16 +792,16 @@ int64 FMonolithIndexDatabase::InsertActor(const FIndexedActor& Actor)
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT INTO actors (asset_id, actor_name, actor_class, actor_label, transform, components) VALUES (?, ?, ?, ?, ?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Actor.AssetId);
-	Stmt.SetBindingValueByIndex(2, Actor.ActorName);
-	Stmt.SetBindingValueByIndex(3, Actor.ActorClass);
-	Stmt.SetBindingValueByIndex(4, Actor.ActorLabel);
-	Stmt.SetBindingValueByIndex(5, Actor.Transform);
-	Stmt.SetBindingValueByIndex(6, Actor.Components);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertActor"), TEXT("INSERT INTO actors (asset_id, actor_name, actor_class, actor_label, transform, components) VALUES (?, ?, ?, ?, ?, ?);"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, Actor.AssetId);
+	Stmt->SetBindingValueByIndex(2, Actor.ActorName);
+	Stmt->SetBindingValueByIndex(3, Actor.ActorClass);
+	Stmt->SetBindingValueByIndex(4, Actor.ActorLabel);
+	Stmt->SetBindingValueByIndex(5, Actor.Transform);
+	Stmt->SetBindingValueByIndex(6, Actor.Components);
 
-	if (!Stmt.Execute()) return -1;
+	if (!Stmt->Execute()) return -1;
 	return Database->GetLastInsertRowId();
 }
 
@@ -690,13 +813,13 @@ int64 FMonolithIndexDatabase::InsertTag(const FIndexedTag& Tag)
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT OR IGNORE INTO tags (tag_name, parent_tag, reference_count) VALUES (?, ?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Tag.TagName);
-	Stmt.SetBindingValueByIndex(2, Tag.ParentTag);
-	Stmt.SetBindingValueByIndex(3, static_cast<int64>(Tag.ReferenceCount));
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertTag"), TEXT("INSERT OR IGNORE INTO tags (tag_name, parent_tag, reference_count) VALUES (?, ?, ?);"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, Tag.TagName);
+	Stmt->SetBindingValueByIndex(2, Tag.ParentTag);
+	Stmt->SetBindingValueByIndex(3, static_cast<int64>(Tag.ReferenceCount));
 
-	if (!Stmt.Execute()) return -1;
+	if (!Stmt->Execute()) return -1;
 	return GetOrCreateTag(Tag.TagName, Tag.ParentTag);
 }
 
@@ -705,23 +828,23 @@ int64 FMonolithIndexDatabase::GetOrCreateTag(const FString& TagName, const FStri
 	if (!IsOpen()) return -1;
 
 	// Try to get existing
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT id FROM tags WHERE tag_name = ?;"));
-	Stmt.SetBindingValueByIndex(1, TagName);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetTagByName"), TEXT("SELECT id FROM tags WHERE tag_name = ?;"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, TagName);
 
-	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	if (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		int64 Id = 0;
-		Stmt.GetColumnValueByIndex(0, Id);
+		Stmt->GetColumnValueByIndex(0, Id);
 		return Id;
 	}
 
 	// Insert new
-	FSQLitePreparedStatement InsertStmt;
-	InsertStmt.Create(*Database, TEXT("INSERT INTO tags (tag_name, parent_tag) VALUES (?, ?);"));
-	InsertStmt.SetBindingValueByIndex(1, TagName);
-	InsertStmt.SetBindingValueByIndex(2, ParentTag);
-	InsertStmt.Execute();
+	FSQLitePreparedStatement* InsertStmt = StatementCache.FindOrCreate(*Database, TEXT("InsertTagName"), TEXT("INSERT INTO tags (tag_name, parent_tag) VALUES (?, ?);"));
+	if (!InsertStmt) return -1;
+	InsertStmt->SetBindingValueByIndex(1, TagName);
+	InsertStmt->SetBindingValueByIndex(2, ParentTag);
+	InsertStmt->Execute();
 	return Database->GetLastInsertRowId();
 }
 
@@ -729,20 +852,22 @@ int64 FMonolithIndexDatabase::InsertTagReference(const FIndexedTagReference& Ref
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT INTO tag_references (tag_id, asset_id, context) VALUES (?, ?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Ref.TagId);
-	Stmt.SetBindingValueByIndex(2, Ref.AssetId);
-	Stmt.SetBindingValueByIndex(3, Ref.Context);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertTagReference"), TEXT("INSERT INTO tag_references (tag_id, asset_id, context) VALUES (?, ?, ?);"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, Ref.TagId);
+	Stmt->SetBindingValueByIndex(2, Ref.AssetId);
+	Stmt->SetBindingValueByIndex(3, Ref.Context);
 
-	if (!Stmt.Execute()) return -1;
+	if (!Stmt->Execute()) return -1;
 
 	// Update reference count
-	FSQLitePreparedStatement UpdateStmt;
-	UpdateStmt.Create(*Database, TEXT("UPDATE tags SET reference_count = (SELECT COUNT(*) FROM tag_references WHERE tag_id = ?) WHERE id = ?;"));
-	UpdateStmt.SetBindingValueByIndex(1, Ref.TagId);
-	UpdateStmt.SetBindingValueByIndex(2, Ref.TagId);
-	UpdateStmt.Execute();
+	FSQLitePreparedStatement* UpdateStmt = StatementCache.FindOrCreate(*Database, TEXT("UpdateTagReferenceCount"), TEXT("UPDATE tags SET reference_count = (SELECT COUNT(*) FROM tag_references WHERE tag_id = ?) WHERE id = ?;"));
+	if (UpdateStmt)
+	{
+		UpdateStmt->SetBindingValueByIndex(1, Ref.TagId);
+		UpdateStmt->SetBindingValueByIndex(2, Ref.TagId);
+		UpdateStmt->Execute();
+	}
 
 	return Database->GetLastInsertRowId();
 }
@@ -755,14 +880,14 @@ int64 FMonolithIndexDatabase::InsertConfig(const FIndexedConfig& Config)
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT INTO configs (file_path, section, key, value) VALUES (?, ?, ?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Config.FilePath);
-	Stmt.SetBindingValueByIndex(2, Config.Section);
-	Stmt.SetBindingValueByIndex(3, Config.Key);
-	Stmt.SetBindingValueByIndex(4, Config.Value);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertConfig"), TEXT("INSERT INTO configs (file_path, section, key, value) VALUES (?, ?, ?, ?);"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, Config.FilePath);
+	Stmt->SetBindingValueByIndex(2, Config.Section);
+	Stmt->SetBindingValueByIndex(3, Config.Key);
+	Stmt->SetBindingValueByIndex(4, Config.Value);
 
-	if (!Stmt.Execute()) return -1;
+	if (!Stmt->Execute()) return -1;
 	return Database->GetLastInsertRowId();
 }
 
@@ -774,16 +899,16 @@ int64 FMonolithIndexDatabase::InsertCppSymbol(const FIndexedCppSymbol& Symbol)
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT INTO cpp_symbols (file_path, symbol_name, symbol_type, signature, line_number, parent_symbol) VALUES (?, ?, ?, ?, ?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Symbol.FilePath);
-	Stmt.SetBindingValueByIndex(2, Symbol.SymbolName);
-	Stmt.SetBindingValueByIndex(3, Symbol.SymbolType);
-	Stmt.SetBindingValueByIndex(4, Symbol.Signature);
-	Stmt.SetBindingValueByIndex(5, static_cast<int64>(Symbol.LineNumber));
-	Stmt.SetBindingValueByIndex(6, Symbol.ParentSymbol);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertCppSymbol"), TEXT("INSERT INTO cpp_symbols (file_path, symbol_name, symbol_type, signature, line_number, parent_symbol) VALUES (?, ?, ?, ?, ?, ?);"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, Symbol.FilePath);
+	Stmt->SetBindingValueByIndex(2, Symbol.SymbolName);
+	Stmt->SetBindingValueByIndex(3, Symbol.SymbolType);
+	Stmt->SetBindingValueByIndex(4, Symbol.Signature);
+	Stmt->SetBindingValueByIndex(5, static_cast<int64>(Symbol.LineNumber));
+	Stmt->SetBindingValueByIndex(6, Symbol.ParentSymbol);
 
-	if (!Stmt.Execute()) return -1;
+	if (!Stmt->Execute()) return -1;
 	return Database->GetLastInsertRowId();
 }
 
@@ -795,13 +920,13 @@ int64 FMonolithIndexDatabase::InsertDataTableRow(const FIndexedDataTableRow& Row
 {
 	if (!IsOpen()) return -1;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT INTO datatable_rows (asset_id, row_name, row_data) VALUES (?, ?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Row.AssetId);
-	Stmt.SetBindingValueByIndex(2, Row.RowName);
-	Stmt.SetBindingValueByIndex(3, Row.RowData);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertDataTableRow"), TEXT("INSERT INTO datatable_rows (asset_id, row_name, row_data) VALUES (?, ?, ?);"));
+	if (!Stmt) return -1;
+	Stmt->SetBindingValueByIndex(1, Row.AssetId);
+	Stmt->SetBindingValueByIndex(2, Row.RowName);
+	Stmt->SetBindingValueByIndex(3, Row.RowData);
 
-	if (!Stmt.Execute()) return -1;
+	if (!Stmt->Execute()) return -1;
 	return Database->GetLastInsertRowId();
 }
 
@@ -813,25 +938,25 @@ bool FMonolithIndexDatabase::WriteMeta(const FString& Key, const FString& Value)
 {
 	if (!IsOpen()) return false;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);"));
-	Stmt.SetBindingValueByIndex(1, Key);
-	Stmt.SetBindingValueByIndex(2, Value);
-	return Stmt.Execute();
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("WriteMeta"), TEXT("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);"));
+	if (!Stmt) return false;
+	Stmt->SetBindingValueByIndex(1, Key);
+	Stmt->SetBindingValueByIndex(2, Value);
+	return Stmt->Execute();
 }
 
 FString FMonolithIndexDatabase::ReadMeta(const FString& Key) const
 {
 	if (!Database || !Database->IsValid()) return FString();
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT value FROM meta WHERE key = ?;"));
-	Stmt.SetBindingValueByIndex(1, Key);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("ReadMeta"), TEXT("SELECT value FROM meta WHERE key = ?;"));
+	if (!Stmt) return FString();
+	Stmt->SetBindingValueByIndex(1, Key);
 
-	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	if (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FString Value;
-		Stmt.GetColumnValueByIndex(0, Value);
+		Stmt->GetColumnValueByIndex(0, Value);
 		return Value;
 	}
 	return FString();
@@ -846,13 +971,13 @@ TArray<FString> FMonolithIndexDatabase::GetAllIndexedPaths()
 	TArray<FString> Result;
 	if (!IsOpen()) return Result;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT package_path FROM assets;"));
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetAllIndexedPaths"), TEXT("SELECT package_path FROM assets;"));
+	if (!Stmt) return Result;
 
-	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	while (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FString Path;
-		Stmt.GetColumnValueByIndex(0, Path);
+		Stmt->GetColumnValueByIndex(0, Path);
 		Result.Add(MoveTemp(Path));
 	}
 	return Result;
@@ -862,14 +987,14 @@ FString FMonolithIndexDatabase::GetSavedHash(const FString& PackagePath)
 {
 	if (!IsOpen()) return FString();
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT saved_hash FROM assets WHERE package_path = ?;"));
-	Stmt.SetBindingValueByIndex(1, PackagePath);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetSavedHash"), TEXT("SELECT saved_hash FROM assets WHERE package_path = ?;"));
+	if (!Stmt) return FString();
+	Stmt->SetBindingValueByIndex(1, PackagePath);
 
-	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	if (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FString Hash;
-		Stmt.GetColumnValueByIndex(0, Hash);
+		Stmt->GetColumnValueByIndex(0, Hash);
 		return Hash;
 	}
 	return FString();
@@ -880,14 +1005,14 @@ TMap<FString, FString> FMonolithIndexDatabase::GetAllPathsAndHashes()
 	TMap<FString, FString> Result;
 	if (!IsOpen()) return Result;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT package_path, saved_hash FROM assets;"));
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetAllPathsAndHashes"), TEXT("SELECT package_path, saved_hash FROM assets;"));
+	if (!Stmt) return Result;
 
-	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	while (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FString Path, Hash;
-		Stmt.GetColumnValueByIndex(0, Path);
-		Stmt.GetColumnValueByIndex(1, Hash);
+		Stmt->GetColumnValueByIndex(0, Path);
+		Stmt->GetColumnValueByIndex(1, Hash);
 		Result.Add(MoveTemp(Path), MoveTemp(Hash));
 	}
 	return Result;
@@ -907,22 +1032,23 @@ bool FMonolithIndexDatabase::UpdateAssetPath(const FString& OldPath, const FStri
 {
 	if (!IsOpen()) return false;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("UPDATE assets SET package_path = ?, asset_name = COALESCE(NULLIF(?, ''), asset_name) WHERE package_path = ?;"));
-	Stmt.SetBindingValueByIndex(1, NewPath);
-	Stmt.SetBindingValueByIndex(2, NewAssetName);
-	Stmt.SetBindingValueByIndex(3, OldPath);
+	const FString SearchTokens = BuildIndexAssetSearchTokens(NewPath, NewAssetName, FString());
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("UpdateAssetPath"), TEXT("UPDATE assets SET package_path = ?, asset_name = COALESCE(NULLIF(?, ''), asset_name), search_tokens = ? WHERE package_path = ?;"));
+	if (!Stmt) return false;
+	Stmt->SetBindingValueByIndex(1, NewPath);
+	Stmt->SetBindingValueByIndex(2, NewAssetName);
+	Stmt->SetBindingValueByIndex(3, SearchTokens);
+	Stmt->SetBindingValueByIndex(4, OldPath);
 
-	if (!Stmt.Execute()) return false;
+	if (!Stmt->Execute()) return false;
 
 	// Check if a row was actually updated
 	// GetLastInsertRowId isn't useful for UPDATE; use changes count via a follow-up query
-	FSQLitePreparedStatement ChangesStmt;
-	ChangesStmt.Create(*Database, TEXT("SELECT changes();"));
-	if (ChangesStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	FSQLitePreparedStatement* ChangesStmt = StatementCache.FindOrCreate(*Database, TEXT("Changes"), TEXT("SELECT changes();"));
+	if (ChangesStmt && ChangesStmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		int64 Changes = 0;
-		ChangesStmt.GetColumnValueByIndex(0, Changes);
+		ChangesStmt->GetColumnValueByIndex(0, Changes);
 		return Changes > 0;
 	}
 	return false;
@@ -932,25 +1058,26 @@ bool FMonolithIndexDatabase::UpdateAssetMetadata(const FIndexedAsset& Asset)
 {
 	if (!IsOpen()) return false;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("UPDATE assets SET asset_name = ?, asset_class = ?, module_name = ?, description = ?, file_size_bytes = ?, last_modified = ?, saved_hash = ?, indexed_at = datetime('now') WHERE package_path = ?;"));
-	Stmt.SetBindingValueByIndex(1, Asset.AssetName);
-	Stmt.SetBindingValueByIndex(2, Asset.AssetClass);
-	Stmt.SetBindingValueByIndex(3, Asset.ModuleName);
-	Stmt.SetBindingValueByIndex(4, Asset.Description);
-	Stmt.SetBindingValueByIndex(5, Asset.FileSizeBytes);
-	Stmt.SetBindingValueByIndex(6, Asset.LastModified);
-	Stmt.SetBindingValueByIndex(7, Asset.SavedHash);
-	Stmt.SetBindingValueByIndex(8, Asset.PackagePath);
+	const FString SearchTokens = BuildIndexAssetSearchTokens(Asset.PackagePath, Asset.AssetName, Asset.AssetClass);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("UpdateAssetMetadata"), TEXT("UPDATE assets SET asset_name = ?, asset_class = ?, module_name = ?, description = ?, search_tokens = ?, file_size_bytes = ?, last_modified = ?, saved_hash = ?, indexed_at = datetime('now') WHERE package_path = ?;"));
+	if (!Stmt) return false;
+	Stmt->SetBindingValueByIndex(1, Asset.AssetName);
+	Stmt->SetBindingValueByIndex(2, Asset.AssetClass);
+	Stmt->SetBindingValueByIndex(3, Asset.ModuleName);
+	Stmt->SetBindingValueByIndex(4, Asset.Description);
+	Stmt->SetBindingValueByIndex(5, SearchTokens);
+	Stmt->SetBindingValueByIndex(6, Asset.FileSizeBytes);
+	Stmt->SetBindingValueByIndex(7, Asset.LastModified);
+	Stmt->SetBindingValueByIndex(8, Asset.SavedHash);
+	Stmt->SetBindingValueByIndex(9, Asset.PackagePath);
 
-	if (!Stmt.Execute()) return false;
+	if (!Stmt->Execute()) return false;
 
-	FSQLitePreparedStatement ChangesStmt;
-	ChangesStmt.Create(*Database, TEXT("SELECT changes();"));
-	if (ChangesStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	FSQLitePreparedStatement* ChangesStmt = StatementCache.FindOrCreate(*Database, TEXT("Changes"), TEXT("SELECT changes();"));
+	if (ChangesStmt && ChangesStmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		int64 Changes = 0;
-		ChangesStmt.GetColumnValueByIndex(0, Changes);
+		ChangesStmt->GetColumnValueByIndex(0, Changes);
 		return Changes > 0;
 	}
 	return false;
@@ -965,25 +1092,49 @@ bool FMonolithIndexDatabase::DeleteChildDataForAsset(int64 AssetId)
 
 	bool bSuccess = true;
 
-	FSQLitePreparedStatement Stmt1;
-	Stmt1.Create(*Database, TEXT("DELETE FROM nodes WHERE asset_id = ?;"));
-	Stmt1.SetBindingValueByIndex(1, AssetId);
-	bSuccess &= Stmt1.Execute();
+	FSQLitePreparedStatement* Stmt1 = StatementCache.FindOrCreate(*Database, TEXT("DeleteAssetNodes"), TEXT("DELETE FROM nodes WHERE asset_id = ?;"));
+	if (Stmt1)
+	{
+		Stmt1->SetBindingValueByIndex(1, AssetId);
+		bSuccess &= Stmt1->Execute();
+	}
+	else
+	{
+		bSuccess = false;
+	}
 
-	FSQLitePreparedStatement Stmt2;
-	Stmt2.Create(*Database, TEXT("DELETE FROM variables WHERE asset_id = ?;"));
-	Stmt2.SetBindingValueByIndex(1, AssetId);
-	bSuccess &= Stmt2.Execute();
+	FSQLitePreparedStatement* Stmt2 = StatementCache.FindOrCreate(*Database, TEXT("DeleteAssetVariables"), TEXT("DELETE FROM variables WHERE asset_id = ?;"));
+	if (Stmt2)
+	{
+		Stmt2->SetBindingValueByIndex(1, AssetId);
+		bSuccess &= Stmt2->Execute();
+	}
+	else
+	{
+		bSuccess = false;
+	}
 
-	FSQLitePreparedStatement Stmt3;
-	Stmt3.Create(*Database, TEXT("DELETE FROM parameters WHERE asset_id = ?;"));
-	Stmt3.SetBindingValueByIndex(1, AssetId);
-	bSuccess &= Stmt3.Execute();
+	FSQLitePreparedStatement* Stmt3 = StatementCache.FindOrCreate(*Database, TEXT("DeleteAssetParameters"), TEXT("DELETE FROM parameters WHERE asset_id = ?;"));
+	if (Stmt3)
+	{
+		Stmt3->SetBindingValueByIndex(1, AssetId);
+		bSuccess &= Stmt3->Execute();
+	}
+	else
+	{
+		bSuccess = false;
+	}
 
-	FSQLitePreparedStatement Stmt4;
-	Stmt4.Create(*Database, TEXT("DELETE FROM datatable_rows WHERE asset_id = ?;"));
-	Stmt4.SetBindingValueByIndex(1, AssetId);
-	bSuccess &= Stmt4.Execute();
+	FSQLitePreparedStatement* Stmt4 = StatementCache.FindOrCreate(*Database, TEXT("DeleteAssetDataTableRows"), TEXT("DELETE FROM datatable_rows WHERE asset_id = ?;"));
+	if (Stmt4)
+	{
+		Stmt4->SetBindingValueByIndex(1, AssetId);
+		bSuccess &= Stmt4->Execute();
+	}
+	else
+	{
+		bSuccess = false;
+	}
 
 	return bSuccess;
 }
@@ -992,19 +1143,18 @@ bool FMonolithIndexDatabase::UpdateSavedHash(const FString& PackagePath, const F
 {
 	if (!IsOpen()) return false;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("UPDATE assets SET saved_hash = ? WHERE package_path = ?;"));
-	Stmt.SetBindingValueByIndex(1, HashHex);
-	Stmt.SetBindingValueByIndex(2, PackagePath);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("UpdateSavedHash"), TEXT("UPDATE assets SET saved_hash = ? WHERE package_path = ?;"));
+	if (!Stmt) return false;
+	Stmt->SetBindingValueByIndex(1, HashHex);
+	Stmt->SetBindingValueByIndex(2, PackagePath);
 
-	if (!Stmt.Execute()) return false;
+	if (!Stmt->Execute()) return false;
 
-	FSQLitePreparedStatement ChangesStmt;
-	ChangesStmt.Create(*Database, TEXT("SELECT changes();"));
-	if (ChangesStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	FSQLitePreparedStatement* ChangesStmt = StatementCache.FindOrCreate(*Database, TEXT("Changes"), TEXT("SELECT changes();"));
+	if (ChangesStmt && ChangesStmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		int64 Changes = 0;
-		ChangesStmt.GetColumnValueByIndex(0, Changes);
+		ChangesStmt->GetColumnValueByIndex(0, Changes);
 		return Changes > 0;
 	}
 	return false;
@@ -1019,60 +1169,58 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	TArray<FSearchResult> Results;
 	if (!IsOpen()) return Results;
 
-	// Search assets FTS
-	FString SQL = FString::Printf(
-		TEXT("SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, snippet(fts_assets, 2, '>>>', '<<<', '...', 32) as ctx, rank FROM fts_assets f JOIN assets a ON a.id = f.rowid WHERE fts_assets MATCH ? ORDER BY rank LIMIT %d;"),
-		Limit
-	);
+	static const TCHAR* SearchSQL = TEXT(R"SQL(
+SELECT asset_path, asset_name, asset_class, module_name, match_context, score
+FROM (
+    SELECT
+        a.package_path AS asset_path,
+        a.asset_name AS asset_name,
+        a.asset_class AS asset_class,
+        a.module_name AS module_name,
+        snippet(fts_assets, -1, '>>>', '<<<', '...', 32) AS match_context,
+        bm25(fts_assets, 10.0, 3.0, 1.0, 5.0, 2.0, 1.0) * 1.00 AS score,
+        1.00 AS source_weight
+    FROM fts_assets f
+    JOIN assets a ON a.id = f.rowid
+    WHERE fts_assets MATCH ?
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, *SQL);
-	Stmt.SetBindingValueByIndex(1, Query);
+    UNION ALL
 
-	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+    SELECT
+        a.package_path AS asset_path,
+        a.asset_name AS asset_name,
+        a.asset_class AS asset_class,
+        a.module_name AS module_name,
+        snippet(fts_nodes, -1, '>>>', '<<<', '...', 32) AS match_context,
+        bm25(fts_nodes, 5.0, 2.0, 1.0, 4.0) * 1.20 AS score,
+        1.20 AS source_weight
+    FROM fts_nodes f
+    JOIN nodes n ON n.id = f.rowid
+    JOIN assets a ON a.id = n.asset_id
+    WHERE fts_nodes MATCH ?
+)
+ORDER BY score ASC
+LIMIT ?;
+)SQL");
+
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("FullTextSearch"), SearchSQL);
+	if (!Stmt) return Results;
+	Stmt->SetBindingValueByIndex(1, Query);
+	Stmt->SetBindingValueByIndex(2, Query);
+	Stmt->SetBindingValueByIndex(3, static_cast<int64>(FMath::Max(1, Limit)));
+
+	while (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FSearchResult R;
-		Stmt.GetColumnValueByIndex(0, R.AssetPath);
-		Stmt.GetColumnValueByIndex(1, R.AssetName);
-		Stmt.GetColumnValueByIndex(2, R.AssetClass);
-		Stmt.GetColumnValueByIndex(3, R.ModuleName);
-		Stmt.GetColumnValueByIndex(4, R.MatchContext);
+		Stmt->GetColumnValueByIndex(0, R.AssetPath);
+		Stmt->GetColumnValueByIndex(1, R.AssetName);
+		Stmt->GetColumnValueByIndex(2, R.AssetClass);
+		Stmt->GetColumnValueByIndex(3, R.ModuleName);
+		Stmt->GetColumnValueByIndex(4, R.MatchContext);
 		double RankD = 0.0;
-		Stmt.GetColumnValueByIndex(5, RankD);
+		Stmt->GetColumnValueByIndex(5, RankD);
 		R.Rank = static_cast<float>(RankD);
 		Results.Add(MoveTemp(R));
-	}
-
-	// Also search nodes FTS
-	FString NodeSQL = FString::Printf(
-		TEXT("SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, snippet(fts_nodes, 0, '>>>', '<<<', '...', 32) as ctx, f.rank FROM fts_nodes f JOIN nodes n ON n.id = f.rowid JOIN assets a ON a.id = n.asset_id WHERE fts_nodes MATCH ? ORDER BY f.rank LIMIT %d;"),
-		Limit
-	);
-
-	FSQLitePreparedStatement Stmt2;
-	Stmt2.Create(*Database, *NodeSQL);
-	Stmt2.SetBindingValueByIndex(1, Query);
-
-	while (Stmt2.Step() == ESQLitePreparedStatementStepResult::Row)
-	{
-		FSearchResult R;
-		Stmt2.GetColumnValueByIndex(0, R.AssetPath);
-		Stmt2.GetColumnValueByIndex(1, R.AssetName);
-		Stmt2.GetColumnValueByIndex(2, R.AssetClass);
-		Stmt2.GetColumnValueByIndex(3, R.ModuleName);
-		Stmt2.GetColumnValueByIndex(4, R.MatchContext);
-		double RankD = 0.0;
-		Stmt2.GetColumnValueByIndex(5, RankD);
-		R.Rank = static_cast<float>(RankD);
-		Results.Add(MoveTemp(R));
-	}
-
-	// Sort combined results by rank (lower = better in FTS5)
-	Results.Sort([](const FSearchResult& A, const FSearchResult& B) { return A.Rank < B.Rank; });
-
-	if (Results.Num() > Limit)
-	{
-		Results.SetNum(Limit);
 	}
 
 	return Results;
@@ -1328,71 +1476,137 @@ bool FMonolithIndexDatabase::CreateTables()
 		return false;
 	}
 
-	// GCreateTablesSQL contains multiple statements separated by semicolons.
-	// FSQLiteDatabase::Execute() only handles one statement at a time,
-	// so we split and execute each individually.
-	FString FullSQL(GCreateTablesSQL);
-	TArray<FString> Statements;
-
-	// Split on semicolons, tracking BEGIN/END depth for trigger bodies
-	int32 Start = 0;
-	int32 Depth = 0;
-	for (int32 i = 0; i < FullSQL.Len(); ++i)
+	const bool bCoreSchemaOk = ExecuteMonolithSQLiteMulti(*Database, GCreateCoreTablesSQL, true);
+	const bool bFtsSchemaOk = ExecuteMonolithSQLiteMulti(*Database, GCreateFtsTablesSQL, true);
+	if (!bCoreSchemaOk || !bFtsSchemaOk)
 	{
-		// Check for BEGIN keyword (trigger body start)
-		if (i + 5 <= FullSQL.Len())
-		{
-			FString Word = FullSQL.Mid(i, 5).ToUpper();
-			if (Word == TEXT("BEGIN") && (i == 0 || FChar::IsWhitespace(FullSQL[i - 1]) || FullSQL[i - 1] == '\n'))
-			{
-				if (i + 5 >= FullSQL.Len() || FChar::IsWhitespace(FullSQL[i + 5]) || FullSQL[i + 5] == '\n')
-				{
-					Depth++;
-				}
-			}
-		}
-		// Check for END keyword (trigger body end)
-		if (i + 3 <= FullSQL.Len())
-		{
-			FString Word = FullSQL.Mid(i, 3).ToUpper();
-			if (Word == TEXT("END") && (i == 0 || FChar::IsWhitespace(FullSQL[i - 1]) || FullSQL[i - 1] == '\n'))
-			{
-				if (i + 3 >= FullSQL.Len() || FullSQL[i + 3] == ';' || FChar::IsWhitespace(FullSQL[i + 3]))
-				{
-					if (Depth > 0) Depth--;
-				}
-			}
-		}
-
-		if (FullSQL[i] == ';' && Depth == 0)
-		{
-			FString Stmt = FullSQL.Mid(Start, i - Start + 1).TrimStartAndEnd();
-			if (!Stmt.IsEmpty() && Stmt != TEXT(";"))
-			{
-				Statements.Add(Stmt);
-			}
-			Start = i + 1;
-		}
+		UE_LOG(LogMonolithIndex, Warning, TEXT("Some schema statements failed -- FTS5 may not be available in this SQLite build: %s"),
+			*Database->GetLastError());
 	}
-
-	bool bAllSucceeded = true;
-	for (const FString& Stmt : Statements)
-	{
-		if (!Database->Execute(*Stmt))
-		{
-			UE_LOG(LogMonolithIndex, Warning, TEXT("Schema statement failed: %s -- Error: %s"),
-				*Stmt.Left(100), *Database->GetLastError());
-			bAllSucceeded = false;
-			// Don't stop -- try remaining statements (some may be IF NOT EXISTS)
-		}
-	}
-
-	if (!bAllSucceeded)
-	{
-		UE_LOG(LogMonolithIndex, Warning, TEXT("Some schema statements failed -- FTS5 may not be available in this SQLite build"));
-	}
-
 	return true; // Return true even if FTS fails -- basic tables should work
+}
+
+bool FMonolithIndexDatabase::MigrateFtsSchemaToV4()
+{
+	if (!Database || !Database->IsValid())
+	{
+		return false;
+	}
+
+	UE_LOG(LogMonolithIndex, Log, TEXT("Migrating index FTS schema to v%d"), GIndexSchemaVersion);
+	StatementCache.Clear();
+
+	if (!ExecuteSQL(TEXT("BEGIN;")))
+	{
+		return false;
+	}
+
+	if (!MonolithIndexTableHasColumn(*Database, TEXT("assets"), TEXT("search_tokens")))
+	{
+		if (!ExecuteSQL(TEXT("ALTER TABLE assets ADD COLUMN search_tokens TEXT DEFAULT '';")))
+		{
+			ExecuteSQL(TEXT("ROLLBACK;"));
+			return false;
+		}
+	}
+	if (!MonolithIndexTableHasColumn(*Database, TEXT("nodes"), TEXT("search_tokens")))
+	{
+		if (!ExecuteSQL(TEXT("ALTER TABLE nodes ADD COLUMN search_tokens TEXT DEFAULT '';")))
+		{
+			ExecuteSQL(TEXT("ROLLBACK;"));
+			return false;
+		}
+	}
+
+	{
+		TArray<FIndexedAsset> AssetRows;
+		FSQLitePreparedStatement SelectAssets;
+		if (SelectAssets.Create(*Database, TEXT("SELECT id, package_path, asset_name, asset_class FROM assets;"), ESQLitePreparedStatementFlags::Persistent))
+		{
+			while (SelectAssets.Step() == ESQLitePreparedStatementStepResult::Row)
+			{
+				FIndexedAsset Asset;
+				SelectAssets.GetColumnValueByIndex(0, Asset.Id);
+				SelectAssets.GetColumnValueByIndex(1, Asset.PackagePath);
+				SelectAssets.GetColumnValueByIndex(2, Asset.AssetName);
+				SelectAssets.GetColumnValueByIndex(3, Asset.AssetClass);
+				AssetRows.Add(MoveTemp(Asset));
+			}
+		}
+
+		FSQLitePreparedStatement UpdateAssetTokens;
+		if (UpdateAssetTokens.Create(*Database, TEXT("UPDATE assets SET search_tokens = ? WHERE id = ?;"), ESQLitePreparedStatementFlags::Persistent))
+		{
+			for (const FIndexedAsset& Asset : AssetRows)
+			{
+				UpdateAssetTokens.Reset();
+				UpdateAssetTokens.SetBindingValueByIndex(1, BuildIndexAssetSearchTokens(Asset.PackagePath, Asset.AssetName, Asset.AssetClass));
+				UpdateAssetTokens.SetBindingValueByIndex(2, Asset.Id);
+				UpdateAssetTokens.Execute();
+			}
+		}
+
+		TArray<FIndexedNode> NodeRows;
+		FSQLitePreparedStatement SelectNodes;
+		if (SelectNodes.Create(*Database, TEXT("SELECT id, node_name, node_class, node_type FROM nodes;"), ESQLitePreparedStatementFlags::Persistent))
+		{
+			while (SelectNodes.Step() == ESQLitePreparedStatementStepResult::Row)
+			{
+				FIndexedNode Node;
+				SelectNodes.GetColumnValueByIndex(0, Node.Id);
+				SelectNodes.GetColumnValueByIndex(1, Node.NodeName);
+				SelectNodes.GetColumnValueByIndex(2, Node.NodeClass);
+				SelectNodes.GetColumnValueByIndex(3, Node.NodeType);
+				NodeRows.Add(MoveTemp(Node));
+			}
+		}
+
+		FSQLitePreparedStatement UpdateNodeTokens;
+		if (UpdateNodeTokens.Create(*Database, TEXT("UPDATE nodes SET search_tokens = ? WHERE id = ?;"), ESQLitePreparedStatementFlags::Persistent))
+		{
+			for (const FIndexedNode& Node : NodeRows)
+			{
+				UpdateNodeTokens.Reset();
+				UpdateNodeTokens.SetBindingValueByIndex(1, BuildIndexNodeSearchTokens(Node.NodeName, Node.NodeClass, Node.NodeType));
+				UpdateNodeTokens.SetBindingValueByIndex(2, Node.Id);
+				UpdateNodeTokens.Execute();
+			}
+		}
+	}
+
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_assets_ai;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_assets_ad;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_assets_au;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_nodes_ai;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_nodes_ad;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_nodes_au;"));
+	ExecuteSQL(TEXT("DROP TABLE IF EXISTS fts_assets;"));
+	ExecuteSQL(TEXT("DROP TABLE IF EXISTS fts_nodes;"));
+
+	const bool bCreated = CreateTables();
+
+	const bool bAssetsRebuilt = ExecuteSQL(TEXT("INSERT INTO fts_assets(rowid, asset_name, asset_class, description, search_tokens, package_path, module_name) SELECT id, asset_name, asset_class, description, search_tokens, package_path, module_name FROM assets;"));
+	const bool bNodesRebuilt = ExecuteSQL(TEXT("INSERT INTO fts_nodes(rowid, node_name, node_class, node_type, search_tokens) SELECT id, node_name, node_class, node_type, search_tokens FROM nodes;"));
+	if (!bCreated || !bAssetsRebuilt || !bNodesRebuilt)
+	{
+		ExecuteSQL(TEXT("ROLLBACK;"));
+		UE_LOG(LogMonolithIndex, Warning, TEXT("Index FTS v3 rebuild incomplete: %s"), *Database->GetLastError());
+		return false;
+	}
+
+	if (!ExecuteSQL(TEXT("COMMIT;")))
+	{
+		return false;
+	}
+
+	FMonolithSQLiteMaintenanceOptions MaintenanceOptions;
+	MaintenanceOptions.bRunPragmaOptimize = true;
+	MaintenanceOptions.bUseFullOptimizeScan = true;
+	MaintenanceOptions.FtsTablesToOptimize.Add(TEXT("fts_assets"));
+	MaintenanceOptions.FtsTablesToOptimize.Add(TEXT("fts_nodes"));
+	RunMonolithSQLiteMaintenance(*Database, MaintenanceOptions);
+
+	return true;
 }
 
 bool FMonolithIndexDatabase::ExecuteSQL(const FString& SQL)

@@ -10,12 +10,12 @@ public class MonolithSource : ModuleRules
 		{
 			"Core",
 			"CoreUObject",
-			"Engine"
+			"Engine",
+			"MonolithCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"MonolithCore",
 			"SQLiteCore",
 			"EditorSubsystem",
 			"UnrealEd",

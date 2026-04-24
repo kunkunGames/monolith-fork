@@ -1,84 +1,14 @@
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceSchema.h"
+#include "MonolithSQLiteExec.h"
+#include "MonolithSQLiteMaintenance.h"
+#include "MonolithSQLitePragmaPolicy.h"
+#include "MonolithSQLiteSearchText.h"
 #include "SQLiteDatabase.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
 
 DEFINE_LOG_CATEGORY(LogMonolithSource);
-
-// ============================================================
-// Helper: execute a multi-statement SQL string statement-by-statement.
-// FSQLiteDatabase::Execute() only runs the first statement when given
-// a semicolon-separated multi-statement string, so we must split manually.
-//
-// Splits on ';' at BEGIN/END nesting depth 0, so trigger bodies like
-//   BEGIN INSERT INTO ...; END;
-// are kept intact as a single statement.
-// ============================================================
-static bool ExecuteMulti(FSQLiteDatabase& DB, const TCHAR* SQL)
-{
-	const FString Source(SQL);
-	const int32 Len = Source.Len();
-
-	int32 Depth = 0;   // BEGIN...END nesting depth
-	FString Current;
-
-	auto FlushStatement = [&]() -> bool
-	{
-		FString Stmt = Current.TrimStartAndEnd();
-		Current.Empty();
-		if (Stmt.IsEmpty())
-		{
-			return true;
-		}
-		return DB.Execute(*Stmt);
-	};
-
-	int32 i = 0;
-	while (i < Len)
-	{
-		const TCHAR Ch = Source[i];
-
-		// Detect SQL keywords (BEGIN / END) at word boundaries.
-		// String literals are not present in our DDL so we skip quote handling.
-		if (FChar::IsAlpha(Ch) || Ch == TEXT('_'))
-		{
-			const int32 WordStart = i;
-			while (i < Len && (FChar::IsAlnum(Source[i]) || Source[i] == TEXT('_')))
-			{
-				++i;
-			}
-			const FString Word = Source.Mid(WordStart, i - WordStart).ToUpper();
-			Current += Source.Mid(WordStart, i - WordStart);
-
-			if (Word == TEXT("BEGIN"))
-			{
-				++Depth;
-			}
-			else if (Word == TEXT("END") && Depth > 0)
-			{
-				--Depth;
-			}
-			continue;
-		}
-
-		if (Ch == TEXT(';') && Depth == 0)
-		{
-			++i;
-			if (!FlushStatement())
-			{
-				return false;
-			}
-			continue;
-		}
-
-		Current += Ch;
-		++i;
-	}
-
-	// Flush any trailing statement (no trailing semicolon)
-	return FlushStatement();
-}
 
 // ============================================================
 // Constructor / Destructor
@@ -99,7 +29,9 @@ bool FMonolithSourceDatabase::Open(const FString& DbPath)
 
 	if (Database)
 	{
-		Close();
+		Database->Close();
+		delete Database;
+		Database = nullptr;
 	}
 
 	CachedDbPath = DbPath;
@@ -112,16 +44,18 @@ bool FMonolithSourceDatabase::Open(const FString& DbPath)
 	}
 
 	Database = new FSQLiteDatabase();
-	if (!Database->Open(*DbPath, ESQLiteDatabaseOpenMode::ReadWrite))
+	FMonolithSQLiteOpenPolicy Policy;
+	Policy.Intent = EMonolithSQLiteIntent::QueryOnly;
+	Policy.Role = EMonolithSQLiteConnectionRole::ReadMostly;
+	Policy.bVerifyIntegrity = false;
+	bRunOptimizeOnClose = false;
+	if (!OpenMonolithSQLiteDatabase(*Database, DbPath, Policy))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("Failed to open engine source DB: %s"), *DbPath);
 		delete Database;
 		Database = nullptr;
 		return false;
 	}
-
-	// Force DELETE journal mode — WAL breaks ReadOnly on Windows
-	Database->Execute(TEXT("PRAGMA journal_mode=DELETE;"));
 
 	UE_LOG(LogMonolithSource, Log, TEXT("Engine source DB opened: %s"), *DbPath);
 	return true;
@@ -132,10 +66,18 @@ void FMonolithSourceDatabase::Close()
 	FScopeLock Lock(&DbLock);
 	if (Database)
 	{
+		StatementCache.Clear();
+		if (bRunOptimizeOnClose && Database->IsValid())
+		{
+			FMonolithSQLiteMaintenanceOptions MaintenanceOptions;
+			MaintenanceOptions.bRunPragmaOptimize = true;
+			RunMonolithSQLiteMaintenance(*Database, MaintenanceOptions);
+		}
 		Database->Close();
 		delete Database;
 		Database = nullptr;
 	}
+	bRunOptimizeOnClose = false;
 }
 
 bool FMonolithSourceDatabase::IsOpen() const
@@ -179,6 +121,188 @@ FString FMonolithSourceDatabase::EscapeFTS(const FString& Query)
 		Result += FString::Printf(TEXT("\"%s\"*"), *Tokens[i]);
 	}
 	return Result;
+}
+
+bool FMonolithSourceDatabase::DoesTableExistLocked(const TCHAR* TableName) const
+{
+	if (!Database || !Database->IsValid())
+	{
+		return false;
+	}
+
+	FSQLitePreparedStatement Stmt;
+	if (!Stmt.Create(*Database, TEXT("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1;")))
+	{
+		return false;
+	}
+	Stmt.SetBindingValueByIndex(1, FString(TableName));
+	return Stmt.Step() == ESQLitePreparedStatementStepResult::Row;
+}
+
+static bool DoesSourceColumnExistLocked(FSQLiteDatabase& Database, const TCHAR* TableName, const TCHAR* ColumnName)
+{
+	FSQLitePreparedStatement Stmt;
+	const FString SQL = FString::Printf(TEXT("PRAGMA table_info(%s);"), TableName);
+	if (!Stmt.Create(Database, *SQL, ESQLitePreparedStatementFlags::Persistent))
+	{
+		return false;
+	}
+
+	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		FString ExistingColumn;
+		Stmt.GetColumnValueByIndex(1, ExistingColumn);
+		if (ExistingColumn == ColumnName)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+int32 FMonolithSourceDatabase::ReadSchemaVersionLocked() const
+{
+	if (!Database || !Database->IsValid())
+	{
+		return 0;
+	}
+
+	int32 HeaderSchemaVersion = 0;
+	Database->GetUserVersion(HeaderSchemaVersion);
+	if (HeaderSchemaVersion > 0)
+	{
+		return HeaderSchemaVersion;
+	}
+
+	if (!DoesTableExistLocked(TEXT("meta")))
+	{
+		return 0;
+	}
+
+	FSQLitePreparedStatement Stmt;
+	if (!Stmt.Create(*Database, TEXT("SELECT value FROM meta WHERE key='schema_version';")))
+	{
+		return 0;
+	}
+	if (Stmt.Step() != ESQLitePreparedStatementStepResult::Row)
+	{
+		return 0;
+	}
+
+	FString MetaVersion;
+	Stmt.GetColumnValueByIndex(0, MetaVersion);
+	return FCString::Atoi(*MetaVersion);
+}
+
+void FMonolithSourceDatabase::WriteSchemaVersionLocked()
+{
+	FSQLitePreparedStatement MetaStmt;
+	if (MetaStmt.Create(*Database, TEXT("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);")))
+	{
+		MetaStmt.SetBindingValueByIndex(1, FString(TEXT("schema_version")));
+		MetaStmt.SetBindingValueByIndex(2, FString::FromInt(MonolithSourceSchema::SchemaVersion));
+		MetaStmt.Step();
+	}
+	Database->SetUserVersion(MonolithSourceSchema::SchemaVersion);
+}
+
+bool FMonolithSourceDatabase::MigrateFtsSchemaToV2Locked()
+{
+	if (!Database || !Database->IsValid())
+	{
+		return false;
+	}
+
+	UE_LOG(LogMonolithSource, Log, TEXT("Migrating source FTS schema to v%d"), MonolithSourceSchema::SchemaVersion);
+
+	bool bSuccess = true;
+	const bool bHadSourceFts = DoesTableExistLocked(TEXT("source_fts"));
+
+	if (!Database->Execute(TEXT("BEGIN;")))
+	{
+		UE_LOG(LogMonolithSource, Warning, TEXT("Source FTS v2 migration could not start transaction: %s"), *Database->GetLastError());
+		return false;
+	}
+
+	if (!DoesSourceColumnExistLocked(*Database, TEXT("symbols"), TEXT("search_tokens")))
+	{
+		if (!Database->Execute(TEXT("ALTER TABLE symbols ADD COLUMN search_tokens TEXT DEFAULT '';")))
+		{
+			Database->Execute(TEXT("ROLLBACK;"));
+			UE_LOG(LogMonolithSource, Warning, TEXT("Source FTS migration could not add search_tokens: %s"), *Database->GetLastError());
+			return false;
+		}
+	}
+
+	{
+		TArray<FMonolithSourceSymbol> SymbolRows;
+		FSQLitePreparedStatement SelectSymbols;
+		if (SelectSymbols.Create(*Database, TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols;"), ESQLitePreparedStatementFlags::Persistent))
+		{
+			while (SelectSymbols.Step() == ESQLitePreparedStatementStepResult::Row)
+			{
+				SymbolRows.Add(ReadSymbolFromStatement(SelectSymbols));
+			}
+		}
+
+		FSQLitePreparedStatement UpdateSymbolTokens;
+		if (UpdateSymbolTokens.Create(*Database, TEXT("UPDATE symbols SET search_tokens = ? WHERE id = ?;"), ESQLitePreparedStatementFlags::Persistent))
+		{
+			for (const FMonolithSourceSymbol& Symbol : SymbolRows)
+			{
+				UpdateSymbolTokens.Reset();
+				UpdateSymbolTokens.SetBindingValueByIndex(1, BuildMonolithSQLiteSearchText(FString::Printf(TEXT("%s %s %s"), *Symbol.Name, *Symbol.QualifiedName, *Symbol.Kind)));
+				UpdateSymbolTokens.SetBindingValueByIndex(2, Symbol.Id);
+				UpdateSymbolTokens.Execute();
+			}
+		}
+	}
+
+	if (bHadSourceFts)
+	{
+		bSuccess &= Database->Execute(TEXT("DROP TABLE IF EXISTS temp.monolith_source_fts_backup;"));
+		bSuccess &= Database->Execute(TEXT("CREATE TEMP TABLE monolith_source_fts_backup AS SELECT file_id, line_number, text FROM source_fts;"));
+		if (!bSuccess)
+		{
+			Database->Execute(TEXT("ROLLBACK;"));
+			UE_LOG(LogMonolithSource, Warning, TEXT("Source FTS v2 migration backup failed: %s"), *Database->GetLastError());
+			return false;
+		}
+	}
+
+	bSuccess &= Database->Execute(TEXT("DROP TRIGGER IF EXISTS symbols_au;"));
+	bSuccess &= Database->Execute(TEXT("DROP TRIGGER IF EXISTS symbols_ad;"));
+	bSuccess &= Database->Execute(TEXT("DROP TRIGGER IF EXISTS symbols_ai;"));
+	bSuccess &= Database->Execute(TEXT("DROP TABLE IF EXISTS symbols_fts;"));
+	bSuccess &= Database->Execute(TEXT("DROP TABLE IF EXISTS source_fts;"));
+
+	bSuccess &= ExecuteMonolithSQLiteMulti(*Database, MonolithSourceSchema::DDL_FTS);
+	bSuccess &= ExecuteMonolithSQLiteMulti(*Database, MonolithSourceSchema::DDL_Triggers);
+	bSuccess &= Database->Execute(TEXT("INSERT INTO symbols_fts(rowid, name, qualified_name, docstring, search_tokens) SELECT id, name, qualified_name, docstring, search_tokens FROM symbols;"));
+
+	if (bHadSourceFts)
+	{
+		bSuccess &= Database->Execute(TEXT("INSERT INTO source_fts(file_id, line_number, text) SELECT file_id, line_number, text FROM temp.monolith_source_fts_backup;"));
+		Database->Execute(TEXT("DROP TABLE IF EXISTS temp.monolith_source_fts_backup;"));
+	}
+
+	if (!bSuccess)
+	{
+		Database->Execute(TEXT("ROLLBACK;"));
+		UE_LOG(LogMonolithSource, Warning, TEXT("Source FTS v2 migration incomplete: %s"), *Database->GetLastError());
+		return false;
+	}
+
+	bSuccess &= Database->Execute(TEXT("COMMIT;"));
+
+	FMonolithSQLiteMaintenanceOptions MaintenanceOptions;
+	MaintenanceOptions.bRunPragmaOptimize = true;
+	MaintenanceOptions.bUseFullOptimizeScan = true;
+	MaintenanceOptions.FtsTablesToOptimize.Add(TEXT("symbols_fts"));
+	MaintenanceOptions.FtsTablesToOptimize.Add(TEXT("source_fts"));
+	RunMonolithSQLiteMaintenance(*Database, MaintenanceOptions);
+
+	return bSuccess;
 }
 
 // ============================================================
@@ -269,14 +393,14 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::SearchSymbolsFTS(const FS
 
 	FString FTSQuery = EscapeFTS(Query);
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols_fts f JOIN symbols s ON s.id = f.rowid WHERE symbols_fts MATCH ? ORDER BY bm25(symbols_fts) LIMIT ?;"));
-	Stmt.SetBindingValueByIndex(1, FTSQuery);
-	Stmt.SetBindingValueByIndex(2, static_cast<int64>(Limit));
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("SearchSymbolsFTS"), TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols_fts f JOIN symbols s ON s.id = f.rowid WHERE symbols_fts MATCH ? ORDER BY bm25(symbols_fts, 5.0, 3.0, 1.0, 4.0) LIMIT ?;"));
+	if (!Stmt) return Result;
+	Stmt->SetBindingValueByIndex(1, FTSQuery);
+	Stmt->SetBindingValueByIndex(2, static_cast<int64>(Limit));
 
-	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	while (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
-		Result.Add(ReadSymbolFromStatement(Stmt));
+		Result.Add(ReadSymbolFromStatement(*Stmt));
 	}
 	return Result;
 }
@@ -286,13 +410,13 @@ TOptional<FMonolithSourceSymbol> FMonolithSourceDatabase::GetSymbolById(int64 Id
 	FScopeLock Lock(&DbLock);
 	if (!Database || !Database->IsValid()) return {};
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE id = ?;"));
-	Stmt.SetBindingValueByIndex(1, Id);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetSymbolById"), TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE id = ?;"));
+	if (!Stmt) return {};
+	Stmt->SetBindingValueByIndex(1, Id);
 
-	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	if (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
-		return ReadSymbolFromStatement(Stmt);
+		return ReadSymbolFromStatement(*Stmt);
 	}
 	return {};
 }
@@ -306,14 +430,14 @@ FString FMonolithSourceDatabase::GetFilePath(int64 FileId)
 	FScopeLock Lock(&DbLock);
 	if (!Database || !Database->IsValid()) return TEXT("<unknown>");
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT path FROM files WHERE id = ?;"));
-	Stmt.SetBindingValueByIndex(1, FileId);
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("GetFilePath"), TEXT("SELECT path FROM files WHERE id = ?;"));
+	if (!Stmt) return TEXT("<unknown>");
+	Stmt->SetBindingValueByIndex(1, FileId);
 
-	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	if (Stmt->Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FString Path;
-		Stmt.GetColumnValueByIndex(0, Path);
+		Stmt->GetColumnValueByIndex(0, Path);
 		return Path;
 	}
 	return TEXT("<unknown>");
@@ -704,7 +828,7 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::SearchSymbolsFTSFiltered(
 	}
 
 	SQL += TEXT("WHERE ") + FString::Join(Conditions, TEXT(" AND "));
-	SQL += FString::Printf(TEXT(" ORDER BY bm25(symbols_fts) LIMIT %d;"), Limit);
+	SQL += FString::Printf(TEXT(" ORDER BY bm25(symbols_fts, 5.0, 3.0, 1.0, 4.0) LIMIT %d;"), Limit);
 
 	FSQLitePreparedStatement Stmt;
 	Stmt.Create(*Database, *SQL);
@@ -749,18 +873,20 @@ bool FMonolithSourceDatabase::OpenForWriting(const FString& DbPath)
 	CachedDbPath = DbPath;
 
 	Database = new FSQLiteDatabase();
-	if (!Database->Open(*DbPath, ESQLiteDatabaseOpenMode::ReadWriteCreate))
+	FMonolithSQLiteOpenPolicy Policy;
+	Policy.Intent = EMonolithSQLiteIntent::CreateOrRebuild;
+	Policy.Role = EMonolithSQLiteConnectionRole::WriteHeavy;
+	Policy.bEnableForeignKeys = true;
+	Policy.bVerifyIntegrity = false;
+	bRunOptimizeOnClose = true;
+	FMonolithSQLiteTuningResult TuningResult;
+	if (!OpenMonolithSQLiteDatabase(*Database, DbPath, Policy, &TuningResult))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("OpenForWriting: failed to open/create DB: %s"), *DbPath);
 		delete Database;
 		Database = nullptr;
 		return false;
 	}
-
-	// Belt-and-suspenders: force DELETE journal mode (WAL breaks ReadOnly on Windows, per lesson learned)
-	Database->Execute(TEXT("PRAGMA journal_mode=DELETE;"));
-	Database->Execute(TEXT("PRAGMA synchronous=NORMAL;"));
-	Database->Execute(TEXT("PRAGMA cache_size=-64000;"));   // 64 MB page cache
 
 	UE_LOG(LogMonolithSource, Log, TEXT("Engine source DB opened for writing: %s"), *DbPath);
 	return true;
@@ -779,28 +905,46 @@ bool FMonolithSourceDatabase::CreateTablesIfNeeded()
 		return false;
 	}
 
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_Tables))
+	const int32 CurrentSchemaVersion = ReadSchemaVersionLocked();
+
+	if (!ExecuteMonolithSQLiteMulti(*Database, MonolithSourceSchema::DDL_Tables))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: DDL_Tables failed — %s"), *Database->GetLastError());
 		return false;
 	}
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_FTS))
+
+	const bool bHasLegacyFts = DoesTableExistLocked(TEXT("symbols_fts")) || DoesTableExistLocked(TEXT("source_fts"));
+	const bool bNeedsFtsMigration = (CurrentSchemaVersion > 0 && CurrentSchemaVersion < MonolithSourceSchema::SchemaVersion)
+		|| (CurrentSchemaVersion == 0 && bHasLegacyFts);
+
+	if (bNeedsFtsMigration)
 	{
-		UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: DDL_FTS failed — %s"), *Database->GetLastError());
-		return false;
+		if (!MigrateFtsSchemaToV2Locked())
+		{
+			UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: FTS migration failed — %s"), *Database->GetLastError());
+			return false;
+		}
 	}
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_Triggers))
+	else
 	{
-		UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: DDL_Triggers failed — %s"), *Database->GetLastError());
-		return false;
+		if (!ExecuteMonolithSQLiteMulti(*Database, MonolithSourceSchema::DDL_FTS))
+		{
+			UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: DDL_FTS failed — %s"), *Database->GetLastError());
+			return false;
+		}
+		if (!ExecuteMonolithSQLiteMulti(*Database, MonolithSourceSchema::DDL_Triggers))
+		{
+			UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: DDL_Triggers failed — %s"), *Database->GetLastError());
+			return false;
+		}
 	}
 
-	// Stamp the schema version into meta
-	FSQLitePreparedStatement MetaStmt;
-	MetaStmt.Create(*Database, TEXT("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);"));
-	MetaStmt.SetBindingValueByIndex(1, FString(TEXT("schema_version")));
-	MetaStmt.SetBindingValueByIndex(2, FString::FromInt(MonolithSourceSchema::SchemaVersion));
-	MetaStmt.Step();
+	WriteSchemaVersionLocked();
+
+	FMonolithSQLiteMaintenanceOptions MaintenanceOptions;
+	MaintenanceOptions.bRunPragmaOptimize = true;
+	MaintenanceOptions.bUseFullOptimizeScan = true;
+	RunMonolithSQLiteMaintenance(*Database, MaintenanceOptions);
 
 	UE_LOG(LogMonolithSource, Log, TEXT("Schema created/verified (version %d)"), MonolithSourceSchema::SchemaVersion);
 	return true;
@@ -815,7 +959,9 @@ bool FMonolithSourceDatabase::ResetDatabase()
 		return false;
 	}
 
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_Drop))
+	StatementCache.Clear();
+
+	if (!ExecuteMonolithSQLiteMulti(*Database, MonolithSourceSchema::DDL_Drop))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: drop failed — %s"), *Database->GetLastError());
 		return false;
@@ -824,27 +970,30 @@ bool FMonolithSourceDatabase::ResetDatabase()
 	UE_LOG(LogMonolithSource, Log, TEXT("ResetDatabase: all tables dropped, recreating schema"));
 
 	// Execute DDL inline (we're already holding DbLock, can't call CreateTablesIfNeeded)
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_Tables))
+	if (!ExecuteMonolithSQLiteMulti(*Database, MonolithSourceSchema::DDL_Tables))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_Tables failed — %s"), *Database->GetLastError());
 		return false;
 	}
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_FTS))
+	if (!ExecuteMonolithSQLiteMulti(*Database, MonolithSourceSchema::DDL_FTS))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_FTS failed — %s"), *Database->GetLastError());
 		return false;
 	}
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_Triggers))
+	if (!ExecuteMonolithSQLiteMulti(*Database, MonolithSourceSchema::DDL_Triggers))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_Triggers failed — %s"), *Database->GetLastError());
 		return false;
 	}
 
-	FSQLitePreparedStatement MetaStmt;
-	MetaStmt.Create(*Database, TEXT("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);"));
-	MetaStmt.SetBindingValueByIndex(1, FString(TEXT("schema_version")));
-	MetaStmt.SetBindingValueByIndex(2, FString::FromInt(MonolithSourceSchema::SchemaVersion));
-	MetaStmt.Step();
+	WriteSchemaVersionLocked();
+
+	FMonolithSQLiteMaintenanceOptions MaintenanceOptions;
+	MaintenanceOptions.bRunPragmaOptimize = true;
+	MaintenanceOptions.bUseFullOptimizeScan = true;
+	MaintenanceOptions.bRunIncrementalVacuum = true;
+	RunMonolithSQLiteMaintenance(*Database, MaintenanceOptions);
+	Database->PerformQuickIntegrityCheck();
 
 	UE_LOG(LogMonolithSource, Log, TEXT("ResetDatabase: schema recreated successfully"));
 	return true;
@@ -962,9 +1111,10 @@ int64 FMonolithSourceDatabase::InsertSymbol(
 
 	FSQLitePreparedStatement Stmt;
 	Stmt.Create(*Database,
-		TEXT("INSERT INTO symbols (name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro) ")
-		TEXT("VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"));
+		TEXT("INSERT INTO symbols (name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, search_tokens, is_ue_macro) ")
+		TEXT("VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"));
 
+	const FString SearchTokens = BuildMonolithSQLiteSearchText(FString::Printf(TEXT("%s %s %s"), *Name, *QualifiedName, *Kind));
 	Stmt.SetBindingValueByIndex(1, Name);
 	Stmt.SetBindingValueByIndex(2, QualifiedName);
 	Stmt.SetBindingValueByIndex(3, Kind);
@@ -989,7 +1139,8 @@ int64 FMonolithSourceDatabase::InsertSymbol(
 	Stmt.SetBindingValueByIndex(8, Access);
 	Stmt.SetBindingValueByIndex(9, Signature);
 	Stmt.SetBindingValueByIndex(10, Docstring);
-	Stmt.SetBindingValueByIndex(11, static_cast<int64>(bIsUEMacro ? 1 : 0));
+	Stmt.SetBindingValueByIndex(11, SearchTokens);
+	Stmt.SetBindingValueByIndex(12, static_cast<int64>(bIsUEMacro ? 1 : 0));
 
 	Stmt.Step();
 
@@ -1054,8 +1205,8 @@ void FMonolithSourceDatabase::InsertSourceChunks(int64 FileId, const TArray<FStr
 	// Chunk's line_number is the 1-based index of the first line in that batch.
 	static const int32 ChunkSize = 10;
 
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("INSERT INTO source_fts (file_id, line_number, text) VALUES (?, ?, ?);"));
+	FSQLitePreparedStatement* Stmt = StatementCache.FindOrCreate(*Database, TEXT("InsertSourceChunk"), TEXT("INSERT INTO source_fts (file_id, line_number, text) VALUES (?, ?, ?);"));
+	if (!Stmt) return;
 
 	for (int32 BatchStart = 0; BatchStart < Lines.Num(); BatchStart += ChunkSize)
 	{
@@ -1074,11 +1225,11 @@ void FMonolithSourceDatabase::InsertSourceChunks(int64 FileId, const TArray<FStr
 		// 1-based line number of the first line in this batch
 		const int64 ChunkLineNumber = static_cast<int64>(BatchStart + 1);
 
-		Stmt.Reset();
-		Stmt.SetBindingValueByIndex(1, FileId);
-		Stmt.SetBindingValueByIndex(2, ChunkLineNumber);
-		Stmt.SetBindingValueByIndex(3, JoinedText);
-		Stmt.Step();
+		Stmt->Reset();
+		Stmt->SetBindingValueByIndex(1, FileId);
+		Stmt->SetBindingValueByIndex(2, ChunkLineNumber);
+		Stmt->SetBindingValueByIndex(3, JoinedText);
+		Stmt->Step();
 	}
 }
 
