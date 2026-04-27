@@ -1,6 +1,7 @@
 #include "MonolithEditorModule.h"
 #include "MonolithEditorActions.h"
 #include "MonolithEditorMapActions.h"
+#include "MonolithEditorSelectionActions.h"
 #include "MonolithSettingsCustomization.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
@@ -19,6 +20,7 @@ void FMonolithEditorModule::StartupModule()
 
 	FMonolithEditorActions::RegisterActions(LogCapture);
 	FMonolithEditorMapActions::RegisterActions(FMonolithToolRegistry::Get());  // F8: create_empty_map + get_module_status
+	FMonolithEditorSelectionActions::RegisterActions();
 
 	// Register settings detail customization
 	FPropertyEditorModule& PropModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
