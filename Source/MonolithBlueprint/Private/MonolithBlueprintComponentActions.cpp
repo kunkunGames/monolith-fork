@@ -2,8 +2,11 @@
 #include "MonolithBlueprintInternal.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithAssetUtils.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
+#include "Engine/SkinnedAsset.h"
+#include "Components/SkinnedMeshComponent.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 
 // ---------------------------------------------------------------------------
@@ -455,11 +458,6 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	if (!BP->SimpleConstructionScript)
-	{
-		return FMonolithActionResult::Error(TEXT("Blueprint has no SimpleConstructionScript"));
-	}
-
 	FString CompName  = Params->GetStringField(TEXT("component_name"));
 	FString PropName  = Params->GetStringField(TEXT("property_name"));
 	FString Value     = Params->GetStringField(TEXT("value"));
@@ -467,16 +465,44 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 	if (CompName.IsEmpty()) return FMonolithActionResult::Error(TEXT("component_name is required"));
 	if (PropName.IsEmpty()) return FMonolithActionResult::Error(TEXT("property_name is required"));
 
-	USCS_Node* Node = FindSCSNodeByName(BP->SimpleConstructionScript, FName(*CompName));
-	if (!Node)
+	// 1) BP-added components live on the SimpleConstructionScript as USCS_Node.
+	UActorComponent* Template = nullptr;
+	if (BP->SimpleConstructionScript)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Component not found: %s"), *CompName));
+		if (USCS_Node* Node = FindSCSNodeByName(BP->SimpleConstructionScript, FName(*CompName)))
+		{
+			Template = Node->ComponentTemplate;
+		}
 	}
 
-	UActorComponent* Template = Node->ComponentTemplate;
+	// 2) Fallback: native inherited components (declared in the C++ parent class)
+	// don't appear in the SCS — they live as default subobjects on the CDO.
+	// Writing to the CDO subobject persists in the saved BP.
+	if (!Template && BP->GeneratedClass)
+	{
+		if (UObject* CDO = BP->GeneratedClass->GetDefaultObject(/*bCreateIfNeeded=*/false))
+		{
+			if (AActor* CDOActor = Cast<AActor>(CDO))
+			{
+				TArray<UActorComponent*> Comps;
+				CDOActor->GetComponents(Comps);
+				for (UActorComponent* Comp : Comps)
+				{
+					if (!Comp) continue;
+					if (Comp->GetName().Equals(CompName, ESearchCase::IgnoreCase) ||
+					    Comp->GetFName() == FName(*CompName))
+					{
+						Template = Comp;
+						break;
+					}
+				}
+			}
+		}
+	}
+
 	if (!Template)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Component '%s' has no ComponentTemplate"), *CompName));
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Component not found: %s"), *CompName));
 	}
 
 	FProperty* Prop = Template->GetClass()->FindPropertyByName(FName(*PropName));
@@ -504,20 +530,134 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 	FString OldValue;
 	Prop->ExportText_Direct(OldValue, ValuePtr, ValuePtr, Template, PPF_None);
 
-	const TCHAR* ImportResult = Prop->ImportText_Direct(*Value, ValuePtr, Template, PPF_None);
-	if (!ImportResult)
+	// Record the change for undo + ensure the CDO subobject is serialized on save.
+	Template->Modify();
+
+	// For FObjectProperty, resolve the path → load the object → assign the pointer
+	// directly. ImportText is fragile for TObjectPtrs on a CDO subobject — it may
+	// silently no-op if the value string isn't in the exact canonical form the
+	// parser expects. Loading the object ourselves bypasses that.
+	FObjectProperty* ObjProp = CastField<FObjectProperty>(Prop);
+	if (ObjProp)
 	{
-		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Failed to set property '%s' to value '%s' — check format"), *PropName, *Value));
+		// Accept both "/Game/.../Asset.Asset" and "Class'/Game/.../Asset.Asset'" forms.
+		FString Path = Value;
+		Path.TrimStartAndEndInline();
+		int32 QuoteStart = INDEX_NONE;
+		if (Path.FindChar(TEXT('\''), QuoteStart))
+		{
+			int32 QuoteEnd = INDEX_NONE;
+			if (Path.FindLastChar(TEXT('\''), QuoteEnd) && QuoteEnd > QuoteStart)
+			{
+				Path = Path.Mid(QuoteStart + 1, QuoteEnd - QuoteStart - 1);
+			}
+		}
+		const bool bIsNone = Path.Equals(TEXT("None"), ESearchCase::IgnoreCase) || Path.IsEmpty();
+		UObject* NewObject = nullptr;
+		if (!bIsNone)
+		{
+			// Load without class constraint — ObjProp->PropertyClass may be an
+			// abstract base (e.g. USkinnedAsset) and asset loader can't pick a
+			// concrete subclass from that. Validate compatibility after loading.
+			NewObject = FMonolithAssetUtils::LoadAssetByPath(UObject::StaticClass(), Path);
+			if (!NewObject)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Failed to load object '%s' for property '%s' (expected %s or subclass)"),
+					*Path, *PropName, *ObjProp->PropertyClass->GetName()));
+			}
+			if (!NewObject->IsA(ObjProp->PropertyClass))
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Object '%s' is a %s, not compatible with property '%s' (expects %s)"),
+					*Path, *NewObject->GetClass()->GetName(), *PropName, *ObjProp->PropertyClass->GetName()));
+			}
+		}
+
+		// Route the write through the canonical setter when one exists. The
+		// engine contract: a UPROPERTY with `Setter=` metadata or a deprecated/
+		// aliased pair (USkinnedMeshComponent::SkinnedAsset ↔ SkeletalMesh,
+		// AnimClass, MeshDeformer, etc.) MUST go through the setter so all
+		// aliases are written and any side effects (render-state refresh,
+		// PostLoad alias re-sync) fire correctly. Writing the field directly
+		// produces a value that survives serialization but is then clobbered
+		// by PostLoad's alias re-sync — see SkinnedMeshComponent.cpp:660-663.
+		bool bWroteValue = false;
+
+		// 1) Special-case: USkinnedMeshComponent::SkinnedAsset is private with
+		//    no Setter meta of its own; it's the new field that PostLoad copies
+		//    from the deprecated SkeletalMesh. Route through SetSkinnedAssetAndUpdate
+		//    which writes both aliases atomically.
+		if (USkinnedMeshComponent* SMC = Cast<USkinnedMeshComponent>(Template))
+		{
+			if (PropName.Equals(TEXT("SkinnedAsset"), ESearchCase::IgnoreCase) ||
+				PropName.Equals(TEXT("SkeletalMesh"), ESearchCase::IgnoreCase) ||
+				PropName.Equals(TEXT("SkeletalMeshAsset"), ESearchCase::IgnoreCase))
+			{
+				if (USkinnedAsset* NewAsset = Cast<USkinnedAsset>(NewObject); NewAsset || bIsNone)
+				{
+					SMC->SetSkinnedAssetAndUpdate(NewAsset);
+					bWroteValue = true;
+				}
+			}
+		}
+
+		// 2) General: detect UPROPERTY `Setter=` metadata and call the named
+		//    setter via reflection. This honours the engine contract for any
+		//    deprecated/aliased UPROPERTY pair. Setter signature is always
+		//    `void SetX(T NewValue)` so a single-pointer params struct works.
+		if (!bWroteValue)
+		{
+			const FString SetterName = ObjProp->GetMetaData(TEXT("Setter"));
+			if (!SetterName.IsEmpty())
+			{
+				if (UFunction* SetterFunc = Template->GetClass()->FindFunctionByName(*SetterName))
+				{
+					struct FObjectSetterParams { UObject* InValue; } SetterParams;
+					SetterParams.InValue = NewObject;
+					Template->ProcessEvent(SetterFunc, &SetterParams);
+					bWroteValue = true;
+				}
+			}
+		}
+
+		// 3) Fallback: direct field write for properties with no setter contract.
+		if (!bWroteValue)
+		{
+			ObjProp->SetObjectPropertyValue(ValuePtr, NewObject);
+		}
+	}
+	else
+	{
+		const TCHAR* ImportResult = Prop->ImportText_Direct(*Value, ValuePtr, Template, PPF_None);
+		if (!ImportResult)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Failed to set property '%s' to value '%s' — check format"), *PropName, *Value));
+		}
+	}
+
+	// Fire property-change notifications so setter-driven side effects run
+	// (e.g. SkeletalMeshComponent mirrors SkinnedAsset ↔ SkeletalMesh and
+	// updates render state). Without this, ObjectPtr properties can end up
+	// set in memory but never serialized to the .uasset.
+	{
+		FPropertyChangedEvent ChangeEvent(Prop, EPropertyChangeType::ValueSet);
+		Template->PostEditChangeProperty(ChangeEvent);
 	}
 
 	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
+	BP->MarkPackageDirty();
+
+	// Re-export to reflect whatever UE actually stored — caller can diff old vs new.
+	FString PostImportValue;
+	Prop->ExportText_Direct(PostImportValue, ValuePtr, ValuePtr, Template, PPF_None);
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("component"), CompName);
 	Root->SetStringField(TEXT("property"), Prop->GetName());
 	Root->SetStringField(TEXT("old_value"), OldValue);
-	Root->SetStringField(TEXT("new_value"), Value);
+	Root->SetStringField(TEXT("new_value"), PostImportValue);
 	Root->SetStringField(TEXT("asset_path"), AssetPath);
 
 	return FMonolithActionResult::Success(Root);

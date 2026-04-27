@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.14.1 (Beta)
+**Version:** 0.14.7 (Beta)
 
 ---
 
@@ -14,8 +14,9 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithNiagaraModule` | Registers 108 Niagara actions |
+| `FMonolithNiagaraModule` | Registers 109 Niagara actions (108 baseline in `MonolithNiagaraActions.cpp` + 1 layout in `MonolithNiagaraLayoutActions.cpp`) |
 | `FMonolithNiagaraActions` | Static handlers + extensive private helpers |
+| `FMonolithNiagaraLayoutActions` | `auto_layout` Blueprint Assist bridge for Niagara graphs |
 | `MonolithNiagaraHelpers` | 6 reimplemented NiagaraEditor functions (non-exported APIs) |
 
 ### Reimplemented NiagaraEditor Helpers
@@ -29,7 +30,9 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 5. `GetParametersForContext` — System user store params
 6. `GetStackFunctionInputs` — Full input enumeration via engine's `FNiagaraStackGraphUtilities::GetStackFunctionInputs` with `FCompileConstantResolver`. Returns all input types (floats, vectors, colors, data interfaces, enums, bools) — not just static switch pins
 
-### Actions (96 — namespace: "niagara")
+### Actions (109 — namespace: "niagara")
+
+> **Audit note (2026-04-26):** detailed per-category tables below sum to roughly 96 — the remainder are post-design-doc additions (NPC, effect types, scalability, layout, advanced query helpers) that have not yet been threaded into the per-category tables. The header count is the source-of-truth.
 
 > **Note:** All Niagara actions accept `asset_path` (preferred) or `system_path` (backward compatible) for the system asset path parameter.
 >

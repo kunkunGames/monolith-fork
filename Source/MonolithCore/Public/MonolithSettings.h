@@ -23,15 +23,28 @@ public:
 
 	// --- MCP Server ---
 
+	/** Master enable for the Monolith MCP HTTP server. Set false to disable
+	 *  the localhost listener entirely (e.g. when working on an untrusted
+	 *  network and you don't need AI tooling for the session). UE's
+	 *  FHttpServerModule has no bind-address parameter, so the listener is
+	 *  reachable on all network interfaces — this flag is the user-facing
+	 *  kill-switch. Takes effect on next editor restart. (Issue #38) */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server")
+	bool bMcpServerEnabled = true;
+
 	/** Port for the embedded MCP HTTP server */
 	UPROPERTY(config, EditAnywhere, Category="MCP Server", meta=(ClampMin="1024", ClampMax="65535"))
 	int32 ServerPort = 9316;
 
 	// --- Auto-Update ---
 
-	/** Check GitHub Releases for updates on editor startup */
+	/** Check GitHub Releases for updates on editor startup. Off by default
+	 *  (Issue #38) — auto-fetching prebuilt zips from GitHub without
+	 *  integrity verification or explicit user opt-in is supply-chain risk
+	 *  for a freshly-installed plugin. Users who want auto-update enable
+	 *  it explicitly here. */
 	UPROPERTY(config, EditAnywhere, Category="Auto-Update")
-	bool bAutoUpdateEnabled = true;
+	bool bAutoUpdateEnabled = false;
 
 	// --- Indexing ---
 

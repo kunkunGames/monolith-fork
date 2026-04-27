@@ -12,13 +12,13 @@
 #      source, binaries, and the uplugin module list
 #   5. Unsets env var (your next dev build auto-detects deps normally)
 #
-# Source users (GitHub clones) are unaffected — Build.cs auto-detects at compile time.
+# Source users (GitHub clones) are unaffected -- Build.cs auto-detects at compile time.
 #
 # Non-redistributable modules:
 #   - MonolithSteamBridge: solo-dev only, Steam Integration Kit bridge (not public)
 #
 # Note: MonolithISX was extracted to a sibling plugin at Plugins/MonolithISX/ on
-# 2026-04-21 — it no longer lives in this repo, so release packaging does not need
+# 2026-04-21 -- it no longer lives in this repo, so release packaging does not need
 # to strip it here.
 
 param(
@@ -63,13 +63,26 @@ finally {
     Pop-Location
 }
 
-# Modules stripped from every public release zip.
-# - MonolithSteamBridge: solo-dev only, Steam Integration Kit bridge -- not public
-# (MonolithISX was extracted to a sibling plugin at Plugins/MonolithISX/ on 2026-04-21 —
-#  it no longer lives in this repo and therefore does not need stripping here.)
-$StrippedModules = @("MonolithSteamBridge")
-
 $ProjectDir = Split-Path -Parent (Split-Path -Parent $PluginDir)
+
+# --- $StrippedModules: defense-in-depth against accidental sibling-plugin re-merge ---
+# Sibling plugins (MonolithSteamBridge, MonolithISX, future siblings) live OUTSIDE
+# Plugins/Monolith/ at the project's Plugins/ level. They are naturally excluded from
+# the release zip by `git ls-files` scope (which only sees files inside Plugins/Monolith/).
+# This array exists purely as defense-in-depth: if someone ever accidentally re-merges
+# sibling source back into Plugins/Monolith/Source/ (refactor mistake, copy-paste, etc.),
+# the strip filter catches it before it ships.
+#
+# Auto-discover all "Monolith*" sibling folders alongside Plugins/Monolith/ -- every new
+# sibling gets protected automatically without script maintenance. Excludes Monolith
+# itself.
+$ProjectPluginsDir = Join-Path $ProjectDir "Plugins"
+$StrippedModules = @(Get-ChildItem -Path $ProjectPluginsDir -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like "Monolith*" -and $_.Name -ne "Monolith" } |
+    Select-Object -ExpandProperty Name)
+if ($StrippedModules.Count -gt 0) {
+    Write-Host "  [strip-list] Auto-discovered $($StrippedModules.Count) sibling plugin(s) to defend against: $($StrippedModules -join ', ')" -ForegroundColor DarkGray
+}
 $OutputZip = Join-Path $ProjectDir "Monolith-v$Version.zip"
 $TempDir = Join-Path $env:TEMP "Monolith_Release_$Version"
 $UBT = 'C:\Program Files (x86)\UE_5.7\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe'
@@ -95,7 +108,7 @@ if (-not $SkipBuild) {
         Write-Host "    Build succeeded" -ForegroundColor Green
     }
     finally {
-        # Always unset — even if build fails, don't poison future dev builds
+        # Always unset -- even if build fails, don't poison future dev builds
         Remove-Item Env:\MONOLITH_RELEASE_BUILD -ErrorAction SilentlyContinue
         Write-Host "    MONOLITH_RELEASE_BUILD unset" -ForegroundColor DarkGray
     }
@@ -121,6 +134,12 @@ $trackedFiles = $allTrackedFiles | Where-Object {
             $keep = $false
             break
         }
+    }
+    # Strip internal testing-execution records (Docs/testing/) -- per-feature test-pass
+    # diaries with no downstream consumer value. Public-facing test artefacts live
+    # elsewhere (SPEC sections, automation tests under Source/).
+    if ($keep -and $path -like "Docs/testing/*") {
+        $keep = $false
     }
     $keep
 }
@@ -206,5 +225,120 @@ $fileSize = [math]::Round((Get-Item $OutputZip).Length / 1MB, 1)
 Write-Host "`nRelease complete: $OutputZip" -ForegroundColor Green
 Write-Host "Size: ${fileSize}MB" -ForegroundColor Green
 Write-Host "`nVerify: optional deps should be OFF in the binaries." -ForegroundColor Cyan
-Write-Host "  WITH_BLUEPRINT_ASSIST=0, WITH_GBA=0" -ForegroundColor Cyan
+Write-Host "  WITH_BLUEPRINT_ASSIST=0, WITH_GBA=0, WITH_COMMONUI=0" -ForegroundColor Cyan
+Write-Host "  WITH_COMBOGRAPH=0, WITH_LOGICDRIVER=0, WITH_METASOUND=0" -ForegroundColor Cyan
+Write-Host "  WITH_GAMEPLAYABILITIES=0, WITH_GAMEPLAYBEHAVIORS=0" -ForegroundColor Cyan
+Write-Host "  WITH_MASSENTITY=0, WITH_ZONEGRAPH=0" -ForegroundColor Cyan
+Write-Host "  WITH_STATETREE=0, WITH_SMARTOBJECTS=0   (after F22 lands)" -ForegroundColor Cyan
 Write-Host "  Your next editor build will auto-detect deps normally." -ForegroundColor DarkGray
+
+# --- Step 5: Post-build hard-link smoke (defense against issue #30) ---
+# Issue #30 (v0.14.0): MonolithMesh.dll hard-linked GeometryScriptingCore.dll because
+# MonolithMesh.Build.cs missed the MONOLITH_RELEASE_BUILD=1 bypass on its GeometryScripting
+# probe. End-user editors failed to load Monolith with "missing import" errors.
+#
+# This step dumps the import table of every UnrealEditor-Monolith*.dll in the release zip
+# and refuses if any imports a sentinel module -- a module from a non-default-enabled UE
+# plugin that should NEVER appear in a release-built Monolith binary.
+Write-Host "`n  [5/5] Post-build hard-link smoke (issue #30 defense)..." -ForegroundColor Yellow
+
+# Sentinel modules: their presence in a Monolith DLL's imports = build-time gate failure.
+# Add new sentinels when adding new optional plugin integrations.
+#
+# GameplayAbilities removed from sentinels in v0.14.7: it's declared as a hard
+# dep in Monolith.uplugin (no Optional flag), so the engine auto-enables it on
+# Monolith install and guarantees load order. MonolithGAS + MonolithIndex
+# hard-link GameplayAbilities and that's functionally safe under this contract.
+# Migration to optional + WITH_GAMEPLAYABILITIES gate planned for v0.14.8
+# alongside the StructUtils-cleanup follow-up.
+$LeakSentinels = @(
+    "GeometryScriptingCore", "CommonUI", "CommonInput", "BlueprintAssist",
+    "GameplayBehaviorsModule", "MassEntity", "ZoneGraph",
+    "StateTreeModule", "SmartObjectsModule", "ComboGraphRuntime", "LogicDriver",
+    "MetaSoundEngine", "MetaSoundFrontend"
+)
+
+# Locate dumpbin.exe -- ships with Visual Studio Build Tools. Try common locations
+# before giving up. If not found, skip the smoke (warn, don't fail) so the script
+# remains usable on dev machines without VS BuildTools.
+$Dumpbin = Get-Command dumpbin.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
+if (-not $Dumpbin) {
+    $VSCommonPaths = @(
+        "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC",
+        "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC",
+        "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC",
+        "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC"
+    )
+    foreach ($vsBase in $VSCommonPaths) {
+        if (Test-Path $vsBase) {
+            $candidate = Get-ChildItem -Path $vsBase -Directory -ErrorAction SilentlyContinue |
+                Sort-Object Name -Descending |
+                ForEach-Object { Join-Path $_.FullName "bin\HostX64\x64\dumpbin.exe" } |
+                Where-Object { Test-Path $_ } |
+                Select-Object -First 1
+            if ($candidate) { $Dumpbin = $candidate; break }
+        }
+    }
+}
+
+if (-not $Dumpbin) {
+    Write-Host "    [SKIP] dumpbin.exe not found -- install Visual Studio Build Tools to enable hard-link smoke." -ForegroundColor Yellow
+} else {
+    # Re-extract the just-built zip into a scratch dir to inspect the actual shipped DLLs
+    # (not the dev binaries we may have overwritten before zipping).
+    $SmokeDir = Join-Path $env:TEMP "Monolith_Release_${Version}_Smoke"
+    if (Test-Path $SmokeDir) { Remove-Item $SmokeDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $SmokeDir | Out-Null
+    Expand-Archive -Path $OutputZip -DestinationPath $SmokeDir -Force
+
+    $MonolithDlls = @(Get-ChildItem -Path $SmokeDir -Recurse -Filter "UnrealEditor-Monolith*.dll")
+    $LeakingDlls = @()
+    foreach ($dllItem in $MonolithDlls) {
+        $imports = & $Dumpbin /imports $dllItem.FullName 2>$null | Out-String
+        foreach ($sentinel in $LeakSentinels) {
+            # Match "UnrealEditor-<Sentinel>.dll" in the import table
+            if ($imports -match "UnrealEditor-$([regex]::Escape($sentinel))\.dll") {
+                $LeakingDlls += [PSCustomObject]@{
+                    Dll      = $dllItem.Name
+                    Sentinel = $sentinel
+                }
+            }
+        }
+    }
+
+    # Cleanup smoke dir regardless of outcome
+    Remove-Item $SmokeDir -Recurse -Force -ErrorAction SilentlyContinue
+
+    if ($LeakingDlls.Count -gt 0) {
+        Write-Host "`n  [FAIL] Hard-link smoke found $($LeakingDlls.Count) sentinel import(s) in shipped DLLs:" -ForegroundColor Red
+        $LeakingDlls | ForEach-Object {
+            Write-Host "    $($_.Dll) imports UnrealEditor-$($_.Sentinel).dll" -ForegroundColor Red
+        }
+        Write-Host "`n  This is the issue #30 failure mode. The Build.cs for the affected module" -ForegroundColor Red
+        Write-Host "  is not honouring MONOLITH_RELEASE_BUILD=1. Fix the Build.cs probe before shipping." -ForegroundColor Red
+        Write-Host "`n  Refusing to publish v$Version. Delete $OutputZip after fixing Build.cs and re-run." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "    No sentinel imports found in $($MonolithDlls.Count) Monolith DLLs (clean)" -ForegroundColor Green
+}
+
+# --- SHA256 hash for release notes (Issue #38) ---
+# Marker token is `Monolith-SHA256:` (not bare `SHA256:`) so the auto-updater's
+# regex never collides with prose mentions of the word SHA256 elsewhere in the
+# release body. The parser anchors on this exact sentinel.
+if (Test-Path $OutputZip) {
+    $Hash = (Get-FileHash -Algorithm SHA256 -Path $OutputZip).Hash.ToLower()
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host "SHA256: $Hash" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Paste this exact line into the GitHub Release notes body:" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Monolith-SHA256: $Hash" -ForegroundColor White
+    Write-Host ""
+    Write-Host "The auto-updater parses this exact marker and refuses to install" -ForegroundColor Yellow
+    Write-Host "if the downloaded zip's hash does not match. Do not rename or"     -ForegroundColor Yellow
+    Write-Host "reformat the marker -- the prefix and a single space before the"   -ForegroundColor Yellow
+    Write-Host "hex string are required."                                          -ForegroundColor Yellow
+    Write-Host "================================================================" -ForegroundColor Cyan
+}

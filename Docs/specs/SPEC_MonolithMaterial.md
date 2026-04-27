@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.14.1 (Beta)
+**Version:** 0.14.7 (Beta)
 
 ---
 
@@ -17,7 +17,7 @@
 | `FMonolithMaterialModule` | Registers 63 material actions |
 | `FMonolithMaterialActions` | Static handlers + helpers for loading materials and serializing expressions |
 
-### Actions (57 — namespace: "material")
+### Actions (63 — namespace: "material")
 
 **Read Actions (10)**
 | Action | Description |

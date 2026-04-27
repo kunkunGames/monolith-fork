@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.14.1 (Beta)
+**Version:** 0.14.7 (Beta)
 
 ---
 
@@ -14,11 +14,11 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithBlueprintModule` | Registers 88 blueprint actions |
+| `FMonolithBlueprintModule` | Registers 89 blueprint actions |
 | `FMonolithBlueprintActions` | Static handlers. Uses `FMonolithAssetUtils::LoadAssetByPath<UBlueprint>` |
 | `MonolithBlueprintInternal` | Helpers: AddGraphArray, FindGraphByName, PinTypeToString, SerializePin/Node, TraceExecFlow, FindEntryNode |
 
-### Actions (88 — namespace: "blueprint")
+### Actions (89 — namespace: "blueprint")
 
 **Read Actions (13)**
 | Action | Params | Description |

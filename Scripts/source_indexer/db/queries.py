@@ -37,22 +37,6 @@ def _escape_fts(query: str) -> str:
     return " ".join(f'"{t}"*' for t in tokens)
 
 
-def _search_text(*parts: str | None) -> str:
-    text = " ".join(p or "" for p in parts)
-    tokens: list[str] = []
-    seen: set[str] = set()
-    for raw in re.split(r"[^0-9A-Za-z]+", text):
-        if not raw:
-            continue
-        expanded = re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", raw)
-        for token in expanded.split():
-            key = token.lower()
-            if len(token) > 1 and key not in seen and key != raw.lower():
-                seen.add(key)
-                tokens.append(token)
-    return " ".join([text, *tokens]).strip()
-
-
 # ── Insert helpers ───────────────────────────────────────────────────────
 
 def insert_module(
@@ -95,11 +79,10 @@ def insert_symbol(
 ) -> int:
     cur = conn.execute(
         "INSERT INTO symbols (name, qualified_name, kind, file_id, line_start, "
-        "line_end, parent_symbol_id, access, signature, docstring, search_tokens, is_ue_macro) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "line_end, parent_symbol_id, access, signature, docstring, is_ue_macro) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (name, qualified_name, kind, file_id, line_start, line_end,
-         parent_symbol_id, access, signature, docstring,
-         _search_text(name, qualified_name, kind), is_ue_macro),
+         parent_symbol_id, access, signature, docstring, is_ue_macro),
     )
     return cur.lastrowid
 
@@ -183,7 +166,7 @@ def search_symbols_fts(
         "SELECT s.* FROM symbols_fts f "
         "JOIN symbols s ON s.id = f.rowid "
         "WHERE symbols_fts MATCH ? "
-        "ORDER BY bm25(symbols_fts, 5.0, 3.0, 1.0, 4.0) "
+        "ORDER BY bm25(symbols_fts) "
         "LIMIT ?",
         (fts_query, limit),
     ).fetchall()
@@ -242,7 +225,7 @@ def search_symbols_fts_filtered(
         params.append(f"%{path_filter}%")
 
     sql += "WHERE " + " AND ".join(conditions)
-    sql += " ORDER BY bm25(symbols_fts, 5.0, 3.0, 1.0, 4.0) LIMIT ?"
+    sql += " ORDER BY bm25(symbols_fts) LIMIT ?"
     params.append(limit)
 
     rows = conn.execute(sql, params).fetchall()

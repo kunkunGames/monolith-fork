@@ -54,7 +54,10 @@ private:
 	// --- Helpers ---
 	TUniquePtr<FHttpServerResponse> MakeJsonResponse(const FString& JsonBody, EHttpServerResponseCodes Code = EHttpServerResponseCodes::Ok);
 	TUniquePtr<FHttpServerResponse> MakeSseResponse(const TArray<TSharedPtr<FJsonObject>>& Messages);
-	void AddCorsHeaders(FHttpServerResponse& Response);
+	// Echo Origin only when it matches the localhost allowlist. Browsers block
+	// cross-origin reads when ACAO is missing, so omitting the header for
+	// non-allowlisted origins is the defence — see Issue #38.
+	void AddCorsHeaders(FHttpServerResponse& Response, const FHttpServerRequest& Request);
 
 	/** Register all HTTP routes on the current HttpRouter. */
 	void BindRoutes();

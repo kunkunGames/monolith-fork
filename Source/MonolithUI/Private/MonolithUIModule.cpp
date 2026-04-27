@@ -12,7 +12,7 @@
 #include "MonolithToolRegistry.h"
 
 #if WITH_COMMONUI
-// #include "CommonUI/MonolithCommonUIActions.h"
+#include "CommonUI/MonolithCommonUIActions.h"
 #endif
 
 #define LOCTEXT_NAMESPACE "MonolithUI"
@@ -32,7 +32,7 @@ void FMonolithUIModule::StartupModule()
     FMonolithUIAccessibilityActions::RegisterActions(Registry);
 
 #if WITH_COMMONUI
-    // FMonolithCommonUIActions::RegisterAll(Registry);
+    FMonolithCommonUIActions::RegisterAll(Registry);
 #endif
 
     // Dynamic action count — reflects base UMG + any conditionally-registered CommonUI actions.

@@ -10,12 +10,12 @@ public class MonolithIndex : ModuleRules
 		{
 			"Core",
 			"CoreUObject",
-			"Engine",
-			"MonolithCore"
+			"Engine"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			"MonolithCore",
 			"UnrealEd",
 			"AssetRegistry",
 			"Json",

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "MonolithSQLiteStatementCache.h"
 
 class FSQLiteDatabase;
 class FSQLitePreparedStatement;
@@ -76,7 +75,6 @@ struct FMonolithSourceFile
  * C++ wrapper around the engine source SQLite DB.
  * Supports both read-only access (Open) and read-write access (OpenForWriting)
  * for use by both query handlers and the C++ source indexer.
- * Access is internally serialized by DbLock; long result iteration intentionally holds the lock.
  */
 class MONOLITHSOURCE_API FMonolithSourceDatabase
 {
@@ -145,14 +143,8 @@ public:
 private:
 	FMonolithSourceSymbol ReadSymbolFromStatement(FSQLitePreparedStatement& Stmt);
 	FMonolithSourceReference ReadReferenceFromStatement(FSQLitePreparedStatement& Stmt, bool bIsRefTo);
-	bool DoesTableExistLocked(const TCHAR* TableName) const;
-	int32 ReadSchemaVersionLocked() const;
-	void WriteSchemaVersionLocked();
-	bool MigrateFtsSchemaToV2Locked();
 
 	FSQLiteDatabase* Database = nullptr;
-	FMonolithSQLiteStatementCache StatementCache;
 	FString CachedDbPath;
 	mutable FCriticalSection DbLock;
-	bool bRunOptimizeOnClose = false;
 };

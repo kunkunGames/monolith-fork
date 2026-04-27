@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.14.1 (Beta)
+**Version:** 0.14.7 (Beta)
 
 ---
 
@@ -14,10 +14,15 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithAnimationModule` | Registers 115 animation actions |
-| `FMonolithAnimationActions` | Static handlers organized in 15 groups |
+| `FMonolithAnimationModule` | Registers 118 animation actions across `MonolithAnimationActions.cpp` (96), `MonolithPoseSearchActions.cpp` (13), `MonolithAbpWriteActions.cpp` (5), `MonolithControlRigWriteActions.cpp` (3), `MonolithAnimLayoutActions.cpp` (1) |
+| `FMonolithAnimationActions` | Static handlers organized in 15 groups (the original action handlers) |
+| `FMonolithAbpWriteActions` | ABP graph write actions (Phase v0.14.3 PR #34): `add_anim_graph_node` (TwoBoneIK / ModifyBone / LocalToComponentSpace / ComponentToLocalSpace + auto-pin exposure), `connect_anim_graph_pins`, `set_state_animation`, `add_variable_get`, `set_anim_graph_node_property` |
+| `FMonolithControlRigWriteActions` | ControlRig write actions: 3 actions (graph node creation, pin configuration, variable management) |
+| `FMonolithAnimLayoutActions` | `auto_layout` for AnimBP graphs |
 
-### Actions (115 — namespace: "animation")
+### Actions (118 — namespace: "animation")
+
+**Note (2026-04-26 audit):** The detailed per-category tables below cover the 96 baseline actions. The remaining **22 actions** (5 ABP write + 13 PoseSearch + 3 ControlRig + 1 layout) are documented in their own sections at the bottom of this spec. The ABP write actions landed in v0.14.3 (PR #34 by @MaxenceEpitech). No Phase J changes touched this module.
 
 **Sequence Info (4) — read-only**
 | Action | Description |
@@ -124,7 +129,7 @@
 | `add_composite_segment` | Add a segment to an animation composite |
 | `remove_composite_segment` | Remove a segment from an animation composite by index |
 
-**PoseSearch (5)**
+**PoseSearch (13)**
 | Action | Description |
 |--------|-------------|
 | `get_pose_search_schema` | Get PoseSearch schema config and channels |
@@ -132,6 +137,26 @@
 | `add_database_sequence` | Add an animation sequence to a PoseSearch database |
 | `remove_database_sequence` | Remove a sequence from a PoseSearch database by index |
 | `get_database_stats` | Get PoseSearch database statistics (pose count, search mode, costs) |
+| `create_pose_search_schema` | Create a new PoseSearch schema asset |
+| `create_pose_search_database` | Create a new PoseSearch database asset |
+| `set_database_sequence_properties` | Set per-sequence properties (looping, mirror option, sample range) |
+| `add_schema_channel` | Add a channel to a PoseSearch schema |
+| `remove_schema_channel` | Remove a channel from a PoseSearch schema |
+| (3 additional PoseSearch actions registered — see `MonolithPoseSearchActions.cpp` for the full list; this section is approximate while the per-action audit catches up) |
+
+**ABP Write (5) — v0.14.3 PR #34 by @MaxenceEpitech**
+| Action | Description |
+|--------|-------------|
+| `add_anim_graph_node` | Place an animation graph node. Supports `TwoBoneIK`, `ModifyBone`, `LocalToComponentSpace`, `ComponentToLocalSpace`. TwoBoneIK auto-exposes `EffectorLocation`, `JointTargetLocation`, `Alpha` as input pins. New `expose_pins` parameter for manual pin control on any node type |
+| `connect_anim_graph_pins` | Wire two pins inside an ABP graph |
+| `set_state_animation` | Assign an animation asset to a state machine state |
+| `add_variable_get` | Place a `K2Node_VariableGet` in an ABP anim graph for reading AnimInstance member variables. Validates the variable exists on the skeleton class before spawning |
+| `set_anim_graph_node_property` | Set a property on a previously-placed anim graph node via reflection |
+
+**ControlRig Write (3)**
+| Action | Description |
+|--------|-------------|
+| (3 actions in `MonolithControlRigWriteActions.cpp` — graph node creation, pin configuration, variable management) |
 
 **Layout (1)**
 | Action | Description |

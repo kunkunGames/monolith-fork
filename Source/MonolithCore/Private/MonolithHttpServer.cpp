@@ -4,8 +4,10 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithSettings.h"
 #include "HttpServerModule.h"
+#include "HttpServerRequest.h"
 #include "HttpServerResponse.h"
 #include "GenericPlatform/GenericPlatformProcess.h"
+#include "Internationalization/Regex.h"
 #include "SocketSubsystem.h"
 #include "Sockets.h"
 #include "IPAddress.h"
@@ -27,18 +29,23 @@ bool FMonolithHttpServer::Start(int32 Port)
 		return true;
 	}
 
-	constexpr int32 MaxAttempts = 5;
+	// On a fresh editor launch, the OS keeps the port in TIME_WAIT for up to
+	// 2*MSL (~30s on macOS/Linux) after the previous editor shut down. UE's
+	// HttpServerModule also caches a broken listener internally and won't
+	// rebind until StopAllListeners() is called. Budget ~40s total so a
+	// rapid close+reopen cycle doesn't drop the MCP server on the floor.
+	constexpr int32 MaxAttempts = 20;
+	constexpr float BackoffSeconds = 2.0f;
+
 	for (int32 Attempt = 1; Attempt <= MaxAttempts; ++Attempt)
 	{
 		if (Attempt > 1)
 		{
-			const float Backoff = 0.5f * Attempt;
 			UE_LOG(LogMonolith, Warning, TEXT("HTTP bind attempt %d/%d on port %d — waiting %.1fs"),
-				Attempt, MaxAttempts, Port, Backoff);
-			FPlatformProcess::Sleep(Backoff);
+				Attempt, MaxAttempts, Port, BackoffSeconds);
+			FPlatformProcess::Sleep(BackoffSeconds);
 
 			// Drop our router handle + routes so GetHttpRouter can evict failed listener.
-			// Do NOT touch the module-level enabled flag.
 			if (HttpRouter.IsValid())
 			{
 				for (const FHttpRouteHandle& Handle : RouteHandles)
@@ -48,6 +55,10 @@ bool FMonolithHttpServer::Start(int32 Port)
 			}
 			RouteHandles.Empty();
 			HttpRouter.Reset();
+
+			// Full module reset — the HttpServerModule caches a failed listener
+			// and refuses to re-bind the same port until we explicitly stop it.
+			FHttpServerModule::Get().StopAllListeners();
 		}
 
 		HttpRouter = FHttpServerModule::Get().GetHttpRouter(Port, true);
@@ -75,7 +86,8 @@ bool FMonolithHttpServer::Start(int32 Port)
 		UE_LOG(LogMonolith, Warning, TEXT("Port %d not listening after StartAllListeners (attempt %d)"), Port, Attempt);
 	}
 
-	UE_LOG(LogMonolith, Error, TEXT("Failed to bind Monolith MCP server on port %d after %d attempts"), Port, MaxAttempts);
+	UE_LOG(LogMonolith, Error, TEXT("Failed to bind Monolith MCP server on port %d after %d attempts (~%ds total)"),
+		Port, MaxAttempts, static_cast<int32>(MaxAttempts * BackoffSeconds));
 	// Clean up
 	if (HttpRouter.IsValid())
 	{
@@ -204,7 +216,7 @@ bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const
 		TSharedPtr<FJsonObject> Err = FMonolithJsonUtils::ErrorResponse(
 			nullptr, FMonolithJsonUtils::ErrParseError, TEXT("Empty request body"));
 		auto Response = MakeJsonResponse(FMonolithJsonUtils::Serialize(Err), EHttpServerResponseCodes::BadRequest);
-		AddCorsHeaders(*Response);
+		AddCorsHeaders(*Response, Request);
 		OnComplete(MoveTemp(Response));
 		return true;
 	}
@@ -241,7 +253,7 @@ bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const
 			TSharedPtr<FJsonObject> Err = FMonolithJsonUtils::ErrorResponse(
 				nullptr, FMonolithJsonUtils::ErrParseError, TEXT("Invalid JSON"));
 			auto Response = MakeJsonResponse(FMonolithJsonUtils::Serialize(Err), EHttpServerResponseCodes::BadRequest);
-			AddCorsHeaders(*Response);
+			AddCorsHeaders(*Response, Request);
 			OnComplete(MoveTemp(Response));
 			return true;
 		}
@@ -265,7 +277,7 @@ bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const
 		// All notifications — 202 Accepted with no body
 		auto Response = FHttpServerResponse::Ok();
 		Response->Code = EHttpServerResponseCodes::Accepted;
-		AddCorsHeaders(*Response);
+		AddCorsHeaders(*Response, Request);
 		OnComplete(MoveTemp(Response));
 		return true;
 	}
@@ -289,7 +301,7 @@ bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const
 	}
 
 	auto Response = MakeJsonResponse(ResponseBody);
-	AddCorsHeaders(*Response);
+	AddCorsHeaders(*Response, Request);
 	OnComplete(MoveTemp(Response));
 	return true;
 }
@@ -302,7 +314,7 @@ bool FMonolithHttpServer::HandleGetMcp(const FHttpServerRequest& Request, const 
 	FString SseBody = TEXT("event: endpoint\ndata: \"/mcp\"\n\n");
 	auto Response = FHttpServerResponse::Create(SseBody, TEXT("text/event-stream"));
 	Response->Code = EHttpServerResponseCodes::Ok;
-	AddCorsHeaders(*Response);
+	AddCorsHeaders(*Response, Request);
 	Response->Headers.Add(TEXT("Cache-Control"), {TEXT("no-cache")});
 	Response->Headers.Add(TEXT("Connection"), {TEXT("keep-alive")});
 	OnComplete(MoveTemp(Response));
@@ -312,7 +324,7 @@ bool FMonolithHttpServer::HandleGetMcp(const FHttpServerRequest& Request, const 
 bool FMonolithHttpServer::HandleDeleteMcp(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete)
 {
 	auto Response = FHttpServerResponse::Ok();
-	AddCorsHeaders(*Response);
+	AddCorsHeaders(*Response, Request);
 	OnComplete(MoveTemp(Response));
 	return true;
 }
@@ -320,7 +332,7 @@ bool FMonolithHttpServer::HandleDeleteMcp(const FHttpServerRequest& Request, con
 bool FMonolithHttpServer::HandleOptions(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete)
 {
 	auto Response = FHttpServerResponse::Ok();
-	AddCorsHeaders(*Response);
+	AddCorsHeaders(*Response, Request);
 	OnComplete(MoveTemp(Response));
 	return true;
 }
@@ -344,7 +356,7 @@ bool FMonolithHttpServer::HandleHealthCheck(const FHttpServerRequest& Request, c
 	FJsonSerializer::Serialize(Health.ToSharedRef(), Writer);
 
 	auto Response = MakeJsonResponse(Body);
-	AddCorsHeaders(*Response);
+	AddCorsHeaders(*Response, Request);
 	OnComplete(MoveTemp(Response));
 	return true;
 }
@@ -742,10 +754,58 @@ TUniquePtr<FHttpServerResponse> FMonolithHttpServer::MakeSseResponse(const TArra
 	return Response;
 }
 
-void FMonolithHttpServer::AddCorsHeaders(FHttpServerResponse& Response)
+namespace
 {
-	Response.Headers.Add(TEXT("Access-Control-Allow-Origin"), {TEXT("*")});
+	// Allowlisted origins for browser CORS. Loopback only — the MCP server
+	// is a developer tool and should never be exposed cross-origin to the
+	// public web. Replaces the previous wildcard `*` that allowed any
+	// website to read project data via a tab pinging localhost (Issue #38).
+	//
+	// Includes IPv6 loopback `[::1]` because some browsers prefer it over
+	// 127.0.0.1 when resolving `localhost`. Anchored with ^ and $ so
+	// subdomain attacks like `http://localhost.evil.com` are rejected.
+	bool IsAllowedOrigin(const FString& Origin)
+	{
+		if (Origin.IsEmpty()) return false;
+
+		// Reject the literal string "null" (sandboxed iframes / file:// origins).
+		if (Origin.Equals(TEXT("null"), ESearchCase::IgnoreCase)) return false;
+
+		// Match: http(s)://localhost[:NNNN], http(s)://127.0.0.1[:NNNN],
+		// http(s)://[::1][:NNNN]. Reject anything else.
+		static const FRegexPattern Pattern(
+			TEXT("^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:\\d+)?$"));
+		FRegexMatcher Matcher(Pattern, Origin);
+		return Matcher.FindNext();
+	}
+}
+
+void FMonolithHttpServer::AddCorsHeaders(FHttpServerResponse& Response, const FHttpServerRequest& Request)
+{
+	// Always advertise the methods/headers we support — these are not
+	// origin-sensitive. The allow-origin echo is the gated piece.
 	Response.Headers.Add(TEXT("Access-Control-Allow-Methods"), {TEXT("GET, POST, DELETE, OPTIONS")});
 	Response.Headers.Add(TEXT("Access-Control-Allow-Headers"), {TEXT("Content-Type")});
+	Response.Headers.Add(TEXT("Vary"), {TEXT("Origin")});
+
+	// Pull the Origin header (HTTP header names are case-insensitive per RFC 7230,
+	// but the underlying TMap keys may preserve case — try both common spellings).
+	FString Origin;
+	if (const TArray<FString>* Hdr = Request.Headers.Find(TEXT("Origin")))
+	{
+		if (Hdr->Num() > 0) Origin = (*Hdr)[0];
+	}
+	else if (const TArray<FString>* HdrLower = Request.Headers.Find(TEXT("origin")))
+	{
+		if (HdrLower->Num() > 0) Origin = (*HdrLower)[0];
+	}
+
+	if (IsAllowedOrigin(Origin))
+	{
+		Response.Headers.Add(TEXT("Access-Control-Allow-Origin"), {Origin});
+	}
+	// else: omit ACAO entirely — browsers will block the response from being
+	// read by the requesting page. Same-origin and non-browser callers
+	// (Claude Code via the proxy) are unaffected.
 }
 

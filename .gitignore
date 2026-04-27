@@ -8,11 +8,9 @@ __pycache__/
 *.pyc
 Docs/plans/
 Docs/TESTING.md
+Docs/TODO.md
 Docs/TODO_VFX_Issues.md
 Plans/
-
-# Private project-specific modules — not part of public Monolith releases
-Source/MonolithISX/
 
 # Private training actions — never ship in public releases
 Source/MonolithEditor/Private/MonolithTrainingActions.cpp
@@ -21,11 +19,12 @@ Source/MonolithEditor/Public/MonolithTrainingActions.h
 # Internal-only docs — never ship in public releases
 Docs/ROADMAP.md
 Docs/research/
-Docs/specs/
 
-# CommonUI WIP — not shipped until WITH_COMMONUI goes public
-Source/MonolithUI/Private/CommonUI/
-Source/MonolithUI/Public/CommonUI/
+# Specs ship with releases (per-module reference docs for users)
+# Docs/specs/ — UNBLOCKED 2026-04-25
+
+# CommonUI shipped M0.5 (v0.14.0, 2026-04-19) — tracked in git
+# Conditional on WITH_COMMONUI; MONOLITH_RELEASE_BUILD=1 compiles it out
 
 # Build tools and proxy binaries — local to dev machine
 Tools/

@@ -4,7 +4,6 @@
 #include "IO/IoHash.h"
 #include "SQLiteDatabase.h"
 #include "MonolithIndexLog.h"
-#include "MonolithSQLiteStatementCache.h"
 
 struct FIndexedAsset
 {
@@ -141,7 +140,7 @@ struct FSearchResult
 /**
  * RAII wrapper around FSQLiteDatabase for the Monolith project index.
  * Creates all tables on first open, provides typed insert/query helpers.
- * Single-connection access is caller-serialized by UMonolithIndexSubsystem; ownership may be the editor thread or the background indexing thread, but never both at once.
+ * Thread-safe for reads; writes should be serialized by the caller.
  */
 class MONOLITHINDEX_API FMonolithIndexDatabase
 {
@@ -152,20 +151,11 @@ public:
 	/** Open (or create) the database at the given path */
 	bool Open(const FString& InDbPath);
 
-	/** Open an existing database for query-only access without schema bootstrap */
-	bool OpenForQuery(const FString& InDbPath);
-
-	/** Open the database for writes, creation, or rebuilds */
-	bool OpenForWrite(const FString& InDbPath);
-
 	/** Close the database */
 	void Close();
 
 	/** Is the database currently open? */
 	bool IsOpen() const;
-
-	/** Release cached prepared statements without closing the database connection. */
-	void ClearStatementCache();
 
 	/** Wipe all data and recreate tables (for full re-index) */
 	bool ResetDatabase();
@@ -252,10 +242,7 @@ public:
 
 private:
 	bool CreateTables();
-	bool MigrateFtsSchemaToV4();
 	bool ExecuteSQL(const FString& SQL);
 	FSQLiteDatabase* Database = nullptr;
-	mutable FMonolithSQLiteStatementCache StatementCache;
 	FString DbPath;
-	bool bRunOptimizeOnClose = false;
 };

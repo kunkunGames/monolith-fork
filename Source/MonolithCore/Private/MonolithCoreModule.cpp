@@ -35,8 +35,15 @@ void FMonolithCoreModule::StartupModule()
 	// Register core discovery/status tools
 	RegisterCoreTools();
 
-	// Start HTTP server
+	// Start HTTP server (gated on bMcpServerEnabled — Issue #38 kill-switch)
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (Settings && !Settings->bMcpServerEnabled)
+	{
+		UE_LOG(LogMonolith, Log,
+			TEXT("Monolith — MCP server disabled in settings (bMcpServerEnabled=false), skipping HTTP listener startup"));
+		return;
+	}
+
 	int32 Port = Settings ? Settings->ServerPort : 9316;
 
 	HttpServer = MakeUnique<FMonolithHttpServer>();

@@ -25,10 +25,20 @@ public class MonolithUI : ModuleRules
         //   2. Engine Plugins/Marketplace/ (Fab/marketplace install)
         //   3. Engine Plugins/Runtime/ (stock UE 5.7 — first-party Epic plugin)
         // Set MONOLITH_RELEASE_BUILD=1 to force detection off (validates WITH_COMMONUI=0 path).
+        //
+        // IMPORTANT: Even if CommonUI exists in the engine, we must also verify that
+        // Monolith's own CommonUI source files are present. The public release zip
+        // gitignores these files — without this gate, end users get WITH_COMMONUI=1
+        // but missing headers (C1083). See GitHub issue #36.
         bool bHasCommonUI = false;
         bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
 
-        if (!bReleaseBuild)
+        // Self-check: do our own CommonUI source files exist? Release zips strip them.
+        string OurCommonUIDir = Path.Combine(ModuleDirectory, "Public", "CommonUI");
+        bool bHasOurCommonUISources = Directory.Exists(OurCommonUIDir)
+            && File.Exists(Path.Combine(OurCommonUIDir, "MonolithCommonUIActions.h"));
+
+        if (!bReleaseBuild && bHasOurCommonUISources)
         {
             // Location 1: project plugins (guard Target.ProjectFile — null for engine-only / Program targets)
             if (Target.ProjectFile != null)

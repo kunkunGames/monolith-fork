@@ -33,8 +33,6 @@ public class MonolithEditor : ModuleRules
 			"ImageWrapper",
 			"Niagara",
 			"AssetTools",
-			"AssetRegistry",
-			"ContentBrowser",
 			"EditorScriptingUtilities",
 			"AdvancedPreviewScene",
 			"ImageCore",
