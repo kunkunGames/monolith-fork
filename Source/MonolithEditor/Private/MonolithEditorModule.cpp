@@ -1,5 +1,6 @@
 #include "MonolithEditorModule.h"
 #include "MonolithEditorActions.h"
+#include "MonolithEditorSelectionActions.h"
 #include "MonolithSettingsCustomization.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
@@ -17,6 +18,7 @@ void FMonolithEditorModule::StartupModule()
 	GLog->AddOutputDevice(LogCapture);
 
 	FMonolithEditorActions::RegisterActions(LogCapture);
+	FMonolithEditorSelectionActions::RegisterActions();
 
 	// Register settings detail customization
 	FPropertyEditorModule& PropModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
@@ -25,7 +27,7 @@ void FMonolithEditorModule::StartupModule()
 		FOnGetDetailCustomizationInstance::CreateStatic(&FMonolithSettingsCustomization::MakeInstance)
 	);
 
-	UE_LOG(LogMonolith, Log, TEXT("Monolith — Editor module loaded (13 actions)"));
+	UE_LOG(LogMonolith, Log, TEXT("Monolith — Editor module loaded"));
 }
 
 void FMonolithEditorModule::ShutdownModule()
