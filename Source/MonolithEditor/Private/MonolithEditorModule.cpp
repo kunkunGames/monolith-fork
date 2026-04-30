@@ -2,6 +2,7 @@
 #include "MonolithEditorActions.h"
 #include "MonolithEditorMapActions.h"
 #include "MonolithEditorSelectionActions.h"
+#include "MonolithEditorCrashActions.h"
 #include "MonolithSettingsCustomization.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
@@ -21,6 +22,7 @@ void FMonolithEditorModule::StartupModule()
 	FMonolithEditorActions::RegisterActions(LogCapture);
 	FMonolithEditorMapActions::RegisterActions(FMonolithToolRegistry::Get());  // F8: create_empty_map + get_module_status
 	FMonolithEditorSelectionActions::RegisterActions();
+	FMonolithEditorCrashActions::RegisterActions();  // CrashRecovery: get_last_crash_reason / list_recent_crashes / get_crash_stats
 
 	// Register settings detail customization
 	FPropertyEditorModule& PropModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");

@@ -1,6 +1,7 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithCrashBreadcrumb.h"
 #include "HAL/PlatformMisc.h"
 
 // =============================================================================
@@ -284,6 +285,11 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	// Release lock before executing handler (handlers may take time)
 	FMonolithActionHandler HandlerCopy = RegAction->Handler;
 	Lock.Unlock();
+
+	// Crash breadcrumb capture — records (namespace, action, params) into a
+	// pre-built file path/payload that the fatal handler writes synchronously
+	// if the editor crashes during the handler. RAII clears the slot on exit.
+	FMonolithCrashBreadcrumb::FScopedCapture CrashCapture(Namespace, Action, EffectiveParams);
 
 	FMonolithActionResult ActionResult = HandlerCopy.Execute(EffectiveParams);
 
