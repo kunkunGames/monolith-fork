@@ -17,6 +17,8 @@ public:
 
 	/** Index a single SM Blueprint */
 	static void IndexStateMachine(const FAssetData& AssetData);
+	/** Index a single Node Blueprint */
+	static void IndexNodeBlueprint(const FAssetData& AssetData);
 
 	/** Full reindex of all SM assets */
 	static void ReindexAll();
