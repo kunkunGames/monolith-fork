@@ -10,7 +10,7 @@ from tree_sitter import Node, Parser
 
 from .cpp_parser import CPP_LANGUAGE
 from .ue_preprocessor import preprocess_ue_source
-from ..db.queries import insert_reference
+from ..db.queries import insert_references
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class ReferenceBuilder:
         clean_bytes = preprocess_ue_source(source_bytes)
         tree = self._parser.parse(clean_bytes)
 
-        count = 0
+        refs: list[tuple[int, int, str, int, int]] = []
         func_nodes: set[int] = set()
 
         for func_node in self._find_nodes(tree.root_node, "function_definition"):
@@ -53,27 +53,23 @@ class ReferenceBuilder:
                     continue
 
                 line = call_node.start_point[0] + 1
-                insert_reference(
-                    self._conn,
-                    from_symbol_id=caller_id,
-                    to_symbol_id=callee_id,
-                    ref_kind="call",
-                    file_id=file_id,
-                    line=line,
-                )
-                count += 1
+                refs.append((caller_id, callee_id, "call", file_id, line))
 
-            count += self._extract_type_references(func_node, caller_id, file_id)
+            self._extract_type_references(func_node, caller_id, file_id, refs)
 
-        count += self._extract_class_scope_references(tree.root_node, file_id)
-        count += self._extract_global_scope_references(tree.root_node, file_id, func_nodes)
+        self._extract_class_scope_references(tree.root_node, file_id, refs)
+        self._extract_global_scope_references(tree.root_node, file_id, func_nodes, refs)
 
-        return count
+        insert_references(self._conn, refs)
+        return len(refs)
 
     def _extract_type_references(
-        self, func_node: Node, caller_id: int, file_id: int,
-    ) -> int:
-        count = 0
+        self,
+        func_node: Node,
+        caller_id: int,
+        file_id: int,
+        refs: list[tuple[int, int, str, int, int]],
+    ) -> None:
         seen: set[int] = set()
 
         for node in self._find_nodes(func_node, "type_identifier"):
@@ -84,23 +80,14 @@ class ReferenceBuilder:
             seen.add(type_id)
 
             line = node.start_point[0] + 1
-            insert_reference(
-                self._conn,
-                from_symbol_id=caller_id,
-                to_symbol_id=type_id,
-                ref_kind="type",
-                file_id=file_id,
-                line=line,
-            )
-            count += 1
-
-        return count
+            refs.append((caller_id, type_id, "type", file_id, line))
 
     def _extract_class_scope_references(
-        self, root: Node, file_id: int,
-    ) -> int:
-        count = 0
-        for class_node in self._find_nodes(root, "class_specifier") + self._find_nodes(root, "struct_specifier"):
+        self, root: Node, file_id: int, refs: list[tuple[int, int, str, int, int]]
+    ) -> None:
+        for class_node in self._find_nodes(root, "class_specifier") + self._find_nodes(
+            root, "struct_specifier"
+        ):
             class_name = None
             for child in class_node.children:
                 if child.type == "type_identifier":
@@ -124,40 +111,49 @@ class ReferenceBuilder:
                     if child.type == "type_identifier":
                         base_name = child.text.decode()
                         base_id = self._resolve_symbol(base_name)
-                        if base_id is not None and base_id != class_id and base_id not in seen:
+                        if (
+                            base_id is not None
+                            and base_id != class_id
+                            and base_id not in seen
+                        ):
                             seen.add(base_id)
-                            insert_reference(
-                                self._conn,
-                                from_symbol_id=class_id,
-                                to_symbol_id=base_id,
-                                ref_kind="type",
-                                file_id=file_id,
-                                line=child.start_point[0] + 1,
+                            refs.append(
+                                (
+                                    class_id,
+                                    base_id,
+                                    "type",
+                                    file_id,
+                                    child.start_point[0] + 1,
+                                )
                             )
-                            count += 1
 
             for field_list in self._find_nodes(class_node, "field_declaration_list"):
                 for type_node in self._find_nodes(field_list, "type_identifier"):
                     type_name = type_node.text.decode()
                     type_id = self._resolve_symbol(type_name)
-                    if type_id is not None and type_id != class_id and type_id not in seen:
+                    if (
+                        type_id is not None
+                        and type_id != class_id
+                        and type_id not in seen
+                    ):
                         seen.add(type_id)
-                        insert_reference(
-                            self._conn,
-                            from_symbol_id=class_id,
-                            to_symbol_id=type_id,
-                            ref_kind="type",
-                            file_id=file_id,
-                            line=type_node.start_point[0] + 1,
+                        refs.append(
+                            (
+                                class_id,
+                                type_id,
+                                "type",
+                                file_id,
+                                type_node.start_point[0] + 1,
+                            )
                         )
-                        count += 1
-
-        return count
 
     def _extract_global_scope_references(
-        self, root: Node, file_id: int, func_nodes: set[int],
-    ) -> int:
-        count = 0
+        self,
+        root: Node,
+        file_id: int,
+        func_nodes: set[int],
+        refs: list[tuple[int, int, str, int, int]],
+    ) -> None:
         class_types = {"class_specifier", "struct_specifier"}
 
         for child in root.children:
@@ -194,17 +190,9 @@ class ReferenceBuilder:
                 if from_id == type_id:
                     continue
 
-                insert_reference(
-                    self._conn,
-                    from_symbol_id=from_id,
-                    to_symbol_id=type_id,
-                    ref_kind="type",
-                    file_id=file_id,
-                    line=type_node.start_point[0] + 1,
+                refs.append(
+                    (from_id, type_id, "type", file_id, type_node.start_point[0] + 1)
                 )
-                count += 1
-
-        return count
 
     def _find_nodes(self, node: Node, type_name: str) -> list[Node]:
         results: list[Node] = []
@@ -227,7 +215,9 @@ class ReferenceBuilder:
         return None
 
     def _get_call_target(
-        self, call_node: Node, func_node: Node | None = None,
+        self,
+        call_node: Node,
+        func_node: Node | None = None,
     ) -> str | None:
         if not call_node.children:
             return None
@@ -262,7 +252,9 @@ class ReferenceBuilder:
         return None
 
     def _resolve_local_var_type(
-        self, func_node: Node, var_name: str,
+        self,
+        func_node: Node,
+        var_name: str,
     ) -> str | None:
         body = None
         for child in func_node.children:
@@ -290,7 +282,10 @@ class ReferenceBuilder:
                     for sub in child.children:
                         if sub.type == "pointer_declarator":
                             for psub in sub.children:
-                                if psub.type == "identifier" and psub.text.decode() == var_name:
+                                if (
+                                    psub.type == "identifier"
+                                    and psub.text.decode() == var_name
+                                ):
                                     for tc in decl.children:
                                         if tc.type == "type_identifier":
                                             return tc.text.decode()
