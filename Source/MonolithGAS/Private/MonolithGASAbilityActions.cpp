@@ -3887,7 +3887,11 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleScaffoldCustomAbilityTas
 	// OnDestroy
 	Source += FString::Printf(TEXT("void %s::OnDestroy(bool bInOwnerFinished)\n"), *FullClassName);
 	Source += TEXT("{\n");
-	Source += TEXT("\t// TODO: Clean up any bound delegates or timers\n\n");
+	for (const FTaskDelegate& Del : TaskDelegates)
+	{
+		Source += FString::Printf(TEXT("\t%s.Clear();\n"), *Del.Name);
+	}
+	Source += TEXT("\n");
 	Source += TEXT("\tSuper::OnDestroy(bInOwnerFinished);\n");
 	Source += TEXT("}\n");
 
