@@ -11,6 +11,7 @@ _REFS_TABLE = '"references"'
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
+
 def _row_to_dict(row: sqlite3.Row | None) -> dict | None:
     if row is None:
         return None
@@ -30,7 +31,7 @@ def _escape_fts(query: str) -> str:
     # Replace :: with space (common in C++ qualified names)
     q = query.replace("::", " ")
     # Strip FTS5 special chars
-    q = re.sub(r'[^\w\s]', '', q)
+    q = re.sub(r"[^\w\s]", "", q)
     tokens = q.split()
     if not tokens:
         return '""'
@@ -39,9 +40,14 @@ def _escape_fts(query: str) -> str:
 
 # ── Insert helpers ───────────────────────────────────────────────────────
 
+
 def insert_module(
-    conn: sqlite3.Connection, *, name: str, path: str,
-    module_type: str, build_cs_path: str | None = None,
+    conn: sqlite3.Connection,
+    *,
+    name: str,
+    path: str,
+    module_type: str,
+    build_cs_path: str | None = None,
 ) -> int:
     cur = conn.execute(
         "INSERT OR IGNORE INTO modules (name, path, module_type, build_cs_path) "
@@ -57,8 +63,13 @@ def insert_module(
 
 
 def insert_file(
-    conn: sqlite3.Connection, *, path: str, module_id: int,
-    file_type: str, line_count: int, last_modified: float = 0.0,
+    conn: sqlite3.Connection,
+    *,
+    path: str,
+    module_id: int,
+    file_type: str,
+    line_count: int,
+    last_modified: float = 0.0,
 ) -> int:
     cur = conn.execute(
         "INSERT OR IGNORE INTO files (path, module_id, file_type, line_count, last_modified) "
@@ -72,23 +83,46 @@ def insert_file(
 
 
 def insert_symbol(
-    conn: sqlite3.Connection, *, name: str, qualified_name: str,
-    kind: str, file_id: int, line_start: int, line_end: int,
-    parent_symbol_id: int | None, access: str | None,
-    signature: str | None, docstring: str | None, is_ue_macro: int = 0,
+    conn: sqlite3.Connection,
+    *,
+    name: str,
+    qualified_name: str,
+    kind: str,
+    file_id: int,
+    line_start: int,
+    line_end: int,
+    parent_symbol_id: int | None,
+    access: str | None,
+    signature: str | None,
+    docstring: str | None,
+    is_ue_macro: int = 0,
 ) -> int:
     cur = conn.execute(
         "INSERT INTO symbols (name, qualified_name, kind, file_id, line_start, "
         "line_end, parent_symbol_id, access, signature, docstring, is_ue_macro) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (name, qualified_name, kind, file_id, line_start, line_end,
-         parent_symbol_id, access, signature, docstring, is_ue_macro),
+        (
+            name,
+            qualified_name,
+            kind,
+            file_id,
+            line_start,
+            line_end,
+            parent_symbol_id,
+            access,
+            signature,
+            docstring,
+            is_ue_macro,
+        ),
     )
     return cur.lastrowid
 
 
 def insert_inheritance(
-    conn: sqlite3.Connection, *, child_id: int, parent_id: int,
+    conn: sqlite3.Connection,
+    *,
+    child_id: int,
+    parent_id: int,
 ) -> None:
     conn.execute(
         "INSERT INTO inheritance (child_id, parent_id) VALUES (?, ?)",
@@ -97,8 +131,13 @@ def insert_inheritance(
 
 
 def insert_reference(
-    conn: sqlite3.Connection, *, from_symbol_id: int, to_symbol_id: int,
-    ref_kind: str, file_id: int, line: int,
+    conn: sqlite3.Connection,
+    *,
+    from_symbol_id: int,
+    to_symbol_id: int,
+    ref_kind: str,
+    file_id: int,
+    line: int,
 ) -> None:
     conn.execute(
         f"INSERT INTO {_REFS_TABLE} (from_symbol_id, to_symbol_id, ref_kind, file_id, line) "
@@ -107,8 +146,24 @@ def insert_reference(
     )
 
 
+def insert_references(
+    conn: sqlite3.Connection, refs: list[tuple[int, int, str, int, int]]
+) -> None:
+    if not refs:
+        return
+    conn.executemany(
+        f"INSERT INTO {_REFS_TABLE} (from_symbol_id, to_symbol_id, ref_kind, file_id, line) "
+        "VALUES (?, ?, ?, ?, ?)",
+        refs,
+    )
+
+
 def insert_include(
-    conn: sqlite3.Connection, *, file_id: int, included_path: str, line: int,
+    conn: sqlite3.Connection,
+    *,
+    file_id: int,
+    included_path: str,
+    line: int,
 ) -> None:
     conn.execute(
         "INSERT INTO includes (file_id, included_path, line) VALUES (?, ?, ?)",
@@ -117,6 +172,7 @@ def insert_include(
 
 
 # ── Query helpers ────────────────────────────────────────────────────────
+
 
 def get_symbol_by_name(conn: sqlite3.Connection, name: str) -> dict | None:
     row = conn.execute(
@@ -134,14 +190,14 @@ def get_symbol_by_name(conn: sqlite3.Connection, name: str) -> dict | None:
 
 
 def get_symbol_by_id(conn: sqlite3.Connection, symbol_id: int) -> dict | None:
-    row = conn.execute(
-        "SELECT * FROM symbols WHERE id = ?", (symbol_id,)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM symbols WHERE id = ?", (symbol_id,)).fetchone()
     return _row_to_dict(row)
 
 
 def get_symbols_by_name(
-    conn: sqlite3.Connection, name: str, kind: str | None = None,
+    conn: sqlite3.Connection,
+    name: str,
+    kind: str | None = None,
 ) -> list[dict]:
     if kind:
         rows = conn.execute(
@@ -159,7 +215,9 @@ def get_symbols_by_name(
 
 
 def search_symbols_fts(
-    conn: sqlite3.Connection, query: str, limit: int = 20,
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 20,
 ) -> list[dict]:
     fts_query = _escape_fts(query)
     rows = conn.execute(
@@ -174,7 +232,10 @@ def search_symbols_fts(
 
 
 def search_source_fts(
-    conn: sqlite3.Connection, query: str, limit: int = 20, scope: str = "all",
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 20,
+    scope: str = "all",
 ) -> list[dict]:
     fts_query = _escape_fts(query)
     if scope == "all":
@@ -200,14 +261,15 @@ def search_source_fts(
 
 
 def search_symbols_fts_filtered(
-    conn: sqlite3.Connection, query: str, limit: int = 20,
-    kind: str | None = None, module: str | None = None, path_filter: str | None = None,
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 20,
+    kind: str | None = None,
+    module: str | None = None,
+    path_filter: str | None = None,
 ) -> list[dict]:
     fts_query = _escape_fts(query)
-    sql = (
-        "SELECT s.* FROM symbols_fts f "
-        "JOIN symbols s ON s.id = f.rowid "
-    )
+    sql = "SELECT s.* FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
     conditions = ["symbols_fts MATCH ?"]
     params: list = [fts_query]
 
@@ -233,8 +295,12 @@ def search_symbols_fts_filtered(
 
 
 def search_source_fts_filtered(
-    conn: sqlite3.Connection, query: str, limit: int = 20, scope: str = "all",
-    module: str | None = None, path_filter: str | None = None,
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 20,
+    scope: str = "all",
+    module: str | None = None,
+    path_filter: str | None = None,
 ) -> list[dict]:
     fts_query = _escape_fts(query)
 
@@ -276,7 +342,10 @@ def search_source_fts_filtered(
 
 
 def get_source_chunks(
-    conn: sqlite3.Connection, keyword: str, scope: str = "all", limit: int = 500,
+    conn: sqlite3.Connection,
+    keyword: str,
+    scope: str = "all",
+    limit: int = 500,
 ) -> list[dict]:
     fts_query = _escape_fts(keyword)
     if scope == "all":
@@ -343,8 +412,10 @@ def get_inheritance_children(conn: sqlite3.Connection, parent_id: int) -> list[d
 
 
 def get_references_to(
-    conn: sqlite3.Connection, symbol_id: int,
-    ref_kind: str | None = None, limit: int = 50,
+    conn: sqlite3.Connection,
+    symbol_id: int,
+    ref_kind: str | None = None,
+    limit: int = 50,
 ) -> list[dict]:
     if ref_kind:
         rows = conn.execute(
@@ -370,8 +441,10 @@ def get_references_to(
 
 
 def get_references_from(
-    conn: sqlite3.Connection, symbol_id: int,
-    ref_kind: str | None = None, limit: int = 50,
+    conn: sqlite3.Connection,
+    symbol_id: int,
+    ref_kind: str | None = None,
+    limit: int = 50,
 ) -> list[dict]:
     if ref_kind:
         rows = conn.execute(
@@ -397,8 +470,10 @@ def get_references_from(
 
 
 def get_symbols_in_module(
-    conn: sqlite3.Connection, module_name: str,
-    kind: str | None = None, limit: int = 200,
+    conn: sqlite3.Connection,
+    module_name: str,
+    kind: str | None = None,
+    limit: int = 200,
 ) -> list[dict]:
     if kind:
         rows = conn.execute(
