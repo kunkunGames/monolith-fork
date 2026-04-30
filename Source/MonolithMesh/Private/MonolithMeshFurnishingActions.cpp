@@ -1130,9 +1130,19 @@ FMonolithActionResult FMonolithMeshFurnishingActions::FurnishBuilding(const TSha
 	}
 
 	// --- Apply decay across all placed items if requested ---
-	// Decay is applied by calling set_room_disturbance or rotating items post-placement
-	// For now we annotate decay info in the result — actual rotation is applied per-item above
-	// TODO: integrate with set_room_disturbance when available
+	if (Decay > 0.0f)
+	{
+		FString DisturbanceLevel = TEXT("slightly_messy");
+		if (Decay > 0.6f) DisturbanceLevel = TEXT("abandoned");
+		else if (Decay > 0.3f) DisturbanceLevel = TEXT("ransacked");
+
+		auto DisturbanceParams = MakeShared<FJsonObject>();
+		DisturbanceParams->SetStringField(TEXT("volume_name"), BuildingId);
+		DisturbanceParams->SetStringField(TEXT("disturbance"), DisturbanceLevel);
+		DisturbanceParams->SetNumberField(TEXT("seed"), Seed + 1234);
+
+		Registry.ExecuteAction(TEXT("mesh"), TEXT("set_room_disturbance"), DisturbanceParams);
+	}
 
 	// --- Build result ---
 	auto Result = MakeShared<FJsonObject>();
@@ -1151,7 +1161,7 @@ FMonolithActionResult FMonolithMeshFurnishingActions::FurnishBuilding(const TSha
 	if (Decay > 0.0f)
 	{
 		Result->SetNumberField(TEXT("decay"), Decay);
-		Result->SetStringField(TEXT("decay_note"), TEXT("Decay applied — some items may have rotation offsets"));
+		Result->SetStringField(TEXT("decay_note"), TEXT("Decay applied via set_room_disturbance"));
 	}
 
 	return FMonolithActionResult::Success(Result);
