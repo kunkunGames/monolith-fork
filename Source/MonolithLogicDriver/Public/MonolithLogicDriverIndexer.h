@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "MonolithIndexer.h"
 
 #if WITH_LOGICDRIVER
 
@@ -9,19 +10,12 @@
  * Registers into MonolithIndex at startup. Indexes SM Blueprints,
  * Node Blueprints, and component references for cross-reference queries.
  */
-class FStateMachineIndexer
+class FStateMachineIndexer : public IMonolithIndexer
 {
 public:
-	static void Register();
-	static void Unregister();
-
-	/** Index a single SM Blueprint */
-	static void IndexStateMachine(const FAssetData& AssetData);
-	/** Index a single Node Blueprint */
-	static void IndexNodeBlueprint(const FAssetData& AssetData);
-
-	/** Full reindex of all SM assets */
-	static void ReindexAll();
+	virtual TArray<FString> GetSupportedClasses() const override;
+	virtual bool IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset, FMonolithIndexDatabase& DB, int64 AssetId) override;
+	virtual FString GetName() const override;
 };
 
 #endif // WITH_LOGICDRIVER
