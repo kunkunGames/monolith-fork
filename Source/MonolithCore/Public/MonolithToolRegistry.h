@@ -46,6 +46,28 @@ struct FMonolithActionResult
 		return *this;
 	}
 	FMonolithActionResult& WithErrorData(const TSharedPtr<FJsonObject>& Data) { ErrorData = Data; return *this; }
+
+	// DD-02: structured asset-path recovery
+	FMonolithActionResult& WithRetryWith(const TSharedPtr<FJsonObject>& Args)
+	{
+		if (!ErrorData.IsValid()) ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetObjectField(TEXT("retry_with"), Args);
+		return *this;
+	}
+
+	FMonolithActionResult& WithDidYouMean(const TArray<FString>& Candidates)
+	{
+		if (!ErrorData.IsValid()) ErrorData = MakeShared<FJsonObject>();
+		
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Reserve(Candidates.Num());
+		for (const FString& Cand : Candidates)
+		{
+			Arr.Add(MakeShared<FJsonValueString>(Cand));
+		}
+		ErrorData->SetArrayField(TEXT("did_you_mean"), Arr);
+		return *this;
+	}
 };
 
 /** Delegate type for action handlers */

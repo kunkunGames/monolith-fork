@@ -11,6 +11,7 @@ Docs/TESTING.md
 Docs/TODO.md
 Docs/TODO_VFX_Issues.md
 Plans/
+PRD/
 
 # Private training actions — never ship in public releases
 Source/MonolithEditor/Private/MonolithTrainingActions.cpp

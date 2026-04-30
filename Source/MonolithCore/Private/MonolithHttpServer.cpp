@@ -763,6 +763,13 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 			}
 			Result->SetArrayField(TEXT("hints"), Arr);
 		}
+		if (ActionResult.ErrorData.IsValid())
+		{
+			for (const auto& Pair : ActionResult.ErrorData->Values)
+			{
+				Result->SetField(Pair.Key, Pair.Value);
+			}
+		}
 	}
 
 	Result->SetArrayField(TEXT("content"), Content);

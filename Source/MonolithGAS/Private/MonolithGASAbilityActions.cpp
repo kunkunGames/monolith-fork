@@ -156,6 +156,20 @@ namespace
 			if (!BP)
 			{
 				OutError = FMonolithActionResult::Error(Error);
+				if (!AssetPath.IsEmpty())
+				{
+					TArray<FString> Candidates = FMonolithAssetUtils::FindAssetCandidates(AssetPath, 5);
+					if (Candidates.Num() == 1)
+					{
+						TSharedPtr<FJsonObject> RetryArgs = MakeShared<FJsonObject>();
+						RetryArgs->SetStringField(TEXT("asset_path"), Candidates[0]);
+						OutError.WithRetryWith(RetryArgs);
+					}
+					else if (Candidates.Num() > 1)
+					{
+						OutError.WithDidYouMean(Candidates);
+					}
+				}
 				return false;
 			}
 			if (!MonolithGAS::IsAbilityBlueprint(BP))
