@@ -194,3 +194,161 @@ FString FMonolithAssetUtils::GetAssetName(const FString& AssetPath)
 {
 	return FPackageName::GetShortName(AssetPath);
 }
+
+FMonolithAssetUtils::FAssetCandidateKey FMonolithAssetUtils::ParseAssetCandidateInput(const FString& Input)
+{
+	FAssetCandidateKey Key;
+
+	FString Norm = Input;
+	Norm.TrimStartAndEndInline();
+	if (Norm.IsEmpty())
+	{
+		return Key;
+	}
+
+	// Unify path separators. After this, the only colon left should be a
+	// drive letter (D:/...) or a SubObject delimiter; we handle both below.
+	Norm.ReplaceInline(TEXT("\\"), TEXT("/"));
+
+	// Strip Windows drive letter prefix ("D:/foo" → "/foo"). Without this,
+	// the next steps treat "D:" as a path segment.
+	if (Norm.Len() >= 2 && Norm[1] == TEXT(':') && FChar::IsAlpha(Norm[0]))
+	{
+		Norm = Norm.Mid(2);
+	}
+
+	// Strip ":SubObject" suffix. Drive-letter colon is already handled above.
+	int32 ColonIdx = INDEX_NONE;
+	if (Norm.FindChar(TEXT(':'), ColonIdx))
+	{
+		Norm = Norm.Left(ColonIdx);
+	}
+
+	// Strip .uasset / .umap (case-insensitive).
+	if (Norm.EndsWith(TEXT(".uasset"), ESearchCase::IgnoreCase))
+	{
+		Norm.LeftChopInline(7);
+	}
+	else if (Norm.EndsWith(TEXT(".umap"), ESearchCase::IgnoreCase))
+	{
+		Norm.LeftChopInline(5);
+	}
+
+	// Filesystem prefix up to "/Content/" → rewrite to "/Game/".
+	// Handles e.g. "D:\LyraStarterGame\Content\AI\..." (already de-Windowsed)
+	// and "/some/path/Content/Subdir/...".
+	{
+		const int32 ContentIdx = Norm.Find(TEXT("/Content/"), ESearchCase::IgnoreCase);
+		if (ContentIdx != INDEX_NONE)
+		{
+			Norm = TEXT("/Game/") + Norm.Mid(ContentIdx + 9);
+		}
+	}
+
+	// Split into non-empty path segments.
+	TArray<FString> Segments;
+	Norm.ParseIntoArray(Segments, TEXT("/"), /*CullEmpty=*/true);
+	if (Segments.Num() == 0)
+	{
+		return Key;
+	}
+
+	// The last segment may be in "AssetName" form, "AssetName.AssetName" form,
+	// or "PackageName.AssetName" form (FSoftObjectPath). Take the part after
+	// the last '.' as the short name in all those cases.
+	FString Last = Segments.Last();
+	int32 LastDot = INDEX_NONE;
+	if (Last.FindLastChar(TEXT('.'), LastDot))
+	{
+		Last = Last.Mid(LastDot + 1);
+	}
+	if (Last.IsEmpty())
+	{
+		return Key;
+	}
+
+	Key.ShortName = MoveTemp(Last);
+
+	// Remaining segments become path hints (used to disambiguate candidates).
+	for (int32 i = 0; i < Segments.Num() - 1; ++i)
+	{
+		Key.PathHints.Add(Segments[i]);
+	}
+	return Key;
+}
+
+TArray<FString> FMonolithAssetUtils::FindAssetCandidates(const FString& Input, int32 MaxResults)
+{
+	TArray<FString> Results;
+	if (Input.IsEmpty() || MaxResults <= 0)
+	{
+		return Results;
+	}
+
+	const FAssetCandidateKey Key = ParseAssetCandidateInput(Input);
+	if (Key.ShortName.IsEmpty())
+	{
+		return Results;
+	}
+
+	IAssetRegistry* AR = IAssetRegistry::Get();
+	if (!AR)
+	{
+		return Results;
+	}
+
+	// AssetRegistry has no direct AssetName index — scan with scoring.
+	// On a Lyra-sized project (~10k assets) this is well under 10ms; the call
+	// only fires on the error path, so it's acceptable.
+	const FName TargetName(*Key.ShortName);
+	TArray<FAssetData> AllAssets;
+	AR->GetAllAssets(AllAssets, /*bIncludeOnlyOnDiskAssets=*/false);
+
+	struct FScoredCandidate { FString Path; int32 Score; };
+	TArray<FScoredCandidate> Scored;
+	Scored.Reserve(8);
+
+	for (const FAssetData& Data : AllAssets)
+	{
+		if (Data.AssetName != TargetName)
+		{
+			continue;
+		}
+
+		const FString ObjectPath = Data.GetSoftObjectPath().ToString();
+
+		// Score: how many path hints appear in the candidate's object path.
+		// More hint matches → user's mistyped path was closer to this candidate.
+		int32 Score = 0;
+		for (const FString& Hint : Key.PathHints)
+		{
+			if (Hint.IsEmpty())
+			{
+				continue;
+			}
+			if (ObjectPath.Contains(Hint, ESearchCase::IgnoreCase))
+			{
+				Score += 10;
+			}
+		}
+
+		// Tiny tiebreaker: shorter object paths beat longer ones at the same
+		// score (prefer "/Game/AI/PunchBot/BB_PunchBot" over a deeper match).
+		Score -= ObjectPath.Len() / 64;
+
+		Scored.Add({ObjectPath, Score});
+	}
+
+	Scored.Sort([](const FScoredCandidate& L, const FScoredCandidate& R)
+	{
+		return L.Score > R.Score;
+	});
+
+	const int32 Count = FMath::Min(MaxResults, Scored.Num());
+	Results.Reserve(Count);
+	for (int32 i = 0; i < Count; ++i)
+	{
+		Results.Add(Scored[i].Path);
+	}
+	return Results;
+}

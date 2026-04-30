@@ -1,7 +1,48 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithCrashBreadcrumb.h"
 #include "HAL/PlatformMisc.h"
+
+// =============================================================================
+//  CC-05 — Levenshtein helper (file-local, only used by FindSimilarActions)
+// =============================================================================
+namespace
+{
+	// Iterative Levenshtein distance. Both inputs are short (action names, ~20 chars),
+	// so a fixed-size stack buffer is plenty. Returns INT32_MAX on overflow.
+	int32 LevenshteinDistance(const FString& A, const FString& B)
+	{
+		const int32 La = A.Len();
+		const int32 Lb = B.Len();
+		if (La == 0) return Lb;
+		if (Lb == 0) return La;
+
+		// Use two rolling rows of size Lb+1.
+		TArray<int32> Prev, Curr;
+		Prev.SetNumUninitialized(Lb + 1);
+		Curr.SetNumUninitialized(Lb + 1);
+		for (int32 j = 0; j <= Lb; ++j) Prev[j] = j;
+
+		for (int32 i = 1; i <= La; ++i)
+		{
+			Curr[0] = i;
+			const TCHAR Ca = A[i - 1];
+			for (int32 j = 1; j <= Lb; ++j)
+			{
+				const TCHAR Cb = B[j - 1];
+				const int32 Cost = (FChar::ToLower(Ca) == FChar::ToLower(Cb)) ? 0 : 1;
+				Curr[j] = FMath::Min3(
+					Prev[j] + 1,        // deletion
+					Curr[j - 1] + 1,    // insertion
+					Prev[j - 1] + Cost  // substitution
+				);
+			}
+			Swap(Prev, Curr);
+		}
+		return Prev[Lb];
+	}
+}
 
 // =============================================================================
 //  FMonolithParamSchema — K2 alias rewriting + K3 unknown-key detection
@@ -193,10 +234,25 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 
 	if (!RegAction)
 	{
-		return FMonolithActionResult::Error(
+		// CC-05: surface "did you mean" suggestions for the agent so it can
+		// recover in one round-trip instead of guessing iteratively.
+		// Drop the lock before scoring (FindSimilarActions takes the lock again).
+		Lock.Unlock();
+
+		TArray<FString> Similar = FindSimilarActions(Namespace, Action, /*MaxResults=*/5);
+
+		FMonolithActionResult R = FMonolithActionResult::Error(
 			FString::Printf(TEXT("Unknown action: %s.%s"), *Namespace, *Action),
 			FMonolithJsonUtils::ErrMethodNotFound
 		);
+		R.RelatedActions = MoveTemp(Similar);
+		if (R.RelatedActions.Num() == 0)
+		{
+			// No close matches — guide the agent to discovery.
+			R.Hints.Add(FString::Printf(
+				TEXT("Use monolith_discover(\"%s\") to list available actions."), *Namespace));
+		}
+		return R;
 	}
 
 	if (!RegAction->Handler.IsBound())
@@ -249,10 +305,44 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		{
 			TArray<FString> Provided;
 			for (const auto& P : EffectiveParams->Values) Provided.Add(P.Key);
-			return FMonolithActionResult::Error(
+
+			// CC-05: enrich the missing-param error with alias info so the agent
+			// can fix typos without round-trip schema fetches.
+			TArray<FString> AliasHints;
+			for (const FString& MissKey : Missing)
+			{
+				const TSharedPtr<FJsonObject>* MissDef = nullptr;
+				if (!ActionInfo.ParamSchema->TryGetObjectField(MissKey, MissDef) || !MissDef) continue;
+
+				const TArray<TSharedPtr<FJsonValue>>* AliasArr = nullptr;
+				if ((*MissDef)->TryGetArrayField(TEXT("aliases"), AliasArr) && AliasArr && AliasArr->Num() > 0)
+				{
+					TArray<FString> Aliases;
+					for (const TSharedPtr<FJsonValue>& AV : *AliasArr)
+					{
+						FString A;
+						if (AV.IsValid() && AV->TryGetString(A)) Aliases.Add(A);
+					}
+					if (Aliases.Num() > 0)
+					{
+						AliasHints.Add(FString::Printf(TEXT("'%s' (aliases: %s)"),
+							*MissKey, *FString::Join(Aliases, TEXT(", "))));
+					}
+				}
+			}
+
+			// Preserve the existing error code (default -32603) so callers that
+			// match on it stay compatible. Only the Hints array is additive here.
+			FMonolithActionResult R = FMonolithActionResult::Error(
 				FString::Printf(TEXT("Missing required param(s): [%s]. Provided keys: [%s]"),
 					*FString::Join(Missing, TEXT(", ")),
 					*FString::Join(Provided, TEXT(", "))));
+			if (AliasHints.Num() > 0)
+			{
+				R.Hints.Add(FString::Printf(TEXT("Accepted aliases: %s"),
+					*FString::Join(AliasHints, TEXT("; "))));
+			}
+			return R;
 		}
 	}
 
@@ -284,6 +374,11 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	// Release lock before executing handler (handlers may take time)
 	FMonolithActionHandler HandlerCopy = RegAction->Handler;
 	Lock.Unlock();
+
+	// Crash breadcrumb capture — records (namespace, action, params) into a
+	// pre-built file path/payload that the fatal handler writes synchronously
+	// if the editor crashes during the handler. RAII clears the slot on exit.
+	FMonolithCrashBreadcrumb::FScopedCapture CrashCapture(Namespace, Action, EffectiveParams);
 
 	FMonolithActionResult ActionResult = HandlerCopy.Execute(EffectiveParams);
 
@@ -354,4 +449,74 @@ int32 FMonolithToolRegistry::GetActionCount() const
 {
 	FScopeLock Lock(&RegistryLock);
 	return Actions.Num();
+}
+
+TArray<FString> FMonolithToolRegistry::FindSimilarActions(const FString& Namespace, const FString& ActionName, int32 MaxResults) const
+{
+	TArray<FString> Result;
+	if (ActionName.IsEmpty() || MaxResults <= 0)
+	{
+		return Result;
+	}
+
+	// Snapshot candidate names under the lock, then score outside the lock.
+	TArray<FString> Candidates;
+	{
+		FScopeLock Lock(&RegistryLock);
+		const TArray<FString>* Keys = NamespaceActions.Find(Namespace);
+		if (!Keys)
+		{
+			return Result;
+		}
+		Candidates.Reserve(Keys->Num());
+		for (const FString& Key : *Keys)
+		{
+			if (const FRegisteredAction* Reg = Actions.Find(Key))
+			{
+				Candidates.Add(Reg->Info.Action);
+			}
+		}
+	}
+
+	// Score: prefix match (case-insensitive) wins; otherwise Levenshtein distance.
+	// Distance threshold scales with name length so longer names tolerate more typos.
+	struct FScoredCandidate { FString Name; int32 Score; };
+	TArray<FScoredCandidate> Scored;
+	Scored.Reserve(Candidates.Num());
+
+	const int32 Threshold = FMath::Max(2, ActionName.Len() / 2);
+	const FString LowerName = ActionName.ToLower();
+
+	for (const FString& Cand : Candidates)
+	{
+		const FString LowerCand = Cand.ToLower();
+
+		// Prefix or substring match — very strong signal, push to top.
+		if (LowerCand.StartsWith(LowerName) || LowerName.StartsWith(LowerCand))
+		{
+			Scored.Add({Cand, 0});
+			continue;
+		}
+		if (LowerCand.Contains(LowerName) || LowerName.Contains(LowerCand))
+		{
+			Scored.Add({Cand, 1});
+			continue;
+		}
+
+		const int32 Dist = LevenshteinDistance(ActionName, Cand);
+		if (Dist <= Threshold)
+		{
+			Scored.Add({Cand, 2 + Dist});
+		}
+	}
+
+	Scored.Sort([](const FScoredCandidate& L, const FScoredCandidate& R) { return L.Score < R.Score; });
+
+	const int32 Count = FMath::Min(MaxResults, Scored.Num());
+	Result.Reserve(Count);
+	for (int32 i = 0; i < Count; ++i)
+	{
+		Result.Add(Scored[i].Name);
+	}
+	return Result;
 }
