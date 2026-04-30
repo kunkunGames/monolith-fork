@@ -10,6 +10,9 @@
 #include "MonolithLogicDriverDiscoveryActions.h"
 #include "MonolithLogicDriverComponentActions.h"
 #include "MonolithLogicDriverTextGraphActions.h"
+#include "MonolithLogicDriverIndexer.h"
+#include "MonolithIndexSubsystem.h"
+#include "Editor.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogMonolithLogicDriver, Log, All);
 DEFINE_LOG_CATEGORY(LogMonolithLogicDriver);
@@ -35,6 +38,19 @@ void FMonolithLogicDriverModule::StartupModule()
 	FMonolithLogicDriverDiscoveryActions::RegisterActions(Registry);
 	FMonolithLogicDriverComponentActions::RegisterActions(Registry);
 	FMonolithLogicDriverTextGraphActions::RegisterActions(Registry);
+
+	PostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddLambda([this]()
+	{
+		if (GEditor)
+		{
+			if (UMonolithIndexSubsystem* IndexSS = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>())
+			{
+				IndexSS->RegisterIndexer(MakeShared<FStateMachineIndexer>());
+				UE_LOG(LogMonolithLogicDriver, Log, TEXT("MonolithLogicDriver: Registered FStateMachineIndexer into MonolithIndex"));
+			}
+		}
+	});
+
 	int32 ActionCount = Registry.GetActions(TEXT("logicdriver")).Num();
 	UE_LOG(LogMonolithLogicDriver, Log,
 		TEXT("MonolithLogicDriver: Loaded (%d actions)"), ActionCount);
@@ -46,6 +62,12 @@ void FMonolithLogicDriverModule::StartupModule()
 
 void FMonolithLogicDriverModule::ShutdownModule()
 {
+	if (PostEngineInitHandle.IsValid())
+	{
+		FCoreDelegates::OnPostEngineInit.Remove(PostEngineInitHandle);
+		PostEngineInitHandle.Reset();
+	}
+
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("logicdriver"));
 }
 

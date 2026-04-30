@@ -4,80 +4,108 @@
 
 #include "MonolithLogicDriverInternal.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Serialization/JsonSerializer.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMonolithLDIndexer, Log, All);
 
-void FStateMachineIndexer::Register()
+TArray<FString> FStateMachineIndexer::GetSupportedClasses() const
 {
-	// TODO Phase 2: Register with MonolithIndex system (requires understanding the indexer registration API)
-	// For now, just log that we're alive so module startup is visible.
-	UE_LOG(LogMonolithLDIndexer, Log, TEXT("FStateMachineIndexer: registered (Phase 1 skeleton — not yet hooked into MonolithIndex)"));
+	return { TEXT("Blueprint") };
 }
 
-void FStateMachineIndexer::Unregister()
+FString FStateMachineIndexer::GetName() const
 {
-	UE_LOG(LogMonolithLDIndexer, Log, TEXT("FStateMachineIndexer: unregistered"));
+	return TEXT("LogicDriver");
 }
 
-void FStateMachineIndexer::IndexStateMachine(const FAssetData& AssetData)
+bool FStateMachineIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset, FMonolithIndexDatabase& DB, int64 AssetId)
 {
-	// TODO Phase 2: Extract SM structure (states, transitions, node classes, variables)
-	// and push into MonolithIndex for cross-reference queries.
-	UE_LOG(LogMonolithLDIndexer, Verbose, TEXT("FStateMachineIndexer::IndexStateMachine: '%s' (stub — no-op)"), *AssetData.AssetName.ToString());
-}
+	if (!LoadedAsset) return false;
 
-void FStateMachineIndexer::IndexNodeBlueprint(const FAssetData& AssetData)
-{
-	// TODO Phase 2: Extract node properties and logic
-	// and push into MonolithIndex for cross-reference queries.
-	UE_LOG(LogMonolithLDIndexer, Verbose, TEXT("FStateMachineIndexer::IndexNodeBlueprint: '%s' (stub — no-op)"), *AssetData.AssetName.ToString());
-}
+	UBlueprint* BP = Cast<UBlueprint>(LoadedAsset);
+	if (!BP) return false;
 
-void FStateMachineIndexer::ReindexAll()
-{
-	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-
-	// Find all SM Blueprints
 	UClass* SMBPClass = MonolithLD::GetSMBlueprintClass();
-	if (!SMBPClass)
+	if (!SMBPClass || !BP->GetClass()->IsChildOf(SMBPClass))
 	{
-		UE_LOG(LogMonolithLDIndexer, Warning, TEXT("FStateMachineIndexer::ReindexAll: SMBlueprint class not found — Logic Driver not loaded?"));
-		return;
-	}
-	FARFilter Filter;
-	Filter.ClassPaths.Add(SMBPClass->GetClassPathName());
-	Filter.bRecursiveClasses = true;
-
-	TArray<FAssetData> SMAssets;
-	AssetRegistry.GetAssets(Filter, SMAssets);
-
-	UE_LOG(LogMonolithLDIndexer, Log, TEXT("FStateMachineIndexer::ReindexAll: found %d SM Blueprints"), SMAssets.Num());
-
-	for (const FAssetData& Asset : SMAssets)
-	{
-		IndexStateMachine(Asset);
+		return false;
 	}
 
-	// Also find Node Blueprints
-	UClass* NodeBPClass = FindFirstObject<UClass>(TEXT("SMNodeBlueprint"), EFindFirstObjectOptions::NativeFirst);
-	if (NodeBPClass)
+	TSharedPtr<FJsonObject> SMStructure = MonolithLD::SMStructureToJson(BP, -1);
+	if (!SMStructure.IsValid()) return false;
+
+	TMap<FString, int64> GuidToNodeId;
+
+	auto ProcessNodes = [&](const FString& ArrayName)
 	{
-		FARFilter NodeFilter;
-		NodeFilter.ClassPaths.Add(NodeBPClass->GetClassPathName());
-		NodeFilter.bRecursiveClasses = true;
-
-		TArray<FAssetData> NodeAssets;
-		AssetRegistry.GetAssets(NodeFilter, NodeAssets);
-
-		UE_LOG(LogMonolithLDIndexer, Log, TEXT("FStateMachineIndexer::ReindexAll: found %d Node Blueprints"), NodeAssets.Num());
-
-		for (const FAssetData& Asset : NodeAssets)
+		const TArray<TSharedPtr<FJsonValue>>* NodesArray;
+		if (SMStructure->TryGetArrayField(ArrayName, NodesArray))
 		{
-			IndexNodeBlueprint(Asset);
+			for (const TSharedPtr<FJsonValue>& NodeVal : *NodesArray)
+			{
+				TSharedPtr<FJsonObject> NodeObj = NodeVal->AsObject();
+				if (!NodeObj.IsValid()) continue;
+
+				FIndexedNode Node;
+				Node.AssetId = AssetId;
+				Node.NodeType = NodeObj->GetStringField(TEXT("node_type"));
+				Node.NodeName = NodeObj->GetStringField(TEXT("name"));
+
+				double PosX = 0.0, PosY = 0.0;
+				if (NodeObj->TryGetNumberField(TEXT("position_x"), PosX)) Node.PosX = (int32)PosX;
+				if (NodeObj->TryGetNumberField(TEXT("position_y"), PosY)) Node.PosY = (int32)PosY;
+
+				// Store detailed properties as JSON string
+				FString PropsStr;
+				auto Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&PropsStr);
+				FJsonSerializer::Serialize(NodeObj.ToSharedRef(), *Writer, true);
+				Node.Properties = PropsStr;
+
+				int64 NewNodeId = DB.InsertNode(Node);
+
+				FString GuidStr;
+				if (NodeObj->TryGetStringField(TEXT("node_guid"), GuidStr))
+				{
+					GuidToNodeId.Add(GuidStr, NewNodeId);
+				}
+			}
+		}
+	};
+
+	ProcessNodes(TEXT("states"));
+	ProcessNodes(TEXT("nested_state_machines"));
+	ProcessNodes(TEXT("conduits"));
+	ProcessNodes(TEXT("transitions"));
+
+	// Now process transitions specifically for connections
+	const TArray<TSharedPtr<FJsonValue>>* TransitionsArray;
+	if (SMStructure->TryGetArrayField(TEXT("transitions"), TransitionsArray))
+	{
+		for (const TSharedPtr<FJsonValue>& TransVal : *TransitionsArray)
+		{
+			TSharedPtr<FJsonObject> TransObj = TransVal->AsObject();
+			if (!TransObj.IsValid()) continue;
+
+			FString SourceGuid, TargetGuid;
+			if (TransObj->TryGetStringField(TEXT("source_guid"), SourceGuid) &&
+				TransObj->TryGetStringField(TEXT("target_guid"), TargetGuid))
+			{
+				if (int64* SourceNodeId = GuidToNodeId.Find(SourceGuid))
+				{
+					if (int64* TargetNodeId = GuidToNodeId.Find(TargetGuid))
+					{
+						FIndexedConnection Conn;
+						Conn.SourceNodeId = *SourceNodeId;
+						Conn.TargetNodeId = *TargetNodeId;
+						Conn.PinType = TEXT("transition");
+						DB.InsertConnection(Conn);
+					}
+				}
+			}
 		}
 	}
 
-	UE_LOG(LogMonolithLDIndexer, Log, TEXT("FStateMachineIndexer::ReindexAll: complete (Phase 1 — index stubs only)"));
+	return true;
 }
 
 #endif // WITH_LOGICDRIVER
