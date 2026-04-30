@@ -422,6 +422,7 @@ class IndexingPipeline:
         if total > 0:
             print(f"  Resolving inheritance for {total:,} classes...", flush=True)
 
+        batch = []
         for i, key in enumerate(keys_to_process):
             child_name = key[len("_bases_"):]
             base_classes = self._symbol_name_to_id[key]
@@ -432,6 +433,21 @@ class IndexingPipeline:
             for parent_name in base_classes:
                 parent_id = self._class_name_to_id.get(parent_name)
                 if parent_id is not None:
+                    batch.append((child_id, parent_id))
+                else:
+                    self._diag["inheritance_failed"] += 1
+                    logger.debug("Inheritance: %s -> %s (parent not in class map)", child_name, parent_name)
+
+        if batch:
+            try:
+                self._conn.executemany(
+                    "INSERT INTO inheritance (child_id, parent_id) VALUES (?, ?)",
+                    batch,
+                )
+                self._diag["inheritance_resolved"] += len(batch)
+            except sqlite3.IntegrityError:
+                # Fallback to row-by-row insert if there are constraint violations (e.g., duplicates)
+                for child_id, parent_id in batch:
                     try:
                         insert_inheritance(
                             self._conn, child_id=child_id, parent_id=parent_id,
@@ -439,6 +455,3 @@ class IndexingPipeline:
                         self._diag["inheritance_resolved"] += 1
                     except sqlite3.IntegrityError:
                         pass
-                else:
-                    self._diag["inheritance_failed"] += 1
-                    logger.debug("Inheritance: %s -> %s (parent not in class map)", child_name, parent_name)
