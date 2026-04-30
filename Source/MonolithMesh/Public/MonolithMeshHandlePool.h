@@ -8,6 +8,7 @@ class FJsonObject;
 
 #if WITH_GEOMETRYSCRIPT
 #include "UDynamicMesh.h"
+#include "GeometryScript/CollisionFunctions.h"
 #include "Containers/Ticker.h"
 #endif
 
@@ -41,6 +42,11 @@ public:
 		const FString& CollisionMode = TEXT("auto"), int32 MaxHulls = 4);
 	TSharedPtr<FJsonObject> ListHandles() const;
 
+#if WITH_GEOMETRYSCRIPT
+	void SetHandleCollision(const FString& HandleName, const FGeometryScriptSimpleCollision& Collision);
+	bool GetHandleCollision(const FString& HandleName, FGeometryScriptSimpleCollision& OutCollision) const;
+#endif
+
 private:
 	// UPROPERTY must be outside preprocessor guards (UHT limitation).
 	// Store as UObject* — cast to UDynamicMesh* at runtime in WITH_GEOMETRYSCRIPT code.
@@ -49,6 +55,10 @@ private:
 
 	TMap<FString, FString> HandleSources;
 	TMap<FString, double> LastAccessTime;
+
+#if WITH_GEOMETRYSCRIPT
+	TMap<FString, FGeometryScriptSimpleCollision> HandleCollisions;
+#endif
 
 #if WITH_GEOMETRYSCRIPT
 	FTSTicker::FDelegateHandle EvictionTimerHandle;

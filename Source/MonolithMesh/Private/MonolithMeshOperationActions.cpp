@@ -488,13 +488,8 @@ FMonolithActionResult FMonolithMeshOperationActions::GenerateCollision(const TSh
 	FGeometryScriptSimpleCollision Collision = UGeometryScriptLibrary_CollisionFunctions::GenerateCollisionFromMesh(
 		Mesh, CollisionOpts);
 
-	// BUG (known): The collision data computed above is discarded after this function returns.
-	// It is NOT stored on the handle or applied to any StaticMesh.
-	// This is harmless in practice because save_handle now auto-generates collision
-	// (added in Task 4 of the proc-geo overhaul). Users wanting custom collision can
-	// use the collision/max_hulls params on save_handle instead.
-	// TODO: Phase 2 fix — store collision in a TMap<FString, FGeometryScriptSimpleCollision>
-	// on the pool so save_handle can use pre-generated collision instead of re-computing.
+	// Store collision on the pool so save_handle can use pre-generated collision instead of re-computing.
+	Pool->SetHandleCollision(HandleName, Collision);
 
 	// Report collision shape counts so the user gets useful feedback
 	int32 ShapeCount = Collision.AggGeom.BoxElems.Num()
@@ -511,7 +506,7 @@ FMonolithActionResult FMonolithMeshOperationActions::GenerateCollision(const TSh
 	Result->SetNumberField(TEXT("capsule_elements"), Collision.AggGeom.SphylElems.Num());
 	Result->SetNumberField(TEXT("convex_elements"), Collision.AggGeom.ConvexElems.Num());
 	Result->SetStringField(TEXT("status"), TEXT("generated"));
-	Result->SetStringField(TEXT("note"), TEXT("Collision shapes computed but not stored. Use save_handle with collision param to persist collision on the saved StaticMesh."));
+	Result->SetStringField(TEXT("note"), TEXT("Collision shapes generated and cached. They will be applied when save_handle is called."));
 
 	return FMonolithActionResult::Success(Result);
 }
