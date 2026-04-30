@@ -26,6 +26,13 @@ void FStateMachineIndexer::IndexStateMachine(const FAssetData& AssetData)
 	UE_LOG(LogMonolithLDIndexer, Verbose, TEXT("FStateMachineIndexer::IndexStateMachine: '%s' (stub — no-op)"), *AssetData.AssetName.ToString());
 }
 
+void FStateMachineIndexer::IndexNodeBlueprint(const FAssetData& AssetData)
+{
+	// TODO Phase 2: Extract node properties and logic
+	// and push into MonolithIndex for cross-reference queries.
+	UE_LOG(LogMonolithLDIndexer, Verbose, TEXT("FStateMachineIndexer::IndexNodeBlueprint: '%s' (stub — no-op)"), *AssetData.AssetName.ToString());
+}
+
 void FStateMachineIndexer::ReindexAll()
 {
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -64,7 +71,10 @@ void FStateMachineIndexer::ReindexAll()
 
 		UE_LOG(LogMonolithLDIndexer, Log, TEXT("FStateMachineIndexer::ReindexAll: found %d Node Blueprints"), NodeAssets.Num());
 
-		// TODO Phase 2: Index node blueprints as well
+		for (const FAssetData& Asset : NodeAssets)
+		{
+			IndexNodeBlueprint(Asset);
+		}
 	}
 
 	UE_LOG(LogMonolithLDIndexer, Log, TEXT("FStateMachineIndexer::ReindexAll: complete (Phase 1 — index stubs only)"));
