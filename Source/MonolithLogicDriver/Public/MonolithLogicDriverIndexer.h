@@ -1,9 +1,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "MonolithIndexer.h"
-
 #if WITH_LOGICDRIVER
+#include "MonolithIndexer.h"
 
 /**
  * FStateMachineIndexer -- deep indexer for Logic Driver SM assets.
