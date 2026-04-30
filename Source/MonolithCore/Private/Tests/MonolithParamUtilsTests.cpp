@@ -52,4 +52,25 @@ bool FMonolithParseMobilityTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamUtilsNormalizePathTest,
+	"Monolith.ParamUtils.NormalizeBlueprintClassPath",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamUtilsNormalizePathTest::RunTest(const FString& Parameters)
+{
+	// Test case: no dot
+	FString NoDot = MonolithParamUtils::NormalizeBlueprintClassPath(TEXT("/Game/Foo/BP_Bar"));
+	TestEqual(TEXT("No dot adds .BaseName_C"), NoDot, TEXT("/Game/Foo/BP_Bar.BP_Bar_C"));
+
+	// Test case: has dot, no _C
+	FString HasDotNoC = MonolithParamUtils::NormalizeBlueprintClassPath(TEXT("/Game/Foo/BP_Bar.BP_Bar"));
+	TestEqual(TEXT("Has dot but no _C appends _C"), HasDotNoC, TEXT("/Game/Foo/BP_Bar.BP_Bar_C"));
+
+	// Test case: has dot, has _C
+	FString HasDotHasC = MonolithParamUtils::NormalizeBlueprintClassPath(TEXT("/Game/Foo/BP_Bar.BP_Bar_C"));
+	TestEqual(TEXT("Has dot and _C does not change"), HasDotHasC, TEXT("/Game/Foo/BP_Bar.BP_Bar_C"));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
