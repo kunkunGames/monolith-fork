@@ -46,4 +46,43 @@ public:
 
 	/** Get display-friendly name from an asset path */
 	static FString GetAssetName(const FString& AssetPath);
+
+	/**
+	 * CC-05: Find AssetRegistry entries that look like a "did you mean" match for
+	 * the given input. Tolerant of any input form an agent might supply:
+	 *
+	 *   - bare short name           "BB_PunchBot"
+	 *   - relative path             "AI/PunchBot/BB_PunchBot"
+	 *   - wrong-prefix abs path     "/ShooterExplorer/AI/PunchBot/BB_PunchBot"
+	 *   - object path with subobj   "/Game/Foo.Foo:SubObject"
+	 *   - filesystem absolute path  "D:\LyraStarterGame\Content\AI\PunchBot\BB_PunchBot.uasset"
+	 *   - mixed separators          "/Game\AI\PunchBot/BB_PunchBot"
+	 *
+	 * Strategy:
+	 *   1. Normalize: trim, unify separators, strip filesystem prefix up to
+	 *      "/Content/" (rewriting it to "/Game/"), strip ":SubObject" and
+	 *      .uasset / .umap extensions.
+	 *   2. Extract the short name (last "/" segment, then last "." segment) and
+	 *      keep the remaining segments as path hints.
+	 *   3. Filter AssetRegistry to entries whose AssetName matches the short
+	 *      name (FName-equality, case-insensitive on most platforms).
+	 *   4. Score each candidate by how many of the input's path-hint segments
+	 *      appear (case-insensitive substring) in the candidate's object path.
+	 *
+	 * Returns up to MaxResults soft-object paths, best-ranked first. Empty
+	 * array on no match, empty input, or whitespace-only input.
+	 */
+	static TArray<FString> FindAssetCandidates(const FString& Input, int32 MaxResults = 5);
+
+	/**
+	 * Internal — exposed for testing. Parses an input path-like string into
+	 * a (short name, path hints) pair without touching the AssetRegistry.
+	 * Returns ShortName == "" on inputs that contain no usable identifier.
+	 */
+	struct FAssetCandidateKey
+	{
+		FString ShortName;
+		TArray<FString> PathHints;
+	};
+	static FAssetCandidateKey ParseAssetCandidateInput(const FString& Input);
 };

@@ -711,11 +711,65 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 	}
 	else
 	{
+		// CC-05: append structured hints to the error text so the agent can
+		// recover in one round-trip. Keep the format human/LLM readable —
+		// no JSON parsing required on the client side.
+		FString ErrorText = ActionResult.ErrorMessage;
+
+		if (ActionResult.RelatedActions.Num() > 0)
+		{
+			ErrorText += TEXT("\n\nDid you mean:");
+			for (const FString& Name : ActionResult.RelatedActions)
+			{
+				ErrorText += TEXT("\n  - ") + Name;
+			}
+		}
+
+		if (ActionResult.Hints.Num() > 0)
+		{
+			ErrorText += TEXT("\n");
+			for (const FString& Hint : ActionResult.Hints)
+			{
+				ErrorText += TEXT("\nHint: ") + Hint;
+			}
+		}
+
 		TSharedPtr<FJsonObject> TextContent = MakeShared<FJsonObject>();
 		TextContent->SetStringField(TEXT("type"), TEXT("text"));
-		TextContent->SetStringField(TEXT("text"), ActionResult.ErrorMessage);
+		TextContent->SetStringField(TEXT("text"), ErrorText);
 		Content.Add(MakeShared<FJsonValueObject>(TextContent));
 		Result->SetBoolField(TEXT("isError"), true);
+
+		// Also surface the structured hints alongside the text so MCP clients
+		// that prefer machine-readable metadata can use it. Empty arrays are
+		// not attached → existing responses byte-identical when no hints.
+		if (ActionResult.RelatedActions.Num() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> Arr;
+			Arr.Reserve(ActionResult.RelatedActions.Num());
+			for (const FString& Name : ActionResult.RelatedActions)
+			{
+				Arr.Add(MakeShared<FJsonValueString>(Name));
+			}
+			Result->SetArrayField(TEXT("related_actions"), Arr);
+		}
+		if (ActionResult.Hints.Num() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> Arr;
+			Arr.Reserve(ActionResult.Hints.Num());
+			for (const FString& Hint : ActionResult.Hints)
+			{
+				Arr.Add(MakeShared<FJsonValueString>(Hint));
+			}
+			Result->SetArrayField(TEXT("hints"), Arr);
+		}
+		if (ActionResult.ErrorData.IsValid())
+		{
+			for (const auto& Pair : ActionResult.ErrorData->Values)
+			{
+				Result->SetField(Pair.Key, Pair.Value);
+			}
+		}
 	}
 
 	Result->SetArrayField(TEXT("content"), Content);

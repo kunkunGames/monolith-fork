@@ -11,6 +11,14 @@ struct FMonolithActionResult
 	FString ErrorMessage;
 	int32 ErrorCode = 0;
 
+	// CC-05: structured hint slots — empty by default → existing responses byte-identical.
+	// RelatedActions: "did you mean" suggestions (action names, asset paths, etc.).
+	// Hints: free-form follow-up guidance for the agent.
+	// ErrorData: handler-supplied structured context, attached to JSON-RPC error.data.
+	TArray<FString> RelatedActions;
+	TArray<FString> Hints;
+	TSharedPtr<FJsonObject> ErrorData;
+
 	static FMonolithActionResult Success(const TSharedPtr<FJsonObject>& InResult)
 	{
 		FMonolithActionResult R;
@@ -26,6 +34,39 @@ struct FMonolithActionResult
 		R.ErrorMessage = Message;
 		R.ErrorCode = Code;
 		return R;
+	}
+
+	// Chain helpers — keep handler call sites readable:
+	//   return FMonolithActionResult::Error("...").WithHint("...").WithRelatedAction("...");
+	FMonolithActionResult& WithHint(const FString& Hint) { Hints.Add(Hint); return *this; }
+	FMonolithActionResult& WithRelatedAction(const FString& Name) { RelatedActions.Add(Name); return *this; }
+	FMonolithActionResult& WithRelatedActions(const TArray<FString>& Names)
+	{
+		RelatedActions.Append(Names);
+		return *this;
+	}
+	FMonolithActionResult& WithErrorData(const TSharedPtr<FJsonObject>& Data) { ErrorData = Data; return *this; }
+
+	// DD-02: structured asset-path recovery
+	FMonolithActionResult& WithRetryWith(const TSharedPtr<FJsonObject>& Args)
+	{
+		if (!ErrorData.IsValid()) ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetObjectField(TEXT("retry_with"), Args);
+		return *this;
+	}
+
+	FMonolithActionResult& WithDidYouMean(const TArray<FString>& Candidates)
+	{
+		if (!ErrorData.IsValid()) ErrorData = MakeShared<FJsonObject>();
+		
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Reserve(Candidates.Num());
+		for (const FString& Cand : Candidates)
+		{
+			Arr.Add(MakeShared<FJsonValueString>(Cand));
+		}
+		ErrorData->SetArrayField(TEXT("did_you_mean"), Arr);
+		return *this;
 	}
 };
 
@@ -88,6 +129,13 @@ public:
 
 	/** Get total number of registered actions */
 	int32 GetActionCount() const;
+
+	/**
+	 * CC-05: Find action names in a namespace that are similar to the given name.
+	 * Uses prefix match + Levenshtein distance to surface "did you mean" suggestions.
+	 * Returns up to MaxResults names, ordered by best match first.
+	 */
+	TArray<FString> FindSimilarActions(const FString& Namespace, const FString& ActionName, int32 MaxResults = 5) const;
 
 private:
 	FMonolithToolRegistry() = default;
