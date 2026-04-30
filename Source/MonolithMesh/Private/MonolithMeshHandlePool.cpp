@@ -64,6 +64,9 @@ void UMonolithMeshHandlePool::Teardown()
 	Handles.Empty();
 	HandleSources.Empty();
 	LastAccessTime.Empty();
+#if WITH_GEOMETRYSCRIPT
+	HandleCollisions.Empty();
+#endif
 }
 
 // ============================================================================
@@ -145,6 +148,9 @@ bool UMonolithMeshHandlePool::ReleaseHandle(const FString& HandleName)
 	Handles.Remove(HandleName);
 	HandleSources.Remove(HandleName);
 	LastAccessTime.Remove(HandleName);
+#if WITH_GEOMETRYSCRIPT
+	HandleCollisions.Remove(HandleName);
+#endif
 	return true;
 }
 
@@ -252,7 +258,15 @@ bool UMonolithMeshHandlePool::SaveHandle(const FString& HandleName, const FStrin
 		UBodySetup* BS = StaticMesh->GetBodySetup();
 		check(BS);
 
-		if (CollisionMode == TEXT("complex_as_simple"))
+		FGeometryScriptSimpleCollision CachedCollision;
+		bool bHasCachedCollision = GetHandleCollision(HandleName, CachedCollision);
+
+		if (bHasCachedCollision && CollisionMode == TEXT("auto"))
+		{
+			UGeometryScriptLibrary_CollisionFunctions::SetStaticMeshCollisionFromSimpleBoundingSolids(
+				CachedCollision, StaticMesh);
+		}
+		else if (CollisionMode == TEXT("complex_as_simple"))
 		{
 			BS->CollisionTraceFlag = CTF_UseComplexAsSimple;
 			BS->CreatePhysicsMeshes();
@@ -466,3 +480,21 @@ UDynamicMesh* UMonolithMeshHandlePool::CreateFromAsset(const FString& AssetPath,
 }
 
 #endif // WITH_GEOMETRYSCRIPT
+
+
+#if WITH_GEOMETRYSCRIPT
+void UMonolithMeshHandlePool::SetHandleCollision(const FString& HandleName, const FGeometryScriptSimpleCollision& Collision)
+{
+	HandleCollisions.Add(HandleName, Collision);
+}
+
+bool UMonolithMeshHandlePool::GetHandleCollision(const FString& HandleName, FGeometryScriptSimpleCollision& OutCollision) const
+{
+	if (const FGeometryScriptSimpleCollision* Collision = HandleCollisions.Find(HandleName))
+	{
+		OutCollision = *Collision;
+		return true;
+	}
+	return false;
+}
+#endif
