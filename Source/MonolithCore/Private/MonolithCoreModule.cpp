@@ -4,6 +4,7 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithCoreTools.h"
+#include "MonolithCrashBreadcrumb.h"
 #include "Misc/FileHelper.h"
 #include "GenericPlatform/GenericPlatformProcess.h"
 #include "Interfaces/IPluginManager.h"
@@ -23,6 +24,12 @@ void FMonolithCoreModule::StartupModule()
 
 	// Self-heal future-dated mtimes from cross-TZ ZIP extraction.
 	NormalizeFutureMtimesIfNeeded();
+
+	// Crash breadcrumb is bound in ALL modes (editor + commandlet). Cook/compile
+	// crashes inside MCP-loaded code are still useful to record. The handler is
+	// passive when no MCP action is in flight (writes a "(idle)" engine-data
+	// sentinel only).
+	FMonolithCrashBreadcrumb::Get().Init();
 
 	// Skip MCP server + sentinel in commandlets (cook/compile). The running editor already holds port 9316
 	// and a second bind attempt surfaces as UAT ExitCode=1. Commandlets have no MCP consumer anyway.
@@ -68,6 +75,8 @@ void FMonolithCoreModule::ShutdownModule()
 	}
 
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("monolith"));
+
+	FMonolithCrashBreadcrumb::Get().Shutdown();
 
 	UE_LOG(LogMonolith, Log, TEXT("Monolith — Core module shut down"));
 }
