@@ -3877,10 +3877,14 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleScaffoldCustomAbilityTas
 	Source += TEXT("{\n");
 	Source += TEXT("\tSuper::Activate();\n\n");
 	Source += TEXT("\t// TODO: Implement task activation logic\n");
-	Source += TEXT("\t// Call delegate.Broadcast() when task completes\n");
 	if (TaskDelegates.Num() > 0)
 	{
-		Source += FString::Printf(TEXT("\t// Example: %s.Broadcast();\n"), *TaskDelegates[0].Name);
+		Source += TEXT("\t/* Example of broadcasting a delegate:\n");
+		Source += TEXT("\tif (ShouldBroadcastAbilityTaskDelegates())\n");
+		Source += TEXT("\t{\n");
+		Source += FString::Printf(TEXT("\t\t%s.Broadcast();\n"), *TaskDelegates[0].Name);
+		Source += TEXT("\t}\n");
+		Source += TEXT("\t*/\n");
 	}
 	Source += TEXT("}\n\n");
 
