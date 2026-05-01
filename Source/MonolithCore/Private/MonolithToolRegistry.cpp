@@ -417,6 +417,7 @@ TArray<FMonolithActionInfo> FMonolithToolRegistry::GetActions(const FString& Nam
 
 	if (const TArray<FString>* Keys = NamespaceActions.Find(Namespace))
 	{
+		Result.Reserve(Keys->Num());
 		for (const FString& Key : *Keys)
 		{
 			if (const FRegisteredAction* RegAction = Actions.Find(Key))
@@ -432,6 +433,7 @@ TArray<FMonolithActionInfo> FMonolithToolRegistry::GetAllActions() const
 {
 	FScopeLock Lock(&RegistryLock);
 	TArray<FMonolithActionInfo> Result;
+	Result.Reserve(Actions.Num());
 	for (const auto& Pair : Actions)
 	{
 		Result.Add(Pair.Value.Info);
