@@ -1,6 +1,7 @@
 #include "MonolithMaterialActions.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
+#include "MonolithPackagePathValidator.h"
 
 #include "Materials/Material.h"
 #include "Materials/MaterialExpression.h"
@@ -2606,6 +2607,11 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<
 	}
 
 	// Create package and material
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg)
 	{
@@ -2699,6 +2705,11 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	AssetName = AssetPath.Mid(LastSlash + 1);
 
 	// Create package and MIC
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg)
 	{
@@ -6336,6 +6347,11 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 	}
 
 	// Create package and material function
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg)
 	{
@@ -8156,6 +8172,11 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	}
 
 	// Create package and material
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(MaterialPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Pkg = CreatePackage(*MaterialPath);
 	if (!Pkg)
 	{
@@ -8346,6 +8367,11 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 	}
 
 	// Create package
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg)
 	{
