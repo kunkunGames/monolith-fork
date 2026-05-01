@@ -289,6 +289,7 @@ bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const
 	{
 		// Batch response — serialize as array
 		TArray<TSharedPtr<FJsonValue>> JsonArray;
+		JsonArray.Reserve(Responses.Num());
 		for (const TSharedPtr<FJsonObject>& Resp : Responses)
 		{
 			JsonArray.Add(MakeShared<FJsonValueObject>(Resp));
@@ -531,6 +532,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 			// Build description with action list
 			FString Description = FString::Printf(TEXT("Query the %s domain. Available actions: "), *Namespace);
 			TArray<FString> ActionNames;
+			ActionNames.Reserve(Actions.Num());
 			for (const FMonolithActionInfo& ActionInfo : Actions)
 			{
 				ActionNames.Add(ActionInfo.Action);
@@ -549,6 +551,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 			ActionProp->SetStringField(TEXT("type"), TEXT("string"));
 			ActionProp->SetStringField(TEXT("description"), TEXT("The action to execute"));
 			TArray<TSharedPtr<FJsonValue>> EnumValues;
+			EnumValues.Reserve(ActionNames.Num());
 			for (const FString& Name : ActionNames)
 			{
 				EnumValues.Add(MakeShared<FJsonValueString>(Name));
