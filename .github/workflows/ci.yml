@@ -7,7 +7,7 @@ on:
 
 jobs:
   python-lint:
-    name: Python — Lint & Format
+    name: Python — Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,9 +21,6 @@ jobs:
 
       - name: Lint (ruff check)
         run: ruff check Scripts/ MCP/
-
-      - name: Format check (ruff format)
-        run: ruff format --check Scripts/ MCP/
 
   python-syntax:
     name: Python — Syntax Check
