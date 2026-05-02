@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  python-lint:
+    name: Python — Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint (ruff check)
+        run: ruff check Scripts/ MCP/
+
+      - name: Format check (ruff format)
+        run: ruff format --check Scripts/ MCP/
+
+  python-syntax:
+    name: Python — Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check syntax
+        run: |
+          find Scripts/ MCP/ -name "*.py" | while read f; do
+            python -m py_compile "$f" || exit 1
+          done
+
+  validate-json:
+    name: Validate JSON files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate .uplugin / .uproject
+        run: |
+          for f in $(find . -maxdepth 2 \( -name "*.uplugin" -o -name "*.uproject" \)); do
+            echo "Checking $f …"
+            python -m json.tool "$f" > /dev/null
+          done
