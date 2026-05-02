@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..db.queries import (
-    get_file_by_path,
     insert_file,
     insert_include,
     insert_inheritance,
