@@ -1,7 +1,6 @@
 """Standalone indexer for Monolith plugin. Usage: python -m source_indexer --source PATH --db PATH [--shaders PATH] [--clean]"""
 import argparse
 import sqlite3
-import sys
 from pathlib import Path
 
 from .db.schema import init_db
@@ -35,7 +34,7 @@ def main():
     print(f"Done: {stats['files_processed']} files, {stats['symbols_extracted']} symbols, {stats['errors']} errors")
 
     diag = pipeline.diagnostics
-    print(f"\nDiagnostics:")
+    print("\nDiagnostics:")
     print(f"  Class/struct definitions: {diag['definitions']}")
     print(f"  Forward declarations:     {diag['forward_decls']}")
     print(f"  With base classes:        {diag['with_base_classes']}")
