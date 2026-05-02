@@ -51,6 +51,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Styling/SlateColor.h"
 #include "Styling/SlateBrush.h"
+#include "MonolithAssetUtils.h"
 
 namespace MonolithUIInternal
 {
@@ -95,19 +96,7 @@ namespace MonolithUIInternal
     // Load a widget blueprint by asset path, returning error result if not found
     inline UWidgetBlueprint* LoadWidgetBlueprint(const FString& AssetPath, FMonolithActionResult& OutError)
     {
-        UObject* Loaded = StaticLoadObject(UWidgetBlueprint::StaticClass(), nullptr, *AssetPath);
-        if (!Loaded)
-        {
-            // Try with _C suffix stripped, or /Game/ prefix added
-            FString CleanPath = AssetPath;
-            if (!CleanPath.StartsWith(TEXT("/")))
-            {
-                CleanPath = TEXT("/Game/") + CleanPath;
-            }
-            Loaded = StaticLoadObject(UWidgetBlueprint::StaticClass(), nullptr, *CleanPath);
-        }
-
-        UWidgetBlueprint* WBP = Cast<UWidgetBlueprint>(Loaded);
+        UWidgetBlueprint* WBP = FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(AssetPath);
         if (!WBP)
         {
             OutError = FMonolithActionResult::Error(
