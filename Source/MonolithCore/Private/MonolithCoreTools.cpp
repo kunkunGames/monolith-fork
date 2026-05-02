@@ -187,6 +187,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			Result->SetStringField(TEXT("category"), FilterCategory);
 		}
 		TArray<TSharedPtr<FJsonValue>> ActionArray;
+		ActionArray.Reserve(Actions.Num());
 		for (const FMonolithActionInfo& ActionInfo : Actions)
 		{
 			TSharedPtr<FJsonObject> ActionObj = MakeShared<FJsonObject>();
@@ -208,6 +209,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 	{
 		// Return all namespaces with action counts
 		TArray<TSharedPtr<FJsonValue>> NsArray;
+		NsArray.Reserve(Namespaces.Num());
 		for (const FString& Ns : Namespaces)
 		{
 			TArray<FMonolithActionInfo> Actions = Registry.GetActions(Ns);
@@ -216,6 +218,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			NsObj->SetNumberField(TEXT("action_count"), Actions.Num());
 
 			TArray<TSharedPtr<FJsonValue>> ActionNames;
+			ActionNames.Reserve(Actions.Num());
 			for (const FMonolithActionInfo& ActionInfo : Actions)
 			{
 				ActionNames.Add(MakeShared<FJsonValueString>(ActionInfo.Action));
@@ -228,6 +231,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		const UMonolithSettings* Settings = UMonolithSettings::Get();
 
 		TArray<TSharedPtr<FJsonValue>> OptionalArray;
+		OptionalArray.Reserve(OptionalModules.Num());
 		for (const FKnownOptionalModule& Mod : OptionalModules)
 		{
 			// Skip if this namespace already has registered actions (it's active)

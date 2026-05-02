@@ -82,6 +82,7 @@ TSharedPtr<FJsonObject> FMonolithJsonUtils::Parse(const FString& JsonString)
 TSharedRef<FJsonValueArray> FMonolithJsonUtils::StringArrayToJson(const TArray<FString>& Strings)
 {
 	TArray<TSharedPtr<FJsonValue>> JsonArray;
+	JsonArray.Reserve(Strings.Num());
 	for (const FString& Str : Strings)
 	{
 		JsonArray.Add(MakeShared<FJsonValueString>(Str));

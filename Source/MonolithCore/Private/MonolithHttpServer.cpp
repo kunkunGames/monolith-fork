@@ -488,6 +488,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 
 	// Each namespace becomes a tool
 	TArray<FString> Namespaces = Registry.GetNamespaces();
+	ToolsArray.Reserve(Namespaces.Num());
 	for (const FString& Namespace : Namespaces)
 	{
 		TArray<FMonolithActionInfo> Actions = Registry.GetActions(Namespace);
@@ -696,6 +697,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 	// Build MCP tool result
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Content;
+	Content.Reserve(2);
 
 	if (ActionResult.bSuccess)
 	{
