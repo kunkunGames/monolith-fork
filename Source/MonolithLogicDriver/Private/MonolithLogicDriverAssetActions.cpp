@@ -131,17 +131,18 @@ void FMonolithLogicDriverAssetActions::RegisterActions(FMonolithToolRegistry& Re
 // ============================================================
 FMonolithActionResult FMonolithLogicDriverAssetActions::HandleCreateStateMachine(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty())
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
 	}
 
 	// Determine asset name
 	FString AssetName;
-	if (Params->HasField(TEXT("name")) && !Params->GetStringField(TEXT("name")).IsEmpty())
+	FString ParamName;
+	if (Params->TryGetStringField(TEXT("name"), ParamName) && !ParamName.IsEmpty())
 	{
-		AssetName = Params->GetStringField(TEXT("name"));
+		AssetName = ParamName;
 	}
 	else
 	{
@@ -368,14 +369,14 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleDeleteStateMachine
 // ============================================================
 FMonolithActionResult FMonolithLogicDriverAssetActions::HandleDuplicateStateMachine(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SourcePath = Params->GetStringField(TEXT("source_path"));
-	if (SourcePath.IsEmpty())
+	FString SourcePath;
+	if (!Params->TryGetStringField(TEXT("source_path"), SourcePath) || SourcePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'source_path'"));
 	}
 
-	FString DestPath = Params->GetStringField(TEXT("dest_path"));
-	if (DestPath.IsEmpty())
+	FString DestPath;
+	if (!Params->TryGetStringField(TEXT("dest_path"), DestPath) || DestPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'dest_path'"));
 	}
@@ -420,13 +421,23 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleDuplicateStateMach
 // ============================================================
 FMonolithActionResult FMonolithLogicDriverAssetActions::HandleCreateNodeBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	FString AssetName = Params->GetStringField(TEXT("name"));
-	FString NodeType = Params->GetStringField(TEXT("node_type")).ToLower();
+	FString SavePath;
+	FString AssetName;
+	FString NodeType;
 
-	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
-	if (AssetName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'name'"));
-	if (NodeType.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'node_type'"));
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
+	}
+	if (!Params->TryGetStringField(TEXT("name"), AssetName) || AssetName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'name'"));
+	}
+	if (!Params->TryGetStringField(TEXT("node_type"), NodeType) || NodeType.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'node_type'"));
+	}
+	NodeType = NodeType.ToLower();
 
 	if (NodeType != TEXT("state") && NodeType != TEXT("transition")
 		&& NodeType != TEXT("conduit") && NodeType != TEXT("state_machine"))

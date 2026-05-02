@@ -163,13 +163,17 @@ void FMonolithLogicDriverScaffoldActions::RegisterActions(FMonolithToolRegistry&
 
 FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldHelloWorldSM(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
+	}
 
 	FString AssetName = TEXT("SM_HelloWorld");
-	if (Params->HasField(TEXT("name")) && !Params->GetStringField(TEXT("name")).IsEmpty())
+	FString ParamName;
+	if (Params->TryGetStringField(TEXT("name"), ParamName) && !ParamName.IsEmpty())
 	{
-		AssetName = Params->GetStringField(TEXT("name"));
+		AssetName = ParamName;
 	}
 
 	// ── 1. Create SM Blueprint via factory ──
@@ -317,13 +321,17 @@ static FMonolithActionResult ScaffoldGeneric(
 	const TArray<FScaffoldTransitionDesc>& TransDescs,
 	int32 InitialStateIndex)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
+	}
 
 	FString AssetName = DefaultName;
-	if (Params->HasField(TEXT("name")) && !Params->GetStringField(TEXT("name")).IsEmpty())
+	FString ParamName;
+	if (Params->TryGetStringField(TEXT("name"), ParamName) && !ParamName.IsEmpty())
 	{
-		AssetName = Params->GetStringField(TEXT("name"));
+		AssetName = ParamName;
 	}
 
 	// 1. Create SM Blueprint via factory
@@ -452,15 +460,14 @@ static FMonolithActionResult ScaffoldGeneric(
 
 FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldDialogueSM(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
+	}
 
 	FString AssetName;
-	if (Params->HasField(TEXT("name")) && !Params->GetStringField(TEXT("name")).IsEmpty())
-	{
-		AssetName = Params->GetStringField(TEXT("name"));
-	}
-	else
+	if (!Params->TryGetStringField(TEXT("name"), AssetName) || AssetName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'name'"));
 	}
@@ -479,8 +486,14 @@ FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldDialogu
 			const TSharedPtr<FJsonObject>& DN = DialogueNodes[i]->AsObject();
 			if (!DN.IsValid()) continue;
 
-			FString Speaker = DN->HasField(TEXT("speaker")) ? DN->GetStringField(TEXT("speaker")) : TEXT("Speaker");
-			FString Text = DN->HasField(TEXT("text")) ? DN->GetStringField(TEXT("text")) : TEXT("");
+			FString Speaker;
+			if (!DN->TryGetStringField(TEXT("speaker"), Speaker) || Speaker.IsEmpty())
+			{
+				Speaker = TEXT("Speaker");
+			}
+
+			FString Text;
+			DN->TryGetStringField(TEXT("text"), Text);
 
 			FString StateName = FString::Printf(TEXT("%s_%d"), *Speaker, i);
 			if (!Text.IsEmpty())
@@ -553,15 +566,9 @@ FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldDialogu
 
 FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldQuestSM(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
-
+	// Rely on ScaffoldGeneric to perform safe extractions for save_path and name
 	FString AssetName;
-	if (Params->HasField(TEXT("name")) && !Params->GetStringField(TEXT("name")).IsEmpty())
-	{
-		AssetName = Params->GetStringField(TEXT("name"));
-	}
-	else
+	if (!Params->TryGetStringField(TEXT("name"), AssetName) || AssetName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'name'"));
 	}
@@ -620,15 +627,9 @@ FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldQuestSM
 
 FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldInteractableSM(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
-
+	// Rely on ScaffoldGeneric to perform safe extractions for save_path and name
 	FString AssetName;
-	if (Params->HasField(TEXT("name")) && !Params->GetStringField(TEXT("name")).IsEmpty())
-	{
-		AssetName = Params->GetStringField(TEXT("name"));
-	}
-	else
+	if (!Params->TryGetStringField(TEXT("name"), AssetName) || AssetName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'name'"));
 	}
