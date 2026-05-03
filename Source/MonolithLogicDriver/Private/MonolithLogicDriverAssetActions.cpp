@@ -4,6 +4,7 @@
 #if WITH_LOGICDRIVER
 
 #include "MonolithLogicDriverInternal.h"
+#include "MonolithPackagePathValidator.h"
 #include "Engine/Blueprint.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/Package.h"
@@ -186,6 +187,11 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleCreateStateMachine
 	}
 
 	// Create package
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
@@ -485,6 +491,11 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleCreateNodeBlueprin
 	}
 
 	// Create package
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
