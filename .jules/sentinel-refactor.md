@@ -3,3 +3,9 @@
 **Learning:** `FMonolithAssetUtils::LoadAssetByPath<T>(AssetPath)` provides a canonical, robust 4-tier asset lookup system that correctly normalizes paths and catches missing assets securely.
 **Reuse rule:** Always prefer `FMonolithAssetUtils::LoadAssetByPath<T>` for asset loading instead of writing manual `StaticLoadObject` fallbacks or path manipulation logic. When loading specific blueprints or assets inside a module, route through the module's `Internal` helper (e.g. `MonolithUIInternal::LoadWidgetBlueprint`) if available, and ensure the internal helper leverages `FMonolithAssetUtils`.
 **Avoid:** Avoid using `StaticLoadObject` directly for asset loading in action handlers when `FMonolithAssetUtils` can be used. Avoid duplicating path-normalization logic across multiple files.
+
+## 2024-11-20 - Safe JSON Extraction
+**Pattern:** Ad-hoc and unsafe parameter extraction via `GetStringField` and duplicate presence checks like `if (Params->HasField(TEXT("name")) && !Params->GetStringField(TEXT("name")).IsEmpty())` appearing frequently across MCP action handlers.
+**Learning:** `GetStringField` can trigger Editor-level crashes when a parameter is missing because UE's `FJsonObject::GetStringField` asserts internally on failure.
+**Reuse rule:** Always prefer `TryGetStringField` pattern over explicit `HasField`/`GetStringField` pairs to safely extract fields without risking assertions, logging explicit errors manually if necessary.
+**Avoid:** Avoid raw `GetStringField` calls for user-supplied JSON input.
