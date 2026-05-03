@@ -17,7 +17,7 @@ void FMonolithComboGraphModule::StartupModule()
 
 #if WITH_COMBOGRAPH
 	FMonolithComboGraphActions::RegisterActions(FMonolithToolRegistry::Get());
-	int32 ActionCount = FMonolithToolRegistry::Get().GetActions(TEXT("combograph")).Num();
+	int32 ActionCount = FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("combograph"));
 	UE_LOG(LogMonolithComboGraph, Log,
 		TEXT("MonolithComboGraph: Loaded (%d actions)"), ActionCount);
 #else

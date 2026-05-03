@@ -290,7 +290,7 @@ FMonolithActionResult FMonolithCoreTools::HandleStatus(const TSharedPtr<FJsonObj
 	// Registry stats
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 	Result->SetNumberField(TEXT("total_actions"), Registry.GetActionCount());
-	Result->SetNumberField(TEXT("namespaces"), Registry.GetNamespaces().Num());
+	Result->SetNumberField(TEXT("namespaces"), Registry.GetNamespaceCount());
 
 	// Engine info
 	Result->SetStringField(TEXT("engine_version"), FApp::GetBuildVersion());

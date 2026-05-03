@@ -136,7 +136,7 @@ void FMonolithMeshModule::StartupModule()
 #endif
 
 	UE_LOG(LogMonolith, Log, TEXT("Monolith — Mesh module loaded (%d actions)"),
-		FMonolithToolRegistry::Get().GetActions(TEXT("mesh")).Num());
+		FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("mesh")));
 }
 
 void FMonolithMeshModule::ShutdownModule()

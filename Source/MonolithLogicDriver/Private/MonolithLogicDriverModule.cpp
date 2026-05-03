@@ -51,7 +51,7 @@ void FMonolithLogicDriverModule::StartupModule()
 		}
 	});
 
-	int32 ActionCount = Registry.GetActions(TEXT("logicdriver")).Num();
+	int32 ActionCount = Registry.GetNamespaceActionCount(TEXT("logicdriver"));
 	UE_LOG(LogMonolithLogicDriver, Log,
 		TEXT("MonolithLogicDriver: Loaded (%d actions)"), ActionCount);
 #else

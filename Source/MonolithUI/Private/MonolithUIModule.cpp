@@ -36,7 +36,7 @@ void FMonolithUIModule::StartupModule()
 #endif
 
     // Dynamic action count — reflects base UMG + any conditionally-registered CommonUI actions.
-    const int32 UINamespaceActions = Registry.GetActions(TEXT("ui")).Num();
+    const int32 UINamespaceActions = Registry.GetNamespaceActionCount(TEXT("ui"));
     UE_LOG(LogMonolith, Log, TEXT("Monolith — UI module loaded (%d ui actions)"), UINamespaceActions);
 }
 

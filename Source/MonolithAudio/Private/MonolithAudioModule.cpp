@@ -31,7 +31,7 @@ void FMonolithAudioModule::StartupModule()
 	FMonolithAudioMetaSoundActions::RegisterActions(Registry);
 #endif
 
-	int32 ActionCount = Registry.GetActions(TEXT("audio")).Num();
+	int32 ActionCount = Registry.GetNamespaceActionCount(TEXT("audio"));
 	const TCHAR* MetaSoundStatus =
 #if WITH_METASOUND
 		TEXT("available");

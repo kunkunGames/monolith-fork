@@ -453,6 +453,22 @@ int32 FMonolithToolRegistry::GetActionCount() const
 	return Actions.Num();
 }
 
+int32 FMonolithToolRegistry::GetNamespaceCount() const
+{
+	FScopeLock Lock(&RegistryLock);
+	return NamespaceActions.Num();
+}
+
+int32 FMonolithToolRegistry::GetNamespaceActionCount(const FString& Namespace) const
+{
+	FScopeLock Lock(&RegistryLock);
+	if (const TArray<FString>* Keys = NamespaceActions.Find(Namespace))
+	{
+		return Keys->Num();
+	}
+	return 0;
+}
+
 TArray<FString> FMonolithToolRegistry::FindSimilarActions(const FString& Namespace, const FString& ActionName, int32 MaxResults) const
 {
 	TArray<FString> Result;
