@@ -8,6 +8,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/App.h"
+#include "Misc/AutomationTest.h"
 
 #if PLATFORM_WINDOWS
 #include "ILiveCodingModule.h"
@@ -38,6 +39,12 @@
 #include "LevelEditorViewport.h"
 #include "PixelFormat.h"
 #include "ObjectTools.h"
+
+// Scripting action includes (HOFF 7)
+#include "IPythonScriptPlugin.h"
+#include "PythonScriptTypes.h"
+#include "LevelEditorSubsystem.h"
+#include "Editor.h"
 
 // --- Compile state ---
 
@@ -432,6 +439,40 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Optional(TEXT("resolution"), TEXT("integer"), TEXT("Output resolution width/height in pixels (default: 256)"))
 			.Optional(TEXT("output_path"), TEXT("string"), TEXT("Output directory (default: Saved/Screenshots/Monolith/GIF_<timestamp>)"))
 			.Optional(TEXT("encoder"), TEXT("string"), TEXT("frames_only (default), ffmpeg, or python — opt-in GIF encoding"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("list_automation_tests"),
+		TEXT("List all registered automation tests, optionally filtered by prefix"),
+		FMonolithActionHandler::CreateStatic(&HandleListAutomationTests),
+		FParamSchemaBuilder()
+			.Optional(TEXT("prefix"), TEXT("string"), TEXT("Filter tests whose full path starts with this prefix (e.g. 'MazeLegends.Bow')"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("run_automation_tests"),
+		TEXT("Run automation tests by prefix in the running editor (no PIE, no separate process). Returns success/passed/failed counts and per-test errors."),
+		FMonolithActionHandler::CreateStatic(&HandleRunAutomationTests),
+		FParamSchemaBuilder()
+			.Required(TEXT("prefix"), TEXT("string"), TEXT("Run tests whose full path starts with this prefix (e.g. 'MazeLegends.Bow')"))
+			.Optional(TEXT("max_tests"), TEXT("integer"), TEXT("Hard cap on number of tests to run (default: 200)"))
+			.Build());
+
+	// --- Scripting actions (HOFF 7) ---
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("run_python"),
+		TEXT("Execute a Python command, statement, or file via IPythonScriptPlugin::ExecPythonCommandEx. Returns success, stdout/stderr captured by Python, and (for evaluate_statement mode) the evaluated result."),
+		FMonolithActionHandler::CreateStatic(&HandleRunPython),
+		FParamSchemaBuilder()
+			.Required(TEXT("command"), TEXT("string"), TEXT("Python source. May be inline code, a single statement, or a file path with optional space-separated args (when mode=execute_file)."))
+			.Optional(TEXT("mode"), TEXT("string"), TEXT("Execution mode: execute_file (default — multi-statement script or file with args), execute_statement (single stmt, prints result), evaluate_statement (single expr, returns result in 'result')."), TEXT("execute_file"))
+			.Optional(TEXT("unattended"), TEXT("bool"), TEXT("Set GIsRunningUnattendedScript=true to suppress UI dialogs."), TEXT("false"))
+			.Optional(TEXT("file_scope"), TEXT("string"), TEXT("Scope for execute_file: private (isolated locals/globals — default), public (shared with REPL console)."), TEXT("private"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("load_level"),
+		TEXT("Close the current persistent level (without saving) and load the specified level by /Game/... asset path. Wraps ULevelEditorSubsystem::LoadLevel."),
+		FMonolithActionHandler::CreateStatic(&HandleLoadLevel),
+		FParamSchemaBuilder()
+			.Required(TEXT("path"), TEXT("string"), TEXT("Asset path of the level to load (e.g. /Game/Maps/L_Backyard). Must exist."))
 			.Build());
 
 	InitLiveCodingDelegate();
@@ -2433,6 +2474,356 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 				FString::Printf(TEXT("Unknown encoder '%s'. Valid: frames_only, ffmpeg, python"), *Encoder));
 		}
 	}
+
+	return FMonolithActionResult::Success(Result);
+}
+
+// --- Automation tests ---
+//
+// `list_automation_tests` and `run_automation_tests` use the engine's automation
+// framework (`FAutomationTestFramework`) to enumerate and execute tests inside the
+// already-running editor process. No PIE, no commandlet, no second editor instance.
+//
+// `run_automation_tests` only handles tests that complete synchronously inside
+// `StartTestByName + StopTest` (which is the case for SimpleAutomationTest macros).
+// Latent / async tests (TickTests-driven) are skipped with a clear note so the
+// caller knows they were not exercised.
+
+namespace MonolithAutomationDetail
+{
+	static FString GetTestFullPath(const FAutomationTestInfo& Info)
+	{
+#if ENGINE_MAJOR_VERSION >= 5
+		return Info.GetFullTestPath();
+#else
+		return Info.GetTestName();
+#endif
+	}
+
+	static void CollectMatchingTests(const FString& Prefix, TArray<FAutomationTestInfo>& OutTests)
+	{
+		FAutomationTestFramework& Framework = FAutomationTestFramework::Get();
+
+		// Force-load latest test list (covers tests added since the editor started).
+		Framework.LoadTestModules();
+
+		// Default RequestedTestFilter is SmokeFilter only (UE constructor default), which
+		// excludes most game-module tests. Widen to all filter buckets so any registered
+		// test the caller's prefix points at is eligible. Restore on scope exit.
+		const EAutomationTestFlags AllFilters = static_cast<EAutomationTestFlags>(
+			static_cast<uint32>(EAutomationTestFlags::SmokeFilter) |
+			static_cast<uint32>(EAutomationTestFlags::EngineFilter) |
+			static_cast<uint32>(EAutomationTestFlags::ProductFilter) |
+			static_cast<uint32>(EAutomationTestFlags::PerfFilter) |
+			static_cast<uint32>(EAutomationTestFlags::StressFilter) |
+			static_cast<uint32>(EAutomationTestFlags::NegativeFilter));
+		// No public getter for the previous filter, so just set ours and leave it.
+		// Subsequent test runs in the same session pick up this widened filter, which
+		// is harmless (other tools will set their own when they need it).
+		Framework.SetRequestedTestFilter(AllFilters);
+
+		TArray<FAutomationTestInfo> AllTests;
+		Framework.GetValidTestNames(AllTests);
+
+		for (const FAutomationTestInfo& Info : AllTests)
+		{
+			const FString FullPath = GetTestFullPath(Info);
+			if (Prefix.IsEmpty() || FullPath.StartsWith(Prefix))
+			{
+				OutTests.Add(Info);
+			}
+		}
+	}
+}
+
+// --- Scripting actions (HOFF 7) ---
+
+namespace
+{
+	const TCHAR* PythonLogTypeToString(EPythonLogOutputType T)
+	{
+		switch (T)
+		{
+		case EPythonLogOutputType::Info:    return TEXT("info");
+		case EPythonLogOutputType::Warning: return TEXT("warning");
+		case EPythonLogOutputType::Error:   return TEXT("error");
+		default:                            return TEXT("info");
+		}
+	}
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleListAutomationTests(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Prefix;
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("prefix"), Prefix);
+	}
+
+	TArray<FAutomationTestInfo> Tests;
+	MonolithAutomationDetail::CollectMatchingTests(Prefix, Tests);
+
+	TArray<TSharedPtr<FJsonValue>> TestsJson;
+	TestsJson.Reserve(Tests.Num());
+	for (const FAutomationTestInfo& Info : Tests)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("full_path"), MonolithAutomationDetail::GetTestFullPath(Info));
+		Obj->SetStringField(TEXT("display_name"), Info.GetDisplayName());
+		Obj->SetStringField(TEXT("test_name"), Info.GetTestName());
+		Obj->SetNumberField(TEXT("flags"), static_cast<double>(static_cast<uint32>(Info.GetTestFlags())));
+		TestsJson.Add(MakeShared<FJsonValueObject>(Obj));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("prefix"), Prefix);
+	Result->SetNumberField(TEXT("count"), Tests.Num());
+	Result->SetArrayField(TEXT("tests"), TestsJson);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Prefix;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("prefix"), Prefix) || Prefix.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Required parameter: prefix (string, e.g. 'MazeLegends.Bow')"));
+	}
+
+	int32 MaxTests = 200;
+	if (Params.IsValid())
+	{
+		double MaxNum = MaxTests;
+		if (Params->TryGetNumberField(TEXT("max_tests"), MaxNum))
+		{
+			MaxTests = FMath::Max(1, FMath::FloorToInt(MaxNum));
+		}
+	}
+
+	TArray<FAutomationTestInfo> MatchingTests;
+	MonolithAutomationDetail::CollectMatchingTests(Prefix, MatchingTests);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("prefix"), Prefix);
+
+	if (MatchingTests.Num() == 0)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetNumberField(TEXT("total"), 0);
+		Result->SetNumberField(TEXT("passed"), 0);
+		Result->SetNumberField(TEXT("failed"), 0);
+		Result->SetStringField(TEXT("message"),
+			FString::Printf(TEXT("No tests matching prefix '%s' (call list_automation_tests for available tests)"), *Prefix));
+		return FMonolithActionResult::Success(Result);
+	}
+
+	const int32 TestsToRun = FMath::Min(MaxTests, MatchingTests.Num());
+
+	FAutomationTestFramework& Framework = FAutomationTestFramework::Get();
+
+	TArray<TSharedPtr<FJsonValue>> ResultsJson;
+	int32 Passed = 0;
+	int32 Failed = 0;
+	int32 Skipped = 0;
+
+	for (int32 i = 0; i < TestsToRun; ++i)
+	{
+		const FAutomationTestInfo& Info = MatchingTests[i];
+		const FString FullPath = MonolithAutomationDetail::GetTestFullPath(Info);
+		// StartTestByName looks up by the class-name registry key (e.g. FBowDataAssetTest),
+		// NOT the human-readable full path. Passing FullPath fails silently and leaves
+		// GIsAutomationTesting=false, which trips an assertion when StopTest is called.
+		const FString TestKey = Info.GetTestName();
+
+		TSharedPtr<FJsonObject> TestResult = MakeShared<FJsonObject>();
+		TestResult->SetStringField(TEXT("full_path"), FullPath);
+		TestResult->SetStringField(TEXT("test_name"), TestKey);
+
+		if (!Framework.ContainsTest(TestKey))
+		{
+			TestResult->SetStringField(TEXT("status"), TEXT("skipped"));
+			TestResult->SetStringField(TEXT("reason"),
+				FString::Printf(TEXT("ContainsTest('%s') returned false (registry lookup failed)"), *TestKey));
+			Skipped++;
+			ResultsJson.Add(MakeShared<FJsonValueObject>(TestResult));
+			continue;
+		}
+
+		Framework.StartTestByName(TestKey, /*RoleIndex=*/0, FullPath);
+
+		FAutomationTestExecutionInfo ExecInfo;
+		const bool bCompleted = Framework.StopTest(ExecInfo);
+		const bool bSuccess = bCompleted && (ExecInfo.GetErrorTotal() == 0);
+
+		TestResult->SetStringField(TEXT("status"), bSuccess ? TEXT("passed") : TEXT("failed"));
+		TestResult->SetNumberField(TEXT("duration_seconds"), ExecInfo.Duration);
+		TestResult->SetNumberField(TEXT("error_count"), ExecInfo.GetErrorTotal());
+		TestResult->SetNumberField(TEXT("warning_count"), ExecInfo.GetWarningTotal());
+
+		// Capture error messages for visibility.
+		if (ExecInfo.GetErrorTotal() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> ErrorsJson;
+			for (const FAutomationExecutionEntry& Entry : ExecInfo.GetEntries())
+			{
+				if (Entry.Event.Type == EAutomationEventType::Error)
+				{
+					ErrorsJson.Add(MakeShared<FJsonValueString>(Entry.Event.Message));
+				}
+			}
+			TestResult->SetArrayField(TEXT("errors"), ErrorsJson);
+		}
+
+		if (bSuccess) Passed++; else Failed++;
+		ResultsJson.Add(MakeShared<FJsonValueObject>(TestResult));
+	}
+
+	Result->SetBoolField(TEXT("success"), Failed == 0);
+	Result->SetNumberField(TEXT("total"), TestsToRun);
+	Result->SetNumberField(TEXT("passed"), Passed);
+	Result->SetNumberField(TEXT("failed"), Failed);
+	Result->SetNumberField(TEXT("skipped"), Skipped);
+	Result->SetArrayField(TEXT("results"), ResultsJson);
+
+	if (MatchingTests.Num() > TestsToRun)
+	{
+		Result->SetNumberField(TEXT("truncated_remaining"), MatchingTests.Num() - TestsToRun);
+	}
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleRunPython(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Command;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("command"), Command) || Command.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: command"));
+	}
+
+	FString ModeStr = TEXT("execute_file");
+	Params->TryGetStringField(TEXT("mode"), ModeStr);
+	EPythonCommandExecutionMode Mode = EPythonCommandExecutionMode::ExecuteFile;
+	if (ModeStr.Equals(TEXT("execute_file"), ESearchCase::IgnoreCase))
+	{
+		Mode = EPythonCommandExecutionMode::ExecuteFile;
+	}
+	else if (ModeStr.Equals(TEXT("execute_statement"), ESearchCase::IgnoreCase))
+	{
+		Mode = EPythonCommandExecutionMode::ExecuteStatement;
+	}
+	else if (ModeStr.Equals(TEXT("evaluate_statement"), ESearchCase::IgnoreCase))
+	{
+		Mode = EPythonCommandExecutionMode::EvaluateStatement;
+	}
+	else
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Invalid mode '%s'. Valid: execute_file, execute_statement, evaluate_statement."), *ModeStr));
+	}
+
+	bool bUnattended = false;
+	Params->TryGetBoolField(TEXT("unattended"), bUnattended);
+
+	FString ScopeStr = TEXT("private");
+	Params->TryGetStringField(TEXT("file_scope"), ScopeStr);
+	EPythonFileExecutionScope FileScope = EPythonFileExecutionScope::Private;
+	if (ScopeStr.Equals(TEXT("private"), ESearchCase::IgnoreCase))
+	{
+		FileScope = EPythonFileExecutionScope::Private;
+	}
+	else if (ScopeStr.Equals(TEXT("public"), ESearchCase::IgnoreCase))
+	{
+		FileScope = EPythonFileExecutionScope::Public;
+	}
+	else
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Invalid file_scope '%s'. Valid: private, public."), *ScopeStr));
+	}
+
+	IPythonScriptPlugin* Python = IPythonScriptPlugin::Get();
+	if (!Python)
+	{
+		// Fallback: load PythonScriptPlugin if it has not been brought up yet.
+		FModuleManager::Get().LoadModule(TEXT("PythonScriptPlugin"));
+		Python = IPythonScriptPlugin::Get();
+	}
+	if (!Python)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("PythonScriptPlugin module is not available. Enable PythonScriptPlugin in the project's plugins list."));
+	}
+	if (!Python->IsPythonAvailable())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Python is not available in this build (IPythonScriptPlugin::IsPythonAvailable() returned false)."));
+	}
+
+	FPythonCommandEx Cmd;
+	Cmd.Command = Command;
+	Cmd.ExecutionMode = Mode;
+	Cmd.FileExecutionScope = FileScope;
+	Cmd.Flags = bUnattended ? EPythonCommandFlags::Unattended : EPythonCommandFlags::None;
+
+	const bool bOk = Python->ExecPythonCommandEx(Cmd);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("ok"), bOk);
+	Result->SetBoolField(TEXT("success"), bOk);
+	Result->SetStringField(TEXT("mode"), ModeStr);
+	Result->SetStringField(TEXT("result"), Cmd.CommandResult);
+
+	TArray<TSharedPtr<FJsonValue>> OutputRows;
+	OutputRows.Reserve(Cmd.LogOutput.Num());
+	for (const FPythonLogOutputEntry& Entry : Cmd.LogOutput)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("type"), PythonLogTypeToString(Entry.Type));
+		Row->SetStringField(TEXT("output"), Entry.Output);
+		OutputRows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+	Result->SetArrayField(TEXT("output"), OutputRows);
+
+	if (!bOk)
+	{
+		// On failure CommandResult typically holds the Python exception trace.
+		// Surface as message so callers don't have to special-case it.
+		Result->SetStringField(TEXT("message"), Cmd.CommandResult);
+	}
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleLoadLevel(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) || Path.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: path"));
+	}
+
+	if (!GEditor)
+	{
+		return FMonolithActionResult::Error(TEXT("GEditor is null — load_level requires editor context."));
+	}
+
+	ULevelEditorSubsystem* LevelEd = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
+	if (!LevelEd)
+	{
+		return FMonolithActionResult::Error(TEXT("ULevelEditorSubsystem is unavailable."));
+	}
+
+	const bool bLoaded = LevelEd->LoadLevel(Path);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("ok"), bLoaded);
+	Result->SetBoolField(TEXT("loaded"), bLoaded);
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetStringField(TEXT("message"),
+		bLoaded
+			? FString::Printf(TEXT("Loaded level '%s'."), *Path)
+			: FString::Printf(TEXT("ULevelEditorSubsystem::LoadLevel returned false for '%s'. Verify the asset exists and is a UWorld."), *Path));
 
 	return FMonolithActionResult::Success(Result);
 }

@@ -1,10 +1,10 @@
 # Monolith API Reference
 
-**Version:** v0.14.7 · **Last updated:** 2026-04-26
+**Version:** v0.14.7 (+ [Unreleased] editor +2) · **Last updated:** 2026-04-30
 
-**In-tree action total: 1286** registered across **16 in-tree namespaces** (1241 active by default; 45 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1282**.
+**In-tree action total: 1271** registered across **16 in-tree namespaces** (all 1271 active by default; 45 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the registry to 1316). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1267**. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 20.
 
-Live editor introspection on a fully loaded project (with all sibling plugins present) reports **1462 actions across 20 namespaces** — that's the in-tree 1286 plus 176 actions from sibling plugins (`inventory` 158, `steam` 28, `claudedesign` 11, minus a 21-action shape mismatch that surfaces only via discover; the canonical per-plugin counts in §Sibling Plugins below are what ships in those repos). Sibling plugins are documented separately — see [§Sibling Plugins](#sibling-plugins).
+Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
 > Auto-generated and hand-curated. Each action is dispatched via HTTP POST to `http://localhost:<port>` with JSON body `{ "namespace": "<ns>", "action": "<action>", "params": { ... } }`, or via the MCP `tools/list` surface that AI clients see at session start.
 >
@@ -21,19 +21,19 @@ Live editor introspection on a fully loaded project (with all sibling plugins pr
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [animation](#animation) | 118 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
-| [editor](#editor) | 22 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status |
+| [editor](#editor) | 24 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run |
 | [config](#config) | 6 | INI config inspection and search |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
-| [mesh](#mesh) | 240 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental) |
-| [ui](#ui) | 96 | UMG widget CRUD, templates, styling, animation, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
+| [mesh](#mesh) | 239 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental — +45 town gen registers only with `bEnableProceduralTownGen=true`) |
+| [ui](#ui) | 121 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 221 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 86 | Sound Cue + MetaSound graph CRUD, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
-| **In-tree subtotal** | **1286** | (1241 default + 45 experimental town gen) |
-| [Sibling plugins](#sibling-plugins) | +176 | `inventory`, `steam`, `claudedesign` — separate plugins, separate distribution |
+| **In-tree subtotal** | **1271** | (all default-active; +45 experimental town gen → 1316 when registered) |
+| [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
 
@@ -847,18 +847,11 @@ If you're building a sibling plugin yourself, read `Plugins/Monolith/Docs/SIBLIN
 
 | Sibling plugin | Namespace | Actions | Status | Repo |
 |---|---|---|---|---|
-| **MonolithISX** | `inventory` | 158 | Bridges InventorySystemX (paid Fab plugin). Editor + runtime PIE actions. Conditional on the InventorySystemX dep. | Separate plugin, sits at `Plugins/MonolithISX/` |
-| **MonolithSteamBridge** | `steam` | 28 | Bridges Steam Integration Kit (paid Fab plugin). Solo-dev only — not in public Monolith releases. `MONOLITH_RELEASE_BUILD=1` strips it. | `Plugins/MonolithSteamBridge/` |
-| **MonolithSteamBridgeLeaderboard** | (folds into `steam`) | (subset) | Phase 2 sub-module that unlocks full-fidelity leaderboard upload/download by splitting from the gated USTRUCT-in-UFUNCTION block. | `Plugins/MonolithSteamBridgeLeaderboard/` |
-| **MonolithClaudeDesignBridge** | `claudedesign` | 11 | Claude Design → UMG bridge. Capture widgets, import generated textures, transpile Tailwind-ish CSS, font import, animation authoring with bezier easing and bound events. | `Plugins/MonolithClaudeDesignBridge/` |
+| External sibling plugin | Custom | Varies | Registers its own namespace at startup and ships through its own repo/channel. | Outside `Plugins/Monolith/` |
 
-**Why these aren't in the in-tree count:** the in-tree 1286/16 figure counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
+**Why these aren't in the in-tree count:** the in-tree 1271/16 figure counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
 
-**Claude Design Bridge** (the only sibling plugin distributed publicly today) lives in its own repo with its own release cadence. Its 11 actions:
-
-`capture_widget`, `import_texture_from_bytes`, `set_rounded_corners`, `create_gradient_mid_from_spec`, `apply_box_shadow`, `import_font_family`, `create_animation_v2`, `add_bezier_eased_segment`, `bake_spring_animation`, `add_animation_event_track`, `bind_animation_to_event`.
-
-For full param schemas, call `monolith_discover("claudedesign")` at runtime when the bridge plugin is installed.
+Private sibling bridges are intentionally omitted from the public API reference. Their action rosters, namespaces, and release notes belong in their own repos/channels; Monolith must not publish them as part of the public API surface.
 
 ---
 

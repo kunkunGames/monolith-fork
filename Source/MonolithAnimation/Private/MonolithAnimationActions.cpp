@@ -5,6 +5,7 @@
 
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/AnimationAsset.h"
 #include "Animation/BlendSpace.h"
 #include "Animation/BlendSpace1D.h"
 #include "Animation/AnimBlueprint.h"
@@ -225,6 +226,17 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation sequence asset path"))
 			.Required(TEXT("bone_name"), TEXT("string"), TEXT("Bone name to remove"))
 			.Optional(TEXT("include_children"), TEXT("bool"), TEXT("Also remove child bone tracks"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("animation"), TEXT("copy_bone_pose_between_sequences"),
+		TEXT("Copy evaluated bone transforms (track + ref pose fallback) from a source AnimSequence at a given time to a destination AnimSequence as keys"),
+		FMonolithActionHandler::CreateStatic(&HandleCopyBonePoseBetweenSequences),
+		FParamSchemaBuilder()
+			.Required(TEXT("source_path"), TEXT("string"), TEXT("Source AnimSequence asset path"))
+			.Required(TEXT("dest_path"), TEXT("string"), TEXT("Destination AnimSequence asset path"))
+			.Required(TEXT("bone_names"), TEXT("array"), TEXT("Array of bone names to copy"))
+			.Optional(TEXT("source_time"), TEXT("number"), TEXT("Time in seconds on source to evaluate (default 0.0)"), TEXT("0.0"))
+			.Optional(TEXT("apply_to_all_dest_frames"), TEXT("bool"), TEXT("If true, write same value to every destination frame (static pose). If false, write only frame 0."), TEXT("true"))
 			.Build());
 
 	// Virtual Bones
@@ -5784,6 +5796,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleBatchExecute(const TShare
 		else if (OpName == TEXT("add_bone_track"))            SubResult = HandleAddBoneTrack(SubParams);
 		else if (OpName == TEXT("set_bone_track_keys"))       SubResult = HandleSetBoneTrackKeys(SubParams);
 		else if (OpName == TEXT("remove_bone_track"))         SubResult = HandleRemoveBoneTrack(SubParams);
+		else if (OpName == TEXT("copy_bone_pose_between_sequences")) SubResult = HandleCopyBonePoseBetweenSequences(SubParams);
 		// BlendSpace ops
 		else if (OpName == TEXT("add_blendspace_sample"))     SubResult = HandleAddBlendSpaceSample(SubParams);
 		else if (OpName == TEXT("edit_blendspace_sample"))    SubResult = HandleEditBlendSpaceSample(SubParams);
@@ -7207,5 +7220,157 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetRetargetChainBones(con
 		ModArr.Add(MakeShared<FJsonValueString>(P));
 	}
 	Root->SetArrayField(TEXT("modified"), ModArr);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// copy_bone_pose_between_sequences — read evaluated pose from source anim,
+// write as keys to dest anim. Resolves ref pose for bones that have no
+// explicit track in the source (common when an FBX was imported with sparse
+// keys). Useful for fixing partial T-pose / wrong arm pose on a target anim
+// without touching its other bones.
+// ---------------------------------------------------------------------------
+FMonolithActionResult FMonolithAnimationActions::HandleCopyBonePoseBetweenSequences(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SourcePath = Params->GetStringField(TEXT("source_path"));
+	FString DestPath = Params->GetStringField(TEXT("dest_path"));
+
+	double SourceTime = 0.0;
+	Params->TryGetNumberField(TEXT("source_time"), SourceTime);
+
+	bool bApplyToAllFrames = true;
+	Params->TryGetBoolField(TEXT("apply_to_all_dest_frames"), bApplyToAllFrames);
+
+	const TArray<TSharedPtr<FJsonValue>>* BoneNamesArr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("bone_names"), BoneNamesArr) || !BoneNamesArr || BoneNamesArr->Num() == 0)
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or empty required field: bone_names"));
+	}
+
+	UAnimSequence* SourceSeq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(SourcePath);
+	if (!SourceSeq) return FMonolithActionResult::Error(FString::Printf(TEXT("Source AnimSequence not found: %s"), *SourcePath));
+
+	UAnimSequence* DestSeq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(DestPath);
+	if (!DestSeq) return FMonolithActionResult::Error(FString::Printf(TEXT("Dest AnimSequence not found: %s"), *DestPath));
+
+	// Clamp SourceTime to the source sequence's playable range. Out-of-range
+	// values (negative, or beyond GetPlayLength()) produce undefined sampling
+	// in UAnimSequence::GetBoneTransform — clamp-and-report keeps callers
+	// productive without surprising silent extrapolation.
+	const double OriginalSourceTime = SourceTime;
+	const double SourcePlayLength = static_cast<double>(SourceSeq->GetPlayLength());
+	SourceTime = FMath::Clamp(SourceTime, 0.0, SourcePlayLength);
+	const bool bSourceTimeClamped = !FMath::IsNearlyEqual(SourceTime, OriginalSourceTime);
+	if (bSourceTimeClamped)
+	{
+		UE_LOG(LogTemp, Verbose,
+			TEXT("copy_bone_pose_between_sequences: source_time clamped from %f to %f (play_length=%f)"),
+			OriginalSourceTime, SourceTime, SourcePlayLength);
+	}
+
+	USkeleton* SourceSkel = SourceSeq->GetSkeleton();
+	USkeleton* DestSkel = DestSeq->GetSkeleton();
+	if (!SourceSkel || !DestSkel) return FMonolithActionResult::Error(TEXT("Source or destination has no skeleton assigned"));
+
+	const IAnimationDataModel* DestDataModel = DestSeq->GetDataModel();
+	if (!DestDataModel) return FMonolithActionResult::Error(TEXT("Destination has no animation data model"));
+
+	// NumberOfFrames + 1 = number of keys (0..NumberOfFrames inclusive)
+	const int32 DestNumKeys = FMath::Max(1, DestDataModel->GetNumberOfFrames() + 1);
+	const int32 KeysToWrite = bApplyToAllFrames ? DestNumKeys : 1;
+
+	IAnimationDataController& Controller = DestSeq->GetController();
+	Controller.OpenBracket(FText::FromString(TEXT("Copy Bone Pose Between Sequences")), false);
+
+	TArray<FString> CopiedBones;
+	TArray<TSharedPtr<FJsonValue>> SkippedJson;
+
+	const FReferenceSkeleton& SourceRefSkel = SourceSkel->GetReferenceSkeleton();
+	const FReferenceSkeleton& DestRefSkel = DestSkel->GetReferenceSkeleton();
+
+	for (int32 Idx = 0; Idx < BoneNamesArr->Num(); ++Idx)
+	{
+		const TSharedPtr<FJsonValue>& Val = (*BoneNamesArr)[Idx];
+		// Element-type guard: FJsonValue::AsString() silently returns "" for
+		// non-string values (numbers, objects, null, bools), which would
+		// otherwise be skipped without surfacing the bad input to the caller.
+		if (!Val.IsValid() || Val->Type != EJson::String)
+		{
+			Controller.CloseBracket(false);
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("bone_names[%d] is not a string"), Idx),
+				-32602);
+		}
+		const FString BoneNameStr = Val->AsString();
+		const FName BoneName(*BoneNameStr);
+
+		const int32 SourceBoneIdx = SourceRefSkel.FindBoneIndex(BoneName);
+		const int32 DestBoneIdx = DestRefSkel.FindBoneIndex(BoneName);
+
+		if (SourceBoneIdx == INDEX_NONE || DestBoneIdx == INDEX_NONE)
+		{
+			TSharedPtr<FJsonObject> Skip = MakeShared<FJsonObject>();
+			Skip->SetStringField(TEXT("bone_name"), BoneNameStr);
+			Skip->SetStringField(TEXT("reason"),
+				SourceBoneIdx == INDEX_NONE ? TEXT("not in source skeleton") : TEXT("not in dest skeleton"));
+			SkippedJson.Add(MakeShared<FJsonValueObject>(Skip));
+			continue;
+		}
+
+		// Evaluate source bone transform at SourceTime. UAnimSequence::GetBoneTransform
+		// uses the raw track if present and falls back to the skeleton's ref pose
+		// if the bone has no track — which is exactly what we want.
+		FTransform BoneXform = FTransform::Identity;
+		SourceSeq->GetBoneTransform(BoneXform, FSkeletonPoseBoneIndex(SourceBoneIdx),
+		                            FAnimExtractContext(SourceTime), /*bUseRawData=*/true);
+
+		// Build per-frame arrays for dest. For a static pose, all frames share
+		// the same value; otherwise only frame 0 is set.
+		TArray<FVector> Positions;
+		TArray<FQuat> Rotations;
+		TArray<FVector> Scales;
+		Positions.SetNum(KeysToWrite);
+		Rotations.SetNum(KeysToWrite);
+		Scales.SetNum(KeysToWrite);
+		const FVector P = BoneXform.GetLocation();
+		const FQuat R = BoneXform.GetRotation();
+		const FVector S = BoneXform.GetScale3D();
+		for (int32 i = 0; i < KeysToWrite; ++i)
+		{
+			Positions[i] = P;
+			Rotations[i] = R;
+			Scales[i] = S;
+		}
+
+		// AddBoneCurve is idempotent — safe even if track exists. Then overwrite keys.
+		Controller.AddBoneCurve(BoneName, false);
+		Controller.SetBoneTrackKeys(BoneName, Positions, Rotations, Scales, false);
+
+		CopiedBones.Add(BoneNameStr);
+	}
+
+	Controller.CloseBracket(false);
+	DestSeq->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("source_path"), SourcePath);
+	Root->SetStringField(TEXT("dest_path"), DestPath);
+	Root->SetNumberField(TEXT("source_time"), SourceTime);
+	if (bSourceTimeClamped)
+	{
+		Root->SetNumberField(TEXT("original_source_time"), OriginalSourceTime);
+		Root->SetNumberField(TEXT("clamped_source_time"), SourceTime);
+	}
+	Root->SetBoolField(TEXT("apply_to_all_dest_frames"), bApplyToAllFrames);
+	Root->SetNumberField(TEXT("keys_written_per_bone"), KeysToWrite);
+
+	TArray<TSharedPtr<FJsonValue>> CopiedJson;
+	for (const FString& B : CopiedBones)
+	{
+		CopiedJson.Add(MakeShared<FJsonValueString>(B));
+	}
+	Root->SetArrayField(TEXT("copied_bones"), CopiedJson);
+	Root->SetArrayField(TEXT("skipped_bones"), SkippedJson);
+
 	return FMonolithActionResult::Success(Root);
 }

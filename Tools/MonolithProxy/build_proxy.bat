@@ -5,7 +5,7 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 echo VCVARS loaded, compiling...
-cd /d "D:\Unreal Projects\Leviathan\Plugins\Monolith\Tools\MonolithProxy"
+cd /d "%~dp0"
 echo CWD: %CD%
 dir monolith_proxy.cpp
 cl /EHsc /std:c++17 /O2 /MT /I ThirdParty monolith_proxy.cpp winhttp.lib /Fe:monolith_proxy.exe

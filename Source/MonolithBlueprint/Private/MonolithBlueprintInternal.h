@@ -19,6 +19,12 @@
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
 #include "K2Node_MacroInstance.h"
+#include "K2Node_ComponentBoundEvent.h"
+#include "K2Node_AddDelegate.h"
+#include "K2Node_RemoveDelegate.h"
+#include "K2Node_ClearDelegate.h"
+#include "K2Node_CallDelegate.h"
+#include "K2Node_BaseMCDelegate.h"
 #include "EdGraphNode_Comment.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -223,6 +229,168 @@ namespace MonolithBlueprintInternal
 		return PinObj;
 	}
 
+	// ============================================================
+	//  ResolveDefaultObjectForPin
+	//
+	//  Resolves the Value string to a UObject* / UClass* appropriate for
+	//  a class-typed (PC_Class) or object-typed (PC_Object) pin's
+	//  Pin->DefaultObject field. Performs cross-category check (class pin
+	//  rejects instance, object pin rejects UClass) and type-constraint
+	//  check against Pin->PinType.PinSubCategoryObject.
+	//
+	//  Returns nullptr and populates OutError on any failure. Does not
+	//  mutate the pin.
+	// ============================================================
+
+	inline UObject* ResolveDefaultObjectForPin(UEdGraphPin* Pin, const FString& Value, FString& OutError)
+	{
+		if (!Pin)
+		{
+			OutError = TEXT("ResolveDefaultObjectForPin: null pin");
+			return nullptr;
+		}
+
+		const FString PinPath = FString::Printf(TEXT("%s:%s"),
+			Pin->GetOwningNode() ? *Pin->GetOwningNode()->GetName() : TEXT("?"),
+			*Pin->PinName.ToString());
+
+		const bool bIsClassPin  = (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Class);
+		const bool bIsObjectPin = (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Object);
+
+		if (!bIsClassPin && !bIsObjectPin)
+		{
+			OutError = FString::Printf(TEXT("Pin '%s' is not class- or object-typed (category=%s)"),
+				*PinPath, *Pin->PinType.PinCategory.ToString());
+			return nullptr;
+		}
+
+		UObject* Resolved = nullptr;
+
+		if (Value.Contains(TEXT("/")))
+		{
+			// Path resolution.
+			Resolved = StaticLoadObject(UObject::StaticClass(), nullptr, *Value);
+
+			// BP class path retry: PC_Class needs a UClass (the GeneratedClass), not a UBlueprint asset.
+			// Fire the retry when value lacks _C AND (load failed OR loaded object isn't a UClass).
+			// '/Game/Foo/BP_Bar' loads the UBlueprint successfully — wrong kind for a class pin —
+			// so the bare-null check alone misses this case.
+			const bool bNeedsClassRetry = bIsClassPin && !Value.EndsWith(TEXT("_C")) &&
+				(!Resolved || !Resolved->IsA(UClass::StaticClass()));
+			if (bNeedsClassRetry)
+			{
+				int32 LastSlash = INDEX_NONE;
+				if (Value.FindLastChar(TEXT('/'), LastSlash))
+				{
+					const FString Leaf = Value.Mid(LastSlash + 1);
+					const FString RetryPath = FString::Printf(TEXT("%s.%s_C"), *Value, *Leaf);
+					if (UObject* Retry = StaticLoadObject(UObject::StaticClass(), nullptr, *RetryPath))
+					{
+						if (Retry->IsA(UClass::StaticClass()))
+						{
+							Resolved = Retry;
+						}
+					}
+				}
+			}
+
+			if (!Resolved)
+			{
+				OutError = FString::Printf(
+					TEXT("Failed to resolve '%s' as object/class for pin '%s'. Path did not load."),
+					*Value, *PinPath);
+				return nullptr;
+			}
+		}
+		else
+		{
+			// Bare-name resolution — PC_Class only.
+			if (!bIsClassPin)
+			{
+				OutError = FString::Printf(
+					TEXT("Pin '%s' is object-typed; bare name '%s' not accepted. Use an asset path."),
+					*PinPath, *Value);
+				return nullptr;
+			}
+
+			// UE stores class names without the C++ source-code prefix (APawn → "Pawn",
+			// USelectableComponent → "SelectableComponent"). Try four forms in order:
+			// (1) value as-is, (2) strip leading A/U, (3) add A prefix, (4) add U prefix.
+			// This makes the resolver tolerant of either the C++ identifier form or the
+			// engine-internal name. Prefix is invariably uppercase A/U per UE C++ naming
+			// discipline, so case-sensitive StartsWith is correct here.
+			UClass* ResolvedClass = FindFirstObject<UClass>(*Value, EFindFirstObjectOptions::NativeFirst);
+			if (!ResolvedClass && Value.Len() > 1 && (Value.StartsWith(TEXT("A")) || Value.StartsWith(TEXT("U"))))
+			{
+				const FString Stripped = Value.Mid(1);
+				ResolvedClass = FindFirstObject<UClass>(*Stripped, EFindFirstObjectOptions::NativeFirst);
+			}
+			if (!ResolvedClass && !Value.StartsWith(TEXT("A")))
+			{
+				ResolvedClass = FindFirstObject<UClass>(
+					*FString::Printf(TEXT("A%s"), *Value), EFindFirstObjectOptions::NativeFirst);
+			}
+			if (!ResolvedClass && !Value.StartsWith(TEXT("U")))
+			{
+				ResolvedClass = FindFirstObject<UClass>(
+					*FString::Printf(TEXT("U%s"), *Value), EFindFirstObjectOptions::NativeFirst);
+			}
+			if (!ResolvedClass)
+			{
+				OutError = FString::Printf(
+					TEXT("Class '%s' not found (tried as-is, with A/U prefix stripped, and with A/U prefix added). Use a full path for BP classes."),
+					*Value);
+				return nullptr;
+			}
+			Resolved = ResolvedClass;
+		}
+
+		// Cross-category mismatch — class pin must hold a UClass; object pin must hold an instance.
+		if (bIsClassPin && !Resolved->IsA(UClass::StaticClass()))
+		{
+			OutError = FString::Printf(
+				TEXT("Pin '%s' expects a class, got instance '%s'. Use a class path or name instead."),
+				*PinPath, *Value);
+			return nullptr;
+		}
+		if (bIsObjectPin && Resolved->IsA(UClass::StaticClass()))
+		{
+			OutError = FString::Printf(
+				TEXT("Pin '%s' expects an instance, got class '%s'. Use an asset path instead."),
+				*PinPath, *Value);
+			return nullptr;
+		}
+
+		// Type-constraint enforcement against PinSubCategoryObject (the pin's declared base type).
+		UClass* PinBase = Cast<UClass>(Pin->PinType.PinSubCategoryObject.Get());
+		if (PinBase)
+		{
+			if (bIsClassPin)
+			{
+				UClass* ResolvedClass = Cast<UClass>(Resolved);
+				if (!ResolvedClass->IsChildOf(PinBase))
+				{
+					OutError = FString::Printf(
+						TEXT("Resolved '%s' is not a subclass of '%s' required by pin '%s'."),
+						*ResolvedClass->GetName(), *PinBase->GetName(), *PinPath);
+					return nullptr;
+				}
+			}
+			else // bIsObjectPin
+			{
+				if (!Resolved->IsA(PinBase))
+				{
+					OutError = FString::Printf(
+						TEXT("Resolved '%s' is not an instance of '%s' required by pin '%s'."),
+						*Resolved->GetName(), *PinBase->GetName(), *PinPath);
+					return nullptr;
+				}
+			}
+		}
+
+		return Resolved;
+	}
+
 	inline TSharedPtr<FJsonObject> SerializeNode(UEdGraphNode* Node)
 	{
 		TSharedPtr<FJsonObject> NObj = MakeShared<FJsonObject>();
@@ -249,6 +417,36 @@ namespace MonolithBlueprintInternal
 			{
 				NObj->SetStringField(TEXT("function_class"), OwnerClass->GetName());
 			}
+		}
+		else if (UK2Node_ComponentBoundEvent* BoundNode = Cast<UK2Node_ComponentBoundEvent>(Node))
+		{
+			NObj->SetStringField(TEXT("component_name"),
+				BoundNode->ComponentPropertyName.ToString());
+			NObj->SetStringField(TEXT("delegate_property_name"),
+				BoundNode->DelegatePropertyName.ToString());
+			NObj->SetStringField(TEXT("event_name"),
+				BoundNode->EventReference.GetMemberName().ToString());
+			if (BoundNode->CustomFunctionName != NAME_None)
+			{
+				NObj->SetStringField(TEXT("custom_name"),
+					BoundNode->CustomFunctionName.ToString());
+			}
+			if (BoundNode->DelegateOwnerClass)
+			{
+				NObj->SetStringField(TEXT("delegate_owner_class"),
+					BoundNode->DelegateOwnerClass->GetName());
+			}
+		}
+		else if (UK2Node_BaseMCDelegate* DelegateNode = Cast<UK2Node_BaseMCDelegate>(Node))
+		{
+			NObj->SetStringField(TEXT("delegate_property_name"),
+				DelegateNode->DelegateReference.GetMemberName().ToString());
+			if (UClass* DelegateOwner = DelegateNode->DelegateReference.GetMemberParentClass())
+			{
+				NObj->SetStringField(TEXT("delegate_owner_class"), DelegateOwner->GetName());
+			}
+			NObj->SetBoolField(TEXT("self_context"),
+				DelegateNode->DelegateReference.IsSelfContext());
 		}
 		else if (UK2Node_Event* EventNode = Cast<UK2Node_Event>(Node))
 		{
@@ -470,6 +668,111 @@ namespace MonolithBlueprintInternal
 			*OutAvailablePins = GetAvailablePinNames(Node, Direction);
 		}
 		return nullptr;
+	}
+
+	/**
+	 * Resolve any FObjectProperty by name on a Blueprint's generated class.
+	 * Covers SCS / native ActorComponent subobjects (Actor BPs), UMG named
+	 * widgets (Widget BPs — UButton, UTextBlock, etc.), and plain object-typed
+	 * Blueprint variables — all compile into FObjectProperty entries on the
+	 * generated class. Callers needing component/delegate validation must
+	 * combine this with FindMulticastDelegateProperty (the effective filter).
+	 * Returns null if no FObjectProperty with that name is found, or its
+	 * PropertyClass is null.
+	 */
+	inline FObjectProperty* FindComponentProperty(UBlueprint* BP, FName ComponentName)
+	{
+		if (!BP || !BP->GeneratedClass) return nullptr;
+		FObjectProperty* Prop = FindFProperty<FObjectProperty>(BP->GeneratedClass, ComponentName);
+		if (!Prop || !Prop->PropertyClass) return nullptr;
+		return Prop;
+	}
+
+	/**
+	 * Find a BlueprintAssignable multicast delegate property on a class (or any superclass).
+	 * Returns null if not found or not BlueprintAssignable.
+	 */
+	inline FMulticastDelegateProperty* FindMulticastDelegateProperty(UClass* OwnerClass, FName DelegateName)
+	{
+		if (!OwnerClass) return nullptr;
+		FMulticastDelegateProperty* Prop = FindFProperty<FMulticastDelegateProperty>(OwnerClass, DelegateName);
+		if (!Prop) return nullptr;
+		if (!Prop->HasAnyPropertyFlags(CPF_BlueprintAssignable)) return nullptr;
+		return Prop;
+	}
+
+	/**
+	 * Resolves the delegate owner class + multicast property for a delegate-node
+	 * add_node / resolve_node call (AddDelegate, RemoveDelegate, ClearDelegate,
+	 * CallDelegate). Mirrors the prefix-normalization the editor's right-click
+	 * menu performs — accepts bare and A/U-prefixed class names. SelfContextClass
+	 * is used when 'target_class' is empty (e.g. self-context: BP->GeneratedClass);
+	 * pass nullptr if no self-context fallback should be attempted.
+	 *
+	 * NodeTypeLabel goes into error messages (e.g. "AddDelegate", "RemoveDelegate")
+	 * so the caller sees which node type's required parameter was missing.
+	 *
+	 * On success, returns a Success result with OutOwnerClass / OutDelegateProp /
+	 * OutbSelfContext populated. On failure, returns an Error result; outputs are
+	 * only meaningful when bSuccess is true — do not read them on the error path.
+	 */
+	inline FMonolithActionResult ResolveDelegateOwnerAndProperty(
+		const TSharedPtr<FJsonObject>& Params,
+		UClass* SelfContextClass,
+		const TCHAR* NodeTypeLabel,
+		UClass*& OutOwnerClass,
+		FMulticastDelegateProperty*& OutDelegateProp,
+		bool& OutbSelfContext)
+	{
+		FString DelegateNameStr = Params->GetStringField(TEXT("delegate_property_name"));
+		if (DelegateNameStr.IsEmpty())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("%s requires 'delegate_property_name'"), NodeTypeLabel));
+		}
+
+		FString TargetClassName = Params->GetStringField(TEXT("target_class"));
+		OutbSelfContext = TargetClassName.IsEmpty();
+
+		if (OutbSelfContext)
+		{
+			if (!SelfContextClass)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("%s requires either target_class or asset_path (for self-context)"),
+					NodeTypeLabel));
+			}
+			OutOwnerClass = SelfContextClass;
+		}
+		else
+		{
+			OutOwnerClass = FindFirstObject<UClass>(*TargetClassName, EFindFirstObjectOptions::NativeFirst);
+			if (!OutOwnerClass && !TargetClassName.StartsWith(TEXT("A")))
+				OutOwnerClass = FindFirstObject<UClass>(*FString::Printf(TEXT("A%s"), *TargetClassName), EFindFirstObjectOptions::NativeFirst);
+			if (!OutOwnerClass && !TargetClassName.StartsWith(TEXT("U")))
+				OutOwnerClass = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *TargetClassName), EFindFirstObjectOptions::NativeFirst);
+			// Strip a leading A/U prefix and retry bare — handles callers passing the C++ class name
+			// (e.g. "AMyActor", "UMyComponent") when UE's object registry uses the bare form.
+			if (!OutOwnerClass && TargetClassName.Len() > 1 &&
+				(TargetClassName.StartsWith(TEXT("A")) || TargetClassName.StartsWith(TEXT("U"))))
+				OutOwnerClass = FindFirstObject<UClass>(*TargetClassName.Mid(1), EFindFirstObjectOptions::NativeFirst);
+			if (!OutOwnerClass)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("%s target_class '%s' not found"), NodeTypeLabel, *TargetClassName));
+			}
+		}
+
+		OutDelegateProp = FindMulticastDelegateProperty(OutOwnerClass, FName(*DelegateNameStr));
+		if (!OutDelegateProp)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("BlueprintAssignable multicast delegate '%s' not found on class '%s'"),
+				*DelegateNameStr, *OutOwnerClass->GetName()));
+		}
+
+		// Success-side payload is unused — callers only check bSuccess and read the out params.
+		return FMonolithActionResult::Success(MakeShared<FJsonObject>());
 	}
 
 	/** Returns true if a UK2Node_CustomEvent with the given name already exists in any graph of the Blueprint */

@@ -15,6 +15,7 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithUICommon.h"
 
 #include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
@@ -32,15 +33,28 @@
 #include "AssetRegistry/ARFilter.h"
 #include "UObject/SavePackage.h"
 
+// Phase G: route style-asset creation through the dedup service.
+#include "Style/MonolithUIStyleService.h"
+
 namespace MonolithCommonUIButton
 {
-	// ----- Shared: create a style Blueprint (class-as-data pattern) -----------
+	// ----- Shared: create-or-resolve a style Blueprint via the Style Service ---
 	//
 	// CommonUI styles are TSubclassOf<UStyle> — widgets expect a UClass*, not
-	// a plain UObject instance.  We create a Blueprint whose parent is the
-	// native style class, apply initial property overrides to the CDO, compile,
-	// and save.  The resulting _C class is what apply_style_to_widget /
-	// batch_retheme will LoadClass on.
+	// a plain UObject instance. The class-as-data pattern is unchanged, but
+	// the asset-creation path now delegates to FMonolithUIStyleService which:
+	//   1. Looks up the cache by asset_name (instant return on repeat call).
+	//   2. Falls back to a canonical-library scan
+	//      (UMonolithUISettings::CanonicalLibraryPath).
+	//   3. Falls back to a content-hash cache (catches repeat property bags
+	//      submitted under different names — the dedup that matters for LLMs).
+	//   4. Finally creates the asset with AssetTools-deduplicated naming so
+	//      racing callers don't collide on the same target path.
+	//
+	// Action surface preserved: same input fields (package_path, asset_name,
+	// properties) and same response shape (asset_path, asset_name, class) so
+	// callers don't break. Phase G additions (resolved_via, was_created) are
+	// purely additive.
 
 	static FMonolithActionResult CreateStyleAsset(
 		UClass* StyleClass,
@@ -55,70 +69,41 @@ namespace MonolithCommonUIButton
 		if (!StyleClass)
 			return FMonolithActionResult::Error(TEXT("CreateStyleAsset: StyleClass is null"));
 
-		const FString FullPath = FString::Printf(TEXT("%s/%s"), *PackagePath, *AssetName);
-
-		UPackage* Package = CreatePackage(*FullPath);
-		if (!Package)
-			return FMonolithActionResult::Error(FString::Printf(TEXT("CreateStyleAsset: CreatePackage failed for '%s'"), *FullPath));
-
-		// Collision check — both in-memory and on-disk
-		if (FindObject<UObject>(Package, *AssetName))
-			return FMonolithActionResult::Error(FString::Printf(TEXT("CreateStyleAsset: asset already exists at '%s'"), *FullPath));
-
-		const FString ObjectPath = FString::Printf(TEXT("%s.%s"), *FullPath, *AssetName);
-		FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
-		if (ARM.Get().GetAssetByObjectPath(FSoftObjectPath(ObjectPath)).IsValid())
-			return FMonolithActionResult::Error(FString::Printf(TEXT("CreateStyleAsset: asset already exists at '%s' (on disk)"), *FullPath));
-
-		Package->FullyLoad();
-
-		// Create a Blueprint whose parent is the native style class.
-		// The 5-arg overload auto-resolves BlueprintClass / BlueprintGeneratedClass.
-		UBlueprint* BP = FKismetEditorUtilities::CreateBlueprint(
-			StyleClass, Package, FName(*AssetName),
-			BPTYPE_Normal, FName(TEXT("MonolithUI")));
-
-		if (!BP || !BP->GeneratedClass)
-			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("CreateStyleAsset: FKismetEditorUtilities::CreateBlueprint failed for '%s' (parent: %s)"),
-				*AssetName, *StyleClass->GetName()));
-
-		// Apply optional property overrides to the CDO
-		UObject* CDO = BP->GeneratedClass->GetDefaultObject();
-		if (CDO)
+		// Optional properties bag — passed straight through to the service so
+		// it participates in the content hash. Missing bag = empty JSON object
+		// (still hashable; produces a stable name suffix).
+		TSharedPtr<FJsonObject> Properties;
+		const TSharedPtr<FJsonObject>* PropsPtr;
+		if (Params->TryGetObjectField(TEXT("properties"), PropsPtr) && PropsPtr && (*PropsPtr).IsValid())
 		{
-			const TSharedPtr<FJsonObject>* Props;
-			if (Params->TryGetObjectField(TEXT("properties"), Props))
-			{
-				for (const auto& Pair : (*Props)->Values)
-				{
-					FProperty* P = FindFProperty<FProperty>(StyleClass, *Pair.Key);
-					if (P)
-					{
-						MonolithCommonUI::SetPropertyFromJson(CDO, P, Pair.Value);
-					}
-				}
-			}
+			Properties = *PropsPtr;
+		}
+		else
+		{
+			Properties = MakeShared<FJsonObject>();
 		}
 
-		// Compile after CDO edits so the class picks up the new defaults
-		FKismetEditorUtilities::CompileBlueprint(BP);
+		FUIStyleResolution Resolution = FMonolithUIStyleService::Get().ResolveOrCreate(
+			StyleClass, AssetName, PackagePath, Properties);
 
-		FAssetRegistryModule::AssetCreated(BP);
-		Package->MarkPackageDirty();
+		if (!Resolution.IsValid())
+		{
+			return FMonolithActionResult::Error(Resolution.Error.IsEmpty()
+				? FString::Printf(TEXT("CreateStyleAsset: style service failed to resolve '%s'"), *AssetName)
+				: Resolution.Error);
+		}
 
-		// Save to disk
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
-		UPackage::SavePackage(
-			Package, BP,
-			*FPackageName::LongPackageNameToFilename(FullPath, FPackageName::GetAssetPackageExtension()),
-			SaveArgs);
+		// Reconstruct the on-disk asset path from the (possibly deduped) name
+		// + folder so callers reading the response can locate the asset.
+		const FString ResolvedFullPath = FString::Printf(TEXT("%s/%s"),
+			*Resolution.PackagePath, *Resolution.AssetName);
 
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		Result->SetStringField(TEXT("asset_path"), FullPath);
-		Result->SetStringField(TEXT("asset_name"), AssetName);
-		Result->SetStringField(TEXT("class"), BP->GeneratedClass->GetPathName());
+		Result->SetStringField(TEXT("asset_path"), ResolvedFullPath);
+		Result->SetStringField(TEXT("asset_name"), Resolution.AssetName);
+		Result->SetStringField(TEXT("class"), Resolution.StyleClass->GetPathName());
+		Result->SetStringField(TEXT("resolved_via"), Resolution.ResolvedVia);
+		Result->SetBoolField(TEXT("was_created"), Resolution.bWasCreated);
 		return FMonolithActionResult::Success(Result);
 	}
 
@@ -144,6 +129,13 @@ namespace MonolithCommonUIButton
 	}
 
 	// ----- 2.B.6 apply_style_to_widget -----------------------------------------
+	//
+	// Phase G note: this action consumes a fully-resolved style class path and
+	// assigns it to a widget — it is the read-side counterpart to
+	// create_common_*_style. Style-asset creation goes through the service via
+	// CreateStyleAsset (above); this action only LoadClass's the resulting _C
+	// path. No service call is needed here because the path already encodes the
+	// resolution decision the service made when the style was created.
 
 	static FMonolithActionResult HandleApplyStyleToWidget(const TSharedPtr<FJsonObject>& Params)
 	{
@@ -407,36 +399,83 @@ namespace MonolithCommonUIButton
 			return FMonolithActionResult::Error(TEXT("Cannot convert root-level button — parent required for reparent"));
 
 		// Capture the single child if any (UButton is a UContentWidget)
-		UWidget* Child = nullptr;
+		FString ChildName;
 		if (OldBtn->GetChildrenCount() > 0)
 		{
-			Child = OldBtn->GetChildAt(0);
+			if (UWidget* Child = OldBtn->GetChildAt(0))
+			{
+				ChildName = Child->GetName();
+			}
 		}
 
 		// Create the new common button — preserve name
 		const FName BtnName = OldBtn->GetFName();
-		Parent->RemoveChild(OldBtn);
+		const FName TempBtnName = MakeUniqueObjectName(
+			Wbp->WidgetTree,
+			TargetClass,
+			FName(*FString::Printf(TEXT("%s_CommonReplacement"), *BtnName.ToString())));
 
-		// Rename old out of the way so the new can take the name
-		OldBtn->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_DoNotDirty);
-
-		UCommonButtonBase* NewBtn = Wbp->WidgetTree->ConstructWidget<UCommonButtonBase>(TargetClass, BtnName);
+		UCommonButtonBase* NewBtn = Wbp->WidgetTree->ConstructWidget<UCommonButtonBase>(TargetClass, TempBtnName);
 		if (!NewBtn)
 		{
 			return FMonolithActionResult::Error(FString::Printf(
 				TEXT("ConstructWidget returned null for class '%s' (abstract or failed instantiation). "
-					 "Old UButton has already been detached — reopen the WBP and re-add the button manually, "
-					 "or pass a verified concrete 'target_class'."),
+					 "Pass a verified concrete 'target_class'."),
 				*TargetClass->GetName()));
 		}
+
+		TArray<UWidget*> OldButtonChildren;
+		for (int32 ChildIndex = 0; ChildIndex < OldBtn->GetChildrenCount(); ++ChildIndex)
+		{
+			if (UWidget* ChildWidget = OldBtn->GetChildAt(ChildIndex))
+			{
+				OldButtonChildren.AddUnique(ChildWidget);
+				TArray<UWidget*> Descendants;
+				UWidgetTree::GetChildWidgets(ChildWidget, Descendants);
+				for (UWidget* Descendant : Descendants)
+				{
+					OldButtonChildren.AddUnique(Descendant);
+				}
+			}
+		}
+
+		OldBtn->Modify();
+		OldBtn->ClearChildren();
+		for (UWidget* ChildWidget : OldButtonChildren)
+		{
+			if (!ChildWidget)
+			{
+				continue;
+			}
+
+			const FName ChildWidgetName = ChildWidget->GetFName();
+			for (int32 BindingIndex = Wbp->Bindings.Num() - 1; BindingIndex >= 0; --BindingIndex)
+			{
+				if (Wbp->Bindings[BindingIndex].ObjectName == ChildWidgetName.ToString())
+				{
+					Wbp->Bindings.RemoveAt(BindingIndex);
+				}
+			}
+
+			ChildWidget->Modify();
+			ChildWidget->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_DoNotDirty);
+			Wbp->OnVariableRemoved(ChildWidgetName);
+		}
+
+		Parent->RemoveChild(OldBtn);
+		OldBtn->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_DoNotDirty);
+		NewBtn->Rename(*BtnName.ToString(), Wbp->WidgetTree, REN_DontCreateRedirectors | REN_DoNotDirty);
 		Parent->AddChild(NewBtn);
+		MonolithUI::RegisterCreatedWidget(Wbp, NewBtn);
 
 		// Note: UCommonButtonBase is a UCommonUserWidget (not a UPanelWidget), so its content
 		// tree is internal rather than a single AddChild slot like UButton. Children from the
 		// original UButton must be rewired manually by the author — we cannot auto-transfer.
-		// The old UButton's child stays orphaned in the transient package once OldBtn is discarded.
+		// ReconcileWidgetVariableGuids prunes removed child names without invoking the broader
+		// editor delete path, which would also strip graph references to the replaced button.
 
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Wbp);
+		MonolithUI::ReconcileWidgetVariableGuids(Wbp);
 		FKismetEditorUtilities::CompileBlueprint(Wbp);
 		Wbp->GetOutermost()->MarkPackageDirty();
 
@@ -444,16 +483,25 @@ namespace MonolithCommonUIButton
 		Result->SetStringField(TEXT("wbp_path"), WbpPath);
 		Result->SetStringField(TEXT("widget_name"), BtnName.ToString());
 		Result->SetStringField(TEXT("new_class"), TargetClass->GetName());
-		Result->SetBoolField(TEXT("had_child"), Child != nullptr);
-		if (Child)
+		Result->SetBoolField(TEXT("had_child"), !ChildName.IsEmpty());
+		if (!ChildName.IsEmpty())
 		{
-			Result->SetStringField(TEXT("orphaned_child"), Child->GetName());
+			Result->SetStringField(TEXT("removed_child"), ChildName);
+			Result->SetStringField(TEXT("orphaned_child"), ChildName);
 			Result->SetStringField(TEXT("note"), TEXT("Old UButton child not auto-transferred — UCommonButtonBase uses internal widget tree, not AddChild. Rewire manually."));
 		}
 		return FMonolithActionResult::Success(Result);
 	}
 
 	// ----- 2.B.7 batch_retheme -------------------------------------------------
+	//
+	// Phase G note: batch_retheme operates on TWO existing style class paths
+	// (old + new) and rewrites widget references across a folder of WBPs. Both
+	// inputs are pre-resolved; the service does not participate in this hot
+	// path. If a future variant accepts a style PROPERTIES bag instead of a
+	// pre-built class, route the bag through FMonolithUIStyleService::Get()
+	// .ResolveOrCreate to get back the class to apply — same pattern as
+	// CreateStyleAsset above.
 
 	static FMonolithActionResult HandleBatchRetheme(const TSharedPtr<FJsonObject>& Params)
 	{
@@ -698,7 +746,7 @@ namespace MonolithCommonUIButton
 
 		Registry.RegisterAction(
 			TEXT("ui"), TEXT("convert_button_to_common"),
-			TEXT("Replace a UButton in a WBP with a UCommonButtonBase-derived class, preserving name and parent slot. "
+			TEXT("Replace a UButton in a WBP with a UCommonButtonBase-derived class, preserving name and parent. "
 				 "Creates a transient concrete subclass by default if target_class is omitted. "
 				 "Override via 'target_class' for project-specific subclasses. Old UButton child is NOT auto-transferred."),
 			FMonolithActionHandler::CreateStatic(&HandleConvertButtonToCommon),

@@ -36,4 +36,19 @@ public:
 	static constexpr int32 ErrMethodNotFound = -32601;
 	static constexpr int32 ErrInvalidParams = -32602;
 	static constexpr int32 ErrInternalError = -32603;
+
+	// --- Monolith server-defined error codes (JSON-RPC -32000..-32099 range) ---
+	//
+	// R3b / §5.5 Error Contract — emitted when an action's underlying
+	// optional sibling/marketplace plugin is absent. The action exists in
+	// the registry; the call cannot be served because the underlying
+	// type/asset/subsystem is missing. First consumer: the EffectSurface
+	// action handlers when the optional provider is not loaded. Distinct from
+	// `ErrInternalError` so telemetry / LLM error counters do not conflate
+	// "feature gracefully unavailable" with "server choked".
+	//
+	// Reserved range -32011..-32019 left open for future "optional dep"
+	// codes (e.g., `ErrFeatureGated` if we later distinguish "missing
+	// plugin" from "feature flag off").
+	static constexpr int32 ErrOptionalDepUnavailable = -32010;
 };

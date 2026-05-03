@@ -115,8 +115,14 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     UWidget* Widget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
     if (!Widget)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget '%s' not found"), *WidgetName));
+        // Phase K
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Lookup"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' not found in WBP '%s'."), *WidgetName, *AssetPath),
+            TEXT("Call ui::get_widget_tree to enumerate live widget names."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
     // Find the FSlateBrush property by name (supports nested like "BarFillStyle.FillImage")
@@ -174,11 +180,28 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     FString DrawType = Params->GetStringField(TEXT("draw_type"));
     if (!DrawType.IsEmpty())
     {
+        // Phase K — pre-K behaviour silently ignored unknown draw_type tokens
+        // (no PropsSet++ + no error). Now: explicit FUISpecError with the full
+        // 5-token list so the LLM can self-correct.
+        bool bMatched = true;
         if (DrawType == TEXT("Image"))           Brush->DrawAs = ESlateBrushDrawType::Image;
         else if (DrawType == TEXT("Box"))        Brush->DrawAs = ESlateBrushDrawType::Box;
         else if (DrawType == TEXT("Border"))     Brush->DrawAs = ESlateBrushDrawType::Border;
         else if (DrawType == TEXT("RoundedBox")) Brush->DrawAs = ESlateBrushDrawType::RoundedBox;
         else if (DrawType == TEXT("NoDrawType")) Brush->DrawAs = ESlateBrushDrawType::NoDrawType;
+        else                                     bMatched = false;
+
+        if (!bMatched)
+        {
+            FUISpecError E = MonolithUIInternal::MakeSpecError(
+                TEXT("Enum"),
+                TEXT("/draw_type"),
+                FString::Printf(TEXT("Unknown draw_type token '%s'."), *DrawType),
+                TEXT("Pick one of the ESlateBrushDrawType tokens. RoundedBox requires a corner_radius alongside."),
+                { TEXT("Image"), TEXT("Box"), TEXT("Border"), TEXT("RoundedBox"), TEXT("NoDrawType") });
+            E.WidgetId = FName(*WidgetName);
+            return MonolithUIInternal::MakeErrorFromSpecError(E);
+        }
         PropsSet++;
     }
 
@@ -272,7 +295,15 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
 
     if (PropsSet == 0)
     {
-        return FMonolithActionResult::Error(TEXT("No brush properties specified. Provide at least one: draw_type, tint_color, texture_path, etc."));
+        // Phase K — list the legal property keys in valid_options.
+        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+            TEXT("MissingInput"),
+            TEXT("/"),
+            TEXT("No brush properties specified."),
+            TEXT("Pass one or more of the listed parameter keys to mutate the SlateBrush."),
+            { TEXT("draw_type"), TEXT("tint_color"), TEXT("image_size"), TEXT("margin"),
+              TEXT("corner_radius"), TEXT("outline_color"), TEXT("outline_width"),
+              TEXT("texture_path"), TEXT("material_path") }));
     }
 
     Widget->SynchronizeProperties();
@@ -303,8 +334,14 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetFont(const TSharedPtr<
     UWidget* Widget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
     if (!Widget)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget '%s' not found"), *WidgetName));
+        // Phase K
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Lookup"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' not found in WBP '%s'."), *WidgetName, *AssetPath),
+            TEXT("Call ui::get_widget_tree to enumerate live widget names."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
     // Get font via getter/setter pattern (safer than raw reflection — respects property accessors)
@@ -312,9 +349,17 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetFont(const TSharedPtr<
     URichTextBlock* RichText = Cast<URichTextBlock>(Widget);
     if (!TextBlock && !RichText)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget '%s' (class %s) is not a text widget (TextBlock or RichTextBlock)"),
-                *WidgetName, *Widget->GetClass()->GetName()));
+        // Phase K — class-mismatch with valid_options enumerating the
+        // accepted text-widget tokens.
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("WidgetClass"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' (class %s) is not a text widget."),
+                *WidgetName, *Widget->GetClass()->GetName()),
+            TEXT("set_font targets text widgets only. For non-text widgets, set the relevant FSlateFontInfo struct field via set_widget_property."),
+            { TEXT("TextBlock"), TEXT("RichTextBlock") });
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
     FSlateFontInfo FontInfoCopy = TextBlock ? TextBlock->GetFont() :
@@ -378,7 +423,14 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetFont(const TSharedPtr<
 
     if (PropsSet == 0)
     {
-        return FMonolithActionResult::Error(TEXT("No font properties specified. Provide at least one: font_size, font_family, typeface, etc."));
+        // Phase K
+        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+            TEXT("MissingInput"),
+            TEXT("/"),
+            TEXT("No font properties specified."),
+            TEXT("Pass one or more of the listed parameter keys to mutate FSlateFontInfo."),
+            { TEXT("font_size"), TEXT("font_family"), TEXT("typeface"),
+              TEXT("letter_spacing"), TEXT("outline_size"), TEXT("outline_color") }));
     }
 
     // Write back via setter (not raw reflection) to ensure Slate update
@@ -546,8 +598,14 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<
     UWidget* Widget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
     if (!Widget)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget '%s' not found"), *WidgetName));
+        // Phase K
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Lookup"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' not found in WBP '%s'."), *WidgetName, *AssetPath),
+            TEXT("Call ui::get_widget_tree to enumerate live widget names."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
     int32 PropsSet = 0;
@@ -580,9 +638,25 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<
         FString Justification = Params->GetStringField(TEXT("justification"));
         if (!Justification.IsEmpty())
         {
+            // Phase K — pre-K silently ignored unknown tokens. Now: explicit
+            // FUISpecError with the 3-token list.
+            bool bMatched = true;
             if (Justification == TEXT("Left"))        TB->SetJustification(ETextJustify::Left);
             else if (Justification == TEXT("Center")) TB->SetJustification(ETextJustify::Center);
             else if (Justification == TEXT("Right"))  TB->SetJustification(ETextJustify::Right);
+            else                                      bMatched = false;
+
+            if (!bMatched)
+            {
+                FUISpecError E = MonolithUIInternal::MakeSpecError(
+                    TEXT("Enum"),
+                    TEXT("/justification"),
+                    FString::Printf(TEXT("Unknown justification token '%s'."), *Justification),
+                    TEXT("Pick one of the ETextJustify tokens."),
+                    { TEXT("Left"), TEXT("Center"), TEXT("Right") });
+                E.WidgetId = FName(*WidgetName);
+                return MonolithUIInternal::MakeErrorFromSpecError(E);
+            }
             PropsSet++;
         }
     }
@@ -598,14 +672,27 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<
     }
     else
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget '%s' (class %s) is not a TextBlock or RichTextBlock"),
-                *WidgetName, *Widget->GetClass()->GetName()));
+        // Phase K
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("WidgetClass"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' (class %s) is not a TextBlock or RichTextBlock."),
+                *WidgetName, *Widget->GetClass()->GetName()),
+            TEXT("set_text targets text widgets only. Use set_widget_property for direct property writes on other classes."),
+            { TEXT("TextBlock"), TEXT("RichTextBlock") });
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
     if (PropsSet == 0)
     {
-        return FMonolithActionResult::Error(TEXT("No text properties specified. Provide at least one: text, text_color, font_size, justification"));
+        // Phase K
+        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+            TEXT("MissingInput"),
+            TEXT("/"),
+            TEXT("No text properties specified."),
+            TEXT("Pass one or more of the listed parameter keys to mutate the text widget."),
+            { TEXT("text"), TEXT("text_color"), TEXT("font_size"), TEXT("justification") }));
     }
 
     Widget->SynchronizeProperties();
@@ -635,16 +722,29 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetImage(const TSharedPtr
     UWidget* Widget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
     if (!Widget)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget '%s' not found"), *WidgetName));
+        // Phase K
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Lookup"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' not found in WBP '%s'."), *WidgetName, *AssetPath),
+            TEXT("Call ui::get_widget_tree to enumerate live widget names."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
     UImage* ImageWidget = Cast<UImage>(Widget);
     if (!ImageWidget)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget '%s' (class %s) is not an Image widget"),
-                *WidgetName, *Widget->GetClass()->GetName()));
+        // Phase K
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("WidgetClass"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' (class %s) is not an Image widget."),
+                *WidgetName, *Widget->GetClass()->GetName()),
+            TEXT("set_image targets the UImage class only. For Border/Button backgrounds, use set_brush."),
+            { TEXT("Image") });
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
     int32 PropsSet = 0;
@@ -700,7 +800,13 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetImage(const TSharedPtr
 
     if (PropsSet == 0)
     {
-        return FMonolithActionResult::Error(TEXT("No image properties specified. Provide at least one: texture_path, material_path, tint_color, size"));
+        // Phase K
+        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+            TEXT("MissingInput"),
+            TEXT("/"),
+            TEXT("No image properties specified."),
+            TEXT("Pass one or more of the listed parameter keys to mutate the UImage."),
+            { TEXT("texture_path"), TEXT("material_path"), TEXT("tint_color"), TEXT("size") }));
     }
 
     ImageWidget->SynchronizeProperties();

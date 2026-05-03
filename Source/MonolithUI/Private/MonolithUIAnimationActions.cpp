@@ -173,7 +173,7 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("create_animation"),
-        TEXT("Create a new UWidgetAnimation with tracks and keyframes on a Widget Blueprint"),
+        TEXT("[DEPRECATED -- use ui::create_animation_v2 instead] Create a new UWidgetAnimation with tracks and keyframes on a Widget Blueprint. Scheduled for removal one major release out (Phase L marker, 2026-04-26). Response payload is tagged {deprecated: true, use_action: \"ui::create_animation_v2\"}; the v2 surface supports multi-track + cubic / weighted-tangent interpolation that v1 cannot express."),
         FMonolithActionHandler::CreateStatic(&HandleCreateAnimation),
         FParamSchemaBuilder()
             .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
@@ -185,7 +185,7 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("add_animation_keyframe"),
-        TEXT("Add a keyframe to an existing animation track"),
+        TEXT("[DEPRECATED -- use ui::create_animation_v2 (multi-key authoring) or ui::add_bezier_eased_segment instead] Add a single keyframe to an existing animation track. Scheduled for removal one major release out (Phase L marker, 2026-04-26). Response payload is tagged {deprecated: true, use_action: \"ui::create_animation_v2\"}; the v2 surface authors entire tracks at once and supports the cubic / weighted-tangent shapes that v1 cannot express."),
         FMonolithActionHandler::CreateStatic(&HandleAddAnimationKeyframe),
         FParamSchemaBuilder()
             .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
@@ -690,6 +690,11 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
     Result->SetNumberField(TEXT("tracks_created"), TrackCount);
     Result->SetNumberField(TEXT("keyframes_created"), KeyframeCount);
     Result->SetBoolField(TEXT("compiled"), true);
+    // Phase L deprecation hint -- v1 surface scheduled for removal one major release out.
+    // Same {deprecated, use_action} payload shape used elsewhere in the registry for
+    // cross-namespace alias deprecation, so callers can branch on a single tag.
+    Result->SetBoolField(TEXT("deprecated"), true);
+    Result->SetStringField(TEXT("use_action"), TEXT("ui::create_animation_v2"));
     return FMonolithActionResult::Success(Result);
 }
 
@@ -866,6 +871,9 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleAddAnimationKeyframe(co
         Result->SetBoolField(TEXT("binding_created"), true);
         Result->SetBoolField(TEXT("track_created"), true);
         Result->SetBoolField(TEXT("added"), true);
+        // Phase L deprecation hint -- v1 surface scheduled for removal one major release out.
+        Result->SetBoolField(TEXT("deprecated"), true);
+        Result->SetStringField(TEXT("use_action"), TEXT("ui::create_animation_v2"));
         return FMonolithActionResult::Success(Result);
     }
 

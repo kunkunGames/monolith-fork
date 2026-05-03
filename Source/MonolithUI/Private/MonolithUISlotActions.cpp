@@ -64,14 +64,28 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
     UWidget* Widget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
     if (!Widget)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget '%s' not found"), *WidgetName));
+        // Phase K
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Lookup"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' not found in WBP '%s'."), *WidgetName, *AssetPath),
+            TEXT("Call ui::get_widget_tree to enumerate live widget names."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
     UPanelSlot* Slot = Widget->Slot;
     if (!Slot)
     {
-        return FMonolithActionResult::Error(TEXT("Widget has no slot (is it the root widget?)"));
+        // Phase K — root widget has no slot. Common LLM mistake; suggested_fix
+        // calls out the typical cause.
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Slot"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' has no slot — likely the WidgetTree root."), *WidgetName),
+            TEXT("Slot properties only apply to non-root widgets. Use a parent panel and address its child."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
     int32 PropsSet = 0;
@@ -187,7 +201,15 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
 
     if (PropsSet == 0)
     {
-        return FMonolithActionResult::Error(TEXT("No slot properties were set. Provide at least one slot property parameter."));
+        // Phase K — surface the legal property keys in valid_options so the
+        // LLM doesn't have to retry guess-by-guess.
+        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+            TEXT("MissingInput"),
+            TEXT("/"),
+            TEXT("No slot properties were set. Provide at least one slot property parameter."),
+            TEXT("Pass one or more of the listed parameter keys with the appropriate JSON shape."),
+            { TEXT("anchors"), TEXT("offsets"), TEXT("position"), TEXT("size"), TEXT("alignment"),
+              TEXT("z_order"), TEXT("auto_size"), TEXT("h_align"), TEXT("v_align"), TEXT("padding") }));
     }
 
     FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
@@ -218,14 +240,45 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetAnchorPreset(const TShare
     UWidget* Widget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
     if (!Widget)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget '%s' not found"), *WidgetName));
+        // Phase K
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Lookup"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' not found in WBP '%s'."), *WidgetName, *AssetPath),
+            TEXT("Call ui::get_widget_tree to enumerate live widget names."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
     UCanvasPanelSlot* CS = Cast<UCanvasPanelSlot>(Widget->Slot);
     if (!CS)
     {
-        return FMonolithActionResult::Error(TEXT("Widget is not in a CanvasPanel — anchor presets only apply to CanvasPanel slots"));
+        // Phase K — slot-class mismatch is a structural issue. valid_options is
+        // empty; the suggested_fix names the only path forward (re-parent).
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("SlotClass"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' is not in a CanvasPanel — anchor presets only apply to CanvasPanel slots."), *WidgetName),
+            TEXT("Re-parent the widget into a CanvasPanel, or use ui::set_slot_property with the appropriate slot-class fields (h_align/v_align/padding for box slots)."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
+    }
+
+    // Phase K — preset name validation. The pre-K code silently fell through
+    // to FAnchors(0,0,0,0) on a miss, which left the LLM thinking the call
+    // succeeded. Now: explicit FUISpecError with the full 16-entry valid_options
+    // list so the LLM can self-correct on the next attempt.
+    const TArray<FString>& KnownPresets = MonolithUIInternal::GetAnchorPresetNames();
+    if (!KnownPresets.Contains(Preset))
+    {
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Enum"),
+            TEXT("/preset"),
+            FString::Printf(TEXT("Unknown anchor preset '%s'."), *Preset),
+            TEXT("Pick one of the listed preset tokens — names are lowercase with underscore separators."),
+            KnownPresets);
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
     FAnchors Anchors = MonolithUIInternal::GetAnchorPreset(Preset);

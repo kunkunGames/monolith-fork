@@ -6,7 +6,7 @@ The Monolith MCP is configured to use the C++ proxy executable:
 
 ```json
 {
-  "command": "D:/Unreal Projects/Leviathan/Plugins/Monolith/Binaries/monolith_proxy.exe",
+  "command": "<project-root>/Plugins/Monolith/Binaries/monolith_proxy.exe",
   "args": []
 }
 ```
@@ -22,12 +22,12 @@ If the C++ proxy encounters issues, you can revert to the Python proxy by updati
 ```json
 {
   "command": "python",
-  "args": ["D:/Unreal Projects/Leviathan/Scripts/monolith_proxy.py"]
+  "args": ["<project-root>/Scripts/monolith_proxy.py"]
 }
 ```
 
 Update the monolith entry in:
-1. `D:\Unreal Projects\Leviathan\.mcp.json`
+1. `<project-root>/.mcp.json`
 2. `%USERPROFILE%\.claude.json` (Windows) or `~/.claude.json` (macOS / Linux)
 
 Then restart Claude Code.

@@ -5,9 +5,9 @@ description: Use when working with Unreal Engine UI via Monolith MCP — creatin
 
 # Unreal UI Workflows
 
-**92 UI actions** via `ui_query()` (42 UMG baseline + 50 CommonUI conditional on CommonUI plugin). Discover with `monolith_discover({ namespace: "ui" })`. Filter to CommonUI only: `monolith_discover({ namespace: "ui", category: "CommonUI" })`.
+**117 UI actions** via `ui_query()` in full-stack: 66 always-on + 51 CommonUI conditional on CommonUI plugin (post Phase A–L MonolithUI architecture expansion, 2026-04-26). Discover with `monolith_discover({ namespace: "ui" })`. Filter to CommonUI only: `monolith_discover({ namespace: "ui", category: "CommonUI" })`. Always-on surface: Widget CRUD (7), Slot (3), Templates (8), Styling (6), v1 Animation (5 — `create_animation` + `add_animation_keyframe` `[DEPRECATED]` Phase L; prefer `create_animation_v2`), v2 Animation hoisted (5), Bindings (4), Settings scaffolds (5), Accessibility (4), Hoisted Design Import (5), EffectSurface (10), **Spec Builder (3 — `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec`)**, Type Registry diagnostic (1).
 
-**CommonUI actions require the CommonUI engine plugin** (stock UE 5.7, `Engine/Plugins/Runtime/CommonUI/`). When absent, 50 actions silently unregister. Detect via `monolith_discover`.
+**CommonUI actions require the CommonUI engine plugin** (stock UE 5.7, `Engine/Plugins/Runtime/CommonUI/`). When absent, 51 actions silently unregister (50 in `Source/MonolithUI/Private/CommonUI/*.cpp` + 1 inline `dump_style_cache_stats` lambda). Detect via `monolith_discover`.
 
 ## Key Parameters
 

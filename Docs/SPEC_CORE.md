@@ -12,7 +12,7 @@
 
 ## 1. Overview
 
-Monolith is a unified Unreal Engine editor plugin that consolidates 9 separate MCP (Model Context Protocol) servers and 4 C++ plugins into a single plugin with an embedded HTTP MCP server. It reduces ~220 individual tools down to 19 MCP tools (1286 total registrations across 16 namespaces, 1282 distinct handlers; 1241 active by default — 45 experimental town gen actions disabled), cutting AI assistant context consumption by ~95%. The CommonUI action pack (50 actions, conditional on `WITH_COMMONUI`) shipped M0.5, v0.14.0 (2026-04-19), tested M0.5.1 (2026-04-25).
+Monolith is a unified Unreal Engine editor plugin that consolidates 9 separate MCP (Model Context Protocol) servers and 4 C++ plugins into a single plugin with an embedded HTTP MCP server. It reduces ~220 individual tools down to 20 MCP tools (1274 total registrations across 16 in-tree namespaces, 1270 distinct handlers; 1274 active by default — 45 experimental town gen actions disabled), cutting AI assistant context consumption by ~95%. The CommonUI action pack (51 actions, conditional on `WITH_COMMONUI`) shipped M0.5, v0.14.0 (2026-04-19), tested M0.5.1 (2026-04-25). Editor +2 (`run_automation_tests`, `list_automation_tests`) landed v0.14.8 — PR #48 by @MaxenceEpitech. v0.14.9 added Editor +2 (`run_python`, `load_level` — Issue #50, ported from @JCSopko's fork) and Animation +1 (`copy_bone_pose_between_sequences` — PR #51 by @MaxenceEpitech).
 
 ### What It Replaces
 
@@ -37,13 +37,13 @@ Monolith.uplugin
   MonolithCore          — HTTP server (bind retry with port probe, Restart()), tool registry, discovery, settings, auto-updater
   MonolithBlueprint     — Blueprint inspection, variable/component/graph CRUD, node operations, compile, spawn (89 actions)
   MonolithMaterial      — Material inspection + graph editing + CRUD + function suite + tiling quality + texture preview (63 actions)
-  MonolithAnimation     — Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP/ControlRig write, layout (118 actions)
+  MonolithAnimation     — Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP/ControlRig write, layout (119 actions)
   MonolithNiagara       — Niagara particle systems, HLSL module/function creation, DI config, event handlers, sim stages, NPC, effect types, scalability, layout (109 actions)
-  MonolithEditor        — Build triggers, live compile, log capture, compile output, crash context, scene capture, texture import, flipbook stitching, asset deletion, viewport info, blank-map factory + module status (Phase J F8) (22 actions)
+  MonolithEditor        — Build triggers, live compile, log capture, compile output, crash context, scene capture, texture import, flipbook stitching, asset deletion, viewport info, blank-map factory + module status (Phase J F8), automation test list/run, Python escape-hatch (`run_python`), map swap (`load_level`) (26 actions — +2 from v0.14.8 PR #48 by @MaxenceEpitech, +2 from v0.14.9 Issue #50 ported from @JCSopko's fork)
   MonolithConfig        — Config/INI resolution and search (6 actions)
   MonolithIndex         — SQLite FTS5 deep project indexer, 14 internal indexers (7 MCP actions)
   MonolithSource        — Engine source + API lookup, auto-reindex on hot-reload (Phase J F17) (11 actions)
-  MonolithUI            — Widget blueprint CRUD, templates, styling, animation, settings scaffolding, accessibility (42 UMG + 50 CommonUI + 4 GAS UI binding aliases = 96 actions). CommonUI actions conditional on #if WITH_COMMONUI. Shipped M0.5, v0.14.0 (2026-04-19)
+  MonolithUI            — Widget blueprint CRUD + slot/template/styling, animation v1 (deprecated) + v2 (hoisted), settings scaffolding, accessibility, UISpec build/dump/schema, EffectSurface sub-bag actions (reflective optional-provider probe, decoupled 2026-04-27), CommonUI categories A–I, Type Registry diagnostic, Style Service diagnostic. (66 always-on + 51 CommonUI = 117 module-owned + 4 GAS UI binding aliases registered cross-namespace). CommonUI actions conditional on #if WITH_COMMONUI. EffectSurface actions return -32010 ErrOptionalDepUnavailable when the optional EffectSurface provider is absent (see specs/SPEC_MonolithUI.md § "Error Contract"). Architecture expansion Phase A–L landed 2026-04-26 (Spec Builder, Type Registry, EffectSurface, Style Service, hoisted Design Import verbs)
   MonolithMesh          — Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript ops, horror/accessibility, lighting, audio/acoustics, performance, decals, level design, tech art, context props, procedural geometry (sweep walls, auto-collision, proc mesh caching, blueprint prefabs), genre presets, encounter design, accessibility reports (195 core actions) + EXPERIMENTAL procedural town generator (45 actions, disabled by default via bEnableProceduralTownGen) = 240 total
   MonolithGAS           — Gameplay Ability System integration: abilities, attributes, effects, ASC, tags, cues, targets, input, inspection, scaffolding, UI attribute binding (135 actions: 131 GAS-namespace + 4 also aliased into `ui` namespace). Conditional on #if WITH_GBA
   MonolithComboGraph    — ComboGraph plugin integration: combo graph CRUD, node/edge management, effects, cues, ability scaffolding (13 actions). Conditional on #if WITH_COMBOGRAPH
@@ -54,14 +54,14 @@ Monolith.uplugin
   MonolithBABridge      — Optional IModularFeatures bridge for Blueprint Assist integration. Exposes IMonolithGraphFormatter; enables BA-powered auto_layout across blueprint, material, animation, and niagara modules when Blueprint Assist is present (0 MCP actions — integration only)
 ```
 
-**Custom sibling plugins (not inside core Monolith — source + per-module specs are private to their respective repos):**
-- **MonolithISX** — InventorySystemX integration, 158 actions, `inventory` namespace, conditional on InventorySystemX. Extracted 2026-04-21 to `Plugins/MonolithISX/`. Totals above do NOT include these 158 actions.
-- **MonolithSteamBridge** — Steam Integration Kit integration, 28 actions, `steam` namespace, conditional on SIK. Lives at `Plugins/MonolithSteamBridge/` (+ `Plugins/MonolithSteamBridgeLeaderboard/` for full-fidelity leaderboard fidelity). Totals above do NOT include these 28 actions.
-- **MonolithClaudeDesignBridge** — Claude Design → UMG bridge, 11 actions, `claudedesign` namespace, conditional on the bridge plugin (M3.5 Transpiler Fidelity shipped 2026-04-25). Totals above do NOT include these 11 actions.
+**Custom sibling plugins (not inside core Monolith; source + per-module specs are private to their respective repos):**
+Additional project-specific sibling plugins may register their own namespaces outside this repository. They are intentionally excluded from public Monolith action counts and release packages; their source, action rosters, and module specs belong in their own repos.
+
+**Optional widget runtime providers** (not bundled with the public Monolith release zip): MonolithUI can expose EffectSurface action handlers through a reflective UClass probe when an external provider supplies the expected widget classes. MonolithUI has zero compile-time dependency on that provider. When the provider is absent, EffectSurface actions return `-32010 ErrOptionalDepUnavailable` (see [`specs/SPEC_MonolithUI.md` § "Error Contract"](specs/SPEC_MonolithUI.md#error-contract--optional-effectsurface-provider-absence--32010)); the rest of `ui::` is fully functional. The `make_release.ps1` `$LeakSentinels` list defends against accidental optional-provider symbol leakage into public release DLLs.
 
 For the architectural pattern that lets you write your own sibling plugin and register actions into Monolith's MCP registry from outside the core repo, see [`SIBLING_PLUGIN_GUIDE.md`](SIBLING_PLUGIN_GUIDE.md).
 
-> **Live editor `monolith_status` will report a higher count than the in-tree total.** When sibling plugins are loaded the editor reports the union (e.g. on the Leviathan project at v0.14.7 / dv.commit.428: `actions=1462, namespaces=20` — the +176 delta over the in-tree 1286 is the sibling plugins above). This is expected. The numbers in §12 below are the **in-tree** ground truth — sibling totals are specced in their own repos.
+> **Live editor `monolith_status` will report a higher count than the in-tree total.** When sibling plugins are loaded the editor reports the union of in-tree and sibling actions. This is expected. The numbers in §12 below are the **in-tree** ground truth; sibling totals are specced in their own repos.
 
 ### Discovery/Dispatch Pattern
 
@@ -76,6 +76,19 @@ All domain modules register actions with `FMonolithToolRegistry` (central single
 - **Batch support:** Yes (JSON-RPC arrays)
 - **Session management:** None — server is fully stateless (session tracking removed; no per-session state was ever stored)
 - **CORS:** `Access-Control-Allow-Origin: *`
+
+#### JSON-RPC error catalogue
+
+Standard codes mirror the JSON-RPC 2.0 spec. Monolith server-defined codes live in the `-32000..-32099` range. Constants: `Plugins/Monolith/Source/MonolithCore/Public/MonolithJsonUtils.h`.
+
+| Constant | Code | Meaning |
+|----------|------|---------|
+| `ErrParseError` | `-32700` | JSON parse failure on the request body. |
+| `ErrInvalidRequest` | `-32600` | Request shape doesn't match JSON-RPC 2.0. |
+| `ErrMethodNotFound` | `-32601` | Tool / action name not registered. |
+| `ErrInvalidParams` | `-32602` | Action found, params invalid (missing required field, bad enum, etc.). |
+| `ErrInternalError` | `-32603` | The server choked. Default for unspecified failures. |
+| `ErrOptionalDepUnavailable` | `-32010` | An optional sibling/marketplace plugin the action depends on is not present. The action exists in the registry; the call cannot be served. First consumer: the 10 EffectSurface action handlers when the optional EffectSurface provider is absent (see [`specs/SPEC_MonolithUI.md` § "Error Contract — Optional EffectSurface Provider Absence (-32010)"](specs/SPEC_MonolithUI.md#error-contract--optional-effectsurface-provider-absence--32010)). Reserved range `-32011..-32019` left open for future "optional dep" codes. |
 
 ### Module Loading
 
@@ -125,13 +138,13 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.1 | MonolithCore | [specs/SPEC_MonolithCore.md](specs/SPEC_MonolithCore.md) | HTTP server (bind retry, Restart(), `Monolith.Restart` console cmd), tool registry, discovery, settings, auto-updater |
 | 3.2 | MonolithBlueprint | [specs/SPEC_MonolithBlueprint.md](specs/SPEC_MonolithBlueprint.md) | Blueprint inspection, variable/component/graph CRUD, node ops, compile, spawn (89 actions) |
 | 3.3 | MonolithMaterial | [specs/SPEC_MonolithMaterial.md](specs/SPEC_MonolithMaterial.md) | Material inspection + graph editing + CRUD + function suite (63 actions) |
-| 3.4 | MonolithAnimation | [specs/SPEC_MonolithAnimation.md](specs/SPEC_MonolithAnimation.md) | Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP write, ControlRig (118 actions) |
+| 3.4 | MonolithAnimation | [specs/SPEC_MonolithAnimation.md](specs/SPEC_MonolithAnimation.md) | Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP write, ControlRig (119 actions) |
 | 3.5 | MonolithNiagara | [specs/SPEC_MonolithNiagara.md](specs/SPEC_MonolithNiagara.md) | Niagara particle systems, HLSL module/function, DI config, event handlers, sim stages, layout (109 actions) |
 | 3.6 | MonolithEditor | [specs/SPEC_MonolithEditor.md](specs/SPEC_MonolithEditor.md) | Build triggers, live compile, log capture, crash context, scene capture (20 actions) |
 | 3.7 | MonolithConfig | [specs/SPEC_MonolithConfig.md](specs/SPEC_MonolithConfig.md) | Config/INI resolution and search (6 actions) |
 | 3.8 | MonolithIndex | [specs/SPEC_MonolithIndex.md](specs/SPEC_MonolithIndex.md) | SQLite FTS5 deep project indexer (7 MCP actions, 14 internal indexers) |
 | 3.9 | MonolithSource | [specs/SPEC_MonolithSource.md](specs/SPEC_MonolithSource.md) | Engine source + API lookup (11 actions) |
-| 3.10 | MonolithUI | [specs/SPEC_MonolithUI.md](specs/SPEC_MonolithUI.md) | Widget blueprint CRUD, templates, styling, accessibility, CommonUI activatables/buttons/input/focus/lists/dialogs/audit/a11y (96 actions: 42 UMG + 50 CommonUI + 4 GAS aliases) |
+| 3.10 | MonolithUI | [specs/SPEC_MonolithUI.md](specs/SPEC_MonolithUI.md) | Widget blueprint CRUD, slot/template/styling, animation v1+v2, bindings, settings/accessibility scaffolds, **Spec Builder + Type Registry + EffectSurface + Style Service** (Phase A–L expansion 2026-04-26), CommonUI categories A–I. **117 module-owned actions** (66 always-on + 51 CommonUI under `WITH_COMMONUI`) + 4 GAS UI binding aliases |
 | 3.11 | MonolithMesh | [specs/SPEC_MonolithMesh.md](specs/SPEC_MonolithMesh.md) | Mesh/scene/spatial/blockout/GeometryScript/procedural (195 core + 45 experimental town gen = 240 actions) |
 | 3.12 | MonolithBABridge | [specs/SPEC_MonolithBABridge.md](specs/SPEC_MonolithBABridge.md) | IModularFeatures bridge for Blueprint Assist (0 MCP actions, integration only) |
 | 3.13 | MonolithGAS | [specs/SPEC_MonolithGAS.md](specs/SPEC_MonolithGAS.md) | Gameplay Ability System integration (135 actions: 131 GAS + 4 UI binding aliased into `ui::`, WITH_GBA) |
@@ -273,7 +286,7 @@ python Saved/monolith_offline.py <namespace> <action> [args...]
 | unreal-niagara | Niagara, particle, VFX, emitter | `niagara_query()` | 96 |
 | unreal-performance | performance, optimization, FPS, frame time | Cross-domain | config + material + niagara |
 | unreal-project-search | find asset, search project, dependencies | `project_query()` | 7 |
-| unreal-ui | UI, HUD, widget, menu, settings, save game, accessibility, CommonUI, activatable, button style, input glyph, focus | `ui_query()` | 92 |
+| unreal-ui | UI, HUD, widget, menu, settings, save game, accessibility, CommonUI, activatable, button style, input glyph, focus, **spec builder, EffectSurface, type registry, style service** | `ui_query()` | 117 |
 
 All skills follow a common structure: YAML frontmatter, Discovery section, Asset Path Conventions table, action tables, workflow examples, and rules.
 
@@ -308,7 +321,7 @@ Setting names below match the actual `UMonolithSettings` UPROPERTY identifiers i
 | bEnableLogicDriver | True | Enable Logic Driver Pro module (no-op if `WITH_LOGICDRIVER=0`) |
 | bEnableAI | True | Enable AI module (Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, Perception, Navigation) |
 | bEnableAudio | True | Enable Audio module (Sound Cues, MetaSounds, batch ops, AI Perception bind) |
-| bEnableInventorySystemX | True | Enable InventorySystemX integration (no-op if InventorySystemX not present; routed via the sibling `MonolithISX` plugin) |
+| bEnableExternalInventoryModule | True | Allow an external sibling plugin to register `inventory_query` actions |
 | bEnableProceduralTownGen | **False** | Enable Procedural Town Generator actions (45 actions). Requires `bEnableMesh`. **Work-in-progress** — known geometry issues, disabled by default. Unless you're willing to dig in and help improve it, best left alone |
 | bEnableBlueprintAssist | True | Allow MonolithBABridge to register IMonolithGraphFormatter when Blueprint Assist is present. Set false to force built-in layout for all auto_layout calls |
 | bDeferFirstTimeIndex | False | If true, first-time indexing won't run automatically. Use `Monolith.StartIndex` console command to trigger |
@@ -484,30 +497,30 @@ See `TODO.md` for the full list. Key architectural constraints:
 
 ## 12. Action Count Summary
 
-Counts below were re-verified against `Source/Monolith*/Private/*Actions.cpp` `RegisterAction(` call sites on 2026-04-26 post-Phase-J. Where a module's spec previously claimed a different number, those per-module SPEC files were corrected in the same audit pass. The Phase J F8 deltas (`editor` +2, `gas` +1, `ai` +2, `audio` +1) are reflected.
+Counts below were re-verified against the live `monolith_discover()` registry on 2026-05-03 (v0.14.9 pre-release audit). Where a module's spec previously claimed a different number, those per-module SPEC files were corrected. Reflected: Phase J F8 deltas (`editor` +2, `gas` +1, `ai` +2, `audio` +1); Phase A–L MonolithUI deltas (+21 net: hoisted Design Import 5, Animation v2 core+events 5, EffectSurface 10, Spec Builder/Schema/Serializer 3, Type Registry diagnostic 1, Style Service diagnostic 1 conditional, plus 2 v1 actions tagged `[DEPRECATED]` but still registered); v0.14.8 `editor` +2 (`run_automation_tests`, `list_automation_tests` — PR #48 by @MaxenceEpitech); v0.14.9 `editor` +2 (`run_python`, `load_level` — Issue #50, ported from @JCSopko's fork) and `animation` +1 (`copy_bone_pose_between_sequences` — PR #51 by @MaxenceEpitech).
 
 | Module | Namespace | Actions | Source-of-truth notes |
 |--------|-----------|---------|------------------------|
 | MonolithCore | monolith | 4 | discover, status, update, reindex |
 | MonolithBlueprint | blueprint | 89 | |
 | MonolithMaterial | material | 63 | |
-| MonolithAnimation | animation | 118 | Includes 5 ABP write actions (`add_anim_graph_node`, `connect_anim_graph_pins`, `set_state_animation`, `add_variable_get`, `set_anim_graph_node_property`), 3 ControlRig write, 1 layout, plus 96 baseline + 13 PoseSearch |
+| MonolithAnimation | animation | 119 | Includes 5 ABP write actions (`add_anim_graph_node`, `connect_anim_graph_pins`, `set_state_animation`, `add_variable_get`, `set_anim_graph_node_property`), 3 ControlRig write, 1 layout, plus 96 baseline + 13 PoseSearch + 1 v0.14.9 (`copy_bone_pose_between_sequences` — PR #51 by @MaxenceEpitech) |
 | MonolithNiagara | niagara | 109 | 108 baseline + 1 layout (`auto_layout`) |
-| MonolithMesh | mesh | 240 (195 core + 45 experimental town gen) | Town gen registered only when `bEnableProceduralTownGen=true` (default false) |
-| MonolithEditor | editor | 22 | 20 base + 2 from `MonolithEditorMapActions` (Phase J F8: `create_empty_map`, `get_module_status`) |
+| MonolithMesh | mesh | 239 (194 core + 45 experimental town gen) | Town gen registered only when `bEnableProceduralTownGen=true` (default false) |
+| MonolithEditor | editor | 26 | 20 base + 2 from `MonolithEditorMapActions` (Phase J F8: `create_empty_map`, `get_module_status`) + 2 from `MonolithEditorAutomationActions` (v0.14.8 PR #48 by @MaxenceEpitech: `list_automation_tests`, `run_automation_tests`) + 2 from v0.14.9 Issue #50 (ported from @JCSopko's fork: `run_python`, `load_level`) |
 | MonolithConfig | config | 6 | |
 | MonolithIndex | project | 7 | |
 | MonolithSource | source | 11 | |
-| MonolithUI | ui | 96 (42 UMG + 50 CommonUI + 4 GAS UI binding aliases) | The 4 aliases (`bind_widget_to_attribute`, `unbind_widget_attribute`, `list_attribute_bindings`, `clear_widget_attribute_bindings`) are registered into the `ui` namespace from `MonolithGAS/Private/MonolithGASUIBindingActions.cpp` and dispatch to the same handlers as their canonical `gas::` versions |
+| MonolithUI | ui | 117 module-owned (66 always-on + 51 CommonUI under `WITH_COMMONUI`) + 4 GAS UI binding aliases (registered from `MonolithGAS`, conditional on `WITH_GBA`) = **121** distinct registrations into `ui::` in the full-stack configuration | Architecture expansion Phase A–L landed 2026-04-26: hoisted Design Import (5), Animation v2 core/events (5), EffectSurface actions (10), Spec Builder/Schema/Serializer (3), Type Registry diagnostic (1), Style Service diagnostic (1, `WITH_COMMONUI`). Optional EffectSurface provider decouple landed 2026-04-27 (Wave 1/2 + Final.1) — count unchanged; the 10 EffectSurface actions now return `-32010 ErrOptionalDepUnavailable` instead of crashing/erroring when the provider is absent. 2 v1 actions (`create_animation`, `add_animation_keyframe`) tagged `[DEPRECATED]` Phase L — still registered, scheduled for removal one major release out. Per-category roll-up in [`specs/SPEC_MonolithUI.md`](specs/SPEC_MonolithUI.md). The 4 GAS aliases (`bind_widget_to_attribute`, `unbind_widget_attribute`, `list_attribute_bindings`, `clear_widget_attribute_bindings`) come from `MonolithGAS/Private/MonolithGASUIBindingActions.cpp` and dispatch to the same handlers as their canonical `gas::` versions |
 | MonolithGAS | gas | 135 | 131 documented in the Action Categories table + 4 UI binding actions (`bind_widget_to_attribute`, `unbind_widget_attribute`, `list_attribute_bindings`, `clear_widget_attribute_bindings`) — the latter four are also aliased into `ui` |
 | MonolithComboGraph | combograph | 13 | |
 | MonolithAI | ai | 221 | Phase J F8 added `add_perception_to_actor` and `get_bt_graph` — pre-J baseline was 219, not the previously documented 229 (per-category `~N` estimates in SPEC_MonolithAI were aspirational, not literal) |
 | MonolithLogicDriver | logicdriver | 66 | |
 | MonolithAudio | audio | 86 | 82 documented in the Action Categories table + 4 perception bind actions (`bind_sound_to_perception`, `unbind_sound_from_perception`, `get_sound_perception_binding`, `list_perception_bound_sounds`) |
 | MonolithBABridge | — | 0 (integration only) | |
-| **Total** | | **1286** registrations across 16 namespaces (1241 active by default; 45 town-gen experimental disabled) | The `ui` namespace double-counts 4 aliased GAS actions; **distinct** action handlers = **1282** |
+| **Total** | | **1278** registrations across 16 namespaces + 4 `monolith_*` meta = **1274 in-tree namespace actions** active by default (45 town-gen experimental disabled). With town gen registered: 1323. Without `WITH_COMMONUI`: 1223 (and 1268 with town gen); without `WITH_GBA`: 1143 (1188 w/ town gen); without both: 1092 (1137 w/ town gen) | The `ui` namespace double-counts 4 aliased GAS actions; **distinct** action handlers = **1270** in default-active configuration, **1319** with town gen registered |
 
-**Note:** MonolithMesh includes 195 core actions (always registered) plus 45 experimental Procedural Town Generator actions (registered only when `bEnableProceduralTownGen = true`, default: false — known geometry issues). MonolithGAS is conditional on `#if WITH_GBA` — projects without GameplayAbilities register 0 GAS actions. MonolithComboGraph is conditional on `#if WITH_COMBOGRAPH` — projects without the ComboGraph plugin register 0 combograph actions. MonolithAI is conditional on `#if WITH_STATETREE` + `#if WITH_SMARTOBJECTS` — projects without these register 0 AI actions. MonolithLogicDriver is conditional on `#if WITH_LOGICDRIVER` — projects without Logic Driver Pro register 0 logicdriver actions. MonolithAudio MetaSound actions are conditional on `#if WITH_METASOUND` — projects without MetaSound get Sound Cue + CRUD + batch actions but no MetaSound graph building. MonolithUI includes 42 UMG baseline actions (always registered) plus 50 CommonUI actions (registered only when `WITH_COMMONUI=1` — projects without CommonUI register 42 UI actions). MonolithBABridge registers no MCP actions — it only provides the `IMonolithGraphFormatter` IModularFeatures bridge consumed by `auto_layout` in the blueprint, material, animation, and niagara modules. The original Python server had higher tool counts (~231 tools) due to fragmented action design — Monolith consolidates these into 19 MCP tools with namespaced actions.
+**Note:** MonolithMesh includes 194 core actions (always registered) plus 45 experimental Procedural Town Generator actions (registered only when `bEnableProceduralTownGen = true`, default: false — known geometry issues). MonolithGAS is conditional on `#if WITH_GBA` — projects without GameplayAbilities register 0 GAS actions. MonolithComboGraph is conditional on `#if WITH_COMBOGRAPH` — projects without the ComboGraph plugin register 0 combograph actions. MonolithAI is conditional on `#if WITH_STATETREE` + `#if WITH_SMARTOBJECTS` — projects without these register 0 AI actions. MonolithLogicDriver is conditional on `#if WITH_LOGICDRIVER` — projects without Logic Driver Pro register 0 logicdriver actions. MonolithAudio MetaSound actions are conditional on `#if WITH_METASOUND` — projects without MetaSound get Sound Cue + CRUD + batch actions but no MetaSound graph building. MonolithUI includes 66 always-on actions (Widget CRUD + Slot + Templates + Styling + v1 Animation + v2 hoisted Animation + Bindings + Settings + Accessibility + Hoisted Design Import + EffectSurface + Spec Builder + Type Registry diagnostic) plus 51 CommonUI actions (50 in `Source/MonolithUI/Private/CommonUI/*.cpp` + 1 inline `dump_style_cache_stats` lambda in `MonolithUIModule.cpp`, all registered only when `WITH_COMMONUI=1`). Projects without CommonUI register 66 `ui::` actions; the full-stack configuration registers 117. The Phase A–L architecture expansion (2026-04-26) added the Spec System (`build_ui_from_spec` / `dump_ui_spec_schema` / `dump_ui_spec`), Type Registry + per-type property allowlist, EffectSurface widget + sub-bag setters, and the dedup-driven Style Service. See [`specs/SPEC_MonolithUI.md`](specs/SPEC_MonolithUI.md) for the full breakdown. MonolithBABridge registers no MCP actions — it only provides the `IMonolithGraphFormatter` IModularFeatures bridge consumed by `auto_layout` in the blueprint, material, animation, and niagara modules. The original Python server had higher tool counts (~231 tools) due to fragmented action design — Monolith consolidates these into 19 MCP tools with namespaced actions.
 
 ---
 

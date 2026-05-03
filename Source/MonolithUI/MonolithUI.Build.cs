@@ -9,14 +9,37 @@ public class MonolithUI : ModuleRules
 
         PublicDependencyModuleNames.AddRange(new string[]
         {
-            "Core", "CoreUObject", "Engine"
+            "Core", "CoreUObject", "Engine",
+            // EditorSubsystem is Public because UMonolithUIRegistrySubsystem
+            // (a UEditorSubsystem) is declared in Public/Registry/. Downstream
+            // modules that include the header need the parent class visible.
+            "EditorSubsystem"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[]
         {
             "MonolithCore", "UnrealEd", "UMG", "UMGEditor",
             "Slate", "SlateCore", "Json", "JsonUtilities",
-            "KismetCompiler", "MovieScene", "MovieSceneTracks"
+            "KismetCompiler", "MovieScene", "MovieSceneTracks",
+            // Hoisted action requirements (Phase D — texture/font ingest, gradient MID factory):
+            //   ImageWrapper / ImageCore        -- import_texture_from_bytes (PNG/JPG/etc decode)
+            //   AssetTools                      -- CreateUniqueAssetName for new assets on disk
+            //   Kismet                          -- FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified
+            //   MaterialEditor                  -- UMaterialEditingLibrary::UpdateMaterialInstance
+            "ImageWrapper", "ImageCore",
+            "AssetTools",
+            "Kismet",
+            "MaterialEditor",
+            // Phase G: UMonolithUISettings derives from UDeveloperSettings,
+            // which lives in the DeveloperSettings module (NOT Engine).
+            // Verified at C:\Program Files (x86)\UE_5.7\Engine\Source\Runtime\
+            // DeveloperSettings\Public\Engine\DeveloperSettings.h:23
+            // (UCLASS(Abstract, MinimalAPI) in module DeveloperSettings).
+            // Missing this dep = LNK2019 on the constructor symbol.
+            "DeveloperSettings",
+            // Automation tests and editor helpers query assets generically
+            // without hardcoding optional provider mount names.
+            "AssetRegistry"
         });
 
         // CommonUI optional integration — detected across 3 install vectors so the

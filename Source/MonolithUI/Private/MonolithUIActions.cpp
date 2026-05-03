@@ -7,6 +7,16 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/SavePackage.h"
 
+// Phase C: set_widget_property routes through the allowlist-gated reflection
+// helper. The legacy bare-FProperty::ImportText_Direct path is preserved
+// behind the `raw_mode=true` opt-out so existing call sites that previously
+// relied on writing arbitrary properties unconditionally still work.
+#include "Editor.h"
+#include "Registry/MonolithUIRegistrySubsystem.h"
+#include "Registry/UIPropertyAllowlist.h"
+#include "Registry/UIPropertyPathCache.h"
+#include "Registry/UIReflectionHelper.h"
+
 void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
     Registry.RegisterAction(
@@ -63,14 +73,15 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("set_widget_property"),
-        TEXT("Set a property on a widget (text, color, opacity, visibility, etc.)"),
+        TEXT("Set a property on a widget (text, color, opacity, visibility, etc.). Default mode gates writes through the per-type curated allowlist; pass raw_mode=true to bypass the gate (legacy compat)."),
         FMonolithActionHandler::CreateStatic(&HandleSetWidgetProperty),
         FParamSchemaBuilder()
             .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("Target widget name"))
-            .Required(TEXT("property_name"), TEXT("string"), TEXT("Property name: Text, ColorAndOpacity, RenderOpacity, Visibility, etc."))
-            .Required(TEXT("value"), TEXT("string"), TEXT("Property value as string"))
+            .Required(TEXT("property_name"), TEXT("string"), TEXT("Property path. Dotted segments allowed (e.g. 'Padding.Left'). Allowlist-gated unless raw_mode=true."))
+            .Required(TEXT("value"), TEXT("string"), TEXT("Property value. Strings, numbers, booleans, JSON arrays/objects all accepted; struct types (Vector2D/LinearColor/Margin/Vector4/SlateColor) accept multiple shapes."))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile after setting"), TEXT("false"))
+            .Optional(TEXT("raw_mode"), TEXT("boolean"), TEXT("Bypass the allowlist gate (legacy unconditional ImportText_Direct path). Default false."), TEXT("false"))
             .Build()
     );
 
@@ -126,8 +137,17 @@ FMonolithActionResult FMonolithUIActions::HandleCreateWidgetBlueprint(const TSha
     }
     if (!ParentClass || !ParentClass->IsChildOf(UUserWidget::StaticClass()))
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Parent class '%s' not found or not a UUserWidget subclass"), *ParentClassName));
+        // Phase K — surface the failure in FUISpecError shape so the LLM gets
+        // category/json_path/suggested_fix/valid_options fields. The valid_options
+        // list intentionally enumerates only the common parent classes (the
+        // FindFirstObject path supports any UUserWidget subclass — listing
+        // every BP-derived UserWidget would explode).
+        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+            TEXT("Type"),
+            TEXT("/parent_class"),
+            FString::Printf(TEXT("Parent class '%s' not found or not a UUserWidget subclass."), *ParentClassName),
+            TEXT("Use a token (UserWidget / CommonActivatableWidget / CommonUserWidget) or a full /Script/Module.Class path."),
+            { TEXT("UserWidget"), TEXT("CommonActivatableWidget"), TEXT("CommonUserWidget") }));
     }
 
     // Create package
@@ -141,22 +161,35 @@ FMonolithActionResult FMonolithUIActions::HandleCreateWidgetBlueprint(const TSha
     UPackage* Package = CreatePackage(*SavePath);
     if (!Package)
     {
-        return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package: %s"), *SavePath));
+        // Phase K — internal error (-32603), not invalid-params: the path passed
+        // earlier validation but the engine refused. Caller can't fix this from
+        // their end without changing the path.
+        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+            TEXT("AssetCreate"),
+            TEXT("/save_path"),
+            FString::Printf(TEXT("CreatePackage failed for '%s'."), *SavePath),
+            TEXT("Verify the path is writeable and not in use by the editor.")), -32603);
     }
 
     // Fail cleanly if the asset already exists instead of letting FactoryCreateNew assert.
     if (FindObject<UObject>(Package, *AssetName))
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget Blueprint already exists at '%s'"), *SavePath));
+        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+            TEXT("AssetExists"),
+            TEXT("/save_path"),
+            FString::Printf(TEXT("Widget Blueprint already exists at '%s'."), *SavePath),
+            TEXT("Pick a different save_path, or delete the existing asset first.")));
     }
 
     const FString ObjectPath = FString::Printf(TEXT("%s.%s"), *SavePath, *AssetName);
     FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
     if (AssetRegistryModule.Get().GetAssetByObjectPath(FSoftObjectPath(ObjectPath)).IsValid())
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget Blueprint already exists at '%s'"), *SavePath));
+        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+            TEXT("AssetExists"),
+            TEXT("/save_path"),
+            FString::Printf(TEXT("Widget Blueprint already exists at '%s' (asset registry)."), *SavePath),
+            TEXT("Pick a different save_path, or delete the existing asset first.")));
     }
 
     // Create widget blueprint via factory
@@ -293,8 +326,18 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
     UClass* WidgetClass = MonolithUIInternal::WidgetClassFromName(WidgetClassName);
     if (!WidgetClass)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Unknown widget class: %s. Use list_widget_types to see available classes."), *WidgetClassName));
+        // Phase K — surface as FUISpecError. Common widget tokens go in
+        // valid_options as a starter list; the full surface lives behind
+        // ui::list_widget_types (referenced in suggested_fix).
+        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+            TEXT("Type"),
+            TEXT("/widget_class"),
+            FString::Printf(TEXT("Unknown widget class token: '%s'."), *WidgetClassName),
+            TEXT("Call ui::list_widget_types for the full registered set, or pass a /Script/UMG.Class path."),
+            { TEXT("CanvasPanel"), TEXT("VerticalBox"), TEXT("HorizontalBox"), TEXT("Overlay"),
+              TEXT("TextBlock"), TEXT("RichTextBlock"), TEXT("Image"), TEXT("Button"),
+              TEXT("Border"), TEXT("SizeBox"), TEXT("ProgressBar"), TEXT("CheckBox"),
+              TEXT("Slider"), TEXT("EditableText"), TEXT("EditableTextBox"), TEXT("ScrollBox") }));
     }
 
     // Widget name
@@ -316,8 +359,14 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
 
     if (!ParentPanel)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Parent '%s' not found or is not a panel widget"), *ParentName));
+        // Phase K — Lookup-class error. Cannot enumerate live widget names in
+        // valid_options without scanning the WidgetTree (the suggested_fix
+        // points the LLM at get_widget_tree for that lookup).
+        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+            TEXT("Lookup"),
+            TEXT("/parent_name"),
+            FString::Printf(TEXT("Parent '%s' not found or is not a panel widget."), *ParentName),
+            TEXT("Call ui::get_widget_tree to enumerate live widget names; the parent must be a UPanelWidget subclass.")));
     }
 
     // Construct widget
@@ -528,12 +577,37 @@ FMonolithActionResult FMonolithUIActions::HandleRemoveWidget(const TSharedPtr<FJ
 }
 
 // --- set_widget_property ---
+//
+// Phase C rewrite (2026-04-26): the handler now routes through
+// FUIReflectionHelper. Default mode (`raw_mode=false`) gates the write through
+// the per-type curated allowlist on FUIPropertyAllowlist; `raw_mode=true`
+// preserves the legacy bare-FProperty::ImportText_Direct path so any existing
+// caller that previously wrote arbitrary properties unconditionally keeps
+// working by adding `raw_mode=true` to its parameter dictionary.
+//
+// Value handling: the action schema declares `value` as type "string", but
+// the wire payload is a TSharedPtr<FJsonValue> — callers can supply numbers,
+// booleans, arrays, objects, and the helper dispatches on FProperty kind.
+// We grab the field via TryGetField (not GetStringField) so non-string JSON
+// shapes survive.
 FMonolithActionResult FMonolithUIActions::HandleSetWidgetProperty(const TSharedPtr<FJsonObject>& Params)
 {
+    if (!Params.IsValid())
+    {
+        return FMonolithActionResult::Error(TEXT("set_widget_property: Params is null"));
+    }
+
     FString AssetPath = Params->GetStringField(TEXT("asset_path"));
     FString WidgetName = Params->GetStringField(TEXT("widget_name"));
     FString PropertyName = Params->GetStringField(TEXT("property_name"));
-    FString Value = Params->GetStringField(TEXT("value"));
+    const bool bRawMode = MonolithUIInternal::GetOptionalBool(Params, TEXT("raw_mode"), false);
+
+    // Pull `value` as the raw JSON value so non-string shapes survive.
+    TSharedPtr<FJsonValue> ValueJson = Params->TryGetField(TEXT("value"));
+    if (!ValueJson.IsValid())
+    {
+        return FMonolithActionResult::Error(TEXT("set_widget_property: missing 'value'"));
+    }
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -542,35 +616,102 @@ FMonolithActionResult FMonolithUIActions::HandleSetWidgetProperty(const TSharedP
     UWidget* Widget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
     if (!Widget)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget '%s' not found"), *WidgetName));
+        // Phase K — Lookup error. valid_options is intentionally empty (would
+        // require scanning the live WidgetTree, which the LLM can do via
+        // ui::get_widget_tree as the suggested_fix indicates).
+        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+            TEXT("Lookup"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' not found in WBP '%s'."), *WidgetName, *AssetPath),
+            TEXT("Call ui::get_widget_tree to enumerate live widget names.")));
     }
 
-    // Try reflection-based property set first
-    FProperty* Prop = Widget->GetClass()->FindPropertyByName(FName(*PropertyName));
-    if (Prop)
+    // ----- Phase C primary path: gated reflection helper -----
+    UMonolithUIRegistrySubsystem* Sub = UMonolithUIRegistrySubsystem::Get();
+    FUIPropertyPathCache* Cache = Sub ? Sub->GetPathCache() : nullptr;
+    const FUIPropertyAllowlist* Allowlist = Sub ? &Sub->GetAllowlist() : nullptr;
+
+    FUIReflectionHelper Helper(Cache, Allowlist);
+    const FUIReflectionApplyResult ApplyRes = Helper.Apply(Widget, PropertyName, ValueJson, bRawMode);
+
+    if (ApplyRes.bSuccess)
     {
-        void* PropAddr = Prop->ContainerPtrToValuePtr<void>(Widget);
-        if (Prop->ImportText_Direct(*Value, PropAddr, Widget, PPF_None))
+        Widget->SynchronizeProperties();
+        FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
+
+        const bool bCompile = MonolithUIInternal::GetOptionalBool(Params, TEXT("compile"), false);
+        if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
+
+        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+        Result->SetStringField(TEXT("widget"), WidgetName);
+        Result->SetStringField(TEXT("property"), PropertyName);
+        // Echo the value as its string serialisation for compat with existing
+        // call-site expectations (legacy result included a `value` string).
+        Result->SetStringField(TEXT("value"), ValueJson->AsString());
+        Result->SetBoolField(TEXT("compiled"), bCompile);
+        Result->SetBoolField(TEXT("raw_mode"), bRawMode);
+        return FMonolithActionResult::Success(Result);
+    }
+
+    // ----- Failure path: propagate the helper's structured reason -----
+    //
+    // Phase K: replaced the prior `| reason=X detail=Y` interim shape with the
+    // FUISpecError formatter so the payload now carries category / json_path /
+    // suggested_fix / valid_options on the same key:value rails as the
+    // `build_ui_from_spec` validation block. For NotInAllowlist failures we
+    // populate valid_options with the actual allowlist entries for this
+    // widget type so the LLM can pick a legal path on its next attempt.
+    FString SuggestedFix;
+    TArray<FString> ValidOptions;
+    FName Category = TEXT("Property");
+
+    if (ApplyRes.FailureReason == TEXT("NotInAllowlist"))
+    {
+        Category = TEXT("Allowlist");
+        SuggestedFix = TEXT("Path not on the curated per-type allowlist. Pick a path from valid_options, or pass raw_mode=true to bypass the gate (legacy compat).");
+        if (Allowlist)
         {
-            Widget->SynchronizeProperties();
-            FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
-
-            const bool bCompile = MonolithUIInternal::GetOptionalBool(Params, TEXT("compile"), false);
-            if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
-
-            TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-            Result->SetStringField(TEXT("widget"), WidgetName);
-            Result->SetStringField(TEXT("property"), PropertyName);
-            Result->SetStringField(TEXT("value"), Value);
-            Result->SetBoolField(TEXT("compiled"), bCompile);
-            return FMonolithActionResult::Success(Result);
+            // Pull the live allowlist for this widget type. The list can be
+            // empty (registry not yet populated, type not on the allowlist):
+            // in that case suggested_fix still names raw_mode as the escape.
+            const FName Token = FName(*Widget->GetClass()->GetName());
+            ValidOptions = Allowlist->GetAllowedPaths(Token);
         }
     }
+    else if (ApplyRes.FailureReason == TEXT("PropertyNotFound"))
+    {
+        Category = TEXT("Property");
+        SuggestedFix = TEXT("Property not found via reflection on the widget class. Verify the property name spelling and walk through any FStructProperty hops with dotted segments (e.g. 'Padding.Left').");
+    }
+    else if (ApplyRes.FailureReason == TEXT("ParseFailed"))
+    {
+        Category = TEXT("ValueParse");
+        SuggestedFix = TEXT("Could not parse the value into the property's struct/scalar shape. Check the FProperty kind (Color/Vector2D/Margin/enum) and supply the matching JSON literal or struct.");
+    }
+    else if (ApplyRes.FailureReason == TEXT("TypeMismatch"))
+    {
+        Category = TEXT("TypeMismatch");
+        SuggestedFix = TEXT("Value JSON shape doesn't match the FProperty's expected type. See ApplyRes.Detail for the expected kind (e.g. 'expected number', 'expected bool').");
+    }
+    else
+    {
+        SuggestedFix = TEXT("Unknown failure mode. Check the editor log for ApplyRes.Detail context.");
+    }
 
-    return FMonolithActionResult::Error(
-        FString::Printf(TEXT("Property '%s' not found on %s or value '%s' could not be parsed"),
-            *PropertyName, *Widget->GetClass()->GetName(), *Value));
+    FUISpecError E = MonolithUIInternal::MakeSpecError(
+        Category,
+        FString::Printf(TEXT("/property_name (%s)"), *PropertyName),
+        FString::Printf(TEXT("set_widget_property failed: %s on %s.%s (%s)"),
+            *ApplyRes.FailureReason,
+            *Widget->GetClass()->GetName(),
+            *PropertyName,
+            *ApplyRes.Detail),
+        SuggestedFix,
+        MoveTemp(ValidOptions));
+    E.WidgetId = FName(*WidgetName);
+    // -32602 is JSON-RPC "invalid params" — gate-rejection is caller-input,
+    // not internal-error.
+    return MonolithUIInternal::MakeErrorFromSpecError(E, -32602);
 }
 
 // --- compile_widget ---
@@ -583,12 +724,27 @@ FMonolithActionResult FMonolithUIActions::HandleCompileWidget(const TSharedPtr<F
 
     FKismetEditorUtilities::CompileBlueprint(WBP);
 
+    // Phase K — when the compiler reports BS_Error, surface that as an
+    // FUISpecError-shaped failure rather than a success-with-status=error.
+    // The LLM consumer can branch cleanly on bSuccess instead of having to
+    // parse a string status field from a "successful" call.
+    if (WBP->Status == BS_Error)
+    {
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Compile"),
+            TEXT("/asset_path"),
+            FString::Printf(TEXT("Blueprint '%s' compiled with errors (BS_Error)."), *AssetPath),
+            TEXT("Open the WBP in the editor to see compiler diagnostics, or call ui::get_widget_tree to inspect the structural state."));
+        return MonolithUIInternal::MakeErrorFromSpecError(E, -32603);
+    }
+
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
     Result->SetStringField(TEXT("asset_path"), AssetPath);
     Result->SetBoolField(TEXT("compiled"), true);
     Result->SetStringField(TEXT("status"),
         WBP->Status == BS_UpToDate ? TEXT("up_to_date") :
-        WBP->Status == BS_Error ? TEXT("error") : TEXT("unknown"));
+        WBP->Status == BS_Dirty    ? TEXT("dirty") :
+        WBP->Status == BS_Unknown  ? TEXT("unknown") : TEXT("other"));
     return FMonolithActionResult::Success(Result);
 }
 

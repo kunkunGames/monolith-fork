@@ -18,7 +18,7 @@ It works with **Claude Code**, **Cursor**, or any MCP-compatible client. If your
 
 ## Why Monolith?
 
-Most MCP integrations register every action as a separate tool, which floods the AI's context window and buries the actually useful stuff. Monolith uses a **namespace dispatch pattern** instead: each domain exposes a single `{namespace}_query(action, params)` tool, and a central `monolith_discover()` call lists everything available. Small tool list (19 tools), massive capability (1286 actions across 16 modules; sibling plugins push it past 1460 when loaded). The AI gets oriented fast and spends its context on your actual problem.
+Most MCP integrations register every action as a separate tool, which floods the AI's context window and buries the actually useful stuff. Monolith uses a **namespace dispatch pattern** instead: each domain exposes a single `{namespace}_query(action, params)` tool, and a central `monolith_discover()` call lists everything available. Small tool list (20 tools), massive capability (1274 actions across 16 in-tree namespaces; sibling plugins add their own and push the live registry higher when loaded). The AI gets oriented fast and spends its context on your actual problem.
 
 ## What Can It Actually Do?
 
@@ -30,9 +30,9 @@ Most MCP integrations register every action as a separate tool, which floods the
 
 **Niagara (109 actions)** — Full system and emitter lifecycle — create, duplicate, configure, compile, save. Module CRUD with override-preserving reorder so you don't blow away artist tweaks. Complete dynamic input lifecycle: attach inputs, inspect the tree, read values, remove them. Event handler and simulation stage CRUD. Niagara Parameter Collections with full param management. Effect Type creation with scalability and culling configuration. Per-quality-level scalability settings. Renderer helpers for every type — mesh assignment, ribbon presets (trail, beam, lightning, tube), SubUV and flipbook setup. Data interface configuration and property inspection handles JSON arrays and structs natively. Diff two systems to see exactly what changed. Clone overrides between modules, duplicate modules, discover parameter bindings, inspect module outputs, rename user parameters. Batch execute with read-only optimization so queries don't trigger unnecessary recompiles. Full `export_system_spec` and `import_system_spec` with merge mode. Covers the full Niagara workflow from system creation to final polish.
 
-**UI (96 actions)** — Widget Blueprint CRUD with full widget tree manipulation. 42 UMG baseline actions plus 50 CommonUI actions (CommonUI conditional on `WITH_COMMONUI`, 9 categories shipped v0.14.0). 4 GAS attribute-binding actions also surface in the `ui` namespace as aliases. Pre-built templates for common game UI: HUD elements, menus, settings panels, confirmation dialogs, loading screens, inventory grids, save slot lists, notification toasts. Style everything — brushes, fonts, color schemes, batch style operations. Create keyframed widget animations. Full game scaffolding: settings systems, save/load, audio config, input remapping, accessibility features. Run accessibility audits, set up colorblind modes, configure text scaling. Covers the full UI workflow from widget creation to accessibility.
+**UI (121 actions)** — Widget Blueprint CRUD with full widget tree manipulation. 66 always-on actions (UMG baseline + Animation v2 + EffectSurface + Spec Builder + Type Registry + hoisted Design Import) plus 51 CommonUI actions (CommonUI conditional on `WITH_COMMONUI`, 9 categories shipped v0.14.0, +1 style-cache diagnostic) = 117 module-owned. 4 GAS attribute-binding actions also surface in the `ui` namespace as aliases for 121 distinct registrations. Pre-built templates for common game UI: HUD elements, menus, settings panels, confirmation dialogs, loading screens, inventory grids, save slot lists, notification toasts. Style everything — brushes, fonts, color schemes, batch style operations. Create keyframed widget animations. Full game scaffolding: settings systems, save/load, audio config, input remapping, accessibility features. Run accessibility audits, set up colorblind modes, configure text scaling. Covers the full UI workflow from widget creation to accessibility.
 
-**Editor (22 actions)** — Trigger full UBT builds or Live Coding compiles, read build errors and compiler output, search and tail editor logs, get crash context after failures. Capture preview screenshots of any asset — materials, Niagara systems, meshes. Capture multi-frame GIF sequences. Import textures, stitch flipbooks, delete assets, create blank maps from the factory, query module status. The AI can compile your code, read the errors, fix the C++, recompile, and verify the fix — all without you touching the editor.
+**Editor (24 actions)** — Trigger full UBT builds or Live Coding compiles, read build errors and compiler output, search and tail editor logs, get crash context after failures. Capture preview screenshots of any asset — materials, Niagara systems, meshes. Capture multi-frame GIF sequences. Import textures, stitch flipbooks, delete assets, create blank maps from the factory, query module status, list/run UE automation tests by full-path prefix. The AI can compile your code, read the errors, fix the C++, recompile, and verify the fix — all without you touching the editor.
 
 **Config (6 actions)** — Full INI resolution chain awareness: Base, Platform, Project, User. Ask what any setting does, where it's overridden, what the effective value is, and how it differs from the engine default. Search across all config files at once. Perfect for performance tuning sessions where you want the AI to just sort out your INIs.
 
@@ -75,7 +75,7 @@ Most MCP integrations register every action as a separate tool, which floods the
 - **Auto-updater** — Off by default as of v0.14.6. When enabled, checks GitHub Releases on editor startup, verifies SHA256 against the release notes marker, downloads and stages updates, auto-swaps on exit
 - **MCP auto-reconnect proxy** — stdio-to-HTTP proxy keeps Claude Code sessions alive across editor restarts. Available as native exe (zero dependencies) or Python script (fallback)
 - **Optional module system** — Extend Monolith with new MCP namespaces for third-party plugins (GeometryScripting, BlueprintAssist, GBA, ComboGraph, Logic Driver, MetaSound) without breaking the build for users who don't own them. The sibling-plugin pattern lets you ship your own integration plugin alongside Monolith — see `Docs/SIBLING_PLUGIN_GUIDE.md`
-- **Claude Code skills** — 15 domain-specific workflow guides bundled with the plugin
+- **Claude Code skills** — 16 domain-specific workflow guides bundled with the plugin
 - **Pure C++** — Direct UE API access, embedded HTTP MCP server, zero external dependencies
 
 ---
@@ -224,7 +224,7 @@ Different AI coding assistants use different conventions for project-instruction
 
 Practical prompt to feed your assistant once Monolith is installed and running:
 
-> *"I've installed the Monolith Unreal plugin. It exposes ~1239 actions across 16 namespaces (`blueprint`, `material`, `animation`, `niagara`, `mesh`, `ui`, `gas`, `ai`, `audio`, etc.) over an in-process MCP HTTP listener at `http://localhost:9316/mcp`. What's the best-practice format for a project-instructions file for [your assistant — e.g. `CLAUDE.md`, `AGENTS.md`, `.cursorrules`]? It should help with action discovery via `monolith_discover()`, asset-path conventions like `/Game/Path/Asset`, and verifying UE 5.7 APIs via `source_query` before writing code."*
+> *"I've installed the Monolith Unreal plugin. It exposes ~1274 actions across 16 namespaces (`blueprint`, `material`, `animation`, `niagara`, `mesh`, `ui`, `gas`, `ai`, `audio`, etc.) over an in-process MCP HTTP listener at `http://localhost:9316/mcp`. What's the best-practice format for a project-instructions file for [your assistant — e.g. `CLAUDE.md`, `AGENTS.md`, `.cursorrules`]? It should help with action discovery via `monolith_discover()`, asset-path conventions like `/Game/Path/Asset`, and verifying UE 5.7 APIs via `source_query` before writing code."*
 
 Whatever your AI generates, drop it at the appropriate path for your toolchain. The action counts and workflow notes from this README's earlier sections are usable input.
 
@@ -272,24 +272,25 @@ Monolith.uplugin
   MonolithNiagara       — Niagara particle systems, dynamic inputs, event handlers, sim stages, NPC, scalability (109 actions)
   MonolithMesh          — Mesh inspection, scene manipulation, spatial queries, blockout, procedural geometry, horror/accessibility (240 actions: 195 core + 45 experimental town gen)
   MonolithAI            — Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, Controllers, Perception, Navigation (221 actions)
-  MonolithEditor        — Build triggers, log capture, compile output, crash context, GIF capture, blank map factory, module status (22 actions)
+  MonolithEditor        — Build triggers, log capture, compile output, crash context, GIF capture, blank map factory, module status, automation test list/run (24 actions)
   MonolithConfig        — Config/INI resolution and search (6 actions)
   MonolithIndex         — SQLite FTS5 deep project indexer, marketplace content, 14 asset indexers (7 actions)
   MonolithSource        — Native C++ engine source indexer, call graphs, class hierarchy, hot-reload-aware reindex (11 actions)
-  MonolithUI            — UI widget Blueprint CRUD, templates, styling, animation, CommonUI (96 actions: 42 UMG + 50 CommonUI + 4 GAS aliases)
+  MonolithUI            — UI widget Blueprint CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, CommonUI (121 actions: 66 always-on + 51 CommonUI + 4 GAS aliases)
   MonolithGAS           — Gameplay Ability System: abilities, effects, attributes, ASC, tags, cues, targeting, ULeviathanVitalsSet template (135 actions)
   MonolithLogicDriver   — Logic Driver Pro state machines: SM CRUD, graph read/write, JSON spec, scaffolding (66 actions)
   MonolithComboGraph    — ComboGraph combo trees: graph CRUD, nodes, edges, effects, cues (13 actions)
   MonolithAudio         — Audio asset CRUD, Sound Cue + MetaSound graph building, batch ops, templates, AI perception binding, sine test wave (86 actions)
   MonolithAudioRuntime  — Runtime sub-module supplying perception classes for audio.bind_sound_to_perception (0 MCP actions)
   MonolithBABridge      — Blueprint Assist integration bridge (0 MCP actions — IModularFeatures only)
+  MonolithLevelSequence — Level Sequence introspection: full per-LS binding inventory (legacy Possessable/Spawnable + UE 5.7 UMovieSceneCustomBinding family), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup (8 actions)
 
 Standalone Tools (in Binaries/)
   monolith_proxy.exe    — MCP stdio-to-HTTP proxy (zero UE dependency, WinHTTP + nlohmann/json)
   monolith_query.exe    — Offline DB query tool (zero UE dependency, sqlite3 amalgamation)
 ```
 
-**1286 actions total across 16 namespaces (1241 active by default; 45 town-gen experimental disabled), exposed through 19 MCP tools. Distinct handlers: 1282 — the `ui` namespace double-counts 4 aliased GAS attribute-binding actions.** Live editors with sibling plugins loaded report higher counts (e.g. with all 4 sibling plugins loaded: 1462 actions across 20 namespaces).
+**1274 actions across 16 in-tree namespaces, exposed through 20 MCP tools (16 namespace dispatchers + 4 `monolith_*` meta-tools). Distinct handlers: 1270 — the `ui` namespace double-counts 4 aliased GAS attribute-binding actions. 45 town-gen experimental actions are disabled by default (`bEnableProceduralTownGen=false`); enabling them brings the in-tree registry to 1319.** Live editors with sibling plugins loaded report higher counts (sibling plugins are documented in their own repos).
 
 ### Tool Reference
 
@@ -309,11 +310,12 @@ Standalone Tools (in Binaries/)
 | `logicdriver` | `logicdriver_query` | 66 | Logic Driver Pro state machines — SM CRUD, graph read/write, JSON spec, scaffolding, components. Conditional on `WITH_LOGICDRIVER` |
 | `combograph` | `combograph_query` | 13 | ComboGraph combo trees — graph CRUD, nodes, edges, effects, cues, ability scaffolding. Conditional on `WITH_COMBOGRAPH` |
 | `audio` | `audio_query` | 86 | Sound asset CRUD, Sound Cue + MetaSound graph building, batch ops, audio health checks, templates, sine test wave, AI perception binding. MetaSound features conditional on `WITH_METASOUND` |
-| `ui` | `ui_query` | 96 (42 + 50 + 4) | UMG widget CRUD, templates, styling, animation, settings scaffolding, accessibility. CommonUI 50 actions conditional on `WITH_COMMONUI`. 4 GAS attribute-binding aliases also live here |
-| `editor` | `editor_query` | 22 | Build triggers, error logs, compile output, crash context, scene capture, GIF capture, texture import, blank map factory, module status |
+| `ui` | `ui_query` | 121 (66 + 51 + 4) | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility. CommonUI 51 actions conditional on `WITH_COMMONUI`. 4 GAS attribute-binding aliases also live here |
+| `editor` | `editor_query` | 24 | Build triggers, error logs, compile output, crash context, scene capture, GIF capture, texture import, blank map factory, module status, UE automation test list/run |
 | `config` | `config_query` | 6 | INI resolution, explain, diff, search |
 | `project` | `project_query` | 7 | Deep project search — FTS5 across all indexed assets including marketplace plugins |
 | `source` | `source_query` | 11 | Native C++ engine source lookup, call graphs, class hierarchy, project reindex, hot-reload-aware refresh |
+| `level_sequence` | `level_sequence_query` | 8 | Level Sequence inspection: full binding inventory (one row per Guid×BindingIndex with kind classification — legacy Possessable/Spawnable + UE 5.7 UMovieSceneSpawnableActorBinding / Replaceable / Custom), Director Blueprint own functions (user / custom_event / sequencer_endpoint) and variables, event-track bindings with Director-function resolution, cross-sequence reverse lookup of function callers |
 
 ---
 
@@ -456,7 +458,7 @@ Settings live at **Editor Preferences > Plugins > Monolith**:
 
 ## Skills
 
-Monolith bundles 15 Claude Code skills in `Skills/` — domain-specific workflow guides that give your AI the right mental model for each area:
+Monolith bundles 16 Claude Code skills in `Skills/` — domain-specific workflow guides that give your AI the right mental model for each area:
 
 | Skill | Description |
 |-------|-------------|
@@ -470,6 +472,7 @@ Monolith bundles 15 Claude Code skills in `Skills/` — domain-specific workflow
 | `unreal-gas` | Gameplay Ability System — abilities, effects, attributes, ASC, tags, cues |
 | `unreal-logicdriver` | Logic Driver Pro state machines — SM CRUD, graph editing, JSON spec, scaffolding |
 | `unreal-combograph` | ComboGraph combo trees — graph CRUD, nodes, edges, effects, ability scaffolding |
+| `unreal-level-sequences` | Level Sequence inspection — full binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
 | `unreal-debugging` | Build errors, log search, crash context |
 | `unreal-performance` | Config auditing, shader stats, INI tuning |
 | `unreal-project-search` | FTS5 search syntax, reference tracing |
