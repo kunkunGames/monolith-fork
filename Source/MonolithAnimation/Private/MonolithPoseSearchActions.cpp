@@ -1,5 +1,6 @@
 #include "MonolithPoseSearchActions.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
 
 #include "PoseSearch/PoseSearchDatabase.h"
@@ -444,6 +445,11 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleCreatePoseSearchSchema(c
 	if (FMonolithAssetUtils::LoadAssetByPath<UObject>(AssetPath))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
 
@@ -507,6 +513,11 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleCreatePoseSearchDatabase
 
 	if (FMonolithAssetUtils::LoadAssetByPath<UObject>(AssetPath))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
