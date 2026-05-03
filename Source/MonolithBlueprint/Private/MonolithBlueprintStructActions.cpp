@@ -1,5 +1,6 @@
 #include "MonolithBlueprintStructActions.h"
 #include "MonolithBlueprintInternal.h"
+#include "MonolithPackagePathValidator.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
@@ -119,6 +120,10 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 	}
 
 	// Create package
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
@@ -282,6 +287,10 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedEn
 	}
 
 	// Create package
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
@@ -466,6 +475,10 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataTable(con
 	}
 
 	// Create package
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
@@ -820,6 +833,10 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataAsset(con
 	}
 
 	// Create package
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{

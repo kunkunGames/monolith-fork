@@ -1,5 +1,6 @@
 #include "MonolithBlueprintCompileActions.h"
 #include "MonolithBlueprintInternal.h"
+#include "MonolithPackagePathValidator.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
@@ -435,6 +436,10 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleCreateBlueprint(co
 	}
 
 	// Create the package — use the full save path as package name.
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 	// CreatePackage returns an existing in-memory package if one exists at
 	// this path (e.g. leftover from a prior crashed attempt).
 	UPackage* Package = CreatePackage(*SavePath);
