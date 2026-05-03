@@ -20,6 +20,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Rendering/SlateRenderer.h"
 
+#include "MonolithUIInternal.h"
 // ============================================================================
 // Registration
 // ============================================================================
@@ -257,22 +258,9 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleAuditAccessibility(
     }
 
     // Load widget blueprint
-    UObject* Loaded = StaticLoadObject(UWidgetBlueprint::StaticClass(), nullptr, *AssetPath);
-    if (!Loaded)
-    {
-        FString CleanPath = AssetPath;
-        if (!CleanPath.StartsWith(TEXT("/")))
-        {
-            CleanPath = TEXT("/Game/") + CleanPath;
-        }
-        Loaded = StaticLoadObject(UWidgetBlueprint::StaticClass(), nullptr, *CleanPath);
-    }
-    UWidgetBlueprint* WBP = Cast<UWidgetBlueprint>(Loaded);
-    if (!WBP)
-    {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget Blueprint not found: %s"), *AssetPath));
-    }
+    FMonolithActionResult Err;
+    UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
+    if (!WBP) return Err;
 
     if (!WBP->WidgetTree)
     {

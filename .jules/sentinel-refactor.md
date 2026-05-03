@@ -1,0 +1,5 @@
+## 2024-05-02 - [Sentinel Refactor: Widget Blueprint Loading Cohesion]
+**Pattern:** Duplicated ad-hoc path parsing (checking for `/Game/` prefix and using raw `StaticLoadObject`) in `MonolithUIInternal::LoadWidgetBlueprint` and direct action handlers like `MonolithUIAccessibilityActions`.
+**Learning:** `FMonolithAssetUtils::LoadAssetByPath<T>(AssetPath)` provides a canonical, robust 4-tier asset lookup system that correctly normalizes paths and catches missing assets securely.
+**Reuse rule:** Always prefer `FMonolithAssetUtils::LoadAssetByPath<T>` for asset loading instead of writing manual `StaticLoadObject` fallbacks or path manipulation logic. When loading specific blueprints or assets inside a module, route through the module's `Internal` helper (e.g. `MonolithUIInternal::LoadWidgetBlueprint`) if available, and ensure the internal helper leverages `FMonolithAssetUtils`.
+**Avoid:** Avoid using `StaticLoadObject` directly for asset loading in action handlers when `FMonolithAssetUtils` can be used. Avoid duplicating path-normalization logic across multiple files.
