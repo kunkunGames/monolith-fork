@@ -1,5 +1,6 @@
 #include "MonolithAnimationActions.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
 
 #include "Animation/AnimMontage.h"
@@ -3254,6 +3255,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateSequence(const TSha
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg)
 	{
@@ -3329,6 +3335,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontage(const TShar
 	if (FMonolithAssetUtils::LoadAssetByPath<UObject>(AssetPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
+	}
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	UPackage* Pkg = CreatePackage(*AssetPath);
@@ -4814,6 +4825,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateBlendSpace(const TS
 	if (FMonolithAssetUtils::LoadAssetByPath<UObject>(AssetPath))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
 
@@ -4871,6 +4887,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateBlendSpace1D(const 
 	if (FMonolithAssetUtils::LoadAssetByPath<UObject>(AssetPath))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
 
@@ -4919,6 +4940,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateAimOffset(const TSh
 
 	if (FMonolithAssetUtils::LoadAssetByPath<UObject>(AssetPath))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
@@ -4975,6 +5001,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateAimOffset1D(const T
 	if (FMonolithAssetUtils::LoadAssetByPath<UObject>(AssetPath))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
 
@@ -5022,6 +5053,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateComposite(const TSh
 
 	if (FMonolithAssetUtils::LoadAssetByPath<UObject>(AssetPath))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
@@ -5087,6 +5123,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateAnimBlueprint(const
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Parent class '%s' not found or not derived from UAnimInstance"), *ParentClassName));
 		}
+	}
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	UPackage* Pkg = CreatePackage(*AssetPath);
@@ -6390,6 +6431,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleBuildSequenceFromPoses(co
 		if (!AssetPath.FindLastChar('/', LastSlash) || LastSlash == AssetPath.Len() - 1)
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid asset path: %s"), *AssetPath));
 		AssetName = AssetPath.Mid(LastSlash + 1);
+
+		if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+		{
+			return FMonolithActionResult::Error(ValidationError);
+		}
 
 		UPackage* Pkg = CreatePackage(*AssetPath);
 		if (!Pkg) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
