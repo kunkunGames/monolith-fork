@@ -31,7 +31,7 @@ void FMonolithEditorModule::StartupModule()
 		FOnGetDetailCustomizationInstance::CreateStatic(&FMonolithSettingsCustomization::MakeInstance)
 	);
 
-	const int32 EditorActionCount = FMonolithToolRegistry::Get().GetActions(TEXT("editor")).Num();
+	const int32 EditorActionCount = FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("editor"));
 	UE_LOG(LogMonolith, Log, TEXT("Monolith — Editor module loaded (%d editor actions)"), EditorActionCount);
 }
 

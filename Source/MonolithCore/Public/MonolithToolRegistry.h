@@ -130,6 +130,12 @@ public:
 	/** Get total number of registered actions */
 	int32 GetActionCount() const;
 
+	/** Get total number of registered namespaces without allocating a copy */
+	int32 GetNamespaceCount() const;
+
+	/** Get number of registered actions in a namespace without allocating a copy */
+	int32 GetNamespaceActionCount(const FString& Namespace) const;
+
 	/**
 	 * CC-05: Find action names in a namespace that are similar to the given name.
 	 * Uses prefix match + Levenshtein distance to surface "did you mean" suggestions.

@@ -61,7 +61,7 @@ void FMonolithAIModule::StartupModule()
 		});
 	}
 
-	int32 ActionCount = Registry.GetActions(TEXT("ai")).Num();
+	int32 ActionCount = Registry.GetNamespaceActionCount(TEXT("ai"));
 	const TCHAR* MassStatus =
 #if WITH_MASSENTITY
 		TEXT("available");

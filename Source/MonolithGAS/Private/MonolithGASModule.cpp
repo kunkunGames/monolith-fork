@@ -38,7 +38,7 @@ void FMonolithGASModule::StartupModule()
 	FMonolithGASScaffoldActions::RegisterActions(Registry);
 	FMonolithGASUIBindingActions::RegisterActions(Registry);
 
-	int32 ActionCount = Registry.GetActions(TEXT("gas")).Num();
+	int32 ActionCount = Registry.GetNamespaceActionCount(TEXT("gas"));
 	const TCHAR* GbaStatus =
 #if WITH_GBA
 		TEXT("available");
