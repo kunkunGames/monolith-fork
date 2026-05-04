@@ -111,11 +111,12 @@ FMonolithActionResult FMonolithLogicDriverTextGraphActions::HandleGetTextGraphCo
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
-	UBlueprint* SMBlueprint = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!SMBlueprint) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(SMBlueprint);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* SMBlueprint = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, SMBlueprint, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	FString TargetGuid;
 	if (Params->HasField(TEXT("node_guid")))
@@ -171,11 +172,12 @@ FMonolithActionResult FMonolithLogicDriverTextGraphActions::HandleGetDialogueFlo
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
-	UBlueprint* SMBlueprint = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!SMBlueprint) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(SMBlueprint);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* SMBlueprint = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, SMBlueprint, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	// Build flow graph: node info + adjacency
 	struct FDialogueNode

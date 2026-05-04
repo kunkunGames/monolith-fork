@@ -172,6 +172,24 @@ UEdGraph* GetRootGraph(UBlueprint* Blueprint)
 	return nullptr;
 }
 
+bool LoadSMBlueprintAndRootGraph(const FString& AssetPath, UBlueprint*& OutBlueprint, UEdGraph*& OutRootGraph, FString& OutError)
+{
+	OutBlueprint = LoadSMBlueprint(AssetPath, OutError);
+	if (!OutBlueprint)
+	{
+		return false;
+	}
+
+	OutRootGraph = GetRootGraph(OutBlueprint);
+	if (!OutRootGraph)
+	{
+		OutError = TEXT("No root SM graph found");
+		return false;
+	}
+
+	return true;
+}
+
 UEdGraphNode* FindNodeByGuid(UEdGraph* Graph, const FString& GuidString)
 {
 	if (!Graph) return nullptr;

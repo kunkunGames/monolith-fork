@@ -169,11 +169,12 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleValidateStateM
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
-	UBlueprint* SMBlueprint = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!SMBlueprint) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(SMBlueprint);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* SMBlueprint = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, SMBlueprint, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Issues;
 
@@ -689,11 +690,12 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleExplainStateMa
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
-	UBlueprint* SMBlueprint = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!SMBlueprint) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(SMBlueprint);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* SMBlueprint = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, SMBlueprint, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	// Collect state info
 	struct FStateData

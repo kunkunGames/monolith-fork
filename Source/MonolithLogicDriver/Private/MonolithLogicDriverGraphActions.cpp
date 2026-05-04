@@ -248,16 +248,11 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleGetNodeDetails(con
 	}
 
 	FString LoadError;
-	UBlueprint* SMBlueprint = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!SMBlueprint)
+	UBlueprint* SMBlueprint = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, SMBlueprint, RootGraph, LoadError))
 	{
 		return FMonolithActionResult::Error(LoadError);
-	}
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(SMBlueprint);
-	if (!RootGraph)
-	{
-		return FMonolithActionResult::Error(TEXT("No root SM graph found"));
 	}
 
 	UEdGraphNode* Node = MonolithLD::FindNodeByGuid(RootGraph, NodeGuid);
@@ -447,11 +442,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleFindNodesByClass(c
 	if (ClassName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'class_name'"));
 
 	FString LoadError;
-	UBlueprint* SMBlueprint = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!SMBlueprint) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(SMBlueprint);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* SMBlueprint = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, SMBlueprint, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> MatchingNodes;
 
@@ -612,11 +608,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddState(const TSh
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	UClass* StateClass = MonolithLD::GetSMGraphNodeStateClass();
 	if (!StateClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_StateNode class not found — is Logic Driver loaded?"));

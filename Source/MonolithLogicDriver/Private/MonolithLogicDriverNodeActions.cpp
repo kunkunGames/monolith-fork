@@ -134,17 +134,9 @@ FNodeLookupResult LoadAndFindNode(const TSharedPtr<FJsonObject>& Params)
 	}
 
 	FString LoadError;
-	Result.Blueprint = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!Result.Blueprint)
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, Result.Blueprint, Result.Graph, LoadError))
 	{
 		Result.Error = FMonolithActionResult::Error(LoadError);
-		return Result;
-	}
-
-	Result.Graph = MonolithLD::GetRootGraph(Result.Blueprint);
-	if (!Result.Graph)
-	{
-		Result.Error = FMonolithActionResult::Error(TEXT("No root SM graph found"));
 		return Result;
 	}
 
@@ -634,11 +626,12 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleGetExposedPropertie
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
-	UBlueprint* SMBlueprint = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!SMBlueprint) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(SMBlueprint);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* SMBlueprint = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, SMBlueprint, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	FString TargetGuid;
 	if (Params->HasField(TEXT("node_guid")))

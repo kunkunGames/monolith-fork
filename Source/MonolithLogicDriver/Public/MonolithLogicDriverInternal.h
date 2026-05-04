@@ -39,6 +39,9 @@ namespace MonolithLD
 	/** Get the root SM graph from a blueprint (first UbergraphPage that is-a SMGraph) */
 	UEdGraph* GetRootGraph(UBlueprint* Blueprint);
 
+	/** Helper to load an SM Blueprint and immediately extract its root graph. Returns true if both succeed. */
+	bool LoadSMBlueprintAndRootGraph(const FString& AssetPath, UBlueprint*& OutBlueprint, UEdGraph*& OutRootGraph, FString& OutError);
+
 	/** Find a graph node by GUID string */
 	UEdGraphNode* FindNodeByGuid(UEdGraph* Graph, const FString& GuidString);
 
