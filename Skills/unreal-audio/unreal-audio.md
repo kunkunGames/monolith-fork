@@ -47,7 +47,7 @@ description: Use when creating, editing, or inspecting Unreal Engine audio asset
 | `find_audio_references` | `asset_path` | Bidirectional reference scan |
 | `find_unused_audio` | `type?`, `path_filter?`, `limit?` | Zero-reference audio assets |
 | `find_sounds_without_class` | `path_filter?` | Unassigned SoundBases |
-| `find_unattenuated_sounds` | `path_filter?` | Missing attenuation |
+| `find_unattenuated_sounds` | `path_filter?`, `limit?` | Missing attenuation |
 | `get_audio_stats` | — | Counts by type, sizes, compression breakdown |
 
 ### Batch Operations (10)

@@ -174,6 +174,7 @@ void FMonolithAudioQueryActions::RegisterActions(FMonolithToolRegistry& Registry
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioQueryActions::FindUnattenuatedSounds),
 		FParamSchemaBuilder()
 			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only scan assets under this content path"))
+			.Optional(TEXT("limit"), TEXT("number"), TEXT("Max results to return (default: 100)"), TEXT("100"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("get_audio_stats"),
@@ -848,6 +849,10 @@ FMonolithActionResult FMonolithAudioQueryActions::FindUnattenuatedSounds(const T
 {
 	const FString PathFilter = Params->HasField(TEXT("path_filter")) ? Params->GetStringField(TEXT("path_filter")) : TEXT("");
 
+	// Default to 100 to protect against massive unattenuated result sets crashing/slowing down the editor
+	int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 100;
+	Limit = FMath::Max(0, Limit);
+
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 
 	TArray<UClass*> ClassesToScan = { USoundWave::StaticClass(), USoundCue::StaticClass() };
@@ -857,19 +862,31 @@ FMonolithActionResult FMonolithAudioQueryActions::FindUnattenuatedSounds(const T
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ResultsArray;
+	int32 ScannedCount = 0;
+	bool bLimitReached = false;
 
 	for (UClass* AssetClass : ClassesToScan)
 	{
+		if (bLimitReached) break;
+
 		TArray<FAssetData> AssetDataList;
 		AR.GetAssetsByClass(AssetClass->GetClassPathName(), AssetDataList, true);
 
 		for (const FAssetData& AssetData : AssetDataList)
 		{
+			if (ResultsArray.Num() >= Limit)
+			{
+				bLimitReached = true;
+				break;
+			}
+
 			const FString AssetPathStr = AssetData.GetObjectPathString();
 			if (!PathFilter.IsEmpty() && !AssetPathStr.StartsWith(PathFilter))
 			{
 				continue;
 			}
+
+			++ScannedCount;
 
 			USoundBase* SoundBase = Cast<USoundBase>(AssetData.GetAsset());
 			if (!SoundBase) continue;
@@ -898,7 +915,9 @@ FMonolithActionResult FMonolithAudioQueryActions::FindUnattenuatedSounds(const T
 	}
 
 	auto ResultJson = MakeShared<FJsonObject>();
+	ResultJson->SetNumberField(TEXT("scanned"), ScannedCount);
 	ResultJson->SetNumberField(TEXT("count"), ResultsArray.Num());
+	ResultJson->SetBoolField(TEXT("limit_reached"), bLimitReached);
 	ResultJson->SetArrayField(TEXT("unattenuated_sounds"), ResultsArray);
 	return FMonolithActionResult::Success(ResultJson);
 }
