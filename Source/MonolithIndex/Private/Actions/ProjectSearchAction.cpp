@@ -7,6 +7,7 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 {
 	FString Query = Params->GetStringField(TEXT("query"));
 	int32 Limit = Params->HasField(TEXT("limit")) ? Params->GetIntegerField(TEXT("limit")) : 50;
+	Limit = FMath::Clamp(Limit, 1, 1000);
 
 	if (Query.IsEmpty())
 	{
