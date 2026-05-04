@@ -42,15 +42,18 @@ public class MonolithGAS : ModuleRules
 		if (!bReleaseBuild)
 		{
 			// 1. Project Plugins/ folder (manual install or symlink)
-			string ProjectPluginsDir = Path.Combine(
-				Target.ProjectFile.Directory.FullName, "Plugins");
-			if (Directory.Exists(ProjectPluginsDir))
+			if (Target.ProjectFile != null)
 			{
-				bHasGBA = Directory.Exists(
-					Path.Combine(ProjectPluginsDir, "BlueprintAttributes"))
-					|| Directory.GetDirectories(
-						ProjectPluginsDir, "Gameplaya*",
-						SearchOption.TopDirectoryOnly).Length > 0;
+				string ProjectPluginsDir = Path.Combine(
+					Target.ProjectFile.Directory.FullName, "Plugins");
+				if (Directory.Exists(ProjectPluginsDir))
+				{
+					bHasGBA = Directory.Exists(
+						Path.Combine(ProjectPluginsDir, "BlueprintAttributes"))
+						|| Directory.GetDirectories(
+							ProjectPluginsDir, "Gameplaya*",
+							SearchOption.TopDirectoryOnly).Length > 0;
+				}
 			}
 
 			// 2. Engine Plugins/Marketplace/ folder (Fab install)

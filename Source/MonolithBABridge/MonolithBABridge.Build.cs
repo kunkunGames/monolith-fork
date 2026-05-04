@@ -19,18 +19,21 @@ public class MonolithBABridge : ModuleRules
 		if (!bReleaseBuild)
 		{
 			// 1. Check project Plugins/ folder (manual install or symlink)
-			string ProjectPluginsDir = Path.Combine(
-				Target.ProjectFile.Directory.FullName, "Plugins");
-			if (Directory.Exists(ProjectPluginsDir))
+			if (Target.ProjectFile != null)
 			{
-				bHasBlueprintAssist = Directory.Exists(
-					Path.Combine(ProjectPluginsDir, "BlueprintAssist"));
-
-				if (!bHasBlueprintAssist)
+				string ProjectPluginsDir = Path.Combine(
+					Target.ProjectFile.Directory.FullName, "Plugins");
+				if (Directory.Exists(ProjectPluginsDir))
 				{
-					bHasBlueprintAssist = Directory.GetDirectories(
-						ProjectPluginsDir, "Blueprin*",
-						SearchOption.TopDirectoryOnly).Length > 0;
+					bHasBlueprintAssist = Directory.Exists(
+						Path.Combine(ProjectPluginsDir, "BlueprintAssist"));
+
+					if (!bHasBlueprintAssist)
+					{
+						bHasBlueprintAssist = Directory.GetDirectories(
+							ProjectPluginsDir, "Blueprin*",
+							SearchOption.TopDirectoryOnly).Length > 0;
+					}
 				}
 			}
 
