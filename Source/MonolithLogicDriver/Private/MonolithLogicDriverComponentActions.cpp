@@ -149,17 +149,14 @@ void FMonolithLogicDriverComponentActions::RegisterActions(FMonolithToolRegistry
 
 FMonolithActionResult FMonolithLogicDriverComponentActions::HandleGetSMComponentConfig(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Params.IsValid() || !Params->HasField(TEXT("blueprint_path")))
+	FString BPPath;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("blueprint_path"), BPPath) || BPPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param: blueprint_path"));
 	}
 
-	const FString BPPath = Params->GetStringField(TEXT("blueprint_path"));
 	FString ComponentName;
-	if (Params->HasField(TEXT("component_name")))
-	{
-		ComponentName = Params->GetStringField(TEXT("component_name"));
-	}
+	Params->TryGetStringField(TEXT("component_name"), ComponentName);
 
 	// Load the Blueprint
 	UBlueprint* BP = Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BPPath));
@@ -270,16 +267,17 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleGetSMComponent
 
 FMonolithActionResult FMonolithLogicDriverComponentActions::HandleAddSMComponent(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Params.IsValid() || !Params->HasField(TEXT("blueprint_path")))
+	FString BPPath;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("blueprint_path"), BPPath) || BPPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param: blueprint_path"));
 	}
 
-	const FString BPPath = Params->GetStringField(TEXT("blueprint_path"));
 	FString CompName = TEXT("StateMachineComponent");
-	if (Params->HasField(TEXT("component_name")) && !Params->GetStringField(TEXT("component_name")).IsEmpty())
+	FString CustomCompName;
+	if (Params->TryGetStringField(TEXT("component_name"), CustomCompName) && !CustomCompName.IsEmpty())
 	{
-		CompName = Params->GetStringField(TEXT("component_name"));
+		CompName = CustomCompName;
 	}
 
 	// Load actor Blueprint
@@ -320,10 +318,7 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleAddSMComponent
 
 	// If sm_path provided, set StateMachineClass on the component template
 	FString SMPath;
-	if (Params->HasField(TEXT("sm_path")))
-	{
-		SMPath = Params->GetStringField(TEXT("sm_path"));
-	}
+	Params->TryGetStringField(TEXT("sm_path"), SMPath);
 
 	if (!SMPath.IsEmpty() && NewNode->ComponentTemplate)
 	{
@@ -379,17 +374,14 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleAddSMComponent
 
 FMonolithActionResult FMonolithLogicDriverComponentActions::HandleConfigureSMComponent(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Params.IsValid() || !Params->HasField(TEXT("blueprint_path")))
+	FString BPPath;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("blueprint_path"), BPPath) || BPPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param: blueprint_path"));
 	}
 
-	const FString BPPath = Params->GetStringField(TEXT("blueprint_path"));
 	FString ComponentName;
-	if (Params->HasField(TEXT("component_name")))
-	{
-		ComponentName = Params->GetStringField(TEXT("component_name"));
-	}
+	Params->TryGetStringField(TEXT("component_name"), ComponentName);
 
 	UBlueprint* BP = Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BPPath));
 	if (!BP)
@@ -460,9 +452,9 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleConfigureSMCom
 	}
 
 	// network_config
-	if (Params->HasField(TEXT("network_config")))
+	FString NetConfig;
+	if (Params->TryGetStringField(TEXT("network_config"), NetConfig) && !NetConfig.IsEmpty())
 	{
-		FString NetConfig = Params->GetStringField(TEXT("network_config"));
 		FProperty* NetProp = FoundComponent->GetClass()->FindPropertyByName(TEXT("NetworkTickConfiguration"));
 		if (!NetProp)
 		{
