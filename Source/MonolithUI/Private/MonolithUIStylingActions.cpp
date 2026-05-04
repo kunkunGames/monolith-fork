@@ -104,9 +104,12 @@ void FMonolithUIStylingActions::RegisterActions(FMonolithToolRegistry& Registry)
 // --- set_brush ---
 FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString WidgetName = Params->GetStringField(TEXT("widget_name"));
-    FString PropertyName = Params->GetStringField(TEXT("property_name"));
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+    FString WidgetName;
+    if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName) || WidgetName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: widget_name"));
+    FString PropertyName;
+    if (!Params->TryGetStringField(TEXT("property_name"), PropertyName) || PropertyName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: property_name"));
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -177,7 +180,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     int32 PropsSet = 0;
 
     // Draw type
-    FString DrawType = Params->GetStringField(TEXT("draw_type"));
+    FString DrawType;
+    Params->TryGetStringField(TEXT("draw_type"), DrawType);
     if (!DrawType.IsEmpty())
     {
         // Phase K — pre-K behaviour silently ignored unknown draw_type tokens
@@ -206,7 +210,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     }
 
     // Tint color
-    FString TintColor = Params->GetStringField(TEXT("tint_color"));
+    FString TintColor;
+    Params->TryGetStringField(TEXT("tint_color"), TintColor);
     if (!TintColor.IsEmpty())
     {
         Brush->TintColor = FSlateColor(MonolithUIInternal::ParseColor(TintColor));
@@ -249,7 +254,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     }
 
     // Outline
-    FString OutlineColor = Params->GetStringField(TEXT("outline_color"));
+    FString OutlineColor;
+    Params->TryGetStringField(TEXT("outline_color"), OutlineColor);
     if (!OutlineColor.IsEmpty())
     {
         Brush->OutlineSettings.Color = FSlateColor(MonolithUIInternal::ParseColor(OutlineColor));
@@ -262,7 +268,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     }
 
     // Texture
-    FString TexturePath = Params->GetStringField(TEXT("texture_path"));
+    FString TexturePath;
+    Params->TryGetStringField(TEXT("texture_path"), TexturePath);
     if (!TexturePath.IsEmpty())
     {
         UTexture2D* Tex = Cast<UTexture2D>(StaticLoadObject(UTexture2D::StaticClass(), nullptr, *TexturePath));
@@ -278,7 +285,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     }
 
     // Material
-    FString MaterialPath = Params->GetStringField(TEXT("material_path"));
+    FString MaterialPath;
+    Params->TryGetStringField(TEXT("material_path"), MaterialPath);
     if (!MaterialPath.IsEmpty())
     {
         UMaterialInterface* Mat = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, *MaterialPath));
@@ -324,8 +332,10 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
 // --- set_font ---
 FMonolithActionResult FMonolithUIStylingActions::HandleSetFont(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString WidgetName = Params->GetStringField(TEXT("widget_name"));
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+    FString WidgetName;
+    if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName) || WidgetName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: widget_name"));
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -376,7 +386,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetFont(const TSharedPtr<
     }
 
     // Font family (asset path)
-    FString FontFamily = Params->GetStringField(TEXT("font_family"));
+    FString FontFamily;
+    Params->TryGetStringField(TEXT("font_family"), FontFamily);
     if (!FontFamily.IsEmpty())
     {
         UObject* FontObj = StaticLoadObject(UFont::StaticClass(), nullptr, *FontFamily);
@@ -392,7 +403,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetFont(const TSharedPtr<
     }
 
     // Typeface
-    FString Typeface = Params->GetStringField(TEXT("typeface"));
+    FString Typeface;
+    Params->TryGetStringField(TEXT("typeface"), Typeface);
     if (!Typeface.IsEmpty())
     {
         FontInfo->TypefaceFontName = FName(*Typeface);
@@ -414,7 +426,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetFont(const TSharedPtr<
     }
 
     // Outline color
-    FString OutlineColor = Params->GetStringField(TEXT("outline_color"));
+    FString OutlineColor;
+    Params->TryGetStringField(TEXT("outline_color"), OutlineColor);
     if (!OutlineColor.IsEmpty())
     {
         FontInfo->OutlineSettings.OutlineColor = MonolithUIInternal::ParseColor(OutlineColor);
@@ -519,10 +532,14 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetColorScheme(const TSha
 // --- batch_style ---
 FMonolithActionResult FMonolithUIStylingActions::HandleBatchStyle(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString WidgetClassName = Params->GetStringField(TEXT("widget_class"));
-    FString PropertyName = Params->GetStringField(TEXT("property_name"));
-    FString Value = Params->GetStringField(TEXT("value"));
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+    FString WidgetClassName;
+    if (!Params->TryGetStringField(TEXT("widget_class"), WidgetClassName) || WidgetClassName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: widget_class"));
+    FString PropertyName;
+    if (!Params->TryGetStringField(TEXT("property_name"), PropertyName) || PropertyName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: property_name"));
+    FString Value;
+    if (!Params->TryGetStringField(TEXT("value"), Value)) return FMonolithActionResult::Error(TEXT("Missing required parameter: value"));
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -588,8 +605,10 @@ FMonolithActionResult FMonolithUIStylingActions::HandleBatchStyle(const TSharedP
 // --- set_text ---
 FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString WidgetName = Params->GetStringField(TEXT("widget_name"));
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+    FString WidgetName;
+    if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName) || WidgetName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: widget_name"));
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -613,14 +632,16 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<
     // TextBlock
     if (UTextBlock* TB = Cast<UTextBlock>(Widget))
     {
-        FString Text = Params->GetStringField(TEXT("text"));
+        FString Text;
+        Params->TryGetStringField(TEXT("text"), Text);
         if (!Text.IsEmpty())
         {
             TB->SetText(FText::FromString(Text));
             PropsSet++;
         }
 
-        FString TextColor = Params->GetStringField(TEXT("text_color"));
+        FString TextColor;
+        Params->TryGetStringField(TEXT("text_color"), TextColor);
         if (!TextColor.IsEmpty())
         {
             TB->SetColorAndOpacity(FSlateColor(MonolithUIInternal::ParseColor(TextColor)));
@@ -635,7 +656,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<
             PropsSet++;
         }
 
-        FString Justification = Params->GetStringField(TEXT("justification"));
+        FString Justification;
+        Params->TryGetStringField(TEXT("justification"), Justification);
         if (!Justification.IsEmpty())
         {
             // Phase K — pre-K silently ignored unknown tokens. Now: explicit
@@ -663,7 +685,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<
     // RichTextBlock
     else if (URichTextBlock* RTB = Cast<URichTextBlock>(Widget))
     {
-        FString Text = Params->GetStringField(TEXT("text"));
+        FString Text;
+        Params->TryGetStringField(TEXT("text"), Text);
         if (!Text.IsEmpty())
         {
             RTB->SetText(FText::FromString(Text));
@@ -712,8 +735,10 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<
 // --- set_image ---
 FMonolithActionResult FMonolithUIStylingActions::HandleSetImage(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString WidgetName = Params->GetStringField(TEXT("widget_name"));
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+    FString WidgetName;
+    if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName) || WidgetName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: widget_name"));
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -750,7 +775,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetImage(const TSharedPtr
     int32 PropsSet = 0;
 
     // Texture
-    FString TexturePath = Params->GetStringField(TEXT("texture_path"));
+    FString TexturePath;
+    Params->TryGetStringField(TEXT("texture_path"), TexturePath);
     if (!TexturePath.IsEmpty())
     {
         UTexture2D* Tex = Cast<UTexture2D>(StaticLoadObject(UTexture2D::StaticClass(), nullptr, *TexturePath));
@@ -766,7 +792,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetImage(const TSharedPtr
     }
 
     // Material
-    FString MaterialPath = Params->GetStringField(TEXT("material_path"));
+    FString MaterialPath;
+    Params->TryGetStringField(TEXT("material_path"), MaterialPath);
     if (!MaterialPath.IsEmpty())
     {
         UMaterialInterface* Mat = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, *MaterialPath));
@@ -782,7 +809,8 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetImage(const TSharedPtr
     }
 
     // Tint color
-    FString TintColor = Params->GetStringField(TEXT("tint_color"));
+    FString TintColor;
+    Params->TryGetStringField(TEXT("tint_color"), TintColor);
     if (!TintColor.IsEmpty())
     {
         ImageWidget->SetColorAndOpacity(MonolithUIInternal::ParseColor(TintColor));
