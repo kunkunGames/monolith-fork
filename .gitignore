@@ -42,3 +42,10 @@ Scripts/score_history.py
 Scripts/__pycache__/
 TrainingMemory/
 .claude/agent-memory/
+
+# Generated databases
+EngineSource.db
+ProjectIndex.db
+
+# Release artifacts
+Monolith-v*.zip
