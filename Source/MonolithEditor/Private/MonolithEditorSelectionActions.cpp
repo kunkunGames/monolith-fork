@@ -166,6 +166,7 @@ FMonolithActionResult FMonolithEditorSelectionActions::HandleGetSelectedAssets(c
 	MonolithEditorSelection::GetSelectedAssetData(SelectedAssets, bIncludeFolders ? &SelectedFolders : nullptr);
 
 	TArray<TSharedPtr<FJsonValue>> AssetArray;
+	AssetArray.Reserve(SelectedAssets.Num());
 	for (const FAssetData& AssetData : SelectedAssets)
 	{
 		if (!AssetData.IsValid())
@@ -188,6 +189,7 @@ FMonolithActionResult FMonolithEditorSelectionActions::HandleGetSelectedAssets(c
 	TArray<TSharedPtr<FJsonValue>> FolderArray;
 	if (bIncludeFolders)
 	{
+		FolderArray.Reserve(SelectedFolders.Num());
 		for (const FString& Folder : SelectedFolders)
 		{
 			TSharedPtr<FJsonObject> FolderObj = MakeShared<FJsonObject>();
@@ -299,6 +301,7 @@ FMonolithActionResult FMonolithEditorSelectionActions::HandleGetActiveAssetEdito
 	}
 
 	TArray<TSharedPtr<FJsonValue>> OpenEditorArray;
+	OpenEditorArray.Reserve(OpenEditors.Num());
 	for (IAssetEditorInstance* Editor : OpenEditors)
 	{
 		const TArray<UObject*> EditedAssets = MonolithEditorSelection::GetAssetsForEditor(AssetEditorSubsystem, Editor);
@@ -381,6 +384,7 @@ TSharedPtr<FJsonObject> FMonolithEditorSelectionActions::ActorToJson(AActor* Act
 	if (bIncludeComponents)
 	{
 		TInlineComponentArray<UActorComponent*> Components(Actor);
+		ComponentArray.Reserve(Components.Num());
 		for (UActorComponent* Component : Components)
 		{
 			ComponentArray.Add(MakeShared<FJsonValueObject>(ComponentToJson(Component)));
@@ -444,6 +448,7 @@ TSharedPtr<FJsonObject> FMonolithEditorSelectionActions::OpenEditorSummaryToJson
 	Obj->SetNumberField(TEXT("last_activation_time"), Editor ? Editor->GetLastActivationTime() : 0.0);
 
 	TArray<TSharedPtr<FJsonValue>> AssetArray;
+	AssetArray.Reserve(EditedAssets.Num());
 	for (UObject* Asset : EditedAssets)
 	{
 		AssetArray.Add(MakeShared<FJsonValueString>(GetObjectPath(Asset)));
