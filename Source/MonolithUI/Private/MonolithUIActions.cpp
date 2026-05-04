@@ -279,6 +279,7 @@ FMonolithActionResult FMonolithUIActions::HandleGetWidgetTree(const TSharedPtr<F
 
     // Animations
     TArray<TSharedPtr<FJsonValue>> AnimArray;
+    AnimArray.Reserve(WBP->Animations.Num());
     for (UWidgetAnimation* Anim : WBP->Animations)
     {
         if (Anim)
@@ -796,6 +797,7 @@ FMonolithActionResult FMonolithUIActions::HandleListWidgetTypes(const TSharedPtr
     };
 
     TArray<TSharedPtr<FJsonValue>> ResultArray;
+    ResultArray.Reserve(Types.Num());
     for (const auto& T : Types)
     {
         if (!Filter.IsEmpty() && T.Category != Filter) continue;
