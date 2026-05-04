@@ -26,6 +26,8 @@
 #include "UObject/SavePackage.h"
 #include "UObject/UnrealType.h"
 
+#include "MonolithPackagePathValidator.h"
+
 // JSON
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -103,6 +105,13 @@ TAsset* FMonolithAudioAssetActions::CreateAudioAsset(const FString& AssetPath, F
 	if (!SplitAssetPath(AssetPath, PackagePath, AssetName))
 	{
 		OutError = TEXT("Invalid asset path — must contain at least one '/' (e.g. /Game/Audio/SA_MyAttenuation)");
+		return nullptr;
+	}
+
+	// Defensive: reject malformed paths (e.g. "//Game/...") before StaticLoadObject/CreatePackage can assert.
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		OutError = ValidationError;
 		return nullptr;
 	}
 
@@ -1494,6 +1503,12 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateTestWave(const TSharedPt
 	if (!SplitAssetPath(AssetPath, PackagePath, AssetName))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid asset path — must contain at least one '/' (e.g. /Game/Tests/Monolith/Audio/SW_Test_Sine_440)"));
+	}
+
+	// Defensive: reject malformed paths (e.g. "//Game/...") before StaticLoadObject/CreatePackage can assert.
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	// ---- 2. Validate numeric params ----------------------------------------
