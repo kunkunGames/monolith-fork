@@ -1,6 +1,7 @@
 #include "MonolithAIStateTreeActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithPackagePathValidator.h"
 
 #if WITH_STATETREE
 #include "StateTree.h"
@@ -786,6 +787,11 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleCreateStateTree(const T
 		PackagePath = SavePath / AssetName;
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackagePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	// Check path is free
 	FString PathErr;
 	if (!MonolithAI::EnsureAssetPathFree(PackagePath, AssetName, PathErr))
@@ -979,6 +985,11 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleDuplicateStateTree(cons
 	}
 
 	FString DestName = FPackageName::GetShortName(DestPath);
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(DestPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	FString PathErr;
 	if (!MonolithAI::EnsureAssetPathFree(DestPath, DestName, PathErr))
@@ -2990,6 +3001,11 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleBuildStateTreeFromSpec(
 	}
 
 	FString AssetName = FPackageName::GetShortName(SavePath);
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	FString PathErr;
 	if (!MonolithAI::EnsureAssetPathFree(SavePath, AssetName, PathErr))

@@ -1,6 +1,7 @@
 #include "MonolithAIAdvancedActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithPackagePathValidator.h"
 
 #if WITH_MASSENTITY
 #include "MassEntityConfigAsset.h"
@@ -275,6 +276,11 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleCreateMassEntityConfig(c
 	if (FPackageName::GetShortName(PackagePath) != AssetName)
 	{
 		PackagePath = SavePath / AssetName;
+	}
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackagePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	FString PathErr;
