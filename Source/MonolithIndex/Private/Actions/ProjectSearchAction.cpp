@@ -5,13 +5,23 @@
 
 FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Query = Params->GetStringField(TEXT("query"));
-	int32 Limit = Params->HasField(TEXT("limit")) ? Params->GetIntegerField(TEXT("limit")) : 50;
-
-	if (Query.IsEmpty())
+	FString Query;
+	if (!Params->TryGetStringField(TEXT("query"), Query) || Query.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("'query' parameter is required"), -32602);
 	}
+
+	int32 Limit = 50;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = FMath::Clamp(Limit, 1, 1000);
 
 	UMonolithIndexSubsystem* Subsystem = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>();
 	if (!Subsystem)
