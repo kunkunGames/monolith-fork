@@ -5,13 +5,22 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+namespace
+{
+FMonolithActionResult ExecuteFindUnattenuatedSounds(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithAudioQueryActions::RegisterActions(FMonolithToolRegistry::Get());
+	return FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("find_unattenuated_sounds"), Params);
+}
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioFindUnattenuatedSoundsLimitTest, "Monolith.LimitGuard.Audio.FindUnattenuatedSoundsClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithAudioFindUnattenuatedSoundsLimitTest::RunTest(const FString& Parameters)
 {
 	// Test default limit (100)
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-		FMonolithActionResult Result = FMonolithAudioQueryActions::FindUnattenuatedSounds(Params);
+		FMonolithActionResult Result = ExecuteFindUnattenuatedSounds(Params);
 		if (!Result.bSuccess || !Result.Result.IsValid())
 		{
 			AddError(TEXT("Action failed without limit"));
@@ -34,7 +43,7 @@ bool FMonolithAudioFindUnattenuatedSoundsLimitTest::RunTest(const FString& Param
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetNumberField(TEXT("limit"), 5.0);
-		FMonolithActionResult Result = FMonolithAudioQueryActions::FindUnattenuatedSounds(Params);
+		FMonolithActionResult Result = ExecuteFindUnattenuatedSounds(Params);
 
 		double CountVal = 0.0;
 		if (Result.Result.IsValid() && Result.Result->TryGetNumberField(TEXT("count"), CountVal))
@@ -50,7 +59,7 @@ bool FMonolithAudioFindUnattenuatedSoundsLimitTest::RunTest(const FString& Param
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetNumberField(TEXT("limit"), -10.0);
-		FMonolithActionResult Result = FMonolithAudioQueryActions::FindUnattenuatedSounds(Params);
+		FMonolithActionResult Result = ExecuteFindUnattenuatedSounds(Params);
 
 		double CountVal = -1.0;
 		if (Result.Result.IsValid() && Result.Result->TryGetNumberField(TEXT("count"), CountVal))
@@ -60,6 +69,31 @@ bool FMonolithAudioFindUnattenuatedSoundsLimitTest::RunTest(const FString& Param
 				AddError(FString::Printf(TEXT("Negative limit was not clamped to 0. Count was %f"), CountVal));
 			}
 		}
+	}
+
+	// Test very large limit upper bound
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 1000000.0);
+		FMonolithActionResult Result = ExecuteFindUnattenuatedSounds(Params);
+
+		double CountVal = 0.0;
+		if (Result.Result.IsValid() && Result.Result->TryGetNumberField(TEXT("count"), CountVal))
+		{
+			if (CountVal > 1000.0)
+			{
+				AddError(FString::Printf(TEXT("Huge limit was not clamped to 1000. Count was %f"), CountVal));
+			}
+		}
+	}
+
+	// Test malformed limit type
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("limit"), TEXT("not_a_number"));
+		FMonolithActionResult Result = ExecuteFindUnattenuatedSounds(Params);
+		TestFalse(TEXT("String limit should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention limit"), Result.ErrorMessage.Contains(TEXT("limit")));
 	}
 
 	return true;

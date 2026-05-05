@@ -847,11 +847,24 @@ FMonolithActionResult FMonolithAudioQueryActions::FindSoundsWithoutClass(const T
 
 FMonolithActionResult FMonolithAudioQueryActions::FindUnattenuatedSounds(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString PathFilter = Params->HasField(TEXT("path_filter")) ? Params->GetStringField(TEXT("path_filter")) : TEXT("");
+	FString PathFilter;
+	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param 'path_filter': must be a string"));
+	}
 
-	// Default to 100 to protect against massive unattenuated result sets crashing/slowing down the editor
-	int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 100;
-	Limit = FMath::Max(0, Limit);
+	// Default to 100 and cap explicit limits to protect large project scans from huge JSON responses.
+	int32 Limit = 100;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = FMath::Clamp(Limit, 0, 1000);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 
