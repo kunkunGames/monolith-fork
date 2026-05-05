@@ -92,6 +92,7 @@ FMonolithActionResult FMonolithUIBindingActions::HandleListWidgetEvents(const TS
             if (const UFunction* SignatureFunc = DelegateProp->SignatureFunction)
             {
                 TArray<TSharedPtr<FJsonValue>> ParamsArr;
+                ParamsArr.Reserve(SignatureFunc->NumParms);
                 for (TFieldIterator<FProperty> ParamIt(SignatureFunc); ParamIt; ++ParamIt)
                 {
                     if ((*ParamIt)->HasAnyPropertyFlags(CPF_Parm) &&
@@ -353,6 +354,7 @@ FMonolithActionResult FMonolithUIBindingActions::HandleGetWidgetBindings(const T
     if (!WBP) return Err;
 
     TArray<TSharedPtr<FJsonValue>> BindingsArray;
+    BindingsArray.Reserve(WBP->Bindings.Num());
 
     for (const FDelegateEditorBinding& Binding : WBP->Bindings)
     {

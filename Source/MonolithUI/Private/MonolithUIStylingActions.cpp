@@ -482,6 +482,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetColorScheme(const TSha
 
     int32 SlotsSet = 0;
     TArray<FString> SetNames;
+    SetNames.Reserve((*ColorsObj)->Values.Num());
 
     for (const auto& Pair : (*ColorsObj)->Values)
     {
@@ -508,6 +509,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetColorScheme(const TSha
     Result->SetNumberField(TEXT("slots_set"), SlotsSet);
 
     TArray<TSharedPtr<FJsonValue>> NamesArray;
+    NamesArray.Reserve(SetNames.Num());
     for (const FString& N : SetNames)
     {
         NamesArray.Add(MakeShared<FJsonValueString>(N));
@@ -577,6 +579,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleBatchStyle(const TSharedP
     Result->SetBoolField(TEXT("compiled"), bCompile);
 
     TArray<TSharedPtr<FJsonValue>> NamesArray;
+    NamesArray.Reserve(ModifiedNames.Num());
     for (const FString& N : ModifiedNames)
     {
         NamesArray.Add(MakeShared<FJsonValueString>(N));
