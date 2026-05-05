@@ -1,8 +1,8 @@
 # Monolith API Reference
 
-**Version:** v0.14.7 (+ [Unreleased] editor +2) · **Last updated:** 2026-04-30
+**Version:** v0.14.9 · **Last updated:** 2026-05-03
 
-**In-tree action total: 1271** registered across **16 in-tree namespaces** (all 1271 active by default; 45 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the registry to 1316). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1267**. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 20.
+**In-tree action total: 1274** registered across **16 in-tree namespaces** (all 1274 active by default; 45 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the registry to 1319). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1270**. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 20.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
