@@ -14,15 +14,18 @@ public class MonolithLogicDriver : ModuleRules
 		if (!bReleaseBuild)
 		{
 			// 1. Check project Plugins/ folder
-			string ProjectPluginsDir = Path.Combine(
-				Target.ProjectFile.Directory.FullName, "Plugins");
-			if (Directory.Exists(ProjectPluginsDir))
+			if (Target.ProjectFile != null)
 			{
-				bHasLogicDriver = Directory.Exists(
-					Path.Combine(ProjectPluginsDir, "SMSystem"))
-					|| Directory.GetDirectories(
-						ProjectPluginsDir, "LogicDri*",
-						SearchOption.TopDirectoryOnly).Length > 0;
+				string ProjectPluginsDir = Path.Combine(
+					Target.ProjectFile.Directory.FullName, "Plugins");
+				if (Directory.Exists(ProjectPluginsDir))
+				{
+					bHasLogicDriver = Directory.Exists(
+						Path.Combine(ProjectPluginsDir, "SMSystem"))
+						|| Directory.GetDirectories(
+							ProjectPluginsDir, "LogicDri*",
+							SearchOption.TopDirectoryOnly).Length > 0;
+				}
 			}
 
 			// 2. Check Engine Plugins/Marketplace/ folder (Fab install)
