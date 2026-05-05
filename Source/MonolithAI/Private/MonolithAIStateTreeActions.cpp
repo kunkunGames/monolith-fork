@@ -787,16 +787,16 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleCreateStateTree(const T
 		PackagePath = SavePath / AssetName;
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackagePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	// Check path is free
 	FString PathErr;
 	if (!MonolithAI::EnsureAssetPathFree(PackagePath, AssetName, PathErr))
 	{
 		return FMonolithActionResult::Error(PathErr);
-	}
-
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackagePath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	UPackage* Package = CreatePackage(*PackagePath);
@@ -986,6 +986,11 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleDuplicateStateTree(cons
 
 	FString DestName = FPackageName::GetShortName(DestPath);
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(DestPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	FString PathErr;
 	if (!MonolithAI::EnsureAssetPathFree(DestPath, DestName, PathErr))
 	{
@@ -993,11 +998,6 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleDuplicateStateTree(cons
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Duplicate StateTree")));
-
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(DestPath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
 
 	UPackage* DestPackage = CreatePackage(*DestPath);
 	UStateTree* NewST = Cast<UStateTree>(StaticDuplicateObject(SourceST, DestPackage, *DestName));
@@ -3002,15 +3002,15 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleBuildStateTreeFromSpec(
 
 	FString AssetName = FPackageName::GetShortName(SavePath);
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	FString PathErr;
 	if (!MonolithAI::EnsureAssetPathFree(SavePath, AssetName, PathErr))
 	{
 		return FMonolithActionResult::Error(PathErr);
-	}
-
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	// Create the StateTree asset

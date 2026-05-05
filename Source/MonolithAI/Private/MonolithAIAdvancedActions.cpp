@@ -278,6 +278,11 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleCreateMassEntityConfig(c
 		PackagePath = SavePath / AssetName;
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackagePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	FString PathErr;
 	if (!MonolithAI::EnsureAssetPathFree(PackagePath, AssetName, PathErr))
 	{
@@ -285,11 +290,6 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleCreateMassEntityConfig(c
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Create MassEntityConfig")));
-
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackagePath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
 
 	UPackage* Package = CreatePackage(*PackagePath);
 	if (!Package)
