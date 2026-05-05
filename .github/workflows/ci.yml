@@ -5,48 +5,102 @@ on:
     branches: [master, main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  python-lint:
-    name: Python — Lint
+  hosted-static-ci:
+    name: Hosted Static CI
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ vars.CI_PYTHON_VERSION || '3.11' }}
 
-      - name: Install ruff
-        run: pip install ruff
-
-      - name: Lint (ruff check)
-        run: ruff check Scripts/ MCP/
-
-  python-syntax:
-    name: Python — Syntax Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-go@v5
         with:
-          python-version: "3.11"
+          go-version: stable
 
-      - name: Check syntax
+      - name: Install Python tools
         run: |
-          find Scripts/ MCP/ -name "*.py" | while read f; do
-            python -m py_compile "$f" || exit 1
-          done
+          python -m pip install --upgrade pip
+          python -m pip install ruff
 
-  validate-json:
-    name: Validate JSON files
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Python syntax
+        run: python -m compileall Scripts MCP
 
-      - name: Validate .uplugin / .uproject
+      - name: Ruff critical lint
+        run: ruff check Scripts/ MCP/ --select E9,F63,F7,F82
+
+      - name: Monolith static checker
+        run: python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json --github check
+
+      - name: Bash syntax
+        run: bash -n Scripts/monolith_proxy.sh
+
+      - name: Install ShellCheck
         run: |
-          for f in $(find . -maxdepth 2 \( -name "*.uplugin" -o -name "*.uproject" \)); do
-            echo "Checking $f …"
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: ShellCheck
+        run: shellcheck Scripts/monolith_proxy.sh
+
+      - name: PowerShell syntax
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "Scripts/make_release.ps1",
+            [ref]$null,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Select-Object -First 20 | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: PSScriptAnalyzer advisory
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          Invoke-ScriptAnalyzer -Path Scripts -Recurse -Severity Error
+
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+      - name: actionlint
+        run: |
+          "$HOME/go/bin/actionlint" -config-file .github/actionlint.yaml -ignore 'SC2129'
+
+      - name: Markdown lint advisory
+        continue-on-error: true
+        run: |
+          npm install -g markdownlint-cli2
+          markdownlint-cli2 > markdownlint.log 2>&1 || {
+            sed -n '1,120p' markdownlint.log
+            {
+              echo "## Markdown lint advisory"
+              grep '^Summary:' markdownlint.log || true
+              echo
+              echo "See the step log for the first 120 lines."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+
+      - name: TruffleHog verified secret scan
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/trufflesecurity/trufflehog:3.95.2 \
+            filesystem /repo --results=verified --fail
+
+      - name: Validate .uplugin and .uproject JSON
+        run: |
+          find . -maxdepth 2 \( -name "*.uplugin" -o -name "*.uproject" \) -print0 | while IFS= read -r -d "" f; do
+            echo "Checking $f"
             python -m json.tool "$f" > /dev/null
           done

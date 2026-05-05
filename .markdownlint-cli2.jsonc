@@ -1,0 +1,25 @@
+{
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD033": false,
+    "MD041": false,
+    "MD060": false
+  },
+  "globs": [
+    "**/*.md",
+    "!.jules/**",
+    "!Binaries/**",
+    "!CHANGELOG.md",
+    "!Docs/API_REFERENCE.md",
+    "!Docs/SPEC_CORE.md",
+    "!Docs/plans/**",
+    "!Docs/specs/**",
+    "!Docs/testing/**",
+    "!Intermediate/**",
+    "!PRD/**",
+    "!Saved/**",
+    "!Skills/**",
+    "!DerivedDataCache/**"
+  ]
+}

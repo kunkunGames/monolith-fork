@@ -1,0 +1,10 @@
+self-hosted-runner:
+  labels:
+    - macOS
+    - monolith
+
+config-variables:
+  - CI_PYTHON_VERSION
+  - JULES_MENTION
+  - JULES_ASSIGNEE
+  - JULES_BOT_USERNAME

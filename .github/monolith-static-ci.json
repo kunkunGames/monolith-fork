@@ -1,0 +1,119 @@
+{
+  "plugin_descriptor": "auto",
+  "source_dir": "Source",
+  "severity": {
+    "line_endings": "advisory",
+    "markdown_lint": "advisory",
+    "powershell_analyzer": "advisory",
+    "broad_secret_regex": "advisory"
+  },
+  "buildcs": {
+    "release_guard_env": "MONOLITH_RELEASE_BUILD",
+    "optional_dependency_tokens": [
+      "BlueprintAssist",
+      "BlueprintAttributes",
+      "ComboGraph",
+      "CommonInput",
+      "CommonUI",
+      "GameplayBehaviors",
+      "GameplayBehaviorsModule",
+      "GameplayStateTree",
+      "GeometryCore",
+      "GeometryFramework",
+      "GeometryScripting",
+      "GeometryScriptingCore",
+      "LogicDriver",
+      "MassEntity",
+      "MassGameplay",
+      "MassGameplayEditor",
+      "MassSpawner",
+      "Metasound",
+      "MetaSoundEngine",
+      "SMSystem",
+      "SmartObjects",
+      "StateTree",
+      "ZoneGraph"
+    ]
+  },
+  "repo_hygiene": {
+    "generated_or_binary_patterns": [
+      "(^|/)(Binaries|Intermediate|Saved|DerivedDataCache)/",
+      "\\.generated\\.(h|cpp)$",
+      "\\.(dll|dylib|so|exe|pdb|obj|o|a|lib)$"
+    ]
+  },
+  "automation_tests": {
+    "scan_extensions": [".cpp", ".h", ".hpp"],
+    "name_regexes": [
+      "IMPLEMENT_(?:SIMPLE_|COMPLEX_)?AUTOMATION_TEST\\s*\\([^,]+,\\s*\"([^\"]+)\""
+    ],
+    "warn_if_none": true
+  },
+  "text_hygiene": {
+    "line_ending_allowlist": [
+      "PRD/SQLite/SQLite_Optimization_Enhancements.md"
+    ],
+    "scan_extensions": [
+      ".bat",
+      ".c",
+      ".cpp",
+      ".cs",
+      ".h",
+      ".hpp",
+      ".ini",
+      ".json",
+      ".md",
+      ".ps1",
+      ".py",
+      ".sh",
+      ".toml",
+      ".txt",
+      ".uplugin",
+      ".uproject",
+      ".yaml",
+      ".yml"
+    ]
+  },
+  "agent_tools": {
+    "agents_dir": ".claude/agents",
+    "dispatcher_prefix": "mcp__monolith__",
+    "missing_agents_dir_is_error": false
+  },
+  "proxy_smoke": {
+    "enabled": true,
+    "script": "Scripts/monolith_proxy.py",
+    "url_env": "MONOLITH_URL",
+    "offline_url": "http://127.0.0.1:9/mcp",
+    "expected_server_name": "monolith-proxy",
+    "timeout_seconds": 5
+  },
+  "workflow": {
+    "hosted_static_workflow": ".github/workflows/ci.yml",
+    "forbidden_tokens": [
+      "RunUAT",
+      "RunUBT",
+      "UnrealEditor-Cmd",
+      "Engine/Build",
+      "Setup Unreal",
+      "Install Unreal"
+    ],
+    "excluded_workflows": [
+      ".github/workflows/macos-build.yml"
+    ],
+    "duplicate_workflow_paths": [
+      ".github/workflows/hosted-static-ci.yml",
+      ".github/workflows/static-ci.yml"
+    ]
+  },
+  "secrets": {
+    "high_confidence_regexes": [
+      "AKIA[0-9A-Z]{16}",
+      "gh[pousr]_[A-Za-z0-9_]{36,}",
+      "github_pat_[A-Za-z0-9_]{22}_[A-Za-z0-9_]{59}",
+      "sk-[A-Za-z0-9]{40,}"
+    ],
+    "broad_advisory_regexes": [
+      "(?i)(api[_-]?key|secret|token|password)\\s*[:=]\\s*['\\\"][^'\\\"]{12,}['\\\"]"
+    ]
+  }
+}
