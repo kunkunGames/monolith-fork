@@ -1018,6 +1018,7 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 {
 	TArray<FSearchResult> Results;
 	if (!IsOpen()) return Results;
+	const int32 ClampedLimit = FMath::Clamp(Limit, 1, 1000);
 
 	// Search assets FTS
 	FString SQL = TEXT("SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, snippet(fts_assets, 2, '>>>', '<<<', '...', 32) as ctx, rank FROM fts_assets f JOIN assets a ON a.id = f.rowid WHERE fts_assets MATCH ? ORDER BY rank LIMIT ?;");
@@ -1025,7 +1026,7 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	FSQLitePreparedStatement Stmt;
 	Stmt.Create(*Database, *SQL);
 	Stmt.SetBindingValueByIndex(1, Query);
-	Stmt.SetBindingValueByIndex(2, static_cast<int64>(Limit));
+	Stmt.SetBindingValueByIndex(2, static_cast<int64>(ClampedLimit));
 
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
@@ -1047,7 +1048,7 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	FSQLitePreparedStatement Stmt2;
 	Stmt2.Create(*Database, *NodeSQL);
 	Stmt2.SetBindingValueByIndex(1, Query);
-	Stmt2.SetBindingValueByIndex(2, static_cast<int64>(Limit));
+	Stmt2.SetBindingValueByIndex(2, static_cast<int64>(ClampedLimit));
 
 	while (Stmt2.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
