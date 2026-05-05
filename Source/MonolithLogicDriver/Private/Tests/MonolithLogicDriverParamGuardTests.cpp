@@ -1,6 +1,5 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
-#include "MonolithActionHandler.h"
 #include "Dom/JsonObject.h"
 #include "MonolithLogicDriverComponentActions.h"
 
@@ -15,7 +14,7 @@ bool FGetSMComponentConfigRejectsMalformedParamsTest::RunTest(const FString& Par
 		Params->SetStringField(TEXT("component_name"), TEXT("MyComp"));
 
 		FMonolithActionResult Result = FMonolithLogicDriverComponentActions::HandleGetSMComponentConfig(Params);
-		TestTrue(TEXT("Missing blueprint_path should return error"), Result.IsError());
+		TestTrue(TEXT("Missing blueprint_path should return error"), !Result.bSuccess);
 		TestTrue(TEXT("Missing blueprint_path error message should mention blueprint_path"), Result.ErrorMessage.Contains(TEXT("blueprint_path")));
 	}
 
@@ -25,7 +24,7 @@ bool FGetSMComponentConfigRejectsMalformedParamsTest::RunTest(const FString& Par
 		Params->SetNumberField(TEXT("blueprint_path"), 12345);
 
 		FMonolithActionResult Result = FMonolithLogicDriverComponentActions::HandleGetSMComponentConfig(Params);
-		TestTrue(TEXT("Wrong type blueprint_path should return error"), Result.IsError());
+		TestTrue(TEXT("Wrong type blueprint_path should return error"), !Result.bSuccess);
 		TestTrue(TEXT("Wrong type blueprint_path error message should mention blueprint_path"), Result.ErrorMessage.Contains(TEXT("blueprint_path")));
 	}
 
@@ -38,7 +37,7 @@ bool FGetSMComponentConfigRejectsMalformedParamsTest::RunTest(const FString& Par
 		Params->SetNumberField(TEXT("component_name"), 123);
 
 		FMonolithActionResult Result = FMonolithLogicDriverComponentActions::HandleGetSMComponentConfig(Params);
-		TestTrue(TEXT("Valid blueprint_path but wrong type component_name should safely return load error (not crash)"), Result.IsError());
+		TestTrue(TEXT("Valid blueprint_path but wrong type component_name should safely return load error (not crash)"), !Result.bSuccess);
 		TestTrue(TEXT("Should fail because blueprint path doesn't exist"), Result.ErrorMessage.Contains(TEXT("Failed to load")));
 	}
 
