@@ -67,6 +67,7 @@ private:
 		if (Aliases.size() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> AliasArr;
+			AliasArr.Reserve(Aliases.size());
 			for (const TCHAR* A : Aliases)
 			{
 				AliasArr.Add(MakeShared<FJsonValueString>(FString(A)));
