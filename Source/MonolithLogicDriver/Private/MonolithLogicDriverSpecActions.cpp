@@ -4,6 +4,7 @@
 #if WITH_LOGICDRIVER
 
 #include "MonolithLogicDriverInternal.h"
+#include "MonolithPackagePathValidator.h"
 #include "Engine/Blueprint.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
@@ -189,6 +190,11 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 
 	// Derive asset name from save path
 	FString AssetName = FPackageName::GetShortName(SavePath);
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at: %s"), *SavePath));
