@@ -19,7 +19,7 @@ void FMonolithLevelSequenceModule::StartupModule()
 	if (Settings->bEnableLevelSequence)
 	{
 		FMonolithLevelSequenceActions::RegisterActions(FMonolithToolRegistry::Get());
-		const int32 ActionCount = FMonolithToolRegistry::Get().GetActions(TEXT("level_sequence")).Num();
+		const int32 ActionCount = FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("level_sequence"));
 		UE_LOG(LogMonolithLevelSequence, Log, TEXT("MonolithLevelSequence: Loaded (%d actions)"), ActionCount);
 	}
 
