@@ -7,3 +7,8 @@
 **Target:** MonolithCore / UMonolithUpdateSubsystem / ParseVersionFromTag & CompareVersions
 **Learning:** Pure C++ static helpers (like semver parsing/comparison) are ideal candidates for Sentinel Test tasks because they can be easily isolated into simple unit tests without requiring complex mock infrastructure or live UE5 editor state.
 **Prevention:** Future tests targeting static helper logic should follow this pattern: group related static functions into a single new Automation Test file, cover edge cases (empty strings, whitespace, capitalization), and use straightforward `TestEqual` / `TestTrue` assertions.
+
+## 2026-05-05 - Enforce Comprehensive Path Tests
+**Target:** Path validation testing (`ValidatePackagePath`)
+**Learning:** When adding validation tests for malformed inputs (like package paths), checking a single malformed state (like double-slash) is insufficient for a complete security regression test.
+**Prevention:** Future path/package tests must explicitly iterate multiple malicious/boundary states: empty path, double-slash path (`//Game/...`), missing leading slash (`Game/...`), trailing slashes, and invalid characters.
