@@ -9,3 +9,8 @@
 **Learning:** `GetStringField` can trigger Editor-level crashes when a parameter is missing because UE's `FJsonObject::GetStringField` asserts internally on failure.
 **Reuse rule:** Always prefer `TryGetStringField` pattern over explicit `HasField`/`GetStringField` pairs to safely extract fields without risking assertions, logging explicit errors manually if necessary.
 **Avoid:** Avoid raw `GetStringField` calls for user-supplied JSON input.
+## 2026-05-04 - [Replace GetStringField with TryGetStringField]
+**Pattern:** Using GetStringField directly for JSON parameter extraction in UI styling actions, leading to potential assertions/crashes when fields are missing.
+**Learning:** FParamSchemaBuilder ensures validation if run, but defensive extraction using TryGetStringField prevents crashes from invalid data completely. Required fields must explicitly check the result of TryGetStringField and return FMonolithActionResult::Error.
+**Reuse rule:** Always use Params->TryGetStringField instead of Params->GetStringField. For required parameters, wrap in an if statement to return an explicit error string.
+**Avoid:** Do not blindly use Params->GetStringField, even if you assume the schema validation guarantees presence.
