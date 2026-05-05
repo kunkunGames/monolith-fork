@@ -8,7 +8,7 @@ class FMonolithLogicDriverComponentActions
 public:
 	static void RegisterActions(FMonolithToolRegistry& Registry);
 
-private:
+public:
 	// Component management (Phase 1 read, Phase 2-3 write)
 	static FMonolithActionResult HandleGetSMComponentConfig(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleAddSMComponent(const TSharedPtr<FJsonObject>& Params);
