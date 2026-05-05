@@ -115,6 +115,8 @@ git clone https://github.com/tumourlove/monolith.git Monolith
 
 Grab the latest release from [GitHub Releases](https://github.com/tumourlove/monolith/releases), extract it, and drop the folder at `YourProject/Plugins/Monolith/`. The release ZIP includes precompiled DLLs — Blueprint-only projects can open the editor immediately without rebuilding. C++ projects should rebuild first.
 
+> **Binary Provenance:** If you require strict binary provenance, delete the `Binaries/` directory after extracting and compile the plugin from source.
+
 **Option C: Let your AI do it**
 
 If you're already in a Claude Code, Cursor, or Cline session, just say:
@@ -386,6 +388,8 @@ cl /O2 /EHsc /std:c++17 Tools/MonolithQuery/monolith_query.cpp /Fe:Binaries/mono
 ```
 
 Precompiled binaries are included in every release — building from source is only needed if you want to modify the tools.
+
+> **Binary Provenance:** If you require strict binary provenance, you can safely delete the precompiled executables and build them from source using the provided scripts.
 
 ---
 
