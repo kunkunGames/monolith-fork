@@ -1,5 +1,13 @@
 @echo off
-call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+set "VCVARS="
+for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+  set "VCVARS=%%i\VC\Auxiliary\Build\vcvars64.bat"
+)
+if exist "%VCVARS%" (
+    call "%VCVARS%"
+) else (
+    call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+)
 if %ERRORLEVEL% neq 0 (
     echo FAILED: vcvars64.bat not found or failed
     exit /b 1
