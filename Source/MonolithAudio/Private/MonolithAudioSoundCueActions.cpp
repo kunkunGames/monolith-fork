@@ -47,6 +47,8 @@
 #include "UObject/SavePackage.h"
 #include "UObject/UnrealType.h"
 
+#include "MonolithPackagePathValidator.h"
+
 // JSON
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -551,6 +553,13 @@ USoundCue* FMonolithAudioSoundCueActions::CreateEmptySoundCue(const FString& Ass
 	if (AssetName.IsEmpty())
 	{
 		OutError = TEXT("Asset name is empty");
+		return nullptr;
+	}
+
+	// Defensive: reject malformed paths (e.g. "//Game/...") before StaticLoadObject/CreatePackage can assert.
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		OutError = ValidationError;
 		return nullptr;
 	}
 
