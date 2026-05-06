@@ -76,6 +76,7 @@ namespace AdvancedLevelHelpers
 	TArray<TSharedPtr<FJsonValue>> VectorToJsonArray(const FVector& V)
 	{
 		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Reserve(3);
 		Arr.Add(MakeShared<FJsonValueNumber>(V.X));
 		Arr.Add(MakeShared<FJsonValueNumber>(V.Y));
 		Arr.Add(MakeShared<FJsonValueNumber>(V.Z));

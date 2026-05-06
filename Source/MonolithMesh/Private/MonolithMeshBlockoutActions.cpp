@@ -74,6 +74,7 @@ void FMonolithMeshBlockoutActions::FScopedMeshTransaction::Cancel()
 TArray<TSharedPtr<FJsonValue>> FMonolithMeshBlockoutActions::VectorToJsonArray(const FVector& V)
 {
 	TArray<TSharedPtr<FJsonValue>> Arr;
+	Arr.Reserve(3);
 	Arr.Add(MakeShared<FJsonValueNumber>(V.X));
 	Arr.Add(MakeShared<FJsonValueNumber>(V.Y));
 	Arr.Add(MakeShared<FJsonValueNumber>(V.Z));
@@ -83,6 +84,7 @@ TArray<TSharedPtr<FJsonValue>> FMonolithMeshBlockoutActions::VectorToJsonArray(c
 TArray<TSharedPtr<FJsonValue>> FMonolithMeshBlockoutActions::RotatorToJsonArray(const FRotator& R)
 {
 	TArray<TSharedPtr<FJsonValue>> Arr;
+	Arr.Reserve(3);
 	Arr.Add(MakeShared<FJsonValueNumber>(R.Pitch));
 	Arr.Add(MakeShared<FJsonValueNumber>(R.Yaw));
 	Arr.Add(MakeShared<FJsonValueNumber>(R.Roll));
