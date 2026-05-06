@@ -1,6 +1,7 @@
 #include "MonolithComboGraphActions.h"
 #include "MonolithComboGraphModule.h"
 #include "MonolithParamSchema.h"
+#include "MonolithPackagePathValidator.h"
 // NO ComboGraph includes — all property access via reflection
 
 #if WITH_COMBOGRAPH
@@ -942,6 +943,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboGraph(const T
 		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	FString AssetName = ExtractAssetName(SavePath);
 	if (AssetName.IsEmpty())
 	{
@@ -1579,6 +1585,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboAbility(const
 	FString InitialInput = Params->GetStringField(TEXT("initial_input"));
 	FString ParentClassName = Params->GetStringField(TEXT("parent_class"));
 	if (ParentClassName.IsEmpty()) ParentClassName = TEXT("GameplayAbility");
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	FString AssetName = ExtractAssetName(SavePath);
 	if (AssetName.IsEmpty())
