@@ -781,8 +781,23 @@ FMonolithActionResult FMonolithAudioQueryActions::FindUnusedAudio(const TSharedP
 
 FMonolithActionResult FMonolithAudioQueryActions::FindSoundsWithoutClass(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString PathFilter = Params->HasField(TEXT("path_filter")) ? Params->GetStringField(TEXT("path_filter")) : TEXT("");
-	const int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 100;
+	FString PathFilter;
+	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param 'path_filter': must be a string"));
+	}
+
+	int32 Limit = 100;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = FMath::Clamp(Limit, 0, 1000);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 
