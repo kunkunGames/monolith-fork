@@ -19,6 +19,7 @@ public class MonolithAudio : ModuleRules
 			"AIModule",                // UAISense_Hearing for sense-class resolution (Phase I3)
 			"AudioMixer",              // SoundSubmix, submix effects
 			"AudioEditor",             // All UFactory classes, graph schemas
+			"AssetRegistry",           // IAssetRegistry / FAssetData
 			"AssetTools",              // FAssetToolsModule for rename operations
 			"Json", "JsonUtilities",
 			"Slate", "SlateCore",      // Editor module transitive deps
