@@ -1,3 +1,8 @@
+## 2024-05-06 - Bound Audio Query Limits
+**Boundary:** list_audio_assets, search_audio_assets, find_unused_audio limits
+**Learning:** Extracting unvalidated double/string fields via GetNumberField for counts causes potential crashes and extreme unbounded scans.
+**Prevention:** Always use TryGetNumberField for limit/count properties and explicitly FMath::Clamp them to safe boundaries (e.g. 0 to 1000).
+
 ## 2025-02-18 - Bound MonolithAudioQueryActions find_unattenuated_sounds results array
 **Boundary:** `limit` param and `ResultsArray.Num()` on `find_unattenuated_sounds` action
 **Learning:** `FindUnattenuatedSounds` traverses potentially tens of thousands of assets via the asset registry. An unbounded list risks returning a huge JSON array, which could consume significant memory and crash the VM/MCP if a project has huge numbers of missing attenuations.

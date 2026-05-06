@@ -191,7 +191,17 @@ FMonolithActionResult FMonolithAudioQueryActions::ListAudioAssets(const TSharedP
 {
 	const FString TypeStr = Params->GetStringField(TEXT("type"));
 	const FString PathFilter = Params->HasField(TEXT("path_filter")) ? Params->GetStringField(TEXT("path_filter")) : TEXT("");
-	const int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 100;
+	int32 Limit = 100;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = FMath::Clamp(Limit, 0, 1000);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 
@@ -269,7 +279,17 @@ FMonolithActionResult FMonolithAudioQueryActions::SearchAudioAssets(const TShare
 {
 	const FString Query = Params->GetStringField(TEXT("query"));
 	const FString TypeStr = Params->HasField(TEXT("type")) ? Params->GetStringField(TEXT("type")) : TEXT("All");
-	const int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
+	int32 Limit = 50;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = FMath::Clamp(Limit, 0, 1000);
 
 	if (Query.IsEmpty())
 	{
@@ -704,7 +724,17 @@ FMonolithActionResult FMonolithAudioQueryActions::FindUnusedAudio(const TSharedP
 {
 	const FString TypeStr = Params->HasField(TEXT("type")) ? Params->GetStringField(TEXT("type")) : TEXT("All");
 	const FString PathFilter = Params->HasField(TEXT("path_filter")) ? Params->GetStringField(TEXT("path_filter")) : TEXT("");
-	const int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 100;
+	int32 Limit = 100;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = FMath::Clamp(Limit, 0, 1000);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 
