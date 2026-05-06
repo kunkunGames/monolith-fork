@@ -91,6 +91,7 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleGetSMOverview(
 
 		TArray<FAssetData> Assets;
 		AssetRegistry.GetAssets(Filter, Assets);
+		SMBlueprintArray.Reserve(Assets.Num());
 
 		for (const FAssetData& Asset : Assets)
 		{
@@ -118,6 +119,7 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleGetSMOverview(
 
 			TArray<FAssetData> Assets;
 			AssetRegistry.GetAssets(Filter, Assets);
+			NodeBlueprintArray.Reserve(Assets.Num());
 
 			for (const FAssetData& Asset : Assets)
 			{
@@ -342,6 +344,7 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleFindSMReferenc
 	AR.GetReferencers(FAssetIdentifier(FName(*PackageName)), Referencers);
 
 	TArray<TSharedPtr<FJsonValue>> RefArray;
+	RefArray.Reserve(Referencers.Num());
 	for (const FAssetIdentifier& Ref : Referencers)
 	{
 		FString RefPath = Ref.PackageName.ToString();
@@ -790,6 +793,7 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleExplainStateMa
 
 	// Build states array
 	TArray<TSharedPtr<FJsonValue>> StatesArr;
+	StatesArr.Reserve(StateCount);
 	FString InitialGuid;
 	for (const auto& Pair : StatesByGuid)
 	{
