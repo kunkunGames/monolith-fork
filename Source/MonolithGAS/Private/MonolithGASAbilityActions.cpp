@@ -3754,17 +3754,27 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleScaffoldCustomAbilityTas
 	const TArray<TSharedPtr<FJsonValue>>* ParamsArr = nullptr;
 	if (Params->TryGetArrayField(TEXT("parameters"), ParamsArr))
 	{
-		for (const TSharedPtr<FJsonValue>& Val : *ParamsArr)
+		for (int32 i = 0; i < ParamsArr->Num(); ++i)
 		{
+			const TSharedPtr<FJsonValue>& Val = (*ParamsArr)[i];
+			if (Val->Type != EJson::Object)
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("parameters[%d] is not a valid object"), i));
+			}
+
 			TSharedPtr<FJsonObject> Obj = Val->AsObject();
 			if (!Obj) continue;
+
 			FTaskParam P;
-			P.Name = Obj->GetStringField(TEXT("name"));
-			P.Type = Obj->GetStringField(TEXT("type"));
-			if (!P.Name.IsEmpty() && !P.Type.IsEmpty())
+			if (!Obj->TryGetStringField(TEXT("name"), P.Name) || P.Name.IsEmpty())
 			{
-				TaskParams.Add(P);
+				return FMonolithActionResult::Error(FString::Printf(TEXT("parameters[%d].name is missing, empty, or not a string"), i));
 			}
+			if (!Obj->TryGetStringField(TEXT("type"), P.Type) || P.Type.IsEmpty())
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("parameters[%d].type is missing, empty, or not a string"), i));
+			}
+			TaskParams.Add(P);
 		}
 	}
 
@@ -3779,17 +3789,32 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleScaffoldCustomAbilityTas
 	const TArray<TSharedPtr<FJsonValue>>* DelegatesArr = nullptr;
 	if (Params->TryGetArrayField(TEXT("delegates"), DelegatesArr))
 	{
-		for (const TSharedPtr<FJsonValue>& Val : *DelegatesArr)
+		for (int32 i = 0; i < DelegatesArr->Num(); ++i)
 		{
+			const TSharedPtr<FJsonValue>& Val = (*DelegatesArr)[i];
+			if (Val->Type != EJson::Object)
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("delegates[%d] is not a valid object"), i));
+			}
+
 			TSharedPtr<FJsonObject> Obj = Val->AsObject();
 			if (!Obj) continue;
+
 			FTaskDelegate D;
-			D.Name = Obj->GetStringField(TEXT("name"));
-			D.DelegateParams = Obj->GetStringField(TEXT("params"));
-			if (!D.Name.IsEmpty())
+			if (!Obj->TryGetStringField(TEXT("name"), D.Name) || D.Name.IsEmpty())
 			{
-				TaskDelegates.Add(D);
+				return FMonolithActionResult::Error(FString::Printf(TEXT("delegates[%d].name is missing, empty, or not a string"), i));
 			}
+			// params is optional, so we use TryGetStringField but don't fail if it's missing or empty
+			if (Obj->HasField(TEXT("params")))
+			{
+				if (!Obj->TryGetStringField(TEXT("params"), D.DelegateParams))
+				{
+					return FMonolithActionResult::Error(FString::Printf(TEXT("delegates[%d].params is provided but not a string"), i));
+				}
+			}
+
+			TaskDelegates.Add(D);
 		}
 	}
 

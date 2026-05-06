@@ -7,3 +7,8 @@
 **Malformed input pattern:** JSON array parameters (`dialogue_nodes`, `choices`, `objectives`, `states`) supplied as strings or objects, or array elements supplied as the wrong type.
 **Learning:** `Params->HasField()` followed by `Params->GetArrayField()` triggers a fatal assert if the field is present but not an array type. Additionally, retrieving array items without validating their type triggers asserts when casting (e.g., `->AsObject()` or `->AsString()`).
 **Prevention:** Use `TryGetArrayField()` which safely checks type. Always verify array element types using `Item->Type == EJson::X` prior to casting, returning a clear `FMonolithActionResult::Error` if invalid.
+
+## 2025-02-20 - Scaffold Custom Ability Task Arrays
+**Malformed input pattern:** Untrusted JSON arrays (`parameters`, `delegates`) passed array elements that are not JSON objects (e.g., numbers, strings), which were then blindly converted with `AsObject()` and their fields queried via `GetStringField()`.
+**Learning:** `AsObject()` does not inherently validate that the JSON value is an object (it may return a nullptr or crash depending on type mismatch), and blindly chaining `GetStringField` on untrusted objects leads to assertions or null dereferences.
+**Prevention:** Handlers iterating over `TryGetArrayField` items must explicitly check `Val->Type == EJson::Object` before calling `AsObject()`, and use `TryGetStringField` instead of `GetStringField` for nested string extraction.
