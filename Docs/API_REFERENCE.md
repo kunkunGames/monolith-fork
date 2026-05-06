@@ -2,7 +2,7 @@
 
 **Version:** v0.14.9 · **Last updated:** 2026-05-03
 
-**In-tree action total: 1274** registered across **16 in-tree namespaces** (all 1274 active by default; 45 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the registry to 1319). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1270**. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 20.
+**In-tree action total: 1273** registered across **16 in-tree namespaces** (all 1273 active by default; 47 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the registry to 1320). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1269**. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 20.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
@@ -25,14 +25,14 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [config](#config) | 6 | INI config inspection and search |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
-| [mesh](#mesh) | 239 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental — +45 town gen registers only with `bEnableProceduralTownGen=true`) |
+| [mesh](#mesh) | 241 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental — +47 town gen registers only with `bEnableProceduralTownGen=true`) |
 | [ui](#ui) | 121 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 221 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 86 | Sound Cue + MetaSound graph CRUD, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
-| **In-tree subtotal** | **1271** | (all default-active; +45 experimental town gen → 1316 when registered) |
+| **In-tree subtotal** | **1273** | (all default-active; +47 experimental town gen → 1320 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -572,7 +572,7 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **11 actions.**
 
 ## mesh
 
-Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript, procedural geometry, lighting, audio, performance, and **experimental** procedural town generation. **240 actions** total — 195 core (always registered) + 45 experimental town gen (gated on `bEnableProceduralTownGen=true`, default `false`).
+Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript, procedural geometry, lighting, audio, performance, and **experimental** procedural town generation. **241 actions** total — 194 core (always registered) + 47 experimental town gen (gated on `bEnableProceduralTownGen=true`, default `false`).
 
 > For full param schemas, call `monolith_discover("mesh")` at runtime. The action surface is too broad for full enumeration — see categories below.
 
