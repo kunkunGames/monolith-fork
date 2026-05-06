@@ -164,13 +164,16 @@ public class MyPluginBridge : ModuleRules
         if (!bReleaseBuild)
         {
             // Check three locations: project Plugins/, Engine Plugins/Marketplace/, Engine Plugins/
-            string ProjectPluginsDir = Path.Combine(
-                Target.ProjectFile.Directory.FullName, "Plugins");
-            if (Directory.Exists(ProjectPluginsDir))
+            if (Target.ProjectFile != null)
             {
-                bHasThirdParty = Directory.GetDirectories(
-                    ProjectPluginsDir, "ThirdParty*",
-                    SearchOption.TopDirectoryOnly).Length > 0;
+                string ProjectPluginsDir = Path.Combine(
+                    Target.ProjectFile.Directory.FullName, "Plugins");
+                if (Directory.Exists(ProjectPluginsDir))
+                {
+                    bHasThirdParty = Directory.GetDirectories(
+                        ProjectPluginsDir, "ThirdParty*",
+                        SearchOption.TopDirectoryOnly).Length > 0;
+                }
             }
 
             if (!bHasThirdParty)
