@@ -429,6 +429,25 @@ TArray<FMonolithActionInfo> FMonolithToolRegistry::GetActions(const FString& Nam
 	return Result;
 }
 
+TArray<FString> FMonolithToolRegistry::GetActionNames(const FString& Namespace) const
+{
+	FScopeLock Lock(&RegistryLock);
+	TArray<FString> Result;
+
+	if (const TArray<FString>* Keys = NamespaceActions.Find(Namespace))
+	{
+		Result.Reserve(Keys->Num());
+		for (const FString& Key : *Keys)
+		{
+			if (const FRegisteredAction* RegAction = Actions.Find(Key))
+			{
+				Result.Add(RegAction->Info.Action);
+			}
+		}
+	}
+	return Result;
+}
+
 TArray<FMonolithActionInfo> FMonolithToolRegistry::GetAllActions() const
 {
 	FScopeLock Lock(&RegistryLock);
