@@ -55,8 +55,14 @@ void FMonolithUIBindingActions::RegisterActions(FMonolithToolRegistry& Registry)
 // --- list_widget_events ---
 FMonolithActionResult FMonolithUIBindingActions::HandleListWidgetEvents(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString WidgetNameFilter = Params->GetStringField(TEXT("widget_name"));
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+    {
+        return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: asset_path"));
+    }
+
+    FString WidgetNameFilter;
+    Params->TryGetStringField(TEXT("widget_name"), WidgetNameFilter);
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -130,8 +136,17 @@ FMonolithActionResult FMonolithUIBindingActions::HandleListWidgetEvents(const TS
 // --- list_widget_properties ---
 FMonolithActionResult FMonolithUIBindingActions::HandleListWidgetProperties(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString WidgetName = Params->GetStringField(TEXT("widget_name"));
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+    {
+        return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: asset_path"));
+    }
+
+    FString WidgetName;
+    if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName) || WidgetName.IsEmpty())
+    {
+        return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: widget_name"));
+    }
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -205,9 +220,23 @@ FMonolithActionResult FMonolithUIBindingActions::HandleListWidgetProperties(cons
 // --- setup_list_view ---
 FMonolithActionResult FMonolithUIBindingActions::HandleSetupListView(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString ListWidgetName = Params->GetStringField(TEXT("list_widget_name"));
-    FString EntryWidgetClass = Params->GetStringField(TEXT("entry_widget_class"));
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+    {
+        return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: asset_path"));
+    }
+
+    FString ListWidgetName;
+    if (!Params->TryGetStringField(TEXT("list_widget_name"), ListWidgetName) || ListWidgetName.IsEmpty())
+    {
+        return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: list_widget_name"));
+    }
+
+    FString EntryWidgetClass;
+    if (!Params->TryGetStringField(TEXT("entry_widget_class"), EntryWidgetClass) || EntryWidgetClass.IsEmpty())
+    {
+        return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: entry_widget_class"));
+    }
 
     double EntryHeight = 50.0;
     if (Params->HasField(TEXT("entry_height")))
@@ -347,7 +376,11 @@ FMonolithActionResult FMonolithUIBindingActions::HandleSetupListView(const TShar
 // --- get_widget_bindings ---
 FMonolithActionResult FMonolithUIBindingActions::HandleGetWidgetBindings(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+    {
+        return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: asset_path"));
+    }
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
