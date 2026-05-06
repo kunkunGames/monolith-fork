@@ -1364,12 +1364,18 @@ FMonolithActionResult FMonolithAudioAssetActions::SetSubmixProperties(const TSha
 		}
 		else if (bHasCanonical)
 		{
-			RequestedOutputVolume = (*PropsJson)->GetNumberField(TEXT("output_volume_db"));
+			if (!(*PropsJson)->TryGetNumberField(TEXT("output_volume_db"), RequestedOutputVolume))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'output_volume_db'. Expected number."));
+			}
 			bRequestedOutputVolume = true;
 		}
 		else if (bHasLegacy)
 		{
-			RequestedOutputVolume = (*PropsJson)->GetNumberField(TEXT("output_volume"));
+			if (!(*PropsJson)->TryGetNumberField(TEXT("output_volume"), RequestedOutputVolume))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'output_volume'. Expected number."));
+			}
 			bRequestedOutputVolume = true;
 			bUsedLegacyKey = true;
 		}
