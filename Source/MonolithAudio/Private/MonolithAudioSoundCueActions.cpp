@@ -2,6 +2,7 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h" // LogMonolith
+#include "MonolithAssetUtils.h"
 
 // Sound Cue core
 #include "Sound/SoundCue.h"
@@ -101,45 +102,10 @@ UClass* FMonolithAudioSoundCueActions::ResolveNodeType(const FString& TypeName)
 
 USoundCue* FMonolithAudioSoundCueActions::LoadSoundCue(const FString& AssetPath, FString& OutError)
 {
-	// Normalize short paths: /Game/Foo/Bar -> /Game/Foo/Bar.Bar
-	FString NormalizedPath = AssetPath;
-	if (!NormalizedPath.Contains(TEXT(".")))
-	{
-		int32 LastSlash;
-		if (NormalizedPath.FindLastChar('/', LastSlash) && LastSlash >= 0)
-		{
-			FString AssetName = NormalizedPath.Mid(LastSlash + 1);
-			if (!AssetName.IsEmpty())
-			{
-				NormalizedPath = NormalizedPath + TEXT(".") + AssetName;
-			}
-		}
-	}
-
-	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
-	FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(NormalizedPath));
-	if (AssetData.IsValid())
-	{
-		UObject* Loaded = AssetData.GetAsset();
-		USoundCue* Cue = Cast<USoundCue>(Loaded);
-		if (!Cue)
-		{
-			OutError = FString::Printf(TEXT("Asset at '%s' is not a USoundCue (found %s)"),
-				*AssetPath, Loaded ? *Loaded->GetClass()->GetName() : TEXT("null"));
-		}
-		return Cue;
-	}
-
-	UObject* Loaded = StaticLoadObject(USoundCue::StaticClass(), nullptr, *AssetPath);
-	if (!Loaded)
-	{
-		OutError = FString::Printf(TEXT("Sound Cue not found at '%s'"), *AssetPath);
-		return nullptr;
-	}
-	USoundCue* Cue = Cast<USoundCue>(Loaded);
+	USoundCue* Cue = FMonolithAssetUtils::LoadAssetByPath<USoundCue>(AssetPath);
 	if (!Cue)
 	{
-		OutError = FString::Printf(TEXT("Asset at '%s' is not a USoundCue"), *AssetPath);
+		OutError = FString::Printf(TEXT("Sound Cue not found or invalid class at '%s'"), *AssetPath);
 	}
 	return Cue;
 }
@@ -339,7 +305,7 @@ bool FMonolithAudioSoundCueActions::SetNodeProperty(USoundNode* Node, const FStr
 			OutError = TEXT("SoundWave value must be a string path");
 			return false;
 		}
-		USoundWave* Wave = Cast<USoundWave>(StaticLoadObject(USoundWave::StaticClass(), nullptr, *WavePath));
+		USoundWave* Wave = FMonolithAssetUtils::LoadAssetByPath<USoundWave>(WavePath);
 		if (!Wave)
 		{
 			OutError = FString::Printf(TEXT("Could not load SoundWave at '%s'"), *WavePath);
@@ -467,7 +433,7 @@ bool FMonolithAudioSoundCueActions::SetNodeProperty(USoundNode* Node, const FStr
 				ObjProp->SetObjectPropertyValue(ValuePtr, nullptr);
 				return true;
 			}
-			UObject* Loaded = StaticLoadObject(ObjProp->PropertyClass, nullptr, *SVal);
+			UObject* Loaded = FMonolithAssetUtils::LoadAssetByPath(ObjProp->PropertyClass, SVal);
 			if (Loaded)
 			{
 				ObjProp->SetObjectPropertyValue(ValuePtr, Loaded);
@@ -564,7 +530,7 @@ USoundCue* FMonolithAudioSoundCueActions::CreateEmptySoundCue(const FString& Ass
 	}
 
 	// Check if already exists
-	UObject* Existing = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
+	UObject* Existing = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (Existing)
 	{
 		OutError = FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath);
@@ -607,7 +573,7 @@ TArray<USoundNode*> FMonolithAudioSoundCueActions::CreateWavePlayerNodes(USoundC
 	TArray<USoundNode*> Nodes;
 	for (const FString& WavePath : WavePaths)
 	{
-		USoundWave* Wave = Cast<USoundWave>(StaticLoadObject(USoundWave::StaticClass(), nullptr, *WavePath));
+		USoundWave* Wave = FMonolithAssetUtils::LoadAssetByPath<USoundWave>(WavePath);
 		if (!Wave)
 		{
 			OutError = FString::Printf(TEXT("Could not load SoundWave at '%s'"), *WavePath);
@@ -1895,7 +1861,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue(
 			return FMonolithActionResult::Error(TEXT("Each band must have a 'sound_wave' path"));
 		}
 
-		USoundWave* Wave = Cast<USoundWave>(StaticLoadObject(USoundWave::StaticClass(), nullptr, *WavePath));
+		USoundWave* Wave = FMonolithAssetUtils::LoadAssetByPath<USoundWave>(WavePath);
 		if (!Wave)
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Could not load SoundWave at '%s'"), *WavePath));
@@ -2054,7 +2020,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::DuplicateSoundCue(const TSh
 	}
 
 	IAssetTools& AssetTools = FAssetToolsModule::GetModule().Get();
-	UObject* Source = StaticLoadObject(UObject::StaticClass(), nullptr, *SourcePath);
+	UObject* Source = FMonolithAssetUtils::LoadAssetByPath(SourcePath);
 	if (!Source) { return FMonolithActionResult::Error(FString::Printf(TEXT("Source asset not found: '%s'"), *SourcePath)); }
 	FString DestPackagePath, DestAssetName;
 	DestPath.Split(TEXT("/"), &DestPackagePath, &DestAssetName, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
@@ -2080,7 +2046,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::DeleteAudioAsset(const TSha
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
-	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
+	UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!Asset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset not found at '%s'"), *AssetPath));
@@ -2106,7 +2072,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::PreviewSound(const TSharedP
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
-	USoundBase* Sound = Cast<USoundBase>(StaticLoadObject(USoundBase::StaticClass(), nullptr, *AssetPath));
+	USoundBase* Sound = FMonolithAssetUtils::LoadAssetByPath<USoundBase>(AssetPath);
 	if (!Sound)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Could not load USoundBase at '%s'"), *AssetPath));

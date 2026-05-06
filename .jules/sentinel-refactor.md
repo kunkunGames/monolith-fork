@@ -21,3 +21,9 @@
 **Learning:** Monolith tools are generally action-handler heavy, and parameter extraction/asset loading boilerplate can quickly bloat handlers. Extracting paired operations (load asset + extract internal root structure) into a single helper with consolidated error propagation significantly improves readability.
 **Reuse rule:** Prefer extracting common multi-step setup logic (like load + get sub-object) into Internal module helpers to keep action handlers focused on logic.
 **Avoid:** Duplicating 6-8 lines of asset load / error checking boilerplate across every action handler in a module.
+
+## 2024-05-06 - [Sentinel Refactor: LoadSoundCue cohesion via FMonolithAssetUtils]
+**Pattern:** Ad-hoc path normalization and `StaticLoadObject` fallbacks were repeatedly used throughout `MonolithAudioSoundCueActions.cpp` for resolving Sound Cues, Sound Waves, and base assets.
+**Learning:** Manual path logic and direct tier-4 lookups (`StaticLoadObject`) bypass Monolith's standard validation and robust 4-tier asset lookup, causing duplication and potentially missing un-saved objects.
+**Reuse rule:** Always utilize `FMonolithAssetUtils::LoadAssetByPath<T>` for generic asset loading within Monolith action handlers, dropping duplicated fallback boilerplate in favor of the canonical path.
+**Avoid:** Avoid writing manual path normalization (`/Game/Foo.Foo`) combined with `AssetRegistry` and `StaticLoadObject` fallbacks when a Core helper already exists.
