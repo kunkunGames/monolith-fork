@@ -3,6 +3,7 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithPackagePathValidator.h"
 
 #include "NiagaraSystem.h"
 #include "NiagaraEmitter.h"
@@ -2374,6 +2375,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRequestCompile(const TShare
 FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystem(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
+
 	FString TemplatePath = Params->HasField(TEXT("template")) ? Params->GetStringField(TEXT("template")) : FString();
 
 	if (!TemplatePath.IsEmpty())
@@ -3547,6 +3551,8 @@ FMonolithActionResult FMonolithNiagaraActions::CreateScriptFromHLSL(const TShare
 
 	if (Name.IsEmpty()) return FMonolithActionResult::Error(TEXT("'name' is required"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("'save_path' is required"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
 	if (HlslBody.IsEmpty()) return FMonolithActionResult::Error(TEXT("'hlsl' is required"));
 
 	// Parse inputs array
@@ -5206,6 +5212,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystemFromSpec(const 
 		SavePath = Spec->GetStringField(TEXT("save_path"));
 	FString Template = Spec->HasField(TEXT("template")) ? Spec->GetStringField(TEXT("template")) : FString();
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("save_path required (provide at params root or inside spec)"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
 
 	// Create system
 	TSharedRef<FJsonObject> CreateParams = MakeShared<FJsonObject>();
@@ -6913,6 +6921,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateSystem(const TShar
 	FString SystemPath = GetAssetPath(Params);
 	FString SavePath = Params->GetStringField(TEXT("save_path"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: save_path"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load source system"));
@@ -9514,6 +9524,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateNPC(const TSharedPtr<
 	FString Namespace = Params->GetStringField(TEXT("namespace"));
 
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: save_path"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
 	if (Namespace.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: namespace"));
 
 	FString PackagePath, AssetName;
@@ -9834,6 +9846,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateEffectType(const TSha
 {
 	FString SavePath = Params->GetStringField(TEXT("save_path"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: save_path"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
 
 	FString PackagePath, AssetName;
 	int32 LastSlash;
@@ -11464,6 +11478,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveEmitterAsTemplate(const
 
 	if (EmitterHandleId.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: emitter"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: save_path"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
