@@ -22,6 +22,7 @@
 #include "Dom/JsonValue.h"
 #include "Editor.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "MonolithPackagePathValidator.h"
 #include "UObject/SavePackage.h"
 #include "UObject/Package.h"
 
@@ -1769,6 +1770,13 @@ FMonolithActionResult FMonolithMeshAudioActions::CreateSurfaceDataTable(const TS
 	}
 
 	FScopedAudioTransaction Transaction(FText::FromString(TEXT("Monolith: Create Surface DataTable")));
+
+	// Early out before modifying physics settings if package path is invalid
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackagePath); !ValidationError.IsEmpty())
+	{
+		Transaction.Cancel();
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	// Step 1: Register surface types via UPhysicsSettings CDO
 	UPhysicsSettings* PhysSettingsMutable = GetMutableDefault<UPhysicsSettings>();

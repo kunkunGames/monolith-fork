@@ -31,6 +31,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Engine/SimpleConstructionScript.h"
+#include "MonolithPackagePathValidator.h"
 #include "Engine/SCS_Node.h"
 
 // ============================================================================
@@ -1411,6 +1412,12 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::CreateBlueprintPrefab(c
 		NSLOCTEXT("Monolith", "CreateBlueprintPrefab", "Monolith: Create Blueprint Prefab"));
 
 	// Create package (no dialog)
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		Transaction.Cancel();
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{

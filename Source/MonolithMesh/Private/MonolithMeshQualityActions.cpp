@@ -23,6 +23,7 @@
 #include "IMeshMergeUtilities.h"
 #include "MeshMergeModule.h"
 #include "MeshMerge/MeshMergingSettings.h"
+#include "MonolithPackagePathValidator.h"
 #include "WorldPartition/HLOD/HLODLayer.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -509,6 +510,12 @@ FMonolithActionResult FMonolithMeshQualityActions::GenerateProxyMesh(const TShar
 	// Create the output package
 	FString PackageName = SavePath;
 	FString AssetName = FPackageName::GetShortName(PackageName);
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackageName); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Package = CreatePackage(*PackageName);
 	if (!Package)
 	{
@@ -631,6 +638,12 @@ FMonolithActionResult FMonolithMeshQualityActions::SetupHlod(const TSharedPtr<FJ
 	// Create the HLOD layer asset
 	FString PackageName = SavePath;
 	FString AssetName = FPackageName::GetShortName(PackageName);
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackageName); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Package = CreatePackage(*PackageName);
 	if (!Package)
 	{

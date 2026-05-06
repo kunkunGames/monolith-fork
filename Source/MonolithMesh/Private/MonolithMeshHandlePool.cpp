@@ -16,6 +16,7 @@ TSharedPtr<FJsonObject> UMonolithMeshHandlePool::ListHandles() const { return Ma
 #include "DynamicMesh/DynamicMesh3.h"
 #include "MeshDescriptionToDynamicMesh.h"
 #include "DynamicMeshToMeshDescription.h"
+#include "MonolithPackagePathValidator.h"
 #include "MeshDescription.h"
 
 #include "Engine/StaticMesh.h"
@@ -168,6 +169,12 @@ bool UMonolithMeshHandlePool::SaveHandle(const FString& HandleName, const FStrin
 	// Check if package already exists
 	FString PackagePath = TargetPath;
 	FString AssetName;
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackagePath); !ValidationError.IsEmpty())
+	{
+		OutError = ValidationError;
+		return false;
+	}
+
 	// Extract asset name from path: "/Game/Meshes/MyMesh" -> PackagePath="/Game/Meshes/MyMesh", AssetName="MyMesh"
 	int32 LastSlash;
 	if (PackagePath.FindLastChar('/', LastSlash))
