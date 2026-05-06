@@ -3,6 +3,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "MonolithLogicDriverComponentActions.h"
+#include "MonolithLogicDriverNodeActions.h"
 #include "MonolithLogicDriverScaffoldActions.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -15,6 +16,17 @@ namespace
 		if (!Registry.HasAction(TEXT("logicdriver"), Action))
 		{
 			FMonolithLogicDriverScaffoldActions::RegisterActions(Registry);
+		}
+
+		return Registry.ExecuteAction(TEXT("logicdriver"), Action, Params);
+	}
+
+	FMonolithActionResult ExecuteNodeAction(const FString& Action, const TSharedPtr<FJsonObject>& Params)
+	{
+		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+		if (!Registry.HasAction(TEXT("logicdriver"), Action))
+		{
+			FMonolithLogicDriverNodeActions::RegisterActions(Registry);
 		}
 
 		return Registry.ExecuteAction(TEXT("logicdriver"), Action, Params);
@@ -182,6 +194,51 @@ bool FMonolithParamGuardLogicDriverScaffoldRejectsMalformedArraysTest::RunTest(c
 		FMonolithActionResult Result = ExecuteScaffoldAction(TEXT("scaffold_dialogue_sm"), Params);
 		TestTrue(TEXT("Dialogue nodes array with wrong item type should return error"), !Result.bSuccess);
 		TestTrue(TEXT("Error message should mention dialogue_nodes object type"), Result.ErrorMessage.Contains(TEXT("dialogue_nodes")) && Result.ErrorMessage.Contains(TEXT("object")));
+	}
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverSetStateTagsRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.SetStateTagsRejectsMalformedParams", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverSetStateTagsRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	// Test 1: missing gameplay_tags
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("blueprint_path"), TEXT("/Game/DummyPath"));
+		Params->SetStringField(TEXT("node_guid"), TEXT("DummyGuid"));
+
+		FMonolithActionResult Result = ExecuteNodeAction(TEXT("set_state_tags"), Params);
+		TestTrue(TEXT("Missing tags should return error"), !Result.bSuccess);
+		TestTrue(TEXT("Missing tags error message should mention gameplay_tags"), Result.ErrorMessage.Contains(TEXT("gameplay_tags")));
+	}
+
+	// Test 2: malformed gameplay_tags type
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("blueprint_path"), TEXT("/Game/DummyPath"));
+		Params->SetStringField(TEXT("node_guid"), TEXT("DummyGuid"));
+		Params->SetStringField(TEXT("gameplay_tags"), TEXT("NotAnArray"));
+
+		FMonolithActionResult Result = ExecuteNodeAction(TEXT("set_state_tags"), Params);
+		TestTrue(TEXT("Malformed tags should return error"), !Result.bSuccess);
+		TestTrue(TEXT("Malformed tags error message should mention gameplay_tags"), Result.ErrorMessage.Contains(TEXT("gameplay_tags")));
+	}
+
+	// Test 3: valid array but malformed item type
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("blueprint_path"), TEXT("/Game/DummyPath"));
+		Params->SetStringField(TEXT("node_guid"), TEXT("DummyGuid"));
+
+		TArray<TSharedPtr<FJsonValue>> ArrayVal;
+		ArrayVal.Add(MakeShared<FJsonValueNumber>(123));
+		Params->SetArrayField(TEXT("gameplay_tags"), ArrayVal);
+
+		FMonolithActionResult Result = ExecuteNodeAction(TEXT("set_state_tags"), Params);
+		TestTrue(TEXT("Malformed tag items should return error"), !Result.bSuccess);
+		TestTrue(TEXT("Malformed tags error message should mention gameplay_tags"), Result.ErrorMessage.Contains(TEXT("gameplay_tags")) && Result.ErrorMessage.Contains(TEXT("string")));
 	}
 
 	return true;

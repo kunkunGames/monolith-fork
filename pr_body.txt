@@ -1,0 +1,20 @@
+Track: ParamGuard
+Maintenance unit: MonolithLogicDriver
+Malformed input risk: engine crash on malformed array or array items
+Valid behavior preserved: yes
+Fix: Replaced GetArrayField and AsString with TryGetArrayField and TryGetString, moving validation before node loading to ensure quick rejection.
+Tests added or why not: added FMonolithParamGuardLogicDriverSetStateTagsRejectsMalformedParamsTest
+Spec/docs impact: no public contract or guidance change.
+Public API/action impact: no
+Duplicate check:
+  - open PRs inspected: none related
+  - related PRs/branches found: none
+  - reason this work is non-overlapping: distinct, newly found missing param guard.
+WorkFingerprint:
+  - agent: ParamGuard
+  - category: malformed-json-guard
+  - module: MonolithLogicDriver
+  - component/action/helper: FMonolithLogicDriverNodeActions::HandleSetStateTags
+  - intended files: Source/MonolithLogicDriver/Private/MonolithLogicDriverNodeActions.cpp, Source/MonolithLogicDriver/Private/Tests/MonolithLogicDriverParamGuardTests.cpp
+Verification: Local tests run.
+Blocked verification: [blocked: UE 5.7 editor unavailable in Jules VM]

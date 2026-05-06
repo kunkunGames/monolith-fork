@@ -834,6 +834,13 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureStateMachi
 
 FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetStateTags(const TSharedPtr<FJsonObject>& Params)
 {
+	const TArray<TSharedPtr<FJsonValue>>* TagArrayPtr;
+	if (!Params->TryGetArrayField(TEXT("gameplay_tags"), TagArrayPtr) || !TagArrayPtr)
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or invalid required param 'gameplay_tags' (must be an array of strings)"));
+	}
+	const TArray<TSharedPtr<FJsonValue>>& TagArray = *TagArrayPtr;
+
 	FNodeLookupResult Lookup = LoadAndFindNode(Params);
 	if (!Lookup.bSuccess) return Lookup.Error;
 
@@ -844,13 +851,6 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetStateTags(const 
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Node is type '%s', expected a state-like node"), *NodeType));
 	}
-
-	if (!Params->HasField(TEXT("gameplay_tags")))
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'gameplay_tags'"));
-	}
-
-	const TArray<TSharedPtr<FJsonValue>>& TagArray = Params->GetArrayField(TEXT("gameplay_tags"));
 
 	// Find a GameplayTagContainer property — try common names
 	FStructProperty* TagsProp = nullptr;
@@ -887,7 +887,11 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetStateTags(const 
 
 	for (const TSharedPtr<FJsonValue>& TagVal : TagArray)
 	{
-		FString TagString = TagVal->AsString();
+		FString TagString;
+		if (!TagVal->TryGetString(TagString))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid item in 'gameplay_tags' array (must be a string)"));
+		}
 		if (TagString.IsEmpty()) continue;
 
 		FGameplayTag Tag = FGameplayTag::RequestGameplayTag(FName(*TagString), false);
