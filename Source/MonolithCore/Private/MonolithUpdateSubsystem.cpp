@@ -214,10 +214,12 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 					}
 				}
 
-				// Fallback to zipball_url if no zip asset
+				// Do NOT fallback to zipball_url. Source zipballs lack precompiled
+				// Binaries/ and will break the plugin for non-C++ users.
 				if (ZipUrl.IsEmpty())
 				{
-					JsonObj->TryGetStringField(TEXT("zipball_url"), ZipUrl);
+					UE_LOG(LogMonolith, Warning, TEXT("Release %s has no .zip asset. Aborting update to avoid pulling source zipball."), *RemoteVersion);
+					return;
 				}
 
 				if (!ZipUrl.IsEmpty())
