@@ -10,8 +10,10 @@
 #include "MonolithLogicDriverDiscoveryActions.h"
 #include "MonolithLogicDriverComponentActions.h"
 #include "MonolithLogicDriverTextGraphActions.h"
+#if WITH_LOGICDRIVER
 #include "MonolithLogicDriverIndexer.h"
 #include "MonolithIndexSubsystem.h"
+#endif
 #include "Editor.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogMonolithLogicDriver, Log, All);

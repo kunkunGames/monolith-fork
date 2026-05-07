@@ -270,8 +270,10 @@ bool UMonolithMeshHandlePool::SaveHandle(const FString& HandleName, const FStrin
 
 		if (bHasCachedCollision && CollisionMode == TEXT("auto"))
 		{
-			UGeometryScriptLibrary_CollisionFunctions::SetStaticMeshCollisionFromSimpleBoundingSolids(
-				CachedCollision, StaticMesh);
+			FGeometryScriptSetSimpleCollisionOptions SimpleCollisionOptions;
+			SimpleCollisionOptions.bEmitTransaction = false;
+			UGeometryScriptLibrary_CollisionFunctions::SetSimpleCollisionOfStaticMesh(
+				CachedCollision, StaticMesh, SimpleCollisionOptions);
 		}
 		else if (CollisionMode == TEXT("complex_as_simple"))
 		{

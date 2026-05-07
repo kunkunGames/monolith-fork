@@ -6,7 +6,7 @@
 #include "MonolithLogicDriverNodeActions.h"
 #include "MonolithLogicDriverScaffoldActions.h"
 
-#if WITH_DEV_AUTOMATION_TESTS
+#if WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
 
 namespace
 {
@@ -33,7 +33,7 @@ namespace
 	}
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetSMComponentConfigRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.GetSMComponentConfigRejectsMalformedParams", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGetSMComponentConfigRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.GetSMComponentConfigRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FGetSMComponentConfigRejectsMalformedParamsTest::RunTest(const FString& Parameters)
 {
 	// Test 1: Missing blueprint_path
@@ -200,7 +200,7 @@ bool FMonolithParamGuardLogicDriverScaffoldRejectsMalformedArraysTest::RunTest(c
 }
 
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverSetStateTagsRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.SetStateTagsRejectsMalformedParams", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverSetStateTagsRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.SetStateTagsRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardLogicDriverSetStateTagsRejectsMalformedParamsTest::RunTest(const FString& Parameters)
 {
 	// Test 1: missing gameplay_tags
@@ -244,4 +244,4 @@ bool FMonolithParamGuardLogicDriverSetStateTagsRejectsMalformedParamsTest::RunTe
 	return true;
 }
 
-#endif // WITH_DEV_AUTOMATION_TESTS
+#endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER

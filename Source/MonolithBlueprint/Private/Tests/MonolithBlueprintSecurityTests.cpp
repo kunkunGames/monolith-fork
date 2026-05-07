@@ -5,7 +5,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithBlueprintSecurityPathTest, "Monolith.Security.Blueprint.ValidatePackagePath", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithBlueprintSecurityPathTest, "Monolith.Security.Blueprint.ValidatePackagePath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithBlueprintSecurityPathTest::RunTest(const FString& Parameters)
 {

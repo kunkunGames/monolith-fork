@@ -6,7 +6,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-#if WITH_DEV_AUTOMATION_TESTS
+#if WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
 
 namespace
 {
@@ -74,4 +74,4 @@ bool FMonolithLogicDriverCrashguardPackagePathValidation::RunTest(const FString&
 	return true;
 }
 
-#endif // WITH_DEV_AUTOMATION_TESTS
+#endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER

@@ -3,15 +3,21 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithMaterialActions.h"
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithMaterialConnectExpressionsAcceptsAliasTest, "Monolith.Registry.Material.ConnectExpressionsAcceptsAlias", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithMaterialConnectExpressionsAcceptsAliasTest, "Monolith.Registry.Material.ConnectExpressionsAcceptsAlias", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithMaterialConnectExpressionsAcceptsAliasTest::RunTest(const FString& Parameters)
 {
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
-	Registry.Clear();
-	FMonolithMaterialActions::RegisterActions(Registry);
 
-	auto Schema = Registry.GetActionSchema(TEXT("material"), TEXT("connect_expressions"));
+	TSharedPtr<FJsonObject> Schema;
+	for (const FMonolithActionInfo& Info : Registry.GetActions(TEXT("material")))
+	{
+		if (Info.Action == TEXT("connect_expressions"))
+		{
+			Schema = Info.ParamSchema;
+			break;
+		}
+	}
 	TestNotNull(TEXT("Schema should exist"), Schema.Get());
 	if (Schema)
 	{
