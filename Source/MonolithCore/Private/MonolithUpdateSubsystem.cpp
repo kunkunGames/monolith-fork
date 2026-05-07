@@ -205,7 +205,11 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 						{
 							FString Name;
 							(*AssetObj)->TryGetStringField(TEXT("name"), Name);
-							if (Name.EndsWith(TEXT(".zip")))
+#if PLATFORM_MAC
+							if (Name.EndsWith(TEXT("-macOS.zip")))
+#else
+							if (Name.EndsWith(TEXT(".zip")) && !Name.EndsWith(TEXT("-macOS.zip")))
+#endif
 							{
 								(*AssetObj)->TryGetStringField(TEXT("browser_download_url"), ZipUrl);
 								break;
@@ -236,8 +240,13 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 					// marker". Stashed on the subsystem; consumed by OnDownloadComplete.
 					Self->PendingExpectedSha256.Empty();
 					{
+#if PLATFORM_MAC
+						static const FRegexPattern HashPattern(
+							TEXT("Monolith-macOS-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
+#else
 						static const FRegexPattern HashPattern(
 							TEXT("Monolith-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
+#endif
 						FRegexMatcher Matcher(HashPattern, ReleaseNotes);
 						if (Matcher.FindNext())
 						{
