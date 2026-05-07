@@ -253,7 +253,9 @@ FMonolithActionResult FMonolithLogicDriverTextGraphActions::HandleGetDialogueFlo
 
 	// Build flow JSON — ordered by traversal from initial node
 	TArray<TSharedPtr<FJsonValue>> FlowArr;
+	FlowArr.Reserve(Nodes.Num());
 	TSet<FString> Visited;
+	Visited.Reserve(Nodes.Num());
 
 	// BFS from initial nodes
 	TArray<FString> Queue;
@@ -286,6 +288,7 @@ FMonolithActionResult FMonolithLogicDriverTextGraphActions::HandleGetDialogueFlo
 
 		// Choices / next states
 		TArray<TSharedPtr<FJsonValue>> NextArr;
+		NextArr.Reserve(DN->NextGuids.Num());
 		for (const FString& NextGuid : DN->NextGuids)
 		{
 			const FDialogueNode* NextDN = Nodes.Find(NextGuid);

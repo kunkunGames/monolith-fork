@@ -486,6 +486,7 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleConfigureSMCom
 	Result->SetStringField(TEXT("component_name"), FoundNodeName);
 
 	TArray<TSharedPtr<FJsonValue>> AppliedArr;
+	AppliedArr.Reserve(Applied.Num());
 	for (const FString& S : Applied)
 		AppliedArr.Add(MakeShared<FJsonValueString>(S));
 	Result->SetArrayField(TEXT("properties_set"), AppliedArr);

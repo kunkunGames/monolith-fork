@@ -1,26 +1,26 @@
 - Duplicate check:
-  - open PRs inspected: `origin/bolt-tarray-reserve-1831361196920817627`, `origin/bolt-tarray-reserve-core-14452436680910620337`, `origin/bolt-tarray-reserve-core-tools-9111280532084720083`, `origin/jules/bolt/monolithmesh/tarray-reserve-11742699341165562135`
-  - related PRs/branches found: `origin/jules/bolt/monolithmesh/tarray-reserve-11742699341165562135` (similar branch structure, but likely addressed different arrays or files as the modifications in MonolithMeshQualityActions were missing Reserve calls).
-  - reason this work is non-overlapping: Targets specific, previously unoptimized JSON builder arrays in `MonolithMeshQualityActions.cpp` (`HandleProposeHooks` implementation) that were missed or added later.
+  - open PRs inspected: `origin/bolt-tarray-reserve-1831361196920817627`, `origin/bolt-tarray-reserve-core-14452436680910620337`, `origin/bolt-tarray-reserve-core-tools-9111280532084720083`, `origin/bolt-reserve-discover-arrays-7098378701757488254`
+  - related PRs/branches found: `origin/bolt-reserve-discover-arrays-7098378701757488254` (targets arrays in MonolithLogicDriverDiscoveryActions, but misses the arrays in `MonolithLogicDriverAssetActions.cpp`, `MonolithLogicDriverComponentActions.cpp`, and `MonolithLogicDriverTextGraphActions.cpp`)
+  - reason this work is non-overlapping: Targets specific, previously unoptimized JSON builder arrays in `MonolithAudioAssetActions.cpp`, `MonolithLogicDriverAssetActions.cpp`, `MonolithLogicDriverComponentActions.cpp`, and `MonolithLogicDriverTextGraphActions.cpp`.
 
 - WorkFingerprint:
   - agent: Bolt
   - category: Performance
-  - module: MonolithMesh
-  - component/action/helper: `HandleProposeHooks` JSON array outputs
-  - intended files: `Source/MonolithMesh/Private/MonolithMeshQualityActions.cpp`
+  - module: MonolithAudio, MonolithLogicDriver
+  - component/action/helper: Audio Asset Actions and LogicDriver Actions JSON array outputs
+  - intended files: `Source/MonolithAudio/Private/MonolithAudioAssetActions.cpp`, `Source/MonolithLogicDriver/Private/MonolithLogicDriverAssetActions.cpp`, `Source/MonolithLogicDriver/Private/MonolithLogicDriverComponentActions.cpp`, `Source/MonolithLogicDriver/Private/MonolithLogicDriverTextGraphActions.cpp`
   - risk type: Memory allocation
   - public API impact: no
   - docs/spec impact: no
 
 - 💡 What:
-  Added `.Reserve()` calls to five fixed-size `TArray` collections (`Inputs`, `Outputs`, `EventTypes`) inside the `HandleProposeHooks` stub in `MonolithMeshQualityActions.cpp` before sequential `.Add()` operations.
+  Added `.Reserve()` calls to 10 instances of `TArray<TSharedPtr<FJsonValue>>` and 1 `TSet` before sequential `.Add()` operations in `MonolithAudioAssetActions.cpp`, `MonolithLogicDriverAssetActions.cpp`, `MonolithLogicDriverComponentActions.cpp`, and `MonolithLogicDriverTextGraphActions.cpp`.
 
 - 🎯 Why:
-  Sequential `.Add()` calls without a prior `.Reserve()` trigger unnecessary heap allocations and array re-copying as the array dynamically resizes. Since the number of elements is known and static (2, 3, or 5 elements), pre-allocating the correct capacity avoids this waste.
+  Sequential `.Add()` calls without a prior `.Reserve()` trigger unnecessary heap allocations and array re-copying as the array dynamically resizes. Pre-allocating the correct capacity avoids this waste.
 
 - 📊 Impact:
-  Static/algorithmic estimate: Prevents 5-10 small heap allocations per execution of the `hook_propose` action.
+  Static/algorithmic estimate: Prevents small heap allocations per execution of several actions that build JSON arrays.
 
 - 🔬 Measurement:
   Not available (UE/editor benchmark unavailable). proxy metric: fewer allocations.

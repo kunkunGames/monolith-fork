@@ -310,6 +310,7 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleListStateMachines(
 	AR.GetAssets(Filter, Assets);
 
 	TArray<TSharedPtr<FJsonValue>> AssetArray;
+	AssetArray.Reserve(Assets.Num());
 	for (const FAssetData& AssetData : Assets)
 	{
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
@@ -654,6 +655,7 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleListNodeBlueprints
 	AR.GetAssets(Filter, Assets);
 
 	TArray<TSharedPtr<FJsonValue>> ResultArray;
+	ResultArray.Reserve(Assets.Num());
 	for (const FAssetData& AssetData : Assets)
 	{
 		// Extract parent class tag to determine node type
