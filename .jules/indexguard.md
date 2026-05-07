@@ -1,4 +1,4 @@
-## 2024-05-04 - Parameterize FTS FullTextSearch Limit Queries
-**Query contract:** MonolithIndex project search limit handling
-**Learning:** Appending user-controlled or unbounded limit parameters directly via FString::Printf is unsafe for memory exhaustion and breaks SQLite prepare caching rules.
-**Prevention:** All database limit/offset queries should use prepared statement bindings (LIMIT ?) and input limits should be clamped explicitly using FMath::Clamp before evaluation.
+## 2024-05-24 - Harden SearchSource FTS query limit bounds and bindings
+**Query contract:** Unbounded limit parameter injection in `SearchSourceFTS`, `SearchSourceFTSFiltered` and `SearchSymbolsFTSFiltered`.
+**Learning:** Raw string insertion via `FString::Printf` for integer bounds like `LIMIT %d` using unclamped user limits is dangerous and permits resource exhaustion or query malfunction.
+**Prevention:** Always clamp index limits (e.g., `FMath::Clamp(Limit, 1, 1000)`) and use SQLite prepared statement bindings (`LIMIT ?`) for numeric arguments in Monolith database handlers.

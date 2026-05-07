@@ -580,19 +580,21 @@ TArray<FMonolithSourceChunk> FMonolithSourceDatabase::SearchSourceFTS(const FStr
 
 	FString FTSQuery = EscapeFTS(Query);
 
+	int32 SafeLimit = FMath::Clamp(Limit, 1, 1000);
+
 	FSQLitePreparedStatement Stmt;
 	if (Scope == TEXT("all"))
 	{
 		Stmt.Create(*Database, TEXT("SELECT f.file_id, f.line_number, f.text FROM source_fts f WHERE source_fts MATCH ? ORDER BY bm25(source_fts) LIMIT ?;"));
 		Stmt.SetBindingValueByIndex(1, FTSQuery);
-		Stmt.SetBindingValueByIndex(2, static_cast<int64>(Limit));
+		Stmt.SetBindingValueByIndex(2, static_cast<int64>(SafeLimit));
 	}
 	else
 	{
 		Stmt.Create(*Database, TEXT("SELECT sf.file_id, sf.line_number, sf.text FROM source_fts sf JOIN files fi ON fi.id = sf.file_id WHERE source_fts MATCH ? AND fi.file_type = ? ORDER BY bm25(source_fts) LIMIT ?;"));
 		Stmt.SetBindingValueByIndex(1, FTSQuery);
 		Stmt.SetBindingValueByIndex(2, Scope);
-		Stmt.SetBindingValueByIndex(3, static_cast<int64>(Limit));
+		Stmt.SetBindingValueByIndex(3, static_cast<int64>(SafeLimit));
 	}
 
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
@@ -614,9 +616,11 @@ TArray<FMonolithSourceChunk> FMonolithSourceDatabase::SearchSourceFTSFiltered(co
 	TArray<FMonolithSourceChunk> Result;
 	if (!Database || !Database->IsValid()) return Result;
 
+	int32 SafeLimit = FMath::Clamp(Limit, 1, 1000);
+
 	if (Scope == TEXT("all") && Module.IsEmpty() && PathFilter.IsEmpty())
 	{
-		return SearchSourceFTS(Query, Scope, Limit);
+		return SearchSourceFTS(Query, Scope, SafeLimit);
 	}
 
 	FString FTSQuery = EscapeFTS(Query);
@@ -640,7 +644,7 @@ TArray<FMonolithSourceChunk> FMonolithSourceDatabase::SearchSourceFTSFiltered(co
 	}
 
 	SQL += TEXT("WHERE ") + FString::Join(Conditions, TEXT(" AND "));
-	SQL += FString::Printf(TEXT(" ORDER BY bm25(source_fts) LIMIT %d;"), Limit);
+	SQL += TEXT(" ORDER BY bm25(source_fts) LIMIT ?;");
 
 	FSQLitePreparedStatement Stmt;
 	Stmt.Create(*Database, *SQL);
@@ -659,6 +663,7 @@ TArray<FMonolithSourceChunk> FMonolithSourceDatabase::SearchSourceFTSFiltered(co
 	{
 		Stmt.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s%%"), *PathFilter));
 	}
+	Stmt.SetBindingValueByIndex(BindIdx++, static_cast<int64>(SafeLimit));
 
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
@@ -678,6 +683,8 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::SearchSymbolsFTSFiltered(
 	FScopeLock Lock(&DbLock);
 	TArray<FMonolithSourceSymbol> Result;
 	if (!Database || !Database->IsValid()) return Result;
+
+	int32 SafeLimit = FMath::Clamp(Limit, 1, 1000);
 
 	FString FTSQuery = EscapeFTS(Query);
 
@@ -704,7 +711,7 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::SearchSymbolsFTSFiltered(
 	}
 
 	SQL += TEXT("WHERE ") + FString::Join(Conditions, TEXT(" AND "));
-	SQL += FString::Printf(TEXT(" ORDER BY bm25(symbols_fts) LIMIT %d;"), Limit);
+	SQL += TEXT(" ORDER BY bm25(symbols_fts) LIMIT ?;");
 
 	FSQLitePreparedStatement Stmt;
 	Stmt.Create(*Database, *SQL);
@@ -723,6 +730,7 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::SearchSymbolsFTSFiltered(
 	{
 		Stmt.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s%%"), *PathFilter));
 	}
+	Stmt.SetBindingValueByIndex(BindIdx++, static_cast<int64>(SafeLimit));
 
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
