@@ -14,12 +14,12 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 22 actions (20 base + 2 from `FMonolithEditorMapActions` Phase J F8) |
+| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 34 actions |
 | `FMonolithLogCapture` | FOutputDevice subclass. Ring buffer (10,000 entries max). Thread-safe. Tracks counts by verbosity |
 | `FMonolithEditorActions` | Static handlers for build and log operations. Hooks into `ILiveCodingModule::GetOnPatchCompleteDelegate()` to capture compile results and timestamps |
 | `FMonolithSettingsCustomization` | IDetailCustomization for UMonolithSettings. Adds re-index buttons for project and source databases in Project Settings UI |
 
-### Actions (22 — namespace: "editor")
+### Actions (34 — namespace: "editor")
 
 | Action | Description |
 |--------|-------------|
@@ -44,5 +44,17 @@
 | `get_viewport_info` | Get active editor viewport camera location, rotation, FOV, resolution, realtime state |
 | `create_empty_map` | **Phase J F8.** Create a fully blank UWorld asset at `path` and save the package. v1 supports `map_template="blank"` only. Errors cleanly on path collision, malformed package path, factory/save failure |
 | `get_module_status` | **Phase J F8.** Report `{ module_name, plugin_name, enabled, loaded, is_runtime, version? }` for the named modules (or all Monolith modules if `module_names` is omitted). Unknown modules return `enabled=false / loaded=false / plugin_name=""` without error |
+| `dev_trigger_ensure` | DEV ONLY: Fires ensure(false) inside the breadcrumb scope to exercise the CrashRecovery capture pipeline. Editor stays alive. |
+| `get_last_crash_reason` | Return the most recent Monolith crash breadcrumb (tool, action, params, timestamp). Returns {found:false} if no crash has been recorded. |
+| `list_recent_crashes` | List recent Monolith crash breadcrumbs newest-first. Optional filters: limit (default 20, max 1000), since (ISO8601), tool (substring). |
+| `get_crash_stats` | Aggregate Monolith crash counts grouped by tool, action, or tool_action. Optional 'since' filter (ISO8601). Useful for spotting recurrent crash sources. |
+| `get_selected_actors` | Get stable metadata for actors selected in the Level Viewport or World Outliner |
+| `get_selected_assets` | Get FAssetData-derived metadata for assets selected in the Content Browser |
+| `get_active_asset_editor` | Get the active or unambiguous open asset editor with explicit fallback source |
+| `capture_system_gif` | Capture a Niagara system as a sequence of PNG frames with optional GIF encoding via ffmpeg or python |
+| `list_automation_tests` | List all registered automation tests, optionally filtered by prefix |
+| `run_automation_tests` | Run automation tests by prefix in the running editor (no PIE, no separate process). Returns success/passed/failed counts and per-test errors. |
+| `run_python` | Execute a Python command, statement, or file via IPythonScriptPlugin::ExecPythonCommandEx. Returns success, stdout/stderr captured by Python, and (for evaluate_statement mode) the evaluated result. |
+| `load_level` | Close the current persistent level (without saving) and load the specified level by /Game/... asset path. Wraps ULevelEditorSubsystem::LoadLevel. |
 
 ---
