@@ -52,6 +52,7 @@ TSharedPtr<FJsonObject> FSpatialBlock::ToJson() const
 		for (const auto& [Floor, RoomIds] : B.FloorToRoomIds)
 		{
 			TArray<TSharedPtr<FJsonValue>> RoomArr;
+			RoomArr.Reserve(RoomIds.Num());
 			for (const FString& RId : RoomIds)
 			{
 				RoomArr.Add(MakeShared<FJsonValueString>(RId));
@@ -61,6 +62,7 @@ TSharedPtr<FJsonObject> FSpatialBlock::ToJson() const
 		BJ->SetObjectField(TEXT("floor_to_room_ids"), FloorsObj);
 
 		TArray<TSharedPtr<FJsonValue>> ExitArr;
+		ExitArr.Reserve(B.ExteriorDoorIds.Num());
 		for (const FString& D : B.ExteriorDoorIds)
 		{
 			ExitArr.Add(MakeShared<FJsonValueString>(D));
@@ -73,6 +75,7 @@ TSharedPtr<FJsonObject> FSpatialBlock::ToJson() const
 
 	// Rooms
 	TArray<TSharedPtr<FJsonValue>> RoomsArr;
+	RoomsArr.Reserve(Rooms.Num());
 	for (const auto& [Id, R] : Rooms)
 	{
 		RoomsArr.Add(MakeShared<FJsonValueObject>(FMonolithMeshSpatialRegistry::RoomToJson(R)));
@@ -81,6 +84,7 @@ TSharedPtr<FJsonObject> FSpatialBlock::ToJson() const
 
 	// Doors
 	TArray<TSharedPtr<FJsonValue>> DoorsArr;
+	DoorsArr.Reserve(Doors.Num());
 	for (const auto& [Id, D] : Doors)
 	{
 		DoorsArr.Add(MakeShared<FJsonValueObject>(FMonolithMeshSpatialRegistry::DoorToJson(D)));
@@ -89,6 +93,7 @@ TSharedPtr<FJsonObject> FSpatialBlock::ToJson() const
 
 	// Furniture
 	TArray<TSharedPtr<FJsonValue>> FurnArr;
+	FurnArr.Reserve(Furniture.Num());
 	for (const auto& [Id, F] : Furniture)
 	{
 		auto FJ = MakeShared<FJsonObject>();
@@ -469,6 +474,7 @@ TSharedPtr<FJsonObject> FMonolithMeshSpatialRegistry::RoomToJson(const FSpatialR
 	}
 
 	TArray<TSharedPtr<FJsonValue>> AdjArr;
+	AdjArr.Reserve(Room.AdjacentRoomIds.Num());
 	for (const FString& A : Room.AdjacentRoomIds)
 	{
 		AdjArr.Add(MakeShared<FJsonValueString>(A));
@@ -476,6 +482,7 @@ TSharedPtr<FJsonObject> FMonolithMeshSpatialRegistry::RoomToJson(const FSpatialR
 	J->SetArrayField(TEXT("adjacent_room_ids"), AdjArr);
 
 	TArray<TSharedPtr<FJsonValue>> DoorArr;
+	DoorArr.Reserve(Room.DoorIds.Num());
 	for (const FString& D : Room.DoorIds)
 	{
 		DoorArr.Add(MakeShared<FJsonValueString>(D));
@@ -1311,6 +1318,7 @@ FMonolithActionResult FMonolithMeshSpatialRegistry::QueryBuildingExits(const TSh
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Building '%s' not found in block '%s'"), *BuildingId, *BlockId));
 
 	TArray<TSharedPtr<FJsonValue>> ExitsArr;
+	ExitsArr.Reserve(Bldg->ExteriorDoorIds.Num());
 	for (const FString& DoorId : Bldg->ExteriorDoorIds)
 	{
 		if (const FSpatialDoor* Door = Block.Doors.Find(DoorId))
@@ -1383,6 +1391,7 @@ FMonolithActionResult FMonolithMeshSpatialRegistry::PathBetweenRooms(const TShar
 
 	// Build path with room details and door IDs
 	TArray<TSharedPtr<FJsonValue>> PathArr;
+	PathArr.Reserve(Path.Num());
 	for (int32 i = 0; i < Path.Num(); ++i)
 	{
 		auto StepObj = MakeShared<FJsonObject>();
