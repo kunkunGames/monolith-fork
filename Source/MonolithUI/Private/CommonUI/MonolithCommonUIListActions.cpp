@@ -299,6 +299,7 @@ namespace MonolithCommonUIList
 		Result->SetStringField(TEXT("wbp_path"), WbpPath);
 		Result->SetStringField(TEXT("widget_name"), WidgetName);
 		TArray<TSharedPtr<FJsonValue>> AppliedArr;
+		AppliedArr.Reserve(Applied.Num());
 		for (const FString& A : Applied) AppliedArr.Add(MakeShared<FJsonValueString>(A));
 		Result->SetArrayField(TEXT("applied"), AppliedArr);
 		return FMonolithActionResult::Success(Result);
