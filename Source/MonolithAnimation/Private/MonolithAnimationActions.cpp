@@ -2753,7 +2753,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddCurve(const TSharedPtr
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString CurveName = Params->GetStringField(TEXT("curve_name"));
-	FString CurveTypeStr = Params->HasField(TEXT("curve_type")) ? Params->GetStringField(TEXT("curve_type")) : TEXT("Float");
+	FString CurveTypeStr = TEXT("Float");
+	Params->TryGetStringField(TEXT("curve_type"), CurveTypeStr);
 
 	UAnimSequence* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
@@ -2789,7 +2790,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveCurve(const TShared
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString CurveName = Params->GetStringField(TEXT("curve_name"));
-	FString CurveTypeStr = Params->HasField(TEXT("curve_type")) ? Params->GetStringField(TEXT("curve_type")) : TEXT("Float");
+	FString CurveTypeStr = TEXT("Float");
+	Params->TryGetStringField(TEXT("curve_type"), CurveTypeStr);
 
 	UAnimSequence* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
@@ -4853,14 +4855,16 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateBlendSpace(const TS
 	// Optional axis configuration
 	if (Params->HasField(TEXT("axis_x_name")) || Params->HasField(TEXT("axis_x_min")) || Params->HasField(TEXT("axis_x_max")))
 	{
-		FString XName = Params->HasField(TEXT("axis_x_name")) ? Params->GetStringField(TEXT("axis_x_name")) : TEXT("None");
+		FString XName = TEXT("None");
+	Params->TryGetStringField(TEXT("axis_x_name"), XName);
 		float XMin = Params->HasField(TEXT("axis_x_min")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_x_min"))) : 0.0f;
 		float XMax = Params->HasField(TEXT("axis_x_max")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_x_max"))) : 100.0f;
 		ConfigureBlendSpaceAxis(BS, 0, XName, XMin, XMax);
 	}
 	if (Params->HasField(TEXT("axis_y_name")) || Params->HasField(TEXT("axis_y_min")) || Params->HasField(TEXT("axis_y_max")))
 	{
-		FString YName = Params->HasField(TEXT("axis_y_name")) ? Params->GetStringField(TEXT("axis_y_name")) : TEXT("None");
+		FString YName = TEXT("None");
+	Params->TryGetStringField(TEXT("axis_y_name"), YName);
 		float YMin = Params->HasField(TEXT("axis_y_min")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_y_min"))) : 0.0f;
 		float YMax = Params->HasField(TEXT("axis_y_max")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_y_max"))) : 100.0f;
 		ConfigureBlendSpaceAxis(BS, 1, YName, YMin, YMax);
@@ -4915,7 +4919,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateBlendSpace1D(const 
 	// Optional axis configuration (1D only uses axis 0)
 	if (Params->HasField(TEXT("axis_name")) || Params->HasField(TEXT("axis_min")) || Params->HasField(TEXT("axis_max")))
 	{
-		FString AxisName = Params->HasField(TEXT("axis_name")) ? Params->GetStringField(TEXT("axis_name")) : TEXT("None");
+		FString AxisName = TEXT("None");
+	Params->TryGetStringField(TEXT("axis_name"), AxisName);
 		float AxisMin = Params->HasField(TEXT("axis_min")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_min"))) : 0.0f;
 		float AxisMax = Params->HasField(TEXT("axis_max")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_max"))) : 100.0f;
 		ConfigureBlendSpaceAxis(BS, 0, AxisName, AxisMin, AxisMax);
@@ -4968,13 +4973,15 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateAimOffset(const TSh
 
 	// Default Yaw/Pitch axes for aim offsets, overridable via params
 	{
-		FString XName = Params->HasField(TEXT("axis_x_name")) ? Params->GetStringField(TEXT("axis_x_name")) : TEXT("Yaw");
+		FString XName = TEXT("Yaw");
+	Params->TryGetStringField(TEXT("axis_x_name"), XName);
 		float XMin = Params->HasField(TEXT("axis_x_min")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_x_min"))) : -180.0f;
 		float XMax = Params->HasField(TEXT("axis_x_max")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_x_max"))) : 180.0f;
 		ConfigureBlendSpaceAxis(AO, 0, XName, XMin, XMax);
 	}
 	{
-		FString YName = Params->HasField(TEXT("axis_y_name")) ? Params->GetStringField(TEXT("axis_y_name")) : TEXT("Pitch");
+		FString YName = TEXT("Pitch");
+	Params->TryGetStringField(TEXT("axis_y_name"), YName);
 		float YMin = Params->HasField(TEXT("axis_y_min")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_y_min"))) : -90.0f;
 		float YMax = Params->HasField(TEXT("axis_y_max")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_y_max"))) : 90.0f;
 		ConfigureBlendSpaceAxis(AO, 1, YName, YMin, YMax);
@@ -5028,7 +5035,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateAimOffset1D(const T
 
 	// Default Yaw axis for 1D aim offsets
 	{
-		FString AxisName = Params->HasField(TEXT("axis_name")) ? Params->GetStringField(TEXT("axis_name")) : TEXT("Yaw");
+		FString AxisName = TEXT("Yaw");
+	Params->TryGetStringField(TEXT("axis_name"), AxisName);
 		float AxisMin = Params->HasField(TEXT("axis_min")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_min"))) : -180.0f;
 		float AxisMax = Params->HasField(TEXT("axis_max")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_max"))) : 180.0f;
 		ConfigureBlendSpaceAxis(AO, 0, AxisName, AxisMin, AxisMax);
@@ -5096,7 +5104,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateAnimBlueprint(const
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString SkeletonPath = Params->GetStringField(TEXT("skeleton_path"));
-	FString ParentClassName = Params->HasField(TEXT("parent_class")) ? Params->GetStringField(TEXT("parent_class")) : TEXT("AnimInstance");
+	FString ParentClassName = TEXT("AnimInstance");
+	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
 
 	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton) return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));

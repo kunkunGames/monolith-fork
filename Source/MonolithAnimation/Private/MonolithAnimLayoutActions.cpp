@@ -169,8 +169,10 @@ TSharedPtr<FJsonObject> FormatSingleGraph(const FString& GraphLabel, UEdGraph* G
 FMonolithActionResult FMonolithAnimLayoutActions::HandleAutoLayout(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
-	FString Formatter = Params->HasField(TEXT("formatter")) ? Params->GetStringField(TEXT("formatter")) : TEXT("auto");
+	FString GraphName = TEXT("AnimGraph");
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	FString Formatter = TEXT("auto");
+	Params->TryGetStringField(TEXT("formatter"), Formatter);
 
 	// Validate formatter param
 	if (Formatter != TEXT("auto") && Formatter != TEXT("blueprint_assist") && Formatter != TEXT("monolith"))
