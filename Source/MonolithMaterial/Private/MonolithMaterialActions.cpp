@@ -343,9 +343,9 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Material asset path"))
 			.Required(TEXT("from_expression"), TEXT("string"), TEXT("Source expression name"))
-			.Optional(TEXT("from_output"), TEXT("string"), TEXT("Source output pin name (empty = default). Alias: from_pin"))
+			.Optional(TEXT("from_output"), TEXT("string"), TEXT("Source output pin name (empty = default). Alias: from_pin"), { TEXT("from_pin") })
 			.Optional(TEXT("to_expression"), TEXT("string"), TEXT("Target expression name (for expr-to-expr)"))
-			.Optional(TEXT("to_input"), TEXT("string"), TEXT("Target input pin name (empty = default). Alias: to_pin"))
+			.Optional(TEXT("to_input"), TEXT("string"), TEXT("Target input pin name (empty = default). Alias: to_pin"), { TEXT("to_pin") })
 			.Optional(TEXT("to_property"), TEXT("string"), TEXT("Material property name: BaseColor, Roughness, etc. (for expr-to-material)"))
 			.Build());
 
