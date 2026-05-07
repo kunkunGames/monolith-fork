@@ -10,7 +10,7 @@ Agents must use a strict, predictable branch naming convention to make active wo
 ## 2. Duplicate / Collision Guard
 Before making any changes, agents must perform a thorough duplicate and collision check:
 - Use `git branch -r` and identify any existing `jules/<agent>/...` branches.
-- If an open branch or PR addresses the intended changes, or if the collision is ambiguous, **stop without PR**. No-op is a perfectly acceptable and expected outcome when the queue is healthy or work overlaps.
+- Stop without PR if a similar branch exists, if an open PR has the same WorkFingerprint, or touches the same intended files. If an open branch or PR addresses the intended changes, or if the collision is ambiguous, **stop without PR**. No-op is a perfectly acceptable and expected outcome when the queue is healthy or work overlaps.
 - PR descriptions must include a 'Duplicate check' section detailing inspected PRs/branches and the reason the work is non-overlapping.
 
 ## 3. WorkFingerprint Requirement
