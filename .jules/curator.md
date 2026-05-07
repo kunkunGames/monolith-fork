@@ -3,3 +3,8 @@
 **Learning:** Monolith uses standalone Python scripts and PowerShell wrappers that generate artifacts at root or subfolders which were never explicitly ignored, likely because they fall outside typical Unreal `Intermediate/` or `Saved/` patterns.
 **Prevention:** Add explicit `EngineSource.db`, `ProjectIndex.db`, and `Monolith-v*.zip` entries to `.gitignore`.
 **Avoid:** Assuming UE's standard `Saved/` or `Intermediate/` ignores will cover all generated database and release artifacts created by custom tooling.
+## 2026-05-08 - make_release.ps1 dynamic vswhere
+**Hygiene issue:** make_release.ps1 hardcoded C:\Program Files paths to find dumpbin.exe for the post-build smoke check.
+**Learning:** Hardcoded paths break on non-standard installations or alternate drive letters.
+**Prevention:** Use vswhere.exe dynamically to locate VC Tools instead of hardcoding static paths.
+**Avoid:** Hardcoded C:\Program Files or specific Visual Studio version paths in build and release scripts.
