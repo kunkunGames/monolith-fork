@@ -39,7 +39,7 @@ Monolith.uplugin
   MonolithMaterial      — Material inspection + graph editing + CRUD + function suite + tiling quality + texture preview (63 actions)
   MonolithAnimation     — Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP/ControlRig write, layout (119 actions)
   MonolithNiagara       — Niagara particle systems, HLSL module/function creation, DI config, event handlers, sim stages, NPC, effect types, scalability, layout (109 actions)
-  MonolithEditor        — Build triggers, live compile, log capture, compile output, crash context, scene capture, texture import, flipbook stitching, asset deletion, viewport info, blank-map factory + module status (Phase J F8), automation test list/run, Python escape-hatch (`run_python`), map swap (`load_level`) (26 actions — +2 from v0.14.8 PR #48 by @MaxenceEpitech, +2 from v0.14.9 Issue #50 ported from @JCSopko's fork)
+  MonolithEditor        — Build triggers, live compile, log capture, compile output, crash context, scene capture, texture import, flipbook stitching, asset deletion, viewport info, blank-map factory + module status (Phase J F8), automation test list/run, Python escape-hatch (`run_python`), map swap (`load_level`) (34 actions)
   MonolithConfig        — Config/INI resolution and search (6 actions)
   MonolithIndex         — SQLite FTS5 deep project indexer, 14 internal indexers (7 MCP actions)
   MonolithSource        — Engine source + API lookup, auto-reindex on hot-reload (Phase J F17) (11 actions)
@@ -140,7 +140,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.3 | MonolithMaterial | [specs/SPEC_MonolithMaterial.md](specs/SPEC_MonolithMaterial.md) | Material inspection + graph editing + CRUD + function suite (63 actions) |
 | 3.4 | MonolithAnimation | [specs/SPEC_MonolithAnimation.md](specs/SPEC_MonolithAnimation.md) | Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP write, ControlRig (119 actions) |
 | 3.5 | MonolithNiagara | [specs/SPEC_MonolithNiagara.md](specs/SPEC_MonolithNiagara.md) | Niagara particle systems, HLSL module/function, DI config, event handlers, sim stages, layout (109 actions) |
-| 3.6 | MonolithEditor | [specs/SPEC_MonolithEditor.md](specs/SPEC_MonolithEditor.md) | Build triggers, live compile, log capture, crash context, scene capture (20 actions) |
+| 3.6 | MonolithEditor | [specs/SPEC_MonolithEditor.md](specs/SPEC_MonolithEditor.md) | Build triggers, live compile, log capture, crash context, scene capture (34 actions) |
 | 3.7 | MonolithConfig | [specs/SPEC_MonolithConfig.md](specs/SPEC_MonolithConfig.md) | Config/INI resolution and search (6 actions) |
 | 3.8 | MonolithIndex | [specs/SPEC_MonolithIndex.md](specs/SPEC_MonolithIndex.md) | SQLite FTS5 deep project indexer (7 MCP actions, 14 internal indexers) |
 | 3.9 | MonolithSource | [specs/SPEC_MonolithSource.md](specs/SPEC_MonolithSource.md) | Engine source + API lookup (11 actions) |
