@@ -355,9 +355,12 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddAnimGraphNode(const TSh
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString NodeType  = Params->GetStringField(TEXT("node_type"));
-	FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
-	FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
-	FString AnimAsset = Params->HasField(TEXT("anim_asset")) ? Params->GetStringField(TEXT("anim_asset")) : TEXT("");
+	FString GraphName = TEXT("AnimGraph");
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	FString StateName = TEXT("");
+	Params->TryGetStringField(TEXT("state_name"), StateName);
+	FString AnimAsset = TEXT("");
+	Params->TryGetStringField(TEXT("anim_asset"), AnimAsset);
 
 	double TempVal;
 	float PosX = 200.f;
@@ -520,8 +523,10 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleConnectAnimGraphPins(const
 	FString SourcePin  = Params->GetStringField(TEXT("source_pin"));
 	FString TargetNode = Params->GetStringField(TEXT("target_node"));
 	FString TargetPin  = Params->GetStringField(TEXT("target_pin"));
-	FString GraphName  = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("");
-	FString StateName  = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+	FString GraphName = TEXT("");
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	FString StateName = TEXT("");
+	Params->TryGetStringField(TEXT("state_name"), StateName);
 
 	bool bCompile = true;
 	if (Params->HasField(TEXT("compile")))
@@ -823,8 +828,10 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddVariableGet(const TShar
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString VarName   = Params->GetStringField(TEXT("variable_name"));
-	FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
-	FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+	FString GraphName = TEXT("AnimGraph");
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	FString StateName = TEXT("");
+	Params->TryGetStringField(TEXT("state_name"), StateName);
 
 	double TempVal;
 	float PosX = 0.f;
@@ -949,8 +956,10 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetAnimGraphNodeProperty(c
 	FString NodeId       = Params->GetStringField(TEXT("node_id"));
 	FString PropertyPath = Params->GetStringField(TEXT("property_path"));
 	FString Value        = Params->GetStringField(TEXT("value"));
-	FString GraphName    = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("");
-	FString StateName    = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+	FString GraphName = TEXT("");
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	FString StateName = TEXT("");
+	Params->TryGetStringField(TEXT("state_name"), StateName);
 
 	if (NodeId.IsEmpty())       return FMonolithActionResult::Error(TEXT("Missing required parameter: node_id"));
 	if (PropertyPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: property_path"));

@@ -27,3 +27,8 @@
 **Learning:** Manual path logic and direct tier-4 lookups (`StaticLoadObject`) bypass Monolith's standard validation and robust 4-tier asset lookup, causing duplication and potentially missing un-saved objects.
 **Reuse rule:** Always utilize `FMonolithAssetUtils::LoadAssetByPath<T>` for generic asset loading within Monolith action handlers, dropping duplicated fallback boilerplate in favor of the canonical path.
 **Avoid:** Avoid writing manual path normalization (`/Game/Foo.Foo`) combined with `AssetRegistry` and `StaticLoadObject` fallbacks when a Core helper already exists.
+## 2024-11-06 - Normalize FJsonObject string extraction
+**Pattern:** Repeated missing-param checks like `HasField(...) ? GetStringField(...) : Default` in MonolithAnimation and MonolithMaterial.
+**Learning:** TryGetStringField safely extracts string parameters, avoiding ad-hoc bounds and making the error handling clearer.
+**Reuse rule:** Use TryGetStringField for extracting optional parameters into an existing variable or default.
+**Avoid:** Duplicated `if HasField then Get...` blocks for optional strings.

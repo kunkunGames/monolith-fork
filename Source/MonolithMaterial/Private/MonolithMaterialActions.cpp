@@ -1169,10 +1169,12 @@ FMonolithActionResult FMonolithMaterialActions::DisconnectExpression(const TShar
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString ExpressionName = Params->GetStringField(TEXT("expression_name"));
-	FString InputName = Params->HasField(TEXT("input_name")) ? Params->GetStringField(TEXT("input_name")) : TEXT("");
+	FString InputName = TEXT("");
+	Params->TryGetStringField(TEXT("input_name"), InputName);
 	bool bDisconnectOutputs = Params->HasField(TEXT("disconnect_outputs")) ? Params->GetBoolField(TEXT("disconnect_outputs")) : false;
 	// Optional filter: only disconnect from a specific downstream expression (when disconnect_outputs=true)
-	FString TargetDownstream = Params->HasField(TEXT("target_expression")) ? Params->GetStringField(TEXT("target_expression")) : TEXT("");
+	FString TargetDownstream = TEXT("");
+	Params->TryGetStringField(TEXT("target_expression"), TargetDownstream);
 	// Optional filter: only disconnect a specific output index
 	int32 TargetOutputIndex = Params->HasField(TEXT("output_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("output_index"))) : -1;
 
@@ -1777,7 +1779,8 @@ FMonolithActionResult FMonolithMaterialActions::ImportMaterialGraph(const TShare
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString GraphJson = Params->GetStringField(TEXT("graph_json"));
-	FString Mode = Params->HasField(TEXT("mode")) ? Params->GetStringField(TEXT("mode")) : TEXT("overwrite");
+	FString Mode = TEXT("overwrite");
+	Params->TryGetStringField(TEXT("mode"), Mode);
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -2344,8 +2347,10 @@ FMonolithActionResult FMonolithMaterialActions::CreateCustomHLSLNode(const TShar
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString Code = Params->GetStringField(TEXT("code"));
-	FString Description = Params->HasField(TEXT("description")) ? Params->GetStringField(TEXT("description")) : TEXT("");
-	FString OutputType = Params->HasField(TEXT("output_type")) ? Params->GetStringField(TEXT("output_type")) : TEXT("");
+	FString Description = TEXT("");
+	Params->TryGetStringField(TEXT("description"), Description);
+	FString OutputType = TEXT("");
+	Params->TryGetStringField(TEXT("output_type"), OutputType);
 	int32 PosX = Params->HasField(TEXT("pos_x")) ? static_cast<int32>(Params->GetNumberField(TEXT("pos_x"))) : 0;
 	int32 PosY = Params->HasField(TEXT("pos_y")) ? static_cast<int32>(Params->GetNumberField(TEXT("pos_y"))) : 0;
 
@@ -2576,9 +2581,12 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
 	// Parse optional properties
-	FString BlendModeStr = Params->HasField(TEXT("blend_mode")) ? Params->GetStringField(TEXT("blend_mode")) : TEXT("Opaque");
-	FString ShadingModelStr = Params->HasField(TEXT("shading_model")) ? Params->GetStringField(TEXT("shading_model")) : TEXT("DefaultLit");
-	FString DomainStr = Params->HasField(TEXT("material_domain")) ? Params->GetStringField(TEXT("material_domain")) : TEXT("Surface");
+	FString BlendModeStr = TEXT("Opaque");
+	Params->TryGetStringField(TEXT("blend_mode"), BlendModeStr);
+	FString ShadingModelStr = TEXT("DefaultLit");
+	Params->TryGetStringField(TEXT("shading_model"), ShadingModelStr);
+	FString DomainStr = TEXT("Surface");
+	Params->TryGetStringField(TEXT("material_domain"), DomainStr);
 	bool bTwoSided = Params->HasField(TEXT("two_sided")) ? Params->GetBoolField(TEXT("two_sided")) : false;
 
 	// Extract package path and asset name from the asset path
@@ -3688,11 +3696,13 @@ FMonolithActionResult FMonolithMaterialActions::ConnectExpressions(const TShared
 	FString FromExprName = Params->GetStringField(TEXT("from_expression"));
 	FString FromOutput = Params->HasField(TEXT("from_output")) ? Params->GetStringField(TEXT("from_output"))
 	                   : Params->HasField(TEXT("from_pin")) ? Params->GetStringField(TEXT("from_pin")) : TEXT("");
-	FString ToExprName = Params->HasField(TEXT("to_expression")) ? Params->GetStringField(TEXT("to_expression")) : TEXT("");
+	FString ToExprName = TEXT("");
+	Params->TryGetStringField(TEXT("to_expression"), ToExprName);
 	FString ToInput = Params->HasField(TEXT("to_input")) ? Params->GetStringField(TEXT("to_input"))
 	                : Params->HasField(TEXT("to_pin")) ? Params->GetStringField(TEXT("to_pin")) : TEXT("");
 	ToInput = NormalizeInputPinName(ToInput);
-	FString ToProperty = Params->HasField(TEXT("to_property")) ? Params->GetStringField(TEXT("to_property")) : TEXT("");
+	FString ToProperty = TEXT("");
+	Params->TryGetStringField(TEXT("to_property"), ToProperty);
 
 	if (ToExprName.IsEmpty() && ToProperty.IsEmpty())
 	{
@@ -4075,8 +4085,10 @@ namespace
 
 FMonolithActionResult FMonolithMaterialActions::ListExpressionClasses(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Filter = Params->HasField(TEXT("filter")) ? Params->GetStringField(TEXT("filter")) : TEXT("");
-	FString Category = Params->HasField(TEXT("category")) ? Params->GetStringField(TEXT("category")) : TEXT("");
+	FString Filter = TEXT("");
+	Params->TryGetStringField(TEXT("filter"), Filter);
+	FString Category = TEXT("");
+	Params->TryGetStringField(TEXT("category"), Category);
 
 	EnsureExpressionClassCache();
 
@@ -4909,8 +4921,10 @@ FMonolithActionResult FMonolithMaterialActions::ClearInstanceParameter(const TSh
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load material instance at '%s'"), *AssetPath));
 	}
 
-	FString ParamName = Params->HasField(TEXT("parameter_name")) ? Params->GetStringField(TEXT("parameter_name")) : TEXT("");
-	FString ParamType = Params->HasField(TEXT("parameter_type")) ? Params->GetStringField(TEXT("parameter_type")) : TEXT("all");
+	FString ParamName = TEXT("");
+	Params->TryGetStringField(TEXT("parameter_name"), ParamName);
+	FString ParamType = TEXT("all");
+	Params->TryGetStringField(TEXT("parameter_type"), ParamType);
 
 	GEditor->BeginTransaction(FText::FromString(TEXT("ClearInstanceParameter")));
 	MIC->Modify();
@@ -7874,9 +7888,8 @@ FMonolithActionResult FMonolithMaterialActions::ImportTexture(const TSharedPtr<F
 {
 	FString SourceFile = Params->GetStringField(TEXT("source_file"));
 	FString DestPath = Params->GetStringField(TEXT("dest_path"));
-	FString DestName = Params->HasField(TEXT("dest_name"))
-		? Params->GetStringField(TEXT("dest_name"))
-		: FString();
+	FString DestName;
+	Params->TryGetStringField(TEXT("dest_name"), DestName);
 	bool bReplaceExisting = Params->HasField(TEXT("replace_existing")) ? Params->GetBoolField(TEXT("replace_existing")) : false;
 
 	// Parse optional settings
@@ -8012,9 +8025,12 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	}
 
 	// ---- Parse optional params ----
-	FString BlendModeStr = Params->HasField(TEXT("blend_mode")) ? Params->GetStringField(TEXT("blend_mode")) : TEXT("Opaque");
-	FString ShadingModelStr = Params->HasField(TEXT("shading_model")) ? Params->GetStringField(TEXT("shading_model")) : TEXT("DefaultLit");
-	FString DomainStr = Params->HasField(TEXT("material_domain")) ? Params->GetStringField(TEXT("material_domain")) : TEXT("Surface");
+	FString BlendModeStr = TEXT("Opaque");
+	Params->TryGetStringField(TEXT("blend_mode"), BlendModeStr);
+	FString ShadingModelStr = TEXT("DefaultLit");
+	Params->TryGetStringField(TEXT("shading_model"), ShadingModelStr);
+	FString DomainStr = TEXT("Surface");
+	Params->TryGetStringField(TEXT("material_domain"), DomainStr);
 	bool bTwoSided = Params->HasField(TEXT("two_sided")) ? Params->GetBoolField(TEXT("two_sided")) : false;
 	int32 MaxTextureSize = Params->HasField(TEXT("max_texture_size")) ? static_cast<int32>(Params->GetNumberField(TEXT("max_texture_size"))) : 2048;
 	bool bOpacityFromAlpha = Params->HasField(TEXT("opacity_from_alpha")) ? Params->GetBoolField(TEXT("opacity_from_alpha")) : false;
