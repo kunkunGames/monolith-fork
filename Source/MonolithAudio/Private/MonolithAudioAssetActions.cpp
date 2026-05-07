@@ -232,6 +232,7 @@ TSharedPtr<FJsonObject> FMonolithAudioAssetActions::StructToJson(const UStruct* 
 			// Serialize arrays of structs, objects, or primitives
 			TArray<TSharedPtr<FJsonValue>> JsonArray;
 			FScriptArrayHelper ArrayHelper(ArrayProp, ValuePtr);
+			JsonArray.Reserve(ArrayHelper.Num());
 
 			for (int32 i = 0; i < ArrayHelper.Num(); ++i)
 			{
@@ -763,6 +764,7 @@ FMonolithActionResult FMonolithAudioAssetActions::GetSoundClassProperties(const 
 
 	// Child classes
 	TArray<TSharedPtr<FJsonValue>> ChildArray;
+	ChildArray.Reserve(Asset->ChildClasses.Num());
 	for (USoundClass* Child : Asset->ChildClasses)
 	{
 		if (Child)
@@ -1219,6 +1221,7 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundSubmix(const TShare
 
 	// Effect chain
 	TArray<TSharedPtr<FJsonValue>> EffectChainArr;
+	EffectChainArr.Reserve(Asset->SubmixEffectChain.Num());
 	for (const auto& Effect : Asset->SubmixEffectChain)
 	{
 		EffectChainArr.Add(MakeShared<FJsonValueString>(Effect ? Effect->GetPathName() : TEXT("None")));
@@ -1227,6 +1230,7 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundSubmix(const TShare
 
 	// Children
 	TArray<TSharedPtr<FJsonValue>> ChildrenArr;
+	ChildrenArr.Reserve(Asset->ChildSubmixes.Num());
 	for (const auto& Child : Asset->ChildSubmixes)
 	{
 		if (Child)
@@ -1260,6 +1264,7 @@ FMonolithActionResult FMonolithAudioAssetActions::GetSubmixProperties(const TSha
 
 	// Effect chain
 	TArray<TSharedPtr<FJsonValue>> EffectChainArr;
+	EffectChainArr.Reserve(Asset->SubmixEffectChain.Num());
 	for (const auto& Effect : Asset->SubmixEffectChain)
 	{
 		EffectChainArr.Add(MakeShared<FJsonValueString>(Effect ? Effect->GetPathName() : TEXT("None")));
@@ -1268,6 +1273,7 @@ FMonolithActionResult FMonolithAudioAssetActions::GetSubmixProperties(const TSha
 
 	// Children
 	TArray<TSharedPtr<FJsonValue>> ChildrenArr;
+	ChildrenArr.Reserve(Asset->ChildSubmixes.Num());
 	for (const auto& Child : Asset->ChildSubmixes)
 	{
 		if (Child)
@@ -1401,6 +1407,7 @@ FMonolithActionResult FMonolithAudioAssetActions::SetSubmixProperties(const TSha
 	Result->SetStringField(TEXT("parent_submix"), Asset->ParentSubmix ? Asset->ParentSubmix->GetPathName() : TEXT("None"));
 
 	TArray<TSharedPtr<FJsonValue>> EffectChainArr;
+	EffectChainArr.Reserve(Asset->SubmixEffectChain.Num());
 	for (const auto& Effect : Asset->SubmixEffectChain)
 	{
 		EffectChainArr.Add(MakeShared<FJsonValueString>(Effect ? Effect->GetPathName() : TEXT("None")));
@@ -1408,6 +1415,7 @@ FMonolithActionResult FMonolithAudioAssetActions::SetSubmixProperties(const TSha
 	Result->SetArrayField(TEXT("effect_chain"), EffectChainArr);
 
 	TArray<TSharedPtr<FJsonValue>> ChildrenArr;
+	ChildrenArr.Reserve(Asset->ChildSubmixes.Num());
 	for (const auto& Child : Asset->ChildSubmixes)
 	{
 		if (Child)
