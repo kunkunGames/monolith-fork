@@ -264,20 +264,19 @@ $LeakSentinels = @(
 # remains usable on dev machines without VS BuildTools.
 $Dumpbin = Get-Command dumpbin.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
 if (-not $Dumpbin) {
-    $VSCommonPaths = @(
-        "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC",
-        "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC",
-        "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC",
-        "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC"
-    )
-    foreach ($vsBase in $VSCommonPaths) {
-        if (Test-Path $vsBase) {
-            $candidate = Get-ChildItem -Path $vsBase -Directory -ErrorAction SilentlyContinue |
-                Sort-Object Name -Descending |
-                ForEach-Object { Join-Path $_.FullName "bin\HostX64\x64\dumpbin.exe" } |
-                Where-Object { Test-Path $_ } |
-                Select-Object -First 1
-            if ($candidate) { $Dumpbin = $candidate; break }
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    if (Test-Path $vswhere) {
+        $installPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if ($installPath) {
+            $vsBase = Join-Path $installPath "VC\Tools\MSVC"
+            if (Test-Path $vsBase) {
+                $candidate = Get-ChildItem -Path $vsBase -Directory -ErrorAction SilentlyContinue |
+                    Sort-Object Name -Descending |
+                    ForEach-Object { Join-Path $_.FullName "bin\HostX64\x64\dumpbin.exe" } |
+                    Where-Object { Test-Path $_ } |
+                    Select-Object -First 1
+                if ($candidate) { $Dumpbin = $candidate }
+            }
         }
     }
 }
