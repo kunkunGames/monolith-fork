@@ -407,6 +407,7 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 	if (bHasDefinition)
 	{
 		TArray<FMonolithSourceSymbol> Filtered;
+			Filtered.Reserve(Symbols.Num());
 		for (const auto& Sym : Symbols)
 		{
 			FString FilePath = DB->GetFilePath(Sym.FileId);
@@ -812,6 +813,7 @@ FMonolithActionResult FMonolithSourceActions::HandleGetClassHierarchy(const TSha
 	if (bHasDefinition)
 	{
 		TArray<FMonolithSourceSymbol> Filtered;
+			Filtered.Reserve(Symbols.Num());
 		for (const auto& S : Symbols)
 		{
 			FString SFilePath = DB->GetFilePath(S.FileId);
