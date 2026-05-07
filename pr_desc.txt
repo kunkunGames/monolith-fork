@@ -1,0 +1,40 @@
+Track: Bolt
+Maintenance unit: MonolithSource
+
+💡 What
+Add `TArray::Reserve(Symbols.Num())` before filtering source symbols in `MonolithSourceActions.cpp`.
+
+🎯 Why
+When parsing source lines and class hierarchies, the server copies elements from the `Symbols` array into the `Filtered` array inside loops. Pre-allocating capacity prevents multiple underlying array memory re-allocations during iteration.
+
+📊 Impact
+Static/algorithmic estimate: Reduced memory re-allocations from $O(\log n)$ per filter loop to $O(1)$ single allocation upfront.
+
+🔬 Measurement
+Static estimate.
+
+✅ Verification
+- Code review (static safety checked)
+- `python3 Scripts/ci_static_checks.py check`
+
+⚠️ Limitations
+[blocked: UE editor unavailable]
+Compile/build validation could not be performed as Unreal Engine and UBT are unavailable in this environment.
+
+🔁 Safety
+Behavior is exactly preserved. The arrays simply pre-allocate their backing memory before being populated.
+
+Duplicate check:
+- open PRs inspected: `gh pr list` / `git branch -r` (no direct bolt overlap for MonolithSource)
+- related PRs/branches found: None touching source symbol filtering action paths.
+- reason this work is non-overlapping: This specific optimization hasn't been merged or staged in other bolt PRs.
+
+WorkFingerprint:
+- agent: Jules
+- category: Performance/Bolt
+- module: MonolithSource
+- component/action/helper: MonolithSourceActions.cpp / HandleReadSource / HandleGetClassHierarchy
+- intended files: Source/MonolithSource/Private/MonolithSourceActions.cpp
+- risk type: Memory/Allocation (low)
+- public API impact: no
+- docs/spec impact: no
