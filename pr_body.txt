@@ -1,20 +1,36 @@
-Track: ParamGuard
-Maintenance unit: MonolithLogicDriver
-Malformed input risk: engine crash on malformed array or array items
-Valid behavior preserved: yes
-Fix: Replaced GetArrayField and AsString with TryGetArrayField and TryGetString, moving validation before node loading to ensure quick rejection.
-Tests added or why not: added FMonolithParamGuardLogicDriverSetStateTagsRejectsMalformedParamsTest
-Spec/docs impact: no public contract or guidance change.
-Public API/action impact: no
-Duplicate check:
-  - open PRs inspected: none related
-  - related PRs/branches found: none
-  - reason this work is non-overlapping: distinct, newly found missing param guard.
-WorkFingerprint:
-  - agent: ParamGuard
-  - category: malformed-json-guard
-  - module: MonolithLogicDriver
-  - component/action/helper: FMonolithLogicDriverNodeActions::HandleSetStateTags
-  - intended files: Source/MonolithLogicDriver/Private/MonolithLogicDriverNodeActions.cpp, Source/MonolithLogicDriver/Private/Tests/MonolithLogicDriverParamGuardTests.cpp
-Verification: Local tests run.
-Blocked verification: [blocked: UE 5.7 editor unavailable in Jules VM]
+- Duplicate check:
+  - open PRs inspected: `origin/bolt-tarray-reserve-1831361196920817627`, `origin/bolt-tarray-reserve-core-14452436680910620337`, `origin/bolt-tarray-reserve-core-tools-9111280532084720083`, `origin/jules/bolt/monolithmesh/tarray-reserve-11742699341165562135`
+  - related PRs/branches found: `origin/jules/bolt/monolithmesh/tarray-reserve-11742699341165562135` (similar branch structure, but likely addressed different arrays or files as the modifications in MonolithMeshQualityActions were missing Reserve calls).
+  - reason this work is non-overlapping: Targets specific, previously unoptimized JSON builder arrays in `MonolithMeshQualityActions.cpp` (`HandleProposeHooks` implementation) that were missed or added later.
+
+- WorkFingerprint:
+  - agent: Bolt
+  - category: Performance
+  - module: MonolithMesh
+  - component/action/helper: `HandleProposeHooks` JSON array outputs
+  - intended files: `Source/MonolithMesh/Private/MonolithMeshQualityActions.cpp`
+  - risk type: Memory allocation
+  - public API impact: no
+  - docs/spec impact: no
+
+- 💡 What:
+  Added `.Reserve()` calls to five fixed-size `TArray` collections (`Inputs`, `Outputs`, `EventTypes`) inside the `HandleProposeHooks` stub in `MonolithMeshQualityActions.cpp` before sequential `.Add()` operations.
+
+- 🎯 Why:
+  Sequential `.Add()` calls without a prior `.Reserve()` trigger unnecessary heap allocations and array re-copying as the array dynamically resizes. Since the number of elements is known and static (2, 3, or 5 elements), pre-allocating the correct capacity avoids this waste.
+
+- 📊 Impact:
+  Static/algorithmic estimate: Prevents 5-10 small heap allocations per execution of the `hook_propose` action.
+
+- 🔬 Measurement:
+  Not available (UE/editor benchmark unavailable). proxy metric: fewer allocations.
+
+- ✅ Verification:
+  - `git diff --check` passed.
+  - `python3 Scripts/ci_static_checks.py check` passed.
+
+- ⚠️ Limitations:
+  [blocked: UE editor unavailable] - C++ compile/build validation could not be performed because Unreal Engine tools (UBT) are not installed in the execution environment.
+
+- 🔁 Safety:
+  This change preserves behavior exactly. It solely adjusts the internal initial capacity of `TArray` instances before items are added, which is a standard Unreal Engine idiom that does not alter data shape, types, or logging.

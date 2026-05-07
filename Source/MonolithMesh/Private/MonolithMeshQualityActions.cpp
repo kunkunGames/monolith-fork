@@ -1557,12 +1557,14 @@ FMonolithActionResult FMonolithMeshQualityActions::IntegrationHooksStub(const TS
 		Hook->SetStringField(TEXT("planned_interface"), TEXT("feed_ai_director({ region, player_positions, tension_override? }) -> { tension_map, suggested_spawn_zones, pacing_state }"));
 
 		TArray<TSharedPtr<FJsonValue>> Inputs;
+		Inputs.Reserve(3);
 		Inputs.Add(MakeShared<FJsonValueString>(TEXT("region: FBox — world region to analyze")));
 		Inputs.Add(MakeShared<FJsonValueString>(TEXT("player_positions: TArray<FVector> — current player locations")));
 		Inputs.Add(MakeShared<FJsonValueString>(TEXT("tension_override: float (optional) — force a tension level")));
 		Hook->SetArrayField(TEXT("inputs"), Inputs);
 
 		TArray<TSharedPtr<FJsonValue>> Outputs;
+		Outputs.Reserve(3);
 		Outputs.Add(MakeShared<FJsonValueString>(TEXT("tension_map: grid of tension values per cell")));
 		Outputs.Add(MakeShared<FJsonValueString>(TEXT("suggested_spawn_zones: ranked list of spawn locations")));
 		Outputs.Add(MakeShared<FJsonValueString>(TEXT("pacing_state: current phase (buildup/encounter/cooldown)")));
@@ -1580,11 +1582,13 @@ FMonolithActionResult FMonolithMeshQualityActions::IntegrationHooksStub(const TS
 		Hook->SetStringField(TEXT("planned_interface"), TEXT("apply_tension_effects({ player_actor, region? }) -> { applied_effects[], tension_score, modifiers[] }"));
 
 		TArray<TSharedPtr<FJsonValue>> Inputs;
+		Inputs.Reserve(2);
 		Inputs.Add(MakeShared<FJsonValueString>(TEXT("player_actor: AActor* — the player to apply effects to")));
 		Inputs.Add(MakeShared<FJsonValueString>(TEXT("region: FBox (optional) — override analysis region")));
 		Hook->SetArrayField(TEXT("inputs"), Inputs);
 
 		TArray<TSharedPtr<FJsonValue>> Outputs;
+		Outputs.Reserve(3);
 		Outputs.Add(MakeShared<FJsonValueString>(TEXT("applied_effects: list of GE tags applied (e.g. Effect.Tension.Dread)")));
 		Outputs.Add(MakeShared<FJsonValueString>(TEXT("tension_score: 0-100 from spatial analysis")));
 		Outputs.Add(MakeShared<FJsonValueString>(TEXT("modifiers: attribute modifiers applied (move speed, FOV, etc.)")));
@@ -1602,6 +1606,7 @@ FMonolithActionResult FMonolithMeshQualityActions::IntegrationHooksStub(const TS
 		Hook->SetStringField(TEXT("planned_interface"), TEXT("record_spatial_event({ event_type, location, player_state, metadata }) + query_heatmap({ event_type, region }) -> { heatmap_data, hotspots[] }"));
 
 		TArray<TSharedPtr<FJsonValue>> EventTypes;
+		EventTypes.Reserve(5);
 		EventTypes.Add(MakeShared<FJsonValueString>(TEXT("scare_reaction: player response to a scare event")));
 		EventTypes.Add(MakeShared<FJsonValueString>(TEXT("death_location: where the player died")));
 		EventTypes.Add(MakeShared<FJsonValueString>(TEXT("movement_stall: where players hesitate or turn back")));
