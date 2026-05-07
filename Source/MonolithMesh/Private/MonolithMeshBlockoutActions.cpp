@@ -599,6 +599,7 @@ FMonolithActionResult FMonolithMeshBlockoutActions::GetBlockoutVolumes(const TSh
 			VolObj->SetStringField(TEXT("room_type"), Parsed.RoomType);
 
 			TArray<TSharedPtr<FJsonValue>> TagsJsonArr;
+			TagsJsonArr.Reserve(Parsed.Tags.Num());
 			for (const FString& T : Parsed.Tags)
 			{
 				TagsJsonArr.Add(MakeShared<FJsonValueString>(T));
@@ -726,6 +727,7 @@ FMonolithActionResult FMonolithMeshBlockoutActions::GetBlockoutVolumeInfo(const 
 	Result->SetStringField(TEXT("room_type"), Parsed.RoomType);
 
 	TArray<TSharedPtr<FJsonValue>> TagsJsonArr;
+	TagsJsonArr.Reserve(Parsed.Tags.Num());
 	for (const FString& T : Parsed.Tags)
 	{
 		TagsJsonArr.Add(MakeShared<FJsonValueString>(T));
@@ -1411,6 +1413,7 @@ FMonolithActionResult FMonolithMeshBlockoutActions::MatchAssetToBlockout(const T
 	// Return top N
 	TArray<TSharedPtr<FJsonValue>> CandidatesJson;
 	int32 Count = FMath::Min(TopN, Candidates.Num());
+	CandidatesJson.Reserve(Count);
 	for (int32 i = 0; i < Count; ++i)
 	{
 		auto CandObj = MakeShared<FJsonObject>();
@@ -1482,6 +1485,7 @@ FMonolithActionResult FMonolithMeshBlockoutActions::MatchAllInVolume(const TShar
 
 	// Match each primitive
 	TArray<TSharedPtr<FJsonValue>> Matches;
+	Matches.Reserve(Primitives.Num());
 	for (AActor* Prim : Primitives)
 	{
 		auto SubParams = MakeShared<FJsonObject>();
@@ -1855,6 +1859,7 @@ FMonolithActionResult FMonolithMeshBlockoutActions::ClearBlockout(const TSharedP
 
 	// Collect names before deletion
 	TArray<TSharedPtr<FJsonValue>> DeletedNames;
+	DeletedNames.Reserve(ToDelete.Num());
 	for (AActor* Actor : ToDelete)
 	{
 		DeletedNames.Add(MakeShared<FJsonValueString>(Actor->GetActorNameOrLabel()));
@@ -2405,6 +2410,7 @@ FMonolithActionResult FMonolithMeshBlockoutActions::ScanVolume(const TSharedPtr<
 				WallInfo->SetBoolField(TEXT("likely_wall"), Variance < AvgDist * 0.3f); // low relative variance
 
 				TArray<TSharedPtr<FJsonValue>> ActorsArr;
+				ActorsArr.Reserve(Data->ActorsHit.Num());
 				for (const FString& A : Data->ActorsHit) ActorsArr.Add(MakeShared<FJsonValueString>(A));
 				WallInfo->SetArrayField(TEXT("actors"), ActorsArr);
 
@@ -2484,6 +2490,7 @@ FMonolithActionResult FMonolithMeshBlockoutActions::ScanVolume(const TSharedPtr<
 
 	// Existing actors
 	TArray<TSharedPtr<FJsonValue>> ActorsJsonArr;
+	ActorsJsonArr.Reserve(AllActorsHit.Num());
 	for (const FString& A : AllActorsHit)
 	{
 		ActorsJsonArr.Add(MakeShared<FJsonValueString>(A));
