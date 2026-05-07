@@ -26,7 +26,7 @@ namespace
 // ---------------------------------------------------------------------------
 // FMonolithAudioSoundCueActions::CreateSoundCue (Validates CreateEmptySoundCue path)
 // ---------------------------------------------------------------------------
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioSecuritySoundCueCreatePathTest, "Monolith.Security.MonolithAudio.CreateSoundCue.RejectsMalformedPath", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioSecuritySoundCueCreatePathTest, "Monolith.Security.MonolithAudio.CreateSoundCue.RejectsMalformedPath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithAudioSecuritySoundCueCreatePathTest::RunTest(const FString& Parameters)
 {
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
@@ -43,7 +43,7 @@ bool FMonolithAudioSecuritySoundCueCreatePathTest::RunTest(const FString& Parame
 // ---------------------------------------------------------------------------
 // FMonolithAudioAssetActions::CreateSoundAttenuation (Validates CreateAudioAsset template path)
 // ---------------------------------------------------------------------------
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioSecurityAssetCreatePathTest, "Monolith.Security.MonolithAudio.CreateAudioAsset.RejectsMalformedPath", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioSecurityAssetCreatePathTest, "Monolith.Security.MonolithAudio.CreateAudioAsset.RejectsMalformedPath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithAudioSecurityAssetCreatePathTest::RunTest(const FString& Parameters)
 {
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
@@ -60,7 +60,7 @@ bool FMonolithAudioSecurityAssetCreatePathTest::RunTest(const FString& Parameter
 // ---------------------------------------------------------------------------
 // FMonolithAudioAssetActions::CreateTestWave (Validates standalone CreatePackage in CreateTestWave)
 // ---------------------------------------------------------------------------
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioSecurityTestWaveCreatePathTest, "Monolith.Security.MonolithAudio.CreateTestWave.RejectsMalformedPath", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioSecurityTestWaveCreatePathTest, "Monolith.Security.MonolithAudio.CreateTestWave.RejectsMalformedPath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithAudioSecurityTestWaveCreatePathTest::RunTest(const FString& Parameters)
 {
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();

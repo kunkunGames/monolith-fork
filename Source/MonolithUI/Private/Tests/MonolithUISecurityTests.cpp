@@ -5,11 +5,11 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUISecurityPathTest, "Monolith.Security.UI.ValidatePackagePath", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUISecurityPathTest, "Monolith.Security.UI.ValidatePackagePath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithUISecurityPathTest::RunTest(const FString& Parameters)
 {
-	auto RunTestCase = [this](const FString& TestName, const FString& Path, bool bShouldSucceed)
+	auto RunTestCase = [this](const FString& TestCaseName, const FString& Path, bool bShouldSucceed)
 	{
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("save_path"), Path);
@@ -19,12 +19,12 @@ bool FMonolithUISecurityPathTest::RunTest(const FString& Parameters)
 		if (bShouldSucceed)
 		{
 			// Note: We only check if it didn't fail DUE TO validation. A valid path might still fail to create a package in a headless test environment.
-			TestFalse(FString::Printf(TEXT("%s: Should not fail validation"), *TestName), Result.ErrorMessage.Contains(TEXT("Invalid package path")));
+			TestFalse(FString::Printf(TEXT("%s: Should not fail validation"), *TestCaseName), Result.ErrorMessage.Contains(TEXT("Invalid package path")));
 		}
 		else
 		{
-			TestFalse(FString::Printf(TEXT("%s: Action should fail"), *TestName), Result.bSuccess);
-			TestTrue(FString::Printf(TEXT("%s: Error should complain about invalid package path"), *TestName), Result.ErrorMessage.Contains(TEXT("Invalid package path")));
+			TestFalse(FString::Printf(TEXT("%s: Action should fail"), *TestCaseName), Result.bSuccess);
+			TestTrue(FString::Printf(TEXT("%s: Error should complain about invalid package path"), *TestCaseName), Result.ErrorMessage.Contains(TEXT("Invalid package path")));
 		}
 	};
 

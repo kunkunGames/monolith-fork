@@ -20,7 +20,7 @@ namespace
 	}
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAISecurityPathTest, "Monolith.Security.AI.ValidatePackagePath", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAISecurityPathTest, "Monolith.Security.AI.ValidatePackagePath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithAISecurityPathTest::RunTest(const FString& Parameters)
 {

@@ -6,7 +6,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FScaffoldCustomAbilityTaskRejectsMalformedArraysTest, "Monolith.ParamGuard.GAS.ScaffoldCustomAbilityTaskRejectsMalformedArrays", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FScaffoldCustomAbilityTaskRejectsMalformedArraysTest, "Monolith.ParamGuard.GAS.ScaffoldCustomAbilityTaskRejectsMalformedArrays", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FScaffoldCustomAbilityTaskRejectsMalformedArraysTest::RunTest(const FString& Parameters)
 {
 	auto ExecuteScaffoldCustomAbilityTask = [](const TSharedPtr<FJsonObject>& Params)

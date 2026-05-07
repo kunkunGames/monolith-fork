@@ -2,7 +2,7 @@
 #include "MonolithPackagePathValidator.h"
 #include "MonolithNiagaraActions.h"
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraCrashguardPathTest, "Monolith.Crashguard.Niagara.ValidatePackagePath", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraCrashguardPathTest, "Monolith.Crashguard.Niagara.ValidatePackagePath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithNiagaraCrashguardPathTest::RunTest(const FString& Parameters)
 {

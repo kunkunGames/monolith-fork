@@ -10,8 +10,7 @@
 #include "MonolithLogicDriverDiscoveryActions.h"
 #include "MonolithLogicDriverComponentActions.h"
 #include "MonolithLogicDriverTextGraphActions.h"
-#include "MonolithLogicDriverIndexer.h"
-#include "MonolithIndexSubsystem.h"
+
 #include "Editor.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogMonolithLogicDriver, Log, All);
@@ -28,6 +27,9 @@ void FMonolithLogicDriverModule::StartupModule()
 	}
 
 #if WITH_LOGICDRIVER
+#include "MonolithLogicDriverIndexer.h"
+#include "MonolithIndexSubsystem.h"
+
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 	FMonolithLogicDriverAssetActions::RegisterActions(Registry);
 	FMonolithLogicDriverGraphActions::RegisterActions(Registry);
