@@ -12,6 +12,11 @@ FMonolithActionResult FProjectListGameplayTagsAction::Execute(const TSharedPtr<F
 		Prefix = Params->GetStringField(TEXT("prefix"));
 	}
 
+	int32 Limit = Params->HasField(TEXT("limit")) ? Params->GetIntegerField(TEXT("limit")) : 100;
+	int32 Offset = Params->HasField(TEXT("offset")) ? Params->GetIntegerField(TEXT("offset")) : 0;
+	Limit = FMath::Clamp(Limit, 1, 1000);
+	Offset = FMath::Max(0, Offset);
+
 	UMonolithIndexSubsystem* Subsystem = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>();
 	if (!Subsystem)
 	{
@@ -33,13 +38,20 @@ FMonolithActionResult FProjectListGameplayTagsAction::Execute(const TSharedPtr<F
 	FSQLitePreparedStatement Stmt;
 	if (Prefix.IsEmpty())
 	{
-		Stmt.Create(*RawDB, TEXT("SELECT tag_name, parent_tag, reference_count FROM tags ORDER BY tag_name;"));
+		Stmt.Create(*RawDB, TEXT("SELECT tag_name, parent_tag, reference_count FROM tags ORDER BY tag_name LIMIT ? OFFSET ?;"));
+		Stmt.SetBindingValueByIndex(1, static_cast<int64>(Limit));
+		Stmt.SetBindingValueByIndex(2, static_cast<int64>(Offset));
 	}
 	else
 	{
-		Stmt.Create(*RawDB, TEXT("SELECT tag_name, parent_tag, reference_count FROM tags WHERE tag_name LIKE ? ORDER BY tag_name;"));
-		FString LikePattern = Prefix + TEXT("%");
+		// Escape SQL wildcards in user input to prevent broad table scans or malformed matching
+		FString EscapedPrefix = Prefix.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
+		FString LikePattern = EscapedPrefix + TEXT("%");
+
+		Stmt.Create(*RawDB, TEXT("SELECT tag_name, parent_tag, reference_count FROM tags WHERE tag_name LIKE ? ESCAPE '\\' ORDER BY tag_name LIMIT ? OFFSET ?;"));
 		Stmt.SetBindingValueByIndex(1, LikePattern);
+		Stmt.SetBindingValueByIndex(2, static_cast<int64>(Limit));
+		Stmt.SetBindingValueByIndex(3, static_cast<int64>(Offset));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> TagsArr;
@@ -63,6 +75,8 @@ FMonolithActionResult FProjectListGameplayTagsAction::Execute(const TSharedPtr<F
 	Result->SetBoolField(TEXT("success"), true);
 	Result->SetArrayField(TEXT("tags"), TagsArr);
 	Result->SetNumberField(TEXT("count"), TagsArr.Num());
+	Result->SetNumberField(TEXT("limit"), Limit);
+	Result->SetNumberField(TEXT("offset"), Offset);
 	if (!Prefix.IsEmpty())
 	{
 		Result->SetStringField(TEXT("prefix_filter"), Prefix);
@@ -74,5 +88,7 @@ TSharedPtr<FJsonObject> FProjectListGameplayTagsAction::GetSchema()
 {
 	return FParamSchemaBuilder()
 		.Optional(TEXT("prefix"), TEXT("string"), TEXT("Tag prefix filter (e.g. 'Weapon.Melee') -- returns tags starting with this prefix"))
+		.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum tags to return"), TEXT("100"))
+		.Optional(TEXT("offset"), TEXT("integer"), TEXT("Pagination offset"), TEXT("0"))
 		.Build();
 }

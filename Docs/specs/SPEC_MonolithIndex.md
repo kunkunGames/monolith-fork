@@ -40,7 +40,7 @@
 | `find_by_type` | `asset_type` (required), `limit` (100), `offset` (0) | Filter assets by class with pagination |
 | `get_stats` | none | Row counts for all 11 tables + asset class breakdown (top 20) |
 | `get_asset_details` | `asset_path` (required) | Deep inspection: nodes, variables, references for a single asset |
-| `list_gameplay_tags` | `prefix` (optional) | List indexed gameplay tags, optionally filtered by prefix |
+| `list_gameplay_tags` | `prefix`, `limit`, `offset` (optional) | List indexed gameplay tags, optionally filtered by prefix |
 | `search_gameplay_tags` | `query` (required) | Search gameplay tags and return referencing assets |
 
 ### Database Schema
