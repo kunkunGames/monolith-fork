@@ -81,7 +81,26 @@ if ($StrippedModules.Count -gt 0) {
 }
 $OutputZip = Join-Path $ProjectDir "Monolith-v$Version.zip"
 $TempDir = Join-Path $env:TEMP "Monolith_Release_$Version"
-$UBT = 'C:\Program Files (x86)\UE_5.7\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe'
+
+# Locate UBT dynamically
+$UBT = $env:UE_57_UBT
+if (-not $UBT) {
+    if ($env:UE_57) {
+        $UBT = Join-Path $env:UE_57 "Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe"
+    } elseif ($env:UE_ROOT) {
+        $UBT = Join-Path $env:UE_ROOT "Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe"
+    } else {
+        $UBT = 'C:\Program Files\Epic Games\UE_5.7\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe'
+        if (-not (Test-Path $UBT)) {
+            $UBT = 'C:\Program Files (x86)\UE_5.7\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe'
+        }
+    }
+}
+
+if (-not (Test-Path $UBT)) {
+    Write-Host "    [SKIP] UnrealBuildTool not found at $UBT" -ForegroundColor Yellow
+}
+
 $UProject = Join-Path $ProjectDir "Leviathan.uproject"
 
 Write-Host "Building Monolith v$Version release zip..." -ForegroundColor Cyan

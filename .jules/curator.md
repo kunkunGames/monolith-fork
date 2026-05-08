@@ -8,3 +8,8 @@
 **Learning:** Hardcoded paths break on non-standard installations or alternate drive letters.
 **Prevention:** Use vswhere.exe dynamically to locate VC Tools instead of hardcoding static paths.
 **Avoid:** Hardcoded C:\Program Files or specific Visual Studio version paths in build and release scripts.
+## 2026-05-08 - make_release.ps1 dynamic UBT detection
+**Hygiene issue:** make_release.ps1 hardcoded the UnrealBuildTool (UBT) path to `C:\Program Files (x86)\UE_5.7\...`, which breaks on non-standard installations or alternate drive letters.
+**Learning:** Hardcoded paths for build tools create fragile scripts that fail across different developer environments and CI runners.
+**Prevention:** Use environment variables like `UE_57`, `UE_ROOT`, or `UE_57_UBT` to dynamically locate tools (like UBT) instead of relying solely on hardcoded static paths.
+**Avoid:** Hardcoded `C:\Program Files` paths for Unreal Engine binaries in build and release scripts.
