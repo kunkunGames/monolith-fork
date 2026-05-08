@@ -21,7 +21,7 @@ public class MonolithAI : ModuleRules
 			"BehaviorTreeEditor", "EnvironmentQueryEditor",
 			"Projects",  // IPluginManager (Phase D2)
 			"Json", "JsonUtilities",
-			"SQLiteCore"
+			"SQLiteCore", "AssetRegistry"
 		});
 
 		// --- Conditional optional deps ---
