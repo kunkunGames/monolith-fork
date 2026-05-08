@@ -490,7 +490,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 
 	// Each namespace becomes a tool
 	TArray<FString> Namespaces = Registry.GetNamespaces();
-	ToolsArray.Reserve(Namespaces.Num());
+	ToolsArray.Reserve(Namespaces.Num() + Registry.GetNamespaceActionCount(TEXT("monolith")));
 	for (const FString& Namespace : Namespaces)
 	{
 		TArray<FString> ActionNames = Registry.GetActionNames(Namespace);

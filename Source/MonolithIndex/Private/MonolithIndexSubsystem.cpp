@@ -1310,6 +1310,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 
 	// 6c: Build paths needing (re-)indexing
 	TSet<FName> PathsToIndex;
+	PathsToIndex.Reserve(TrueAdds.Num() + ModifiedPaths.Num() + Moves.Num());
 	for (FName Path : TrueAdds) PathsToIndex.Add(Path);
 	for (FName Path : ModifiedPaths) PathsToIndex.Add(Path);
 	for (const auto& [OldPath, NewPath] : Moves)
@@ -1383,6 +1384,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 
 	// PHASE 7: Deep-index
 	TSet<FString> PathStrings;
+	PathStrings.Reserve(PathsToIndex.Num());
 	for (FName Path : PathsToIndex) PathStrings.Add(Path.ToString());
 	ProcessDeepIndexQueue(PathStrings);
 
@@ -1510,6 +1512,7 @@ static bool IsRedirector(const FAssetData& AssetData)
 void UMonolithIndexSubsystem::OnAssetsAddedCallback(TConstArrayView<FAssetData> Assets)
 {
 	if (bIsIndexing) return;
+	PendingChanges.Reserve(PendingChanges.Num() + Assets.Num());
 	for (const FAssetData& AssetData : Assets)
 	{
 		if (!IsRedirector(AssetData))
@@ -1520,6 +1523,7 @@ void UMonolithIndexSubsystem::OnAssetsAddedCallback(TConstArrayView<FAssetData> 
 void UMonolithIndexSubsystem::OnAssetsRemovedCallback(TConstArrayView<FAssetData> Assets)
 {
 	if (bIsIndexing) return;
+	PendingChanges.Reserve(PendingChanges.Num() + Assets.Num());
 	for (const FAssetData& AssetData : Assets)
 	{
 		if (!IsRedirector(AssetData))
@@ -1536,6 +1540,7 @@ void UMonolithIndexSubsystem::OnAssetRenamedCallback(const FAssetData& AssetData
 void UMonolithIndexSubsystem::OnAssetsUpdatedOnDiskCallback(TConstArrayView<FAssetData> Assets)
 {
 	if (bIsIndexing) return;
+	PendingChanges.Reserve(PendingChanges.Num() + Assets.Num());
 	for (const FAssetData& AssetData : Assets)
 		PendingChanges.Add({EIndexChangeType::Updated, AssetData, {}});
 }
@@ -1551,6 +1556,7 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 
 	// DEDUP: Collapse multiple changes to same path
 	TMap<FName, int32> PathToLastIndex;
+	PathToLastIndex.Reserve(RawChanges.Num());
 	TArray<FPendingIndexChange> LocalChanges;
 	LocalChanges.Reserve(RawChanges.Num());
 
