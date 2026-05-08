@@ -692,9 +692,12 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSpawnAIActor(const TSh
 	const TSharedPtr<FJsonObject>* LocObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("location"), LocObj) && LocObj && (*LocObj).IsValid())
 	{
-		Location.X = (*LocObj)->GetNumberField(TEXT("x"));
-		Location.Y = (*LocObj)->GetNumberField(TEXT("y"));
-		Location.Z = (*LocObj)->GetNumberField(TEXT("z"));
+			if (!(*LocObj)->TryGetNumberField(TEXT("x"), Location.X) ||
+				!(*LocObj)->TryGetNumberField(TEXT("y"), Location.Y) ||
+				!(*LocObj)->TryGetNumberField(TEXT("z"), Location.Z))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed param 'location': requires numeric x, y, z"));
+			}
 	}
 	else
 	{
@@ -706,9 +709,12 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSpawnAIActor(const TSh
 	const TSharedPtr<FJsonObject>* RotObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj && (*RotObj).IsValid())
 	{
-		Rotation.Pitch = (*RotObj)->GetNumberField(TEXT("pitch"));
-		Rotation.Yaw = (*RotObj)->GetNumberField(TEXT("yaw"));
-		Rotation.Roll = (*RotObj)->GetNumberField(TEXT("roll"));
+			if (!(*RotObj)->TryGetNumberField(TEXT("pitch"), Rotation.Pitch) ||
+				!(*RotObj)->TryGetNumberField(TEXT("yaw"), Rotation.Yaw) ||
+				!(*RotObj)->TryGetNumberField(TEXT("roll"), Rotation.Roll))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed param 'rotation': requires numeric pitch, yaw, roll"));
+			}
 	}
 
 	// Load the Blueprint. Resolver's tier-1 normalization handles the
