@@ -345,7 +345,7 @@ Delete UE assets by path. **Experimental.** Use the `allowed_prefixes` safety gu
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `asset_paths` | array | **required** | UE asset paths to delete |
+| `asset_paths` | array | **required** | UE asset paths to delete (Max: 200) |
 | `allowed_prefixes` | array | optional | Restrict to paths starting with one of these (e.g. `["/Game/AgentTraining/"]`) |
 
 ### `editor.get_viewport_info`

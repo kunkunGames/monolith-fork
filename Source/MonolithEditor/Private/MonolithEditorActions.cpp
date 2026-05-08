@@ -2194,6 +2194,11 @@ FMonolithActionResult FMonolithEditorActions::HandleDeleteAssets(
 		return FMonolithActionResult::Error(TEXT("asset_paths array is required and must not be empty"));
 	}
 
+	if (AssetPathsArray->Num() > 200)
+	{
+		return FMonolithActionResult::Error(TEXT("asset_paths array exceeds maximum allowed size (200)"));
+	}
+
 	TArray<FString> AssetPaths;
 	for (const auto& Val : *AssetPathsArray)
 	{
