@@ -26,3 +26,6 @@ Every agent PR description must include a `WorkFingerprint` containing at least:
 
 ## 4. Verification Claims
 Do not claim Unreal Engine (UE) verification or release packaging was successful unless the tools were actually executed in the current VM. If the UE Editor or build tools are unavailable, explicitly note `[blocked: UE editor unavailable]` or similar in the verification logs.
+
+## 5. Journal Hygiene
+When updating `.jules/` journal files, only document durable coordination rules and learnings. Do not use them as routine work logs or task journals.

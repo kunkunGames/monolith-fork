@@ -16,3 +16,9 @@
 **Learning:** Vague collision instructions allowed agents to create overlapping PRs because they judged their approach as non-overlapping despite editing the same files.
 **Prevention:** Added a strict rule to `AGENTS.md` requiring agents to explicitly "Stop without PR if a similar branch exists, if an open PR has the same WorkFingerprint, or touches the same intended files."
 **Avoid:** Proceeding with file edits when another agent has explicitly claimed the same target files in their WorkFingerprint or PR diff.
+
+## 2024-05-27 - Restrict journal files to durable learnings
+**Coordination issue:** Agents were using `.jules/` files as routine work logs, causing unnecessary repo noise and burying important rules.
+**Learning:** Without explicit instruction, agents default to writing task journals instead of durable coordination rules.
+**Prevention:** Added a 'Journal Hygiene' section to AGENTS.md to explicitly ban routine work logs in `.jules/` files.
+**Avoid:** Updating `.jules/` files with daily summaries or non-reusable logs.
