@@ -1014,8 +1014,11 @@ namespace
 				const TSharedPtr<FJsonObject>* KeyObj;
 				if (!KeyVal->TryGetObject(KeyObj)) continue;
 
-				FString KName = (*KeyObj)->GetStringField(TEXT("name"));
-				FString KType = (*KeyObj)->GetStringField(TEXT("type"));
+				FString KName;
+
+				(*KeyObj)->TryGetStringField(TEXT("name"), KName);
+				FString KType;
+				(*KeyObj)->TryGetStringField(TEXT("type"), KType);
 				if (KName.IsEmpty() || KType.IsEmpty()) continue;
 
 				UBlackboardKeyType* KeyType = nullptr;
@@ -1030,7 +1033,8 @@ namespace
 				else if (KType == TEXT("Object"))
 				{
 					UBlackboardKeyType_Object* ObjKey = NewObject<UBlackboardKeyType_Object>(BB);
-					FString BaseClassName = (*KeyObj)->GetStringField(TEXT("base_class"));
+					FString BaseClassName;
+					(*KeyObj)->TryGetStringField(TEXT("base_class"), BaseClassName);
 					if (!BaseClassName.IsEmpty())
 					{
 						UClass* BaseClass = FindFirstObject<UClass>(*BaseClassName, EFindFirstObjectOptions::EnsureIfAmbiguous);
@@ -1051,7 +1055,8 @@ namespace
 				}
 				else if (KType == TEXT("Enum"))
 				{
-					FString EnumName = (*KeyObj)->GetStringField(TEXT("enum_type"));
+					FString EnumName;
+					(*KeyObj)->TryGetStringField(TEXT("enum_type"), EnumName);
 					UEnum* FoundEnum = nullptr;
 					if (!EnumName.IsEmpty())
 					{
@@ -1107,7 +1112,9 @@ namespace
 	{
 		if (!NodeSpec.IsValid()) return nullptr;
 
-		FString TypeName = NodeSpec->GetStringField(TEXT("type"));
+		FString TypeName;
+
+		NodeSpec->TryGetStringField(TEXT("type"), TypeName);
 		if (TypeName.IsEmpty())
 		{
 			Ctx.Warnings.Add(TEXT("Node missing 'type' field, skipped"));
@@ -1147,7 +1154,8 @@ namespace
 		NewGraphNode->NodeInstance = NewBTNode;
 
 		// Set custom name if provided
-		FString NodeName = NodeSpec->GetStringField(TEXT("name"));
+		FString NodeName;
+		NodeSpec->TryGetStringField(TEXT("name"), NodeName);
 		if (!NodeName.IsEmpty())
 		{
 			NewBTNode->NodeName = NodeName;
@@ -1196,7 +1204,9 @@ namespace
 				const TSharedPtr<FJsonObject>* DecObj;
 				if (!DecVal->TryGetObject(DecObj)) continue;
 
-				FString DecClassName = (*DecObj)->GetStringField(TEXT("class"));
+				FString DecClassName;
+
+				(*DecObj)->TryGetStringField(TEXT("class"), DecClassName);
 				if (DecClassName.IsEmpty()) continue;
 
 				UClass* DecClass = FindFirstObject<UClass>(*DecClassName, EFindFirstObjectOptions::EnsureIfAmbiguous);
@@ -1237,7 +1247,9 @@ namespace
 				const TSharedPtr<FJsonObject>* SvcObj;
 				if (!SvcVal->TryGetObject(SvcObj)) continue;
 
-				FString SvcClassName = (*SvcObj)->GetStringField(TEXT("class"));
+				FString SvcClassName;
+
+				(*SvcObj)->TryGetStringField(TEXT("class"), SvcClassName);
 				if (SvcClassName.IsEmpty()) continue;
 
 				UClass* SvcClass = FindFirstObject<UClass>(*SvcClassName, EFindFirstObjectOptions::EnsureIfAmbiguous);
@@ -1850,7 +1862,9 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBehaviorTree(c
 		return ErrResult;
 	}
 
-	FString AssetName = Params->GetStringField(TEXT("name"));
+	FString AssetName;
+
+	Params->TryGetStringField(TEXT("name"), AssetName);
 	if (AssetName.IsEmpty())
 	{
 		AssetName = FPackageName::GetShortName(SavePath);
@@ -1885,7 +1899,8 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBehaviorTree(c
 	}
 
 	// Optionally link blackboard
-	FString BBPath = Params->GetStringField(TEXT("blackboard_path"));
+	FString BBPath;
+	Params->TryGetStringField(TEXT("blackboard_path"), BBPath);
 	if (!BBPath.IsEmpty())
 	{
 		UBlackboardData* BB = Cast<UBlackboardData>(FMonolithAssetUtils::LoadAssetByPath(UBlackboardData::StaticClass(), BBPath));
@@ -1984,7 +1999,9 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleListBehaviorTrees(co
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(UBehaviorTree::StaticClass()->GetClassPathName(), Assets);
 
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString PathFilter;
+
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 
 	TArray<TSharedPtr<FJsonValue>> Items;
 	for (const FAssetData& Asset : Assets)
@@ -2120,7 +2137,9 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleSetBTBlackboard(cons
 		return FMonolithActionResult::Error(Error);
 	}
 
-	FString BBPath = Params->GetStringField(TEXT("blackboard_path"));
+	FString BBPath;
+
+	Params->TryGetStringField(TEXT("blackboard_path"), BBPath);
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Set BT Blackboard")));
 
@@ -2230,7 +2249,8 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTNode(const TSha
 	}
 
 	// Find the parent graph node
-	FString ParentIdStr = Params->GetStringField(TEXT("parent_id"));
+	FString ParentIdStr;
+	Params->TryGetStringField(TEXT("parent_id"), ParentIdStr);
 	UBehaviorTreeGraphNode* ParentGraphNode = nullptr;
 
 	if (ParentIdStr.IsEmpty())
@@ -2991,7 +3011,8 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTRunEQSTask(cons
 	}
 
 	// Find parent
-	FString ParentIdStr = Params->GetStringField(TEXT("parent_id"));
+	FString ParentIdStr;
+	Params->TryGetStringField(TEXT("parent_id"), ParentIdStr);
 	UBehaviorTreeGraphNode* ParentGraphNode = nullptr;
 	if (ParentIdStr.IsEmpty())
 	{
@@ -3047,7 +3068,9 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTRunEQSTask(cons
 	// Also try BlackboardKey as some versions use that
 	SetPropertyValue(TaskNode, TEXT("BlackboardKey"), BBKeyVal, BT, PropError);
 
-	FString RunMode = Params->GetStringField(TEXT("run_mode"));
+	FString RunMode;
+
+	Params->TryGetStringField(TEXT("run_mode"), RunMode);
 	if (!RunMode.IsEmpty())
 	{
 		TSharedPtr<FJsonValue> RunModeVal = MakeShared<FJsonValueString>(RunMode);
@@ -3134,7 +3157,8 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTSmartObjectTask
 	}
 
 	// Find parent
-	FString ParentIdStr = Params->GetStringField(TEXT("parent_id"));
+	FString ParentIdStr;
+	Params->TryGetStringField(TEXT("parent_id"), ParentIdStr);
 	UBehaviorTreeGraphNode* ParentGraphNode = nullptr;
 	if (ParentIdStr.IsEmpty())
 	{
@@ -3518,7 +3542,8 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleBuildBTFromSpec(cons
 	// package. If the root cannot be added we must NOT save a zero-node BT.
 	// =====================================================================
 	{
-		const FString RootType = (*RootObjPtr)->GetStringField(TEXT("type"));
+		FString RootType;
+		(*RootObjPtr)->TryGetStringField(TEXT("type"), RootType);
 		if (RootType.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("Spec root missing 'type' field — refusing to create empty BT"));
@@ -3560,7 +3585,8 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleBuildBTFromSpec(cons
 		WalkSpec = [&](const TSharedPtr<FJsonObject>& NodeSpec, const FString& Path)
 		{
 			if (!NodeSpec.IsValid()) return;
-			const FString TypeName = NodeSpec->GetStringField(TEXT("type"));
+			FString TypeName;
+			NodeSpec->TryGetStringField(TEXT("type"), TypeName);
 			if (TypeName.IsEmpty())
 			{
 				StrictErrors.Add(FString::Printf(TEXT("%s: missing 'type' field"), *Path));
@@ -3629,7 +3655,8 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleBuildBTFromSpec(cons
 	}
 
 	// Handle blackboard — either load from path or create inline
-	FString BBPath = Spec->GetStringField(TEXT("blackboard_path"));
+	FString BBPath;
+	Spec->TryGetStringField(TEXT("blackboard_path"), BBPath);
 	if (!BBPath.IsEmpty())
 	{
 		UBlackboardData* BB = Cast<UBlackboardData>(FMonolithAssetUtils::LoadAssetByPath(UBlackboardData::StaticClass(), BBPath));
@@ -3833,7 +3860,8 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleImportBTSpec(const T
 	}
 
 	// Update blackboard if specified
-	FString BBPath = Spec->GetStringField(TEXT("blackboard_path"));
+	FString BBPath;
+	Spec->TryGetStringField(TEXT("blackboard_path"), BBPath);
 	if (!BBPath.IsEmpty())
 	{
 		UBlackboardData* BB = Cast<UBlackboardData>(FMonolithAssetUtils::LoadAssetByPath(UBlackboardData::StaticClass(), BBPath));
@@ -4071,7 +4099,9 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCloneBTSubtree(const
 	if (!MonolithAI::RequireStringParam(Params, TEXT("node_id"), NodeIdStr, ErrResult)) return ErrResult;
 	if (!MonolithAI::RequireStringParam(Params, TEXT("dest_path"), DestPath, ErrResult)) return ErrResult;
 
-	FString DestParentIdStr = Params->GetStringField(TEXT("dest_parent_id"));
+	FString DestParentIdStr;
+
+	Params->TryGetStringField(TEXT("dest_parent_id"), DestParentIdStr);
 
 	// Load source BT
 	FString SrcError;
@@ -4156,7 +4186,8 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCloneBTSubtree(const
 			FMonolithAIBehaviorTreeActions* /*unused*/)
 		{
 			// Determine node class
-			FString NodeType = NodeSpec->GetStringField(TEXT("type"));
+			FString NodeType;
+			NodeSpec->TryGetStringField(TEXT("type"), NodeType);
 			FString NodeClass;
 			if (NodeType == TEXT("Selector")) NodeClass = TEXT("BTComposite_Selector");
 			else if (NodeType == TEXT("Sequence")) NodeClass = TEXT("BTComposite_Sequence");
@@ -4189,7 +4220,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCloneBTSubtree(const
 			FString NewNodeId;
 			if (R.Result.IsValid())
 			{
-				NewNodeId = R.Result->GetStringField(TEXT("node_id"));
+				R.Result->TryGetStringField(TEXT("node_id"), NewNodeId);
 			}
 			OutCreatedIds.Add(NewNodeId);
 
@@ -4306,7 +4337,9 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAutoArrangeBT(const 
 		return FMonolithActionResult::Error(Error);
 	}
 
-	FString FormatterPref = Params->GetStringField(TEXT("formatter"));
+	FString FormatterPref;
+
+	Params->TryGetStringField(TEXT("formatter"), FormatterPref);
 	if (FormatterPref.IsEmpty()) FormatterPref = TEXT("default");
 
 	bool bUsedBA = false;
@@ -4592,7 +4625,9 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBTTaskBlueprin
 	if (!MonolithAI::RequireStringParam(Params, TEXT("save_path"), SavePath, ErrResult)) return ErrResult;
 	if (!MonolithAI::RequireStringParam(Params, TEXT("name"), Name, ErrResult)) return ErrResult;
 
-	FString ParentClassName = Params->GetStringField(TEXT("parent_class"));
+	FString ParentClassName;
+
+	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
 
 	// Resolve parent class
 	UClass* ParentClass = UBTTask_BlueprintBase::StaticClass();
@@ -4675,7 +4710,9 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBTDecoratorBlu
 	if (!MonolithAI::RequireStringParam(Params, TEXT("save_path"), SavePath, ErrResult)) return ErrResult;
 	if (!MonolithAI::RequireStringParam(Params, TEXT("name"), Name, ErrResult)) return ErrResult;
 
-	FString ParentClassName = Params->GetStringField(TEXT("parent_class"));
+	FString ParentClassName;
+
+	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
 
 	UClass* ParentClass = UBTDecorator_BlueprintBase::StaticClass();
 	if (!ParentClassName.IsEmpty())
@@ -4749,7 +4786,9 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBTServiceBluep
 	if (!MonolithAI::RequireStringParam(Params, TEXT("save_path"), SavePath, ErrResult)) return ErrResult;
 	if (!MonolithAI::RequireStringParam(Params, TEXT("name"), Name, ErrResult)) return ErrResult;
 
-	FString ParentClassName = Params->GetStringField(TEXT("parent_class"));
+	FString ParentClassName;
+
+	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
 
 	UClass* ParentClass = UBTService_BlueprintBase::StaticClass();
 	if (!ParentClassName.IsEmpty())
@@ -4826,7 +4865,9 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleGenerateBTDiagram(co
 		return FMonolithActionResult::Error(Error);
 	}
 
-	FString Format = Params->GetStringField(TEXT("format"));
+	FString Format;
+
+	Params->TryGetStringField(TEXT("format"), Format);
 	if (Format.IsEmpty()) Format = TEXT("ascii");
 
 	UBehaviorTreeGraphNode_Root* RootGraphNode = FindRootNode(BTGraph);

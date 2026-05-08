@@ -86,7 +86,8 @@ namespace
 			// Set base class filter if provided
 			if (ExtraParams.IsValid())
 			{
-				FString BaseClassName = ExtraParams->GetStringField(TEXT("base_class"));
+				FString BaseClassName;
+				ExtraParams->TryGetStringField(TEXT("base_class"), BaseClassName);
 				if (!BaseClassName.IsEmpty())
 				{
 					UClass* BaseClass = FindFirstObject<UClass>(*BaseClassName, EFindFirstObjectOptions::EnsureIfAmbiguous);
@@ -116,7 +117,8 @@ namespace
 			UBlackboardKeyType_Class* ClassKey = NewObject<UBlackboardKeyType_Class>(Outer);
 			if (ExtraParams.IsValid())
 			{
-				FString BaseClassName = ExtraParams->GetStringField(TEXT("base_class"));
+				FString BaseClassName;
+				ExtraParams->TryGetStringField(TEXT("base_class"), BaseClassName);
 				if (!BaseClassName.IsEmpty())
 				{
 					UClass* BaseClass = FindFirstObject<UClass>(*BaseClassName, EFindFirstObjectOptions::EnsureIfAmbiguous);
@@ -141,7 +143,8 @@ namespace
 			UBlackboardKeyType_Enum* EnumKey = NewObject<UBlackboardKeyType_Enum>(Outer);
 			if (ExtraParams.IsValid())
 			{
-				FString EnumName = ExtraParams->GetStringField(TEXT("enum_type"));
+				FString EnumName;
+				ExtraParams->TryGetStringField(TEXT("enum_type"), EnumName);
 				if (!EnumName.IsEmpty())
 				{
 					UEnum* FoundEnum = FindFirstObject<UEnum>(*EnumName, EFindFirstObjectOptions::EnsureIfAmbiguous);
@@ -166,7 +169,8 @@ namespace
 			UBlackboardKeyType_NativeEnum* NativeEnumKey = NewObject<UBlackboardKeyType_NativeEnum>(Outer);
 			if (ExtraParams.IsValid())
 			{
-				FString EnumName = ExtraParams->GetStringField(TEXT("enum_type"));
+				FString EnumName;
+				ExtraParams->TryGetStringField(TEXT("enum_type"), EnumName);
 				if (!EnumName.IsEmpty())
 				{
 					NativeEnumKey->EnumName = EnumName;
@@ -409,7 +413,8 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleCreateBlackboard(const
 	}
 
 	// Derive asset name from path or explicit param
-	FString AssetName = Params->GetStringField(TEXT("name"));
+	FString AssetName;
+	Params->TryGetStringField(TEXT("name"), AssetName);
 	if (AssetName.IsEmpty())
 	{
 		AssetName = FPackageName::GetShortName(SavePath);
@@ -445,7 +450,8 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleCreateBlackboard(const
 	}
 
 	// Set parent if specified
-	FString ParentPath = Params->GetStringField(TEXT("parent_bb"));
+	FString ParentPath;
+	Params->TryGetStringField(TEXT("parent_bb"), ParentPath);
 	if (!ParentPath.IsEmpty())
 	{
 		UObject* ParentObj = FMonolithAssetUtils::LoadAssetByPath(UBlackboardData::StaticClass(), ParentPath);
@@ -541,7 +547,9 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleListBlackboards(const 
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(UBlackboardData::StaticClass()->GetClassPathName(), Assets);
 
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString PathFilter;
+
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 
 	TArray<TSharedPtr<FJsonValue>> Items;
 	for (const FAssetData& Asset : Assets)
@@ -761,7 +769,8 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleAddBBKey(const TShared
 	NewEntry.KeyType = KeyType;
 
 #if WITH_EDITORONLY_DATA
-	FString Description = Params->GetStringField(TEXT("description"));
+	FString Description;
+	Params->TryGetStringField(TEXT("description"), Description);
 	if (!Description.IsEmpty())
 	{
 		NewEntry.EntryDescription = Description;
@@ -981,8 +990,11 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleBatchAddBBKeys(const T
 			continue;
 		}
 
-		FString KName = (*KeyObj)->GetStringField(TEXT("name"));
-		FString KType = (*KeyObj)->GetStringField(TEXT("type"));
+		FString KName;
+
+		(*KeyObj)->TryGetStringField(TEXT("name"), KName);
+		FString KType;
+		(*KeyObj)->TryGetStringField(TEXT("type"), KType);
 
 		if (KName.IsEmpty() || KType.IsEmpty())
 		{
@@ -1022,7 +1034,8 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleBatchAddBBKeys(const T
 		NewEntry.KeyType = KeyType;
 
 #if WITH_EDITORONLY_DATA
-		FString Desc = (*KeyObj)->GetStringField(TEXT("description"));
+		FString Desc;
+		(*KeyObj)->TryGetStringField(TEXT("description"), Desc);
 		if (!Desc.IsEmpty())
 		{
 			NewEntry.EntryDescription = Desc;
@@ -1068,7 +1081,8 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleSetBBParent(const TSha
 	}
 
 	// parent_path can be empty/"none"/"null" to clear parent
-	FString ParentPath = Params->GetStringField(TEXT("parent_path"));
+	FString ParentPath;
+	Params->TryGetStringField(TEXT("parent_path"), ParentPath);
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Set BB Parent")));
 	BB->Modify();

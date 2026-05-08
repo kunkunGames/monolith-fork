@@ -34,7 +34,7 @@ namespace
 {
 	UMassEntityConfigAsset* LoadMassConfigFromParams(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)
 	{
-		OutAssetPath = Params->GetStringField(TEXT("asset_path"));
+		Params->TryGetStringField(TEXT("asset_path"), OutAssetPath);
 		if (OutAssetPath.IsEmpty())
 		{
 			OutError = TEXT("Missing required param 'asset_path'");
@@ -195,7 +195,8 @@ void FMonolithAIAdvancedActions::RegisterActions(FMonolithToolRegistry& Registry
 // 219. list_mass_entity_configs
 FMonolithActionResult FMonolithAIAdvancedActions::HandleListMassEntityConfigs(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -259,14 +260,17 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleGetMassEntityConfig(cons
 // 221. create_mass_entity_config
 FMonolithActionResult FMonolithAIAdvancedActions::HandleCreateMassEntityConfig(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	FString SavePath;
+	Params->TryGetStringField(TEXT("save_path"), SavePath);
 	if (SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
 	}
 	SavePath = FMonolithAssetUtils::ResolveAssetPath(SavePath);
 
-	FString AssetName = Params->GetStringField(TEXT("name"));
+	FString AssetName;
+
+	Params->TryGetStringField(TEXT("name"), AssetName);
 	if (AssetName.IsEmpty())
 	{
 		AssetName = FPackageName::GetShortName(SavePath);
@@ -304,7 +308,8 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleCreateMassEntityConfig(c
 	}
 
 	// Set parent config if provided
-	FString ParentConfigPath = Params->GetStringField(TEXT("parent_config"));
+	FString ParentConfigPath;
+	Params->TryGetStringField(TEXT("parent_config"), ParentConfigPath);
 	if (!ParentConfigPath.IsEmpty())
 	{
 		ParentConfigPath = FMonolithAssetUtils::ResolveAssetPath(ParentConfigPath);
@@ -649,7 +654,8 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleGetMassEntityStats(const
 // 227. list_zone_graphs
 FMonolithActionResult FMonolithAIAdvancedActions::HandleListZoneGraphs(const TSharedPtr<FJsonObject>& Params)
 {
-	FString LevelFilter = Params->GetStringField(TEXT("level"));
+	FString LevelFilter;
+	Params->TryGetStringField(TEXT("level"), LevelFilter);
 
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	if (!World)
@@ -728,7 +734,8 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleQueryZoneLanes(const TSh
 	}
 
 	FZoneGraphTagFilter TagFilter;
-	FString TagFilterStr = Params->GetStringField(TEXT("tag_filter"));
+	FString TagFilterStr;
+	Params->TryGetStringField(TEXT("tag_filter"), TagFilterStr);
 	// Tag parsing is left as no-op for now — ZoneGraph tags are bitmask-based
 
 	FBox QueryBounds = FBox::BuildAABB(Location, FVector(Radius));
