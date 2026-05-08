@@ -209,8 +209,8 @@ namespace MeshInspectionHelpers
 
 FMonolithActionResult FMonolithMeshInspectionActions::GetMeshInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
@@ -296,8 +296,8 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetMeshInfo(const TSharedP
 
 FMonolithActionResult FMonolithMeshInspectionActions::GetMeshBounds(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
@@ -353,8 +353,8 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetMeshBounds(const TShare
 
 FMonolithActionResult FMonolithMeshInspectionActions::GetMeshMaterials(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
@@ -416,8 +416,8 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetMeshMaterials(const TSh
 
 FMonolithActionResult FMonolithMeshInspectionActions::GetMeshLods(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
@@ -461,8 +461,8 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetMeshLods(const TSharedP
 
 FMonolithActionResult FMonolithMeshInspectionActions::GetMeshCollision(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
@@ -707,22 +707,24 @@ namespace UVAnalysis
 
 FMonolithActionResult FMonolithMeshInspectionActions::GetMeshUvs(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
+	double LodIndexD;
 	int32 LodIndex = 0;
-	if (Params->HasField(TEXT("lod_index")))
+	if (Params->TryGetNumberField(TEXT("lod_index"), LodIndexD))
 	{
-		LodIndex = static_cast<int32>(Params->GetNumberField(TEXT("lod_index")));
+		LodIndex = static_cast<int32>(LodIndexD);
 	}
 
+	double TargetChannelD;
 	int32 TargetChannel = -1;
-	if (Params->HasField(TEXT("uv_channel")))
+	if (Params->TryGetNumberField(TEXT("uv_channel"), TargetChannelD))
 	{
-		TargetChannel = static_cast<int32>(Params->GetNumberField(TEXT("uv_channel")));
+		TargetChannel = static_cast<int32>(TargetChannelD);
 	}
 
 	FString Error;
@@ -809,8 +811,8 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetMeshUvs(const TSharedPt
 
 FMonolithActionResult FMonolithMeshInspectionActions::AnalyzeSkeletalMesh(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
@@ -909,8 +911,8 @@ FMonolithActionResult FMonolithMeshInspectionActions::AnalyzeSkeletalMesh(const 
 
 FMonolithActionResult FMonolithMeshInspectionActions::AnalyzeMeshQuality(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
@@ -1176,8 +1178,10 @@ FMonolithActionResult FMonolithMeshInspectionActions::AnalyzeMeshQuality(const T
 
 FMonolithActionResult FMonolithMeshInspectionActions::CompareMeshes(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PathA = Params->GetStringField(TEXT("asset_path_a"));
-	FString PathB = Params->GetStringField(TEXT("asset_path_b"));
+	FString PathA;
+	FString PathB;
+	Params->TryGetStringField(TEXT("asset_path_a"), PathA);
+	Params->TryGetStringField(TEXT("asset_path_b"), PathB);
 
 	if (PathA.IsEmpty() || PathB.IsEmpty())
 	{
@@ -1269,28 +1273,31 @@ FMonolithActionResult FMonolithMeshInspectionActions::CompareMeshes(const TShare
 
 FMonolithActionResult FMonolithMeshInspectionActions::GetVertexData(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
+	double LodIndexD;
 	int32 LodIndex = 0;
-	if (Params->HasField(TEXT("lod_index")))
+	if (Params->TryGetNumberField(TEXT("lod_index"), LodIndexD))
 	{
-		LodIndex = static_cast<int32>(Params->GetNumberField(TEXT("lod_index")));
+		LodIndex = static_cast<int32>(LodIndexD);
 	}
 
+	double OffsetD;
 	int32 Offset = 0;
-	if (Params->HasField(TEXT("offset")))
+	if (Params->TryGetNumberField(TEXT("offset"), OffsetD))
 	{
-		Offset = static_cast<int32>(Params->GetNumberField(TEXT("offset")));
+		Offset = static_cast<int32>(OffsetD);
 	}
 
+	double LimitD;
 	int32 Limit = 1000;
-	if (Params->HasField(TEXT("limit")))
+	if (Params->TryGetNumberField(TEXT("limit"), LimitD))
 	{
-		Limit = static_cast<int32>(Params->GetNumberField(TEXT("limit")));
+		Limit = static_cast<int32>(LimitD);
 	}
 	Limit = FMath::Clamp(Limit, 1, 5000); // Hard max 5000
 
@@ -1379,21 +1386,16 @@ FMonolithActionResult FMonolithMeshInspectionActions::SearchMeshesBySize(const T
 	}
 
 	FString Category;
-	if (Params->HasField(TEXT("category")))
-	{
-		Category = Params->GetStringField(TEXT("category"));
-	}
+	Params->TryGetStringField(TEXT("category"), Category);
 
 	FString ExcludeSizeClass;
-	if (Params->HasField(TEXT("exclude_size_class")))
-	{
-		ExcludeSizeClass = Params->GetStringField(TEXT("exclude_size_class"));
-	}
+	Params->TryGetStringField(TEXT("exclude_size_class"), ExcludeSizeClass);
 
+	double LimitD;
 	int32 Limit = 20;
-	if (Params->HasField(TEXT("limit")))
+	if (Params->TryGetNumberField(TEXT("limit"), LimitD))
 	{
-		Limit = static_cast<int32>(Params->GetNumberField(TEXT("limit")));
+		Limit = static_cast<int32>(LimitD);
 	}
 
 	FSQLiteDatabase* DB = MeshInspectionHelpers::GetCatalogDB();
