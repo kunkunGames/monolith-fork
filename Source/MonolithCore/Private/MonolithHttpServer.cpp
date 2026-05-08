@@ -240,6 +240,7 @@ bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const
 		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(BodyString);
 		if (FJsonSerializer::Deserialize(Reader, JsonArray) && JsonArray.Num() > 0)
 		{
+			Requests.Reserve(JsonArray.Num());
 			for (const TSharedPtr<FJsonValue>& Value : JsonArray)
 			{
 				if (Value.IsValid() && Value->Type == EJson::Object)
@@ -260,6 +261,7 @@ bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const
 	}
 
 	// Process each request
+	Responses.Reserve(Requests.Num());
 	for (const TSharedPtr<FJsonObject>& Req : Requests)
 	{
 		TSharedPtr<FJsonObject> Resp = ProcessJsonRpcRequest(Req);
