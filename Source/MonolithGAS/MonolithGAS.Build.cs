@@ -28,7 +28,8 @@ public class MonolithGAS : ModuleRules
 			"Json", "JsonUtilities",
 			// UMGEditor: editor-side UWidgetBlueprintExtension + FWidgetBlueprintCompilerContext
 			// (used only by Phase H1 attribute-binding action handlers; module already gated as Type:"Editor").
-			"UMGEditor"
+			"UMGEditor",
+			"AssetRegistry"
 		});
 
 		// --- Conditional: GBA (Blueprint Attributes) ---
