@@ -11,7 +11,9 @@ FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonOb
 		AssetClass = Params->GetStringField(TEXT("asset_class"));
 	}
 	int32 Limit = Params->HasField(TEXT("limit")) ? Params->GetIntegerField(TEXT("limit")) : 100;
+	Limit = FMath::Clamp(Limit, 1, 1000);
 	int32 Offset = Params->HasField(TEXT("offset")) ? Params->GetIntegerField(TEXT("offset")) : 0;
+	Offset = FMath::Max(0, Offset);
 	FString ModuleFilter;
 	if (Params->HasField(TEXT("module")))
 	{
