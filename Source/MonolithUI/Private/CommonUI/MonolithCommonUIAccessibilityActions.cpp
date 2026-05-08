@@ -53,6 +53,7 @@ namespace MonolithCommonUIAccessibility
 		const TArray<FAssetData> Found = GetWbpsInFolder(FolderPath);
 		int32 WbpsScanned = 0, ButtonsScanned = 0, Unstyled = 0;
 		TArray<TSharedPtr<FJsonValue>> Offenders;
+		Offenders.Reserve(Found.Num());
 
 		for (const FAssetData& AD : Found)
 		{
@@ -118,6 +119,7 @@ namespace MonolithCommonUIAccessibility
 		const TArray<FAssetData> Found = GetWbpsInFolder(FolderPath);
 		int32 Scanned = 0, Stamped = 0;
 		TArray<TSharedPtr<FJsonValue>> Missing;
+		Missing.Reserve(Found.Num());
 
 		for (const FAssetData& AD : Found)
 		{
@@ -157,6 +159,7 @@ namespace MonolithCommonUIAccessibility
 		const TArray<FAssetData> Found = GetWbpsInFolder(FolderPath);
 		int32 Scanned = 0, Stamped = 0;
 		TArray<TSharedPtr<FJsonValue>> Missing;
+		Missing.Reserve(Found.Num());
 
 		for (const FAssetData& AD : Found)
 		{

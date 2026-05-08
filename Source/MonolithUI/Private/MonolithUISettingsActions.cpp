@@ -324,6 +324,7 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldGameUserSettings
     Result->SetStringField(TEXT("note"), TEXT("Add the DefaultEngine.ini line to register this as the active GameUserSettings class"));
 
     TArray<TSharedPtr<FJsonValue>> FeatureList;
+    FeatureList.Reserve(Features.Num());
     for (const FString& F : Features)
     {
         FeatureList.Add(MakeShared<FJsonValueString>(F));
@@ -678,6 +679,7 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldAudioSettings(co
 
     // Sound Classes
     TArray<TSharedPtr<FJsonValue>> ClassArray;
+    ClassArray.Reserve(Categories.Num());
     for (const FString& Cat : Categories)
     {
         TSharedPtr<FJsonObject> SC = MakeShared<FJsonObject>();
@@ -699,6 +701,7 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldAudioSettings(co
     Mix->SetStringField(TEXT("suggested_path"), TEXT("/Game/Audio/SoundMix_Master"));
 
     TArray<TSharedPtr<FJsonValue>> MixEntries;
+    MixEntries.Reserve(Categories.Num());
     for (const FString& Cat : Categories)
     {
         TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
@@ -801,6 +804,7 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldInputRemapping(c
 
     // Actions list
     TArray<TSharedPtr<FJsonValue>> ActionList;
+    ActionList.Reserve(Actions.Num());
     for (const FString& A : Actions)
     {
         TSharedPtr<FJsonObject> ActionObj = MakeShared<FJsonObject>();

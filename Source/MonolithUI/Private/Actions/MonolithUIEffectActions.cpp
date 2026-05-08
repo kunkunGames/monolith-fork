@@ -589,6 +589,7 @@ namespace MonolithUI::EffectActionsInternal
         Out->SetStringField(TEXT("widget_name"), WidgetName);
 
         TArray<TSharedPtr<FJsonValue>> WrittenArr;
+        WrittenArr.Reserve(PathsWritten.Num());
         for (const FString& P : PathsWritten)
         {
             WrittenArr.Add(MakeShared<FJsonValueString>(P));
@@ -598,6 +599,7 @@ namespace MonolithUI::EffectActionsInternal
         if (Warnings.Num() > 0)
         {
             TArray<TSharedPtr<FJsonValue>> WarnArr;
+            WarnArr.Reserve(Warnings.Num());
             for (const FString& W : Warnings)
             {
                 WarnArr.Add(MakeShared<FJsonValueString>(W));

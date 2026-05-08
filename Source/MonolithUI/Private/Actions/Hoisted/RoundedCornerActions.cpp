@@ -308,6 +308,7 @@ FMonolithActionResult MonolithUI::FRoundedCornerActions::HandleSetRoundedCorners
     Result->SetStringField(TEXT("widget_name"), WidgetName);
     {
         TArray<TSharedPtr<FJsonValue>> Arr;
+        Arr.Reserve(PropertiesSet.Num());
         for (const FString& P : PropertiesSet)
         {
             Arr.Add(MakeShared<FJsonValueString>(P));
@@ -317,6 +318,7 @@ FMonolithActionResult MonolithUI::FRoundedCornerActions::HandleSetRoundedCorners
     if (Warnings.Num() > 0)
     {
         TArray<TSharedPtr<FJsonValue>> Arr;
+        Arr.Reserve(Warnings.Num());
         for (const FString& W : Warnings)
         {
             Arr.Add(MakeShared<FJsonValueString>(W));

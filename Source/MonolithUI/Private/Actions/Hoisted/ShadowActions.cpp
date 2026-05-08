@@ -569,6 +569,7 @@ FMonolithActionResult MonolithUI::FShadowActions::HandleApplyBoxShadow(const TSh
     Result->SetStringField(TEXT("widget_name"), WidgetName);
     {
         TArray<TSharedPtr<FJsonValue>> Arr;
+        Arr.Reserve(ShadowWidgetNames.Num());
         for (const FString& N : ShadowWidgetNames)
         {
             Arr.Add(MakeShared<FJsonValueString>(N));
@@ -580,6 +581,7 @@ FMonolithActionResult MonolithUI::FShadowActions::HandleApplyBoxShadow(const TSh
     if (Warnings.Num() > 0)
     {
         TArray<TSharedPtr<FJsonValue>> Arr;
+        Arr.Reserve(Warnings.Num());
         for (const FString& W : Warnings)
         {
             Arr.Add(MakeShared<FJsonValueString>(W));

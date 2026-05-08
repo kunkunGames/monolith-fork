@@ -360,6 +360,7 @@ FMonolithActionResult MonolithUI::FGradientActions::HandleCreateGradientMidFromS
     if (Warnings.Num() > 0)
     {
         TArray<TSharedPtr<FJsonValue>> Arr;
+        Arr.Reserve(Warnings.Num());
         for (const FString& W : Warnings)
         {
             Arr.Add(MakeShared<FJsonValueString>(W));

@@ -382,6 +382,7 @@ FMonolithActionResult MonolithUI::FFontIngestActions::HandleImportFontFamily(con
     if (Warnings.Num() > 0)
     {
         TArray<TSharedPtr<FJsonValue>> WarnJson;
+        WarnJson.Reserve(Warnings.Num());
         for (const FString& W : Warnings)
         {
             WarnJson.Add(MakeShared<FJsonValueString>(W));

@@ -218,6 +218,7 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleListAnimations(const TS
     if (!WBP) return Err;
 
     TArray<TSharedPtr<FJsonValue>> AnimArray;
+    AnimArray.Reserve(WBP->Animations.Num());
 
     for (UWidgetAnimation* Anim : WBP->Animations)
     {
