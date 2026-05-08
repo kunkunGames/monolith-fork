@@ -24,7 +24,7 @@ MonolithLogicDriver provides MCP coverage of the Logic Driver Pro marketplace pl
 | Node Config | 8 | Configure state classes, transition rules, conduits, node colors, entry points |
 | Runtime/PIE | 7 | Start/stop/step SM in PIE, get active states, set variables, inspect runtime context |
 | JSON/Spec | 5 | Build SM from JSON spec, export/import SM as JSON, validate spec, diff specs |
-| Scaffolding | 7 | scaffold_hello_world_sm, scaffold_horror_encounter_sm, scaffold_patrol_sm, scaffold_dialogue_sm, scaffold_health_sm, scaffold_interaction_sm, scaffold_quest_sm |
+| Scaffolding | 7 | scaffold_hello_world_sm, scaffold_weapon_sm, scaffold_horror_encounter_sm, scaffold_game_flow_sm, scaffold_dialogue_sm, scaffold_quest_sm, scaffold_interactable_sm |
 | Discovery | 6 | get_sm_overview, list_state_machines, explain_state_machine, compare_state_machines, validate_state_machine, search_state_machines |
 | Component | 3 | Add SM component to actor, configure component, get component info |
 | Text Graph | 2 | visualize_sm_as_text (Mermaid output), export_sm_as_dot (Graphviz DOT) |
@@ -33,7 +33,7 @@ MonolithLogicDriver provides MCP coverage of the Logic Driver Pro marketplace pl
 
 > **`build_sm_from_spec` (power action).** Creates a complete state machine from a JSON specification in a single call. The spec defines states, transitions, initial state, transition rules, and metadata. Handles EdGraph node creation, layout, and compilation automatically.
 >
-> **Scaffolding templates (7).** Pre-built SM patterns for common game scenarios: hello world (3-state tutorial), horror encounter (7-state with escape/lose-interest paths), patrol, dialogue, health management, interaction, and quest progression.
+> **Scaffolding templates (7).** Pre-built SM patterns for common game scenarios: hello world (3-state tutorial), weapon, horror encounter (7-state with escape/lose-interest paths), game flow, dialogue, quest progression, and interactable.
 >
 > **`visualize_sm_as_text`.** Generates Mermaid diagram syntax from an SM asset, including `[*]` initial state markers. Useful for documentation and debugging without opening the editor.
 >
