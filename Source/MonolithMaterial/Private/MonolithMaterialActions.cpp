@@ -3322,6 +3322,7 @@ FMonolithActionResult FMonolithMaterialActions::RecompileMaterial(const TSharedP
 			if (Errors.Num() > 0)
 			{
 				TArray<TSharedPtr<FJsonValue>> ErrorsArray;
+				ErrorsArray.Reserve(Errors.Num());
 				for (const FString& Err : Errors)
 				{
 					ErrorsArray.Add(MakeShared<FJsonValueString>(Err));
@@ -3434,6 +3435,7 @@ FMonolithActionResult FMonolithMaterialActions::GetCompilationStats(const TShare
 		if (Errors.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> ErrorsArray;
+			ErrorsArray.Reserve(Errors.Num());
 			for (const FString& Err : Errors)
 			{
 				ErrorsArray.Add(MakeShared<FJsonValueString>(Err));
@@ -3675,6 +3677,7 @@ FMonolithActionResult FMonolithMaterialActions::SetExpressionProperty(const TSha
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarningArray;
+		WarningArray.Reserve(Warnings.Num());
 		for (const FString& W : Warnings)
 		{
 			WarningArray.Add(MakeShared<FJsonValueString>(W));
@@ -3803,6 +3806,7 @@ FMonolithActionResult FMonolithMaterialActions::ConnectExpressions(const TShared
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 		ResultJson->SetArrayField(TEXT("warnings"), WarnArr);
 	}
@@ -4401,6 +4405,7 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 	if (NotFound.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> NotFoundArr;
+		NotFoundArr.Reserve(NotFound.Num());
 		for (const FString& Name : NotFound) NotFoundArr.Add(MakeShared<FJsonValueString>(Name));
 		ResultJson->SetArrayField(TEXT("not_found"), NotFoundArr);
 	}
@@ -5223,6 +5228,7 @@ FMonolithActionResult FMonolithMaterialActions::UpdateCustomHlslNode(const TShar
 	ResultJson->SetStringField(TEXT("expression_name"), CustomExpr->GetName());
 
 	TArray<TSharedPtr<FJsonValue>> UpdatedArr;
+	UpdatedArr.Reserve(UpdatedFields.Num());
 	for (const FString& F : UpdatedFields) UpdatedArr.Add(MakeShared<FJsonValueString>(F));
 	ResultJson->SetArrayField(TEXT("updated_fields"), UpdatedArr);
 	ResultJson->SetNumberField(TEXT("input_count"), CustomExpr->Inputs.Num());
@@ -6762,6 +6768,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInfo(const TSharedPtr
 
 	// Library categories (LibraryCategoriesText — renamed from LibraryCategories)
 	TArray<TSharedPtr<FJsonValue>> CatsJson;
+	CatsJson.Reserve(MatFunc->LibraryCategoriesText.Num());
 	for (const FText& Cat : MatFunc->LibraryCategoriesText)
 	{
 		CatsJson.Add(MakeShared<FJsonValueString>(Cat.ToString()));
@@ -6902,6 +6909,7 @@ FMonolithActionResult FMonolithMaterialActions::ExportFunctionGraph(const TShare
 
 	// Library categories
 	TArray<TSharedPtr<FJsonValue>> CatsJson;
+	CatsJson.Reserve(MatFunc->LibraryCategoriesText.Num());
 	for (const FText& Cat : MatFunc->LibraryCategoriesText)
 	{
 		CatsJson.Add(MakeShared<FJsonValueString>(Cat.ToString()));
@@ -7229,6 +7237,7 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionMetadata(const TShare
 	ResultJson->SetBoolField(TEXT("modified"), true);
 
 	TArray<TSharedPtr<FJsonValue>> UpdatedFieldsJson;
+	UpdatedFieldsJson.Reserve(UpdatedFields.Num());
 	for (const FString& Field : UpdatedFields)
 	{
 		UpdatedFieldsJson.Add(MakeShared<FJsonValueString>(Field));
@@ -7343,6 +7352,7 @@ FMonolithActionResult FMonolithMaterialActions::DeleteFunctionExpression(const T
 	ResultJson->SetNumberField(TEXT("deleted"), DeletedCount);
 
 	TArray<TSharedPtr<FJsonValue>> NotFoundJson;
+	NotFoundJson.Reserve(NotFound.Num());
 	for (const FString& Name : NotFound)
 	{
 		NotFoundJson.Add(MakeShared<FJsonValueString>(Name));
@@ -7571,6 +7581,7 @@ FMonolithActionResult FMonolithMaterialActions::BatchSetMaterialProperty(const T
 		if (Errors.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> ErrorsJson;
+			ErrorsJson.Reserve(Errors.Num());
 			for (const FString& Err : Errors)
 			{
 				ErrorsJson.Add(MakeShared<FJsonValueString>(Err));
