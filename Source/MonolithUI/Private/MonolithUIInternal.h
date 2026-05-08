@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "WidgetBlueprint.h"
+#include "MonolithCore.h"
 #include "Animation/WidgetAnimation.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Widget.h"
@@ -389,6 +390,12 @@ namespace MonolithUIInternal
         if (AssetName.IsEmpty())
         {
             OutError = FMonolithActionResult::Error(TEXT("Invalid save_path — must contain at least one / separator"));
+            return nullptr;
+        }
+
+        if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+        {
+            OutError = FMonolithActionResult::Error(ValidationError);
             return nullptr;
         }
 

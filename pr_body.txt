@@ -1,36 +1,28 @@
-- Duplicate check:
-  - open PRs inspected: `origin/bolt-tarray-reserve-1831361196920817627`, `origin/bolt-tarray-reserve-core-14452436680910620337`, `origin/bolt-tarray-reserve-core-tools-9111280532084720083`, `origin/bolt-reserve-discover-arrays-7098378701757488254`
-  - related PRs/branches found: `origin/bolt-reserve-discover-arrays-7098378701757488254` (targets arrays in MonolithLogicDriverDiscoveryActions, but misses the arrays in `MonolithLogicDriverAssetActions.cpp`, `MonolithLogicDriverComponentActions.cpp`, and `MonolithLogicDriverTextGraphActions.cpp`)
-  - reason this work is non-overlapping: Targets specific, previously unoptimized JSON builder arrays in `MonolithAudioAssetActions.cpp`, `MonolithLogicDriverAssetActions.cpp`, `MonolithLogicDriverComponentActions.cpp`, and `MonolithLogicDriverTextGraphActions.cpp`.
-
-- WorkFingerprint:
-  - agent: Bolt
-  - category: Performance
-  - module: MonolithAudio, MonolithLogicDriver
-  - component/action/helper: Audio Asset Actions and LogicDriver Actions JSON array outputs
-  - intended files: `Source/MonolithAudio/Private/MonolithAudioAssetActions.cpp`, `Source/MonolithLogicDriver/Private/MonolithLogicDriverAssetActions.cpp`, `Source/MonolithLogicDriver/Private/MonolithLogicDriverComponentActions.cpp`, `Source/MonolithLogicDriver/Private/MonolithLogicDriverTextGraphActions.cpp`
-  - risk type: Memory allocation
-  - public API impact: no
-  - docs/spec impact: no
-
-- 💡 What:
-  Added `.Reserve()` calls to 10 instances of `TArray<TSharedPtr<FJsonValue>>` and 1 `TSet` before sequential `.Add()` operations in `MonolithAudioAssetActions.cpp`, `MonolithLogicDriverAssetActions.cpp`, `MonolithLogicDriverComponentActions.cpp`, and `MonolithLogicDriverTextGraphActions.cpp`.
-
-- 🎯 Why:
-  Sequential `.Add()` calls without a prior `.Reserve()` trigger unnecessary heap allocations and array re-copying as the array dynamically resizes. Pre-allocating the correct capacity avoids this waste.
-
-- 📊 Impact:
-  Static/algorithmic estimate: Prevents small heap allocations per execution of several actions that build JSON arrays.
-
-- 🔬 Measurement:
-  Not available (UE/editor benchmark unavailable). proxy metric: fewer allocations.
-
-- ✅ Verification:
-  - `git diff --check` passed.
-  - `python3 Scripts/ci_static_checks.py check` passed.
-
-- ⚠️ Limitations:
-  [blocked: UE editor unavailable] - C++ compile/build validation could not be performed because Unreal Engine tools (UBT) are not installed in the execution environment.
-
-- 🔁 Safety:
-  This change preserves behavior exactly. It solely adjusts the internal initial capacity of `TArray` instances before items are added, which is a standard Unreal Engine idiom that does not alter data shape, types, or logging.
+Track: Crashguard
+Maintenance unit: MonolithUI
+Stability/data-loss risk: Creating packages with malformed paths crashes the editor in CreatePackage.
+Existing behavior preserved: Yes, valid paths proceed as normal.
+Fix: Validated `SavePath` via `MonolithCore::ValidatePackagePath` before calling `CreatePackage` in `MonolithUIInternal::CreateNewWidgetBlueprint`.
+Tests added or why not: Added `Monolith.Crashguard.UI.CreatePackagePathValidation` to `Source/MonolithUI/Private/Tests/MonolithUICrashguardTests.cpp`.
+Spec/docs impact: Spec/docs: no public contract or guidance change.
+Public API/action impact: Actions will now return a clean JSON error for bad paths instead of a fatal editor crash.
+Duplicate check:
+- open PRs inspected: Checked using memory cache and branches.
+- related PRs/branches found: None found touching MonolithUI internal package paths.
+- reason this work is non-overlapping: Targets specifically the missing `ValidatePackagePath` checks before `CreatePackage` within the `MonolithUIInternal.h` helper.
+WorkFingerprint:
+- agent: Crashguard
+- category: editor-stability
+- module: MonolithUI
+- component/action/helper: CreatePackage
+- intended files: Source/MonolithUI/Private/MonolithUIInternal.h, Source/MonolithUI/Private/Tests/MonolithUICrashguardTests.cpp
+Verification: [blocked: UE 5.7 editor unavailable in Jules VM]
+Blocked verification: Provide local verification commands.
+Local verification commands:
+- Open a UE 5.7 project with Plugins/Monolith installed.
+- Build the project/editor target.
+- Start the editor.
+- Run monolith_status.
+- Run monolith_discover for the ui namespace.
+- Exercise `create_widget` with one valid call and one malformed call (`//Game/bad`).
+- Run Automation test filter: Monolith.Crashguard.UI.CreatePackagePathValidation
