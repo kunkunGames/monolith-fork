@@ -9,6 +9,7 @@
 #include "Misc/Paths.h"
 #include "Misc/App.h"
 #include "Misc/AutomationTest.h"
+#include "MonolithPackagePathValidator.h"
 
 #if PLATFORM_WINDOWS
 #include "ILiveCodingModule.h"
@@ -1869,6 +1870,11 @@ FMonolithActionResult FMonolithEditorActions::HandleStitchFlipbook(
 	if (DestPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("dest_path is required"));
+	}
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(DestPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	// Parse frame_paths array

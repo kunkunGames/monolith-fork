@@ -16,3 +16,9 @@
 **Learning:** Actions that take a user-supplied save path and generate a package must validate the path first.
 **Prevention:** Always check `MonolithCore::ValidatePackagePath(SavePath)` before constructing new packages.
 **Avoid:** Calling `CreatePackage` with an unchecked user string.
+
+## 2025-05-04 - Package Path Validation in MonolithEditor HandleStitchFlipbook
+**Failure mode:** Malformed package paths (e.g., //Game/...) crashing the editor via fatal ensures during CreatePackage.
+**Learning:** MonolithEditorActions constructing Texture2D from StitchFlipbook were missing the standard MonolithCore::ValidatePackagePath check before CreatePackage.
+**Prevention:** Added ValidatePackagePath checks immediately before CreatePackage in MonolithEditorActions.
+**Avoid:** Avoid calling CreatePackage with unvalidated paths originating from external JSON inputs.
