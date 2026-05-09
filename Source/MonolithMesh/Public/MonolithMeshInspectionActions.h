@@ -14,6 +14,8 @@ public:
 	/** Register all 12 inspection actions with the tool registry */
 	static void RegisterActions(FMonolithToolRegistry& Registry);
 
+	static int32 ClampSearchMeshesBySizeLimit(int32 Limit);
+
 private:
 	// --- Individual mesh inspection ---
 	static FMonolithActionResult GetMeshInfo(const TSharedPtr<FJsonObject>& Params);

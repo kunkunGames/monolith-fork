@@ -108,7 +108,7 @@ void FMonolithMeshInspectionActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Required(TEXT("min_bounds"), TEXT("array"), TEXT("Minimum bounds [x, y, z] in cm"))
 			.Required(TEXT("max_bounds"), TEXT("array"), TEXT("Maximum bounds [x, y, z] in cm"))
 			.Optional(TEXT("category"), TEXT("string"), TEXT("Filter by category prefix"))
-			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max results"), TEXT("20"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max results (hard max 1000)"), TEXT("20"))
 			.Optional(TEXT("exclude_size_class"), TEXT("string"), TEXT("Exclude a size class"))
 			.Build());
 
@@ -116,6 +116,11 @@ void FMonolithMeshInspectionActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Get aggregate statistics from the mesh catalog (total count, category breakdown, size distribution)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::GetMeshCatalogStats),
 		FParamSchemaBuilder().Build());
+}
+
+int32 FMonolithMeshInspectionActions::ClampSearchMeshesBySizeLimit(int32 Limit)
+{
+	return FMath::Clamp(Limit, 1, 1000);
 }
 
 // ============================================================================
@@ -1397,6 +1402,7 @@ FMonolithActionResult FMonolithMeshInspectionActions::SearchMeshesBySize(const T
 	{
 		Limit = static_cast<int32>(LimitD);
 	}
+	Limit = ClampSearchMeshesBySizeLimit(Limit);
 
 	FSQLiteDatabase* DB = MeshInspectionHelpers::GetCatalogDB();
 	if (!DB)
