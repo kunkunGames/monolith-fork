@@ -25,7 +25,8 @@ public class MonolithMaterial : ModuleRules
 			"Slate",
 			"SlateCore",
 			"Json",
-			"JsonUtilities"
+			"JsonUtilities",
+			"AssetRegistry"
 		});
 	}
 }

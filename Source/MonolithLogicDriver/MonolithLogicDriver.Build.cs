@@ -61,7 +61,8 @@ public class MonolithLogicDriver : ModuleRules
 				"EditorScriptingUtilities",
 				"SMSystem", "SMSystemEditor",
 				"GameplayTags",
-				"Json", "JsonUtilities"
+				"Json", "JsonUtilities",
+				"AssetRegistry"
 			});
 			PublicDefinitions.Add("WITH_LOGICDRIVER=1");
 		}

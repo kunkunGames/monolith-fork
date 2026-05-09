@@ -25,7 +25,8 @@ public class MonolithNiagara : ModuleRules
 			"JsonUtilities",
 			"AssetTools",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			"AssetRegistry"
 		});
 	}
 }

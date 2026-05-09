@@ -62,7 +62,8 @@ public class MonolithComboGraph : ModuleRules
 				"BlueprintGraph",
 				"EditorScriptingUtilities",
 				"ComboGraph", "ComboGraphEditor",
-				"Json", "JsonUtilities"
+				"Json", "JsonUtilities",
+				"AssetRegistry"
 			});
 			PublicDefinitions.Add("WITH_COMBOGRAPH=1");
 		}
