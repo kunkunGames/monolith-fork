@@ -263,10 +263,8 @@ jobs:
             echo ""
             echo "**Monolith-macOS-SHA256:** $SHA"
             echo ""
-            echo "_Auto-updater currently anchors on the Windows zip's"
-            echo "Monolith-SHA256 marker. The macOS marker above is emitted"
-            echo "for transparency; Lucas curates the GitHub release body"
-            echo "manually if the macOS hash should be added._"
+            echo "Paste this exact line into the GitHub Release notes body"
+            echo "if you want macOS auto-update integrity verification."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifact (workflow run)
