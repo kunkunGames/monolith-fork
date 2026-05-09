@@ -52,3 +52,9 @@ ProjectIndex.db
 # Release artifacts
 Monolith-v*.zip
 Monolith-*-macOS.zip
+
+# IDE and local editor artifacts
+.vs/
+.idea/
+.vscode/
+*.sln
