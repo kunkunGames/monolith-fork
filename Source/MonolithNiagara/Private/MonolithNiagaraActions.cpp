@@ -2986,6 +2986,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputValue(const T
 	if (!bInputFound)
 	{
 		TArray<FString> ValidNames;
+		ValidNames.Reserve(Inputs.Num());
 		for (const FNiagaraVariable& In : Inputs) { ValidNames.Add(MonolithNiagaraHelpers::StripModulePrefix(In.GetName()).ToString()); }
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Input '%s' not found on module. Valid inputs: [%s]"),
@@ -3124,6 +3125,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputBinding(const
 	if (!bInputFound)
 	{
 		TArray<FString> ValidNames;
+		ValidNames.Reserve(Inputs.Num());
 		for (const FNiagaraVariable& In : Inputs) { ValidNames.Add(MonolithNiagaraHelpers::StripModulePrefix(In.GetName()).ToString()); }
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Input '%s' not found on module. Valid inputs: [%s]"),
@@ -3343,6 +3345,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputDI(const TSha
 	if (!bFoundInput)
 	{
 		TArray<FString> ValidNames;
+		ValidNames.Reserve(Inputs.Num());
 		for (const FNiagaraVariable& In : Inputs) { ValidNames.Add(MonolithNiagaraHelpers::StripModulePrefix(In.GetName()).ToString()); }
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Input '%s' not found on module '%s'. Valid inputs: [%s]"),
@@ -4627,6 +4630,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetCurveValue(const TShared
 	if (!bInputFound)
 	{
 		TArray<FString> ValidNames;
+		ValidNames.Reserve(Inputs.Num());
 		for (const FNiagaraVariable& In : Inputs) { ValidNames.Add(MonolithNiagaraHelpers::StripModulePrefix(In.GetName()).ToString()); }
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Input '%s' not found on module '%s'. Valid inputs: [%s]"),
@@ -6037,6 +6041,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetStaticSwitchValue(const 
 	if (!bInputFound)
 	{
 		TArray<FString> ValidNames;
+		ValidNames.Reserve(SwitchInputs.Num());
 		for (const FNiagaraVariable& In : SwitchInputs) { ValidNames.Add(In.GetName().ToString()); }
 		if (ValidNames.Num() == 0)
 		{
@@ -6365,6 +6370,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleInputValue(const T
 	if (!bInputFound)
 	{
 		TArray<FString> ValidNames;
+		ValidNames.Reserve(Inputs.Num());
 		for (const FNiagaraVariable& In : Inputs) ValidNames.Add(MonolithNiagaraHelpers::StripModulePrefix(In.GetName()).ToString());
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Input '%s' not found. Valid: [%s]"), *InputName, *FString::Join(ValidNames, TEXT(", "))));
 	}
@@ -8878,6 +8884,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetDynamicInputValue(const 
 
 	// Build list of valid input names for the error message
 	TArray<FString> ValidNames;
+	ValidNames.Reserve(Inputs.Num());
 	for (const FNiagaraVariable& In : Inputs)
 		ValidNames.Add(MonolithNiagaraHelpers::StripModulePrefix(In.GetName()).ToString());
 
@@ -11123,6 +11130,7 @@ static TSharedRef<FJsonObject> DiffJsonObjects(const TSharedPtr<FJsonObject>& A,
 
 	// Collect all keys from both
 	TSet<FString> AllKeys;
+	AllKeys.Reserve(A->Values.Num() + B->Values.Num());
 	for (auto& Pair : A->Values) AllKeys.Add(Pair.Key);
 	for (auto& Pair : B->Values) AllKeys.Add(Pair.Key);
 
@@ -11218,6 +11226,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 		if (UPB) for (auto& V : *UPB) { auto O = V->AsObject(); if (O) MapB.Add(O->GetStringField(TEXT("name")), O); }
 
 		TSet<FString> AllNames;
+		AllNames.Reserve(MapA.Num() + MapB.Num());
 		for (auto& P : MapA) AllNames.Add(P.Key);
 		for (auto& P : MapB) AllNames.Add(P.Key);
 
@@ -11260,6 +11269,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 		if (EB) for (auto& V : *EB) { auto O = V->AsObject(); if (O) EmMapB.Add(O->GetStringField(TEXT("name")), O); }
 
 		TSet<FString> AllEmitters;
+		AllEmitters.Reserve(EmMapA.Num() + EmMapB.Num());
 		for (auto& P : EmMapA) AllEmitters.Add(P.Key);
 		for (auto& P : EmMapB) AllEmitters.Add(P.Key);
 
@@ -11328,6 +11338,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 				TMap<FString, TArray<TSharedPtr<FJsonObject>>> StageModsB = BuildStageMap(ModsB);
 
 				TSet<FString> AllStages;
+				AllStages.Reserve(StageModsA.Num() + StageModsB.Num());
 				for (auto& P : StageModsA) AllStages.Add(P.Key);
 				for (auto& P : StageModsB) AllStages.Add(P.Key);
 
@@ -11342,6 +11353,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 					if (SMB) for (auto& M : *SMB) ScriptMapB.Add(M->GetStringField(TEXT("script")), M);
 
 					TSet<FString> AllScripts;
+					AllScripts.Reserve(ScriptMapA.Num() + ScriptMapB.Num());
 					for (auto& P : ScriptMapA) AllScripts.Add(P.Key);
 					for (auto& P : ScriptMapB) AllScripts.Add(P.Key);
 
@@ -11839,6 +11851,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetStaticSwitchValue(const 
 	if (!bInputFound)
 	{
 		TArray<FString> ValidNames;
+		ValidNames.Reserve(SwitchInputs.Num());
 		for (const FNiagaraVariable& In : SwitchInputs) ValidNames.Add(In.GetName().ToString());
 		if (ValidNames.Num() == 0)
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Input '%s' not found — this module has no static switches"), *InputName));
