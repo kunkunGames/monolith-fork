@@ -69,7 +69,8 @@ void FMonolithLogicDriverSpecActions::RegisterActions(FMonolithToolRegistry& Reg
 
 FMonolithActionResult FMonolithLogicDriverSpecActions::HandleExportSMJson(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
@@ -94,10 +95,7 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleExportSMJson(const 
 	FJsonSerializer::Serialize(Structure.ToSharedRef(), Writer);
 
 	FString OutputPath;
-	if (Params->HasField(TEXT("output_path")))
-	{
-		OutputPath = Params->GetStringField(TEXT("output_path"));
-	}
+	Params->TryGetStringField(TEXT("output_path"), OutputPath);
 
 	if (!OutputPath.IsEmpty())
 	{
@@ -128,11 +126,11 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleExportSMJson(const 
 
 FMonolithActionResult FMonolithLogicDriverSpecActions::HandleImportSMJson(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
 
-	FString JsonPathOrData = Params->GetStringField(TEXT("json_path_or_data"));
-	if (JsonPathOrData.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'json_path_or_data'"));
+	FString JsonPathOrData;
+	if (!Params->TryGetStringField(TEXT("json_path_or_data"), JsonPathOrData) || JsonPathOrData.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'json_path_or_data'"));
 
 	FString JsonString;
 
@@ -168,8 +166,8 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleImportSMJson(const 
 
 FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
 
 	const TSharedPtr<FJsonObject>* SpecPtr = nullptr;
 	if (!Params->TryGetObjectField(TEXT("spec"), SpecPtr) || !SpecPtr || !(*SpecPtr).IsValid())
@@ -289,7 +287,8 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 			const TSharedPtr<FJsonObject>& StateObj = StateVal->AsObject();
 			if (!StateObj.IsValid()) continue;
 
-			FString Name = StateObj->GetStringField(TEXT("name"));
+			FString Name;
+			StateObj->TryGetStringField(TEXT("name"), Name);
 			if (Name.IsEmpty()) continue;
 
 			UEdGraphNode* StateNode = CreateNode(StateClass, PosX, 0);
@@ -322,7 +321,8 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 		{
 			const TSharedPtr<FJsonObject>& CO = CV->AsObject();
 			if (!CO.IsValid()) continue;
-			FString Name = CO->GetStringField(TEXT("name"));
+			FString Name;
+			CO->TryGetStringField(TEXT("name"), Name);
 			if (Name.IsEmpty()) continue;
 
 			UEdGraphNode* ConduitNode = CreateNode(ConduitClass, PosX, 150);
@@ -342,7 +342,8 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 		{
 			const TSharedPtr<FJsonObject>& NO = NV->AsObject();
 			if (!NO.IsValid()) continue;
-			FString Name = NO->GetStringField(TEXT("name"));
+			FString Name;
+			NO->TryGetStringField(TEXT("name"), Name);
 			if (Name.IsEmpty()) continue;
 
 			UEdGraphNode* SMNode = CreateNode(SMNodeClass, PosX, -150);
@@ -352,7 +353,8 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 			// If sm_path given, try to set the referenced SM class
 			if (NO->HasField(TEXT("sm_path")))
 			{
-				FString SMPath = NO->GetStringField(TEXT("sm_path"));
+				FString SMPath;
+				NO->TryGetStringField(TEXT("sm_path"), SMPath);
 				FString LoadError;
 				UBlueprint* RefBP = MonolithLD::LoadSMBlueprint(SMPath, LoadError);
 				if (RefBP && RefBP->GeneratedClass)
@@ -382,8 +384,10 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 			const TSharedPtr<FJsonObject>& TO = TV->AsObject();
 			if (!TO.IsValid()) continue;
 
-			FString From = TO->GetStringField(TEXT("from"));
-			FString To = TO->GetStringField(TEXT("to"));
+			FString From;
+			TO->TryGetStringField(TEXT("from"), From);
+			FString To;
+			TO->TryGetStringField(TEXT("to"), To);
 
 			UEdGraphNode** FromNode = NameToNode.Find(From);
 			UEdGraphNode** ToNode = NameToNode.Find(To);
@@ -427,8 +431,8 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 
 FMonolithActionResult FMonolithLogicDriverSpecActions::HandleExportSMSpec(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
 	UBlueprint* SMBlueprint = nullptr;
@@ -568,10 +572,10 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleExportSMSpec(const 
 
 FMonolithActionResult FMonolithLogicDriverSpecActions::HandleCompareStateMachines(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PathA = Params->GetStringField(TEXT("path_a"));
-	FString PathB = Params->GetStringField(TEXT("path_b"));
-	if (PathA.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'path_a'"));
-	if (PathB.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'path_b'"));
+	FString PathA;
+	if (!Params->TryGetStringField(TEXT("path_a"), PathA) || PathA.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'path_a'"));
+	FString PathB;
+	if (!Params->TryGetStringField(TEXT("path_b"), PathB) || PathB.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'path_b'"));
 
 	// Load both SMs
 	FString LoadErrorA, LoadErrorB;

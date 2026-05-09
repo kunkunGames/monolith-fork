@@ -107,8 +107,8 @@ void FMonolithLogicDriverTextGraphActions::RegisterActions(FMonolithToolRegistry
 
 FMonolithActionResult FMonolithLogicDriverTextGraphActions::HandleGetTextGraphContent(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
 	UBlueprint* SMBlueprint = nullptr;
@@ -119,10 +119,7 @@ FMonolithActionResult FMonolithLogicDriverTextGraphActions::HandleGetTextGraphCo
 	}
 
 	FString TargetGuid;
-	if (Params->HasField(TEXT("node_guid")))
-	{
-		TargetGuid = Params->GetStringField(TEXT("node_guid"));
-	}
+	Params->TryGetStringField(TEXT("node_guid"), TargetGuid);
 
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
 
@@ -168,8 +165,8 @@ FMonolithActionResult FMonolithLogicDriverTextGraphActions::HandleGetTextGraphCo
 
 FMonolithActionResult FMonolithLogicDriverTextGraphActions::HandleGetDialogueFlow(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
 	UBlueprint* SMBlueprint = nullptr;

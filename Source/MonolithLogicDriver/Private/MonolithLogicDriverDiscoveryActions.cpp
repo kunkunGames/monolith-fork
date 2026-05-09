@@ -69,7 +69,7 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleGetSMOverview(
 	FString PathFilter;
 	if (Params.IsValid() && Params->HasField(TEXT("path_filter")))
 	{
-		PathFilter = Params->GetStringField(TEXT("path_filter"));
+		Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 	}
 
 	// ── 1. SM Blueprints (USMBlueprint) ──
@@ -167,8 +167,8 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleGetSMOverview(
 
 FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleValidateStateMachine(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
 	UBlueprint* SMBlueprint = nullptr;
@@ -325,8 +325,8 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleValidateStateM
 
 FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleFindSMReferences(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -375,8 +375,8 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleFindSMReferenc
 
 FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleFindNodeClassUsages(const TSharedPtr<FJsonObject>& Params)
 {
-	FString NodeBPPath = Params->GetStringField(TEXT("node_bp_path"));
-	if (NodeBPPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'node_bp_path'"));
+	FString NodeBPPath;
+	if (!Params->TryGetStringField(TEXT("node_bp_path"), NodeBPPath) || NodeBPPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'node_bp_path'"));
 
 	// Load the node blueprint to get its generated class
 	FString LoadError;
@@ -479,10 +479,11 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleFindNodeClassU
 
 FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleVisualizeSMAsText(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString Format = Params->GetStringField(TEXT("format")).ToLower();
-	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
-	if (Format.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'format'"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+	FString Format;
+	if (!Params->TryGetStringField(TEXT("format"), Format) || Format.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'format'"));
+	Format = Format.ToLower();
 	if (Format != TEXT("ascii") && Format != TEXT("mermaid") && Format != TEXT("dot"))
 	{
 		return FMonolithActionResult::Error(TEXT("format must be: ascii, mermaid, dot"));
@@ -689,8 +690,8 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleVisualizeSMAsT
 
 FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleExplainStateMachine(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
 	UBlueprint* SMBlueprint = nullptr;

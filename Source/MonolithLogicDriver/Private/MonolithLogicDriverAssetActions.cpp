@@ -169,7 +169,8 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleCreateStateMachine
 	}
 
 	// If parent_class is specified, set it on the factory via reflection
-	FString ParentClassName = Params->GetStringField(TEXT("parent_class"));
+	FString ParentClassName;
+	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
 	if (!ParentClassName.IsEmpty())
 	{
 		UClass* ParentClass = FindFirstObject<UClass>(*ParentClassName, EFindFirstObjectOptions::NativeFirst);
@@ -255,8 +256,8 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleCreateStateMachine
 // ============================================================
 FMonolithActionResult FMonolithLogicDriverAssetActions::HandleGetStateMachine(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
@@ -283,10 +284,7 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleGetStateMachine(co
 FMonolithActionResult FMonolithLogicDriverAssetActions::HandleListStateMachines(const TSharedPtr<FJsonObject>& Params)
 {
 	FString PathFilter;
-	if (Params->HasField(TEXT("path_filter")))
-	{
-		PathFilter = Params->GetStringField(TEXT("path_filter"));
-	}
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -332,8 +330,8 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleListStateMachines(
 // ============================================================
 FMonolithActionResult FMonolithLogicDriverAssetActions::HandleDeleteStateMachine(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
@@ -466,7 +464,8 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleCreateNodeBlueprin
 	}
 
 	// Set ParentClass on the factory based on node_type or explicit parent_class
-	FString ParentClassName = Params->GetStringField(TEXT("parent_class"));
+	FString ParentClassName;
+	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
 	if (ParentClassName.IsEmpty())
 	{
 		// Map node_type to default parent class names
@@ -557,8 +556,8 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleCreateNodeBlueprin
 // ============================================================
 FMonolithActionResult FMonolithLogicDriverAssetActions::HandleGetNodeBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
@@ -636,19 +635,15 @@ FMonolithActionResult FMonolithLogicDriverAssetActions::HandleListNodeBlueprints
 	Filter.bRecursivePaths = true;
 
 	FString PathFilter;
-	if (Params->HasField(TEXT("path_filter")))
+	if (Params->TryGetStringField(TEXT("path_filter"), PathFilter) && !PathFilter.IsEmpty())
 	{
-		PathFilter = Params->GetStringField(TEXT("path_filter"));
-		if (!PathFilter.IsEmpty())
-		{
-			Filter.PackagePaths.Add(FName(*PathFilter));
-		}
+		Filter.PackagePaths.Add(FName(*PathFilter));
 	}
 
 	FString NodeTypeFilter;
-	if (Params->HasField(TEXT("node_type")))
+	if (Params->TryGetStringField(TEXT("node_type"), NodeTypeFilter))
 	{
-		NodeTypeFilter = Params->GetStringField(TEXT("node_type")).ToLower();
+		NodeTypeFilter = NodeTypeFilter.ToLower();
 	}
 
 	TArray<FAssetData> Assets;

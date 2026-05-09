@@ -114,18 +114,19 @@ FNodeLookupResult LoadAndFindNode(const TSharedPtr<FJsonObject>& Params)
 {
 	FNodeLookupResult Result;
 
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		Result.Error = FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 		return Result;
 	}
 
-	FString NodeGuid = Params->GetStringField(TEXT("node_guid"));
+	FString NodeGuid;
+	Params->TryGetStringField(TEXT("node_guid"), NodeGuid);
 	if (NodeGuid.IsEmpty())
 	{
 		// Also check transition_guid for set_transition_condition
-		NodeGuid = Params->GetStringField(TEXT("transition_guid"));
+		Params->TryGetStringField(TEXT("transition_guid"), NodeGuid);
 	}
 	if (NodeGuid.IsEmpty())
 	{
@@ -340,9 +341,9 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureTransition
 			UE_LOG(LogMonolithLDNode, Warning, TEXT("Property 'PriorityOrder' not found on %s"), *Node->GetClass()->GetName());
 	}
 
-	if (Params->HasField(TEXT("color")))
+	FString ColorStr;
+	if (Params->TryGetStringField(TEXT("color"), ColorStr))
 	{
-		FString ColorStr = Params->GetStringField(TEXT("color"));
 		// Try NodeTintColor and TransitionColor as potential property names
 		if (SetColorProp(Node, TEXT("NodeTintColor"), ColorStr))
 			Applied.Add(FString::Printf(TEXT("NodeTintColor=%s"), *ColorStr));
@@ -352,9 +353,9 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureTransition
 			UE_LOG(LogMonolithLDNode, Warning, TEXT("No color property found on %s"), *Node->GetClass()->GetName());
 	}
 
-	if (Params->HasField(TEXT("eval_mode")))
+	FString ModeStr;
+	if (Params->TryGetStringField(TEXT("eval_mode"), ModeStr))
 	{
-		FString ModeStr = Params->GetStringField(TEXT("eval_mode"));
 		// Try common LD property names for evaluation mode
 		if (SetEnumPropFromString(Node, TEXT("ConditionalEvaluationType"), ModeStr))
 			Applied.Add(FString::Printf(TEXT("ConditionalEvaluationType=%s"), *ModeStr));
@@ -466,8 +467,8 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetTransitionCondit
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Node is type '%s', expected 'transition'"), *NodeType));
 	}
 
-	FString ConditionType = Params->GetStringField(TEXT("condition_type"));
-	if (ConditionType.IsEmpty())
+	FString ConditionType;
+	if (!Params->TryGetStringField(TEXT("condition_type"), ConditionType) || ConditionType.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'condition_type'"));
 	}
@@ -517,9 +518,9 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetTransitionCondit
 	else if (ConditionType == TEXT("event_based"))
 	{
 		FString EventName;
-		if (CondParams && CondParams->HasField(TEXT("event_name")))
+		if (CondParams)
 		{
-			EventName = CondParams->GetStringField(TEXT("event_name"));
+			CondParams->TryGetStringField(TEXT("event_name"), EventName);
 		}
 
 		if (SetBoolProp(Node, TEXT("bCanEvaluateFromEvent"), true))
@@ -540,10 +541,8 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetTransitionCondit
 		FString MatchType = TEXT("Exact");
 		if (CondParams)
 		{
-			if (CondParams->HasField(TEXT("tag")))
-				TagString = CondParams->GetStringField(TEXT("tag"));
-			if (CondParams->HasField(TEXT("match_type")))
-				MatchType = CondParams->GetStringField(TEXT("match_type"));
+			CondParams->TryGetStringField(TEXT("tag"), TagString);
+			CondParams->TryGetStringField(TEXT("match_type"), MatchType);
 		}
 
 		if (TagString.IsEmpty())
@@ -622,8 +621,8 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetTransitionCondit
 
 FMonolithActionResult FMonolithLogicDriverNodeActions::HandleGetExposedProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
 	UBlueprint* SMBlueprint = nullptr;
@@ -634,10 +633,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleGetExposedPropertie
 	}
 
 	FString TargetGuid;
-	if (Params->HasField(TEXT("node_guid")))
-	{
-		TargetGuid = Params->GetStringField(TEXT("node_guid"));
-	}
+	Params->TryGetStringField(TEXT("node_guid"), TargetGuid);
 
 	// Lambda to extract exposed properties from a node
 	auto ExtractExposedProps = [](UEdGraphNode* Node) -> TSharedPtr<FJsonObject>
@@ -728,10 +724,11 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetExposedProperty(
 	FNodeLookupResult Lookup = LoadAndFindNode(Params);
 	if (!Lookup.bSuccess) return Lookup.Error;
 
-	FString PropertyName = Params->GetStringField(TEXT("property_name"));
-	if (PropertyName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'property_name'"));
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property_name"), PropertyName) || PropertyName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'property_name'"));
 
-	FString Value = Params->GetStringField(TEXT("value"));
+	FString Value;
+	Params->TryGetStringField(TEXT("value"), Value);
 
 	UEdGraphNode* Node = Lookup.Node;
 

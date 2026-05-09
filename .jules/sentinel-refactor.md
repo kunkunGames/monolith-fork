@@ -32,3 +32,9 @@
 **Learning:** TryGetStringField safely extracts string parameters, avoiding ad-hoc bounds and making the error handling clearer.
 **Reuse rule:** Use TryGetStringField for extracting optional parameters into an existing variable or default.
 **Avoid:** Duplicated `if HasField then Get...` blocks for optional strings.
+
+## 2024-05-09 - Sentinel Refactor: Convert MonolithLogicDriver to TryGetStringField
+**Pattern:** Ad-hoc and unsafe parameter extraction via `GetStringField` across multiple action handler files without checking if the field exists, relying on empty string fallbacks.
+**Learning:** In Monolith JSON extraction, `GetStringField` can throw warnings or fail if the field is missing. Using `TryGetStringField` gracefully handles missing fields and prevents Unreal Engine's internal `LogJson` warning spam.
+**Reuse rule:** Future actions and parameter handlers should use `TryGetStringField` and explicitly check boolean return codes rather than using `GetStringField`.
+**Avoid:** Avoid using `GetStringField` directly on `FJsonObject` instances in Monolith action handlers.
