@@ -3,9 +3,10 @@
 This repository relies on several scheduled Jules tasks (agents) to maintain and optimize the codebase. To prevent collisions and ensure a clean history, all agents MUST follow these coordination rules:
 
 ## 1. Branch and PR Naming Conventions
-Agents must use a strict, predictable branch naming convention to make active work easily discoverable:
-- **Format:** `jules/<agent>/<module-or-area>/<short-behavior>`
-- **Avoid:** Non-standard prefixes like `bolt-...`, `perf-...`, `sentinel-...`, or raw `jules-<id>-...` branches.
+Agents must use a strict, predictable branch and PR naming convention to make active work easily discoverable:
+- **Branch Format:** `jules/<agent>/<module-or-area>/<short-behavior>`
+- **PR Title Format:** `<Emoji> <Agent>: <short description>` (e.g., `⚡ Bolt: [description]`, `🛡️ Sentinel: [description]`).
+- **Avoid:** Non-standard branch prefixes like `bolt-...`, `perf-...`, `sentinel-...`, or raw `jules-<id>-...` branches, and generic PR titles without agent prefixes.
 
 ## 2. Duplicate / Collision Guard
 Before making any changes, agents must perform a thorough duplicate and collision check:

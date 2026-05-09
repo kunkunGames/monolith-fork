@@ -22,3 +22,9 @@
 **Learning:** Without explicit instruction, agents default to writing task journals instead of durable coordination rules.
 **Prevention:** Added a 'Journal Hygiene' section to AGENTS.md to explicitly ban routine work logs in `.jules/` files.
 **Avoid:** Updating `.jules/` files with daily summaries or non-reusable logs.
+
+## 2026-05-08 - Standardize PR title prefixes
+**Coordination issue:** PR titles were not standardized, making it harder to visually scan the open PR queue for specific agent or track overlaps.
+**Learning:** The existing naming conventions focused only on branch names and omitted explicit requirements for PR titles, leading to inconsistent PR list views.
+**Prevention:** Updated `AGENTS.md` to explicitly require PR titles to be prefixed with an emoji and the agent name (e.g., `⚡ Bolt: ...`).
+**Avoid:** Submitting PRs with generic titles that do not clearly indicate the originating agent track.
