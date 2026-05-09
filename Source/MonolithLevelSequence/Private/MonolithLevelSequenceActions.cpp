@@ -111,13 +111,16 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectors(const TShared
 
 	FString SQL = TEXT("SELECT ls_path, director_bp_name, function_count, variable_count "
 	                   "FROM level_sequence_directors");
+	FString LikePattern;
 	if (!PathFilter.IsEmpty())
 	{
-		const FString LikePattern = PathFilter
-			.Replace(TEXT("'"), TEXT("''"))
+		LikePattern = PathFilter
+			.Replace(TEXT("\\"), TEXT("\\\\"))
+			.Replace(TEXT("%"), TEXT("\\%"))
+			.Replace(TEXT("_"), TEXT("\\_"))
 			.Replace(TEXT("*"), TEXT("%"))
 			.Replace(TEXT("?"), TEXT("_"));
-		SQL += FString::Printf(TEXT(" WHERE ls_path LIKE '%s'"), *LikePattern);
+		SQL += TEXT(" WHERE ls_path LIKE ? ESCAPE '\\'");
 	}
 	SQL += TEXT(" ORDER BY ls_path");
 
@@ -125,6 +128,10 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectors(const TShared
 	if (!Stmt.Create(*RawDB, *SQL))
 	{
 		return FMonolithActionResult::Error(TEXT("Failed to prepare list_directors SQL"));
+	}
+	if (!PathFilter.IsEmpty())
+	{
+		Stmt.SetBindingValueByIndex(1, LikePattern);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Directors;
@@ -638,10 +645,12 @@ FMonolithActionResult FMonolithLevelSequenceActions::FindDirectorFunctionCallers
 	if (!PathFilter.IsEmpty())
 	{
 		LikePattern = PathFilter
-			.Replace(TEXT("'"), TEXT("''"))
+			.Replace(TEXT("\\"), TEXT("\\\\"))
+			.Replace(TEXT("%"), TEXT("\\%"))
+			.Replace(TEXT("_"), TEXT("\\_"))
 			.Replace(TEXT("*"), TEXT("%"))
 			.Replace(TEXT("?"), TEXT("_"));
-		PathClause = TEXT(" AND d.ls_path LIKE ?");
+		PathClause = TEXT(" AND d.ls_path LIKE ? ESCAPE '\\'");
 	}
 
 	const FString SQL = FString::Printf(TEXT(
