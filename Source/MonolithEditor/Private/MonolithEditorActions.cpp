@@ -102,6 +102,7 @@ TArray<FMonolithLogEntry> FMonolithLogCapture::GetRecentEntries(int32 Count) con
 	int32 Num = FMath::Min(Count, Total);
 	int32 Begin = bWrapped ? (WriteIndex - Num + Total) % Total : FMath::Max(0, Total - Num);
 
+	Result.Reserve(Num);
 	for (int32 i = 0; i < Num; ++i)
 	{
 		int32 Idx = (Begin + i) % Total;
