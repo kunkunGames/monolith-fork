@@ -1216,11 +1216,14 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 
 	// PHASE 3: Compute deltas
 	TArray<FName> AddedPaths, DeletedPaths, ExistingPaths;
+	AddedPaths.Reserve(CurrentPackages.Num());
+	ExistingPaths.Reserve(CurrentPackages.Num());
 	for (FName Pkg : CurrentPackages)
 	{
 		if (!DBPackages.Contains(Pkg)) AddedPaths.Add(Pkg);
 		else ExistingPaths.Add(Pkg);
 	}
+	DeletedPaths.Reserve(DBPackages.Num());
 	for (FName Pkg : DBPackages)
 	{
 		if (!CurrentPackages.Contains(Pkg)) DeletedPaths.Add(Pkg);
@@ -1237,7 +1240,9 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 	}
 
 	TArray<TPair<FName, FName>> Moves;
+	Moves.Reserve(AddedPaths.Num());
 	TArray<FName> TrueAdds;
+	TrueAdds.Reserve(AddedPaths.Num());
 	for (FName Added : AddedPaths)
 	{
 		FIoHash* NewHash = CurrentHashes.Find(Added);
@@ -1262,6 +1267,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 	for (const auto& [OldPath, NewPath] : Moves) MovedOldPaths.Add(OldPath);
 
 	TArray<FName> TrueDeletes;
+	TrueDeletes.Reserve(DeletedPaths.Num());
 	for (FName Deleted : DeletedPaths)
 	{
 		if (!MovedOldPaths.Contains(Deleted)) TrueDeletes.Add(Deleted);
@@ -1269,6 +1275,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 
 	// PHASE 5: Modification detection
 	TArray<FName> ModifiedPaths;
+	ModifiedPaths.Reserve(ExistingPaths.Num());
 	for (FName Existing : ExistingPaths)
 	{
 		FIoHash* CurrentHash = CurrentHashes.Find(Existing);
