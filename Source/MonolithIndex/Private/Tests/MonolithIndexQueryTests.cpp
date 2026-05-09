@@ -3,7 +3,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectFindByTypeClampsLimitTest, "Monolith.IndexGuard.Project.FindByTypeClampsLimit", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectFindByTypeClampsLimitTest, "Monolith.IndexGuard.Project.FindByTypeClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FProjectFindByTypeClampsLimitTest::RunTest(const FString& Parameters)
 {
@@ -14,10 +14,10 @@ bool FProjectFindByTypeClampsLimitTest::RunTest(const FString& Parameters)
 
 	FMonolithActionResult Result = FProjectFindByTypeAction::Execute(Params);
 
-	if (Result.bSuccess && Result.ResultObject.IsValid())
+	if (Result.bSuccess && Result.Result.IsValid())
 	{
-		int32 RetLimit = Result.ResultObject->GetIntegerField(TEXT("limit"));
-		int32 RetOffset = Result.ResultObject->GetIntegerField(TEXT("offset"));
+		int32 RetLimit = Result.Result->GetIntegerField(TEXT("limit"));
+		int32 RetOffset = Result.Result->GetIntegerField(TEXT("offset"));
 
 		TestEqual(TEXT("Limit is clamped to 1000"), RetLimit, 1000);
 		TestEqual(TEXT("Offset is clamped to 0"), RetOffset, 0);

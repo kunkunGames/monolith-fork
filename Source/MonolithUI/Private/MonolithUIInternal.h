@@ -3,7 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "WidgetBlueprint.h"
-#include "MonolithCore.h"
+#include "MonolithPackagePathValidator.h"
 #include "Animation/WidgetAnimation.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Widget.h"
