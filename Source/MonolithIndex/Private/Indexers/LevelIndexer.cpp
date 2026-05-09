@@ -12,7 +12,34 @@
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
 #include "UObject/Package.h"
-#include "WorldPartition/WorldPartition.h"
+
+namespace
+{
+	bool TeardownLoadedWorldForIndexing(UWorld* World, UPackage* Package)
+	{
+		if (!World || !Package)
+		{
+			return false;
+		}
+
+		UWorld* EditorWorld = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+		if (World == EditorWorld)
+		{
+			return false;
+		}
+
+		if (World->IsInitialized())
+		{
+			// Balance the engine's InitWorld path before allowing GC. Clearing only
+			// RF_Standalone can destroy initialized UWorldSubsystems without their
+			// normal Deinitialize path.
+			World->DestroyWorld(false);
+		}
+
+		World->ClearFlags(RF_Standalone);
+		return FMonolithMemoryHelper::TryUnloadPackage(World);
+	}
+}
 
 bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset, FMonolithIndexDatabase& DB, int64 AssetId)
 {
@@ -102,22 +129,7 @@ bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset
 			ULevel* Level = World->PersistentLevel;
 			ActorsInserted += IndexActorsInLevel(Level, DB, LevelAssetId);
 
-			// Skip teardown if this is the world currently open in the editor - uninit would stop viewport WP cell streaming and unload would close the level
-			UWorld* EditorWorld = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-			if (World != EditorWorld)
-			{
-				// Uninitialize WorldPartition before unload - LoadPackage skips the editor teardown path, so GC would otherwise assert in UWorldPartitionSubsystem::Deinitialize
-				if (UWorldPartition* WP = World->GetWorldPartition())
-				{
-					if (WP->IsInitialized())
-					{
-						WP->Uninitialize();
-					}
-				}
-
-				// Mark world/package for unloading after indexing
-				FMonolithMemoryHelper::TryUnloadPackage(World);
-			}
+			TeardownLoadedWorldForIndexing(World, Package);
 
 			LevelsProcessed++;
 		}
