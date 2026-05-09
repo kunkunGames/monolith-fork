@@ -1398,11 +1398,11 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 			if (!NodeVal->TryGetObject(NodeObjPtr) || !NodeObjPtr) continue;
 			const TSharedPtr<FJsonObject>& NodeObj = *NodeObjPtr;
 
-			FString Id = NodeObj->GetStringField(TEXT("id"));
-			FString TypeName = NodeObj->GetStringField(TEXT("type"));
-			if (Id.IsEmpty() || TypeName.IsEmpty())
+				FString Id;
+				FString TypeName;
+				if (!NodeObj->TryGetStringField(TEXT("id"), Id) || !NodeObj->TryGetStringField(TEXT("type"), TypeName) || Id.IsEmpty() || TypeName.IsEmpty())
 			{
-				return FMonolithActionResult::Error(TEXT("Each node in spec must have 'id' and 'type'"));
+					return FMonolithActionResult::Error(TEXT("Each node in spec must have valid 'id' and 'type' string fields"));
 			}
 
 			UClass* NodeClass = ResolveNodeType(TypeName);
@@ -1430,7 +1430,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 			if (!NodeVal->TryGetObject(NodeObjPtr) || !NodeObjPtr) continue;
 			const TSharedPtr<FJsonObject>& NodeObj = *NodeObjPtr;
 
-			FString Id = NodeObj->GetStringField(TEXT("id"));
+				FString Id;
+				if (!NodeObj->TryGetStringField(TEXT("id"), Id) || Id.IsEmpty()) continue;
 			USoundNode** FoundNode = NodeMap.Find(Id);
 			if (!FoundNode) continue;
 
@@ -1461,10 +1462,14 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 			if (!ConnVal->TryGetObject(ConnObjPtr) || !ConnObjPtr) continue;
 			const TSharedPtr<FJsonObject>& ConnObj = *ConnObjPtr;
 
-			FString FromId = ConnObj->GetStringField(TEXT("from"));
-			FString ToId = ConnObj->GetStringField(TEXT("to"));
+				FString FromId;
+				FString ToId;
+				if (!ConnObj->TryGetStringField(TEXT("from"), FromId) || !ConnObj->TryGetStringField(TEXT("to"), ToId) || FromId.IsEmpty() || ToId.IsEmpty())
+				{
+					return FMonolithActionResult::Error(TEXT("Each connection in spec must have valid 'from' and 'to' string fields"));
+				}
 
-			USoundNode** FromPtr = NodeMap.Find(FromId);
+				USoundNode** FromPtr = NodeMap.Find(FromId);
 			USoundNode** ToPtr = NodeMap.Find(ToId);
 			if (!FromPtr || !*FromPtr)
 			{
@@ -1499,9 +1504,14 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 	}
 
 	// Step 4: Set FirstNode
-	FString FirstNodeId = Spec->GetStringField(TEXT("first_node"));
-	if (!FirstNodeId.IsEmpty())
+	FString FirstNodeId;
+	if (Spec->HasField(TEXT("first_node")))
 	{
+		if (!Spec->TryGetStringField(TEXT("first_node"), FirstNodeId) || FirstNodeId.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("first_node must be a non-empty string when provided"));
+		}
+
 		USoundNode** FirstPtr = NodeMap.Find(FirstNodeId);
 		if (!FirstPtr || !*FirstPtr)
 		{
