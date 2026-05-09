@@ -28,3 +28,9 @@
 **Learning:** The existing naming conventions focused only on branch names and omitted explicit requirements for PR titles, leading to inconsistent PR list views.
 **Prevention:** Updated `AGENTS.md` to explicitly require PR titles to be prefixed with an emoji and the agent name (e.g., `⚡ Bolt: ...`).
 **Avoid:** Submitting PRs with generic titles that do not clearly indicate the originating agent track.
+
+## 2026-05-09 - Add staggered schedule recommendation and fetch requirement
+**Coordination issue:** Agents were creating overlapping PRs (e.g., multiple `bolt/monolithmesh/tarray-reserve` branches) despite duplicate checks, likely due to concurrent VM execution and stale local branch lists.
+**Learning:** Checking `git branch -r` without fetching first, or running agents simultaneously, allows race conditions where agents miss each other's active work.
+**Prevention:** Updated `AGENTS.md` to recommend staggered scheduling and explicitly require running `git fetch origin --prune` before checking for collisions.
+**Avoid:** Running duplicate checks without fetching the latest origin state or scheduling identical agents concurrently.

@@ -9,10 +9,12 @@ Agents must use a strict, predictable branch and PR naming convention to make ac
 - **Avoid:** Non-standard branch prefixes like `bolt-...`, `perf-...`, `sentinel-...`, or raw `jules-<id>-...` branches, and generic PR titles without agent prefixes.
 
 ## 2. Duplicate / Collision Guard
-Before making any changes, agents must perform a thorough duplicate and collision check:
+Before making any changes, agents must perform a thorough duplicate and collision check. Because agents may run in concurrent VMs, you must avoid race conditions:
+- Always run `git fetch origin --prune` immediately before checking branches.
 - Use `git branch -r` and identify any existing `jules/<agent>/...` branches.
 - Stop without PR if a similar branch exists, if an open PR has the same WorkFingerprint, or touches the same intended files. If an open branch or PR addresses the intended changes, or if the collision is ambiguous, **stop without PR**. No-op is a perfectly acceptable and expected outcome when the queue is healthy or work overlaps.
 - PR descriptions must include a 'Duplicate check' section detailing inspected PRs/branches and the reason the work is non-overlapping.
+- **Staggered Schedules:** If multiple agents of the same type are scheduled, their runs should be staggered to allow PR visibility to propagate.
 
 ## 3. WorkFingerprint Requirement
 Every agent PR description must include a `WorkFingerprint` containing at least:
