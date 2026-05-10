@@ -12,3 +12,7 @@
 **Boundary:** `limit` query parameter upper bound and JSON type.
 **Learning:** Raw JSON number access combined with unbounded array allocation for results allows trivial out-of-memory or timeout exploits for large queries.
 **Prevention:** Always use `TryGetNumberField` and immediately `FMath::Clamp` user-provided limits against a sane local maximum (e.g., 1000) before pre-allocating result arrays or initiating resource-heavy loops.
+## 2026-05-10 - 🧱 LimitGuard: Bound GAS effect and tag bounds
+**Boundary:** `depth` and `stack_limit` query properties in MonolithGAS.
+**Learning:** Using GetNumberField for bounds and directly casting to int without clamping can result in unbound tree recursion (in tag hierarchies) or excessive loop bounds/stack limits (in effects).
+**Prevention:** Always use `TryGetNumberField` and apply `FMath::Clamp` against a sane local maximum (e.g. 100 for tag depth, 1000 for stack limits) to prevent trivial resource exhaustion or overflows.

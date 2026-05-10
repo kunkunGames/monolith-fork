@@ -375,9 +375,10 @@ FMonolithActionResult FMonolithGASTagActions::HandleGetTagHierarchy(const TShare
 {
 	FString Root = Params->GetStringField(TEXT("root"));
 	int32 MaxDepth = 0;
-	if (Params->HasField(TEXT("depth")))
+	double DepthVal = 0.0;
+	if (Params->TryGetNumberField(TEXT("depth"), DepthVal))
 	{
-		MaxDepth = static_cast<int32>(Params->GetNumberField(TEXT("depth")));
+		MaxDepth = FMath::Clamp(static_cast<int32>(DepthVal), 0, 100);
 	}
 	bool bIncludeUsage = false;
 	if (Params->HasField(TEXT("include_usage")))
@@ -1310,9 +1311,10 @@ FMonolithActionResult FMonolithGASTagActions::HandleAuditTagNaming(const TShared
 	const TSharedPtr<FJsonObject>* ConventionsObj;
 	if (Params->TryGetObjectField(TEXT("conventions"), ConventionsObj))
 	{
-		if ((*ConventionsObj)->HasField(TEXT("max_depth")))
+		double MaxDepthVal = 0.0;
+		if ((*ConventionsObj)->TryGetNumberField(TEXT("max_depth"), MaxDepthVal))
 		{
-			MaxDepth = static_cast<int32>((*ConventionsObj)->GetNumberField(TEXT("max_depth")));
+			MaxDepth = FMath::Clamp(static_cast<int32>(MaxDepthVal), 1, 100);
 		}
 		if ((*ConventionsObj)->HasField(TEXT("allow_underscores")))
 		{
