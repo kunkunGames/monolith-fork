@@ -1865,8 +1865,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue(
 		if (!BandVal->TryGetObject(BandObjPtr) || !BandObjPtr) continue;
 		const TSharedPtr<FJsonObject>& BandObj = *BandObjPtr;
 
-		FString WavePath = BandObj->GetStringField(TEXT("sound_wave"));
-		if (WavePath.IsEmpty())
+		FString WavePath;
+		if (!BandObj->TryGetStringField(TEXT("sound_wave"), WavePath) || WavePath.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("Each band must have a 'sound_wave' path"));
 		}

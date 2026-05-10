@@ -80,4 +80,23 @@ bool FMonolithParamGuardAudioBuildSoundCueRejectsMalformedSpecTest::RunTest(cons
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioCreateDistanceCrossfadeCueRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.CreateDistanceCrossfadeCueRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioCreateDistanceCrossfadeCueRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SC_TestCrossfade"));
+
+	TArray<TSharedPtr<FJsonValue>> BandsArray;
+	TSharedPtr<FJsonObject> BandObj = MakeShared<FJsonObject>();
+	BandObj->SetNumberField(TEXT("sound_wave"), 123); // Should be string
+	BandsArray.Add(MakeShared<FJsonValueObject>(BandObj));
+	Params->SetArrayField(TEXT("bands"), BandsArray);
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("create_distance_crossfade_cue"), Params);
+
+	TestTrue(TEXT("CreateDistanceCrossfadeCue with malformed band sound_wave should return Error"), !Result.bSuccess);
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
