@@ -24,6 +24,7 @@
 #include "Misc/PackageName.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "MonolithPackagePathValidator.h"
 
 namespace
 {
@@ -345,6 +346,12 @@ UClass* FMonolithUIStyleService::CreateNewStyleAsset(
         FString(),
         FinalPackageName,
         FinalAssetName);
+
+    if (const FString ValidationError = MonolithCore::ValidatePackagePath(FinalPackageName); !ValidationError.IsEmpty())
+    {
+        OutError = ValidationError;
+        return nullptr;
+    }
 
     UPackage* Package = CreatePackage(*FinalPackageName);
     if (!Package)
