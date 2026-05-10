@@ -10,7 +10,7 @@
 
 namespace
 {
-	FMonolithActionResult ExecuteAudioAction(const FString& Action, const TSharedPtr<FJsonObject>& Params)
+	FMonolithActionResult ExecuteAudioSecurityAction(const FString& Action, const TSharedPtr<FJsonObject>& Params)
 	{
 		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 		if (!Registry.HasAction(TEXT("audio"), Action))
@@ -32,7 +32,7 @@ bool FMonolithAudioSecuritySoundCueCreatePathTest::RunTest(const FString& Parame
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 	Params->SetStringField(TEXT("asset_path"), TEXT("//Game/Audio/SC_BadPathTest"));
 
-	FMonolithActionResult Result = ExecuteAudioAction(TEXT("create_sound_cue"), Params);
+	FMonolithActionResult Result = ExecuteAudioSecurityAction(TEXT("create_sound_cue"), Params);
 
 	TestTrue(TEXT("CreateSoundCue with double slash should return Error"), !Result.bSuccess);
 	TestTrue(TEXT("Error should mention invalid package path"), Result.ErrorMessage.Contains(TEXT("Invalid package path")));
@@ -49,7 +49,7 @@ bool FMonolithAudioSecurityAssetCreatePathTest::RunTest(const FString& Parameter
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 	Params->SetStringField(TEXT("asset_path"), TEXT("//Game/Audio/SA_BadPathTest"));
 
-	FMonolithActionResult Result = ExecuteAudioAction(TEXT("create_sound_attenuation"), Params);
+	FMonolithActionResult Result = ExecuteAudioSecurityAction(TEXT("create_sound_attenuation"), Params);
 
 	TestTrue(TEXT("CreateSoundAttenuation with double slash should return Error"), !Result.bSuccess);
 	TestTrue(TEXT("Error should mention invalid package path"), Result.ErrorMessage.Contains(TEXT("Invalid package path")));
@@ -68,7 +68,7 @@ bool FMonolithAudioSecurityTestWaveCreatePathTest::RunTest(const FString& Parame
 	Params->SetNumberField(TEXT("duration_seconds"), 1.0);
 	Params->SetNumberField(TEXT("frequency_hz"), 440.0);
 
-	FMonolithActionResult Result = ExecuteAudioAction(TEXT("create_test_wave"), Params);
+	FMonolithActionResult Result = ExecuteAudioSecurityAction(TEXT("create_test_wave"), Params);
 
 	TestTrue(TEXT("CreateTestWave with double slash should return Error"), !Result.bSuccess);
 	// It happens that CreateTestWave has a manual StartsWith check that we left in place, but

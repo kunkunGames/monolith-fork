@@ -1164,9 +1164,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundGraph(const TS
 	}
 
 	// Graph inputs
+	const FMetasoundFrontendClassInterface& RootInterface = Doc.RootGraph.GetDefaultInterface();
 	TArray<TSharedPtr<FJsonValue>> InputsJson;
-	InputsJson.Reserve(Doc.RootGraph.Interface.Inputs.Num());
-	for (const FMetasoundFrontendClassInput& Input : Doc.RootGraph.Interface.Inputs)
+	InputsJson.Reserve(RootInterface.Inputs.Num());
+	for (const FMetasoundFrontendClassInput& Input : RootInterface.Inputs)
 	{
 		auto InputJson = MakeShared<FJsonObject>();
 		InputJson->SetStringField(TEXT("name"), Input.Name.ToString());
@@ -1177,8 +1178,8 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundGraph(const TS
 
 	// Graph outputs
 	TArray<TSharedPtr<FJsonValue>> OutputsJson;
-	OutputsJson.Reserve(Doc.RootGraph.Interface.Outputs.Num());
-	for (const FMetasoundFrontendClassOutput& Output : Doc.RootGraph.Interface.Outputs)
+	OutputsJson.Reserve(RootInterface.Outputs.Num());
+	for (const FMetasoundFrontendClassOutput& Output : RootInterface.Outputs)
 	{
 		auto OutputJson = MakeShared<FJsonObject>();
 		OutputJson->SetStringField(TEXT("name"), Output.Name.ToString());
@@ -1300,9 +1301,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ListAvailableMetaSoundNode
 			NodeJson->SetStringField(TEXT("variant"), ClassName.Variant.ToString());
 
 			// Inputs
+			const FMetasoundFrontendClassInterface& ClassInterface = InClass.GetDefaultInterface();
 			TArray<TSharedPtr<FJsonValue>> InputsJson;
-			InputsJson.Reserve(InClass.Interface.Inputs.Num());
-			for (const FMetasoundFrontendClassVertex& Vertex : InClass.Interface.Inputs)
+			InputsJson.Reserve(ClassInterface.Inputs.Num());
+			for (const FMetasoundFrontendClassVertex& Vertex : ClassInterface.Inputs)
 			{
 				auto VJson = MakeShared<FJsonObject>();
 				VJson->SetStringField(TEXT("name"), Vertex.Name.ToString());
@@ -1313,8 +1315,8 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ListAvailableMetaSoundNode
 
 			// Outputs
 			TArray<TSharedPtr<FJsonValue>> OutputsJson;
-			OutputsJson.Reserve(InClass.Interface.Outputs.Num());
-			for (const FMetasoundFrontendClassVertex& Vertex : InClass.Interface.Outputs)
+			OutputsJson.Reserve(ClassInterface.Outputs.Num());
+			for (const FMetasoundFrontendClassVertex& Vertex : ClassInterface.Outputs)
 			{
 				auto VJson = MakeShared<FJsonObject>();
 				VJson->SetStringField(TEXT("name"), Vertex.Name.ToString());
@@ -1370,9 +1372,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundNodeInfo(const
 				ResultJson->SetStringField(TEXT("name"), CN.Name.ToString());
 				ResultJson->SetStringField(TEXT("variant"), CN.Variant.ToString());
 
+				const FMetasoundFrontendClassInterface& ClassInterface = InClass.GetDefaultInterface();
 				TArray<TSharedPtr<FJsonValue>> InputsJson;
-				InputsJson.Reserve(InClass.Interface.Inputs.Num());
-				for (const FMetasoundFrontendClassVertex& V : InClass.Interface.Inputs)
+				InputsJson.Reserve(ClassInterface.Inputs.Num());
+				for (const FMetasoundFrontendClassVertex& V : ClassInterface.Inputs)
 				{
 					auto VJson = MakeShared<FJsonObject>();
 					VJson->SetStringField(TEXT("name"), V.Name.ToString());
@@ -1382,8 +1385,8 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundNodeInfo(const
 				ResultJson->SetArrayField(TEXT("inputs"), InputsJson);
 
 				TArray<TSharedPtr<FJsonValue>> OutputsJson;
-				OutputsJson.Reserve(InClass.Interface.Outputs.Num());
-				for (const FMetasoundFrontendClassVertex& V : InClass.Interface.Outputs)
+				OutputsJson.Reserve(ClassInterface.Outputs.Num());
+				for (const FMetasoundFrontendClassVertex& V : ClassInterface.Outputs)
 				{
 					auto VJson = MakeShared<FJsonObject>();
 					VJson->SetStringField(TEXT("name"), V.Name.ToString());
@@ -1584,9 +1587,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundInputNames(con
 	}
 	const FMetasoundFrontendDocument& Doc = *DocPtr;
 
+	const FMetasoundFrontendClassInterface& RootInterface = Doc.RootGraph.GetDefaultInterface();
 	TArray<TSharedPtr<FJsonValue>> InputsJson;
-	InputsJson.Reserve(Doc.RootGraph.Interface.Inputs.Num());
-	for (const FMetasoundFrontendClassInput& Input : Doc.RootGraph.Interface.Inputs)
+	InputsJson.Reserve(RootInterface.Inputs.Num());
+	for (const FMetasoundFrontendClassInput& Input : RootInterface.Inputs)
 	{
 		auto InputJson = MakeShared<FJsonObject>();
 		InputJson->SetStringField(TEXT("name"), Input.Name.ToString());

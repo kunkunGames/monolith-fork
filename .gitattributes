@@ -1,0 +1,19 @@
+* text=auto eol=lf
+
+# Keep generated and binary Unreal/editor artifacts out of text normalization.
+*.a binary
+*.bmp binary
+*.dll binary
+*.dylib binary
+*.exe binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.lib binary
+*.obj binary
+*.pdb binary
+*.png binary
+*.so binary
+*.uasset binary
+*.umap binary
+*.wav binary
