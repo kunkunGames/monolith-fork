@@ -588,6 +588,9 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildErrors(const TShared
 		TArray<FMonolithLogEntry> Entries = CachedLogCapture->GetEntriesSince(
 			SinceTimestamp, CategoryFilter, ELogVerbosity::Warning, 500);
 
+		ErrorsArr.Reserve(Entries.Num());
+		WarningsArr.Reserve(Entries.Num());
+
 		for (const FMonolithLogEntry& Entry : Entries)
 		{
 			if (Entry.Verbosity <= ELogVerbosity::Error)
@@ -720,6 +723,7 @@ FMonolithActionResult FMonolithEditorActions::HandleSearchBuildOutput(const TSha
 		TArray<FMonolithLogEntry> Entries = CachedLogCapture->SearchEntries(
 			Pattern, TEXT(""), ELogVerbosity::VeryVerbose, Limit);
 
+		Matches.Reserve(Entries.Num());
 		for (const FMonolithLogEntry& Entry : Entries)
 		{
 			Matches.Add(MakeShared<FJsonValueObject>(LogEntryToJson(Entry)));
@@ -760,6 +764,7 @@ FMonolithActionResult FMonolithEditorActions::HandleGetCompileOutput(const TShar
 		TArray<FMonolithLogEntry> Entries = CachedLogCapture->GetEntriesSince(
 			LastCompileTimestamp, CompileCategories, ELogVerbosity::VeryVerbose, 500);
 
+		LogLines.Reserve(Entries.Num());
 		for (const FMonolithLogEntry& Entry : Entries)
 		{
 			LogLines.Add(MakeShared<FJsonValueObject>(LogEntryToJson(Entry)));
@@ -797,6 +802,7 @@ FMonolithActionResult FMonolithEditorActions::HandleGetRecentLogs(const TSharedP
 	if (CachedLogCapture)
 	{
 		TArray<FMonolithLogEntry> Entries = CachedLogCapture->GetRecentEntries(Count);
+		LogArr.Reserve(Entries.Num());
 		for (const FMonolithLogEntry& Entry : Entries)
 		{
 			LogArr.Add(MakeShared<FJsonValueObject>(LogEntryToJson(Entry)));
@@ -829,6 +835,7 @@ FMonolithActionResult FMonolithEditorActions::HandleSearchLogs(const TSharedPtr<
 	if (CachedLogCapture)
 	{
 		TArray<FMonolithLogEntry> Entries = CachedLogCapture->SearchEntries(Pattern, Category, MaxVerbosity, Limit);
+		LogArr.Reserve(Entries.Num());
 		for (const FMonolithLogEntry& Entry : Entries)
 		{
 			LogArr.Add(MakeShared<FJsonValueObject>(LogEntryToJson(Entry)));
@@ -856,6 +863,7 @@ FMonolithActionResult FMonolithEditorActions::HandleTailLog(const TSharedPtr<FJs
 	if (CachedLogCapture)
 	{
 		TArray<FMonolithLogEntry> Entries = CachedLogCapture->GetRecentEntries(Count);
+		Lines.Reserve(Entries.Num());
 		for (const FMonolithLogEntry& Entry : Entries)
 		{
 			FString Line = FString::Printf(TEXT("[%s][%s] %s"),
@@ -959,6 +967,7 @@ FMonolithActionResult FMonolithEditorActions::HandleGetCrashContext(const TShare
 		TArray<FMonolithLogEntry> ErrorEntries = CachedLogCapture->SearchEntries(
 			TEXT(""), TEXT(""), ELogVerbosity::Error, 20);
 		TArray<TSharedPtr<FJsonValue>> RecentErrors;
+		RecentErrors.Reserve(ErrorEntries.Num());
 		for (const FMonolithLogEntry& Entry : ErrorEntries)
 		{
 			RecentErrors.Add(MakeShared<FJsonValueObject>(LogEntryToJson(Entry)));
