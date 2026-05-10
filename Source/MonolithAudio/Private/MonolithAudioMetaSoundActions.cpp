@@ -1265,9 +1265,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ListAvailableMetaSoundNode
 	FString Category;
 	Params->TryGetStringField(TEXT("category"), Category);
 	int32 Limit = 200;
-	if (Params->HasField(TEXT("limit")))
+	double LimitVal = 200.0;
+	if (Params->TryGetNumberField(TEXT("limit"), LimitVal))
 	{
-		Limit = static_cast<int32>(Params->GetNumberField(TEXT("limit")));
+		Limit = static_cast<int32>(LimitVal);
 	}
 
 	Metasound::Frontend::INodeClassRegistry& Registry = Metasound::Frontend::INodeClassRegistry::GetChecked();
@@ -2452,9 +2453,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateLoopingAmbientMetaSo
 	}
 
 	float LfoFrequency = 0.25f;
-	if (Params->HasField(TEXT("lfo_frequency")))
+	double LfoFreqVal = 0.25;
+	if (Params->TryGetNumberField(TEXT("lfo_frequency"), LfoFreqVal))
 	{
-		LfoFrequency = static_cast<float>(Params->GetNumberField(TEXT("lfo_frequency")));
+		LfoFrequency = static_cast<float>(LfoFreqVal);
 	}
 
 	float PitchMin = 0.95f, PitchMax = 1.05f;
@@ -2614,9 +2616,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateSynthesizedTone(cons
 	Params->TryGetStringField(TEXT("oscillator_type"), OscType);
 
 	float Frequency = 440.0f;
-	if (Params->HasField(TEXT("frequency")))
+	double FreqVal = 440.0;
+	if (Params->TryGetNumberField(TEXT("frequency"), FreqVal))
 	{
-		Frequency = static_cast<float>(Params->GetNumberField(TEXT("frequency")));
+		Frequency = static_cast<float>(FreqVal);
 	}
 
 	// ADSR defaults
@@ -2624,10 +2627,14 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateSynthesizedTone(cons
 	const TSharedPtr<FJsonObject>* AdsrPtr = nullptr;
 	if (Params->TryGetObjectField(TEXT("adsr"), AdsrPtr) && AdsrPtr && AdsrPtr->IsValid())
 	{
-		if ((*AdsrPtr)->HasField(TEXT("attack"))) Attack = static_cast<float>((*AdsrPtr)->GetNumberField(TEXT("attack")));
-		if ((*AdsrPtr)->HasField(TEXT("decay"))) Decay = static_cast<float>((*AdsrPtr)->GetNumberField(TEXT("decay")));
-		if ((*AdsrPtr)->HasField(TEXT("sustain"))) Sustain = static_cast<float>((*AdsrPtr)->GetNumberField(TEXT("sustain")));
-		if ((*AdsrPtr)->HasField(TEXT("release"))) Release = static_cast<float>((*AdsrPtr)->GetNumberField(TEXT("release")));
+		double AttackVal = 0.01;
+		if ((*AdsrPtr)->TryGetNumberField(TEXT("attack"), AttackVal)) Attack = static_cast<float>(AttackVal);
+		double DecayVal = 0.1;
+		if ((*AdsrPtr)->TryGetNumberField(TEXT("decay"), DecayVal)) Decay = static_cast<float>(DecayVal);
+		double SustainVal = 0.7;
+		if ((*AdsrPtr)->TryGetNumberField(TEXT("sustain"), SustainVal)) Sustain = static_cast<float>(SustainVal);
+		double ReleaseVal = 0.3;
+		if ((*AdsrPtr)->TryGetNumberField(TEXT("release"), ReleaseVal)) Release = static_cast<float>(ReleaseVal);
 	}
 
 	FString PackagePath, AssetName;
@@ -3012,13 +3019,12 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::SetMetaSoundNodeLocation(c
 		return FMonolithActionResult::Error(TEXT("asset_path and node_id_or_handle are required"));
 	}
 
-	if (!Params->HasField(TEXT("x")) || !Params->HasField(TEXT("y")))
+	double X = 0.0;
+	double Y = 0.0;
+	if (!Params->TryGetNumberField(TEXT("x"), X) || !Params->TryGetNumberField(TEXT("y"), Y))
 	{
-		return FMonolithActionResult::Error(TEXT("x and y are required"));
+		return FMonolithActionResult::Error(TEXT("x and y are required and must be numbers"));
 	}
-
-	const double X = Params->GetNumberField(TEXT("x"));
-	const double Y = Params->GetNumberField(TEXT("y"));
 
 	FString Error;
 	UMetaSoundBuilderBase* Builder = GetBuilderForAsset(AssetPath, Error);

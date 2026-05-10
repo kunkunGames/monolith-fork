@@ -395,7 +395,9 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetCompression(const TSha
 	int32 Quality = 0;
 	if (bHasQuality)
 	{
-		Quality = FMath::Clamp(static_cast<int32>(Params->GetNumberField(TEXT("quality"))), 1, 100);
+		double QualityVal = 0.0;
+		Params->TryGetNumberField(TEXT("quality"), QualityVal);
+		Quality = FMath::Clamp(static_cast<int32>(QualityVal), 1, 100);
 	}
 
 	ESoundAssetCompressionType CompressionType = ESoundAssetCompressionType::BinkAudio;
@@ -1026,7 +1028,9 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 		{
 			if (CompObj->HasField(TEXT("quality")))
 			{
-				CompressionQuality = FMath::Clamp(static_cast<int32>(CompObj->GetNumberField(TEXT("quality"))), 1, 100);
+				double QualityVal2 = 0.0;
+				CompObj->TryGetNumberField(TEXT("quality"), QualityVal2);
+				CompressionQuality = FMath::Clamp(static_cast<int32>(QualityVal2), 1, 100);
 				bHasCompressionQuality = true;
 			}
 			if (CompObj->HasField(TEXT("type")))
