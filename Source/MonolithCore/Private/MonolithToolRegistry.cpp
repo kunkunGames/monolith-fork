@@ -304,6 +304,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		if (Missing.Num() > 0)
 		{
 			TArray<FString> Provided;
+			Provided.Reserve(EffectiveParams->Values.Num());
 			for (const auto& P : EffectiveParams->Values) Provided.Add(P.Key);
 
 			// CC-05: enrich the missing-param error with alias info so the agent
