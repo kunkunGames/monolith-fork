@@ -40,3 +40,9 @@
 **Learning:** Without explicit cleanup instructions, agents focus on completing the task and overlook removing the intermediate files they created.
 **Prevention:** Added 'Temporary Workflow Artifacts' rule to `AGENTS.md` requiring the explicit deletion of all temporary files before staging and committing.
 **Avoid:** Committing and pushing temporary helper scripts or PR description drafts.
+
+## 2026-05-10 - Standardize blocked verification wording
+**Coordination issue:** Agents used vague or inconsistent wording when UE verification was blocked, making it difficult for reviewers and tooling to grep for blocked status.
+**Learning:** The previous "or similar" instruction allowed for too much variance in blocked verification logs.
+**Prevention:** Updated `AGENTS.md` to mandate the exact string `[blocked: UE editor unavailable]` in a dedicated 'Blocked verification' PR section.
+**Avoid:** Claiming UE verification without running it, or using non-standard wording to describe a blocked state.
