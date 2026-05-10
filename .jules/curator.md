@@ -13,3 +13,8 @@
 **Learning:** Hardcoded paths for build tools create fragile scripts that fail across different developer environments and CI runners.
 **Prevention:** Use environment variables like `UE_57`, `UE_ROOT`, or `UE_57_UBT` to dynamically locate tools (like UBT) instead of relying solely on hardcoded static paths.
 **Avoid:** Hardcoded `C:\Program Files` paths for Unreal Engine binaries in build and release scripts.
+## 2026-05-10 - Fail fast on dynamic tool resolution
+**Hygiene issue:** Build scripts (`Tools/MonolithProxy/build_proxy.bat` and `Tools/MonolithQuery/build.bat`) hardcoded fallback paths like `C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat` if `vswhere.exe` failed, leading to brittle toolchains.
+**Learning:** Hardcoded `C:\Program Files` paths cause mysterious build failures in non-standard environments, and silent fallbacks hide the root cause of `vswhere.exe` resolution issues.
+**Prevention:** Build scripts should fail fast with clear errors when dynamic tool resolution (e.g., `vswhere.exe`) fails, rather than falling back to hardcoded paths.
+**Avoid:** Hardcoded `C:\Program Files` paths for Visual Studio tools in batch scripts.

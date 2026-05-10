@@ -13,7 +13,8 @@ for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio
 if exist "%VCVARS%" (
     call "%VCVARS%"
 ) else (
-    call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+    echo FAILED: vswhere.exe could not locate vcvars64.bat
+    exit /b 1
 )
 
 :build
