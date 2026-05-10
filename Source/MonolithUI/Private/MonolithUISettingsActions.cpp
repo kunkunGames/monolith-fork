@@ -366,6 +366,7 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveGame(const T
     {
         for (const auto& Val : *PropsArray)
         {
+            if (!Val.IsValid() || Val->Type != EJson::Object) continue;
             const TSharedPtr<FJsonObject>& PropObj = Val->AsObject();
             if (PropObj.IsValid() && PropObj->Values.Num() > 0)
             {
