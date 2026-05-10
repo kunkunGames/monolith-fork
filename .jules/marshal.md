@@ -34,3 +34,9 @@
 **Learning:** Checking `git branch -r` without fetching first, or running agents simultaneously, allows race conditions where agents miss each other's active work.
 **Prevention:** Updated `AGENTS.md` to recommend staggered scheduling and explicitly require running `git fetch origin --prune` before checking for collisions.
 **Avoid:** Running duplicate checks without fetching the latest origin state or scheduling identical agents concurrently.
+
+## 2026-05-10 - Enforce temporary workflow artifact cleanup
+**Coordination issue:** Agents were leaving temporary scratchpad scripts (e.g., `pr_body.txt`, `fix.py`) in the codebase when committing, polluting the repository.
+**Learning:** Without explicit cleanup instructions, agents focus on completing the task and overlook removing the intermediate files they created.
+**Prevention:** Added 'Temporary Workflow Artifacts' rule to `AGENTS.md` requiring the explicit deletion of all temporary files before staging and committing.
+**Avoid:** Committing and pushing temporary helper scripts or PR description drafts.

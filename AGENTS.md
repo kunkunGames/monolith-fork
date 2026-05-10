@@ -32,3 +32,6 @@ Do not claim Unreal Engine (UE) verification or release packaging was successful
 
 ## 5. Journal Hygiene
 When updating `.jules/` journal files, only document durable coordination rules and learnings. Do not use them as routine work logs or task journals.
+
+## 6. Temporary Workflow Artifacts
+Agents often create temporary files (such as `pr_body.txt`, helper Python scripts, or JSON dumps) during their workflows. To maintain repository hygiene, you must ensure all temporary workflow artifacts are completely deleted before staging and committing your final changes.
