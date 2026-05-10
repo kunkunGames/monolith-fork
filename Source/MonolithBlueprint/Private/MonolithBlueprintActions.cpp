@@ -125,7 +125,7 @@ void FMonolithBlueprintActions::RegisterActions()
 			.Optional(TEXT("class_filter"),      TEXT("string"),  TEXT("Restrict results to a specific class name (case-insensitive contains). Required if query is empty."))
 			.Optional(TEXT("include_inherited"), TEXT("boolean"), TEXT("Include inherited functions (default: true)"))
 			.Optional(TEXT("pure_only"),         TEXT("boolean"), TEXT("Only return pure (no exec pins) functions (default: false)"))
-			.Optional(TEXT("limit"),             TEXT("integer"), TEXT("Max results to return (default: 50)"))
+			.Optional(TEXT("limit"),             TEXT("integer"), TEXT("Max results to return (default: 50, hard max 1000)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_node_details"),
@@ -1195,7 +1195,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 		double LimitNum = 0.0;
 		if (Params->TryGetNumberField(TEXT("limit"), LimitNum) && LimitNum > 0)
 		{
-			Limit = (int32)LimitNum;
+			Limit = FMath::Clamp((int32)LimitNum, 1, 1000);
 		}
 	}
 
