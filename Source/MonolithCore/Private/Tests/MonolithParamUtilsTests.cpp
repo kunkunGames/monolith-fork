@@ -73,4 +73,127 @@ bool FMonolithParamUtilsNormalizePathTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParseVectorTest,
+	"Monolith.Core.ParamUtils.ParseVector",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParseVectorTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+	// Test case: valid array [x, y, z]
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Add(MakeShared<FJsonValueNumber>(1.5));
+		Arr.Add(MakeShared<FJsonValueNumber>(2.5));
+		Arr.Add(MakeShared<FJsonValueNumber>(3.5));
+		Params->SetArrayField(TEXT("vec_arr"), Arr);
+
+		FVector Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseVector(Params, TEXT("vec_arr"), Out);
+		TestTrue(TEXT("ParseVector array succeeds"), bResult);
+		TestEqual(TEXT("ParseVector array X"), Out.X, 1.5);
+		TestEqual(TEXT("ParseVector array Y"), Out.Y, 2.5);
+		TestEqual(TEXT("ParseVector array Z"), Out.Z, 3.5);
+	}
+
+	// Test case: valid object {x, y, z}
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("x"), 10.0);
+		Obj->SetNumberField(TEXT("y"), 20.0);
+		Obj->SetNumberField(TEXT("z"), 30.0);
+		Params->SetObjectField(TEXT("vec_obj"), Obj);
+
+		FVector Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseVector(Params, TEXT("vec_obj"), Out);
+		TestTrue(TEXT("ParseVector object succeeds"), bResult);
+		TestEqual(TEXT("ParseVector object X"), Out.X, 10.0);
+		TestEqual(TEXT("ParseVector object Y"), Out.Y, 20.0);
+		TestEqual(TEXT("ParseVector object Z"), Out.Z, 30.0);
+	}
+
+	// Test case: short array
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Add(MakeShared<FJsonValueNumber>(1.0));
+		Params->SetArrayField(TEXT("short_arr"), Arr);
+
+		FVector Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseVector(Params, TEXT("short_arr"), Out);
+		TestFalse(TEXT("ParseVector short array fails"), bResult);
+	}
+
+	// Test case: missing key
+	{
+		FVector Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseVector(Params, TEXT("missing_key"), Out);
+		TestFalse(TEXT("ParseVector missing key fails"), bResult);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParseRotatorTest,
+	"Monolith.Core.ParamUtils.ParseRotator",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParseRotatorTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+	// Test case: valid array [pitch, yaw, roll]
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Add(MakeShared<FJsonValueNumber>(90.0));
+		Arr.Add(MakeShared<FJsonValueNumber>(180.0));
+		Arr.Add(MakeShared<FJsonValueNumber>(270.0));
+		Params->SetArrayField(TEXT("rot_arr"), Arr);
+
+		FRotator Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseRotator(Params, TEXT("rot_arr"), Out);
+		TestTrue(TEXT("ParseRotator array succeeds"), bResult);
+		TestEqual(TEXT("ParseRotator array Pitch"), Out.Pitch, 90.0);
+		TestEqual(TEXT("ParseRotator array Yaw"), Out.Yaw, 180.0);
+		TestEqual(TEXT("ParseRotator array Roll"), Out.Roll, 270.0);
+	}
+
+	// Test case: valid object {pitch, yaw, roll}
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("pitch"), 10.0);
+		Obj->SetNumberField(TEXT("yaw"), 20.0);
+		Obj->SetNumberField(TEXT("roll"), 30.0);
+		Params->SetObjectField(TEXT("rot_obj"), Obj);
+
+		FRotator Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseRotator(Params, TEXT("rot_obj"), Out);
+		TestTrue(TEXT("ParseRotator object succeeds"), bResult);
+		TestEqual(TEXT("ParseRotator object Pitch"), Out.Pitch, 10.0);
+		TestEqual(TEXT("ParseRotator object Yaw"), Out.Yaw, 20.0);
+		TestEqual(TEXT("ParseRotator object Roll"), Out.Roll, 30.0);
+	}
+
+	// Test case: short array
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Add(MakeShared<FJsonValueNumber>(1.0));
+		Params->SetArrayField(TEXT("short_arr"), Arr);
+
+		FRotator Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseRotator(Params, TEXT("short_arr"), Out);
+		TestFalse(TEXT("ParseRotator short array fails"), bResult);
+	}
+
+	// Test case: missing key
+	{
+		FRotator Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseRotator(Params, TEXT("missing_key"), Out);
+		TestFalse(TEXT("ParseRotator missing key fails"), bResult);
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
