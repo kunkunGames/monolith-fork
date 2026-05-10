@@ -48,8 +48,8 @@ bool FStateMachineIndexer::IndexAsset(const FAssetData& AssetData, UObject* Load
 
 				FIndexedNode Node;
 				Node.AssetId = AssetId;
-				Node.NodeType = NodeObj->GetStringField(TEXT("node_type"));
-				Node.NodeName = NodeObj->GetStringField(TEXT("name"));
+				NodeObj->TryGetStringField(TEXT("node_type"), Node.NodeType);
+				NodeObj->TryGetStringField(TEXT("name"), Node.NodeName);
 
 				double PosX = 0.0, PosY = 0.0;
 				if (NodeObj->TryGetNumberField(TEXT("position_x"), PosX)) Node.PosX = (int32)PosX;

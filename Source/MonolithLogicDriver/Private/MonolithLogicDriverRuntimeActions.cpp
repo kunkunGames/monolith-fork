@@ -28,7 +28,8 @@ namespace
 	{
 		FPIELookupResult Result;
 
-		FString ActorName = Params->GetStringField(TEXT("actor"));
+		FString ActorName;
+		Params->TryGetStringField(TEXT("actor"), ActorName);
 		if (ActorName.IsEmpty())
 		{
 			Result.Error = FMonolithActionResult::Error(TEXT("Missing required param 'actor'"));
@@ -326,7 +327,8 @@ FMonolithActionResult FMonolithLogicDriverRuntimeActions::HandleRuntimeSwitchSta
 	FPIELookupResult Lookup = FindSMInstanceInPIE(Params);
 	if (!Lookup.bSuccess) return Lookup.Error;
 
-	FString StateGuidStr = Params->GetStringField(TEXT("state_guid"));
+	FString StateGuidStr;
+	Params->TryGetStringField(TEXT("state_guid"), StateGuidStr);
 	if (StateGuidStr.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'state_guid'"));
 
 	FGuid StateGuid;
