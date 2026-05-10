@@ -325,8 +325,9 @@ TOptional<FMonolithSourceFile> FMonolithSourceDatabase::FindFileBySuffix(const F
 	if (!Database || !Database->IsValid()) return {};
 
 	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT id, path, module_id, file_type, line_count FROM files WHERE path LIKE ? LIMIT 1;"));
-	Stmt.SetBindingValueByIndex(1, FString::Printf(TEXT("%%%s"), *Suffix));
+	FString EscapedSuffix = Suffix.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
+	Stmt.Create(*Database, TEXT("SELECT id, path, module_id, file_type, line_count FROM files WHERE path LIKE ? ESCAPE '\\' LIMIT 1;"));
+	Stmt.SetBindingValueByIndex(1, FString::Printf(TEXT("%%%s"), *EscapedSuffix));
 
 	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
@@ -640,7 +641,7 @@ TArray<FMonolithSourceChunk> FMonolithSourceDatabase::SearchSourceFTSFiltered(co
 	}
 	if (!PathFilter.IsEmpty())
 	{
-		Conditions.Add(TEXT("fi.path LIKE ?"));
+		Conditions.Add(TEXT("fi.path LIKE ? ESCAPE '\\'"));
 	}
 
 	SQL += TEXT("WHERE ") + FString::Join(Conditions, TEXT(" AND "));
@@ -661,7 +662,8 @@ TArray<FMonolithSourceChunk> FMonolithSourceDatabase::SearchSourceFTSFiltered(co
 	}
 	if (!PathFilter.IsEmpty())
 	{
-		Stmt.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s%%"), *PathFilter));
+		FString EscapedPathFilter = PathFilter.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
+		Stmt.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s%%"), *EscapedPathFilter));
 	}
 	Stmt.SetBindingValueByIndex(BindIdx++, static_cast<int64>(SafeLimit));
 
@@ -707,7 +709,7 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::SearchSymbolsFTSFiltered(
 	}
 	if (!PathFilter.IsEmpty())
 	{
-		Conditions.Add(TEXT("fi.path LIKE ?"));
+		Conditions.Add(TEXT("fi.path LIKE ? ESCAPE '\\'"));
 	}
 
 	SQL += TEXT("WHERE ") + FString::Join(Conditions, TEXT(" AND "));
@@ -728,7 +730,8 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::SearchSymbolsFTSFiltered(
 	}
 	if (!PathFilter.IsEmpty())
 	{
-		Stmt.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s%%"), *PathFilter));
+		FString EscapedPathFilter = PathFilter.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
+		Stmt.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s%%"), *EscapedPathFilter));
 	}
 	Stmt.SetBindingValueByIndex(BindIdx++, static_cast<int64>(SafeLimit));
 

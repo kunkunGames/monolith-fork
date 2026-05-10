@@ -97,7 +97,7 @@ TSharedPtr<FJsonObject> FMonolithMeshCatalog::SearchBySize(
 
 	if (!Category.IsEmpty())
 	{
-		SQL += TEXT(" AND category LIKE ?");
+		SQL += TEXT(" AND category LIKE ? ESCAPE '\\'");
 	}
 
 	if (!ExcludeSizeClass.IsEmpty())
@@ -121,7 +121,8 @@ TSharedPtr<FJsonObject> FMonolithMeshCatalog::SearchBySize(
 
 	if (!Category.IsEmpty())
 	{
-		Stmt.SetBindingValueByIndex(BindIdx++, Category + TEXT("%"));
+		FString EscapedCategory = Category.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
+		Stmt.SetBindingValueByIndex(BindIdx++, EscapedCategory + TEXT("%"));
 	}
 
 	if (!ExcludeSizeClass.IsEmpty())

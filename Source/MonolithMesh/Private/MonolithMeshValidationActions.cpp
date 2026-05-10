@@ -454,11 +454,19 @@ FMonolithActionResult FMonolithMeshTemplateActions::BatchValidate(const TSharedP
 
 		if (!PathFilter.IsEmpty())
 		{
-			SQL += FString::Printf(TEXT(" AND asset_path LIKE '%%%s%%'"), *PathFilter);
+			SQL += TEXT(" AND asset_path LIKE ? ESCAPE '\\'");
 		}
 
 		FSQLitePreparedStatement Stmt;
 		Stmt.Create(*DB, *SQL);
+
+		if (!PathFilter.IsEmpty())
+		{
+			FString EscapedPathFilter = PathFilter.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
+			// In this specific query, the only parameter is the path filter if present, so index 1 is correct.
+			// The base query is "SELECT ... FROM mesh_catalog WHERE 1=1" which has no parameters.
+			Stmt.SetBindingValueByIndex(1, FString::Printf(TEXT("%%%s%%"), *EscapedPathFilter));
+		}
 
 		while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 		{
