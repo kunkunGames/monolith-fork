@@ -93,7 +93,8 @@
 		},
 		{
 			"Name": "CommonUI",
-			"Enabled": true
+			"Enabled": true,
+			"Optional": true
 		},
 		{
 			"Name": "SMSystem",
