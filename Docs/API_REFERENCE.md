@@ -19,9 +19,9 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [monolith](#monolith) | 4 | Core server tools (discover, status, update, reindex) |
 | [blueprint](#blueprint) | 89 | Blueprint read/write, variable/component/graph CRUD, node ops, compile, auto-layout, spawn actors |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
-| [animation](#animation) | 118 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
+| [animation](#animation) | 119 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
-| [editor](#editor) | 24 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run |
+| [editor](#editor) | 26 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run |
 | [config](#config) | 6 | INI config inspection and search |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
@@ -202,7 +202,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithMaterial.md` for full graph_spec s
 
 ## animation
 
-Animation curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig. **118 actions** total — 96 baseline + 13 PoseSearch + 5 ABP write + 3 Control Rig write + 1 layout.
+Animation curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig. **119 actions** total — 96 baseline + 13 PoseSearch + 5 ABP write + 3 Control Rig write + 1 layout + 1 sequence action.
 
 > For full param schemas, call `monolith_discover("animation")` at runtime.
 
@@ -263,7 +263,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithNiagara.md`.
 
 ## editor
 
-Live Coding builds, compile output capture, editor log capture, scene capture, texture import, asset deletion, viewport info, GIF capture, **map creation** and **module status** (Phase J F8). **22 actions.**
+Live Coding builds, compile output capture, editor log capture, scene capture, texture import, asset deletion, viewport info, GIF capture, **map creation** and **module status** (Phase J F8). **26 actions.**
 
 ### `editor.trigger_build` / `editor.live_compile`
 

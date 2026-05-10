@@ -21,3 +21,9 @@
 **Learning:** Monolith relies heavily on `Scripts/make_release.ps1` for building and signing its release ZIPs (ensuring `Installed=true` and extracting the SHA256 marker). This requirement was not formally documented in `CONTRIBUTING.md`, leading to manual or incorrect releases.
 **Prevention:** Include a dedicated 'Release Workflow' section in `CONTRIBUTING.md` explicitly detailing version updates, script execution, and the mandatory SHA256 marker inclusion for the auto-updater to function correctly.
 **Avoid:** Missing documentation on the exact commands needed to prepare and verify a release before pushing to GitHub.
+
+## 2026-05-10 - [Version Sync]
+**Release risk:** Stale version numbers and out-of-sync capability counts (e.g. action counts in API_REFERENCE.md and README.md vs live specs) degrade confidence and confuse agents attempting to use discovery.
+**Learning:** Hard-coded versions in multiple files (`API_REFERENCE.md`, `README.md`, all module specs) and action counts across docs require manual sweeping when versions bump.
+**Prevention:** Always grep for specific action count integers in markdown docs as a post-release check to ensure consistency.
+**Avoid:** Avoid leaving README.md counts (like UI, Animation and Editor) decoupled from the detailed counts in the API reference and specs.
