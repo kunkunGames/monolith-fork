@@ -493,8 +493,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 	ToolsArray.Reserve(Namespaces.Num() + Registry.GetNamespaceActionCount(TEXT("monolith")));
 	for (const FString& Namespace : Namespaces)
 	{
-		TArray<FString> ActionNames = Registry.GetActionNames(Namespace);
-		if (ActionNames.Num() == 0) continue;
+		if (Registry.GetNamespaceActionCount(Namespace) == 0) continue;
 
 		// Build the tool entry for this namespace
 		// Format: "namespace_query" with action as a parameter
@@ -528,6 +527,8 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 		}
 		else
 		{
+			TArray<FString> ActionNames = Registry.GetActionNames(Namespace);
+
 			// Domain tools use the dispatch pattern: namespace_query (underscore, not dot)
 			// Dots in tool names break Claude Code's mcp__server__tool mapping.
 			FString ToolName = FString::Printf(TEXT("%s_query"), *Namespace);
