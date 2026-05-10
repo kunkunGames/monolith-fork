@@ -155,7 +155,9 @@ Wraps `USkeleton::CompatibleSkeletons` — the canonical UE5 mechanism that lets
 | `set_database_sequence_properties` | Set per-sequence properties (looping, mirror option, sample range) |
 | `add_schema_channel` | Add a channel to a PoseSearch schema |
 | `remove_schema_channel` | Remove a channel from a PoseSearch schema |
-| (3 additional PoseSearch actions registered — see `MonolithPoseSearchActions.cpp` for the full list; this section is approximate while the per-action audit catches up) |
+| `set_channel_weight` | Set the weight on a PoseSearch schema channel by index |
+| `rebuild_pose_search_index` | Trigger async rebuild of a PoseSearch database search index |
+| `set_database_search_mode` | Configure search algorithm and cost bias settings on a PoseSearch database |
 
 **ABP Write (5) — v0.14.3 PR #34 by @MaxenceEpitech**
 | Action | Description |
