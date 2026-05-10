@@ -242,7 +242,7 @@ Write-Host "Size: ${fileSize}MB" -ForegroundColor Green
 Write-Host "`nVerify: optional deps should be OFF in the binaries." -ForegroundColor Cyan
 Write-Host "  WITH_BLUEPRINT_ASSIST=0, WITH_GBA=0, WITH_COMMONUI=0" -ForegroundColor Cyan
 Write-Host "  WITH_COMBOGRAPH=0, WITH_LOGICDRIVER=0, WITH_METASOUND=0" -ForegroundColor Cyan
-Write-Host "  WITH_GAMEPLAYABILITIES=0, WITH_GAMEPLAYBEHAVIORS=0" -ForegroundColor Cyan
+Write-Host "  WITH_GAMEPLAYABILITIES=0" -ForegroundColor Cyan
 Write-Host "  WITH_MASSENTITY=0, WITH_ZONEGRAPH=0" -ForegroundColor Cyan
 Write-Host "  WITH_STATETREE=0, WITH_SMARTOBJECTS=0   (after F22 lands)" -ForegroundColor Cyan
 Write-Host "  Your next editor build will auto-detect deps normally." -ForegroundColor DarkGray
@@ -273,7 +273,7 @@ Write-Host "`n  [5/5] Post-build hard-link smoke (issue #30 defense)..." -Foregr
 # this list in their own release wrappers.
 $LeakSentinels = @(
     "GeometryScriptingCore", "CommonUI", "CommonInput", "BlueprintAssist",
-    "GameplayBehaviorsModule", "MassEntity", "ZoneGraph",
+    "MassEntity", "ZoneGraph",
     "StateTreeModule", "SmartObjectsModule", "ComboGraphRuntime", "LogicDriver",
     "MetaSoundEngine", "MetaSoundFrontend"
 )

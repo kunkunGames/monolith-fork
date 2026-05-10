@@ -101,11 +101,6 @@
 			"Optional": true
 		},
 		{
-			"Name": "GameplayBehaviors",
-			"Enabled": true,
-			"Optional": true
-		},
-		{
 			"Name": "MassGameplay",
 			"Enabled": true,
 			"Optional": true

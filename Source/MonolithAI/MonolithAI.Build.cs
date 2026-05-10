@@ -177,44 +177,6 @@ public class MonolithAI : ModuleRules
 			PublicDefinitions.Add("WITH_GAMEPLAYABILITIES=0");
 		}
 
-		// --- Conditional: GameplayBehaviors (Experimental) ---
-		bool bHasGameplayBehaviors = false;
-		if (!bReleaseBuild)
-		{
-			if (Directory.Exists(Path.Combine(EnginePluginsDir, "GameplayBehaviors")))
-			{
-				bHasGameplayBehaviors = true;
-			}
-			else
-			{
-				string[] SearchDirs = new string[]
-				{
-					Path.Combine(EnginePluginsDir, "Runtime"),
-					Path.Combine(EnginePluginsDir, "Experimental"),
-					Path.Combine(EnginePluginsDir, "AI")
-				};
-				foreach (string Dir in SearchDirs)
-				{
-					if (Directory.Exists(Dir) &&
-						Directory.GetDirectories(Dir, "GameplayBehaviors*", SearchOption.TopDirectoryOnly).Length > 0)
-					{
-						bHasGameplayBehaviors = true;
-						break;
-					}
-				}
-			}
-		}
-
-		if (bHasGameplayBehaviors)
-		{
-			PrivateDependencyModuleNames.Add("GameplayBehaviorsModule");
-			PublicDefinitions.Add("WITH_GAMEPLAYBEHAVIORS=1");
-		}
-		else
-		{
-			PublicDefinitions.Add("WITH_GAMEPLAYBEHAVIORS=0");
-		}
-
 		// --- Conditional: MassEntity (Experimental) ---
 		bool bHasMassEntity = false;
 		if (!bReleaseBuild)
