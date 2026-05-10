@@ -38,12 +38,13 @@ FMonolithActionResult FProjectSearchGameplayTagsAction::Execute(const TSharedPtr
 		"FROM tags t "
 		"LEFT JOIN tag_references tr ON t.id = tr.tag_id "
 		"LEFT JOIN assets a ON tr.asset_id = a.id "
-		"WHERE t.tag_name LIKE ? "
+		"WHERE t.tag_name LIKE ? ESCAPE '\\' "
 		"GROUP BY t.id "
 		"ORDER BY t.reference_count DESC, t.tag_name;"
 	));
 
-	FString LikePattern = TEXT("%") + Query + TEXT("%");
+	FString EscapedQuery = Query.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
+	FString LikePattern = TEXT("%") + EscapedQuery + TEXT("%");
 	Stmt.SetBindingValueByIndex(1, LikePattern);
 
 	TArray<TSharedPtr<FJsonValue>> TagsArr;

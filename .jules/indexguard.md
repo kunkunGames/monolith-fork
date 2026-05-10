@@ -11,3 +11,8 @@
 **Query contract:** SQLite `LIKE` queries accepting user-controlled strings (e.g. `PathFilter` or `Category`).
 **Learning:** Raw user inputs mapped directly to `LIKE` queries allow unbounded wildcards (`%` or `_`) which can bypass limits, lead to performance-degrading full-table scans, or unintended matches.
 **Prevention:** Always escape user-provided wildcards (`%`, `_`, and `\`) in C++ using `.Replace()` and append `ESCAPE '\'` to the parameterized `LIKE` query string.
+
+## 2026-05-10 - Harden ProjectSearchGameplayTagsAction LIKE contract
+**Query contract:** Gameplay tag search query substring escaping
+**Learning:** Unescaped user string used in a LIKE substring match can result in unconstrained wildcards altering query performance and matching logic.
+**Prevention:** Always escape SQL wildcards `%`, `_`, and `\` before passing a user string to a parameter bound to a `LIKE` query, and explicitly use `ESCAPE '\'`.
