@@ -111,6 +111,7 @@ namespace
 		if (GraphNode->Decorators.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> DecoratorArr;
+			DecoratorArr.Reserve(GraphNode->Decorators.Num());
 			for (const UBehaviorTreeGraphNode* DecNode : GraphNode->Decorators)
 			{
 				if (!DecNode) continue;
@@ -130,6 +131,7 @@ namespace
 		if (GraphNode->Services.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> ServiceArr;
+			ServiceArr.Reserve(GraphNode->Services.Num());
 			for (const UBehaviorTreeGraphNode* SvcNode : GraphNode->Services)
 			{
 				if (!SvcNode) continue;
@@ -147,6 +149,7 @@ namespace
 
 		// Children — walk output pins to find connected child nodes
 		TArray<TSharedPtr<FJsonValue>> ChildrenArr;
+		ChildrenArr.Reserve(GraphNode->Pins.Num());
 		for (UEdGraphPin* Pin : GraphNode->Pins)
 		{
 			if (Pin->Direction != EGPD_Output) continue;
@@ -1338,6 +1341,7 @@ namespace
 		if (GraphNode->Decorators.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> DecArr;
+			DecArr.Reserve(GraphNode->Decorators.Num());
 			for (const UBehaviorTreeGraphNode* DecNode : GraphNode->Decorators)
 			{
 				if (!DecNode) continue;
@@ -1360,6 +1364,7 @@ namespace
 		if (GraphNode->Services.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> SvcArr;
+			SvcArr.Reserve(GraphNode->Services.Num());
 			for (const UBehaviorTreeGraphNode* SvcNode : GraphNode->Services)
 			{
 				if (!SvcNode) continue;
@@ -1383,6 +1388,7 @@ namespace
 		if (Children.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> ChildArr;
+			ChildArr.Reserve(Children.Num());
 			for (UBehaviorTreeGraphNode* Child : Children)
 			{
 				TSharedPtr<FJsonObject> ChildSpec = ExportNodeToSpec(Child);
@@ -5189,6 +5195,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleGetBTGraph(const TSh
 
 		// Children: walk output-pin LinkedTo.
 		TArray<TSharedPtr<FJsonValue>> ChildrenArr;
+		ChildrenArr.Reserve(GraphNode->Pins.Num());
 		for (UEdGraphPin* Pin : GraphNode->Pins)
 		{
 			if (Pin->Direction != EGPD_Output) continue;

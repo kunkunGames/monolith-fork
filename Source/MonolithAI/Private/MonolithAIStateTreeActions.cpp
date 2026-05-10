@@ -135,6 +135,7 @@ namespace
 
 		// Tasks
 		TArray<TSharedPtr<FJsonValue>> TaskArr;
+		TaskArr.Reserve(State->Tasks.Num());
 		for (int32 i = 0; i < State->Tasks.Num(); ++i)
 		{
 			const FStateTreeEditorNode& TaskNode = State->Tasks[i];
@@ -154,6 +155,7 @@ namespace
 
 		// Enter conditions
 		TArray<TSharedPtr<FJsonValue>> CondArr;
+		CondArr.Reserve(State->EnterConditions.Num());
 		for (int32 i = 0; i < State->EnterConditions.Num(); ++i)
 		{
 			const FStateTreeEditorNode& CondNode = State->EnterConditions[i];
@@ -173,6 +175,7 @@ namespace
 
 		// Transitions
 		TArray<TSharedPtr<FJsonValue>> TransArr;
+		TransArr.Reserve(State->Transitions.Num());
 		for (int32 i = 0; i < State->Transitions.Num(); ++i)
 		{
 			const FStateTreeTransition& Trans = State->Transitions[i];
@@ -204,6 +207,7 @@ namespace
 
 		// Considerations
 		TArray<TSharedPtr<FJsonValue>> ConsArr;
+		ConsArr.Reserve(State->Considerations.Num());
 		for (int32 i = 0; i < State->Considerations.Num(); ++i)
 		{
 			const FStateTreeEditorNode& ConsNode = State->Considerations[i];
@@ -223,6 +227,7 @@ namespace
 
 		// Children (recursive)
 		TArray<TSharedPtr<FJsonValue>> ChildArr;
+		ChildArr.Reserve(State->Children.Num());
 		for (const UStateTreeState* Child : State->Children)
 		{
 			TSharedPtr<FJsonObject> ChildJson = SerializeState(Child);
@@ -858,6 +863,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleGetStateTree(const TSha
 
 	// SubTrees (root states)
 	TArray<TSharedPtr<FJsonValue>> SubTreeArr;
+	SubTreeArr.Reserve(EditorData->SubTrees.Num());
 	for (const UStateTreeState* SubTree : EditorData->SubTrees)
 	{
 		TSharedPtr<FJsonObject> SubTreeJson = SerializeState(SubTree);
@@ -3161,6 +3167,7 @@ namespace
 
 		// Tasks
 		TArray<TSharedPtr<FJsonValue>> TaskArr;
+		TaskArr.Reserve(State->Tasks.Num());
 		for (const FStateTreeEditorNode& TaskNode : State->Tasks)
 		{
 			TSharedPtr<FJsonObject> TaskObj = MakeShared<FJsonObject>();
@@ -3200,6 +3207,7 @@ namespace
 
 		// Transitions
 		TArray<TSharedPtr<FJsonValue>> TransArr;
+		TransArr.Reserve(State->Transitions.Num());
 		for (const FStateTreeTransition& Trans : State->Transitions)
 		{
 			TSharedPtr<FJsonObject> TransObj = MakeShared<FJsonObject>();
@@ -3240,6 +3248,7 @@ namespace
 
 		// Enter conditions
 		TArray<TSharedPtr<FJsonValue>> CondArr;
+		CondArr.Reserve(State->EnterConditions.Num());
 		for (const FStateTreeEditorNode& CondNode : State->EnterConditions)
 		{
 			TSharedPtr<FJsonObject> CondObj = MakeShared<FJsonObject>();
@@ -3256,6 +3265,7 @@ namespace
 
 		// Children
 		TArray<TSharedPtr<FJsonValue>> ChildArr;
+		ChildArr.Reserve(State->Children.Num());
 		for (const UStateTreeState* Child : State->Children)
 		{
 			TSharedPtr<FJsonObject> ChildSpec = ExportStateSpec(Child);
@@ -3307,6 +3317,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleExportSTSpec(const TSha
 		Root->SetStringField(TEXT("type"), TEXT("Group"));
 
 		TArray<TSharedPtr<FJsonValue>> SubTreeArr;
+		SubTreeArr.Reserve(EditorData->SubTrees.Num());
 		for (const UStateTreeState* SubTree : EditorData->SubTrees)
 		{
 			TSharedPtr<FJsonObject> SubSpec = ExportStateSpec(SubTree);
