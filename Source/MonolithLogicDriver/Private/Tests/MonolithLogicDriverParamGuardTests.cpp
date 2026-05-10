@@ -244,4 +244,101 @@ bool FMonolithParamGuardLogicDriverSetStateTagsRejectsMalformedParamsTest::RunTe
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverBuildSMFromSpecRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.BuildSMFromSpecRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverBuildSMFromSpecRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	auto ExecuteAction = [](const TSharedPtr<FJsonObject>& Params) -> FMonolithActionResult
+	{
+		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+		if (!Registry.HasAction(TEXT("logicdriver"), TEXT("build_sm_from_spec")))
+		{
+			FMonolithLogicDriverSpecActions::RegisterActions(Registry);
+		}
+		return Registry.ExecuteAction(TEXT("logicdriver"), TEXT("build_sm_from_spec"), Params);
+	};
+
+	// Helper to create a valid base spec
+	auto CreateBaseSpec = []() -> TSharedPtr<FJsonObject> {
+		TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
+		return Spec;
+	};
+
+	auto CreateBaseParams = [&]() -> TSharedPtr<FJsonObject> {
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("save_path"), TEXT("/Game/Test/SM_SpecTest"));
+		return Params;
+	};
+
+		// Test 1: states is malformed
+	{
+		TSharedPtr<FJsonObject> Params = CreateBaseParams();
+		TSharedPtr<FJsonObject> Spec = CreateBaseSpec();
+		Spec->SetStringField(TEXT("states"), TEXT("NotAnArray"));
+		Params->SetObjectField(TEXT("spec"), Spec);
+
+		FMonolithActionResult Result = ExecuteAction(Params);
+		TestTrue(TEXT("Malformed states array should return error"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention states"), Result.ErrorMessage.Contains(TEXT("states")));
+	}
+
+	// Test 2: conduits is malformed
+	{
+		TSharedPtr<FJsonObject> Params = CreateBaseParams();
+		TSharedPtr<FJsonObject> Spec = CreateBaseSpec();
+		Spec->SetNumberField(TEXT("conduits"), 123);
+		Params->SetObjectField(TEXT("spec"), Spec);
+
+		FMonolithActionResult Result = ExecuteAction(Params);
+		TestTrue(TEXT("Malformed conduits array should return error"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention conduits"), Result.ErrorMessage.Contains(TEXT("conduits")));
+	}
+
+	// Test 3: transitions is malformed
+	{
+		TSharedPtr<FJsonObject> Params = CreateBaseParams();
+		TSharedPtr<FJsonObject> Spec = CreateBaseSpec();
+		Spec->SetStringField(TEXT("transitions"), TEXT("NotAnArray"));
+		Params->SetObjectField(TEXT("spec"), Spec);
+
+		FMonolithActionResult Result = ExecuteAction(Params);
+		TestTrue(TEXT("Malformed transitions array should return error"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention transitions"), Result.ErrorMessage.Contains(TEXT("transitions")));
+	}
+
+	// Test 4: states with malformed is_initial/is_end
+	{
+		TSharedPtr<FJsonObject> Params = CreateBaseParams();
+		TSharedPtr<FJsonObject> Spec = CreateBaseSpec();
+
+		TArray<TSharedPtr<FJsonValue>> States;
+		TSharedPtr<FJsonObject> State = MakeShared<FJsonObject>();
+		State->SetStringField(TEXT("name"), TEXT("StateA"));
+		State->SetStringField(TEXT("is_initial"), TEXT("true")); // should be bool
+		State->SetNumberField(TEXT("is_end"), 1); // should be bool
+		States.Add(MakeShared<FJsonValueObject>(State));
+
+		Spec->SetArrayField(TEXT("states"), States);
+		Params->SetObjectField(TEXT("spec"), Spec);
+
+		FMonolithActionResult Result = ExecuteAction(Params);
+		TestTrue(TEXT("Malformed is_initial/is_end bools should return error"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention is_initial or is_end"), Result.ErrorMessage.Contains(TEXT("is_initial")) || Result.ErrorMessage.Contains(TEXT("is_end")));
+	}
+
+	// Test 5: nested_sms is malformed
+	{
+		TSharedPtr<FJsonObject> Params = CreateBaseParams();
+		TSharedPtr<FJsonObject> Spec = CreateBaseSpec();
+		Spec->SetNumberField(TEXT("nested_sms"), 456);
+		Params->SetObjectField(TEXT("spec"), Spec);
+
+		FMonolithActionResult Result = ExecuteAction(Params);
+		TestTrue(TEXT("Malformed nested_sms array should return error"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention nested_sms"), Result.ErrorMessage.Contains(TEXT("nested_sms")));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
