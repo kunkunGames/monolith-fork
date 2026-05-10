@@ -15,3 +15,9 @@
 **Learning:** Monolith provides macOS-specific binary releases (`-macOS.zip`) which should only be downloaded on Mac, and Windows should ignore them.
 **Prevention:** Check `PLATFORM_MAC` and conditionally look for the `*-macOS.zip` file and `Monolith-macOS-SHA256` hash in `MonolithUpdateSubsystem.cpp`.
 **Avoid:** Trusting `.EndsWith(".zip")` blindly when multiple platforms exist.
+
+## 2026-05-10 - Add missing release workflow to CONTRIBUTING.md
+**Release risk:** Incomplete documentation on the release process can lead to forgotten steps, specifically around generating and adding the `Monolith-SHA256:` marker into the GitHub release notes body. Missing this causes auto-updater failures.
+**Learning:** Monolith relies heavily on `Scripts/make_release.ps1` for building and signing its release ZIPs (ensuring `Installed=true` and extracting the SHA256 marker). This requirement was not formally documented in `CONTRIBUTING.md`, leading to manual or incorrect releases.
+**Prevention:** Include a dedicated 'Release Workflow' section in `CONTRIBUTING.md` explicitly detailing version updates, script execution, and the mandatory SHA256 marker inclusion for the auto-updater to function correctly.
+**Avoid:** Missing documentation on the exact commands needed to prepare and verify a release before pushing to GitHub.

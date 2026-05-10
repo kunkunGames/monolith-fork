@@ -293,6 +293,19 @@ Then use Claude Code or any MCP-compatible client to interact with the tools.
 
 ---
 
+## Release Workflow
+
+When preparing a new release of Monolith:
+
+1. **Update versions:** Update the version number in `Monolith.uplugin`, `Source/MonolithCore/Public/MonolithCoreModule.h`, `CHANGELOG.md`, `README.md`, `Docs/API_REFERENCE.md`, and `Docs/SPEC_CORE.md`.
+2. **Action counts:** Verify that action counts in `README.md` and `Docs/API_REFERENCE.md` match `monolith_discover()` output.
+3. **Clean working tree:** Ensure your git working tree is clean (`git status`). The release script refuses to run with uncommitted changes unless forced.
+4. **Build release ZIP:** Run the release script from PowerShell:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File Scripts/make_release.ps1 -Version "X.Y.Z"
+   ```
+5. **Publish:** Create a GitHub Release with the new tag. **Crucial:** You must copy the exact `Monolith-SHA256: <hash>` output from the release script and paste it into the release notes body. The auto-updater will refuse to install the update without this exact marker.
+
 ## Architecture Notes
 
 - **Discovery/dispatch pattern** — Each domain exposes one `{namespace}_query(action, params)` MCP tool. The registry dispatches to the correct handler. This keeps AI context lean (15 tools instead of 815 individual endpoints).
