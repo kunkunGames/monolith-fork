@@ -189,8 +189,10 @@ void FMonolithAudioQueryActions::RegisterActions(FMonolithToolRegistry& Registry
 
 FMonolithActionResult FMonolithAudioQueryActions::ListAudioAssets(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString TypeStr = Params->GetStringField(TEXT("type"));
-	const FString PathFilter = Params->HasField(TEXT("path_filter")) ? Params->GetStringField(TEXT("path_filter")) : TEXT("");
+	FString TypeStr;
+	Params->TryGetStringField(TEXT("type"), TypeStr);
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 	int32 Limit = 100;
 	if (Params->HasField(TEXT("limit")))
 	{
@@ -277,8 +279,10 @@ FMonolithActionResult FMonolithAudioQueryActions::ListAudioAssets(const TSharedP
 
 FMonolithActionResult FMonolithAudioQueryActions::SearchAudioAssets(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString Query = Params->GetStringField(TEXT("query"));
-	const FString TypeStr = Params->HasField(TEXT("type")) ? Params->GetStringField(TEXT("type")) : TEXT("All");
+	FString Query;
+	Params->TryGetStringField(TEXT("query"), Query);
+	FString TypeStr = TEXT("All");
+	Params->TryGetStringField(TEXT("type"), TypeStr);
 	int32 Limit = 50;
 	if (Params->HasField(TEXT("limit")))
 	{
@@ -368,7 +372,8 @@ FMonolithActionResult FMonolithAudioQueryActions::SearchAudioAssets(const TShare
 
 FMonolithActionResult FMonolithAudioQueryActions::GetSoundWaveInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 
 	USoundWave* SoundWave = Cast<USoundWave>(StaticLoadObject(USoundWave::StaticClass(), nullptr, *AssetPath));
 	if (!SoundWave)
@@ -493,7 +498,8 @@ TSharedPtr<FJsonObject> FMonolithAudioQueryActions::BuildSoundClassTree(USoundCl
 
 FMonolithActionResult FMonolithAudioQueryActions::GetSoundClassHierarchy(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString RootClassPath = Params->HasField(TEXT("root_class")) ? Params->GetStringField(TEXT("root_class")) : TEXT("");
+	FString RootClassPath;
+	Params->TryGetStringField(TEXT("root_class"), RootClassPath);
 
 	TSet<USoundClass*> Visited;
 
@@ -603,7 +609,8 @@ TSharedPtr<FJsonObject> FMonolithAudioQueryActions::BuildSubmixTree(USoundSubmix
 
 FMonolithActionResult FMonolithAudioQueryActions::GetSubmixHierarchy(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString RootSubmixPath = Params->HasField(TEXT("root_submix")) ? Params->GetStringField(TEXT("root_submix")) : TEXT("");
+	FString RootSubmixPath;
+	Params->TryGetStringField(TEXT("root_submix"), RootSubmixPath);
 
 	TSet<USoundSubmixBase*> Visited;
 
@@ -666,7 +673,8 @@ FMonolithActionResult FMonolithAudioQueryActions::GetSubmixHierarchy(const TShar
 
 FMonolithActionResult FMonolithAudioQueryActions::FindAudioReferences(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 
@@ -722,8 +730,10 @@ FMonolithActionResult FMonolithAudioQueryActions::FindAudioReferences(const TSha
 
 FMonolithActionResult FMonolithAudioQueryActions::FindUnusedAudio(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString TypeStr = Params->HasField(TEXT("type")) ? Params->GetStringField(TEXT("type")) : TEXT("All");
-	const FString PathFilter = Params->HasField(TEXT("path_filter")) ? Params->GetStringField(TEXT("path_filter")) : TEXT("");
+	FString TypeStr = TEXT("All");
+	Params->TryGetStringField(TEXT("type"), TypeStr);
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 	int32 Limit = 100;
 	if (Params->HasField(TEXT("limit")))
 	{

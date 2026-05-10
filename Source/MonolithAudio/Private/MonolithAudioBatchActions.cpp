@@ -284,7 +284,8 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchAssignSoundClass(const TS
 		return FMonolithActionResult::Error(ParseError);
 	}
 
-	FString SoundClassPath = Params->GetStringField(TEXT("sound_class"));
+	FString SoundClassPath;
+	Params->TryGetStringField(TEXT("sound_class"), SoundClassPath);
 	if (SoundClassPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required field 'sound_class'"));
@@ -333,7 +334,8 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchAssignAttenuation(const T
 		return FMonolithActionResult::Error(ParseError);
 	}
 
-	FString AttenuationPath = Params->GetStringField(TEXT("attenuation"));
+	FString AttenuationPath;
+	Params->TryGetStringField(TEXT("attenuation"), AttenuationPath);
 	if (AttenuationPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required field 'attenuation'"));
@@ -399,7 +401,8 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetCompression(const TSha
 	ESoundAssetCompressionType CompressionType = ESoundAssetCompressionType::BinkAudio;
 	if (bHasType)
 	{
-		FString TypeStr = Params->GetStringField(TEXT("type"));
+		FString TypeStr;
+	Params->TryGetStringField(TEXT("type"), TypeStr);
 		FString TypeError;
 		if (!ParseCompressionType(TypeStr, CompressionType, TypeError))
 		{
@@ -457,7 +460,8 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetSubmix(const TSharedPt
 		return FMonolithActionResult::Error(ParseError);
 	}
 
-	FString SubmixPath = Params->GetStringField(TEXT("submix"));
+	FString SubmixPath;
+	Params->TryGetStringField(TEXT("submix"), SubmixPath);
 	if (SubmixPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required field 'submix'"));
@@ -506,7 +510,8 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetConcurrency(const TSha
 		return FMonolithActionResult::Error(ParseError);
 	}
 
-	FString ConcurrencyPath = Params->GetStringField(TEXT("concurrency"));
+	FString ConcurrencyPath;
+	Params->TryGetStringField(TEXT("concurrency"), ConcurrencyPath);
 	if (ConcurrencyPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required field 'concurrency'"));
@@ -598,7 +603,8 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetVirtualization(const T
 		return FMonolithActionResult::Error(ParseError);
 	}
 
-	FString ModeStr = Params->GetStringField(TEXT("mode"));
+	FString ModeStr;
+	Params->TryGetStringField(TEXT("mode"), ModeStr);
 	if (ModeStr.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required field 'mode'"));
@@ -649,10 +655,14 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchRenameAudio(const TShared
 		return FMonolithActionResult::Error(ParseError);
 	}
 
-	FString Prefix = Params->GetStringField(TEXT("prefix"));
-	FString Suffix = Params->GetStringField(TEXT("suffix"));
-	FString Find = Params->GetStringField(TEXT("find"));
-	FString Replace = Params->GetStringField(TEXT("replace"));
+	FString Prefix;
+	Params->TryGetStringField(TEXT("prefix"), Prefix);
+	FString Suffix;
+	Params->TryGetStringField(TEXT("suffix"), Suffix);
+	FString Find;
+	Params->TryGetStringField(TEXT("find"), Find);
+	FString Replace;
+	Params->TryGetStringField(TEXT("replace"), Replace);
 
 	if (Prefix.IsEmpty() && Suffix.IsEmpty() && Find.IsEmpty())
 	{
@@ -752,7 +762,8 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetSoundWaveProperties(co
 	if (!Params->TryGetObjectField(TEXT("properties"), PropertiesPtr) || !PropertiesPtr || !(*PropertiesPtr).IsValid())
 	{
 		// Claude Code may serialize the object as a string
-		FString PropsStr = Params->GetStringField(TEXT("properties"));
+		FString PropsStr;
+	Params->TryGetStringField(TEXT("properties"), PropsStr);
 		if (!PropsStr.IsEmpty())
 		{
 			TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(PropsStr);
@@ -944,7 +955,8 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 		}
 		else
 		{
-			FString TemplateStr = Params->GetStringField(TEXT("template"));
+			FString TemplateStr;
+	Params->TryGetStringField(TEXT("template"), TemplateStr);
 			if (!TemplateStr.IsEmpty())
 			{
 				TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(TemplateStr);
@@ -964,7 +976,8 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	USoundClass* SoundClass = nullptr;
 	if (Template->HasField(TEXT("sound_class")))
 	{
-		FString ClassPath = Template->GetStringField(TEXT("sound_class"));
+		FString ClassPath;
+		Template->TryGetStringField(TEXT("sound_class"), ClassPath);
 		SoundClass = LoadAudioAsset<USoundClass>(ClassPath);
 		if (!SoundClass)
 		{
@@ -976,7 +989,8 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	USoundAttenuation* Attenuation = nullptr;
 	if (Template->HasField(TEXT("attenuation")))
 	{
-		FString AttenPath = Template->GetStringField(TEXT("attenuation"));
+		FString AttenPath;
+		Template->TryGetStringField(TEXT("attenuation"), AttenPath);
 		Attenuation = LoadAudioAsset<USoundAttenuation>(AttenPath);
 		if (!Attenuation)
 		{
@@ -1002,7 +1016,8 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 		else
 		{
 			// Might be a string-encoded object
-			FString CompStr = Template->GetStringField(TEXT("compression"));
+			FString CompStr;
+		Template->TryGetStringField(TEXT("compression"), CompStr);
 			TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(CompStr);
 			FJsonSerializer::Deserialize(Reader, CompObj);
 		}
@@ -1016,7 +1031,8 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 			}
 			if (CompObj->HasField(TEXT("type")))
 			{
-				FString TypeStr = CompObj->GetStringField(TEXT("type"));
+				FString TypeStr;
+				CompObj->TryGetStringField(TEXT("type"), TypeStr);
 				FString TypeError;
 				if (!ParseCompressionType(TypeStr, CompressionType, TypeError))
 				{
@@ -1049,7 +1065,8 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	USoundSubmix* Submix = nullptr;
 	if (Template->HasField(TEXT("submix")))
 	{
-		FString SubmixPath = Template->GetStringField(TEXT("submix"));
+		FString SubmixPath;
+		Template->TryGetStringField(TEXT("submix"), SubmixPath);
 		Submix = LoadAudioAsset<USoundSubmix>(SubmixPath);
 		if (!Submix)
 		{
@@ -1061,7 +1078,8 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	USoundConcurrency* Concurrency = nullptr;
 	if (Template->HasField(TEXT("concurrency")))
 	{
-		FString ConcPath = Template->GetStringField(TEXT("concurrency"));
+		FString ConcPath;
+		Template->TryGetStringField(TEXT("concurrency"), ConcPath);
 		Concurrency = LoadAudioAsset<USoundConcurrency>(ConcPath);
 		if (!Concurrency)
 		{
@@ -1081,7 +1099,8 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	EVirtualizationMode VirtMode = EVirtualizationMode::Restart;
 	if (bHasVirtualization)
 	{
-		FString ModeStr = Template->GetStringField(TEXT("virtualization"));
+		FString ModeStr;
+		Template->TryGetStringField(TEXT("virtualization"), ModeStr);
 		FString ModeError;
 		if (!ParseVirtualizationMode(ModeStr, VirtMode, ModeError))
 		{

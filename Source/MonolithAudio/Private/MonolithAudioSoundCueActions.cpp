@@ -777,7 +777,8 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 
 FMonolithActionResult FMonolithAudioSoundCueActions::CreateSoundCue(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -846,7 +847,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateSoundCue(const TShare
 
 FMonolithActionResult FMonolithAudioSoundCueActions::GetSoundCueGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -914,8 +916,10 @@ FMonolithActionResult FMonolithAudioSoundCueActions::GetSoundCueGraph(const TSha
 
 FMonolithActionResult FMonolithAudioSoundCueActions::AddSoundCueNode(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString NodeType = Params->GetStringField(TEXT("node_type"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString NodeType;
+	Params->TryGetStringField(TEXT("node_type"), NodeType);
 	if (AssetPath.IsEmpty() || NodeType.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path and node_type are required"));
@@ -967,8 +971,10 @@ FMonolithActionResult FMonolithAudioSoundCueActions::AddSoundCueNode(const TShar
 
 FMonolithActionResult FMonolithAudioSoundCueActions::RemoveSoundCueNode(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString NodeId = Params->GetStringField(TEXT("node_id"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString NodeId;
+	Params->TryGetStringField(TEXT("node_id"), NodeId);
 	if (AssetPath.IsEmpty() || NodeId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path and node_id are required"));
@@ -1022,9 +1028,12 @@ FMonolithActionResult FMonolithAudioSoundCueActions::RemoveSoundCueNode(const TS
 
 FMonolithActionResult FMonolithAudioSoundCueActions::ConnectSoundCueNodes(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString FromNodeId = Params->GetStringField(TEXT("from_node_id"));
-	const FString ToNodeId = Params->GetStringField(TEXT("to_node_id"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString FromNodeId;
+	Params->TryGetStringField(TEXT("from_node_id"), FromNodeId);
+	FString ToNodeId;
+	Params->TryGetStringField(TEXT("to_node_id"), ToNodeId);
 	if (AssetPath.IsEmpty() || FromNodeId.IsEmpty() || ToNodeId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path, from_node_id, and to_node_id are required"));
@@ -1094,8 +1103,10 @@ FMonolithActionResult FMonolithAudioSoundCueActions::ConnectSoundCueNodes(const 
 
 FMonolithActionResult FMonolithAudioSoundCueActions::SetSoundCueFirstNode(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString NodeId = Params->GetStringField(TEXT("node_id"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString NodeId;
+	Params->TryGetStringField(TEXT("node_id"), NodeId);
 	if (AssetPath.IsEmpty() || NodeId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path and node_id are required"));
@@ -1126,9 +1137,12 @@ FMonolithActionResult FMonolithAudioSoundCueActions::SetSoundCueFirstNode(const 
 
 FMonolithActionResult FMonolithAudioSoundCueActions::SetSoundCueNodeProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString NodeId = Params->GetStringField(TEXT("node_id"));
-	const FString PropName = Params->GetStringField(TEXT("property_name"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString NodeId;
+	Params->TryGetStringField(TEXT("node_id"), NodeId);
+	FString PropName;
+	Params->TryGetStringField(TEXT("property_name"), PropName);
 	if (AssetPath.IsEmpty() || NodeId.IsEmpty() || PropName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path, node_id, and property_name are required"));
@@ -1222,7 +1236,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::ListSoundCueNodeTypes(const
 
 FMonolithActionResult FMonolithAudioSoundCueActions::FindSoundWavesInCue(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -1259,7 +1274,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::FindSoundWavesInCue(const T
 
 FMonolithActionResult FMonolithAudioSoundCueActions::ValidateSoundCue(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -1366,7 +1382,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::ValidateSoundCue(const TSha
 
 FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -1560,7 +1577,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 
 FMonolithActionResult FMonolithAudioSoundCueActions::CreateRandomSoundCue(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -1644,7 +1662,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateRandomSoundCue(const 
 
 FMonolithActionResult FMonolithAudioSoundCueActions::CreateLayeredSoundCue(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -1727,7 +1746,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateLayeredSoundCue(const
 
 FMonolithActionResult FMonolithAudioSoundCueActions::CreateLoopingAmbientCue(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -1834,7 +1854,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateLoopingAmbientCue(con
 
 FMonolithActionResult FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -1951,8 +1972,10 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue(
 
 FMonolithActionResult FMonolithAudioSoundCueActions::CreateSwitchSoundCue(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString ParameterName = Params->GetStringField(TEXT("parameter_name"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString ParameterName;
+	Params->TryGetStringField(TEXT("parameter_name"), ParameterName);
 	if (AssetPath.IsEmpty() || ParameterName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path and parameter_name are required"));
@@ -2022,8 +2045,10 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateSwitchSoundCue(const 
 
 FMonolithActionResult FMonolithAudioSoundCueActions::DuplicateSoundCue(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString SourcePath = Params->GetStringField(TEXT("source_path"));
-	const FString DestPath = Params->GetStringField(TEXT("dest_path"));
+	FString SourcePath;
+	Params->TryGetStringField(TEXT("source_path"), SourcePath);
+	FString DestPath;
+	Params->TryGetStringField(TEXT("dest_path"), DestPath);
 	if (SourcePath.IsEmpty() || DestPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("source_path and dest_path are required"));
@@ -2050,7 +2075,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::DuplicateSoundCue(const TSh
 
 FMonolithActionResult FMonolithAudioSoundCueActions::DeleteAudioAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -2076,7 +2102,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::DeleteAudioAsset(const TSha
 
 FMonolithActionResult FMonolithAudioSoundCueActions::PreviewSound(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -2118,7 +2145,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::StopPreview(const TSharedPt
 
 FMonolithActionResult FMonolithAudioSoundCueActions::GetSoundCueDuration(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));

@@ -38,3 +38,8 @@
 **Learning:** In Monolith JSON extraction, `GetStringField` can throw warnings or fail if the field is missing. Using `TryGetStringField` gracefully handles missing fields and prevents Unreal Engine's internal `LogJson` warning spam.
 **Reuse rule:** Future actions and parameter handlers should use `TryGetStringField` and explicitly check boolean return codes rather than using `GetStringField`.
 **Avoid:** Avoid using `GetStringField` directly on `FJsonObject` instances in Monolith action handlers.
+## 2026-05-10 - Normalize parameter extraction across MonolithAudio
+**Pattern:** Extensive use of `GetStringField` across the MonolithAudio module which warns internally or can fail if JSON keys are absent.
+**Learning:** Monolith C++ handlers benefit from using `TryGetStringField` instead of `GetStringField` to improve stability and avoid warning spam.
+**Reuse rule:** Future tasks should use `TryGetStringField` instead of `GetStringField` unless the parameter extraction is explicitly guaranteed.
+**Avoid:** Writing new handler logic with raw `GetStringField` instead of checking with `TryGetStringField`.
