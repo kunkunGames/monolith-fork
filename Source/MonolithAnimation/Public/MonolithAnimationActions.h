@@ -70,10 +70,13 @@ public:
 	static FMonolithActionResult HandleGetSequenceInfo(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetSequenceNotifies(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetBoneTrackKeys(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleListBoneTracks(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetSequenceCurves(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetMontageInfo(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetBlendSpaceInfo(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetSkeletonSockets(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleGetSkeletonPreviewAttachedAssets(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleGetBoneRefPose(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetAbpInfo(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Wave 2: Notify CRUD (4) ---
@@ -128,6 +131,14 @@ public:
 	// --- Wave 9: ABP Read Enhancements (2) ---
 	static FMonolithActionResult HandleGetAbpVariables(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetAbpLinkedAssets(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Skeleton Compatibility (3) ---
+	// Wraps USkeleton::CompatibleSkeletons — required for playing UE4 mannequin
+	// anims on UE5 SK_Mannequin meshes (and similar legacy/cross-skeleton flows)
+	// without manual run_python boilerplate.
+	static FMonolithActionResult HandleGetCompatibleSkeletons(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleAddCompatibleSkeleton(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleRemoveCompatibleSkeleton(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Wave 10: ABP Write Experimental (3) ---
 	static FMonolithActionResult HandleAddStateToMachine(const TSharedPtr<FJsonObject>& Params);

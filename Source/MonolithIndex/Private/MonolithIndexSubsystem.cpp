@@ -33,6 +33,7 @@
 #include "Indexers/DataAssetIndexer.h"
 #include "Indexers/MeshCatalogIndexer.h"
 #include "Indexers/GASIndexer.h"
+#include "Indexers/MetaSoundIndexer.h"
 
 void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -193,6 +194,10 @@ void UMonolithIndexSubsystem::RegisterDefaultIndexers()
 		RegisterIndexer(MakeShared<FMeshCatalogIndexer>());
 	if (Settings->bIndexGAS)
 		RegisterIndexer(MakeShared<FGASIndexer>());
+#if WITH_METASOUND
+	if (Settings->bIndexMetaSounds)
+		RegisterIndexer(MakeShared<FMetaSoundIndexer>());
+#endif
 
 	UE_LOG(LogMonolithIndex, Log, TEXT("Registered %d indexers"), Indexers.Num());
 }

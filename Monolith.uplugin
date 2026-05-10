@@ -1,9 +1,9 @@
 {
 	"FileVersion": 3,
-	"Version": 1,
-	"VersionName": "0.14.9",
+	"Version": 2,
+	"VersionName": "0.14.10",
 	"FriendlyName": "Monolith",
-	"Description": "Unified Unreal Engine MCP server — 1282 actions across 16 in-tree domains (Blueprint 89, Material 63, Animation 119, Niagara 109, Mesh 194, Editor 34, Config 6, Source 11, Project 7, UI 121, GAS 135, ComboGraph 13, AI 221, LogicDriver 66, Audio 86, LevelSequence 8). +45 experimental town-gen actions register when `bEnableProceduralTownGen=true`. AI-powered asset creation, inspection, and modification.",
+	"Description": "Unified Unreal Engine MCP server — 1302 active actions across 16 in-tree domains (Blueprint 89, Material 63, Animation 125, Niagara 109, Mesh 194 active + 47 experimental, Editor 36, Config 6, Source 11, Project 7, UI 121, GAS 135, ComboGraph 13, AI 221, LogicDriver 66, Audio 98, LevelSequence 8). AI-powered asset creation, inspection, and modification.",
 	"Category": "Editor",
 	"CreatedBy": "tumourlove",
 	"CreatedByURL": "https://github.com/tumourlove/monolith",

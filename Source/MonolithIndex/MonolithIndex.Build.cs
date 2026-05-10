@@ -1,4 +1,5 @@
 using UnrealBuildTool;
+using System.IO;
 
 public class MonolithIndex : ModuleRules
 {
@@ -33,5 +34,31 @@ public class MonolithIndex : ModuleRules
 			"EnhancedInput",
 			"Projects"
 		});
+
+		// --- Conditional: MetaSound (engine-shipped Runtime plugin) ---
+		// 3-location probe (engine Plugins/Runtime, Plugins/Marketplace, top-level Plugins fallback).
+		// Release builds: set MONOLITH_RELEASE_BUILD=1 to force optional deps off (Issue #30 defense).
+		bool bHasMetasound = false;
+		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
+
+		if (!bReleaseBuild)
+		{
+			string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
+			string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
+			bHasMetasound =
+				Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "Metasound"))
+				|| Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace", "Metasound"))
+				|| Directory.GetDirectories(EnginePluginsDir, "Metasound", SearchOption.TopDirectoryOnly).Length > 0;
+		}
+
+		if (bHasMetasound)
+		{
+			PrivateDependencyModuleNames.AddRange(new string[] { "MetasoundEngine", "MetasoundFrontend" });
+			PublicDefinitions.Add("WITH_METASOUND=1");
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_METASOUND=0");
+		}
 	}
 }

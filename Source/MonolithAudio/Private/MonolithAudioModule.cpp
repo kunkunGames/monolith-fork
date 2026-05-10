@@ -9,6 +9,7 @@
 #include "MonolithAudioPerceptionActions.h"
 #if WITH_METASOUND
 #include "MonolithAudioMetaSoundActions.h"
+#include "MonolithAudioMetaSoundIntrospectionActions.h"
 #endif
 
 void FMonolithAudioModule::StartupModule()
@@ -29,6 +30,7 @@ void FMonolithAudioModule::StartupModule()
 	FMonolithAudioPerceptionActions::RegisterActions(Registry);
 #if WITH_METASOUND
 	FMonolithAudioMetaSoundActions::RegisterActions(Registry);
+	FMonolithAudioMetaSoundIntrospectionActions::RegisterActions(Registry);
 #endif
 
 	int32 ActionCount = Registry.GetNamespaceActionCount(TEXT("audio"));

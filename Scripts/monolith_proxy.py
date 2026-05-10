@@ -22,14 +22,16 @@ import os
 import sys
 import threading
 import time
+import tempfile
 import urllib.error
 import urllib.request
 from io import TextIOWrapper
+from pathlib import Path
 
 MONOLITH_URL = os.environ.get("MONOLITH_URL", "http://localhost:9316/mcp")
 MONOLITH_HEALTH = MONOLITH_URL.replace("/mcp", "/health")
 PROXY_NAME = "monolith-proxy"
-PROXY_VERSION = "1.1.0"
+PROXY_VERSION = "1.1.1"
 TIMEOUT = 30.0
 POLL_INTERVAL = 5.0
 POLL_START_DELAY = 3.0
@@ -37,6 +39,25 @@ POLL_START_DELAY = 3.0
 # Track Monolith availability for list_changed notifications
 _monolith_was_up = None
 _stdout_lock = threading.Lock()
+
+CORE_QUERY_TOOLS = [
+    "blueprint_query",
+    "material_query",
+    "animation_query",
+    "niagara_query",
+    "editor_query",
+    "config_query",
+    "project_query",
+    "source_query",
+    "ui_query",
+    "mesh_query",
+    "gas_query",
+    "combograph_query",
+    "ai_query",
+    "logicdriver_query",
+    "audio_query",
+    "level_sequence_query",
+]
 
 
 def _log(msg: str) -> None:
@@ -90,6 +111,126 @@ def _jsonrpc_error(id, code: int, message: str) -> str:
         "id": id,
         "error": {"code": code, "message": message},
     })
+
+
+def _sanitize_cache_part(value: str) -> str:
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in value)
+
+
+def _tools_cache_path() -> Path:
+    base = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir())
+    cache_dir = base / "Monolith"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    host_port = MONOLITH_HEALTH.replace("http://", "").replace("https://", "")
+    host_port = host_port.split("/", 1)[0]
+    return cache_dir / f"monolith_proxy_tools_{_sanitize_cache_part(host_port)}.json"
+
+
+def _query_tool_schema() -> dict:
+    return {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "description": "The action to execute. Use monolith_discover first when the editor is available.",
+            },
+            "params": {
+                "type": "object",
+                "description": "Parameters for the selected action.",
+            },
+        },
+        "required": ["action"],
+    }
+
+
+def _empty_object_schema() -> dict:
+    return {"type": "object", "properties": {}}
+
+
+def _make_tool(name: str, description: str, schema: dict) -> dict:
+    return {"name": name, "description": description, "inputSchema": schema}
+
+
+def _seed_tools() -> list[dict]:
+    tools = []
+    for name in CORE_QUERY_TOOLS:
+        domain = name[:-6] if name.endswith("_query") else name
+        tools.append(_make_tool(
+            name,
+            f"Query the {domain} domain. The editor may be offline at session start; retry after Monolith is healthy.",
+            _query_tool_schema(),
+        ))
+
+    tools.append(_make_tool(
+        "monolith_discover",
+        "List available tool namespaces and their actions. Pass namespace and optional category to filter.",
+        {
+            "type": "object",
+            "properties": {
+                "namespace": {"type": "string", "description": "Optional: filter to a specific namespace"},
+                "category": {"type": "string", "description": "Optional: filter actions within the namespace by category"},
+            },
+        },
+    ))
+    tools.append(_make_tool(
+        "monolith_status",
+        "Get Monolith server health: version, uptime, port, registered action count, and module status.",
+        _empty_object_schema(),
+    ))
+    tools.append(_make_tool(
+        "monolith_update",
+        "Check for or install Monolith updates from GitHub Releases.",
+        {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "'check' to compare versions, 'install' to download and stage update",
+                    "default": "check",
+                }
+            },
+        },
+    ))
+    tools.append(_make_tool(
+        "monolith_reindex",
+        "Re-index the Monolith project database. Requires the editor-side Monolith server.",
+        _empty_object_schema(),
+    ))
+    return tools
+
+
+def _write_tools_cache(resp: str) -> None:
+    try:
+        payload = json.loads(resp)
+        tools = payload.get("result", {}).get("tools", [])
+        if isinstance(tools, list) and tools:
+            _tools_cache_path().write_text(json.dumps(tools), encoding="utf-8")
+    except Exception as e:
+        _log(f"Failed to write tools/list cache: {e}")
+
+
+def _read_tools_cache() -> list[dict] | None:
+    try:
+        path = _tools_cache_path()
+        if not path.exists():
+            return None
+        tools = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(tools, list) and tools:
+            return tools
+    except Exception as e:
+        _log(f"Failed to read tools/list cache: {e}")
+    return None
+
+
+def _fallback_tools_list(msg: dict) -> str:
+    cached = _read_tools_cache()
+    if cached:
+        _log("Monolith down during tools/list — returning cached tools")
+        return _result(msg.get("id"), {"tools": cached})
+
+    _log("Monolith down during tools/list — returning seed tools")
+    return _result(msg.get("id"), {"tools": _seed_tools()})
 
 
 def _check_monolith_up() -> bool:
@@ -168,12 +309,12 @@ def handle_ping(msg: dict) -> str:
 
 
 def handle_tools_list(msg: dict) -> str:
-    """Forward tools/list to Monolith. Empty list if down."""
+    """Forward tools/list to Monolith. Stable cached/seed list if down."""
     resp = _post_monolith(json.dumps(msg))
     if resp:
+        _write_tools_cache(resp)
         return resp
-    _log("Monolith down during tools/list — returning empty list")
-    return _result(msg.get("id"), {"tools": []})
+    return _fallback_tools_list(msg)
 
 
 def handle_tools_call(msg: dict) -> str:

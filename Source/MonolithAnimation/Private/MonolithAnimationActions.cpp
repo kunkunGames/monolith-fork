@@ -11,6 +11,7 @@
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimBlueprintGeneratedClass.h"
 #include "Animation/Skeleton.h"
+#include "Animation/PreviewAssetAttachComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/SkeletalMeshSocket.h"
 #include "Rendering/SkeletalMeshRenderData.h"
@@ -292,6 +293,12 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("start_frame"), TEXT("integer"), TEXT("Start frame (default 0)"), TEXT("0"))
 			.Optional(TEXT("end_frame"), TEXT("integer"), TEXT("End frame (default -1 = all)"), TEXT("-1"))
 			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("list_bone_tracks"),
+		TEXT("List all bone names that have tracks (animated bones) in an AnimSequence"),
+		FMonolithActionHandler::CreateStatic(&HandleListBoneTracks),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_sequence_curves"),
 		TEXT("Get float and transform curves on an animation sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSequenceCurves),
@@ -315,6 +322,19 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleGetSkeletonSockets),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton or SkeletalMesh asset path"))
+			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("get_skeleton_preview_attached_assets"),
+		TEXT("Get assets attached to a skeleton's preview scene (Persona [Preview Only] entries: socket + asset path per pair)"),
+		FMonolithActionHandler::CreateStatic(&HandleGetSkeletonPreviewAttachedAssets),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("get_bone_ref_pose"),
+		TEXT("Get reference (bind) pose transforms of bones on a Skeleton or SkeletalMesh — returns parent-relative AND component-space transforms without spawning an actor"),
+		FMonolithActionHandler::CreateStatic(&HandleGetBoneRefPose),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton or SkeletalMesh asset path"))
+			.Optional(TEXT("bone_names"), TEXT("array"), TEXT("Specific bone names to query (default: all bones)"), TEXT("[]"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_abp_info"),
 		TEXT("Get animation blueprint overview (skeleton, graphs, state machines, variables, interfaces)"),
@@ -648,6 +668,30 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleGetAbpLinkedAssets),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.Build());
+
+	// Skeleton Compatibility — required for legacy UE4 anims on UE5 mannequin etc.
+	Registry.RegisterAction(TEXT("animation"), TEXT("get_compatible_skeletons"),
+		TEXT("List skeletons declared compatible with the given Skeleton (USkeleton::CompatibleSkeletons)"),
+		FMonolithActionHandler::CreateStatic(&HandleGetCompatibleSkeletons),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_compatible_skeleton"),
+		TEXT("Declare another Skeleton as compatible — lets anims authored on the other skeleton play on this one without retargeting"),
+		FMonolithActionHandler::CreateStatic(&HandleAddCompatibleSkeleton),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path (the one being declared compatible)"))
+			.Required(TEXT("compatible_with"), TEXT("string"), TEXT("Skeleton asset path to add to the compatibility list"))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the modified skeleton asset (default true)"), TEXT("true"))
+			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("remove_compatible_skeleton"),
+		TEXT("Remove a skeleton from another's CompatibleSkeletons array"),
+		FMonolithActionHandler::CreateStatic(&HandleRemoveCompatibleSkeleton),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.Required(TEXT("compatible_with"), TEXT("string"), TEXT("Skeleton asset path to remove from the compatibility list"))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the modified skeleton asset (default true)"), TEXT("true"))
 			.Build());
 
 	// Wave 11 — Asset Creation + Setup
@@ -2170,31 +2214,21 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetBoneTrackKeys(const TS
 	const IAnimationDataModel* DataModel = Seq->GetDataModel();
 	if (!DataModel) return FMonolithActionResult::Error(TEXT("No animation data model"));
 
-	const FRawAnimSequenceTrack* RawTrackPtr = nullptr;
-PRAGMA_DISABLE_DEPRECATION_WARNINGS
-	const TArray<FBoneAnimationTrack>& BoneTracks = DataModel->GetBoneAnimationTracks();
-PRAGMA_ENABLE_DEPRECATION_WARNINGS
-	for (const FBoneAnimationTrack& Track : BoneTracks)
-	{
-		if (Track.Name == FName(*BoneName))
-		{
-			RawTrackPtr = &Track.InternalTrackData;
-			break;
-		}
-	}
-	if (!RawTrackPtr)
+	const FName BoneFName(*BoneName);
+	if (!DataModel->IsValidBoneTrackName(BoneFName))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Bone track not found: %s"), *BoneName));
 
-	const FRawAnimSequenceTrack& RawTrack = *RawTrackPtr;
-
-	int32 NumPosKeys = RawTrack.PosKeys.Num();
-	int32 NumRotKeys = RawTrack.RotKeys.Num();
-	int32 NumScaleKeys = RawTrack.ScaleKeys.Num();
-	int32 MaxKeys = FMath::Max3(NumPosKeys, NumRotKeys, NumScaleKeys);
+	// Use non-deprecated API: evaluate the bone track at every keyframe via
+	// GetBoneTrackTransforms. Works regardless of underlying compressed storage.
+	TArray<FTransform> AllTransforms;
+	DataModel->GetBoneTrackTransforms(BoneFName, AllTransforms);
+	const int32 MaxKeys = AllTransforms.Num();
 
 	if (EndFrame < 0 || EndFrame >= MaxKeys)
 		EndFrame = MaxKeys - 1;
 	if (StartFrame < 0) StartFrame = 0;
+	if (MaxKeys == 0)
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Bone track has no keys: %s"), *BoneName));
 	if (StartFrame > EndFrame)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("start_frame (%d) > end_frame (%d)"), StartFrame, EndFrame));
 
@@ -2202,43 +2236,63 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	Root->SetStringField(TEXT("bone_name"), BoneName);
 	Root->SetNumberField(TEXT("num_keys"), MaxKeys);
 
-	// Positions
 	TArray<TSharedPtr<FJsonValue>> PosArr;
-	for (int32 i = StartFrame; i <= EndFrame && i < NumPosKeys; ++i)
+	TArray<TSharedPtr<FJsonValue>> RotArr;
+	TArray<TSharedPtr<FJsonValue>> ScaleArr;
+	for (int32 i = StartFrame; i <= EndFrame; ++i)
 	{
-		TArray<TSharedPtr<FJsonValue>> Vec;
-		Vec.Add(MakeShared<FJsonValueNumber>(RawTrack.PosKeys[i].X));
-		Vec.Add(MakeShared<FJsonValueNumber>(RawTrack.PosKeys[i].Y));
-		Vec.Add(MakeShared<FJsonValueNumber>(RawTrack.PosKeys[i].Z));
-		PosArr.Add(MakeShared<FJsonValueArray>(Vec));
+		const FTransform& Xf = AllTransforms[i];
+		const FVector& Pos = Xf.GetLocation();
+		const FQuat& Rot = Xf.GetRotation();
+		const FVector& Scl = Xf.GetScale3D();
+
+		TArray<TSharedPtr<FJsonValue>> P;
+		P.Add(MakeShared<FJsonValueNumber>(Pos.X));
+		P.Add(MakeShared<FJsonValueNumber>(Pos.Y));
+		P.Add(MakeShared<FJsonValueNumber>(Pos.Z));
+		PosArr.Add(MakeShared<FJsonValueArray>(P));
+
+		TArray<TSharedPtr<FJsonValue>> Q;
+		Q.Add(MakeShared<FJsonValueNumber>(Rot.X));
+		Q.Add(MakeShared<FJsonValueNumber>(Rot.Y));
+		Q.Add(MakeShared<FJsonValueNumber>(Rot.Z));
+		Q.Add(MakeShared<FJsonValueNumber>(Rot.W));
+		RotArr.Add(MakeShared<FJsonValueArray>(Q));
+
+		TArray<TSharedPtr<FJsonValue>> S;
+		S.Add(MakeShared<FJsonValueNumber>(Scl.X));
+		S.Add(MakeShared<FJsonValueNumber>(Scl.Y));
+		S.Add(MakeShared<FJsonValueNumber>(Scl.Z));
+		ScaleArr.Add(MakeShared<FJsonValueArray>(S));
 	}
 	Root->SetArrayField(TEXT("positions"), PosArr);
-
-	// Rotations
-	TArray<TSharedPtr<FJsonValue>> RotArr;
-	for (int32 i = StartFrame; i <= EndFrame && i < NumRotKeys; ++i)
-	{
-		TArray<TSharedPtr<FJsonValue>> Quat;
-		Quat.Add(MakeShared<FJsonValueNumber>(RawTrack.RotKeys[i].X));
-		Quat.Add(MakeShared<FJsonValueNumber>(RawTrack.RotKeys[i].Y));
-		Quat.Add(MakeShared<FJsonValueNumber>(RawTrack.RotKeys[i].Z));
-		Quat.Add(MakeShared<FJsonValueNumber>(RawTrack.RotKeys[i].W));
-		RotArr.Add(MakeShared<FJsonValueArray>(Quat));
-	}
 	Root->SetArrayField(TEXT("rotations"), RotArr);
-
-	// Scales
-	TArray<TSharedPtr<FJsonValue>> ScaleArr;
-	for (int32 i = StartFrame; i <= EndFrame && i < NumScaleKeys; ++i)
-	{
-		TArray<TSharedPtr<FJsonValue>> Vec;
-		Vec.Add(MakeShared<FJsonValueNumber>(RawTrack.ScaleKeys[i].X));
-		Vec.Add(MakeShared<FJsonValueNumber>(RawTrack.ScaleKeys[i].Y));
-		Vec.Add(MakeShared<FJsonValueNumber>(RawTrack.ScaleKeys[i].Z));
-		ScaleArr.Add(MakeShared<FJsonValueArray>(Vec));
-	}
 	Root->SetArrayField(TEXT("scales"), ScaleArr);
 
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleListBoneTracks(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+
+	UAnimSequence* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(AssetPath);
+	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
+
+	const IAnimationDataModel* DataModel = Seq->GetDataModel();
+	if (!DataModel) return FMonolithActionResult::Error(TEXT("No animation data model"));
+
+	TArray<FName> BoneNames;
+	DataModel->GetBoneTrackNames(BoneNames);
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetNumberField(TEXT("count"), BoneNames.Num());
+	TArray<TSharedPtr<FJsonValue>> NameArr;
+	for (const FName& N : BoneNames)
+	{
+		NameArr.Add(MakeShared<FJsonValueString>(N.ToString()));
+	}
+	Root->SetArrayField(TEXT("bone_names"), NameArr);
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -2447,6 +2501,156 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetSkeletonSockets(const 
 
 	Root->SetArrayField(TEXT("sockets"), SocketsArr);
 	Root->SetNumberField(TEXT("count"), SocketsArr.Num());
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleGetSkeletonPreviewAttachedAssets(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+
+	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(AssetPath);
+	if (!Skeleton)
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton not found: %s"), *AssetPath));
+
+	const FPreviewAssetAttachContainer& Container = Skeleton->PreviewAttachedAssetContainer;
+	const int32 NumAttached = Container.Num();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+
+	TArray<TSharedPtr<FJsonValue>> AttachedArr;
+	for (int32 i = 0; i < NumAttached; ++i)
+	{
+		const FPreviewAttachedObjectPair& Pair = Container[i];
+		UObject* AttachedObject = Pair.GetAttachedObject();
+		const FName AttachPoint = Pair.AttachedTo;
+
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("attach_point"), AttachPoint.ToString());
+		Entry->SetStringField(TEXT("attached_object"),
+			AttachedObject ? AttachedObject->GetPathName() : TEXT("None"));
+		Entry->SetStringField(TEXT("attached_object_class"),
+			AttachedObject ? AttachedObject->GetClass()->GetName() : TEXT("None"));
+
+		AttachedArr.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	Root->SetArrayField(TEXT("attached_objects"), AttachedArr);
+	Root->SetNumberField(TEXT("count"), AttachedArr.Num());
+
+	// FPreviewAssetAttachContainer does NOT store relative transforms — Persona
+	// attaches preview assets at the socket origin with the asset's natural
+	// orientation. Any visual placement comes from (a) the socket's position on
+	// the skeleton and (b) the attached mesh's own pivot. There is no hidden
+	// FTransform to recover here.
+	Root->SetBoolField(TEXT("transforms_stored"), false);
+
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleGetBoneRefPose(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+
+	const FReferenceSkeleton* RefSkel = nullptr;
+	FString SourceType;
+
+	if (USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(AssetPath))
+	{
+		RefSkel = &Skeleton->GetReferenceSkeleton();
+		SourceType = TEXT("Skeleton");
+	}
+	else if (USkeletalMesh* Mesh = FMonolithAssetUtils::LoadAssetByPath<USkeletalMesh>(AssetPath))
+	{
+		RefSkel = &Mesh->GetRefSkeleton();
+		SourceType = TEXT("SkeletalMesh");
+	}
+	else
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton or SkeletalMesh not found: %s"), *AssetPath));
+	}
+
+	const TArray<FTransform>& RefBonePose = RefSkel->GetRefBonePose(); // parent-relative
+	const int32 NumBones = RefSkel->GetNum();
+
+	// Compute component-space transforms by walking the hierarchy once.
+	TArray<FTransform> ComponentSpace;
+	ComponentSpace.SetNum(NumBones);
+	for (int32 i = 0; i < NumBones; ++i)
+	{
+		const int32 ParentIdx = RefSkel->GetParentIndex(i);
+		ComponentSpace[i] = (ParentIdx >= 0)
+			? RefBonePose[i] * ComponentSpace[ParentIdx]
+			: RefBonePose[i];
+	}
+
+	// Resolve which bones to emit (default = all).
+	TArray<int32> BoneIndices;
+	const TArray<TSharedPtr<FJsonValue>>* RequestedBones = nullptr;
+	if (Params->TryGetArrayField(TEXT("bone_names"), RequestedBones) && RequestedBones && RequestedBones->Num() > 0)
+	{
+		for (const TSharedPtr<FJsonValue>& Val : *RequestedBones)
+		{
+			if (!Val.IsValid()) continue;
+			const FName BoneName(*Val->AsString());
+			const int32 Idx = RefSkel->FindBoneIndex(BoneName);
+			if (Idx != INDEX_NONE)
+				BoneIndices.Add(Idx);
+		}
+	}
+	else
+	{
+		BoneIndices.Reserve(NumBones);
+		for (int32 i = 0; i < NumBones; ++i)
+			BoneIndices.Add(i);
+	}
+
+	auto WriteVec = [](const FVector& V) {
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("x"), V.X);
+		O->SetNumberField(TEXT("y"), V.Y);
+		O->SetNumberField(TEXT("z"), V.Z);
+		return O;
+	};
+	auto WriteRot = [](const FRotator& R) {
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("pitch"), R.Pitch);
+		O->SetNumberField(TEXT("yaw"), R.Yaw);
+		O->SetNumberField(TEXT("roll"), R.Roll);
+		return O;
+	};
+	auto WriteXform = [&](const FTransform& T) {
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetObjectField(TEXT("location"), WriteVec(T.GetLocation()));
+		O->SetObjectField(TEXT("rotation"), WriteRot(T.GetRotation().Rotator()));
+		O->SetObjectField(TEXT("scale"), WriteVec(T.GetScale3D()));
+		return O;
+	};
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("source_type"), SourceType);
+	Root->SetNumberField(TEXT("bone_count"), NumBones);
+
+	TArray<TSharedPtr<FJsonValue>> BonesArr;
+	for (int32 BoneIdx : BoneIndices)
+	{
+		const FName BoneName = RefSkel->GetBoneName(BoneIdx);
+		const int32 ParentIdx = RefSkel->GetParentIndex(BoneIdx);
+
+		TSharedPtr<FJsonObject> BoneObj = MakeShared<FJsonObject>();
+		BoneObj->SetNumberField(TEXT("index"), BoneIdx);
+		BoneObj->SetStringField(TEXT("name"), BoneName.ToString());
+		BoneObj->SetNumberField(TEXT("parent_index"), ParentIdx);
+		if (ParentIdx >= 0)
+			BoneObj->SetStringField(TEXT("parent_name"), RefSkel->GetBoneName(ParentIdx).ToString());
+		BoneObj->SetObjectField(TEXT("local"), WriteXform(RefBonePose[BoneIdx]));
+		BoneObj->SetObjectField(TEXT("component"), WriteXform(ComponentSpace[BoneIdx]));
+
+		BonesArr.Add(MakeShared<FJsonValueObject>(BoneObj));
+	}
+
+	Root->SetArrayField(TEXT("bones"), BonesArr);
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -3810,6 +4014,129 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetAbpLinkedAssets(const 
 	Root->SetArrayField(TEXT("composites"), CompositesArr);
 	Root->SetArrayField(TEXT("linked_anim_blueprints"), LinkedAbpArr);
 	Root->SetNumberField(TEXT("total_dependencies"), Deps.Num());
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// Skeleton Compatibility — wraps USkeleton::CompatibleSkeletons
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAnimationActions::HandleGetCompatibleSkeletons(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+
+	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(AssetPath);
+	if (!Skeleton)
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton not found: %s"), *AssetPath));
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+
+	TArray<TSharedPtr<FJsonValue>> CompatArr;
+	for (const TSoftObjectPtr<USkeleton>& Compat : Skeleton->GetCompatibleSkeletons())
+	{
+		const FString CompatPath = Compat.ToSoftObjectPath().ToString();
+		if (!CompatPath.IsEmpty())
+			CompatArr.Add(MakeShared<FJsonValueString>(CompatPath));
+	}
+
+	Root->SetArrayField(TEXT("compatible_skeletons"), CompatArr);
+	Root->SetNumberField(TEXT("count"), CompatArr.Num());
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleAddCompatibleSkeleton(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	const FString CompatPath = Params->GetStringField(TEXT("compatible_with"));
+	bool bSave = true;
+	Params->TryGetBoolField(TEXT("save"), bSave);
+
+	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(AssetPath);
+	if (!Skeleton)
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton not found: %s"), *AssetPath));
+
+	USkeleton* Compat = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(CompatPath);
+	if (!Compat)
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Compatible Skeleton not found: %s"), *CompatPath));
+
+	if (Skeleton == Compat)
+		return FMonolithActionResult::Error(TEXT("Cannot mark a skeleton compatible with itself"));
+
+	// Idempotency: skip if already present.
+	bool bAlreadyCompatible = false;
+	for (const TSoftObjectPtr<USkeleton>& Existing : Skeleton->GetCompatibleSkeletons())
+	{
+		if (Existing.Get() == Compat)
+		{
+			bAlreadyCompatible = true;
+			break;
+		}
+	}
+
+	if (!bAlreadyCompatible)
+	{
+		Skeleton->AddCompatibleSkeleton(Compat);
+		Skeleton->MarkPackageDirty();
+		if (bSave)
+		{
+			UEditorAssetLibrary::SaveAsset(AssetPath, /*bOnlyIfIsDirty*/ false);
+		}
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("compatible_with"), CompatPath);
+	Root->SetBoolField(TEXT("added"), !bAlreadyCompatible);
+	Root->SetBoolField(TEXT("already_compatible"), bAlreadyCompatible);
+	Root->SetNumberField(TEXT("count"), Skeleton->GetCompatibleSkeletons().Num());
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleRemoveCompatibleSkeleton(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	const FString CompatPath = Params->GetStringField(TEXT("compatible_with"));
+	bool bSave = true;
+	Params->TryGetBoolField(TEXT("save"), bSave);
+
+	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(AssetPath);
+	if (!Skeleton)
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton not found: %s"), *AssetPath));
+
+	// USkeleton::RemoveCompatibleSkeleton() exists in 5.7+.
+	USkeleton* Compat = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(CompatPath);
+	if (!Compat)
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Compatible Skeleton not found: %s"), *CompatPath));
+
+	bool bWasCompatible = false;
+	for (const TSoftObjectPtr<USkeleton>& Existing : Skeleton->GetCompatibleSkeletons())
+	{
+		if (Existing.Get() == Compat)
+		{
+			bWasCompatible = true;
+			break;
+		}
+	}
+
+	bool bRemoved = false;
+	if (bWasCompatible)
+	{
+		Skeleton->RemoveCompatibleSkeleton(Compat);
+		Skeleton->MarkPackageDirty();
+		bRemoved = true;
+		if (bSave)
+		{
+			UEditorAssetLibrary::SaveAsset(AssetPath, /*bOnlyIfIsDirty*/ false);
+		}
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("compatible_with"), CompatPath);
+	Root->SetBoolField(TEXT("removed"), bRemoved);
+	Root->SetBoolField(TEXT("was_compatible"), bWasCompatible);
+	Root->SetNumberField(TEXT("count"), Skeleton->GetCompatibleSkeletons().Num());
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -5831,6 +6158,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleBatchExecute(const TShare
 		else if (OpName == TEXT("get_blend_space_info"))      SubResult = HandleGetBlendSpaceInfo(SubParams);
 		else if (OpName == TEXT("get_sequence_curves"))       SubResult = HandleGetSequenceCurves(SubParams);
 		else if (OpName == TEXT("get_bone_track_keys"))       SubResult = HandleGetBoneTrackKeys(SubParams);
+		else if (OpName == TEXT("list_bone_tracks"))          SubResult = HandleListBoneTracks(SubParams);
 		else if (OpName == TEXT("get_curve_keys"))            SubResult = HandleGetCurveKeys(SubParams);
 		else if (OpName == TEXT("list_curves"))               SubResult = HandleListCurves(SubParams);
 		else if (OpName == TEXT("get_sync_markers"))          SubResult = HandleGetSyncMarkers(SubParams);

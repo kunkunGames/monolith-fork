@@ -33,6 +33,8 @@
 #include <algorithm>
 #include <optional>
 #include <cstdlib>
+#include <fstream>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -43,7 +45,7 @@ using json = nlohmann::json;
 // ============================================================================
 
 static const char* PROXY_NAME    = "monolith-proxy";
-static const char* PROXY_VERSION = "1.1.0";
+static const char* PROXY_VERSION = "1.1.1";
 
 static constexpr double TIMEOUT                  = 30.0;
 static constexpr double POLL_INTERVAL            = 5.0;
@@ -90,6 +92,25 @@ static std::set<std::string> g_editor_action_denylist;
 static std::optional<bool> g_monolith_was_up; // nullopt = unknown
 static std::mutex g_stdout_lock;
 static std::unordered_map<std::string, double> g_recent_tool_calls;
+
+static const std::vector<std::string> CORE_QUERY_TOOLS = {
+    "blueprint_query",
+    "material_query",
+    "animation_query",
+    "niagara_query",
+    "editor_query",
+    "config_query",
+    "project_query",
+    "source_query",
+    "ui_query",
+    "mesh_query",
+    "gas_query",
+    "combograph_query",
+    "ai_query",
+    "logicdriver_query",
+    "audio_query",
+    "level_sequence_query",
+};
 
 // ============================================================================
 // Logging
@@ -341,6 +362,195 @@ static std::string make_jsonrpc_error(const json& id, int code, const std::strin
 }
 
 // ============================================================================
+// Stable tools/list fallback
+// ============================================================================
+
+static std::string sanitize_cache_part(std::string value)
+{
+    for (char& c : value)
+    {
+        const bool ok =
+            (c >= 'a' && c <= 'z') ||
+            (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') ||
+            c == '-' || c == '_';
+        if (!ok)
+            c = '_';
+    }
+    return value;
+}
+
+static std::string tools_cache_path()
+{
+    std::string base = get_env("LOCALAPPDATA");
+    if (base.empty())
+        base = get_env("TEMP", ".");
+
+    std::string dir = base + "\\Monolith";
+    CreateDirectoryA(dir.c_str(), nullptr);
+
+    return dir + "\\monolith_proxy_tools_" +
+        sanitize_cache_part(g_monolith_host) + "_" +
+        std::to_string(g_monolith_port) + ".json";
+}
+
+static json make_query_tool_schema()
+{
+    return {
+        {"type", "object"},
+        {"properties", {
+            {"action", {
+                {"type", "string"},
+                {"description", "The action to execute. Use monolith_discover first when the editor is available."}
+            }},
+            {"params", {
+                {"type", "object"},
+                {"description", "Parameters for the selected action."}
+            }}
+        }},
+        {"required", json::array({"action"})}
+    };
+}
+
+static json make_empty_object_schema()
+{
+    return {
+        {"type", "object"},
+        {"properties", json::object()}
+    };
+}
+
+static json make_tool(const std::string& name, const std::string& description, const json& schema)
+{
+    return {
+        {"name", name},
+        {"description", description},
+        {"inputSchema", schema}
+    };
+}
+
+static json make_seed_tools()
+{
+    json tools = json::array();
+
+    for (const std::string& name : CORE_QUERY_TOOLS)
+    {
+        std::string domain = name;
+        const std::string suffix = "_query";
+        if (domain.size() > suffix.size() &&
+            domain.compare(domain.size() - suffix.size(), suffix.size(), suffix) == 0)
+        {
+            domain.resize(domain.size() - suffix.size());
+        }
+
+        tools.push_back(make_tool(
+            name,
+            "Query the " + domain + " domain. The editor may be offline at session start; retry after Monolith is healthy.",
+            make_query_tool_schema()));
+    }
+
+    tools.push_back(make_tool(
+        "monolith_discover",
+        "List available tool namespaces and their actions. Pass namespace and optional category to filter.",
+        {
+            {"type", "object"},
+            {"properties", {
+                {"namespace", {
+                    {"type", "string"},
+                    {"description", "Optional: filter to a specific namespace"}
+                }},
+                {"category", {
+                    {"type", "string"},
+                    {"description", "Optional: filter actions within the namespace by category"}
+                }}
+            }}
+        }));
+
+    tools.push_back(make_tool(
+        "monolith_status",
+        "Get Monolith server health: version, uptime, port, registered action count, and module status.",
+        make_empty_object_schema()));
+
+    tools.push_back(make_tool(
+        "monolith_update",
+        "Check for or install Monolith updates from GitHub Releases.",
+        {
+            {"type", "object"},
+            {"properties", {
+                {"action", {
+                    {"type", "string"},
+                    {"description", "'check' to compare versions, 'install' to download and stage update"},
+                    {"default", "check"}
+                }}
+            }}
+        }));
+
+    tools.push_back(make_tool(
+        "monolith_reindex",
+        "Re-index the Monolith project database. Requires the editor-side Monolith server.",
+        make_empty_object_schema()));
+
+    return tools;
+}
+
+static void write_tools_cache(const std::string& response)
+{
+    try
+    {
+        json payload = json::parse(response);
+        auto result_it = payload.find("result");
+        if (result_it == payload.end() || !result_it->is_object())
+            return;
+
+        auto tools_it = result_it->find("tools");
+        if (tools_it == result_it->end() || !tools_it->is_array() || tools_it->empty())
+            return;
+
+        std::ofstream out(tools_cache_path(), std::ios::binary | std::ios::trunc);
+        if (out)
+            out << tools_it->dump();
+    }
+    catch (const std::exception& e)
+    {
+        log_msg(std::string("Failed to write tools/list cache: ") + e.what());
+    }
+}
+
+static std::optional<json> read_tools_cache()
+{
+    try
+    {
+        std::ifstream in(tools_cache_path(), std::ios::binary);
+        if (!in)
+            return std::nullopt;
+
+        json tools;
+        in >> tools;
+        if (!tools.is_array() || tools.empty())
+            return std::nullopt;
+
+        return tools;
+    }
+    catch (const std::exception& e)
+    {
+        log_msg(std::string("Failed to read tools/list cache: ") + e.what());
+        return std::nullopt;
+    }
+}
+
+static std::string make_fallback_tools_list_response(const json& msg)
+{
+    if (auto cached = read_tools_cache())
+    {
+        log_msg("Monolith down during tools/list -- returning cached tools");
+        return make_result(msg.value("id", json()), {{"tools", cached.value()}});
+    }
+
+    log_msg("Monolith down during tools/list -- returning seed tools");
+    return make_result(msg.value("id", json()), {{"tools", make_seed_tools()}});
+}
+
+// ============================================================================
 // stdout writing (thread-safe)
 // ============================================================================
 
@@ -537,11 +747,11 @@ static std::string handle_tools_list(const json& msg)
                 log_msg(std::string("Failed to rewrite tools/list response: ") + e.what());
             }
         }
+        write_tools_cache(resp);
         return resp;
     }
 
-    log_msg("Monolith down during tools/list -- returning empty list");
-    return make_result(msg.value("id", json()), {{"tools", json::array()}});
+    return make_fallback_tools_list_response(msg);
 }
 
 static std::string handle_tools_call(const json& msg)

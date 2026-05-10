@@ -47,6 +47,18 @@
 #include "LevelEditorSubsystem.h"
 #include "Editor.h"
 
+// run_console_command needs world / PC access
+#include "Engine/World.h"
+#include "Engine/Engine.h"
+#include "GameFramework/PlayerController.h"
+
+// start_pie needs the level-editor module + asset viewport to pin PIE to in-viewport mode
+#include "LevelEditor.h"
+#include "IAssetViewport.h"
+#include "Modules/ModuleManager.h"
+#include "Editor/UnrealEdEngine.h"
+#include "UnrealEdGlobals.h"
+
 // --- Compile state ---
 
 FMonolithLogCapture* FMonolithEditorActions::CachedLogCapture = nullptr;
@@ -365,6 +377,23 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 	Registry.RegisterAction(TEXT("editor"), TEXT("get_crash_context"),
 		TEXT("Get last crash/ensure context information"),
 		FMonolithActionHandler::CreateStatic(&HandleGetCrashContext),
+		MakeShared<FJsonObject>());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("run_console_command"),
+		TEXT("Execute a console command. Routes to the first PIE PlayerController found (multi-client PIE not disambiguated); falls back to GEngine->Exec when no PIE session is active."),
+		FMonolithActionHandler::CreateStatic(&HandleRunConsoleCommand),
+		FParamSchemaBuilder()
+			.Required(TEXT("command"), TEXT("string"), TEXT("Console command string (e.g. 'BowLoop 1', 'WalkLoop', 'Cam3P 1')"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("start_pie"),
+		TEXT("Start a Play-In-Editor session (equivalent to pressing Cmd+P in the editor)."),
+		FMonolithActionHandler::CreateStatic(&HandleStartPIE),
+		MakeShared<FJsonObject>());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("stop_pie"),
+		TEXT("Stop the active Play-In-Editor session."),
+		FMonolithActionHandler::CreateStatic(&HandleStopPIE),
 		MakeShared<FJsonObject>());
 
 	// --- Capture actions ---
@@ -975,6 +1004,133 @@ FMonolithActionResult FMonolithEditorActions::HandleGetCrashContext(const TShare
 		Root->SetArrayField(TEXT("recent_errors"), RecentErrors);
 	}
 
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// run_console_command — execute a console command on the active world
+// ---------------------------------------------------------------------------
+FMonolithActionResult FMonolithEditorActions::HandleRunConsoleCommand(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Command;
+	if (!Params->TryGetStringField(TEXT("command"), Command) || Command.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required field: command"));
+	}
+
+	// Resolve a target world: prefer an active PIE world (so exec functions on
+	// the player character actually fire), fall back to the editor world.
+	UWorld* TargetWorld = nullptr;
+	FString WorldType = TEXT("none");
+	if (GEditor)
+	{
+		for (const FWorldContext& Context : GEditor->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE && Context.World())
+			{
+				TargetWorld = Context.World();
+				WorldType = TEXT("pie");
+				break;
+			}
+		}
+		if (!TargetWorld)
+		{
+			TargetWorld = GEditor->GetEditorWorldContext().World();
+			WorldType = TEXT("editor");
+		}
+	}
+
+	if (!TargetWorld)
+	{
+		return FMonolithActionResult::Error(TEXT("No usable world found (no PIE active and no editor world)"));
+	}
+
+	// Prefer the player controller's command path so exec UFUNCTIONs on the
+	// possessed pawn (BowLoop, WalkLoop, Cam3P, …) get dispatched. Fall back
+	// to the world-level Exec for cheats that don't need a PC.
+	bool bExecutedViaPC = false;
+	if (APlayerController* PC = TargetWorld->GetFirstPlayerController())
+	{
+		PC->ConsoleCommand(Command, /*bWriteToLog=*/true);
+		bExecutedViaPC = true;
+	}
+	else
+	{
+		if (!GEngine)
+		{
+			return FMonolithActionResult::Error(TEXT("GEngine is null — run_console_command requires engine context."));
+		}
+		GEngine->Exec(TargetWorld, *Command);
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("command"), Command);
+	Root->SetStringField(TEXT("world"), WorldType);
+	Root->SetBoolField(TEXT("via_player_controller"), bExecutedViaPC);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// start_pie / stop_pie — drive Play-In-Editor sessions programmatically
+// ---------------------------------------------------------------------------
+FMonolithActionResult FMonolithEditorActions::HandleStartPIE(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GUnrealEd) return FMonolithActionResult::Error(TEXT("GUnrealEd not available"));
+
+	// Reject if a PIE session is already running so we don't queue duplicates.
+	for (const FWorldContext& Context : GEditor->GetWorldContexts())
+	{
+		if (Context.WorldType == EWorldType::PIE && Context.World())
+		{
+			TSharedPtr<FJsonObject> AlreadyRunning = MakeShared<FJsonObject>();
+			AlreadyRunning->SetBoolField(TEXT("started"), false);
+			AlreadyRunning->SetStringField(TEXT("reason"), TEXT("PIE already running"));
+			return FMonolithActionResult::Success(AlreadyRunning);
+		}
+	}
+
+	// Pin to in-viewport mode so the action is independent of the user's
+	// last-used PIE flavour (Simulate / NewWindow / etc.).
+	FLevelEditorModule& LevelEditorModule = FModuleManager::GetModuleChecked<FLevelEditorModule>("LevelEditor");
+	TSharedPtr<IAssetViewport> ActiveLevelViewport = LevelEditorModule.GetFirstActiveViewport();
+	if (!ActiveLevelViewport.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("No active level viewport — cannot pin PIE to in-viewport mode."));
+	}
+
+	FRequestPlaySessionParams SessionParams;
+	SessionParams.WorldType = EPlaySessionWorldType::PlayInEditor;
+	SessionParams.DestinationSlateViewport = ActiveLevelViewport;
+	GUnrealEd->RequestPlaySession(SessionParams);
+	GUnrealEd->StartQueuedPlaySessionRequest();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetBoolField(TEXT("started"), true);
+	Root->SetStringField(TEXT("mode"), TEXT("in_viewport"));
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleStopPIE(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("GEditor not available"));
+
+	bool bWasRunning = false;
+	for (const FWorldContext& Context : GEditor->GetWorldContexts())
+	{
+		if (Context.WorldType == EWorldType::PIE && Context.World())
+		{
+			bWasRunning = true;
+			break;
+		}
+	}
+
+	if (bWasRunning)
+	{
+		GEditor->RequestEndPlayMap();
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetBoolField(TEXT("stopped"), bWasRunning);
 	return FMonolithActionResult::Success(Root);
 }
 

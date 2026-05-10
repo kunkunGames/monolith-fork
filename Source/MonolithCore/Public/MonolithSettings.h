@@ -102,6 +102,11 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Indexing|Deep Indexers")
 	bool bIndexGAS = true;
 
+	/** Walk MetaSound graphs and index nodes/connections/parameters into the project index. Disable to skip MetaSound deep indexing if memory is tight. */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Deep Indexers", meta=(DisplayName="Index MetaSounds",
+		ToolTip="Walk MetaSound graphs and index nodes/connections/parameters into the project index. Disable to skip MetaSound deep indexing if memory is tight."))
+	bool bIndexMetaSounds = true;
+
 	/** Enable AI asset indexing (behavior trees, blackboards, state trees, EQS, smart objects) */
 	UPROPERTY(config, EditAnywhere, Category="Indexing|Deep Indexers")
 	bool bIndexAI = true;
