@@ -11,11 +11,12 @@ import argparse
 import fnmatch
 import json
 import os
+import queue
 import re
-import selectors
 import subprocess
 import sys
 import tempfile
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -464,17 +465,25 @@ def check_proxy_smoke(ctx: CheckContext) -> None:
         stderr=subprocess.PIPE,
         text=True,
     )
-    selector = selectors.DefaultSelector()
     assert proc.stdout is not None
-    selector.register(proc.stdout, selectors.EVENT_READ)
+    stdout_lines: queue.Queue[str] = queue.Queue()
+
+    def read_stdout() -> None:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            stdout_lines.put(line)
+
+    stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+    stdout_thread.start()
 
     def request(message: dict[str, Any]) -> dict[str, Any]:
         assert proc.stdin is not None
         proc.stdin.write(json.dumps(message) + "\n")
         proc.stdin.flush()
-        if not selector.select(timeout):
-            raise TimeoutError(f"timed out waiting for {message.get('method')}")
-        line = proc.stdout.readline()
+        try:
+            line = stdout_lines.get(timeout=timeout)
+        except queue.Empty as exc:
+            raise TimeoutError(f"timed out waiting for {message.get('method')}") from exc
         return json.loads(line)
 
     try:
@@ -499,8 +508,15 @@ def check_proxy_smoke(ctx: CheckContext) -> None:
             ctx.block("proxy-smoke", f"Unexpected proxy server name: {server_name}", script)
         if responses[1].get("result") != {}:
             ctx.block("proxy-smoke", "ping did not return an empty result", script)
-        if responses[2].get("result") != {"tools": []}:
-            ctx.block("proxy-smoke", "offline tools/list did not return an empty tools list", script)
+        tools = responses[2].get("result", {}).get("tools")
+        min_tools = int(config.get("expected_offline_min_tools", 0))
+        if not isinstance(tools, list) or len(tools) < min_tools:
+            ctx.block(
+                "proxy-smoke",
+                f"offline tools/list returned {0 if not isinstance(tools, list) else len(tools)} tools; "
+                f"expected at least {min_tools}",
+                script,
+            )
         if responses[3].get("result", {}).get("isError") is not True:
             ctx.block("proxy-smoke", "offline tools/call did not return graceful tool error", script)
     except Exception as exc:  # noqa: BLE001 - convert smoke failure to CI finding.
