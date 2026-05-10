@@ -1559,6 +1559,11 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 	bool bCompileOnComplete = false;
 	Params->TryGetBoolField(TEXT("compile_on_complete"), bCompileOnComplete);
 
+	if (Ops.Num() > 500)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Too many operations (max 500), got %d"), Ops.Num()));
+	}
+
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "BPBatchExec", "BP Batch Execute"));
 
 	TArray<TSharedPtr<FJsonValue>> Results;
@@ -2176,6 +2181,11 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNodesBulk(const TS
 
 	FString SharedGraphName = Params->GetStringField(TEXT("graph_name"));
 
+	if (NodesArr.Num() > 500)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Too many nodes to add (max 500), got %d"), NodesArr.Num()));
+	}
+
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "BPAddNodesBulk", "BP Add Nodes Bulk"));
 
 	TArray<TSharedPtr<FJsonValue>> CreatedArr;
@@ -2300,6 +2310,11 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleConnectPinsBulk(const
 
 	FString SharedGraphName = Params->GetStringField(TEXT("graph_name"));
 
+	if (ConnArr.Num() > 500)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Too many connections (max 500), got %d"), ConnArr.Num()));
+	}
+
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "BPConnectPinsBulk", "BP Connect Pins Bulk"));
 
 	TArray<TSharedPtr<FJsonValue>> Results;
@@ -2397,6 +2412,11 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetPinDefaultsBulk(co
 	}
 
 	FString SharedGraphName = Params->GetStringField(TEXT("graph_name"));
+
+	if (DefaultsArr.Num() > 500)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Too many pin defaults (max 500), got %d"), DefaultsArr.Num()));
+	}
 
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "BPSetPinDefaultsBulk", "BP Set Pin Defaults Bulk"));
 
