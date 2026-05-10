@@ -429,6 +429,8 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
 5. Create zip: `powershell -ExecutionPolicy Bypass -File Scripts/make_release.ps1 -Version "X.Y.Z"` (excludes Intermediate/Saved/.git, sets `"Installed": true` for BP-only users)
 6. `gh release create vX.Y.Z "../Monolith-vX.Y.Z.zip" --title "..." --notes "..."`
 
+**Important:** You must copy the exact `Monolith-SHA256: <hash>` (or `Monolith-macOS-SHA256: <hash>` for Mac) marker output from the release script into the release notes body. The auto-updater hard-fails without it.
+
 **Important:** Release zips MUST include pre-compiled DLLs (`Binaries/Win64/*.dll`) so Blueprint-only users can use the plugin without rebuilding. The `make_release.ps1` script sets `"Installed": true` in the zip's `.uplugin` to suppress rebuild prompts. The local dev copy keeps `"Installed": false`.
 
 #### Auto-updater flow
@@ -436,7 +438,7 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
 1. On editor startup (5s delay), checks `api.github.com/repos/tumourlove/monolith/releases/latest`
 2. Compares `tag_name` semver against compiled `MONOLITH_VERSION`
 3. If newer: shows a dialog window with full release notes + "Install Update" / "Remind Me Later"
-4. Download stages to `Saved/Monolith/Staging/` (NOT Plugins/ — would cause UBT conflicts)
+4. Downloads the zip and verifies the SHA256 hash against the release notes marker before staging to `Saved/Monolith/Staging/` (NOT Plugins/ — would cause UBT conflicts)
 5. On editor exit, a detached swap script runs:
    - Polls `tasklist` for `UnrealEditor.exe` until it's gone (120s timeout)
    - Asks for user confirmation (Y/N)
