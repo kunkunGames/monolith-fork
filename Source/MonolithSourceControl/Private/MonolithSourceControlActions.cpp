@@ -64,25 +64,32 @@ namespace
 				? FPackageName::ObjectPathToPackageName(Path)
 				: Path;
 
-			if (FPackageName::DoesPackageExist(PackageName, &OutFile))
+			if (FPackageName::IsValidLongPackageName(PackageName, false))
 			{
-				OutFile = FPaths::ConvertRelativePathToFull(OutFile);
-				FPaths::NormalizeFilename(OutFile);
-				return true;
+				if (FPackageName::DoesPackageExist(PackageName, &OutFile))
+				{
+					OutFile = FPaths::ConvertRelativePathToFull(OutFile);
+					FPaths::NormalizeFilename(OutFile);
+					return true;
+				}
+
+				if (FPackageName::TryConvertLongPackageNameToFilename(
+					PackageName,
+					OutFile,
+					FPackageName::GetAssetPackageExtension()))
+				{
+					OutFile = FPaths::ConvertRelativePathToFull(OutFile);
+					FPaths::NormalizeFilename(OutFile);
+					return true;
+				}
+
+				OutError = FString::Printf(TEXT("could not resolve package path: %s"), *Input);
+				return false;
 			}
 
-			if (FPackageName::TryConvertLongPackageNameToFilename(
-				PackageName,
-				OutFile,
-				FPackageName::GetAssetPackageExtension()))
-			{
-				OutFile = FPaths::ConvertRelativePathToFull(OutFile);
-				FPaths::NormalizeFilename(OutFile);
-				return true;
-			}
-
-			OutError = FString::Printf(TEXT("could not resolve package path: %s"), *Input);
-			return false;
+			OutFile = FPaths::ConvertRelativePathToFull(Path);
+			FPaths::NormalizeFilename(OutFile);
+			return true;
 		}
 
 		if (FPaths::IsRelative(Path))
@@ -455,7 +462,7 @@ FMonolithActionResult FMonolithSourceControlActions::HandleCheckoutOrAdd(const T
 			Decision->SetStringField(TEXT("planned_action"), TEXT("add"));
 			FilesToAdd.Add(File);
 		}
-		else if (State->CanCheckout() || State->IsSourceControlled())
+		else if (State->CanCheckout())
 		{
 			Decision->SetStringField(TEXT("planned_action"), TEXT("checkout"));
 			FilesToCheckout.Add(File);
