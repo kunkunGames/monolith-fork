@@ -493,20 +493,21 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 	ToolsArray.Reserve(Namespaces.Num() + Registry.GetNamespaceActionCount(TEXT("monolith")));
 	for (const FString& Namespace : Namespaces)
 	{
-		if (Registry.GetNamespaceActionCount(Namespace) == 0) continue;
-
-		// Build the tool entry for this namespace
-		// Format: "namespace_query" with action as a parameter
-		TSharedPtr<FJsonObject> Tool = MakeShared<FJsonObject>();
-
 		if (Namespace == TEXT("monolith"))
 		{
 			TArray<FMonolithActionInfo> CoreActions = Registry.GetActions(Namespace);
+			if (CoreActions.Num() == 0) continue;
+
 			// Core tools are individual: monolith_discover, monolith_status
 			for (const FMonolithActionInfo& ActionInfo : CoreActions)
 			{
 				TSharedPtr<FJsonObject> CoreTool = MakeShared<FJsonObject>();
-				CoreTool->SetStringField(TEXT("name"), FString::Printf(TEXT("monolith_%s"), *ActionInfo.Action));
+
+				FString ToolName;
+				ToolName.Reserve(9 + ActionInfo.Action.Len()); // "monolith_" = 9 chars
+				ToolName += TEXT("monolith_");
+				ToolName += ActionInfo.Action;
+				CoreTool->SetStringField(TEXT("name"), ToolName);
 				CoreTool->SetStringField(TEXT("description"), ActionInfo.Description);
 
 				// Input schema
@@ -528,15 +529,26 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 		else
 		{
 			TArray<FString> ActionNames = Registry.GetActionNames(Namespace);
+			if (ActionNames.Num() == 0) continue;
+
+			// Build the tool entry for this namespace
+			// Format: "namespace_query" with action as a parameter
+			TSharedPtr<FJsonObject> Tool = MakeShared<FJsonObject>();
 
 			// Domain tools use the dispatch pattern: namespace_query (underscore, not dot)
 			// Dots in tool names break Claude Code's mcp__server__tool mapping.
-			FString ToolName = FString::Printf(TEXT("%s_query"), *Namespace);
+			FString ToolName = Namespace;
+			ToolName += TEXT("_query");
 			Tool->SetStringField(TEXT("name"), ToolName);
 
 			// Build description with action list
-			FString Description = FString::Printf(TEXT("Query the %s domain. Available actions: "), *Namespace);
-			Description += FString::Join(ActionNames, TEXT(", "));
+			FString JoinedActions = FString::Join(ActionNames, TEXT(", "));
+			FString Description;
+			Description.Reserve(38 + Namespace.Len() + JoinedActions.Len()); // "Query the  domain. Available actions: " = 38 chars
+			Description += TEXT("Query the ");
+			Description += Namespace;
+			Description += TEXT(" domain. Available actions: ");
+			Description += JoinedActions;
 			Tool->SetStringField(TEXT("description"), Description);
 
 			// Build input schema
@@ -561,8 +573,13 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 			// "params" property — keep lightweight; full per-action schemas available via monolith_discover
 			TSharedPtr<FJsonObject> ParamsProp = MakeShared<FJsonObject>();
 			ParamsProp->SetStringField(TEXT("type"), TEXT("object"));
-			ParamsProp->SetStringField(TEXT("description"),
-				FString::Printf(TEXT("Parameters for the action. Call monolith_discover(\"%s\") for full parameter schemas."), *Namespace));
+
+			FString ParamsDesc;
+			ParamsDesc.Reserve(81 + Namespace.Len());
+			ParamsDesc += TEXT("Parameters for the action. Call monolith_discover(\"");
+			ParamsDesc += Namespace;
+			ParamsDesc += TEXT("\") for full parameter schemas.");
+			ParamsProp->SetStringField(TEXT("description"), ParamsDesc);
 			Properties->SetObjectField(TEXT("params"), ParamsProp);
 
 			InputSchema->SetObjectField(TEXT("properties"), Properties);
