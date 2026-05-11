@@ -220,6 +220,7 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleGetSMStructure(con
 		{
 			Depth = static_cast<int32>(TmpDepth);
 		}
+	}
 
 	FString LoadError;
 	UBlueprint* SMBlueprint = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
@@ -718,13 +719,14 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddTransition(cons
 	if (TransOutPin && TargetInPin) TransOutPin->MakeLinkTo(TargetInPin);
 
 	// Set priority if specified
+	if (Params->HasField(TEXT("priority")))
 	{
-		int32 Priority = 0;
 		double TmpPriority = 0.0;
-		if (Params->TryGetNumberField(TEXT("priority"), TmpPriority))
+		if (!Params->TryGetNumberField(TEXT("priority"), TmpPriority))
 		{
-			Priority = static_cast<int32>(TmpPriority);
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'priority' must be a number"), -32602);
 		}
+		const int32 Priority = static_cast<int32>(TmpPriority);
 		SetPropertyByName(TransNode, TEXT("PriorityOrder"), FString::FromInt(Priority));
 	}
 
