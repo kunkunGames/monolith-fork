@@ -22,20 +22,55 @@ MonolithBABridge is an **optional** editor module that bridges Blueprint Assist'
 ### IMonolithGraphFormatter Interface
 
 ```cpp
-class IMonolithGraphFormatter
+class IMonolithGraphFormatter : public IModularFeature
 {
 public:
-    virtual ~IMonolithGraphFormatter() = default;
+    static FName GetModularFeatureName()
+    {
+        static const FName Name(TEXT("MonolithGraphFormatter"));
+        return Name;
+    }
 
-    /** Feature name used with IModularFeatures */
-    static const FName FeatureName;
+    /** Check if this formatter can handle the given graph type */
+    virtual bool SupportsGraph(UEdGraph* Graph) const = 0;
 
     /**
-     * Format a graph using the registered formatter.
-     * @param Graph  Target graph to layout
-     * @return true if layout was applied
+     * Format an entire graph.
+     * @param Graph             The graph to format (must be open in an editor tab)
+     * @param OutNodesFormatted Number of nodes repositioned
+     * @param OutErrorMessage   Populated on failure
+     * @return true on success
+     *
+     * Precondition: The asset MUST be open in an editor tab.
      */
-    virtual bool FormatGraph(UEdGraph* Graph) = 0;
+    virtual bool FormatGraph(
+        UEdGraph* Graph,
+        int32& OutNodesFormatted,
+        FString& OutErrorMessage) = 0;
+
+    /**
+     * Get diagnostic info about what formatter would be used for this graph.
+     * Returns FMonolithFormatterInfo with type, support status, and graph class name.
+     */
+    virtual FMonolithFormatterInfo GetFormatterInfo(UEdGraph* Graph) const = 0;
+
+    // --- Static helpers for consumers ---
+
+    /** Check if any graph formatter is registered */
+    static bool IsAvailable()
+    {
+        return IModularFeatures::Get().IsModularFeatureAvailable(GetModularFeatureName());
+    }
+
+    /**
+     * Get the registered formatter (check IsAvailable() first!).
+     * Returns the first registered provider.
+     */
+    static IMonolithGraphFormatter& Get()
+    {
+        return IModularFeatures::Get().GetModularFeature<IMonolithGraphFormatter>(
+            GetModularFeatureName());
+    }
 };
 ```
 
@@ -43,11 +78,11 @@ Consumer pattern used by `auto_layout` actions in each domain module:
 
 ```cpp
 // Check at call time — BA may not be loaded
-if (IModularFeatures::Get().IsFeatureAvailable(IMonolithGraphFormatter::FeatureName))
+if (IMonolithGraphFormatter::IsAvailable())
 {
-    auto& Formatter = IModularFeatures::Get().GetFeature<IMonolithGraphFormatter>(
-        IMonolithGraphFormatter::FeatureName);
-    Formatter.FormatGraph(Graph);
+    int32 NodesFormatted = 0;
+    FString ErrorMsg;
+    IMonolithGraphFormatter::Get().FormatGraph(Graph, NodesFormatted, ErrorMsg);
 }
 ```
 
