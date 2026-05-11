@@ -15,3 +15,9 @@
 **Learning:** For optional Engine/Marketplace plugins that are conditionally queried in a module's `Build.cs`, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file will cause the Engine to refuse to load the plugin entirely when the optional dependency is missing, rendering the conditional fallback logic useless.
 **Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have `"Optional": true` defined in `Monolith.uplugin`.
 **Avoid:** Do not leave `Enabled: true` without `Optional: true` for dynamically-checked plugins.
+
+## 2026-05-10 - MonolithAI StateTree optional uplugin guard consistency
+**Build pattern:** `StateTree`, `SmartObjects`, and `GameplayStateTree` plugins were conditionally linked in `MonolithAI.Build.cs` but listed without `"Optional": true` in `Monolith.uplugin`.
+**Learning:** For optional Engine plugins that are conditionally queried in a module's `Build.cs`, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file will cause the Engine to refuse to load the plugin entirely when the optional dependency is missing, defeating the conditional fallback logic.
+**Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have `"Optional": true` defined in `Monolith.uplugin`.
+**Avoid:** Do not leave `Enabled: true` without `Optional: true` for dynamically-checked plugins.
