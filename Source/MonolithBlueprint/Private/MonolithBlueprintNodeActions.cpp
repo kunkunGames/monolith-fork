@@ -1523,11 +1523,6 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetNodePosition(const
 FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	UBlueprint* BP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, AssetPath);
-	if (!BP)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-	}
 
 	// Parse operations — handle both EJson::Array (normal) and EJson::String (Claude Code quirk)
 	TArray<TSharedPtr<FJsonValue>> Ops;
@@ -1562,6 +1557,12 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 	if (Ops.Num() > 500)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Too many operations (max 500), got %d"), Ops.Num()));
+	}
+
+	UBlueprint* BP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, AssetPath);
+	if (!BP)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "BPBatchExec", "BP Batch Execute"));
