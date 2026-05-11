@@ -32,6 +32,7 @@
 #include "UObject/SavePackage.h"
 #include "UObject/UObjectIterator.h"
 #include "Engine/World.h"
+#include "MonolithPackagePathValidator.h"
 
 namespace MonolithCommonUIActivatable
 {
@@ -52,6 +53,9 @@ namespace MonolithCommonUIActivatable
 			return FMonolithActionResult::Error(TEXT("save_path must contain at least one / separator"));
 
 		// Create package + factory-instantiated WBP with parent class UCommonActivatableWidget
+		if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+			return FMonolithActionResult::Error(ValidationError);
+
 		UPackage* Package = CreatePackage(*SavePath);
 		if (!Package)
 			return FMonolithActionResult::Error(FString::Printf(TEXT("CreatePackage failed for '%s'"), *SavePath));

@@ -32,6 +32,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/ARFilter.h"
 #include "UObject/SavePackage.h"
+#include "MonolithPackagePathValidator.h"
 
 // Phase G: route style-asset creation through the dedup service.
 #include "Style/MonolithUIStyleService.h"
@@ -345,6 +346,9 @@ namespace MonolithCommonUIButton
 				UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *DefaultPath);
 				if (!BP)
 				{
+					if (const FString ValidationError = MonolithCore::ValidatePackagePath(DefaultPath); !ValidationError.IsEmpty())
+						return FMonolithActionResult::Error(ValidationError);
+
 					UPackage* Pkg = CreatePackage(*DefaultPath);
 					if (Pkg)
 					{

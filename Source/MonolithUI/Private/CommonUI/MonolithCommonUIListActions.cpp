@@ -34,6 +34,7 @@
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/UObjectIterator.h"
+#include "MonolithPackagePathValidator.h"
 
 namespace MonolithCommonUIList
 {
@@ -110,6 +111,9 @@ namespace MonolithCommonUIList
 		FString PackagePath, AssetName;
 		if (!SavePath.Split(TEXT("/"), &PackagePath, &AssetName, ESearchCase::IgnoreCase, ESearchDir::FromEnd))
 			return FMonolithActionResult::Error(TEXT("save_path must contain /"));
+
+		if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+			return FMonolithActionResult::Error(ValidationError);
 
 		UPackage* Package = CreatePackage(*SavePath);
 		if (!Package) return FMonolithActionResult::Error(TEXT("CreatePackage failed"));

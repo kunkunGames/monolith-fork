@@ -15,6 +15,7 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Engine/World.h"
 #include "Editor.h"
+#include "MonolithPackagePathValidator.h"
 
 namespace MonolithCommonUI
 {
@@ -37,6 +38,11 @@ namespace MonolithCommonUI
 		}
 
 		const FString FullPath = FString::Printf(TEXT("%s/%s"), *PackagePath, *AssetName);
+
+		if (const FString ValidationError = MonolithCore::ValidatePackagePath(FullPath); !ValidationError.IsEmpty())
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("CreateAsset: %s"), *ValidationError));
+		}
 
 		UPackage* Package = CreatePackage(*FullPath);
 		if (!Package)
