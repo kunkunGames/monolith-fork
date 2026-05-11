@@ -304,7 +304,7 @@ When preparing a new release of Monolith:
    ```powershell
    powershell -ExecutionPolicy Bypass -File Scripts/make_release.ps1 -Version "X.Y.Z"
    ```
-5. **Publish:** Create a GitHub Release with the new tag. **Crucial:** You must copy the exact `Monolith-SHA256: <hash>` output from the release script and paste it into the release notes body. The auto-updater will refuse to install the update without this exact marker.
+5. **Publish:** Create a GitHub Release with the new tag. **Crucial:** You must copy the exact `Monolith-SHA256: <hash>` (or `Monolith-macOS-SHA256: <hash>` on Mac) output from the release script and paste it into the release notes body. The auto-updater will refuse to install the update without this exact marker.
 
 ## Architecture Notes
 
