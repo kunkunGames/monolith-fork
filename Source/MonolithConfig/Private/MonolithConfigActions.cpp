@@ -168,14 +168,16 @@ FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJ
 
 FMonolithActionResult FMonolithConfigActions::ExplainSetting(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Category = Params->GetStringField(TEXT("file"));
-	FString Section = Params->GetStringField(TEXT("section"));
-	FString Key = Params->GetStringField(TEXT("key"));
+	FString Category, Section, Key;
+	Params->TryGetStringField(TEXT("file"), Category);
+	Params->TryGetStringField(TEXT("section"), Section);
+	Params->TryGetStringField(TEXT("key"), Key);
 
 	// Convenience: if 'setting' param provided instead of file/section/key, search for it
 	if (Category.IsEmpty() && Section.IsEmpty() && Key.IsEmpty())
 	{
-		FString Setting = Params->GetStringField(TEXT("setting"));
+		FString Setting;
+		Params->TryGetStringField(TEXT("setting"), Setting);
 		if (!Setting.IsEmpty())
 		{
 			Key = Setting;
@@ -405,7 +407,8 @@ static TSharedPtr<FJsonObject> MakeDiffEntry(
 FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Category = Params->GetStringField(TEXT("file"));
-	FString FilterSection = Params->HasField(TEXT("section")) ? Params->GetStringField(TEXT("section")) : TEXT("");
+	FString FilterSection;
+	Params->TryGetStringField(TEXT("section"), FilterSection);
 
 	// Strip 'Default' or 'Base' prefix if user passed it (e.g. "DefaultEngine" -> "Engine")
 	if (Category.StartsWith(TEXT("Default")))
@@ -504,7 +507,8 @@ FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<F
 FMonolithActionResult FMonolithConfigActions::SearchConfig(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Query = Params->GetStringField(TEXT("query"));
-	FString FilterCategory = Params->HasField(TEXT("category")) ? Params->GetStringField(TEXT("category")) : TEXT("");
+	FString FilterCategory;
+	Params->TryGetStringField(TEXT("category"), FilterCategory);
 
 	// Gather config directories to search
 	TArray<FString> ConfigDirs;
@@ -685,7 +689,8 @@ FMonolithActionResult FMonolithConfigActions::GetSection(const TSharedPtr<FJsonO
 
 FMonolithActionResult FMonolithConfigActions::GetConfigFiles(const TSharedPtr<FJsonObject>& Params)
 {
-	FString FilterCategory = Params->HasField(TEXT("category")) ? Params->GetStringField(TEXT("category")) : TEXT("");
+	FString FilterCategory;
+	Params->TryGetStringField(TEXT("category"), FilterCategory);
 
 	TArray<TSharedPtr<FJsonValue>> FilesArray;
 
