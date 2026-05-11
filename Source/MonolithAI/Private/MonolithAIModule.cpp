@@ -14,6 +14,8 @@
 #include "MonolithAIScaffoldActions.h"
 #include "MonolithAIDiscoveryActions.h"
 #include "MonolithAIAdvancedActions.h"
+#include "MonolithAIChooserActions.h"
+#include "MonolithAIMassZoneGraphActions.h"
 #include "MonolithAIIndexer.h"
 #include "MonolithIndexSubsystem.h"
 #include "Editor.h"
@@ -44,6 +46,8 @@ void FMonolithAIModule::StartupModule()
 	FMonolithAIScaffoldActions::RegisterActions(Registry);
 	FMonolithAIDiscoveryActions::RegisterActions(Registry);
 	FMonolithAIAdvancedActions::RegisterActions(Registry);
+	FMonolithAIMassZoneGraphActions::RegisterActions(Registry);
+	FMonolithAIChooserActions::RegisterActions(Registry);
 
 	// Register the AI deep indexer into MonolithIndex (deferred until editor subsystems are ready)
 	if (Settings->bIndexAI)
@@ -62,13 +66,14 @@ void FMonolithAIModule::StartupModule()
 	}
 
 	int32 ActionCount = Registry.GetNamespaceActionCount(TEXT("ai"));
+	int32 ChooserActionCount = Registry.GetNamespaceActionCount(TEXT("chooser"));
 	const TCHAR* MassStatus =
 #if WITH_MASSENTITY
 		TEXT("available");
 #else
 		TEXT("not installed");
 #endif
-	UE_LOG(LogMonolithAI, Log, TEXT("MonolithAI: Loaded (%d actions, MassEntity=%s)"), ActionCount, MassStatus);
+	UE_LOG(LogMonolithAI, Log, TEXT("MonolithAI: Loaded (%d ai actions, %d chooser actions, MassEntity=%s)"), ActionCount, ChooserActionCount, MassStatus);
 }
 
 void FMonolithAIModule::ShutdownModule()
@@ -80,6 +85,7 @@ void FMonolithAIModule::ShutdownModule()
 	}
 
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("ai"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("chooser"));
 }
 
 IMPLEMENT_MODULE(FMonolithAIModule, MonolithAI)
