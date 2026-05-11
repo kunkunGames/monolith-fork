@@ -130,6 +130,9 @@ public:
 	/** Check if a specific action exists */
 	bool HasAction(const FString& Namespace, const FString& Action) const;
 
+	/** Check if a namespace exists in the raw registry */
+	bool HasNamespace(const FString& Namespace) const;
+
 	/** Get total number of registered actions */
 	int32 GetActionCount() const;
 

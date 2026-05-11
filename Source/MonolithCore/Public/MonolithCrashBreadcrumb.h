@@ -1,6 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "MonolithActionExecutionGuard.h"
 #include "Dom/JsonObject.h"
 #include "Delegates/IDelegateInstance.h"
 
@@ -60,6 +61,7 @@ public:
 
 		// True if this scope owns the active slot (false for nested calls).
 		bool bOwnsSlot = false;
+		FMonolithActionExecutionGuard::FExecutionScope ExecutionScope;
 	};
 
 private:

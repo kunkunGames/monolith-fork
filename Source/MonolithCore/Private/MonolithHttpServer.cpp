@@ -12,6 +12,11 @@
 #include "Sockets.h"
 #include "IPAddress.h"
 
+namespace
+{
+	constexpr int32 MaxMcpRequestBodyBytes = 16 * 1024 * 1024;
+}
+
 FMonolithHttpServer::FMonolithHttpServer()
 {
 }
@@ -207,6 +212,18 @@ bool FMonolithHttpServer::Restart(int32 Port)
 
 bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete)
 {
+	if (Request.Body.Num() > MaxMcpRequestBodyBytes)
+	{
+		TSharedPtr<FJsonObject> Err = FMonolithJsonUtils::ErrorResponse(
+			nullptr,
+			FMonolithJsonUtils::ErrInvalidRequest,
+			FString::Printf(TEXT("Request body exceeds Monolith MCP limit of %d bytes"), MaxMcpRequestBodyBytes));
+		auto Response = MakeJsonResponse(FMonolithJsonUtils::Serialize(Err), EHttpServerResponseCodes::RequestTooLarge);
+		AddCorsHeaders(*Response, Request);
+		OnComplete(MoveTemp(Response));
+		return true;
+	}
+
 	// Parse body as UTF-8 JSON (Body is NOT null-terminated — must add terminator)
 	TArray<uint8> NullTermBody(Request.Body);
 	NullTermBody.Add(0);
@@ -352,6 +369,21 @@ bool FMonolithHttpServer::HandleHealthCheck(const FHttpServerRequest& Request, c
 	Health->SetNumberField(TEXT("uptime_seconds"), static_cast<double>(Uptime.GetTotalSeconds()));
 
 	Health->SetNumberField(TEXT("tools_registered"), FMonolithToolRegistry::Get().GetActionCount());
+
+	TSharedPtr<FJsonObject> Transport = MakeShared<FJsonObject>();
+	Transport->SetStringField(TEXT("primary_route"), TEXT("/mcp"));
+	Transport->SetBoolField(TEXT("streamable_http_enabled"), true);
+	Transport->SetBoolField(TEXT("mcp_get_sse_endpoint_enabled"), true);
+	Transport->SetBoolField(TEXT("legacy_sse_route_enabled"), false);
+	Transport->SetBoolField(TEXT("legacy_message_route_enabled"), false);
+	Transport->SetStringField(TEXT("cors_mode"), TEXT("loopback_origin_allowlist"));
+	Transport->SetNumberField(TEXT("max_request_body_bytes"), MaxMcpRequestBodyBytes);
+
+	TArray<TSharedPtr<FJsonValue>> Protocols;
+	Protocols.Add(MakeShared<FJsonValueString>(TEXT("2024-11-05")));
+	Protocols.Add(MakeShared<FJsonValueString>(TEXT("2025-03-26")));
+	Transport->SetArrayField(TEXT("supported_protocol_versions"), Protocols);
+	Health->SetObjectField(TEXT("mcp_transport"), Transport);
 
 	FString Body;
 	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
@@ -859,7 +891,7 @@ void FMonolithHttpServer::AddCorsHeaders(FHttpServerResponse& Response, const FH
 	// Always advertise the methods/headers we support — these are not
 	// origin-sensitive. The allow-origin echo is the gated piece.
 	Response.Headers.Add(TEXT("Access-Control-Allow-Methods"), {TEXT("GET, POST, DELETE, OPTIONS")});
-	Response.Headers.Add(TEXT("Access-Control-Allow-Headers"), {TEXT("Content-Type")});
+	Response.Headers.Add(TEXT("Access-Control-Allow-Headers"), {TEXT("Content-Type, Accept, MCP-Session-Id, MCP-Protocol-Version")});
 	Response.Headers.Add(TEXT("Vary"), {TEXT("Origin")});
 
 	// Pull the Origin header (HTTP header names are case-insensitive per RFC 7230,

@@ -46,6 +46,49 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Auto-Update")
 	bool bAutoUpdateEnabled = false;
 
+	// --- Onboarding ---
+
+	/** Versioned schema for Monolith onboarding state. Increment only when steps change meaning. */
+	UPROPERTY(config, EditAnywhere, Category="Onboarding")
+	int32 OnboardingSchemaVersion = 1;
+
+	/** Completed local onboarding steps such as server_ready, index_ready, and optional_modules_reviewed. */
+	UPROPERTY(config, EditAnywhere, Category="Onboarding")
+	TArray<FString> OnboardingCompletedSteps;
+
+	/** User-skipped onboarding steps. Skipped steps remain visible in readiness reports. */
+	UPROPERTY(config, EditAnywhere, Category="Onboarding")
+	TArray<FString> OnboardingSkippedSteps;
+
+	// --- Notifications ---
+
+	/** Show lightweight editor toast notifications for Monolith server/action events. */
+	UPROPERTY(config, EditAnywhere, Category="Notifications")
+	bool bNotifyEditorToasts = true;
+
+	/** Reserve setting for notification sounds. Sound playback is opt-in and not triggered by readiness checks. */
+	UPROPERTY(config, EditAnywhere, Category="Notifications")
+	bool bNotifySounds = false;
+
+	/** Reserve setting for OS taskbar attention on important Monolith events. */
+	UPROPERTY(config, EditAnywhere, Category="Notifications")
+	bool bNotifyTaskbarAttention = false;
+
+	UPROPERTY(config, EditAnywhere, Category="Notifications")
+	bool bNotifyServerErrors = true;
+
+	UPROPERTY(config, EditAnywhere, Category="Notifications")
+	bool bNotifyActionErrors = true;
+
+	UPROPERTY(config, EditAnywhere, Category="Notifications")
+	bool bNotifyLongRunningActionComplete = true;
+
+	UPROPERTY(config, EditAnywhere, Category="Notifications")
+	bool bNotifyIndexingComplete = true;
+
+	UPROPERTY(config, EditAnywhere, Category="Notifications")
+	bool bNotifyUpdateAvailable = true;
+
 	// --- Indexing ---
 
 	/** Content paths to index in addition to /Game. Add plugin mount points like /MyPlugin. */

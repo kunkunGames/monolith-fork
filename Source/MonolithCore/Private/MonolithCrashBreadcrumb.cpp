@@ -1,4 +1,4 @@
-#include "MonolithCrashBreadcrumb.h"
+﻿#include "MonolithCrashBreadcrumb.h"
 #include "MonolithJsonUtils.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/FileHelper.h"
@@ -220,6 +220,7 @@ FMonolithCrashBreadcrumb::FScopedCapture::FScopedCapture(
 	B.CurrentPayloadJson = BuildPayloadJson(
 		Namespace, Action, ParamsSerialized, B.SessionId, Now);
 
+	ExecutionScope = FMonolithActionExecutionGuard::Get().BeginAction(Namespace, Action);
 	B.bSlotActive = true;
 	bOwnsSlot = true;
 }
@@ -231,6 +232,7 @@ FMonolithCrashBreadcrumb::FScopedCapture::~FScopedCapture()
 		return;
 	}
 	FMonolithCrashBreadcrumb& B = FMonolithCrashBreadcrumb::Get();
+	FMonolithActionExecutionGuard::Get().EndAction(ExecutionScope);
 	B.bSlotActive = false;
 	// Strings are kept (we do not Empty()) — there is no harm and avoiding
 	// reallocation on the next ExecuteAction is a small win. The contents

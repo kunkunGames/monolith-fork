@@ -26,4 +26,40 @@ public:
 
 	/** monolith_reindex — Trigger full project re-index */
 	static FMonolithActionResult HandleReindex(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_get_mcp_server_status — Return MCP transport/server status */
+	static FMonolithActionResult HandleGetMcpServerStatus(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_list_mcp_sessions — Report MCP session tracking availability */
+	static FMonolithActionResult HandleListMcpSessions(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_terminate_mcp_session — Report MCP session termination availability */
+	static FMonolithActionResult HandleTerminateMcpSession(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_set_mcp_compatibility_options — Report compatibility option mutability */
+	static FMonolithActionResult HandleSetMcpCompatibilityOptions(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_get_mcp_discovery_state — Return current discovery snapshot status */
+	static FMonolithActionResult HandleGetMcpDiscoveryState(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_get_onboarding_state — Return local onboarding progress */
+	static FMonolithActionResult HandleGetOnboardingState(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_set_onboarding_state — Complete, skip, reopen, or reset onboarding steps */
+	static FMonolithActionResult HandleSetOnboardingState(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_get_readiness_status — Read-only Monolith readiness checks */
+	static FMonolithActionResult HandleGetReadinessStatus(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_get_readiness_help — Help text for readiness components */
+	static FMonolithActionResult HandleGetReadinessHelp(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_get_notification_settings — Return local notification preferences */
+	static FMonolithActionResult HandleGetNotificationSettings(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_set_notification_settings — Persist local notification preferences */
+	static FMonolithActionResult HandleSetNotificationSettings(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_test_notification — Trigger a harmless notification test */
+	static FMonolithActionResult HandleTestNotification(const TSharedPtr<FJsonObject>& Params);
 };
