@@ -18,3 +18,8 @@
 **Learning:** Hardcoded `C:\Program Files` paths cause mysterious build failures in non-standard environments, and silent fallbacks hide the root cause of `vswhere.exe` resolution issues.
 **Prevention:** Build scripts should fail fast with clear errors when dynamic tool resolution (e.g., `vswhere.exe`) fails, rather than falling back to hardcoded paths.
 **Avoid:** Hardcoded `C:\Program Files` paths for Visual Studio tools in batch scripts.
+## 2026-05-11 - make_release.ps1 dynamic UBT detection without silent skip
+**Hygiene issue:** `make_release.ps1` silently skipped the UBT path when it couldn't locate it dynamically (with no hardcoded fallbacks), which creates confusing build behavior.
+**Learning:** Silently skipping critical build tools leads to brittle scripts that fail later in confusing ways instead of at the point of tool discovery.
+**Prevention:** Build scripts should fail fast with clear errors when dynamic tool resolution (e.g., UBT) fails, rather than warning and continuing without building.
+**Avoid:** Silently skipping build tool steps when dynamic resolution fails.

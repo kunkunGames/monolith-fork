@@ -89,16 +89,12 @@ if (-not $UBT) {
         $UBT = Join-Path $env:UE_57 "Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe"
     } elseif ($env:UE_ROOT) {
         $UBT = Join-Path $env:UE_ROOT "Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe"
-    } else {
-        $UBT = 'C:\Program Files\Epic Games\UE_5.7\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe'
-        if (-not (Test-Path $UBT)) {
-            $UBT = 'C:\Program Files (x86)\UE_5.7\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe'
-        }
     }
 }
 
-if (-not (Test-Path $UBT)) {
-    Write-Host "    [SKIP] UnrealBuildTool not found at $UBT" -ForegroundColor Yellow
+if (-not $UBT -or -not (Test-Path $UBT)) {
+    Write-Host "    [FAIL] UnrealBuildTool not found. Set UE_57, UE_ROOT, or UE_57_UBT environment variable." -ForegroundColor Red
+    exit 1
 }
 
 $UProject = Join-Path $ProjectDir "Leviathan.uproject"
