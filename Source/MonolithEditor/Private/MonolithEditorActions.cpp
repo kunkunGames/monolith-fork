@@ -2535,9 +2535,19 @@ FMonolithActionResult FMonolithEditorActions::HandleListOpenViewports(const TSha
 
 FMonolithActionResult FMonolithEditorActions::HandleCaptureLevelViewport(const TSharedPtr<FJsonObject>& Params)
 {
-	double ViewportIndexNumber = 0.0;
-	Params->TryGetNumberField(TEXT("viewport_index"), ViewportIndexNumber);
-	const int32 ViewportIndex = FMath::Max(0, static_cast<int32>(ViewportIndexNumber));
+	int32 ViewportIndex = 0;
+	if (Params->HasField(TEXT("viewport_index")))
+	{
+		double ViewportIndexNumber = 0.0;
+		if (!Params->TryGetNumberField(TEXT("viewport_index"), ViewportIndexNumber)
+			|| ViewportIndexNumber < 0.0
+			|| ViewportIndexNumber > static_cast<double>(MAX_int32)
+			|| static_cast<double>(static_cast<int64>(ViewportIndexNumber)) != ViewportIndexNumber)
+		{
+			return FMonolithActionResult::Error(TEXT("viewport_index must be a non-negative integer"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		ViewportIndex = static_cast<int32>(ViewportIndexNumber);
+	}
 
 	FString Error;
 	FLevelEditorViewportClient* Client = GetLevelViewportClientByIndex(ViewportIndex, Error);
