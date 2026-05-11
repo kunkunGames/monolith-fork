@@ -540,6 +540,11 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::DuplicateJob(const TShar
 	{
 		return FMonolithActionResult::Error(Error);
 	}
+	UMoviePipelineQueueSubsystem* Subsystem = GetMovieRenderSubsystem();
+	if (Subsystem && Subsystem->IsRendering())
+	{
+		return FMonolithActionResult::Error(TEXT("Cannot delete a Movie Render Queue job while rendering"), FMonolithJsonUtils::ErrInvalidRequest);
+	}
 
 	TArray<UMoviePipelineExecutorJob*> Jobs = Queue->GetJobs();
 	int32 Index = INDEX_NONE;
