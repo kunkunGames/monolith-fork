@@ -620,6 +620,11 @@ FMonolithActionResult FMonolithAIMassZoneGraphActions::FindNearestZoneLane(const
 
 			TSharedPtr<FJsonObject> LaneInfoParams = MakeShared<FJsonObject>();
 			LaneInfoParams->SetNumberField(TEXT("lane_handle"), LaneIndex);
+			double DataHandle = 0.0;
+			if (LaneObject->TryGetNumberField(TEXT("data_handle"), DataHandle))
+			{
+				LaneInfoParams->SetNumberField(TEXT("data_handle"), DataHandle);
+			}
 			FMonolithActionResult LaneInfoResult = Registry.ExecuteAction(TEXT("ai"), TEXT("get_zone_lane_info"), LaneInfoParams);
 			if (!LaneInfoResult.bSuccess || !LaneInfoResult.Result.IsValid())
 			{

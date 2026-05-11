@@ -785,22 +785,45 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleGetZoneLaneInfo(const TS
 		return FMonolithActionResult::Error(TEXT("UZoneGraphSubsystem not found"));
 	}
 
-	// Get lane location data from the first registered zone graph data
+	int32 RequestedDataHandle = INDEX_NONE;
+	if (Params->HasField(TEXT("data_handle")))
+	{
+		double DataHandleValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("data_handle"), DataHandleValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'data_handle' must be a number"));
+		}
+		RequestedDataHandle = static_cast<int32>(DataHandleValue);
+	}
+
 	const FZoneGraphStorage* Storage = nullptr;
+	int32 ResolvedDataHandle = INDEX_NONE;
 	{
 		TConstArrayView<FRegisteredZoneGraphData> AllData = ZGSubsystem->GetRegisteredZoneGraphData();
 		for (int32 Idx = 0; Idx < AllData.Num(); ++Idx)
 		{
+			if (RequestedDataHandle != INDEX_NONE && Idx != RequestedDataHandle)
+			{
+				continue;
+			}
 			if (AllData[Idx].bInUse)
 			{
 				FZoneGraphDataHandle Handle(static_cast<uint16>(Idx), static_cast<uint16>(AllData[Idx].Generation));
 				Storage = ZGSubsystem->GetZoneGraphStorage(Handle);
-				if (Storage) break;
+				if (Storage)
+				{
+					ResolvedDataHandle = Idx;
+					break;
+				}
 			}
 		}
 	}
 	if (!Storage)
 	{
+		if (RequestedDataHandle != INDEX_NONE)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("No ZoneGraph storage available for data_handle %d"), RequestedDataHandle));
+		}
 		return FMonolithActionResult::Error(TEXT("No ZoneGraph storage available"));
 	}
 
@@ -813,6 +836,7 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleGetZoneLaneInfo(const TS
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetNumberField(TEXT("lane_index"), LaneIndex);
+	Result->SetNumberField(TEXT("data_handle"), ResolvedDataHandle);
 	Result->SetNumberField(TEXT("width"), Lane.Width);
 	Result->SetNumberField(TEXT("num_points"), Lane.PointsEnd - Lane.PointsBegin);
 	Result->SetNumberField(TEXT("tags"), static_cast<int32>(Lane.Tags.GetValue())); // raw bitmask value
