@@ -86,6 +86,10 @@ FString ReadFileWindow(const FString& FilePath, int32 StartLine, int32 EndLine)
 	{
 		return FString::Printf(TEXT("[File not found: %s]"), *FilePath);
 	}
+	if (Lines.Num() == 0)
+	{
+		return FString::Printf(TEXT("[Empty file: %s]\n"), *FilePath);
+	}
 
 	StartLine = FMath::Clamp(StartLine, 1, FMath::Max(1, Lines.Num()));
 	EndLine = FMath::Clamp(EndLine, StartLine, FMath::Max(StartLine, Lines.Num()));
@@ -342,7 +346,11 @@ FMonolithActionResult FMonolithSourceContextActions::HandleGetIndexStatus(const 
 
 FMonolithActionResult FMonolithSourceContextActions::HandleStartIndexing(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString Scope = Params->HasField(TEXT("scope")) ? Params->GetStringField(TEXT("scope")) : TEXT("all");
+	FString Scope = TEXT("all");
+	if (Params->HasField(TEXT("scope")) && !Params->TryGetStringField(TEXT("scope"), Scope))
+	{
+		return FMonolithActionResult::Error(TEXT("'scope' must be a string"), -32602);
+	}
 	const bool bFull = GetOptionalBool(Params, TEXT("full"), false);
 
 	if (Scope != TEXT("all") && Scope != TEXT("assets") && Scope != TEXT("source"))
