@@ -408,7 +408,14 @@ FMonolithActionResult FMonolithSourceContextActions::HandleStartIndexing(const T
 			else
 			{
 				Source->TriggerProjectReindex();
-				Started.Add(MakeShared<FJsonValueString>(TEXT("source: project index")));
+				if (Source->IsIndexing())
+				{
+					Started.Add(MakeShared<FJsonValueString>(TEXT("source: project index")));
+				}
+				else
+				{
+					Skipped.Add(MakeShared<FJsonValueString>(TEXT("source: project index unavailable; run full source.trigger_reindex first")));
+				}
 			}
 		}
 	}
