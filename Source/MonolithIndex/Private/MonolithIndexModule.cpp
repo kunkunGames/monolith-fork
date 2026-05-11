@@ -8,6 +8,7 @@
 #include "Actions/ProjectGetAssetDetailsAction.h"
 #include "Actions/ProjectListGameplayTagsAction.h"
 #include "Actions/ProjectSearchGameplayTagsAction.h"
+#include "Actions/AssetCollectionActions.h"
 
 #define LOCTEXT_NAMESPACE "FMonolithIndexModule"
 
@@ -51,11 +52,14 @@ void FMonolithIndexModule::StartupModule()
 		FProjectSearchGameplayTagsAction::GetDescription(),
 		FMonolithActionHandler::CreateStatic(&FProjectSearchGameplayTagsAction::Execute),
 		FProjectSearchGameplayTagsAction::GetSchema());
+
+	FAssetCollectionActions::Register(Registry);
 }
 
 void FMonolithIndexModule::ShutdownModule()
 {
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("project"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("collection"));
 }
 
 #undef LOCTEXT_NAMESPACE
