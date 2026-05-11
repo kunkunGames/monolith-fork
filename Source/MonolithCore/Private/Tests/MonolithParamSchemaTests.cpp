@@ -118,4 +118,37 @@ bool FMonolithParamSchemaUnknownKeysTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+// FMonolithParamSchema STRICT_PARAMS test
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamSchemaStrictParamsTest,
+	"Monolith.ParamSchema.StrictParamsBehavior",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamSchemaStrictParamsTest::RunTest(const FString& Parameters)
+{
+	// Store original value to restore later
+	const FString OriginalVal = FPlatformMisc::GetEnvironmentVariable(TEXT("STRICT_PARAMS"));
+
+	// Test 1: Set to "1"
+	FPlatformMisc::SetEnvironmentVar(TEXT("STRICT_PARAMS"), TEXT("1"));
+	TestTrue(TEXT("IsStrictParamsEnabled returns true when STRICT_PARAMS=1"), FMonolithParamSchema::IsStrictParamsEnabled());
+
+	// Test 2: Set to "0"
+	FPlatformMisc::SetEnvironmentVar(TEXT("STRICT_PARAMS"), TEXT("0"));
+	TestFalse(TEXT("IsStrictParamsEnabled returns false when STRICT_PARAMS=0"), FMonolithParamSchema::IsStrictParamsEnabled());
+
+	// Test 3: Set to empty
+	FPlatformMisc::SetEnvironmentVar(TEXT("STRICT_PARAMS"), TEXT(""));
+	TestFalse(TEXT("IsStrictParamsEnabled returns false when STRICT_PARAMS is empty"), FMonolithParamSchema::IsStrictParamsEnabled());
+
+	// Test 4: Set to arbitrary string
+	FPlatformMisc::SetEnvironmentVar(TEXT("STRICT_PARAMS"), TEXT("true"));
+	TestFalse(TEXT("IsStrictParamsEnabled returns false when STRICT_PARAMS=true"), FMonolithParamSchema::IsStrictParamsEnabled());
+
+	// Restore original value
+	FPlatformMisc::SetEnvironmentVar(TEXT("STRICT_PARAMS"), *OriginalVal);
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
