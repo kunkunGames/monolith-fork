@@ -15,4 +15,6 @@ public:
 
 private:
 	static FMonolithActionResult HandleAutoLayout(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleGetMetaHumanStatus(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleListMetaHumanAssets(const TSharedPtr<FJsonObject>& Params);
 };

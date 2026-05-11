@@ -16,7 +16,7 @@ void FMonolithAnimationModule::StartupModule()
 	FMonolithControlRigWriteActions::RegisterActions(FMonolithToolRegistry::Get());
 	FMonolithAbpWriteActions::RegisterActions(FMonolithToolRegistry::Get());
 	FMonolithAnimLayoutActions::RegisterActions(FMonolithToolRegistry::Get());
-	UE_LOG(LogMonolith, Verbose, TEXT("Monolith — Animation module loaded (81 actions)"));
+	UE_LOG(LogMonolith, Verbose, TEXT("Monolith — Animation module loaded (90 actions)"));
 }
 
 void FMonolithAnimationModule::ShutdownModule()

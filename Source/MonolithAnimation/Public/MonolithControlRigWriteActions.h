@@ -17,4 +17,13 @@ private:
 	static FMonolithActionResult HandleGetControlRigGraph(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleAddControlRigNode(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleConnectControlRigPins(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleEditControlRigArrayPin(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleBindControlRigPinVariable(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSetControlRigPinMetadata(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleManageControlRigExposedPin(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleManageControlRigLocalVariable(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSetControlRigNodeMetadata(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleCollapseControlRigNodes(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandlePromoteControlRigNode(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleManageControlRigTrait(const TSharedPtr<FJsonObject>& Params);
 };

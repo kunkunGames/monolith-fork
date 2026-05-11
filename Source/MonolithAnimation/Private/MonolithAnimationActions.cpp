@@ -1,4 +1,4 @@
-#include "MonolithAnimationActions.h"
+﻿#include "MonolithAnimationActions.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
@@ -52,6 +52,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Modules/ModuleManager.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonReader.h"
 #include "Editor.h"
@@ -66,6 +67,27 @@
 #include "PhysicsEngine/BodySetup.h"
 #include "PhysicsEngine/PhysicsConstraintTemplate.h"
 #include "PhysicsEngine/BodyInstance.h"
+
+namespace
+{
+	TSharedPtr<FJsonObject> BuildOptionalModuleStatus(const TCHAR* ModuleName)
+	{
+		FModuleManager& ModuleManager = FModuleManager::Get();
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("module"), ModuleName);
+		Row->SetBoolField(TEXT("exists"), ModuleManager.ModuleExists(ModuleName));
+		Row->SetBoolField(TEXT("loaded"), ModuleManager.IsModuleLoaded(FName(ModuleName)));
+		return Row;
+	}
+
+	TSharedPtr<FJsonObject> BuildReflectedTypeStatus(const TCHAR* ObjectPath)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("object_path"), ObjectPath);
+		Row->SetBoolField(TEXT("loaded"), FindObject<UObject>(nullptr, ObjectPath) != nullptr);
+		return Row;
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Registration
@@ -342,6 +364,10 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
 			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("get_livelink_status"),
+		TEXT("Report optional LiveLink module/type availability without mutating the active session"),
+		FMonolithActionHandler::CreateStatic(&HandleGetLiveLinkStatus),
+		FParamSchemaBuilder().Build());
 
 	// Wave 2 — Notify CRUD
 	Registry.RegisterAction(TEXT("animation"), TEXT("add_notify"),
@@ -963,6 +989,78 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("new_name"), TEXT("string"), TEXT("Rename the chain"))
 			.Build());
 
+}
+
+// ---------------------------------------------------------------------------
+// LiveLink Optional Capability Status
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAnimationActions::HandleGetLiveLinkStatus(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("namespace"), TEXT("animation"));
+	Root->SetStringField(TEXT("action"), TEXT("get_livelink_status"));
+	Root->SetStringField(TEXT("sample_utc"), FDateTime::UtcNow().ToIso8601());
+	Root->SetStringField(TEXT("status"), TEXT("read_only_capability_probe"));
+
+	TArray<TSharedPtr<FJsonValue>> Modules;
+	const TCHAR* ModuleNames[] =
+	{
+		TEXT("LiveLinkInterface"),
+		TEXT("LiveLink"),
+		TEXT("LiveLinkComponents"),
+		TEXT("LiveLinkAnimationCore"),
+		TEXT("LiveLinkEditor")
+	};
+
+	bool bAnyLiveLinkModuleExists = false;
+	bool bAnyLiveLinkModuleLoaded = false;
+	for (const TCHAR* ModuleName : ModuleNames)
+	{
+		TSharedPtr<FJsonObject> ModuleStatus = BuildOptionalModuleStatus(ModuleName);
+		bAnyLiveLinkModuleExists |= ModuleStatus->GetBoolField(TEXT("exists"));
+		bAnyLiveLinkModuleLoaded |= ModuleStatus->GetBoolField(TEXT("loaded"));
+		Modules.Add(MakeShared<FJsonValueObject>(ModuleStatus));
+	}
+	Root->SetArrayField(TEXT("modules"), Modules);
+	Root->SetBoolField(TEXT("available"), bAnyLiveLinkModuleExists);
+	Root->SetBoolField(TEXT("loaded"), bAnyLiveLinkModuleLoaded);
+	Root->SetBoolField(TEXT("livelink_namespace_registered"), FMonolithToolRegistry::Get().HasNamespace(TEXT("livelink")));
+
+	TArray<TSharedPtr<FJsonValue>> ReflectedTypes;
+	const TCHAR* TypePaths[] =
+	{
+		TEXT("/Script/LiveLinkInterface.LiveLinkRole"),
+		TEXT("/Script/LiveLinkInterface.LiveLinkAnimationRole"),
+		TEXT("/Script/LiveLinkInterface.LiveLinkSubjectFrameData"),
+		TEXT("/Script/LiveLinkInterface.LiveLinkSubjectName"),
+		TEXT("/Script/LiveLinkInterface.LiveLinkSourceHandle")
+	};
+	for (const TCHAR* TypePath : TypePaths)
+	{
+		ReflectedTypes.Add(MakeShared<FJsonValueObject>(BuildReflectedTypeStatus(TypePath)));
+	}
+	Root->SetArrayField(TEXT("reflected_types"), ReflectedTypes);
+
+	TArray<TSharedPtr<FJsonValue>> CurrentActions;
+	CurrentActions.Add(MakeShared<FJsonValueString>(TEXT("animation.get_livelink_status")));
+	Root->SetArrayField(TEXT("current_actions"), CurrentActions);
+
+	TArray<TSharedPtr<FJsonValue>> FutureActions;
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("livelink.get_capabilities")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("livelink.list_sources")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("livelink.list_subjects")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("livelink.evaluate_frame")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("livelink.list_roles")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("livelink.list_virtual_subjects")));
+	Root->SetArrayField(TEXT("future_actions"), FutureActions);
+
+	TArray<TSharedPtr<FJsonValue>> Notes;
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("This first milestone intentionally does not load LiveLink modules or mutate sources, subjects, or virtual subjects.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Full source, subject, frame, and lifecycle actions should live in an owned optional livelink namespace once registration and shutdown ownership are added.")));
+	Root->SetArrayField(TEXT("notes"), Notes);
+
+	return FMonolithActionResult::Success(Root);
 }
 
 // ---------------------------------------------------------------------------

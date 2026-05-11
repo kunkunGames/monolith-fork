@@ -31,4 +31,8 @@ private:
 	static FMonolithActionResult HandleSetChannelWeight(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRebuildPoseSearchIndex(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleSetDatabaseSearchMode(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Cloth/Outfit discovery ---
+	static FMonolithActionResult HandleGetClothStatus(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleListClothingAssets(const TSharedPtr<FJsonObject>& Params);
 };

@@ -1,4 +1,4 @@
-#include "MonolithAnimLayoutActions.h"
+﻿#include "MonolithAnimLayoutActions.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithParamSchema.h"
 #include "IMonolithGraphFormatter.h"
@@ -9,8 +9,10 @@
 #include "AnimationStateMachineGraph.h"
 #include "AnimStateNode.h"
 #include "AnimationStateGraph.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Modules/ModuleManager.h"
 
 // ---------------------------------------------------------------------------
 // Registration
@@ -30,6 +32,19 @@ void FMonolithAnimLayoutActions::RegisterActions(FMonolithToolRegistry& Registry
 				TEXT("Formatter: 'auto' (default, uses BA if available), 'blueprint_assist' (BA or error), 'monolith' (not supported for animation)"),
 				TEXT("auto"))
 			.Build());
+
+	Registry.RegisterAction(TEXT("metahuman"), TEXT("get_status"),
+		TEXT("Report read-only MetaHuman capability status without hard MetaHuman plugin dependencies or service calls."),
+		FMonolithActionHandler::CreateStatic(&HandleGetMetaHumanStatus),
+		FParamSchemaBuilder().Build());
+
+	Registry.RegisterAction(TEXT("metahuman"), TEXT("list_character_assets"),
+		TEXT("List MetaHuman-like assets under /Game using AssetRegistry metadata only. Does not load characters, build, rig, conform, or call services."),
+		FMonolithActionHandler::CreateStatic(&HandleListMetaHumanAssets),
+		FParamSchemaBuilder()
+			.Optional(TEXT("package_path"), TEXT("string"), TEXT("Content package path under /Game"), TEXT("/Game"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum assets to return, clamped to 1..500"), TEXT("100"))
+			.Build());
 }
 
 // ---------------------------------------------------------------------------
@@ -38,6 +53,30 @@ void FMonolithAnimLayoutActions::RegisterActions(FMonolithToolRegistry& Registry
 
 namespace
 {
+int32 ClampMetaHumanLimit(double LimitValue)
+{
+	return FMath::Clamp(static_cast<int32>(LimitValue), 1, 500);
+}
+
+bool IsMetaHumanLikeAssetClass(const FAssetData& AssetData)
+{
+	const FString ClassName = AssetData.AssetClassPath.GetAssetName().ToString();
+	const FString ClassPath = AssetData.AssetClassPath.ToString();
+	return ClassPath.Contains(TEXT("MetaHuman"))
+		|| ClassPath.Contains(TEXT("MetaHumans"))
+		|| ClassName.Contains(TEXT("MetaHuman"))
+		|| ClassName.Contains(TEXT("MetaHumans"));
+}
+
+TSharedPtr<FJsonObject> MakeMetaHumanModuleStatus(const TCHAR* ModuleName)
+{
+	FModuleManager& ModuleManager = FModuleManager::Get();
+	auto Status = MakeShared<FJsonObject>();
+	Status->SetStringField(TEXT("name"), ModuleName);
+	Status->SetBoolField(TEXT("exists"), ModuleManager.ModuleExists(ModuleName));
+	Status->SetBoolField(TEXT("loaded"), ModuleManager.IsModuleLoaded(ModuleName));
+	return Status;
+}
 
 /** Collect all formattable graphs from an ABP: the main AnimGraph, all state machine graphs, and state inner graphs. */
 void CollectAllGraphs(UAnimBlueprint* ABP, TArray<TPair<FString, UEdGraph*>>& OutGraphs)
@@ -295,4 +334,120 @@ FMonolithActionResult FMonolithAnimLayoutActions::HandleAutoLayout(const TShared
 	Root->SetStringField(TEXT("formatter_used"), GraphResult->GetStringField(TEXT("formatter_used")));
 
 	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// metahuman.get_status / metahuman.list_character_assets
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAnimLayoutActions::HandleGetMetaHumanStatus(const TSharedPtr<FJsonObject>& Params)
+{
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("metahuman"));
+	Result->SetStringField(TEXT("domain"), TEXT("metahuman_discovery"));
+	Result->SetStringField(TEXT("mode"), TEXT("read_only"));
+	Result->SetBoolField(TEXT("hard_dependency"), false);
+	Result->SetBoolField(TEXT("service_calls"), false);
+
+	TArray<TSharedPtr<FJsonValue>> Modules;
+	Modules.Add(MakeShared<FJsonValueObject>(MakeMetaHumanModuleStatus(TEXT("MetaHumanCharacter"))));
+	Modules.Add(MakeShared<FJsonValueObject>(MakeMetaHumanModuleStatus(TEXT("MetaHumanCharacterEditor"))));
+	Modules.Add(MakeShared<FJsonValueObject>(MakeMetaHumanModuleStatus(TEXT("MetaHumanCharacterPalette"))));
+	Modules.Add(MakeShared<FJsonValueObject>(MakeMetaHumanModuleStatus(TEXT("MetaHumanCoreTechLib"))));
+	Modules.Add(MakeShared<FJsonValueObject>(MakeMetaHumanModuleStatus(TEXT("MetaHumanIdentity"))));
+	Modules.Add(MakeShared<FJsonValueObject>(MakeMetaHumanModuleStatus(TEXT("MetaHumanIdentityEditor"))));
+	Modules.Add(MakeShared<FJsonValueObject>(MakeMetaHumanModuleStatus(TEXT("RigLogic"))));
+	Result->SetArrayField(TEXT("modules"), Modules);
+
+	TArray<TSharedPtr<FJsonValue>> ImplementedActions;
+	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("metahuman.get_status")));
+	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("metahuman.list_character_assets")));
+	Result->SetArrayField(TEXT("implemented_actions"), ImplementedActions);
+
+	TArray<TSharedPtr<FJsonValue>> FutureActions;
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("metahuman.get_metahuman_info")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("metahuman.initialize_metahuman_from_preset")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("metahuman.list_metahuman_wardrobe")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("metahuman.request_metahuman_textures")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("metahuman.auto_rig_metahuman")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("metahuman.build_metahuman")));
+	Result->SetArrayField(TEXT("future_optional_actions"), FutureActions);
+
+	TArray<TSharedPtr<FJsonValue>> Notes;
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("This first milestone uses module reflection plus AssetRegistry metadata only; it does not load MetaHuman assets or call services.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Build, rig, conform, texture, wardrobe, and spawn workflows remain future work gated by compatible plugin APIs and confirm=true.")));
+	Result->SetArrayField(TEXT("notes"), Notes);
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithAnimLayoutActions::HandleListMetaHumanAssets(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PackagePath = TEXT("/Game");
+	Params->TryGetStringField(TEXT("package_path"), PackagePath);
+	if (!PackagePath.StartsWith(TEXT("/Game")))
+	{
+		return FMonolithActionResult::Error(TEXT("package_path must be under /Game"));
+	}
+
+	double LimitValue = 100.0;
+	Params->TryGetNumberField(TEXT("limit"), LimitValue);
+	const int32 Limit = ClampMetaHumanLimit(LimitValue);
+
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	FARFilter Filter;
+	Filter.PackagePaths.Add(FName(*PackagePath));
+	Filter.bRecursivePaths = true;
+
+	TArray<FAssetData> Assets;
+	AssetRegistry.GetAssets(Filter, Assets);
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	int32 MatchedCount = 0;
+	TMap<FString, int32> ClassCounts;
+
+	for (const FAssetData& AssetData : Assets)
+	{
+		if (!IsMetaHumanLikeAssetClass(AssetData))
+		{
+			continue;
+		}
+
+		MatchedCount++;
+		const FString ClassName = AssetData.AssetClassPath.GetAssetName().ToString();
+		ClassCounts.FindOrAdd(ClassName)++;
+
+		if (Rows.Num() >= Limit)
+		{
+			continue;
+		}
+
+		auto Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("object_path"), AssetData.GetObjectPathString());
+		Row->SetStringField(TEXT("package_name"), AssetData.PackageName.ToString());
+		Row->SetStringField(TEXT("package_path"), AssetData.PackagePath.ToString());
+		Row->SetStringField(TEXT("asset_name"), AssetData.AssetName.ToString());
+		Row->SetStringField(TEXT("asset_class"), ClassName);
+		Row->SetStringField(TEXT("asset_class_path"), AssetData.AssetClassPath.ToString());
+		Row->SetBoolField(TEXT("loaded"), AssetData.IsAssetLoaded());
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	auto CountsJson = MakeShared<FJsonObject>();
+	for (const TPair<FString, int32>& Pair : ClassCounts)
+	{
+		CountsJson->SetNumberField(Pair.Key, Pair.Value);
+	}
+
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("metahuman"));
+	Result->SetStringField(TEXT("domain"), TEXT("metahuman_discovery"));
+	Result->SetStringField(TEXT("package_path"), PackagePath);
+	Result->SetNumberField(TEXT("matched_count"), MatchedCount);
+	Result->SetNumberField(TEXT("returned_count"), Rows.Num());
+	Result->SetNumberField(TEXT("limit"), Limit);
+	Result->SetBoolField(TEXT("truncated"), MatchedCount > Rows.Num());
+	Result->SetObjectField(TEXT("class_counts"), CountsJson);
+	Result->SetArrayField(TEXT("assets"), Rows);
+	return FMonolithActionResult::Success(Result);
 }
