@@ -133,9 +133,11 @@ namespace
 		if (const FByteProperty* ByteProp = CastField<FByteProperty>(Property))
 		{
 			const uint8 RawValue = ByteProp->GetPropertyValue(ValuePtr);
-			return MakeShared<FJsonValueString>(ByteProp->Enum
-				? ByteProp->Enum->GetNameStringByValue(RawValue)
-				: FString::FromInt(RawValue));
+			if (ByteProp->Enum)
+			{
+				return MakeShared<FJsonValueString>(ByteProp->Enum->GetNameStringByValue(RawValue));
+			}
+			return MakeShared<FJsonValueNumber>(RawValue);
 		}
 
 		if (const FNumericProperty* NumProp = CastField<FNumericProperty>(Property))

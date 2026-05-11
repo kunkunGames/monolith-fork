@@ -180,6 +180,7 @@ void FMonolithAIAdvancedActions::RegisterActions(FMonolithToolRegistry& Registry
 		FMonolithActionHandler::CreateStatic(&HandleGetZoneLaneInfo),
 		FParamSchemaBuilder()
 			.Required(TEXT("lane_handle"), TEXT("number"), TEXT("Lane handle index"))
+			.Optional(TEXT("data_handle"), TEXT("number"), TEXT("ZoneGraph dataset handle index for multi-data worlds"))
 			.Build());
 #endif // WITH_ZONEGRAPH
 
