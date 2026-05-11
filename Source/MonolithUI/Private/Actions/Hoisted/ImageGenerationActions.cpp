@@ -27,7 +27,8 @@ namespace MonolithUI::ImageGenerationInternal
 		const FString InvalidChars = TEXT(" .,:;'\"\\/?!@#$%^&*()[]{}|<>~`+=\t\r\n");
 		for (int32 Index = 0; Index < InvalidChars.Len(); ++Index)
 		{
-			Sanitized = Sanitized.Replace(&InvalidChars[Index], TEXT("_"));
+			const FString InvalidChar = InvalidChars.Mid(Index, 1);
+			Sanitized = Sanitized.Replace(*InvalidChar, TEXT("_"));
 		}
 
 		while (Sanitized.Contains(TEXT("__")))
