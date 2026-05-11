@@ -49,6 +49,80 @@ namespace
 		return Arr;
 	}
 
+	bool TryReadLocationObject(const TSharedPtr<FJsonObject>& Params, FVector& OutLocation, FString& OutError)
+	{
+		const TSharedPtr<FJsonObject>* LocationPtr = nullptr;
+		if (!Params->TryGetObjectField(TEXT("location"), LocationPtr) || !LocationPtr || !LocationPtr->IsValid())
+		{
+			OutError = TEXT("Missing required param 'location' (object with x, y, z)");
+			return false;
+		}
+
+		double X = 0.0;
+		double Y = 0.0;
+		double Z = 0.0;
+		if (!(*LocationPtr)->TryGetNumberField(TEXT("x"), X)
+			|| !(*LocationPtr)->TryGetNumberField(TEXT("y"), Y)
+			|| !(*LocationPtr)->TryGetNumberField(TEXT("z"), Z))
+		{
+			OutError = TEXT("'location' must contain numeric x, y, and z fields");
+			return false;
+		}
+
+		OutLocation = FVector(X, Y, Z);
+		return true;
+	}
+
+	bool TryParseTupleVector(const FString& Text, FVector& OutVector)
+	{
+		FString Clean = Text;
+		Clean.ReplaceInline(TEXT("("), TEXT(""));
+		Clean.ReplaceInline(TEXT(")"), TEXT(""));
+		Clean.ReplaceInline(TEXT(" "), TEXT(""));
+
+		TArray<FString> Parts;
+		Clean.ParseIntoArray(Parts, TEXT(","), true);
+		if (Parts.Num() != 3)
+		{
+			return false;
+		}
+
+		OutVector = FVector(
+			FCString::Atod(*Parts[0]),
+			FCString::Atod(*Parts[1]),
+			FCString::Atod(*Parts[2]));
+		return true;
+	}
+
+	double DistanceSquaredToSegment(const FVector& Point, const FVector& SegmentStart, const FVector& SegmentEnd)
+	{
+		const FVector Segment = SegmentEnd - SegmentStart;
+		const double SegmentLengthSquared = Segment.SizeSquared();
+		if (SegmentLengthSquared <= SMALL_NUMBER)
+		{
+			return FVector::DistSquared(Point, SegmentStart);
+		}
+
+		const double Alpha = FMath::Clamp(FVector::DotProduct(Point - SegmentStart, Segment) / SegmentLengthSquared, 0.0, 1.0);
+		const FVector ClosestPoint = SegmentStart + Segment * Alpha;
+		return FVector::DistSquared(Point, ClosestPoint);
+	}
+
+	TSharedPtr<FJsonObject> CloneJsonObjectFields(const TSharedPtr<FJsonObject>& Source)
+	{
+		TSharedPtr<FJsonObject> Clone = MakeShared<FJsonObject>();
+		if (!Source.IsValid())
+		{
+			return Clone;
+		}
+
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Source->Values)
+		{
+			Clone->SetField(Pair.Key, Pair.Value);
+		}
+		return Clone;
+	}
+
 	TSharedPtr<FJsonObject> BuildModuleStatus(const TCHAR* ModuleName)
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -290,7 +364,7 @@ void FMonolithAIMassZoneGraphActions::RegisterActions(FMonolithToolRegistry& Reg
 		FMonolithActionHandler::CreateStatic(&FMonolithAIMassZoneGraphActions::ListZoneLaneProfiles), FParamSchemaBuilder().Build());
 	Registry.RegisterAction(TEXT("ai"), TEXT("list_zone_tags"), TEXT("Return tag names found on loaded ZoneShape/ZoneGraph-like actors."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAIMassZoneGraphActions::ListZoneTags), FParamSchemaBuilder().Optional(TEXT("world_context"), TEXT("string"), TEXT("editor or pie"), TEXT("editor")).Build());
-	Registry.RegisterAction(TEXT("ai"), TEXT("find_nearest_zone_lane"), TEXT("Delegate to ai.query_zone_lanes when ZoneGraph support is registered."),
+	Registry.RegisterAction(TEXT("ai"), TEXT("find_nearest_zone_lane"), TEXT("Return the nearest ZoneGraph lane from overlapping candidates."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAIMassZoneGraphActions::FindNearestZoneLane), FParamSchemaBuilder().Required(TEXT("location"), TEXT("object"), TEXT("{x,y,z}")).Optional(TEXT("radius"), TEXT("number"), TEXT("Search radius"), TEXT("1000")).Build());
 	Registry.RegisterAction(TEXT("ai"), TEXT("find_overlapping_zone_lanes"), TEXT("Delegate to ai.query_zone_lanes when ZoneGraph support is registered."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAIMassZoneGraphActions::FindOverlappingZoneLanes), FParamSchemaBuilder().Required(TEXT("location"), TEXT("object"), TEXT("{x,y,z}")).Optional(TEXT("radius"), TEXT("number"), TEXT("Search radius"), TEXT("1000")).Build());
@@ -492,9 +566,102 @@ FMonolithActionResult FMonolithAIMassZoneGraphActions::ListZoneTags(const TShare
 
 FMonolithActionResult FMonolithAIMassZoneGraphActions::FindNearestZoneLane(const TSharedPtr<FJsonObject>& Params)
 {
-	if (FMonolithToolRegistry::Get().HasAction(TEXT("ai"), TEXT("query_zone_lanes")))
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (Registry.HasAction(TEXT("ai"), TEXT("query_zone_lanes")))
 	{
-		return FMonolithToolRegistry::Get().ExecuteAction(TEXT("ai"), TEXT("query_zone_lanes"), Params);
+		FVector QueryLocation;
+		FString LocationError;
+		if (!TryReadLocationObject(Params, QueryLocation, LocationError))
+		{
+			return FMonolithActionResult::Error(LocationError);
+		}
+
+		FMonolithActionResult QueryResult = Registry.ExecuteAction(TEXT("ai"), TEXT("query_zone_lanes"), Params);
+		if (!QueryResult.bSuccess || !QueryResult.Result.IsValid())
+		{
+			return QueryResult;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Lanes = nullptr;
+		if (!QueryResult.Result->TryGetArrayField(TEXT("lanes"), Lanes) || !Lanes || Lanes->Num() == 0)
+		{
+			QueryResult.Result->SetNumberField(TEXT("overlap_count"), 0);
+			return QueryResult;
+		}
+		const int32 OverlapCount = Lanes->Num();
+
+		if (!Registry.HasAction(TEXT("ai"), TEXT("get_zone_lane_info")))
+		{
+			return FMonolithActionResult::Error(TEXT("ai.get_zone_lane_info is required to compute the nearest ZoneGraph lane"));
+		}
+
+		double BestDistanceSquared = TNumericLimits<double>::Max();
+		TSharedPtr<FJsonObject> BestLane;
+		int32 InspectedLaneCount = 0;
+
+		for (const TSharedPtr<FJsonValue>& LaneValue : *Lanes)
+		{
+			if (!LaneValue.IsValid() || LaneValue->Type != EJson::Object)
+			{
+				continue;
+			}
+
+			TSharedPtr<FJsonObject> LaneObject = LaneValue->AsObject();
+			if (!LaneObject.IsValid())
+			{
+				continue;
+			}
+
+			double LaneIndex = 0.0;
+			if (!LaneObject->TryGetNumberField(TEXT("lane_index"), LaneIndex))
+			{
+				continue;
+			}
+
+			TSharedPtr<FJsonObject> LaneInfoParams = MakeShared<FJsonObject>();
+			LaneInfoParams->SetNumberField(TEXT("lane_handle"), LaneIndex);
+			FMonolithActionResult LaneInfoResult = Registry.ExecuteAction(TEXT("ai"), TEXT("get_zone_lane_info"), LaneInfoParams);
+			if (!LaneInfoResult.bSuccess || !LaneInfoResult.Result.IsValid())
+			{
+				continue;
+			}
+
+			FString StartText;
+			FString EndText;
+			FVector StartPoint;
+			FVector EndPoint;
+			if (!LaneInfoResult.Result->TryGetStringField(TEXT("start_point"), StartText)
+				|| !LaneInfoResult.Result->TryGetStringField(TEXT("end_point"), EndText)
+				|| !TryParseTupleVector(StartText, StartPoint)
+				|| !TryParseTupleVector(EndText, EndPoint))
+			{
+				continue;
+			}
+
+			++InspectedLaneCount;
+			const double DistanceSquared = DistanceSquaredToSegment(QueryLocation, StartPoint, EndPoint);
+			if (DistanceSquared < BestDistanceSquared)
+			{
+				BestDistanceSquared = DistanceSquared;
+				BestLane = CloneJsonObjectFields(LaneObject);
+				BestLane->SetObjectField(TEXT("lane_info"), LaneInfoResult.Result);
+				BestLane->SetNumberField(TEXT("distance"), FMath::Sqrt(DistanceSquared));
+			}
+		}
+
+		if (!BestLane.IsValid())
+		{
+			return FMonolithActionResult::Error(TEXT("Unable to compute nearest ZoneGraph lane from overlapping lane geometry"));
+		}
+
+		TArray<TSharedPtr<FJsonValue>> NearestLanes;
+		NearestLanes.Add(MakeShared<FJsonValueObject>(BestLane));
+		QueryResult.Result->SetArrayField(TEXT("lanes"), NearestLanes);
+		QueryResult.Result->SetObjectField(TEXT("nearest_lane"), BestLane);
+		QueryResult.Result->SetNumberField(TEXT("count"), 1);
+		QueryResult.Result->SetNumberField(TEXT("overlap_count"), OverlapCount);
+		QueryResult.Result->SetNumberField(TEXT("inspected_lane_count"), InspectedLaneCount);
+		return QueryResult;
 	}
 	return MakeUnavailable(TEXT("ai.find_nearest_zone_lane"), Params, TEXT("ai.query_zone_lanes is not registered because ZoneGraph support is unavailable in this build."));
 }
