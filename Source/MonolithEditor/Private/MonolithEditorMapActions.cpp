@@ -31,6 +31,12 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "AssetToolsModule.h"
+#include "Editor.h"
+#include "EngineUtils.h"
+#include "Engine/Level.h"
+#include "Engine/LevelStreaming.h"
+#include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "IAssetTools.h"
 
 #include "Engine/World.h"
@@ -102,6 +108,137 @@ namespace
 		}
 		return false;
 	}
+
+	int32 GetIntParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, int32 DefaultValue, int32 MinValue, int32 MaxValue)
+	{
+		double RawValue = static_cast<double>(DefaultValue);
+		if (Params.IsValid())
+		{
+			Params->TryGetNumberField(FieldName, RawValue);
+		}
+		return FMath::Clamp(static_cast<int32>(RawValue), MinValue, MaxValue);
+	}
+
+	UWorld* GetActiveEditorWorld()
+	{
+		if (!GEditor)
+		{
+			return nullptr;
+		}
+		if (UWorld* World = GEditor->GetEditorWorldContext().World())
+		{
+			return World;
+		}
+		return GWorld;
+	}
+
+	FString WorldTypeToString(EWorldType::Type WorldType)
+	{
+		switch (WorldType)
+		{
+		case EWorldType::Game:
+			return TEXT("Game");
+		case EWorldType::Editor:
+			return TEXT("Editor");
+		case EWorldType::PIE:
+			return TEXT("PIE");
+		case EWorldType::EditorPreview:
+			return TEXT("EditorPreview");
+		case EWorldType::GamePreview:
+			return TEXT("GamePreview");
+		case EWorldType::GameRPC:
+			return TEXT("GameRPC");
+		case EWorldType::Inactive:
+			return TEXT("Inactive");
+		default:
+			return TEXT("None");
+		}
+	}
+
+	TSharedPtr<FJsonObject> ActorToJson(AActor* Actor)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		if (!Actor)
+		{
+			return Row;
+		}
+
+		Row->SetStringField(TEXT("path"), Actor->GetPathName());
+		Row->SetStringField(TEXT("label"), Actor->GetActorLabel());
+		Row->SetStringField(TEXT("name"), Actor->GetName());
+		Row->SetStringField(TEXT("class"), Actor->GetClass() ? Actor->GetClass()->GetName() : FString());
+		if (ULevel* Level = Actor->GetLevel())
+		{
+			Row->SetStringField(TEXT("level"), Level->GetOutermost() ? Level->GetOutermost()->GetName() : Level->GetName());
+		}
+		return Row;
+	}
+
+	TSharedPtr<FJsonObject> BuildWorldContext(UWorld* World)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetBoolField(TEXT("has_world"), World != nullptr);
+		if (!World)
+		{
+			return Obj;
+		}
+
+		int32 ActorCount = 0;
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			++ActorCount;
+		}
+
+		Obj->SetStringField(TEXT("world_name"), World->GetName());
+		Obj->SetStringField(TEXT("map_name"), World->GetMapName());
+		Obj->SetStringField(TEXT("world_type"), WorldTypeToString(World->WorldType));
+		Obj->SetStringField(TEXT("world_package"), World->GetOutermost() ? World->GetOutermost()->GetName() : FString());
+		Obj->SetBoolField(TEXT("is_partitioned_world"), World->IsPartitionedWorld());
+		Obj->SetBoolField(TEXT("classic_streaming_supported"), !World->IsPartitionedWorld());
+		Obj->SetNumberField(TEXT("actor_count"), ActorCount);
+		Obj->SetNumberField(TEXT("streaming_level_count"), World->GetStreamingLevels().Num());
+
+		if (ULevel* PersistentLevel = World->PersistentLevel)
+		{
+			Obj->SetStringField(TEXT("persistent_level"), PersistentLevel->GetOutermost() ? PersistentLevel->GetOutermost()->GetName() : PersistentLevel->GetName());
+		}
+
+		return Obj;
+	}
+
+	TSharedPtr<FJsonObject> StreamingLevelToJson(ULevelStreaming* StreamingLevel)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		if (!StreamingLevel)
+		{
+			return Row;
+		}
+
+		Row->SetStringField(TEXT("name"), StreamingLevel->GetName());
+		Row->SetStringField(TEXT("class"), StreamingLevel->GetClass() ? StreamingLevel->GetClass()->GetName() : FString());
+		Row->SetStringField(TEXT("world_asset_package"), StreamingLevel->GetWorldAssetPackageName());
+		Row->SetStringField(TEXT("state"), ::EnumToString(StreamingLevel->GetLevelStreamingState()));
+		Row->SetBoolField(TEXT("should_be_loaded"), StreamingLevel->ShouldBeLoaded());
+		Row->SetBoolField(TEXT("should_be_visible"), StreamingLevel->ShouldBeVisible());
+		Row->SetBoolField(TEXT("should_be_visible_flag"), StreamingLevel->GetShouldBeVisibleFlag());
+		Row->SetBoolField(TEXT("is_requesting_unload_and_removal"), StreamingLevel->GetIsRequestingUnloadAndRemoval());
+		Row->SetNumberField(TEXT("priority"), StreamingLevel->GetPriority());
+#if WITH_EDITORONLY_DATA
+		Row->SetBoolField(TEXT("should_be_visible_in_editor"), StreamingLevel->GetShouldBeVisibleInEditor());
+#endif
+
+		if (ULevel* LoadedLevel = StreamingLevel->GetLoadedLevel())
+		{
+			Row->SetBoolField(TEXT("is_loaded"), true);
+			Row->SetStringField(TEXT("loaded_level"), LoadedLevel->GetOutermost() ? LoadedLevel->GetOutermost()->GetName() : LoadedLevel->GetName());
+		}
+		else
+		{
+			Row->SetBoolField(TEXT("is_loaded"), false);
+		}
+
+		return Row;
+	}
 }
 
 // =============================================================================
@@ -123,6 +260,26 @@ void FMonolithEditorMapActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleGetModuleStatus),
 		FParamSchemaBuilder()
 			.Optional(TEXT("module_names"), TEXT("array"), TEXT("Optional array of module name strings. Omit to query all Monolith modules."))
+			.Build());
+
+	Registry.RegisterAction(TEXT("level"), TEXT("get_world_context"),
+		TEXT("Read the active editor world, persistent level, partitioning, actor count, and classic streaming capability."),
+		FMonolithActionHandler::CreateStatic(&HandleGetWorldContext),
+		FParamSchemaBuilder().Build());
+
+	Registry.RegisterAction(TEXT("level"), TEXT("list_layers"),
+		TEXT("List actor layer names in the active editor world, with optional capped actor membership rows."),
+		FMonolithActionHandler::CreateStatic(&HandleListLayers),
+		FParamSchemaBuilder()
+			.Optional(TEXT("include_actors"), TEXT("boolean"), TEXT("Include capped actor membership rows for each layer."), TEXT("false"))
+			.Optional(TEXT("actor_limit"), TEXT("integer"), TEXT("Maximum actor rows per layer when include_actors=true."), TEXT("20"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("level"), TEXT("list_streaming_levels"),
+		TEXT("List classic streaming levels for the active editor world and report World Partition capability context."),
+		FMonolithActionHandler::CreateStatic(&HandleListStreamingLevels),
+		FParamSchemaBuilder()
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum streaming level rows to return."), TEXT("100"))
 			.Build());
 }
 
@@ -312,5 +469,147 @@ FMonolithActionResult FMonolithEditorMapActions::HandleGetModuleStatus(const TSh
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("ok"), true);
 	Result->SetArrayField(TEXT("modules"), Rows);
+	return FMonolithActionResult::Success(Result);
+}
+
+// =============================================================================
+//  level::get_world_context
+// =============================================================================
+
+FMonolithActionResult FMonolithEditorMapActions::HandleGetWorldContext(const TSharedPtr<FJsonObject>& Params)
+{
+	UWorld* World = GetActiveEditorWorld();
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("ok"), World != nullptr);
+	Result->SetObjectField(TEXT("world"), BuildWorldContext(World));
+	Result->SetBoolField(TEXT("read_only"), true);
+	if (!World)
+	{
+		Result->SetStringField(TEXT("message"), TEXT("No active editor world is available."));
+	}
+	return FMonolithActionResult::Success(Result);
+}
+
+// =============================================================================
+//  level::list_layers
+// =============================================================================
+
+FMonolithActionResult FMonolithEditorMapActions::HandleListLayers(const TSharedPtr<FJsonObject>& Params)
+{
+	UWorld* World = GetActiveEditorWorld();
+	if (!World)
+	{
+		return FMonolithActionResult::Error(TEXT("No active editor world is available."));
+	}
+
+	bool bIncludeActors = false;
+	if (Params.IsValid())
+	{
+		Params->TryGetBoolField(TEXT("include_actors"), bIncludeActors);
+	}
+	const int32 ActorLimit = GetIntParam(Params, TEXT("actor_limit"), 20, 0, 500);
+
+	TMap<FName, TArray<AActor*>> LayerActors;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!Actor)
+		{
+			continue;
+		}
+		for (const FName& LayerName : Actor->Layers)
+		{
+			if (!LayerName.IsNone())
+			{
+				LayerActors.FindOrAdd(LayerName).Add(Actor);
+			}
+		}
+	}
+
+	TArray<FName> LayerNames;
+	LayerActors.GetKeys(LayerNames);
+	LayerNames.Sort([](const FName& A, const FName& B)
+	{
+		return A.LexicalLess(B);
+	});
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	for (const FName& LayerName : LayerNames)
+	{
+		const TArray<AActor*>* Actors = LayerActors.Find(LayerName);
+		const int32 ActorCount = Actors ? Actors->Num() : 0;
+
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("name"), LayerName.ToString());
+		Row->SetNumberField(TEXT("actor_count"), ActorCount);
+
+		if (bIncludeActors && Actors)
+		{
+			TArray<TSharedPtr<FJsonValue>> ActorRows;
+			for (AActor* Actor : *Actors)
+			{
+				if (ActorRows.Num() >= ActorLimit)
+				{
+					break;
+				}
+				ActorRows.Add(MakeShared<FJsonValueObject>(ActorToJson(Actor)));
+			}
+			Row->SetArrayField(TEXT("actors"), ActorRows);
+			Row->SetNumberField(TEXT("returned_actor_count"), ActorRows.Num());
+			if (ActorCount > ActorRows.Num())
+			{
+				Row->SetNumberField(TEXT("truncated_actor_count"), ActorCount - ActorRows.Num());
+			}
+		}
+
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("ok"), true);
+	Result->SetObjectField(TEXT("world"), BuildWorldContext(World));
+	Result->SetNumberField(TEXT("layer_count"), Rows.Num());
+	Result->SetArrayField(TEXT("layers"), Rows);
+	Result->SetBoolField(TEXT("read_only"), true);
+	return FMonolithActionResult::Success(Result);
+}
+
+// =============================================================================
+//  level::list_streaming_levels
+// =============================================================================
+
+FMonolithActionResult FMonolithEditorMapActions::HandleListStreamingLevels(const TSharedPtr<FJsonObject>& Params)
+{
+	UWorld* World = GetActiveEditorWorld();
+	if (!World)
+	{
+		return FMonolithActionResult::Error(TEXT("No active editor world is available."));
+	}
+
+	const int32 Limit = GetIntParam(Params, TEXT("limit"), 100, 1, 1000);
+	const TArray<ULevelStreaming*>& StreamingLevels = World->GetStreamingLevels();
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	for (ULevelStreaming* StreamingLevel : StreamingLevels)
+	{
+		if (Rows.Num() >= Limit)
+		{
+			break;
+		}
+		Rows.Add(MakeShared<FJsonValueObject>(StreamingLevelToJson(StreamingLevel)));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("ok"), true);
+	Result->SetObjectField(TEXT("world"), BuildWorldContext(World));
+	Result->SetNumberField(TEXT("matched_count"), StreamingLevels.Num());
+	Result->SetNumberField(TEXT("returned_count"), Rows.Num());
+	Result->SetArrayField(TEXT("streaming_levels"), Rows);
+	if (StreamingLevels.Num() > Rows.Num())
+	{
+		Result->SetNumberField(TEXT("truncated_remaining"), StreamingLevels.Num() - Rows.Num());
+	}
+	Result->SetBoolField(TEXT("read_only"), true);
 	return FMonolithActionResult::Success(Result);
 }

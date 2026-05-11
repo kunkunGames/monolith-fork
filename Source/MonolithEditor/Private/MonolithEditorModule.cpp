@@ -2,6 +2,7 @@
 #include "MonolithEditorActions.h"
 #include "MonolithEditorMapActions.h"
 #include "MonolithEditorSelectionActions.h"
+#include "MonolithEditorLevelMetadataActions.h"
 #include "MonolithEditorCrashActions.h"
 #include "MonolithSettingsCustomization.h"
 #include "MonolithToolRegistry.h"
@@ -22,6 +23,7 @@ void FMonolithEditorModule::StartupModule()
 	FMonolithEditorActions::RegisterActions(LogCapture);
 	FMonolithEditorMapActions::RegisterActions(FMonolithToolRegistry::Get());  // F8: create_empty_map + get_module_status
 	FMonolithEditorSelectionActions::RegisterActions();
+	FMonolithEditorLevelMetadataActions::RegisterActions();
 	FMonolithEditorCrashActions::RegisterActions();  // CrashRecovery: get_last_crash_reason / list_recent_crashes / get_crash_stats
 
 	// Register settings detail customization
@@ -38,6 +40,7 @@ void FMonolithEditorModule::StartupModule()
 void FMonolithEditorModule::ShutdownModule()
 {
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("editor"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("level"));
 
 	if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))
 	{
