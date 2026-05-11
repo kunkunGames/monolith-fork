@@ -464,7 +464,7 @@ bool FMonolithEditorLevelMetadataActions::ResolveOutputDir(const FString& Reques
 
 	FString NormalizedSavedRoot = SavedRoot;
 	FPaths::NormalizeDirectoryName(NormalizedSavedRoot);
-	if (!OutDir.StartsWith(NormalizedSavedRoot))
+	if (OutDir != NormalizedSavedRoot && !FPaths::IsUnderDirectory(OutDir, NormalizedSavedRoot))
 	{
 		OutError = FString::Printf(TEXT("output_dir must resolve under ProjectSavedDir: %s"), *NormalizedSavedRoot);
 		return false;

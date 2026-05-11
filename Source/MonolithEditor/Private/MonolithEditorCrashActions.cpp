@@ -247,7 +247,12 @@ namespace
 		{
 			if (Params->HasField(TEXT("limit")))
 			{
-				Limit = FMath::Clamp((int32)Params->GetNumberField(TEXT("limit")), 1, 1000);
+				double LimitValue = 0.0;
+				if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
+				}
+				Limit = FMath::Clamp((int32)LimitValue, 1, 1000);
 			}
 			Params->TryGetStringField(TEXT("since"), Since);
 			Params->TryGetStringField(TEXT("tool"), ToolFilter);
@@ -408,7 +413,12 @@ namespace
 		{
 			if (Params->HasField(TEXT("limit")))
 			{
-				Limit = FMath::Clamp((int32)Params->GetNumberField(TEXT("limit")), 1, 1000);
+				double LimitValue = 0.0;
+				if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
+				}
+				Limit = FMath::Clamp((int32)LimitValue, 1, 1000);
 			}
 			Params->TryGetStringField(TEXT("since"), Since);
 			Params->TryGetStringField(TEXT("tool"), ToolFilter);
@@ -429,6 +439,10 @@ namespace
 		for (const FString& Name : JsonFiles)
 		{
 			if (Items.Num() >= Limit) break;
+			if (Name == TEXT("report_status.json"))
+			{
+				continue;
+			}
 			if (!bIncludeIgnored && IsCrashIgnored(StatusRoot, Name))
 			{
 				++IgnoredSkipped;
