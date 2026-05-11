@@ -410,7 +410,11 @@ namespace
 		return Details;
 	}
 
-	TArray<TSharedPtr<FJsonValue>> BuildValidationWarnings(const UObject* Asset, const FAssetEnricherDef* Def, int32 ArrayLimit)
+	TArray<TSharedPtr<FJsonValue>> BuildValidationWarnings(
+		const UObject* Asset,
+		const FAssetEnricherDef* Def,
+		int32 ArrayLimit,
+		const TArray<TSharedPtr<FJsonValue>>* PrecomputedReferences = nullptr)
 	{
 		TArray<TSharedPtr<FJsonValue>> Warnings;
 		auto AddWarning = [&Warnings](const FString& Code, const FString& Message)
@@ -438,7 +442,10 @@ namespace
 			AddWarning(TEXT("large_payload_capped"), FString::Printf(TEXT("Array properties are capped at %d items by default."), ArrayLimit));
 		}
 
-		for (const TSharedPtr<FJsonValue>& RefValue : CollectAssetReferences(Asset, ArrayLimit))
+		const TArray<TSharedPtr<FJsonValue>> CollectedReferences =
+			PrecomputedReferences ? TArray<TSharedPtr<FJsonValue>>() : CollectAssetReferences(Asset, ArrayLimit);
+		const TArray<TSharedPtr<FJsonValue>>& References = PrecomputedReferences ? *PrecomputedReferences : CollectedReferences;
+		for (const TSharedPtr<FJsonValue>& RefValue : References)
 		{
 			const TSharedPtr<FJsonObject>* RefObject = nullptr;
 			if (!RefValue.IsValid() || !RefValue->TryGetObject(RefObject) || !RefObject || !RefObject->IsValid())
@@ -528,12 +535,16 @@ namespace
 		}
 		Result->SetObjectField(TEXT("details"), Details);
 
+		TArray<TSharedPtr<FJsonValue>> References;
+		const TArray<TSharedPtr<FJsonValue>>* ReferencesForWarnings = nullptr;
 		if (bIncludeReferences)
 		{
-			Result->SetArrayField(TEXT("references"), CollectAssetReferences(Asset, ArrayLimit));
+			References = CollectAssetReferences(Asset, ArrayLimit);
+			ReferencesForWarnings = &References;
+			Result->SetArrayField(TEXT("references"), References);
 		}
 
-		Result->SetArrayField(TEXT("warnings"), BuildValidationWarnings(Asset, Def, ArrayLimit));
+		Result->SetArrayField(TEXT("warnings"), BuildValidationWarnings(Asset, Def, ArrayLimit, ReferencesForWarnings));
 		return Result;
 	}
 }

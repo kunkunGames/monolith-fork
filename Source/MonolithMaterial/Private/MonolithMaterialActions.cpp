@@ -1058,7 +1058,12 @@ FMonolithActionResult FMonolithMaterialActions::ListPaper2DAssets(const TSharedP
 {
 	FString PackagePath = TEXT("/Game");
 	Params->TryGetStringField(TEXT("package_path"), PackagePath);
-	if (!PackagePath.StartsWith(TEXT("/Game")))
+	PackagePath.TrimStartAndEndInline();
+	while (PackagePath.Len() > 5 && PackagePath.EndsWith(TEXT("/")))
+	{
+		PackagePath.LeftChopInline(1);
+	}
+	if (PackagePath != TEXT("/Game") && !PackagePath.StartsWith(TEXT("/Game/")))
 	{
 		return FMonolithActionResult::Error(TEXT("package_path must be under /Game"));
 	}
