@@ -1,4 +1,4 @@
-#include "MonolithMaterialActions.h"
+﻿#include "MonolithMaterialActions.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithPackagePathValidator.h"
@@ -41,6 +41,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
+#include "Modules/ModuleManager.h"
 #include "ObjectTools.h"
 #include "ImageUtils.h"
 #include "UObject/SavePackage.h"
@@ -95,6 +96,33 @@ static FString NormalizeInputPinName(const FString& PinName)
 		}
 	}
 	return Result;
+}
+
+namespace MonolithMaterialPaper2D
+{
+	static int32 ClampLimit(double LimitValue)
+	{
+		return FMath::Clamp(static_cast<int32>(LimitValue), 1, 500);
+	}
+
+	static bool IsPaper2DAssetClass(const FAssetData& AssetData)
+	{
+		const FString ClassName = AssetData.AssetClassPath.GetAssetName().ToString();
+		return ClassName == TEXT("PaperSprite")
+			|| ClassName == TEXT("PaperFlipbook")
+			|| ClassName == TEXT("PaperTileSet")
+			|| ClassName == TEXT("PaperTileMap");
+	}
+
+	static TSharedPtr<FJsonObject> MakeModuleStatus(const TCHAR* ModuleName)
+	{
+		FModuleManager& ModuleManager = FModuleManager::Get();
+		auto Status = MakeShared<FJsonObject>();
+		Status->SetStringField(TEXT("name"), ModuleName);
+		Status->SetBoolField(TEXT("exists"), ModuleManager.ModuleExists(ModuleName));
+		Status->SetBoolField(TEXT("loaded"), ModuleManager.IsModuleLoaded(ModuleName));
+		return Status;
+	}
 }
 
 // ============================================================================
@@ -726,6 +754,19 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Material asset path"))
 			.Build());
+
+	Registry.RegisterAction(TEXT("material"), TEXT("get_paper2d_status"),
+		TEXT("Report Paper2D plugin/module availability and the Monolith-native first milestone for texture-atlas adjacent Paper2D discovery. Read-only; no Paper2D hard dependency."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMaterialActions::GetPaper2DStatus),
+		FParamSchemaBuilder().Build());
+
+	Registry.RegisterAction(TEXT("material"), TEXT("list_paper2d_assets"),
+		TEXT("List Paper2D asset metadata under /Game using AssetRegistry only: PaperSprite, PaperFlipbook, PaperTileSet, and PaperTileMap. Does not load or mutate assets."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMaterialActions::ListPaper2DAssets),
+		FParamSchemaBuilder()
+			.Optional(TEXT("package_path"), TEXT("string"), TEXT("Content path to scan, under /Game. Default: /Game"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum returned rows, clamped to 1..500. Default: 100."))
+			.Build());
 }
 
 // ============================================================================
@@ -970,6 +1011,126 @@ FMonolithActionResult FMonolithMaterialActions::GetAllExpressions(const TSharedP
 	ResultJson->SetNumberField(TEXT("expression_count"), ExpressionsArray.Num());
 	ResultJson->SetArrayField(TEXT("expressions"), ExpressionsArray);
 
+	return FMonolithActionResult::Success(ResultJson);
+}
+
+FMonolithActionResult FMonolithMaterialActions::GetPaper2DStatus(const TSharedPtr<FJsonObject>& Params)
+{
+	auto ResultJson = MakeShared<FJsonObject>();
+	ResultJson->SetStringField(TEXT("namespace"), TEXT("material"));
+	ResultJson->SetStringField(TEXT("domain"), TEXT("paper2d_discovery"));
+	ResultJson->SetStringField(TEXT("mode"), TEXT("read_only"));
+	ResultJson->SetBoolField(TEXT("hard_dependency"), false);
+
+	TArray<TSharedPtr<FJsonValue>> Modules;
+	Modules.Add(MakeShared<FJsonValueObject>(MonolithMaterialPaper2D::MakeModuleStatus(TEXT("Paper2D"))));
+	Modules.Add(MakeShared<FJsonValueObject>(MonolithMaterialPaper2D::MakeModuleStatus(TEXT("Paper2DEditor"))));
+	ResultJson->SetArrayField(TEXT("modules"), Modules);
+
+	TArray<TSharedPtr<FJsonValue>> AssetClasses;
+	AssetClasses.Add(MakeShared<FJsonValueString>(TEXT("PaperSprite")));
+	AssetClasses.Add(MakeShared<FJsonValueString>(TEXT("PaperFlipbook")));
+	AssetClasses.Add(MakeShared<FJsonValueString>(TEXT("PaperTileSet")));
+	AssetClasses.Add(MakeShared<FJsonValueString>(TEXT("PaperTileMap")));
+	ResultJson->SetArrayField(TEXT("asset_classes"), AssetClasses);
+
+	TArray<TSharedPtr<FJsonValue>> ImplementedActions;
+	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("material.get_paper2d_status")));
+	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("material.list_paper2d_assets")));
+	ResultJson->SetArrayField(TEXT("implemented_actions"), ImplementedActions);
+
+	TArray<TSharedPtr<FJsonValue>> FutureActions;
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("paper2d.get_sprite")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("paper2d.get_flipbook")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("paper2d.slice_sprite_sheet")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("paper2d.create_flipbook")));
+	ResultJson->SetArrayField(TEXT("future_optional_actions"), FutureActions);
+
+	TArray<TSharedPtr<FJsonValue>> Notes;
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("This first milestone lives in the existing material namespace because Paper2D sprite workflows start from texture/atlas assets and the Paper2D module boundary is optional.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("No Paper2D classes are included or loaded; AssetRegistry metadata is used for discovery.")));
+	ResultJson->SetArrayField(TEXT("notes"), Notes);
+
+	return FMonolithActionResult::Success(ResultJson);
+}
+
+FMonolithActionResult FMonolithMaterialActions::ListPaper2DAssets(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PackagePath = TEXT("/Game");
+	Params->TryGetStringField(TEXT("package_path"), PackagePath);
+	PackagePath.TrimStartAndEndInline();
+	while (PackagePath.Len() > 5 && PackagePath.EndsWith(TEXT("/")))
+	{
+		PackagePath.LeftChopInline(1);
+	}
+	if (PackagePath != TEXT("/Game") && !PackagePath.StartsWith(TEXT("/Game/")))
+	{
+		return FMonolithActionResult::Error(TEXT("package_path must be under /Game"));
+	}
+
+	double LimitValue = 100.0;
+	Params->TryGetNumberField(TEXT("limit"), LimitValue);
+	const int32 Limit = MonolithMaterialPaper2D::ClampLimit(LimitValue);
+
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	FARFilter Filter;
+	Filter.PackagePaths.Add(FName(*PackagePath));
+	Filter.bRecursivePaths = true;
+	Filter.ClassPaths.Add(FTopLevelAssetPath(TEXT("/Script/Paper2D"), TEXT("PaperSprite")));
+	Filter.ClassPaths.Add(FTopLevelAssetPath(TEXT("/Script/Paper2D"), TEXT("PaperFlipbook")));
+	Filter.ClassPaths.Add(FTopLevelAssetPath(TEXT("/Script/Paper2D"), TEXT("PaperTileSet")));
+	Filter.ClassPaths.Add(FTopLevelAssetPath(TEXT("/Script/Paper2D"), TEXT("PaperTileMap")));
+
+	TArray<FAssetData> Assets;
+	AssetRegistry.GetAssets(Filter, Assets);
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	int32 MatchedCount = 0;
+	TMap<FString, int32> ClassCounts;
+
+	for (const FAssetData& AssetData : Assets)
+	{
+		if (!MonolithMaterialPaper2D::IsPaper2DAssetClass(AssetData))
+		{
+			continue;
+		}
+
+		MatchedCount++;
+		const FString ClassName = AssetData.AssetClassPath.GetAssetName().ToString();
+		ClassCounts.FindOrAdd(ClassName)++;
+
+		if (Rows.Num() >= Limit)
+		{
+			continue;
+		}
+
+		auto Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("object_path"), AssetData.GetObjectPathString());
+		Row->SetStringField(TEXT("package_name"), AssetData.PackageName.ToString());
+		Row->SetStringField(TEXT("package_path"), AssetData.PackagePath.ToString());
+		Row->SetStringField(TEXT("asset_name"), AssetData.AssetName.ToString());
+		Row->SetStringField(TEXT("asset_class"), ClassName);
+		Row->SetStringField(TEXT("asset_class_path"), AssetData.AssetClassPath.ToString());
+		Row->SetBoolField(TEXT("loaded"), AssetData.IsAssetLoaded());
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	auto CountsJson = MakeShared<FJsonObject>();
+	for (const TPair<FString, int32>& Pair : ClassCounts)
+	{
+		CountsJson->SetNumberField(Pair.Key, Pair.Value);
+	}
+
+	auto ResultJson = MakeShared<FJsonObject>();
+	ResultJson->SetStringField(TEXT("namespace"), TEXT("material"));
+	ResultJson->SetStringField(TEXT("domain"), TEXT("paper2d_discovery"));
+	ResultJson->SetStringField(TEXT("package_path"), PackagePath);
+	ResultJson->SetNumberField(TEXT("matched_count"), MatchedCount);
+	ResultJson->SetNumberField(TEXT("returned_count"), Rows.Num());
+	ResultJson->SetNumberField(TEXT("limit"), Limit);
+	ResultJson->SetBoolField(TEXT("truncated"), MatchedCount > Rows.Num());
+	ResultJson->SetObjectField(TEXT("class_counts"), CountsJson);
+	ResultJson->SetArrayField(TEXT("assets"), Rows);
 	return FMonolithActionResult::Success(ResultJson);
 }
 
