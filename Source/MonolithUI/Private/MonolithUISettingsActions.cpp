@@ -127,8 +127,10 @@ void FMonolithUISettingsActions::RegisterActions(FMonolithToolRegistry& Registry
 
 FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldGameUserSettings(const TSharedPtr<FJsonObject>& Params)
 {
-    FString ClassName = Params->GetStringField(TEXT("class_name"));
-    FString ModuleName = Params->GetStringField(TEXT("module_name"));
+    FString ClassName;
+    Params->TryGetStringField(TEXT("class_name"), ClassName);
+    FString ModuleName;
+    Params->TryGetStringField(TEXT("module_name"), ModuleName);
     if (ClassName.IsEmpty() || ModuleName.IsEmpty())
     {
         return FMonolithActionResult::Error(TEXT("Missing required params: class_name, module_name"));
@@ -340,8 +342,10 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldGameUserSettings
 
 FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveGame(const TSharedPtr<FJsonObject>& Params)
 {
-    FString ClassName = Params->GetStringField(TEXT("class_name"));
-    FString ModuleName = Params->GetStringField(TEXT("module_name"));
+    FString ClassName;
+    Params->TryGetStringField(TEXT("class_name"), ClassName);
+    FString ModuleName;
+    Params->TryGetStringField(TEXT("module_name"), ModuleName);
     if (ClassName.IsEmpty() || ModuleName.IsEmpty())
     {
         return FMonolithActionResult::Error(TEXT("Missing required params: class_name, module_name"));
@@ -371,9 +375,9 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveGame(const T
             if (PropObj.IsValid() && PropObj->Values.Num() > 0)
             {
                 FSaveProp P;
-                P.Name = PropObj->GetStringField(TEXT("name"));
-                P.Type = PropObj->GetStringField(TEXT("type"));
-                P.Default = PropObj->GetStringField(TEXT("default_value"));
+                PropObj->TryGetStringField(TEXT("name"), P.Name);
+                PropObj->TryGetStringField(TEXT("type"), P.Type);
+                PropObj->TryGetStringField(TEXT("default_value"), P.Default);
                 if (!P.Name.IsEmpty() && !P.Type.IsEmpty())
                 {
                     Properties.Add(P);
@@ -495,9 +499,12 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveGame(const T
 
 FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveSubsystem(const TSharedPtr<FJsonObject>& Params)
 {
-    FString ClassName = Params->GetStringField(TEXT("class_name"));
-    FString ModuleName = Params->GetStringField(TEXT("module_name"));
-    FString SaveGameClass = Params->GetStringField(TEXT("save_game_class"));
+    FString ClassName;
+    Params->TryGetStringField(TEXT("class_name"), ClassName);
+    FString ModuleName;
+    Params->TryGetStringField(TEXT("module_name"), ModuleName);
+    FString SaveGameClass;
+    Params->TryGetStringField(TEXT("save_game_class"), SaveGameClass);
     if (ClassName.IsEmpty() || ModuleName.IsEmpty() || SaveGameClass.IsEmpty())
     {
         return FMonolithActionResult::Error(TEXT("Missing required params: class_name, module_name, save_game_class"));

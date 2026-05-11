@@ -43,3 +43,9 @@
 **Learning:** Monolith C++ handlers benefit from using `TryGetStringField` instead of `GetStringField` to improve stability and avoid warning spam.
 **Reuse rule:** Future tasks should use `TryGetStringField` instead of `GetStringField` unless the parameter extraction is explicitly guaranteed.
 **Avoid:** Writing new handler logic with raw `GetStringField` instead of checking with `TryGetStringField`.
+
+## 2026-05-11 - Normalize MonolithUI Param Extraction
+**Pattern:** Ad-hoc use of `GetStringField` directly on `Params` objects, which is unsafe when not preceded by type validation or when the field is missing (even with `HasField`, since it could be null or non-string).
+**Learning:** Monolith C++ modules should never use direct typed accessors (`GetStringField`, etc.) without `TryGet*Field` since malformed JSON can cause assertion crashes.
+**Reuse rule:** Future UI actions and module handlers should consistently use `TryGetStringField` and properly initialize local variables.
+**Avoid:** Using `GetStringField`, especially right after a `HasField` check.
