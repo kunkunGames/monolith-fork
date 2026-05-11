@@ -120,7 +120,8 @@ namespace MonolithMeshGeneratedModel
 		const FString InvalidChars = TEXT(" .,:;'\"\\/?!@#$%^&*()[]{}|<>~`+=\t\r\n");
 		for (int32 Index = 0; Index < InvalidChars.Len(); ++Index)
 		{
-			Sanitized = Sanitized.Replace(&InvalidChars[Index], TEXT("_"));
+			const FString InvalidChar = InvalidChars.Mid(Index, 1);
+			Sanitized = Sanitized.Replace(*InvalidChar, TEXT("_"));
 		}
 		while (Sanitized.Contains(TEXT("__")))
 		{
@@ -883,12 +884,14 @@ FMonolithActionResult FMonolithMeshTechArtActions::ImportGeneratedModel(const TS
 	FString Provider = TEXT("external");
 	FString Model = TEXT("unknown");
 	FString Prompt;
+	FString PromptHash;
 	FString SourceImageHash;
 	if (Manifest.IsValid())
 	{
 		Provider = Manifest->GetStringField(TEXT("provider"));
 		Model = Manifest->GetStringField(TEXT("model"));
 		JobId = Manifest->GetStringField(TEXT("job_id"));
+		Manifest->TryGetStringField(TEXT("prompt_hash"), PromptHash);
 		SourceImageHash = Manifest->GetStringField(TEXT("source_image_hash"));
 	}
 	else
@@ -903,6 +906,10 @@ FMonolithActionResult FMonolithMeshTechArtActions::ImportGeneratedModel(const TS
 	TSharedPtr<FJsonObject> Provenance = MonolithMeshGeneratedModel::BuildProvenance(
 		Provider, Model, Manifest.IsValid() ? TEXT("local_deterministic") : TEXT("external_file"),
 		JobId, Prompt, SourceImageHash, FPaths::GetExtension(FilePath).ToLower(), FileSize);
+	if (!PromptHash.IsEmpty())
+	{
+		Provenance->SetStringField(TEXT("prompt_hash"), PromptHash);
+	}
 
 	bool bSave = true;
 	Params->TryGetBoolField(TEXT("save"), bSave);

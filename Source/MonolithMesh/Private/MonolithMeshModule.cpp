@@ -160,6 +160,7 @@ void FMonolithMeshModule::ShutdownModule()
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("interchange"));
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("level_instance"));
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("hlod"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("ndisplay"));
 }
 
 #undef LOCTEXT_NAMESPACE
