@@ -73,11 +73,13 @@
 		},
 		{
 			"Name": "StateTree",
-			"Enabled": true
+			"Enabled": true,
+			"Optional": true
 		},
 		{
 			"Name": "SmartObjects",
-			"Enabled": true
+			"Enabled": true,
+			"Optional": true
 		},
 		{
 			"Name": "EnvironmentQueryEditor",
@@ -85,7 +87,8 @@
 		},
 		{
 			"Name": "GameplayStateTree",
-			"Enabled": true
+			"Enabled": true,
+			"Optional": true
 		},
 		{
 			"Name": "ProceduralMeshComponent",

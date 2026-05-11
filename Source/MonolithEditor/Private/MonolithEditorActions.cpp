@@ -1745,7 +1745,8 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 			FString::Printf(TEXT("Failed to load: %s"), *AssetPath));
 	}
 
-	bool bPersistent = Params->HasField(TEXT("persistent")) && Params->GetBoolField(TEXT("persistent"));
+	bool bPersistent = false;
+	Params->TryGetBoolField(TEXT("persistent"), bPersistent);
 
 	double StartTime = FPlatformTime::Seconds();
 	TArray<TSharedPtr<FJsonValue>> FrameResults;
@@ -2088,9 +2089,12 @@ FMonolithActionResult FMonolithEditorActions::HandleStitchFlipbook(
 	}
 
 	// Optional params
-	bool bSRGB = !Params->HasField(TEXT("srgb")) || Params->GetBoolField(TEXT("srgb"));
-	bool bNoMipmaps = !Params->HasField(TEXT("no_mipmaps")) || Params->GetBoolField(TEXT("no_mipmaps"));
-	bool bDeleteSources = !Params->HasField(TEXT("delete_sources")) || Params->GetBoolField(TEXT("delete_sources"));
+	bool bSRGB = true;
+	Params->TryGetBoolField(TEXT("srgb"), bSRGB);
+	bool bNoMipmaps = true;
+	Params->TryGetBoolField(TEXT("no_mipmaps"), bNoMipmaps);
+	bool bDeleteSources = true;
+	Params->TryGetBoolField(TEXT("delete_sources"), bDeleteSources);
 
 	FString LODGroupStr = TEXT("TEXTUREGROUP_Effects");
 	if (Params->HasField(TEXT("lod_group")))
@@ -2478,10 +2482,17 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 	if (AssetPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 
-	double DurationSeconds = Params->HasField(TEXT("duration_seconds")) ? Params->GetNumberField(TEXT("duration_seconds")) : 2.0;
-	int32 FPS = Params->HasField(TEXT("fps")) ? static_cast<int32>(Params->GetNumberField(TEXT("fps"))) : 15;
-	int32 Resolution = Params->HasField(TEXT("resolution")) ? static_cast<int32>(Params->GetNumberField(TEXT("resolution"))) : 256;
-	FString Encoder = Params->HasField(TEXT("encoder")) ? Params->GetStringField(TEXT("encoder")).ToLower() : TEXT("frames_only");
+	double DurationSeconds = 2.0;
+	Params->TryGetNumberField(TEXT("duration_seconds"), DurationSeconds);
+	double FpsDouble = 15.0;
+	Params->TryGetNumberField(TEXT("fps"), FpsDouble);
+	int32 FPS = static_cast<int32>(FpsDouble);
+	double ResDouble = 256.0;
+	Params->TryGetNumberField(TEXT("resolution"), ResDouble);
+	int32 Resolution = static_cast<int32>(ResDouble);
+	FString Encoder = TEXT("frames_only");
+	Params->TryGetStringField(TEXT("encoder"), Encoder);
+	Encoder = Encoder.ToLower();
 
 	if (FPS <= 0) FPS = 15;
 	if (Resolution <= 0) Resolution = 256;

@@ -1183,7 +1183,8 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleScaffoldStatusEffect(co
 	float Duration = Config->HasField(TEXT("duration")) ? Config->GetNumberField(TEXT("duration")) : 5.0f;
 	float Period = Config->HasField(TEXT("period")) ? Config->GetNumberField(TEXT("period")) : 1.0f;
 	FString StackingType = Config->HasField(TEXT("stacking_type")) ? Config->GetStringField(TEXT("stacking_type")) : TEXT("aggregate_by_target");
-	int32 StackLimit = Config->HasField(TEXT("stack_limit")) ? static_cast<int32>(Config->GetNumberField(TEXT("stack_limit"))) : 5;
+	double StackLimitVal = 0.0;
+	int32 StackLimit = Config->TryGetNumberField(TEXT("stack_limit"), StackLimitVal) ? FMath::Clamp(static_cast<int32>(StackLimitVal), 0, 1000) : 5;
 	float DamagePerTick = Config->HasField(TEXT("damage_per_tick")) ? Config->GetNumberField(TEXT("damage_per_tick")) : 0.0f;
 	FString Attribute = Config->GetStringField(TEXT("attribute"));
 	FString StatusTag = Config->GetStringField(TEXT("status_tag"));

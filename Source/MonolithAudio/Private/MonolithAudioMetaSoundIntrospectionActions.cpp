@@ -429,7 +429,8 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleListMet
 FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleGetMetaSoundDocument(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString PageIdStr = Params->HasField(TEXT("page_id")) ? Params->GetStringField(TEXT("page_id")) : FString();
+	FString PageIdStr;
+	Params->TryGetStringField(TEXT("page_id"), PageIdStr);
 
 	UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!Asset)
@@ -481,7 +482,8 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleGetMeta
 FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleGetMetaSoundSummary(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString PageIdStr = Params->HasField(TEXT("page_id")) ? Params->GetStringField(TEXT("page_id")) : FString();
+	FString PageIdStr;
+	Params->TryGetStringField(TEXT("page_id"), PageIdStr);
 
 	UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!Asset)
@@ -521,9 +523,12 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleGetMeta
 FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleInspectMetaSoundNodeInstance(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString PageIdStr = Params->HasField(TEXT("page_id")) ? Params->GetStringField(TEXT("page_id")) : FString();
-	FString NodeIdStr = Params->HasField(TEXT("node_id")) ? Params->GetStringField(TEXT("node_id")) : FString();
-	FString NodeName = Params->HasField(TEXT("node_name")) ? Params->GetStringField(TEXT("node_name")) : FString();
+	FString PageIdStr;
+	Params->TryGetStringField(TEXT("page_id"), PageIdStr);
+	FString NodeIdStr;
+	Params->TryGetStringField(TEXT("node_id"), NodeIdStr);
+	FString NodeName;
+	Params->TryGetStringField(TEXT("node_name"), NodeName);
 
 	if (NodeIdStr.IsEmpty() && NodeName.IsEmpty())
 	{
@@ -603,8 +608,10 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleInspect
 FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleGetMetaSoundDocumentConnections(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString PageIdStr = Params->HasField(TEXT("page_id")) ? Params->GetStringField(TEXT("page_id")) : FString();
-	FString NodeIdStr = Params->HasField(TEXT("node_id")) ? Params->GetStringField(TEXT("node_id")) : FString();
+	FString PageIdStr;
+	Params->TryGetStringField(TEXT("page_id"), PageIdStr);
+	FString NodeIdStr;
+	Params->TryGetStringField(TEXT("node_id"), NodeIdStr);
 
 	UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!Asset)
@@ -662,7 +669,8 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleGetMeta
 FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleGetMetaSoundDocumentVariables(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString PageIdStr = Params->HasField(TEXT("page_id")) ? Params->GetStringField(TEXT("page_id")) : FString();
+	FString PageIdStr;
+	Params->TryGetStringField(TEXT("page_id"), PageIdStr);
 
 	UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!Asset)
@@ -772,7 +780,8 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleSearchM
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString Query = Params->GetStringField(TEXT("query"));
-	FString PageIdStr = Params->HasField(TEXT("page_id")) ? Params->GetStringField(TEXT("page_id")) : FString();
+	FString PageIdStr;
+	Params->TryGetStringField(TEXT("page_id"), PageIdStr);
 
 	UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!Asset)
@@ -964,8 +973,10 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleGetMeta
 
 FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleListMetaSounds(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Filter = Params->HasField(TEXT("filter")) ? Params->GetStringField(TEXT("filter")) : FString();
-	FString TypeFilter = Params->HasField(TEXT("type")) ? Params->GetStringField(TEXT("type")) : TEXT("All");
+	FString Filter;
+	Params->TryGetStringField(TEXT("filter"), Filter);
+	FString TypeFilter = TEXT("All");
+	Params->TryGetStringField(TEXT("type"), TypeFilter);
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 

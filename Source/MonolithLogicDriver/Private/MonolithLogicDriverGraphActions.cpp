@@ -214,9 +214,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleGetSMStructure(con
 	}
 
 	int32 Depth = -1;
-	if (Params->HasField(TEXT("depth")))
 	{
-		Depth = static_cast<int32>(Params->GetNumberField(TEXT("depth")));
+		double TmpDepth = 0.0;
+		if (Params->TryGetNumberField(TEXT("depth"), TmpDepth))
+		{
+			Depth = static_cast<int32>(TmpDepth);
+		}
 	}
 
 	FString LoadError;
@@ -629,8 +632,26 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddState(const TSh
 	UClass* StateClass = MonolithLD::GetSMGraphNodeStateClass();
 	if (!StateClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_StateNode class not found — is Logic Driver loaded?"));
 
-	int32 PosX = Params->HasField(TEXT("position_x")) ? static_cast<int32>(Params->GetNumberField(TEXT("position_x"))) : 0;
-	int32 PosY = Params->HasField(TEXT("position_y")) ? static_cast<int32>(Params->GetNumberField(TEXT("position_y"))) : 0;
+	int32 PosX = 0;
+	double TmpX = 0.0;
+	if (Params->HasField(TEXT("position_x")))
+	{
+		if (!Params->TryGetNumberField(TEXT("position_x"), TmpX))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'position_x' must be a number"), -32602);
+		}
+		PosX = static_cast<int32>(TmpX);
+	}
+	int32 PosY = 0;
+	double TmpY = 0.0;
+	if (Params->HasField(TEXT("position_y")))
+	{
+		if (!Params->TryGetNumberField(TEXT("position_y"), TmpY))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'position_y' must be a number"), -32602);
+		}
+		PosY = static_cast<int32>(TmpY);
+	}
 
 	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, StateClass, PosX, PosY);
 	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create state node"));
@@ -708,7 +729,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddTransition(cons
 	// Set priority if specified
 	if (Params->HasField(TEXT("priority")))
 	{
-		int32 Priority = static_cast<int32>(Params->GetNumberField(TEXT("priority")));
+		double TmpPriority = 0.0;
+		if (!Params->TryGetNumberField(TEXT("priority"), TmpPriority))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'priority' must be a number"), -32602);
+		}
+		const int32 Priority = static_cast<int32>(TmpPriority);
 		SetPropertyByName(TransNode, TEXT("PriorityOrder"), FString::FromInt(Priority));
 	}
 
@@ -737,8 +763,26 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddConduit(const T
 	UClass* ConduitClass = MonolithLD::GetSMGraphNodeConduitClass();
 	if (!ConduitClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_ConduitNode class not found"));
 
-	int32 PosX = Params->HasField(TEXT("position_x")) ? static_cast<int32>(Params->GetNumberField(TEXT("position_x"))) : 0;
-	int32 PosY = Params->HasField(TEXT("position_y")) ? static_cast<int32>(Params->GetNumberField(TEXT("position_y"))) : 0;
+	int32 PosX = 0;
+	double TmpX = 0.0;
+	if (Params->HasField(TEXT("position_x")))
+	{
+		if (!Params->TryGetNumberField(TEXT("position_x"), TmpX))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'position_x' must be a number"), -32602);
+		}
+		PosX = static_cast<int32>(TmpX);
+	}
+	int32 PosY = 0;
+	double TmpY = 0.0;
+	if (Params->HasField(TEXT("position_y")))
+	{
+		if (!Params->TryGetNumberField(TEXT("position_y"), TmpY))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'position_y' must be a number"), -32602);
+		}
+		PosY = static_cast<int32>(TmpY);
+	}
 
 	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, ConduitClass, PosX, PosY);
 	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create conduit node"));
@@ -770,8 +814,26 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddStateMachineNod
 	UClass* SMNodeClass = MonolithLD::GetSMGraphNodeSMClass();
 	if (!SMNodeClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_StateMachineStateNode class not found"));
 
-	int32 PosX = Params->HasField(TEXT("position_x")) ? static_cast<int32>(Params->GetNumberField(TEXT("position_x"))) : 0;
-	int32 PosY = Params->HasField(TEXT("position_y")) ? static_cast<int32>(Params->GetNumberField(TEXT("position_y"))) : 0;
+	int32 PosX = 0;
+	double TmpX = 0.0;
+	if (Params->HasField(TEXT("position_x")))
+	{
+		if (!Params->TryGetNumberField(TEXT("position_x"), TmpX))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'position_x' must be a number"), -32602);
+		}
+		PosX = static_cast<int32>(TmpX);
+	}
+	int32 PosY = 0;
+	double TmpY = 0.0;
+	if (Params->HasField(TEXT("position_y")))
+	{
+		if (!Params->TryGetNumberField(TEXT("position_y"), TmpY))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'position_y' must be a number"), -32602);
+		}
+		PosY = static_cast<int32>(TmpY);
+	}
 
 	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, SMNodeClass, PosX, PosY);
 	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create state machine node"));
@@ -813,8 +875,18 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddAnyStateNode(co
 	UClass* AnyStateClass = MonolithLD::GetSMGraphNodeAnyStateClass();
 	if (!AnyStateClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_AnyStateNode class not found"));
 
-	int32 PosX = Params->HasField(TEXT("position_x")) ? static_cast<int32>(Params->GetNumberField(TEXT("position_x"))) : 0;
-	int32 PosY = Params->HasField(TEXT("position_y")) ? static_cast<int32>(Params->GetNumberField(TEXT("position_y"))) : 0;
+	int32 PosX = 0;
+	double TmpX = 0.0;
+	if (Params->TryGetNumberField(TEXT("position_x"), TmpX))
+	{
+		PosX = static_cast<int32>(TmpX);
+	}
+	int32 PosY = 0;
+	double TmpY = 0.0;
+	if (Params->TryGetNumberField(TEXT("position_y"), TmpY))
+	{
+		PosY = static_cast<int32>(TmpY);
+	}
 
 	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, AnyStateClass, PosX, PosY);
 	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create Any State node"));
@@ -1213,8 +1285,20 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleMoveNode(const TSh
 	if (!Params->HasField(TEXT("position_x"))) return FMonolithActionResult::Error(TEXT("Missing required param 'position_x'"));
 	if (!Params->HasField(TEXT("position_y"))) return FMonolithActionResult::Error(TEXT("Missing required param 'position_y'"));
 
-	int32 PosX = static_cast<int32>(Params->GetNumberField(TEXT("position_x")));
-	int32 PosY = static_cast<int32>(Params->GetNumberField(TEXT("position_y")));
+	int32 PosX = 0;
+	double TmpX = 0.0;
+	if (!Params->TryGetNumberField(TEXT("position_x"), TmpX))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'position_x' must be a number"), -32602);
+	}
+	PosX = static_cast<int32>(TmpX);
+	int32 PosY = 0;
+	double TmpY = 0.0;
+	if (!Params->TryGetNumberField(TEXT("position_y"), TmpY))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'position_y' must be a number"), -32602);
+	}
+	PosY = static_cast<int32>(TmpY);
 
 	FString LoadError;
 	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);

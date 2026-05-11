@@ -1850,9 +1850,10 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetEffectStacking(const T
 	// Set StackingType via reflection (SetStackingType is not exported)
 	SetGameplayEffectStackingTypeValue(GE, StackType);
 
-	if (Params->HasField(TEXT("stack_limit")))
+	double StackLimitVal = 0.0;
+	if (Params->TryGetNumberField(TEXT("stack_limit"), StackLimitVal))
 	{
-		GE->StackLimitCount = static_cast<int32>(Params->GetNumberField(TEXT("stack_limit")));
+		GE->StackLimitCount = FMath::Clamp(static_cast<int32>(StackLimitVal), 0, 1000);
 	}
 
 	FString DurRefreshStr = Params->GetStringField(TEXT("stack_duration_refresh_policy"));
@@ -2676,9 +2677,10 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 	{
 		FString StackType = (*StackPtr)->GetStringField(TEXT("type"));
 		int32 StackLimit = 0;
-		if ((*StackPtr)->HasField(TEXT("limit")))
+		double StackLimitVal = 0.0;
+		if ((*StackPtr)->TryGetNumberField(TEXT("limit"), StackLimitVal))
 		{
-			StackLimit = static_cast<int32>((*StackPtr)->GetNumberField(TEXT("limit")));
+			StackLimit = FMath::Clamp(static_cast<int32>(StackLimitVal), 0, 1000);
 		}
 		ConfigureStacking(GE, StackType, StackLimit);
 	}

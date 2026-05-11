@@ -267,12 +267,14 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::SearchSymbolsFTS(const FS
 	TArray<FMonolithSourceSymbol> Result;
 	if (!Database || !Database->IsValid()) return Result;
 
+	int32 SafeLimit = FMath::Clamp(Limit, 1, 1000);
+
 	FString FTSQuery = EscapeFTS(Query);
 
 	FSQLitePreparedStatement Stmt;
 	Stmt.Create(*Database, TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols_fts f JOIN symbols s ON s.id = f.rowid WHERE symbols_fts MATCH ? ORDER BY bm25(symbols_fts) LIMIT ?;"));
 	Stmt.SetBindingValueByIndex(1, FTSQuery);
-	Stmt.SetBindingValueByIndex(2, static_cast<int64>(Limit));
+	Stmt.SetBindingValueByIndex(2, static_cast<int64>(SafeLimit));
 
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
@@ -378,19 +380,21 @@ TArray<FMonolithSourceReference> FMonolithSourceDatabase::GetReferencesTo(int64 
 	TArray<FMonolithSourceReference> Result;
 	if (!Database || !Database->IsValid()) return Result;
 
+	int32 SafeLimit = FMath::Clamp(Limit, 1, 1000);
+
 	FSQLitePreparedStatement Stmt;
 	if (RefKind.IsEmpty())
 	{
 		Stmt.Create(*Database, TEXT("SELECT r.id, r.from_symbol_id, r.to_symbol_id, r.ref_kind, r.file_id, r.line, s.name, f.path FROM \"references\" r JOIN symbols s ON s.id = r.from_symbol_id JOIN files f ON f.id = r.file_id WHERE r.to_symbol_id = ? LIMIT ?;"));
 		Stmt.SetBindingValueByIndex(1, SymbolId);
-		Stmt.SetBindingValueByIndex(2, static_cast<int64>(Limit));
+		Stmt.SetBindingValueByIndex(2, static_cast<int64>(SafeLimit));
 	}
 	else
 	{
 		Stmt.Create(*Database, TEXT("SELECT r.id, r.from_symbol_id, r.to_symbol_id, r.ref_kind, r.file_id, r.line, s.name, f.path FROM \"references\" r JOIN symbols s ON s.id = r.from_symbol_id JOIN files f ON f.id = r.file_id WHERE r.to_symbol_id = ? AND r.ref_kind = ? LIMIT ?;"));
 		Stmt.SetBindingValueByIndex(1, SymbolId);
 		Stmt.SetBindingValueByIndex(2, RefKind);
-		Stmt.SetBindingValueByIndex(3, static_cast<int64>(Limit));
+		Stmt.SetBindingValueByIndex(3, static_cast<int64>(SafeLimit));
 	}
 
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
@@ -406,19 +410,21 @@ TArray<FMonolithSourceReference> FMonolithSourceDatabase::GetReferencesFrom(int6
 	TArray<FMonolithSourceReference> Result;
 	if (!Database || !Database->IsValid()) return Result;
 
+	int32 SafeLimit = FMath::Clamp(Limit, 1, 1000);
+
 	FSQLitePreparedStatement Stmt;
 	if (RefKind.IsEmpty())
 	{
 		Stmt.Create(*Database, TEXT("SELECT r.id, r.from_symbol_id, r.to_symbol_id, r.ref_kind, r.file_id, r.line, s.name, f.path FROM \"references\" r JOIN symbols s ON s.id = r.to_symbol_id JOIN files f ON f.id = r.file_id WHERE r.from_symbol_id = ? LIMIT ?;"));
 		Stmt.SetBindingValueByIndex(1, SymbolId);
-		Stmt.SetBindingValueByIndex(2, static_cast<int64>(Limit));
+		Stmt.SetBindingValueByIndex(2, static_cast<int64>(SafeLimit));
 	}
 	else
 	{
 		Stmt.Create(*Database, TEXT("SELECT r.id, r.from_symbol_id, r.to_symbol_id, r.ref_kind, r.file_id, r.line, s.name, f.path FROM \"references\" r JOIN symbols s ON s.id = r.to_symbol_id JOIN files f ON f.id = r.file_id WHERE r.from_symbol_id = ? AND r.ref_kind = ? LIMIT ?;"));
 		Stmt.SetBindingValueByIndex(1, SymbolId);
 		Stmt.SetBindingValueByIndex(2, RefKind);
-		Stmt.SetBindingValueByIndex(3, static_cast<int64>(Limit));
+		Stmt.SetBindingValueByIndex(3, static_cast<int64>(SafeLimit));
 	}
 
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
@@ -547,19 +553,21 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::GetSymbolsInModule(const 
 	TArray<FMonolithSourceSymbol> Result;
 	if (!Database || !Database->IsValid()) return Result;
 
+	int32 SafeLimit = FMath::Clamp(Limit, 1, 1000);
+
 	FSQLitePreparedStatement Stmt;
 	if (Kind.IsEmpty())
 	{
 		Stmt.Create(*Database, TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols s JOIN files f ON f.id = s.file_id JOIN modules m ON m.id = f.module_id WHERE m.name = ? LIMIT ?;"));
 		Stmt.SetBindingValueByIndex(1, ModuleName);
-		Stmt.SetBindingValueByIndex(2, static_cast<int64>(Limit));
+		Stmt.SetBindingValueByIndex(2, static_cast<int64>(SafeLimit));
 	}
 	else
 	{
 		Stmt.Create(*Database, TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols s JOIN files f ON f.id = s.file_id JOIN modules m ON m.id = f.module_id WHERE m.name = ? AND s.kind = ? LIMIT ?;"));
 		Stmt.SetBindingValueByIndex(1, ModuleName);
 		Stmt.SetBindingValueByIndex(2, Kind);
-		Stmt.SetBindingValueByIndex(3, static_cast<int64>(Limit));
+		Stmt.SetBindingValueByIndex(3, static_cast<int64>(SafeLimit));
 	}
 
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)

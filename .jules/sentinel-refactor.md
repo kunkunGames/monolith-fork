@@ -44,6 +44,12 @@
 **Reuse rule:** Future tasks should use `TryGetStringField` instead of `GetStringField` unless the parameter extraction is explicitly guaranteed.
 **Avoid:** Writing new handler logic with raw `GetStringField` instead of checking with `TryGetStringField`.
 
+## 2024-05-23 - Normalize MonolithLogicDriver GetNumberField extraction
+**Pattern:** Repeated missing-param checks like `HasField(...) ? GetNumberField(...) : Default` in MonolithLogicDriverGraphActions.
+**Learning:** TryGetNumberField safely extracts numeric parameters, avoiding ad-hoc type casts directly inside ternary statements and making the error/default handling clearer.
+**Reuse rule:** Use TryGetNumberField for extracting optional numbers into an existing variable with a fallback default.
+**Avoid:** Duplicated `if HasField then GetNumberField` or `HasField ? GetNumberField : Default` blocks.
+
 ## 2026-05-11 - Normalize MonolithUI Param Extraction
 **Pattern:** Ad-hoc use of `GetStringField` directly on `Params` objects, which is unsafe when not preceded by type validation or when the field is missing (even with `HasField`, since it could be null or non-string).
 **Learning:** Monolith C++ modules should never use direct typed accessors (`GetStringField`, etc.) without `TryGet*Field` since malformed JSON can cause assertion crashes.

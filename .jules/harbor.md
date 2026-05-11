@@ -27,3 +27,9 @@
 **Learning:** Hard-coded versions in multiple files (`API_REFERENCE.md`, `README.md`, all module specs) and action counts across docs require manual sweeping when versions bump.
 **Prevention:** Always grep for specific action count integers in markdown docs as a post-release check to ensure consistency.
 **Avoid:** Avoid leaving README.md counts (like UI, Animation and Editor) decoupled from the detailed counts in the API reference and specs.
+
+## 2026-05-11 - Correctly output macOS release zip and marker from release script
+**Release risk:** The `make_release.ps1` script didn't generate `-macOS.zip` output names or the `Monolith-macOS-SHA256` marker prefix when executed on macOS, causing friction and manual renaming during macOS release builds.
+**Learning:** Monolith's C++ auto-updater explicitly expects `Monolith-vX.Y.Z-macOS.zip` and parses `Monolith-macOS-SHA256: <hash>` on macOS, but the PowerShell build script used a hardcoded Windows `.zip` naming and standard `Monolith-SHA256:` prefix regardless of platform.
+**Prevention:** Check `$IsMacOS` in `Scripts/make_release.ps1` and correctly branch the output filename and SHA256 marker prefix. Ensure `CONTRIBUTING.md` mentions the macOS marker.
+**Avoid:** Hardcoding platform-specific release artifact names and checksum prefixes in cross-platform build scripts.
