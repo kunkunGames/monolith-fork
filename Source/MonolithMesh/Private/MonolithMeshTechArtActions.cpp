@@ -114,6 +114,29 @@ namespace MonolithMeshGeneratedModel
 		return JobDir(JobId) / TEXT("manifest.json");
 	}
 
+	static bool ValidateJobId(const FString& JobId, FString& OutError)
+	{
+		if (JobId.IsEmpty())
+		{
+			OutError = TEXT("job_id is required");
+			return false;
+		}
+		if (JobId.Contains(TEXT(".")) || JobId.Contains(TEXT("/")) || JobId.Contains(TEXT("\\")))
+		{
+			OutError = TEXT("job_id may not contain path separators or dots");
+			return false;
+		}
+		for (TCHAR Ch : JobId)
+		{
+			if (!FChar::IsAlnum(Ch) && Ch != TCHAR('_') && Ch != TCHAR('-'))
+			{
+				OutError = TEXT("job_id may contain only letters, numbers, underscore, and hyphen");
+				return false;
+			}
+		}
+		return true;
+	}
+
 	static FString SanitizeAssetName(const FString& Input)
 	{
 		FString Sanitized = Input.Left(64);
@@ -738,6 +761,10 @@ FMonolithActionResult FMonolithMeshTechArtActions::GetGeneratedModelJob(const TS
 	}
 
 	FString Error;
+	if (!MonolithMeshGeneratedModel::ValidateJobId(JobId, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	TSharedPtr<FJsonObject> Manifest = MonolithMeshGeneratedModel::ReadJsonFile(MonolithMeshGeneratedModel::ManifestPath(JobId), Error);
 	if (!Manifest.IsValid())
 	{
@@ -767,8 +794,16 @@ FMonolithActionResult FMonolithMeshTechArtActions::CancelGeneratedModelJob(const
 	Result->SetBoolField(TEXT("cancelled"), true);
 	Result->SetStringField(TEXT("cancelled_at_utc"), FDateTime::UtcNow().ToIso8601());
 
-	FString JobId = Result->GetStringField(TEXT("job_id"));
+	FString JobId;
+	if (!Params->TryGetStringField(TEXT("job_id"), JobId) || JobId.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or empty required param: job_id"), -32602);
+	}
 	FString Error;
+	if (!MonolithMeshGeneratedModel::ValidateJobId(JobId, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	if (!MonolithMeshGeneratedModel::WriteJsonFile(MonolithMeshGeneratedModel::ManifestPath(JobId), Result, Error))
 	{
 		return FMonolithActionResult::Error(Error, -32603);
@@ -830,6 +865,10 @@ FMonolithActionResult FMonolithMeshTechArtActions::ImportGeneratedModel(const TS
 	if (Params->TryGetStringField(TEXT("job_id"), JobId) && !JobId.IsEmpty())
 	{
 		FString Error;
+		if (!MonolithMeshGeneratedModel::ValidateJobId(JobId, Error))
+		{
+			return FMonolithActionResult::Error(Error, -32602);
+		}
 		Manifest = MonolithMeshGeneratedModel::ReadJsonFile(MonolithMeshGeneratedModel::ManifestPath(JobId), Error);
 		if (!Manifest.IsValid())
 		{
