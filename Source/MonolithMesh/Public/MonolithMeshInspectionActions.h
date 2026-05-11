@@ -32,4 +32,9 @@ private:
 	// --- Catalog queries (require MeshCatalogIndexer to have run) ---
 	static FMonolithActionResult SearchMeshesBySize(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult GetMeshCatalogStats(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Optional PCG visibility (no hard PCG dependency) ---
+	static FMonolithActionResult GetPcgStatus(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ListPcgGraphAssets(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ListPcgComponents(const TSharedPtr<FJsonObject>& Params);
 };

@@ -16,6 +16,10 @@
 #include "GeometryScript/MeshUVFunctions.h"
 #include "GeometryScript/MeshTransformFunctions.h"
 #include "GeometryScript/CollisionFunctions.h"
+#include "GeometryScript/MeshNormalsFunctions.h"
+#include "GeometryScript/MeshSubdivideFunctions.h"
+#include "GeometryScript/MeshMaterialFunctions.h"
+#include "GeometryScript/MeshDeformFunctions.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -23,6 +27,86 @@
 using namespace UE::Geometry;
 
 UMonolithMeshHandlePool* FMonolithMeshOperationActions::Pool = nullptr;
+
+namespace
+{
+	bool ReadVectorArray(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, FVector& OutVector, FString& OutError)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Params->TryGetArrayField(FieldName, Values))
+		{
+			return true;
+		}
+
+		if (!Values || Values->Num() < 3)
+		{
+			OutError = FString::Printf(TEXT("'%s' must be an array [x,y,z]"), FieldName);
+			return false;
+		}
+
+		OutVector = FVector(
+			(*Values)[0]->AsNumber(),
+			(*Values)[1]->AsNumber(),
+			(*Values)[2]->AsNumber());
+		return true;
+	}
+
+	UDynamicMesh* GetWorkingMeshForOperation(
+		UMonolithMeshHandlePool* Pool,
+		const TSharedPtr<FJsonObject>& Params,
+		const FString& OperationName,
+		FString& OutHandleName,
+		FString& OutError)
+	{
+		const FString SourceHandle = Params->GetStringField(TEXT("handle"));
+		if (SourceHandle.IsEmpty())
+		{
+			OutError = TEXT("'handle' is required");
+			return nullptr;
+		}
+
+		FString SourceError;
+		UDynamicMesh* SourceMesh = Pool->GetHandle(SourceHandle, SourceError);
+		if (!SourceMesh)
+		{
+			OutError = SourceError;
+			return nullptr;
+		}
+
+		FString ResultHandle;
+		if (Params->TryGetStringField(TEXT("result_handle"), ResultHandle))
+		{
+			ResultHandle.TrimStartAndEndInline();
+		}
+
+		if (!ResultHandle.IsEmpty() && ResultHandle != SourceHandle)
+		{
+			FString CreateError;
+			if (!Pool->CreateHandle(
+				ResultHandle,
+				FString::Printf(TEXT("internal:%s:%s"), *OperationName, *SourceHandle),
+				CreateError))
+			{
+				OutError = CreateError;
+				return nullptr;
+			}
+
+			UDynamicMesh* ResultMesh = Pool->GetHandle(ResultHandle, CreateError);
+			if (!ResultMesh)
+			{
+				OutError = CreateError;
+				return nullptr;
+			}
+
+			ResultMesh->SetMesh(SourceMesh->GetMeshRef());
+			OutHandleName = ResultHandle;
+			return ResultMesh;
+		}
+
+		OutHandleName = SourceHandle;
+		return SourceMesh;
+	}
+}
 
 void FMonolithMeshOperationActions::SetHandlePool(UMonolithMeshHandlePool* InPool)
 {
@@ -135,6 +219,62 @@ void FMonolithMeshOperationActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Required(TEXT("handle"), TEXT("string"), TEXT("Handle to mirror"))
 			.Required(TEXT("axis"), TEXT("string"), TEXT("Mirror axis: X, Y, or Z"))
 			.Optional(TEXT("weld"), TEXT("boolean"), TEXT("Weld vertices along mirror plane"), TEXT("true"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("mesh"), TEXT("geometry_plane_cut"),
+		TEXT("Apply a direct GeometryScript plane cut/slice/mirror to a mesh handle"),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshOperationActions::GeometryPlaneCut),
+		FParamSchemaBuilder()
+			.Required(TEXT("handle"), TEXT("string"), TEXT("Handle to modify"))
+			.Optional(TEXT("result_handle"), TEXT("string"), TEXT("Optional output handle; if omitted the input handle is modified in place"))
+			.Optional(TEXT("mode"), TEXT("string"), TEXT("cut, slice, or mirror"), TEXT("cut"))
+			.Optional(TEXT("origin"), TEXT("array"), TEXT("Plane origin [x,y,z]"), TEXT("[0,0,0]"))
+			.Optional(TEXT("normal"), TEXT("array"), TEXT("Plane normal [x,y,z]"), TEXT("[0,0,1]"))
+			.Optional(TEXT("fill_holes"), TEXT("boolean"), TEXT("Fill cut/slice holes when supported"), TEXT("true"))
+			.Optional(TEXT("weld"), TEXT("boolean"), TEXT("Weld along mirror plane"), TEXT("true"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("mesh"), TEXT("geometry_recompute_normals"),
+		TEXT("Recompute or reset normals on a mesh handle"),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshOperationActions::GeometryRecomputeNormals),
+		FParamSchemaBuilder()
+			.Required(TEXT("handle"), TEXT("string"), TEXT("Handle to modify"))
+			.Optional(TEXT("result_handle"), TEXT("string"), TEXT("Optional output handle; if omitted the input handle is modified in place"))
+			.Optional(TEXT("mode"), TEXT("string"), TEXT("recompute, split, per_vertex, or per_face"), TEXT("recompute"))
+			.Optional(TEXT("split_angle"), TEXT("number"), TEXT("Opening angle in degrees for split mode"), TEXT("15"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("mesh"), TEXT("geometry_subdivide"),
+		TEXT("Uniform or PN tessellate a mesh handle"),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshOperationActions::GeometrySubdivide),
+		FParamSchemaBuilder()
+			.Required(TEXT("handle"), TEXT("string"), TEXT("Handle to modify"))
+			.Optional(TEXT("result_handle"), TEXT("string"), TEXT("Optional output handle; if omitted the input handle is modified in place"))
+			.Optional(TEXT("method"), TEXT("string"), TEXT("uniform or pn"), TEXT("uniform"))
+			.Optional(TEXT("level"), TEXT("integer"), TEXT("Tessellation level, clamped to 1-5"), TEXT("1"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("mesh"), TEXT("geometry_material_ids"),
+		TEXT("Inspect or modify per-triangle material IDs on a mesh handle"),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshOperationActions::GeometryMaterialIds),
+		FParamSchemaBuilder()
+			.Required(TEXT("handle"), TEXT("string"), TEXT("Handle to inspect or modify"))
+			.Required(TEXT("verb"), TEXT("string"), TEXT("info, remap, clear, or delete_by_id"))
+			.Optional(TEXT("result_handle"), TEXT("string"), TEXT("Optional output handle for mutating verbs"))
+			.Optional(TEXT("from_id"), TEXT("integer"), TEXT("Source material ID for remap"), TEXT("0"))
+			.Optional(TEXT("to_id"), TEXT("integer"), TEXT("Destination material ID for remap"), TEXT("0"))
+			.Optional(TEXT("material_id"), TEXT("integer"), TEXT("Material ID for delete_by_id"), TEXT("0"))
+			.Optional(TEXT("clear_value"), TEXT("integer"), TEXT("Material ID value for clear"), TEXT("0"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("mesh"), TEXT("geometry_smooth"),
+		TEXT("Apply iterative smoothing to a mesh handle"),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshOperationActions::GeometrySmooth),
+		FParamSchemaBuilder()
+			.Required(TEXT("handle"), TEXT("string"), TEXT("Handle to modify"))
+			.Optional(TEXT("result_handle"), TEXT("string"), TEXT("Optional output handle; if omitted the input handle is modified in place"))
+			.Optional(TEXT("iterations"), TEXT("integer"), TEXT("Smoothing iterations, clamped to 1-200"), TEXT("10"))
+			.Optional(TEXT("speed"), TEXT("number"), TEXT("Smoothing alpha, clamped to 0.0-1.0"), TEXT("0.25"))
 			.Build());
 }
 
@@ -721,7 +861,7 @@ FMonolithActionResult FMonolithMeshOperationActions::MirrorMesh(const TSharedPtr
 	FTransform MirrorFrame = FTransform::Identity;
 	if (Axis == TEXT("X"))
 	{
-		// Mirror plane has normal along X — identity frame works (X-axis is forward)
+		// Mirror plane has normal along X - identity frame works (X-axis is forward)
 		MirrorFrame = FTransform::Identity;
 	}
 	else if (Axis == TEXT("Y"))
@@ -748,6 +888,317 @@ FMonolithActionResult FMonolithMeshOperationActions::MirrorMesh(const TSharedPtr
 	Result->SetBoolField(TEXT("weld"), bWeld);
 	Result->SetNumberField(TEXT("original_triangles"), OriginalTris);
 	Result->SetNumberField(TEXT("result_triangles"), Mesh->GetTriangleCount());
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithMeshOperationActions::GeometryPlaneCut(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Pool)
+	{
+		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
+	}
+
+	FString WorkingHandle;
+	FString Error;
+	UDynamicMesh* Mesh = GetWorkingMeshForOperation(Pool, Params, TEXT("geometry_plane_cut"), WorkingHandle, Error);
+	if (!Mesh)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const FString Mode = Params->HasField(TEXT("mode"))
+		? Params->GetStringField(TEXT("mode")).ToLower()
+		: TEXT("cut");
+
+	FVector Origin = FVector::ZeroVector;
+	FVector Normal = FVector::UpVector;
+	if (!ReadVectorArray(Params, TEXT("origin"), Origin, Error) ||
+		!ReadVectorArray(Params, TEXT("normal"), Normal, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	Normal = Normal.GetSafeNormal();
+	if (Normal.IsNearlyZero())
+	{
+		return FMonolithActionResult::Error(TEXT("'normal' must not be zero length"));
+	}
+
+	const bool bFillHoles = !Params->HasField(TEXT("fill_holes")) || Params->GetBoolField(TEXT("fill_holes"));
+	const bool bWeld = !Params->HasField(TEXT("weld")) || Params->GetBoolField(TEXT("weld"));
+	const int32 OriginalTris = Mesh->GetTriangleCount();
+
+	FTransform CutFrame(FQuat::FindBetweenNormals(FVector::UpVector, Normal), Origin);
+	if (Mode == TEXT("cut"))
+	{
+		FGeometryScriptMeshPlaneCutOptions CutOptions;
+		CutOptions.bFillHoles = bFillHoles;
+		UGeometryScriptLibrary_MeshBooleanFunctions::ApplyMeshPlaneCut(Mesh, CutFrame, CutOptions);
+	}
+	else if (Mode == TEXT("slice"))
+	{
+		FGeometryScriptMeshPlaneSliceOptions SliceOptions;
+		SliceOptions.bFillHoles = bFillHoles;
+		UGeometryScriptLibrary_MeshBooleanFunctions::ApplyMeshPlaneSlice(Mesh, CutFrame, SliceOptions);
+	}
+	else if (Mode == TEXT("mirror"))
+	{
+		FGeometryScriptMeshMirrorOptions MirrorOptions;
+		MirrorOptions.bApplyPlaneCut = true;
+		MirrorOptions.bWeldAlongPlane = bWeld;
+		UGeometryScriptLibrary_MeshBooleanFunctions::ApplyMeshMirror(Mesh, CutFrame, MirrorOptions);
+	}
+	else
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Unknown mode '%s'. Valid: cut, slice, mirror"), *Mode));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("handle"), WorkingHandle);
+	Result->SetStringField(TEXT("mode"), Mode);
+	Result->SetBoolField(TEXT("fill_holes"), bFillHoles);
+	Result->SetNumberField(TEXT("original_triangles"), OriginalTris);
+	Result->SetNumberField(TEXT("result_triangles"), Mesh->GetTriangleCount());
+	Result->SetStringField(TEXT("status"), TEXT("completed"));
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithMeshOperationActions::GeometryRecomputeNormals(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Pool)
+	{
+		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
+	}
+
+	FString WorkingHandle;
+	FString Error;
+	UDynamicMesh* Mesh = GetWorkingMeshForOperation(Pool, Params, TEXT("geometry_recompute_normals"), WorkingHandle, Error);
+	if (!Mesh)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const FString Mode = Params->HasField(TEXT("mode"))
+		? Params->GetStringField(TEXT("mode")).ToLower()
+		: TEXT("recompute");
+
+	if (Mode == TEXT("recompute"))
+	{
+		FGeometryScriptCalculateNormalsOptions NormalOptions;
+		UGeometryScriptLibrary_MeshNormalsFunctions::RecomputeNormals(Mesh, NormalOptions);
+	}
+	else if (Mode == TEXT("split"))
+	{
+		FGeometryScriptSplitNormalsOptions SplitOptions;
+		SplitOptions.OpeningAngleDeg = Params->HasField(TEXT("split_angle"))
+			? static_cast<float>(Params->GetNumberField(TEXT("split_angle")))
+			: 15.0f;
+		FGeometryScriptCalculateNormalsOptions NormalOptions;
+		UGeometryScriptLibrary_MeshNormalsFunctions::ComputeSplitNormals(Mesh, SplitOptions, NormalOptions);
+	}
+	else if (Mode == TEXT("per_vertex"))
+	{
+		UGeometryScriptLibrary_MeshNormalsFunctions::SetPerVertexNormals(Mesh);
+	}
+	else if (Mode == TEXT("per_face"))
+	{
+		UGeometryScriptLibrary_MeshNormalsFunctions::SetPerFaceNormals(Mesh);
+	}
+	else
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Unknown normals mode '%s'. Valid: recompute, split, per_vertex, per_face"), *Mode));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("handle"), WorkingHandle);
+	Result->SetStringField(TEXT("mode"), Mode);
+	Result->SetNumberField(TEXT("triangle_count"), Mesh->GetTriangleCount());
+	Result->SetStringField(TEXT("status"), TEXT("completed"));
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithMeshOperationActions::GeometrySubdivide(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Pool)
+	{
+		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
+	}
+
+	FString WorkingHandle;
+	FString Error;
+	UDynamicMesh* Mesh = GetWorkingMeshForOperation(Pool, Params, TEXT("geometry_subdivide"), WorkingHandle, Error);
+	if (!Mesh)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const FString Method = Params->HasField(TEXT("method"))
+		? Params->GetStringField(TEXT("method")).ToLower()
+		: TEXT("uniform");
+	const int32 Level = FMath::Clamp(
+		Params->HasField(TEXT("level")) ? static_cast<int32>(Params->GetNumberField(TEXT("level"))) : 1,
+		1,
+		5);
+	const int32 OriginalTris = Mesh->GetTriangleCount();
+
+	if (Method == TEXT("uniform"))
+	{
+		UGeometryScriptLibrary_MeshSubdivideFunctions::ApplyUniformTessellation(Mesh, Level);
+	}
+	else if (Method == TEXT("pn"))
+	{
+		FGeometryScriptPNTessellateOptions Options;
+		UGeometryScriptLibrary_MeshSubdivideFunctions::ApplyPNTessellation(Mesh, Options, Level);
+	}
+	else
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Unknown subdivide method '%s'. Valid: uniform, pn"), *Method));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("handle"), WorkingHandle);
+	Result->SetStringField(TEXT("method"), Method);
+	Result->SetNumberField(TEXT("level"), Level);
+	Result->SetNumberField(TEXT("original_triangles"), OriginalTris);
+	Result->SetNumberField(TEXT("result_triangles"), Mesh->GetTriangleCount());
+	Result->SetStringField(TEXT("status"), TEXT("completed"));
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithMeshOperationActions::GeometryMaterialIds(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Pool)
+	{
+		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
+	}
+
+	const FString Verb = Params->GetStringField(TEXT("verb")).ToLower();
+	if (Verb.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("'verb' is required"));
+	}
+
+	FString WorkingHandle;
+	FString Error;
+	UDynamicMesh* Mesh = nullptr;
+
+	if (Verb == TEXT("info"))
+	{
+		const FString HandleName = Params->GetStringField(TEXT("handle"));
+		if (HandleName.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("'handle' is required"));
+		}
+
+		Mesh = Pool->GetHandle(HandleName, Error);
+		WorkingHandle = HandleName;
+		if (!Mesh)
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+	}
+	else
+	{
+		Mesh = GetWorkingMeshForOperation(Pool, Params, TEXT("geometry_material_ids"), WorkingHandle, Error);
+		if (!Mesh)
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+	}
+
+	const int32 OriginalTris = Mesh->GetTriangleCount();
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("handle"), WorkingHandle);
+	Result->SetStringField(TEXT("verb"), Verb);
+
+	if (Verb == TEXT("info"))
+	{
+		bool bHasMaterialIds = false;
+		const int32 MaxId = UGeometryScriptLibrary_MeshMaterialFunctions::GetMaxMaterialID(Mesh, bHasMaterialIds);
+		Result->SetBoolField(TEXT("has_material_ids"), bHasMaterialIds);
+		Result->SetNumberField(TEXT("max_material_id"), MaxId);
+	}
+	else if (Verb == TEXT("remap"))
+	{
+		const int32 FromId = Params->HasField(TEXT("from_id")) ? static_cast<int32>(Params->GetNumberField(TEXT("from_id"))) : 0;
+		const int32 ToId = Params->HasField(TEXT("to_id")) ? static_cast<int32>(Params->GetNumberField(TEXT("to_id"))) : 0;
+		UGeometryScriptLibrary_MeshMaterialFunctions::RemapMaterialIDs(Mesh, FromId, ToId);
+		Result->SetNumberField(TEXT("from_id"), FromId);
+		Result->SetNumberField(TEXT("to_id"), ToId);
+	}
+	else if (Verb == TEXT("clear"))
+	{
+		const int32 ClearValue = Params->HasField(TEXT("clear_value")) ? static_cast<int32>(Params->GetNumberField(TEXT("clear_value"))) : 0;
+		UGeometryScriptLibrary_MeshMaterialFunctions::ClearMaterialIDs(Mesh, ClearValue);
+		Result->SetNumberField(TEXT("clear_value"), ClearValue);
+	}
+	else if (Verb == TEXT("delete_by_id"))
+	{
+		const int32 MaterialId = Params->HasField(TEXT("material_id")) ? static_cast<int32>(Params->GetNumberField(TEXT("material_id"))) : 0;
+		int32 NumDeleted = 0;
+		UGeometryScriptLibrary_MeshMaterialFunctions::DeleteTrianglesByMaterialID(Mesh, MaterialId, NumDeleted);
+		Result->SetNumberField(TEXT("material_id"), MaterialId);
+		Result->SetNumberField(TEXT("deleted_triangles"), NumDeleted);
+	}
+	else
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Unknown material ID verb '%s'. Valid: info, remap, clear, delete_by_id"), *Verb));
+	}
+
+	Result->SetNumberField(TEXT("original_triangles"), OriginalTris);
+	Result->SetNumberField(TEXT("result_triangles"), Mesh->GetTriangleCount());
+	Result->SetStringField(TEXT("status"), TEXT("completed"));
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithMeshOperationActions::GeometrySmooth(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Pool)
+	{
+		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
+	}
+
+	FString WorkingHandle;
+	FString Error;
+	UDynamicMesh* Mesh = GetWorkingMeshForOperation(Pool, Params, TEXT("geometry_smooth"), WorkingHandle, Error);
+	if (!Mesh)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const int32 Iterations = FMath::Clamp(
+		Params->HasField(TEXT("iterations")) ? static_cast<int32>(Params->GetNumberField(TEXT("iterations"))) : 10,
+		1,
+		200);
+	const float Speed = FMath::Clamp(
+		Params->HasField(TEXT("speed")) ? static_cast<float>(Params->GetNumberField(TEXT("speed"))) : 0.25f,
+		0.0f,
+		1.0f);
+	const int32 OriginalTris = Mesh->GetTriangleCount();
+
+	FGeometryScriptIterativeMeshSmoothingOptions Options;
+	Options.NumIterations = Iterations;
+	Options.Alpha = Speed;
+
+	FGeometryScriptMeshSelection EmptySelection;
+	UGeometryScriptLibrary_MeshDeformFunctions::ApplyIterativeSmoothingToMesh(Mesh, EmptySelection, Options);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("handle"), WorkingHandle);
+	Result->SetNumberField(TEXT("iterations"), Iterations);
+	Result->SetNumberField(TEXT("speed"), Speed);
+	Result->SetNumberField(TEXT("original_triangles"), OriginalTris);
+	Result->SetNumberField(TEXT("result_triangles"), Mesh->GetTriangleCount());
+	Result->SetStringField(TEXT("status"), TEXT("completed"));
 
 	return FMonolithActionResult::Success(Result);
 }

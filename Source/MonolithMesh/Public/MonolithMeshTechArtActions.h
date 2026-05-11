@@ -25,6 +25,27 @@ private:
 	/** Import FBX/glTF mesh via IAssetTools::ImportAssetsAutomated */
 	static FMonolithActionResult ImportMesh(const TSharedPtr<FJsonObject>& Params);
 
+	/** List local/external generated-model provider boundaries */
+	static FMonolithActionResult ListModelGenerationProviders(const TSharedPtr<FJsonObject>& Params);
+
+	/** Submit a local deterministic generated model job */
+	static FMonolithActionResult SubmitGeneratedModelJob(const TSharedPtr<FJsonObject>& Params);
+
+	/** Read a generated model job manifest */
+	static FMonolithActionResult GetGeneratedModelJob(const TSharedPtr<FJsonObject>& Params);
+
+	/** Cancel a generated model job when it is still cancelable */
+	static FMonolithActionResult CancelGeneratedModelJob(const TSharedPtr<FJsonObject>& Params);
+
+	/** Resolve the local file for a completed generated model job */
+	static FMonolithActionResult DownloadGeneratedModelResult(const TSharedPtr<FJsonObject>& Params);
+
+	/** Import a generated model file or completed job as StaticMesh assets */
+	static FMonolithActionResult ImportGeneratedModel(const TSharedPtr<FJsonObject>& Params);
+
+	/** Read Monolith generation provenance from a StaticMesh */
+	static FMonolithActionResult GetGeneratedModelProvenance(const TSharedPtr<FJsonObject>& Params);
+
 	/** Export a UStaticMesh / USkeletalMesh asset to FBX file on disk via UAssetExportTask */
 	static FMonolithActionResult ExportMesh(const TSharedPtr<FJsonObject>& Params);
 

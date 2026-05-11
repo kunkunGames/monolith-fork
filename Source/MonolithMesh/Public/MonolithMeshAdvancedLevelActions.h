@@ -43,4 +43,10 @@ private:
 
 	/** Measure distance between two actors or world points */
 	static FMonolithActionResult MeasureDistance(const TSharedPtr<FJsonObject>& Params);
+
+	/** Report nDisplay/DisplayCluster module support without hard dependencies */
+	static FMonolithActionResult GetNDisplayStatus(const TSharedPtr<FJsonObject>& Params);
+
+	/** List nDisplay/DisplayCluster config-like assets using AssetRegistry metadata */
+	static FMonolithActionResult ListNDisplayConfigAssets(const TSharedPtr<FJsonObject>& Params);
 };
