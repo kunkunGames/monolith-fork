@@ -1,0 +1,19 @@
+Track: Refactor
+Maintenance unit: MonolithLogicDriver
+Existing behavior preserved: Yes, the fallback to `0` or extraction logic works identically.
+Reuse/cohesion improvement: Normalizes `GetNumberField` ad-hoc usages to `TryGetNumberField` in MonolithLogicDriverGraphActions to prevent assert warnings and conform to standard param extraction patterns.
+Production change size: 80 lines changed in 1 file.
+Public API/action impact: None, action contract remains unchanged.
+Tests added or why not: Not added; change is a behavior-preserving reuse/refactor. UE test infrastructure for this path is not present in this VM.
+Spec/docs impact: No public contract or guidance change.
+Duplicate check: Checked for similar branches, found `origin/jules/sentinel-refactor/monolithlogicdriver/normalize-param-extraction-4850995676419634537` but it appears to be a botched or stale commit affecting MonolithProxy instead.
+WorkFingerprint:
+- agent: Sentinel Refactor
+- category: param extraction
+- module: MonolithLogicDriver
+- component/action/helper: MonolithLogicDriverGraphActions
+- intended files: Source/MonolithLogicDriver/Private/MonolithLogicDriverGraphActions.cpp
+Verification:
+- git diff --check
+- ran ci_static_checks.py
+Blocked verification: [blocked: UE 5.7 editor unavailable in Jules VM]
