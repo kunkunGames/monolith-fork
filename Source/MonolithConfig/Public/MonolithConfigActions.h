@@ -20,6 +20,10 @@ public:
 	static FMonolithActionResult SearchConfig(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult GetSection(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult GetConfigFiles(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ListPlugins(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GetPlugin(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GetCVar(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult FindCVars(const TSharedPtr<FJsonObject>& Params);
 
 private:
 	/** Map shortname (e.g. "DefaultEngine") to full file path */
