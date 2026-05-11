@@ -257,7 +257,8 @@ namespace
 		const FString& Source,
 		TArray<TSharedPtr<FJsonValue>>& OutRefs,
 		TSet<FString>& Seen,
-		int32 Depth);
+		int32 Depth,
+		int32 ArrayLimit);
 
 	void AddReference(TArray<TSharedPtr<FJsonValue>>& OutRefs, TSet<FString>& Seen, const FString& Source, const FString& Path, const FString& ClassName, bool bLoaded, bool bSoft)
 	{
@@ -288,7 +289,7 @@ namespace
 		OutRefs.Add(MakeShared<FJsonValueObject>(Ref));
 	}
 
-	void CollectReferencesFromStruct(const UStruct* Struct, const void* StructMemory, const FString& Source, TArray<TSharedPtr<FJsonValue>>& OutRefs, TSet<FString>& Seen, int32 Depth)
+	void CollectReferencesFromStruct(const UStruct* Struct, const void* StructMemory, const FString& Source, TArray<TSharedPtr<FJsonValue>>& OutRefs, TSet<FString>& Seen, int32 Depth, int32 ArrayLimit)
 	{
 		if (!Struct || !StructMemory || Depth < 0)
 		{
@@ -302,7 +303,7 @@ namespace
 			{
 				continue;
 			}
-			CollectReferencesFromProperty(Property, Property->ContainerPtrToValuePtr<void>(StructMemory), Source, OutRefs, Seen, Depth);
+			CollectReferencesFromProperty(Property, Property->ContainerPtrToValuePtr<void>(StructMemory), Source, OutRefs, Seen, Depth, ArrayLimit);
 		}
 	}
 
@@ -312,7 +313,8 @@ namespace
 		const FString& Source,
 		TArray<TSharedPtr<FJsonValue>>& OutRefs,
 		TSet<FString>& Seen,
-		int32 Depth)
+		int32 Depth,
+		int32 ArrayLimit)
 	{
 		if (!Property || !ValuePtr || Depth < 0)
 		{
@@ -340,14 +342,15 @@ namespace
 
 		if (const FStructProperty* StructProp = CastField<FStructProperty>(Property))
 		{
-			CollectReferencesFromStruct(StructProp->Struct, ValuePtr, Source + TEXT(".") + Property->GetName(), OutRefs, Seen, Depth - 1);
+			CollectReferencesFromStruct(StructProp->Struct, ValuePtr, Source + TEXT(".") + Property->GetName(), OutRefs, Seen, Depth - 1, ArrayLimit);
 			return;
 		}
 
 		if (const FArrayProperty* ArrayProp = CastField<FArrayProperty>(Property))
 		{
 			FScriptArrayHelper Helper(ArrayProp, ValuePtr);
-			for (int32 Index = 0; Index < Helper.Num(); ++Index)
+			const int32 Limit = FMath::Clamp(ArrayLimit, 0, Helper.Num());
+			for (int32 Index = 0; Index < Limit; ++Index)
 			{
 				CollectReferencesFromProperty(
 					ArrayProp->Inner,
@@ -355,16 +358,17 @@ namespace
 					FString::Printf(TEXT("%s.%s[%d]"), *Source, *Property->GetName(), Index),
 					OutRefs,
 					Seen,
-					Depth - 1);
+					Depth - 1,
+					ArrayLimit);
 			}
 		}
 	}
 
-	TArray<TSharedPtr<FJsonValue>> CollectAssetReferences(const UObject* Asset)
+	TArray<TSharedPtr<FJsonValue>> CollectAssetReferences(const UObject* Asset, int32 ArrayLimit)
 	{
 		TArray<TSharedPtr<FJsonValue>> Refs;
 		TSet<FString> Seen;
-		CollectReferencesFromStruct(Asset ? Asset->GetClass() : nullptr, Asset, TEXT("asset"), Refs, Seen, 6);
+		CollectReferencesFromStruct(Asset ? Asset->GetClass() : nullptr, Asset, TEXT("asset"), Refs, Seen, 6, ArrayLimit);
 		return Refs;
 	}
 
@@ -423,7 +427,7 @@ namespace
 			AddWarning(TEXT("large_payload_capped"), FString::Printf(TEXT("Array properties are capped at %d items by default."), ArrayLimit));
 		}
 
-		for (const TSharedPtr<FJsonValue>& RefValue : CollectAssetReferences(Asset))
+		for (const TSharedPtr<FJsonValue>& RefValue : CollectAssetReferences(Asset, ArrayLimit))
 		{
 			const TSharedPtr<FJsonObject>* RefObject = nullptr;
 			if (!RefValue.IsValid() || !RefValue->TryGetObject(RefObject) || !RefObject || !RefObject->IsValid())
@@ -495,7 +499,7 @@ namespace
 
 		if (bIncludeReferences)
 		{
-			Result->SetArrayField(TEXT("references"), CollectAssetReferences(Asset));
+			Result->SetArrayField(TEXT("references"), CollectAssetReferences(Asset, ArrayLimit));
 		}
 
 		Result->SetArrayField(TEXT("warnings"), BuildValidationWarnings(Asset, Def, ArrayLimit));

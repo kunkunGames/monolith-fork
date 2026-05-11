@@ -1071,6 +1071,10 @@ FMonolithActionResult FMonolithMaterialActions::ListPaper2DAssets(const TSharedP
 	FARFilter Filter;
 	Filter.PackagePaths.Add(FName(*PackagePath));
 	Filter.bRecursivePaths = true;
+	Filter.ClassPaths.Add(FTopLevelAssetPath(TEXT("/Script/Paper2D"), TEXT("PaperSprite")));
+	Filter.ClassPaths.Add(FTopLevelAssetPath(TEXT("/Script/Paper2D"), TEXT("PaperFlipbook")));
+	Filter.ClassPaths.Add(FTopLevelAssetPath(TEXT("/Script/Paper2D"), TEXT("PaperTileSet")));
+	Filter.ClassPaths.Add(FTopLevelAssetPath(TEXT("/Script/Paper2D"), TEXT("PaperTileMap")));
 
 	TArray<FAssetData> Assets;
 	AssetRegistry.GetAssets(Filter, Assets);
