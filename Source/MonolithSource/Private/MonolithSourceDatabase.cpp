@@ -155,6 +155,7 @@ FString FMonolithSourceDatabase::EscapeFTS(const FString& Query)
 
 	// Strip non-alphanumeric/non-space
 	FString Cleaned;
+	Cleaned.Reserve(Q.Len());
 	for (TCHAR Ch : Q)
 	{
 		if (FChar::IsAlnum(Ch) || Ch == TEXT('_') || Ch == TEXT(' '))
@@ -173,10 +174,19 @@ FString FMonolithSourceDatabase::EscapeFTS(const FString& Query)
 	}
 
 	FString Result;
+	int32 TotalLen = 0;
+	for (const FString& Token : Tokens)
+	{
+		TotalLen += Token.Len() + 4; // Quotes, star, space
+	}
+	Result.Reserve(TotalLen);
+
 	for (int32 i = 0; i < Tokens.Num(); ++i)
 	{
 		if (i > 0) Result += TEXT(" ");
-		Result += FString::Printf(TEXT("\"%s\"*"), *Tokens[i]);
+		Result += TEXT("\"");
+		Result += Tokens[i];
+		Result += TEXT("\"*");
 	}
 	return Result;
 }
@@ -1073,6 +1083,13 @@ void FMonolithSourceDatabase::InsertSourceChunks(int64 FileId, const TArray<FStr
 		const int32 BatchEnd = FMath::Min(BatchStart + ChunkSize, Lines.Num());
 
 		FString JoinedText;
+		int32 TotalLen = 0;
+		for (int32 i = BatchStart; i < BatchEnd; ++i)
+		{
+			TotalLen += Lines[i].Len() + 1;
+		}
+		JoinedText.Reserve(TotalLen);
+
 		for (int32 i = BatchStart; i < BatchEnd; ++i)
 		{
 			if (i > BatchStart)
