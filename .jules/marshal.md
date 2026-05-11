@@ -1,4 +1,10 @@
 
+## 2026-05-10 - Require checking legacy branch prefixes
+**Coordination issue:** Agents were missing collisions with older open work because they only checked for the strict `jules/<agent>/...` branch pattern.
+**Learning:** Legacy PRs often use non-standard prefixes (e.g., `bolt-*`, `perf-*`, `sentinel-*`), which evade the strict `git branch -r` filter in duplicate checks.
+**Prevention:** Updated `AGENTS.md` to explicitly require agents to check for legacy or non-standard branch prefixes during their duplicate guard process.
+**Avoid:** Assuming all open branches strictly follow the current naming convention without verifying older, pending work.
+
 ## 2024-05-24 - Standardize branch naming and verification claims
 **Coordination issue:** Agents used inconsistent branch prefixes (e.g., `bolt-*`, `perf-*`, `sentinel-*`) making duplicate detection extremely difficult.
 **Learning:** Without a single, strict convention, agents fail to correctly parse `git branch -r` and identify overlapping work.
