@@ -24,6 +24,184 @@ namespace
 		return FMonolithJsonUtils::Parse(Body);
 	}
 
+	FString GetCrashReportStatusPath()
+	{
+		return FPaths::Combine(FMonolithCrashBreadcrumb::GetCrashesDir(), TEXT("report_status.json"));
+	}
+
+	bool IsCrashReportStatusFile(const FString& FileName)
+	{
+		return FileName.Equals(TEXT("report_status.json"), ESearchCase::IgnoreCase);
+	}
+
+	TSharedPtr<FJsonObject> LoadCrashReportStatus()
+	{
+		FString Body;
+		if (!FFileHelper::LoadFileToString(Body, *GetCrashReportStatusPath()))
+		{
+			return MakeShared<FJsonObject>();
+		}
+
+		TSharedPtr<FJsonObject> Parsed = FMonolithJsonUtils::Parse(Body);
+		return Parsed.IsValid() ? Parsed : MakeShared<FJsonObject>();
+	}
+
+	bool SaveCrashReportStatus(const TSharedPtr<FJsonObject>& StatusRoot, FString& OutError)
+	{
+		IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
+		const FString Dir = FMonolithCrashBreadcrumb::GetCrashesDir();
+		if (!PF.DirectoryExists(*Dir))
+		{
+			PF.CreateDirectoryTree(*Dir);
+		}
+
+		const FString Body = FMonolithJsonUtils::Serialize(StatusRoot);
+		if (!FFileHelper::SaveStringToFile(Body, *GetCrashReportStatusPath(), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			OutError = FString::Printf(TEXT("Failed to write crash report status: %s"), *GetCrashReportStatusPath());
+			return false;
+		}
+
+		return true;
+	}
+
+	TSharedPtr<FJsonObject> GetCrashStatusEntry(const TSharedPtr<FJsonObject>& StatusRoot, const FString& FileName)
+	{
+		if (!StatusRoot.IsValid())
+		{
+			return nullptr;
+		}
+
+		TSharedPtr<FJsonValue>* Value = StatusRoot->Values.Find(FileName);
+		if (Value && Value->IsValid() && (*Value)->Type == EJson::Object)
+		{
+			return (*Value)->AsObject();
+		}
+		return nullptr;
+	}
+
+	FString GetCrashStatusString(const TSharedPtr<FJsonObject>& StatusRoot, const FString& FileName)
+	{
+		TSharedPtr<FJsonObject> Entry = GetCrashStatusEntry(StatusRoot, FileName);
+		if (!Entry.IsValid())
+		{
+			return TEXT("unreported");
+		}
+
+		FString Status;
+		return Entry->TryGetStringField(TEXT("status"), Status) ? Status : TEXT("unreported");
+	}
+
+	bool IsCrashIgnored(const TSharedPtr<FJsonObject>& StatusRoot, const FString& FileName)
+	{
+		TSharedPtr<FJsonObject> Entry = GetCrashStatusEntry(StatusRoot, FileName);
+		bool bIgnored = false;
+		return Entry.IsValid() && Entry->TryGetBoolField(TEXT("ignored"), bIgnored) && bIgnored;
+	}
+
+	void ApplyCrashReportStatus(const TSharedPtr<FJsonObject>& Crash, const TSharedPtr<FJsonObject>& StatusRoot, const FString& FileName)
+	{
+		if (!Crash.IsValid())
+		{
+			return;
+		}
+
+		Crash->SetStringField(TEXT("report_status"), GetCrashStatusString(StatusRoot, FileName));
+		Crash->SetBoolField(TEXT("report_ignored"), IsCrashIgnored(StatusRoot, FileName));
+
+		TSharedPtr<FJsonObject> Entry = GetCrashStatusEntry(StatusRoot, FileName);
+		if (Entry.IsValid())
+		{
+			FString UpdatedAt;
+			FString Note;
+			if (Entry->TryGetStringField(TEXT("updated_at"), UpdatedAt))
+			{
+				Crash->SetStringField(TEXT("report_updated_at"), UpdatedAt);
+			}
+			if (Entry->TryGetStringField(TEXT("note"), Note) && !Note.IsEmpty())
+			{
+				Crash->SetStringField(TEXT("report_note"), Note);
+			}
+		}
+	}
+
+	bool ResolveCrashFileName(const FString& RequestedFile, FString& OutFileName, FString& OutError)
+	{
+		FString FileName = RequestedFile.TrimStartAndEnd();
+		if (FileName.IsEmpty())
+		{
+			if (!FFileHelper::LoadFileToString(FileName, *FMonolithCrashBreadcrumb::GetLatestPointerPath()))
+			{
+				OutError = TEXT("No crash file was specified and latest.txt is unavailable.");
+				return false;
+			}
+			FileName.TrimStartAndEndInline();
+		}
+
+		if (FileName.Contains(TEXT("/")) || FileName.Contains(TEXT("\\")) || FileName.Contains(TEXT("..")))
+		{
+			OutError = TEXT("file must be a crash JSON file name, not a path.");
+			return false;
+		}
+		if (!FileName.EndsWith(TEXT(".json")))
+		{
+			OutError = TEXT("file must end with .json.");
+			return false;
+		}
+		if (!FPaths::FileExists(FPaths::Combine(FMonolithCrashBreadcrumb::GetCrashesDir(), FileName)))
+		{
+			OutError = FString::Printf(TEXT("Crash file not found: %s"), *FileName);
+			return false;
+		}
+
+		OutFileName = FileName;
+		return true;
+	}
+
+	TSharedPtr<FJsonObject> BuildCrashReportPreview(
+		const TSharedPtr<FJsonObject>& Crash,
+		const FString& FileName,
+		const TSharedPtr<FJsonObject>& StatusRoot,
+		bool bIncludeParams)
+	{
+		TSharedPtr<FJsonObject> Report = MakeShared<FJsonObject>();
+		Report->SetStringField(TEXT("file"), FileName);
+		Report->SetStringField(TEXT("report_status"), GetCrashStatusString(StatusRoot, FileName));
+		Report->SetBoolField(TEXT("report_ignored"), IsCrashIgnored(StatusRoot, FileName));
+
+		const TCHAR* Fields[] = {
+			TEXT("ts"),
+			TEXT("kind"),
+			TEXT("tool"),
+			TEXT("action"),
+			TEXT("monolith_version"),
+			TEXT("engine_version"),
+			TEXT("session_id"),
+			TEXT("thread")
+		};
+
+		for (const TCHAR* Field : Fields)
+		{
+			FString Value;
+			if (Crash->TryGetStringField(Field, Value))
+			{
+				Report->SetStringField(Field, Value);
+			}
+		}
+
+		Report->SetBoolField(TEXT("params_included"), bIncludeParams);
+		if (bIncludeParams)
+		{
+			FString Params;
+			if (Crash->TryGetStringField(TEXT("params"), Params))
+			{
+				Report->SetStringField(TEXT("params"), Params);
+			}
+		}
+
+		return Report;
+	}
+
 	// ---- editor.get_last_crash_reason ---------------------------------------
 	FMonolithActionResult HandleGetLastCrashReason(const TSharedPtr<FJsonObject>& /*Params*/)
 	{
@@ -74,7 +252,12 @@ namespace
 		{
 			if (Params->HasField(TEXT("limit")))
 			{
-				Limit = FMath::Clamp((int32)Params->GetNumberField(TEXT("limit")), 1, 1000);
+				double LimitValue = 0.0;
+				if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
+				}
+				Limit = FMath::Clamp((int32)LimitValue, 1, 1000);
 			}
 			Params->TryGetStringField(TEXT("since"), Since);
 			Params->TryGetStringField(TEXT("tool"), ToolFilter);
@@ -93,6 +276,10 @@ namespace
 		for (const FString& Name : JsonFiles)
 		{
 			if (Items.Num() >= Limit) break;
+			if (IsCrashReportStatusFile(Name))
+			{
+				continue;
+			}
 
 			const FString FullPath = FPaths::Combine(Dir, Name);
 			FString FileName;
@@ -157,6 +344,11 @@ namespace
 
 		for (const FString& Name : JsonFiles)
 		{
+			if (IsCrashReportStatusFile(Name))
+			{
+				continue;
+			}
+
 			const FString FullPath = FPaths::Combine(Dir, Name);
 			FString FileName;
 			TSharedPtr<FJsonObject> Crash = ReadCrashFile(FullPath, FileName);
@@ -207,6 +399,227 @@ namespace
 		Result->SetStringField(TEXT("group_by"), GroupBy);
 		if (!Since.IsEmpty()) Result->SetStringField(TEXT("since"), Since);
 		Result->SetObjectField(TEXT("by"), By);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	// ---- editor.get_crash_report_settings -----------------------------------
+	FMonolithActionResult HandleGetCrashReportSettings(const TSharedPtr<FJsonObject>& /*Params*/)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("mode"), TEXT("local_only"));
+		Result->SetBoolField(TEXT("external_reporting_enabled"), false);
+		Result->SetBoolField(TEXT("external_endpoint_configured"), false);
+		Result->SetBoolField(TEXT("include_editor_log"), false);
+		Result->SetBoolField(TEXT("include_params_by_default"), false);
+		Result->SetStringField(TEXT("status_path"), GetCrashReportStatusPath());
+		Result->SetStringField(TEXT("note"), TEXT("Phase 1 keeps crash reports local and never attempts network upload."));
+		return FMonolithActionResult::Success(Result);
+	}
+
+	// ---- editor.list_reportable_crashes -------------------------------------
+	FMonolithActionResult HandleListReportableCrashes(const TSharedPtr<FJsonObject>& Params)
+	{
+		int32 Limit = 20;
+		FString Since;
+		FString ToolFilter;
+		bool bIncludeIgnored = false;
+		if (Params.IsValid())
+		{
+			if (Params->HasField(TEXT("limit")))
+			{
+				double LimitValue = 0.0;
+				if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
+				}
+				Limit = FMath::Clamp((int32)LimitValue, 1, 1000);
+			}
+			Params->TryGetStringField(TEXT("since"), Since);
+			Params->TryGetStringField(TEXT("tool"), ToolFilter);
+			Params->TryGetBoolField(TEXT("include_ignored"), bIncludeIgnored);
+		}
+
+		const FString Dir = FMonolithCrashBreadcrumb::GetCrashesDir();
+		TSharedPtr<FJsonObject> StatusRoot = LoadCrashReportStatus();
+
+		TArray<FString> JsonFiles;
+		IFileManager::Get().FindFiles(JsonFiles, *(Dir / TEXT("*.json")), true, false);
+		JsonFiles.Sort([](const FString& A, const FString& B) { return A > B; });
+
+		TArray<TSharedPtr<FJsonValue>> Items;
+		Items.Reserve(FMath::Min(Limit, JsonFiles.Num()));
+		int32 IgnoredSkipped = 0;
+
+		for (const FString& Name : JsonFiles)
+		{
+			if (Items.Num() >= Limit) break;
+			if (IsCrashReportStatusFile(Name))
+			{
+				continue;
+			}
+			if (!bIncludeIgnored && IsCrashIgnored(StatusRoot, Name))
+			{
+				++IgnoredSkipped;
+				continue;
+			}
+
+			const FString FullPath = FPaths::Combine(Dir, Name);
+			FString FileName;
+			TSharedPtr<FJsonObject> Crash = ReadCrashFile(FullPath, FileName);
+			if (!Crash.IsValid()) continue;
+
+			if (!Since.IsEmpty())
+			{
+				FString Ts;
+				if (Crash->TryGetStringField(TEXT("ts"), Ts) && Ts < Since) continue;
+			}
+			if (!ToolFilter.IsEmpty())
+			{
+				FString Tool;
+				FString Action;
+				Crash->TryGetStringField(TEXT("tool"), Tool);
+				Crash->TryGetStringField(TEXT("action"), Action);
+				const FString Composite = Tool + TEXT(".") + Action;
+				if (!Composite.Contains(ToolFilter) &&
+					!Tool.Contains(ToolFilter) &&
+					!Action.Contains(ToolFilter))
+				{
+					continue;
+				}
+			}
+
+			Crash->SetStringField(TEXT("file"), FileName);
+			ApplyCrashReportStatus(Crash, StatusRoot, FileName);
+			Items.Add(MakeShared<FJsonValueObject>(Crash));
+		}
+
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetArrayField(TEXT("crashes"), Items);
+		Result->SetNumberField(TEXT("count"), Items.Num());
+		Result->SetNumberField(TEXT("total_files_on_disk"), JsonFiles.Num());
+		Result->SetNumberField(TEXT("ignored_skipped"), IgnoredSkipped);
+		Result->SetBoolField(TEXT("external_reporting_enabled"), false);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	// ---- editor.preview_crash_report ----------------------------------------
+	FMonolithActionResult HandlePreviewCrashReport(const TSharedPtr<FJsonObject>& Params)
+	{
+		FString RequestedFile;
+		bool bIncludeParams = false;
+		if (Params.IsValid())
+		{
+			Params->TryGetStringField(TEXT("file"), RequestedFile);
+			Params->TryGetBoolField(TEXT("include_params"), bIncludeParams);
+		}
+
+		FString FileName;
+		FString Error;
+		if (!ResolveCrashFileName(RequestedFile, FileName, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+
+		FString LoadedName;
+		TSharedPtr<FJsonObject> Crash = ReadCrashFile(FPaths::Combine(FMonolithCrashBreadcrumb::GetCrashesDir(), FileName), LoadedName);
+		if (!Crash.IsValid())
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Could not parse crash file: %s"), *FileName));
+		}
+
+		TSharedPtr<FJsonObject> StatusRoot = LoadCrashReportStatus();
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("would_upload"), false);
+		Result->SetBoolField(TEXT("external_request_attempted"), false);
+		Result->SetStringField(TEXT("mode"), TEXT("local_only"));
+		Result->SetStringField(TEXT("reason"), TEXT("External crash reporting is disabled in Phase 1."));
+		Result->SetObjectField(TEXT("report"), BuildCrashReportPreview(Crash, FileName, StatusRoot, bIncludeParams));
+		return FMonolithActionResult::Success(Result);
+	}
+
+	// ---- editor.submit_crash_report -----------------------------------------
+	FMonolithActionResult HandleSubmitCrashReport(const TSharedPtr<FJsonObject>& Params)
+	{
+		FString RequestedFile;
+		if (Params.IsValid())
+		{
+			Params->TryGetStringField(TEXT("file"), RequestedFile);
+		}
+
+		FString FileName;
+		FString Error;
+		if (!ResolveCrashFileName(RequestedFile, FileName, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+
+		TSharedPtr<FJsonObject> StatusRoot = LoadCrashReportStatus();
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("status"), TEXT("blocked_external_reporting_disabled"));
+		Entry->SetBoolField(TEXT("ignored"), false);
+		Entry->SetStringField(TEXT("updated_at"), FDateTime::UtcNow().ToIso8601());
+		Entry->SetStringField(TEXT("note"), TEXT("External crash reporting is disabled; no network request was attempted."));
+		StatusRoot->SetObjectField(FileName, Entry);
+
+		if (!SaveCrashReportStatus(StatusRoot, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("file"), FileName);
+		Result->SetBoolField(TEXT("submitted"), false);
+		Result->SetBoolField(TEXT("external_request_attempted"), false);
+		Result->SetStringField(TEXT("status"), TEXT("blocked_external_reporting_disabled"));
+		Result->SetStringField(TEXT("status_path"), GetCrashReportStatusPath());
+		return FMonolithActionResult::Success(Result);
+	}
+
+	// ---- editor.mark_crash_ignored ------------------------------------------
+	FMonolithActionResult HandleMarkCrashIgnored(const TSharedPtr<FJsonObject>& Params)
+	{
+		FString RequestedFile;
+		FString Note;
+		bool bIgnored = true;
+		if (Params.IsValid())
+		{
+			Params->TryGetStringField(TEXT("file"), RequestedFile);
+			Params->TryGetStringField(TEXT("note"), Note);
+			Params->TryGetBoolField(TEXT("ignored"), bIgnored);
+		}
+		if (RequestedFile.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("Required parameter: file"));
+		}
+
+		FString FileName;
+		FString Error;
+		if (!ResolveCrashFileName(RequestedFile, FileName, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+
+		TSharedPtr<FJsonObject> StatusRoot = LoadCrashReportStatus();
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("status"), bIgnored ? TEXT("ignored") : TEXT("unreported"));
+		Entry->SetBoolField(TEXT("ignored"), bIgnored);
+		Entry->SetStringField(TEXT("updated_at"), FDateTime::UtcNow().ToIso8601());
+		if (!Note.IsEmpty())
+		{
+			Entry->SetStringField(TEXT("note"), Note);
+		}
+		StatusRoot->SetObjectField(FileName, Entry);
+
+		if (!SaveCrashReportStatus(StatusRoot, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("file"), FileName);
+		Result->SetBoolField(TEXT("ignored"), bIgnored);
+		Result->SetStringField(TEXT("status"), bIgnored ? TEXT("ignored") : TEXT("unreported"));
+		Result->SetStringField(TEXT("status_path"), GetCrashReportStatusPath());
 		return FMonolithActionResult::Success(Result);
 	}
 
@@ -261,5 +674,44 @@ void FMonolithEditorCrashActions::RegisterActions()
 		FParamSchemaBuilder()
 			.Optional(TEXT("since"),    TEXT("string"), TEXT("Only include crashes at/after this ISO8601 timestamp"))
 			.Optional(TEXT("group_by"), TEXT("string"), TEXT("'tool' (default), 'action', or 'tool_action'"), TEXT("tool"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("get_crash_report_settings"),
+		TEXT("Return local-only crash reporting settings. Phase 1 never attempts network upload."),
+		FMonolithActionHandler::CreateStatic(&HandleGetCrashReportSettings),
+		MakeShared<FJsonObject>());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("list_reportable_crashes"),
+		TEXT("List crash breadcrumbs with local report status. Optional filters: limit, since, tool, include_ignored."),
+		FMonolithActionHandler::CreateStatic(&HandleListReportableCrashes),
+		FParamSchemaBuilder()
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max items"), TEXT("20"))
+			.Optional(TEXT("since"), TEXT("string"), TEXT("Filter to crashes at/after this ISO8601 timestamp"))
+			.Optional(TEXT("tool"), TEXT("string"), TEXT("Filter to entries whose tool/action contains this substring"))
+			.Optional(TEXT("include_ignored"), TEXT("bool"), TEXT("Include crashes marked ignored"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("preview_crash_report"),
+		TEXT("Preview the local crash report metadata that would be considered for a manual report. No network request is attempted."),
+		FMonolithActionHandler::CreateStatic(&HandlePreviewCrashReport),
+		FParamSchemaBuilder()
+			.Optional(TEXT("file"), TEXT("string"), TEXT("Crash JSON file name. Defaults to latest.txt"))
+			.Optional(TEXT("include_params"), TEXT("bool"), TEXT("Include serialized action params in preview"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("submit_crash_report"),
+		TEXT("Local-only Phase 1 submit stub: records that external reporting is disabled and makes no network request."),
+		FMonolithActionHandler::CreateStatic(&HandleSubmitCrashReport),
+		FParamSchemaBuilder()
+			.Optional(TEXT("file"), TEXT("string"), TEXT("Crash JSON file name. Defaults to latest.txt"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("mark_crash_ignored"),
+		TEXT("Mark or unmark a crash breadcrumb as ignored in local report status."),
+		FMonolithActionHandler::CreateStatic(&HandleMarkCrashIgnored),
+		FParamSchemaBuilder()
+			.Required(TEXT("file"), TEXT("string"), TEXT("Crash JSON file name"))
+			.Optional(TEXT("ignored"), TEXT("bool"), TEXT("Whether the crash should be ignored"), TEXT("true"))
+			.Optional(TEXT("note"), TEXT("string"), TEXT("Optional local note"))
 			.Build());
 }

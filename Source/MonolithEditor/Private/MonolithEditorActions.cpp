@@ -10,6 +10,9 @@
 #include "Misc/App.h"
 #include "Misc/AutomationTest.h"
 #include "MonolithPackagePathValidator.h"
+#include "HAL/FileManager.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 
 #if PLATFORM_WINDOWS
 #include "ILiveCodingModule.h"
@@ -67,6 +70,8 @@ FString FMonolithEditorActions::LastCompileResult = TEXT("none");
 bool FMonolithEditorActions::bIsCompiling = false;
 bool FMonolithEditorActions::bPatchApplied = false;
 double FMonolithEditorActions::LastCompileEndTimestamp = 0.0;
+TSharedPtr<FJsonObject> FMonolithEditorActions::LastAutomationRun;
+double FMonolithEditorActions::LastAutomationRunTimestamp = 0.0;
 
 // --- Log capture ---
 
@@ -460,6 +465,38 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FMonolithActionHandler::CreateStatic(&HandleGetViewportInfo),
 		MakeShared<FJsonObject>());
 
+	Registry.RegisterAction(TEXT("editor"), TEXT("list_open_viewports"),
+		TEXT("List open level editor viewports and their camera/source metadata."),
+		FMonolithActionHandler::CreateStatic(&HandleListOpenViewports),
+		MakeShared<FJsonObject>());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("capture_level_viewport"),
+		TEXT("Capture a level editor viewport to a PNG file. Errors instead of substituting a different viewport."),
+		FMonolithActionHandler::CreateStatic(&HandleCaptureLevelViewport),
+		FParamSchemaBuilder()
+			.Optional(TEXT("viewport_index"), TEXT("integer"), TEXT("Index from editor.list_open_viewports"), TEXT("0"))
+			.Optional(TEXT("camera"), TEXT("object"), TEXT("Optional {location:[x,y,z], rotation:[p,y,r], fov:60} applied before capture"))
+			.Optional(TEXT("output_path"), TEXT("string"), TEXT("Output PNG path. Defaults under Saved/Screenshots/Monolith."))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("capture_asset_editor_viewport"),
+		TEXT("Report asset editor viewport capture availability. Does not fall back to level viewport capture."),
+		FMonolithActionHandler::CreateStatic(&HandleCaptureAssetEditorViewport),
+		FParamSchemaBuilder().Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset editor target path")).Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("capture_widget_designer"),
+		TEXT("Report widget designer capture availability. Does not fall back to level viewport capture."),
+		FMonolithActionHandler::CreateStatic(&HandleCaptureWidgetDesigner),
+		FParamSchemaBuilder().Required(TEXT("widget_path"), TEXT("string"), TEXT("Widget Blueprint path")).Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("capture_asset_thumbnail"),
+		TEXT("Report asset thumbnail capture availability with explicit thumbnail_fallback contract."),
+		FMonolithActionHandler::CreateStatic(&HandleCaptureAssetThumbnail),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to capture"))
+			.Optional(TEXT("thumbnail_fallback"), TEXT("boolean"), TEXT("Must be true to allow future thumbnail fallback"), TEXT("false"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("editor"), TEXT("capture_system_gif"),
 		TEXT("Capture a Niagara system as a sequence of PNG frames with optional GIF encoding via ffmpeg or python"),
 		FMonolithActionHandler::CreateStatic(&HandleCaptureSystemGif),
@@ -479,12 +516,35 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Optional(TEXT("prefix"), TEXT("string"), TEXT("Filter tests whose full path starts with this prefix (e.g. 'MazeLegends.Bow')"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("editor"), TEXT("find_automation_tests"),
+		TEXT("Find registered automation tests by prefix and/or case-insensitive query across full path, display name, and test name."),
+		FMonolithActionHandler::CreateStatic(&HandleFindAutomationTests),
+		FParamSchemaBuilder()
+			.Optional(TEXT("prefix"), TEXT("string"), TEXT("Filter tests whose full path starts with this prefix"))
+			.Optional(TEXT("query"), TEXT("string"), TEXT("Case-insensitive substring match"))
+			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Maximum tests to return (default: 100, max: 1000)"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("editor"), TEXT("run_automation_tests"),
 		TEXT("Run automation tests by prefix in the running editor (no PIE, no separate process). Returns success/passed/failed counts and per-test errors."),
 		FMonolithActionHandler::CreateStatic(&HandleRunAutomationTests),
 		FParamSchemaBuilder()
 			.Required(TEXT("prefix"), TEXT("string"), TEXT("Run tests whose full path starts with this prefix (e.g. 'MazeLegends.Bow')"))
 			.Optional(TEXT("max_tests"), TEXT("integer"), TEXT("Hard cap on number of tests to run (default: 200)"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("get_automation_summary"),
+		TEXT("Summarize discovered automation tests and include the most recent Monolith-triggered automation run when available."),
+		FMonolithActionHandler::CreateStatic(&HandleGetAutomationSummary),
+		FParamSchemaBuilder()
+			.Optional(TEXT("prefix"), TEXT("string"), TEXT("Filter discovered tests whose full path starts with this prefix"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("export_automation_report"),
+		TEXT("Export the most recent Monolith-triggered automation run report to Project/Saved/Monolith/AutomationReports."),
+		FMonolithActionHandler::CreateStatic(&HandleExportAutomationReport),
+		FParamSchemaBuilder()
+			.Optional(TEXT("output_dir"), TEXT("string"), TEXT("Output directory, relative to or under Project/Saved"))
 			.Build());
 
 	// --- Scripting actions (HOFF 7) ---
@@ -2361,6 +2421,228 @@ FMonolithActionResult FMonolithEditorActions::HandleGetViewportInfo(
 	return FMonolithActionResult::Success(Result);
 }
 
+namespace
+{
+	TArray<TSharedPtr<FJsonValue>> EditorVectorToJson(const FVector& Value)
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Add(MakeShared<FJsonValueNumber>(Value.X));
+		Arr.Add(MakeShared<FJsonValueNumber>(Value.Y));
+		Arr.Add(MakeShared<FJsonValueNumber>(Value.Z));
+		return Arr;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> EditorRotatorToJson(const FRotator& Value)
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Add(MakeShared<FJsonValueNumber>(Value.Pitch));
+		Arr.Add(MakeShared<FJsonValueNumber>(Value.Yaw));
+		Arr.Add(MakeShared<FJsonValueNumber>(Value.Roll));
+		return Arr;
+	}
+
+	bool ReadVectorArray(const TSharedPtr<FJsonObject>& Object, const FString& Field, FVector& OutValue)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (!Object->TryGetArrayField(Field, Arr) || !Arr || Arr->Num() != 3)
+		{
+			return false;
+		}
+		OutValue = FVector((*Arr)[0]->AsNumber(), (*Arr)[1]->AsNumber(), (*Arr)[2]->AsNumber());
+		return true;
+	}
+
+	bool ReadRotatorArray(const TSharedPtr<FJsonObject>& Object, const FString& Field, FRotator& OutValue)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (!Object->TryGetArrayField(Field, Arr) || !Arr || Arr->Num() != 3)
+		{
+			return false;
+		}
+		OutValue = FRotator((*Arr)[0]->AsNumber(), (*Arr)[1]->AsNumber(), (*Arr)[2]->AsNumber());
+		return true;
+	}
+
+	FLevelEditorViewportClient* GetLevelViewportClientByIndex(int32 ViewportIndex, FString& OutError)
+	{
+		if (!GEditor)
+		{
+			OutError = TEXT("GEditor is not available");
+			return nullptr;
+		}
+		const TArray<FLevelEditorViewportClient*>& Clients = GEditor->GetLevelViewportClients();
+		if (!Clients.IsValidIndex(ViewportIndex) || !Clients[ViewportIndex])
+		{
+			OutError = FString::Printf(TEXT("Level viewport index %d is not available; call editor.list_open_viewports first"), ViewportIndex);
+			return nullptr;
+		}
+		if (!Clients[ViewportIndex]->Viewport)
+		{
+			OutError = FString::Printf(TEXT("Level viewport index %d has no FViewport"), ViewportIndex);
+			return nullptr;
+		}
+		return Clients[ViewportIndex];
+	}
+
+	TSharedPtr<FJsonObject> MakeViewportRow(FLevelEditorViewportClient* Client, int32 Index)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetNumberField(TEXT("index"), Index);
+		Row->SetStringField(TEXT("source"), TEXT("level_editor"));
+		if (!Client || !Client->Viewport)
+		{
+			Row->SetBoolField(TEXT("available"), false);
+			return Row;
+		}
+
+		const FIntPoint Size = Client->Viewport->GetSizeXY();
+		Row->SetBoolField(TEXT("available"), Size.X > 0 && Size.Y > 0);
+		Row->SetNumberField(TEXT("width"), Size.X);
+		Row->SetNumberField(TEXT("height"), Size.Y);
+		Row->SetArrayField(TEXT("camera_location"), EditorVectorToJson(Client->GetViewLocation()));
+		Row->SetArrayField(TEXT("camera_rotation"), EditorRotatorToJson(Client->GetViewRotation()));
+		Row->SetNumberField(TEXT("fov"), Client->ViewFOV);
+		Row->SetBoolField(TEXT("realtime"), Client->IsRealtime());
+		return Row;
+	}
+
+	FMonolithActionResult MakeViewportCaptureUnavailable(const FString& Action, const FString& Reason)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("action"), Action);
+		Result->SetStringField(TEXT("status"), TEXT("unavailable"));
+		Result->SetBoolField(TEXT("fallback_used"), false);
+		Result->SetStringField(TEXT("reason"), Reason);
+		return FMonolithActionResult::Success(Result);
+	}
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleListOpenViewports(const TSharedPtr<FJsonObject>& Params)
+{
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	if (GEditor)
+	{
+		const TArray<FLevelEditorViewportClient*>& Clients = GEditor->GetLevelViewportClients();
+		for (int32 Index = 0; Index < Clients.Num(); ++Index)
+		{
+			Rows.Add(MakeShared<FJsonValueObject>(MakeViewportRow(Clients[Index], Index)));
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetNumberField(TEXT("viewport_count"), Rows.Num());
+	Result->SetArrayField(TEXT("viewports"), Rows);
+	Result->SetStringField(TEXT("asset_editor_capture_status"), TEXT("unavailable"));
+	Result->SetStringField(TEXT("widget_designer_capture_status"), TEXT("unavailable"));
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleCaptureLevelViewport(const TSharedPtr<FJsonObject>& Params)
+{
+	int32 ViewportIndex = 0;
+	if (Params->HasField(TEXT("viewport_index")))
+	{
+		double ViewportIndexNumber = 0.0;
+		if (!Params->TryGetNumberField(TEXT("viewport_index"), ViewportIndexNumber)
+			|| ViewportIndexNumber < 0.0
+			|| ViewportIndexNumber > static_cast<double>(MAX_int32)
+			|| static_cast<double>(static_cast<int64>(ViewportIndexNumber)) != ViewportIndexNumber)
+		{
+			return FMonolithActionResult::Error(TEXT("viewport_index must be a non-negative integer"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		ViewportIndex = static_cast<int32>(ViewportIndexNumber);
+	}
+
+	FString Error;
+	FLevelEditorViewportClient* Client = GetLevelViewportClientByIndex(ViewportIndex, Error);
+	if (!Client)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const TSharedPtr<FJsonObject>* CameraObject = nullptr;
+	if (Params->TryGetObjectField(TEXT("camera"), CameraObject) && CameraObject && CameraObject->IsValid())
+	{
+		FVector Location;
+		if (ReadVectorArray(*CameraObject, TEXT("location"), Location))
+		{
+			Client->SetViewLocation(Location);
+		}
+
+		FRotator Rotation;
+		if (ReadRotatorArray(*CameraObject, TEXT("rotation"), Rotation))
+		{
+			Client->SetViewRotation(Rotation);
+		}
+
+		double Fov = 0.0;
+		if ((*CameraObject)->TryGetNumberField(TEXT("fov"), Fov) && Fov > 0.0)
+		{
+			Client->ViewFOV = FMath::Clamp(static_cast<float>(Fov), 5.0f, 170.0f);
+		}
+
+		Client->Invalidate();
+	}
+
+	const FIntPoint Size = Client->Viewport->GetSizeXY();
+	if (Size.X <= 0 || Size.Y <= 0)
+	{
+		return FMonolithActionResult::Error(TEXT("Selected level viewport has zero size"));
+	}
+
+	TArray<FColor> Pixels;
+	if (!Client->Viewport->ReadPixels(Pixels) || Pixels.Num() != Size.X * Size.Y)
+	{
+		return FMonolithActionResult::Error(TEXT("Failed to read pixels from selected level viewport"));
+	}
+
+	FString OutputPath;
+	Params->TryGetStringField(TEXT("output_path"), OutputPath);
+	if (OutputPath.IsEmpty())
+	{
+		OutputPath = FPaths::ProjectSavedDir() / TEXT("Screenshots/Monolith/LevelViewport_") + FDateTime::UtcNow().ToString(TEXT("%Y%m%d_%H%M%S")) + TEXT(".png");
+	}
+	IFileManager::Get().MakeDirectory(*FPaths::GetPath(OutputPath), true);
+
+	FImage Image;
+	Image.Init(Size.X, Size.Y, ERawImageFormat::BGRA8, EGammaSpace::sRGB);
+	FMemory::Memcpy(Image.RawData.GetData(), Pixels.GetData(), Pixels.Num() * sizeof(FColor));
+	if (!FImageUtils::SaveImageAutoFormat(*OutputPath, Image))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save viewport capture: %s"), *OutputPath));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeViewportRow(Client, ViewportIndex);
+	Result->SetStringField(TEXT("output_path"), OutputPath);
+	Result->SetBoolField(TEXT("fallback_used"), false);
+	Result->SetStringField(TEXT("format"), TEXT("png"));
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleCaptureAssetEditorViewport(const TSharedPtr<FJsonObject>& Params)
+{
+	return MakeViewportCaptureUnavailable(TEXT("editor.capture_asset_editor_viewport"),
+		TEXT("Asset editor viewport discovery is not implemented yet. Monolith refuses to fall back to level viewport capture."));
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleCaptureWidgetDesigner(const TSharedPtr<FJsonObject>& Params)
+{
+	return MakeViewportCaptureUnavailable(TEXT("editor.capture_widget_designer"),
+		TEXT("Widget designer viewport discovery is not implemented yet. Monolith refuses to fall back to level viewport capture."));
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleCaptureAssetThumbnail(const TSharedPtr<FJsonObject>& Params)
+{
+	bool bThumbnailFallback = false;
+	Params->TryGetBoolField(TEXT("thumbnail_fallback"), bThumbnailFallback);
+	if (!bThumbnailFallback)
+	{
+		return FMonolithActionResult::Error(TEXT("thumbnail_fallback=true is required for thumbnail capture; Monolith will not silently substitute thumbnails for viewport captures."));
+	}
+	return MakeViewportCaptureUnavailable(TEXT("editor.capture_asset_thumbnail"),
+		TEXT("Explicit thumbnail fallback contract is present, but thumbnail rendering is not implemented yet."));
+}
+
 FMonolithActionResult FMonolithEditorActions::HandleDeleteAssets(
 	const TSharedPtr<FJsonObject>& Params)
 {
@@ -2688,6 +2970,109 @@ namespace MonolithAutomationDetail
 #endif
 	}
 
+	static TSharedPtr<FJsonObject> TestInfoToJson(const FAutomationTestInfo& Info)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("full_path"), GetTestFullPath(Info));
+		Obj->SetStringField(TEXT("display_name"), Info.GetDisplayName());
+		Obj->SetStringField(TEXT("test_name"), Info.GetTestName());
+		Obj->SetNumberField(TEXT("flags"), static_cast<double>(static_cast<uint32>(Info.GetTestFlags())));
+		return Obj;
+	}
+
+	static bool MatchesQuery(const FAutomationTestInfo& Info, const FString& Query)
+	{
+		if (Query.IsEmpty())
+		{
+			return true;
+		}
+
+		const FString QueryLower = Query.ToLower();
+		return GetTestFullPath(Info).ToLower().Contains(QueryLower)
+			|| Info.GetDisplayName().ToLower().Contains(QueryLower)
+			|| Info.GetTestName().ToLower().Contains(QueryLower);
+	}
+
+	static void IncrementFlagBucket(const FAutomationTestInfo& Info, const EAutomationTestFlags Flag, const TCHAR* FieldName, TSharedPtr<FJsonObject>& Counts)
+	{
+		const uint32 Flags = static_cast<uint32>(Info.GetTestFlags());
+		if ((Flags & static_cast<uint32>(Flag)) != 0)
+		{
+			double Existing = 0.0;
+			Counts->TryGetNumberField(FieldName, Existing);
+			Counts->SetNumberField(FieldName, Existing + 1.0);
+		}
+	}
+
+	static TSharedPtr<FJsonObject> BuildFlagSummary(const TArray<FAutomationTestInfo>& Tests)
+	{
+		TSharedPtr<FJsonObject> Counts = MakeShared<FJsonObject>();
+		Counts->SetNumberField(TEXT("smoke"), 0);
+		Counts->SetNumberField(TEXT("engine"), 0);
+		Counts->SetNumberField(TEXT("product"), 0);
+		Counts->SetNumberField(TEXT("performance"), 0);
+		Counts->SetNumberField(TEXT("stress"), 0);
+		Counts->SetNumberField(TEXT("negative"), 0);
+
+		for (const FAutomationTestInfo& Info : Tests)
+		{
+			IncrementFlagBucket(Info, EAutomationTestFlags::SmokeFilter, TEXT("smoke"), Counts);
+			IncrementFlagBucket(Info, EAutomationTestFlags::EngineFilter, TEXT("engine"), Counts);
+			IncrementFlagBucket(Info, EAutomationTestFlags::ProductFilter, TEXT("product"), Counts);
+			IncrementFlagBucket(Info, EAutomationTestFlags::PerfFilter, TEXT("performance"), Counts);
+			IncrementFlagBucket(Info, EAutomationTestFlags::StressFilter, TEXT("stress"), Counts);
+			IncrementFlagBucket(Info, EAutomationTestFlags::NegativeFilter, TEXT("negative"), Counts);
+		}
+
+		return Counts;
+	}
+
+	static bool ResolveAutomationReportDirectory(const FString& OutputDirParam, FString& OutDir, FString& OutError)
+	{
+		FString SavedDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir());
+		FPaths::NormalizeDirectoryName(SavedDir);
+
+		FString RequestedDir = OutputDirParam.TrimStartAndEnd();
+		if (RequestedDir.IsEmpty())
+		{
+			RequestedDir = FPaths::Combine(SavedDir, TEXT("Monolith"), TEXT("AutomationReports"));
+		}
+		else if (FPaths::IsRelative(RequestedDir))
+		{
+			RequestedDir = FPaths::Combine(SavedDir, RequestedDir);
+		}
+
+		RequestedDir = FPaths::ConvertRelativePathToFull(RequestedDir);
+		FPaths::NormalizeDirectoryName(RequestedDir);
+
+		if (!RequestedDir.Equals(SavedDir, ESearchCase::IgnoreCase)
+			&& !FPaths::IsUnderDirectory(RequestedDir, SavedDir))
+		{
+			OutError = FString::Printf(TEXT("output_dir must resolve under Project/Saved. Requested: %s"), *RequestedDir);
+			return false;
+		}
+
+		if (!IFileManager::Get().MakeDirectory(*RequestedDir, true))
+		{
+			OutError = FString::Printf(TEXT("Failed to create output_dir: %s"), *RequestedDir);
+			return false;
+		}
+
+		OutDir = RequestedDir;
+		return true;
+	}
+
+	static bool JsonObjectToString(const TSharedPtr<FJsonObject>& Object, FString& OutString)
+	{
+		if (!Object.IsValid())
+		{
+			return false;
+		}
+
+		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutString);
+		return FJsonSerializer::Serialize(Object.ToSharedRef(), Writer);
+	}
+
 	static void CollectMatchingTests(const FString& Prefix, TArray<FAutomationTestInfo>& OutTests)
 	{
 		FAutomationTestFramework& Framework = FAutomationTestFramework::Get();
@@ -2755,18 +3140,135 @@ FMonolithActionResult FMonolithEditorActions::HandleListAutomationTests(const TS
 	TestsJson.Reserve(Tests.Num());
 	for (const FAutomationTestInfo& Info : Tests)
 	{
-		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-		Obj->SetStringField(TEXT("full_path"), MonolithAutomationDetail::GetTestFullPath(Info));
-		Obj->SetStringField(TEXT("display_name"), Info.GetDisplayName());
-		Obj->SetStringField(TEXT("test_name"), Info.GetTestName());
-		Obj->SetNumberField(TEXT("flags"), static_cast<double>(static_cast<uint32>(Info.GetTestFlags())));
-		TestsJson.Add(MakeShared<FJsonValueObject>(Obj));
+		TestsJson.Add(MakeShared<FJsonValueObject>(MonolithAutomationDetail::TestInfoToJson(Info)));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("prefix"), Prefix);
 	Result->SetNumberField(TEXT("count"), Tests.Num());
 	Result->SetArrayField(TEXT("tests"), TestsJson);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleFindAutomationTests(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Prefix;
+	FString Query;
+	int32 MaxResults = 100;
+
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("prefix"), Prefix);
+		Params->TryGetStringField(TEXT("query"), Query);
+
+		double MaxNum = MaxResults;
+		if (Params->TryGetNumberField(TEXT("max_results"), MaxNum))
+		{
+			MaxResults = FMath::Clamp(FMath::FloorToInt(MaxNum), 1, 1000);
+		}
+	}
+
+	TArray<FAutomationTestInfo> Tests;
+	MonolithAutomationDetail::CollectMatchingTests(Prefix, Tests);
+
+	TArray<TSharedPtr<FJsonValue>> MatchesJson;
+	int32 MatchedCount = 0;
+	for (const FAutomationTestInfo& Info : Tests)
+	{
+		if (!MonolithAutomationDetail::MatchesQuery(Info, Query))
+		{
+			continue;
+		}
+
+		++MatchedCount;
+		if (MatchesJson.Num() < MaxResults)
+		{
+			MatchesJson.Add(MakeShared<FJsonValueObject>(MonolithAutomationDetail::TestInfoToJson(Info)));
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("prefix"), Prefix);
+	Result->SetStringField(TEXT("query"), Query);
+	Result->SetNumberField(TEXT("matched_count"), MatchedCount);
+	Result->SetNumberField(TEXT("returned_count"), MatchesJson.Num());
+	Result->SetArrayField(TEXT("tests"), MatchesJson);
+	if (MatchedCount > MatchesJson.Num())
+	{
+		Result->SetNumberField(TEXT("truncated_remaining"), MatchedCount - MatchesJson.Num());
+	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleGetAutomationSummary(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Prefix;
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("prefix"), Prefix);
+	}
+
+	TArray<FAutomationTestInfo> Tests;
+	MonolithAutomationDetail::CollectMatchingTests(Prefix, Tests);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("prefix"), Prefix);
+	Result->SetNumberField(TEXT("discovered_total"), Tests.Num());
+	Result->SetObjectField(TEXT("flag_counts"), MonolithAutomationDetail::BuildFlagSummary(Tests));
+
+	Result->SetBoolField(TEXT("has_last_run"), LastAutomationRun.IsValid());
+	if (LastAutomationRun.IsValid())
+	{
+		Result->SetStringField(TEXT("last_run_recorded_at"), TimestampToIso(LastAutomationRunTimestamp));
+		Result->SetObjectField(TEXT("last_run"), LastAutomationRun);
+	}
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleExportAutomationReport(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!LastAutomationRun.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("No automation run has been recorded by editor.run_automation_tests in this editor session."));
+	}
+
+	FString OutputDirParam;
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("output_dir"), OutputDirParam);
+	}
+
+	FString OutputDir;
+	FString ResolveError;
+	if (!MonolithAutomationDetail::ResolveAutomationReportDirectory(OutputDirParam, OutputDir, ResolveError))
+	{
+		return FMonolithActionResult::Error(ResolveError);
+	}
+
+	TSharedPtr<FJsonObject> ReportRoot = MakeShared<FJsonObject>();
+	ReportRoot->SetStringField(TEXT("kind"), TEXT("monolith.automation_report"));
+	ReportRoot->SetStringField(TEXT("exported_at"), FDateTime::UtcNow().ToIso8601());
+	ReportRoot->SetStringField(TEXT("last_run_recorded_at"), TimestampToIso(LastAutomationRunTimestamp));
+	ReportRoot->SetObjectField(TEXT("last_run"), LastAutomationRun);
+
+	FString ReportJson;
+	if (!MonolithAutomationDetail::JsonObjectToString(ReportRoot, ReportJson))
+	{
+		return FMonolithActionResult::Error(TEXT("Failed to serialize automation report JSON."));
+	}
+
+	const FString FileName = FString::Printf(TEXT("AutomationReport_%s.json"), *FDateTime::UtcNow().ToString(TEXT("%Y%m%dT%H%M%SZ")));
+	const FString OutputPath = FPaths::Combine(OutputDir, FileName);
+	if (!FFileHelper::SaveStringToFile(ReportJson, *OutputPath))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to write automation report: %s"), *OutputPath));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("path"), OutputPath);
+	Result->SetNumberField(TEXT("bytes"), ReportJson.Len());
+	Result->SetStringField(TEXT("kind"), TEXT("monolith.automation_report"));
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -2791,8 +3293,13 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 	TArray<FAutomationTestInfo> MatchingTests;
 	MonolithAutomationDetail::CollectMatchingTests(Prefix, MatchingTests);
 
+	const FString RunId = FString::Printf(TEXT("automation-%s"), *FDateTime::UtcNow().ToString(TEXT("%Y%m%dT%H%M%SZ")));
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("run_id"), RunId);
+	Result->SetStringField(TEXT("started_at"), FDateTime::UtcNow().ToIso8601());
 	Result->SetStringField(TEXT("prefix"), Prefix);
+	Result->SetNumberField(TEXT("matched"), MatchingTests.Num());
+	Result->SetNumberField(TEXT("max_tests"), MaxTests);
 
 	if (MatchingTests.Num() == 0)
 	{
@@ -2802,6 +3309,9 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 		Result->SetNumberField(TEXT("failed"), 0);
 		Result->SetStringField(TEXT("message"),
 			FString::Printf(TEXT("No tests matching prefix '%s' (call list_automation_tests for available tests)"), *Prefix));
+		Result->SetStringField(TEXT("completed_at"), FDateTime::UtcNow().ToIso8601());
+		LastAutomationRun = Result;
+		LastAutomationRunTimestamp = FPlatformTime::Seconds();
 		return FMonolithActionResult::Success(Result);
 	}
 
@@ -2826,6 +3336,8 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 		TSharedPtr<FJsonObject> TestResult = MakeShared<FJsonObject>();
 		TestResult->SetStringField(TEXT("full_path"), FullPath);
 		TestResult->SetStringField(TEXT("test_name"), TestKey);
+		TestResult->SetStringField(TEXT("display_name"), Info.GetDisplayName());
+		TestResult->SetNumberField(TEXT("flags"), static_cast<double>(static_cast<uint32>(Info.GetTestFlags())));
 
 		if (!Framework.ContainsTest(TestKey))
 		{
@@ -2848,24 +3360,42 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 		TestResult->SetNumberField(TEXT("error_count"), ExecInfo.GetErrorTotal());
 		TestResult->SetNumberField(TEXT("warning_count"), ExecInfo.GetWarningTotal());
 
-		// Capture error messages for visibility.
-		if (ExecInfo.GetErrorTotal() > 0)
+		TArray<TSharedPtr<FJsonValue>> ErrorsJson;
+		TArray<TSharedPtr<FJsonValue>> WarningsJson;
+		TArray<TSharedPtr<FJsonValue>> LogSnippetsJson;
+		for (const FAutomationExecutionEntry& Entry : ExecInfo.GetEntries())
 		{
-			TArray<TSharedPtr<FJsonValue>> ErrorsJson;
-			for (const FAutomationExecutionEntry& Entry : ExecInfo.GetEntries())
+			if (Entry.Event.Type == EAutomationEventType::Error)
 			{
-				if (Entry.Event.Type == EAutomationEventType::Error)
-				{
-					ErrorsJson.Add(MakeShared<FJsonValueString>(Entry.Event.Message));
-				}
+				ErrorsJson.Add(MakeShared<FJsonValueString>(Entry.Event.Message));
 			}
+			else if (Entry.Event.Type == EAutomationEventType::Warning)
+			{
+				WarningsJson.Add(MakeShared<FJsonValueString>(Entry.Event.Message));
+			}
+			else if (LogSnippetsJson.Num() < 20)
+			{
+				LogSnippetsJson.Add(MakeShared<FJsonValueString>(Entry.Event.Message));
+			}
+		}
+		if (ErrorsJson.Num() > 0)
+		{
 			TestResult->SetArrayField(TEXT("errors"), ErrorsJson);
+		}
+		if (WarningsJson.Num() > 0)
+		{
+			TestResult->SetArrayField(TEXT("warnings"), WarningsJson);
+		}
+		if (LogSnippetsJson.Num() > 0)
+		{
+			TestResult->SetArrayField(TEXT("log_snippets"), LogSnippetsJson);
 		}
 
 		if (bSuccess) Passed++; else Failed++;
 		ResultsJson.Add(MakeShared<FJsonValueObject>(TestResult));
 	}
 
+	Result->SetStringField(TEXT("completed_at"), FDateTime::UtcNow().ToIso8601());
 	Result->SetBoolField(TEXT("success"), Failed == 0);
 	Result->SetNumberField(TEXT("total"), TestsToRun);
 	Result->SetNumberField(TEXT("passed"), Passed);
@@ -2878,6 +3408,8 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 		Result->SetNumberField(TEXT("truncated_remaining"), MatchingTests.Num() - TestsToRun);
 	}
 
+	LastAutomationRun = Result;
+	LastAutomationRunTimestamp = FPlatformTime::Seconds();
 	return FMonolithActionResult::Success(Result);
 }
 

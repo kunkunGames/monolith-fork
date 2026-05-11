@@ -67,12 +67,20 @@ public:
 	static FMonolithActionResult HandleCaptureSystemGif(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleImportTexture(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetViewportInfo(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleListOpenViewports(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleCaptureLevelViewport(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleCaptureAssetEditorViewport(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleCaptureWidgetDesigner(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleCaptureAssetThumbnail(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleStitchFlipbook(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleDeleteAssets(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Automation tests ---
 	static FMonolithActionResult HandleRunAutomationTests(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleListAutomationTests(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleFindAutomationTests(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleGetAutomationSummary(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleExportAutomationReport(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Scripting actions (HOFF 7) ---
 	static FMonolithActionResult HandleRunPython(const TSharedPtr<FJsonObject>& Params);
@@ -101,6 +109,8 @@ private:
 	static bool bIsCompiling;
 	static bool bPatchApplied;
 	static double LastCompileEndTimestamp;
+	static TSharedPtr<FJsonObject> LastAutomationRun;
+	static double LastAutomationRunTimestamp;
 
 	// Capture helpers
 	static bool CaptureNiagaraFrame(
