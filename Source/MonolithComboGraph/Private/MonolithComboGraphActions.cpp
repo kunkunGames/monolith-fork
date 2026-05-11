@@ -1032,15 +1032,25 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 	if (NodeType.IsEmpty()) NodeType = TEXT("montage");
 
 	float PlayRate = 1.0f;
+	double PlayRateVal;
 	if (Params->HasField(TEXT("play_rate")))
 	{
-		PlayRate = static_cast<float>(Params->GetNumberField(TEXT("play_rate")));
+		if (!Params->TryGetNumberField(TEXT("play_rate"), PlayRateVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for param 'play_rate', expected number"));
+		}
+		PlayRate = static_cast<float>(PlayRateVal);
 	}
 
 	int32 ParentNodeIndex = -1;
+	double ParentNodeIndexVal;
 	if (Params->HasField(TEXT("parent_node_index")))
 	{
-		ParentNodeIndex = static_cast<int32>(Params->GetNumberField(TEXT("parent_node_index")));
+		if (!Params->TryGetNumberField(TEXT("parent_node_index"), ParentNodeIndexVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for param 'parent_node_index', expected number"));
+		}
+		ParentNodeIndex = static_cast<int32>(ParentNodeIndexVal);
 	}
 
 	// Load graph
@@ -2090,12 +2100,26 @@ FMonolithActionResult FMonolithComboGraphActions::HandleLayoutComboGraph(const T
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
-	const int32 HSpacing = Params->HasField(TEXT("horizontal_spacing"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("horizontal_spacing")))
-		: 300;
-	const int32 VSpacing = Params->HasField(TEXT("vertical_spacing"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("vertical_spacing")))
-		: 200;
+	int32 HSpacing = 300;
+	if (Params->HasField(TEXT("horizontal_spacing")))
+	{
+		double Val;
+		if (!Params->TryGetNumberField(TEXT("horizontal_spacing"), Val))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for param 'horizontal_spacing', expected number"));
+		}
+		HSpacing = static_cast<int32>(Val);
+	}
+	int32 VSpacing = 200;
+	if (Params->HasField(TEXT("vertical_spacing")))
+	{
+		double Val;
+		if (!Params->TryGetNumberField(TEXT("vertical_spacing"), Val))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for param 'vertical_spacing', expected number"));
+		}
+		VSpacing = static_cast<int32>(Val);
+	}
 
 	// Load the ComboGraph asset
 	UObject* Graph = LoadObject<UObject>(nullptr, *AssetPath);
