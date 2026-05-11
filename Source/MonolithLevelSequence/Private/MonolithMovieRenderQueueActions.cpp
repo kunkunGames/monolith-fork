@@ -579,6 +579,11 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::DeleteJob(const TSharedP
 	{
 		return FMonolithActionResult::Error(Error);
 	}
+	UMoviePipelineQueueSubsystem* Subsystem = GetMovieRenderSubsystem();
+	if (Subsystem && Subsystem->IsRendering())
+	{
+		return FMonolithActionResult::Error(TEXT("Cannot delete a Movie Render Queue job while rendering"), FMonolithJsonUtils::ErrInvalidRequest);
+	}
 
 	TArray<UMoviePipelineExecutorJob*> Jobs = Queue->GetJobs();
 	int32 Index = INDEX_NONE;
@@ -636,6 +641,11 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::SetJobIndex(const TShare
 	if (!Queue)
 	{
 		return FMonolithActionResult::Error(Error);
+	}
+	UMoviePipelineQueueSubsystem* Subsystem = GetMovieRenderSubsystem();
+	if (Subsystem && Subsystem->IsRendering())
+	{
+		return FMonolithActionResult::Error(TEXT("Cannot move a Movie Render Queue job while rendering"), FMonolithJsonUtils::ErrInvalidRequest);
 	}
 
 	TArray<UMoviePipelineExecutorJob*> Jobs = Queue->GetJobs();
