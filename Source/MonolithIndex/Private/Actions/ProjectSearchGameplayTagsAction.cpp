@@ -6,11 +6,23 @@
 
 FMonolithActionResult FProjectSearchGameplayTagsAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Query = Params->GetStringField(TEXT("query"));
-	if (Query.IsEmpty())
+	FString Query;
+	if (!Params->TryGetStringField(TEXT("query"), Query) || Query.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("'query' parameter is required"), -32602);
 	}
+
+	int32 Limit = 100;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = FMath::Clamp(Limit, 1, 1000);
 
 	UMonolithIndexSubsystem* Subsystem = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>();
 	if (!Subsystem)
@@ -40,12 +52,14 @@ FMonolithActionResult FProjectSearchGameplayTagsAction::Execute(const TSharedPtr
 		"LEFT JOIN assets a ON tr.asset_id = a.id "
 		"WHERE t.tag_name LIKE ? ESCAPE '\\' "
 		"GROUP BY t.id "
-		"ORDER BY t.reference_count DESC, t.tag_name;"
+		"ORDER BY t.reference_count DESC, t.tag_name "
+		"LIMIT ?;"
 	));
 
 	FString EscapedQuery = Query.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
 	FString LikePattern = TEXT("%") + EscapedQuery + TEXT("%");
 	Stmt.SetBindingValueByIndex(1, LikePattern);
+	Stmt.SetBindingValueByIndex(2, static_cast<int64>(Limit));
 
 	TArray<TSharedPtr<FJsonValue>> TagsArr;
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
@@ -90,6 +104,7 @@ FMonolithActionResult FProjectSearchGameplayTagsAction::Execute(const TSharedPtr
 	Result->SetArrayField(TEXT("tags"), TagsArr);
 	Result->SetNumberField(TEXT("count"), TagsArr.Num());
 	Result->SetStringField(TEXT("query"), Query);
+	Result->SetNumberField(TEXT("limit"), Limit);
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -97,5 +112,6 @@ TSharedPtr<FJsonObject> FProjectSearchGameplayTagsAction::GetSchema()
 {
 	return FParamSchemaBuilder()
 		.Required(TEXT("query"), TEXT("string"), TEXT("Substring to search for in tag names (e.g. 'Damage', 'Weapon')"))
+		.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum tags to return"), TEXT("100"))
 		.Build();
 }
