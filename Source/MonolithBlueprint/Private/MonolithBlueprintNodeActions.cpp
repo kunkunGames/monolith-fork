@@ -1523,11 +1523,6 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetNodePosition(const
 FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	UBlueprint* BP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, AssetPath);
-	if (!BP)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-	}
 
 	// Parse operations — handle both EJson::Array (normal) and EJson::String (Claude Code quirk)
 	TArray<TSharedPtr<FJsonValue>> Ops;
@@ -1536,11 +1531,34 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required field: operations"));
 	}
+
+	// Array payloads are already parsed by the JSON-RPC layer, so checking their
+	// length before loading assets avoids needless editor work for oversized
+	// batches. String payloads are parsed only after the Blueprint is valid.
+	if (OpsField->Type == EJson::Array)
+	{
+		const TArray<TSharedPtr<FJsonValue>>& OpsArray = OpsField->AsArray();
+		if (OpsArray.Num() > 500)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Too many operations (max 500), got %d"), OpsArray.Num()));
+		}
+	}
+	else if (OpsField->Type != EJson::String)
+	{
+		return FMonolithActionResult::Error(TEXT("'operations' must be an array"));
+	}
+
+	UBlueprint* BP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, AssetPath);
+	if (!BP)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+	}
+
 	if (OpsField->Type == EJson::Array)
 	{
 		Ops = OpsField->AsArray();
 	}
-	else if (OpsField->Type == EJson::String)
+	else
 	{
 		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(OpsField->AsString());
 		if (!FJsonSerializer::Deserialize(Reader, Ops))
@@ -1548,16 +1566,17 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 			return FMonolithActionResult::Error(TEXT("Failed to parse operations string as JSON array"));
 		}
 	}
-	else
-	{
-		return FMonolithActionResult::Error(TEXT("'operations' must be an array"));
-	}
 
 	bool bStopOnError = false;
 	Params->TryGetBoolField(TEXT("stop_on_error"), bStopOnError);
 
 	bool bCompileOnComplete = false;
 	Params->TryGetBoolField(TEXT("compile_on_complete"), bCompileOnComplete);
+
+	if (Ops.Num() > 500)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Too many operations (max 500), got %d"), Ops.Num()));
+	}
 
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "BPBatchExec", "BP Batch Execute"));
 
@@ -2176,6 +2195,11 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNodesBulk(const TS
 
 	FString SharedGraphName = Params->GetStringField(TEXT("graph_name"));
 
+	if (NodesArr.Num() > 500)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Too many nodes to add (max 500), got %d"), NodesArr.Num()));
+	}
+
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "BPAddNodesBulk", "BP Add Nodes Bulk"));
 
 	TArray<TSharedPtr<FJsonValue>> CreatedArr;
@@ -2300,6 +2324,11 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleConnectPinsBulk(const
 
 	FString SharedGraphName = Params->GetStringField(TEXT("graph_name"));
 
+	if (ConnArr.Num() > 500)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Too many connections (max 500), got %d"), ConnArr.Num()));
+	}
+
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "BPConnectPinsBulk", "BP Connect Pins Bulk"));
 
 	TArray<TSharedPtr<FJsonValue>> Results;
@@ -2397,6 +2426,11 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetPinDefaultsBulk(co
 	}
 
 	FString SharedGraphName = Params->GetStringField(TEXT("graph_name"));
+
+	if (DefaultsArr.Num() > 500)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Too many pin defaults (max 500), got %d"), DefaultsArr.Num()));
+	}
 
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "BPSetPinDefaultsBulk", "BP Set Pin Defaults Bulk"));
 

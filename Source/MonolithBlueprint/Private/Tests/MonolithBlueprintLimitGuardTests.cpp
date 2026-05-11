@@ -38,4 +38,40 @@ bool FMonolithBlueprintSearchFunctionsLimitTest::RunTest(const FString& Paramete
 	return true;
 }
 
+namespace
+{
+FMonolithActionResult ExecuteBatchExecute(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("blueprint"), TEXT("batch_execute")))
+	{
+		FMonolithBlueprintActions::RegisterActions();
+	}
+	return Registry.ExecuteAction(TEXT("blueprint"), TEXT("batch_execute"), Params);
+}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithBlueprintBatchExecuteLimitTest, "Monolith.LimitGuard.Blueprint.BatchExecuteRejectsOversizedArray", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithBlueprintBatchExecuteLimitTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/NonExistent.NonExistent"));
+
+	TArray<TSharedPtr<FJsonValue>> OpsArray;
+	for (int32 i = 0; i < 501; ++i)
+	{
+		TSharedPtr<FJsonObject> Op = MakeShared<FJsonObject>();
+		Op->SetStringField(TEXT("op"), TEXT("add_node"));
+		OpsArray.Add(MakeShared<FJsonValueObject>(Op));
+	}
+	Params->SetArrayField(TEXT("operations"), OpsArray);
+
+	FMonolithActionResult Result = ExecuteBatchExecute(Params);
+
+	TestTrue(TEXT("Should fail on oversized array"), !Result.bSuccess);
+	TestTrue(TEXT("Error message should mention max 500"), Result.ErrorMessage.Contains(TEXT("max 500")));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
