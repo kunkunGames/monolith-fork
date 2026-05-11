@@ -92,17 +92,17 @@ if (-not $UBT) {
     }
 }
 
-if (-not $UBT -or -not (Test-Path $UBT)) {
-    Write-Host "    [FAIL] UnrealBuildTool not found. Set UE_57, UE_ROOT, or UE_57_UBT environment variable." -ForegroundColor Red
-    exit 1
-}
-
 $UProject = Join-Path $ProjectDir "Leviathan.uproject"
 
 Write-Host "Building Monolith v$Version release zip..." -ForegroundColor Cyan
 
 # --- Step 1: Build with optional deps disabled ---
 if (-not $SkipBuild) {
+    if (-not $UBT -or -not (Test-Path $UBT)) {
+        Write-Host "    [FAIL] UnrealBuildTool not found. Set UE_57, UE_ROOT, or UE_57_UBT environment variable." -ForegroundColor Red
+        exit 1
+    }
+
     Write-Host "`n  [1/4] Building release binaries (optional deps OFF)..." -ForegroundColor Yellow
 
     # Set env var so Build.cs files skip optional dependency detection
