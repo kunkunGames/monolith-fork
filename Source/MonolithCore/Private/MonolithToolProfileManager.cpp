@@ -372,10 +372,12 @@ bool FMonolithToolProfileManager::SetActionEnabled(const FString& ProfileId, con
 		if (bEnabled)
 		{
 			Profile->EnabledActions.Add(ActionId);
+			Profile->DisabledActions.Remove(ActionId);
 		}
 		else
 		{
 			Profile->EnabledActions.Remove(ActionId);
+			Profile->DisabledActions.Add(ActionId);
 		}
 	}
 	else
@@ -383,9 +385,11 @@ bool FMonolithToolProfileManager::SetActionEnabled(const FString& ProfileId, con
 		if (bEnabled)
 		{
 			Profile->DisabledActions.Remove(ActionId);
+			Profile->EnabledActions.Add(ActionId);
 		}
 		else
 		{
+			Profile->EnabledActions.Remove(ActionId);
 			Profile->DisabledActions.Add(ActionId);
 		}
 	}
@@ -476,12 +480,21 @@ bool FMonolithToolProfileManager::IsActionAllowed(const FString& Namespace, cons
 	}
 
 	const FString ActionId = MakeActionId(Namespace, Action);
-	if (Profile->Mode == TEXT("allowlist"))
+	if (Profile->EnabledActions.Contains(ActionId))
 	{
-		return Profile->EnabledNamespaces.Contains(Namespace) || Profile->EnabledActions.Contains(ActionId);
+		return true;
+	}
+	if (Profile->DisabledActions.Contains(ActionId))
+	{
+		return false;
 	}
 
-	return !Profile->DisabledNamespaces.Contains(Namespace) && !Profile->DisabledActions.Contains(ActionId);
+	if (Profile->Mode == TEXT("allowlist"))
+	{
+		return Profile->EnabledNamespaces.Contains(Namespace);
+	}
+
+	return !Profile->DisabledNamespaces.Contains(Namespace);
 }
 
 FMonolithActionInfo FMonolithToolProfileManager::ApplyDescriptionOverride(const FMonolithActionInfo& Info)

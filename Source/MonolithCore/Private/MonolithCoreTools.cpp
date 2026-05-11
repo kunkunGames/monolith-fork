@@ -715,6 +715,11 @@ FMonolithActionResult FMonolithCoreTools::HandleSetOnboardingState(const TShared
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Unknown onboarding step: %s"), *Step), FMonolithJsonUtils::ErrInvalidParams);
 		}
 
+		if (Action != TEXT("complete") && Action != TEXT("skip") && Action != TEXT("reopen"))
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Unknown onboarding action: %s"), *Action), FMonolithJsonUtils::ErrInvalidParams);
+		}
+
 		Settings->OnboardingCompletedSteps.Remove(Step);
 		Settings->OnboardingSkippedSteps.Remove(Step);
 
@@ -729,10 +734,6 @@ FMonolithActionResult FMonolithCoreTools::HandleSetOnboardingState(const TShared
 		else if (Action == TEXT("reopen"))
 		{
 			// Removed from both arrays above.
-		}
-		else
-		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Unknown onboarding action: %s"), *Action), FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
 
