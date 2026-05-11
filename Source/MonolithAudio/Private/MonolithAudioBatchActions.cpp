@@ -396,7 +396,10 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetCompression(const TSha
 	if (bHasQuality)
 	{
 		double QualityVal = 0.0;
-		Params->TryGetNumberField(TEXT("quality"), QualityVal);
+		if (!Params->TryGetNumberField(TEXT("quality"), QualityVal))
+		{
+			return FMonolithActionResult::Error(TEXT("'quality' must be a number"));
+		}
 		Quality = FMath::Clamp(static_cast<int32>(QualityVal), 1, 100);
 	}
 
@@ -404,7 +407,7 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetCompression(const TSha
 	if (bHasType)
 	{
 		FString TypeStr;
-	Params->TryGetStringField(TEXT("type"), TypeStr);
+		Params->TryGetStringField(TEXT("type"), TypeStr);
 		FString TypeError;
 		if (!ParseCompressionType(TypeStr, CompressionType, TypeError))
 		{
@@ -1029,7 +1032,10 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 			if (CompObj->HasField(TEXT("quality")))
 			{
 				double QualityVal2 = 0.0;
-				CompObj->TryGetNumberField(TEXT("quality"), QualityVal2);
+				if (!CompObj->TryGetNumberField(TEXT("quality"), QualityVal2))
+				{
+					return FMonolithActionResult::Error(TEXT("'compression.quality' must be a number"));
+				}
 				CompressionQuality = FMath::Clamp(static_cast<int32>(QualityVal2), 1, 100);
 				bHasCompressionQuality = true;
 			}
