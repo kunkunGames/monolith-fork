@@ -376,9 +376,10 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 		bIncludeHeader = Params->GetBoolField(TEXT("include_header"));
 	}
 	int32 MaxLines = 0;
-	if (Params->HasField(TEXT("max_lines")))
+	double RawMaxLines = 0;
+	if (Params->TryGetNumberField(TEXT("max_lines"), RawMaxLines))
 	{
-		MaxLines = static_cast<int32>(Params->GetNumberField(TEXT("max_lines")));
+		MaxLines = FMath::Clamp(static_cast<int32>(RawMaxLines), 1, 1000);
 	}
 	bool bMembersOnly = false;
 	if (Params->HasField(TEXT("members_only")))
@@ -495,7 +496,12 @@ FMonolithActionResult FMonolithSourceActions::HandleFindReferences(const TShared
 
 	FString Symbol = Params->GetStringField(TEXT("symbol"));
 	FString RefKind = Params->HasField(TEXT("ref_kind")) ? Params->GetStringField(TEXT("ref_kind")) : TEXT("");
-	int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
+	int32 Limit = 50;
+	double RawLimit = 0;
+	if (Params->TryGetNumberField(TEXT("limit"), RawLimit))
+	{
+		Limit = FMath::Clamp(static_cast<int32>(RawLimit), 1, 1000);
+	}
 
 	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(Symbol);
 	if (Symbols.Num() == 0) Symbols = DB->SearchSymbolsFTS(Symbol, 5);
@@ -542,7 +548,12 @@ FMonolithActionResult FMonolithSourceActions::HandleFindCallers(const TSharedPtr
 	}
 
 	FString Function = Params->GetStringField(TEXT("symbol"));
-	int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
+	int32 Limit = 50;
+	double RawLimit = 0;
+	if (Params->TryGetNumberField(TEXT("limit"), RawLimit))
+	{
+		Limit = FMath::Clamp(static_cast<int32>(RawLimit), 1, 1000);
+	}
 
 	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(Function, TEXT("function"));
 	if (Symbols.Num() == 0)
@@ -603,7 +614,12 @@ FMonolithActionResult FMonolithSourceActions::HandleFindCallees(const TSharedPtr
 	}
 
 	FString Function = Params->GetStringField(TEXT("symbol"));
-	int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
+	int32 Limit = 50;
+	double RawLimit = 0;
+	if (Params->TryGetNumberField(TEXT("limit"), RawLimit))
+	{
+		Limit = FMath::Clamp(static_cast<int32>(RawLimit), 1, 1000);
+	}
 
 	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(Function, TEXT("function"));
 	if (Symbols.Num() == 0)
@@ -657,7 +673,12 @@ FMonolithActionResult FMonolithSourceActions::HandleSearchSource(const TSharedPt
 
 	FString Query = Params->GetStringField(TEXT("query"));
 	FString Scope = Params->HasField(TEXT("scope")) ? Params->GetStringField(TEXT("scope")) : TEXT("all");
-	int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 20;
+	int32 Limit = 20;
+	double RawLimit = 0;
+	if (Params->TryGetNumberField(TEXT("limit"), RawLimit))
+	{
+		Limit = FMath::Clamp(static_cast<int32>(RawLimit), 1, 1000);
+	}
 	FString Mode = Params->HasField(TEXT("mode")) ? Params->GetStringField(TEXT("mode")) : TEXT("fts");
 	FString Module = Params->HasField(TEXT("module")) ? Params->GetStringField(TEXT("module")) : TEXT("");
 	FString PathFilter = Params->HasField(TEXT("path_filter")) ? Params->GetStringField(TEXT("path_filter")) : TEXT("");
@@ -787,7 +808,12 @@ FMonolithActionResult FMonolithSourceActions::HandleGetClassHierarchy(const TSha
 
 	FString ClassName = Params->HasField(TEXT("symbol")) ? Params->GetStringField(TEXT("symbol")) : Params->GetStringField(TEXT("class_name"));
 	FString Direction = Params->HasField(TEXT("direction")) ? Params->GetStringField(TEXT("direction")) : TEXT("both");
-	int32 Depth = Params->HasField(TEXT("depth")) ? static_cast<int32>(Params->GetNumberField(TEXT("depth"))) : 1;
+	int32 Depth = 1;
+	double RawDepth = 0;
+	if (Params->TryGetNumberField(TEXT("depth"), RawDepth))
+	{
+		Depth = FMath::Clamp(static_cast<int32>(RawDepth), 1, 100);
+	}
 
 	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(ClassName, TEXT("class"));
 	if (Symbols.Num() == 0) Symbols = DB->GetSymbolsByName(ClassName, TEXT("struct"));
@@ -939,7 +965,12 @@ FMonolithActionResult FMonolithSourceActions::HandleGetSymbolContext(const TShar
 	}
 
 	FString Symbol = Params->GetStringField(TEXT("symbol"));
-	int32 ContextLines = Params->HasField(TEXT("context_lines")) ? static_cast<int32>(Params->GetNumberField(TEXT("context_lines"))) : 20;
+	int32 ContextLines = 20;
+	double RawContextLines = 0;
+	if (Params->TryGetNumberField(TEXT("context_lines"), RawContextLines))
+	{
+		ContextLines = FMath::Clamp(static_cast<int32>(RawContextLines), 1, 1000);
+	}
 
 	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(Symbol);
 	if (Symbols.Num() == 0) Symbols = DB->SearchSymbolsFTS(Symbol, 5);
@@ -1002,8 +1033,18 @@ FMonolithActionResult FMonolithSourceActions::HandleReadFile(const TSharedPtr<FJ
 	}
 
 	FString Path = Params->GetStringField(TEXT("file_path"));
-	int32 StartLine = Params->HasField(TEXT("start_line")) ? static_cast<int32>(Params->GetNumberField(TEXT("start_line"))) : 1;
-	int32 EndLine = Params->HasField(TEXT("end_line")) ? static_cast<int32>(Params->GetNumberField(TEXT("end_line"))) : 0;
+	int32 StartLine = 1;
+	double RawStartLine = 0;
+	if (Params->TryGetNumberField(TEXT("start_line"), RawStartLine))
+	{
+		StartLine = FMath::Clamp(static_cast<int32>(RawStartLine), 1, 1000000);
+	}
+	int32 EndLine = 0;
+	double RawEndLine = 0;
+	if (Params->TryGetNumberField(TEXT("end_line"), RawEndLine))
+	{
+		EndLine = FMath::Clamp(static_cast<int32>(RawEndLine), 0, 1000000);
+	}
 
 	// Resolve path
 	FString ResolvedPath;
