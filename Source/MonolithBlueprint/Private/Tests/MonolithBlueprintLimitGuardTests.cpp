@@ -38,8 +38,6 @@ bool FMonolithBlueprintSearchFunctionsLimitTest::RunTest(const FString& Paramete
 	return true;
 }
 
-#endif // WITH_DEV_AUTOMATION_TESTS
-
 namespace
 {
 FMonolithActionResult ExecuteBatchExecute(const TSharedPtr<FJsonObject>& Params)
@@ -75,3 +73,5 @@ bool FMonolithBlueprintBatchExecuteLimitTest::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS
