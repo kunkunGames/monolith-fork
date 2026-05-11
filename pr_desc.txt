@@ -1,0 +1,21 @@
+- Duplicate check:
+  - open PRs inspected: `gh pr list` / `git branch -r` (no direct bolt overlap for MonolithAudioMetaSoundIntrospectionActions)
+  - related PRs/branches found: `perf-tarray-reserve-4356384657134965139` touches `MonolithAudioAssetActions.cpp` but intentionally omitted this introspection file because it was newly added to master.
+  - reason this work is non-overlapping: Targets specific, previously unoptimized JSON builder arrays in the recently added `MonolithAudioMetaSoundIntrospectionActions.cpp` file.
+- WorkFingerprint:
+  - agent: Bolt
+  - category: Performance
+  - module: MonolithAudio
+  - component/action/helper: MonolithAudioMetaSoundIntrospectionActions JSON array outputs
+  - intended files: Source/MonolithAudio/Private/MonolithAudioMetaSoundIntrospectionActions.cpp
+  - risk type: Memory allocation
+  - public API impact: no
+  - docs/spec impact: no
+
+- 💡 What: Added `.Reserve()` calls to 12 instances of `TArray<TSharedPtr<FJsonValue>>` and 1 instance of `TSet<FGuid>` before sequential `.Add()` operations in `MonolithAudioMetaSoundIntrospectionActions.cpp`.
+- 🎯 Why: Sequential `.Add()` calls without a prior `.Reserve()` trigger unnecessary heap allocations and array re-copying as the arrays dynamically resize during iteration over large MetaSound graphs and dependencies. Pre-allocating the capacity avoids this waste.
+- 📊 Impact: static/algorithmic estimate - Reduces repeated temporary heap allocations per execution when serializing MetaSound graphs for introspection.
+- 🔬 Measurement: Static estimate. (Runtime benchmark unavailable as UE/editor is missing in VM).
+- ✅ Verification: Ran `git diff --check`. C++ logic statically verified (python3 Scripts/ci_static_checks.py check).
+- ⚠️ Limitations: [blocked: UE 5.7 editor unavailable in Jules VM]
+- 🔁 Safety: The replacement logic strictly mirrors the previous flow, only reserving capacity on arrays whose final element counts are strictly matched by the bounds of the iterators pushing to them.
