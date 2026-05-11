@@ -822,7 +822,12 @@ FMonolithActionResult FMonolithConfigActions::ListPlugins(const TSharedPtr<FJson
 		Params->TryGetBoolField(TEXT("enabled_only"), bEnabledOnly);
 		if (Params->HasField(TEXT("limit")))
 		{
-			Limit = FMath::Clamp((int32)Params->GetNumberField(TEXT("limit")), 1, 1000);
+			double LimitValue = 0.0;
+			if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
+			}
+			Limit = FMath::Clamp((int32)LimitValue, 1, 1000);
 		}
 	}
 
@@ -906,7 +911,12 @@ FMonolithActionResult FMonolithConfigActions::FindCVars(const TSharedPtr<FJsonOb
 		Params->TryGetStringField(TEXT("mode"), Mode);
 		if (Params->HasField(TEXT("limit")))
 		{
-			Limit = FMath::Clamp((int32)Params->GetNumberField(TEXT("limit")), 1, 1000);
+			double LimitValue = 0.0;
+			if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
+			}
+			Limit = FMath::Clamp((int32)LimitValue, 1, 1000);
 		}
 	}
 
