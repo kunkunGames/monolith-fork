@@ -9,6 +9,7 @@
 #include "MonolithGASCueActions.h"
 #include "MonolithGASTargetActions.h"
 #include "MonolithGASInputActions.h"
+#include "MonolithGASInputAssetActions.h"
 #include "MonolithGASInspectActions.h"
 #include "MonolithGASScaffoldActions.h"
 #include "MonolithGASUIBindingActions.h"
@@ -17,15 +18,17 @@ DEFINE_LOG_CATEGORY(LogMonolithGAS);
 
 void FMonolithGASModule::StartupModule()
 {
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	FMonolithGASInputAssetActions::RegisterActions(Registry);
+
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
 	if (!Settings || !Settings->bEnableGAS)
 	{
 		UE_LOG(LogMonolithGAS, Log,
-			TEXT("MonolithGAS: GAS integration disabled in settings"));
+			TEXT("MonolithGAS: GAS integration disabled in settings; input asset actions remain available"));
 		return;
 	}
 
-	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 	FMonolithGASAbilityActions::RegisterActions(Registry);
 	FMonolithGASAttributeActions::RegisterActions(Registry);
 	FMonolithGASEffectActions::RegisterActions(Registry);
@@ -51,6 +54,7 @@ void FMonolithGASModule::StartupModule()
 void FMonolithGASModule::ShutdownModule()
 {
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("gas"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("input"));
 }
 
 IMPLEMENT_MODULE(FMonolithGASModule, MonolithGAS)
