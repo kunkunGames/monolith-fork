@@ -1,4 +1,4 @@
-#include "MonolithPoseSearchActions.h"
+﻿#include "MonolithPoseSearchActions.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
@@ -22,6 +22,37 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/UnrealType.h"
 #include "Editor.h"
+#include "Modules/ModuleManager.h"
+
+namespace
+{
+	int32 ClampClothLimit(double LimitValue)
+	{
+		return FMath::Clamp(static_cast<int32>(LimitValue), 1, 500);
+	}
+
+	bool IsClothLikeAssetClass(const FAssetData& AssetData)
+	{
+		const FString ClassName = AssetData.AssetClassPath.GetAssetName().ToString();
+		const FString ClassPath = AssetData.AssetClassPath.ToString();
+		return ClassPath.Contains(TEXT("Cloth"))
+			|| ClassPath.Contains(TEXT("Clothing"))
+			|| ClassPath.Contains(TEXT("Outfit"))
+			|| ClassName.Contains(TEXT("Cloth"))
+			|| ClassName.Contains(TEXT("Clothing"))
+			|| ClassName.Contains(TEXT("Outfit"));
+	}
+
+	TSharedPtr<FJsonObject> MakeClothModuleStatus(const TCHAR* ModuleName)
+	{
+		FModuleManager& ModuleManager = FModuleManager::Get();
+		auto Status = MakeShared<FJsonObject>();
+		Status->SetStringField(TEXT("name"), ModuleName);
+		Status->SetBoolField(TEXT("exists"), ModuleManager.ModuleExists(ModuleName));
+		Status->SetBoolField(TEXT("loaded"), ModuleManager.IsModuleLoaded(ModuleName));
+		return Status;
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Registration
@@ -148,6 +179,137 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Optional(TEXT("looping_cost_bias"), TEXT("number"), TEXT("Cost bias for looping animations"))
 			.Optional(TEXT("continuing_interaction_cost_bias"), TEXT("number"), TEXT("Cost bias for continuing interaction poses"))
 			.Build());
+
+	Registry.RegisterAction(TEXT("cloth"), TEXT("get_status"),
+		TEXT("Report read-only Chaos Cloth/Outfit workflow support without hard Chaos Outfit dependencies."),
+		FMonolithActionHandler::CreateStatic(&HandleGetClothStatus),
+		FParamSchemaBuilder().Build());
+
+	Registry.RegisterAction(TEXT("cloth"), TEXT("list_clothing_assets"),
+		TEXT("List cloth/clothing/outfit-like assets under /Game using AssetRegistry metadata only. Does not load vertex data, weight maps, or mutate assets."),
+		FMonolithActionHandler::CreateStatic(&HandleListClothingAssets),
+		FParamSchemaBuilder()
+			.Optional(TEXT("package_path"), TEXT("string"), TEXT("Content package path under /Game"), TEXT("/Game"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum assets to return, clamped to 1..500"), TEXT("100"))
+			.Build());
+}
+
+// ---------------------------------------------------------------------------
+// cloth.get_status / cloth.list_clothing_assets
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithPoseSearchActions::HandleGetClothStatus(const TSharedPtr<FJsonObject>& Params)
+{
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("cloth"));
+	Result->SetStringField(TEXT("domain"), TEXT("cloth_outfit_discovery"));
+	Result->SetStringField(TEXT("mode"), TEXT("read_only"));
+	Result->SetBoolField(TEXT("hard_dependency"), false);
+
+	TArray<TSharedPtr<FJsonValue>> BaseModules;
+	BaseModules.Add(MakeShared<FJsonValueObject>(MakeClothModuleStatus(TEXT("ChaosCloth"))));
+	BaseModules.Add(MakeShared<FJsonValueObject>(MakeClothModuleStatus(TEXT("ChaosClothAsset"))));
+	BaseModules.Add(MakeShared<FJsonValueObject>(MakeClothModuleStatus(TEXT("ChaosClothAssetEditor"))));
+	BaseModules.Add(MakeShared<FJsonValueObject>(MakeClothModuleStatus(TEXT("ClothingSystemRuntimeCommon"))));
+	Result->SetArrayField(TEXT("base_cloth_modules"), BaseModules);
+
+	TArray<TSharedPtr<FJsonValue>> OutfitModules;
+	OutfitModules.Add(MakeShared<FJsonValueObject>(MakeClothModuleStatus(TEXT("ChaosOutfit"))));
+	OutfitModules.Add(MakeShared<FJsonValueObject>(MakeClothModuleStatus(TEXT("ChaosOutfitAsset"))));
+	OutfitModules.Add(MakeShared<FJsonValueObject>(MakeClothModuleStatus(TEXT("ChaosOutfitAssetEditor"))));
+	Result->SetArrayField(TEXT("outfit_modules"), OutfitModules);
+
+	TArray<TSharedPtr<FJsonValue>> ImplementedActions;
+	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("cloth.get_status")));
+	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("cloth.list_clothing_assets")));
+	Result->SetArrayField(TEXT("implemented_actions"), ImplementedActions);
+
+	TArray<TSharedPtr<FJsonValue>> FutureActions;
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("cloth.list_clothing_bindings")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("cloth.get_clothing_sim_mesh_info")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("cloth.get_clothing_vertices")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("cloth.get_weight_map")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("cloth.set_weight_map")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("cloth.find_closest_outfit_size")));
+	Result->SetArrayField(TEXT("future_optional_actions"), FutureActions);
+
+	TArray<TSharedPtr<FJsonValue>> Notes;
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("This first milestone uses module reflection plus AssetRegistry metadata only; it does not load cloth assets, vertices, weight maps, or Chaos Outfit APIs.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Vertex/weight-map reads and all writes remain future work with paging, value validation, confirm=true, and dirty package reporting.")));
+	Result->SetArrayField(TEXT("notes"), Notes);
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithPoseSearchActions::HandleListClothingAssets(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PackagePath = TEXT("/Game");
+	Params->TryGetStringField(TEXT("package_path"), PackagePath);
+	if (!PackagePath.StartsWith(TEXT("/Game")))
+	{
+		return FMonolithActionResult::Error(TEXT("package_path must be under /Game"));
+	}
+
+	double LimitValue = 100.0;
+	Params->TryGetNumberField(TEXT("limit"), LimitValue);
+	const int32 Limit = ClampClothLimit(LimitValue);
+
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	FARFilter Filter;
+	Filter.PackagePaths.Add(FName(*PackagePath));
+	Filter.bRecursivePaths = true;
+
+	TArray<FAssetData> Assets;
+	AssetRegistry.GetAssets(Filter, Assets);
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	int32 MatchedCount = 0;
+	TMap<FString, int32> ClassCounts;
+
+	for (const FAssetData& AssetData : Assets)
+	{
+		if (!IsClothLikeAssetClass(AssetData))
+		{
+			continue;
+		}
+
+		MatchedCount++;
+		const FString ClassName = AssetData.AssetClassPath.GetAssetName().ToString();
+		ClassCounts.FindOrAdd(ClassName)++;
+
+		if (Rows.Num() >= Limit)
+		{
+			continue;
+		}
+
+		auto Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("object_path"), AssetData.GetObjectPathString());
+		Row->SetStringField(TEXT("package_name"), AssetData.PackageName.ToString());
+		Row->SetStringField(TEXT("package_path"), AssetData.PackagePath.ToString());
+		Row->SetStringField(TEXT("asset_name"), AssetData.AssetName.ToString());
+		Row->SetStringField(TEXT("asset_class"), ClassName);
+		Row->SetStringField(TEXT("asset_class_path"), AssetData.AssetClassPath.ToString());
+		Row->SetBoolField(TEXT("loaded"), AssetData.IsAssetLoaded());
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	auto CountsJson = MakeShared<FJsonObject>();
+	for (const TPair<FString, int32>& Pair : ClassCounts)
+	{
+		CountsJson->SetNumberField(Pair.Key, Pair.Value);
+	}
+
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("cloth"));
+	Result->SetStringField(TEXT("domain"), TEXT("cloth_outfit_discovery"));
+	Result->SetStringField(TEXT("package_path"), PackagePath);
+	Result->SetNumberField(TEXT("matched_count"), MatchedCount);
+	Result->SetNumberField(TEXT("returned_count"), Rows.Num());
+	Result->SetNumberField(TEXT("limit"), Limit);
+	Result->SetBoolField(TEXT("truncated"), MatchedCount > Rows.Num());
+	Result->SetObjectField(TEXT("class_counts"), CountsJson);
+	Result->SetArrayField(TEXT("assets"), Rows);
+	return FMonolithActionResult::Success(Result);
 }
 
 // ---------------------------------------------------------------------------

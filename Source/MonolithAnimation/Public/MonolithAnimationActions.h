@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "MonolithToolRegistry.h"
@@ -78,6 +78,7 @@ public:
 	static FMonolithActionResult HandleGetSkeletonPreviewAttachedAssets(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetBoneRefPose(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetAbpInfo(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleGetLiveLinkStatus(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Wave 2: Notify CRUD (4) ---
 	static FMonolithActionResult HandleAddNotify(const TSharedPtr<FJsonObject>& Params);
