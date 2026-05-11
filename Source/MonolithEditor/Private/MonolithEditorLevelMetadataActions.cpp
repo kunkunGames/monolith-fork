@@ -155,7 +155,13 @@ FMonolithActionResult FMonolithEditorLevelMetadataActions::HandleExportMetadata(
 		return FMonolithActionResult::Error(TEXT("Failed to serialize level metadata"));
 	}
 
-	const FString LevelName = Metadata->GetStringField(TEXT("level_name"));
+	FString LevelName;
+	if (!Metadata->TryGetStringField(TEXT("level_name"), LevelName) || LevelName.IsEmpty())
+	{
+		FString Status;
+		Metadata->TryGetStringField(TEXT("status"), Status);
+		return FMonolithActionResult::Error(Status.IsEmpty() ? TEXT("Level metadata did not include level_name") : Status);
+	}
 	const FString BaseName = MakeSafeBaseName(LevelName);
 	const FString SummaryPath = FPaths::Combine(OutputDir, BaseName + TEXT("_meta.json"));
 	const FString ActorsPath = FPaths::Combine(OutputDir, BaseName + TEXT("_actors.ndjson"));
@@ -257,7 +263,9 @@ FMonolithActionResult FMonolithEditorLevelMetadataActions::HandleValidateMetadat
 		}
 	}
 
-	const bool bKindOk = Manifest->GetStringField(TEXT("kind")) == TEXT("monolith_level_metadata_manifest");
+	FString Kind;
+	const bool bKindOk = Manifest->TryGetStringField(TEXT("kind"), Kind)
+		&& Kind == TEXT("monolith_level_metadata_manifest");
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("valid"), bKindOk && MissingFiles.Num() == 0);
 	Result->SetBoolField(TEXT("kind_ok"), bKindOk);
