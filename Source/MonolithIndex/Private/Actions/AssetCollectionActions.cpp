@@ -20,13 +20,34 @@ namespace MonolithCollection
 		return Manager.GetProjectCollectionContainer();
 	}
 
-	static ECollectionShareType::Type ParseShareType(const FString& In)
+	static bool TryParseShareType(const FString& In, ECollectionShareType::Type& OutType, bool bAllowAll = false)
 	{
-		if (In.Equals(TEXT("private"), ESearchCase::IgnoreCase)) return ECollectionShareType::CST_Private;
-		if (In.Equals(TEXT("shared"), ESearchCase::IgnoreCase)) return ECollectionShareType::CST_Shared;
-		if (In.Equals(TEXT("system"), ESearchCase::IgnoreCase)) return ECollectionShareType::CST_System;
-		if (In.Equals(TEXT("all"), ESearchCase::IgnoreCase)) return ECollectionShareType::CST_All;
-		return ECollectionShareType::CST_Local;
+		if (In.IsEmpty() || In.Equals(TEXT("local"), ESearchCase::IgnoreCase))
+		{
+			OutType = ECollectionShareType::CST_Local;
+			return true;
+		}
+		if (In.Equals(TEXT("private"), ESearchCase::IgnoreCase))
+		{
+			OutType = ECollectionShareType::CST_Private;
+			return true;
+		}
+		if (In.Equals(TEXT("shared"), ESearchCase::IgnoreCase))
+		{
+			OutType = ECollectionShareType::CST_Shared;
+			return true;
+		}
+		if (In.Equals(TEXT("system"), ESearchCase::IgnoreCase))
+		{
+			OutType = ECollectionShareType::CST_System;
+			return true;
+		}
+		if (bAllowAll && In.Equals(TEXT("all"), ESearchCase::IgnoreCase))
+		{
+			OutType = ECollectionShareType::CST_All;
+			return true;
+		}
+		return false;
 	}
 
 	static ECollectionStorageMode::Type ParseStorageMode(const FString& In)
@@ -73,14 +94,23 @@ namespace MonolithCollection
 		return true;
 	}
 
-	static ECollectionShareType::Type GetShareType(const TSharedPtr<FJsonObject>& Params)
+	static bool GetShareType(const TSharedPtr<FJsonObject>& Params, ECollectionShareType::Type& OutType, FString& OutError, bool bAllowAll = false)
 	{
 		FString ShareType;
 		if (Params.IsValid())
 		{
-			Params->TryGetStringField(TEXT("share_type"), ShareType);
+			if (Params->HasField(TEXT("share_type")) && !Params->TryGetStringField(TEXT("share_type"), ShareType))
+			{
+				OutError = TEXT("share_type must be a string");
+				return false;
+			}
 		}
-		return ParseShareType(ShareType);
+		if (!TryParseShareType(ShareType, OutType, bAllowAll))
+		{
+			OutError = FString::Printf(TEXT("Invalid share_type: %s"), *ShareType);
+			return false;
+		}
+		return true;
 	}
 
 	static FString NormalizeObjectPath(const FString& InPath)
@@ -252,9 +282,16 @@ void FAssetCollectionActions::Register(FMonolithToolRegistry& Registry)
 FMonolithActionResult FAssetCollectionActions::ListCollections(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ShareTypeText;
-	Params->TryGetStringField(TEXT("share_type"), ShareTypeText);
+	if (Params.IsValid() && Params->HasField(TEXT("share_type")) && !Params->TryGetStringField(TEXT("share_type"), ShareTypeText))
+	{
+		return FMonolithActionResult::Error(TEXT("share_type must be a string"), -32602);
+	}
 	const bool bFilter = !ShareTypeText.IsEmpty() && !ShareTypeText.Equals(TEXT("all"), ESearchCase::IgnoreCase);
-	const ECollectionShareType::Type FilterType = MonolithCollection::ParseShareType(ShareTypeText);
+	ECollectionShareType::Type FilterType = ECollectionShareType::CST_All;
+	if (!MonolithCollection::TryParseShareType(ShareTypeText, FilterType, true))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid share_type: %s"), *ShareTypeText), -32602);
+	}
 
 	TArray<FCollectionNameType> Collections;
 	MonolithCollection::Container()->GetCollections(Collections);
@@ -283,7 +320,11 @@ FMonolithActionResult FAssetCollectionActions::GetCollection(const TSharedPtr<FJ
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
-	const ECollectionShareType::Type ShareType = MonolithCollection::GetShareType(Params);
+	ECollectionShareType::Type ShareType;
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	if (!MonolithCollection::Container()->CollectionExists(Name, ShareType))
 	{
 		return FMonolithActionResult::Error(TEXT("Collection does not exist"), -32602);
@@ -299,7 +340,11 @@ FMonolithActionResult FAssetCollectionActions::CreateCollection(const TSharedPtr
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
-	const ECollectionShareType::Type ShareType = MonolithCollection::GetShareType(Params);
+	ECollectionShareType::Type ShareType;
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	if (MonolithCollection::Container()->IsReadOnly(ShareType))
 	{
 		return MonolithCollection::MutatingReadOnlyError(ShareType);
@@ -326,7 +371,11 @@ FMonolithActionResult FAssetCollectionActions::DeleteCollection(const TSharedPtr
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
-	const ECollectionShareType::Type ShareType = MonolithCollection::GetShareType(Params);
+	ECollectionShareType::Type ShareType;
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	if (MonolithCollection::Container()->IsReadOnly(ShareType))
 	{
 		return MonolithCollection::MutatingReadOnlyError(ShareType);
@@ -362,7 +411,11 @@ FMonolithActionResult FAssetCollectionActions::AddAssets(const TSharedPtr<FJsonO
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
-	const ECollectionShareType::Type ShareType = MonolithCollection::GetShareType(Params);
+	ECollectionShareType::Type ShareType;
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	if (MonolithCollection::Container()->IsReadOnly(ShareType))
 	{
 		return MonolithCollection::MutatingReadOnlyError(ShareType);
@@ -396,7 +449,11 @@ FMonolithActionResult FAssetCollectionActions::RemoveAssets(const TSharedPtr<FJs
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
-	const ECollectionShareType::Type ShareType = MonolithCollection::GetShareType(Params);
+	ECollectionShareType::Type ShareType;
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	if (MonolithCollection::Container()->IsReadOnly(ShareType))
 	{
 		return MonolithCollection::MutatingReadOnlyError(ShareType);
@@ -433,7 +490,11 @@ FMonolithActionResult FAssetCollectionActions::ListAssets(const TSharedPtr<FJson
 	FString Recursive;
 	Params->TryGetStringField(TEXT("recursive"), Recursive);
 	TArray<FSoftObjectPath> Assets;
-	const ECollectionShareType::Type ShareType = MonolithCollection::GetShareType(Params);
+	ECollectionShareType::Type ShareType;
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	MonolithCollection::Container()->GetAssetsInCollection(Name, ShareType, Assets, MonolithCollection::ParseRecursion(Recursive));
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
@@ -464,7 +525,11 @@ FMonolithActionResult FAssetCollectionActions::ContainsAsset(const TSharedPtr<FJ
 	}
 	FString Recursive;
 	Params->TryGetStringField(TEXT("recursive"), Recursive);
-	const ECollectionShareType::Type ShareType = MonolithCollection::GetShareType(Params);
+	ECollectionShareType::Type ShareType;
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	FText ErrorText;
 	const bool bContains = MonolithCollection::Container()->IsObjectInCollection(
 		FSoftObjectPath(MonolithCollection::NormalizeObjectPath(AssetPath)), Name, ShareType, MonolithCollection::ParseRecursion(Recursive), &ErrorText);
@@ -493,7 +558,11 @@ FMonolithActionResult FAssetCollectionActions::SetDynamicQuery(const TSharedPtr<
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param: query_text"), -32602);
 	}
-	const ECollectionShareType::Type ShareType = MonolithCollection::GetShareType(Params);
+	ECollectionShareType::Type ShareType;
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	if (MonolithCollection::Container()->IsReadOnly(ShareType))
 	{
 		return MonolithCollection::MutatingReadOnlyError(ShareType);
@@ -517,7 +586,11 @@ FMonolithActionResult FAssetCollectionActions::GetDynamicQuery(const TSharedPtr<
 	}
 	FString QueryText;
 	FText ErrorText;
-	const ECollectionShareType::Type ShareType = MonolithCollection::GetShareType(Params);
+	ECollectionShareType::Type ShareType;
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	const bool bSuccess = MonolithCollection::Container()->GetDynamicQueryText(Name, ShareType, QueryText, &ErrorText);
 	if (!bSuccess)
 	{
@@ -537,7 +610,11 @@ FMonolithActionResult FAssetCollectionActions::SetCollectionColor(const TSharedP
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
-	const ECollectionShareType::Type ShareType = MonolithCollection::GetShareType(Params);
+	ECollectionShareType::Type ShareType;
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	if (MonolithCollection::Container()->IsReadOnly(ShareType))
 	{
 		return MonolithCollection::MutatingReadOnlyError(ShareType);
@@ -547,11 +624,21 @@ FMonolithActionResult FAssetCollectionActions::SetCollectionColor(const TSharedP
 	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("color"), ColorObj) && ColorObj && ColorObj->IsValid())
 	{
-		NewColor = FLinearColor(
-			(*ColorObj)->GetNumberField(TEXT("r")),
-			(*ColorObj)->GetNumberField(TEXT("g")),
-			(*ColorObj)->GetNumberField(TEXT("b")),
-			(*ColorObj)->HasField(TEXT("a")) ? (*ColorObj)->GetNumberField(TEXT("a")) : 1.0f);
+		double R = 0.0;
+		double G = 0.0;
+		double B = 0.0;
+		double A = 1.0;
+		if (!(*ColorObj)->TryGetNumberField(TEXT("r"), R)
+			|| !(*ColorObj)->TryGetNumberField(TEXT("g"), G)
+			|| !(*ColorObj)->TryGetNumberField(TEXT("b"), B))
+		{
+			return FMonolithActionResult::Error(TEXT("color must contain numeric r, g, and b fields"), -32602);
+		}
+		if ((*ColorObj)->HasField(TEXT("a")) && !(*ColorObj)->TryGetNumberField(TEXT("a"), A))
+		{
+			return FMonolithActionResult::Error(TEXT("color.a must be numeric"), -32602);
+		}
+		NewColor = FLinearColor(static_cast<float>(R), static_cast<float>(G), static_cast<float>(B), static_cast<float>(A));
 	}
 	FText ErrorText;
 	const bool bSuccess = MonolithCollection::Container()->SetCollectionColor(Name, ShareType, NewColor, &ErrorText);
@@ -571,7 +658,11 @@ FMonolithActionResult FAssetCollectionActions::ValidateCollectionName(const TSha
 		return FMonolithActionResult::Error(Error, -32602);
 	}
 	FText ErrorText;
-	const ECollectionShareType::Type ShareType = MonolithCollection::GetShareType(Params);
+	ECollectionShareType::Type ShareType;
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	const bool bValid = MonolithCollection::Container()->IsValidCollectionName(Name.ToString(), ShareType, &ErrorText);
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("name"), Name.ToString());
@@ -591,7 +682,12 @@ FMonolithActionResult FAssetCollectionActions::CreateUniqueCollectionName(const 
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or empty required param: base_name"), -32602);
 	}
-	const ECollectionShareType::Type ShareType = MonolithCollection::GetShareType(Params);
+	FString Error;
+	ECollectionShareType::Type ShareType;
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	FName UniqueName;
 	MonolithCollection::Container()->CreateUniqueCollectionName(FName(*BaseName), ShareType, UniqueName);
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
