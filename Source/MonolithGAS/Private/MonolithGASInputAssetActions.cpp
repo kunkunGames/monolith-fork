@@ -879,6 +879,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleValidateInputMappings
 	TArray<TSharedPtr<FJsonValue>> ContextResults;
 	int32 ConflictCount = 0;
 	int32 MissingActionCount = 0;
+	int32 ContextLoadFailureCount = 0;
 
 	for (const FString& ContextPath : ContextPaths)
 	{
@@ -888,6 +889,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleValidateInputMappings
 		ContextResult->SetStringField(TEXT("context_path"), ContextPath);
 		if (!Context)
 		{
+			ContextLoadFailureCount++;
 			ContextResult->SetBoolField(TEXT("valid"), false);
 			ContextResult->SetStringField(TEXT("error"), Error);
 			ContextResults.Add(MakeShared<FJsonValueObject>(ContextResult));
@@ -947,8 +949,9 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleValidateInputMappings
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("valid"), ConflictCount == 0 && MissingActionCount == 0);
+	Result->SetBoolField(TEXT("valid"), ConflictCount == 0 && MissingActionCount == 0 && ContextLoadFailureCount == 0);
 	Result->SetNumberField(TEXT("contexts_checked"), ContextPaths.Num());
+	Result->SetNumberField(TEXT("context_load_failures"), ContextLoadFailureCount);
 	Result->SetNumberField(TEXT("conflicts"), ConflictCount);
 	Result->SetNumberField(TEXT("missing_actions"), MissingActionCount);
 	Result->SetArrayField(TEXT("contexts"), ContextResults);
