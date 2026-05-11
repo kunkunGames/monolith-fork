@@ -5,6 +5,7 @@
 #include "MonolithLogicDriverComponentActions.h"
 #include "MonolithLogicDriverNodeActions.h"
 #include "MonolithLogicDriverScaffoldActions.h"
+#include "MonolithLogicDriverSpecActions.h"
 
 #if WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
 

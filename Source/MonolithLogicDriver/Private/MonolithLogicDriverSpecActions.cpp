@@ -176,6 +176,47 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 	}
 	TSharedPtr<FJsonObject> Spec = *SpecPtr;
 
+	if (Spec->HasField(TEXT("states")))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* StatesPtr = nullptr;
+		if (!Spec->TryGetArrayField(TEXT("states"), StatesPtr) || !StatesPtr)
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'states' must be an array"));
+		}
+		for (const TSharedPtr<FJsonValue>& StateVal : *StatesPtr)
+		{
+			const TSharedPtr<FJsonObject>* StateObjPtr = nullptr;
+			if (!StateVal.IsValid() || !StateVal->TryGetObject(StateObjPtr) || !StateObjPtr || !(*StateObjPtr).IsValid())
+			{
+				continue;
+			}
+			const TSharedPtr<FJsonObject>& StateObj = *StateObjPtr;
+			bool bFlag = false;
+			if (StateObj->HasField(TEXT("is_initial")) && !StateObj->TryGetBoolField(TEXT("is_initial"), bFlag))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'is_initial' must be a boolean"));
+			}
+			if (StateObj->HasField(TEXT("is_end")) && !StateObj->TryGetBoolField(TEXT("is_end"), bFlag))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'is_end' must be a boolean"));
+			}
+		}
+	}
+
+	const TCHAR* ArrayFieldNames[] = { TEXT("conduits"), TEXT("nested_sms"), TEXT("transitions") };
+	for (const TCHAR* FieldName : ArrayFieldNames)
+	{
+		if (Spec->HasField(FieldName))
+		{
+			const TArray<TSharedPtr<FJsonValue>>* ArrayPtr = nullptr;
+			if (!Spec->TryGetArrayField(FieldName, ArrayPtr) || !ArrayPtr)
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(TEXT("Invalid param: '%s' must be an array"), FieldName));
+			}
+		}
+	}
+
 	// ── 1. Create SM Blueprint via factory ──
 	UClass* FactoryClass = MonolithLD::GetSMBlueprintFactoryClass();
 	if (!FactoryClass)
