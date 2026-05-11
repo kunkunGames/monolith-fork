@@ -438,7 +438,7 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
 1. On editor startup (5s delay), checks `api.github.com/repos/tumourlove/monolith/releases/latest`
 2. Compares `tag_name` semver against compiled `MONOLITH_VERSION`
 3. If newer: shows a dialog window with full release notes + "Install Update" / "Remind Me Later"
-4. Downloads the zip and verifies the SHA256 hash against the release notes marker before staging to `Saved/Monolith/Staging/` (NOT Plugins/ — would cause UBT conflicts)
+4. Downloads the zip, verifies the SHA256 hash before staging when the release notes marker is present, and logs a warning while staging without an integrity check when the marker is missing (`Saved/Monolith/Staging/`, NOT Plugins/ — would cause UBT conflicts)
 5. On editor exit, a detached swap script runs:
    - Polls `tasklist` for `UnrealEditor.exe` until it's gone (120s timeout)
    - Asks for user confirmation (Y/N)
