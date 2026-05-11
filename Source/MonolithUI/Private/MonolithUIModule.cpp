@@ -21,6 +21,7 @@
 // spring bake, animation event tracks + delegate bindings, rounded corners,
 // box shadow compositor, gradient MID factory).
 #include "Actions/Hoisted/TextureIngestActions.h"
+#include "Actions/Hoisted/ImageGenerationActions.h"
 #include "Actions/Hoisted/FontIngestActions.h"
 #include "Actions/Hoisted/AnimationCoreActions.h"
 #include "Actions/Hoisted/AnimationEventActions.h"
@@ -75,6 +76,7 @@ void FMonolithUIModule::StartupModule()
 
     // Hoisted action set -- generic verbs registered under the ui:: namespace.
     MonolithUI::FTextureIngestActions::Register(Registry);
+    MonolithUI::FImageGenerationActions::Register(Registry);
     MonolithUI::FFontIngestActions::Register(Registry);
     MonolithUI::FAnimationCoreActions::Register(Registry);
     MonolithUI::FAnimationEventActions::Register(Registry);
@@ -161,6 +163,7 @@ void FMonolithUIModule::ShutdownModule()
     }
 
     FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("ui"));
+    FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("generate"));
 
 #if WITH_COMMONUI
     // Phase G — release cached UClass strong-refs before the module DLL
