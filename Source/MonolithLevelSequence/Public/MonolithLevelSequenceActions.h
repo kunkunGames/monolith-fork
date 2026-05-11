@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "MonolithToolRegistry.h"
@@ -16,6 +16,19 @@ public:
 
 	// --- Action handlers ---
 	static FMonolithActionResult Ping(const TSharedPtr<FJsonObject>& Params);
+
+	/**
+	 * Report editor/PIE replay readiness and the project-local Saved replay/demo
+	 * folders that Monolith will inspect. This is intentionally read-only.
+	 */
+	static FMonolithActionResult GetReplayStatus(const TSharedPtr<FJsonObject>& Params);
+
+	/**
+	 * List project-local saved replay/demo containers and optional file metadata
+	 * from Saved/Demos, Saved/Replays, and Saved/Replay without streaming file
+	 * contents or touching paths outside the project Saved directory.
+	 */
+	static FMonolithActionResult ListSavedReplays(const TSharedPtr<FJsonObject>& Params);
 
 	/**
 	 * List all Level Sequences that have a Director Blueprint, with the

@@ -1,4 +1,4 @@
-#include "MonolithLevelSequenceActions.h"
+﻿#include "MonolithLevelSequenceActions.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithIndexSubsystem.h"
@@ -7,8 +7,203 @@
 #include "Editor.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/World.h"
+#include "HAL/FileManager.h"
+#include "Misc/Paths.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonReader.h"
+
+namespace
+{
+	constexpr int32 MaxReplayRows = 500;
+
+	FString NormalizeJsonPath(FString Path)
+	{
+		FPaths::NormalizeFilename(Path);
+		return Path;
+	}
+
+	FString SavedRelativePath(const FString& Path)
+	{
+		const FString SavedRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir());
+		FString AbsolutePath = FPaths::ConvertRelativePathToFull(Path);
+		FString RelativePath = AbsolutePath;
+		if (FPaths::MakePathRelativeTo(RelativePath, *SavedRoot))
+		{
+			return NormalizeJsonPath(RelativePath);
+		}
+		return TEXT("<outside_project_saved>");
+	}
+
+	TArray<FString> GetReplaySearchRoots()
+	{
+		const FString SavedRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir());
+		return {
+			FPaths::Combine(SavedRoot, TEXT("Demos")),
+			FPaths::Combine(SavedRoot, TEXT("Replays")),
+			FPaths::Combine(SavedRoot, TEXT("Replay"))
+		};
+	}
+
+	FString WorldTypeToString(EWorldType::Type WorldType)
+	{
+		switch (WorldType)
+		{
+		case EWorldType::None: return TEXT("None");
+		case EWorldType::Game: return TEXT("Game");
+		case EWorldType::Editor: return TEXT("Editor");
+		case EWorldType::PIE: return TEXT("PIE");
+		case EWorldType::EditorPreview: return TEXT("EditorPreview");
+		case EWorldType::GamePreview: return TEXT("GamePreview");
+		case EWorldType::GameRPC: return TEXT("GameRPC");
+		case EWorldType::Inactive: return TEXT("Inactive");
+		default: return TEXT("Unknown");
+		}
+	}
+
+	TSharedPtr<FJsonObject> MakeWorldJson(const TCHAR* Label, const UWorld* World)
+	{
+		auto Json = MakeShared<FJsonObject>();
+		Json->SetStringField(TEXT("label"), Label);
+		Json->SetBoolField(TEXT("available"), World != nullptr);
+		if (World)
+		{
+			Json->SetStringField(TEXT("name"), World->GetName());
+			Json->SetStringField(TEXT("world_type"), WorldTypeToString(World->WorldType));
+			Json->SetBoolField(TEXT("is_game_world"), World->IsGameWorld());
+			Json->SetBoolField(TEXT("is_paused"), World->IsPaused());
+		}
+		return Json;
+	}
+
+	TSharedPtr<FJsonObject> MakeReplayRootJson(const FString& Root)
+	{
+		auto Json = MakeShared<FJsonObject>();
+		Json->SetStringField(TEXT("name"), FPaths::GetPathLeaf(Root));
+		Json->SetStringField(TEXT("saved_relative_path"), SavedRelativePath(Root));
+		Json->SetBoolField(TEXT("exists"), IFileManager::Get().DirectoryExists(*Root));
+		return Json;
+	}
+
+	void AddReplayRootStatusRows(TArray<TSharedPtr<FJsonValue>>& OutRows)
+	{
+		for (const FString& Root : GetReplaySearchRoots())
+		{
+			OutRows.Add(MakeShared<FJsonValueObject>(MakeReplayRootJson(Root)));
+		}
+	}
+
+	void AddReplayContainerRows(
+		const FString& Root,
+		int32 Limit,
+		TSet<FString>& SeenPaths,
+		TArray<TSharedPtr<FJsonValue>>& OutRows)
+	{
+		if (!IFileManager::Get().DirectoryExists(*Root) || OutRows.Num() >= Limit)
+		{
+			return;
+		}
+
+		TArray<FString> DirectoryNames;
+		IFileManager::Get().FindFiles(DirectoryNames, *(Root / TEXT("*")), false, true);
+		DirectoryNames.Sort();
+
+		for (const FString& DirectoryName : DirectoryNames)
+		{
+			if (OutRows.Num() >= Limit)
+			{
+				return;
+			}
+
+			const FString DirectoryPath = FPaths::Combine(Root, DirectoryName);
+			FString Normalized = FPaths::ConvertRelativePathToFull(DirectoryPath);
+			FPaths::NormalizeDirectoryName(Normalized);
+			if (SeenPaths.Contains(Normalized))
+			{
+				continue;
+			}
+			SeenPaths.Add(Normalized);
+
+			TArray<FString> ContainedFiles;
+			IFileManager::Get().FindFilesRecursive(ContainedFiles, *DirectoryPath, TEXT("*"), true, false);
+
+			int64 TotalBytes = 0;
+			for (const FString& File : ContainedFiles)
+			{
+				const int64 FileBytes = IFileManager::Get().FileSize(*File);
+				if (FileBytes > 0)
+				{
+					TotalBytes += FileBytes;
+				}
+			}
+
+			auto Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("kind"), TEXT("replay_container"));
+			Row->SetStringField(TEXT("name"), DirectoryName);
+			Row->SetStringField(TEXT("saved_relative_path"), SavedRelativePath(DirectoryPath));
+			Row->SetNumberField(TEXT("file_count"), static_cast<double>(ContainedFiles.Num()));
+			Row->SetNumberField(TEXT("total_size_bytes"), static_cast<double>(TotalBytes));
+			OutRows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+	}
+
+	void AddReplayFileRows(
+		const FString& Root,
+		bool bIncludeNestedFiles,
+		int32 Limit,
+		TSet<FString>& SeenPaths,
+		TArray<TSharedPtr<FJsonValue>>& OutRows)
+	{
+		if (!IFileManager::Get().DirectoryExists(*Root) || OutRows.Num() >= Limit)
+		{
+			return;
+		}
+
+		TArray<FString> Files;
+		if (bIncludeNestedFiles)
+		{
+			IFileManager::Get().FindFilesRecursive(Files, *Root, TEXT("*"), true, false);
+		}
+		else
+		{
+			TArray<FString> FileNames;
+			IFileManager::Get().FindFiles(FileNames, *(Root / TEXT("*")), true, false);
+			for (const FString& FileName : FileNames)
+			{
+				Files.Add(FPaths::Combine(Root, FileName));
+			}
+		}
+		Files.Sort();
+
+		for (const FString& File : Files)
+		{
+			if (OutRows.Num() >= Limit)
+			{
+				return;
+			}
+
+			FString Normalized = FPaths::ConvertRelativePathToFull(File);
+			FPaths::NormalizeFilename(Normalized);
+			if (SeenPaths.Contains(Normalized))
+			{
+				continue;
+			}
+			SeenPaths.Add(Normalized);
+
+			const int64 FileBytes = IFileManager::Get().FileSize(*File);
+			const FDateTime Timestamp = IFileManager::Get().GetTimeStamp(*File);
+
+			auto Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("kind"), TEXT("replay_file"));
+			Row->SetStringField(TEXT("name"), FPaths::GetCleanFilename(File));
+			Row->SetStringField(TEXT("extension"), FPaths::GetExtension(File).ToLower());
+			Row->SetStringField(TEXT("saved_relative_path"), SavedRelativePath(File));
+			Row->SetNumberField(TEXT("size_bytes"), static_cast<double>(FileBytes));
+			Row->SetStringField(TEXT("modified_utc"), Timestamp.ToIso8601());
+			OutRows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+	}
+}
 
 // ============================================================================
 // Registration
@@ -20,6 +215,20 @@ void FMonolithLevelSequenceActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Smoke test — returns {status:ok, module:MonolithLevelSequence} when the module is loaded."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelSequenceActions::Ping),
 		FParamSchemaBuilder().Build());
+
+	Registry.RegisterAction(TEXT("level_sequence"), TEXT("get_replay_status"),
+		TEXT("Report editor/PIE replay readiness and the project-local Saved replay/demo folders inspected by Monolith. Read-only; runtime recording/playback controls remain future guarded work."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelSequenceActions::GetReplayStatus),
+		FParamSchemaBuilder().Build());
+
+	Registry.RegisterAction(TEXT("level_sequence"), TEXT("list_saved_replays"),
+		TEXT("List project-local saved replay/demo containers and optional file metadata from Saved/Demos, Saved/Replays, and Saved/Replay. File bytes are never returned."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelSequenceActions::ListSavedReplays),
+		FParamSchemaBuilder()
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum rows to return, clamped to 1..500. Default: 100."))
+			.Optional(TEXT("include_files"), TEXT("boolean"), TEXT("When true, include bounded replay/demo file metadata rows in addition to top-level replay containers. Default: false."))
+			.Optional(TEXT("include_nested_files"), TEXT("boolean"), TEXT("When include_files is true, include files under replay container subdirectories. Default: true."))
+			.Build());
 
 	Registry.RegisterAction(TEXT("level_sequence"), TEXT("list_directors"),
 		TEXT("List all Level Sequences that have a Director Blueprint, with director name and function/variable counts. Optional asset_path_filter is a glob pattern (* and ?) matched against ls_path."),
@@ -83,6 +292,86 @@ FMonolithActionResult FMonolithLevelSequenceActions::Ping(const TSharedPtr<FJson
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("status"), TEXT("ok"));
 	Result->SetStringField(TEXT("module"), TEXT("MonolithLevelSequence"));
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLevelSequenceActions::GetReplayStatus(const TSharedPtr<FJsonObject>& Params)
+{
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("level_sequence"));
+	Result->SetStringField(TEXT("domain"), TEXT("replay_saved_inspection"));
+	Result->SetStringField(TEXT("mode"), TEXT("read_only"));
+	Result->SetBoolField(TEXT("runtime_controls_available"), false);
+	Result->SetBoolField(TEXT("saved_replay_listing_available"), true);
+
+	TArray<TSharedPtr<FJsonValue>> Worlds;
+	const UWorld* EditorWorld = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	const UWorld* PlayWorld = GEditor ? GEditor->PlayWorld : nullptr;
+	Worlds.Add(MakeShared<FJsonValueObject>(MakeWorldJson(TEXT("editor_world"), EditorWorld)));
+	Worlds.Add(MakeShared<FJsonValueObject>(MakeWorldJson(TEXT("play_world"), PlayWorld)));
+	Result->SetArrayField(TEXT("world_contexts"), Worlds);
+	Result->SetBoolField(TEXT("pie_active"), PlayWorld != nullptr);
+
+	TArray<TSharedPtr<FJsonValue>> Roots;
+	AddReplayRootStatusRows(Roots);
+	Result->SetArrayField(TEXT("replay_roots"), Roots);
+
+	TArray<TSharedPtr<FJsonValue>> ImplementedActions;
+	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("level_sequence.get_replay_status")));
+	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("level_sequence.list_saved_replays")));
+	Result->SetArrayField(TEXT("implemented_actions"), ImplementedActions);
+
+	TArray<TSharedPtr<FJsonValue>> PlannedActions;
+	PlannedActions.Add(MakeShared<FJsonValueString>(TEXT("replay.start_recording")));
+	PlannedActions.Add(MakeShared<FJsonValueString>(TEXT("replay.stop_recording")));
+	PlannedActions.Add(MakeShared<FJsonValueString>(TEXT("replay.play")));
+	PlannedActions.Add(MakeShared<FJsonValueString>(TEXT("replay.delete_replay")));
+	Result->SetArrayField(TEXT("planned_guarded_runtime_actions"), PlannedActions);
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLevelSequenceActions::ListSavedReplays(const TSharedPtr<FJsonObject>& Params)
+{
+	double RequestedLimit = 100.0;
+	Params->TryGetNumberField(TEXT("limit"), RequestedLimit);
+	const int32 Limit = FMath::Clamp(static_cast<int32>(RequestedLimit), 1, MaxReplayRows);
+
+	bool bIncludeFiles = false;
+	Params->TryGetBoolField(TEXT("include_files"), bIncludeFiles);
+
+	bool bIncludeNestedFiles = true;
+	Params->TryGetBoolField(TEXT("include_nested_files"), bIncludeNestedFiles);
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	TSet<FString> SeenPaths;
+
+	for (const FString& Root : GetReplaySearchRoots())
+	{
+		AddReplayContainerRows(Root, Limit, SeenPaths, Rows);
+		if (bIncludeFiles)
+		{
+			AddReplayFileRows(Root, bIncludeNestedFiles, Limit, SeenPaths, Rows);
+		}
+		if (Rows.Num() >= Limit)
+		{
+			break;
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Roots;
+	AddReplayRootStatusRows(Roots);
+
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("level_sequence"));
+	Result->SetStringField(TEXT("mode"), TEXT("read_only"));
+	Result->SetNumberField(TEXT("limit"), Limit);
+	Result->SetBoolField(TEXT("include_files"), bIncludeFiles);
+	Result->SetBoolField(TEXT("include_nested_files"), bIncludeNestedFiles);
+	Result->SetBoolField(TEXT("truncated"), Rows.Num() >= Limit);
+	Result->SetArrayField(TEXT("replay_roots"), Roots);
+	Result->SetArrayField(TEXT("replays"), Rows);
+	Result->SetNumberField(TEXT("count"), Rows.Num());
 	return FMonolithActionResult::Success(Result);
 }
 

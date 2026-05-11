@@ -1,6 +1,7 @@
 #include "MonolithLevelSequenceModule.h"
 #include "MonolithLevelSequenceActions.h"
 #include "MonolithLevelSequenceIndexer.h"
+#include "MonolithMovieRenderQueueActions.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithSettings.h"
 #include "MonolithIndexSubsystem.h"
@@ -19,8 +20,10 @@ void FMonolithLevelSequenceModule::StartupModule()
 	if (Settings->bEnableLevelSequence)
 	{
 		FMonolithLevelSequenceActions::RegisterActions(FMonolithToolRegistry::Get());
+		FMonolithMovieRenderQueueActions::RegisterActions(FMonolithToolRegistry::Get());
 		const int32 ActionCount = FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("level_sequence"));
-		UE_LOG(LogMonolithLevelSequence, Log, TEXT("MonolithLevelSequence: Loaded (%d actions)"), ActionCount);
+		const int32 MovieRenderActionCount = FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("movie_render"));
+		UE_LOG(LogMonolithLevelSequence, Log, TEXT("MonolithLevelSequence: Loaded (%d level_sequence actions, %d movie_render actions)"), ActionCount, MovieRenderActionCount);
 	}
 
 	if (Settings->bIndexLevelSequences)
@@ -48,6 +51,7 @@ void FMonolithLevelSequenceModule::ShutdownModule()
 	}
 
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("level_sequence"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("movie_render"));
 }
 
 #undef LOCTEXT_NAMESPACE
