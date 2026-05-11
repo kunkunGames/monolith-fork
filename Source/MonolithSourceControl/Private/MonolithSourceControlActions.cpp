@@ -457,7 +457,7 @@ FMonolithActionResult FMonolithSourceControlActions::HandleCheckoutOrAdd(const T
 			Decision->SetStringField(TEXT("planned_action"), TEXT("skip"));
 			Decision->SetStringField(TEXT("reason"), TEXT("already checked out or added"));
 		}
-		else if (!State.IsValid() || !State->IsSourceControlled() || State->CanAdd())
+		else if (!State.IsValid() || (!State->IsSourceControlled() && State->CanAdd()))
 		{
 			Decision->SetStringField(TEXT("planned_action"), TEXT("add"));
 			FilesToAdd.Add(File);
