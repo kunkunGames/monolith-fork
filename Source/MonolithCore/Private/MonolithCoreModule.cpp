@@ -4,6 +4,7 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithCoreTools.h"
+#include "MonolithToolProfileActions.h"
 #include "MonolithCrashBreadcrumb.h"
 #include "Misc/FileHelper.h"
 #include "GenericPlatform/GenericPlatformProcess.h"
@@ -84,6 +85,7 @@ void FMonolithCoreModule::ShutdownModule()
 void FMonolithCoreModule::RegisterCoreTools()
 {
 	FMonolithCoreTools::RegisterAll();
+	FMonolithToolProfileActions::RegisterAll();
 }
 
 FString FMonolithCoreModule::GetSentinelFilePath() const

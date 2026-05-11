@@ -2,6 +2,7 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithCrashBreadcrumb.h"
+#include "MonolithToolProfileManager.h"
 #include "HAL/PlatformMisc.h"
 
 // =============================================================================
@@ -255,6 +256,16 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		return R;
 	}
 
+	if (!FMonolithToolProfileManager::Get().IsActionAllowed(Namespace, Action))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Action '%s.%s' is disabled by the active Monolith tool profile '%s'."),
+				*Namespace,
+				*Action,
+				*FMonolithToolProfileManager::Get().GetActiveProfileId()),
+			FMonolithJsonUtils::ErrInvalidRequest);
+	}
+
 	if (!RegAction->Handler.IsBound())
 	{
 		return FMonolithActionResult::Error(
@@ -407,7 +418,22 @@ TArray<FString> FMonolithToolRegistry::GetNamespaces() const
 {
 	FScopeLock Lock(&RegistryLock);
 	TArray<FString> Result;
-	NamespaceActions.GetKeys(Result);
+	FMonolithToolProfileManager& Profiles = FMonolithToolProfileManager::Get();
+	for (const auto& Pair : NamespaceActions)
+	{
+		const FString& Namespace = Pair.Key;
+		for (const FString& Key : Pair.Value)
+		{
+			if (const FRegisteredAction* RegAction = Actions.Find(Key))
+			{
+				if (Profiles.IsActionAllowed(Namespace, RegAction->Info.Action))
+				{
+					Result.Add(Namespace);
+					break;
+				}
+			}
+		}
+	}
 	return Result;
 }
 
@@ -419,11 +445,15 @@ TArray<FMonolithActionInfo> FMonolithToolRegistry::GetActions(const FString& Nam
 	if (const TArray<FString>* Keys = NamespaceActions.Find(Namespace))
 	{
 		Result.Reserve(Keys->Num());
+		FMonolithToolProfileManager& Profiles = FMonolithToolProfileManager::Get();
 		for (const FString& Key : *Keys)
 		{
 			if (const FRegisteredAction* RegAction = Actions.Find(Key))
 			{
-				Result.Add(RegAction->Info);
+				if (Profiles.IsActionAllowed(Namespace, RegAction->Info.Action))
+				{
+					Result.Add(Profiles.ApplyDescriptionOverride(RegAction->Info));
+				}
 			}
 		}
 	}
@@ -438,11 +468,15 @@ TArray<FString> FMonolithToolRegistry::GetActionNames(const FString& Namespace) 
 	if (const TArray<FString>* Keys = NamespaceActions.Find(Namespace))
 	{
 		Result.Reserve(Keys->Num());
+		FMonolithToolProfileManager& Profiles = FMonolithToolProfileManager::Get();
 		for (const FString& Key : *Keys)
 		{
 			if (const FRegisteredAction* RegAction = Actions.Find(Key))
 			{
-				Result.Add(RegAction->Info.Action);
+				if (Profiles.IsActionAllowed(Namespace, RegAction->Info.Action))
+				{
+					Result.Add(RegAction->Info.Action);
+				}
 			}
 		}
 	}
@@ -454,9 +488,14 @@ TArray<FMonolithActionInfo> FMonolithToolRegistry::GetAllActions() const
 	FScopeLock Lock(&RegistryLock);
 	TArray<FMonolithActionInfo> Result;
 	Result.Reserve(Actions.Num());
+	FMonolithToolProfileManager& Profiles = FMonolithToolProfileManager::Get();
 	for (const auto& Pair : Actions)
 	{
-		Result.Add(Pair.Value.Info);
+		const FMonolithActionInfo& Info = Pair.Value.Info;
+		if (Profiles.IsActionAllowed(Info.Namespace, Info.Action))
+		{
+			Result.Add(Profiles.ApplyDescriptionOverride(Info));
+		}
 	}
 	return Result;
 }
@@ -467,16 +506,49 @@ bool FMonolithToolRegistry::HasAction(const FString& Namespace, const FString& A
 	return Actions.Contains(MakeKey(Namespace, Action));
 }
 
+bool FMonolithToolRegistry::HasNamespace(const FString& Namespace) const
+{
+	FScopeLock Lock(&RegistryLock);
+	return NamespaceActions.Contains(Namespace);
+}
+
 int32 FMonolithToolRegistry::GetActionCount() const
 {
 	FScopeLock Lock(&RegistryLock);
-	return Actions.Num();
+	int32 Count = 0;
+	FMonolithToolProfileManager& Profiles = FMonolithToolProfileManager::Get();
+	for (const auto& Pair : Actions)
+	{
+		const FMonolithActionInfo& Info = Pair.Value.Info;
+		if (Profiles.IsActionAllowed(Info.Namespace, Info.Action))
+		{
+			++Count;
+		}
+	}
+	return Count;
 }
 
 int32 FMonolithToolRegistry::GetNamespaceCount() const
 {
 	FScopeLock Lock(&RegistryLock);
-	return NamespaceActions.Num();
+	int32 Count = 0;
+	FMonolithToolProfileManager& Profiles = FMonolithToolProfileManager::Get();
+	for (const auto& Pair : NamespaceActions)
+	{
+		const FString& Namespace = Pair.Key;
+		for (const FString& Key : Pair.Value)
+		{
+			if (const FRegisteredAction* RegAction = Actions.Find(Key))
+			{
+				if (Profiles.IsActionAllowed(Namespace, RegAction->Info.Action))
+				{
+					++Count;
+					break;
+				}
+			}
+		}
+	}
+	return Count;
 }
 
 int32 FMonolithToolRegistry::GetNamespaceActionCount(const FString& Namespace) const
@@ -484,7 +556,19 @@ int32 FMonolithToolRegistry::GetNamespaceActionCount(const FString& Namespace) c
 	FScopeLock Lock(&RegistryLock);
 	if (const TArray<FString>* Keys = NamespaceActions.Find(Namespace))
 	{
-		return Keys->Num();
+		int32 Count = 0;
+		FMonolithToolProfileManager& Profiles = FMonolithToolProfileManager::Get();
+		for (const FString& Key : *Keys)
+		{
+			if (const FRegisteredAction* RegAction = Actions.Find(Key))
+			{
+				if (Profiles.IsActionAllowed(Namespace, RegAction->Info.Action))
+				{
+					++Count;
+				}
+			}
+		}
+		return Count;
 	}
 	return 0;
 }
@@ -511,7 +595,10 @@ TArray<FString> FMonolithToolRegistry::FindSimilarActions(const FString& Namespa
 		{
 			if (const FRegisteredAction* Reg = Actions.Find(Key))
 			{
-				Candidates.Add(Reg->Info.Action);
+				if (FMonolithToolProfileManager::Get().IsActionAllowed(Namespace, Reg->Info.Action))
+				{
+					Candidates.Add(Reg->Info.Action);
+				}
 			}
 		}
 	}
