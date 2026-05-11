@@ -755,6 +755,7 @@ bool FLevelSequenceIndexer::IndexAsset(const FAssetData& AssetData, UObject* Loa
 	// so InsertEventBindingRow can opportunistically populate fires_function_id
 	// inline when both function and binding sit in the same IndexAsset call).
 	TMap<FName, int64> FuncNameToId;
+	FuncNameToId.Reserve(TotalFuncCount);
 	for (const FFnRecord& Fn : Functions)
 	{
 		FSQLitePreparedStatement Stmt;
