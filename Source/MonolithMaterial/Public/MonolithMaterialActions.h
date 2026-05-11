@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "MonolithToolRegistry.h"
@@ -104,6 +104,10 @@ public:
 	static FMonolithActionResult PreviewTexture(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult PreviewTextures(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult CheckTilingQuality(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Optional Paper2D discovery (texture/atlas-adjacent) ---
+	static FMonolithActionResult GetPaper2DStatus(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ListPaper2DAssets(const TSharedPtr<FJsonObject>& Params);
 
 private:
 	/** Load a UMaterial from an asset path. Returns nullptr on failure. */
