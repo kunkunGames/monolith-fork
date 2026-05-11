@@ -18,7 +18,8 @@ public class MonolithConfig : ModuleRules
 			"MonolithCore",
 			"UnrealEd",
 			"Json",
-			"JsonUtilities"
+			"JsonUtilities",
+			"Projects"
 		});
 	}
 }

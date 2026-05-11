@@ -7,7 +7,9 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "HAL/PlatformProperties.h"
+#include "Interfaces/IPluginManager.h"
 
 // ============================================================================
 // Registration
@@ -63,6 +65,38 @@ void FMonolithConfigActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&FMonolithConfigActions::GetConfigFiles),
 		FParamSchemaBuilder()
 			.Optional(TEXT("category"), TEXT("string"), TEXT("Filter to a specific category"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("config"), TEXT("list_plugins"),
+		TEXT("List discovered plugins with enabled state and descriptor metadata. Read-only."),
+		FMonolithActionHandler::CreateStatic(&FMonolithConfigActions::ListPlugins),
+		FParamSchemaBuilder()
+			.Optional(TEXT("name_contains"), TEXT("string"), TEXT("Case-insensitive plugin name substring filter"))
+			.Optional(TEXT("enabled_only"), TEXT("bool"), TEXT("Only return enabled plugins"), TEXT("false"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max plugins to return"), TEXT("200"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("config"), TEXT("get_plugin"),
+		TEXT("Get descriptor metadata for one discovered plugin. Read-only."),
+		FMonolithActionHandler::CreateStatic(&FMonolithConfigActions::GetPlugin),
+		FParamSchemaBuilder()
+			.Required(TEXT("name"), TEXT("string"), TEXT("Plugin name"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("config"), TEXT("get_cvar"),
+		TEXT("Get one console variable value and flags. Read-only."),
+		FMonolithActionHandler::CreateStatic(&FMonolithConfigActions::GetCVar),
+		FParamSchemaBuilder()
+			.Required(TEXT("name"), TEXT("string"), TEXT("Console variable name"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("config"), TEXT("find_cvars"),
+		TEXT("Find console variables by prefix or substring. Read-only."),
+		FMonolithActionHandler::CreateStatic(&FMonolithConfigActions::FindCVars),
+		FParamSchemaBuilder()
+			.Optional(TEXT("query"), TEXT("string"), TEXT("Prefix or substring to search for"))
+			.Optional(TEXT("mode"), TEXT("string"), TEXT("prefix (default) or contains"), TEXT("prefix"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max CVars to return"), TEXT("100"))
 			.Build());
 }
 
@@ -128,6 +162,46 @@ TArray<TPair<FString, FString>> FMonolithConfigActions::GetConfigHierarchy(const
 	}
 
 	return Hierarchy;
+}
+
+namespace
+{
+	TSharedPtr<FJsonObject> PluginToJson(const TSharedRef<IPlugin>& Plugin)
+	{
+		const FPluginDescriptor& Descriptor = Plugin->GetDescriptor();
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), Plugin->GetName());
+		Obj->SetStringField(TEXT("friendly_name"), Descriptor.FriendlyName);
+		Obj->SetStringField(TEXT("description"), Descriptor.Description);
+		Obj->SetStringField(TEXT("category"), Descriptor.Category);
+		Obj->SetStringField(TEXT("version_name"), Descriptor.VersionName);
+		Obj->SetNumberField(TEXT("version"), Descriptor.Version);
+		Obj->SetBoolField(TEXT("enabled"), Plugin->IsEnabled());
+		Obj->SetBoolField(TEXT("enabled_by_default"), Plugin->IsEnabledByDefault(true));
+		Obj->SetBoolField(TEXT("can_contain_content"), Descriptor.bCanContainContent);
+		Obj->SetBoolField(TEXT("installed"), Descriptor.bInstalled);
+		Obj->SetStringField(TEXT("base_dir"), Plugin->GetBaseDir());
+		return Obj;
+	}
+
+	TSharedPtr<FJsonObject> CVarToJson(const FString& Name, IConsoleVariable* Variable)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), Name);
+		Obj->SetBoolField(TEXT("found"), Variable != nullptr);
+		if (!Variable)
+		{
+			return Obj;
+		}
+
+		Obj->SetStringField(TEXT("value"), Variable->GetString());
+		Obj->SetStringField(TEXT("help"), Variable->GetHelp());
+		Obj->SetNumberField(TEXT("flags"), static_cast<double>(static_cast<uint32>(Variable->GetFlags())));
+		Obj->SetBoolField(TEXT("read_only"), Variable->TestFlags(ECVF_ReadOnly));
+		Obj->SetBoolField(TEXT("cheat"), Variable->TestFlags(ECVF_Cheat));
+		Obj->SetStringField(TEXT("set_by"), GetConsoleVariableSetByName(Variable->GetFlags()));
+		return Obj;
+	}
 }
 
 // ============================================================================
@@ -740,4 +814,152 @@ FMonolithActionResult FMonolithConfigActions::GetConfigFiles(const TSharedPtr<FJ
 	ResultJson->SetArrayField(TEXT("files"), FilesArray);
 
 	return FMonolithActionResult::Success(ResultJson);
+}
+
+FMonolithActionResult FMonolithConfigActions::ListPlugins(const TSharedPtr<FJsonObject>& Params)
+{
+	FString NameContains;
+	bool bEnabledOnly = false;
+	int32 Limit = 200;
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("name_contains"), NameContains);
+		Params->TryGetBoolField(TEXT("enabled_only"), bEnabledOnly);
+		if (Params->HasField(TEXT("limit")))
+		{
+			double LimitValue = 0.0;
+			if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
+			}
+			Limit = FMath::Clamp((int32)LimitValue, 1, 1000);
+		}
+	}
+
+	const FString Needle = NameContains.ToLower();
+	TArray<TSharedRef<IPlugin>> Plugins = IPluginManager::Get().GetDiscoveredPlugins();
+	Plugins.Sort([](const TSharedRef<IPlugin>& A, const TSharedRef<IPlugin>& B)
+	{
+		return A->GetName() < B->GetName();
+	});
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	int32 Matched = 0;
+	for (const TSharedRef<IPlugin>& Plugin : Plugins)
+	{
+		if (bEnabledOnly && !Plugin->IsEnabled())
+		{
+			continue;
+		}
+		if (!Needle.IsEmpty() && !Plugin->GetName().ToLower().Contains(Needle))
+		{
+			continue;
+		}
+
+		++Matched;
+		if (Rows.Num() < Limit)
+		{
+			Rows.Add(MakeShared<FJsonValueObject>(PluginToJson(Plugin)));
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetNumberField(TEXT("matched_count"), Matched);
+	Result->SetNumberField(TEXT("returned_count"), Rows.Num());
+	Result->SetArrayField(TEXT("plugins"), Rows);
+	if (Matched > Rows.Num())
+	{
+		Result->SetNumberField(TEXT("truncated_remaining"), Matched - Rows.Num());
+	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithConfigActions::GetPlugin(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Required parameter: name"));
+	}
+
+	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(Name);
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("name"), Name);
+	Result->SetBoolField(TEXT("found"), Plugin.IsValid());
+	if (Plugin.IsValid())
+	{
+		Result->SetObjectField(TEXT("plugin"), PluginToJson(Plugin.ToSharedRef()));
+	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithConfigActions::GetCVar(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Required parameter: name"));
+	}
+
+	IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Name);
+	return FMonolithActionResult::Success(CVarToJson(Name, Variable));
+}
+
+FMonolithActionResult FMonolithConfigActions::FindCVars(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Query;
+	FString Mode = TEXT("prefix");
+	int32 Limit = 100;
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("query"), Query);
+		Params->TryGetStringField(TEXT("mode"), Mode);
+		if (Params->HasField(TEXT("limit")))
+		{
+			double LimitValue = 0.0;
+			if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
+			}
+			Limit = FMath::Clamp((int32)LimitValue, 1, 1000);
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	int32 Matched = 0;
+	FConsoleObjectVisitor Visitor = FConsoleObjectVisitor::CreateLambda(
+		[&Rows, &Matched, Limit](const TCHAR* Name, IConsoleObject* Object)
+		{
+			if (!Object || !Object->AsVariable())
+			{
+				return;
+			}
+
+			++Matched;
+			if (Rows.Num() < Limit)
+			{
+				Rows.Add(MakeShared<FJsonValueObject>(CVarToJson(Name, Object->AsVariable())));
+			}
+		});
+
+	if (Mode.Equals(TEXT("contains"), ESearchCase::IgnoreCase))
+	{
+		IConsoleManager::Get().ForEachConsoleObjectThatContains(Visitor, *Query);
+	}
+	else
+	{
+		IConsoleManager::Get().ForEachConsoleObjectThatStartsWith(Visitor, *Query);
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("query"), Query);
+	Result->SetStringField(TEXT("mode"), Mode);
+	Result->SetNumberField(TEXT("matched_count"), Matched);
+	Result->SetNumberField(TEXT("returned_count"), Rows.Num());
+	Result->SetArrayField(TEXT("cvars"), Rows);
+	if (Matched > Rows.Num())
+	{
+		Result->SetNumberField(TEXT("truncated_remaining"), Matched - Rows.Num());
+	}
+	return FMonolithActionResult::Success(Result);
 }
