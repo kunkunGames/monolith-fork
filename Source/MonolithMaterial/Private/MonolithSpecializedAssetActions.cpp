@@ -39,33 +39,44 @@ namespace
 		return Defs;
 	}
 
-	FString GetNativeClassName(const UObject* Asset)
+	const UClass* GetNativeClass(const UObject* Asset)
 	{
 		if (!Asset)
 		{
-			return FString();
+			return nullptr;
 		}
 
 		if (const UBlueprint* Blueprint = Cast<UBlueprint>(Asset))
 		{
 			if (Blueprint->GeneratedClass)
 			{
-				return Blueprint->GeneratedClass->GetName();
+				return Blueprint->GeneratedClass;
 			}
 		}
 
-		return Asset->GetClass()->GetName();
+		return Asset->GetClass();
+	}
+
+	bool ClassMatchesCandidate(const UClass* Class, const TCHAR* Candidate)
+	{
+		for (const UClass* Current = Class; Current; Current = Current->GetSuperClass())
+		{
+			if (Current->GetName().Equals(Candidate, ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	const FAssetEnricherDef* FindEnricher(const UObject* Asset)
 	{
-		const FString ClassName = GetNativeClassName(Asset);
+		const UClass* Class = GetNativeClass(Asset);
 		for (const FAssetEnricherDef& Def : GetSupportedEnrichers())
 		{
 			for (const TCHAR* Candidate : Def.ClassNames)
 			{
-				if (ClassName.Equals(Candidate, ESearchCase::IgnoreCase) ||
-					ClassName.Contains(Candidate, ESearchCase::IgnoreCase))
+				if (ClassMatchesCandidate(Class, Candidate))
 				{
 					return &Def;
 				}
@@ -134,21 +145,6 @@ namespace
 			return MakeShared<FJsonValueBoolean>(BoolProp->GetPropertyValue(ValuePtr));
 		}
 
-		if (const FNumericProperty* NumericProp = CastField<FNumericProperty>(Property))
-		{
-			if (NumericProp->IsInteger())
-			{
-				const bool bUnsigned =
-					CastField<FUInt16Property>(Property) ||
-					CastField<FUInt32Property>(Property) ||
-					CastField<FUInt64Property>(Property);
-				return MakeShared<FJsonValueNumber>(bUnsigned
-					? static_cast<double>(NumericProp->GetUnsignedIntPropertyValue(ValuePtr))
-					: static_cast<double>(NumericProp->GetSignedIntPropertyValue(ValuePtr)));
-			}
-			return MakeShared<FJsonValueNumber>(NumericProp->GetFloatingPointPropertyValue(ValuePtr));
-		}
-
 		if (const FEnumProperty* EnumProp = CastField<FEnumProperty>(Property))
 		{
 			const int64 RawValue = EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(ValuePtr);
@@ -163,6 +159,21 @@ namespace
 			return MakeShared<FJsonValueString>(ByteProp->Enum
 				? ByteProp->Enum->GetNameStringByValue(RawValue)
 				: FString::FromInt(RawValue));
+		}
+
+		if (const FNumericProperty* NumericProp = CastField<FNumericProperty>(Property))
+		{
+			if (NumericProp->IsInteger())
+			{
+				const bool bUnsigned =
+					CastField<FUInt16Property>(Property) ||
+					CastField<FUInt32Property>(Property) ||
+					CastField<FUInt64Property>(Property);
+				return MakeShared<FJsonValueNumber>(bUnsigned
+					? static_cast<double>(NumericProp->GetUnsignedIntPropertyValue(ValuePtr))
+					: static_cast<double>(NumericProp->GetSignedIntPropertyValue(ValuePtr)));
+			}
+			return MakeShared<FJsonValueNumber>(NumericProp->GetFloatingPointPropertyValue(ValuePtr));
 		}
 
 		if (const FNameProperty* NameProp = CastField<FNameProperty>(Property))
