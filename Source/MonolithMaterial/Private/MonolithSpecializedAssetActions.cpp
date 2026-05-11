@@ -461,6 +461,26 @@ namespace
 		return Warnings;
 	}
 
+	bool HasBlockingValidationWarnings(const TArray<TSharedPtr<FJsonValue>>& Warnings)
+	{
+		for (const TSharedPtr<FJsonValue>& WarningValue : Warnings)
+		{
+			const TSharedPtr<FJsonObject>* WarningObject = nullptr;
+			if (!WarningValue.IsValid() || !WarningValue->TryGetObject(WarningObject) || !WarningObject || !WarningObject->IsValid())
+			{
+				continue;
+			}
+
+			FString Code;
+			(*WarningObject)->TryGetStringField(TEXT("code"), Code);
+			if (!Code.Equals(TEXT("large_payload_capped"), ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	UObject* LoadAssetFromParams(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)
 	{
 		Params->TryGetStringField(TEXT("asset_path"), OutAssetPath);
@@ -672,6 +692,6 @@ FMonolithActionResult FMonolithSpecializedAssetActions::ValidateSpecializedAsset
 	Result->SetStringField(TEXT("enricher"), Def ? Def->Key : TEXT("generic"));
 	Result->SetArrayField(TEXT("warnings"), Warnings);
 	Result->SetNumberField(TEXT("warning_count"), Warnings.Num());
-	Result->SetBoolField(TEXT("valid"), Warnings.Num() == 0);
+	Result->SetBoolField(TEXT("valid"), !HasBlockingValidationWarnings(Warnings));
 	return FMonolithActionResult::Success(Result);
 }
