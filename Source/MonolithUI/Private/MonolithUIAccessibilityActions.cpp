@@ -73,8 +73,10 @@ void FMonolithUIAccessibilityActions::RegisterActions(FMonolithToolRegistry& Reg
 
 FMonolithActionResult FMonolithUIAccessibilityActions::HandleScaffoldAccessibilitySubsystem(const TSharedPtr<FJsonObject>& Params)
 {
-    FString ClassName = Params->GetStringField(TEXT("class_name"));
-    FString ModuleName = Params->GetStringField(TEXT("module_name"));
+    FString ClassName;
+    Params->TryGetStringField(TEXT("class_name"), ClassName);
+    FString ModuleName;
+    Params->TryGetStringField(TEXT("module_name"), ModuleName);
     if (ClassName.IsEmpty() || ModuleName.IsEmpty())
     {
         return FMonolithActionResult::Error(TEXT("Missing required params: class_name, module_name"));
@@ -251,7 +253,8 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleScaffoldAccessibili
 
 FMonolithActionResult FMonolithUIAccessibilityActions::HandleAuditAccessibility(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+    FString AssetPath;
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
     if (AssetPath.IsEmpty())
     {
         return FMonolithActionResult::Error(TEXT("Missing required param: asset_path"));
@@ -402,7 +405,8 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleAuditAccessibility(
     int32 Errors = 0, Warnings = 0;
     for (const auto& I : Issues)
     {
-        FString Sev = I->AsObject()->GetStringField(TEXT("severity"));
+        FString Sev;
+        I->AsObject()->TryGetStringField(TEXT("severity"), Sev);
         if (Sev == TEXT("error")) Errors++;
         else Warnings++;
     }
@@ -428,7 +432,8 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleAuditAccessibility(
 
 FMonolithActionResult FMonolithUIAccessibilityActions::HandleSetColorblindMode(const TSharedPtr<FJsonObject>& Params)
 {
-    FString Mode = Params->GetStringField(TEXT("mode"));
+    FString Mode;
+    Params->TryGetStringField(TEXT("mode"), Mode);
     if (Mode.IsEmpty())
     {
         return FMonolithActionResult::Error(TEXT("Missing required param: mode"));

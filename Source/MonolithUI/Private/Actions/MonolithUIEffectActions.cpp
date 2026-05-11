@@ -578,12 +578,15 @@ namespace MonolithUI::EffectActionsInternal
 
     /** Common success-result builder. */
     static FMonolithActionResult MakeSuccess(
-        const FString& AssetPath,
-        const FString& WidgetName,
+        const TSharedPtr<FJsonObject>& Params,
         const TArray<FString>& PathsWritten,
         const TArray<FString>& Warnings,
         bool bCompiled)
     {
+        FString AssetPath, WidgetName;
+        Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+        Params->TryGetStringField(TEXT("widget_name"), WidgetName);
+
         TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
         Out->SetStringField(TEXT("asset_path"), AssetPath);
         Out->SetStringField(TEXT("widget_name"), WidgetName);
@@ -665,8 +668,7 @@ FMonolithActionResult MonolithUI::FEffectSurfaceActions::HandleSetCorners(const 
     }
 
     return MakeSuccess(
-        Params->GetStringField(TEXT("asset_path")),
-        Params->GetStringField(TEXT("widget_name")),
+        Params,
         PathsWritten, Failures, bCompile);
 }
 
@@ -768,8 +770,7 @@ FMonolithActionResult MonolithUI::FEffectSurfaceActions::HandleSetFill(const TSh
     }
 
     return MakeSuccess(
-        Params->GetStringField(TEXT("asset_path")),
-        Params->GetStringField(TEXT("widget_name")),
+        Params,
         PathsWritten, Failures, bCompile);
 }
 
@@ -836,8 +837,7 @@ FMonolithActionResult MonolithUI::FEffectSurfaceActions::HandleSetBorder(const T
     }
 
     return MakeSuccess(
-        Params->GetStringField(TEXT("asset_path")),
-        Params->GetStringField(TEXT("widget_name")),
+        Params,
         PathsWritten, Failures, bCompile);
 }
 
@@ -888,8 +888,7 @@ namespace MonolithUI::EffectActionsInternal
         }
 
         return MakeSuccess(
-            Params->GetStringField(TEXT("asset_path")),
-            Params->GetStringField(TEXT("widget_name")),
+            Params,
             PathsWritten, Failures, bCompile);
     }
 }
@@ -968,8 +967,7 @@ FMonolithActionResult MonolithUI::FEffectSurfaceActions::HandleSetGlow(const TSh
     }
 
     return MakeSuccess(
-        Params->GetStringField(TEXT("asset_path")),
-        Params->GetStringField(TEXT("widget_name")),
+        Params,
         PathsWritten, Failures, bCompile);
 }
 
@@ -1017,8 +1015,7 @@ FMonolithActionResult MonolithUI::FEffectSurfaceActions::HandleSetFilter(const T
     FinalizeWriteAndPush(WBP, Surface, bCompile);
 
     return MakeSuccess(
-        Params->GetStringField(TEXT("asset_path")),
-        Params->GetStringField(TEXT("widget_name")),
+        Params,
         PathsWritten, Failures, bCompile);
 }
 
@@ -1063,8 +1060,7 @@ FMonolithActionResult MonolithUI::FEffectSurfaceActions::HandleSetBackdropBlur(c
     }
 
     return MakeSuccess(
-        Params->GetStringField(TEXT("asset_path")),
-        Params->GetStringField(TEXT("widget_name")),
+        Params,
         PathsWritten, Failures, bCompile);
 }
 
@@ -1129,8 +1125,7 @@ FMonolithActionResult MonolithUI::FEffectSurfaceActions::HandleSetInsetHighlight
     }
 
     return MakeSuccess(
-        Params->GetStringField(TEXT("asset_path")),
-        Params->GetStringField(TEXT("widget_name")),
+        Params,
         PathsWritten, Failures, bCompile);
 }
 
@@ -1690,9 +1685,13 @@ FMonolithActionResult MonolithUI::FEffectSurfaceActions::HandleApplyPreset(const
     Params->TryGetBoolField(TEXT("compile"), bCompile);
     FinalizeWriteAndPush(WBP, Surface, bCompile);
 
+    FString AssetPath, WidgetName;
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+    Params->TryGetStringField(TEXT("widget_name"), WidgetName);
+
     TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-    Out->SetStringField(TEXT("asset_path"), Params->GetStringField(TEXT("asset_path")));
-    Out->SetStringField(TEXT("widget_name"), Params->GetStringField(TEXT("widget_name")));
+    Out->SetStringField(TEXT("asset_path"), AssetPath);
+    Out->SetStringField(TEXT("widget_name"), WidgetName);
     Out->SetStringField(TEXT("preset_name"), PresetName);
     Out->SetNumberField(TEXT("paths_written_count"), PathsWritten.Num());
     Out->SetBoolField(TEXT("compiled"), bCompile);

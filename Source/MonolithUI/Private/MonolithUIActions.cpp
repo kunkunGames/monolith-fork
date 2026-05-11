@@ -252,7 +252,8 @@ FMonolithActionResult FMonolithUIActions::HandleCreateWidgetBlueprint(const TSha
 // --- get_widget_tree ---
 FMonolithActionResult FMonolithUIActions::HandleGetWidgetTree(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+    FString AssetPath;
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
     if (!WBP) return Err;
@@ -543,8 +544,10 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
 // --- remove_widget ---
 FMonolithActionResult FMonolithUIActions::HandleRemoveWidget(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString WidgetName = Params->GetStringField(TEXT("widget_name"));
+    FString AssetPath;
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+    FString WidgetName;
+    Params->TryGetStringField(TEXT("widget_name"), WidgetName);
     if (WidgetName.IsEmpty())
     {
         return FMonolithActionResult::Error(TEXT("Missing required param: widget_name"));
@@ -604,9 +607,12 @@ FMonolithActionResult FMonolithUIActions::HandleSetWidgetProperty(const TSharedP
         return FMonolithActionResult::Error(TEXT("set_widget_property: Params is null"));
     }
 
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString WidgetName = Params->GetStringField(TEXT("widget_name"));
-    FString PropertyName = Params->GetStringField(TEXT("property_name"));
+    FString AssetPath;
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+    FString WidgetName;
+    Params->TryGetStringField(TEXT("widget_name"), WidgetName);
+    FString PropertyName;
+    Params->TryGetStringField(TEXT("property_name"), PropertyName);
     const bool bRawMode = MonolithUIInternal::GetOptionalBool(Params, TEXT("raw_mode"), false);
 
     // Pull `value` as the raw JSON value so non-string shapes survive.
@@ -724,7 +730,8 @@ FMonolithActionResult FMonolithUIActions::HandleSetWidgetProperty(const TSharedP
 // --- compile_widget ---
 FMonolithActionResult FMonolithUIActions::HandleCompileWidget(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+    FString AssetPath;
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
     if (!WBP) return Err;

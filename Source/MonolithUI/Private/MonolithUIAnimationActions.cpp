@@ -212,7 +212,8 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
 // --- list_animations ---
 FMonolithActionResult FMonolithUIAnimationActions::HandleListAnimations(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+    FString AssetPath;
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
     if (!WBP) return Err;
@@ -255,8 +256,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleListAnimations(const TS
 // --- get_animation_details ---
 FMonolithActionResult FMonolithUIAnimationActions::HandleGetAnimationDetails(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString AnimationName = Params->GetStringField(TEXT("animation_name"));
+    FString AssetPath;
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+    FString AnimationName;
+    Params->TryGetStringField(TEXT("animation_name"), AnimationName);
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -401,8 +404,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleGetAnimationDetails(con
 // --- create_animation ---
 FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString AnimationName = Params->GetStringField(TEXT("animation_name"));
+    FString AssetPath;
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+    FString AnimationName;
+    Params->TryGetStringField(TEXT("animation_name"), AnimationName);
     double Duration = 0.0;
     Params->TryGetNumberField(TEXT("duration"), Duration);
 
@@ -467,8 +472,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
             }
             const TSharedPtr<FJsonObject>& TrackObj = *TrackObjPtr;
 
-            FString WidgetName = TrackObj->GetStringField(TEXT("widget_name"));
-            FString Property = TrackObj->GetStringField(TEXT("property"));
+            FString WidgetName;
+            TrackObj->TryGetStringField(TEXT("widget_name"), WidgetName);
+            FString Property;
+            TrackObj->TryGetStringField(TEXT("property"), Property);
 
             if (WidgetName.IsEmpty() || Property.IsEmpty()) continue;
 
@@ -721,12 +728,16 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
 // --- add_animation_keyframe ---
 FMonolithActionResult FMonolithUIAnimationActions::HandleAddAnimationKeyframe(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString AnimationName = Params->GetStringField(TEXT("animation_name"));
-    FString WidgetName = Params->GetStringField(TEXT("widget_name"));
-    FString Property = Params->GetStringField(TEXT("property"));
+    FString AssetPath;
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+    FString AnimationName;
+    Params->TryGetStringField(TEXT("animation_name"), AnimationName);
+    FString WidgetName;
+    Params->TryGetStringField(TEXT("widget_name"), WidgetName);
+    FString Property;
+    Params->TryGetStringField(TEXT("property"), Property);
     FString Component;
-    Params->TryGetStringField(TEXT("component"), Component);
+    if (Params->HasField(TEXT("component"))) { Params->TryGetStringField(TEXT("component"), Component); }
     double Time = 0.0;
     if (!Params->TryGetNumberField(TEXT("time"), Time))
     {
@@ -913,8 +924,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleAddAnimationKeyframe(co
 // --- remove_animation ---
 FMonolithActionResult FMonolithUIAnimationActions::HandleRemoveAnimation(const TSharedPtr<FJsonObject>& Params)
 {
-    FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-    FString AnimationName = Params->GetStringField(TEXT("animation_name"));
+    FString AssetPath;
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+    FString AnimationName;
+    Params->TryGetStringField(TEXT("animation_name"), AnimationName);
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
