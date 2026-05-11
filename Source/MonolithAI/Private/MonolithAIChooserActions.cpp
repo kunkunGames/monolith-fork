@@ -122,6 +122,22 @@ namespace
 			return MakeShared<FJsonValueBoolean>(BoolProp->GetPropertyValue(ValuePtr));
 		}
 
+		if (const FEnumProperty* EnumProp = CastField<FEnumProperty>(Property))
+		{
+			const int64 RawValue = EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(ValuePtr);
+			return MakeShared<FJsonValueString>(EnumProp->GetEnum()
+				? EnumProp->GetEnum()->GetNameStringByValue(RawValue)
+				: FString::FromInt(RawValue));
+		}
+
+		if (const FByteProperty* ByteProp = CastField<FByteProperty>(Property))
+		{
+			const uint8 RawValue = ByteProp->GetPropertyValue(ValuePtr);
+			return MakeShared<FJsonValueString>(ByteProp->Enum
+				? ByteProp->Enum->GetNameStringByValue(RawValue)
+				: FString::FromInt(RawValue));
+		}
+
 		if (const FNumericProperty* NumProp = CastField<FNumericProperty>(Property))
 		{
 			if (NumProp->IsInteger())
@@ -137,22 +153,6 @@ namespace
 				return MakeShared<FJsonValueNumber>(static_cast<double>(NumProp->GetSignedIntPropertyValue(ValuePtr)));
 			}
 			return MakeShared<FJsonValueNumber>(NumProp->GetFloatingPointPropertyValue(ValuePtr));
-		}
-
-		if (const FEnumProperty* EnumProp = CastField<FEnumProperty>(Property))
-		{
-			const int64 RawValue = EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(ValuePtr);
-			return MakeShared<FJsonValueString>(EnumProp->GetEnum()
-				? EnumProp->GetEnum()->GetNameStringByValue(RawValue)
-				: FString::FromInt(RawValue));
-		}
-
-		if (const FByteProperty* ByteProp = CastField<FByteProperty>(Property))
-		{
-			const uint8 RawValue = ByteProp->GetPropertyValue(ValuePtr);
-			return MakeShared<FJsonValueString>(ByteProp->Enum
-				? ByteProp->Enum->GetNameStringByValue(RawValue)
-				: FString::FromInt(RawValue));
 		}
 
 		if (const FNameProperty* NameProp = CastField<FNameProperty>(Property))
