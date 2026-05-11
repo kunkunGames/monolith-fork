@@ -50,11 +50,27 @@ namespace MonolithCollection
 		return false;
 	}
 
-	static ECollectionStorageMode::Type ParseStorageMode(const FString& In)
+	static bool GetStorageMode(const TSharedPtr<FJsonObject>& Params, ECollectionStorageMode::Type& OutMode, FString& OutError)
 	{
-		return In.Equals(TEXT("dynamic"), ESearchCase::IgnoreCase)
-			? ECollectionStorageMode::Dynamic
-			: ECollectionStorageMode::Static;
+		FString StorageMode;
+		if (Params.IsValid() && Params->HasField(TEXT("storage_mode")) && !Params->TryGetStringField(TEXT("storage_mode"), StorageMode))
+		{
+			OutError = TEXT("storage_mode must be a string");
+			return false;
+		}
+		if (StorageMode.IsEmpty() || StorageMode.Equals(TEXT("static"), ESearchCase::IgnoreCase))
+		{
+			OutMode = ECollectionStorageMode::Static;
+			return true;
+		}
+		if (StorageMode.Equals(TEXT("dynamic"), ESearchCase::IgnoreCase))
+		{
+			OutMode = ECollectionStorageMode::Dynamic;
+			return true;
+		}
+
+		OutError = FString::Printf(TEXT("Invalid storage_mode: %s"), *StorageMode);
+		return false;
 	}
 
 	static ECollectionRecursionFlags::Flags ParseRecursion(const FString& In)
@@ -73,6 +89,7 @@ namespace MonolithCollection
 		case ECollectionShareType::CST_Private: return TEXT("private");
 		case ECollectionShareType::CST_Shared: return TEXT("shared");
 		case ECollectionShareType::CST_System: return TEXT("system");
+		case ECollectionShareType::CST_All: return TEXT("all");
 		default: return TEXT("unknown");
 		}
 	}
@@ -350,9 +367,11 @@ FMonolithActionResult FAssetCollectionActions::CreateCollection(const TSharedPtr
 		return MonolithCollection::MutatingReadOnlyError(ShareType);
 	}
 
-	FString StorageModeText;
-	Params->TryGetStringField(TEXT("storage_mode"), StorageModeText);
-	const ECollectionStorageMode::Type StorageMode = MonolithCollection::ParseStorageMode(StorageModeText);
+	ECollectionStorageMode::Type StorageMode;
+	if (!MonolithCollection::GetStorageMode(Params, StorageMode, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 
 	FText ErrorText;
 	const bool bSuccess = MonolithCollection::Container()->CreateCollection(Name, ShareType, StorageMode, &ErrorText);
@@ -622,8 +641,13 @@ FMonolithActionResult FAssetCollectionActions::SetCollectionColor(const TSharedP
 
 	TOptional<FLinearColor> NewColor;
 	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("color"), ColorObj) && ColorObj && ColorObj->IsValid())
+	if (Params->HasField(TEXT("color")))
 	{
+		if (!Params->TryGetObjectField(TEXT("color"), ColorObj) || !ColorObj || !ColorObj->IsValid())
+		{
+			return FMonolithActionResult::Error(TEXT("color must be an object"), -32602);
+		}
+
 		double R = 0.0;
 		double G = 0.0;
 		double B = 0.0;
@@ -659,7 +683,7 @@ FMonolithActionResult FAssetCollectionActions::ValidateCollectionName(const TSha
 	}
 	FText ErrorText;
 	ECollectionShareType::Type ShareType;
-	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
+	if (!MonolithCollection::GetShareType(Params, ShareType, Error, true))
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
