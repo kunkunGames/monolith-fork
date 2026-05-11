@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "MonolithToolRegistry.h"
@@ -19,6 +19,8 @@ public:
 
 private:
 	static FMonolithActionResult GetActorInfo(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GetWaterStatus(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ListWaterBodies(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult SpawnActor(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult MoveActor(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult DuplicateActor(const TSharedPtr<FJsonObject>& Params);

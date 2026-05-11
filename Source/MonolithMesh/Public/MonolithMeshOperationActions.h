@@ -39,6 +39,11 @@ private:
 	static FMonolithActionResult FillHoles(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ComputeUvs(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult MirrorMesh(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GeometryPlaneCut(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GeometryRecomputeNormals(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GeometrySubdivide(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GeometryMaterialIds(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GeometrySmooth(const TSharedPtr<FJsonObject>& Params);
 };
 
 #endif // WITH_GEOMETRYSCRIPT

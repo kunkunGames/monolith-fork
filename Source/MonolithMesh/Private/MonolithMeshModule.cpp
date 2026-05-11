@@ -19,6 +19,10 @@
 #include "MonolithMeshPresetActions.h"
 #include "MonolithMeshEncounterActions.h"
 #include "MonolithMeshQualityActions.h"
+#include "MonolithMeshInterchangeActions.h"
+#include "MonolithLevelInstanceActions.h"
+#include "MonolithHlodActions.h"
+#include "MonolithActorMergeActions.h"
 #include "MonolithMeshFloorPlanGenerator.h"
 #include "MonolithMeshSpatialRegistry.h"
 #include "MonolithMeshAutoVolumeActions.h"
@@ -72,6 +76,10 @@ void FMonolithMeshModule::StartupModule()
 	FMonolithMeshPresetActions::RegisterActions(FMonolithToolRegistry::Get());
 	FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry::Get());
 	FMonolithMeshQualityActions::RegisterActions(FMonolithToolRegistry::Get());
+	FMonolithMeshInterchangeActions::RegisterActions(FMonolithToolRegistry::Get());
+	FMonolithLevelInstanceActions::RegisterActions(FMonolithToolRegistry::Get());
+	FMonolithHlodActions::RegisterActions(FMonolithToolRegistry::Get());
+	FMonolithActorMergeActions::RegisterActions(FMonolithToolRegistry::Get());
 	// --- Procedural Town Generation (experimental, off by default) ---
 	if (GetDefault<UMonolithSettings>()->bEnableProceduralTownGen)
 	{
@@ -149,6 +157,9 @@ void FMonolithMeshModule::ShutdownModule()
 #endif
 
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("mesh"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("interchange"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("level_instance"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("hlod"));
 }
 
 #undef LOCTEXT_NAMESPACE

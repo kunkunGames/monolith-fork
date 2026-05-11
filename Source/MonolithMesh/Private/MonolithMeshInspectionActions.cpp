@@ -1,4 +1,4 @@
-#include "MonolithMeshInspectionActions.h"
+﻿#include "MonolithMeshInspectionActions.h"
 #include "MonolithMeshUtils.h"
 #include "MonolithMeshCatalog.h"
 #include "MonolithToolRegistry.h"
@@ -10,12 +10,17 @@
 
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
+#include "EngineUtils.h"
 #include "MeshDescription.h"
 #include "PhysicsEngine/BodySetup.h"
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "StaticMeshResources.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Components/ActorComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "GameFramework/Actor.h"
+#include "Modules/ModuleManager.h"
 #include "SQLiteDatabase.h"
 #include "Editor.h"
 
@@ -116,6 +121,26 @@ void FMonolithMeshInspectionActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Get aggregate statistics from the mesh catalog (total count, category breakdown, size distribution)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::GetMeshCatalogStats),
 		FParamSchemaBuilder().Build());
+
+	Registry.RegisterAction(TEXT("mesh"), TEXT("get_pcg_status"),
+		TEXT("Report optional PCG module/type availability without loading PCG or mutating the level"),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::GetPcgStatus),
+		FParamSchemaBuilder().Build());
+
+	Registry.RegisterAction(TEXT("mesh"), TEXT("list_pcg_graph_assets"),
+		TEXT("List PCG graph-like assets using AssetRegistry class paths without hard PCG dependencies"),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::ListPcgGraphAssets),
+		FParamSchemaBuilder()
+			.Optional(TEXT("package_path"), TEXT("string"), TEXT("Root package path to scan (must be under /Game)"), TEXT("/Game"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum rows to return (1-500)"), TEXT("100"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("mesh"), TEXT("list_pcg_components"),
+		TEXT("List PCG-like components in the current editor world using reflected class names"),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::ListPcgComponents),
+		FParamSchemaBuilder()
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum rows to return (1-500)"), TEXT("100"))
+			.Build());
 }
 
 int32 FMonolithMeshInspectionActions::ClampSearchMeshesBySizeLimit(int32 Limit)
@@ -206,6 +231,247 @@ namespace MeshInspectionHelpers
 		default:                      return TEXT("default");
 		}
 	}
+
+	TArray<FString> GetPcgModuleNames()
+	{
+		return {
+			TEXT("PCG"),
+			TEXT("PCGEditor"),
+			TEXT("PCGCompute"),
+			TEXT("PCGGeometryScriptInterop"),
+			TEXT("PCGWaterInterop"),
+			TEXT("PCGExternalDataInterop"),
+			TEXT("PCGPythonInteropEditor")
+		};
+	}
+
+	TSharedPtr<FJsonObject> BuildModuleStatusRow(const FString& ModuleName)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("module"), ModuleName);
+		Row->SetBoolField(TEXT("exists"), FModuleManager::Get().ModuleExists(*ModuleName));
+		Row->SetBoolField(TEXT("loaded"), FModuleManager::Get().IsModuleLoaded(*ModuleName));
+		return Row;
+	}
+
+	TSharedPtr<FJsonObject> BuildReflectedTypeRow(const TCHAR* ObjectPath)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("object_path"), ObjectPath);
+		Row->SetBoolField(TEXT("loaded"), FindObject<UObject>(nullptr, ObjectPath) != nullptr);
+		return Row;
+	}
+
+	int32 ClampPcgLimit(double Limit)
+	{
+		return FMath::Clamp(static_cast<int32>(Limit), 1, 500);
+	}
+
+	bool IsPcgGraphLikeAsset(const FAssetData& Asset)
+	{
+		const FString ClassName = Asset.AssetClassPath.GetAssetName().ToString();
+		return ClassName.Equals(TEXT("PCGGraph"), ESearchCase::IgnoreCase)
+			|| ClassName.Equals(TEXT("PCGGraphInstance"), ESearchCase::IgnoreCase)
+			|| ClassName.Equals(TEXT("ProceduralVegetationGraph"), ESearchCase::IgnoreCase)
+			|| ClassName.Contains(TEXT("PCGGraph"), ESearchCase::IgnoreCase);
+	}
+
+	bool IsPcgLikeComponent(const UActorComponent* Component)
+	{
+		if (!Component || !Component->GetClass())
+		{
+			return false;
+		}
+
+		const FString ClassName = Component->GetClass()->GetName();
+		const FString ClassPath = Component->GetClass()->GetClassPathName().ToString();
+		return ClassName.Equals(TEXT("PCGComponent"), ESearchCase::IgnoreCase)
+			|| ClassPath.Contains(TEXT("/Script/PCG."), ESearchCase::IgnoreCase)
+			|| ClassName.Contains(TEXT("PCG"), ESearchCase::IgnoreCase);
+	}
+}
+
+// ============================================================================
+// Optional PCG visibility
+// ============================================================================
+
+FMonolithActionResult FMonolithMeshInspectionActions::GetPcgStatus(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("mesh"));
+	Result->SetStringField(TEXT("status"), TEXT("read_only_capability_probe"));
+	Result->SetStringField(TEXT("sample_utc"), FDateTime::UtcNow().ToIso8601());
+	Result->SetBoolField(TEXT("pcg_namespace_registered"), FMonolithToolRegistry::Get().HasNamespace(TEXT("pcg")));
+
+	TArray<TSharedPtr<FJsonValue>> ModuleRows;
+	bool bAnyModuleExists = false;
+	bool bAnyModuleLoaded = false;
+	for (const FString& ModuleName : MeshInspectionHelpers::GetPcgModuleNames())
+	{
+		TSharedPtr<FJsonObject> Row = MeshInspectionHelpers::BuildModuleStatusRow(ModuleName);
+		bAnyModuleExists |= Row->GetBoolField(TEXT("exists"));
+		bAnyModuleLoaded |= Row->GetBoolField(TEXT("loaded"));
+		ModuleRows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+	Result->SetArrayField(TEXT("modules"), ModuleRows);
+	Result->SetBoolField(TEXT("available"), bAnyModuleExists);
+	Result->SetBoolField(TEXT("loaded"), bAnyModuleLoaded);
+
+	TArray<TSharedPtr<FJsonValue>> ReflectedTypes;
+	const TCHAR* TypePaths[] =
+	{
+		TEXT("/Script/PCG.PCGGraph"),
+		TEXT("/Script/PCG.PCGGraphInstance"),
+		TEXT("/Script/PCG.PCGComponent"),
+		TEXT("/Script/PCG.PCGSettings"),
+		TEXT("/Script/PCG.PCGVolume")
+	};
+	for (const TCHAR* TypePath : TypePaths)
+	{
+		ReflectedTypes.Add(MakeShared<FJsonValueObject>(MeshInspectionHelpers::BuildReflectedTypeRow(TypePath)));
+	}
+	Result->SetArrayField(TEXT("reflected_types"), ReflectedTypes);
+
+	TArray<TSharedPtr<FJsonValue>> CurrentActions;
+	CurrentActions.Add(MakeShared<FJsonValueString>(TEXT("mesh.get_pcg_status")));
+	CurrentActions.Add(MakeShared<FJsonValueString>(TEXT("mesh.list_pcg_graph_assets")));
+	CurrentActions.Add(MakeShared<FJsonValueString>(TEXT("mesh.list_pcg_components")));
+	Result->SetArrayField(TEXT("current_actions"), CurrentActions);
+
+	TArray<TSharedPtr<FJsonValue>> FutureActions;
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.get_capabilities")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.get_pcg_graph")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.list_pcg_node_types")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.validate_pcg_graph")));
+	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.execute_pcg")));
+	Result->SetArrayField(TEXT("future_actions"), FutureActions);
+
+	TArray<TSharedPtr<FJsonValue>> Notes;
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("This first milestone uses AssetRegistry and reflected class names only; it does not add PCG or PCGEditor link dependencies.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Graph mutation, execution, and node parameter editing remain future work for an owned optional pcg namespace.")));
+	Result->SetArrayField(TEXT("notes"), Notes);
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithMeshInspectionActions::ListPcgGraphAssets(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PackagePath = TEXT("/Game");
+	Params->TryGetStringField(TEXT("package_path"), PackagePath);
+	if (!PackagePath.StartsWith(TEXT("/Game")))
+	{
+		return FMonolithActionResult::Error(TEXT("package_path must be under /Game"));
+	}
+
+	double LimitValue = 100.0;
+	Params->TryGetNumberField(TEXT("limit"), LimitValue);
+	const int32 Limit = MeshInspectionHelpers::ClampPcgLimit(LimitValue);
+
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	FARFilter Filter;
+	Filter.PackagePaths.Add(FName(*PackagePath));
+	Filter.bRecursivePaths = true;
+
+	TArray<FAssetData> Assets;
+	AssetRegistry.GetAssets(Filter, Assets);
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	int32 MatchedCount = 0;
+	for (const FAssetData& Asset : Assets)
+	{
+		if (!MeshInspectionHelpers::IsPcgGraphLikeAsset(Asset))
+		{
+			continue;
+		}
+
+		MatchedCount++;
+		if (Rows.Num() >= Limit)
+		{
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("object_path"), Asset.GetObjectPathString());
+		Row->SetStringField(TEXT("package_name"), Asset.PackageName.ToString());
+		Row->SetStringField(TEXT("package_path"), Asset.PackagePath.ToString());
+		Row->SetStringField(TEXT("asset_name"), Asset.AssetName.ToString());
+		Row->SetStringField(TEXT("asset_class"), Asset.AssetClassPath.GetAssetName().ToString());
+		Row->SetStringField(TEXT("asset_class_path"), Asset.AssetClassPath.ToString());
+		Row->SetBoolField(TEXT("loaded"), Asset.IsAssetLoaded());
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("package_path"), PackagePath);
+	Result->SetNumberField(TEXT("matched_count"), MatchedCount);
+	Result->SetNumberField(TEXT("returned_count"), Rows.Num());
+	Result->SetNumberField(TEXT("limit"), Limit);
+	Result->SetBoolField(TEXT("truncated"), MatchedCount > Rows.Num());
+	Result->SetArrayField(TEXT("graphs"), Rows);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithMeshInspectionActions::ListPcgComponents(const TSharedPtr<FJsonObject>& Params)
+{
+	double LimitValue = 100.0;
+	Params->TryGetNumberField(TEXT("limit"), LimitValue);
+	const int32 Limit = MeshInspectionHelpers::ClampPcgLimit(LimitValue);
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("status"), TEXT("unavailable"));
+		Result->SetStringField(TEXT("reason"), TEXT("No editor world is available"));
+		Result->SetArrayField(TEXT("components"), TArray<TSharedPtr<FJsonValue>>());
+		return FMonolithActionResult::Success(Result);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	int32 MatchedCount = 0;
+	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+	{
+		AActor* Actor = *ActorIt;
+		if (!Actor)
+		{
+			continue;
+		}
+
+		TArray<UActorComponent*> Components;
+		Actor->GetComponents(Components);
+		for (UActorComponent* Component : Components)
+		{
+			if (!MeshInspectionHelpers::IsPcgLikeComponent(Component))
+			{
+				continue;
+			}
+
+			MatchedCount++;
+			if (Rows.Num() >= Limit)
+			{
+				continue;
+			}
+
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("actor_name"), Actor->GetActorLabel());
+			Row->SetStringField(TEXT("actor_path"), Actor->GetPathName());
+			Row->SetStringField(TEXT("component_name"), Component->GetName());
+			Row->SetStringField(TEXT("component_path"), Component->GetPathName());
+			Row->SetStringField(TEXT("component_class"), Component->GetClass()->GetName());
+			Row->SetStringField(TEXT("component_class_path"), Component->GetClass()->GetClassPathName().ToString());
+			Row->SetBoolField(TEXT("registered"), Component->IsRegistered());
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("world"), World->GetPathName());
+	Result->SetNumberField(TEXT("matched_count"), MatchedCount);
+	Result->SetNumberField(TEXT("returned_count"), Rows.Num());
+	Result->SetNumberField(TEXT("limit"), Limit);
+	Result->SetBoolField(TEXT("truncated"), MatchedCount > Rows.Num());
+	Result->SetArrayField(TEXT("components"), Rows);
+	return FMonolithActionResult::Success(Result);
 }
 
 // ============================================================================
