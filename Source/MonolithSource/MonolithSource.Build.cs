@@ -16,6 +16,7 @@ public class MonolithSource : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"MonolithCore",
+			"MonolithIndex",
 			"SQLiteCore",
 			"EditorSubsystem",
 			"UnrealEd",
