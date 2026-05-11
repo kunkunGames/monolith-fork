@@ -73,12 +73,37 @@ namespace MonolithCollection
 		return false;
 	}
 
-	static ECollectionRecursionFlags::Flags ParseRecursion(const FString& In)
+	static bool GetRecursion(const TSharedPtr<FJsonObject>& Params, ECollectionRecursionFlags::Flags& OutFlags, FString& OutError)
 	{
-		if (In.Equals(TEXT("children"), ESearchCase::IgnoreCase)) return ECollectionRecursionFlags::SelfAndChildren;
-		if (In.Equals(TEXT("parents"), ESearchCase::IgnoreCase)) return ECollectionRecursionFlags::SelfAndParents;
-		if (In.Equals(TEXT("all"), ESearchCase::IgnoreCase)) return ECollectionRecursionFlags::All;
-		return ECollectionRecursionFlags::Self;
+		FString Recursion;
+		if (Params.IsValid() && Params->HasField(TEXT("recursive")) && !Params->TryGetStringField(TEXT("recursive"), Recursion))
+		{
+			OutError = TEXT("recursive must be a string");
+			return false;
+		}
+		if (Recursion.IsEmpty() || Recursion.Equals(TEXT("self"), ESearchCase::IgnoreCase))
+		{
+			OutFlags = ECollectionRecursionFlags::Self;
+			return true;
+		}
+		if (Recursion.Equals(TEXT("children"), ESearchCase::IgnoreCase))
+		{
+			OutFlags = ECollectionRecursionFlags::SelfAndChildren;
+			return true;
+		}
+		if (Recursion.Equals(TEXT("parents"), ESearchCase::IgnoreCase))
+		{
+			OutFlags = ECollectionRecursionFlags::SelfAndParents;
+			return true;
+		}
+		if (Recursion.Equals(TEXT("all"), ESearchCase::IgnoreCase))
+		{
+			OutFlags = ECollectionRecursionFlags::All;
+			return true;
+		}
+
+		OutError = FString::Printf(TEXT("Invalid recursive: %s"), *Recursion);
+		return false;
 	}
 
 	static FString ShareTypeToString(ECollectionShareType::Type Type)
@@ -455,7 +480,9 @@ FMonolithActionResult FAssetCollectionActions::AddAssets(const TSharedPtr<FJsonO
 	Result->SetStringField(TEXT("collection"), Name.ToString());
 	if (!bSuccess)
 	{
-		Result->SetStringField(TEXT("error"), ErrorText.IsEmpty() ? TEXT("Failed to add one or more assets") : ErrorText.ToString());
+		FMonolithActionResult ErrorResult = FMonolithActionResult::Error(ErrorText.IsEmpty() ? TEXT("Failed to add one or more assets") : ErrorText.ToString(), -32603);
+		ErrorResult.WithErrorData(Result);
+		return ErrorResult;
 	}
 	return FMonolithActionResult::Success(Result);
 }
@@ -493,7 +520,9 @@ FMonolithActionResult FAssetCollectionActions::RemoveAssets(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("collection"), Name.ToString());
 	if (!bSuccess)
 	{
-		Result->SetStringField(TEXT("error"), ErrorText.IsEmpty() ? TEXT("Failed to remove one or more assets") : ErrorText.ToString());
+		FMonolithActionResult ErrorResult = FMonolithActionResult::Error(ErrorText.IsEmpty() ? TEXT("Failed to remove one or more assets") : ErrorText.ToString(), -32603);
+		ErrorResult.WithErrorData(Result);
+		return ErrorResult;
 	}
 	return FMonolithActionResult::Success(Result);
 }
@@ -506,15 +535,18 @@ FMonolithActionResult FAssetCollectionActions::ListAssets(const TSharedPtr<FJson
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
-	FString Recursive;
-	Params->TryGetStringField(TEXT("recursive"), Recursive);
+	ECollectionRecursionFlags::Flags Recursion = ECollectionRecursionFlags::Self;
+	if (!MonolithCollection::GetRecursion(Params, Recursion, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	TArray<FSoftObjectPath> Assets;
 	ECollectionShareType::Type ShareType;
 	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
-	MonolithCollection::Container()->GetAssetsInCollection(Name, ShareType, Assets, MonolithCollection::ParseRecursion(Recursive));
+	MonolithCollection::Container()->GetAssetsInCollection(Name, ShareType, Assets, Recursion);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	Rows.Reserve(Assets.Num());
@@ -542,8 +574,11 @@ FMonolithActionResult FAssetCollectionActions::ContainsAsset(const TSharedPtr<FJ
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or empty required param: asset_path"), -32602);
 	}
-	FString Recursive;
-	Params->TryGetStringField(TEXT("recursive"), Recursive);
+	ECollectionRecursionFlags::Flags Recursion = ECollectionRecursionFlags::Self;
+	if (!MonolithCollection::GetRecursion(Params, Recursion, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 	ECollectionShareType::Type ShareType;
 	if (!MonolithCollection::GetShareType(Params, ShareType, Error))
 	{
@@ -551,7 +586,7 @@ FMonolithActionResult FAssetCollectionActions::ContainsAsset(const TSharedPtr<FJ
 	}
 	FText ErrorText;
 	const bool bContains = MonolithCollection::Container()->IsObjectInCollection(
-		FSoftObjectPath(MonolithCollection::NormalizeObjectPath(AssetPath)), Name, ShareType, MonolithCollection::ParseRecursion(Recursive), &ErrorText);
+		FSoftObjectPath(MonolithCollection::NormalizeObjectPath(AssetPath)), Name, ShareType, Recursion, &ErrorText);
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("collection"), Name.ToString());
