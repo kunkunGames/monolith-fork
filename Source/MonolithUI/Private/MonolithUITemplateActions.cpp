@@ -897,9 +897,17 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateInventoryGrid(cons
         return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
     }
 
-    int32 Columns = Params->HasField(TEXT("columns")) ? static_cast<int32>(Params->GetNumberField(TEXT("columns"))) : 5;
-    int32 Rows = Params->HasField(TEXT("rows")) ? static_cast<int32>(Params->GetNumberField(TEXT("rows"))) : 4;
-    int32 SlotSize = Params->HasField(TEXT("slot_size")) ? static_cast<int32>(Params->GetNumberField(TEXT("slot_size"))) : 64;
+    int32 Columns = 5;
+    double TempColumns;
+    if (Params->TryGetNumberField(TEXT("columns"), TempColumns)) Columns = static_cast<int32>(TempColumns);
+
+    int32 Rows = 4;
+    double TempRows;
+    if (Params->TryGetNumberField(TEXT("rows"), TempRows)) Rows = static_cast<int32>(TempRows);
+
+    int32 SlotSize = 64;
+    double TempSlotSize;
+    if (Params->TryGetNumberField(TEXT("slot_size"), TempSlotSize)) SlotSize = static_cast<int32>(TempSlotSize);
     Columns = FMath::Clamp(Columns, 1, 20);
     Rows = FMath::Clamp(Rows, 1, 20);
     SlotSize = FMath::Clamp(SlotSize, 16, 256);
@@ -964,7 +972,9 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateSaveSlotList(const
         return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
     }
 
-    int32 MaxSlots = Params->HasField(TEXT("max_slots")) ? static_cast<int32>(Params->GetNumberField(TEXT("max_slots"))) : 3;
+    int32 MaxSlots = 3;
+    double TempMaxSlots;
+    if (Params->TryGetNumberField(TEXT("max_slots"), TempMaxSlots)) MaxSlots = static_cast<int32>(TempMaxSlots);
     MaxSlots = FMath::Clamp(MaxSlots, 1, 20);
 
     FMonolithActionResult Err;

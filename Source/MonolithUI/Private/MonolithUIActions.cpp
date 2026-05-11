@@ -424,7 +424,10 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
         const TSharedPtr<FJsonObject>* PosObj = nullptr;
         if (Params->TryGetObjectField(TEXT("position"), PosObj))
         {
-            FVector2D Pos((*PosObj)->GetNumberField(TEXT("x")), (*PosObj)->GetNumberField(TEXT("y")));
+            double Px = 0, Py = 0;
+            (*PosObj)->TryGetNumberField(TEXT("x"), Px);
+            (*PosObj)->TryGetNumberField(TEXT("y"), Py);
+            FVector2D Pos(Px, Py);
             CSlot->SetPosition(Pos);
         }
 
@@ -432,7 +435,10 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
         const TSharedPtr<FJsonObject>* SizeObj = nullptr;
         if (Params->TryGetObjectField(TEXT("size"), SizeObj))
         {
-            FVector2D Size((*SizeObj)->GetNumberField(TEXT("x")), (*SizeObj)->GetNumberField(TEXT("y")));
+            double Sx = 0, Sy = 0;
+            (*SizeObj)->TryGetNumberField(TEXT("x"), Sx);
+            (*SizeObj)->TryGetNumberField(TEXT("y"), Sy);
+            FVector2D Size(Sx, Sy);
             CSlot->SetSize(Size);
         }
 

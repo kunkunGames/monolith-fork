@@ -440,9 +440,10 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleSetColorblindMode(c
     }
 
     int32 Severity = 5;
-    if (Params->HasField(TEXT("severity")))
+    double TempSeverity;
+    if (Params->TryGetNumberField(TEXT("severity"), TempSeverity))
     {
-        Severity = FMath::Clamp((int32)Params->GetNumberField(TEXT("severity")), 0, 10);
+        Severity = FMath::Clamp((int32)TempSeverity, 0, 10);
     }
 
     bool bCorrect = true;
@@ -478,12 +479,12 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleSetColorblindMode(c
 
 FMonolithActionResult FMonolithUIAccessibilityActions::HandleSetTextScale(const TSharedPtr<FJsonObject>& Params)
 {
-    if (!Params->HasField(TEXT("scale")))
+    double ScaleDouble = 0.0;
+    if (!Params->TryGetNumberField(TEXT("scale"), ScaleDouble))
     {
-        return FMonolithActionResult::Error(TEXT("Missing required param: scale"));
+        return FMonolithActionResult::Error(TEXT("Missing or invalid required param: scale"));
     }
-
-    float Scale = (float)Params->GetNumberField(TEXT("scale"));
+    float Scale = (float)ScaleDouble;
     Scale = FMath::Clamp(Scale, 0.75f, 1.5f);
 
     FSlateApplication::Get().SetApplicationScale(Scale);
