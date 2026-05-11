@@ -103,6 +103,21 @@ namespace
 		return Path + TEXT(".") + AssetName;
 	}
 
+	FString NormalizePackagePath(const FString& Path)
+	{
+		FString PackagePath = Path;
+		FString ObjectName;
+		if (PackagePath.Split(TEXT("."), &PackagePath, &ObjectName))
+		{
+			// PackagePath now contains the long package part of an object path.
+		}
+		if (!PackagePath.StartsWith(TEXT("/")))
+		{
+			PackagePath = TEXT("/Game/") + PackagePath;
+		}
+		return PackagePath;
+	}
+
 	bool SaveAssetIfRequested(UObject* Asset, bool bSave, bool& bSaved, FString& OutError)
 	{
 		bSaved = false;
@@ -474,7 +489,9 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 		return FMonolithActionResult::Error(TEXT("save must be a boolean"));
 	}
 
-	UInputAction* Action = LoadObject<UInputAction>(nullptr, *NormalizeObjectPath(AssetPath));
+	const FString PackagePath = NormalizePackagePath(AssetPath);
+	const FString ObjectPath = NormalizeObjectPath(PackagePath);
+	UInputAction* Action = LoadObject<UInputAction>(nullptr, *ObjectPath);
 	if (Action && !bOverwrite)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("InputAction already exists: %s"), *AssetPath));
@@ -483,14 +500,14 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 	bool bCreated = false;
 	if (!Action)
 	{
-		const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
+		const FString AssetName = FPackageName::GetLongPackageAssetName(PackagePath);
 		FString ExistError;
-		if (!MonolithGAS::EnsureAssetPathFree(AssetPath, AssetName, ExistError))
+		if (!MonolithGAS::EnsureAssetPathFree(PackagePath, AssetName, ExistError))
 		{
 			return FMonolithActionResult::Error(ExistError);
 		}
 
-		UPackage* Package = MonolithGAS::GetOrCreatePackage(AssetPath, Error);
+		UPackage* Package = MonolithGAS::GetOrCreatePackage(PackagePath, Error);
 		if (!Package)
 		{
 			return FMonolithActionResult::Error(Error);
@@ -706,7 +723,9 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 		return FMonolithActionResult::Error(TEXT("save must be a boolean"));
 	}
 
-	UInputMappingContext* Context = LoadObject<UInputMappingContext>(nullptr, *NormalizeObjectPath(AssetPath));
+	const FString PackagePath = NormalizePackagePath(AssetPath);
+	const FString ObjectPath = NormalizeObjectPath(PackagePath);
+	UInputMappingContext* Context = LoadObject<UInputMappingContext>(nullptr, *ObjectPath);
 	if (Context && !bOverwrite)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("InputMappingContext already exists: %s"), *AssetPath));
@@ -715,14 +734,14 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 	bool bCreated = false;
 	if (!Context)
 	{
-		const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
+		const FString AssetName = FPackageName::GetLongPackageAssetName(PackagePath);
 		FString ExistError;
-		if (!MonolithGAS::EnsureAssetPathFree(AssetPath, AssetName, ExistError))
+		if (!MonolithGAS::EnsureAssetPathFree(PackagePath, AssetName, ExistError))
 		{
 			return FMonolithActionResult::Error(ExistError);
 		}
 
-		UPackage* Package = MonolithGAS::GetOrCreatePackage(AssetPath, Error);
+		UPackage* Package = MonolithGAS::GetOrCreatePackage(PackagePath, Error);
 		if (!Package)
 		{
 			return FMonolithActionResult::Error(Error);
