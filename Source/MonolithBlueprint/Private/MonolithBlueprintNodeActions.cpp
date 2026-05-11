@@ -151,6 +151,54 @@ static const TMap<FString, FNodeAlias>& GetNodeAliases()
 	return Aliases;
 }
 
+static bool HasAliasDefaultParam(const FNodeAlias& Alias, const FString& FieldName)
+{
+	const FString* Value = Alias.DefaultParams.Find(FieldName);
+	return Value && !Value->IsEmpty();
+}
+
+static bool IsSpawnableAliasTemplate(const FNodeAlias& Alias)
+{
+	const FString& NodeType = Alias.CanonicalType;
+	if (NodeType == TEXT("CallFunction"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("function_name"));
+	}
+	if (NodeType == TEXT("VariableGet") || NodeType == TEXT("VariableSet"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("variable_name"));
+	}
+	if (NodeType == TEXT("CustomEvent"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("event_name"));
+	}
+	if (NodeType == TEXT("MacroInstance"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("macro_name"));
+	}
+	if (NodeType == TEXT("SpawnActorFromClass"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("actor_class"));
+	}
+	if (NodeType == TEXT("DynamicCast"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("cast_class")) || HasAliasDefaultParam(Alias, TEXT("actor_class"));
+	}
+	if (NodeType == TEXT("MakeStruct") || NodeType == TEXT("BreakStruct"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("struct_type"));
+	}
+	if (NodeType == TEXT("SwitchOnEnum"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("enum_type"));
+	}
+	if (NodeType == TEXT("Return"))
+	{
+		return false;
+	}
+	return true;
+}
+
 struct FNodeTemplateCacheEntry
 {
 	FString CacheId;
@@ -624,6 +672,10 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSearchSpawnableNodes(
 		{
 			const FString DisplayName = Pair.Key;
 			const FString NodeType = Pair.Value.CanonicalType;
+			if (!IsSpawnableAliasTemplate(Pair.Value))
+			{
+				continue;
+			}
 			if (!MatchesNodeTemplateQuery(QueryLower, DisplayName, NodeType, TEXT(""), TEXT("generic")))
 			{
 				continue;
@@ -931,14 +983,33 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNodeAlias(cons
 	}
 	else
 	{
+		TArray<const FBlueprintNodeAliasEntry*> Matches;
 		for (const TPair<FString, FBlueprintNodeAliasEntry>& Pair : GetBlueprintNodeAliasCache())
 		{
 			if (Pair.Value.AssetPath.Equals(LoadedPath, ESearchCase::IgnoreCase)
 				&& Pair.Value.Alias.Equals(Alias, ESearchCase::IgnoreCase))
 			{
-				Entry = &Pair.Value;
-				break;
+				Matches.Add(&Pair.Value);
 			}
+		}
+		if (Matches.Num() > 1)
+		{
+			TArray<FString> GraphNames;
+			for (const FBlueprintNodeAliasEntry* Match : Matches)
+			{
+				if (Match)
+				{
+					GraphNames.AddUnique(Match->GraphName);
+				}
+			}
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Alias '%s' is ambiguous across graphs: %s. Pass graph_name to resolve it."),
+					*Alias, *FString::Join(GraphNames, TEXT(", "))),
+				-32602);
+		}
+		if (Matches.Num() == 1)
+		{
+			Entry = Matches[0];
 		}
 	}
 
