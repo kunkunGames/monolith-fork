@@ -29,6 +29,11 @@ namespace
 		return FPaths::Combine(FMonolithCrashBreadcrumb::GetCrashesDir(), TEXT("report_status.json"));
 	}
 
+	bool IsCrashReportStatusFile(const FString& FileName)
+	{
+		return FileName.Equals(TEXT("report_status.json"), ESearchCase::IgnoreCase);
+	}
+
 	TSharedPtr<FJsonObject> LoadCrashReportStatus()
 	{
 		FString Body;
@@ -271,6 +276,10 @@ namespace
 		for (const FString& Name : JsonFiles)
 		{
 			if (Items.Num() >= Limit) break;
+			if (IsCrashReportStatusFile(Name))
+			{
+				continue;
+			}
 
 			const FString FullPath = FPaths::Combine(Dir, Name);
 			FString FileName;
@@ -335,6 +344,11 @@ namespace
 
 		for (const FString& Name : JsonFiles)
 		{
+			if (IsCrashReportStatusFile(Name))
+			{
+				continue;
+			}
+
 			const FString FullPath = FPaths::Combine(Dir, Name);
 			FString FileName;
 			TSharedPtr<FJsonObject> Crash = ReadCrashFile(FullPath, FileName);
@@ -439,7 +453,7 @@ namespace
 		for (const FString& Name : JsonFiles)
 		{
 			if (Items.Num() >= Limit) break;
-			if (Name == TEXT("report_status.json"))
+			if (IsCrashReportStatusFile(Name))
 			{
 				continue;
 			}
