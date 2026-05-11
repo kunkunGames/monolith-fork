@@ -516,9 +516,15 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
                         const TSharedPtr<FJsonObject>& KfObj = *KfObjPtr;
 
                         double Time = 0.0;
-                            KfObj->TryGetNumberField(TEXT("time"), Time);
+                        if (!KfObj->TryGetNumberField(TEXT("time"), Time))
+                        {
+                            return FMonolithActionResult::Error(TEXT("keyframe.time must be a number"), -32602);
+                        }
                         double Value = 0.0;
-                            KfObj->TryGetNumberField(TEXT("value"), Value);
+                        if (!KfObj->TryGetNumberField(TEXT("value"), Value))
+                        {
+                            return FMonolithActionResult::Error(TEXT("keyframe.value must be a number"), -32602);
+                        }
 
                         FFrameNumber KeyFrame(
                             FMath::RoundToInt32(Time * TickResolution.AsDecimal()));
@@ -587,9 +593,16 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
                             const TSharedPtr<FJsonObject>& KfObj = *KfObjPtr;
 
                             double Time = 0.0;
-                            KfObj->TryGetNumberField(TEXT("time"), Time);
+                            if (!KfObj->TryGetNumberField(TEXT("time"), Time))
+                            {
+                                return FMonolithActionResult::Error(TEXT("keyframe.time must be a number"), -32602);
+                            }
                             double Value = Defaults[SubIdx];
-                            KfObj->TryGetNumberField(FieldNames[SubIdx], Value);
+                            if (KfObj->HasField(FieldNames[SubIdx]) && !KfObj->TryGetNumberField(FieldNames[SubIdx], Value))
+                            {
+                                return FMonolithActionResult::Error(
+                                    FString::Printf(TEXT("keyframe.%s must be a number"), *FieldNames[SubIdx]), -32602);
+                            }
 
                             FFrameNumber KeyFrame(
                                 FMath::RoundToInt32(Time * TickResolution.AsDecimal()));
@@ -651,9 +664,16 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
                             const TSharedPtr<FJsonObject>& KfObj = *KfObjPtr;
 
                             double Time = 0.0;
-                            KfObj->TryGetNumberField(TEXT("time"), Time);
+                            if (!KfObj->TryGetNumberField(TEXT("time"), Time))
+                            {
+                                return FMonolithActionResult::Error(TEXT("keyframe.time must be a number"), -32602);
+                            }
                             double Value = Defaults[SubIdx];
-                            KfObj->TryGetNumberField(FieldNames[SubIdx], Value);
+                            if (KfObj->HasField(FieldNames[SubIdx]) && !KfObj->TryGetNumberField(FieldNames[SubIdx], Value))
+                            {
+                                return FMonolithActionResult::Error(
+                                    FString::Printf(TEXT("keyframe.%s must be a number"), *FieldNames[SubIdx]), -32602);
+                            }
 
                             FFrameNumber KeyFrame(
                                 FMath::RoundToInt32(Time * TickResolution.AsDecimal()));
@@ -708,9 +728,15 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleAddAnimationKeyframe(co
     FString Component;
     Params->TryGetStringField(TEXT("component"), Component);
     double Time = 0.0;
-    Params->TryGetNumberField(TEXT("time"), Time);
+    if (!Params->TryGetNumberField(TEXT("time"), Time))
+    {
+        return FMonolithActionResult::Error(TEXT("time must be a number"), -32602);
+    }
     double Value = 0.0;
-    Params->TryGetNumberField(TEXT("value"), Value);
+    if (!Params->TryGetNumberField(TEXT("value"), Value))
+    {
+        return FMonolithActionResult::Error(TEXT("value must be a number"), -32602);
+    }
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
