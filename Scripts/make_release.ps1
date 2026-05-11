@@ -79,7 +79,11 @@ $StrippedModules = @(Get-ChildItem -Path $ProjectPluginsDir -Directory -ErrorAct
 if ($StrippedModules.Count -gt 0) {
     Write-Host "  [strip-list] Auto-discovered $($StrippedModules.Count) sibling plugin(s) to defend against: $($StrippedModules -join ', ')" -ForegroundColor DarkGray
 }
-$OutputZip = Join-Path $ProjectDir "Monolith-v$Version.zip"
+if ($IsMacOS) {
+    $OutputZip = Join-Path $ProjectDir "Monolith-v$Version-macOS.zip"
+} else {
+    $OutputZip = Join-Path $ProjectDir "Monolith-v$Version.zip"
+}
 $TempDir = Join-Path $env:TEMP "Monolith_Release_$Version"
 
 # Locate UBT dynamically
@@ -353,7 +357,8 @@ if (Test-Path $OutputZip) {
     Write-Host ""
     Write-Host "Paste this exact line into the GitHub Release notes body:" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  Monolith-SHA256: $Hash" -ForegroundColor White
+    $MarkerPrefix = if ($IsMacOS) { "Monolith-macOS-SHA256" } else { "Monolith-SHA256" }
+    Write-Host "  ${MarkerPrefix}: $Hash" -ForegroundColor White
     Write-Host ""
     Write-Host "The auto-updater parses this exact marker and refuses to install" -ForegroundColor Yellow
     Write-Host "if the downloaded zip's hash does not match. Do not rename or"     -ForegroundColor Yellow
