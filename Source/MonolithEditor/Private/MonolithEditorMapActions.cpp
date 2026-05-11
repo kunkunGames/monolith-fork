@@ -42,6 +42,8 @@
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 
+#include "MonolithPackagePathValidator.h"
+
 // =============================================================================
 //  Helpers
 // =============================================================================
@@ -153,6 +155,11 @@ FMonolithActionResult FMonolithEditorMapActions::HandleCreateEmptyMap(const TSha
 	if (!SplitAssetPath(InPath, PackagePath, AssetName, Error))
 	{
 		return FMonolithActionResult::Error(Error);
+	}
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackagePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	if (DoesAssetExist(PackagePath, AssetName))
