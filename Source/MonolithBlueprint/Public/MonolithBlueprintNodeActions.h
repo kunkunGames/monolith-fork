@@ -17,6 +17,13 @@ public:
 
 	// Wave 3 — Discovery & Resolution
 	static FMonolithActionResult HandleResolveNode(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSearchSpawnableNodes(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSpawnCachedNode(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleValidateNodeCache(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleRegisterNodeAlias(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleResolveNodeAlias(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleClearNodeAliases(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleDescribeSelectedGraphNodes(const TSharedPtr<FJsonObject>& Params);
 
 	// Wave 4 — Bulk Node Operations
 	static FMonolithActionResult HandleAddNodesBulk(const TSharedPtr<FJsonObject>& Params);

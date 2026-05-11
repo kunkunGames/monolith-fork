@@ -47,6 +47,8 @@
 #include "Serialization/JsonSerializer.h"
 #include "Editor.h"
 #include "UObject/Package.h"
+#include "UObject/UObjectIterator.h"
+#include "Misc/Guid.h"
 
 // ============================================================
 //  Shared Node Alias Map (1G)
@@ -147,6 +149,167 @@ static const TMap<FString, FNodeAlias>& GetNodeAliases()
 		Aliases.Add(TEXT("retriggerabledelay"), {TEXT("CallFunction"), {{TEXT("function_name"), TEXT("RetriggerableDelay")}, {TEXT("target_class"), TEXT("KismetSystemLibrary")}}});
 	}
 	return Aliases;
+}
+
+static bool HasAliasDefaultParam(const FNodeAlias& Alias, const FString& FieldName)
+{
+	const FString* Value = Alias.DefaultParams.Find(FieldName);
+	return Value && !Value->IsEmpty();
+}
+
+static bool IsSpawnableAliasTemplate(const FNodeAlias& Alias)
+{
+	const FString& NodeType = Alias.CanonicalType;
+	if (NodeType == TEXT("CallFunction"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("function_name"));
+	}
+	if (NodeType == TEXT("VariableGet") || NodeType == TEXT("VariableSet"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("variable_name"));
+	}
+	if (NodeType == TEXT("CustomEvent"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("event_name"));
+	}
+	if (NodeType == TEXT("MacroInstance"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("macro_name"));
+	}
+	if (NodeType == TEXT("SpawnActorFromClass"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("actor_class"));
+	}
+	if (NodeType == TEXT("DynamicCast"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("cast_class")) || HasAliasDefaultParam(Alias, TEXT("actor_class"));
+	}
+	if (NodeType == TEXT("MakeStruct") || NodeType == TEXT("BreakStruct"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("struct_type"));
+	}
+	if (NodeType == TEXT("SwitchOnEnum"))
+	{
+		return HasAliasDefaultParam(Alias, TEXT("enum_type"));
+	}
+	if (NodeType == TEXT("Return"))
+	{
+		return false;
+	}
+	return true;
+}
+
+struct FNodeTemplateCacheEntry
+{
+	FString CacheId;
+	FString Category;
+	FString DisplayName;
+	FString NodeType;
+	FString FunctionName;
+	FString TargetClass;
+	TMap<FString, FString> DefaultParams;
+	FDateTime CreatedAtUtc;
+};
+
+struct FBlueprintNodeAliasEntry
+{
+	FString AssetPath;
+	FString GraphName;
+	FString Alias;
+	FString NodeId;
+	FDateTime CreatedAtUtc;
+};
+
+static TMap<FString, FNodeTemplateCacheEntry>& GetNodeTemplateCache()
+{
+	static TMap<FString, FNodeTemplateCacheEntry> Cache;
+	return Cache;
+}
+
+static TMap<FString, FBlueprintNodeAliasEntry>& GetBlueprintNodeAliasCache()
+{
+	static TMap<FString, FBlueprintNodeAliasEntry> Cache;
+	return Cache;
+}
+
+static FString MakeNodeTemplateCacheId()
+{
+	return FString::Printf(TEXT("bpnode-%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+}
+
+static FString MakeNodeAliasKey(const FString& AssetPath, const FString& GraphName, const FString& Alias)
+{
+	return FString::Printf(TEXT("%s|%s|%s"), *AssetPath.ToLower(), *GraphName.ToLower(), *Alias.ToLower());
+}
+
+static bool MatchesNodeTemplateQuery(const FString& QueryLower, const FString& DisplayName, const FString& NodeType, const FString& ClassName, const FString& Category)
+{
+	if (QueryLower.IsEmpty())
+	{
+		return true;
+	}
+
+	TArray<FString> Tokens;
+	QueryLower.ParseIntoArray(Tokens, TEXT(" "), true);
+	for (const FString& Token : Tokens)
+	{
+		if (!DisplayName.ToLower().Contains(Token)
+			&& !NodeType.ToLower().Contains(Token)
+			&& !ClassName.ToLower().Contains(Token)
+			&& !Category.ToLower().Contains(Token))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+static TSharedPtr<FJsonObject> NodeTemplateToJson(const FNodeTemplateCacheEntry& Entry)
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("cache_id"), Entry.CacheId);
+	Obj->SetStringField(TEXT("category"), Entry.Category);
+	Obj->SetStringField(TEXT("display_name"), Entry.DisplayName);
+	Obj->SetStringField(TEXT("node_type"), Entry.NodeType);
+	Obj->SetStringField(TEXT("created_at"), Entry.CreatedAtUtc.ToIso8601());
+	if (!Entry.FunctionName.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("function_name"), Entry.FunctionName);
+	}
+	if (!Entry.TargetClass.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("target_class"), Entry.TargetClass);
+	}
+
+	TSharedPtr<FJsonObject> Defaults = MakeShared<FJsonObject>();
+	for (const TPair<FString, FString>& Pair : Entry.DefaultParams)
+	{
+		Defaults->SetStringField(Pair.Key, Pair.Value);
+	}
+	Obj->SetObjectField(TEXT("default_params"), Defaults);
+	return Obj;
+}
+
+static bool IsNodeTemplateStillValid(const FNodeTemplateCacheEntry& Entry)
+{
+	if (Entry.Category.Equals(TEXT("function"), ESearchCase::IgnoreCase))
+	{
+		UClass* TargetClass = FindFirstObject<UClass>(*Entry.TargetClass, EFindFirstObjectOptions::NativeFirst);
+		if (!TargetClass && !Entry.TargetClass.StartsWith(TEXT("U")))
+		{
+			TargetClass = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *Entry.TargetClass), EFindFirstObjectOptions::NativeFirst);
+		}
+		return TargetClass && TargetClass->FindFunctionByName(FName(*Entry.FunctionName)) != nullptr;
+	}
+	return true;
+}
+
+static void AddCachedNodeTemplate(TArray<TSharedPtr<FJsonValue>>& Results, FNodeTemplateCacheEntry&& Entry)
+{
+	Entry.CacheId = MakeNodeTemplateCacheId();
+	Entry.CreatedAtUtc = FDateTime::UtcNow();
+	GetNodeTemplateCache().Add(Entry.CacheId, Entry);
+	Results.Add(MakeShared<FJsonValueObject>(NodeTemplateToJson(Entry)));
 }
 
 // ============================================================
@@ -277,6 +440,66 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("delegate_property_name"), TEXT("string"), TEXT("Multicast delegate name for ComponentBoundEvent / AddDelegate / RemoveDelegate / ClearDelegate / CallDelegate dry-run"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("search_spawnable_nodes"),
+		TEXT("Search session-local spawnable Blueprint node templates and return cache IDs usable by spawn_cached_node. Covers Monolith add_node templates and Blueprint-callable functions."),
+		FMonolithActionHandler::CreateStatic(&HandleSearchSpawnableNodes),
+		FParamSchemaBuilder()
+			.Optional(TEXT("query"), TEXT("string"), TEXT("Case-insensitive search across display name, node type, class, and category"))
+			.Optional(TEXT("category"), TEXT("string"), TEXT("all, generic, or function"), TEXT("all"))
+			.Optional(TEXT("class_filter"), TEXT("string"), TEXT("Restrict function templates to class names containing this text"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max templates to return"), TEXT("50"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("spawn_cached_node"),
+		TEXT("Spawn a Blueprint node from a cache ID returned by search_spawnable_nodes. Delegates to blueprint.add_node and keeps the cache session-local."),
+		FMonolithActionHandler::CreateStatic(&HandleSpawnCachedNode),
+		FParamSchemaBuilder()
+			.Required(TEXT("cache_id"), TEXT("string"), TEXT("Cache ID returned by search_spawnable_nodes"))
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name (defaults to EventGraph)"))
+			.Optional(TEXT("position"), TEXT("array"), TEXT("Node position as [x, y]"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("validate_node_cache"),
+		TEXT("Validate session-local Blueprint node template cache and optional node aliases. Reports stale function templates or aliases whose target nodes no longer exist."),
+		FMonolithActionHandler::CreateStatic(&HandleValidateNodeCache),
+		FParamSchemaBuilder()
+			.Optional(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path to validate aliases for"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("register_node_alias"),
+		TEXT("Bind a friendly alias to an existing graph node ID for this editor session."),
+		FMonolithActionHandler::CreateStatic(&HandleRegisterNodeAlias),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.Required(TEXT("node_id"), TEXT("string"), TEXT("Existing node ID"))
+			.Required(TEXT("alias"), TEXT("string"), TEXT("Friendly alias"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name (searches all graphs if omitted)"))
+			.Optional(TEXT("overwrite"), TEXT("bool"), TEXT("Overwrite an existing alias"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("resolve_node_alias"),
+		TEXT("Resolve a friendly alias to the current node ID and graph for this editor session."),
+		FMonolithActionHandler::CreateStatic(&HandleResolveNodeAlias),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.Required(TEXT("alias"), TEXT("string"), TEXT("Friendly alias"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name to narrow alias lookup"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("clear_node_aliases"),
+		TEXT("Clear session-local Blueprint node aliases by asset, graph, or all aliases."),
+		FMonolithActionHandler::CreateStatic(&HandleClearNodeAliases),
+		FParamSchemaBuilder()
+			.Optional(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path filter"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name filter"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("describe_selected_graph_nodes"),
+		TEXT("Report selected Blueprint graph-node context availability. Current Monolith action surface does not yet bind to the active graph editor selection."),
+		FMonolithActionHandler::CreateStatic(&HandleDescribeSelectedGraphNodes),
+		FParamSchemaBuilder().Build());
+
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("batch_execute"),
 		TEXT("Execute multiple Blueprint write operations on a single asset in one transaction. Each operation is { \"op\": \"action_name\", ...action_params_minus_asset_path }. Supported ops: add_node, remove_node, connect_pins, disconnect_pins, set_pin_default, set_node_position, add_variable, remove_variable, rename_variable, set_variable_type, set_variable_defaults, add_local_variable, remove_local_variable, add_component, remove_component, rename_component, reparent_component, set_component_property, duplicate_component, add_function, remove_function, rename_function, add_macro, remove_macro, rename_macro, add_event_dispatcher, set_function_params, implement_interface, remove_interface, scaffold_interface_implementation, add_timeline, add_event_node, add_comment_node, promote_pin_to_variable, add_replicated_variable, save_asset."),
 		FMonolithActionHandler::CreateStatic(&HandleBatchExecute),
@@ -405,6 +628,452 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("variable_name"),  TEXT("string"), TEXT("Name for the new variable (defaults to pin_name)"))
 			.Optional(TEXT("graph_name"),     TEXT("string"), TEXT("Graph name (searches all graphs if omitted)"))
 			.Build());
+}
+
+// ============================================================
+//  node template cache / aliases
+// ============================================================
+
+FMonolithActionResult FMonolithBlueprintNodeActions::HandleSearchSpawnableNodes(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Query;
+	FString Category = TEXT("all");
+	FString ClassFilter;
+	int32 Limit = 50;
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("query"), Query);
+		Params->TryGetStringField(TEXT("category"), Category);
+		Params->TryGetStringField(TEXT("class_filter"), ClassFilter);
+
+		double LimitNumber = Limit;
+		if (Params->TryGetNumberField(TEXT("limit"), LimitNumber))
+		{
+			Limit = FMath::Clamp(FMath::FloorToInt(LimitNumber), 1, 1000);
+		}
+	}
+
+	const FString CategoryLower = Category.ToLower();
+	const bool bIncludeGeneric = CategoryLower == TEXT("all") || CategoryLower == TEXT("generic");
+	const bool bIncludeFunctions = CategoryLower == TEXT("all") || CategoryLower == TEXT("function") || CategoryLower == TEXT("functions");
+	if (!bIncludeGeneric && !bIncludeFunctions)
+	{
+		return FMonolithActionResult::Error(TEXT("category must be all, generic, or function"));
+	}
+
+	const FString QueryLower = Query.ToLower();
+	const FString ClassFilterLower = ClassFilter.ToLower();
+	TArray<TSharedPtr<FJsonValue>> Results;
+	int32 Matched = 0;
+
+	if (bIncludeGeneric)
+	{
+		for (const TPair<FString, FNodeAlias>& Pair : GetNodeAliases())
+		{
+			const FString DisplayName = Pair.Key;
+			const FString NodeType = Pair.Value.CanonicalType;
+			if (!IsSpawnableAliasTemplate(Pair.Value))
+			{
+				continue;
+			}
+			if (!MatchesNodeTemplateQuery(QueryLower, DisplayName, NodeType, TEXT(""), TEXT("generic")))
+			{
+				continue;
+			}
+
+			++Matched;
+			if (Results.Num() < Limit)
+			{
+				FNodeTemplateCacheEntry Entry;
+				Entry.Category = TEXT("generic");
+				Entry.DisplayName = DisplayName;
+				Entry.NodeType = NodeType;
+				Entry.DefaultParams = Pair.Value.DefaultParams;
+				AddCachedNodeTemplate(Results, MoveTemp(Entry));
+			}
+		}
+	}
+
+	if (bIncludeFunctions)
+	{
+		for (TObjectIterator<UClass> ClassIt; ClassIt; ++ClassIt)
+		{
+			UClass* Class = *ClassIt;
+			if (!Class || Class->HasAnyClassFlags(CLASS_CompiledFromBlueprint))
+			{
+				continue;
+			}
+
+			const FString ClassName = Class->GetName();
+			if (!ClassFilterLower.IsEmpty() && !ClassName.ToLower().Contains(ClassFilterLower))
+			{
+				continue;
+			}
+
+			for (TFieldIterator<UFunction> FuncIt(Class, EFieldIterationFlags::None); FuncIt; ++FuncIt)
+			{
+				UFunction* Func = *FuncIt;
+				if (!Func
+					|| Func->GetOwnerClass() != Class
+					|| !Func->HasAnyFunctionFlags(FUNC_BlueprintCallable)
+					|| Func->HasMetaData(TEXT("DeprecatedFunction")))
+				{
+					continue;
+				}
+
+				const FString FunctionName = Func->GetName();
+				const FString FunctionCategory = Func->GetMetaData(TEXT("Category"));
+				const FString DisplayName = FString::Printf(TEXT("%s (%s)"), *FunctionName, *ClassName);
+				if (!MatchesNodeTemplateQuery(QueryLower, DisplayName, TEXT("CallFunction"), ClassName, FunctionCategory))
+				{
+					continue;
+				}
+
+				++Matched;
+				if (Results.Num() < Limit)
+				{
+					FNodeTemplateCacheEntry Entry;
+					Entry.Category = TEXT("function");
+					Entry.DisplayName = DisplayName;
+					Entry.NodeType = TEXT("CallFunction");
+					Entry.FunctionName = FunctionName;
+					Entry.TargetClass = ClassName;
+					AddCachedNodeTemplate(Results, MoveTemp(Entry));
+				}
+			}
+		}
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("query"), Query);
+	Root->SetStringField(TEXT("category"), CategoryLower);
+	Root->SetNumberField(TEXT("matched_count"), Matched);
+	Root->SetNumberField(TEXT("returned_count"), Results.Num());
+	Root->SetNumberField(TEXT("cache_size"), GetNodeTemplateCache().Num());
+	Root->SetArrayField(TEXT("nodes"), Results);
+	if (Matched > Results.Num())
+	{
+		Root->SetNumberField(TEXT("truncated_remaining"), Matched - Results.Num());
+	}
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithBlueprintNodeActions::HandleSpawnCachedNode(const TSharedPtr<FJsonObject>& Params)
+{
+	FString CacheId;
+	FString AssetPath;
+	if (!Params.IsValid()
+		|| !Params->TryGetStringField(TEXT("cache_id"), CacheId)
+		|| !Params->TryGetStringField(TEXT("asset_path"), AssetPath)
+		|| CacheId.IsEmpty()
+		|| AssetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Required parameters: cache_id, asset_path"));
+	}
+
+	const FNodeTemplateCacheEntry* Entry = GetNodeTemplateCache().Find(CacheId);
+	if (!Entry)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Unknown node cache_id: %s"), *CacheId));
+	}
+	if (!IsNodeTemplateStillValid(*Entry))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Stale node cache_id: %s"), *CacheId));
+	}
+
+	TSharedPtr<FJsonObject> AddParams = MakeShared<FJsonObject>();
+	AddParams->SetStringField(TEXT("asset_path"), AssetPath);
+	AddParams->SetStringField(TEXT("node_type"), Entry->NodeType);
+	if (!Entry->FunctionName.IsEmpty())
+	{
+		AddParams->SetStringField(TEXT("function_name"), Entry->FunctionName);
+	}
+	if (!Entry->TargetClass.IsEmpty())
+	{
+		AddParams->SetStringField(TEXT("target_class"), Entry->TargetClass);
+	}
+	for (const TPair<FString, FString>& Pair : Entry->DefaultParams)
+	{
+		AddParams->SetStringField(Pair.Key, Pair.Value);
+	}
+
+	FString GraphName;
+	if (Params->TryGetStringField(TEXT("graph_name"), GraphName) && !GraphName.IsEmpty())
+	{
+		AddParams->SetStringField(TEXT("graph_name"), GraphName);
+	}
+	if (TSharedPtr<FJsonValue> Position = Params->TryGetField(TEXT("position")))
+	{
+		AddParams->SetField(TEXT("position"), Position);
+	}
+
+	FMonolithActionResult Result = HandleAddNode(AddParams);
+	if (Result.bSuccess && Result.Result.IsValid())
+	{
+		Result.Result->SetStringField(TEXT("cache_id"), CacheId);
+		Result.Result->SetStringField(TEXT("template_display_name"), Entry->DisplayName);
+		Result.Result->SetStringField(TEXT("template_category"), Entry->Category);
+	}
+	return Result;
+}
+
+FMonolithActionResult FMonolithBlueprintNodeActions::HandleValidateNodeCache(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> TemplateRows;
+	int32 StaleTemplates = 0;
+	for (const TPair<FString, FNodeTemplateCacheEntry>& Pair : GetNodeTemplateCache())
+	{
+		const bool bValid = IsNodeTemplateStillValid(Pair.Value);
+		if (!bValid)
+		{
+			++StaleTemplates;
+		}
+		TSharedPtr<FJsonObject> Row = NodeTemplateToJson(Pair.Value);
+		Row->SetBoolField(TEXT("valid"), bValid);
+		TemplateRows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> AliasRows;
+	int32 StaleAliases = 0;
+	int32 UncheckedAliases = 0;
+	UBlueprint* BP = nullptr;
+	if (!AssetPath.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> LoadParams = MakeShared<FJsonObject>();
+		LoadParams->SetStringField(TEXT("asset_path"), AssetPath);
+		FString LoadedPath;
+		BP = MonolithBlueprintInternal::LoadBlueprintFromParams(LoadParams, LoadedPath);
+	}
+
+	for (const TPair<FString, FBlueprintNodeAliasEntry>& Pair : GetBlueprintNodeAliasCache())
+	{
+		const FBlueprintNodeAliasEntry& Alias = Pair.Value;
+		if (!AssetPath.IsEmpty() && !Alias.AssetPath.Equals(AssetPath, ESearchCase::IgnoreCase))
+		{
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("asset_path"), Alias.AssetPath);
+		Row->SetStringField(TEXT("graph_name"), Alias.GraphName);
+		Row->SetStringField(TEXT("alias"), Alias.Alias);
+		Row->SetStringField(TEXT("node_id"), Alias.NodeId);
+		Row->SetStringField(TEXT("created_at"), Alias.CreatedAtUtc.ToIso8601());
+
+		if (BP)
+		{
+			const bool bValid = MonolithBlueprintInternal::FindNodeById(BP, Alias.GraphName, Alias.NodeId) != nullptr;
+			Row->SetBoolField(TEXT("valid"), bValid);
+			if (!bValid)
+			{
+				++StaleAliases;
+			}
+		}
+		else
+		{
+			Row->SetStringField(TEXT("status"), TEXT("unchecked"));
+			++UncheckedAliases;
+		}
+		AliasRows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetNumberField(TEXT("template_count"), GetNodeTemplateCache().Num());
+	Root->SetNumberField(TEXT("stale_template_count"), StaleTemplates);
+	Root->SetArrayField(TEXT("templates"), TemplateRows);
+	Root->SetNumberField(TEXT("alias_count"), AliasRows.Num());
+	Root->SetNumberField(TEXT("stale_alias_count"), StaleAliases);
+	Root->SetNumberField(TEXT("unchecked_alias_count"), UncheckedAliases);
+	Root->SetArrayField(TEXT("aliases"), AliasRows);
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithBlueprintNodeActions::HandleRegisterNodeAlias(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	FString NodeId;
+	FString Alias;
+	if (!Params.IsValid()
+		|| !Params->TryGetStringField(TEXT("asset_path"), AssetPath)
+		|| !Params->TryGetStringField(TEXT("node_id"), NodeId)
+		|| !Params->TryGetStringField(TEXT("alias"), Alias)
+		|| AssetPath.IsEmpty()
+		|| NodeId.IsEmpty()
+		|| Alias.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Required parameters: asset_path, node_id, alias"));
+	}
+
+	FString LoadedPath;
+	UBlueprint* BP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, LoadedPath);
+	if (!BP)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+	}
+
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	UEdGraphNode* Node = MonolithBlueprintInternal::FindNodeById(BP, GraphName, NodeId);
+	if (!Node)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Node not found: %s"), *NodeId));
+	}
+	if (GraphName.IsEmpty() && Node->GetGraph())
+	{
+		GraphName = Node->GetGraph()->GetName();
+	}
+
+	bool bOverwrite = false;
+	Params->TryGetBoolField(TEXT("overwrite"), bOverwrite);
+	const FString Key = MakeNodeAliasKey(LoadedPath, GraphName, Alias);
+	if (GetBlueprintNodeAliasCache().Contains(Key) && !bOverwrite)
+	{
+		return FMonolithActionResult::Error(TEXT("Alias already exists. Pass overwrite=true to replace it."));
+	}
+
+	FBlueprintNodeAliasEntry Entry;
+	Entry.AssetPath = LoadedPath;
+	Entry.GraphName = GraphName;
+	Entry.Alias = Alias;
+	Entry.NodeId = NodeId;
+	Entry.CreatedAtUtc = FDateTime::UtcNow();
+	GetBlueprintNodeAliasCache().Add(Key, Entry);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("asset_path"), LoadedPath);
+	Result->SetStringField(TEXT("graph_name"), GraphName);
+	Result->SetStringField(TEXT("alias"), Alias);
+	Result->SetStringField(TEXT("node_id"), NodeId);
+	Result->SetBoolField(TEXT("overwritten"), bOverwrite);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNodeAlias(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	FString Alias;
+	if (!Params.IsValid()
+		|| !Params->TryGetStringField(TEXT("asset_path"), AssetPath)
+		|| !Params->TryGetStringField(TEXT("alias"), Alias)
+		|| AssetPath.IsEmpty()
+		|| Alias.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Required parameters: asset_path, alias"));
+	}
+
+	FString LoadedPath;
+	UBlueprint* BP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, LoadedPath);
+	if (!BP)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+	}
+
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	const FBlueprintNodeAliasEntry* Entry = nullptr;
+	if (!GraphName.IsEmpty())
+	{
+		Entry = GetBlueprintNodeAliasCache().Find(MakeNodeAliasKey(LoadedPath, GraphName, Alias));
+	}
+	else
+	{
+		TArray<const FBlueprintNodeAliasEntry*> Matches;
+		for (const TPair<FString, FBlueprintNodeAliasEntry>& Pair : GetBlueprintNodeAliasCache())
+		{
+			if (Pair.Value.AssetPath.Equals(LoadedPath, ESearchCase::IgnoreCase)
+				&& Pair.Value.Alias.Equals(Alias, ESearchCase::IgnoreCase))
+			{
+				Matches.Add(&Pair.Value);
+			}
+		}
+		if (Matches.Num() > 1)
+		{
+			TArray<FString> GraphNames;
+			for (const FBlueprintNodeAliasEntry* Match : Matches)
+			{
+				if (Match)
+				{
+					GraphNames.AddUnique(Match->GraphName);
+				}
+			}
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Alias '%s' is ambiguous across graphs: %s. Pass graph_name to resolve it."),
+					*Alias, *FString::Join(GraphNames, TEXT(", "))),
+				-32602);
+		}
+		if (Matches.Num() == 1)
+		{
+			Entry = Matches[0];
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("asset_path"), LoadedPath);
+	Result->SetStringField(TEXT("alias"), Alias);
+	if (!Entry)
+	{
+		Result->SetBoolField(TEXT("found"), false);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	UEdGraphNode* Node = MonolithBlueprintInternal::FindNodeById(BP, Entry->GraphName, Entry->NodeId);
+	Result->SetBoolField(TEXT("found"), true);
+	Result->SetBoolField(TEXT("stale"), Node == nullptr);
+	Result->SetStringField(TEXT("graph_name"), Entry->GraphName);
+	Result->SetStringField(TEXT("node_id"), Entry->NodeId);
+	if (Node)
+	{
+		Result->SetStringField(TEXT("node_class"), Node->GetClass()->GetName());
+		Result->SetStringField(TEXT("node_title"), Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithBlueprintNodeActions::HandleClearNodeAliases(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	FString GraphName;
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+		Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	}
+
+	int32 Removed = 0;
+	TArray<FString> KeysToRemove;
+	for (const TPair<FString, FBlueprintNodeAliasEntry>& Pair : GetBlueprintNodeAliasCache())
+	{
+		const bool bAssetMatches = AssetPath.IsEmpty() || Pair.Value.AssetPath.Equals(AssetPath, ESearchCase::IgnoreCase);
+		const bool bGraphMatches = GraphName.IsEmpty() || Pair.Value.GraphName.Equals(GraphName, ESearchCase::IgnoreCase);
+		if (bAssetMatches && bGraphMatches)
+		{
+			KeysToRemove.Add(Pair.Key);
+		}
+	}
+
+	for (const FString& Key : KeysToRemove)
+	{
+		Removed += GetBlueprintNodeAliasCache().Remove(Key);
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetNumberField(TEXT("removed"), Removed);
+	Result->SetNumberField(TEXT("remaining"), GetBlueprintNodeAliasCache().Num());
+	if (!AssetPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("asset_path"), AssetPath);
+	}
+	if (!GraphName.IsEmpty())
+	{
+		Result->SetStringField(TEXT("graph_name"), GraphName);
+	}
+	return FMonolithActionResult::Success(Result);
 }
 
 // ============================================================
@@ -3722,4 +4391,15 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetTimelineKeys(const
 	Root->SetStringField(TEXT("track_name"), TrackNameStr);
 	Root->SetNumberField(TEXT("keys_set"), KeyCount);
 	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithBlueprintNodeActions::HandleDescribeSelectedGraphNodes(const TSharedPtr<FJsonObject>& /*Params*/)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("status"), TEXT("unavailable"));
+	Result->SetStringField(TEXT("reason"), TEXT("Active Blueprint graph-editor selection is not exposed through the current Monolith editor adapter."));
+	Result->SetBoolField(TEXT("fallback_used"), false);
+	Result->SetStringField(TEXT("recommended_action"), TEXT("blueprint.get_graph_data"));
+	Result->SetArrayField(TEXT("nodes"), TArray<TSharedPtr<FJsonValue>>());
+	return FMonolithActionResult::Success(Result);
 }
