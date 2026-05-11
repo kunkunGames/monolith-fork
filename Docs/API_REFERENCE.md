@@ -202,7 +202,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithMaterial.md` for full graph_spec s
 
 ## animation
 
-Animation curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig. **119 actions** total — 96 baseline + 13 PoseSearch + 5 ABP write + 3 Control Rig write + 1 layout + 1 sequence action.
+Animation curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig. **125 actions** total — 103 baseline + 13 PoseSearch + 5 ABP write + 3 Control Rig write + 1 layout.
 
 > For full param schemas, call `monolith_discover("animation")` at runtime.
 
