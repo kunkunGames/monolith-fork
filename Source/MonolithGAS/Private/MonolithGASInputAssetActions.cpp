@@ -456,16 +456,24 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleGetInputAction(const 
 
 FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const bool bOverwrite = Params->HasField(TEXT("overwrite")) && Params->GetBoolField(TEXT("overwrite"));
-	const bool bSave = !Params->HasField(TEXT("save")) || Params->GetBoolField(TEXT("save"));
-
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
 	FString Error;
+	bool bOverwrite = false;
+	if (Params->HasField(TEXT("overwrite")) && !Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+	{
+		return FMonolithActionResult::Error(TEXT("overwrite must be a boolean"));
+	}
+	bool bSave = true;
+	if (Params->HasField(TEXT("save")) && !Params->TryGetBoolField(TEXT("save"), bSave))
+	{
+		return FMonolithActionResult::Error(TEXT("save must be a boolean"));
+	}
+
 	UInputAction* Action = LoadObject<UInputAction>(nullptr, *NormalizeObjectPath(AssetPath));
 	if (Action && !bOverwrite)
 	{
@@ -475,13 +483,19 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 	bool bCreated = false;
 	if (!Action)
 	{
+		const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
+		FString ExistError;
+		if (!MonolithGAS::EnsureAssetPathFree(AssetPath, AssetName, ExistError))
+		{
+			return FMonolithActionResult::Error(ExistError);
+		}
+
 		UPackage* Package = MonolithGAS::GetOrCreatePackage(AssetPath, Error);
 		if (!Package)
 		{
 			return FMonolithActionResult::Error(Error);
 		}
 
-		const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
 		Action = NewObject<UInputAction>(Package, *AssetName, RF_Public | RF_Standalone);
 		if (!Action)
 		{
@@ -495,30 +509,56 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 		const FScopedTransaction Transaction(NSLOCTEXT("Monolith", "CreateInputAction", "Create Input Action"));
 		Action->Modify();
 
-		FString ValueTypeString = Params->HasField(TEXT("value_type")) ? Params->GetStringField(TEXT("value_type")) : TEXT("Boolean");
-		EInputActionValueType ValueType;
-		if (!ParseValueType(ValueTypeString, ValueType))
+		if (Params->HasField(TEXT("value_type")) || bCreated)
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid value_type: %s"), *ValueTypeString));
+			FString ValueTypeString = TEXT("Boolean");
+			if (Params->HasField(TEXT("value_type")) && !Params->TryGetStringField(TEXT("value_type"), ValueTypeString))
+			{
+				return FMonolithActionResult::Error(TEXT("value_type must be a string"));
+			}
+			EInputActionValueType ValueType;
+			if (!ParseValueType(ValueTypeString, ValueType))
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid value_type: %s"), *ValueTypeString));
+			}
+			Action->ValueType = ValueType;
 		}
-		Action->ValueType = ValueType;
 
 		if (Params->HasField(TEXT("description")))
 		{
-			Action->ActionDescription = FText::FromString(Params->GetStringField(TEXT("description")));
+			FString Description;
+			if (!Params->TryGetStringField(TEXT("description"), Description))
+			{
+				return FMonolithActionResult::Error(TEXT("description must be a string"));
+			}
+			Action->ActionDescription = FText::FromString(Description);
 		}
 		if (Params->HasField(TEXT("consume_input")))
 		{
-			Action->bConsumeInput = Params->GetBoolField(TEXT("consume_input"));
+			bool bConsumeInput = false;
+			if (!Params->TryGetBoolField(TEXT("consume_input"), bConsumeInput))
+			{
+				return FMonolithActionResult::Error(TEXT("consume_input must be a boolean"));
+			}
+			Action->bConsumeInput = bConsumeInput;
 		}
 		if (Params->HasField(TEXT("trigger_when_paused")))
 		{
-			Action->bTriggerWhenPaused = Params->GetBoolField(TEXT("trigger_when_paused"));
+			bool bTriggerWhenPaused = false;
+			if (!Params->TryGetBoolField(TEXT("trigger_when_paused"), bTriggerWhenPaused))
+			{
+				return FMonolithActionResult::Error(TEXT("trigger_when_paused must be a boolean"));
+			}
+			Action->bTriggerWhenPaused = bTriggerWhenPaused;
 		}
 		if (Params->HasField(TEXT("accumulation")))
 		{
 			EInputActionAccumulationBehavior Behavior;
-			const FString Accumulation = Params->GetStringField(TEXT("accumulation"));
+			FString Accumulation;
+			if (!Params->TryGetStringField(TEXT("accumulation"), Accumulation))
+			{
+				return FMonolithActionResult::Error(TEXT("accumulation must be a string"));
+			}
 			if (!ParseAccumulation(Accumulation, Behavior))
 			{
 				return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid accumulation: %s"), *Accumulation));
@@ -648,16 +688,24 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleGetInputMappingContex
 
 FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingContext(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const bool bOverwrite = Params->HasField(TEXT("overwrite")) && Params->GetBoolField(TEXT("overwrite"));
-	const bool bSave = !Params->HasField(TEXT("save")) || Params->GetBoolField(TEXT("save"));
-
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
 	FString Error;
+	bool bOverwrite = false;
+	if (Params->HasField(TEXT("overwrite")) && !Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+	{
+		return FMonolithActionResult::Error(TEXT("overwrite must be a boolean"));
+	}
+	bool bSave = true;
+	if (Params->HasField(TEXT("save")) && !Params->TryGetBoolField(TEXT("save"), bSave))
+	{
+		return FMonolithActionResult::Error(TEXT("save must be a boolean"));
+	}
+
 	UInputMappingContext* Context = LoadObject<UInputMappingContext>(nullptr, *NormalizeObjectPath(AssetPath));
 	if (Context && !bOverwrite)
 	{
@@ -667,13 +715,19 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 	bool bCreated = false;
 	if (!Context)
 	{
+		const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
+		FString ExistError;
+		if (!MonolithGAS::EnsureAssetPathFree(AssetPath, AssetName, ExistError))
+		{
+			return FMonolithActionResult::Error(ExistError);
+		}
+
 		UPackage* Package = MonolithGAS::GetOrCreatePackage(AssetPath, Error);
 		if (!Package)
 		{
 			return FMonolithActionResult::Error(Error);
 		}
 
-		const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
 		Context = NewObject<UInputMappingContext>(Package, *AssetName, RF_Public | RF_Standalone);
 		if (!Context)
 		{
@@ -687,7 +741,12 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 	Context->Modify();
 	if (Params->HasField(TEXT("description")))
 	{
-		Context->ContextDescription = FText::FromString(Params->GetStringField(TEXT("description")));
+		FString Description;
+		if (!Params->TryGetStringField(TEXT("description"), Description))
+		{
+			return FMonolithActionResult::Error(TEXT("description must be a string"));
+		}
+		Context->ContextDescription = FText::FromString(Description);
 	}
 
 	bool bSaved = false;
