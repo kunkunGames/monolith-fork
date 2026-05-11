@@ -68,7 +68,13 @@ namespace MonolithUI::ImageGenerationInternal
 
 	static FString PromptHash(const FString& Prompt)
 	{
-		return FMD5::HashAnsiString(*Prompt);
+		FMD5 Md5;
+		const auto Utf8 = StringCast<UTF8CHAR>(*Prompt);
+		Md5.Update(reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length() * sizeof(UTF8CHAR));
+
+		uint8 Digest[16];
+		Md5.Final(Digest);
+		return BytesToHex(Digest, UE_ARRAY_COUNT(Digest)).ToLower();
 	}
 
 	static bool ResolveAspectRatio(const FString& AspectRatio, int32& OutWidth, int32& OutHeight)
@@ -158,6 +164,41 @@ namespace MonolithUI::ImageGenerationInternal
 		}
 
 		return Input.RightChop(CommaIndex + 1);
+	}
+
+	static FString CompactBase64Payload(const FString& Input)
+	{
+		FString Compact;
+		Compact.Reserve(Input.Len());
+		for (const TCHAR Ch : Input)
+		{
+			if (!FChar::IsWhitespace(Ch))
+			{
+				Compact.AppendChar(Ch);
+			}
+		}
+		return Compact;
+	}
+
+	static int64 EstimateBase64DecodedBytes(const FString& CompactBase64)
+	{
+		if (CompactBase64.IsEmpty())
+		{
+			return 0;
+		}
+
+		int32 Padding = 0;
+		if (CompactBase64.EndsWith(TEXT("==")))
+		{
+			Padding = 2;
+		}
+		else if (CompactBase64.EndsWith(TEXT("=")))
+		{
+			Padding = 1;
+		}
+
+		const int64 EncodedLength = CompactBase64.Len();
+		return FMath::Max<int64>(0, ((EncodedLength + 3) / 4) * 3 - Padding);
 	}
 
 	static void AppendLe32(TArray<uint8>& Bytes, uint32 Value)
@@ -559,9 +600,21 @@ FMonolithActionResult MonolithUI::FImageGenerationActions::HandleImportGenerated
 	FString FormatHint;
 	Params->TryGetStringField(TEXT("format_hint"), FormatHint);
 	BytesB64 = ImageGenerationInternal::StripDataUrlPrefix(BytesB64, FormatHint);
+	BytesB64 = ImageGenerationInternal::CompactBase64Payload(BytesB64);
 	if (FormatHint.IsEmpty())
 	{
 		FormatHint = TEXT("png");
+	}
+
+	double MaxBytesDouble = ImageGenerationInternal::DefaultMaxCompressedBytes;
+	Params->TryGetNumberField(TEXT("max_bytes"), MaxBytesDouble);
+	const int32 MaxBytes = FMath::Max(1, static_cast<int32>(MaxBytesDouble));
+	const int64 EstimatedDecodedBytes = ImageGenerationInternal::EstimateBase64DecodedBytes(BytesB64);
+	if (EstimatedDecodedBytes > MaxBytes)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Compressed image payload is estimated at %lld bytes, above max_bytes %d"), EstimatedDecodedBytes, MaxBytes),
+			-32602);
 	}
 
 	TArray<uint8> DecodedBytes;
@@ -570,9 +623,6 @@ FMonolithActionResult MonolithUI::FImageGenerationActions::HandleImportGenerated
 		return FMonolithActionResult::Error(TEXT("Base64 decode of bytes_b64 failed or produced empty buffer"), -32602);
 	}
 
-	double MaxBytesDouble = ImageGenerationInternal::DefaultMaxCompressedBytes;
-	Params->TryGetNumberField(TEXT("max_bytes"), MaxBytesDouble);
-	const int32 MaxBytes = FMath::Max(1, static_cast<int32>(MaxBytesDouble));
 	if (DecodedBytes.Num() > MaxBytes)
 	{
 		return FMonolithActionResult::Error(
