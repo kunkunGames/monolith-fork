@@ -250,14 +250,14 @@ namespace
 		FString ToolFilter;
 		if (Params.IsValid())
 		{
-			if (Params->HasField(TEXT("limit")))
+			double LimitValue = 0.0;
+			if (Params->TryGetNumberField(TEXT("limit"), LimitValue))
 			{
-				double LimitValue = 0.0;
-				if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
-				{
-					return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
-				}
 				Limit = FMath::Clamp((int32)LimitValue, 1, 1000);
+			}
+			else if (Params->HasField(TEXT("limit")))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
 			}
 			Params->TryGetStringField(TEXT("since"), Since);
 			Params->TryGetStringField(TEXT("tool"), ToolFilter);
@@ -425,14 +425,14 @@ namespace
 		bool bIncludeIgnored = false;
 		if (Params.IsValid())
 		{
-			if (Params->HasField(TEXT("limit")))
+			double LimitValue = 0.0;
+			if (Params->TryGetNumberField(TEXT("limit"), LimitValue))
 			{
-				double LimitValue = 0.0;
-				if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
-				{
-					return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
-				}
 				Limit = FMath::Clamp((int32)LimitValue, 1, 1000);
+			}
+			else if (Params->HasField(TEXT("limit")))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
 			}
 			Params->TryGetStringField(TEXT("since"), Since);
 			Params->TryGetStringField(TEXT("tool"), ToolFilter);

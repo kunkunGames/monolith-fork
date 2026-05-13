@@ -2019,9 +2019,9 @@ FMonolithActionResult FMonolithEditorActions::HandleImportTexture(
 		if (ParsedSettings.IsValid())
 		{
 			// Compression
-			if (ParsedSettings->HasField(TEXT("compression")))
+			FString Comp;
+			if (ParsedSettings->TryGetStringField(TEXT("compression"), Comp))
 			{
-				FString Comp = ParsedSettings->GetStringField(TEXT("compression"));
 				if (Comp == TEXT("TC_Normalmap")) Texture->CompressionSettings = TC_Normalmap;
 				else if (Comp == TEXT("TC_Masks")) Texture->CompressionSettings = TC_Masks;
 				else if (Comp == TEXT("TC_HDR")) Texture->CompressionSettings = TC_HDR;
@@ -2030,15 +2030,17 @@ FMonolithActionResult FMonolithEditorActions::HandleImportTexture(
 			}
 
 			// sRGB
-			if (ParsedSettings->HasField(TEXT("srgb")))
+			bool bSRGB = false;
+			if (ParsedSettings->TryGetBoolField(TEXT("srgb"), bSRGB))
 			{
-				Texture->SRGB = ParsedSettings->GetBoolField(TEXT("srgb"));
+				Texture->SRGB = bSRGB;
 			}
 
 			// Tiling
-			if (ParsedSettings->HasField(TEXT("tiling")))
+			bool bTiling = false;
+			if (ParsedSettings->TryGetBoolField(TEXT("tiling"), bTiling))
 			{
-				if (ParsedSettings->GetBoolField(TEXT("tiling")))
+				if (bTiling)
 				{
 					Texture->AddressX = TA_Wrap;
 					Texture->AddressY = TA_Wrap;
@@ -2046,9 +2048,10 @@ FMonolithActionResult FMonolithEditorActions::HandleImportTexture(
 			}
 
 			// Max size
-			if (ParsedSettings->HasField(TEXT("max_size")))
+			double MaxSizeNum;
+			if (ParsedSettings->TryGetNumberField(TEXT("max_size"), MaxSizeNum))
 			{
-				int32 MaxSize = (int32)ParsedSettings->GetNumberField(TEXT("max_size"));
+				int32 MaxSize = (int32)MaxSizeNum;
 				if (MaxSize > 0)
 				{
 					Texture->MaxTextureSize = MaxSize;
@@ -2056,9 +2059,9 @@ FMonolithActionResult FMonolithEditorActions::HandleImportTexture(
 			}
 
 			// LOD group
-			if (ParsedSettings->HasField(TEXT("lod_group")))
+			FString LODGroup;
+			if (ParsedSettings->TryGetStringField(TEXT("lod_group"), LODGroup))
 			{
-				FString LODGroup = ParsedSettings->GetStringField(TEXT("lod_group"));
 				if (LODGroup == TEXT("TEXTUREGROUP_WorldNormalMap")) Texture->LODGroup = TEXTUREGROUP_WorldNormalMap;
 				else if (LODGroup == TEXT("TEXTUREGROUP_Effects")) Texture->LODGroup = TEXTUREGROUP_Effects;
 				else if (LODGroup == TEXT("TEXTUREGROUP_EffectsNotFiltered")) Texture->LODGroup = TEXTUREGROUP_EffectsNotFiltered;
@@ -2157,10 +2160,7 @@ FMonolithActionResult FMonolithEditorActions::HandleStitchFlipbook(
 	Params->TryGetBoolField(TEXT("delete_sources"), bDeleteSources);
 
 	FString LODGroupStr = TEXT("TEXTUREGROUP_Effects");
-	if (Params->HasField(TEXT("lod_group")))
-	{
-		LODGroupStr = Params->GetStringField(TEXT("lod_group"));
-	}
+	Params->TryGetStringField(TEXT("lod_group"), LODGroupStr);
 
 	// --- Load all frame images ---
 	IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
@@ -2540,17 +2540,20 @@ FMonolithActionResult FMonolithEditorActions::HandleListOpenViewports(const TSha
 FMonolithActionResult FMonolithEditorActions::HandleCaptureLevelViewport(const TSharedPtr<FJsonObject>& Params)
 {
 	int32 ViewportIndex = 0;
-	if (Params->HasField(TEXT("viewport_index")))
+	double ViewportIndexNumber = 0.0;
+	if (Params->TryGetNumberField(TEXT("viewport_index"), ViewportIndexNumber))
 	{
-		double ViewportIndexNumber = 0.0;
-		if (!Params->TryGetNumberField(TEXT("viewport_index"), ViewportIndexNumber)
-			|| ViewportIndexNumber < 0.0
+		if (ViewportIndexNumber < 0.0
 			|| ViewportIndexNumber > static_cast<double>(MAX_int32)
 			|| static_cast<double>(static_cast<int64>(ViewportIndexNumber)) != ViewportIndexNumber)
 		{
 			return FMonolithActionResult::Error(TEXT("viewport_index must be a non-negative integer"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		ViewportIndex = static_cast<int32>(ViewportIndexNumber);
+	}
+	else if (Params->HasField(TEXT("viewport_index")))
+	{
+		return FMonolithActionResult::Error(TEXT("viewport_index must be a non-negative integer"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString Error;
@@ -2782,9 +2785,8 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 
 	// Output directory
 	FString OutputDir;
-	if (Params->HasField(TEXT("output_path")))
+	if (Params->TryGetStringField(TEXT("output_path"), OutputDir))
 	{
-		OutputDir = Params->GetStringField(TEXT("output_path"));
 		if (FPaths::IsRelative(OutputDir))
 		{
 			OutputDir = FPaths::ProjectDir() / OutputDir;
