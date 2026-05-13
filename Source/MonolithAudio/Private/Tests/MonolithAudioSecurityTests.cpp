@@ -64,7 +64,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioSecurityTestWaveCreatePathTest, "
 bool FMonolithAudioSecurityTestWaveCreatePathTest::RunTest(const FString& Parameters)
 {
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-	Params->SetStringField(TEXT("path"), TEXT("//Game/Audio/SW_BadPathTest"));
+	Params->SetStringField(TEXT("asset_path"), TEXT("//Game/Audio/SW_BadPathTest"));
 	Params->SetNumberField(TEXT("duration_seconds"), 1.0);
 	Params->SetNumberField(TEXT("frequency_hz"), 440.0);
 

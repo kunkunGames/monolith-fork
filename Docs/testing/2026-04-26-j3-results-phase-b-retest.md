@@ -31,7 +31,7 @@ The 19 runtime PIE-driven test cases from the original J3 spec (TC3.1–TC3.17, 
 |-------|--------|--------|
 | `monolith_status` first call | PASS | `server_running=true, version=0.14.7, port=9316, actions=1462, namespaces=20` |
 | 4 perception actions present in `audio` namespace | PASS | bind/unbind/get/list — all four registered |
-| `audio::create_test_wave` (F18) present | PASS | Listed in audio actions; param schema requires `path` not `asset_path` (worth noting for future agents) |
+| `audio::create_test_wave` (F18) present | PASS | Listed in audio actions; param schema requires `path` not `asset_path` (worth noting for future agents, fixed in contract audit) |
 | Disposable test path `/Game/Tests/Monolith/J3/` available | PASS | All test assets created and purged cleanly under that prefix |
 
 ---
@@ -101,7 +101,7 @@ Re-ran the 10 prior-PASS rows from `2026-04-26-j3-results.md` (action-surface su
 The prior pass deferred TC3.19 because no MCP route existed to author a disposable USoundWave under `/Game/Tests/Monolith/`. F18 shipped `audio::create_test_wave` to close that gap.
 
 **Steps:**
-1. `audio::create_test_wave({path:"/Game/Tests/Monolith/J3/SW_J3_F18_TC319"})` → 22050 samples, 0.5s, 440Hz sine. PASS.
+1. `audio::create_test_wave({asset_path:"/Game/Tests/Monolith/J3/SW_J3_F18_TC319"})` → 22050 samples, 0.5s, 440Hz sine. PASS.
 2. `audio::bind_sound_to_perception({asset_path:"/Game/Tests/Monolith/J3/SW_J3_F18_TC319", loudness:0.7, max_range:1500, tag:"F18Direct", sense_class:"Hearing"})` → `asset_class:"SoundWave", created:true`. PASS.
 3. `audio::get_sound_perception_binding(...)` → `has_binding:true`, `binding.tag:"F18Direct"`, `binding.loudness:0.69999998807907104` (float32 round-trip), `binding.sense_class:"AISense_Hearing"`. PASS.
 4. Final list confirmed the wave appears with `asset_class:"SoundWave"`. PASS.
