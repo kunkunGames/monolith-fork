@@ -24,10 +24,16 @@ bool ParseVector(const TSharedPtr<FJsonObject>& Params, const FString& Key, FVec
 	const TSharedPtr<FJsonObject>* Obj;
 	if (Params->TryGetObjectField(Key, Obj))
 	{
-		Out.X = (*Obj)->GetNumberField(TEXT("x"));
-		Out.Y = (*Obj)->GetNumberField(TEXT("y"));
-		Out.Z = (*Obj)->GetNumberField(TEXT("z"));
-		return true;
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		if ((*Obj)->TryGetNumberField(TEXT("x"), X) &&
+			(*Obj)->TryGetNumberField(TEXT("y"), Y) &&
+			(*Obj)->TryGetNumberField(TEXT("z"), Z))
+		{
+			Out.X = X;
+			Out.Y = Y;
+			Out.Z = Z;
+			return true;
+		}
 	}
 
 	return false;
@@ -49,10 +55,16 @@ bool ParseRotator(const TSharedPtr<FJsonObject>& Params, const FString& Key, FRo
 	const TSharedPtr<FJsonObject>* Obj;
 	if (Params->TryGetObjectField(Key, Obj))
 	{
-		Out.Pitch = (*Obj)->GetNumberField(TEXT("pitch"));
-		Out.Yaw   = (*Obj)->GetNumberField(TEXT("yaw"));
-		Out.Roll  = (*Obj)->GetNumberField(TEXT("roll"));
-		return true;
+		double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
+		if ((*Obj)->TryGetNumberField(TEXT("pitch"), Pitch) &&
+			(*Obj)->TryGetNumberField(TEXT("yaw"), Yaw) &&
+			(*Obj)->TryGetNumberField(TEXT("roll"), Roll))
+		{
+			Out.Pitch = Pitch;
+			Out.Yaw = Yaw;
+			Out.Roll = Roll;
+			return true;
+		}
 	}
 
 	return false;

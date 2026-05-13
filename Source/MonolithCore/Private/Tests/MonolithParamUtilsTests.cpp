@@ -98,6 +98,7 @@ bool FMonolithParseVectorTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("ParseVector array Z"), Out.Z, 3.5);
 	}
 
+
 	// Test case: valid object {x, y, z}
 	{
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
@@ -112,6 +113,30 @@ bool FMonolithParseVectorTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("ParseVector object X"), Out.X, 10.0);
 		TestEqual(TEXT("ParseVector object Y"), Out.Y, 20.0);
 		TestEqual(TEXT("ParseVector object Z"), Out.Z, 30.0);
+	}
+
+	// Test case: invalid object (missing fields)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("x"), 10.0);
+		Params->SetObjectField(TEXT("vec_obj_invalid"), Obj);
+
+		FVector Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseVector(Params, TEXT("vec_obj_invalid"), Out);
+		TestFalse(TEXT("ParseVector invalid object fails gracefully"), bResult);
+	}
+
+	// Test case: invalid object (wrong type)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("x"), 10.0);
+		Obj->SetNumberField(TEXT("y"), 20.0);
+		Obj->SetStringField(TEXT("z"), TEXT("thirty"));
+		Params->SetObjectField(TEXT("vec_obj_wrong_type"), Obj);
+
+		FVector Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseVector(Params, TEXT("vec_obj_wrong_type"), Out);
+		TestFalse(TEXT("ParseVector wrong type object fails gracefully"), bResult);
 	}
 
 	// Test case: short array
@@ -159,6 +184,7 @@ bool FMonolithParseRotatorTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("ParseRotator array Roll"), Out.Roll, 270.0);
 	}
 
+
 	// Test case: valid object {pitch, yaw, roll}
 	{
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
@@ -173,6 +199,30 @@ bool FMonolithParseRotatorTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("ParseRotator object Pitch"), Out.Pitch, 10.0);
 		TestEqual(TEXT("ParseRotator object Yaw"), Out.Yaw, 20.0);
 		TestEqual(TEXT("ParseRotator object Roll"), Out.Roll, 30.0);
+	}
+
+	// Test case: invalid object (missing fields)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("pitch"), 10.0);
+		Params->SetObjectField(TEXT("rot_obj_invalid"), Obj);
+
+		FRotator Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseRotator(Params, TEXT("rot_obj_invalid"), Out);
+		TestFalse(TEXT("ParseRotator invalid object fails gracefully"), bResult);
+	}
+
+	// Test case: invalid object (wrong type)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("pitch"), 10.0);
+		Obj->SetNumberField(TEXT("yaw"), 20.0);
+		Obj->SetStringField(TEXT("roll"), TEXT("thirty"));
+		Params->SetObjectField(TEXT("rot_obj_wrong_type"), Obj);
+
+		FRotator Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseRotator(Params, TEXT("rot_obj_wrong_type"), Out);
+		TestFalse(TEXT("ParseRotator wrong type object fails gracefully"), bResult);
 	}
 
 	// Test case: short array
