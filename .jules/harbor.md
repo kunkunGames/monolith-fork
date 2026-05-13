@@ -33,3 +33,9 @@
 **Learning:** Monolith's C++ auto-updater explicitly expects `Monolith-vX.Y.Z-macOS.zip` and parses `Monolith-macOS-SHA256: <hash>` on macOS, but the PowerShell build script used a hardcoded Windows `.zip` naming and standard `Monolith-SHA256:` prefix regardless of platform.
 **Prevention:** Check `$IsMacOS` in `Scripts/make_release.ps1` and correctly branch the output filename and SHA256 marker prefix. Ensure `CONTRIBUTING.md` mentions the macOS marker.
 **Avoid:** Hardcoding platform-specific release artifact names and checksum prefixes in cross-platform build scripts.
+
+## 2026-05-14 - Fix misleading missing-marker docs
+**Release risk:** Misleading release docs imply updates fail without a marker, hiding the fact that they proceed without integrity checks.
+**Learning:** The actual auto-updater behavior logs a warning and proceeds if the SHA256 marker is completely missing.
+**Prevention:** Always verify documentation against the actual updater C++ code (`MonolithUpdateSubsystem.cpp`).
+**Avoid:** Writing release docs that claim the updater is stricter than it actually is.
