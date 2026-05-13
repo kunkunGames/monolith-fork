@@ -27,7 +27,6 @@ public class MonolithAudio : ModuleRules
 		});
 
 		// --- Conditional: MetaSound support ---
-		// MetaSound is a built-in engine plugin (ships with UE 5.7), single location check sufficient.
 		// Release builds: set MONOLITH_RELEASE_BUILD=1 to force all optional deps off.
 		bool bHasMetaSound = false;
 		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
@@ -35,10 +34,14 @@ public class MonolithAudio : ModuleRules
 		if (!bReleaseBuild)
 		{
 			string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
+			string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
 
-			// Check Engine Plugins (built-in — most common)
-			if (Directory.Exists(Path.Combine(EngineDir, "Plugins", "Runtime", "Metasound")))
-				bHasMetaSound = true;
+			// 3-location probe (engine Plugins/Runtime, Plugins/Marketplace, top-level Plugins fallback)
+			// Note: MetaSound is a built-in engine plugin (ships with UE 5.7) usually found in Runtime.
+			bHasMetaSound =
+				Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "Metasound"))
+				|| Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace", "Metasound"))
+				|| Directory.Exists(Path.Combine(EnginePluginsDir, "Metasound"));
 		}
 
 		PublicDefinitions.Add("WITH_METASOUND=" + (bHasMetaSound ? "1" : "0"));
