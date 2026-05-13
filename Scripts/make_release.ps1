@@ -158,6 +158,10 @@ $trackedFiles = $allTrackedFiles | Where-Object {
     if ($keep -and $path -like "Docs/testing/*") {
         $keep = $false
     }
+    # Enforce release ZIP hygiene: explicitly exclude build/local folders even if accidentally tracked
+    if ($keep -and ($path -like "Intermediate/*" -or $path -like "Saved/*" -or $path -like ".git/*" -or $path -eq ".git")) {
+        $keep = $false
+    }
     $keep
 }
 $strippedSourceCount = $allTrackedFiles.Count - $trackedFiles.Count
