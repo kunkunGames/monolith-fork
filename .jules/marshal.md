@@ -53,6 +53,12 @@
 **Prevention:** Updated `AGENTS.md` to mandate the exact string `[blocked: UE editor unavailable]` in a dedicated 'Blocked verification' PR section.
 **Avoid:** Claiming UE verification without running it, or using non-standard wording to describe a blocked state.
 
+## 2026-05-12 - Distinguish blocked editor and build tools
+**Coordination issue:** Agents were logging missing UE verification tools with one generic editor-unavailable string even when the blocked tool was a build, packaging, or command-line UE tool.
+**Learning:** One exact blocked string improves grepability but hides the concrete unavailable tool when the editor is not the blocker.
+**Prevention:** Use `[blocked: UE 5.7 editor unavailable in Jules VM]` for editor blockers and concrete tool-specific strings such as `[blocked: UE 5.7 build tools unavailable in Jules VM]` for build-tool blockers.
+**Avoid:** Claiming UE verification without running it, or using editor-unavailable wording for build-tool-only failures.
+
 ## 2026-05-11 - Enforce public action contract stability
 **Coordination issue:** Agents performing routine refactoring or performance tasks were casually modifying JSON parameter schemas or public action outputs to simplify their code.
 **Learning:** Casual changes to public contracts break downstream consumers and invalidate API documentation without proper spec review.
