@@ -1,0 +1,59 @@
+#include "CoreMinimal.h"
+#include "Misc/AutomationTest.h"
+#include "MonolithToolRegistry.h"
+#include "MonolithComboGraphActions.h"
+#include "Dom/JsonObject.h"
+
+#if WITH_DEV_AUTOMATION_TESTS && WITH_COMBOGRAPH
+
+namespace
+{
+	FMonolithActionResult ExecuteComboGraphAction(const FString& Action, const TSharedPtr<FJsonObject>& Params)
+	{
+		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+		if (!Registry.HasAction(TEXT("combograph"), Action))
+		{
+			FMonolithComboGraphActions::RegisterActions(Registry);
+		}
+
+		return Registry.ExecuteAction(TEXT("combograph"), Action, Params);
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithComboGraphSecurityPathTest, "Monolith.Security.MonolithComboGraph.ValidatePackagePath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithComboGraphSecurityPathTest::RunTest(const FString& Parameters)
+{
+	TArray<FString> MalformedPaths = {
+		TEXT(""), // Empty path
+		TEXT("//Game/MalformedPath/TestComboGraph"), // Double leading slash
+		TEXT("Game/MalformedPath/TestComboGraph"), // Missing leading slash
+		TEXT("/Game/MalformedPath/TestComboGraph/"), // Trailing slash
+		TEXT("/Game/MalformedPath/TestComboGraph#Invalid") // Illegal characters
+	};
+
+	for (const FString& Path : MalformedPaths)
+	{
+		// Setup payload to simulate malformed path
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("save_path"), Path);
+
+		// Call the action
+		FMonolithActionResult Result = ExecuteComboGraphAction(TEXT("create_combo_graph"), Payload);
+
+		// Verify it failed gracefully and returned the validation error
+		TestFalse(*FString::Printf(TEXT("Action should fail on malformed path: %s"), *Path), Result.bSuccess);
+		TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), Result.ErrorMessage.IsEmpty());
+		if (!Path.IsEmpty())
+		{
+			TestTrue(*FString::Printf(TEXT("Error should complain about invalid package path for: %s"), *Path),
+				Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
+				Result.ErrorMessage.Contains(TEXT("Package path")) ||
+				Result.ErrorMessage.Contains(Path));
+		}
+	}
+
+	return true;
+}
+
+#endif // WITH_DEV_AUTOMATION_TESTS && WITH_COMBOGRAPH
