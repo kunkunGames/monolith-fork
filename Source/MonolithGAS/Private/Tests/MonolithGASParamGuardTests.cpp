@@ -128,3 +128,63 @@ bool FScaffoldWeaponAbilityRejectsMalformedFireModeTest::RunTest(const FString& 
 }
 
 #endif // WITH_DEV_AUTOMATION_TESTS
+
+#if WITH_DEV_AUTOMATION_TESTS
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTargetActionsRejectMalformedParamsTest, "Monolith.ParamGuard.GAS.TargetActionsRejectMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FTargetActionsRejectMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	auto ExecuteCreateTargetActor = [](const TSharedPtr<FJsonObject>& Params)
+	{
+		return FMonolithToolRegistry::Get().ExecuteAction(TEXT("gas"), TEXT("create_target_actor"), Params);
+	};
+
+	// Test 1: string where number expected for create_target_actor
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("save_path"), TEXT("/Game/GAS/Targeting/TA_Test"));
+		Params->SetStringField(TEXT("targeting_type"), TEXT("line"));
+		Params->SetStringField(TEXT("max_range"), TEXT("1000"));
+
+		FMonolithActionResult Result = ExecuteCreateTargetActor(Params);
+		TestTrue(TEXT("Malformed max_range should fail"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention max_range"), Result.ErrorMessage.Contains(TEXT("max_range")) && Result.ErrorMessage.Contains(TEXT("number")));
+	}
+
+	auto ExecuteConfigureTargetActor = [](const TSharedPtr<FJsonObject>& Params)
+	{
+		return FMonolithToolRegistry::Get().ExecuteAction(TEXT("gas"), TEXT("configure_target_actor"), Params);
+	};
+
+	// Test 2: string where boolean expected for configure_target_actor
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/GAS/Targeting/TA_Test"));
+		Params->SetStringField(TEXT("should_produce_target_data_on_server"), TEXT("true"));
+
+		FMonolithActionResult Result = ExecuteConfigureTargetActor(Params);
+		TestTrue(TEXT("Malformed should_produce_target_data_on_server should fail"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention should_produce_target_data_on_server"), Result.ErrorMessage.Contains(TEXT("should_produce_target_data_on_server")) && Result.ErrorMessage.Contains(TEXT("boolean")));
+	}
+
+	auto ExecuteScaffoldFPSTargeting = [](const TSharedPtr<FJsonObject>& Params)
+	{
+		return FMonolithToolRegistry::Get().ExecuteAction(TEXT("gas"), TEXT("scaffold_fps_targeting"), Params);
+	};
+
+	// Test 3: number where string expected for scaffold_fps_targeting
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("ability_path"), TEXT("/Game/GAS/Abilities/GA_Test"));
+		Params->SetStringField(TEXT("mode"), TEXT("hitscan"));
+		Params->SetNumberField(TEXT("save_path"), 123);
+
+		FMonolithActionResult Result = ExecuteScaffoldFPSTargeting(Params);
+		TestTrue(TEXT("Malformed save_path should fail"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention save_path"), Result.ErrorMessage.Contains(TEXT("save_path")) && Result.ErrorMessage.Contains(TEXT("string")));
+	}
+
+	return true;
+}
+
+#endif // WITH_DEV_AUTOMATION_TESTS
