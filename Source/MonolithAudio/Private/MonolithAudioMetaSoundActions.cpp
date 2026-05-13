@@ -542,7 +542,7 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateMetaSoundSource(cons
 	bool bOneShot = true;
 	if (Params->HasField(TEXT("one_shot")))
 	{
-		bOneShot = Params->GetBoolField(TEXT("one_shot"));
+		Params->TryGetBoolField(TEXT("one_shot"), bOneShot);
 	}
 
 	UMetaSoundBuilderSubsystem& Sub = UMetaSoundBuilderSubsystem::GetChecked();
@@ -1779,7 +1779,7 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 		bool bOneShot = true;
 		if (Spec->HasField(TEXT("one_shot")))
 		{
-			bOneShot = Spec->GetBoolField(TEXT("one_shot"));
+			Spec->TryGetBoolField(TEXT("one_shot"), bOneShot);
 		}
 
 		FMetaSoundBuilderNodeOutputHandle OnPlayOutput;

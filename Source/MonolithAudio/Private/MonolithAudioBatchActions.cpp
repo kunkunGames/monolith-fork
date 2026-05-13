@@ -569,7 +569,11 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetLooping(const TSharedP
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required field 'looping'"));
 	}
-	bool bLooping = Params->GetBoolField(TEXT("looping"));
+	bool bLooping = false;
+	if (!Params->TryGetBoolField(TEXT("looping"), bLooping))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: looping must be a boolean"));
+	}
 
 	int32 Modified = 0;
 	TArray<TSharedPtr<FJsonValue>> Failed;
@@ -1099,9 +1103,13 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	}
 
 	bool bHasLooping = Template->HasField(TEXT("looping"));
-	bool bLooping = bHasLooping ? Template->GetBoolField(TEXT("looping")) : false;
+	bool bLooping = false;
 	if (bHasLooping)
 	{
+		if (!Template->TryGetBoolField(TEXT("looping"), bLooping))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed template.looping: must be a boolean"));
+		}
 		AppliedFields.Add(TEXT("looping"));
 	}
 

@@ -965,7 +965,12 @@ FMonolithActionResult FMonolithAudioSoundCueActions::AddSoundCueNode(const TShar
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("node_id"), MakeNodeId(Cue, NewNode));
 	Result->SetStringField(TEXT("type"), NodeType);
-	Result->SetObjectField(TEXT("properties"), SerializeNode(Cue, NewNode)->GetObjectField(TEXT("properties")));
+	TSharedPtr<FJsonObject> SerializedNode = SerializeNode(Cue, NewNode);
+	const TSharedPtr<FJsonObject>* SerProps = nullptr;
+	if (SerializedNode.IsValid() && SerializedNode->TryGetObjectField(TEXT("properties"), SerProps) && SerProps && SerProps->IsValid())
+	{
+		Result->SetObjectField(TEXT("properties"), *SerProps);
+	}
 	return FMonolithActionResult::Success(Result);
 }
 
