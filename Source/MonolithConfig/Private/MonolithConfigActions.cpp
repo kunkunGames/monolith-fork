@@ -154,7 +154,7 @@ TArray<TPair<FString, FString>> FMonolithConfigActions::GetConfigHierarchy(const
 	}
 
 	// User saved (platform-specific)
-	FString SavedFile = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Config"), FPlatformProperties::PlatformName(),
+	FString SavedFile = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Config"), FPlatformProperties::IniPlatformName(),
 		FString::Printf(TEXT("%s.ini"), *Category));
 	if (FPaths::FileExists(SavedFile))
 	{
@@ -799,7 +799,7 @@ FMonolithActionResult FMonolithConfigActions::GetConfigFiles(const TSharedPtr<FJ
 	AddFilesFromDir(FPaths::EngineConfigDir(), TEXT("Engine Base"));
 	AddFilesFromDir(FPaths::ProjectConfigDir(), TEXT("Project Default"));
 
-	FString SavedConfigDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Config"), FPlatformProperties::PlatformName());
+	FString SavedConfigDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Config"), FPlatformProperties::IniPlatformName());
 	if (FPaths::DirectoryExists(SavedConfigDir))
 	{
 		AddFilesFromDir(SavedConfigDir, TEXT("User Saved"));
