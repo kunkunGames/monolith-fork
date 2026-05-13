@@ -1332,12 +1332,15 @@ FMonolithActionResult FMonolithMaterialActions::DisconnectExpression(const TShar
 	FString ExpressionName = Params->GetStringField(TEXT("expression_name"));
 	FString InputName = TEXT("");
 	Params->TryGetStringField(TEXT("input_name"), InputName);
-	bool bDisconnectOutputs = Params->HasField(TEXT("disconnect_outputs")) ? Params->GetBoolField(TEXT("disconnect_outputs")) : false;
+	bool bDisconnectOutputs = false;
+	Params->TryGetBoolField(TEXT("disconnect_outputs"), bDisconnectOutputs);
 	// Optional filter: only disconnect from a specific downstream expression (when disconnect_outputs=true)
 	FString TargetDownstream = TEXT("");
 	Params->TryGetStringField(TEXT("target_expression"), TargetDownstream);
 	// Optional filter: only disconnect a specific output index
-	int32 TargetOutputIndex = Params->HasField(TEXT("output_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("output_index"))) : -1;
+	int32 TargetOutputIndex = -1;
+	double TargetOutputIndex_Val;
+	if (Params->TryGetNumberField(TEXT("output_index"), TargetOutputIndex_Val)) TargetOutputIndex = static_cast<int32>(TargetOutputIndex_Val);
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -1527,7 +1530,8 @@ FMonolithActionResult FMonolithMaterialActions::EndTransaction(const TSharedPtr<
 FMonolithActionResult FMonolithMaterialActions::BuildMaterialGraph(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	bool bClearExisting = Params->HasField(TEXT("clear_existing")) ? Params->GetBoolField(TEXT("clear_existing")) : true;
+	bool bClearExisting = true;
+	Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting);
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -1635,9 +1639,13 @@ FMonolithActionResult FMonolithMaterialActions::BuildMaterialGraph(const TShared
 			const TSharedPtr<FJsonObject>& OutObj = *OutObjPtr;
 
 			// Accept both "from" (export format) and "from_expression" (connect_expressions style)
-			FString FromId = OutObj->HasField(TEXT("from")) ? OutObj->GetStringField(TEXT("from"))
-			               : OutObj->HasField(TEXT("from_expression")) ? OutObj->GetStringField(TEXT("from_expression")) : TEXT("");
-			FString FromPin = OutObj->HasField(TEXT("from_pin")) ? OutObj->GetStringField(TEXT("from_pin")) : TEXT("");
+			FString FromId = TEXT("");
+			if (!OutObj->TryGetStringField(TEXT("from"), FromId))
+			{
+				OutObj->TryGetStringField(TEXT("from_expression"), FromId);
+			}
+			FString FromPin = TEXT("");
+			OutObj->TryGetStringField(TEXT("from_pin"), FromPin);
 			FString ToProp = OutObj->GetStringField(TEXT("to_property"));
 
 			UMaterialExpression** FromPtr = IdToExpr.Find(FromId);
@@ -2017,7 +2025,8 @@ FMonolithActionResult FMonolithMaterialActions::ImportMaterialGraph(const TShare
 FMonolithActionResult FMonolithMaterialActions::ValidateMaterial(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	bool bFixIssues = Params->HasField(TEXT("fix_issues")) ? Params->GetBoolField(TEXT("fix_issues")) : false;
+	bool bFixIssues = false;
+	Params->TryGetBoolField(TEXT("fix_issues"), bFixIssues);
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -2313,7 +2322,9 @@ FMonolithActionResult FMonolithMaterialActions::ValidateMaterial(const TSharedPt
 FMonolithActionResult FMonolithMaterialActions::RenderPreview(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 Resolution = Params->HasField(TEXT("resolution")) ? static_cast<int32>(Params->GetNumberField(TEXT("resolution"))) : 256;
+	int32 Resolution = 256;
+	double Resolution_Val;
+	if (Params->TryGetNumberField(TEXT("resolution"), Resolution_Val)) Resolution = static_cast<int32>(Resolution_Val);
 	if (Resolution <= 0)
 	{
 		Resolution = 256;
@@ -2428,7 +2439,9 @@ FMonolithActionResult FMonolithMaterialActions::RenderPreview(const TSharedPtr<F
 FMonolithActionResult FMonolithMaterialActions::GetThumbnail(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 Resolution = Params->HasField(TEXT("resolution")) ? static_cast<int32>(Params->GetNumberField(TEXT("resolution"))) : 256;
+	int32 Resolution = 256;
+	double Resolution_Val;
+	if (Params->TryGetNumberField(TEXT("resolution"), Resolution_Val)) Resolution = static_cast<int32>(Resolution_Val);
 	if (Resolution <= 0)
 	{
 		Resolution = 256;
@@ -2512,8 +2525,12 @@ FMonolithActionResult FMonolithMaterialActions::CreateCustomHLSLNode(const TShar
 	Params->TryGetStringField(TEXT("description"), Description);
 	FString OutputType = TEXT("");
 	Params->TryGetStringField(TEXT("output_type"), OutputType);
-	int32 PosX = Params->HasField(TEXT("pos_x")) ? static_cast<int32>(Params->GetNumberField(TEXT("pos_x"))) : 0;
-	int32 PosY = Params->HasField(TEXT("pos_y")) ? static_cast<int32>(Params->GetNumberField(TEXT("pos_y"))) : 0;
+	int32 PosX = 0;
+	double PosX_Val;
+	if (Params->TryGetNumberField(TEXT("pos_x"), PosX_Val)) PosX = static_cast<int32>(PosX_Val);
+	int32 PosY = 0;
+	double PosY_Val;
+	if (Params->TryGetNumberField(TEXT("pos_y"), PosY_Val)) PosY = static_cast<int32>(PosY_Val);
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -2748,7 +2765,8 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<
 	Params->TryGetStringField(TEXT("shading_model"), ShadingModelStr);
 	FString DomainStr = TEXT("Surface");
 	Params->TryGetStringField(TEXT("material_domain"), DomainStr);
-	bool bTwoSided = Params->HasField(TEXT("two_sided")) ? Params->GetBoolField(TEXT("two_sided")) : false;
+	bool bTwoSided = false;
+	Params->TryGetBoolField(TEXT("two_sided"), bTwoSided);
 
 	// Extract package path and asset name from the asset path
 	FString PackagePath, AssetName;
@@ -2918,10 +2936,18 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 			if (Pair.Value->TryGetObject(ColorObj))
 			{
 				FLinearColor Color;
-				Color.R = (*ColorObj)->HasField(TEXT("R")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("R"))) : 0.f;
-				Color.G = (*ColorObj)->HasField(TEXT("G")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("G"))) : 0.f;
-				Color.B = (*ColorObj)->HasField(TEXT("B")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("B"))) : 0.f;
-				Color.A = (*ColorObj)->HasField(TEXT("A")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("A"))) : 1.f;
+				Color.R = 0.f;
+				double ColorR_Val;
+				if ((*ColorObj)->TryGetNumberField(TEXT("R"), ColorR_Val)) Color.R = static_cast<float>(ColorR_Val);
+				Color.G = 0.f;
+				double ColorG_Val;
+				if ((*ColorObj)->TryGetNumberField(TEXT("G"), ColorG_Val)) Color.G = static_cast<float>(ColorG_Val);
+				Color.B = 0.f;
+				double ColorB_Val;
+				if ((*ColorObj)->TryGetNumberField(TEXT("B"), ColorB_Val)) Color.B = static_cast<float>(ColorB_Val);
+				Color.A = 1.f;
+				double ColorA_Val;
+				if ((*ColorObj)->TryGetNumberField(TEXT("A"), ColorA_Val)) Color.A = static_cast<float>(ColorA_Val);
 				MIC->SetVectorParameterValueEditorOnly(FMaterialParameterInfo(*Pair.Key), Color);
 				VectorCount++;
 			}
@@ -3386,10 +3412,18 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameter(const TShar
 		if (Params->TryGetObjectField(TEXT("vector_value"), ColorObj))
 		{
 			FLinearColor Color;
-			Color.R = (*ColorObj)->HasField(TEXT("R")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("R"))) : 0.f;
-			Color.G = (*ColorObj)->HasField(TEXT("G")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("G"))) : 0.f;
-			Color.B = (*ColorObj)->HasField(TEXT("B")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("B"))) : 0.f;
-			Color.A = (*ColorObj)->HasField(TEXT("A")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("A"))) : 1.f;
+			Color.R = 0.f;
+				double ColorR_Val;
+				if ((*ColorObj)->TryGetNumberField(TEXT("R"), ColorR_Val)) Color.R = static_cast<float>(ColorR_Val);
+			Color.G = 0.f;
+				double ColorG_Val;
+				if ((*ColorObj)->TryGetNumberField(TEXT("G"), ColorG_Val)) Color.G = static_cast<float>(ColorG_Val);
+			Color.B = 0.f;
+				double ColorB_Val;
+				if ((*ColorObj)->TryGetNumberField(TEXT("B"), ColorB_Val)) Color.B = static_cast<float>(ColorB_Val);
+			Color.A = 1.f;
+				double ColorA_Val;
+				if ((*ColorObj)->TryGetNumberField(TEXT("A"), ColorA_Val)) Color.A = static_cast<float>(ColorA_Val);
 			MIC->SetVectorParameterValueEditorOnly(ParamInfo, Color);
 			SetType = TEXT("vector");
 			SetValue = FString::Printf(TEXT("(%.3f, %.3f, %.3f, %.3f)"), Color.R, Color.G, Color.B, Color.A);
@@ -3865,12 +3899,12 @@ FMonolithActionResult FMonolithMaterialActions::ConnectExpressions(const TShared
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString FromExprName = Params->GetStringField(TEXT("from_expression"));
-	FString FromOutput = Params->HasField(TEXT("from_output")) ? Params->GetStringField(TEXT("from_output"))
-	                   : Params->HasField(TEXT("from_pin")) ? Params->GetStringField(TEXT("from_pin")) : TEXT("");
+	FString FromOutput = Params->HasField(TEXT("from_pin")) ? Params->GetStringField(TEXT("from_pin")) : TEXT("");
+	Params->TryGetStringField(TEXT("from_output"), FromOutput);
 	FString ToExprName = TEXT("");
 	Params->TryGetStringField(TEXT("to_expression"), ToExprName);
-	FString ToInput = Params->HasField(TEXT("to_input")) ? Params->GetStringField(TEXT("to_input"))
-	                : Params->HasField(TEXT("to_pin")) ? Params->GetStringField(TEXT("to_pin")) : TEXT("");
+	FString ToInput = Params->HasField(TEXT("to_pin")) ? Params->GetStringField(TEXT("to_pin")) : TEXT("");
+	Params->TryGetStringField(TEXT("to_input"), ToInput);
 	ToInput = NormalizeInputPinName(ToInput);
 	FString ToProperty = TEXT("");
 	Params->TryGetStringField(TEXT("to_property"), ToProperty);
@@ -4110,8 +4144,12 @@ FMonolithActionResult FMonolithMaterialActions::DuplicateExpression(const TShare
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString ExprName = Params->GetStringField(TEXT("expression_name"));
-	int32 OffsetX = Params->HasField(TEXT("offset_x")) ? static_cast<int32>(Params->GetNumberField(TEXT("offset_x"))) : 50;
-	int32 OffsetY = Params->HasField(TEXT("offset_y")) ? static_cast<int32>(Params->GetNumberField(TEXT("offset_y"))) : 50;
+	int32 OffsetX = 50;
+	double OffsetX_Val;
+	if (Params->TryGetNumberField(TEXT("offset_x"), OffsetX_Val)) OffsetX = static_cast<int32>(OffsetX_Val);
+	int32 OffsetY = 50;
+	double OffsetY_Val;
+	if (Params->TryGetNumberField(TEXT("offset_y"), OffsetY_Val)) OffsetY = static_cast<int32>(OffsetY_Val);
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -4461,7 +4499,8 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 		int32 Y;
 	};
 	TArray<FMoveOp> MoveOps;
-	bool bRelative = Params->HasField(TEXT("relative")) ? Params->GetBoolField(TEXT("relative")) : false;
+	bool bRelative = false;
+	Params->TryGetBoolField(TEXT("relative"), bRelative);
 
 	const TArray<TSharedPtr<FJsonValue>>* ExpressionsArr = nullptr;
 	// Handle Claude Code JSON string serialization quirk — array may arrive as string
@@ -4900,10 +4939,18 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameters(const TSha
 			if ((*ParamObj)->TryGetObjectField(TEXT("value"), ColorObj))
 			{
 				FLinearColor Color;
-				Color.R = (*ColorObj)->HasField(TEXT("R")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("R"))) : 0.f;
-				Color.G = (*ColorObj)->HasField(TEXT("G")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("G"))) : 0.f;
-				Color.B = (*ColorObj)->HasField(TEXT("B")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("B"))) : 0.f;
-				Color.A = (*ColorObj)->HasField(TEXT("A")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("A"))) : 1.f;
+				Color.R = 0.f;
+				double ColorR_Val;
+				if ((*ColorObj)->TryGetNumberField(TEXT("R"), ColorR_Val)) Color.R = static_cast<float>(ColorR_Val);
+				Color.G = 0.f;
+				double ColorG_Val;
+				if ((*ColorObj)->TryGetNumberField(TEXT("G"), ColorG_Val)) Color.G = static_cast<float>(ColorG_Val);
+				Color.B = 0.f;
+				double ColorB_Val;
+				if ((*ColorObj)->TryGetNumberField(TEXT("B"), ColorB_Val)) Color.B = static_cast<float>(ColorB_Val);
+				Color.A = 1.f;
+				double ColorA_Val;
+				if ((*ColorObj)->TryGetNumberField(TEXT("A"), ColorA_Val)) Color.A = static_cast<float>(ColorA_Val);
 				MIC->SetVectorParameterValueEditorOnly(ParamInfo, Color);
 				SetCount++;
 				bParamSuccess = true;
@@ -5221,7 +5268,8 @@ FMonolithActionResult FMonolithMaterialActions::ClearInstanceParameter(const TSh
 FMonolithActionResult FMonolithMaterialActions::SaveMaterial(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	bool bOnlyIfDirty = Params->HasField(TEXT("only_if_dirty")) ? Params->GetBoolField(TEXT("only_if_dirty")) : true;
+	bool bOnlyIfDirty = true;
+	Params->TryGetBoolField(TEXT("only_if_dirty"), bOnlyIfDirty);
 
 	// Verify asset exists
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
@@ -5421,8 +5469,8 @@ FMonolithActionResult FMonolithMaterialActions::ReplaceExpression(const TSharedP
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString ExprName = Params->GetStringField(TEXT("expression_name"));
 	FString NewClassName = Params->GetStringField(TEXT("new_class"));
-	bool bPreserveConnections = Params->HasField(TEXT("preserve_connections"))
-		? Params->GetBoolField(TEXT("preserve_connections")) : true;
+	bool bPreserveConnections = true;
+	Params->TryGetBoolField(TEXT("preserve_connections"), bPreserveConnections);
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -5929,7 +5977,8 @@ FMonolithActionResult FMonolithMaterialActions::RenameExpression(const TSharedPt
 FMonolithActionResult FMonolithMaterialActions::ListMaterialInstances(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ParentPath = Params->GetStringField(TEXT("parent_path"));
-	bool bRecursive = Params->HasField(TEXT("recursive")) ? Params->GetBoolField(TEXT("recursive")) : true;
+	bool bRecursive = true;
+	Params->TryGetBoolField(TEXT("recursive"), bRecursive);
 
 	// Verify parent exists
 	UObject* ParentAsset = UEditorAssetLibrary::LoadAsset(ParentPath);
@@ -6401,15 +6450,27 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 			const TSharedPtr<FJsonObject>& ConnObj = *ConnObjPtr;
 
 			// Accept both "from"/"to" (export format) and "from_expression"/"to_expression" (connect_expressions style)
-			FString FromId = ConnObj->HasField(TEXT("from")) ? ConnObj->GetStringField(TEXT("from"))
-			               : ConnObj->HasField(TEXT("from_expression")) ? ConnObj->GetStringField(TEXT("from_expression")) : TEXT("");
-			FString ToId   = ConnObj->HasField(TEXT("to")) ? ConnObj->GetStringField(TEXT("to"))
-			               : ConnObj->HasField(TEXT("to_expression")) ? ConnObj->GetStringField(TEXT("to_expression")) : TEXT("");
+			FString FromId = TEXT("");
+			if (!ConnObj->TryGetStringField(TEXT("from"), FromId))
+			{
+				ConnObj->TryGetStringField(TEXT("from_expression"), FromId);
+			}
+			FString ToId = TEXT("");
+			if (!ConnObj->TryGetStringField(TEXT("to"), ToId))
+			{
+				ConnObj->TryGetStringField(TEXT("to_expression"), ToId);
+			}
 			// Accept both "from_pin"/"to_pin" (export format) and "from_output"/"to_input" (connect_expressions style)
-			FString FromPin = ConnObj->HasField(TEXT("from_pin")) ? ConnObj->GetStringField(TEXT("from_pin"))
-			                : ConnObj->HasField(TEXT("from_output")) ? ConnObj->GetStringField(TEXT("from_output")) : TEXT("");
-			FString ToPin   = ConnObj->HasField(TEXT("to_pin")) ? ConnObj->GetStringField(TEXT("to_pin"))
-			                : ConnObj->HasField(TEXT("to_input")) ? ConnObj->GetStringField(TEXT("to_input")) : TEXT("");
+			FString FromPin = TEXT("");
+			if (!ConnObj->TryGetStringField(TEXT("from_pin"), FromPin))
+			{
+				ConnObj->TryGetStringField(TEXT("from_output"), FromPin);
+			}
+			FString ToPin = TEXT("");
+			if (!ConnObj->TryGetStringField(TEXT("to_pin"), ToPin))
+			{
+				ConnObj->TryGetStringField(TEXT("to_input"), ToPin);
+			}
 			ToPin = NormalizeInputPinName(ToPin);
 
 			UMaterialExpression** FromPtr = IdToExpr.Find(FromId);
@@ -6563,9 +6624,8 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 		NewFunc->Description = Params->GetStringField(TEXT("description"));
 	}
 
-	bool bExposeToLibrary = Params->HasField(TEXT("expose_to_library"))
-		? Params->GetBoolField(TEXT("expose_to_library"))
-		: true;
+	bool bExposeToLibrary = true;
+	Params->TryGetBoolField(TEXT("expose_to_library"), bExposeToLibrary);
 	NewFunc->bExposeToLibrary = bExposeToLibrary;
 
 	// LibraryCategories was renamed to LibraryCategoriesText (TArray<FString> → TArray<FText>) in UE 5.x
@@ -6612,7 +6672,8 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	bool bClearExisting = Params->HasField(TEXT("clear_existing")) ? Params->GetBoolField(TEXT("clear_existing")) : false;
+	bool bClearExisting = false;
+	Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting);
 
 	// Load the material function
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
@@ -6704,7 +6765,8 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 			const TSharedPtr<FJsonObject>& InputObj = *InputObjPtr;
 
 			FString InputName = InputObj->GetStringField(TEXT("name"));
-			FString InputId = InputObj->HasField(TEXT("id")) ? InputObj->GetStringField(TEXT("id")) : InputName;
+			FString InputId = InputName;
+			InputObj->TryGetStringField(TEXT("id"), InputId);
 
 			// Position: spread inputs vertically, allow override
 			int32 PosX = -400;
@@ -6809,7 +6871,8 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 			const TSharedPtr<FJsonObject>& OutputObj = *OutputObjPtr;
 
 			FString OutputName = OutputObj->GetStringField(TEXT("name"));
-			FString OutputId = OutputObj->HasField(TEXT("id")) ? OutputObj->GetStringField(TEXT("id")) : OutputName;
+			FString OutputId = OutputName;
+			OutputObj->TryGetStringField(TEXT("id"), OutputId);
 
 			// Position: spread outputs vertically on the right, allow override
 			int32 PosX = 400;
@@ -7007,13 +7070,17 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInfo(const TSharedPtr
 	{
 		if (!A.IsValid() || A->Type != EJson::Object) return false;
 		if (!B.IsValid() || B->Type != EJson::Object) return true;
-		return A->AsObject()->GetNumberField(TEXT("sort_priority")) < B->AsObject()->GetNumberField(TEXT("sort_priority"));
+		double ValA = 0.0; A->AsObject()->TryGetNumberField(TEXT("sort_priority"), ValA);
+		double ValB = 0.0; B->AsObject()->TryGetNumberField(TEXT("sort_priority"), ValB);
+		return ValA < ValB;
 	});
 	OutputsJson.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
 	{
 		if (!A.IsValid() || A->Type != EJson::Object) return false;
 		if (!B.IsValid() || B->Type != EJson::Object) return true;
-		return A->AsObject()->GetNumberField(TEXT("sort_priority")) < B->AsObject()->GetNumberField(TEXT("sort_priority"));
+		double ValA = 0.0; A->AsObject()->TryGetNumberField(TEXT("sort_priority"), ValA);
+		double ValB = 0.0; B->AsObject()->TryGetNumberField(TEXT("sort_priority"), ValB);
+		return ValA < ValB;
 	});
 
 	ResultJson->SetArrayField(TEXT("inputs"), InputsJson);
@@ -7297,13 +7364,17 @@ FMonolithActionResult FMonolithMaterialActions::ExportFunctionGraph(const TShare
 	{
 		if (!A.IsValid() || A->Type != EJson::Object) return false;
 		if (!B.IsValid() || B->Type != EJson::Object) return true;
-		return A->AsObject()->GetNumberField(TEXT("sort_priority")) < B->AsObject()->GetNumberField(TEXT("sort_priority"));
+		double ValA = 0.0; A->AsObject()->TryGetNumberField(TEXT("sort_priority"), ValA);
+		double ValB = 0.0; B->AsObject()->TryGetNumberField(TEXT("sort_priority"), ValB);
+		return ValA < ValB;
 	});
 	OutputsJson.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
 	{
 		if (!A.IsValid() || A->Type != EJson::Object) return false;
 		if (!B.IsValid() || B->Type != EJson::Object) return true;
-		return A->AsObject()->GetNumberField(TEXT("sort_priority")) < B->AsObject()->GetNumberField(TEXT("sort_priority"));
+		double ValA = 0.0; A->AsObject()->TryGetNumberField(TEXT("sort_priority"), ValA);
+		double ValB = 0.0; B->AsObject()->TryGetNumberField(TEXT("sort_priority"), ValB);
+		return ValA < ValB;
 	});
 
 	// --- Build connections (traverse ALL expressions including Input/Output) ---
@@ -8082,7 +8153,8 @@ FMonolithActionResult FMonolithMaterialActions::ImportTexture(const TSharedPtr<F
 	FString DestPath = Params->GetStringField(TEXT("dest_path"));
 	FString DestName;
 	Params->TryGetStringField(TEXT("dest_name"), DestName);
-	bool bReplaceExisting = Params->HasField(TEXT("replace_existing")) ? Params->GetBoolField(TEXT("replace_existing")) : false;
+	bool bReplaceExisting = false;
+	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
 
 	// Parse optional settings
 	TextureCompressionSettings Compression = TC_Default;
@@ -8097,7 +8169,8 @@ FMonolithActionResult FMonolithMaterialActions::ImportTexture(const TSharedPtr<F
 		}
 	}
 
-	bool bSRGB = Params->HasField(TEXT("srgb")) ? Params->GetBoolField(TEXT("srgb")) : true;
+	bool bSRGB = true;
+	Params->TryGetBoolField(TEXT("srgb"), bSRGB);
 
 	TextureGroup LODGroup = TEXTUREGROUP_World;
 	if (Params->HasField(TEXT("lod_group")))
@@ -8223,10 +8296,15 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	Params->TryGetStringField(TEXT("shading_model"), ShadingModelStr);
 	FString DomainStr = TEXT("Surface");
 	Params->TryGetStringField(TEXT("material_domain"), DomainStr);
-	bool bTwoSided = Params->HasField(TEXT("two_sided")) ? Params->GetBoolField(TEXT("two_sided")) : false;
-	int32 MaxTextureSize = Params->HasField(TEXT("max_texture_size")) ? static_cast<int32>(Params->GetNumberField(TEXT("max_texture_size"))) : 2048;
-	bool bOpacityFromAlpha = Params->HasField(TEXT("opacity_from_alpha")) ? Params->GetBoolField(TEXT("opacity_from_alpha")) : false;
-	bool bReplaceExisting = Params->HasField(TEXT("replace_existing")) ? Params->GetBoolField(TEXT("replace_existing")) : false;
+	bool bTwoSided = false;
+	Params->TryGetBoolField(TEXT("two_sided"), bTwoSided);
+	int32 MaxTextureSize = 2048;
+	double MaxTextureSize_Val;
+	if (Params->TryGetNumberField(TEXT("max_texture_size"), MaxTextureSize_Val)) MaxTextureSize = static_cast<int32>(MaxTextureSize_Val);
+	bool bOpacityFromAlpha = false;
+	Params->TryGetBoolField(TEXT("opacity_from_alpha"), bOpacityFromAlpha);
+	bool bReplaceExisting = false;
+	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
 
 	// Validate material_path format
 	FString MaterialPackagePath, MaterialAssetName;
@@ -8336,7 +8414,7 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 		{
 			if (!Err.IsValid() || Err->Type != EJson::Object) continue;
 			if (!CombinedErrors.IsEmpty()) CombinedErrors += TEXT("; ");
-			CombinedErrors += Err->AsObject()->GetStringField(TEXT("error"));
+			FString ErrStr; if (Err->AsObject()->TryGetStringField(TEXT("error"), ErrStr)) CombinedErrors += ErrStr;
 		}
 		return FMonolithActionResult::Error(FString::Printf(TEXT("No textures were imported. Errors: %s"), *CombinedErrors));
 	}
@@ -8706,10 +8784,18 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 				continue;
 			}
 			FLinearColor Color;
-			Color.R = (*ColorObj)->HasField(TEXT("r")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("r"))) : 0.f;
-			Color.G = (*ColorObj)->HasField(TEXT("g")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("g"))) : 0.f;
-			Color.B = (*ColorObj)->HasField(TEXT("b")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("b"))) : 0.f;
-			Color.A = (*ColorObj)->HasField(TEXT("a")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("a"))) : 1.f;
+			Color.R = 0.f;
+			double ColorR_Val;
+			if ((*ColorObj)->TryGetNumberField(TEXT("r"), ColorR_Val)) Color.R = static_cast<float>(ColorR_Val);
+			Color.G = 0.f;
+			double ColorG_Val;
+			if ((*ColorObj)->TryGetNumberField(TEXT("g"), ColorG_Val)) Color.G = static_cast<float>(ColorG_Val);
+			Color.B = 0.f;
+			double ColorB_Val;
+			if ((*ColorObj)->TryGetNumberField(TEXT("b"), ColorB_Val)) Color.B = static_cast<float>(ColorB_Val);
+			Color.A = 1.f;
+			double ColorA_Val;
+			if ((*ColorObj)->TryGetNumberField(TEXT("a"), ColorA_Val)) Color.A = static_cast<float>(ColorA_Val);
 			FVectorParameterValue NewEntry;
 			NewEntry.ParameterInfo = FMaterialParameterInfo(ParamName);
 			NewEntry.ExpressionGUID = *FoundGUID;
@@ -8897,10 +8983,18 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionInstanceParameter(con
 		}
 
 		FLinearColor Color;
-		Color.R = (*ColorObj)->HasField(TEXT("r")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("r"))) : 0.f;
-		Color.G = (*ColorObj)->HasField(TEXT("g")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("g"))) : 0.f;
-		Color.B = (*ColorObj)->HasField(TEXT("b")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("b"))) : 0.f;
-		Color.A = (*ColorObj)->HasField(TEXT("a")) ? static_cast<float>((*ColorObj)->GetNumberField(TEXT("a"))) : 1.f;
+		Color.R = 0.f;
+		double ColorR_Val;
+		if ((*ColorObj)->TryGetNumberField(TEXT("r"), ColorR_Val)) Color.R = static_cast<float>(ColorR_Val);
+		Color.G = 0.f;
+		double ColorG_Val;
+		if ((*ColorObj)->TryGetNumberField(TEXT("g"), ColorG_Val)) Color.G = static_cast<float>(ColorG_Val);
+		Color.B = 0.f;
+		double ColorB_Val;
+		if ((*ColorObj)->TryGetNumberField(TEXT("b"), ColorB_Val)) Color.B = static_cast<float>(ColorB_Val);
+		Color.A = 1.f;
+		double ColorA_Val;
+		if ((*ColorObj)->TryGetNumberField(TEXT("a"), ColorA_Val)) Color.A = static_cast<float>(ColorA_Val);
 
 		bool bFound = false;
 		for (FVectorParameterValue& Entry : MFI->VectorParameterValues)
@@ -9243,7 +9337,9 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 	{
 		if (!A.IsValid() || A->Type != EJson::Object) return false;
 		if (!B.IsValid() || B->Type != EJson::Object) return true;
-		return A->AsObject()->GetNumberField(TEXT("sort_priority")) < B->AsObject()->GetNumberField(TEXT("sort_priority"));
+		double ValA = 0.0; A->AsObject()->TryGetNumberField(TEXT("sort_priority"), ValA);
+		double ValB = 0.0; B->AsObject()->TryGetNumberField(TEXT("sort_priority"), ValB);
+		return ValA < ValB;
 	});
 
 	TArray<TSharedPtr<FJsonValue>> OutputsJson;
@@ -9265,7 +9361,9 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 	{
 		if (!A.IsValid() || A->Type != EJson::Object) return false;
 		if (!B.IsValid() || B->Type != EJson::Object) return true;
-		return A->AsObject()->GetNumberField(TEXT("sort_priority")) < B->AsObject()->GetNumberField(TEXT("sort_priority"));
+		double ValA = 0.0; A->AsObject()->TryGetNumberField(TEXT("sort_priority"), ValA);
+		double ValB = 0.0; B->AsObject()->TryGetNumberField(TEXT("sort_priority"), ValB);
+		return ValA < ValB;
 	});
 
 	ResultJson->SetArrayField(TEXT("inputs"), InputsJson);
