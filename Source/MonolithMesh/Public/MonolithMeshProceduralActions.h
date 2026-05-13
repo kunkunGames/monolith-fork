@@ -28,6 +28,8 @@ public:
 
 	// ---- Shared helpers (public for cross-module use, e.g. FMonolithMeshBuildingActions) ----
 
+	static int32 ClampListCachedMeshesLimit(int32 Limit);
+
 	/** Optionally save the built mesh to a UStaticMesh asset. Returns save_path in result. */
 	static bool SaveMeshToAsset(UDynamicMesh* Mesh, const FString& SavePath, bool bOverwrite, FString& OutError);
 
@@ -112,7 +114,6 @@ private:
 		const FString& ActionName = TEXT(""), const FString& Category = TEXT(""));
 
 	// ---- Cache management actions ----
-	static int32 ClampListCachedMeshesLimit(int32 Limit);
 	static FMonolithActionResult ListCachedMeshes(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ClearCacheAction(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ValidateCacheAction(const TSharedPtr<FJsonObject>& Params);
