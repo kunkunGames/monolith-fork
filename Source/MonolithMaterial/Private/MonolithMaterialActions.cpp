@@ -4755,6 +4755,7 @@ FMonolithActionResult FMonolithMaterialActions::GetInstanceParameters(const TSha
 		TArray<FMaterialParameterInfo> SwitchInfos;
 		TArray<FGuid> SwitchGuids;
 		MIC->GetAllStaticSwitchParameterInfo(SwitchInfos, SwitchGuids);
+		SwitchArr.Reserve(SwitchInfos.Num());
 
 		// Also get parent values to detect overrides
 		SwitchArr.Reserve(SwitchInfos.Num());
@@ -9063,6 +9064,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	// --- Scalar parameter overrides ---
 	TArray<TSharedPtr<FJsonValue>> ScalarArr;
+	ScalarArr.Reserve(MFI->ScalarParameterValues.Num());
 	for (const auto& Param : MFI->ScalarParameterValues)
 	{
 		auto PJson = MakeShared<FJsonObject>();
@@ -9074,6 +9076,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	// --- Vector parameter overrides ---
 	TArray<TSharedPtr<FJsonValue>> VectorArr;
+	VectorArr.Reserve(MFI->VectorParameterValues.Num());
 	for (const auto& Param : MFI->VectorParameterValues)
 	{
 		auto PJson = MakeShared<FJsonObject>();
@@ -9090,6 +9093,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	// --- DoubleVector parameter overrides ---
 	TArray<TSharedPtr<FJsonValue>> DoubleVecArr;
+	DoubleVecArr.Reserve(MFI->DoubleVectorParameterValues.Num());
 	for (const auto& Param : MFI->DoubleVectorParameterValues)
 	{
 		auto PJson = MakeShared<FJsonObject>();
@@ -9106,6 +9110,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	// --- Texture parameter overrides ---
 	TArray<TSharedPtr<FJsonValue>> TextureArr;
+	TextureArr.Reserve(MFI->TextureParameterValues.Num());
 	for (const auto& Param : MFI->TextureParameterValues)
 	{
 		auto PJson = MakeShared<FJsonObject>();
@@ -9117,6 +9122,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	// --- Texture collection parameter overrides ---
 	TArray<TSharedPtr<FJsonValue>> TexCollArr;
+	TexCollArr.Reserve(MFI->TextureCollectionParameterValues.Num());
 	for (const auto& Param : MFI->TextureCollectionParameterValues)
 	{
 		auto PJson = MakeShared<FJsonObject>();
@@ -9128,6 +9134,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	// --- Parameter collection parameter overrides ---
 	TArray<TSharedPtr<FJsonValue>> ParamCollArr;
+	ParamCollArr.Reserve(MFI->ParameterCollectionParameterValues.Num());
 	for (const auto& Param : MFI->ParameterCollectionParameterValues)
 	{
 		auto PJson = MakeShared<FJsonObject>();
@@ -9139,6 +9146,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	// --- Font parameter overrides ---
 	TArray<TSharedPtr<FJsonValue>> FontArr;
+	FontArr.Reserve(MFI->FontParameterValues.Num());
 	for (const auto& Param : MFI->FontParameterValues)
 	{
 		auto PJson = MakeShared<FJsonObject>();
@@ -9151,6 +9159,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	// --- Runtime virtual texture parameter overrides ---
 	TArray<TSharedPtr<FJsonValue>> RVTArr;
+	RVTArr.Reserve(MFI->RuntimeVirtualTextureParameterValues.Num());
 	for (const auto& Param : MFI->RuntimeVirtualTextureParameterValues)
 	{
 		auto PJson = MakeShared<FJsonObject>();
@@ -9162,6 +9171,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	// --- Sparse volume texture parameter overrides ---
 	TArray<TSharedPtr<FJsonValue>> SVTArr;
+	SVTArr.Reserve(MFI->SparseVolumeTextureParameterValues.Num());
 	for (const auto& Param : MFI->SparseVolumeTextureParameterValues)
 	{
 		auto PJson = MakeShared<FJsonObject>();
@@ -9173,6 +9183,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	// --- Static switch parameter overrides ---
 	TArray<TSharedPtr<FJsonValue>> SwitchArr;
+	SwitchArr.Reserve(MFI->StaticSwitchParameterValues.Num());
 	for (const auto& Param : MFI->StaticSwitchParameterValues)
 	{
 		auto PJson = MakeShared<FJsonObject>();
@@ -9185,6 +9196,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	// --- Static component mask parameter overrides ---
 	TArray<TSharedPtr<FJsonValue>> MaskArr;
+	MaskArr.Reserve(MFI->StaticComponentMaskParameterValues.Num());
 	for (const auto& Param : MFI->StaticComponentMaskParameterValues)
 	{
 		auto PJson = MakeShared<FJsonObject>();
