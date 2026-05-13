@@ -23,3 +23,9 @@
 **Learning:** Silently skipping critical build tools leads to brittle scripts that fail later in confusing ways instead of at the point of tool discovery.
 **Prevention:** Build scripts should fail fast with clear errors when dynamic tool resolution (e.g., UBT) fails, rather than warning and continuing without building.
 **Avoid:** Silently skipping build tool steps when dynamic resolution fails.
+
+## 2026-05-13 - Ignore CI artifacts and build staging directories
+**Hygiene issue:** The macOS release pipeline can leave `_stage/`, and local static checks can leave `markdownlint.log`.
+**Learning:** CI and release helper artifacts often appear at repository root, outside Unreal's standard `Saved/` and `Intermediate/` ignore coverage.
+**Prevention:** Ignore only the known generated artifacts (`_stage/` and `markdownlint.log`) unless there is concrete evidence that a broader log pattern is safe.
+**Avoid:** Creating multiple overlapping `.gitignore` PRs for the same artifact family or adding broad ignore rules without checking active Curator/Harbor PRs.
