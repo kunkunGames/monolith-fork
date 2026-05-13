@@ -7,13 +7,31 @@
 FMonolithActionResult FProjectListGameplayTagsAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Prefix;
-	if (Params->HasField(TEXT("prefix")))
+	if (Params->HasField(TEXT("prefix")) && !Params->TryGetStringField(TEXT("prefix"), Prefix))
 	{
-		Prefix = Params->GetStringField(TEXT("prefix"));
+		return FMonolithActionResult::Error(TEXT("'prefix' parameter must be a string"), -32602);
 	}
 
-	int32 Limit = Params->HasField(TEXT("limit")) ? Params->GetIntegerField(TEXT("limit")) : 100;
-	int32 Offset = Params->HasField(TEXT("offset")) ? Params->GetIntegerField(TEXT("offset")) : 0;
+	int32 Limit = 100;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	int32 Offset = 0;
+	if (Params->HasField(TEXT("offset")))
+	{
+		double OffsetValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("offset"), OffsetValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'offset' parameter must be a number"), -32602);
+		}
+		Offset = static_cast<int32>(OffsetValue);
+	}
 	Limit = FMath::Clamp(Limit, 1, 1000);
 	Offset = FMath::Max(0, Offset);
 

@@ -5,24 +5,45 @@
 
 FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetClass = Params->GetStringField(TEXT("asset_type"));
-	if (AssetClass.IsEmpty())
+	FString AssetClass;
+	if (!Params->TryGetStringField(TEXT("asset_type"), AssetClass) || AssetClass.IsEmpty())
 	{
-		AssetClass = Params->GetStringField(TEXT("asset_class"));
-	}
-	int32 Limit = Params->HasField(TEXT("limit")) ? Params->GetIntegerField(TEXT("limit")) : 100;
-	Limit = FMath::Clamp(Limit, 1, 1000);
-	int32 Offset = Params->HasField(TEXT("offset")) ? Params->GetIntegerField(TEXT("offset")) : 0;
-	Offset = FMath::Max(0, Offset);
-	FString ModuleFilter;
-	if (Params->HasField(TEXT("module")))
-	{
-		ModuleFilter = Params->GetStringField(TEXT("module"));
+		Params->TryGetStringField(TEXT("asset_class"), AssetClass);
 	}
 
 	if (AssetClass.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("'asset_type' (or 'asset_class') parameter is required"), -32602);
+	}
+
+	int32 Limit = 100;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = FMath::Clamp(Limit, 1, 1000);
+
+	int32 Offset = 0;
+	if (Params->HasField(TEXT("offset")))
+	{
+		double OffsetValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("offset"), OffsetValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'offset' parameter must be a number"), -32602);
+		}
+		Offset = static_cast<int32>(OffsetValue);
+	}
+	Offset = FMath::Max(0, Offset);
+
+	FString ModuleFilter;
+	if (Params->HasField(TEXT("module")) && !Params->TryGetStringField(TEXT("module"), ModuleFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("'module' parameter must be a string"), -32602);
 	}
 
 	UMonolithIndexSubsystem* Subsystem = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>();

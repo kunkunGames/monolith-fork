@@ -5,10 +5,10 @@
 
 FMonolithActionResult FProjectGetAssetDetailsAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PackagePath = Params->GetStringField(TEXT("asset_path"));
-	if (PackagePath.IsEmpty())
+	FString PackagePath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), PackagePath) || PackagePath.IsEmpty())
 	{
-		PackagePath = Params->GetStringField(TEXT("package_path"));
+		Params->TryGetStringField(TEXT("package_path"), PackagePath);
 	}
 	if (PackagePath.IsEmpty())
 	{
