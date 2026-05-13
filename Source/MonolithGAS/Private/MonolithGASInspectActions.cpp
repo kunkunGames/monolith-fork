@@ -138,17 +138,17 @@ TArray<TSharedPtr<FJsonValue>> TagsToJsonArray(const FGameplayTagContainer& Cont
 
 FMonolithActionResult FMonolithGASInspectActions::HandleExportGASManifest(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Format = Params->GetStringField(TEXT("format"));
+	FString Format;
+	Params->TryGetStringField(TEXT("format"), Format);
 	if (Format.IsEmpty()) Format = TEXT("json");
 
 	bool bIncludeRelationships = true;
-	if (Params->HasField(TEXT("include_relationships")))
-	{
-		bIncludeRelationships = Params->GetBoolField(TEXT("include_relationships"));
-	}
+	Params->TryGetBoolField(TEXT("include_relationships"), bIncludeRelationships);
 
-	FString OutputPath = Params->GetStringField(TEXT("output_path"));
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString OutputPath;
+	Params->TryGetStringField(TEXT("output_path"), OutputPath);
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 
 	IAssetRegistry& AssetRegistry =
 		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -772,12 +772,10 @@ FMonolithActionResult FMonolithGASInspectActions::HandleSnapshotGASState(const T
 		return FMonolithActionResult::Error(TEXT("No PIE world found. Start Play-In-Editor first."));
 	}
 
-	FString ClassFilter = Params->GetStringField(TEXT("class_filter"));
+	FString ClassFilter;
+	Params->TryGetStringField(TEXT("class_filter"), ClassFilter);
 	bool bIncludeModifiers = false;
-	if (Params->HasField(TEXT("include_modifiers")))
-	{
-		bIncludeModifiers = Params->GetBoolField(TEXT("include_modifiers"));
-	}
+	Params->TryGetBoolField(TEXT("include_modifiers"), bIncludeModifiers);
 
 	TArray<TSharedPtr<FJsonValue>> ActorsArr;
 
@@ -1329,7 +1327,8 @@ void DiffJsonArrayByKey(
 			if (Val->Type == EJson::Object)
 			{
 				TSharedPtr<FJsonObject> Obj = Val->AsObject();
-				FString Key = Obj->GetStringField(KeyField);
+				FString Key;
+				Obj->TryGetStringField(KeyField, Key);
 				if (!Key.IsEmpty()) MapA.Add(Key, Obj);
 			}
 		}
@@ -1342,7 +1341,8 @@ void DiffJsonArrayByKey(
 			if (Val->Type == EJson::Object)
 			{
 				TSharedPtr<FJsonObject> Obj = Val->AsObject();
-				FString Key = Obj->GetStringField(KeyField);
+				FString Key;
+				Obj->TryGetStringField(KeyField, Key);
 				if (!Key.IsEmpty()) MapB.Add(Key, Obj);
 			}
 		}
@@ -1436,7 +1436,8 @@ void DiffAttributes(
 			{
 				TSharedPtr<FJsonObject> SetObj = SetVal->AsObject();
 				if (!SetObj) continue;
-				FString SetClass = SetObj->GetStringField(TEXT("set_class"));
+				FString SetClass;
+				SetObj->TryGetStringField(TEXT("set_class"), SetClass);
 				const TArray<TSharedPtr<FJsonValue>>* Attrs = nullptr;
 				if (SetObj->TryGetArrayField(TEXT("attributes"), Attrs))
 				{
@@ -1444,7 +1445,9 @@ void DiffAttributes(
 					{
 						TSharedPtr<FJsonObject> AttrObj = AttrVal->AsObject();
 						if (!AttrObj) continue;
-						FString Key = SetClass + TEXT(".") + AttrObj->GetStringField(TEXT("name"));
+						FString AttrName;
+						AttrObj->TryGetStringField(TEXT("name"), AttrName);
+						FString Key = SetClass + TEXT(".") + AttrName;
 						double Val = 0;
 						AttrObj->TryGetNumberField(TEXT("current_value"), Val);
 						OutVals.Add(Key, Val);
@@ -1531,7 +1534,12 @@ FMonolithActionResult FMonolithGASInspectActions::HandleCompareGASStates(const T
 		for (const TSharedPtr<FJsonValue>& V : *ActorsA)
 		{
 			TSharedPtr<FJsonObject> Obj = V->AsObject();
-			if (Obj) ActorMapA.Add(Obj->GetStringField(TEXT("actor_name")), Obj);
+			if (Obj)
+				{
+					FString ActorName;
+					Obj->TryGetStringField(TEXT("actor_name"), ActorName);
+					ActorMapA.Add(ActorName, Obj);
+				}
 		}
 	}
 	if (ActorsB)
@@ -1539,7 +1547,12 @@ FMonolithActionResult FMonolithGASInspectActions::HandleCompareGASStates(const T
 		for (const TSharedPtr<FJsonValue>& V : *ActorsB)
 		{
 			TSharedPtr<FJsonObject> Obj = V->AsObject();
-			if (Obj) ActorMapB.Add(Obj->GetStringField(TEXT("actor_name")), Obj);
+			if (Obj)
+				{
+					FString ActorName;
+					Obj->TryGetStringField(TEXT("actor_name"), ActorName);
+					ActorMapB.Add(ActorName, Obj);
+				}
 		}
 	}
 
@@ -1609,7 +1622,9 @@ FMonolithActionResult FMonolithGASInspectActions::HandleCompareGASStates(const T
 	int32 Added = 0, Removed = 0, Changed = 0;
 	for (const TSharedPtr<FJsonValue>& V : AllDiffs)
 	{
-		FString Type = V->AsObject()->GetStringField(TEXT("type"));
+		FString Type;
+		TSharedPtr<FJsonObject> ObjV = V->AsObject();
+		if (ObjV) ObjV->TryGetStringField(TEXT("type"), Type);
 		if (Type == TEXT("added")) Added++;
 		else if (Type == TEXT("removed")) Removed++;
 		else if (Type == TEXT("changed")) Changed++;
