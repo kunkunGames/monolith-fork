@@ -197,7 +197,8 @@ namespace MonolithCDOInternal
 
 FMonolithActionResult FMonolithBlueprintCDOActions::HandleGetCDOProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
@@ -326,13 +327,15 @@ FMonolithActionResult FMonolithBlueprintCDOActions::HandleGetCDOProperties(const
 
 FMonolithActionResult FMonolithBlueprintCDOActions::HandleSetCDOProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	}
 
-	FString PropertyName = Params->GetStringField(TEXT("property_name"));
+	FString PropertyName;
+	Params->TryGetStringField(TEXT("property_name"), PropertyName);
 	if (PropertyName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: property_name"));

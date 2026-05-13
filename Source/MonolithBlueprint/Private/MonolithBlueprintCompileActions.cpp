@@ -362,19 +362,22 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleValidateBlueprint(
 
 FMonolithActionResult FMonolithBlueprintCompileActions::HandleCreateBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	FString SavePath;
+	Params->TryGetStringField(TEXT("save_path"), SavePath);
 	if (SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"));
 	}
 
-	FString ParentClassName = Params->GetStringField(TEXT("parent_class"));
+	FString ParentClassName;
+	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
 	if (ParentClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: parent_class"));
 	}
 
-	FString BlueprintTypeStr = Params->GetStringField(TEXT("blueprint_type"));
+	FString BlueprintTypeStr;
+	Params->TryGetStringField(TEXT("blueprint_type"), BlueprintTypeStr);
 	if (BlueprintTypeStr.IsEmpty())
 	{
 		BlueprintTypeStr = TEXT("Normal");
@@ -540,7 +543,8 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleDuplicateBlueprint
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString NewPath = Params->GetStringField(TEXT("new_path"));
+	FString NewPath;
+	Params->TryGetStringField(TEXT("new_path"), NewPath);
 	if (NewPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: new_path"));
@@ -573,7 +577,8 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleGetDependencies(co
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString Direction = Params->GetStringField(TEXT("direction"));
+	FString Direction;
+	Params->TryGetStringField(TEXT("direction"), Direction);
 	if (Direction.IsEmpty())
 	{
 		Direction = TEXT("both");
@@ -622,7 +627,8 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleGetDependencies(co
 
 FMonolithActionResult FMonolithBlueprintCompileActions::HandleSaveAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));

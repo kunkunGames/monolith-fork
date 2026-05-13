@@ -157,7 +157,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleAddFunction(const TS
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString FuncName = Params->GetStringField(TEXT("name"));
+	FString FuncName;
+	Params->TryGetStringField(TEXT("name"), FuncName);
 	if (FuncName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
@@ -272,7 +273,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveFunction(const
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString FuncName = Params->GetStringField(TEXT("name"));
+	FString FuncName;
+	Params->TryGetStringField(TEXT("name"), FuncName);
 	if (FuncName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
@@ -312,8 +314,10 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRenameFunction(const
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString OldName = Params->GetStringField(TEXT("old_name"));
-	FString NewName = Params->GetStringField(TEXT("new_name"));
+	FString OldName;
+	Params->TryGetStringField(TEXT("old_name"), OldName);
+	FString NewName;
+	Params->TryGetStringField(TEXT("new_name"), NewName);
 
 	if (OldName.IsEmpty())
 	{
@@ -364,7 +368,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleAddMacro(const TShar
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString MacroName = Params->GetStringField(TEXT("name"));
+	FString MacroName;
+	Params->TryGetStringField(TEXT("name"), MacroName);
 	if (MacroName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
@@ -407,7 +412,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveMacro(const TS
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString MacroName = Params->GetStringField(TEXT("macro_name"));
+	FString MacroName;
+	Params->TryGetStringField(TEXT("macro_name"), MacroName);
 	if (MacroName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: macro_name"));
@@ -447,8 +453,10 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRenameMacro(const TS
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString OldName = Params->GetStringField(TEXT("old_name"));
-	FString NewName = Params->GetStringField(TEXT("new_name"));
+	FString OldName;
+	Params->TryGetStringField(TEXT("old_name"), OldName);
+	FString NewName;
+	Params->TryGetStringField(TEXT("new_name"), NewName);
 
 	if (OldName.IsEmpty())
 	{
@@ -503,7 +511,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleAddEventDispatcher(c
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString DispatcherName = Params->GetStringField(TEXT("name"));
+	FString DispatcherName;
+	Params->TryGetStringField(TEXT("name"), DispatcherName);
 	if (DispatcherName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
@@ -570,7 +579,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleSetFunctionParams(co
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString FuncName = Params->GetStringField(TEXT("function_name"));
+	FString FuncName;
+	Params->TryGetStringField(TEXT("function_name"), FuncName);
 	if (FuncName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: function_name"));
@@ -686,7 +696,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleImplementInterface(c
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString InterfaceClassName = Params->GetStringField(TEXT("interface_class"));
+	FString InterfaceClassName;
+	Params->TryGetStringField(TEXT("interface_class"), InterfaceClassName);
 	if (InterfaceClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: interface_class"));
@@ -736,7 +747,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveInterface(cons
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString InterfaceClassName = Params->GetStringField(TEXT("interface_class"));
+	FString InterfaceClassName;
+	Params->TryGetStringField(TEXT("interface_class"), InterfaceClassName);
 	if (InterfaceClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: interface_class"));
@@ -780,7 +792,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleScaffoldInterfaceImp
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString InterfaceClassName = Params->GetStringField(TEXT("interface_class"));
+	FString InterfaceClassName;
+	Params->TryGetStringField(TEXT("interface_class"), InterfaceClassName);
 	if (InterfaceClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: interface_class"));
@@ -910,7 +923,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleReparentBlueprint(co
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString ClassName = Params->GetStringField(TEXT("new_parent_class"));
+	FString ClassName;
+	Params->TryGetStringField(TEXT("new_parent_class"), ClassName);
 	if (ClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: new_parent_class"));
@@ -951,7 +965,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveEventDispatche
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString DispatcherName = Params->GetStringField(TEXT("dispatcher_name"));
+	FString DispatcherName;
+	Params->TryGetStringField(TEXT("dispatcher_name"), DispatcherName);
 	if (DispatcherName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: dispatcher_name"));
@@ -1039,7 +1054,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleSetEventDispatcherPa
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString DispatcherName = Params->GetStringField(TEXT("dispatcher_name"));
+	FString DispatcherName;
+	Params->TryGetStringField(TEXT("dispatcher_name"), DispatcherName);
 	if (DispatcherName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: dispatcher_name"));

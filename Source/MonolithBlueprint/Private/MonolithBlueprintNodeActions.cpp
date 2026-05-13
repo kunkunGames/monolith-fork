@@ -1089,7 +1089,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString NodeType = Params->GetStringField(TEXT("node_type"));
+	FString NodeType;
+	Params->TryGetStringField(TEXT("node_type"), NodeType);
 	if (NodeType.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: node_type"));
@@ -1113,7 +1114,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 		}
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	UEdGraph* Graph = MonolithBlueprintInternal::FindGraphByName(BP, GraphName);
 	if (!Graph)
 	{
@@ -1137,13 +1139,15 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 	// ---- CallFunction ----
 	if (NodeType == TEXT("CallFunction"))
 	{
-		FString FuncName = Params->GetStringField(TEXT("function_name"));
+		FString FuncName;
+		Params->TryGetStringField(TEXT("function_name"), FuncName);
 		if (FuncName.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("CallFunction node requires 'function_name'"));
 		}
 
-		FString TargetClassName = Params->GetStringField(TEXT("target_class"));
+		FString TargetClassName;
+		Params->TryGetStringField(TEXT("target_class"), TargetClassName);
 
 		UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(Graph);
 
@@ -1209,7 +1213,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 	// ---- VariableGet ----
 	else if (NodeType == TEXT("VariableGet"))
 	{
-		FString VarName = Params->GetStringField(TEXT("variable_name"));
+		FString VarName;
+		Params->TryGetStringField(TEXT("variable_name"), VarName);
 		if (VarName.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("VariableGet node requires 'variable_name'"));
@@ -1226,7 +1231,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 	// ---- VariableSet ----
 	else if (NodeType == TEXT("VariableSet"))
 	{
-		FString VarName = Params->GetStringField(TEXT("variable_name"));
+		FString VarName;
+		Params->TryGetStringField(TEXT("variable_name"), VarName);
 		if (VarName.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("VariableSet node requires 'variable_name'"));
@@ -1243,7 +1249,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 	// ---- CustomEvent ----
 	else if (NodeType == TEXT("CustomEvent"))
 	{
-		FString EventName = Params->GetStringField(TEXT("event_name"));
+		FString EventName;
+		Params->TryGetStringField(TEXT("event_name"), EventName);
 		if (EventName.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("CustomEvent node requires 'event_name'"));
@@ -1320,7 +1327,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 	// ---- MacroInstance ----
 	else if (NodeType == TEXT("MacroInstance"))
 	{
-		FString MacroName = Params->GetStringField(TEXT("macro_name"));
+		FString MacroName;
+		Params->TryGetStringField(TEXT("macro_name"), MacroName);
 		if (MacroName.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("MacroInstance node requires 'macro_name'"));
@@ -1328,7 +1336,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 
 		// Resolve the macro graph — search current BP first, then optional macro_blueprint
 		UEdGraph* MacroGraph = nullptr;
-		FString MacroBPPath = Params->GetStringField(TEXT("macro_blueprint"));
+		FString MacroBPPath;
+		Params->TryGetStringField(TEXT("macro_blueprint"), MacroBPPath);
 		if (!MacroBPPath.IsEmpty())
 		{
 			UBlueprint* MacroBP = FMonolithAssetUtils::LoadAssetByPath<UBlueprint>(MacroBPPath);
@@ -1377,7 +1386,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 	// ---- SpawnActorFromClass ----
 	else if (NodeType == TEXT("SpawnActorFromClass"))
 	{
-		FString ActorClassName = Params->GetStringField(TEXT("actor_class"));
+		FString ActorClassName;
+		Params->TryGetStringField(TEXT("actor_class"), ActorClassName);
 		if (ActorClassName.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("SpawnActorFromClass node requires 'actor_class'"));
@@ -1409,10 +1419,11 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 	else if (NodeType == TEXT("DynamicCast"))
 	{
 		// Accept cast_class as the primary param; actor_class is the deprecated fallback
-		FString CastClassName = Params->GetStringField(TEXT("cast_class"));
+		FString CastClassName;
+		Params->TryGetStringField(TEXT("cast_class"), CastClassName);
 		if (CastClassName.IsEmpty())
 		{
-			CastClassName = Params->GetStringField(TEXT("actor_class"));
+			Params->TryGetStringField(TEXT("actor_class"), CastClassName);
 		}
 		if (CastClassName.IsEmpty())
 		{
@@ -1441,7 +1452,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 	// ---- MakeStruct ----
 	else if (NodeType == TEXT("MakeStruct"))
 	{
-		FString StructType = Params->GetStringField(TEXT("struct_type"));
+		FString StructType;
+		Params->TryGetStringField(TEXT("struct_type"), StructType);
 		if (StructType.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("MakeStruct node requires 'struct_type' (e.g. struct_type=Vector)"));
@@ -1467,7 +1479,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 	// ---- BreakStruct ----
 	else if (NodeType == TEXT("BreakStruct"))
 	{
-		FString StructType = Params->GetStringField(TEXT("struct_type"));
+		FString StructType;
+		Params->TryGetStringField(TEXT("struct_type"), StructType);
 		if (StructType.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("BreakStruct node requires 'struct_type' (e.g. struct_type=Vector)"));
@@ -1493,7 +1506,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 	// ---- SwitchOnEnum ----
 	else if (NodeType == TEXT("SwitchOnEnum"))
 	{
-		FString EnumType = Params->GetStringField(TEXT("enum_type"));
+		FString EnumType;
+		Params->TryGetStringField(TEXT("enum_type"), EnumType);
 		if (EnumType.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("SwitchOnEnum node requires 'enum_type' (e.g. enum_type=ECollisionChannel)"));
@@ -1545,7 +1559,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 		Graph->AddNode(FormatNode, true, false);
 		FormatNode->AllocateDefaultPins();
 
-		FString FormatStr = Params->GetStringField(TEXT("format"));
+		FString FormatStr;
+		Params->TryGetStringField(TEXT("format"), FormatStr);
 		if (!FormatStr.IsEmpty())
 		{
 			UEdGraphPin* FormatPin = FormatNode->GetFormatPin();
@@ -1630,8 +1645,10 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 	// K2Node_ComponentBoundEvent does not override either method in UE 5.7.
 	else if (NodeType == TEXT("ComponentBoundEvent"))
 	{
-		FString CompNameStr = Params->GetStringField(TEXT("component_name"));
-		FString DelegateNameStr = Params->GetStringField(TEXT("delegate_property_name"));
+		FString CompNameStr;
+		Params->TryGetStringField(TEXT("component_name"), CompNameStr);
+		FString DelegateNameStr;
+		Params->TryGetStringField(TEXT("delegate_property_name"), DelegateNameStr);
 		if (CompNameStr.IsEmpty() || DelegateNameStr.IsEmpty())
 		{
 			return FMonolithActionResult::Error(
@@ -1843,13 +1860,15 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleRemoveNode(const TSha
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString NodeId = Params->GetStringField(TEXT("node_id"));
+	FString NodeId;
+	Params->TryGetStringField(TEXT("node_id"), NodeId);
 	if (NodeId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: node_id"));
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	UEdGraphNode* Node = MonolithBlueprintInternal::FindNodeById(BP, GraphName, NodeId);
 	if (!Node)
 	{
@@ -1878,17 +1897,22 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleConnectPins(const TSh
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString SourceNodeId = Params->GetStringField(TEXT("source_node"));
-	FString SourcePinName = Params->GetStringField(TEXT("source_pin"));
-	FString TargetNodeId = Params->GetStringField(TEXT("target_node"));
-	FString TargetPinName = Params->GetStringField(TEXT("target_pin"));
+	FString SourceNodeId;
+	Params->TryGetStringField(TEXT("source_node"), SourceNodeId);
+	FString SourcePinName;
+	Params->TryGetStringField(TEXT("source_pin"), SourcePinName);
+	FString TargetNodeId;
+	Params->TryGetStringField(TEXT("target_node"), TargetNodeId);
+	FString TargetPinName;
+	Params->TryGetStringField(TEXT("target_pin"), TargetPinName);
 
 	if (SourceNodeId.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: source_node"));
 	if (SourcePinName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: source_pin"));
 	if (TargetNodeId.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: target_node"));
 	if (TargetPinName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: target_pin"));
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 
 	UEdGraphNode* SrcNode = MonolithBlueprintInternal::FindNodeById(BP, GraphName, SourceNodeId);
 	if (!SrcNode)
@@ -1968,19 +1992,22 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleDisconnectPins(const 
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString NodeId = Params->GetStringField(TEXT("node_id"));
+	FString NodeId;
+	Params->TryGetStringField(TEXT("node_id"), NodeId);
 	if (NodeId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: node_id"));
 	}
 
-	FString PinName = Params->GetStringField(TEXT("pin_name"));
+	FString PinName;
+	Params->TryGetStringField(TEXT("pin_name"), PinName);
 	if (PinName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: pin_name"));
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 
 	UEdGraphNode* Node = MonolithBlueprintInternal::FindNodeById(BP, GraphName, NodeId);
 	if (!Node)
@@ -1996,8 +2023,10 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleDisconnectPins(const 
 			TEXT("Pin '%s' not found on node '%s'. Available pins: %s"), *PinName, *NodeId, *AvailPins));
 	}
 
-	FString TargetNodeId = Params->GetStringField(TEXT("target_node"));
-	FString TargetPinName = Params->GetStringField(TEXT("target_pin"));
+	FString TargetNodeId;
+	Params->TryGetStringField(TEXT("target_node"), TargetNodeId);
+	FString TargetPinName;
+	Params->TryGetStringField(TEXT("target_pin"), TargetPinName);
 
 	if (TargetNodeId.IsEmpty())
 	{
@@ -2056,25 +2085,29 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetPinDefault(const T
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString NodeId = Params->GetStringField(TEXT("node_id"));
+	FString NodeId;
+	Params->TryGetStringField(TEXT("node_id"), NodeId);
 	if (NodeId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: node_id"));
 	}
 
-	FString PinName = Params->GetStringField(TEXT("pin_name"));
+	FString PinName;
+	Params->TryGetStringField(TEXT("pin_name"), PinName);
 	if (PinName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: pin_name"));
 	}
 
-	FString Value = Params->GetStringField(TEXT("value"));
+	FString Value;
+	Params->TryGetStringField(TEXT("value"), Value);
 	if (Value.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: value"));
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 
 	UEdGraphNode* Node = MonolithBlueprintInternal::FindNodeById(BP, GraphName, NodeId);
 	if (!Node)
@@ -2146,7 +2179,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetNodePosition(const
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString NodeId = Params->GetStringField(TEXT("node_id"));
+	FString NodeId;
+	Params->TryGetStringField(TEXT("node_id"), NodeId);
 	if (NodeId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: node_id"));
@@ -2161,7 +2195,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetNodePosition(const
 	int32 PosX = (int32)(*PosArray)[0]->AsNumber();
 	int32 PosY = (int32)(*PosArray)[1]->AsNumber();
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 
 	UEdGraphNode* Node = MonolithBlueprintInternal::FindNodeById(BP, GraphName, NodeId);
 	if (!Node)
@@ -2404,7 +2439,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 
 FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSharedPtr<FJsonObject>& Params)
 {
-	FString NodeType = Params->GetStringField(TEXT("node_type"));
+	FString NodeType;
+	Params->TryGetStringField(TEXT("node_type"), NodeType);
 	if (NodeType.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: node_type"));
@@ -2444,13 +2480,15 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 
 	if (NodeType == TEXT("CallFunction"))
 	{
-		FString FuncName = Params->GetStringField(TEXT("function_name"));
+		FString FuncName;
+		Params->TryGetStringField(TEXT("function_name"), FuncName);
 		if (FuncName.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("CallFunction requires 'function_name'"));
 		}
 
-		FString TargetClassName = Params->GetStringField(TEXT("target_class"));
+		FString TargetClassName;
+		Params->TryGetStringField(TEXT("target_class"), TargetClassName);
 
 		TArray<FName> Candidates;
 		Candidates.Add(FName(*FuncName));
@@ -2510,7 +2548,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 		// If variable_name is provided it's recorded in the response but the pin
 		// layout is identical regardless — VariableGet always has one output data pin.
 		UK2Node_VariableGet* VarNode = NewObject<UK2Node_VariableGet>(TempGraph);
-		FString VarName = Params->GetStringField(TEXT("variable_name"));
+		FString VarName;
+		Params->TryGetStringField(TEXT("variable_name"), VarName);
 		if (VarName.IsEmpty()) VarName = TEXT("Variable");
 		VarNode->VariableReference.SetSelfMember(FName(*VarName));
 		VarNode->AllocateDefaultPins();
@@ -2520,7 +2559,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 	else if (NodeType == TEXT("VariableSet"))
 	{
 		UK2Node_VariableSet* VarNode = NewObject<UK2Node_VariableSet>(TempGraph);
-		FString VarName = Params->GetStringField(TEXT("variable_name"));
+		FString VarName;
+		Params->TryGetStringField(TEXT("variable_name"), VarName);
 		if (VarName.IsEmpty()) VarName = TEXT("Variable");
 		VarNode->VariableReference.SetSelfMember(FName(*VarName));
 		VarNode->AllocateDefaultPins();
@@ -2536,7 +2576,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 	else if (NodeType == TEXT("CustomEvent"))
 	{
 		UK2Node_CustomEvent* EventNode = NewObject<UK2Node_CustomEvent>(TempGraph);
-		FString EventName = Params->GetStringField(TEXT("event_name"));
+		FString EventName;
+		Params->TryGetStringField(TEXT("event_name"), EventName);
 		if (EventName.IsEmpty()) EventName = TEXT("MyEvent");
 		EventNode->CustomFunctionName = FName(*EventName);
 		EventNode->AllocateDefaultPins();
@@ -2578,8 +2619,10 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 	}
 	else if (NodeType == TEXT("MacroInstance"))
 	{
-		FString MacroName = Params->GetStringField(TEXT("macro_name"));
-		FString MacroBP = Params->GetStringField(TEXT("macro_blueprint"));
+		FString MacroName;
+		Params->TryGetStringField(TEXT("macro_name"), MacroName);
+		FString MacroBP;
+		Params->TryGetStringField(TEXT("macro_blueprint"), MacroBP);
 		if (MacroBP.IsEmpty()) MacroBP = TEXT("/Engine/EditorBlueprintResources/StandardMacros");
 
 		UBlueprint* MacroBlueprint = LoadObject<UBlueprint>(nullptr, *MacroBP);
@@ -2624,8 +2667,10 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 				TEXT("resolve_node for ComponentBoundEvent requires asset_path to resolve the component variable"));
 		}
 
-		FString CompNameStr = Params->GetStringField(TEXT("component_name"));
-		FString DelegateNameStr = Params->GetStringField(TEXT("delegate_property_name"));
+		FString CompNameStr;
+		Params->TryGetStringField(TEXT("component_name"), CompNameStr);
+		FString DelegateNameStr;
+		Params->TryGetStringField(TEXT("delegate_property_name"), DelegateNameStr);
 		if (CompNameStr.IsEmpty() || DelegateNameStr.IsEmpty())
 		{
 			return FMonolithActionResult::Error(
@@ -2663,7 +2708,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 		// If both target_class and asset_path are missing, the helper reports a
 		// clear error including the node-type label.
 		UClass* SelfContextClass = nullptr;
-		FString TargetClassName = Params->GetStringField(TEXT("target_class"));
+		FString TargetClassName;
+		Params->TryGetStringField(TEXT("target_class"), TargetClassName);
 		if (TargetClassName.IsEmpty())
 		{
 			FString AssetPath;
@@ -2863,7 +2909,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNodesBulk(const TS
 	bool bAutoLayout = false;
 	Params->TryGetBoolField(TEXT("auto_layout"), bAutoLayout);
 
-	FString SharedGraphName = Params->GetStringField(TEXT("graph_name"));
+	FString SharedGraphName;
+	Params->TryGetStringField(TEXT("graph_name"), SharedGraphName);
 
 	if (NodesArr.Num() > 500)
 	{
@@ -2884,7 +2931,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNodesBulk(const TS
 			continue;
 		}
 
-		FString TempId = Entry->GetStringField(TEXT("temp_id"));
+		FString TempId;
+		Entry->TryGetStringField(TEXT("temp_id"), TempId);
 
 		// Build sub-params: inject asset_path and graph_name, then copy all entry fields
 		TSharedRef<FJsonObject> SubParams = MakeShared<FJsonObject>();
@@ -2919,9 +2967,12 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNodesBulk(const TS
 		if (Result.bSuccess && Result.Result.IsValid())
 		{
 			// SerializeNode uses "id" (not "node_id") — matches get_graph_data format
-			FString NodeId = Result.Result->GetStringField(TEXT("id"));
-			FString NodeClass = Result.Result->GetStringField(TEXT("class"));
-			FString NodeTitle = Result.Result->GetStringField(TEXT("title"));
+			FString NodeId;
+			Result.Result->TryGetStringField(TEXT("id"), NodeId);
+			FString NodeClass;
+			Result.Result->TryGetStringField(TEXT("class"), NodeClass);
+			FString NodeTitle;
+			Result.Result->TryGetStringField(TEXT("title"), NodeTitle);
 
 			Out->SetStringField(TEXT("node_id"), NodeId);
 			Out->SetStringField(TEXT("class"),   NodeClass);
@@ -2993,7 +3044,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleConnectPinsBulk(const
 		return FMonolithActionResult::Error(TEXT("'connections' must be an array"));
 	}
 
-	FString SharedGraphName = Params->GetStringField(TEXT("graph_name"));
+	FString SharedGraphName;
+	Params->TryGetStringField(TEXT("graph_name"), SharedGraphName);
 
 	if (ConnArr.Num() > 500)
 	{
@@ -3096,7 +3148,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetPinDefaultsBulk(co
 		return FMonolithActionResult::Error(TEXT("'defaults' must be an array"));
 	}
 
-	FString SharedGraphName = Params->GetStringField(TEXT("graph_name"));
+	FString SharedGraphName;
+	Params->TryGetStringField(TEXT("graph_name"), SharedGraphName);
 
 	if (DefaultsArr.Num() > 500)
 	{
@@ -3182,7 +3235,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddTimeline(const TSh
 	}
 
 	// Resolve or find the target graph — must be an event graph (ubergraph page)
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	UEdGraph* Graph = nullptr;
 
 	if (GraphName.IsEmpty())
@@ -3214,7 +3268,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddTimeline(const TSh
 	}
 
 	// Resolve timeline variable name — generate unique if not provided
-	FString TimelineVarName = Params->GetStringField(TEXT("timeline_name"));
+	FString TimelineVarName;
+	Params->TryGetStringField(TEXT("timeline_name"), TimelineVarName);
 	if (TimelineVarName.IsEmpty())
 	{
 		TimelineVarName = FBlueprintEditorUtils::FindUniqueTimelineName(BP).ToString();
@@ -3340,14 +3395,16 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddEventNode(const TS
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString EventName = Params->GetStringField(TEXT("event_name"));
+	FString EventName;
+	Params->TryGetStringField(TEXT("event_name"), EventName);
 	if (EventName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: event_name"));
 	}
 
 	// Resolve graph — must be an event graph
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	UEdGraph* Graph = nullptr;
 
 	if (GraphName.IsEmpty())
@@ -3573,13 +3630,15 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddCommentNode(const 
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString CommentText = Params->GetStringField(TEXT("text"));
+	FString CommentText;
+	Params->TryGetStringField(TEXT("text"), CommentText);
 	if (CommentText.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: text"));
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	UEdGraph* Graph = MonolithBlueprintInternal::FindGraphByName(BP, GraphName);
 	if (!Graph)
 	{
@@ -3702,19 +3761,22 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandlePromotePinToVariable(
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString NodeId = Params->GetStringField(TEXT("node_id"));
+	FString NodeId;
+	Params->TryGetStringField(TEXT("node_id"), NodeId);
 	if (NodeId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: node_id"));
 	}
 
-	FString PinName = Params->GetStringField(TEXT("pin_name"));
+	FString PinName;
+	Params->TryGetStringField(TEXT("pin_name"), PinName);
 	if (PinName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: pin_name"));
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 
 	// Find the node
 	UEdGraphNode* SourceNode = MonolithBlueprintInternal::FindNodeById(BP, GraphName, NodeId);
@@ -3753,7 +3815,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandlePromotePinToVariable(
 	}
 
 	// Determine variable name: use provided or default to pin name
-	FString VarNameStr = Params->GetStringField(TEXT("variable_name"));
+	FString VarNameStr;
+	Params->TryGetStringField(TEXT("variable_name"), VarNameStr);
 	if (VarNameStr.IsEmpty())
 	{
 		VarNameStr = PinName;
@@ -3996,8 +4059,16 @@ static TSharedPtr<FJsonObject> SerializeTimelineTemplate(const UTimelineTemplate
 		if (Track.CurveFloat)
 		{
 			TSharedPtr<FJsonObject> CurveData = SerializeRichCurveKeys(Track.CurveFloat->FloatCurve);
-			TrackObj->SetArrayField(TEXT("keys"), CurveData->GetArrayField(TEXT("keys")));
-			TrackObj->SetNumberField(TEXT("num_keys"), CurveData->GetNumberField(TEXT("num_keys")));
+			const TArray<TSharedPtr<FJsonValue>>* CurveData_keysArr = nullptr;
+			if (CurveData->TryGetArrayField(TEXT("keys"), CurveData_keysArr) && CurveData_keysArr)
+			{
+				TrackObj->SetArrayField(TEXT("keys"), *CurveData_keysArr);
+			}
+			double CurveData_num_keysNum = 0.0;
+			if (CurveData->TryGetNumberField(TEXT("num_keys"), CurveData_num_keysNum))
+			{
+				TrackObj->SetNumberField(TEXT("num_keys"), CurveData_num_keysNum);
+			}
 		}
 		else
 		{
@@ -4024,7 +4095,11 @@ static TSharedPtr<FJsonObject> SerializeTimelineTemplate(const UTimelineTemplate
 				TSharedPtr<FJsonObject> ChObj = MakeShared<FJsonObject>();
 				ChObj->SetStringField(TEXT("channel"), ChannelNames[i]);
 				TSharedPtr<FJsonObject> CurveData = SerializeRichCurveKeys(Track.CurveVector->FloatCurves[i]);
-				ChObj->SetArrayField(TEXT("keys"), CurveData->GetArrayField(TEXT("keys")));
+				const TArray<TSharedPtr<FJsonValue>>* CurveData_keysArr = nullptr;
+				if (CurveData->TryGetArrayField(TEXT("keys"), CurveData_keysArr) && CurveData_keysArr)
+				{
+					ChObj->SetArrayField(TEXT("keys"), *CurveData_keysArr);
+				}
 				ChannelArr.Add(MakeShared<FJsonValueObject>(ChObj));
 			}
 			TrackObj->SetArrayField(TEXT("channels"), ChannelArr);
@@ -4079,7 +4154,11 @@ static TSharedPtr<FJsonObject> SerializeTimelineTemplate(const UTimelineTemplate
 				TSharedPtr<FJsonObject> ChObj = MakeShared<FJsonObject>();
 				ChObj->SetStringField(TEXT("channel"), ChannelNames[i]);
 				TSharedPtr<FJsonObject> CurveData = SerializeRichCurveKeys(Track.CurveLinearColor->FloatCurves[i]);
-				ChObj->SetArrayField(TEXT("keys"), CurveData->GetArrayField(TEXT("keys")));
+				const TArray<TSharedPtr<FJsonValue>>* CurveData_keysArr = nullptr;
+				if (CurveData->TryGetArrayField(TEXT("keys"), CurveData_keysArr) && CurveData_keysArr)
+				{
+					ChObj->SetArrayField(TEXT("keys"), *CurveData_keysArr);
+				}
 				ChannelArr.Add(MakeShared<FJsonValueObject>(ChObj));
 			}
 			TrackObj->SetArrayField(TEXT("channels"), ChannelArr);
@@ -4100,7 +4179,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleGetTimelineData(const
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString TimelineName = Params->GetStringField(TEXT("timeline_name"));
+	FString TimelineName;
+	Params->TryGetStringField(TEXT("timeline_name"), TimelineName);
 
 	TArray<TSharedPtr<FJsonValue>> TimelinesArr;
 
@@ -4156,19 +4236,22 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddTimelineTrack(cons
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString TimelineName = Params->GetStringField(TEXT("timeline_name"));
+	FString TimelineName;
+	Params->TryGetStringField(TEXT("timeline_name"), TimelineName);
 	if (TimelineName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: timeline_name"));
 	}
 
-	FString TrackNameStr = Params->GetStringField(TEXT("track_name"));
+	FString TrackNameStr;
+	Params->TryGetStringField(TEXT("track_name"), TrackNameStr);
 	if (TrackNameStr.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: track_name"));
 	}
 
-	FString TrackTypeStr = Params->GetStringField(TEXT("track_type"));
+	FString TrackTypeStr;
+	Params->TryGetStringField(TEXT("track_type"), TrackTypeStr);
 	if (TrackTypeStr.IsEmpty())
 	{
 		TrackTypeStr = TEXT("float");
@@ -4271,13 +4354,15 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetTimelineKeys(const
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString TimelineName = Params->GetStringField(TEXT("timeline_name"));
+	FString TimelineName;
+	Params->TryGetStringField(TEXT("timeline_name"), TimelineName);
 	if (TimelineName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: timeline_name"));
 	}
 
-	FString TrackNameStr = Params->GetStringField(TEXT("track_name"));
+	FString TrackNameStr;
+	Params->TryGetStringField(TEXT("track_name"), TrackNameStr);
 	if (TrackNameStr.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: track_name"));
@@ -4377,7 +4462,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetTimelineKeys(const
 		FKeyHandle Handle = Curve.AddKey((float)Time, (float)Value);
 
 		// Set interp mode if provided
-		FString InterpStr = KeyObj->GetStringField(TEXT("interp_mode"));
+		FString InterpStr;
+		KeyObj->TryGetStringField(TEXT("interp_mode"), InterpStr);
 		if (!InterpStr.IsEmpty())
 		{
 			Curve.SetKeyInterpMode(Handle, StringToInterpMode(InterpStr));

@@ -121,7 +121,8 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleAddComponent(con
 		return FMonolithActionResult::Error(TEXT("Blueprint has no SimpleConstructionScript (is it an Actor Blueprint?)"));
 	}
 
-	FString ClassName = Params->GetStringField(TEXT("component_class"));
+	FString ClassName;
+	Params->TryGetStringField(TEXT("component_class"), ClassName);
 	if (ClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("component_class is required"));
@@ -143,7 +144,8 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleAddComponent(con
 	}
 
 	// Determine node name — use provided name or derive from class
-	FString Name = Params->GetStringField(TEXT("component_name"));
+	FString Name;
+	Params->TryGetStringField(TEXT("component_name"), Name);
 	if (Name.IsEmpty())
 	{
 		// Strip 'U' prefix and 'Component' suffix for a clean default name
@@ -161,14 +163,16 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleAddComponent(con
 	}
 
 	// Attach socket if specified (must be set before adding to hierarchy)
-	FString AttachSocket = Params->GetStringField(TEXT("attach_socket"));
+	FString AttachSocket;
+	Params->TryGetStringField(TEXT("attach_socket"), AttachSocket);
 	if (!AttachSocket.IsEmpty())
 	{
 		NewNode->AttachToName = FName(*AttachSocket);
 	}
 
 	// Attach to parent component or add as root
-	FString ParentName = Params->GetStringField(TEXT("parent"));
+	FString ParentName;
+	Params->TryGetStringField(TEXT("parent"), ParentName);
 	FString ActualParentName;
 
 	if (!ParentName.IsEmpty())
@@ -220,7 +224,8 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleRemoveComponent(
 		return FMonolithActionResult::Error(TEXT("Blueprint has no SimpleConstructionScript"));
 	}
 
-	FString CompName = Params->GetStringField(TEXT("component_name"));
+	FString CompName;
+	Params->TryGetStringField(TEXT("component_name"), CompName);
 	if (CompName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("component_name is required"));
@@ -284,8 +289,10 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleRenameComponent(
 		return FMonolithActionResult::Error(TEXT("Blueprint has no SimpleConstructionScript"));
 	}
 
-	FString CompName = Params->GetStringField(TEXT("component_name"));
-	FString NewName  = Params->GetStringField(TEXT("new_name"));
+	FString CompName;
+	Params->TryGetStringField(TEXT("component_name"), CompName);
+	FString NewName;
+	Params->TryGetStringField(TEXT("new_name"), NewName);
 
 	if (CompName.IsEmpty()) return FMonolithActionResult::Error(TEXT("component_name is required"));
 	if (NewName.IsEmpty())  return FMonolithActionResult::Error(TEXT("new_name is required"));
@@ -349,9 +356,12 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleReparentComponen
 		return FMonolithActionResult::Error(TEXT("Blueprint has no SimpleConstructionScript"));
 	}
 
-	FString CompName   = Params->GetStringField(TEXT("component_name"));
-	FString NewParent  = Params->GetStringField(TEXT("new_parent"));
-	FString AttachSocket = Params->GetStringField(TEXT("attach_socket"));
+	FString CompName;
+	Params->TryGetStringField(TEXT("component_name"), CompName);
+	FString NewParent;
+	Params->TryGetStringField(TEXT("new_parent"), NewParent);
+	FString AttachSocket;
+	Params->TryGetStringField(TEXT("attach_socket"), AttachSocket);
 
 	if (CompName.IsEmpty()) return FMonolithActionResult::Error(TEXT("component_name is required"));
 
@@ -458,9 +468,12 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString CompName  = Params->GetStringField(TEXT("component_name"));
-	FString PropName  = Params->GetStringField(TEXT("property_name"));
-	FString Value     = Params->GetStringField(TEXT("value"));
+	FString CompName;
+	Params->TryGetStringField(TEXT("component_name"), CompName);
+	FString PropName;
+	Params->TryGetStringField(TEXT("property_name"), PropName);
+	FString Value;
+	Params->TryGetStringField(TEXT("value"), Value);
 
 	if (CompName.IsEmpty()) return FMonolithActionResult::Error(TEXT("component_name is required"));
 	if (PropName.IsEmpty()) return FMonolithActionResult::Error(TEXT("property_name is required"));
@@ -681,7 +694,8 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleDuplicateCompone
 		return FMonolithActionResult::Error(TEXT("Blueprint has no SimpleConstructionScript"));
 	}
 
-	FString CompName = Params->GetStringField(TEXT("component_name"));
+	FString CompName;
+	Params->TryGetStringField(TEXT("component_name"), CompName);
 	if (CompName.IsEmpty()) return FMonolithActionResult::Error(TEXT("component_name is required"));
 
 	USCS_Node* SourceNode = FindSCSNodeByName(BP->SimpleConstructionScript, FName(*CompName));
@@ -696,7 +710,8 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleDuplicateCompone
 	}
 
 	// Build new node name
-	FString NewName = Params->GetStringField(TEXT("new_name"));
+	FString NewName;
+	Params->TryGetStringField(TEXT("new_name"), NewName);
 	if (NewName.IsEmpty())
 	{
 		NewName = CompName + TEXT("_Copy");

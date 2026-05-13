@@ -213,13 +213,15 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddVariable(const
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString Name = Params->GetStringField(TEXT("name"));
+	FString Name;
+	Params->TryGetStringField(TEXT("name"), Name);
 	if (Name.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
 	}
 
-	FString TypeStr = Params->GetStringField(TEXT("type"));
+	FString TypeStr;
+	Params->TryGetStringField(TEXT("type"), TypeStr);
 	if (TypeStr.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: type"));
@@ -314,7 +316,8 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddVariable(const
 		}
 	}
 
-	FString DefaultValue = Params->GetStringField(TEXT("default_value"));
+	FString DefaultValue;
+	Params->TryGetStringField(TEXT("default_value"), DefaultValue);
 
 	// Check for existing variable with same name
 	for (const FBPVariableDescription& Existing : BP->NewVariables)
@@ -330,7 +333,8 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddVariable(const
 	FBlueprintEditorUtils::AddMemberVariable(BP, VarName, PinType, DefaultValue);
 
 	// Apply optional metadata flags
-	FString Category = Params->GetStringField(TEXT("category"));
+	FString Category;
+	Params->TryGetStringField(TEXT("category"), Category);
 	if (!Category.IsEmpty())
 	{
 		FBlueprintEditorUtils::SetBlueprintVariableCategory(BP, VarName, nullptr, FText::FromString(Category));
@@ -373,7 +377,8 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleRemoveVariable(co
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString Name = Params->GetStringField(TEXT("name"));
+	FString Name;
+	Params->TryGetStringField(TEXT("name"), Name);
 	if (Name.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
@@ -419,8 +424,10 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleRenameVariable(co
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString OldName = Params->GetStringField(TEXT("old_name"));
-	FString NewName = Params->GetStringField(TEXT("new_name"));
+	FString OldName;
+	Params->TryGetStringField(TEXT("old_name"), OldName);
+	FString NewName;
+	Params->TryGetStringField(TEXT("new_name"), NewName);
 
 	if (OldName.IsEmpty())
 	{
@@ -472,13 +479,15 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleSetVariableType(c
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString Name = Params->GetStringField(TEXT("name"));
+	FString Name;
+	Params->TryGetStringField(TEXT("name"), Name);
 	if (Name.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
 	}
 
-	FString TypeStr = Params->GetStringField(TEXT("type"));
+	FString TypeStr;
+	Params->TryGetStringField(TEXT("type"), TypeStr);
 	if (TypeStr.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: type"));
@@ -526,7 +535,8 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleSetVariableDefaul
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString Name = Params->GetStringField(TEXT("name"));
+	FString Name;
+	Params->TryGetStringField(TEXT("name"), Name);
 	if (Name.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
@@ -550,7 +560,8 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleSetVariableDefaul
 	}
 
 	// Apply category if provided
-	FString Category = Params->GetStringField(TEXT("category"));
+	FString Category;
+	Params->TryGetStringField(TEXT("category"), Category);
 	if (!Category.IsEmpty())
 	{
 		FBlueprintEditorUtils::SetBlueprintVariableCategory(BP, VarName, nullptr, FText::FromString(Category));
@@ -571,7 +582,8 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleSetVariableDefaul
 	}
 
 	// Apply default_value and remaining flags via direct FBPVariableDescription modification
-	FString DefaultValue = Params->GetStringField(TEXT("default_value"));
+	FString DefaultValue;
+	Params->TryGetStringField(TEXT("default_value"), DefaultValue);
 	bool bHasDefaultValue = !DefaultValue.IsEmpty();
 	ApplyVariableFlags(BP, VarName, Params, DefaultValue, bHasDefaultValue);
 
@@ -597,19 +609,22 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddLocalVariable(
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString FunctionName = Params->GetStringField(TEXT("function_name"));
+	FString FunctionName;
+	Params->TryGetStringField(TEXT("function_name"), FunctionName);
 	if (FunctionName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: function_name"));
 	}
 
-	FString Name = Params->GetStringField(TEXT("name"));
+	FString Name;
+	Params->TryGetStringField(TEXT("name"), Name);
 	if (Name.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
 	}
 
-	FString TypeStr = Params->GetStringField(TEXT("type"));
+	FString TypeStr;
+	Params->TryGetStringField(TEXT("type"), TypeStr);
 	if (TypeStr.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: type"));
@@ -629,7 +644,8 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddLocalVariable(
 	}
 
 	FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
-	FString DefaultValue = Params->GetStringField(TEXT("default_value"));
+	FString DefaultValue;
+	Params->TryGetStringField(TEXT("default_value"), DefaultValue);
 
 	FBlueprintEditorUtils::AddLocalVariable(BP, FuncGraph, FName(*Name), PinType, DefaultValue);
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
@@ -656,13 +672,15 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleRemoveLocalVariab
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString FunctionName = Params->GetStringField(TEXT("function_name"));
+	FString FunctionName;
+	Params->TryGetStringField(TEXT("function_name"), FunctionName);
 	if (FunctionName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: function_name"));
 	}
 
-	FString Name = Params->GetStringField(TEXT("name"));
+	FString Name;
+	Params->TryGetStringField(TEXT("name"), Name);
 	if (Name.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
@@ -733,13 +751,15 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddReplicatedVari
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString VarNameStr = Params->GetStringField(TEXT("variable_name"));
+	FString VarNameStr;
+	Params->TryGetStringField(TEXT("variable_name"), VarNameStr);
 	if (VarNameStr.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: variable_name"));
 	}
 
-	FString TypeStr = Params->GetStringField(TEXT("type"));
+	FString TypeStr;
+	Params->TryGetStringField(TEXT("type"), TypeStr);
 	if (TypeStr.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: type"));
@@ -767,7 +787,8 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddReplicatedVari
 	}
 
 	// Parse replication condition string -> ELifetimeCondition
-	FString ConditionStr = Params->GetStringField(TEXT("replication_condition"));
+	FString ConditionStr;
+	Params->TryGetStringField(TEXT("replication_condition"), ConditionStr);
 	if (ConditionStr.IsEmpty()) ConditionStr = TEXT("None");
 
 	// Accept both "COND_OwnerOnly" and "OwnerOnly" forms
@@ -804,7 +825,8 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddReplicatedVari
 	bool bCreateOnRep = false;
 	Params->TryGetBoolField(TEXT("create_on_rep"), bCreateOnRep);
 
-	FString DefaultValue = Params->GetStringField(TEXT("default_value"));
+	FString DefaultValue;
+	Params->TryGetStringField(TEXT("default_value"), DefaultValue);
 
 	// Step 1: Add the variable
 	FBlueprintEditorUtils::AddMemberVariable(BP, VarName, PinType, DefaultValue);
@@ -824,7 +846,8 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddReplicatedVari
 	}
 
 	// Apply optional category
-	FString Category = Params->GetStringField(TEXT("category"));
+	FString Category;
+	Params->TryGetStringField(TEXT("category"), Category);
 	if (!Category.IsEmpty())
 	{
 		FBlueprintEditorUtils::SetBlueprintVariableCategory(BP, VarName, nullptr, FText::FromString(Category));

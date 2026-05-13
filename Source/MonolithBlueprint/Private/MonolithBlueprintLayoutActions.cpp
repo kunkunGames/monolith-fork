@@ -268,7 +268,8 @@ FMonolithActionResult FMonolithBlueprintLayoutActions::HandleAutoLayout(const TS
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	if (GraphName.IsEmpty()) GraphName = TEXT("EventGraph");
 
 	double OutHSpacing = 350.0;
@@ -278,10 +279,12 @@ FMonolithActionResult FMonolithBlueprintLayoutActions::HandleAutoLayout(const TS
 	Params->TryGetNumberField(TEXT("vertical_spacing"), OutVSpacing);
 	int32 VSpacing = static_cast<int32>(OutVSpacing);
 
-	FString LayoutMode = Params->GetStringField(TEXT("layout_mode"));
+	FString LayoutMode;
+	Params->TryGetStringField(TEXT("layout_mode"), LayoutMode);
 	if (LayoutMode.IsEmpty()) LayoutMode = TEXT("all");
 
-	FString Formatter = Params->GetStringField(TEXT("formatter"));
+	FString Formatter;
+	Params->TryGetStringField(TEXT("formatter"), Formatter);
 	if (Formatter.IsEmpty()) Formatter = TEXT("auto");
 
 	// Validate formatter
