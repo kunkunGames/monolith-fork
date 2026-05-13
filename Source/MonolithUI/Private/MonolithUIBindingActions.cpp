@@ -239,15 +239,9 @@ FMonolithActionResult FMonolithUIBindingActions::HandleSetupListView(const TShar
     }
 
     double EntryHeight = 50.0;
-    if (Params->HasField(TEXT("entry_height")))
-    {
-        EntryHeight = Params->GetNumberField(TEXT("entry_height"));
-    }
+    Params->TryGetNumberField(TEXT("entry_height"), EntryHeight);
     double EntryWidth = 100.0;
-    if (Params->HasField(TEXT("entry_width")))
-    {
-        EntryWidth = Params->GetNumberField(TEXT("entry_width"));
-    }
+    Params->TryGetNumberField(TEXT("entry_width"), EntryWidth);
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);

@@ -141,15 +141,17 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
             PropsSet++;
         }
 
-        if (Params->HasField(TEXT("z_order")))
+        double ZOrderVal;
+        if (Params->TryGetNumberField(TEXT("z_order"), ZOrderVal))
         {
-            CS->SetZOrder(static_cast<int32>(Params->GetNumberField(TEXT("z_order"))));
+            CS->SetZOrder(static_cast<int32>(ZOrderVal));
             PropsSet++;
         }
 
-        if (Params->HasField(TEXT("auto_size")))
+        bool bAutoSize;
+        if (Params->TryGetBoolField(TEXT("auto_size"), bAutoSize))
         {
-            CS->SetAutoSize(Params->GetBoolField(TEXT("auto_size")));
+            CS->SetAutoSize(bAutoSize);
             PropsSet++;
         }
     }
@@ -219,7 +221,7 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
     FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
 
     bool bCompile = false;
-    if (Params->HasField(TEXT("compile"))) bCompile = Params->GetBoolField(TEXT("compile"));
+    Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -294,7 +296,7 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetAnchorPreset(const TShare
     FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
 
     bool bCompile = false;
-    if (Params->HasField(TEXT("compile"))) bCompile = Params->GetBoolField(TEXT("compile"));
+    Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -347,7 +349,7 @@ FMonolithActionResult FMonolithUISlotActions::HandleMoveWidget(const TSharedPtr<
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 
     bool bCompile = true;
-    if (Params->HasField(TEXT("compile"))) bCompile = Params->GetBoolField(TEXT("compile"));
+    Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();

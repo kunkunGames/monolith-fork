@@ -261,9 +261,10 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
         Brush->OutlineSettings.Color = FSlateColor(MonolithUIInternal::ParseColor(OutlineColor));
         PropsSet++;
     }
-    if (Params->HasField(TEXT("outline_width")))
+    double OutlineWidthVal;
+    if (Params->TryGetNumberField(TEXT("outline_width"), OutlineWidthVal))
     {
-        Brush->OutlineSettings.Width = static_cast<float>(Params->GetNumberField(TEXT("outline_width")));
+        Brush->OutlineSettings.Width = static_cast<float>(OutlineWidthVal);
         PropsSet++;
     }
 
@@ -318,7 +319,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
 
     bool bCompile = false;
-    if (Params->HasField(TEXT("compile"))) bCompile = Params->GetBoolField(TEXT("compile"));
+    Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -379,9 +380,10 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetFont(const TSharedPtr<
     int32 PropsSet = 0;
 
     // Font size
-    if (Params->HasField(TEXT("font_size")))
+    double FontSizeVal;
+    if (Params->TryGetNumberField(TEXT("font_size"), FontSizeVal))
     {
-        FontInfo->Size = static_cast<float>(Params->GetNumberField(TEXT("font_size")));
+        FontInfo->Size = static_cast<float>(FontSizeVal);
         PropsSet++;
     }
 
@@ -412,16 +414,18 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetFont(const TSharedPtr<
     }
 
     // Letter spacing
-    if (Params->HasField(TEXT("letter_spacing")))
+    double LetterSpacingVal;
+    if (Params->TryGetNumberField(TEXT("letter_spacing"), LetterSpacingVal))
     {
-        FontInfo->LetterSpacing = static_cast<int32>(Params->GetNumberField(TEXT("letter_spacing")));
+        FontInfo->LetterSpacing = static_cast<int32>(LetterSpacingVal);
         PropsSet++;
     }
 
     // Outline size
-    if (Params->HasField(TEXT("outline_size")))
+    double OutlineSizeVal;
+    if (Params->TryGetNumberField(TEXT("outline_size"), OutlineSizeVal))
     {
-        FontInfo->OutlineSettings.OutlineSize = static_cast<int32>(Params->GetNumberField(TEXT("outline_size")));
+        FontInfo->OutlineSettings.OutlineSize = static_cast<int32>(OutlineSizeVal);
         PropsSet++;
     }
 
@@ -452,7 +456,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetFont(const TSharedPtr<
     FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
 
     bool bCompile = false;
-    if (Params->HasField(TEXT("compile"))) bCompile = Params->GetBoolField(TEXT("compile"));
+    Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -585,7 +589,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleBatchStyle(const TSharedP
     FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
 
     bool bCompile = false;
-    if (Params->HasField(TEXT("compile"))) bCompile = Params->GetBoolField(TEXT("compile"));
+    Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -651,10 +655,11 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<
             PropsSet++;
         }
 
-        if (Params->HasField(TEXT("font_size")))
+        double FontSizeVal;
+        if (Params->TryGetNumberField(TEXT("font_size"), FontSizeVal))
         {
             FSlateFontInfo FontInfo = TB->GetFont();
-            FontInfo.Size = static_cast<float>(Params->GetNumberField(TEXT("font_size")));
+            FontInfo.Size = static_cast<float>(FontSizeVal);
             TB->SetFont(FontInfo);
             PropsSet++;
         }
@@ -725,7 +730,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<
     FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
 
     bool bCompile = false;
-    if (Params->HasField(TEXT("compile"))) bCompile = Params->GetBoolField(TEXT("compile"));
+    Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -844,7 +849,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetImage(const TSharedPtr
     FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
 
     bool bCompile = false;
-    if (Params->HasField(TEXT("compile"))) bCompile = Params->GetBoolField(TEXT("compile"));
+    Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();

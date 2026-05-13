@@ -447,10 +447,7 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleSetColorblindMode(c
     }
 
     bool bCorrect = true;
-    if (Params->HasField(TEXT("correct")))
-    {
-        bCorrect = Params->GetBoolField(TEXT("correct"));
-    }
+    Params->TryGetBoolField(TEXT("correct"), bCorrect);
 
     EColorVisionDeficiency CVD = EColorVisionDeficiency::NormalVision;
     if (Mode == TEXT("Deuteranope"))      CVD = EColorVisionDeficiency::Deuteranope;
