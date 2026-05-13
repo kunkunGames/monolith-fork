@@ -112,6 +112,7 @@ private:
 		const FString& ActionName = TEXT(""), const FString& Category = TEXT(""));
 
 	// ---- Cache management actions ----
+	static int32 ClampListCachedMeshesLimit(int32 Limit);
 	static FMonolithActionResult ListCachedMeshes(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ClearCacheAction(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ValidateCacheAction(const TSharedPtr<FJsonObject>& Params);
