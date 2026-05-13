@@ -256,6 +256,7 @@ namespace MonolithUI::SpecActionsInternal
         const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
         if (Obj->TryGetArrayField(TEXT("styleRefs"), Arr) && Arr)
         {
+            OutCUI.StyleRefs.Reserve(Arr->Num());
             for (const TSharedPtr<FJsonValue>& V : *Arr)
             {
                 if (V.IsValid() && V->Type == EJson::String)
@@ -296,6 +297,7 @@ namespace MonolithUI::SpecActionsInternal
         const TArray<TSharedPtr<FJsonValue>>* AnimRefArr = nullptr;
         if (Obj->TryGetArrayField(TEXT("animationRefs"), AnimRefArr) && AnimRefArr)
         {
+            Node->AnimationRefs.Reserve(AnimRefArr->Num());
             for (const TSharedPtr<FJsonValue>& V : *AnimRefArr)
             {
                 if (V.IsValid() && V->Type == EJson::String)
@@ -308,6 +310,7 @@ namespace MonolithUI::SpecActionsInternal
         const TArray<TSharedPtr<FJsonValue>>* ChildArr = nullptr;
         if (Obj->TryGetArrayField(TEXT("children"), ChildArr) && ChildArr)
         {
+            Node->Children.Reserve(ChildArr->Num());
             for (const TSharedPtr<FJsonValue>& V : *ChildArr)
             {
                 const TSharedPtr<FJsonObject>* ChildObj = nullptr;
@@ -380,6 +383,7 @@ namespace MonolithUI::SpecActionsInternal
         const TArray<TSharedPtr<FJsonValue>>* AnimArr = nullptr;
         if (SpecObj->TryGetArrayField(TEXT("animations"), AnimArr) && AnimArr)
         {
+            OutDoc.Animations.Reserve(AnimArr->Num());
             for (const TSharedPtr<FJsonValue>& V : *AnimArr)
             {
                 const TSharedPtr<FJsonObject>* AnimObj = nullptr;
@@ -398,6 +402,7 @@ namespace MonolithUI::SpecActionsInternal
                     const TArray<TSharedPtr<FJsonValue>>* KFArr = nullptr;
                     if ((*AnimObj)->TryGetArrayField(TEXT("keyframes"), KFArr) && KFArr)
                     {
+                        A.Keyframes.Reserve(KFArr->Num());
                         for (const TSharedPtr<FJsonValue>& KV : *KFArr)
                         {
                             const TSharedPtr<FJsonObject>* KObj = nullptr;
@@ -461,6 +466,7 @@ namespace MonolithUI::SpecActionsInternal
         if (R.Errors.Num() > 0)
         {
             TArray<TSharedPtr<FJsonValue>> Errs;
+            Errs.Reserve(R.Errors.Num());
             for (const FUISpecError& E : R.Errors)
             {
                 TSharedPtr<FJsonObject> EObj = MakeShared<FJsonObject>();
@@ -476,6 +482,7 @@ namespace MonolithUI::SpecActionsInternal
         if (R.Warnings.Num() > 0)
         {
             TArray<TSharedPtr<FJsonValue>> Warns;
+            Warns.Reserve(R.Warnings.Num());
             for (const FUISpecError& W : R.Warnings)
             {
                 TSharedPtr<FJsonObject> WObj = MakeShared<FJsonObject>();
@@ -491,6 +498,7 @@ namespace MonolithUI::SpecActionsInternal
         {
             TSharedPtr<FJsonObject> Diff = MakeShared<FJsonObject>();
             TArray<TSharedPtr<FJsonValue>> Lines;
+            Lines.Reserve(R.DiffLines.Num());
             for (const FString& L : R.DiffLines)
             {
                 Lines.Add(MakeShared<FJsonValueString>(L));
@@ -797,6 +805,7 @@ namespace MonolithUI::SpecActionsInternal
         Out->SetNumberField(TEXT("backdropBlurStrength"), E.BackdropBlurStrength);
 
         TArray<TSharedPtr<FJsonValue>> Drops;
+        Drops.Reserve(E.DropShadows.Num());
         for (const FUISpecEffectShadow& S : E.DropShadows)
         {
             Drops.Add(MakeShared<FJsonValueObject>(ShadowToJson(S)));
@@ -804,6 +813,7 @@ namespace MonolithUI::SpecActionsInternal
         if (Drops.Num() > 0) Out->SetArrayField(TEXT("dropShadows"), Drops);
 
         TArray<TSharedPtr<FJsonValue>> Inners;
+        Inners.Reserve(E.InnerShadows.Num());
         for (const FUISpecEffectShadow& S : E.InnerShadows)
         {
             Inners.Add(MakeShared<FJsonValueObject>(ShadowToJson(S)));
@@ -821,6 +831,7 @@ namespace MonolithUI::SpecActionsInternal
         if (C.StyleRefs.Num() > 0)
         {
             TArray<TSharedPtr<FJsonValue>> Arr;
+            Arr.Reserve(C.StyleRefs.Num());
             for (const FName& N : C.StyleRefs)
             {
                 Arr.Add(MakeShared<FJsonValueString>(N.ToString()));
@@ -848,6 +859,7 @@ namespace MonolithUI::SpecActionsInternal
         if (N.AnimationRefs.Num() > 0)
         {
             TArray<TSharedPtr<FJsonValue>> Arr;
+            Arr.Reserve(N.AnimationRefs.Num());
             for (const FName& A : N.AnimationRefs)
             {
                 Arr.Add(MakeShared<FJsonValueString>(A.ToString()));
@@ -858,6 +870,7 @@ namespace MonolithUI::SpecActionsInternal
         if (N.Children.Num() > 0)
         {
             TArray<TSharedPtr<FJsonValue>> Arr;
+            Arr.Reserve(N.Children.Num());
             for (const TSharedPtr<FUISpecNode>& C : N.Children)
             {
                 if (C.IsValid())
@@ -898,6 +911,7 @@ namespace MonolithUI::SpecActionsInternal
         if (R.Document.Animations.Num() > 0)
         {
             TArray<TSharedPtr<FJsonValue>> Arr;
+            Arr.Reserve(R.Document.Animations.Num());
             for (const FUISpecAnimation& A : R.Document.Animations)
             {
                 TSharedPtr<FJsonObject> AObj = MakeShared<FJsonObject>();
@@ -912,6 +926,7 @@ namespace MonolithUI::SpecActionsInternal
                 if (A.Keyframes.Num() > 0)
                 {
                     TArray<TSharedPtr<FJsonValue>> Kfs;
+                    Kfs.Reserve(A.Keyframes.Num());
                     for (const FUISpecKeyframe& K : A.Keyframes)
                     {
                         TSharedPtr<FJsonObject> KO = MakeShared<FJsonObject>();
@@ -937,6 +952,7 @@ namespace MonolithUI::SpecActionsInternal
         if (R.Errors.Num() > 0)
         {
             TArray<TSharedPtr<FJsonValue>> Errs;
+            Errs.Reserve(R.Errors.Num());
             for (const FUISpecError& E : R.Errors)
             {
                 TSharedPtr<FJsonObject> EObj = MakeShared<FJsonObject>();
@@ -949,6 +965,7 @@ namespace MonolithUI::SpecActionsInternal
         if (R.Warnings.Num() > 0)
         {
             TArray<TSharedPtr<FJsonValue>> Warns;
+            Warns.Reserve(R.Warnings.Num());
             for (const FUISpecError& W : R.Warnings)
             {
                 TSharedPtr<FJsonObject> WObj = MakeShared<FJsonObject>();
