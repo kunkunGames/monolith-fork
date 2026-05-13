@@ -387,7 +387,7 @@ FMonolithActionResult FMonolithMeshAccessibilityActions::AnalyzeVisualContrast(c
 	const TArray<TSharedPtr<FJsonValue>>* TagsArr;
 	if (Params->TryGetArrayField(TEXT("tags"), TagsArr))
 	{
-		for (const auto& V : *TagsArr) Tags.Add(V->AsString());
+		for (const auto& V : *TagsArr) { if (V->Type == EJson::String) Tags.Add(V->AsString()); }
 	}
 	if (Tags.Num() == 0)
 	{
@@ -835,7 +835,7 @@ FMonolithActionResult FMonolithMeshAccessibilityActions::ValidateInteractiveReac
 	const TArray<TSharedPtr<FJsonValue>>* TagsArr;
 	if (Params->TryGetArrayField(TEXT("tags"), TagsArr))
 	{
-		for (const auto& V : *TagsArr) Tags.Add(V->AsString());
+		for (const auto& V : *TagsArr) { if (V->Type == EJson::String) Tags.Add(V->AsString()); }
 	}
 	if (Tags.Num() == 0)
 	{
@@ -1200,7 +1200,7 @@ FMonolithActionResult FMonolithMeshAccessibilityActions::GenerateAccessibilityRe
 	// Sort issues by severity
 	Issues.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
 	{
-		return A->AsObject()->GetStringField(TEXT("severity")) < B->AsObject()->GetStringField(TEXT("severity"));
+		if (A->Type == EJson::Object && B->Type == EJson::Object) return A->AsObject()->GetStringField(TEXT("severity")) < B->AsObject()->GetStringField(TEXT("severity")); return false;
 	});
 
 	Report->SetArrayField(TEXT("issues"), Issues);

@@ -402,6 +402,10 @@ int32 FMonolithMeshProceduralCache::ValidateCache()
 			continue;
 		}
 
+		if (Pair.Value->Type != EJson::Object)
+		{
+			continue;
+		}
 		const TSharedPtr<FJsonObject> Entry = Pair.Value->AsObject();
 		const FString AssetPath = Entry->GetStringField(TEXT("asset_path"));
 		if (AssetPath.IsEmpty() || !FPackageName::DoesPackageExist(AssetPath))
@@ -454,6 +458,10 @@ int32 FMonolithMeshProceduralCache::ClearCache(const FString& TypeFilter)
 			continue;
 		}
 
+		if (Pair.Value->Type != EJson::Object)
+		{
+			continue;
+		}
 		const TSharedPtr<FJsonObject> Entry = Pair.Value->AsObject();
 		if (Entry->GetStringField(TEXT("type")).Equals(TypeFilter, ESearchCase::IgnoreCase))
 		{
@@ -497,6 +505,10 @@ TSharedPtr<FJsonObject> FMonolithMeshProceduralCache::GetStats()
 			continue;
 		}
 
+		if (Pair.Value->Type != EJson::Object)
+		{
+			continue;
+		}
 		const TSharedPtr<FJsonObject> Entry = Pair.Value->AsObject();
 		const FString Type = Entry->GetStringField(TEXT("type"));
 		TypeCounts.FindOrAdd(Type, 0)++;
@@ -544,6 +556,10 @@ TSharedPtr<FJsonObject> FMonolithMeshProceduralCache::ListEntries(const FString&
 			continue;
 		}
 
+		if (Pair.Value->Type != EJson::Object)
+		{
+			continue;
+		}
 		const TSharedPtr<FJsonObject> Entry = Pair.Value->AsObject();
 
 		// Apply type filter if specified

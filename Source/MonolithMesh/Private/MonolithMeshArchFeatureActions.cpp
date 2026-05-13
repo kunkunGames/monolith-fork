@@ -82,9 +82,9 @@ FAttachmentContext FMonolithMeshArchFeatureActions::ParseBuildingContext(const T
 	const TArray<TSharedPtr<FJsonValue>>* NormalArr = nullptr;
 	if (BC->TryGetArrayField(TEXT("normal"), NormalArr) && NormalArr && NormalArr->Num() >= 3)
 	{
-		Ctx.WallNormal.X = (*NormalArr)[0]->AsNumber();
-		Ctx.WallNormal.Y = (*NormalArr)[1]->AsNumber();
-		Ctx.WallNormal.Z = (*NormalArr)[2]->AsNumber();
+		Ctx.WallNormal.X = (*NormalArr)[0]->Type == EJson::Number ? (*NormalArr)[0]->AsNumber() : 0.0;
+		Ctx.WallNormal.Y = (*NormalArr)[1]->Type == EJson::Number ? (*NormalArr)[1]->AsNumber() : 0.0;
+		Ctx.WallNormal.Z = (*NormalArr)[2]->Type == EJson::Number ? (*NormalArr)[2]->AsNumber() : 0.0;
 		Ctx.WallNormal.Normalize();
 	}
 
@@ -92,9 +92,9 @@ FAttachmentContext FMonolithMeshArchFeatureActions::ParseBuildingContext(const T
 	const TArray<TSharedPtr<FJsonValue>>* OriginArr = nullptr;
 	if (BC->TryGetArrayField(TEXT("world_origin"), OriginArr) && OriginArr && OriginArr->Num() >= 3)
 	{
-		Ctx.WallOrigin.X = (*OriginArr)[0]->AsNumber();
-		Ctx.WallOrigin.Y = (*OriginArr)[1]->AsNumber();
-		Ctx.WallOrigin.Z = (*OriginArr)[2]->AsNumber();
+		Ctx.WallOrigin.X = (*OriginArr)[0]->Type == EJson::Number ? (*OriginArr)[0]->AsNumber() : 0.0;
+		Ctx.WallOrigin.Y = (*OriginArr)[1]->Type == EJson::Number ? (*OriginArr)[1]->AsNumber() : 0.0;
+		Ctx.WallOrigin.Z = (*OriginArr)[2]->Type == EJson::Number ? (*OriginArr)[2]->AsNumber() : 0.0;
 	}
 
 	// Parse scalar fields
@@ -1352,11 +1352,35 @@ FMonolithActionResult FMonolithMeshArchFeatureActions::CreateRailing(const TShar
 			return FMonolithActionResult::Error(FString::Printf(
 				TEXT("Point %d must be an array of [x,y,z]"), Pi));
 		}
-		FVector Pt(
-			(*PtArr)[0]->AsNumber(),
-			(*PtArr)[1]->AsNumber(),
-			(*PtArr)[2]->AsNumber()
-		);
+		auto ReadCoordinate = [&](int32 CoordIndex, double& OutValue) -> bool
+		{
+			const TSharedPtr<FJsonValue>& Coord = (*PtArr)[CoordIndex];
+			if (!Coord.IsValid())
+			{
+				return false;
+			}
+			if (Coord->Type == EJson::Number)
+			{
+				OutValue = Coord->AsNumber();
+				return true;
+			}
+			if (Coord->Type == EJson::String)
+			{
+				return LexTryParseString(OutValue, *Coord->AsString());
+			}
+			return false;
+		};
+
+		double X = 0.0;
+		double Y = 0.0;
+		double Z = 0.0;
+		if (!ReadCoordinate(0, X) || !ReadCoordinate(1, Y) || !ReadCoordinate(2, Z))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Point %d coordinates must be numbers or numeric strings"), Pi));
+		}
+
+		FVector Pt(X, Y, Z);
 		Points.Add(Pt);
 	}
 

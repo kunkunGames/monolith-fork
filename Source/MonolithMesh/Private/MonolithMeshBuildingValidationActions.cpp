@@ -63,7 +63,7 @@ namespace BuildingValidationHelpers
 			{
 				return Val->AsBool();
 			}
-			FString Str = Val->AsString();
+			FString Str = Val->Type == EJson::String ? Val->AsString() : TEXT("");
 			return Str.Equals(TEXT("true"), ESearchCase::IgnoreCase);
 		}
 		return Default;
