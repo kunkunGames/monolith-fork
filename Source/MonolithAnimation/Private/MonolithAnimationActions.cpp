@@ -3940,11 +3940,40 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetCompositeInfo(const TS
 
 FMonolithActionResult FMonolithAnimationActions::HandleAddCompositeSegment(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString AnimPath = Params->GetStringField(TEXT("anim_path"));
-	float StartPos = Params->HasField(TEXT("start_pos")) ? static_cast<float>(Params->GetNumberField(TEXT("start_pos"))) : 0.0f;
-	float PlayRate = Params->HasField(TEXT("play_rate")) ? static_cast<float>(Params->GetNumberField(TEXT("play_rate"))) : 1.0f;
-	int32 LoopingCount = Params->HasField(TEXT("looping_count")) ? static_cast<int32>(Params->GetNumberField(TEXT("looping_count"))) : 1;
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+		return FMonolithActionResult::Error(TEXT("Invalid parameter: asset_path must be a string."));
+
+	FString AnimPath;
+	if (!Params->TryGetStringField(TEXT("anim_path"), AnimPath))
+		return FMonolithActionResult::Error(TEXT("Invalid parameter: anim_path must be a string."));
+
+	float StartPos = 0.0f;
+	if (Params->HasField(TEXT("start_pos")))
+	{
+		double TempPos;
+		if (!Params->TryGetNumberField(TEXT("start_pos"), TempPos))
+			return FMonolithActionResult::Error(TEXT("Invalid parameter: start_pos must be a number."));
+		StartPos = static_cast<float>(TempPos);
+	}
+
+	float PlayRate = 1.0f;
+	if (Params->HasField(TEXT("play_rate")))
+	{
+		double TempRate;
+		if (!Params->TryGetNumberField(TEXT("play_rate"), TempRate))
+			return FMonolithActionResult::Error(TEXT("Invalid parameter: play_rate must be a number."));
+		PlayRate = static_cast<float>(TempRate);
+	}
+
+	int32 LoopingCount = 1;
+	if (Params->HasField(TEXT("looping_count")))
+	{
+		double TempCount;
+		if (!Params->TryGetNumberField(TEXT("looping_count"), TempCount))
+			return FMonolithActionResult::Error(TEXT("Invalid parameter: looping_count must be a number."));
+		LoopingCount = static_cast<int32>(TempCount);
+	}
 
 	UAnimComposite* Composite = FMonolithAssetUtils::LoadAssetByPath<UAnimComposite>(AssetPath);
 	if (!Composite) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimComposite not found: %s"), *AssetPath));
