@@ -1244,6 +1244,13 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleDetectAICircularReferen
 		TArray<FAssetData> BTAssets;
 		AR.GetAssetsByClass(UBehaviorTree::StaticClass()->GetClassPathName(), BTAssets);
 
+		TSet<FName> BTPackageNames;
+		BTPackageNames.Reserve(BTAssets.Num());
+		for (const FAssetData& Asset : BTAssets)
+		{
+			BTPackageNames.Add(Asset.PackageName);
+		}
+
 		// Build a map of BT -> referenced BTs (via asset registry references)
 		TMap<FString, TArray<FString>> BTGraph;
 		for (const FAssetData& Asset : BTAssets)
@@ -1257,15 +1264,9 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleDetectAICircularReferen
 			TArray<FString>& Refs = BTGraph.FindOrAdd(BTPath);
 			for (const FName& Dep : Dependencies)
 			{
-				FString DepPath = Dep.ToString();
-				// Check if this dependency is also a BT
-				for (const FAssetData& OtherBT : BTAssets)
+				if (BTPackageNames.Contains(Dep))
 				{
-					if (OtherBT.PackageName.ToString() == DepPath)
-					{
-						Refs.Add(DepPath);
-						break;
-					}
+					Refs.Add(Dep.ToString());
 				}
 			}
 		}
@@ -1315,6 +1316,13 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleDetectAICircularReferen
 		TArray<FAssetData> STAssets;
 		AR.GetAssetsByClass(UStateTree::StaticClass()->GetClassPathName(), STAssets);
 
+		TSet<FName> STPackageNames;
+		STPackageNames.Reserve(STAssets.Num());
+		for (const FAssetData& Asset : STAssets)
+		{
+			STPackageNames.Add(Asset.PackageName);
+		}
+
 		TMap<FString, TArray<FString>> STGraph;
 		for (const FAssetData& Asset : STAssets)
 		{
@@ -1327,14 +1335,9 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleDetectAICircularReferen
 			TArray<FString>& Refs = STGraph.FindOrAdd(STPath);
 			for (const FName& Dep : Dependencies)
 			{
-				FString DepPath = Dep.ToString();
-				for (const FAssetData& OtherST : STAssets)
+				if (STPackageNames.Contains(Dep))
 				{
-					if (OtherST.PackageName.ToString() == DepPath)
-					{
-						Refs.Add(DepPath);
-						break;
-					}
+					Refs.Add(Dep.ToString());
 				}
 			}
 		}
