@@ -35,3 +35,6 @@ When updating `.jules/` journal files, only document durable coordination rules 
 
 ## 6. Temporary Workflow Artifacts
 Agents often create temporary files (such as `pr_body.txt`, helper Python scripts, or JSON dumps) during their workflows. To maintain repository hygiene, you must ensure all temporary workflow artifacts are completely deleted before staging and committing your final changes.
+
+## 7. Public Action Contracts
+Agents performing routine refactoring, performance optimization (Bolt), or hygiene (Curator) tasks must not modify public action contracts or JSON parameter schemas without explicit justification. If a behavior change is not the primary goal, do not alter expected inputs/outputs just to simplify code.

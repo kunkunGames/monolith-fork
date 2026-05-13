@@ -52,3 +52,9 @@
 **Learning:** The previous "or similar" instruction allowed for too much variance in blocked verification logs.
 **Prevention:** Updated `AGENTS.md` to mandate the exact string `[blocked: UE editor unavailable]` in a dedicated 'Blocked verification' PR section.
 **Avoid:** Claiming UE verification without running it, or using non-standard wording to describe a blocked state.
+
+## 2026-05-11 - Enforce public action contract stability
+**Coordination issue:** Agents performing routine refactoring or performance tasks were casually modifying JSON parameter schemas or public action outputs to simplify their code.
+**Learning:** Casual changes to public contracts break downstream consumers and invalidate API documentation without proper spec review.
+**Prevention:** Added 'Public Action Contracts' rule to AGENTS.md explicitly forbidding changes to expected inputs/outputs during non-feature work without clear justification.
+**Avoid:** Changing parameter names, adding required fields, or altering JSON return structures just to make internal C++ refactoring easier.
