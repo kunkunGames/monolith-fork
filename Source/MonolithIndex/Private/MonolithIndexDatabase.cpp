@@ -1021,7 +1021,7 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	const int32 ClampedLimit = FMath::Clamp(Limit, 1, 1000);
 
 	// Search assets FTS
-	FString SQL = TEXT("SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, snippet(fts_assets, 2, '>>>', '<<<', '...', 32) as ctx, rank FROM fts_assets f JOIN assets a ON a.id = f.rowid WHERE fts_assets MATCH ? ORDER BY rank LIMIT ?;");
+	FString SQL = TEXT("SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, snippet(fts_assets, -1, '>>>', '<<<', '...', 32) as ctx, rank FROM fts_assets f JOIN assets a ON a.id = f.rowid WHERE fts_assets MATCH ? ORDER BY rank LIMIT ?;");
 
 	FSQLitePreparedStatement Stmt;
 	Stmt.Create(*Database, *SQL);
@@ -1043,7 +1043,7 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	}
 
 	// Also search nodes FTS
-	FString NodeSQL = TEXT("SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, snippet(fts_nodes, 0, '>>>', '<<<', '...', 32) as ctx, f.rank FROM fts_nodes f JOIN nodes n ON n.id = f.rowid JOIN assets a ON a.id = n.asset_id WHERE fts_nodes MATCH ? ORDER BY f.rank LIMIT ?;");
+	FString NodeSQL = TEXT("SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, snippet(fts_nodes, -1, '>>>', '<<<', '...', 32) as ctx, f.rank FROM fts_nodes f JOIN nodes n ON n.id = f.rowid JOIN assets a ON a.id = n.asset_id WHERE fts_nodes MATCH ? ORDER BY f.rank LIMIT ?;");
 
 	FSQLitePreparedStatement Stmt2;
 	Stmt2.Create(*Database, *NodeSQL);
