@@ -469,10 +469,7 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleCreateBlueprint(co
 
 	// Read skip_save param (default false)
 	bool bSkipSave = false;
-	if (Params->HasField(TEXT("skip_save")))
-	{
-		bSkipSave = Params->GetBoolField(TEXT("skip_save"));
-	}
+	Params->TryGetBoolField(TEXT("skip_save"), bSkipSave);
 
 	// CreateBlueprint already calls FBlueprintCompilationManager::CompileSynchronously
 	// before returning (Kismet2.cpp:514-516), so the GeneratedClass and CDO are

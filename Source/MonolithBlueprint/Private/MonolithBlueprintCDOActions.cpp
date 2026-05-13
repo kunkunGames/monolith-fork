@@ -236,28 +236,16 @@ FMonolithActionResult FMonolithBlueprintCDOActions::HandleGetCDOProperties(const
 	}
 
 	FString CategoryFilter;
-	if (Params->HasField(TEXT("category_filter")))
-	{
-		CategoryFilter = Params->GetStringField(TEXT("category_filter"));
-	}
+	Params->TryGetStringField(TEXT("category_filter"), CategoryFilter);
 
 	bool bIncludeParentDefaults = true;
-	if (Params->HasField(TEXT("include_parent_defaults")))
-	{
-		bIncludeParentDefaults = Params->GetBoolField(TEXT("include_parent_defaults"));
-	}
+	Params->TryGetBoolField(TEXT("include_parent_defaults"), bIncludeParentDefaults);
 
 	FString OwnerClassFilter;
-	if (Params->HasField(TEXT("owner_class_filter")))
-	{
-		OwnerClassFilter = Params->GetStringField(TEXT("owner_class_filter"));
-	}
+	Params->TryGetStringField(TEXT("owner_class_filter"), OwnerClassFilter);
 
 	FString NamePattern;
-	if (Params->HasField(TEXT("name_pattern")))
-	{
-		NamePattern = Params->GetStringField(TEXT("name_pattern"));
-	}
+	Params->TryGetStringField(TEXT("name_pattern"), NamePattern);
 
 	TArray<FString> ExcludeCategories;
 	const TArray<TSharedPtr<FJsonValue>>* ExcludeCatArr = nullptr;
@@ -350,7 +338,8 @@ FMonolithActionResult FMonolithBlueprintCDOActions::HandleSetCDOProperty(const T
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: property_name"));
 	}
 
-	if (!Params->HasField(TEXT("value")))
+	const TSharedPtr<FJsonValue> JsonVal = Params->TryGetField(TEXT("value"));
+	if (!JsonVal)
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: value"));
 	}
@@ -424,7 +413,7 @@ FMonolithActionResult FMonolithBlueprintCDOActions::HandleSetCDOProperty(const T
 	TargetObject->PreEditChange(PropertyChain);
 
 	// --- Set the value (JSON-aware for structs/arrays/maps, ImportText for scalars) ---
-	const TSharedPtr<FJsonValue>& JsonVal = Params->TryGetField(TEXT("value"));
+
 
 	if (JsonVal->Type == EJson::Object || JsonVal->Type == EJson::Array)
 	{

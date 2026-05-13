@@ -868,10 +868,7 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataAsset(con
 
 	// Read skip_save param
 	bool bSkipSave = false;
-	if (Params->HasField(TEXT("skip_save")))
-	{
-		bSkipSave = Params->GetBoolField(TEXT("skip_save"));
-	}
+	Params->TryGetBoolField(TEXT("skip_save"), bSkipSave);
 
 	// Notify and save
 	Package->MarkPackageDirty();

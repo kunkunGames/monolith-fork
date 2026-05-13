@@ -271,10 +271,12 @@ FMonolithActionResult FMonolithBlueprintLayoutActions::HandleAutoLayout(const TS
 	FString GraphName = Params->GetStringField(TEXT("graph_name"));
 	if (GraphName.IsEmpty()) GraphName = TEXT("EventGraph");
 
-	int32 HSpacing = Params->HasField(TEXT("horizontal_spacing"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("horizontal_spacing"))) : 350;
-	int32 VSpacing = Params->HasField(TEXT("vertical_spacing"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("vertical_spacing"))) : 80;
+	double OutHSpacing = 350.0;
+	Params->TryGetNumberField(TEXT("horizontal_spacing"), OutHSpacing);
+	int32 HSpacing = static_cast<int32>(OutHSpacing);
+	double OutVSpacing = 80.0;
+	Params->TryGetNumberField(TEXT("vertical_spacing"), OutVSpacing);
+	int32 VSpacing = static_cast<int32>(OutVSpacing);
 
 	FString LayoutMode = Params->GetStringField(TEXT("layout_mode"));
 	if (LayoutMode.IsEmpty()) LayoutMode = TEXT("all");

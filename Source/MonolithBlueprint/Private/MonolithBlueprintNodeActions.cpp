@@ -1567,9 +1567,10 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 		ArrayNode->AllocateDefaultPins();
 
 		int32 NumEntries = 1;
-		if (Params->HasField(TEXT("num_entries")))
+		double OutNumEntries = 1.0;
+		if (Params->TryGetNumberField(TEXT("num_entries"), OutNumEntries))
 		{
-			NumEntries = FMath::Max(1, (int32)Params->GetNumberField(TEXT("num_entries")));
+			NumEntries = FMath::Clamp(static_cast<int32>(OutNumEntries), 1, 1000);
 		}
 		// AllocateDefaultPins creates 1 input by default, add extras
 		for (int32 i = 1; i < NumEntries; ++i)
@@ -2898,11 +2899,12 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNodesBulk(const TS
 		}
 
 		// Apply auto_layout position if the entry doesn't already specify one and auto_layout is on
-		if (bAutoLayout && !Entry->HasField(TEXT("position")))
+		if (bAutoLayout && !Entry->HasTypedField<EJson::Array>(TEXT("position")))
 		{
 			int32 Col = i % 5;
 			int32 Row = i / 5;
 			TArray<TSharedPtr<FJsonValue>> PosArr;
+			PosArr.Reserve(2);
 			PosArr.Add(MakeShared<FJsonValueNumber>(Col * 200));
 			PosArr.Add(MakeShared<FJsonValueNumber>(Row * 100));
 			SubParams->SetArrayField(TEXT("position"), PosArr);
