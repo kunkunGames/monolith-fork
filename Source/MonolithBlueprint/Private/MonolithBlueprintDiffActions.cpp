@@ -455,8 +455,10 @@ namespace
 
 FMonolithActionResult FMonolithBlueprintDiffActions::HandleCompareBlueprints(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PathA = Params->GetStringField(TEXT("asset_path_a"));
-	FString PathB = Params->GetStringField(TEXT("asset_path_b"));
+	FString PathA;
+	Params->TryGetStringField(TEXT("asset_path_a"), PathA);
+	FString PathB;
+	Params->TryGetStringField(TEXT("asset_path_b"), PathB);
 
 	if (PathA.IsEmpty())
 	{
@@ -501,18 +503,58 @@ FMonolithActionResult FMonolithBlueprintDiffActions::HandleCompareBlueprints(con
 	// Build summary
 	int32 Additions = 0, Removals = 0, Modifications = 0;
 
-	Additions += VarDiff->GetArrayField(TEXT("added")).Num();
-	Additions += CompDiff->GetArrayField(TEXT("added")).Num();
-	Additions += FuncDiff->GetArrayField(TEXT("added")).Num();
-	Additions += GraphDiff->GetArrayField(TEXT("added")).Num();
+	const TArray<TSharedPtr<FJsonValue>>* VarDiff_addedArr = nullptr;
+	if (VarDiff->TryGetArrayField(TEXT("added"), VarDiff_addedArr) && VarDiff_addedArr)
+	{
+		Additions += VarDiff_addedArr->Num();
+	}
+	const TArray<TSharedPtr<FJsonValue>>* CompDiff_addedArr = nullptr;
+	if (CompDiff->TryGetArrayField(TEXT("added"), CompDiff_addedArr) && CompDiff_addedArr)
+	{
+		Additions += CompDiff_addedArr->Num();
+	}
+	const TArray<TSharedPtr<FJsonValue>>* FuncDiff_addedArr = nullptr;
+	if (FuncDiff->TryGetArrayField(TEXT("added"), FuncDiff_addedArr) && FuncDiff_addedArr)
+	{
+		Additions += FuncDiff_addedArr->Num();
+	}
+	const TArray<TSharedPtr<FJsonValue>>* GraphDiff_addedArr = nullptr;
+	if (GraphDiff->TryGetArrayField(TEXT("added"), GraphDiff_addedArr) && GraphDiff_addedArr)
+	{
+		Additions += GraphDiff_addedArr->Num();
+	}
 
-	Removals += VarDiff->GetArrayField(TEXT("removed")).Num();
-	Removals += CompDiff->GetArrayField(TEXT("removed")).Num();
-	Removals += FuncDiff->GetArrayField(TEXT("removed")).Num();
-	Removals += GraphDiff->GetArrayField(TEXT("removed")).Num();
+	const TArray<TSharedPtr<FJsonValue>>* VarDiff_removedArr = nullptr;
+	if (VarDiff->TryGetArrayField(TEXT("removed"), VarDiff_removedArr) && VarDiff_removedArr)
+	{
+		Removals += VarDiff_removedArr->Num();
+	}
+	const TArray<TSharedPtr<FJsonValue>>* CompDiff_removedArr = nullptr;
+	if (CompDiff->TryGetArrayField(TEXT("removed"), CompDiff_removedArr) && CompDiff_removedArr)
+	{
+		Removals += CompDiff_removedArr->Num();
+	}
+	const TArray<TSharedPtr<FJsonValue>>* FuncDiff_removedArr = nullptr;
+	if (FuncDiff->TryGetArrayField(TEXT("removed"), FuncDiff_removedArr) && FuncDiff_removedArr)
+	{
+		Removals += FuncDiff_removedArr->Num();
+	}
+	const TArray<TSharedPtr<FJsonValue>>* GraphDiff_removedArr = nullptr;
+	if (GraphDiff->TryGetArrayField(TEXT("removed"), GraphDiff_removedArr) && GraphDiff_removedArr)
+	{
+		Removals += GraphDiff_removedArr->Num();
+	}
 
-	Modifications += VarDiff->GetArrayField(TEXT("modified")).Num();
-	Modifications += CompDiff->GetArrayField(TEXT("modified")).Num();
+	const TArray<TSharedPtr<FJsonValue>>* VarDiff_modifiedArr = nullptr;
+	if (VarDiff->TryGetArrayField(TEXT("modified"), VarDiff_modifiedArr) && VarDiff_modifiedArr)
+	{
+		Modifications += VarDiff_modifiedArr->Num();
+	}
+	const TArray<TSharedPtr<FJsonValue>>* CompDiff_modifiedArr = nullptr;
+	if (CompDiff->TryGetArrayField(TEXT("modified"), CompDiff_modifiedArr) && CompDiff_modifiedArr)
+	{
+		Modifications += CompDiff_modifiedArr->Num();
+	}
 
 	TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
 	Summary->SetNumberField(TEXT("total_diffs"), Additions + Removals + Modifications);

@@ -74,7 +74,7 @@ namespace MonolithBlueprintInternal
 
 	inline UBlueprint* LoadBlueprintFromParams(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath)
 	{
-		OutAssetPath = Params->GetStringField(TEXT("asset_path"));
+		Params->TryGetStringField(TEXT("asset_path"), OutAssetPath);
 		if (OutAssetPath.IsEmpty()) return nullptr;
 
 		// Try standard Blueprint asset load first
@@ -724,14 +724,16 @@ namespace MonolithBlueprintInternal
 		FMulticastDelegateProperty*& OutDelegateProp,
 		bool& OutbSelfContext)
 	{
-		FString DelegateNameStr = Params->GetStringField(TEXT("delegate_property_name"));
+		FString DelegateNameStr;
+		Params->TryGetStringField(TEXT("delegate_property_name"), DelegateNameStr);
 		if (DelegateNameStr.IsEmpty())
 		{
 			return FMonolithActionResult::Error(FString::Printf(
 				TEXT("%s requires 'delegate_property_name'"), NodeTypeLabel));
 		}
 
-		FString TargetClassName = Params->GetStringField(TEXT("target_class"));
+		FString TargetClassName;
+		Params->TryGetStringField(TEXT("target_class"), TargetClassName);
 		OutbSelfContext = TargetClassName.IsEmpty();
 
 		if (OutbSelfContext)

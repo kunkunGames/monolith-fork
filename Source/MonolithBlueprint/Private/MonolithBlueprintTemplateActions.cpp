@@ -227,8 +227,10 @@ FMonolithActionResult FMonolithBlueprintTemplateActions::HandleListTemplates(con
 
 FMonolithActionResult FMonolithBlueprintTemplateActions::HandleApplyTemplate(const TSharedPtr<FJsonObject>& Params)
 {
-	FString TemplateName = Params->GetStringField(TEXT("template_name"));
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString TemplateName;
+	Params->TryGetStringField(TEXT("template_name"), TemplateName);
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 
 	if (TemplateName.IsEmpty())
 	{

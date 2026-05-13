@@ -81,7 +81,8 @@ void FMonolithBlueprintStructActions::RegisterActions(FMonolithToolRegistry& Reg
 
 FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedStruct(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	FString SavePath;
+	Params->TryGetStringField(TEXT("save_path"), SavePath);
 	if (SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"));
@@ -153,8 +154,10 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 		}
 
 		const TSharedPtr<FJsonObject>& FieldObj = *FieldObjPtr;
-		FString FieldName = FieldObj->GetStringField(TEXT("name"));
-		FString TypeStr = FieldObj->GetStringField(TEXT("type"));
+		FString FieldName;
+		FieldObj->TryGetStringField(TEXT("name"), FieldName);
+		FString TypeStr;
+		FieldObj->TryGetStringField(TEXT("type"), TypeStr);
 
 		if (FieldName.IsEmpty() || TypeStr.IsEmpty())
 		{
@@ -203,7 +206,8 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 			FStructureEditorUtils::RenameVariable(Struct, VarGuid, FieldName);
 
 			// Set default value if provided
-			FString DefaultValue = FieldObj->GetStringField(TEXT("default_value"));
+			FString DefaultValue;
+			FieldObj->TryGetStringField(TEXT("default_value"), DefaultValue);
 			if (!DefaultValue.IsEmpty())
 			{
 				FStructureEditorUtils::ChangeVariableDefaultValue(Struct, VarGuid, DefaultValue);
@@ -248,7 +252,8 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedSt
 
 FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedEnum(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	FString SavePath;
+	Params->TryGetStringField(TEXT("save_path"), SavePath);
 	if (SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"));
@@ -428,13 +433,15 @@ static TSharedPtr<FJsonObject> SerializeRowToJson(const UScriptStruct* RowStruct
 
 FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataTable(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	FString SavePath;
+	Params->TryGetStringField(TEXT("save_path"), SavePath);
 	if (SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"));
 	}
 
-	FString RowStructName = Params->GetStringField(TEXT("row_struct"));
+	FString RowStructName;
+	Params->TryGetStringField(TEXT("row_struct"), RowStructName);
 	if (RowStructName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: row_struct"));
@@ -517,13 +524,15 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataTable(con
 
 FMonolithActionResult FMonolithBlueprintStructActions::HandleAddDataTableRow(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	}
 
-	FString RowName = Params->GetStringField(TEXT("row_name"));
+	FString RowName;
+	Params->TryGetStringField(TEXT("row_name"), RowName);
 	if (RowName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: row_name"));
@@ -679,7 +688,8 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleAddDataTableRow(con
 
 FMonolithActionResult FMonolithBlueprintStructActions::HandleGetDataTableRows(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
@@ -750,13 +760,15 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleGetDataTableRows(co
 
 FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	FString SavePath;
+	Params->TryGetStringField(TEXT("save_path"), SavePath);
 	if (SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"));
 	}
 
-	FString ClassName = Params->GetStringField(TEXT("class_name"));
+	FString ClassName;
+	Params->TryGetStringField(TEXT("class_name"), ClassName);
 	if (ClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: class_name"));

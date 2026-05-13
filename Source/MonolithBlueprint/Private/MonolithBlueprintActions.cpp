@@ -219,8 +219,10 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetGraphData(const TShare
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
-	FString ClassFilter = Params->GetStringField(TEXT("node_class_filter"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	FString ClassFilter;
+	Params->TryGetStringField(TEXT("node_class_filter"), ClassFilter);
 	UEdGraph* Graph = MonolithBlueprintInternal::FindGraphByName(BP, GraphName);
 	if (!Graph)
 	{
@@ -300,7 +302,8 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetGraphSummary(const TSh
 		}
 	};
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 
 	// When graph_name is provided, return single graph at root level (backward compat)
 	if (!GraphName.IsEmpty())
@@ -434,7 +437,8 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetExecutionFlow(const TS
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString EntryPoint = Params->GetStringField(TEXT("entry_point"));
+	FString EntryPoint;
+	Params->TryGetStringField(TEXT("entry_point"), EntryPoint);
 	if (EntryPoint.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: entry_point"));
@@ -492,7 +496,8 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchNodes(const TShared
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString Query = Params->GetStringField(TEXT("query"));
+	FString Query;
+	Params->TryGetStringField(TEXT("query"), Query);
 	if (Query.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: query"));
@@ -693,7 +698,8 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetComponentDetails(const
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString ComponentName = Params->GetStringField(TEXT("component_name"));
+	FString ComponentName;
+	Params->TryGetStringField(TEXT("component_name"), ComponentName);
 	if (ComponentName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: component_name"));
@@ -1174,8 +1180,10 @@ namespace
 
 FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Query       = Params->GetStringField(TEXT("query"));
-	FString ClassFilter = Params->GetStringField(TEXT("class_filter"));
+	FString Query;
+	Params->TryGetStringField(TEXT("query"), Query);
+	FString ClassFilter;
+	Params->TryGetStringField(TEXT("class_filter"), ClassFilter);
 
 	if (Query.IsEmpty() && ClassFilter.IsEmpty())
 	{
@@ -1296,13 +1304,15 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetNodeDetails(const TSha
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString NodeId = Params->GetStringField(TEXT("node_id"));
+	FString NodeId;
+	Params->TryGetStringField(TEXT("node_id"), NodeId);
 	if (NodeId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: node_id"));
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	UEdGraphNode* Node = MonolithBlueprintInternal::FindNodeById(BP, GraphName, NodeId);
 	if (!Node)
 	{
@@ -1372,7 +1382,8 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetNodeDetails(const TSha
 
 FMonolithActionResult FMonolithBlueprintActions::HandleGetInterfaceFunctions(const TSharedPtr<FJsonObject>& Params)
 {
-	FString InterfaceClassName = Params->GetStringField(TEXT("interface_class"));
+	FString InterfaceClassName;
+	Params->TryGetStringField(TEXT("interface_class"), InterfaceClassName);
 	if (InterfaceClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: interface_class"));
@@ -1493,7 +1504,8 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetFunctionSignature(cons
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString FuncName = Params->GetStringField(TEXT("function_name"));
+	FString FuncName;
+	Params->TryGetStringField(TEXT("function_name"), FuncName);
 	if (FuncName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: function_name"));
@@ -1710,7 +1722,8 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetEventDispatcherDetails
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString DispatcherName = Params->GetStringField(TEXT("dispatcher_name"));
+	FString DispatcherName;
+	Params->TryGetStringField(TEXT("dispatcher_name"), DispatcherName);
 	if (DispatcherName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: dispatcher_name"));

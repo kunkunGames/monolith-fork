@@ -133,7 +133,8 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleExportGraph(co
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	UEdGraph* Graph = MonolithBlueprintInternal::FindGraphByName(BP, GraphName);
 	if (!Graph)
 	{
@@ -196,7 +197,8 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleExportGraph(co
 FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleCopyNodes(const TSharedPtr<FJsonObject>& Params)
 {
 	// Load source Blueprint
-	FString SourceAssetPath = Params->GetStringField(TEXT("source_asset"));
+	FString SourceAssetPath;
+	Params->TryGetStringField(TEXT("source_asset"), SourceAssetPath);
 	if (SourceAssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: source_asset"));
@@ -213,7 +215,8 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleCopyNodes(cons
 	}
 
 	// Load target Blueprint
-	FString TargetAssetPath = Params->GetStringField(TEXT("target_asset"));
+	FString TargetAssetPath;
+	Params->TryGetStringField(TEXT("target_asset"), TargetAssetPath);
 	if (TargetAssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: target_asset"));
@@ -229,7 +232,8 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleCopyNodes(cons
 	}
 
 	// Find source graph
-	FString SourceGraphName = Params->GetStringField(TEXT("source_graph"));
+	FString SourceGraphName;
+	Params->TryGetStringField(TEXT("source_graph"), SourceGraphName);
 	UEdGraph* SourceGraph = MonolithBlueprintInternal::FindGraphByName(SourceBP, SourceGraphName);
 	if (!SourceGraph)
 	{
@@ -237,7 +241,8 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleCopyNodes(cons
 	}
 
 	// Find target graph
-	FString TargetGraphName = Params->GetStringField(TEXT("target_graph"));
+	FString TargetGraphName;
+	Params->TryGetStringField(TEXT("target_graph"), TargetGraphName);
 	UEdGraph* TargetGraph = MonolithBlueprintInternal::FindGraphByName(TargetBP, TargetGraphName);
 	if (!TargetGraph)
 	{
@@ -340,13 +345,15 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleDuplicateGraph
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	if (GraphName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: graph_name"));
 	}
 
-	FString NewName = Params->GetStringField(TEXT("new_name"));
+	FString NewName;
+	Params->TryGetStringField(TEXT("new_name"), NewName);
 	if (NewName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: new_name"));
