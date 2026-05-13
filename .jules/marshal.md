@@ -64,3 +64,9 @@
 **Learning:** Casual changes to public contracts break downstream consumers and invalidate API documentation without proper spec review.
 **Prevention:** Added 'Public Action Contracts' rule to AGENTS.md explicitly forbidding changes to expected inputs/outputs during non-feature work without clear justification.
 **Avoid:** Changing parameter names, adding required fields, or altering JSON return structures just to make internal C++ refactoring easier.
+
+## 2026-05-13 - Enforce single responsibility and tight scoping
+**Coordination issue:** Agents were grouping unrelated changes or stacking several tiny maintenance ideas into separate overlapping PRs, which made queue triage close more PRs than expected.
+**Learning:** A PR that is "small" can still be low-value if it races another PR, touches shared prompt/docs files, or bundles unrelated categories such as security, tests, performance, release, and refactor work.
+**Prevention:** AGENTS.md now requires scheduled agents to keep PRs tightly scoped and to stop without PR when the only candidate would mix unrelated concerns.
+**Avoid:** Creating a PR just because one small edit exists; no-op when the useful change is already covered or the scope would be awkwardly bundled.

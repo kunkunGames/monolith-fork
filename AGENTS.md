@@ -36,5 +36,8 @@ When updating `.jules/` journal files, only document durable coordination rules 
 ## 6. Temporary Workflow Artifacts
 Agents often create temporary files (such as `pr_body.txt`, helper Python scripts, or JSON dumps) during their workflows. To maintain repository hygiene, you must ensure all temporary workflow artifacts are completely deleted before staging and committing your final changes.
 
-## 7. Public Action Contracts
+## 7. Single Responsibility
+Agents must keep PRs tightly scoped. Do not mix unrelated security, test, spec, performance, release, refactor, and prompt-governance work in one PR. If the only remaining useful change requires bundling unrelated concerns, stop without PR instead.
+
+## 8. Public Action Contracts
 Agents performing routine refactoring, performance optimization (Bolt), or hygiene (Curator) tasks must not modify public action contracts or JSON parameter schemas without explicit justification. If a behavior change is not the primary goal, do not alter expected inputs/outputs just to simplify code.
