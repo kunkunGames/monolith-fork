@@ -4,7 +4,7 @@
 **Engine:** Unreal Engine 5.7+
 **Version:** 0.14.9 (Beta)
 
-> **Action-count audit (2026-04-26):** source-of-truth count is **194 core + 47 experimental town gen = 241**, not the previously claimed 195 + 45 = 240. The detailed per-action tables below predate the audit and may sum to slightly different numbers per category — they are accurate per-row but the category subtotals have drifted. A full per-action sweep against `Source/MonolithMesh/Private/Monolith*Actions.cpp` is on the audit backlog.
+> **Action-count audit (2026-04-26):** source-of-truth count is **244 core + 24 experimental town gen = 268**, not the previously claimed 195 + 45 = 240. The detailed per-action tables below predate the audit and may sum to slightly different numbers per category — they are accurate per-row but the category subtotals have drifted. A full per-action sweep against `Source/MonolithMesh/Private/Monolith*Actions.cpp` is on the audit backlog.
 
 ---
 
@@ -18,7 +18,7 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithMeshModule` | Registers 194 core mesh actions across 30+ action classes (+ GeometryScript ops conditional). 47 additional experimental town gen actions registered only when `bEnableProceduralTownGen = true` (default: false). Total: 241 |
+| `FMonolithMeshModule` | Registers 244 core mesh actions across 30+ action classes (+ GeometryScript ops conditional). 24 additional experimental town gen actions registered only when `bEnableProceduralTownGen = true` (default: false). Total: 268 |
 | `FMonolithMeshInspectionActions` | Mesh asset inspection: geometry stats, LODs, UVs, materials, collision, quality analysis, catalog (12 actions) |
 | `FMonolithMeshSceneActions` | Scene actor manipulation: spawn, move, duplicate, delete, group, batch execute (8 actions) |
 | `FMonolithMeshSpatialActions` | Spatial queries: raycasts, sweeps, overlaps, nearest, line of sight, navmesh, scene bounds/stats (11 actions) |
@@ -41,9 +41,9 @@
 | `FMonolithMeshCatalog` | Mesh catalog database for search_meshes_by_size and get_mesh_catalog_stats |
 | `FMonolithMeshUtils` | Shared helpers for mesh loading, bounds calculation, actor queries |
 
-### Actions (241 — namespace: "mesh")
+### Actions (268 — namespace: "mesh")
 
-> **Note:** 194 core actions (Phases 1-22 + Proc Geo Overhaul) always registered + 47 experimental Procedural Town Generator actions (SP1-SP10 + `validate_building`) registered only when `bEnableProceduralTownGen = true` (default: false). Town gen has known geometry issues (wall misalignment, room separation) — very much a work-in-progress. Unless you're willing to dig in and help improve it, it's best left alone for now. Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain.
+> **Note:** 244 core actions (Phases 1-22 + Proc Geo Overhaul) always registered + 24 experimental Procedural Town Generator actions (SP1-SP10 + `validate_building`) registered only when `bEnableProceduralTownGen = true` (default: false). Town gen has known geometry issues (wall misalignment, room separation) — very much a work-in-progress. Unless you're willing to dig in and help improve it, it's best left alone for now. Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain.
 
 **Inspection (12)**
 | Action | Params | Description |
@@ -122,9 +122,9 @@
 
 > **Procedural Geometry Overhaul (2026-03-28):** The proc gen actions (`create_parametric_mesh`, `create_structure`, `create_horror_prop`, etc.) now feature sweep-based thin walls (`wall_mode: "sweep"` default), auto snap-to-floor (`snap_to_floor` param), auto-collision on all saved meshes (`collision: auto/box/convex/complex_as_simple/none`), human-scale defaults (stairs 90/28/18cm, doors 90cm, floor 3cm), door/window/vent trim frames (`add_trim` param), and vent openings via `create_structure`. Collision-aware prop placement uses `collision_mode: none/warn/reject/adjust` on scatter actions with SweepSingle box traces for floor finding. All proc gen actions support `use_cache` and `auto_save` params for the caching system.
 
-### Procedural Town Generator (47 gated + 1 always-registered actions — 11 sub-projects) — WORK-IN-PROGRESS
+### Procedural Town Generator (24 gated actions — 11 sub-projects) — WORK-IN-PROGRESS
 
-> **Status:** Work-in-progress, disabled by default (`bEnableProceduralTownGen = false`). Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain (wall misalignment, room separation). Very much a WIP — unless you're willing to dig in and help improve it, it's best left alone.
+> **Status:** Work-in-progress, disabled by default (`bEnableProceduralTownGen = false`). The current registration audit counts 24 gated town-gen actions; the historical per-subproject catalog below remains on the per-row audit backlog. Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain (wall misalignment, room separation). Very much a WIP — unless you're willing to dig in and help improve it, it's best left alone.
 
 Procedural city block generation from a single MCP call. 11 sub-projects composing into a pipeline: grid-based buildings with connected rooms, roofs, facades, furniture, lighting, horror dressing, navmesh, and volumes, all adaptive to terrain. The critical interface is the **Building Descriptor** — a JSON contract that SP1 outputs and SP2-SP10 consume. All building specs are generated server-side (not sent over MCP wire).
 

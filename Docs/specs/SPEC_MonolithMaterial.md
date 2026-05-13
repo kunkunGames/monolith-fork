@@ -14,10 +14,10 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithMaterialModule` | Registers 63 material actions |
+| `FMonolithMaterialModule` | Registers 65 material actions |
 | `FMonolithMaterialActions` | Static handlers + helpers for loading materials and serializing expressions |
 
-### Actions (63 — namespace: "material")
+### Actions (65 — namespace: "material")
 
 **Read Actions (10)**
 | Action | Description |
