@@ -24,3 +24,28 @@ bool FMonolithEditorDeleteAssetsRejectsOversizedArray::RunTest(const FString& Pa
 
 	return true;
 }
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorRunAutomationTestsClampsLimit, "Monolith.LimitGuard.MonolithEditor.RunAutomationTestsClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorRunAutomationTestsClampsLimit::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("prefix"), TEXT("Dummy.Prefix.That.Does.Not.Exist"));
+	Params->SetNumberField(TEXT("max_tests"), 10000.0);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("run_automation_tests"), Params);
+
+	TestTrue(TEXT("Should succeed since it executes the action and returns 0 matching tests"), Result.bSuccess);
+	if (Result.Result.IsValid())
+	{
+		TestTrue(TEXT("Result JSON should contain the clamped max_tests field"), Result.Result->HasField(TEXT("max_tests")));
+		TestEqual(TEXT("Should clamp max_tests to 1000"), Result.Result->GetNumberField(TEXT("max_tests")), 1000.0);
+	}
+	else
+	{
+		AddError(TEXT("Result JSON object is invalid"));
+	}
+
+	return true;
+}

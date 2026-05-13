@@ -530,7 +530,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FMonolithActionHandler::CreateStatic(&HandleRunAutomationTests),
 		FParamSchemaBuilder()
 			.Required(TEXT("prefix"), TEXT("string"), TEXT("Run tests whose full path starts with this prefix (e.g. 'MazeLegends.Bow')"))
-			.Optional(TEXT("max_tests"), TEXT("integer"), TEXT("Hard cap on number of tests to run (default: 200)"))
+			.Optional(TEXT("max_tests"), TEXT("integer"), TEXT("Hard cap on number of tests to run (default: 200, max: 1000)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("get_automation_summary"),
@@ -3286,7 +3286,7 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 		double MaxNum = MaxTests;
 		if (Params->TryGetNumberField(TEXT("max_tests"), MaxNum))
 		{
-			MaxTests = FMath::Max(1, FMath::FloorToInt(MaxNum));
+			MaxTests = FMath::Clamp(FMath::FloorToInt(MaxNum), 1, 1000);
 		}
 	}
 

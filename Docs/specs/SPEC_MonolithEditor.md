@@ -55,7 +55,7 @@
 | `get_active_asset_editor` | Get the active or unambiguous open asset editor with explicit fallback source |
 | `capture_system_gif` | Capture a Niagara system as a sequence of PNG frames with optional GIF encoding via ffmpeg or python |
 | `list_automation_tests` | List all registered automation tests, optionally filtered by prefix |
-| `run_automation_tests` | Run automation tests by prefix in the running editor (no PIE, no separate process). Returns success/passed/failed counts and per-test errors. |
+| `run_automation_tests` | Run automation tests by prefix in the running editor (no PIE, no separate process). `max_tests` limit defaults to 200 (hard max 1000). Returns success/passed/failed counts, per-test errors, and the applied `max_tests`. |
 | `run_python` | Execute a Python command, statement, or file via IPythonScriptPlugin::ExecPythonCommandEx. Returns success, stdout/stderr captured by Python, and (for evaluate_statement mode) the evaluated result. |
 | `load_level` | Close the current persistent level (without saving) and load the specified level by /Game/... asset path. Wraps ULevelEditorSubsystem::LoadLevel. |
 | `start_pie` | Begin a PIE session pinned to in-viewport mode (`EPlaySessionWorldType::PlayInEditor` + first active level viewport via `FLevelEditorModule::GetFirstActiveViewport`). Independent of the user's `LastExecutedPlayModeType` toolbar choice. Returns `started: true, mode: 'in_viewport'`. Refuses to queue duplicates when PIE is already running. |

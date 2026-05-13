@@ -16,3 +16,7 @@
 **Boundary:** `depth` and `stack_limit` query properties in MonolithGAS.
 **Learning:** Using GetNumberField for bounds and directly casting to int without clamping can result in unbound tree recursion (in tag hierarchies) or excessive loop bounds/stack limits (in effects).
 **Prevention:** Always use `TryGetNumberField` and apply `FMath::Clamp` against a sane local maximum (e.g. 100 for tag depth, 1000 for stack limits) to prevent trivial resource exhaustion or overflows.
+## 2026-05-11 - 🧱 LimitGuard: Bound editor/run_automation_tests max_tests
+**Boundary:** `max_tests` parameter in `run_automation_tests`.
+**Learning:** `run_automation_tests` operates synchronously inside the editor (without PIE or a separate process). Using the `max_tests` argument with extreme values allows thousands of tests to be executed sequentially on the main thread, resulting in potentially massive editor hangs/freezes.
+**Prevention:** Clamp the maximum tests limit using `FMath::Clamp` with a hard limit (e.g. 1000) to prevent single-action test exhaustion and document it properly in schemas.
