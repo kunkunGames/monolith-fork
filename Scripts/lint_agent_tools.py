@@ -17,12 +17,12 @@ import re
 import sys
 from pathlib import Path
 
-# Project root is two parents up from Plugins/Monolith/Scripts/.
+# Project root is one parent up from Scripts/.
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent.parent.parent
+PROJECT_ROOT = SCRIPT_DIR.parent
 AGENTS_DIR = PROJECT_ROOT / ".claude" / "agents"
 
-DISPATCHER_RE = re.compile(r"mcp__monolith__[A-Za-z_]+")
+DISPATCHER_RE = re.compile(r"mcp__monolith__[A-Za-z_][A-Za-z0-9_]*")
 
 
 def parse_tools_line(text: str) -> tuple[set[str], int] | None:
