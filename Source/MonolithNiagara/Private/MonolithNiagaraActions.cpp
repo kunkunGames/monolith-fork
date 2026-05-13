@@ -11890,9 +11890,10 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 	int32 FailCount = 0;
 
 	// Add user parameters
-	if (Spec->HasField(TEXT("user_parameters")))
+	const TArray<TSharedPtr<FJsonValue>>* UserParamsArray = nullptr;
+	if (Spec->TryGetArrayField(TEXT("user_parameters"), UserParamsArray))
 	{
-		for (const TSharedPtr<FJsonValue>& PV : Spec->GetArrayField(TEXT("user_parameters")))
+		for (const TSharedPtr<FJsonValue>& PV : *UserParamsArray)
 		{
 			TSharedPtr<FJsonObject> PO = PV->AsObject();
 			if (!PO) continue;
@@ -11907,9 +11908,10 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 	}
 
 	// Add emitters
-	if (Spec->HasField(TEXT("emitters")))
+	const TArray<TSharedPtr<FJsonValue>>* EmittersArray = nullptr;
+	if (Spec->TryGetArrayField(TEXT("emitters"), EmittersArray))
 	{
-		for (const TSharedPtr<FJsonValue>& EV : Spec->GetArrayField(TEXT("emitters")))
+		for (const TSharedPtr<FJsonValue>& EV : *EmittersArray)
 		{
 			TSharedPtr<FJsonObject> EO = EV->AsObject();
 			if (!EO) continue;
@@ -11951,9 +11953,10 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 			}
 
 			// Modules
-			if (EO->HasField(TEXT("modules")))
+			const TArray<TSharedPtr<FJsonValue>>* ModsArray = nullptr;
+			if (EO->TryGetArrayField(TEXT("modules"), ModsArray))
 			{
-				const TArray<TSharedPtr<FJsonValue>>& Mods = EO->GetArrayField(TEXT("modules"));
+				const TArray<TSharedPtr<FJsonValue>>& Mods = *ModsArray;
 				for (int32 MI = 0; MI < Mods.Num(); ++MI)
 				{
 					TSharedPtr<FJsonObject> MO = Mods[MI]->AsObject();
@@ -12022,9 +12025,10 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 			}
 
 			// Renderers
-			if (EO->HasField(TEXT("renderers")))
+			const TArray<TSharedPtr<FJsonValue>>* RenderersArray = nullptr;
+			if (EO->TryGetArrayField(TEXT("renderers"), RenderersArray))
 			{
-				for (const TSharedPtr<FJsonValue>& RV : EO->GetArrayField(TEXT("renderers")))
+				for (const TSharedPtr<FJsonValue>& RV : *RenderersArray)
 				{
 					TSharedPtr<FJsonObject> RO = RV->AsObject();
 					if (!RO) continue;
@@ -12122,6 +12126,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 		// User parameters: add only if name doesn't exist
 		if (Spec->HasField(TEXT("user_parameters")))
 		{
+			const TArray<TSharedPtr<FJsonValue>>* ParamArrPtr = nullptr;
+			if (!Spec->TryGetArrayField(TEXT("user_parameters"), ParamArrPtr) || ParamArrPtr == nullptr)
+			{
+				return FMonolithActionResult::Error(TEXT("'spec.user_parameters' must be an array"));
+			}
+
 			FNiagaraUserRedirectionParameterStore& US = System->GetExposedParameters();
 			TArray<FNiagaraVariable> ExistingParams;
 			US.GetUserParameters(ExistingParams);
@@ -12132,7 +12142,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 				ExistingNames.Add(V.GetName().ToString());
 			}
 
-			const TArray<TSharedPtr<FJsonValue>>& ParamArr = Spec->GetArrayField(TEXT("user_parameters"));
+			const TArray<TSharedPtr<FJsonValue>>& ParamArr = *ParamArrPtr;
 			for (const TSharedPtr<FJsonValue>& PVal : ParamArr)
 			{
 				const TSharedPtr<FJsonObject>* PObj = nullptr;
@@ -12165,6 +12175,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 		// Emitters: add new ones, skip existing by name match
 		if (Spec->HasField(TEXT("emitters")))
 		{
+			const TArray<TSharedPtr<FJsonValue>>* EmittersArrPtr = nullptr;
+			if (!Spec->TryGetArrayField(TEXT("emitters"), EmittersArrPtr) || EmittersArrPtr == nullptr)
+			{
+				return FMonolithActionResult::Error(TEXT("'spec.emitters' must be an array"));
+			}
+
 			TSet<FString> ExistingEmitterNames;
 			for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
 			{
@@ -12175,7 +12191,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 			// For merge, we only apply emitters whose names don't already exist
 			TSharedRef<FJsonObject> FilteredSpec = MakeShared<FJsonObject>();
 			TArray<TSharedPtr<FJsonValue>> NewEmitters;
-			for (const TSharedPtr<FJsonValue>& EVal : Spec->GetArrayField(TEXT("emitters")))
+			for (const TSharedPtr<FJsonValue>& EVal : *EmittersArrPtr)
 			{
 				const TSharedPtr<FJsonObject>* EObj = nullptr;
 				if (!EVal->TryGetObject(EObj) || !(*EObj).IsValid()) continue;
