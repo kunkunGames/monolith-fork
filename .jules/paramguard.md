@@ -17,3 +17,8 @@
 **Malformed input pattern:** JSON objects passed to ParseVector and ParseRotator missing required coordinate fields, or containing fields of the wrong type (e.g. strings instead of numbers).
 **Learning:** `FJsonObject::GetNumberField` asserts or crashes if the field doesn't exist or is not a number. Initial parameter schema validation does not enforce exact structure for all optional nested data.
 **Prevention:** Always use `TryGetNumberField` (or other `TryGet*Field` methods) when parsing nested fields from untrusted JSON, and explicitly handle the boolean return value to gracefully reject malformed inputs.
+
+## 2026-05-14 - Harden MonolithGAS Target Actions parameter parsing
+**Malformed input pattern:** Using GetStringField/GetBoolField/GetNumberField immediately after HasField.
+**Learning:** HasField does not guarantee type safety and can cause assertion crashes on malformed inputs. WaitTargetData actions have multiple optional fields that are susceptible to this.
+**Prevention:** Always use the equivalent TryGet*Field.

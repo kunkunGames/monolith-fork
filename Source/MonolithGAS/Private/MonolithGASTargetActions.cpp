@@ -265,7 +265,12 @@ FMonolithActionResult FMonolithGASTargetActions::HandleCreateTargetActor(const T
 		// Apply optional configuration
 		if (Params->HasField(TEXT("max_range")))
 		{
-			float Range = static_cast<float>(Params->GetNumberField(TEXT("max_range")));
+			double RangeVal = 0.0;
+			if (!Params->TryGetNumberField(TEXT("max_range"), RangeVal))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for max_range. Expected a number."));
+			}
+			float Range = static_cast<float>(RangeVal);
 			// Try common property names for range
 			for (const TCHAR* PropName : { TEXT("MaxRange"), TEXT("MaxDistance"), TEXT("TraceRange") })
 			{
@@ -279,7 +284,12 @@ FMonolithActionResult FMonolithGASTargetActions::HandleCreateTargetActor(const T
 
 		if (Params->HasField(TEXT("radius")))
 		{
-			float Radius = static_cast<float>(Params->GetNumberField(TEXT("radius")));
+			double RadiusVal = 0.0;
+			if (!Params->TryGetNumberField(TEXT("radius"), RadiusVal))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for radius. Expected a number."));
+			}
+			float Radius = static_cast<float>(RadiusVal);
 			for (const TCHAR* PropName : { TEXT("Radius"), TEXT("CollisionRadius"), TEXT("SphereRadius") })
 			{
 				if (SetFloatPropOnCDO(CDO, PropName, Radius))
@@ -352,7 +362,12 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 	// Max range
 	if (Params->HasField(TEXT("max_range")))
 	{
-		float Range = static_cast<float>(Params->GetNumberField(TEXT("max_range")));
+		double RangeVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("max_range"), RangeVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for max_range. Expected a number."));
+		}
+		float Range = static_cast<float>(RangeVal);
 		for (const TCHAR* PropName : { TEXT("MaxRange"), TEXT("MaxDistance"), TEXT("TraceRange") })
 		{
 			if (SetFloatPropOnCDO(CDO, PropName, Range))
@@ -366,7 +381,12 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 	// Radius
 	if (Params->HasField(TEXT("radius")))
 	{
-		float Radius = static_cast<float>(Params->GetNumberField(TEXT("radius")));
+		double RadiusVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("radius"), RadiusVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for radius. Expected a number."));
+		}
+		float Radius = static_cast<float>(RadiusVal);
 		for (const TCHAR* PropName : { TEXT("Radius"), TEXT("CollisionRadius"), TEXT("SphereRadius") })
 		{
 			if (SetFloatPropOnCDO(CDO, PropName, Radius))
@@ -380,7 +400,11 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 	// ShouldProduceTargetDataOnServer
 	if (Params->HasField(TEXT("should_produce_target_data_on_server")))
 	{
-		bool bVal = Params->GetBoolField(TEXT("should_produce_target_data_on_server"));
+		bool bVal = false;
+		if (!Params->TryGetBoolField(TEXT("should_produce_target_data_on_server"), bVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for should_produce_target_data_on_server. Expected a boolean."));
+		}
 		if (SetBoolPropOnCDO(CDO, TEXT("ShouldProduceTargetDataOnServer"), bVal))
 		{
 			SetProps.Add(FString::Printf(TEXT("ShouldProduceTargetDataOnServer = %s"), bVal ? TEXT("true") : TEXT("false")));
@@ -390,7 +414,11 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 	// Debug
 	if (Params->HasField(TEXT("debug_draw")))
 	{
-		bool bVal = Params->GetBoolField(TEXT("debug_draw"));
+		bool bVal = false;
+		if (!Params->TryGetBoolField(TEXT("debug_draw"), bVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for debug_draw. Expected a boolean."));
+		}
 		for (const TCHAR* PropName : { TEXT("bDebug"), TEXT("bDebugDraw"), TEXT("Debug") })
 		{
 			if (SetBoolPropOnCDO(CDO, PropName, bVal))
@@ -404,7 +432,11 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 	// StartLocation type
 	if (Params->HasField(TEXT("start_location_type")))
 	{
-		FString LocType = Params->GetStringField(TEXT("start_location_type"));
+		FString LocType;
+		if (!Params->TryGetStringField(TEXT("start_location_type"), LocType))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for start_location_type. Expected a string."));
+		}
 		int32 EnumVal = -1;
 		if (LocType.Equals(TEXT("player_transform"), ESearchCase::IgnoreCase)) EnumVal = 0;
 		else if (LocType.Equals(TEXT("socket"), ESearchCase::IgnoreCase)) EnumVal = 1;
@@ -476,10 +508,24 @@ FMonolithActionResult FMonolithGASTargetActions::HandleAddTargetingToAbility(con
 		return FMonolithActionResult::Error(FString::Printf(TEXT("'%s' is not a GameplayAbility Blueprint"), *AbilityPath));
 	}
 
-	FString ConfirmTypeStr = Params->GetStringField(TEXT("confirm_type"));
+	FString ConfirmTypeStr;
+	if (Params->HasField(TEXT("confirm_type")))
+	{
+		if (!Params->TryGetStringField(TEXT("confirm_type"), ConfirmTypeStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for confirm_type. Expected a string."));
+		}
+	}
 	if (ConfirmTypeStr.IsEmpty()) ConfirmTypeStr = TEXT("instant");
 
-	FString TargetActorClassPath = Params->GetStringField(TEXT("target_actor_class"));
+	FString TargetActorClassPath;
+	if (Params->HasField(TEXT("target_actor_class")))
+	{
+		if (!Params->TryGetStringField(TEXT("target_actor_class"), TargetActorClassPath))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for target_actor_class. Expected a string."));
+		}
+	}
 
 	// Resolve target actor class
 	UClass* TargetActorClass = nullptr;
@@ -602,12 +648,27 @@ FMonolithActionResult FMonolithGASTargetActions::HandleScaffoldFPSTargeting(cons
 			FString::Printf(TEXT("Invalid mode: '%s'. Valid: hitscan, projectile, melee_sweep, aoe"), *Mode));
 	}
 
-	float Range = Params->HasField(TEXT("range"))
-		? static_cast<float>(Params->GetNumberField(TEXT("range")))
-		: DefaultRange;
-	float Radius = Params->HasField(TEXT("radius"))
-		? static_cast<float>(Params->GetNumberField(TEXT("radius")))
-		: DefaultRadius;
+	float Range = DefaultRange;
+	if (Params->HasField(TEXT("range")))
+	{
+		double RangeVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("range"), RangeVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for range. Expected a number."));
+		}
+		Range = static_cast<float>(RangeVal);
+	}
+
+	float Radius = DefaultRadius;
+	if (Params->HasField(TEXT("radius")))
+	{
+		double RadiusVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("radius"), RadiusVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for radius. Expected a number."));
+		}
+		Radius = static_cast<float>(RadiusVal);
+	}
 
 	// Verify ability exists
 	FString Error;
@@ -619,7 +680,14 @@ FMonolithActionResult FMonolithGASTargetActions::HandleScaffoldFPSTargeting(cons
 	}
 
 	// Determine save path for auto-created TargetActor
-	FString TASavePath = Params->GetStringField(TEXT("save_path"));
+	FString TASavePath;
+	if (Params->HasField(TEXT("save_path")))
+	{
+		if (!Params->TryGetStringField(TEXT("save_path"), TASavePath))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for save_path. Expected a string."));
+		}
+	}
 	if (TASavePath.IsEmpty())
 	{
 		// Extract directory from ability path and put TA there
