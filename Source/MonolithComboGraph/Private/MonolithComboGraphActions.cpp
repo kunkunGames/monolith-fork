@@ -243,6 +243,7 @@ namespace
 		FScriptArrayHelper ArrayHelper(ChildProp, ChildProp->ContainerPtrToValuePtr<void>(Node));
 		FObjectProperty* InnerProp = CastField<FObjectProperty>(ChildProp->Inner);
 		if (!InnerProp) return Children;
+		Children.Reserve(ArrayHelper.Num());
 
 		for (int32 i = 0; i < ArrayHelper.Num(); i++)
 		{
@@ -290,6 +291,7 @@ namespace
 		// Edges
 		TArray<UObject*> NodeEdges = GetEdges(Node);
 		TArray<TSharedPtr<FJsonValue>> EdgesArr;
+		EdgesArr.Reserve(NodeEdges.Num());
 		for (UObject* Edge : NodeEdges)
 		{
 			if (!Edge) continue;
@@ -628,6 +630,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleListComboGraphs(const TS
 	AssetRegistry.GetAssets(Filter, Assets);
 
 	TArray<TSharedPtr<FJsonValue>> ResultArray;
+	ResultArray.Reserve(Assets.Num());
 	for (const FAssetData& AssetData : Assets)
 	{
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
@@ -682,6 +685,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleGetComboGraphInfo(const 
 	// AllNodes
 	TArray<UObject*> Nodes = GetAllNodes(Graph);
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
+	NodesArr.Reserve(Nodes.Num());
 	for (int32 i = 0; i < Nodes.Num(); i++)
 	{
 		if (Nodes[i])
@@ -1367,6 +1371,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 		if (ContainerData->TryGetArrayField(TEXT("effect_classes"), EffectClasses) && EffectClasses)
 		{
 			TArray<FString> ClassPaths;
+			ClassPaths.Reserve(EffectClasses->Num());
 			for (const auto& Val : *EffectClasses)
 			{
 				if (Val.IsValid() && Val->Type == EJson::String) ClassPaths.Add(Val->AsString());
@@ -1512,6 +1517,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 				if (Def->TryGetArrayField(TEXT("gameplay_cue_tags"), CueTags) && CueTags)
 				{
 					TArray<FString> TagTexts;
+					TagTexts.Reserve(CueTags->Num());
 					for (const auto& TV : *CueTags)
 					{
 						if (TV.IsValid() && TV->Type == EJson::String)
@@ -1988,6 +1994,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontage
 
 	// Parse montage paths
 	TArray<FString> MontagePaths;
+	MontagePaths.Reserve(MontagesArr->Num());
 	for (const auto& Val : *MontagesArr)
 	{
 		if (Val.IsValid() && Val->Type == EJson::String)
@@ -2017,6 +2024,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontage
 
 	// Step 2: Add nodes for each montage
 	TArray<int32> NodeIndices;
+	NodeIndices.Reserve(MontagePaths.Num());
 	for (int32 i = 0; i < MontagePaths.Num(); i++)
 	{
 		TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
@@ -2073,6 +2081,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontage
 	Result->SetNumberField(TEXT("edges_created"), EdgesCreated);
 
 	TArray<TSharedPtr<FJsonValue>> MontageList;
+	MontageList.Reserve(MontagePaths.Num());
 	for (const FString& Path : MontagePaths)
 	{
 		MontageList.Add(MakeShared<FJsonValueString>(Path));
