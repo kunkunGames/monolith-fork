@@ -342,4 +342,33 @@ bool FMonolithParamGuardLogicDriverBuildSMFromSpecRejectsMalformedParamsTest::Ru
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverConfigureSMComponentRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.ConfigureSMComponentRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverConfigureSMComponentRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	// Test 1: auto_start malformed
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("blueprint_path"), TEXT("/Game/Dummy"));
+		Params->SetStringField(TEXT("auto_start"), TEXT("not_a_bool"));
+
+		FMonolithActionResult Result = FMonolithLogicDriverComponentActions::HandleConfigureSMComponent(Params);
+		TestTrue(TEXT("Malformed auto_start should return error before Blueprint load"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention auto_start"), Result.ErrorMessage.Contains(TEXT("auto_start")));
+	}
+
+	// Test 2: tick_interval malformed
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("blueprint_path"), TEXT("/Game/Dummy"));
+		Params->SetStringField(TEXT("tick_interval"), TEXT("not_a_number"));
+
+		FMonolithActionResult Result = FMonolithLogicDriverComponentActions::HandleConfigureSMComponent(Params);
+		TestTrue(TEXT("Malformed tick_interval should return error before Blueprint load"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention tick_interval"), Result.ErrorMessage.Contains(TEXT("tick_interval")));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER

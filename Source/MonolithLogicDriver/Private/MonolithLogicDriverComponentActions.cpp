@@ -1,4 +1,5 @@
 #include "MonolithLogicDriverComponentActions.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithLogicDriverInternal.h"
 
@@ -383,6 +384,20 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleConfigureSMCom
 	FString ComponentName;
 	Params->TryGetStringField(TEXT("component_name"), ComponentName);
 
+	bool bAutoStart = false;
+	const bool bHasAutoStart = Params->HasField(TEXT("auto_start"));
+	if (bHasAutoStart && !Params->TryGetBoolField(TEXT("auto_start"), bAutoStart))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: auto_start must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	double TickInterval = 0.0;
+	const bool bHasTickInterval = Params->HasField(TEXT("tick_interval"));
+	if (bHasTickInterval && !Params->TryGetNumberField(TEXT("tick_interval"), TickInterval))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: tick_interval must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	UBlueprint* BP = Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BPPath));
 	if (!BP)
 	{
@@ -426,22 +441,21 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleConfigureSMCom
 	TArray<FString> Applied;
 
 	// auto_start
-	if (Params->HasField(TEXT("auto_start")))
+	if (bHasAutoStart)
 	{
-		bool bVal = Params->GetBoolField(TEXT("auto_start"));
 		FBoolProperty* Prop = CastField<FBoolProperty>(FoundComponent->GetClass()->FindPropertyByName(TEXT("bAutoStart")));
 		if (Prop)
 		{
 			FoundComponent->Modify();
-			Prop->SetPropertyValue(Prop->ContainerPtrToValuePtr<void>(FoundComponent), bVal);
-			Applied.Add(FString::Printf(TEXT("bAutoStart=%s"), bVal ? TEXT("true") : TEXT("false")));
+			Prop->SetPropertyValue(Prop->ContainerPtrToValuePtr<void>(FoundComponent), bAutoStart);
+			Applied.Add(FString::Printf(TEXT("bAutoStart=%s"), bAutoStart ? TEXT("true") : TEXT("false")));
 		}
 	}
 
 	// tick_interval
-	if (Params->HasField(TEXT("tick_interval")))
+	if (bHasTickInterval)
 	{
-		float Val = static_cast<float>(Params->GetNumberField(TEXT("tick_interval")));
+		float Val = static_cast<float>(TickInterval);
 		FFloatProperty* Prop = CastField<FFloatProperty>(FoundComponent->GetClass()->FindPropertyByName(TEXT("TickInterval")));
 		if (Prop)
 		{
