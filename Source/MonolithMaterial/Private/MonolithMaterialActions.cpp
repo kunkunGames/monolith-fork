@@ -3255,6 +3255,7 @@ FMonolithActionResult FMonolithMaterialActions::GetMaterialParameters(const TSha
 	TArray<FMaterialParameterInfo> ScalarInfos;
 	TArray<FGuid> ScalarGuids;
 	MatInterface->GetAllScalarParameterInfo(ScalarInfos, ScalarGuids);
+	ScalarArray.Reserve(ScalarInfos.Num());
 	for (int32 i = 0; i < ScalarInfos.Num(); ++i)
 	{
 		float Value = 0.f;
@@ -3271,6 +3272,7 @@ FMonolithActionResult FMonolithMaterialActions::GetMaterialParameters(const TSha
 	TArray<FMaterialParameterInfo> VectorInfos;
 	TArray<FGuid> VectorGuids;
 	MatInterface->GetAllVectorParameterInfo(VectorInfos, VectorGuids);
+	VectorArray.Reserve(VectorInfos.Num());
 	for (int32 i = 0; i < VectorInfos.Num(); ++i)
 	{
 		FLinearColor Value;
@@ -3292,6 +3294,7 @@ FMonolithActionResult FMonolithMaterialActions::GetMaterialParameters(const TSha
 	TArray<FMaterialParameterInfo> TextureInfos;
 	TArray<FGuid> TextureGuids;
 	MatInterface->GetAllTextureParameterInfo(TextureInfos, TextureGuids);
+	TextureArray.Reserve(TextureInfos.Num());
 	for (int32 i = 0; i < TextureInfos.Num(); ++i)
 	{
 		UTexture* Tex = nullptr;
@@ -3308,6 +3311,7 @@ FMonolithActionResult FMonolithMaterialActions::GetMaterialParameters(const TSha
 	TArray<FMaterialParameterInfo> SwitchInfos;
 	TArray<FGuid> SwitchGuids;
 	MatInterface->GetAllStaticSwitchParameterInfo(SwitchInfos, SwitchGuids);
+	SwitchArray.Reserve(SwitchInfos.Num());
 	for (int32 i = 0; i < SwitchInfos.Num(); ++i)
 	{
 		bool Value = false;
@@ -4703,6 +4707,7 @@ FMonolithActionResult FMonolithMaterialActions::GetInstanceParameters(const TSha
 
 	// Scalar parameters
 	TArray<TSharedPtr<FJsonValue>> ScalarArr;
+	ScalarArr.Reserve(MIC->ScalarParameterValues.Num());
 	for (const auto& Param : MIC->ScalarParameterValues)
 	{
 		auto ParamJson = MakeShared<FJsonObject>();
@@ -4715,6 +4720,7 @@ FMonolithActionResult FMonolithMaterialActions::GetInstanceParameters(const TSha
 
 	// Vector parameters
 	TArray<TSharedPtr<FJsonValue>> VectorArr;
+	VectorArr.Reserve(MIC->VectorParameterValues.Num());
 	for (const auto& Param : MIC->VectorParameterValues)
 	{
 		auto ParamJson = MakeShared<FJsonObject>();
@@ -4732,6 +4738,7 @@ FMonolithActionResult FMonolithMaterialActions::GetInstanceParameters(const TSha
 
 	// Texture parameters
 	TArray<TSharedPtr<FJsonValue>> TextureArr;
+	TextureArr.Reserve(MIC->TextureParameterValues.Num());
 	for (const auto& Param : MIC->TextureParameterValues)
 	{
 		auto ParamJson = MakeShared<FJsonObject>();
@@ -4750,6 +4757,7 @@ FMonolithActionResult FMonolithMaterialActions::GetInstanceParameters(const TSha
 		MIC->GetAllStaticSwitchParameterInfo(SwitchInfos, SwitchGuids);
 
 		// Also get parent values to detect overrides
+		SwitchArr.Reserve(SwitchInfos.Num());
 		for (int32 i = 0; i < SwitchInfos.Num(); ++i)
 		{
 			bool Value = false;
