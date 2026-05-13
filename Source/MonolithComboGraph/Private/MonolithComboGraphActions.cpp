@@ -1369,7 +1369,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 			TArray<FString> ClassPaths;
 			for (const auto& Val : *EffectClasses)
 			{
-				if (Val.IsValid()) ClassPaths.Add(Val->AsString());
+				if (Val.IsValid() && Val->Type == EJson::String) ClassPaths.Add(Val->AsString());
 			}
 			if (ClassPaths.Num() > 0)
 			{
@@ -1514,7 +1514,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 					TArray<FString> TagTexts;
 					for (const auto& TV : *CueTags)
 					{
-						if (TV.IsValid())
+						if (TV.IsValid() && TV->Type == EJson::String)
 						{
 							TagTexts.Add(FString::Printf(TEXT("(TagName=\"%s\")"), *TV->AsString()));
 						}
@@ -1990,7 +1990,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontage
 	TArray<FString> MontagePaths;
 	for (const auto& Val : *MontagesArr)
 	{
-		if (Val.IsValid())
+		if (Val.IsValid() && Val->Type == EJson::String)
 		{
 			FString Path = Val->AsString();
 			if (!Path.IsEmpty())
