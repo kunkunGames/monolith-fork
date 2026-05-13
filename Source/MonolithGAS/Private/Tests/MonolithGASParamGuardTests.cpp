@@ -73,3 +73,58 @@ bool FScaffoldCustomAbilityTaskRejectsMalformedArraysTest::RunTest(const FString
 }
 
 #endif // WITH_DEV_AUTOMATION_TESTS
+
+#if WITH_DEV_AUTOMATION_TESTS
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FScaffoldStatusEffectRejectsMalformedConfigTest, "Monolith.ParamGuard.GAS.ScaffoldStatusEffectRejectsMalformedConfig", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FScaffoldStatusEffectRejectsMalformedConfigTest::RunTest(const FString& Parameters)
+{
+	auto ExecuteScaffoldStatusEffect = [](const TSharedPtr<FJsonObject>& Params)
+	{
+		return FMonolithToolRegistry::Get().ExecuteAction(TEXT("gas"), TEXT("scaffold_status_effect"), Params);
+	};
+
+	// Test 1: string where number expected
+	{
+		TSharedPtr<FJsonObject> ConfigObj = MakeShared<FJsonObject>();
+		ConfigObj->SetStringField(TEXT("duration"), TEXT("5.0"));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("save_path"), TEXT("/Game/Effects/GE_Test"));
+		Params->SetStringField(TEXT("name"), TEXT("TestEffect"));
+		Params->SetObjectField(TEXT("config"), ConfigObj);
+
+		FMonolithActionResult Result = ExecuteScaffoldStatusEffect(Params);
+		TestTrue(TEXT("Malformed config duration should fail"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention duration must be a number"), Result.ErrorMessage.Contains(TEXT("duration must be a number")));
+	}
+	return true;
+}
+
+#endif // WITH_DEV_AUTOMATION_TESTS
+
+#if WITH_DEV_AUTOMATION_TESTS
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FScaffoldWeaponAbilityRejectsMalformedFireModeTest, "Monolith.ParamGuard.GAS.ScaffoldWeaponAbilityRejectsMalformedFireMode", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FScaffoldWeaponAbilityRejectsMalformedFireModeTest::RunTest(const FString& Parameters)
+{
+	auto ExecuteScaffoldWeaponAbility = [](const TSharedPtr<FJsonObject>& Params)
+	{
+		return FMonolithToolRegistry::Get().ExecuteAction(TEXT("gas"), TEXT("scaffold_weapon_ability"), Params);
+	};
+
+	// Test: number where string expected
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("save_path"), TEXT("/Game/Abilities/GA_TestWeapon"));
+		Params->SetStringField(TEXT("weapon_type"), TEXT("pistol"));
+		Params->SetNumberField(TEXT("fire_mode"), 1);
+
+		FMonolithActionResult Result = ExecuteScaffoldWeaponAbility(Params);
+		TestTrue(TEXT("Malformed fire_mode should fail"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention fire_mode must be a string"), Result.ErrorMessage.Contains(TEXT("fire_mode must be a string")));
+	}
+	return true;
+}
+
+#endif // WITH_DEV_AUTOMATION_TESTS
