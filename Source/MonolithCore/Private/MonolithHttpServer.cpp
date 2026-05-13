@@ -522,12 +522,12 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 
 	// Each namespace becomes a tool
 	TArray<FString> Namespaces = Registry.GetNamespaces();
-	ToolsArray.Reserve(Namespaces.Num() + Registry.GetNamespaceActionCount(TEXT("monolith")));
+	TArray<FMonolithActionInfo> CoreActions = Registry.GetActions(TEXT("monolith"));
+	ToolsArray.Reserve(Namespaces.Num() + CoreActions.Num());
 	for (const FString& Namespace : Namespaces)
 	{
 		if (Namespace == TEXT("monolith"))
 		{
-			TArray<FMonolithActionInfo> CoreActions = Registry.GetActions(Namespace);
 			if (CoreActions.Num() == 0) continue;
 
 			// Core tools are individual: monolith_discover, monolith_status
@@ -574,13 +574,28 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 			Tool->SetStringField(TEXT("name"), ToolName);
 
 			// Build description with action list
-			FString JoinedActions = FString::Join(ActionNames, TEXT(", "));
+			int32 TotalActionLen = 0;
+			for (const FString& Name : ActionNames)
+			{
+				TotalActionLen += Name.Len();
+			}
+			if (ActionNames.Num() > 0)
+			{
+				TotalActionLen += (ActionNames.Num() - 1) * 2; // ", "
+			}
 			FString Description;
-			Description.Reserve(38 + Namespace.Len() + JoinedActions.Len()); // "Query the  domain. Available actions: " = 38 chars
+			Description.Reserve(38 + Namespace.Len() + TotalActionLen); // "Query the  domain. Available actions: " = 38 chars
 			Description += TEXT("Query the ");
 			Description += Namespace;
 			Description += TEXT(" domain. Available actions: ");
-			Description += JoinedActions;
+			for (int32 i = 0; i < ActionNames.Num(); ++i)
+			{
+				if (i > 0)
+				{
+					Description += TEXT(", ");
+				}
+				Description += ActionNames[i];
+			}
 			Tool->SetStringField(TEXT("description"), Description);
 
 			// Build input schema
