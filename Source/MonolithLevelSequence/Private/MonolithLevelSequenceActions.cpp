@@ -855,6 +855,7 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListEventBindings(const TSh
 	Stmt.Destroy();
 
 	TArray<TSharedPtr<FJsonValue>> BindingsArr;
+	BindingsArr.Reserve(BindingOrder.Num());
 	for (const FString& Key : BindingOrder)
 	{
 		const FBindingAccum& Acc = Bindings.FindChecked(Key);
