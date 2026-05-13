@@ -12,6 +12,7 @@
 #include "UObject/Class.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UObjectIterator.h"
+#include "MonolithUISettings.h"
 
 namespace
 {
@@ -47,7 +48,7 @@ void UMonolithUIRegistrySubsystem::Initialize(FSubsystemCollectionBase& Collecti
 
     // Phase C: property path cache. Default cap (256) matches the
     // UMonolithUISettings.PathCacheCap default scheduled for Phase G.
-    PathCache = MakeUnique<FUIPropertyPathCache>();
+    PathCache = MakeUnique<FUIPropertyPathCache>(UMonolithUISettings::Get()->PathCacheCap);
 
     PopulateFromReflectionWalk();
     RegisterCuratedMappings();
