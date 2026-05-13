@@ -401,7 +401,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		FParamSchemaBuilder()
 			.Optional(TEXT("filter"), TEXT("string"), TEXT("Substring filter on node name"))
 			.Optional(TEXT("category"), TEXT("string"), TEXT("Filter by namespace/category"))
-			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum results (default: 200)"), TEXT("200"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum results (default: 200, max: 1000)"), TEXT("200"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("get_metasound_node_info"),
@@ -1270,6 +1270,7 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ListAvailableMetaSoundNode
 	{
 		Limit = static_cast<int32>(LimitVal);
 	}
+	Limit = FMath::Clamp(Limit, 0, 1000);
 
 	Metasound::Frontend::INodeClassRegistry& Registry = Metasound::Frontend::INodeClassRegistry::GetChecked();
 

@@ -1,5 +1,6 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithAudioQueryActions.h"
+#include "MonolithAudioMetaSoundActions.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 
@@ -285,6 +286,129 @@ bool FMonolithAudioListAudioAssetsLimitTest::RunTest(const FString& Parameters)
 		FMonolithActionResult Result = ExecuteListAudioAssets(Params);
 		TestFalse(TEXT("String limit should return an error"), Result.bSuccess);
 		TestTrue(TEXT("Error should mention limit"), Result.ErrorMessage.Contains(TEXT("limit")));
+	}
+
+	return true;
+}
+
+
+
+
+namespace
+{
+FMonolithActionResult ExecuteListAvailableMetaSoundNodes(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry::Get());
+	return FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("list_available_metasound_nodes"), Params);
+}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioListAvailableMetaSoundNodesLimitTest, "Monolith.LimitGuard.Audio.ListAvailableMetaSoundNodesClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAudioListAvailableMetaSoundNodesLimitTest::RunTest(const FString& Parameters)
+{
+	// Test default limit (200)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = ExecuteListAvailableMetaSoundNodes(Params);
+		if (!Result.bSuccess || !Result.Result.IsValid())
+		{
+			AddError(TEXT("Action failed without limit"));
+			return false;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
+		if (Result.Result->TryGetArrayField(TEXT("nodes"), NodesArray))
+		{
+			if (NodesArray->Num() > 200)
+			{
+				AddError(FString::Printf(TEXT("Default limit of 200 was not respected. Count was %d"), NodesArray->Num()));
+			}
+		}
+		else
+		{
+			AddError(TEXT("Missing nodes array in result"));
+		}
+	}
+
+	// Test explicit limit
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 5.0);
+		FMonolithActionResult Result = ExecuteListAvailableMetaSoundNodes(Params);
+
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("nodes"), NodesArray))
+			{
+				if (NodesArray->Num() > 5)
+				{
+					AddError(FString::Printf(TEXT("Explicit limit of 5 was not respected. Count was %d"), NodesArray->Num()));
+				}
+			}
+		}
+	}
+
+	// Test zero/negative limit clamping
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), -10.0);
+		FMonolithActionResult Result = ExecuteListAvailableMetaSoundNodes(Params);
+
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("nodes"), NodesArray))
+			{
+				if (NodesArray->Num() != 1 && NodesArray->Num() != 0) // clamped to 1, but maybe no nodes found
+				{
+					// the test is just ensuring we clamped correctly
+					// note: some nodes might not exist so Num could be 0, but it should not be > 1
+					if (NodesArray->Num() > 1)
+					{
+						AddError(FString::Printf(TEXT("Negative limit was not clamped to 1. Count was %d"), NodesArray->Num()));
+					}
+				}
+			}
+		}
+	}
+
+	// Test very large limit upper bound
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 1000000.0);
+		FMonolithActionResult Result = ExecuteListAvailableMetaSoundNodes(Params);
+
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("nodes"), NodesArray))
+			{
+				if (NodesArray->Num() > 1000)
+				{
+					AddError(FString::Printf(TEXT("Huge limit was not clamped to 1000. Count was %d"), NodesArray->Num()));
+				}
+			}
+		}
+	}
+
+	// Test malformed limit type (TryGetNumberField fails and leaves default intact)
+	// (or returns error depending on how we handle it - the current code just ignores and uses default)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("limit"), TEXT("not_a_number"));
+		FMonolithActionResult Result = ExecuteListAvailableMetaSoundNodes(Params);
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("nodes"), NodesArray))
+			{
+				if (NodesArray->Num() > 200)
+				{
+					AddError(FString::Printf(TEXT("Malformed limit was not ignored/defaulted to 200. Count was %d"), NodesArray->Num()));
+				}
+			}
+		}
 	}
 
 	return true;
