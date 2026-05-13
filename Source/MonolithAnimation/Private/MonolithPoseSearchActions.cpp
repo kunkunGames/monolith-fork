@@ -443,10 +443,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleAddDatabaseSequence(cons
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString AnimPath = Params->GetStringField(TEXT("anim_path"));
 	bool bEnabled = true;
-	if (Params->HasField(TEXT("enabled")))
-	{
-		bEnabled = Params->GetBoolField(TEXT("enabled"));
-	}
+	Params->TryGetBoolField(TEXT("enabled"), bEnabled);
 
 	UPoseSearchDatabase* Database = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchDatabase>(AssetPath);
 	if (!Database)
@@ -622,17 +619,15 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleCreatePoseSearchSchema(c
 	Schema->AddSkeleton(Skeleton);
 
 	// Set sample rate if provided
-	if (Params->HasField(TEXT("sample_rate")))
+	double SampleRateVal = 0.0;
+	if (Params->TryGetNumberField(TEXT("sample_rate"), SampleRateVal))
 	{
-		Schema->SampleRate = static_cast<int32>(Params->GetNumberField(TEXT("sample_rate")));
+		Schema->SampleRate = static_cast<int32>(SampleRateVal);
 	}
 
 	// Add default channels (Pose + Trajectory) unless explicitly disabled
 	bool bAddDefaults = true;
-	if (Params->HasField(TEXT("add_default_channels")))
-	{
-		bAddDefaults = Params->GetBoolField(TEXT("add_default_channels"));
-	}
+	Params->TryGetBoolField(TEXT("add_default_channels"), bAddDefaults);
 	if (bAddDefaults)
 	{
 		Schema->AddDefaultChannels();
@@ -779,19 +774,21 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 	Database->Modify();
 
 #if WITH_EDITORONLY_DATA
-	if (Params->HasField(TEXT("enabled")))
+	bool bEntryEnabled = false;
+	if (Params->TryGetBoolField(TEXT("enabled"), bEntryEnabled))
 	{
-		Entry->SetIsEnabled(Params->GetBoolField(TEXT("enabled")));
+		Entry->SetIsEnabled(bEntryEnabled);
 	}
 
-	if (Params->HasField(TEXT("disable_reselection")))
+	bool bDisableReselection = false;
+	if (Params->TryGetBoolField(TEXT("disable_reselection"), bDisableReselection))
 	{
-		Entry->SetDisableReselection(Params->GetBoolField(TEXT("disable_reselection")));
+		Entry->SetDisableReselection(bDisableReselection);
 	}
 
-	if (Params->HasField(TEXT("mirror_option")))
+	FString MirrorStr;
+	if (Params->TryGetStringField(TEXT("mirror_option"), MirrorStr))
 	{
-		FString MirrorStr = Params->GetStringField(TEXT("mirror_option"));
 		if (MirrorStr.Equals(TEXT("UnmirroredOnly"), ESearchCase::IgnoreCase))
 			Entry->MirrorOption = EPoseSearchMirrorOption::UnmirroredOnly;
 		else if (MirrorStr.Equals(TEXT("MirroredOnly"), ESearchCase::IgnoreCase))
@@ -805,15 +802,16 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 		}
 	}
 
-	if (Params->HasField(TEXT("sampling_range_start")) || Params->HasField(TEXT("sampling_range_end")))
+	double RangeStartVal = 0.0;
+	bool bHasStart = Params->TryGetNumberField(TEXT("sampling_range_start"), RangeStartVal);
+	double RangeEndVal = 0.0;
+	bool bHasEnd = Params->TryGetNumberField(TEXT("sampling_range_end"), RangeEndVal);
+
+	if (bHasStart || bHasEnd)
 	{
 		FFloatInterval CurrentRange = Entry->GetSamplingRange();
-		float Start = Params->HasField(TEXT("sampling_range_start"))
-			? static_cast<float>(Params->GetNumberField(TEXT("sampling_range_start")))
-			: CurrentRange.Min;
-		float End = Params->HasField(TEXT("sampling_range_end"))
-			? static_cast<float>(Params->GetNumberField(TEXT("sampling_range_end")))
-			: CurrentRange.Max;
+		float Start = bHasStart ? static_cast<float>(RangeStartVal) : CurrentRange.Min;
+		float End = bHasEnd ? static_cast<float>(RangeEndVal) : CurrentRange.Max;
 		Entry->SetSamplingRange(FFloatInterval(Start, End));
 	}
 #endif // WITH_EDITORONLY_DATA
@@ -883,9 +881,10 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleAddSchemaChannel(const T
 
 	// Set weight if provided (Weight is WITH_EDITORONLY_DATA, exists on all channel types as a float UPROPERTY)
 #if WITH_EDITORONLY_DATA
-	if (Params->HasField(TEXT("weight")))
+	double WeightVal = 0.0;
+	if (Params->TryGetNumberField(TEXT("weight"), WeightVal))
 	{
-		float Weight = static_cast<float>(Params->GetNumberField(TEXT("weight")));
+		float Weight = static_cast<float>(WeightVal);
 		FProperty* WeightProp = Channel->GetClass()->FindPropertyByName(TEXT("Weight"));
 		if (WeightProp)
 		{
@@ -896,9 +895,9 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleAddSchemaChannel(const T
 	}
 
 	// Set bone reference if provided (for Position, Velocity, Heading channels)
-	if (Params->HasField(TEXT("bone")))
+	FString BoneName;
+	if (Params->TryGetStringField(TEXT("bone"), BoneName))
 	{
-		FString BoneName = Params->GetStringField(TEXT("bone"));
 		FProperty* BoneProp = Channel->GetClass()->FindPropertyByName(TEXT("Bone"));
 		if (BoneProp)
 		{
@@ -1052,10 +1051,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleRebuildPoseSearchIndex(c
 		return FMonolithActionResult::Error(FString::Printf(TEXT("PoseSearchDatabase not found: %s"), *AssetPath));
 
 	bool bWait = false;
-	if (Params->HasField(TEXT("wait")))
-	{
-		bWait = Params->GetBoolField(TEXT("wait"));
-	}
+	Params->TryGetBoolField(TEXT("wait"), bWait);
 
 	using namespace UE::PoseSearch;
 	ERequestAsyncBuildFlag Flag = ERequestAsyncBuildFlag::NewRequest;
@@ -1106,9 +1102,9 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSearchMode(co
 	Database->Modify();
 
 	// Search mode
-	if (Params->HasField(TEXT("pose_search_mode")))
+	FString ModeStr;
+	if (Params->TryGetStringField(TEXT("pose_search_mode"), ModeStr))
 	{
-		FString ModeStr = Params->GetStringField(TEXT("pose_search_mode"));
 		if (ModeStr.Equals(TEXT("BruteForce"), ESearchCase::IgnoreCase))
 			Database->PoseSearchMode = EPoseSearchMode::BruteForce;
 		else if (ModeStr.Equals(TEXT("PCAKDTree"), ESearchCase::IgnoreCase))
@@ -1125,44 +1121,51 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSearchMode(co
 	}
 
 	// KDTree neighbors (not editor-only)
-	if (Params->HasField(TEXT("kd_tree_query_num_neighbors")))
+	double NeighborsVal = 0.0;
+	if (Params->TryGetNumberField(TEXT("kd_tree_query_num_neighbors"), NeighborsVal))
 	{
 		Database->KDTreeQueryNumNeighbors = FMath::Clamp(
-			static_cast<int32>(Params->GetNumberField(TEXT("kd_tree_query_num_neighbors"))), 1, 600);
+			static_cast<int32>(NeighborsVal), 1, 600);
 	}
 
 #if WITH_EDITORONLY_DATA
 	// PCA components (editor-only)
-	if (Params->HasField(TEXT("number_of_principal_components")))
+	double ComponentsVal = 0.0;
+	if (Params->TryGetNumberField(TEXT("number_of_principal_components"), ComponentsVal))
 	{
 		Database->NumberOfPrincipalComponents = FMath::Clamp(
-			static_cast<int32>(Params->GetNumberField(TEXT("number_of_principal_components"))), 1, 64);
+			static_cast<int32>(ComponentsVal), 1, 64);
 	}
 
 	// KDTree max leaf size (editor-only)
-	if (Params->HasField(TEXT("kd_tree_max_leaf_size")))
+	double LeafSizeVal = 0.0;
+	if (Params->TryGetNumberField(TEXT("kd_tree_max_leaf_size"), LeafSizeVal))
 	{
 		Database->KDTreeMaxLeafSize = FMath::Clamp(
-			static_cast<int32>(Params->GetNumberField(TEXT("kd_tree_max_leaf_size"))), 1, 256);
+			static_cast<int32>(LeafSizeVal), 1, 256);
 	}
 #endif // WITH_EDITORONLY_DATA
 
 	// Cost biases (runtime-accessible)
-	if (Params->HasField(TEXT("continuing_pose_cost_bias")))
+	double BiasVal1 = 0.0;
+	if (Params->TryGetNumberField(TEXT("continuing_pose_cost_bias"), BiasVal1))
 	{
-		Database->ContinuingPoseCostBias = static_cast<float>(Params->GetNumberField(TEXT("continuing_pose_cost_bias")));
+		Database->ContinuingPoseCostBias = static_cast<float>(BiasVal1);
 	}
-	if (Params->HasField(TEXT("base_cost_bias")))
+	double BiasVal2 = 0.0;
+	if (Params->TryGetNumberField(TEXT("base_cost_bias"), BiasVal2))
 	{
-		Database->BaseCostBias = static_cast<float>(Params->GetNumberField(TEXT("base_cost_bias")));
+		Database->BaseCostBias = static_cast<float>(BiasVal2);
 	}
-	if (Params->HasField(TEXT("looping_cost_bias")))
+	double BiasVal3 = 0.0;
+	if (Params->TryGetNumberField(TEXT("looping_cost_bias"), BiasVal3))
 	{
-		Database->LoopingCostBias = static_cast<float>(Params->GetNumberField(TEXT("looping_cost_bias")));
+		Database->LoopingCostBias = static_cast<float>(BiasVal3);
 	}
-	if (Params->HasField(TEXT("continuing_interaction_cost_bias")))
+	double BiasVal4 = 0.0;
+	if (Params->TryGetNumberField(TEXT("continuing_interaction_cost_bias"), BiasVal4))
 	{
-		Database->ContinuingInteractionCostBias = static_cast<float>(Params->GetNumberField(TEXT("continuing_interaction_cost_bias")));
+		Database->ContinuingInteractionCostBias = static_cast<float>(BiasVal4);
 	}
 
 	GEditor->EndTransaction();
@@ -1172,16 +1175,16 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSearchMode(co
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("asset_path"), AssetPath);
 
-	FString ModeStr;
+	FString ResponseModeStr;
 	switch (Database->PoseSearchMode)
 	{
-	case EPoseSearchMode::BruteForce: ModeStr = TEXT("BruteForce"); break;
-	case EPoseSearchMode::PCAKDTree:  ModeStr = TEXT("PCAKDTree"); break;
-	case EPoseSearchMode::VPTree:     ModeStr = TEXT("VPTree"); break;
-	case EPoseSearchMode::EventOnly:  ModeStr = TEXT("EventOnly"); break;
-	default:                          ModeStr = TEXT("Unknown"); break;
+	case EPoseSearchMode::BruteForce: ResponseModeStr = TEXT("BruteForce"); break;
+	case EPoseSearchMode::PCAKDTree:  ResponseModeStr = TEXT("PCAKDTree"); break;
+	case EPoseSearchMode::VPTree:     ResponseModeStr = TEXT("VPTree"); break;
+	case EPoseSearchMode::EventOnly:  ResponseModeStr = TEXT("EventOnly"); break;
+	default:                          ResponseModeStr = TEXT("Unknown"); break;
 	}
-	Root->SetStringField(TEXT("pose_search_mode"), ModeStr);
+	Root->SetStringField(TEXT("pose_search_mode"), ResponseModeStr);
 	Root->SetNumberField(TEXT("kd_tree_query_num_neighbors"), Database->KDTreeQueryNumNeighbors);
 #if WITH_EDITORONLY_DATA
 	Root->SetNumberField(TEXT("number_of_principal_components"), Database->NumberOfPrincipalComponents);
