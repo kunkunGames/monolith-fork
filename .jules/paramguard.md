@@ -1,3 +1,8 @@
+## YYYY-MM-DD - Harden MonolithSource parameter parsing
+**Malformed input pattern:** Using GetStringField/GetBoolField/GetNumberField directly without Try* counterparts or immediately after HasField.
+**Learning:** HasField does not guarantee type safety and can cause assertion crashes on malformed inputs.
+**Prevention:** Always use the equivalent TryGet*Field.
+
 ## 2025-02-06 - Harden audio/modify_sound_submix param parsing
 **Malformed input pattern:** String passed to `output_volume_db` or `output_volume`
 **Learning:** Checking `HasField` and directly calling `GetNumberField` causes a fatal engine crash if the client passes an unexpected type like a string.

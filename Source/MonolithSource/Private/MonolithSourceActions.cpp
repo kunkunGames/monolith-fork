@@ -369,12 +369,13 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
 	}
 
-	FString Symbol = Params->GetStringField(TEXT("symbol"));
-	bool bIncludeHeader = true;
-	if (Params->HasField(TEXT("include_header")))
+	FString Symbol;
+	if (!Params->TryGetStringField(TEXT("symbol"), Symbol) || Symbol.IsEmpty())
 	{
-		bIncludeHeader = Params->GetBoolField(TEXT("include_header"));
+		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
 	}
+	bool bIncludeHeader = true;
+	Params->TryGetBoolField(TEXT("include_header"), bIncludeHeader);
 	int32 MaxLines = 0;
 	double RawMaxLines = 0;
 	if (Params->TryGetNumberField(TEXT("max_lines"), RawMaxLines))
@@ -382,10 +383,7 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 		MaxLines = FMath::Clamp(static_cast<int32>(RawMaxLines), 1, 1000);
 	}
 	bool bMembersOnly = false;
-	if (Params->HasField(TEXT("members_only")))
-	{
-		bMembersOnly = Params->GetBoolField(TEXT("members_only"));
-	}
+	Params->TryGetBoolField(TEXT("members_only"), bMembersOnly);
 
 	// Look up by exact name first, then FTS fallback
 	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(Symbol);
@@ -494,8 +492,13 @@ FMonolithActionResult FMonolithSourceActions::HandleFindReferences(const TShared
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
 	}
 
-	FString Symbol = Params->GetStringField(TEXT("symbol"));
-	FString RefKind = Params->HasField(TEXT("ref_kind")) ? Params->GetStringField(TEXT("ref_kind")) : TEXT("");
+	FString Symbol;
+	if (!Params->TryGetStringField(TEXT("symbol"), Symbol) || Symbol.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
+	}
+	FString RefKind;
+	Params->TryGetStringField(TEXT("ref_kind"), RefKind);
 	int32 Limit = 50;
 	double RawLimit = 0;
 	if (Params->TryGetNumberField(TEXT("limit"), RawLimit))
@@ -547,7 +550,11 @@ FMonolithActionResult FMonolithSourceActions::HandleFindCallers(const TSharedPtr
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
 	}
 
-	FString Function = Params->GetStringField(TEXT("symbol"));
+	FString Function;
+	if (!Params->TryGetStringField(TEXT("symbol"), Function) || Function.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
+	}
 	int32 Limit = 50;
 	double RawLimit = 0;
 	if (Params->TryGetNumberField(TEXT("limit"), RawLimit))
@@ -613,7 +620,11 @@ FMonolithActionResult FMonolithSourceActions::HandleFindCallees(const TSharedPtr
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
 	}
 
-	FString Function = Params->GetStringField(TEXT("symbol"));
+	FString Function;
+	if (!Params->TryGetStringField(TEXT("symbol"), Function) || Function.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
+	}
 	int32 Limit = 50;
 	double RawLimit = 0;
 	if (Params->TryGetNumberField(TEXT("limit"), RawLimit))
@@ -671,18 +682,27 @@ FMonolithActionResult FMonolithSourceActions::HandleSearchSource(const TSharedPt
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
 	}
 
-	FString Query = Params->GetStringField(TEXT("query"));
-	FString Scope = Params->HasField(TEXT("scope")) ? Params->GetStringField(TEXT("scope")) : TEXT("all");
+	FString Query;
+	if (!Params->TryGetStringField(TEXT("query"), Query) || Query.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("\'query\' parameter is required and must be a string"));
+	}
+	FString Scope = TEXT("all");
+	Params->TryGetStringField(TEXT("scope"), Scope);
 	int32 Limit = 20;
 	double RawLimit = 0;
 	if (Params->TryGetNumberField(TEXT("limit"), RawLimit))
 	{
 		Limit = FMath::Clamp(static_cast<int32>(RawLimit), 1, 1000);
 	}
-	FString Mode = Params->HasField(TEXT("mode")) ? Params->GetStringField(TEXT("mode")) : TEXT("fts");
-	FString Module = Params->HasField(TEXT("module")) ? Params->GetStringField(TEXT("module")) : TEXT("");
-	FString PathFilter = Params->HasField(TEXT("path_filter")) ? Params->GetStringField(TEXT("path_filter")) : TEXT("");
-	FString SymbolKind = Params->HasField(TEXT("symbol_kind")) ? Params->GetStringField(TEXT("symbol_kind")) : TEXT("");
+	FString Mode = TEXT("fts");
+	Params->TryGetStringField(TEXT("mode"), Mode);
+	FString Module;
+	Params->TryGetStringField(TEXT("module"), Module);
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
+	FString SymbolKind;
+	Params->TryGetStringField(TEXT("symbol_kind"), SymbolKind);
 
 	TArray<FString> Parts;
 
@@ -806,8 +826,17 @@ FMonolithActionResult FMonolithSourceActions::HandleGetClassHierarchy(const TSha
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
 	}
 
-	FString ClassName = Params->HasField(TEXT("symbol")) ? Params->GetStringField(TEXT("symbol")) : Params->GetStringField(TEXT("class_name"));
-	FString Direction = Params->HasField(TEXT("direction")) ? Params->GetStringField(TEXT("direction")) : TEXT("both");
+	FString ClassName;
+	if (!Params->TryGetStringField(TEXT("symbol"), ClassName) && !Params->TryGetStringField(TEXT("class_name"), ClassName))
+	{
+		return FMonolithActionResult::Error(TEXT("\'symbol\' (or \'class_name\') parameter is required and must be a string"));
+	}
+	if (ClassName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter cannot be empty"));
+	}
+	FString Direction = TEXT("both");
+	Params->TryGetStringField(TEXT("direction"), Direction);
 	int32 Depth = 1;
 	double RawDepth = 0;
 	if (Params->TryGetNumberField(TEXT("depth"), RawDepth))
@@ -903,7 +932,11 @@ FMonolithActionResult FMonolithSourceActions::HandleGetModuleInfo(const TSharedP
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
 	}
 
-	FString ModuleName = Params->GetStringField(TEXT("module_name"));
+	FString ModuleName;
+	if (!Params->TryGetStringField(TEXT("module_name"), ModuleName) || ModuleName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("\'module_name\' parameter is required and must be a string"));
+	}
 
 	TOptional<FMonolithSourceModuleStats> Stats = DB->GetModuleStats(ModuleName);
 	if (!Stats.IsSet())
@@ -964,7 +997,11 @@ FMonolithActionResult FMonolithSourceActions::HandleGetSymbolContext(const TShar
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
 	}
 
-	FString Symbol = Params->GetStringField(TEXT("symbol"));
+	FString Symbol;
+	if (!Params->TryGetStringField(TEXT("symbol"), Symbol) || Symbol.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
+	}
 	int32 ContextLines = 20;
 	double RawContextLines = 0;
 	if (Params->TryGetNumberField(TEXT("context_lines"), RawContextLines))
@@ -1032,7 +1069,11 @@ FMonolithActionResult FMonolithSourceActions::HandleReadFile(const TSharedPtr<FJ
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
 	}
 
-	FString Path = Params->GetStringField(TEXT("file_path"));
+	FString Path;
+	if (!Params->TryGetStringField(TEXT("file_path"), Path) || Path.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("\'file_path\' parameter is required and must be a string"));
+	}
 	int32 StartLine = 1;
 	double RawStartLine = 0;
 	if (Params->TryGetNumberField(TEXT("start_line"), RawStartLine))
