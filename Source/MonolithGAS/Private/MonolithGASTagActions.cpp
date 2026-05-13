@@ -1031,10 +1031,12 @@ FMonolithActionResult FMonolithGASTagActions::HandleRemoveGameplayTags(const TSh
 	Result->SetNumberField(TEXT("blocked_count"), Blocked.Num());
 
 	TArray<TSharedPtr<FJsonValue>> RemovedArr;
+	RemovedArr.Reserve(Removed.Num());
 	for (const FString& T : Removed) RemovedArr.Add(MakeShared<FJsonValueString>(T));
 	Result->SetArrayField(TEXT("removed"), RemovedArr);
 
 	TArray<TSharedPtr<FJsonValue>> SkippedArr;
+	SkippedArr.Reserve(Skipped.Num());
 	for (const FString& T : Skipped) SkippedArr.Add(MakeShared<FJsonValueString>(T));
 	Result->SetArrayField(TEXT("skipped"), SkippedArr);
 
@@ -1408,10 +1410,12 @@ FMonolithActionResult FMonolithGASTagActions::HandleAuditTagNaming(const TShared
 	Result->SetArrayField(TEXT("issues"), Issues);
 
 	TArray<TSharedPtr<FJsonValue>> PrefixArr;
+	PrefixArr.Reserve(RequiredPrefixes.Num());
 	for (const FString& P : RequiredPrefixes) PrefixArr.Add(MakeShared<FJsonValueString>(P));
 	Result->SetArrayField(TEXT("recognized_prefixes"), PrefixArr);
 
 	TArray<TSharedPtr<FJsonValue>> UnkArr;
+	UnkArr.Reserve(UnknownPrefixes.Num());
 	for (const FString& P : UnknownPrefixes) UnkArr.Add(MakeShared<FJsonValueString>(P));
 	Result->SetArrayField(TEXT("unrecognized_prefixes"), UnkArr);
 
@@ -1446,6 +1450,7 @@ FMonolithActionResult FMonolithGASTagActions::HandleExportTagHierarchy(const TSh
 	{
 		// JSON array of strings
 		TArray<TSharedPtr<FJsonValue>> TagArray;
+		TagArray.Reserve(SortedTags.Num());
 		for (const FString& T : SortedTags)
 		{
 			TagArray.Add(MakeShared<FJsonValueString>(T));
@@ -1715,6 +1720,7 @@ FMonolithActionResult FMonolithGASTagActions::HandleImportTagHierarchy(const TSh
 	if (bDryRun || ToAdd.Num() <= 50)
 	{
 		TArray<TSharedPtr<FJsonValue>> AddArr;
+		AddArr.Reserve(ToAdd.Num());
 		for (const FString& T : ToAdd) AddArr.Add(MakeShared<FJsonValueString>(T));
 		Result->SetArrayField(TEXT("tags_to_add"), AddArr);
 	}
@@ -1722,6 +1728,7 @@ FMonolithActionResult FMonolithGASTagActions::HandleImportTagHierarchy(const TSh
 	if (bDryRun && MergeMode.Equals(TEXT("replace"), ESearchCase::IgnoreCase) && ToRemove.Num() <= 50)
 	{
 		TArray<TSharedPtr<FJsonValue>> RemArr;
+		RemArr.Reserve(ToRemove.Num());
 		for (const FString& T : ToRemove) RemArr.Add(MakeShared<FJsonValueString>(T));
 		Result->SetArrayField(TEXT("tags_to_remove"), RemArr);
 	}
