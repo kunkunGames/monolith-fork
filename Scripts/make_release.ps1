@@ -81,6 +81,8 @@ if ($StrippedModules.Count -gt 0) {
 }
 if ($IsMacOS) {
     $OutputZip = Join-Path $ProjectDir "Monolith-v$Version-macOS.zip"
+} elseif ($IsLinux) {
+    $OutputZip = Join-Path $ProjectDir "Monolith-v$Version-Linux.zip"
 } else {
     $OutputZip = Join-Path $ProjectDir "Monolith-v$Version.zip"
 }
@@ -353,7 +355,7 @@ if (Test-Path $OutputZip) {
     Write-Host ""
     Write-Host "Paste this exact line into the GitHub Release notes body:" -ForegroundColor Yellow
     Write-Host ""
-    $MarkerPrefix = if ($IsMacOS) { "Monolith-macOS-SHA256" } else { "Monolith-SHA256" }
+    $MarkerPrefix = if ($IsMacOS) { "Monolith-macOS-SHA256" } elseif ($IsLinux) { "Monolith-Linux-SHA256" } else { "Monolith-SHA256" }
     Write-Host "  ${MarkerPrefix}: $Hash" -ForegroundColor White
     Write-Host ""
     Write-Host "The auto-updater parses this exact marker and refuses to install" -ForegroundColor Yellow

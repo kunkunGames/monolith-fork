@@ -401,7 +401,7 @@ Monolith can check for new versions on editor startup so you don't have to babys
 
 1. **Opt in** — Tick **Auto Update Enabled** in Editor Preferences > Plugins > Monolith
 2. **On editor startup** — Checks GitHub Releases for a newer version
-3. **Downloads and verifies** — If an update is found, it downloads the zip and verifies the SHA256 hash against the `Monolith-SHA256:` (or `Monolith-macOS-SHA256:` on Mac) marker in the release notes. Mismatch aborts the install.
+3. **Downloads and verifies** — If an update is found, it downloads the zip and verifies the SHA256 hash against the `Monolith-SHA256:` (or `Monolith-macOS-SHA256:` on Mac, `Monolith-Linux-SHA256:` on Linux) marker in the release notes. Mismatch aborts the install.
 4. **Auto-swaps on exit** — The plugin is replaced when you close the editor (after a Y/N prompt in the swap script)
 5. **Manual check** — `monolith_update` tool to check anytime
 6. **Releases without a SHA256 marker** — log a warning and proceed without integrity check (legacy releases do not have markers; future-only releases will hard-fail without one)

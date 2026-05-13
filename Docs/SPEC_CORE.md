@@ -429,7 +429,7 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
 5. Create zip: `powershell -ExecutionPolicy Bypass -File Scripts/make_release.ps1 -Version "X.Y.Z"` (excludes Intermediate/Saved/.git, sets `"Installed": true` for BP-only users)
 6. `gh release create vX.Y.Z "../Monolith-vX.Y.Z.zip" --title "..." --notes "..."`
 
-**Important:** You must copy the exact `Monolith-SHA256: <hash>` (or `Monolith-macOS-SHA256: <hash>` for Mac) marker output from the release script into the release notes body. If the marker is missing, the current auto-updater logs a warning and proceeds without the release-notes integrity check.
+**Important:** You must copy the exact `Monolith-SHA256: <hash>` (or `Monolith-macOS-SHA256: <hash>` for Mac, `Monolith-Linux-SHA256: <hash>` for Linux) marker output from the release script into the release notes body. If the marker is missing, the current auto-updater logs a warning and proceeds without the release-notes integrity check.
 
 **Important:** Release zips MUST include pre-compiled DLLs (`Binaries/Win64/*.dll`) so Blueprint-only users can use the plugin without rebuilding. The `make_release.ps1` script sets `"Installed": true` in the zip's `.uplugin` to suppress rebuild prompts. The local dev copy keeps `"Installed": false`.
 

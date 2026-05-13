@@ -207,8 +207,10 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 							(*AssetObj)->TryGetStringField(TEXT("name"), Name);
 #if PLATFORM_MAC
 							if (Name.EndsWith(TEXT("-macOS.zip")))
+#elif PLATFORM_LINUX
+							if (Name.EndsWith(TEXT("-Linux.zip")))
 #else
-							if (Name.EndsWith(TEXT(".zip")) && !Name.EndsWith(TEXT("-macOS.zip")))
+							if (Name.EndsWith(TEXT(".zip")) && !Name.EndsWith(TEXT("-macOS.zip")) && !Name.EndsWith(TEXT("-Linux.zip")))
 #endif
 							{
 								(*AssetObj)->TryGetStringField(TEXT("browser_download_url"), ZipUrl);
@@ -243,6 +245,9 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 #if PLATFORM_MAC
 						static const FRegexPattern HashPattern(
 							TEXT("Monolith-macOS-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
+#elif PLATFORM_LINUX
+						static const FRegexPattern HashPattern(
+							TEXT("Monolith-Linux-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
 #else
 						static const FRegexPattern HashPattern(
 							TEXT("Monolith-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
