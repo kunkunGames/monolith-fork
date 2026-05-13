@@ -5,7 +5,7 @@ description: Use when creating, editing, or inspecting Niagara particle systems 
 
 # Unreal Niagara VFX Workflows
 
-You have access to **Monolith** with 108 Niagara actions via `niagara_query()`.
+You have access to **Monolith** with 109 Niagara actions via `niagara_query()`.
 
 ## Discovery
 
@@ -350,7 +350,7 @@ When creating fire+light effects, do NOT put the Light Renderer on a GPU emitter
 
 ## Rules
 
-- Use `monolith_discover("niagara")` to see per-action param schemas — there are 108 actions
+- Use `monolith_discover("niagara")` to see per-action param schemas — there are 109 actions
 - The primary asset param is `asset_path`, NOT `system` or `asset`
 - Module actions require `module_node` (a GUID) — get it from `get_ordered_modules`
 - Module stages: `Emitter Spawn`, `Emitter Update`, `Particle Spawn`, `Particle Update`, `Render`
