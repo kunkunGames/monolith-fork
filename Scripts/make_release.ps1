@@ -362,8 +362,8 @@ if (Test-Path $OutputZip) {
     $MarkerPrefix = if ($IsMacOS) { "Monolith-macOS-SHA256" } elseif ($IsLinux) { "Monolith-Linux-SHA256" } else { "Monolith-SHA256" }
     Write-Host "  ${MarkerPrefix}: $Hash" -ForegroundColor White
     Write-Host ""
-    Write-Host "The auto-updater parses this exact marker and refuses to install" -ForegroundColor Yellow
-    Write-Host "if the downloaded zip's hash does not match. Do not rename or"     -ForegroundColor Yellow
+    Write-Host "The auto-updater parses this exact marker and fails safe (refusing" -ForegroundColor Yellow
+    Write-Host "to install) if the downloaded zip's hash does not match. Do not rename or"     -ForegroundColor Yellow
     Write-Host "reformat the marker -- the prefix and a single space before the"   -ForegroundColor Yellow
     Write-Host "hex string are required."                                          -ForegroundColor Yellow
     Write-Host "================================================================" -ForegroundColor Cyan
