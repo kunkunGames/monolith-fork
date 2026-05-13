@@ -830,7 +830,12 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldCompleteAICharac
 	int32 TeamId = 1;
 	if (Params->HasField(TEXT("team_id")))
 	{
-		TeamId = FMath::RoundToInt32(Params->GetNumberField(TEXT("team_id")));
+		double TempTeamId;
+		if (!Params->TryGetNumberField(TEXT("team_id"), TempTeamId))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'team_id' must be a number"));
+		}
+		TeamId = FMath::RoundToInt32(TempTeamId);
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Scaffold Complete AI Character")));
@@ -1537,7 +1542,12 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldEnemyAI(const TS
 	int32 TeamId = 1;
 	if (Params->HasField(TEXT("team_id")))
 	{
-		TeamId = FMath::RoundToInt32(Params->GetNumberField(TEXT("team_id")));
+		double TempTeamId;
+		if (!Params->TryGetNumberField(TEXT("team_id"), TempTeamId))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'team_id' must be a number"));
+		}
+		TeamId = FMath::RoundToInt32(TempTeamId);
 	}
 
 	// Map archetype to BT template and BB keys
@@ -2407,7 +2417,12 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldAIControllerBlue
 	int32 TeamId = -1;
 	if (Params->HasField(TEXT("team_id")))
 	{
-		TeamId = FMath::RoundToInt32(Params->GetNumberField(TEXT("team_id")));
+		double TempTeamId;
+		if (!Params->TryGetNumberField(TEXT("team_id"), TempTeamId))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'team_id' must be a number"));
+		}
+		TeamId = FMath::RoundToInt32(TempTeamId);
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Scaffold AI Controller Blueprint")));
@@ -2572,7 +2587,12 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldCompanionAI(cons
 	float FollowDistance = 300.0f;
 	if (Params->HasField(TEXT("follow_distance")))
 	{
-		FollowDistance = static_cast<float>(Params->GetNumberField(TEXT("follow_distance")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("follow_distance"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'follow_distance' must be a number"));
+		}
+		FollowDistance = static_cast<float>(TempVal);
 	}
 
 	FString CombatBehavior = Params->GetStringField(TEXT("combat_behavior"));
@@ -2936,7 +2956,12 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldAmbientNPC(const
 	float WanderRadius = 1000.0f;
 	if (Params->HasField(TEXT("wander_radius")))
 	{
-		WanderRadius = static_cast<float>(Params->GetNumberField(TEXT("wander_radius")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("wander_radius"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'wander_radius' must be a number"));
+		}
+		WanderRadius = static_cast<float>(TempVal);
 	}
 
 	TArray<FString> SmartObjects;
@@ -3101,7 +3126,14 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorStalker(co
 
 	float StalkDistance = 1500.0f;
 	if (Params->HasField(TEXT("stalk_distance")))
-		StalkDistance = static_cast<float>(Params->GetNumberField(TEXT("stalk_distance")));
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("stalk_distance"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'stalk_distance' must be a number"));
+		}
+		StalkDistance = static_cast<float>(TempVal);
+	}
 
 	FString AttackConditions = Params->GetStringField(TEXT("attack_conditions"));
 	if (AttackConditions.IsEmpty()) AttackConditions = TEXT("darkness");
@@ -3626,7 +3658,13 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldStealthGameAI(co
 	if (!MonolithAI::RequireStringParam(Params, TEXT("name"), Name, ErrResult)) return ErrResult;
 
 	bool bDetectionMeter = true;
-	if (Params->HasField(TEXT("detection_meter"))) bDetectionMeter = Params->GetBoolField(TEXT("detection_meter"));
+	if (Params->HasField(TEXT("detection_meter")))
+	{
+		if (!Params->TryGetBoolField(TEXT("detection_meter"), bDetectionMeter))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'detection_meter' must be a boolean"));
+		}
+	}
 	FString AlertStates = Params->GetStringField(TEXT("alert_states"));
 	if (AlertStates.IsEmpty()) AlertStates = TEXT("standard");
 
@@ -3767,9 +3805,25 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldTurretAI(const T
 	if (!MonolithAI::RequireStringParam(Params, TEXT("name"), Name, ErrResult)) return ErrResult;
 
 	float DetectionCone = 45.0f;
-	if (Params->HasField(TEXT("detection_cone"))) DetectionCone = static_cast<float>(Params->GetNumberField(TEXT("detection_cone")));
+	if (Params->HasField(TEXT("detection_cone")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("detection_cone"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'detection_cone' must be a number"));
+		}
+		DetectionCone = static_cast<float>(TempVal);
+	}
 	float EngagementRange = 3000.0f;
-	if (Params->HasField(TEXT("engagement_range"))) EngagementRange = static_cast<float>(Params->GetNumberField(TEXT("engagement_range")));
+	if (Params->HasField(TEXT("engagement_range")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("engagement_range"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'engagement_range' must be a number"));
+		}
+		EngagementRange = static_cast<float>(TempVal);
+	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Scaffold Turret AI")));
 	TArray<FString> CreatedAssets, Warnings;
