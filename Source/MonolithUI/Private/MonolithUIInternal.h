@@ -133,7 +133,7 @@ namespace MonolithUIInternal
         Payload->SetStringField(TEXT("widget_type"), WidgetType);
         Payload->SetStringField(TEXT("alternative"), Alternative);
         Payload->SetStringField(TEXT("category"),    TEXT("OptionalDepUnavailable"));
-        Result.Result = Payload;
+        Result.ErrorData = Payload;
         return Result;
     }
 
