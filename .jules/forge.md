@@ -21,3 +21,9 @@
 **Learning:** For optional Engine plugins that are conditionally queried in a module's `Build.cs`, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file will cause the Engine to refuse to load the plugin entirely when the optional dependency is missing, defeating the conditional fallback logic.
 **Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have `"Optional": true` defined in `Monolith.uplugin`.
 **Avoid:** Do not leave `Enabled: true` without `Optional: true` for dynamically-checked plugins.
+
+## 2026-05-13 - [Safe directory existence check in Build.cs]
+**Build pattern:** `DirectoryNotFoundException` when using `Directory.GetDirectories` on a directory path that might not exist (e.g. `EnginePluginsDir`).
+**Learning:** `Directory.GetDirectories` throws an exception if the base path is missing. Using it to probe for optional plugin subdirectories inside the engine or marketplace directories can break the build if the base directory itself was never created.
+**Prevention:** Always use `Directory.Exists(Path.Combine(Dir, "SubDir"))` instead of `Directory.GetDirectories` for exact-match subdirectory existence checks to avoid exceptions.
+**Avoid:** Using `Directory.GetDirectories` with an exact string (no wildcard) just to check if a single subdirectory exists within an unverified base path.

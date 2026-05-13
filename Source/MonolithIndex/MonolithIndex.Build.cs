@@ -49,7 +49,7 @@ public class MonolithIndex : ModuleRules
 			bHasMetasound =
 				Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "Metasound"))
 				|| Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace", "Metasound"))
-				|| Directory.GetDirectories(EnginePluginsDir, "Metasound", SearchOption.TopDirectoryOnly).Length > 0;
+				|| Directory.Exists(Path.Combine(EnginePluginsDir, "Metasound"));
 		}
 
 		if (bHasMetasound)
