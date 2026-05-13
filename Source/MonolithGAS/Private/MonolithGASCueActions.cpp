@@ -19,6 +19,7 @@
 #include "UObject/SavePackage.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Misc/PackageName.h"
+#include "MonolithPackagePathValidator.h"
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -247,6 +248,12 @@ FMonolithActionResult FMonolithGASCueActions::HandleCreateGameplayCueNotify(cons
 	}
 
 	// Create package
+	// Validate path before creating package to prevent editor crashes
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{

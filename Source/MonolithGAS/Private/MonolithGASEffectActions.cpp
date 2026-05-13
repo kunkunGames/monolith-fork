@@ -31,6 +31,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Misc/PackageName.h"
 #include "ObjectTools.h"
+#include "MonolithPackagePathValidator.h"
 
 // LogMonolithGAS defined in MonolithGASModule.cpp
 
@@ -969,6 +970,12 @@ FMonolithActionResult FMonolithGASEffectActions::HandleCreateGameplayEffect(cons
 	}
 
 	// Create package
+	// Validate path before creating package to prevent editor crashes
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
@@ -2234,6 +2241,13 @@ namespace
 		if (!MonolithGAS::EnsureAssetPathFree(SavePath, AssetName, ExistError))
 		{
 			OutError = FMonolithActionResult::Error(ExistError);
+			return nullptr;
+		}
+
+		// Validate path before creating package to prevent editor crashes
+		if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+		{
+			OutError = FMonolithActionResult::Error(ValidationError);
 			return nullptr;
 		}
 

@@ -24,6 +24,7 @@
 #include "HAL/PlatformFileManager.h"
 #include "UObject/SavePackage.h"
 #include "Interfaces/IPluginManager.h"
+#include "MonolithPackagePathValidator.h"
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1045,6 +1046,13 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleScaffoldDamagePipeline(
 			continue;
 		}
 
+		// Validate path before creating package to prevent editor crashes
+		if (const FString ValidationError = MonolithCore::ValidatePackagePath(GEPath); !ValidationError.IsEmpty())
+		{
+			AssetErrors.Add(MakeShared<FJsonValueString>(ValidationError));
+			continue;
+		}
+
 		UPackage* Package = CreatePackage(*GEPath);
 		if (!Package)
 		{
@@ -1243,6 +1251,12 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleScaffoldStatusEffect(co
 	if (!MonolithGAS::EnsureAssetPathFree(SavePath, AssetName, ExistError))
 	{
 		return FMonolithActionResult::Error(ExistError);
+	}
+
+	// Validate path before creating package to prevent editor crashes
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	UPackage* Package = CreatePackage(*SavePath);
@@ -1476,6 +1490,12 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleScaffoldWeaponAbility(c
 	if (!MonolithGAS::EnsureAssetPathFree(SavePath, AssetName, ExistError))
 	{
 		return FMonolithActionResult::Error(ExistError);
+	}
+
+	// Validate path before creating package to prevent editor crashes
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	UPackage* Package = CreatePackage(*SavePath);

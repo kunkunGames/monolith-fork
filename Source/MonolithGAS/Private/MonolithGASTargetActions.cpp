@@ -24,6 +24,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitTargetData.h"
 #include "EdGraphSchema_K2.h"
 #include "K2Node_CallFunction.h"
+#include "MonolithPackagePathValidator.h"
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -228,6 +229,12 @@ FMonolithActionResult FMonolithGASTargetActions::HandleCreateTargetActor(const T
 	}
 
 	// Create package and Blueprint
+	// Validate path before creating package to prevent editor crashes
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
