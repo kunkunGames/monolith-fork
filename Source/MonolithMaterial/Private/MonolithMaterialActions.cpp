@@ -1706,7 +1706,7 @@ FMonolithActionResult FMonolithMaterialActions::BuildMaterialGraph(const TShared
 	int32 ErrorCount = 0, WarningCount = 0;
 	for (const TSharedPtr<FJsonValue>& Entry : ErrorsArray)
 	{
-		if (Entry->AsObject()->HasField(TEXT("warning"))) WarningCount++;
+		if (Entry.IsValid() && Entry->Type == EJson::Object && Entry->AsObject()->HasField(TEXT("warning"))) WarningCount++;
 		else ErrorCount++;
 	}
 	ResultJson->SetBoolField(TEXT("has_errors"), ErrorCount > 0);
@@ -2900,6 +2900,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	{
 		for (const auto& Pair : (*ScalarParams)->Values)
 		{
+			if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::Number) continue;
 			float Value = static_cast<float>(Pair.Value->AsNumber());
 			MIC->SetScalarParameterValueEditorOnly(FMaterialParameterInfo(*Pair.Key), Value);
 			ScalarCount++;
@@ -2934,6 +2935,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	{
 		for (const auto& Pair : (*TextureParams)->Values)
 		{
+			if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::String) continue;
 			FString TexPath = Pair.Value->AsString();
 			UTexture* Tex = Cast<UTexture>(UEditorAssetLibrary::LoadAsset(TexPath));
 			if (Tex)
@@ -2951,6 +2953,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	{
 		for (const auto& Pair : (*SwitchParams)->Values)
 		{
+			if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::Boolean) continue;
 			bool bValue = Pair.Value->AsBool();
 			MIC->SetStaticSwitchParameterValueEditorOnly(FMaterialParameterInfo(*Pair.Key), bValue);
 			SwitchCount++;
@@ -4783,7 +4786,7 @@ FMonolithActionResult FMonolithMaterialActions::GetInstanceParameters(const TSha
 	for (const TSharedPtr<FJsonValue>& SwitchVal : SwitchArr)
 	{
 		bool bOverridden = false;
-		if (SwitchVal.IsValid())
+		if (SwitchVal.IsValid() && SwitchVal->Type == EJson::Object)
 		{
 			SwitchVal->AsObject()->TryGetBoolField(TEXT("is_overridden"), bOverridden);
 		}
@@ -6563,7 +6566,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 		NewFunc->LibraryCategoriesText.Empty();
 		for (const TSharedPtr<FJsonValue>& CatVal : *CategoriesArray)
 		{
-			if (CatVal)
+			if (CatVal.IsValid() && CatVal->Type == EJson::String)
 			{
 				NewFunc->LibraryCategoriesText.Add(FText::FromString(CatVal->AsString()));
 			}
@@ -6859,7 +6862,7 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 	int32 ErrorCount = 0, WarningCount = 0;
 	for (const TSharedPtr<FJsonValue>& Entry : ErrorsArray)
 	{
-		if (Entry->AsObject()->HasField(TEXT("warning"))) WarningCount++;
+		if (Entry.IsValid() && Entry->Type == EJson::Object && Entry->AsObject()->HasField(TEXT("warning"))) WarningCount++;
 		else ErrorCount++;
 	}
 	ResultJson->SetBoolField(TEXT("has_errors"), ErrorCount > 0);
@@ -6993,10 +6996,14 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInfo(const TSharedPtr
 	// Sort inputs and outputs by sort priority
 	InputsJson.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
 	{
+		if (!A.IsValid() || A->Type != EJson::Object) return false;
+		if (!B.IsValid() || B->Type != EJson::Object) return true;
 		return A->AsObject()->GetNumberField(TEXT("sort_priority")) < B->AsObject()->GetNumberField(TEXT("sort_priority"));
 	});
 	OutputsJson.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
 	{
+		if (!A.IsValid() || A->Type != EJson::Object) return false;
+		if (!B.IsValid() || B->Type != EJson::Object) return true;
 		return A->AsObject()->GetNumberField(TEXT("sort_priority")) < B->AsObject()->GetNumberField(TEXT("sort_priority"));
 	});
 
@@ -7279,10 +7286,14 @@ FMonolithActionResult FMonolithMaterialActions::ExportFunctionGraph(const TShare
 	// Sort inputs and outputs by sort priority
 	InputsJson.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
 	{
+		if (!A.IsValid() || A->Type != EJson::Object) return false;
+		if (!B.IsValid() || B->Type != EJson::Object) return true;
 		return A->AsObject()->GetNumberField(TEXT("sort_priority")) < B->AsObject()->GetNumberField(TEXT("sort_priority"));
 	});
 	OutputsJson.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
 	{
+		if (!A.IsValid() || A->Type != EJson::Object) return false;
+		if (!B.IsValid() || B->Type != EJson::Object) return true;
 		return A->AsObject()->GetNumberField(TEXT("sort_priority")) < B->AsObject()->GetNumberField(TEXT("sort_priority"));
 	});
 
@@ -8260,6 +8271,7 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 
 	for (const auto& MapEntry : MapsObj->Values)
 	{
+		if (!MapEntry.Value.IsValid() || MapEntry.Value->Type != EJson::String) continue;
 		FString MapType = MapEntry.Key.ToLower();
 		FString DiskPath = MapEntry.Value->AsString();
 
@@ -8313,6 +8325,7 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 		FString CombinedErrors;
 		for (const auto& Err : TextureErrors)
 		{
+			if (!Err.IsValid() || Err->Type != EJson::Object) continue;
 			if (!CombinedErrors.IsEmpty()) CombinedErrors += TEXT("; ");
 			CombinedErrors += Err->AsObject()->GetStringField(TEXT("error"));
 		}
@@ -9208,6 +9221,8 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	InputsJson.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
 	{
+		if (!A.IsValid() || A->Type != EJson::Object) return false;
+		if (!B.IsValid() || B->Type != EJson::Object) return true;
 		return A->AsObject()->GetNumberField(TEXT("sort_priority")) < B->AsObject()->GetNumberField(TEXT("sort_priority"));
 	});
 
@@ -9228,6 +9243,8 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	OutputsJson.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
 	{
+		if (!A.IsValid() || A->Type != EJson::Object) return false;
+		if (!B.IsValid() || B->Type != EJson::Object) return true;
 		return A->AsObject()->GetNumberField(TEXT("sort_priority")) < B->AsObject()->GetNumberField(TEXT("sort_priority"));
 	});
 
