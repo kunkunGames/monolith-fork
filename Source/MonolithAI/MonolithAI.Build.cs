@@ -190,7 +190,7 @@ public class MonolithAI : ModuleRules
 			foreach (string Dir in MassSearchDirs)
 			{
 				if (Directory.Exists(Dir) &&
-					Directory.GetDirectories(Dir, "MassEntity*", SearchOption.TopDirectoryOnly).Length > 0)
+					Directory.Exists(Path.Combine(Dir, "MassEntity")))
 				{
 					bHasMassEntity = true;
 					break;
@@ -222,7 +222,7 @@ public class MonolithAI : ModuleRules
 			foreach (string Dir in ZoneSearchDirs)
 			{
 				if (Directory.Exists(Dir) &&
-					Directory.GetDirectories(Dir, "ZoneGraph*", SearchOption.TopDirectoryOnly).Length > 0)
+					Directory.Exists(Path.Combine(Dir, "ZoneGraph")))
 				{
 					bHasZoneGraph = true;
 					break;
