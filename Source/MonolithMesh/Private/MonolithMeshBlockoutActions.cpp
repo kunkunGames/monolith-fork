@@ -2466,7 +2466,7 @@ FMonolithActionResult FMonolithMeshBlockoutActions::ScanVolume(const TSharedPtr<
 
 	// Openings — directions with high variance or low hit count
 	TArray<TSharedPtr<FJsonValue>> OpeningsArr;
-	OpeningsArr.Reserve(CompassDirs.Num());
+	OpeningsArr.Reserve(UE_ARRAY_COUNT(CompassDirs));
 	for (const auto& CDir : CompassDirs)
 	{
 		FString DirName = CDir.Name;
