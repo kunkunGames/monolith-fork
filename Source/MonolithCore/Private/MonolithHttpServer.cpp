@@ -2,6 +2,7 @@
 #include "MonolithActionExecutionGuard.h"
 #include "MonolithCoreModule.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithResourceRegistry.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithSettings.h"
 #include "HttpServerModule.h"
@@ -442,6 +443,8 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::ProcessJsonRpcRequest(const TShared
 
 	// Dispatch by method
 	TSharedPtr<FJsonObject> Response;
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	const bool bResourcesEnabled = Settings && Settings->bEnableMcpResources;
 
 	if (Method == TEXT("initialize"))
 	{
@@ -459,6 +462,14 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::ProcessJsonRpcRequest(const TShared
 	else if (Method == TEXT("tools/call"))
 	{
 		Response = HandleToolsCall(Id, Params);
+	}
+	else if (bResourcesEnabled && Method == TEXT("resources/list"))
+	{
+		Response = HandleResourcesList(Id, Params);
+	}
+	else if (bResourcesEnabled && Method == TEXT("resources/read"))
+	{
+		Response = HandleResourcesRead(Id, Params);
 	}
 	else if (Method == TEXT("ping"))
 	{
@@ -509,6 +520,14 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleInitialize(const TSharedPtr<F
 	TSharedPtr<FJsonObject> ToolsCap = MakeShared<FJsonObject>();
 	ToolsCap->SetBoolField(TEXT("listChanged"), false);
 	Capabilities->SetObjectField(TEXT("tools"), ToolsCap);
+
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (Settings && Settings->bEnableMcpResources)
+	{
+		TSharedPtr<FJsonObject> ResourcesCap = MakeShared<FJsonObject>();
+		ResourcesCap->SetBoolField(TEXT("listChanged"), false);
+		Capabilities->SetObjectField(TEXT("resources"), ResourcesCap);
+	}
 
 	Result->SetObjectField(TEXT("capabilities"), Capabilities);
 
@@ -641,6 +660,54 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetArrayField(TEXT("tools"), ToolsArray);
 
+	return FMonolithJsonUtils::SuccessResponse(Id, MakeShared<FJsonValueObject>(Result));
+}
+
+TSharedPtr<FJsonObject> FMonolithHttpServer::HandleResourcesList(const TSharedPtr<FJsonValue>& Id, const TSharedPtr<FJsonObject>& Params)
+{
+	double LimitValue = 100.0;
+	FString Cursor;
+	if (Params.IsValid())
+	{
+		Params->TryGetNumberField(TEXT("limit"), LimitValue);
+		Params->TryGetStringField(TEXT("cursor"), Cursor);
+	}
+
+	TSharedPtr<FJsonObject> Result = FMonolithResourceRegistry::Get().ListResourcesJson(
+		static_cast<int32>(LimitValue),
+		Cursor);
+	return FMonolithJsonUtils::SuccessResponse(Id, MakeShared<FJsonValueObject>(Result));
+}
+
+TSharedPtr<FJsonObject> FMonolithHttpServer::HandleResourcesRead(const TSharedPtr<FJsonValue>& Id, const TSharedPtr<FJsonObject>& Params)
+{
+	FString Uri;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("uri"), Uri) || Uri.IsEmpty())
+	{
+		return FMonolithJsonUtils::ErrorResponse(
+			Id,
+			FMonolithJsonUtils::ErrInvalidParams,
+			TEXT("Missing resource uri"));
+	}
+
+	FMonolithResourceReadResult Read = FMonolithResourceRegistry::Get().ReadResource(Uri);
+	if (!Read.bFound)
+	{
+		return FMonolithJsonUtils::ErrorResponse(
+			Id,
+			FMonolithJsonUtils::ErrResourceNotFound,
+			Read.Error);
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> Contents;
+	TSharedPtr<FJsonObject> Content = MakeShared<FJsonObject>();
+	Content->SetStringField(TEXT("uri"), Read.Uri);
+	Content->SetStringField(TEXT("mimeType"), Read.MimeType);
+	Content->SetStringField(TEXT("text"), Read.Text);
+	Content->SetBoolField(TEXT("truncated"), Read.bTruncated);
+	Contents.Add(MakeShared<FJsonValueObject>(Content));
+	Result->SetArrayField(TEXT("contents"), Contents);
 	return FMonolithJsonUtils::SuccessResponse(Id, MakeShared<FJsonValueObject>(Result));
 }
 

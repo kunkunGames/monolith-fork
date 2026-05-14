@@ -2,6 +2,7 @@
 #include "MonolithHttpServer.h"
 #include "MonolithSettings.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithResourceRegistry.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithCoreTools.h"
 #include "MonolithToolProfileActions.h"
@@ -89,6 +90,7 @@ void FMonolithCoreModule::RegisterCoreTools()
 	FMonolithCoreTools::RegisterAll();
 	FMonolithToolProfileActions::RegisterAll();
 	RegisterMonolithExecutionGuardActions();
+	FMonolithResourceRegistry::Get().RegisterDefaultResources();
 }
 
 FString FMonolithCoreModule::GetSentinelFilePath() const

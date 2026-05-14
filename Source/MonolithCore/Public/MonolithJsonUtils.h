@@ -51,4 +51,8 @@ public:
 	// codes (e.g., `ErrFeatureGated` if we later distinguish "missing
 	// plugin" from "feature flag off").
 	static constexpr int32 ErrOptionalDepUnavailable = -32010;
+
+	// Resource endpoints: URI is syntactically valid but no registered
+	// provider owns it.
+	static constexpr int32 ErrResourceNotFound = -32020;
 };

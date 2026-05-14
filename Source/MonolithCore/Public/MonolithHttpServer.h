@@ -49,6 +49,8 @@ private:
 	TSharedPtr<FJsonObject> HandleInitialize(const TSharedPtr<FJsonValue>& Id, const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleToolsList(const TSharedPtr<FJsonValue>& Id, const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleToolsCall(const TSharedPtr<FJsonValue>& Id, const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleResourcesList(const TSharedPtr<FJsonValue>& Id, const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleResourcesRead(const TSharedPtr<FJsonValue>& Id, const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandlePing(const TSharedPtr<FJsonValue>& Id);
 
 	// --- Helpers ---
