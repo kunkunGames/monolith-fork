@@ -161,24 +161,57 @@ namespace
 	{
 		double DVal = 0.0;
 		FString SVal;
+		bool BVal = false;
 
-		if (Params->TryGetNumberField(TEXT("loudness"), DVal) && DVal < 0.0)
+		if (Params->HasField(TEXT("loudness")))
 		{
-			OutError = TEXT("loudness must be >= 0");
-			return false;
+			if (!Params->TryGetNumberField(TEXT("loudness"), DVal))
+			{
+				OutError = TEXT("Malformed parameter: loudness must be a number");
+				return false;
+			}
+			if (DVal < 0.0)
+			{
+				OutError = TEXT("loudness must be >= 0");
+				return false;
+			}
 		}
-		if (Params->TryGetNumberField(TEXT("max_range"), DVal) && DVal < 0.0)
+
+		if (Params->HasField(TEXT("max_range")))
 		{
-			OutError = TEXT("max_range must be >= 0 (use 0 for listener default)");
-			return false;
+			if (!Params->TryGetNumberField(TEXT("max_range"), DVal))
+			{
+				OutError = TEXT("Malformed parameter: max_range must be a number");
+				return false;
+			}
+			if (DVal < 0.0)
+			{
+				OutError = TEXT("max_range must be >= 0 (use 0 for listener default)");
+				return false;
+			}
 		}
-		if (Params->TryGetStringField(TEXT("tag"), SVal) && SVal.Len() > 255)
+
+		if (Params->HasField(TEXT("tag")))
 		{
-			OutError = TEXT("tag exceeds 255 characters");
-			return false;
+			if (!Params->TryGetStringField(TEXT("tag"), SVal))
+			{
+				OutError = TEXT("Malformed parameter: tag must be a string");
+				return false;
+			}
+			if (SVal.Len() > 255)
+			{
+				OutError = TEXT("tag exceeds 255 characters");
+				return false;
+			}
 		}
-		if (Params->TryGetStringField(TEXT("sense_class"), SVal))
+
+		if (Params->HasField(TEXT("sense_class")))
 		{
+			if (!Params->TryGetStringField(TEXT("sense_class"), SVal))
+			{
+				OutError = TEXT("Malformed parameter: sense_class must be a string");
+				return false;
+			}
 			TSubclassOf<UAISense> ParsedSense;
 			FString SenseErr;
 			if (!ParseSenseClass(SVal, ParsedSense, SenseErr))
@@ -187,8 +220,26 @@ namespace
 				return false;
 			}
 		}
+
+		if (Params->HasField(TEXT("enabled")) && !Params->TryGetBoolField(TEXT("enabled"), BVal))
+		{
+			OutError = TEXT("Malformed parameter: enabled must be a boolean");
+			return false;
+		}
+		if (Params->HasField(TEXT("fire_on_fade_in")) && !Params->TryGetBoolField(TEXT("fire_on_fade_in"), BVal))
+		{
+			OutError = TEXT("Malformed parameter: fire_on_fade_in must be a boolean");
+			return false;
+		}
+		if (Params->HasField(TEXT("require_owning_actor")) && !Params->TryGetBoolField(TEXT("require_owning_actor"), BVal))
+		{
+			OutError = TEXT("Malformed parameter: require_owning_actor must be a boolean");
+			return false;
+		}
+
 		return true;
 	}
+
 
 	/** Build the JSON payload describing a binding (mirrored across bind/get returns). */
 	TSharedPtr<FJsonObject> BindingToJson(const UMonolithSoundPerceptionUserData* Data)
