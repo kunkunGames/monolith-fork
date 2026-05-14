@@ -41,6 +41,3 @@ Agents must keep PRs tightly scoped. Do not mix unrelated security, test, spec, 
 
 ## 8. Public Action Contracts
 Agents performing routine refactoring, performance optimization (Bolt), or hygiene (Curator) tasks must not modify public action contracts or JSON parameter schemas without explicit justification. If a behavior change is not the primary goal, do not alter expected inputs/outputs just to simplify code.
-
-## 9. Minimum PR Value Threshold
-Passing static CI is not enough to make a scheduled PR worth merging; a PR must also be non-overlapping, current after rebase, and clearly more valuable than a no-op. Stop without PR if the only available change is a micro-edit against shared coordination docs, action-count docs, or release docs where multiple agents often race.

@@ -27,8 +27,3 @@
 **Learning:** `Directory.GetDirectories` throws an exception if the base path is missing. Using it to probe for optional plugin subdirectories inside the engine or marketplace directories can break the build if the base directory itself was never created.
 **Prevention:** Always use `Directory.Exists(Path.Combine(Dir, "SubDir"))` instead of `Directory.GetDirectories` for exact-match subdirectory existence checks to avoid exceptions.
 **Avoid:** Using `Directory.GetDirectories` with an exact string (no wildcard) just to check if a single subdirectory exists within an unverified base path.
-2026-05-14 - [Precise wildcard for optional plugin detection]
-Build pattern: Falsely detecting an optional plugin because the wildcard used in `Directory.GetDirectories` is too broad and matches other plugins (e.g., `Gameplaya*` matching `GameplayAbilities` instead of the intended `BlueprintAttributes` plugin).
-Learning: Using vague wildcards when searching for optional plugins can trigger invalid build dependencies.
-Prevention: Use precise wildcard prefixes that uniquely match the target optional plugin directory.
-Avoid: Using short or generic wildcards like `Gameplaya*` when the plugin name is `BlueprintAttributes`.

@@ -613,8 +613,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleListComboGraphs(const TS
 		return FMonolithActionResult::Error(TEXT("ComboGraph class not found. Is the ComboGraph plugin loaded?"));
 	}
 
-	FString PathFilter;
-	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
+	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -1033,8 +1032,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 		return FMonolithActionResult::Error(TEXT("Missing required param 'animation_asset'"));
 	}
 
-	FString NodeType;
-	Params->TryGetStringField(TEXT("node_type"), NodeType);
+	FString NodeType = Params->GetStringField(TEXT("node_type"));
 	if (NodeType.IsEmpty()) NodeType = TEXT("montage");
 
 	float PlayRate = 1.0f;
@@ -1202,14 +1200,9 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboEdge(const TShar
 	int32 FromIndex = static_cast<int32>(Params->GetNumberField(TEXT("from_node_index")));
 	int32 ToIndex = static_cast<int32>(Params->GetNumberField(TEXT("to_node_index")));
 
-	FString InputAction;
-	Params->TryGetStringField(TEXT("input_action"), InputAction);
-
-	FString TriggerEvent;
-	Params->TryGetStringField(TEXT("trigger_event"), TriggerEvent);
-
-	FString TransitionBehavior;
-	Params->TryGetStringField(TEXT("transition_behavior"), TransitionBehavior);
+	FString InputAction = Params->GetStringField(TEXT("input_action"));
+	FString TriggerEvent = Params->GetStringField(TEXT("trigger_event"));
+	FString TransitionBehavior = Params->GetStringField(TEXT("transition_behavior"));
 
 	// Load graph
 	FString Error;
@@ -1604,14 +1597,9 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboAbility(const
 		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
 	}
 
-	FString ComboGraphPath;
-	Params->TryGetStringField(TEXT("combo_graph"), ComboGraphPath);
-
-	FString InitialInput;
-	Params->TryGetStringField(TEXT("initial_input"), InitialInput);
-
-	FString ParentClassName;
-	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
+	FString ComboGraphPath = Params->GetStringField(TEXT("combo_graph"));
+	FString InitialInput = Params->GetStringField(TEXT("initial_input"));
+	FString ParentClassName = Params->GetStringField(TEXT("parent_class"));
 	if (ParentClassName.IsEmpty()) ParentClassName = TEXT("GameplayAbility");
 
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
@@ -2000,11 +1988,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontage
 		return FMonolithActionResult::Error(TEXT("Missing or empty required param 'montages' (array of asset paths)"));
 	}
 
-	FString InputAction;
-	Params->TryGetStringField(TEXT("input_action"), InputAction);
-
-	FString TransitionBehavior;
-	Params->TryGetStringField(TEXT("transition_behavior"), TransitionBehavior);
+	FString InputAction = Params->GetStringField(TEXT("input_action"));
+	FString TransitionBehavior = Params->GetStringField(TEXT("transition_behavior"));
 	if (TransitionBehavior.IsEmpty()) TransitionBehavior = TEXT("Immediately");
 
 	// Parse montage paths

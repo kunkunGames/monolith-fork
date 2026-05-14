@@ -212,12 +212,9 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
 // --- list_animations ---
 FMonolithActionResult FMonolithUIAnimationActions::HandleListAnimations(const TSharedPtr<FJsonObject>& Params)
 {
-    FMonolithActionResult Err;
     FString AssetPath;
-    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, Err))
-    {
-        return Err;
-    }
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+    FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
     if (!WBP) return Err;
 
@@ -259,18 +256,12 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleListAnimations(const TS
 // --- get_animation_details ---
 FMonolithActionResult FMonolithUIAnimationActions::HandleGetAnimationDetails(const TSharedPtr<FJsonObject>& Params)
 {
-    FMonolithActionResult Err;
     FString AssetPath;
-    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, Err))
-    {
-        return Err;
-    }
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
     FString AnimationName;
-    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("animation_name"), AnimationName, Err))
-    {
-        return Err;
-    }
+    Params->TryGetStringField(TEXT("animation_name"), AnimationName);
 
+    FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
     if (!WBP) return Err;
 
@@ -413,20 +404,17 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleGetAnimationDetails(con
 // --- create_animation ---
 FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const TSharedPtr<FJsonObject>& Params)
 {
-    FMonolithActionResult ParamError;
     FString AssetPath;
-    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, ParamError))
-    {
-        return ParamError;
-    }
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
     FString AnimationName;
-    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("animation_name"), AnimationName, ParamError))
-    {
-        return ParamError;
-    }
+    Params->TryGetStringField(TEXT("animation_name"), AnimationName);
     double Duration = 0.0;
     Params->TryGetNumberField(TEXT("duration"), Duration);
 
+    if (AnimationName.IsEmpty())
+    {
+        return FMonolithActionResult::Error(TEXT("Missing required param: animation_name"));
+    }
     if (Duration <= 0.0)
     {
         return FMonolithActionResult::Error(TEXT("Duration must be > 0"));
@@ -740,27 +728,14 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
 // --- add_animation_keyframe ---
 FMonolithActionResult FMonolithUIAnimationActions::HandleAddAnimationKeyframe(const TSharedPtr<FJsonObject>& Params)
 {
-    FMonolithActionResult ParamError;
     FString AssetPath;
-    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, ParamError))
-    {
-        return ParamError;
-    }
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
     FString AnimationName;
-    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("animation_name"), AnimationName, ParamError))
-    {
-        return ParamError;
-    }
+    Params->TryGetStringField(TEXT("animation_name"), AnimationName);
     FString WidgetName;
-    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("widget_name"), WidgetName, ParamError))
-    {
-        return ParamError;
-    }
+    Params->TryGetStringField(TEXT("widget_name"), WidgetName);
     FString Property;
-    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("property"), Property, ParamError))
-    {
-        return ParamError;
-    }
+    Params->TryGetStringField(TEXT("property"), Property);
     FString Component;
     if (Params->HasField(TEXT("component"))) { Params->TryGetStringField(TEXT("component"), Component); }
     double Time = 0.0;
@@ -949,18 +924,12 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleAddAnimationKeyframe(co
 // --- remove_animation ---
 FMonolithActionResult FMonolithUIAnimationActions::HandleRemoveAnimation(const TSharedPtr<FJsonObject>& Params)
 {
-    FMonolithActionResult Err;
     FString AssetPath;
-    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, Err))
-    {
-        return Err;
-    }
+    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
     FString AnimationName;
-    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("animation_name"), AnimationName, Err))
-    {
-        return Err;
-    }
+    Params->TryGetStringField(TEXT("animation_name"), AnimationName);
 
+    FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
     if (!WBP) return Err;
 

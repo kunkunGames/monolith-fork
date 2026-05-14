@@ -29,8 +29,3 @@
 **Learning:** CI and release helper artifacts often appear at repository root, outside Unreal's standard `Saved/` and `Intermediate/` ignore coverage.
 **Prevention:** Ignore only the known generated artifacts (`_stage/` and `markdownlint.log`) unless there is concrete evidence that a broader log pattern is safe.
 **Avoid:** Creating multiple overlapping `.gitignore` PRs for the same artifact family or adding broad ignore rules without checking active Curator/Harbor PRs.
-## 2026-05-14 - Ignore temporary workflow artifacts
-**Hygiene issue:** Temporary workflow files such as pr_body.txt, commit_msg.txt, and prs.json leaked into working directories during agent runs.
-**Learning:** These workflow artifacts are not captured by standard Unreal ignores and create noise in git status during orchestration runs.
-**Prevention:** Add explicit ignore rules for known workflow files like pr_body.txt, commit_msg.txt, prs.json, and no_op_reason.txt in .gitignore.
-**Avoid:** Committing or leaving workflow artifacts unstaged, which can cause spurious diffs in CI or subsequent tasks.

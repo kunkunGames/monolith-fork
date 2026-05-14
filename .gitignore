@@ -50,7 +50,6 @@ EngineSource.db
 ProjectIndex.db
 
 # Release artifacts
-Monolith-*-Linux.zip
 Monolith-v*.zip
 Monolith-*-macOS.zip
 
@@ -59,15 +58,8 @@ Monolith-*-macOS.zip
 .idea/
 .vscode/
 *.sln
+Monolith-*-Linux.zip
 
 # Build and CI artifacts
 _stage/
 markdownlint.log
-
-# Agent workflow artifacts
-pr_body.txt
-commit_msg.txt
-prs.json
-no_op_reason.txt
-scratch.py
-scratch.sh
