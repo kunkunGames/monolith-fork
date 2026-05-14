@@ -138,7 +138,8 @@ FMonolithActionResult FMonolithAIControllerActions::HandleCreateAIController(con
 		return ErrResult;
 	}
 
-	FString AssetName = Params->GetStringField(TEXT("name"));
+	FString AssetName;
+	Params->TryGetStringField(TEXT("name"), AssetName);
 	if (AssetName.IsEmpty())
 	{
 		AssetName = FPackageName::GetShortName(SavePath);
@@ -179,8 +180,10 @@ FMonolithActionResult FMonolithAIControllerActions::HandleCreateAIController(con
 	// We validate the BT/BB exist and enable auto-start. The actual BT assignment
 	// happens at runtime in the controller's OnPossess → RunBehaviorTree flow.
 	// Users should override RunBehaviorTree in their BP or set the BT in BeginPlay.
-	FString BTPath = Params->GetStringField(TEXT("bt_path"));
-	FString BBPath = Params->GetStringField(TEXT("bb_path"));
+	FString BTPath;
+	Params->TryGetStringField(TEXT("bt_path"), BTPath);
+	FString BBPath;
+	Params->TryGetStringField(TEXT("bb_path"), BBPath);
 	bool bBTValid = false;
 
 	if (!BTPath.IsEmpty())
@@ -310,7 +313,8 @@ FMonolithActionResult FMonolithAIControllerActions::HandleListAIControllers(cons
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(UBlueprint::StaticClass()->GetClassPathName(), Assets);
 
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 
 	TArray<TSharedPtr<FJsonValue>> Items;
 	for (const FAssetData& Asset : Assets)
@@ -377,7 +381,8 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSetAIControllerBT(cons
 	}
 
 	// Optionally load BB (use BT's BB if not specified)
-	FString BBPath = Params->GetStringField(TEXT("bb_path"));
+	FString BBPath;
+	Params->TryGetStringField(TEXT("bb_path"), BBPath);
 	UBlackboardData* BB = nullptr;
 	if (!BBPath.IsEmpty())
 	{
@@ -745,14 +750,16 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSpawnAIActor(const TSh
 	}
 
 	// Set label if provided
-	FString Label = Params->GetStringField(TEXT("label"));
+	FString Label;
+	Params->TryGetStringField(TEXT("label"), Label);
 	if (!Label.IsEmpty())
 	{
 		SpawnedActor->SetActorLabel(Label);
 	}
 
 	// Set folder path — ALWAYS set, default to "AI"
-	FString FolderPath = Params->GetStringField(TEXT("folder_path"));
+	FString FolderPath;
+	Params->TryGetStringField(TEXT("folder_path"), FolderPath);
 	if (FolderPath.IsEmpty())
 	{
 		FolderPath = TEXT("AI");
@@ -781,7 +788,8 @@ FMonolithActionResult FMonolithAIControllerActions::HandleGetAIActors(const TSha
 		return FMonolithActionResult::Error(TEXT("No PIE world found. Start Play-In-Editor first."));
 	}
 
-	FString ClassFilter = Params->GetStringField(TEXT("class_filter"));
+	FString ClassFilter;
+	Params->TryGetStringField(TEXT("class_filter"), ClassFilter);
 
 	TArray<TSharedPtr<FJsonValue>> ActorArr;
 
