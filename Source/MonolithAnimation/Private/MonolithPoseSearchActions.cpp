@@ -833,15 +833,15 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 	Root->SetBoolField(TEXT("enabled"), Entry->IsEnabled());
 	Root->SetBoolField(TEXT("disable_reselection"), Entry->IsDisableReselection());
 
-	FString MirrorStr;
+	FString MirrorOptionOut;
 	switch (Entry->GetMirrorOption())
 	{
-	case EPoseSearchMirrorOption::UnmirroredOnly:      MirrorStr = TEXT("UnmirroredOnly"); break;
-	case EPoseSearchMirrorOption::MirroredOnly:        MirrorStr = TEXT("MirroredOnly"); break;
-	case EPoseSearchMirrorOption::UnmirroredAndMirrored: MirrorStr = TEXT("UnmirroredAndMirrored"); break;
-	default:                                           MirrorStr = TEXT("Unknown"); break;
+	case EPoseSearchMirrorOption::UnmirroredOnly:      MirrorOptionOut = TEXT("UnmirroredOnly"); break;
+	case EPoseSearchMirrorOption::MirroredOnly:        MirrorOptionOut = TEXT("MirroredOnly"); break;
+	case EPoseSearchMirrorOption::UnmirroredAndMirrored: MirrorOptionOut = TEXT("UnmirroredAndMirrored"); break;
+	default:                                           MirrorOptionOut = TEXT("Unknown"); break;
 	}
-	Root->SetStringField(TEXT("mirror_option"), MirrorStr);
+	Root->SetStringField(TEXT("mirror_option"), MirrorOptionOut);
 
 	FFloatInterval Range = Entry->GetSamplingRange();
 	Root->SetNumberField(TEXT("sampling_range_start"), Range.Min);
