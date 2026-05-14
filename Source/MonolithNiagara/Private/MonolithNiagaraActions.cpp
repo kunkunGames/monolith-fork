@@ -2222,7 +2222,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetEmitterEnabled(const TSh
 FMonolithActionResult FMonolithNiagaraActions::HandleReorderEmitters(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = GetAssetPath(Params);
-	const TArray<TSharedPtr<FJsonValue>>& OrderArr = Params->GetArrayField(TEXT("order"));
+	const TArray<TSharedPtr<FJsonValue>>* OrderArrPtr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("order"), OrderArrPtr) || !OrderArrPtr)
+		return FMonolithActionResult::Error(TEXT("Missing or invalid required param: order"));
+	const TArray<TSharedPtr<FJsonValue>>& OrderArr = *OrderArrPtr;
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -3467,7 +3470,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputDI(const TSha
 		if (Cast<UNiagaraDataInterfaceColorCurve>(DIInst) && DIConfig->HasField(TEXT("keys"))
 			&& !DIConfig->HasField(TEXT("red")))
 		{
-			TArray<TSharedPtr<FJsonValue>> FloatKeys = DIConfig->GetArrayField(TEXT("keys"));
+			const TArray<TSharedPtr<FJsonValue>>* FloatKeysPtr = nullptr;
+			DIConfig->TryGetArrayField(TEXT("keys"), FloatKeysPtr);
+			TArray<TSharedPtr<FJsonValue>> FloatKeys = FloatKeysPtr ? *FloatKeysPtr : TArray<TSharedPtr<FJsonValue>>();
 			DIConfig->SetField(TEXT("red"), MakeShared<FJsonValueArray>(FloatKeys));
 			DIConfig->SetField(TEXT("green"), MakeShared<FJsonValueArray>(FloatKeys));
 			DIConfig->SetField(TEXT("blue"), MakeShared<FJsonValueArray>(FloatKeys));
