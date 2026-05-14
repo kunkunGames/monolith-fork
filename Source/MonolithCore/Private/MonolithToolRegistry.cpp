@@ -253,25 +253,48 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 			R.Hints.Add(FString::Printf(
 				TEXT("Use monolith_discover(\"%s\") to list available actions."), *Namespace));
 		}
+		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+			TEXT(""),
+			Namespace,
+			Action,
+			TEXT("malformed_dispatch"),
+			R.ErrorCode,
+			R.ErrorMessage);
 		return R;
 	}
 
 	if (!FMonolithToolProfileManager::Get().IsActionAllowed(Namespace, Action))
 	{
-		return FMonolithActionResult::Error(
+		FMonolithActionResult R = FMonolithActionResult::Error(
 			FString::Printf(TEXT("Action '%s.%s' is disabled by the active Monolith tool profile '%s'."),
 				*Namespace,
 				*Action,
 				*FMonolithToolProfileManager::Get().GetActiveProfileId()),
 			FMonolithJsonUtils::ErrInvalidRequest);
+		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+			TEXT(""),
+			Namespace,
+			Action,
+			TEXT("profile_blocked"),
+			R.ErrorCode,
+			R.ErrorMessage);
+		return R;
 	}
 
 	if (!RegAction->Handler.IsBound())
 	{
-		return FMonolithActionResult::Error(
+		FMonolithActionResult R = FMonolithActionResult::Error(
 			FString::Printf(TEXT("Action handler not bound: %s"), *Key),
 			FMonolithJsonUtils::ErrInternalError
 		);
+		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+			TEXT(""),
+			Namespace,
+			Action,
+			TEXT("error"),
+			R.ErrorCode,
+			R.ErrorMessage);
+		return R;
 	}
 
 	const FMonolithActionInfo& ActionInfo = RegAction->Info;
@@ -283,7 +306,15 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		FString Collision;
 		if (!FMonolithParamSchema::ApplyAliases(ActionInfo.ParamSchema, EffectiveParams, Collision))
 		{
-			return FMonolithActionResult::Error(Collision, FMonolithJsonUtils::ErrInvalidParams);
+			FMonolithActionResult R = FMonolithActionResult::Error(Collision, FMonolithJsonUtils::ErrInvalidParams);
+			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+				TEXT(""),
+				Namespace,
+				Action,
+				TEXT("malformed_dispatch"),
+				R.ErrorCode,
+				R.ErrorMessage);
+			return R;
 		}
 	}
 
@@ -354,6 +385,13 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 				R.Hints.Add(FString::Printf(TEXT("Accepted aliases: %s"),
 					*FString::Join(AliasHints, TEXT("; "))));
 			}
+			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+				TEXT(""),
+				Namespace,
+				Action,
+				TEXT("malformed_dispatch"),
+				R.ErrorCode,
+				R.ErrorMessage);
 			return R;
 		}
 	}
@@ -375,10 +413,18 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 
 			if (FMonolithParamSchema::IsStrictParamsEnabled())
 			{
-				return FMonolithActionResult::Error(
+				FMonolithActionResult R = FMonolithActionResult::Error(
 					FString::Printf(TEXT("STRICT_PARAMS=1: rejected action '%s:%s' due to unknown params: [%s]"),
 						*Namespace, *Action, *FString::Join(Unknown, TEXT(", "))),
 					FMonolithJsonUtils::ErrInvalidParams);
+				FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+					TEXT(""),
+					Namespace,
+					Action,
+					TEXT("malformed_dispatch"),
+					R.ErrorCode,
+					R.ErrorMessage);
+				return R;
 			}
 		}
 	}
@@ -411,6 +457,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		ActionResult.Result->SetArrayField(TEXT("warnings"), Existing);
 	}
 
+	CrashCapture.SetOutcome(ActionResult.bSuccess, ActionResult.ErrorCode, ActionResult.Result, ActionResult.ErrorMessage);
 	return ActionResult;
 }
 

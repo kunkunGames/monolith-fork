@@ -19,6 +19,8 @@ static FAutoConsoleCommand GMonolithRestartCmd(
 	FConsoleCommandDelegate::CreateStatic(&FMonolithCoreModule::RestartHttpServer)
 );
 
+void RegisterMonolithExecutionGuardActions();
+
 void FMonolithCoreModule::StartupModule()
 {
 	UE_LOG(LogMonolith, Log, TEXT("Monolith %s — Core module initializing"), MONOLITH_VERSION);
@@ -86,6 +88,7 @@ void FMonolithCoreModule::RegisterCoreTools()
 {
 	FMonolithCoreTools::RegisterAll();
 	FMonolithToolProfileActions::RegisterAll();
+	RegisterMonolithExecutionGuardActions();
 }
 
 FString FMonolithCoreModule::GetSentinelFilePath() const
