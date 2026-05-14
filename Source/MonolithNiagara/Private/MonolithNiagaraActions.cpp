@@ -2175,7 +2175,15 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateEmitter(const TSha
 	FString SystemPath = GetAssetPath(Params);
 	FString SourceHandleId = Params->GetStringField(TEXT("source_emitter"));
 	if (SourceHandleId.IsEmpty()) SourceHandleId = Params->GetStringField(TEXT("emitter"));
-	FString NewName = Params->HasField(TEXT("new_name")) ? Params->GetStringField(TEXT("new_name")) : FString();
+
+	FString NewName;
+	if (Params->HasField(TEXT("new_name")))
+	{
+		if (!Params->TryGetStringField(TEXT("new_name"), NewName))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'new_name': expected a string"));
+		}
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
