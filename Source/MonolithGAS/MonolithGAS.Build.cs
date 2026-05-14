@@ -53,7 +53,7 @@ public class MonolithGAS : ModuleRules
 					bHasGBA = Directory.Exists(
 						Path.Combine(ProjectPluginsDir, "BlueprintAttributes"))
 						|| Directory.GetDirectories(
-							ProjectPluginsDir, "Gameplaya*",
+							ProjectPluginsDir, "BlueprintAttributes*",
 							SearchOption.TopDirectoryOnly).Length > 0;
 				}
 			}
@@ -67,7 +67,7 @@ public class MonolithGAS : ModuleRules
 				if (Directory.Exists(MarketplaceDir))
 				{
 					bHasGBA = Directory.GetDirectories(
-						MarketplaceDir, "Gameplaya*",
+						MarketplaceDir, "BlueprintAttributes*",
 						SearchOption.TopDirectoryOnly).Length > 0;
 				}
 
