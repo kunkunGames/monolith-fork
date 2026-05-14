@@ -41,6 +41,11 @@ def parse_tools_line(text: str) -> tuple[set[str], int] | None:
             return None  # Frontmatter ended without a tools: line.
         if line.lstrip().startswith("tools:"):
             value = line.split(":", 1)[1].strip()
+            # Strip inline comments
+            value = value.split("#", 1)[0].strip()
+            # Strip list brackets
+            if value.startswith("[") and value.endswith("]"):
+                value = value[1:-1]
             tools = {tok.strip() for tok in value.split(",") if tok.strip()}
             return tools, idx + 1
     return None
@@ -97,6 +102,32 @@ def lint_agent(path: Path) -> list[tuple[Path, str, int]]:
     return violations
 
 
+def run_selftest() -> int:
+    """Exercise parser cases that the repository may not contain today."""
+    cases = [
+        (
+            "bracket list with inline comment",
+            "---\ntools: [mcp__monolith__bracket, mcp__monolith__comment] # inline\n---\n",
+            {"mcp__monolith__bracket", "mcp__monolith__comment"},
+            2,
+        ),
+        (
+            "csv list with inline comment",
+            "---\ntools: mcp__monolith__alpha, mcp__monolith__beta # inline\n---\n",
+            {"mcp__monolith__alpha", "mcp__monolith__beta"},
+            2,
+        ),
+    ]
+    for label, text, expected_tools, expected_line in cases:
+        parsed = parse_tools_line(text)
+        if parsed != (expected_tools, expected_line):
+            print(f"selftest failed: {label}: got {parsed!r}", file=sys.stderr)
+            return 1
+
+    print("selftest passed")
+    return 0
+
+
 def main() -> int:
     if not AGENTS_DIR.is_dir():
         print(f"ERROR: agents directory not found: {AGENTS_DIR}", file=sys.stderr)
@@ -119,4 +150,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if "--selftest" in sys.argv[1:]:
+        sys.exit(run_selftest())
     sys.exit(main())
