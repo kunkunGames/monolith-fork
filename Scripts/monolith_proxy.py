@@ -57,6 +57,7 @@ CORE_QUERY_TOOLS = [
     "logicdriver_query",
     "audio_query",
     "level_sequence_query",
+    "movie_render_query",
 ]
 
 
