@@ -237,6 +237,7 @@ FMonolithActionResult FMonolithAudioQueryActions::ListAudioAssets(const TSharedP
 	}
 
 	TArray<TSharedPtr<FJsonValue>> AssetsArray;
+	AssetsArray.Reserve(Limit);
 	int32 Count = 0;
 
 	for (UClass* AssetClass : ClassesToQuery)
@@ -330,6 +331,7 @@ FMonolithActionResult FMonolithAudioQueryActions::SearchAudioAssets(const TShare
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ResultsArray;
+	ResultsArray.Reserve(Limit);
 	int32 Count = 0;
 
 	for (UClass* AssetClass : ClassesToSearch)
@@ -849,6 +851,7 @@ FMonolithActionResult FMonolithAudioQueryActions::FindSoundsWithoutClass(const T
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ResultsArray;
+	ResultsArray.Reserve(Limit);
 	int32 ScannedCount = 0;
 	bool bLimitReached = false;
 
@@ -930,6 +933,7 @@ FMonolithActionResult FMonolithAudioQueryActions::FindUnattenuatedSounds(const T
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ResultsArray;
+	ResultsArray.Reserve(Limit);
 	int32 ScannedCount = 0;
 	bool bLimitReached = false;
 
