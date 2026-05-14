@@ -363,7 +363,9 @@ if (Test-Path $OutputZip) {
     Write-Host "  ${MarkerPrefix}: $Hash" -ForegroundColor White
     Write-Host ""
     Write-Host "The auto-updater parses this exact marker and fails safe (refusing" -ForegroundColor Yellow
-    Write-Host "to install) if the downloaded zip's hash does not match. Do not rename or"     -ForegroundColor Yellow
+    Write-Host "to install) if the downloaded zip's hash does not match. If the marker"        -ForegroundColor Yellow
+    Write-Host "is missing entirely, it logs a warning and proceeds without checking."         -ForegroundColor Yellow
+    Write-Host "Do not rename or"                                                              -ForegroundColor Yellow
     Write-Host "reformat the marker -- the prefix and a single space before the"   -ForegroundColor Yellow
     Write-Host "hex string are required."                                          -ForegroundColor Yellow
     Write-Host "================================================================" -ForegroundColor Cyan
