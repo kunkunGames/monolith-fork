@@ -12,3 +12,7 @@
 **Drift pattern:** The scaffolding templates section in `Docs/specs/SPEC_MonolithLogicDriver.md` listed hypothetical or old actions instead of the actual `scaffold_weapon_sm`, `scaffold_game_flow_sm`, and `scaffold_interactable_sm` registered in source.
 **Source of truth:** `Source/MonolithLogicDriver/Private/MonolithLogicDriverScaffoldActions.cpp` and actual runtime action registrations.
 **Prevention:** Future scaffolding documentation additions or modifications must directly match the explicitly registered string identifiers in the source code.
+## 2026-05-14 - MonolithConfig Action Count and missing namespace
+**Drift pattern:** MonolithConfig module counts and documented namespaces drifted. Source reality has 14 actions (10 config, 4 localization) whereas the module spec only listed 6 config actions and completely missed the `localization` namespace registrations and the `FMonolithLocalizationActions` class.
+**Source of truth:** `Source/MonolithConfig/Private/MonolithConfigActions.cpp` and `Source/MonolithConfig/Private/MonolithLocalizationActions.cpp`.
+**Prevention:** Future code changes adding namespaces or actions inside a module must update the corresponding `Docs/specs/SPEC_<Module>.md` file to list the complete action set and associated static handler classes.
