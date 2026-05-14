@@ -55,3 +55,10 @@
 **Learning:** Monolith C++ modules should never use direct typed accessors (`GetStringField`, etc.) without `TryGet*Field` since malformed JSON can cause assertion crashes.
 **Reuse rule:** Future UI actions and module handlers should consistently use `TryGetStringField` and properly initialize local variables.
 **Avoid:** Using `GetStringField`, especially right after a `HasField` check.
+
+## 2026-05-14 - Replace GetStringField with TryGetStringField in AIControllerActions
+
+**Pattern:** Unsafe calls to `GetStringField` for optional parameters caused crashes when the fields were missing from the JSON payload.
+**Learning:** Monolith MCP actions should always validate optional JSON fields properly using `TryGetStringField` instead of blindly assuming their existence, even when a schema defines them as optional, because schema validation alone does not populate missing optional JSON fields before handler execution.
+**Reuse rule:** Future handlers should prefer using `TryGetStringField` or checking `HasField` prior to accessing optional JSON values.
+**Avoid:** Avoid using `GetStringField` directly on `Params` JSON objects unless the parameter has been strictly guaranteed to exist through prior programmatic validation (like `RequireStringParam`).

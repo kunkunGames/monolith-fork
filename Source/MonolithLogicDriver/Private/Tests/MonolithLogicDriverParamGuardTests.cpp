@@ -371,4 +371,35 @@ bool FMonolithParamGuardLogicDriverConfigureSMComponentRejectsMalformedParamsTes
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverNodeRejectsMalformedFieldsTest, "Monolith.ParamGuard.LogicDriver.NodeRejectsMalformedFields", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverNodeRejectsMalformedFieldsTest::RunTest(const FString& Parameters)
+{
+	// Test 1: configure_state with malformed always_update
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Test/TestSM"));
+		Params->SetStringField(TEXT("node_guid"), TEXT("some-guid"));
+		Params->SetStringField(TEXT("always_update"), TEXT("not_a_boolean"));
+
+		FMonolithActionResult Result = ExecuteNodeAction(TEXT("configure_state"), Params);
+		TestTrue(TEXT("Malformed always_update should return error"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention always_update boolean"), Result.ErrorMessage.Contains(TEXT("always_update")) && Result.ErrorMessage.Contains(TEXT("boolean")));
+	}
+
+	// Test 2: configure_transition with malformed priority
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Test/TestSM"));
+		Params->SetStringField(TEXT("node_guid"), TEXT("some-guid"));
+		Params->SetStringField(TEXT("priority"), TEXT("not_a_number"));
+
+		FMonolithActionResult Result = ExecuteNodeAction(TEXT("configure_transition"), Params);
+		TestTrue(TEXT("Malformed priority should return error"), !Result.bSuccess);
+		TestTrue(TEXT("Error message should mention priority number"), Result.ErrorMessage.Contains(TEXT("priority")) && Result.ErrorMessage.Contains(TEXT("number")));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER

@@ -182,8 +182,13 @@ namespace MonolithCollection
 		}
 
 		const TArray<TSharedPtr<FJsonValue>>* PathsArray = nullptr;
-		if (Params->TryGetArrayField(TEXT("asset_paths"), PathsArray) && PathsArray)
+		if (Params->HasField(TEXT("asset_paths")))
 		{
+			if (!Params->TryGetArrayField(TEXT("asset_paths"), PathsArray) || !PathsArray)
+			{
+				OutError = TEXT("asset_paths must be an array");
+				return false;
+			}
 			for (const TSharedPtr<FJsonValue>& Value : *PathsArray)
 			{
 				FString Path;

@@ -22,3 +22,7 @@
 **Malformed input pattern:** Using GetStringField/GetBoolField/GetNumberField immediately after HasField.
 **Learning:** HasField does not guarantee type safety and can cause assertion crashes on malformed inputs. WaitTargetData actions have multiple optional fields that are susceptible to this.
 **Prevention:** Always use the equivalent TryGet*Field.
+## 2026-05-14 - ProjectIndexer: harden index action param parsing
+**Malformed input pattern:** array parameter fallback behavior
+**Learning:** array parameters need to report an error if wrong type was provided, instead of being silently ignored
+**Prevention:** FJsonObject::HasField + FJsonObject::TryGetArrayField

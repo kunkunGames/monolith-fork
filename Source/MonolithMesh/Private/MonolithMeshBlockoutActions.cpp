@@ -993,7 +993,6 @@ FMonolithActionResult FMonolithMeshBlockoutActions::CreateBlockoutPrimitivesBatc
 
 	int32 Created = 0;
 	TArray<TSharedPtr<FJsonValue>> Warnings;
-	Warnings.Reserve(PrimitivesArr->Num());
 
 	for (int32 i = 0; i < PrimitivesArr->Num(); ++i)
 	{
@@ -1630,9 +1629,6 @@ FMonolithActionResult FMonolithMeshBlockoutActions::ApplyReplacement(const TShar
 	TArray<TSharedPtr<FJsonValue>> Succeeded;
 	TArray<TSharedPtr<FJsonValue>> Failed;
 	TArray<AActor*> BlockoutsToDelete; // Batch deletion after all spawns succeed
-	Succeeded.Reserve(Entries.Num());
-	Failed.Reserve(Entries.Num());
-	BlockoutsToDelete.Reserve(Entries.Num());
 
 	for (const FReplacementEntry& Entry : Entries)
 	{
@@ -1759,7 +1755,6 @@ FMonolithActionResult FMonolithMeshBlockoutActions::SetActorTags(const TSharedPt
 	};
 
 	TArray<FTagEntry> Entries;
-	Entries.Reserve(ActorTagsArr->Num());
 	for (const auto& Val : *ActorTagsArr)
 	{
 		const TSharedPtr<FJsonObject>* EntryObj;
@@ -2037,7 +2032,6 @@ FMonolithActionResult FMonolithMeshBlockoutActions::ImportBlockoutLayout(const T
 
 	int32 Created = 0;
 	TArray<TSharedPtr<FJsonValue>> Warnings;
-	Warnings.Reserve(PrimitivesArr->Num());
 
 	for (const auto& Val : *PrimitivesArr)
 	{
@@ -2466,7 +2460,6 @@ FMonolithActionResult FMonolithMeshBlockoutActions::ScanVolume(const TSharedPtr<
 
 	// Openings — directions with high variance or low hit count
 	TArray<TSharedPtr<FJsonValue>> OpeningsArr;
-	OpeningsArr.Reserve(UE_ARRAY_COUNT(CompassDirs));
 	for (const auto& CDir : CompassDirs)
 	{
 		FString DirName = CDir.Name;
@@ -2584,7 +2577,6 @@ FMonolithActionResult FMonolithMeshBlockoutActions::ScatterProps(const TSharedPt
 
 	// Validate all meshes
 	TArray<UStaticMesh*> Meshes;
-	Meshes.Reserve(AssetPathsArr->Num());
 	for (const auto& Val : *AssetPathsArr)
 	{
 		FString MeshError;
@@ -2716,15 +2708,12 @@ FMonolithActionResult FMonolithMeshBlockoutActions::ScatterProps(const TSharedPt
 	int32 AdjustedCount = 0;
 	TArray<TSharedPtr<FJsonValue>> PlacedArr;
 	TArray<TSharedPtr<FJsonValue>> ScatterWarnings;
-	PlacedArr.Reserve(Samples.Num());
-	ScatterWarnings.Reserve(Samples.Num());
 
 	FCollisionQueryParams FloorTraceParams(SCENE_QUERY_STAT(MonolithFloorTrace), true);
 	FloorTraceParams.AddIgnoredActor(Volume);
 
 	// Track spawned actors so we can ignore them in collision checks for subsequent props
 	TArray<AActor*> SpawnedActors;
-	SpawnedActors.Reserve(Samples.Num() + 1);
 	SpawnedActors.Add(Volume);
 
 	for (const FSample& Sample : Samples)
