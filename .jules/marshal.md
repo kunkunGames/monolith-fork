@@ -70,3 +70,9 @@
 **Learning:** A PR that is "small" can still be low-value if it races another PR, touches shared prompt/docs files, or bundles unrelated categories such as security, tests, performance, release, and refactor work.
 **Prevention:** AGENTS.md now requires scheduled agents to keep PRs tightly scoped and to stop without PR when the only candidate would mix unrelated concerns.
 **Avoid:** Creating a PR just because one small edit exists; no-op when the useful change is already covered or the scope would be awkwardly bundled.
+
+## 2026-05-14 - Raise the value threshold before scheduled PR creation
+**Coordination issue:** Bulk triage of the Jules queue closed many small PRs because they were empty, superseded, or overlapped another PR touching the same files.
+**Learning:** Passing static CI is not enough to make a scheduled PR worth merging; a PR must also be non-overlapping, current after rebase, and clearly more valuable than a no-op.
+**Prevention:** During duplicate checks, treat same intended files, same WorkFingerprint, stale action-count baselines, and micro-PRs against shared coordination docs as reasons to stop without PR unless the change is uniquely valuable.
+**Avoid:** Creating a PR just because a tiny edit is available, especially in `AGENTS.md`, `.jules/*`, `.gitignore`, release docs, or action-count docs where multiple agents often race.
