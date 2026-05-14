@@ -42,6 +42,18 @@ public:
 	/** monolith_get_mcp_discovery_state — Return current discovery snapshot status */
 	static FMonolithActionResult HandleGetMcpDiscoveryState(const TSharedPtr<FJsonObject>& Params);
 
+	/** monolith_list_domains — Return cheap profile-filtered domain metadata */
+	static FMonolithActionResult HandleListDomains(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_describe_domain — Return one domain's profile-filtered actions and schemas */
+	static FMonolithActionResult HandleDescribeDomain(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_load_domain — Mark a domain loaded for metadata/discovery scope without changing tools/list */
+	static FMonolithActionResult HandleLoadDomain(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_get_loaded_domains — Return process/profile-scoped loaded domain state */
+	static FMonolithActionResult HandleGetLoadedDomains(const TSharedPtr<FJsonObject>& Params);
+
 	/** monolith_get_onboarding_state — Return local onboarding progress */
 	static FMonolithActionResult HandleGetOnboardingState(const TSharedPtr<FJsonObject>& Params);
 
