@@ -55,16 +55,16 @@ namespace BuildingValidationHelpers
 	/** Parse a boolean param with default */
 	bool GetBoolParam(const TSharedPtr<FJsonObject>& Params, const FString& Key, bool Default)
 	{
-		if (Params->HasField(Key))
+		bool Value;
+		if (Params->TryGetBoolField(Key, Value))
 		{
-			// Handle both bool and string "true"/"false"
-			const TSharedPtr<FJsonValue>& Val = Params->Values.FindChecked(Key);
-			if (Val->Type == EJson::Boolean)
-			{
-				return Val->AsBool();
-			}
-			FString Str = Val->Type == EJson::String ? Val->AsString() : TEXT("");
-			return Str.Equals(TEXT("true"), ESearchCase::IgnoreCase);
+			return Value;
+		}
+		// Handle both bool and string "true"/"false"
+		FString StringVal;
+		if (Params->TryGetStringField(Key, StringVal))
+		{
+			return StringVal.Equals(TEXT("true"), ESearchCase::IgnoreCase);
 		}
 		return Default;
 	}
@@ -72,9 +72,10 @@ namespace BuildingValidationHelpers
 	/** Parse a number param with default */
 	double GetNumberParam(const TSharedPtr<FJsonObject>& Params, const FString& Key, double Default)
 	{
-		if (Params->HasField(Key))
+		double Value;
+		if (Params->TryGetNumberField(Key, Value))
 		{
-			return Params->GetNumberField(Key);
+			return Value;
 		}
 		return Default;
 	}
