@@ -138,14 +138,8 @@ FMonolithActionResult FMonolithAIPerceptionScaffoldActions::HandleAddPerceptionT
 
 	double SightRadius = 1500.0;
 	double HearingRange = 3000.0;
-	if (Params->HasField(TEXT("sight_radius")) && !Params->TryGetNumberField(TEXT("sight_radius"), SightRadius))
-	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'sight_radius' must be a number"));
-	}
-	if (Params->HasField(TEXT("hearing_range")) && !Params->TryGetNumberField(TEXT("hearing_range"), HearingRange))
-	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'hearing_range' must be a number"));
-	}
+	Params->TryGetNumberField(TEXT("sight_radius"), SightRadius);
+	Params->TryGetNumberField(TEXT("hearing_range"), HearingRange);
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Add Perception To Actor")));
 

@@ -178,7 +178,7 @@ void FMonolithLogicDriverRuntimeActions::RegisterActions(FMonolithToolRegistry& 
 		FParamSchemaBuilder()
 			.Required(TEXT("actor"), TEXT("string"), TEXT("Actor label or name in PIE world"))
 			.Optional(TEXT("component_name"), TEXT("string"), TEXT("SM component name"))
-			.Optional(TEXT("limit"), TEXT("number"), TEXT("Max history entries to return (default: 50, max: 1000)"))
+			.Optional(TEXT("limit"), TEXT("number"), TEXT("Max history entries to return (default: 50)"))
 			.Build());
 
 	UE_LOG(LogMonolithLDRuntime, Log, TEXT("MonolithLogicDriver Runtime: registered 7 actions"));
@@ -398,7 +398,6 @@ FMonolithActionResult FMonolithLogicDriverRuntimeActions::HandleRuntimeGetStateH
 	{
 		Limit = static_cast<int32>(Params->GetNumberField(TEXT("limit")));
 	}
-	Limit = FMath::Clamp(Limit, 1, 1000);
 
 	// Try to call GetStateHistory and read the result
 	// The function may return a TArray of structs — fallback to property reading

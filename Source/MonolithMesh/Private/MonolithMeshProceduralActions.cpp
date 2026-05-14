@@ -2911,17 +2911,11 @@ void FMonolithMeshProceduralActions::RegisterCacheActions(FMonolithToolRegistry&
 			.Build());
 }
 
-int32 FMonolithMeshProceduralActions::ClampListCachedMeshesLimit(int32 Limit)
-{
-	return FMath::Clamp(Limit, 1, 1000);
-}
-
 FMonolithActionResult FMonolithMeshProceduralActions::ListCachedMeshes(const TSharedPtr<FJsonObject>& Params)
 {
 	FString TypeFilter;
 	Params->TryGetStringField(TEXT("type"), TypeFilter);
 	int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 100;
-	Limit = ClampListCachedMeshesLimit(Limit);
 
 	TSharedPtr<FJsonObject> Result = FMonolithMeshProceduralCache::Get().ListEntries(TypeFilter, Limit);
 	return FMonolithActionResult::Success(Result);

@@ -270,9 +270,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureState(cons
 
 	if (Params->HasField(TEXT("always_update")))
 	{
-		bool bVal = false;
-		if (!Params->TryGetBoolField(TEXT("always_update"), bVal))
-			return FMonolithActionResult::Error(TEXT("Invalid param: always_update must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bool bVal = Params->GetBoolField(TEXT("always_update"));
 		if (SetBoolProp(Node, TEXT("bAlwaysUpdate"), bVal))
 			Applied.Add(FString::Printf(TEXT("bAlwaysUpdate=%s"), bVal ? TEXT("true") : TEXT("false")));
 		else
@@ -281,9 +279,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureState(cons
 
 	if (Params->HasField(TEXT("disable_tick_transition")))
 	{
-		bool bVal = false;
-		if (!Params->TryGetBoolField(TEXT("disable_tick_transition"), bVal))
-			return FMonolithActionResult::Error(TEXT("Invalid param: disable_tick_transition must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bool bVal = Params->GetBoolField(TEXT("disable_tick_transition"));
 		if (SetBoolProp(Node, TEXT("bDisableTickTransitionEvaluation"), bVal))
 			Applied.Add(FString::Printf(TEXT("bDisableTickTransitionEvaluation=%s"), bVal ? TEXT("true") : TEXT("false")));
 		else
@@ -292,9 +288,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureState(cons
 
 	if (Params->HasField(TEXT("exclude_from_any_state")))
 	{
-		bool bVal = false;
-		if (!Params->TryGetBoolField(TEXT("exclude_from_any_state"), bVal))
-			return FMonolithActionResult::Error(TEXT("Invalid param: exclude_from_any_state must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bool bVal = Params->GetBoolField(TEXT("exclude_from_any_state"));
 		if (SetBoolProp(Node, TEXT("bExcludeFromAnyState"), bVal))
 			Applied.Add(FString::Printf(TEXT("bExcludeFromAnyState=%s"), bVal ? TEXT("true") : TEXT("false")));
 		else
@@ -340,10 +334,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureTransition
 
 	if (Params->HasField(TEXT("priority")))
 	{
-		double TmpPriority = 0.0;
-		if (!Params->TryGetNumberField(TEXT("priority"), TmpPriority))
-			return FMonolithActionResult::Error(TEXT("Invalid param: priority must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-		int32 Val = static_cast<int32>(TmpPriority);
+		int32 Val = static_cast<int32>(Params->GetNumberField(TEXT("priority")));
 		if (SetIntProp(Node, TEXT("PriorityOrder"), Val))
 			Applied.Add(FString::Printf(TEXT("PriorityOrder=%d"), Val));
 		else
@@ -376,9 +367,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureTransition
 
 	if (Params->HasField(TEXT("can_eval_with_start_state")))
 	{
-		bool bVal = false;
-		if (!Params->TryGetBoolField(TEXT("can_eval_with_start_state"), bVal))
-			return FMonolithActionResult::Error(TEXT("Invalid param: can_eval_with_start_state must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bool bVal = Params->GetBoolField(TEXT("can_eval_with_start_state"));
 		if (SetBoolProp(Node, TEXT("bCanEvaluateWithStartState"), bVal))
 			Applied.Add(FString::Printf(TEXT("bCanEvaluateWithStartState=%s"), bVal ? TEXT("true") : TEXT("false")));
 		else if (SetBoolProp(Node, TEXT("bCanEvalWithStartState"), bVal))
@@ -425,9 +414,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureConduit(co
 
 	if (Params->HasField(TEXT("eval_with_transitions")))
 	{
-		bool bVal = false;
-		if (!Params->TryGetBoolField(TEXT("eval_with_transitions"), bVal))
-			return FMonolithActionResult::Error(TEXT("Invalid param: eval_with_transitions must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bool bVal = Params->GetBoolField(TEXT("eval_with_transitions"));
 		if (SetBoolProp(Node, TEXT("bEvalWithTransitions"), bVal))
 			Applied.Add(FString::Printf(TEXT("bEvalWithTransitions=%s"), bVal ? TEXT("true") : TEXT("false")));
 		else
@@ -437,9 +424,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureConduit(co
 	if (Params->HasField(TEXT("conduit_as_state")))
 	{
 		// LD Pro sometimes exposes this as bUseConduitAsState or similar
-		bool bVal = false;
-		if (!Params->TryGetBoolField(TEXT("conduit_as_state"), bVal))
-			return FMonolithActionResult::Error(TEXT("Invalid param: conduit_as_state must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bool bVal = Params->GetBoolField(TEXT("conduit_as_state"));
 		if (SetBoolProp(Node, TEXT("bConduitAsState"), bVal))
 			Applied.Add(FString::Printf(TEXT("bConduitAsState=%s"), bVal ? TEXT("true") : TEXT("false")));
 		else if (SetBoolProp(Node, TEXT("bUseConduitAsState"), bVal))
@@ -517,10 +502,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetTransitionCondit
 		float Duration = 1.0f;
 		if (CondParams && CondParams->HasField(TEXT("duration")))
 		{
-			double TmpDuration = 0.0;
-			if (!CondParams->TryGetNumberField(TEXT("duration"), TmpDuration))
-				return FMonolithActionResult::Error(TEXT("Invalid param: duration must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-			Duration = static_cast<float>(TmpDuration);
+			Duration = static_cast<float>(CondParams->GetNumberField(TEXT("duration")));
 		}
 
 		// Try various property names for transition delay/duration
@@ -799,9 +781,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureStateMachi
 
 	if (Params->HasField(TEXT("reuse_if_not_end_state")))
 	{
-		bool bVal = false;
-		if (!Params->TryGetBoolField(TEXT("reuse_if_not_end_state"), bVal))
-			return FMonolithActionResult::Error(TEXT("Invalid param: reuse_if_not_end_state must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bool bVal = Params->GetBoolField(TEXT("reuse_if_not_end_state"));
 		if (SetBoolProp(Node, TEXT("bReuseIfNotEndState"), bVal))
 			Applied.Add(FString::Printf(TEXT("bReuseIfNotEndState=%s"), bVal ? TEXT("true") : TEXT("false")));
 		else if (SetBoolProp(Node, TEXT("bReuseReference"), bVal))
@@ -812,9 +792,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureStateMachi
 
 	if (Params->HasField(TEXT("reuse_current_state")))
 	{
-		bool bVal = false;
-		if (!Params->TryGetBoolField(TEXT("reuse_current_state"), bVal))
-			return FMonolithActionResult::Error(TEXT("Invalid param: reuse_current_state must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bool bVal = Params->GetBoolField(TEXT("reuse_current_state"));
 		if (SetBoolProp(Node, TEXT("bReuseCurrentState"), bVal))
 			Applied.Add(FString::Printf(TEXT("bReuseCurrentState=%s"), bVal ? TEXT("true") : TEXT("false")));
 		else
@@ -823,9 +801,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureStateMachi
 
 	if (Params->HasField(TEXT("allow_independent_tick")))
 	{
-		bool bVal = false;
-		if (!Params->TryGetBoolField(TEXT("allow_independent_tick"), bVal))
-			return FMonolithActionResult::Error(TEXT("Invalid param: allow_independent_tick must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bool bVal = Params->GetBoolField(TEXT("allow_independent_tick"));
 		if (SetBoolProp(Node, TEXT("bAllowIndependentTick"), bVal))
 			Applied.Add(FString::Printf(TEXT("bAllowIndependentTick=%s"), bVal ? TEXT("true") : TEXT("false")));
 		else
