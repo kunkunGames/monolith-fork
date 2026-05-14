@@ -531,7 +531,10 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleConnectAnimGraphPins(const
 	bool bCompile = true;
 	if (Params->HasField(TEXT("compile")))
 	{
-		bCompile = Params->GetBoolField(TEXT("compile"));
+		if (!Params->TryGetBoolField(TEXT("compile"), bCompile))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'compile' must be a boolean"));
+		}
 	}
 
 	if (SourceNode.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: source_node"));
@@ -657,13 +660,19 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetStateAnimation(const TS
 	bool bLoop = false;
 	if (Params->HasField(TEXT("loop")))
 	{
-		bLoop = Params->GetBoolField(TEXT("loop"));
+		if (!Params->TryGetBoolField(TEXT("loop"), bLoop))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'loop' must be a boolean"));
+		}
 	}
 
 	bool bClearExisting = true;
 	if (Params->HasField(TEXT("clear_existing")))
 	{
-		bClearExisting = Params->GetBoolField(TEXT("clear_existing"));
+		if (!Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'clear_existing' must be a boolean"));
+		}
 	}
 
 	if (MachineName.IsEmpty())  return FMonolithActionResult::Error(TEXT("Missing required parameter: machine_name"));
