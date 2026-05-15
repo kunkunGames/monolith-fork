@@ -1195,9 +1195,16 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldTeamSystem(const
 		if (!TV->TryGetObject(TO) || !TO) continue;
 
 		FTeamDef T;
-		T.Id = FMath::RoundToInt32((*TO)->GetNumberField(TEXT("id")));
-		T.Name = (*TO)->GetStringField(TEXT("name"));
-		if (T.Name.IsEmpty()) T.Name = FString::Printf(TEXT("Team_%d"), T.Id);
+		double TempId;
+		if (!(*TO)->TryGetNumberField(TEXT("id"), TempId))
+		{
+			return FMonolithActionResult::Error(TEXT("Team entry missing 'id' number field"));
+		}
+		T.Id = FMath::RoundToInt32(TempId);
+		if (!(*TO)->TryGetStringField(TEXT("name"), T.Name) || T.Name.IsEmpty())
+		{
+			T.Name = FString::Printf(TEXT("Team_%d"), T.Id);
+		}
 		Teams.Add(T);
 	}
 
@@ -1224,9 +1231,18 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldTeamSystem(const
 			if (!AV->TryGetObject(AO) || !AO) continue;
 
 			FAttitudeDef A;
-			A.From = FMath::RoundToInt32((*AO)->GetNumberField(TEXT("from")));
-			A.To = FMath::RoundToInt32((*AO)->GetNumberField(TEXT("to")));
-			A.Attitude = (*AO)->GetStringField(TEXT("attitude"));
+			double TempFrom, TempTo;
+			if (!(*AO)->TryGetNumberField(TEXT("from"), TempFrom) || !(*AO)->TryGetNumberField(TEXT("to"), TempTo))
+			{
+				return FMonolithActionResult::Error(TEXT("Attitude entry missing 'from' or 'to' number fields"));
+			}
+			A.From = FMath::RoundToInt32(TempFrom);
+			A.To = FMath::RoundToInt32(TempTo);
+
+			if (!(*AO)->TryGetStringField(TEXT("attitude"), A.Attitude) || A.Attitude.IsEmpty())
+			{
+				A.Attitude = TEXT("Neutral"); // fallback if string missing
+			}
 			Attitudes.Add(A);
 		}
 	}
@@ -2778,8 +2794,17 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldBossAI(const TSh
 			if (PhaseVal->TryGetObject(PhaseObj) && PhaseObj && (*PhaseObj).IsValid())
 			{
 				FPhaseInfo Info;
-				Info.PhaseName = (*PhaseObj)->GetStringField(TEXT("name"));
-				Info.HealthThreshold = static_cast<float>((*PhaseObj)->GetNumberField(TEXT("health_threshold")));
+				if (!(*PhaseObj)->TryGetStringField(TEXT("name"), Info.PhaseName) || Info.PhaseName.IsEmpty())
+				{
+					Info.PhaseName = FString::Printf(TEXT("Phase_%d"), Phases.Num() + 1);
+				}
+
+				double TempThreshold;
+				if (!(*PhaseObj)->TryGetNumberField(TEXT("health_threshold"), TempThreshold))
+				{
+					return FMonolithActionResult::Error(TEXT("Phase entry missing 'health_threshold' number field"));
+				}
+				Info.HealthThreshold = static_cast<float>(TempThreshold);
 				Phases.Add(Info);
 			}
 		}
