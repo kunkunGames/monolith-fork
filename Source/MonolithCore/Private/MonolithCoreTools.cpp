@@ -362,7 +362,10 @@ void FMonolithCoreTools::RegisterAll()
 		Registry.RegisterAction(
 			TEXT("monolith"), TEXT("reindex"),
 			TEXT("Re-index the Monolith project database. Incremental by default (delta only). Pass force=true for full wipe+rebuild."),
-			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleReindex)
+			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleReindex),
+			FParamSchemaBuilder()
+				.Optional(TEXT("force"), TEXT("boolean"), TEXT("If true, performs a full wipe and rebuild instead of an incremental delta update."), TEXT("false"))
+				.Build()
 		);
 	}
 
@@ -776,8 +779,14 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 		return FMonolithActionResult::Error(TEXT("GEditor not available"));
 	}
 
-	bool bForce = Params.IsValid() && Params->HasField(TEXT("force"))
-	              && Params->GetBoolField(TEXT("force"));
+	bool bForce = false;
+	if (Params.IsValid() && Params->HasField(TEXT("force")))
+	{
+		if (!Params->TryGetBoolField(TEXT("force"), bForce))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'force' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 
 	UClass* IndexSubsystemClass = FindObject<UClass>(nullptr, TEXT("/Script/MonolithIndex.MonolithIndexSubsystem"));
 	if (!IndexSubsystemClass)
