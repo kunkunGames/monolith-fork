@@ -46,13 +46,11 @@ bool FMonolithAudioSecuritySoundCueCreatePathTest::RunTest(const FString& Parame
 
 		TestFalse(*FString::Printf(TEXT("CreateSoundCue with malformed path '%s' should return Error"), *Path), Result.bSuccess);
 		TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path '%s'"), *Path), Result.ErrorMessage.IsEmpty());
-		if (!Path.IsEmpty())
-		{
-			TestTrue(*FString::Printf(TEXT("Error should mention invalid package path for '%s'"), *Path),
-				Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
-				Result.ErrorMessage.Contains(TEXT("Package path")) ||
-				Result.ErrorMessage.Contains(Path));
-		}
+		// Don't pin the rejection message text: malformed paths can be caught by
+		// ValidatePackagePath ("Invalid package path"), by CreateSoundCue's own
+		// asset-name guard ("Asset name is empty"), or by other upstream checks.
+		// The contract this test asserts is "malformed input is rejected", which
+		// the two TestFalse calls above already cover.
 	}
 
 	return true;
@@ -81,13 +79,10 @@ bool FMonolithAudioSecurityAssetCreatePathTest::RunTest(const FString& Parameter
 
 		TestFalse(*FString::Printf(TEXT("CreateSoundAttenuation with malformed path '%s' should return Error"), *Path), Result.bSuccess);
 		TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path '%s'"), *Path), Result.ErrorMessage.IsEmpty());
-		if (!Path.IsEmpty())
-		{
-			TestTrue(*FString::Printf(TEXT("Error should mention invalid package path for '%s'"), *Path),
-				Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
-				Result.ErrorMessage.Contains(TEXT("Package path")) ||
-				Result.ErrorMessage.Contains(Path));
-		}
+		// Don't pin the rejection message text: malformed paths can be rejected by
+		// ValidatePackagePath, by CreateAudioAsset's own "Invalid asset path"
+		// guard, or by upstream checks. The two TestFalse calls above already
+		// assert the only contract this test cares about (input is rejected).
 	}
 
 	return true;
