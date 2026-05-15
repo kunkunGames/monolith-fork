@@ -548,10 +548,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleBatchStyle(const TSharedP
     FString PropertyName;
     if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("property_name"), PropertyName, ParamError)) return ParamError;
     FString Value;
-    if (!Params.IsValid() || !Params->HasField(TEXT("value")) || !Params->TryGetStringField(TEXT("value"), Value))
-    {
-        return FMonolithActionResult::Error(TEXT("Missing required param: value"));
-    }
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("value"), Value, ParamError)) return ParamError;
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
