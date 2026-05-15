@@ -142,8 +142,14 @@ void FMonolithActionExecutionGuard::RecordRejectedToolCall(
 
 TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 {
-	FScopeLock Lock(&GuardLock);
 	const bool bAdvancedRecords = IsAdvancedToolCallRecordsEnabled();
+	const bool bAdvancedRegistered = bAdvancedRecords
+		&& FMonolithToolRegistry::Get().HasAction(TEXT("monolith"), TEXT("list_tool_call_records"));
+	int32 AuditCount = 0;
+	{
+		FScopeLock Lock(&GuardLock);
+		AuditCount = AuditRows.Num();
+	}
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("namespace"), TEXT("monolith"));
@@ -152,7 +158,7 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Result->SetBoolField(TEXT("enabled"), true);
 	Result->SetBoolField(TEXT("advanced_tool_call_records"), bAdvancedRecords);
 	Result->SetNumberField(TEXT("audit_capacity"), AuditCapacity);
-	Result->SetNumberField(TEXT("audit_count"), AuditRows.Num());
+	Result->SetNumberField(TEXT("audit_count"), AuditCount);
 	Result->SetBoolField(TEXT("dirty_package_tracking"), true);
 	Result->SetBoolField(TEXT("raw_payload_logging"), false);
 	Result->SetBoolField(TEXT("automatic_transaction_wrapping"), false);
@@ -167,9 +173,6 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	// when the setting was true at startup. Gate the advertised list on actual registry state
 	// so toggling the setting at runtime (without restart) doesn't make capability discovery
 	// lie about endpoints that still 'unknown action' on dispatch.
-	const FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
-	const bool bAdvancedRegistered = bAdvancedRecords
-		&& Registry.HasAction(TEXT("monolith"), TEXT("list_tool_call_records"));
 	if (bAdvancedRegistered)
 	{
 		Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.list_tool_call_records")));
