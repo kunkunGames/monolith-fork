@@ -301,7 +301,13 @@ FMonolithActionResult FMonolithToolProfileActions::HandleSetActionEnabled(const 
 		return FMonolithActionResult::Error(TEXT("'action_id' parameter is required"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	bool bEnabled = true;
-	Params->TryGetBoolField(TEXT("enabled"), bEnabled);
+	if (Params->HasField(TEXT("enabled")))
+	{
+		if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 
 	FString Error;
 	if (!FMonolithToolProfileManager::Get().SetActionEnabled(ProfileId, ActionId, bEnabled, Error))
@@ -325,7 +331,13 @@ FMonolithActionResult FMonolithToolProfileActions::HandleSetNamespaceEnabled(con
 		return FMonolithActionResult::Error(TEXT("'namespace' parameter is required"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	bool bEnabled = true;
-	Params->TryGetBoolField(TEXT("enabled"), bEnabled);
+	if (Params->HasField(TEXT("enabled")))
+	{
+		if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 
 	FString Error;
 	if (!FMonolithToolProfileManager::Get().SetNamespaceEnabled(ProfileId, Namespace, bEnabled, Error))
