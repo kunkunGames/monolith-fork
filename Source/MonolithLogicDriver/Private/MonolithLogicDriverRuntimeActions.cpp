@@ -39,7 +39,11 @@ namespace
 		FString ComponentName;
 		if (Params->HasField(TEXT("component_name")))
 		{
-			ComponentName = Params->GetStringField(TEXT("component_name"));
+			if (!Params->TryGetStringField(TEXT("component_name"), ComponentName))
+			{
+				Result.Error = FMonolithActionResult::Error(TEXT("Invalid param: 'component_name' must be a string"));
+				return Result;
+			}
 		}
 
 		// Get PIE world
@@ -396,7 +400,12 @@ FMonolithActionResult FMonolithLogicDriverRuntimeActions::HandleRuntimeGetStateH
 	int32 Limit = 50;
 	if (Params->HasField(TEXT("limit")))
 	{
-		Limit = static_cast<int32>(Params->GetNumberField(TEXT("limit")));
+		double TmpLimit = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), TmpLimit))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"));
+		}
+		Limit = static_cast<int32>(TmpLimit);
 	}
 	Limit = FMath::Clamp(Limit, 1, 1000);
 
