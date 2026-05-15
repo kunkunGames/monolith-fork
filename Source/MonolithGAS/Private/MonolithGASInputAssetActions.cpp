@@ -432,7 +432,8 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleListInputActions(cons
 {
 	TArray<FAssetData> Assets;
 	GetAssetsByClass(UInputAction::StaticClass(), Params, Assets);
-	const bool bIncludeDetails = Params->HasField(TEXT("include_details")) && Params->GetBoolField(TEXT("include_details"));
+	bool bIncludeDetails = false;
+	Params->TryGetBoolField(TEXT("include_details"), bIncludeDetails);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	for (const FAssetData& AssetData : Assets)
@@ -514,21 +515,21 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 	}
 
 	FString Description;
-	const bool bHasDescription = Params->HasField(TEXT("description"));
+	bool bHasDescription = Params->HasField(TEXT("description"));
 	if (bHasDescription && !Params->TryGetStringField(TEXT("description"), Description))
 	{
 		return FMonolithActionResult::Error(TEXT("description must be a string"));
 	}
 
 	bool bConsumeInput = false;
-	const bool bHasConsumeInput = Params->HasField(TEXT("consume_input"));
+	bool bHasConsumeInput = Params->HasField(TEXT("consume_input"));
 	if (bHasConsumeInput && !Params->TryGetBoolField(TEXT("consume_input"), bConsumeInput))
 	{
 		return FMonolithActionResult::Error(TEXT("consume_input must be a boolean"));
 	}
 
 	bool bTriggerWhenPaused = false;
-	const bool bHasTriggerWhenPaused = Params->HasField(TEXT("trigger_when_paused"));
+	bool bHasTriggerWhenPaused = Params->HasField(TEXT("trigger_when_paused"));
 	if (bHasTriggerWhenPaused && !Params->TryGetBoolField(TEXT("trigger_when_paused"), bTriggerWhenPaused))
 	{
 		return FMonolithActionResult::Error(TEXT("trigger_when_paused must be a boolean"));
@@ -616,7 +617,8 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 FMonolithActionResult FMonolithGASInputAssetActions::HandleSetInputActionProperties(const TSharedPtr<FJsonObject>& Params)
 {
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const bool bSave = !Params->HasField(TEXT("save")) || Params->GetBoolField(TEXT("save"));
+	bool bSave = true;
+	Params->TryGetBoolField(TEXT("save"), bSave);
 	FString Error;
 	UInputAction* Action = LoadInputAction(AssetPath, Error);
 	if (!Action)
@@ -641,21 +643,25 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleSetInputActionPropert
 	{
 		Action->ActionDescription = FText::FromString(Params->GetStringField(TEXT("description")));
 	}
-	if (Params->HasField(TEXT("consume_input")))
+	bool bConsumeInput = false;
+	if (Params->TryGetBoolField(TEXT("consume_input"), bConsumeInput))
 	{
-		Action->bConsumeInput = Params->GetBoolField(TEXT("consume_input"));
+		Action->bConsumeInput = bConsumeInput;
 	}
-	if (Params->HasField(TEXT("consume_legacy_mappings")))
+	bool bConsumeLegacy = false;
+	if (Params->TryGetBoolField(TEXT("consume_legacy_mappings"), bConsumeLegacy))
 	{
-		Action->bConsumesActionAndAxisMappings = Params->GetBoolField(TEXT("consume_legacy_mappings"));
+		Action->bConsumesActionAndAxisMappings = bConsumeLegacy;
 	}
-	if (Params->HasField(TEXT("trigger_when_paused")))
+	bool bTriggerWhenPaused = false;
+	if (Params->TryGetBoolField(TEXT("trigger_when_paused"), bTriggerWhenPaused))
 	{
-		Action->bTriggerWhenPaused = Params->GetBoolField(TEXT("trigger_when_paused"));
+		Action->bTriggerWhenPaused = bTriggerWhenPaused;
 	}
-	if (Params->HasField(TEXT("reserve_all_mappings")))
+	bool bReserveMappings = false;
+	if (Params->TryGetBoolField(TEXT("reserve_all_mappings"), bReserveMappings))
 	{
-		Action->bReserveAllMappings = Params->GetBoolField(TEXT("reserve_all_mappings"));
+		Action->bReserveAllMappings = bReserveMappings;
 	}
 	if (Params->HasField(TEXT("accumulation")))
 	{
@@ -683,7 +689,8 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleListInputMappingConte
 {
 	TArray<FAssetData> Assets;
 	GetAssetsByClass(UInputMappingContext::StaticClass(), Params, Assets);
-	const bool bIncludeDetails = Params->HasField(TEXT("include_details")) && Params->GetBoolField(TEXT("include_details"));
+	bool bIncludeDetails = false;
+	Params->TryGetBoolField(TEXT("include_details"), bIncludeDetails);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	for (const FAssetData& AssetData : Assets)
@@ -749,7 +756,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 	}
 
 	FString Description;
-	const bool bHasDescription = Params->HasField(TEXT("description"));
+	bool bHasDescription = Params->HasField(TEXT("description"));
 	if (bHasDescription && !Params->TryGetStringField(TEXT("description"), Description))
 	{
 		return FMonolithActionResult::Error(TEXT("description must be a string"));
@@ -804,7 +811,8 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	const FString ContextPath = Params->GetStringField(TEXT("context_path"));
 	const FString ActionPath = Params->GetStringField(TEXT("action_path"));
 	const FString KeyName = Params->GetStringField(TEXT("key"));
-	const bool bSave = !Params->HasField(TEXT("save")) || Params->GetBoolField(TEXT("save"));
+	bool bSave = true;
+	Params->TryGetBoolField(TEXT("save"), bSave);
 
 	FString Error;
 	UInputMappingContext* Context = LoadInputMappingContext(ContextPath, Error);
@@ -857,7 +865,8 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleRemoveInputMapping(co
 	const FString ContextPath = Params->GetStringField(TEXT("context_path"));
 	const FString ActionPath = Params->GetStringField(TEXT("action_path"));
 	const FString KeyName = Params->GetStringField(TEXT("key"));
-	const bool bSave = !Params->HasField(TEXT("save")) || Params->GetBoolField(TEXT("save"));
+	bool bSave = true;
+	Params->TryGetBoolField(TEXT("save"), bSave);
 
 	FString Error;
 	UInputMappingContext* Context = LoadInputMappingContext(ContextPath, Error);

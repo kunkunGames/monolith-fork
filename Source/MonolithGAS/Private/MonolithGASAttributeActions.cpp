@@ -2273,25 +2273,28 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleCreateAttributeInitDat
 
 		// Set BaseValue
 		FProperty* BaseValueProp = RowStruct->FindPropertyByName(TEXT("BaseValue"));
-		if (BaseValueProp && RowObj->HasField(TEXT("base_value")))
+		double BaseVal = 0.0;
+		if (BaseValueProp && RowObj->TryGetNumberField(TEXT("base_value"), BaseVal))
 		{
-			float Val = static_cast<float>(RowObj->GetNumberField(TEXT("base_value")));
+			float Val = static_cast<float>(BaseVal);
 			BaseValueProp->CopyCompleteValue(BaseValueProp->ContainerPtrToValuePtr<void>(RowData), &Val);
 		}
 
 		// Set MinValue
 		FProperty* MinValueProp = RowStruct->FindPropertyByName(TEXT("MinValue"));
-		if (MinValueProp && RowObj->HasField(TEXT("min_value")))
+		double MinVal = 0.0;
+		if (MinValueProp && RowObj->TryGetNumberField(TEXT("min_value"), MinVal))
 		{
-			float Val = static_cast<float>(RowObj->GetNumberField(TEXT("min_value")));
+			float Val = static_cast<float>(MinVal);
 			MinValueProp->CopyCompleteValue(MinValueProp->ContainerPtrToValuePtr<void>(RowData), &Val);
 		}
 
 		// Set MaxValue
 		FProperty* MaxValueProp = RowStruct->FindPropertyByName(TEXT("MaxValue"));
-		if (MaxValueProp && RowObj->HasField(TEXT("max_value")))
+		double MaxVal = 0.0;
+		if (MaxValueProp && RowObj->TryGetNumberField(TEXT("max_value"), MaxVal))
 		{
-			float Val = static_cast<float>(RowObj->GetNumberField(TEXT("max_value")));
+			float Val = static_cast<float>(MaxVal);
 			MaxValueProp->CopyCompleteValue(MaxValueProp->ContainerPtrToValuePtr<void>(RowData), &Val);
 		}
 
