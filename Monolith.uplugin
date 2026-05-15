@@ -105,6 +105,11 @@
 			"Optional": true
 		},
 		{
+			"Name": "MassEntity",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
 			"Name": "MassGameplay",
 			"Enabled": true,
 			"Optional": true

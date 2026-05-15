@@ -32,3 +32,9 @@ Build pattern: Falsely detecting an optional plugin because the wildcard used in
 Learning: Using vague wildcards when searching for optional plugins can trigger invalid build dependencies.
 Prevention: Use precise wildcard prefixes that uniquely match the target optional plugin directory.
 Avoid: Using short or generic wildcards like `Gameplaya*` when the plugin name is `BlueprintAttributes`.
+
+## 2026-05-15 - [Add missing MassEntity optional plugin dependency]
+**Build pattern:** The `MassEntity` plugin was conditionally linked in `MonolithAI.Build.cs` but was missing from the `Monolith.uplugin` configuration.
+**Learning:** For optional Engine plugins that are conditionally queried and linked in a module's Build.cs, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file can cause the Engine to refuse to load the plugin entirely or fail dependency resolution when the optional dependency is enabled.
+**Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have a corresponding `"Optional": true` entry defined in `Monolith.uplugin`.
+**Avoid:** Linking optional plugins in `Build.cs` without adding them to `.uplugin`.
