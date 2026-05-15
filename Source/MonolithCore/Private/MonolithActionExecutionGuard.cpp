@@ -3,6 +3,7 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
 #include "MonolithToolProfileManager.h"
+#include "MonolithToolRegistry.h"
 #include "Misc/App.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectIterator.h"
@@ -162,11 +163,23 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.get_execution_guard_status")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.list_recent_action_audit")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.get_last_rollback")));
-	if (bAdvancedRecords)
+	// Advanced ToolCall actions are only registered during RegisterMonolithExecutionGuardActions
+	// when the setting was true at startup. Gate the advertised list on actual registry state
+	// so toggling the setting at runtime (without restart) doesn't make capability discovery
+	// lie about endpoints that still 'unknown action' on dispatch.
+	const FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	const bool bAdvancedRegistered = bAdvancedRecords
+		&& Registry.HasAction(TEXT("monolith"), TEXT("list_tool_call_records"));
+	if (bAdvancedRegistered)
 	{
 		Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.list_tool_call_records")));
 		Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.get_tool_call_record")));
 		Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.analyze_tool_call_records")));
+	}
+	Result->SetBoolField(TEXT("advanced_records_registered"), bAdvancedRegistered);
+	if (bAdvancedRecords && !bAdvancedRegistered)
+	{
+		Result->SetBoolField(TEXT("restart_required"), true);
 	}
 	Result->SetArrayField(TEXT("implemented_actions"), Implemented);
 
