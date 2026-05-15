@@ -1503,8 +1503,23 @@ FString FMonolithMeshProceduralActions::FinalizeProceduralMesh(UDynamicMesh* Mes
 	const FString& ActionName, const FString& Category)
 {
 	// ---- Cache check (before any generation work is consumed) ----
-	bool bUseCache = !ActionName.IsEmpty() && (!Params->HasField(TEXT("use_cache")) || Params->GetBoolField(TEXT("use_cache")));
-	bool bAutoSave = !Params->HasField(TEXT("auto_save")) || Params->GetBoolField(TEXT("auto_save"));
+	bool bUseCache = true;
+	if (!ActionName.IsEmpty() && Params->HasField(TEXT("use_cache")))
+	{
+		if (!Params->TryGetBoolField(TEXT("use_cache"), bUseCache))
+		{
+			return TEXT("Invalid type for parameter 'use_cache'. Expected boolean.");
+		}
+	}
+	else if (ActionName.IsEmpty())
+	{
+		bUseCache = false;
+	}
+	bool bAutoSave = true;
+	if (Params->HasField(TEXT("auto_save")) && !Params->TryGetBoolField(TEXT("auto_save"), bAutoSave))
+	{
+		return TEXT("Invalid type for parameter 'auto_save'. Expected boolean.");
+	}
 	FString Hash;
 
 	if (bUseCache)
@@ -1535,7 +1550,11 @@ FString FMonolithMeshProceduralActions::FinalizeProceduralMesh(UDynamicMesh* Mes
 			}
 
 			// Still place in scene if requested
-			bool bPlace = Params->HasField(TEXT("place_in_scene")) ? Params->GetBoolField(TEXT("place_in_scene")) : false;
+			bool bPlace = false;
+			if (Params->HasField(TEXT("place_in_scene")) && !Params->TryGetBoolField(TEXT("place_in_scene"), bPlace))
+			{
+				return TEXT("Invalid type for parameter 'place_in_scene'. Expected boolean.");
+			}
 			if (bPlace)
 			{
 				FVector Location = FVector::ZeroVector;
@@ -1544,7 +1563,11 @@ FString FMonolithMeshProceduralActions::FinalizeProceduralMesh(UDynamicMesh* Mes
 				MonolithMeshUtils::ParseRotator(Params, TEXT("rotation"), Rotation);
 				FString Label;
 				Params->TryGetStringField(TEXT("label"), Label);
-				bool bSnapToFloor = !Params->HasField(TEXT("snap_to_floor")) || Params->GetBoolField(TEXT("snap_to_floor"));
+				bool bSnapToFloor = true;
+				if (Params->HasField(TEXT("snap_to_floor")) && !Params->TryGetBoolField(TEXT("snap_to_floor"), bSnapToFloor))
+				{
+					return TEXT("Invalid type for parameter 'snap_to_floor'. Expected boolean.");
+				}
 
 				// Build default folder from Category (e.g., "Procedural/Parametric")
 				FString Folder;
@@ -1598,18 +1621,45 @@ FString FMonolithMeshProceduralActions::FinalizeProceduralMesh(UDynamicMesh* Mes
 		const TSharedPtr<FJsonObject>* DimObj = nullptr;
 		if (Params->TryGetObjectField(TEXT("dimensions"), DimObj) && DimObj && (*DimObj).IsValid())
 		{
-			if ((*DimObj)->HasField(TEXT("width")))  Width  = static_cast<float>((*DimObj)->GetNumberField(TEXT("width")));
-			if ((*DimObj)->HasField(TEXT("depth")))  Depth  = static_cast<float>((*DimObj)->GetNumberField(TEXT("depth")));
-			if ((*DimObj)->HasField(TEXT("height"))) Height = static_cast<float>((*DimObj)->GetNumberField(TEXT("height")));
+			if ((*DimObj)->HasField(TEXT("width")))
+			{
+				double TempVal;
+				if (!(*DimObj)->TryGetNumberField(TEXT("width"), TempVal)) return TEXT("Invalid type for parameter 'dimensions.width'. Expected number.");
+				Width = static_cast<float>(TempVal);
+			}
+			if ((*DimObj)->HasField(TEXT("depth")))
+			{
+				double TempVal;
+				if (!(*DimObj)->TryGetNumberField(TEXT("depth"), TempVal)) return TEXT("Invalid type for parameter 'dimensions.depth'. Expected number.");
+				Depth = static_cast<float>(TempVal);
+			}
+			if ((*DimObj)->HasField(TEXT("height")))
+			{
+				double TempVal;
+				if (!(*DimObj)->TryGetNumberField(TEXT("height"), TempVal)) return TEXT("Invalid type for parameter 'dimensions.height'. Expected number.");
+				Height = static_cast<float>(TempVal);
+			}
 		}
 		// Also check top-level fields used by some actions (e.g. terrain size)
-		if (Result->HasField(TEXT("size_x"))) Width = static_cast<float>(Result->GetNumberField(TEXT("size_x")));
-		if (Result->HasField(TEXT("size_y"))) Depth = static_cast<float>(Result->GetNumberField(TEXT("size_y")));
+		if (Result->HasField(TEXT("size_x")))
+		{
+			double TempVal;
+			if (!Result->TryGetNumberField(TEXT("size_x"), TempVal)) return TEXT("Invalid type for 'size_x'. Expected number.");
+			Width = static_cast<float>(TempVal);
+		}
+		if (Result->HasField(TEXT("size_y")))
+		{
+			double TempVal;
+			if (!Result->TryGetNumberField(TEXT("size_y"), TempVal)) return TEXT("Invalid type for 'size_y'. Expected number.");
+			Depth = static_cast<float>(TempVal);
+		}
 
 		int32 Seed = -1;
 		if (Params->HasField(TEXT("seed")))
 		{
-			Seed = static_cast<int32>(Params->GetNumberField(TEXT("seed")));
+			double TempVal;
+			if (!Params->TryGetNumberField(TEXT("seed"), TempVal)) return TEXT("Invalid type for parameter 'seed'. Expected number.");
+			Seed = static_cast<int32>(TempVal);
 		}
 
 		FString HashForPath = bUseCache ? Hash : FMonolithMeshProceduralCache::Get().ComputeHash(ActionName, Params);
@@ -1619,7 +1669,11 @@ FString FMonolithMeshProceduralActions::FinalizeProceduralMesh(UDynamicMesh* Mes
 	// ---- Save to asset ----
 	if (!SavePath.IsEmpty())
 	{
-		bool bOverwrite = Params->HasField(TEXT("overwrite")) ? Params->GetBoolField(TEXT("overwrite")) : false;
+		bool bOverwrite = false;
+		if (Params->HasField(TEXT("overwrite")) && !Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+		{
+			return TEXT("Invalid type for parameter 'overwrite'. Expected boolean.");
+		}
 		FString SaveErr;
 		if (!SaveMeshToAsset(Mesh, SavePath, bOverwrite, SaveErr))
 		{
@@ -1636,14 +1690,20 @@ FString FMonolithMeshProceduralActions::FinalizeProceduralMesh(UDynamicMesh* Mes
 			int32 TriCount = 0;
 			if (Result->HasField(TEXT("triangle_count")))
 			{
-				TriCount = static_cast<int32>(Result->GetNumberField(TEXT("triangle_count")));
+				double TempVal;
+				if (!Result->TryGetNumberField(TEXT("triangle_count"), TempVal)) return TEXT("Invalid type for 'triangle_count'. Expected number.");
+				TriCount = static_cast<int32>(TempVal);
 			}
 			FMonolithMeshProceduralCache::Get().Register(Hash, SavePath, ActionName, Type, TriCount, Params);
 			Result->SetStringField(TEXT("hash"), Hash);
 		}
 
 		// Place in scene if requested
-		bool bPlace = Params->HasField(TEXT("place_in_scene")) ? Params->GetBoolField(TEXT("place_in_scene")) : false;
+		bool bPlace = false;
+		if (Params->HasField(TEXT("place_in_scene")) && !Params->TryGetBoolField(TEXT("place_in_scene"), bPlace))
+		{
+			return TEXT("Invalid type for parameter 'place_in_scene'. Expected boolean.");
+		}
 		if (bPlace)
 		{
 			FVector Location = FVector::ZeroVector;
@@ -1652,7 +1712,11 @@ FString FMonolithMeshProceduralActions::FinalizeProceduralMesh(UDynamicMesh* Mes
 			MonolithMeshUtils::ParseRotator(Params, TEXT("rotation"), Rotation);
 			FString Label;
 			Params->TryGetStringField(TEXT("label"), Label);
-			bool bSnapToFloor = !Params->HasField(TEXT("snap_to_floor")) || Params->GetBoolField(TEXT("snap_to_floor"));
+			bool bSnapToFloor = true;
+			if (Params->HasField(TEXT("snap_to_floor")) && !Params->TryGetBoolField(TEXT("snap_to_floor"), bSnapToFloor))
+			{
+				return TEXT("Invalid type for parameter 'snap_to_floor'. Expected boolean.");
+			}
 
 			// Build default folder from Category
 			FString Folder;
