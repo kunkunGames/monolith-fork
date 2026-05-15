@@ -114,7 +114,6 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateHudElement(const T
     FString Prefix = MonolithUIInternal::GetOptionalString(Params, TEXT("widget_name_prefix"));
     if (Prefix.IsEmpty()) Prefix = ElementType;
 
-    FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
     if (!WBP) return Err;
     if (!WBP->WidgetTree || !WBP->WidgetTree->RootWidget)
@@ -416,7 +415,6 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateMenu(const TShared
     }
 
     // Create the widget blueprint
-    FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::CreateNewWidgetBlueprint(SavePath, Err);
     if (!WBP) return Err;
 
@@ -523,7 +521,6 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateSettingsPanel(cons
         Tabs = { TEXT("Graphics"), TEXT("Audio"), TEXT("Controls"), TEXT("Gameplay"), TEXT("Accessibility") };
     }
 
-    FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::CreateNewWidgetBlueprint(SavePath, Err);
     if (!WBP) return Err;
 
@@ -643,7 +640,6 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateDialog(const TShar
     FString CancelText = MonolithUIInternal::GetOptionalString(Params, TEXT("cancel_text"));
     if (CancelText.IsEmpty()) CancelText = TEXT("No");
 
-    FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::CreateNewWidgetBlueprint(SavePath, Err);
     if (!WBP) return Err;
 
@@ -754,7 +750,6 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateNotificationToast(
     FString Position = MonolithUIInternal::GetOptionalString(Params, TEXT("position"));
     if (Position.IsEmpty()) Position = TEXT("top_right");
 
-    FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::CreateNewWidgetBlueprint(SavePath, Err);
     if (!WBP) return Err;
 
@@ -828,7 +823,6 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateLoadingScreen(cons
     const bool bShowTips = MonolithUIInternal::GetOptionalBool(Params, TEXT("show_tips"), true);
     const bool bShowSpinner = MonolithUIInternal::GetOptionalBool(Params, TEXT("show_spinner"), true);
 
-    FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::CreateNewWidgetBlueprint(SavePath, Err);
     if (!WBP) return Err;
 
@@ -914,7 +908,6 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateInventoryGrid(cons
     Rows = FMath::Clamp(Rows, 1, 20);
     SlotSize = FMath::Clamp(SlotSize, 16, 256);
 
-    FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::CreateNewWidgetBlueprint(SavePath, Err);
     if (!WBP) return Err;
 
@@ -979,7 +972,6 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateSaveSlotList(const
     if (Params->TryGetNumberField(TEXT("max_slots"), TempMaxSlots)) MaxSlots = static_cast<int32>(TempMaxSlots);
     MaxSlots = FMath::Clamp(MaxSlots, 1, 20);
 
-    FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::CreateNewWidgetBlueprint(SavePath, Err);
     if (!WBP) return Err;
 
