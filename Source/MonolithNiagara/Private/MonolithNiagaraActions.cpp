@@ -12651,7 +12651,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetScalabilitySettings(cons
 	if (!EffectType)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load effect type '%s'"), *AssetPath));
 
-	const TArray<TSharedPtr<FJsonValue>>& SettingsJsonArr = Params->GetArrayField(TEXT("settings"));
+	const TArray<TSharedPtr<FJsonValue>>* SettingsJsonArrPtr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("settings"), SettingsJsonArrPtr) || !SettingsJsonArrPtr)
+		return FMonolithActionResult::Error(TEXT("Missing or invalid 'settings' array parameter"));
+
+	const TArray<TSharedPtr<FJsonValue>>& SettingsJsonArr = *SettingsJsonArrPtr;
 	if (SettingsJsonArr.Num() == 0)
 		return FMonolithActionResult::Error(TEXT("'settings' array is empty"));
 
@@ -12670,10 +12674,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetScalabilitySettings(cons
 		FNiagaraSystemScalabilitySettings S;
 
 		// Build platform set from quality levels
-		if (SO->HasField(TEXT("quality_levels")))
+		const TArray<TSharedPtr<FJsonValue>>* QLArrPtr = nullptr;
+		if (SO->TryGetArrayField(TEXT("quality_levels"), QLArrPtr) && QLArrPtr)
 		{
 			int32 Mask = 0;
-			const TArray<TSharedPtr<FJsonValue>>& QLArr = SO->GetArrayField(TEXT("quality_levels"));
+			const TArray<TSharedPtr<FJsonValue>>& QLArr = *QLArrPtr;
 			for (const TSharedPtr<FJsonValue>& QL : QLArr)
 			{
 				int32 Level = (int32)QL->AsNumber();
