@@ -1123,7 +1123,10 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleSetEndState(const 
 	bool bIsEndState = true;
 	if (Params->HasField(TEXT("is_end_state")))
 	{
-		bIsEndState = Params->GetBoolField(TEXT("is_end_state"));
+		if (!Params->TryGetBoolField(TEXT("is_end_state"), bIsEndState))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'is_end_state' must be a boolean"), -32602);
+		}
 	}
 
 	FString LoadError;
@@ -1340,7 +1343,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAutoArrangeGraph(c
 	FString FormatterMode = TEXT("default");
 	if (Params->HasField(TEXT("formatter")))
 	{
-		FormatterMode = Params->GetStringField(TEXT("formatter")).ToLower();
+		FString TmpStr;
+		if (!Params->TryGetStringField(TEXT("formatter"), TmpStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'formatter' must be a string"), -32602);
+		}
+		FormatterMode = TmpStr.ToLower();
 	}
 
 	FString LoadError;
