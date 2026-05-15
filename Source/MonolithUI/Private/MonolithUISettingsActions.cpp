@@ -1,5 +1,6 @@
 // MonolithUISettingsActions.cpp
 #include "MonolithUISettingsActions.h"
+#include "MonolithUIInternal.h"
 #include "MonolithParamSchema.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -158,7 +159,6 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldGameUserSettings
         Features.Add(TEXT("keybinding_support"));
     }
 
-    FMonolithActionResult Err;
     FString SourceDir = ResolveSourceDir(ModuleName, Err);
     if (SourceDir.IsEmpty()) return Err;
 
@@ -384,7 +384,6 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveGame(const T
         }
     }
 
-    FMonolithActionResult Err;
     FString SourceDir = ResolveSourceDir(ModuleName, Err);
     if (SourceDir.IsEmpty()) return Err;
 
@@ -516,7 +515,6 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveSubsystem(co
 
     FString ApiMacro = ModuleName.ToUpper() + TEXT("_API");
 
-    FMonolithActionResult Err;
     FString SourceDir = ResolveSourceDir(ModuleName, Err);
     if (SourceDir.IsEmpty()) return Err;
 
