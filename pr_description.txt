@@ -1,0 +1,43 @@
+Track: Test
+Maintenance unit: MonolithAudio / Security Tests
+Why this regression matters:
+When adding validation tests for malformed inputs (like package paths), checking a single malformed state (like double-slash) is insufficient. This change updates the audio security tests to comprehensively test various malformed path inputs (empty, double-slash, missing leading slash, trailing slash, invalid characters) to ensure complete validation bounds checking.
+
+Tests added:
+Updated three existing tests to iterate over comprehensive arrays of malformed paths:
+- `FMonolithAudioSecuritySoundCueCreatePathTest`
+- `FMonolithAudioSecurityAssetCreatePathTest`
+- `FMonolithAudioSecurityTestWaveCreatePathTest`
+
+Production changes: None
+Spec/docs impact: Spec/docs: no public contract or guidance change.
+
+Verification:
+- Run `git diff --check`.
+- Ran `python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json --github check`.
+
+Blocked verification:
+[blocked: UE 5.7 editor unavailable in Jules VM]
+
+Local verification commands:
+1. Open a UE 5.7 project with Plugins/Monolith installed.
+2. Build the project/editor target.
+3. Start the editor.
+4. Run the Automation test filter: `Monolith.Security.MonolithAudio`.
+
+Follow-up: None
+
+Duplicate check:
+open PRs inspected: Checked `gh pr list` / `git branch -r`. Found #253, #283 which add path validation tests for other modules.
+related PRs/branches found: None touching MonolithAudioSecurityTests.cpp.
+reason this work is non-overlapping: Targets specific, untouched tests in the MonolithAudio module.
+
+WorkFingerprint:
+agent: Sentinel Test 🧪
+category: Security Tests
+module: MonolithAudio
+component/action/helper: Path validation for CreateSoundCue, CreateAudioAsset, CreateTestWave
+intended files: Source/MonolithAudio/Private/Tests/MonolithAudioSecurityTests.cpp
+risk type: Low (Test-only changes)
+public API impact: no
+docs/spec impact: no
