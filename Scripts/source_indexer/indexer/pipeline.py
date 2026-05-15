@@ -386,19 +386,12 @@ class IndexingPipeline:
         if not pending:
             return result
 
-        # Sort pending matches longest-first per #include line so that overlapping
-        # names like ``Foo.h`` and ``Path/Foo.h`` resolve deterministically to the
-        # longer (more specific) include first. The previous unordered ``set``
-        # iteration could record the short name on the wrong line and leave the
-        # real include unresolved (or land on a later line).
-        sorted_includes = sorted(includes, key=len, reverse=True)
-
         for i, line in enumerate(source_lines, 1):
             if not pending:
                 break
             if "#include" in line:
-                for inc in sorted_includes:
-                    if inc in pending and inc in line:
+                for inc in list(pending):
+                    if inc in line:
                         result[inc] = i
                         pending.remove(inc)
                         break
