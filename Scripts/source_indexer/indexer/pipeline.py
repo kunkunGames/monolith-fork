@@ -278,13 +278,9 @@ class IndexingPipeline:
         )
         self._new_file_ids.add(file_id)
 
+        inc_lines = self._find_include_line_numbers(result.includes, result.source_lines)
         for inc_path in result.includes:
-            line_num = 0
-            for i, line in enumerate(result.source_lines, 1):
-                if inc_path in line and "#include" in line:
-                    line_num = i
-                    break
-            insert_include(self._conn, file_id=file_id, included_path=inc_path, line=line_num)
+            insert_include(self._conn, file_id=file_id, included_path=inc_path, line=inc_lines.get(inc_path, 0))
 
         count = 0
         for sym in result.symbols:
@@ -348,13 +344,9 @@ class IndexingPipeline:
         )
         self._new_file_ids.add(file_id)
 
+        inc_lines = self._find_include_line_numbers(result.includes, source_lines)
         for inc_path in result.includes:
-            line_num = 0
-            for i, line in enumerate(source_lines, 1):
-                if inc_path in line and "#include" in line:
-                    line_num = i
-                    break
-            insert_include(self._conn, file_id=file_id, included_path=inc_path, line=line_num)
+            insert_include(self._conn, file_id=file_id, included_path=inc_path, line=inc_lines.get(inc_path, 0))
 
         count = 0
         for sym in result.symbols:
@@ -386,6 +378,24 @@ class IndexingPipeline:
                 "INSERT INTO source_fts (file_id, line_number, text) VALUES (?, ?, ?)",
                 batch,
             )
+
+    @staticmethod
+    def _find_include_line_numbers(includes: list[str], source_lines: list[str]) -> dict[str, int]:
+        result = {inc: 0 for inc in includes}
+        pending = set(includes)
+        if not pending:
+            return result
+
+        for i, line in enumerate(source_lines, 1):
+            if not pending:
+                break
+            if "#include" in line:
+                for inc in list(pending):
+                    if inc in line:
+                        result[inc] = i
+                        pending.remove(inc)
+                        break
+        return result
 
     @staticmethod
     def _is_definition(line_start: int, line_end: int) -> bool:
