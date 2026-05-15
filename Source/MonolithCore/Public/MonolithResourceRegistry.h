@@ -58,6 +58,7 @@ private:
 		FMonolithResourceDescriptor Descriptor;
 		FTextResourceProvider Provider;
 		int32 MaxChars = 65536;
+		bool bRequireNonEmpty = false;
 	};
 
 	static TSharedPtr<FJsonObject> DescriptorToJson(const FMonolithResourceDescriptor& Descriptor);

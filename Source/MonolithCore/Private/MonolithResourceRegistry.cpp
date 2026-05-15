@@ -126,6 +126,15 @@ void FMonolithResourceRegistry::RegisterDefaultResources()
 				return ReadPluginRelativeTextFile(RelativePath);
 			}),
 			65536);
+
+		// Default docs are file-backed; treat unreadable/empty content as missing.
+		{
+			FScopeLock RegLock(&ResourceLock);
+			if (FRegisteredResource* Reg = Resources.Find(Doc.Uri))
+			{
+				Reg->bRequireNonEmpty = true;
+			}
+		}
 	}
 }
 
@@ -198,9 +207,14 @@ FMonolithResourceReadResult FMonolithResourceRegistry::ReadResource(const FStrin
 		return Result;
 	}
 
-	Result.bFound = true;
 	Result.MimeType = Resource.Descriptor.MimeType.IsEmpty() ? TEXT("text/plain") : Resource.Descriptor.MimeType;
 	Result.Text = Resource.Provider.Execute();
+	if (Resource.bRequireNonEmpty && Result.Text.IsEmpty())
+	{
+		Result.Error = FString::Printf(TEXT("Resource unreadable or empty: %s"), *Uri);
+		return Result;
+	}
+	Result.bFound = true;
 	if (Result.Text.Len() > Resource.MaxChars)
 	{
 		Result.Text = Result.Text.Left(Resource.MaxChars);

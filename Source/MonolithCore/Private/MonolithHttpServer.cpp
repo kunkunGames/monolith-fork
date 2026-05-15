@@ -673,6 +673,16 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleResourcesList(const TSharedPt
 		Params->TryGetStringField(TEXT("cursor"), Cursor);
 	}
 
+	if (!FMath::IsFinite(LimitValue) ||
+		LimitValue < static_cast<double>(TNumericLimits<int32>::Min()) ||
+		LimitValue > static_cast<double>(TNumericLimits<int32>::Max()))
+	{
+		return FMonolithJsonUtils::ErrorResponse(
+			Id,
+			FMonolithJsonUtils::ErrInvalidParams,
+			TEXT("Invalid limit: must be a finite number within int32 range"));
+	}
+
 	TSharedPtr<FJsonObject> Result = FMonolithResourceRegistry::Get().ListResourcesJson(
 		static_cast<int32>(LimitValue),
 		Cursor);
