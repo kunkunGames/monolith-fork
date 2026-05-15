@@ -55,9 +55,10 @@ void FMonolithUISlotActions::RegisterActions(FMonolithToolRegistry& Registry)
 FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TSharedPtr<FJsonObject>& Params)
 {
     FString AssetPath;
-    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+    FMonolithActionResult ParamError;
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, ParamError)) return ParamError;
     FString WidgetName;
-    if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName) || WidgetName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: widget_name"));
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("widget_name"), WidgetName, ParamError)) return ParamError;
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -236,11 +237,12 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
 FMonolithActionResult FMonolithUISlotActions::HandleSetAnchorPreset(const TSharedPtr<FJsonObject>& Params)
 {
     FString AssetPath;
-    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+    FMonolithActionResult ParamError;
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, ParamError)) return ParamError;
     FString WidgetName;
-    if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName) || WidgetName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: widget_name"));
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("widget_name"), WidgetName, ParamError)) return ParamError;
     FString Preset;
-    if (!Params->TryGetStringField(TEXT("preset"), Preset) || Preset.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: preset"));
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("preset"), Preset, ParamError)) return ParamError;
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -310,11 +312,12 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetAnchorPreset(const TShare
 FMonolithActionResult FMonolithUISlotActions::HandleMoveWidget(const TSharedPtr<FJsonObject>& Params)
 {
     FString AssetPath;
-    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+    FMonolithActionResult ParamError;
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, ParamError)) return ParamError;
     FString WidgetName;
-    if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName) || WidgetName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: widget_name"));
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("widget_name"), WidgetName, ParamError)) return ParamError;
     FString NewParentName;
-    if (!Params->TryGetStringField(TEXT("new_parent_name"), NewParentName) || NewParentName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: new_parent_name"));
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("new_parent_name"), NewParentName, ParamError)) return ParamError;
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
