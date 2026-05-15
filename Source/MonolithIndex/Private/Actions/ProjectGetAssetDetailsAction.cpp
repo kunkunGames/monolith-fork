@@ -6,13 +6,22 @@
 FMonolithActionResult FProjectGetAssetDetailsAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
 	FString PackagePath;
-	if (Params->HasField(TEXT("asset_path")) && (!Params->TryGetStringField(TEXT("asset_path"), PackagePath) || PackagePath.IsEmpty()))
+	// Try asset_path first if present, but don't reject an empty value when the
+	// legacy package_path alias can still provide a value. Only enforce
+	// type-correctness (must be a string when supplied).
+	if (Params->HasField(TEXT("asset_path")))
 	{
-		return FMonolithActionResult::Error(TEXT("'asset_path' parameter must be a non-empty string"), -32602);
+		if (!Params->TryGetStringField(TEXT("asset_path"), PackagePath))
+		{
+			return FMonolithActionResult::Error(TEXT("'asset_path' parameter must be a string"), -32602);
+		}
 	}
-	if (PackagePath.IsEmpty() && Params->HasField(TEXT("package_path")) && (!Params->TryGetStringField(TEXT("package_path"), PackagePath) || PackagePath.IsEmpty()))
+	if (PackagePath.IsEmpty() && Params->HasField(TEXT("package_path")))
 	{
-		return FMonolithActionResult::Error(TEXT("'package_path' parameter must be a non-empty string"), -32602);
+		if (!Params->TryGetStringField(TEXT("package_path"), PackagePath))
+		{
+			return FMonolithActionResult::Error(TEXT("'package_path' parameter must be a string"), -32602);
+		}
 	}
 	if (PackagePath.IsEmpty())
 	{

@@ -6,13 +6,22 @@
 FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetClass;
-	if (Params->HasField(TEXT("asset_type")) && (!Params->TryGetStringField(TEXT("asset_type"), AssetClass) || AssetClass.IsEmpty()))
+	// Try asset_type first if present, but don't reject an empty value when the
+	// legacy asset_class alias can still provide a value. Only enforce
+	// type-correctness (must be a string when supplied).
+	if (Params->HasField(TEXT("asset_type")))
 	{
-		return FMonolithActionResult::Error(TEXT("'asset_type' parameter must be a non-empty string"), -32602);
+		if (!Params->TryGetStringField(TEXT("asset_type"), AssetClass))
+		{
+			return FMonolithActionResult::Error(TEXT("'asset_type' parameter must be a string"), -32602);
+		}
 	}
-	if (AssetClass.IsEmpty() && Params->HasField(TEXT("asset_class")) && (!Params->TryGetStringField(TEXT("asset_class"), AssetClass) || AssetClass.IsEmpty()))
+	if (AssetClass.IsEmpty() && Params->HasField(TEXT("asset_class")))
 	{
-		return FMonolithActionResult::Error(TEXT("'asset_class' parameter must be a non-empty string"), -32602);
+		if (!Params->TryGetStringField(TEXT("asset_class"), AssetClass))
+		{
+			return FMonolithActionResult::Error(TEXT("'asset_class' parameter must be a string"), -32602);
+		}
 	}
 
 	if (AssetClass.IsEmpty())
