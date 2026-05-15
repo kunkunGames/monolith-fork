@@ -26,3 +26,9 @@
 **Malformed input pattern:** array parameter fallback behavior
 **Learning:** array parameters need to report an error if wrong type was provided, instead of being silently ignored
 **Prevention:** FJsonObject::HasField + FJsonObject::TryGetArrayField
+
+## 2026-05-14 - Harden Niagara duplicate_emitter param parsing
+**Malformed input pattern:** String parameter `new_name` in `duplicate_emitter` checked with `HasField` but accessed directly with `GetStringField`.
+**Learning:** `HasField` only checks if the key exists, not the type. Calling `GetStringField` directly causes assertion crashes if the user provides a different JSON type (like a number or boolean).
+**Prevention:** Handlers accessing optional string fields must use `TryGetStringField` after `HasField`, and explicitly handle the boolean return to reject malformed types with a clear `FMonolithActionResult::Error`.
+**Avoid:** Assuming `HasField` guarantees type safety for optional parameters.
