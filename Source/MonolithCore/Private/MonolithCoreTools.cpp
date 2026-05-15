@@ -107,9 +107,20 @@ static TSharedPtr<FJsonObject> MakeDeferredDomainCatalogStatus(const UMonolithSe
 	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 	const bool bConfigured = IsDeferredDomainCatalogEnabled(Settings);
 	const bool bExposeTools = IsDomainToolExposureEnabled(Settings);
+	// `active` must reflect *runtime* registry state, not just the config flag.
+	// RegisterAll only registers the catalog handlers when bEnableDeferredDomainCatalog
+	// was true at registration time; after a settings toggle without a restart, the
+	// flag and registry can disagree.
+	const bool bHandlersRegistered =
+		FMonolithToolRegistry::Get().HasAction(TEXT("monolith"), TEXT("list_domains"));
 	Obj->SetBoolField(TEXT("compiled"), true);
 	Obj->SetBoolField(TEXT("configured"), bConfigured);
-	Obj->SetBoolField(TEXT("active"), bConfigured);
+	Obj->SetBoolField(TEXT("active"), bHandlersRegistered);
+	Obj->SetBoolField(TEXT("handlers_registered"), bHandlersRegistered);
+	if (bConfigured != bHandlersRegistered)
+	{
+		Obj->SetBoolField(TEXT("restart_required"), true);
+	}
 	Obj->SetStringField(TEXT("state_scope"), TEXT("process_profile"));
 	Obj->SetBoolField(TEXT("domain_tool_exposure"), bExposeTools);
 	Obj->SetStringField(TEXT("tool_exposure_mode"), bExposeTools ? TEXT("legacy_opt_in_reserved") : TEXT("disabled"));
