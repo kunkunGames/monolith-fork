@@ -6,9 +6,13 @@
 FMonolithActionResult FProjectGetAssetDetailsAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
 	FString PackagePath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), PackagePath) || PackagePath.IsEmpty())
+	if (Params->HasField(TEXT("asset_path")) && (!Params->TryGetStringField(TEXT("asset_path"), PackagePath) || PackagePath.IsEmpty()))
 	{
-		Params->TryGetStringField(TEXT("package_path"), PackagePath);
+		return FMonolithActionResult::Error(TEXT("'asset_path' parameter must be a non-empty string"), -32602);
+	}
+	if (PackagePath.IsEmpty() && Params->HasField(TEXT("package_path")) && (!Params->TryGetStringField(TEXT("package_path"), PackagePath) || PackagePath.IsEmpty()))
+	{
+		return FMonolithActionResult::Error(TEXT("'package_path' parameter must be a non-empty string"), -32602);
 	}
 	if (PackagePath.IsEmpty())
 	{

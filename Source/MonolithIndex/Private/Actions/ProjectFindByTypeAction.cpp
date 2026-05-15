@@ -6,9 +6,13 @@
 FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetClass;
-	if (!Params->TryGetStringField(TEXT("asset_type"), AssetClass) || AssetClass.IsEmpty())
+	if (Params->HasField(TEXT("asset_type")) && (!Params->TryGetStringField(TEXT("asset_type"), AssetClass) || AssetClass.IsEmpty()))
 	{
-		Params->TryGetStringField(TEXT("asset_class"), AssetClass);
+		return FMonolithActionResult::Error(TEXT("'asset_type' parameter must be a non-empty string"), -32602);
+	}
+	if (AssetClass.IsEmpty() && Params->HasField(TEXT("asset_class")) && (!Params->TryGetStringField(TEXT("asset_class"), AssetClass) || AssetClass.IsEmpty()))
+	{
+		return FMonolithActionResult::Error(TEXT("'asset_class' parameter must be a non-empty string"), -32602);
 	}
 
 	if (AssetClass.IsEmpty())
