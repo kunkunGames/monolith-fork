@@ -36,6 +36,49 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="MCP Server", meta=(ClampMin="1024", ClampMax="65535"))
 	int32 ServerPort = 9316;
 
+	/** Enable domain catalog actions that let clients list, describe, and mark
+	 *  active namespaces without exposing additional namespace tools by default. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Discovery",
+		meta=(DisplayName="Enable Deferred Domain Catalog",
+			  ToolTip="Registers monolith.list_domains, describe_domain, load_domain, and get_loaded_domains. Default off to preserve existing MCP tool-list behavior."))
+	bool bEnableDeferredDomainCatalog = false;
+
+	/** Legacy compatibility opt-in for clients that need loaded domains to appear
+	 *  as namespace query tools. Keep disabled for single-dispatcher clients. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Discovery",
+		meta=(DisplayName="Expose Loaded Domains As MCP Tools",
+			  EditCondition="bEnableDeferredDomainCatalog",
+			  ToolTip="Reserved compatibility flag. The first domain catalog slice records this status but does not change tools/list."))
+	bool bExposeLoadedDomainsAsMcpTools = false;
+
+	/** Enables read-only MCP resources/list and resources/read dispatch once the
+	 *  resource registry implementation is present. Default off for compatibility. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Resources",
+		meta=(DisplayName="Enable MCP Resources",
+			  ToolTip="Reserved feature flag for MCP resources/list and resources/read support. Default off until resource providers are implemented."))
+	bool bEnableMcpResources = false;
+
+	/** Adds MCP structuredContent and typed content entries while preserving
+	 *  legacy text JSON output. Default off for existing clients. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Results",
+		meta=(DisplayName="Enable Structured Tool Results",
+			  ToolTip="Reserved feature flag for structuredContent and typed MCP content. Legacy text JSON remains available."))
+	bool bEnableStructuredToolResults = false;
+
+	/** Enables persistent MCP session/request state, progress, and cancellation
+	 *  once the execution-context implementation is present. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Sessions",
+		meta=(DisplayName="Enable MCP Session Mode",
+			  ToolTip="Reserved feature flag for persistent MCP sessions, progress, and cancellation. Default off."))
+	bool bEnableMcpSessionMode = false;
+
+	/** Extends the current action audit into redacted ToolCall records and
+	 *  analysis actions once advanced recording is implemented. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Audit",
+		meta=(DisplayName="Enable Advanced ToolCall Records",
+			  ToolTip="Reserved feature flag for redacted ToolCall records and analysis. Raw payload logging remains disabled."))
+	bool bEnableAdvancedToolCallRecords = false;
+
 	// --- Auto-Update ---
 
 	/** Check GitHub Releases for updates on editor startup. Off by default

@@ -4,6 +4,7 @@
 #include "MonolithHttpServer.h"
 #include "MonolithParamSchema.h"
 #include "MonolithSettings.h"
+#include "MonolithToolProfileManager.h"
 #include "MonolithUpdateSubsystem.h"
 #include "Dom/JsonValue.h"
 #include "EditorSubsystem.h"
@@ -71,6 +72,129 @@ static TArray<TSharedPtr<FJsonValue>> StringArrayToJson(const TArray<FString>& V
 	{
 		Result.Add(MakeShared<FJsonValueString>(Value));
 	}
+	return Result;
+}
+
+static FString NormalizeDomainNamespace(FString Namespace)
+{
+	Namespace.TrimStartAndEndInline();
+	Namespace.ToLowerInline();
+	return Namespace;
+}
+
+static bool IsDeferredDomainCatalogEnabled(const UMonolithSettings* Settings)
+{
+	return Settings && Settings->bEnableDeferredDomainCatalog;
+}
+
+static bool IsDomainToolExposureEnabled(const UMonolithSettings* Settings)
+{
+	return Settings && Settings->bEnableDeferredDomainCatalog && Settings->bExposeLoadedDomainsAsMcpTools;
+}
+
+static TSharedPtr<FJsonObject> MakeSettingsOnlyFeatureStatus(bool bConfigured, const FString& State)
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetBoolField(TEXT("compiled"), true);
+	Obj->SetBoolField(TEXT("configured"), bConfigured);
+	Obj->SetBoolField(TEXT("active"), false);
+	Obj->SetStringField(TEXT("state"), State);
+	return Obj;
+}
+
+static TSharedPtr<FJsonObject> MakeDeferredDomainCatalogStatus(const UMonolithSettings* Settings)
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	const bool bConfigured = IsDeferredDomainCatalogEnabled(Settings);
+	const bool bExposeTools = IsDomainToolExposureEnabled(Settings);
+	// `active` must reflect *runtime* registry state, not just the config flag.
+	// RegisterAll only registers the catalog handlers when bEnableDeferredDomainCatalog
+	// was true at registration time; after a settings toggle without a restart, the
+	// flag and registry can disagree.
+	const bool bHandlersRegistered =
+		FMonolithToolRegistry::Get().HasAction(TEXT("monolith"), TEXT("list_domains"));
+	Obj->SetBoolField(TEXT("compiled"), true);
+	Obj->SetBoolField(TEXT("configured"), bConfigured);
+	Obj->SetBoolField(TEXT("active"), bHandlersRegistered);
+	Obj->SetBoolField(TEXT("handlers_registered"), bHandlersRegistered);
+	if (bConfigured != bHandlersRegistered)
+	{
+		Obj->SetBoolField(TEXT("restart_required"), true);
+	}
+	Obj->SetStringField(TEXT("state_scope"), TEXT("process_profile"));
+	Obj->SetBoolField(TEXT("domain_tool_exposure"), bExposeTools);
+	Obj->SetStringField(TEXT("tool_exposure_mode"), bExposeTools ? TEXT("legacy_opt_in_reserved") : TEXT("disabled"));
+	Obj->SetStringField(TEXT("tool_list_mutation"), TEXT("not_implemented_in_metadata_slice"));
+	return Obj;
+}
+
+static FString BuildDomainDescription(const FString& Namespace, const TArray<FMonolithActionInfo>& Actions)
+{
+	if (Actions.Num() == 0)
+	{
+		return FString::Printf(TEXT("%s domain has no profile-allowed actions."), *Namespace);
+	}
+
+	TSet<FString> Categories;
+	for (const FMonolithActionInfo& Action : Actions)
+	{
+		if (!Action.Category.IsEmpty())
+		{
+			Categories.Add(Action.Category);
+		}
+	}
+
+	if (Categories.Num() > 0)
+	{
+		TArray<FString> CategoryList = Categories.Array();
+		CategoryList.Sort();
+		return FString::Printf(TEXT("%s domain with %d profile-allowed actions across categories: %s."),
+			*Namespace,
+			Actions.Num(),
+			*FString::Join(CategoryList, TEXT(", ")));
+	}
+
+	return FString::Printf(TEXT("%s domain with %d profile-allowed actions."), *Namespace, Actions.Num());
+}
+
+static FCriticalSection GLoadedDomainCatalogLock;
+static TMap<FString, TSet<FString>> GLoadedDomainsByProfile;
+
+static TSet<FString>& GetLoadedDomainsForActiveProfile_NoLock()
+{
+	return GLoadedDomainsByProfile.FindOrAdd(FMonolithToolProfileManager::Get().GetActiveProfileId());
+}
+
+static bool IsDomainLoadedForActiveProfile(const FString& Namespace)
+{
+	FScopeLock Lock(&GLoadedDomainCatalogLock);
+	return GetLoadedDomainsForActiveProfile_NoLock().Contains(Namespace);
+}
+
+static TArray<FString> GetLoadedDomainsSnapshotForActiveProfile()
+{
+	FScopeLock Lock(&GLoadedDomainCatalogLock);
+	TArray<FString> Domains = GetLoadedDomainsForActiveProfile_NoLock().Array();
+	Domains.Sort();
+	return Domains;
+}
+
+static bool MarkDomainLoadedForActiveProfile(const FString& Namespace)
+{
+	FScopeLock Lock(&GLoadedDomainCatalogLock);
+	TSet<FString>& LoadedDomains = GetLoadedDomainsForActiveProfile_NoLock();
+	const bool bAlreadyLoaded = LoadedDomains.Contains(Namespace);
+	LoadedDomains.Add(Namespace);
+	return !bAlreadyLoaded;
+}
+
+static TSharedPtr<FJsonObject> MakeDomainCatalogDisabledResult()
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("status"), TEXT("disabled"));
+	Result->SetBoolField(TEXT("deferred_enabled"), false);
+	Result->SetStringField(TEXT("reason"), TEXT("bEnableDeferredDomainCatalog is false. Enable it in Monolith MCP Server discovery settings and restart the editor to register catalog tools."));
+	Result->SetObjectField(TEXT("feature"), MakeDeferredDomainCatalogStatus(UMonolithSettings::Get()));
 	return Result;
 }
 
@@ -280,6 +404,43 @@ void FMonolithCoreTools::RegisterAll()
 		TEXT("Return the current live registry discovery snapshot and refresh semantics."),
 		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetMcpDiscoveryState)
 	);
+
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (IsDeferredDomainCatalogEnabled(Settings))
+	{
+		Registry.RegisterAction(
+			TEXT("monolith"), TEXT("list_domains"),
+			TEXT("Return cheap profile-filtered Monolith domain metadata without per-action schemas."),
+			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleListDomains),
+			FParamSchemaBuilder()
+				.Optional(TEXT("include_optional"), TEXT("boolean"), TEXT("Include known optional domains that are not currently registered"), TEXT("true"))
+				.Build()
+		);
+
+		Registry.RegisterAction(
+			TEXT("monolith"), TEXT("describe_domain"),
+			TEXT("Return one Monolith domain's profile-filtered actions and schemas without changing tools/list."),
+			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleDescribeDomain),
+			FParamSchemaBuilder()
+				.Required(TEXT("namespace"), TEXT("string"), TEXT("Domain namespace to describe"))
+				.Build()
+		);
+
+		Registry.RegisterAction(
+			TEXT("monolith"), TEXT("load_domain"),
+			TEXT("Mark a Monolith domain loaded for discovery scope without exposing additional tools by default."),
+			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleLoadDomain),
+			FParamSchemaBuilder()
+				.Required(TEXT("namespace"), TEXT("string"), TEXT("Domain namespace to mark loaded"))
+				.Build()
+		);
+
+		Registry.RegisterAction(
+			TEXT("monolith"), TEXT("get_loaded_domains"),
+			TEXT("Return process/profile-scoped loaded domain state for the deferred domain catalog."),
+			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetLoadedDomains)
+		);
+	}
 
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("get_onboarding_state"),
@@ -1020,6 +1181,13 @@ FMonolithActionResult FMonolithCoreTools::HandleGetMcpServerStatus(const TShared
 	Result->SetNumberField(TEXT("max_request_body_bytes"), MaxRequestBodyBytes);
 	Result->SetStringField(TEXT("session_tracking"), TEXT("not_persistent"));
 	Result->SetStringField(TEXT("session_tracking_note"), TEXT("Current streamable HTTP handling accepts MCP session/protocol headers but does not persist per-client session rows."));
+	TSharedPtr<FJsonObject> Features = MakeShared<FJsonObject>();
+	Features->SetObjectField(TEXT("deferred_domain_catalog"), MakeDeferredDomainCatalogStatus(Settings));
+	Features->SetObjectField(TEXT("mcp_resources"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableMcpResources, TEXT("settings_only_provider_registry_pending")));
+	Features->SetObjectField(TEXT("structured_tool_results"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableStructuredToolResults, TEXT("settings_only_result_helpers_pending")));
+	Features->SetObjectField(TEXT("mcp_session_mode"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableMcpSessionMode, TEXT("settings_only_execution_context_pending")));
+	Features->SetObjectField(TEXT("advanced_tool_call_records"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableAdvancedToolCallRecords, TEXT("settings_only_guard_wiring_pending")));
+	Result->SetObjectField(TEXT("features"), Features);
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -1090,5 +1258,259 @@ FMonolithActionResult FMonolithCoreTools::HandleGetMcpDiscoveryState(const TShar
 	Result->SetNumberField(TEXT("namespace_count"), Namespaces.Num());
 	Result->SetNumberField(TEXT("action_count"), Registry.GetActionCount());
 	Result->SetArrayField(TEXT("namespaces"), NamespaceRows);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithCoreTools::HandleListDomains(const TSharedPtr<FJsonObject>& Params)
+{
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (!IsDeferredDomainCatalogEnabled(Settings))
+	{
+		return FMonolithActionResult::Success(MakeDomainCatalogDisabledResult());
+	}
+
+	bool bIncludeOptional = true;
+	if (Params.IsValid())
+	{
+		Params->TryGetBoolField(TEXT("include_optional"), bIncludeOptional);
+	}
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	TArray<FString> Namespaces = Registry.GetNamespaces();
+	Namespaces.Sort();
+
+	TArray<TSharedPtr<FJsonValue>> DomainRows;
+	DomainRows.Reserve(Namespaces.Num());
+	for (const FString& Namespace : Namespaces)
+	{
+		const TArray<FMonolithActionInfo> Actions = Registry.GetActions(Namespace);
+
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("namespace"), Namespace);
+		Row->SetNumberField(TEXT("action_count"), Actions.Num());
+		Row->SetBoolField(TEXT("loaded"), IsDomainLoadedForActiveProfile(Namespace));
+		Row->SetBoolField(TEXT("profile_allowed"), Actions.Num() > 0);
+		Row->SetStringField(TEXT("description"), BuildDomainDescription(Namespace, Actions));
+
+		TSet<FString> CategorySet;
+		for (const FMonolithActionInfo& Action : Actions)
+		{
+			if (!Action.Category.IsEmpty())
+			{
+				CategorySet.Add(Action.Category);
+			}
+		}
+		TArray<FString> Categories = CategorySet.Array();
+		Categories.Sort();
+		Row->SetArrayField(TEXT("categories"), StringArrayToJson(Categories));
+
+		DomainRows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> OptionalRows;
+	if (bIncludeOptional)
+	{
+		TSet<FString> RegisteredNamespaces;
+		for (const FString& Namespace : Namespaces)
+		{
+			RegisteredNamespaces.Add(Namespace);
+		}
+		for (const FKnownOptionalModule& Module : GetKnownOptionalModules())
+		{
+			if (RegisteredNamespaces.Contains(Module.Namespace))
+			{
+				continue;
+			}
+
+			bool bSettingEnabled = false;
+			if (Settings)
+			{
+				const FBoolProperty* Prop = CastField<FBoolProperty>(
+					UMonolithSettings::StaticClass()->FindPropertyByName(*Module.SettingsField));
+				bSettingEnabled = Prop && Prop->GetPropertyValue_InContainer(Settings);
+			}
+
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("namespace"), Module.Namespace);
+			Row->SetStringField(TEXT("tool"), Module.ToolName);
+			Row->SetNumberField(TEXT("action_count"), 0);
+			Row->SetBoolField(TEXT("loaded"), false);
+			Row->SetBoolField(TEXT("profile_allowed"), false);
+			Row->SetStringField(TEXT("status"), bSettingEnabled ? TEXT("not_installed") : TEXT("disabled"));
+			Row->SetStringField(TEXT("description"), Module.InstallHint);
+			OptionalRows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("status"), TEXT("ok"));
+	Result->SetBoolField(TEXT("deferred_enabled"), true);
+	Result->SetStringField(TEXT("state_scope"), TEXT("process_profile"));
+	Result->SetStringField(TEXT("active_profile_id"), FMonolithToolProfileManager::Get().GetActiveProfileId());
+	Result->SetBoolField(TEXT("domain_tool_exposure"), IsDomainToolExposureEnabled(Settings));
+	Result->SetStringField(TEXT("tool_exposure_mode"), IsDomainToolExposureEnabled(Settings) ? TEXT("legacy_opt_in_reserved") : TEXT("disabled"));
+	Result->SetNumberField(TEXT("domain_count"), DomainRows.Num());
+	Result->SetArrayField(TEXT("domains"), DomainRows);
+	Result->SetArrayField(TEXT("loaded_domains"), StringArrayToJson(GetLoadedDomainsSnapshotForActiveProfile()));
+	if (OptionalRows.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("optional_domains"), OptionalRows);
+	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithCoreTools::HandleDescribeDomain(const TSharedPtr<FJsonObject>& Params)
+{
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (!IsDeferredDomainCatalogEnabled(Settings))
+	{
+		return FMonolithActionResult::Success(MakeDomainCatalogDisabledResult());
+	}
+
+	FString Namespace;
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("namespace"), Namespace);
+	}
+	Namespace = NormalizeDomainNamespace(Namespace);
+	if (Namespace.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("namespace is required"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	TArray<FMonolithActionInfo> Actions = Registry.GetActions(Namespace);
+	if (Actions.Num() == 0)
+	{
+		if (Registry.HasNamespace(Namespace))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Domain '%s' has no actions allowed by the active Monolith tool profile '%s'."),
+					*Namespace,
+					*FMonolithToolProfileManager::Get().GetActiveProfileId()),
+				FMonolithJsonUtils::ErrInvalidRequest);
+		}
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Unknown domain namespace: %s"), *Namespace),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	Actions.Sort([](const FMonolithActionInfo& Left, const FMonolithActionInfo& Right)
+	{
+		return Left.Action < Right.Action;
+	});
+
+	TArray<TSharedPtr<FJsonValue>> ActionRows;
+	ActionRows.Reserve(Actions.Num());
+	for (const FMonolithActionInfo& Action : Actions)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("name"), Action.Action);
+		Row->SetStringField(TEXT("action"), Action.Action);
+		Row->SetStringField(TEXT("description"), Action.Description);
+		if (!Action.Category.IsEmpty())
+		{
+			Row->SetStringField(TEXT("category"), Action.Category);
+		}
+		if (Action.ParamSchema.IsValid())
+		{
+			Row->SetObjectField(TEXT("inputSchema"), Action.ParamSchema);
+			Row->SetObjectField(TEXT("params"), Action.ParamSchema);
+		}
+		ActionRows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("status"), TEXT("ok"));
+	Result->SetStringField(TEXT("namespace"), Namespace);
+	Result->SetBoolField(TEXT("loaded"), IsDomainLoadedForActiveProfile(Namespace));
+	Result->SetBoolField(TEXT("profile_allowed"), true);
+	Result->SetStringField(TEXT("active_profile_id"), FMonolithToolProfileManager::Get().GetActiveProfileId());
+	Result->SetStringField(TEXT("state_scope"), TEXT("process_profile"));
+	Result->SetBoolField(TEXT("domain_tool_exposure"), IsDomainToolExposureEnabled(Settings));
+	Result->SetNumberField(TEXT("action_count"), Actions.Num());
+	Result->SetStringField(TEXT("description"), BuildDomainDescription(Namespace, Actions));
+	Result->SetArrayField(TEXT("actions"), ActionRows);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithCoreTools::HandleLoadDomain(const TSharedPtr<FJsonObject>& Params)
+{
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (!IsDeferredDomainCatalogEnabled(Settings))
+	{
+		return FMonolithActionResult::Success(MakeDomainCatalogDisabledResult());
+	}
+
+	FString Namespace;
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("namespace"), Namespace);
+	}
+	Namespace = NormalizeDomainNamespace(Namespace);
+	if (Namespace.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("namespace is required"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	const TArray<FMonolithActionInfo> Actions = Registry.GetActions(Namespace);
+	if (Actions.Num() == 0)
+	{
+		if (Registry.HasNamespace(Namespace))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Cannot load domain '%s' because the active Monolith tool profile '%s' allows no actions in that namespace."),
+					*Namespace,
+					*FMonolithToolProfileManager::Get().GetActiveProfileId()),
+				FMonolithJsonUtils::ErrInvalidRequest);
+		}
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Unknown domain namespace: %s"), *Namespace),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	const bool bNewlyLoaded = MarkDomainLoadedForActiveProfile(Namespace);
+
+	TSharedPtr<FJsonObject> RecommendedDispatch = MakeShared<FJsonObject>();
+	RecommendedDispatch->SetStringField(TEXT("namespace"), Namespace);
+	RecommendedDispatch->SetStringField(TEXT("current_mcp_tool"), FString::Printf(TEXT("%s_query"), *Namespace));
+	RecommendedDispatch->SetStringField(TEXT("offline_cli"), TEXT("monolith_query.exe"));
+	RecommendedDispatch->SetBoolField(TEXT("action_argument_required"), true);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("status"), TEXT("ok"));
+	Result->SetStringField(TEXT("namespace"), Namespace);
+	Result->SetBoolField(TEXT("loaded"), true);
+	Result->SetBoolField(TEXT("newly_loaded"), bNewlyLoaded);
+	Result->SetBoolField(TEXT("already_loaded"), !bNewlyLoaded);
+	Result->SetStringField(TEXT("state_scope"), TEXT("process_profile"));
+	Result->SetStringField(TEXT("active_profile_id"), FMonolithToolProfileManager::Get().GetActiveProfileId());
+	Result->SetBoolField(TEXT("execution_surface_changed"), false);
+	Result->SetBoolField(TEXT("visible_tools_changed"), false);
+	Result->SetBoolField(TEXT("domain_tool_exposure"), IsDomainToolExposureEnabled(Settings));
+	Result->SetStringField(TEXT("tool_exposure_mode"), IsDomainToolExposureEnabled(Settings) ? TEXT("legacy_opt_in_reserved") : TEXT("disabled"));
+	Result->SetNumberField(TEXT("action_count"), Actions.Num());
+	Result->SetObjectField(TEXT("recommended_dispatch"), RecommendedDispatch);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithCoreTools::HandleGetLoadedDomains(const TSharedPtr<FJsonObject>& /*Params*/)
+{
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (!IsDeferredDomainCatalogEnabled(Settings))
+	{
+		return FMonolithActionResult::Success(MakeDomainCatalogDisabledResult());
+	}
+
+	const TArray<FString> LoadedDomains = GetLoadedDomainsSnapshotForActiveProfile();
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("status"), TEXT("ok"));
+	Result->SetBoolField(TEXT("deferred_enabled"), true);
+	Result->SetStringField(TEXT("state_scope"), TEXT("process_profile"));
+	Result->SetStringField(TEXT("active_profile_id"), FMonolithToolProfileManager::Get().GetActiveProfileId());
+	Result->SetBoolField(TEXT("domain_tool_exposure"), IsDomainToolExposureEnabled(Settings));
+	Result->SetNumberField(TEXT("loaded_domain_count"), LoadedDomains.Num());
+	Result->SetArrayField(TEXT("loaded_domains"), StringArrayToJson(LoadedDomains));
 	return FMonolithActionResult::Success(Result);
 }
