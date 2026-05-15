@@ -78,3 +78,34 @@ bool FMonolithParamGuardMeshProceduralMalformedParamsTest::RunTest(const FString
 
     return true;
 }
+
+#include "MonolithMeshRoofActions.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshRoofMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.GenerateRoofRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardMeshRoofMalformedParamsTest::RunTest(const FString& Parameters)
+{
+    FMonolithMeshRoofActions::RegisterActions(FMonolithToolRegistry::Get());
+    TestTrue(TEXT("generate_roof action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("generate_roof")));
+
+    // Test with malformed pitch_degrees (string instead of number)
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        // Required fields
+        TArray<TSharedPtr<FJsonValue>> Poly;
+        Poly.Add(MakeShared<FJsonValueNumber>(0.0));
+        Poly.Add(MakeShared<FJsonValueNumber>(0.0));
+        Poly.Add(MakeShared<FJsonValueNumber>(0.0));
+        Params->SetArrayField(TEXT("footprint_polygon"), Poly);
+        Params->SetStringField(TEXT("save_path"), TEXT("/Game/TestRoof"));
+
+        // Malformed optional field
+        Params->SetStringField(TEXT("pitch_degrees"), TEXT("steep"));
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("generate_roof"), Params);
+        TestFalse(TEXT("GenerateRoof rejects malformed pitch_degrees parameter"), Result.bSuccess);
+        TestTrue(TEXT("GenerateRoof reports the validation error"), Result.ErrorMessage.Contains(TEXT("pitch_degrees must be a number")));
+    }
+
+    return true;
+}
