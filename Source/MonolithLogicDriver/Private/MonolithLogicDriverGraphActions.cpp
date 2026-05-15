@@ -1017,6 +1017,8 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleSetNodeProperties(
 	Result->SetNumberField(TEXT("failed_count"), FailedProps.Num());
 
 	TArray<TSharedPtr<FJsonValue>> SetArr, FailArr;
+	SetArr.Reserve(SetProps.Num());
+	FailArr.Reserve(FailedProps.Num());
 	for (const FString& S : SetProps) SetArr.Add(MakeShared<FJsonValueString>(S));
 	for (const FString& S : FailedProps) FailArr.Add(MakeShared<FJsonValueString>(S));
 	Result->SetArrayField(TEXT("set_properties"), SetArr);

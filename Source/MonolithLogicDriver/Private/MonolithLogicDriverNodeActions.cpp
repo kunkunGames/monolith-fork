@@ -314,6 +314,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureState(cons
 	Result->SetStringField(TEXT("node_type"), NodeType);
 
 	TArray<TSharedPtr<FJsonValue>> AppliedArr;
+	AppliedArr.Reserve(Applied.Num());
 	for (const FString& S : Applied)
 		AppliedArr.Add(MakeShared<FJsonValueString>(S));
 	Result->SetArrayField(TEXT("properties_set"), AppliedArr);
@@ -399,6 +400,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureTransition
 	Result->SetStringField(TEXT("node_type"), NodeType);
 
 	TArray<TSharedPtr<FJsonValue>> AppliedArr;
+	AppliedArr.Reserve(Applied.Num());
 	for (const FString& S : Applied)
 		AppliedArr.Add(MakeShared<FJsonValueString>(S));
 	Result->SetArrayField(TEXT("properties_set"), AppliedArr);
@@ -460,6 +462,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureConduit(co
 	Result->SetStringField(TEXT("node_type"), NodeType);
 
 	TArray<TSharedPtr<FJsonValue>> AppliedArr;
+	AppliedArr.Reserve(Applied.Num());
 	for (const FString& S : Applied)
 		AppliedArr.Add(MakeShared<FJsonValueString>(S));
 	Result->SetArrayField(TEXT("properties_set"), AppliedArr);
@@ -628,6 +631,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetTransitionCondit
 	Result->SetStringField(TEXT("condition_type"), ConditionType);
 
 	TArray<TSharedPtr<FJsonValue>> AppliedArr;
+	AppliedArr.Reserve(Applied.Num());
 	for (const FString& S : Applied)
 		AppliedArr.Add(MakeShared<FJsonValueString>(S));
 	Result->SetArrayField(TEXT("properties_set"), AppliedArr);
@@ -844,6 +848,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureStateMachi
 	Result->SetStringField(TEXT("node_type"), NodeType);
 
 	TArray<TSharedPtr<FJsonValue>> AppliedArr;
+	AppliedArr.Reserve(Applied.Num());
 	for (const FString& S : Applied)
 		AppliedArr.Add(MakeShared<FJsonValueString>(S));
 	Result->SetArrayField(TEXT("properties_set"), AppliedArr);
@@ -936,6 +941,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetStateTags(const 
 	Result->SetNumberField(TEXT("tags_set"), AddedTags.Num());
 
 	TArray<TSharedPtr<FJsonValue>> AddedArr;
+	AddedArr.Reserve(AddedTags.Num());
 	for (const FString& S : AddedTags)
 		AddedArr.Add(MakeShared<FJsonValueString>(S));
 	Result->SetArrayField(TEXT("tags"), AddedArr);
@@ -943,6 +949,7 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetStateTags(const 
 	if (InvalidTags.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> InvalidArr;
+		InvalidArr.Reserve(InvalidTags.Num());
 		for (const FString& S : InvalidTags)
 			InvalidArr.Add(MakeShared<FJsonValueString>(S));
 		Result->SetArrayField(TEXT("invalid_tags"), InvalidArr);
