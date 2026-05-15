@@ -61,17 +61,16 @@ namespace
 		return FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("Monolith"));
 	}
 
-	FString ReadPluginRelativeTextFile(const FString& RelativePath)
+	bool TryReadPluginRelativeTextFile(const FString& RelativePath, FString& OutText)
 	{
-		FString Text;
+		OutText.Empty();
 		const FString AbsolutePath = FPaths::ConvertRelativePathToFull(
 			FPaths::Combine(GetMonolithPluginBaseDir(), RelativePath));
 		if (!FPaths::FileExists(AbsolutePath))
 		{
-			return FString();
+			return false;
 		}
-		FFileHelper::LoadFileToString(Text, *AbsolutePath);
-		return Text;
+		return FFileHelper::LoadFileToString(OutText, *AbsolutePath);
 	}
 }
 
@@ -112,29 +111,25 @@ void FMonolithResourceRegistry::RegisterDefaultResources()
 
 	for (const FDefaultDocResource& Doc : GetDefaultDocResources())
 	{
+		FString DocText;
+		if (!TryReadPluginRelativeTextFile(Doc.RelativePath, DocText) || DocText.IsEmpty())
+		{
+			continue;
+		}
+
 		FMonolithResourceDescriptor Descriptor;
 		Descriptor.Uri = Doc.Uri;
 		Descriptor.Name = Doc.Name;
 		Descriptor.Description = Doc.Description;
 		Descriptor.MimeType = TEXT("text/markdown");
 
-		const FString RelativePath = Doc.RelativePath;
 		RegisterTextResource(
 			Descriptor,
-			FTextResourceProvider::CreateLambda([RelativePath]()
+			FTextResourceProvider::CreateLambda([DocText]()
 			{
-				return ReadPluginRelativeTextFile(RelativePath);
+				return DocText;
 			}),
 			65536);
-
-		// Default docs are file-backed; treat unreadable/empty content as missing.
-		{
-			FScopeLock RegLock(&ResourceLock);
-			if (FRegisteredResource* Reg = Resources.Find(Doc.Uri))
-			{
-				Reg->bRequireNonEmpty = true;
-			}
-		}
 	}
 }
 
@@ -181,10 +176,6 @@ TSharedPtr<FJsonObject> FMonolithResourceRegistry::ListResourcesJson(int32 Limit
 	{
 		Result->SetStringField(TEXT("nextCursor"), FString::FromInt(EndIndex));
 	}
-	else
-	{
-		Result->SetField(TEXT("nextCursor"), MakeShared<FJsonValueNull>());
-	}
 	return Result;
 }
 
@@ -209,11 +200,6 @@ FMonolithResourceReadResult FMonolithResourceRegistry::ReadResource(const FStrin
 
 	Result.MimeType = Resource.Descriptor.MimeType.IsEmpty() ? TEXT("text/plain") : Resource.Descriptor.MimeType;
 	Result.Text = Resource.Provider.Execute();
-	if (Resource.bRequireNonEmpty && Result.Text.IsEmpty())
-	{
-		Result.Error = FString::Printf(TEXT("Resource unreadable or empty: %s"), *Uri);
-		return Result;
-	}
 	Result.bFound = true;
 	if (Result.Text.Len() > Resource.MaxChars)
 	{

@@ -60,6 +60,7 @@ bool FMonolithResourceRegistryBasicTest::RunTest(const FString& Parameters)
 		const TArray<TSharedPtr<FJsonValue>>* Resources = nullptr;
 		TestTrue(TEXT("Resources array exists"), List->TryGetArrayField(TEXT("resources"), Resources));
 		TestTrue(TEXT("Registered URI is listed"), ResourceArrayContainsUri(Resources, TEXT("monolith://test/resource")));
+		TestFalse(TEXT("Final resource page omits next cursor"), List->HasField(TEXT("nextCursor")));
 	}
 
 	FMonolithResourceReadResult Read = Registry.ReadResource(TEXT("monolith://test/resource"));
@@ -70,6 +71,52 @@ bool FMonolithResourceRegistryBasicTest::RunTest(const FString& Parameters)
 	FMonolithResourceReadResult Missing = Registry.ReadResource(TEXT("monolith://test/missing"));
 	TestFalse(TEXT("Unknown resource is not found"), Missing.bFound);
 	TestTrue(TEXT("Unknown resource has error"), !Missing.Error.IsEmpty());
+
+	Registry.ResetForTests();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithResourceRegistryPaginationTest,
+	"Monolith.Core.Resources.RegistryPagination",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithResourceRegistryPaginationTest::RunTest(const FString& Parameters)
+{
+	FMonolithResourceRegistry& Registry = FMonolithResourceRegistry::Get();
+	Registry.ResetForTests();
+
+	for (int32 Index = 0; Index < 3; ++Index)
+	{
+		FMonolithResourceDescriptor Descriptor;
+		Descriptor.Uri = FString::Printf(TEXT("monolith://test/page/%d"), Index);
+		Descriptor.Name = FString::Printf(TEXT("Page %d"), Index);
+		Descriptor.Description = TEXT("Resource pagination test payload");
+		Descriptor.MimeType = TEXT("text/plain");
+
+		Registry.RegisterTextResource(
+			Descriptor,
+			FMonolithResourceRegistry::FTextResourceProvider::CreateLambda([Index]()
+			{
+				return FString::Printf(TEXT("page %d"), Index);
+			}),
+			64);
+	}
+
+	TSharedPtr<FJsonObject> FirstPage = Registry.ListResourcesJson(2, FString());
+	TestTrue(TEXT("First page exists"), FirstPage.IsValid());
+	if (FirstPage.IsValid())
+	{
+		FString NextCursor;
+		TestTrue(TEXT("First page has next cursor"), FirstPage->TryGetStringField(TEXT("nextCursor"), NextCursor));
+		TestEqual(TEXT("First page cursor points to next offset"), NextCursor, TEXT("2"));
+	}
+
+	TSharedPtr<FJsonObject> FinalPage = Registry.ListResourcesJson(2, TEXT("2"));
+	TestTrue(TEXT("Final page exists"), FinalPage.IsValid());
+	if (FinalPage.IsValid())
+	{
+		TestFalse(TEXT("Final page omits next cursor"), FinalPage->HasField(TEXT("nextCursor")));
+	}
 
 	Registry.ResetForTests();
 	return true;
