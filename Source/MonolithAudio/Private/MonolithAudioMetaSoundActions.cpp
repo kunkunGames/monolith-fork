@@ -540,9 +540,9 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateMetaSoundSource(cons
 	}
 
 	bool bOneShot = true;
-	if (Params->HasField(TEXT("one_shot")))
+	if (Params->HasField(TEXT("one_shot")) && !Params->TryGetBoolField(TEXT("one_shot"), bOneShot))
 	{
-		Params->TryGetBoolField(TEXT("one_shot"), bOneShot);
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: one_shot must be a boolean"));
 	}
 
 	UMetaSoundBuilderSubsystem& Sub = UMetaSoundBuilderSubsystem::GetChecked();
@@ -1778,9 +1778,9 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 		}
 
 		bool bOneShot = true;
-		if (Spec->HasField(TEXT("one_shot")))
+		if (Spec->HasField(TEXT("one_shot")) && !Spec->TryGetBoolField(TEXT("one_shot"), bOneShot))
 		{
-			Spec->TryGetBoolField(TEXT("one_shot"), bOneShot);
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: one_shot must be a boolean"));
 		}
 
 		FMetaSoundBuilderNodeOutputHandle OnPlayOutput;
