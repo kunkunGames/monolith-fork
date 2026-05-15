@@ -106,6 +106,11 @@ void FMonolithConfigActions::RegisterActions(FMonolithToolRegistry& Registry)
 
 FString FMonolithConfigActions::ResolveConfigFilePath(const FString& ShortName)
 {
+	if (ShortName.Contains(TEXT("..")))
+	{
+		return FString();
+	}
+
 	// Handle known shortnames
 	if (ShortName.StartsWith(TEXT("Base")))
 	{
@@ -138,6 +143,11 @@ FString FMonolithConfigActions::ResolveConfigFilePath(const FString& ShortName)
 TArray<TPair<FString, FString>> FMonolithConfigActions::GetConfigHierarchy(const FString& Category)
 {
 	TArray<TPair<FString, FString>> Hierarchy;
+
+	if (Category.Contains(TEXT("..")))
+	{
+		return Hierarchy;
+	}
 
 	// Engine base
 	FString BaseFile = FPaths::Combine(FPaths::EngineConfigDir(), FString::Printf(TEXT("Base%s.ini"), *Category));
@@ -481,6 +491,11 @@ static TSharedPtr<FJsonObject> MakeDiffEntry(
 FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Category = Params->GetStringField(TEXT("file"));
+	if (Category.Contains(TEXT("..")))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid 'file' parameter. Category cannot contain path traversal characters."));
+	}
+
 	FString FilterSection;
 	Params->TryGetStringField(TEXT("section"), FilterSection);
 
@@ -582,7 +597,10 @@ FMonolithActionResult FMonolithConfigActions::SearchConfig(const TSharedPtr<FJso
 {
 	FString Query = Params->GetStringField(TEXT("query"));
 	FString FilterCategory;
-	Params->TryGetStringField(TEXT("category"), FilterCategory);
+	if (Params->TryGetStringField(TEXT("category"), FilterCategory) && FilterCategory.Contains(TEXT("..")))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid 'category' parameter. Cannot contain path traversal characters."));
+	}
 
 	// Gather config directories to search
 	TArray<FString> ConfigDirs;
@@ -764,7 +782,10 @@ FMonolithActionResult FMonolithConfigActions::GetSection(const TSharedPtr<FJsonO
 FMonolithActionResult FMonolithConfigActions::GetConfigFiles(const TSharedPtr<FJsonObject>& Params)
 {
 	FString FilterCategory;
-	Params->TryGetStringField(TEXT("category"), FilterCategory);
+	if (Params->TryGetStringField(TEXT("category"), FilterCategory) && FilterCategory.Contains(TEXT("..")))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid 'category' parameter. Cannot contain path traversal characters."));
+	}
 
 	TArray<TSharedPtr<FJsonValue>> FilesArray;
 
