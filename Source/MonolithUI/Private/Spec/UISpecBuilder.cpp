@@ -37,6 +37,7 @@
 
 #include "MonolithUICommon.h"
 #include "MonolithUISettings.h"
+#include "MonolithPackagePathValidator.h"
 #include "Registry/MonolithUIRegistrySubsystem.h"
 #include "Registry/UITypeRegistry.h"
 #include "Registry/UIPropertyAllowlist.h"
