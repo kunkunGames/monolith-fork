@@ -99,13 +99,16 @@ void FMonolithUITemplateActions::RegisterActions(FMonolithToolRegistry& Registry
 // --- create_hud_element ---
 FMonolithActionResult FMonolithUITemplateActions::HandleCreateHudElement(const TSharedPtr<FJsonObject>& Params)
 {
+    FMonolithActionResult Err;
     FString AssetPath;
-    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-    FString ElementType;
-    Params->TryGetStringField(TEXT("element_type"), ElementType);
-    if (ElementType.IsEmpty())
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, Err))
     {
-        return FMonolithActionResult::Error(TEXT("Missing required param: element_type"));
+        return Err;
+    }
+    FString ElementType;
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("element_type"), ElementType, Err))
+    {
+        return Err;
     }
 
     FString Prefix = MonolithUIInternal::GetOptionalString(Params, TEXT("widget_name_prefix"));
@@ -363,18 +366,17 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateHudElement(const T
 // --- create_menu ---
 FMonolithActionResult FMonolithUITemplateActions::HandleCreateMenu(const TSharedPtr<FJsonObject>& Params)
 {
+    FMonolithActionResult Err;
     FString SavePath;
-    Params->TryGetStringField(TEXT("save_path"), SavePath);
-    if (SavePath.IsEmpty())
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("save_path"), SavePath, Err))
     {
-        return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
+        return Err;
     }
 
     FString MenuType;
-    Params->TryGetStringField(TEXT("menu_type"), MenuType);
-    if (MenuType.IsEmpty())
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("menu_type"), MenuType, Err))
     {
-        return FMonolithActionResult::Error(TEXT("Missing required param: menu_type"));
+        return Err;
     }
 
     // Default buttons per menu type
@@ -499,11 +501,11 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateMenu(const TShared
 // --- create_settings_panel ---
 FMonolithActionResult FMonolithUITemplateActions::HandleCreateSettingsPanel(const TSharedPtr<FJsonObject>& Params)
 {
+    FMonolithActionResult Err;
     FString SavePath;
-    Params->TryGetStringField(TEXT("save_path"), SavePath);
-    if (SavePath.IsEmpty())
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("save_path"), SavePath, Err))
     {
-        return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
+        return Err;
     }
 
     // Parse tabs
@@ -625,11 +627,11 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateSettingsPanel(cons
 // --- create_dialog ---
 FMonolithActionResult FMonolithUITemplateActions::HandleCreateDialog(const TSharedPtr<FJsonObject>& Params)
 {
+    FMonolithActionResult Err;
     FString SavePath;
-    Params->TryGetStringField(TEXT("save_path"), SavePath);
-    if (SavePath.IsEmpty())
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("save_path"), SavePath, Err))
     {
-        return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
+        return Err;
     }
 
     FString Title = MonolithUIInternal::GetOptionalString(Params, TEXT("title"));
@@ -742,11 +744,11 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateDialog(const TShar
 // --- create_notification_toast ---
 FMonolithActionResult FMonolithUITemplateActions::HandleCreateNotificationToast(const TSharedPtr<FJsonObject>& Params)
 {
+    FMonolithActionResult Err;
     FString SavePath;
-    Params->TryGetStringField(TEXT("save_path"), SavePath);
-    if (SavePath.IsEmpty())
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("save_path"), SavePath, Err))
     {
-        return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
+        return Err;
     }
 
     FString Position = MonolithUIInternal::GetOptionalString(Params, TEXT("position"));
@@ -815,11 +817,11 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateNotificationToast(
 // --- create_loading_screen ---
 FMonolithActionResult FMonolithUITemplateActions::HandleCreateLoadingScreen(const TSharedPtr<FJsonObject>& Params)
 {
+    FMonolithActionResult Err;
     FString SavePath;
-    Params->TryGetStringField(TEXT("save_path"), SavePath);
-    if (SavePath.IsEmpty())
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("save_path"), SavePath, Err))
     {
-        return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
+        return Err;
     }
 
     const bool bShowProgress = MonolithUIInternal::GetOptionalBool(Params, TEXT("show_progress"), true);
@@ -890,11 +892,11 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateLoadingScreen(cons
 // --- create_inventory_grid ---
 FMonolithActionResult FMonolithUITemplateActions::HandleCreateInventoryGrid(const TSharedPtr<FJsonObject>& Params)
 {
+    FMonolithActionResult Err;
     FString SavePath;
-    Params->TryGetStringField(TEXT("save_path"), SavePath);
-    if (SavePath.IsEmpty())
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("save_path"), SavePath, Err))
     {
-        return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
+        return Err;
     }
 
     int32 Columns = 5;
@@ -965,11 +967,11 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateInventoryGrid(cons
 // --- create_save_slot_list ---
 FMonolithActionResult FMonolithUITemplateActions::HandleCreateSaveSlotList(const TSharedPtr<FJsonObject>& Params)
 {
+    FMonolithActionResult Err;
     FString SavePath;
-    Params->TryGetStringField(TEXT("save_path"), SavePath);
-    if (SavePath.IsEmpty())
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("save_path"), SavePath, Err))
     {
-        return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
+        return Err;
     }
 
     int32 MaxSlots = 3;
