@@ -305,6 +305,7 @@ FMonolithActionResult FMonolithLevelSequenceActions::GetReplayStatus(const TShar
 	Result->SetBoolField(TEXT("saved_replay_listing_available"), true);
 
 	TArray<TSharedPtr<FJsonValue>> Worlds;
+	Worlds.Reserve(2);
 	const UWorld* EditorWorld = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	const UWorld* PlayWorld = GEditor ? GEditor->PlayWorld : nullptr;
 	Worlds.Add(MakeShared<FJsonValueObject>(MakeWorldJson(TEXT("editor_world"), EditorWorld)));
@@ -317,11 +318,13 @@ FMonolithActionResult FMonolithLevelSequenceActions::GetReplayStatus(const TShar
 	Result->SetArrayField(TEXT("replay_roots"), Roots);
 
 	TArray<TSharedPtr<FJsonValue>> ImplementedActions;
+	ImplementedActions.Reserve(2);
 	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("level_sequence.get_replay_status")));
 	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("level_sequence.list_saved_replays")));
 	Result->SetArrayField(TEXT("implemented_actions"), ImplementedActions);
 
 	TArray<TSharedPtr<FJsonValue>> PlannedActions;
+	PlannedActions.Reserve(4);
 	PlannedActions.Add(MakeShared<FJsonValueString>(TEXT("replay.start_recording")));
 	PlannedActions.Add(MakeShared<FJsonValueString>(TEXT("replay.stop_recording")));
 	PlannedActions.Add(MakeShared<FJsonValueString>(TEXT("replay.play")));
