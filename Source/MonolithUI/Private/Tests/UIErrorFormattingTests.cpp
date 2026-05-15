@@ -92,6 +92,11 @@ namespace MonolithUI::ErrorFormattingTests
         FString PackagePath, AssetName;
         AssetPath.Split(TEXT("/"), &PackagePath, &AssetName, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
 
+        if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+        {
+            return AssetPath;
+        }
+
         UPackage* Package = CreatePackage(*AssetPath);
         if (!Package) return AssetPath;
 

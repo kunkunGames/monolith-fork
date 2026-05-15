@@ -103,6 +103,12 @@ namespace MonolithUI::TestUtils
             return false;
         }
 
+        if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+        {
+            OutError = ValidationError;
+            return false;
+        }
+
         UPackage* Package = CreatePackage(*AssetPath);
         if (!Package)
         {
