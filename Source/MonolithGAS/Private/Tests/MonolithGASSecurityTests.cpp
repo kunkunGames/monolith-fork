@@ -2,6 +2,7 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithGASAbilityActions.h"
+#include "MonolithGASCueActions.h"
 #include "Dom/JsonObject.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -14,6 +15,7 @@ namespace
         if (!Registry.HasAction(TEXT("gas"), Action))
         {
             FMonolithGASAbilityActions::RegisterActions(Registry);
+            FMonolithGASCueActions::RegisterActions(Registry);
         }
 
         return Registry.ExecuteAction(TEXT("gas"), Action, Params);
@@ -51,6 +53,35 @@ bool FMonolithGASSecurityPathTest::RunTest(const FString& Parameters)
                 Result.ErrorMessage.Contains(TEXT("Package path")) ||
                 Result.ErrorMessage.Contains(Path));
         }
+    }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithGASCueSecurityPathTest, "Monolith.Security.GAS.ValidatePackagePath.Cue", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithGASCueSecurityPathTest::RunTest(const FString& Parameters)
+{
+    TArray<FString> MalformedPaths = {
+        TEXT(""), // Empty path
+        TEXT("//Game/MalformedPath/GC_Test"), // Double leading slash
+        TEXT("Game/MalformedPath/GC_Test"), // Missing leading slash
+        TEXT("/Game/MalformedPath/GC_Test/"), // Trailing slash
+        TEXT("/Game/MalformedPath/GC_Test#Invalid") // Illegal characters
+    };
+
+    for (const FString& Path : MalformedPaths)
+    {
+        // Setup payload to simulate malformed path
+        TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+        Payload->SetStringField(TEXT("save_path"), Path);
+
+        // Call the action. "create_gameplay_cue" triggers ValidatePackagePath.
+        FMonolithActionResult Result = ExecuteGASAction(TEXT("create_gameplay_cue"), Payload);
+
+        // Verify it failed gracefully and returned the validation error
+        TestFalse(*FString::Printf(TEXT("Action should fail on malformed path: %s"), *Path), Result.bSuccess);
+        TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), Result.ErrorMessage.IsEmpty());
     }
 
     return true;
