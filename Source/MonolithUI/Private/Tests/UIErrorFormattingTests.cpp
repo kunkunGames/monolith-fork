@@ -42,7 +42,6 @@
 #include "Spec/UISpec.h"
 #include "Spec/UISpecValidator.h"
 
-#include "MonolithPackagePathValidator.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"

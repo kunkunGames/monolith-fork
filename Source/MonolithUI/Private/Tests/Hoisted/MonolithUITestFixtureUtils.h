@@ -2,7 +2,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "MonolithPackagePathValidator.h"
 #include "WidgetBlueprint.h"
 #include "WidgetBlueprintFactory.h"
 #include "Blueprint/UserWidget.h"
