@@ -568,6 +568,12 @@ namespace MonolithUI::SpecBuilderInternal
         bOutPreExisting = false;
         OutPackage = nullptr;
 
+        if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+        {
+            OutError = ValidationError;
+            return nullptr;
+        }
+
         // Probe the asset registry FIRST — cheaper than CreatePackage and
         // gives us a clean "exists" signal independent of whether the package
         // is currently loaded.
