@@ -2478,11 +2478,14 @@ FMonolithActionResult FMonolithGASEffectActions::HandleCreateEffectFromTemplate(
 	if (Params->TryGetObjectField(TEXT("overrides"), OverridesPtr) && OverridesPtr && (*OverridesPtr).IsValid())
 	{
 		const TSharedPtr<FJsonObject>& Ov = *OverridesPtr;
-		if (Ov->HasField(TEXT("duration"))) Def.DurationMagnitude = Ov->GetNumberField(TEXT("duration"));
-		if (Ov->HasField(TEXT("period"))) Def.Period = Ov->GetNumberField(TEXT("period"));
-		if (Ov->HasField(TEXT("magnitude")) && Def.Modifiers.Num() > 0)
+		double DurationVal = 0.0;
+		if (Ov->TryGetNumberField(TEXT("duration"), DurationVal)) Def.DurationMagnitude = DurationVal;
+		double PeriodVal = 0.0;
+		if (Ov->TryGetNumberField(TEXT("period"), PeriodVal)) Def.Period = PeriodVal;
+		double MagVal = 0.0;
+		if (Ov->TryGetNumberField(TEXT("magnitude"), MagVal) && Def.Modifiers.Num() > 0)
 		{
-			Def.Modifiers[0].Value = Ov->GetNumberField(TEXT("magnitude"));
+			Def.Modifiers[0].Value = MagVal;
 		}
 		FString StackOverride = Ov->GetStringField(TEXT("stacking"));
 		if (!StackOverride.IsEmpty()) Def.StackingType = StackOverride;
@@ -2610,9 +2613,10 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 	TArray<TSharedPtr<FJsonValue>> Warnings;
 
 	// Duration magnitude
-	if (Spec->HasField(TEXT("duration_magnitude")) && DurationPolicy == EGameplayEffectDurationType::HasDuration)
+	double DurationMagVal = 0.0;
+	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && Spec->TryGetNumberField(TEXT("duration_magnitude"), DurationMagVal))
 	{
-		GE->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Spec->GetNumberField(TEXT("duration_magnitude"))));
+		GE->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(DurationMagVal));
 	}
 
 	// Period

@@ -1419,21 +1419,24 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleSetAbilityFlags(const TS
 
 	bool bChanged = false;
 
-	if (Params->HasField(TEXT("replicate_input_directly")))
+	bool bReplicateInput = false;
+	if (Params->TryGetBoolField(TEXT("replicate_input_directly"), bReplicateInput))
 	{
-		SetBoolProperty(Ctx.CDO, FName(TEXT("bReplicateInputDirectly")), Params->GetBoolField(TEXT("replicate_input_directly")));
+		SetBoolProperty(Ctx.CDO, FName(TEXT("bReplicateInputDirectly")), bReplicateInput);
 		bChanged = true;
 	}
 
-	if (Params->HasField(TEXT("retrigger_instanced_ability")))
+	bool bRetriggerInstanced = false;
+	if (Params->TryGetBoolField(TEXT("retrigger_instanced_ability"), bRetriggerInstanced))
 	{
-		SetBoolProperty(Ctx.CDO, FName(TEXT("bRetriggerInstancedAbility")), Params->GetBoolField(TEXT("retrigger_instanced_ability")));
+		SetBoolProperty(Ctx.CDO, FName(TEXT("bRetriggerInstancedAbility")), bRetriggerInstanced);
 		bChanged = true;
 	}
 
-	if (Params->HasField(TEXT("server_respects_remote_ability_cancellation")))
+	bool bServerRespectsCancel = false;
+	if (Params->TryGetBoolField(TEXT("server_respects_remote_ability_cancellation"), bServerRespectsCancel))
 	{
-		SetBoolProperty(Ctx.CDO, FName(TEXT("bServerRespectsRemoteAbilityCancellation")), Params->GetBoolField(TEXT("server_respects_remote_ability_cancellation")));
+		SetBoolProperty(Ctx.CDO, FName(TEXT("bServerRespectsRemoteAbilityCancellation")), bServerRespectsCancel);
 		bChanged = true;
 	}
 
@@ -2074,9 +2077,9 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleCreateAbilityFromTemplat
 	CreateParams->SetStringField(TEXT("save_path"), SavePath);
 
 	FString ParentClass = TEXT("GameplayAbility");
-	if (Params->TryGetObjectField(TEXT("overrides"), Overrides) && (*Overrides)->HasField(TEXT("parent_class")))
+	if (Params->TryGetObjectField(TEXT("overrides"), Overrides))
 	{
-		ParentClass = (*Overrides)->GetStringField(TEXT("parent_class"));
+		(*Overrides)->TryGetStringField(TEXT("parent_class"), ParentClass);
 	}
 	CreateParams->SetStringField(TEXT("parent_class"), ParentClass);
 
@@ -2262,12 +2265,15 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleBuildAbilityFromSpec(con
 		{
 			TSharedPtr<FJsonObject> FlagParams = MakeShared<FJsonObject>();
 			FlagParams->SetStringField(TEXT("asset_path"), SavePath);
-			if ((*FlagsObj)->HasField(TEXT("replicate_input_directly")))
-				FlagParams->SetBoolField(TEXT("replicate_input_directly"), (*FlagsObj)->GetBoolField(TEXT("replicate_input_directly")));
-			if ((*FlagsObj)->HasField(TEXT("retrigger_instanced_ability")))
-				FlagParams->SetBoolField(TEXT("retrigger_instanced_ability"), (*FlagsObj)->GetBoolField(TEXT("retrigger_instanced_ability")));
-			if ((*FlagsObj)->HasField(TEXT("server_respects_remote_ability_cancellation")))
-				FlagParams->SetBoolField(TEXT("server_respects_remote_ability_cancellation"), (*FlagsObj)->GetBoolField(TEXT("server_respects_remote_ability_cancellation")));
+			bool bRepIn = false;
+			if ((*FlagsObj)->TryGetBoolField(TEXT("replicate_input_directly"), bRepIn))
+				FlagParams->SetBoolField(TEXT("replicate_input_directly"), bRepIn);
+			bool bRetrig = false;
+			if ((*FlagsObj)->TryGetBoolField(TEXT("retrigger_instanced_ability"), bRetrig))
+				FlagParams->SetBoolField(TEXT("retrigger_instanced_ability"), bRetrig);
+			bool bServerCancel = false;
+			if ((*FlagsObj)->TryGetBoolField(TEXT("server_respects_remote_ability_cancellation"), bServerCancel))
+				FlagParams->SetBoolField(TEXT("server_respects_remote_ability_cancellation"), bServerCancel);
 
 			FMonolithActionResult FlagResult = HandleSetAbilityFlags(FlagParams);
 			if (FlagResult.bSuccess) AppliedSteps.Add(TEXT("flags"));
