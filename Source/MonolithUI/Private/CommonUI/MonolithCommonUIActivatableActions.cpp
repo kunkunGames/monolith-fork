@@ -489,7 +489,7 @@ namespace MonolithCommonUIActivatable
 			TEXT("Add a UCommonActivatableWidgetStack to an existing WBP's tree (modal layer container)"),
 			FMonolithActionHandler::CreateStatic(&HandleCreateActivatableStack),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Target Widget Blueprint path"))
+				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Target Widget Blueprint path"), {TEXT("asset_path")})
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name to assign the stack"))
 				.Optional(TEXT("parent_widget"), TEXT("string"), TEXT("Name of parent panel (default: root)"))
 				.Build(),
@@ -500,7 +500,7 @@ namespace MonolithCommonUIActivatable
 			TEXT("Add a UCommonActivatableWidgetSwitcher to an existing WBP's tree (tab/screen switch container)"),
 			FMonolithActionHandler::CreateStatic(&HandleCreateActivatableSwitcher),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Target Widget Blueprint path"))
+				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Target Widget Blueprint path"), {TEXT("asset_path")})
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name to assign the switcher"))
 				.Optional(TEXT("parent_widget"), TEXT("string"), TEXT("Name of parent panel (default: root)"))
 				.Build(),
@@ -511,7 +511,7 @@ namespace MonolithCommonUIActivatable
 			TEXT("Set UCommonActivatableWidget CDO flags (bAutoActivate, bIsModal, bIsBackHandler, visibility, InputMapping, priority)"),
 			FMonolithActionHandler::CreateStatic(&HandleConfigureActivatable),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Target UCommonActivatableWidget blueprint"))
+				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Target UCommonActivatableWidget blueprint"), {TEXT("asset_path")})
 				.Optional(TEXT("bAutoActivate"), TEXT("boolean"), TEXT("Auto-activate when added to layout"))
 				.Optional(TEXT("bIsModal"), TEXT("boolean"), TEXT("Modal — obscures widgets below in stack"))
 				.Optional(TEXT("bIsBackHandler"), TEXT("boolean"), TEXT("Handles back action input"))
@@ -556,7 +556,7 @@ namespace MonolithCommonUIActivatable
 			TEXT("Set TransitionType / TransitionDuration / TransitionCurveType on an activatable container widget (stack/container only, not switcher — use configure_animated_switcher for switchers)"),
 			FMonolithActionHandler::CreateStatic(&HandleSetActivatableTransition),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Target Widget Blueprint path"))
+				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Target Widget Blueprint path"), {TEXT("asset_path")})
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("FName of container widget in tree"))
 				.Optional(TEXT("transition_type"), TEXT("string"), TEXT("ECommonSwitcherTransition enum name"))
 				.Optional(TEXT("transition_duration"), TEXT("number"), TEXT("Duration in seconds"))
