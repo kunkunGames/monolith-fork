@@ -42,7 +42,7 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 >
 > **Emitter name matching:** `FindEmitterHandleIndex` does NOT auto-select a single emitter when a specific non-matching name is passed. If a name is provided it must match exactly (case-insensitive). Numeric index strings (`"0"`, `"1"`, etc.) are also accepted as a fallback.
 
-**System (14)**
+**System (22)**
 | Action | Description |
 |--------|-------------|
 | `add_emitter` | Add an emitter (UE 5.7: takes FGuid VersionGuid) |
@@ -59,8 +59,16 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 | `list_module_scripts` | Search available Niagara module scripts by keyword. Returns matching script asset paths |
 | `list_renderer_properties` | List editable properties on a renderer. Params: `asset_path`, `emitter`, `renderer` |
 | `get_system_diagnostics` | Compile errors, warnings, renderer/SimTarget incompatibility, GPU+dynamic bounds warnings, per-script stats (op count, registers, compile status). Added 2026-03-13 |
+| `duplicate_system` | Clone an entire Niagara system to a new path |
+| `get_system_property` | Read a system-level property (WarmupTime, bDeterminism, RandomSeed, etc.) |
+| `get_system_summary` | One-call overview of an entire Niagara system (emitters, params, renderers, module counts) |
+| `list_systems` | Search/list Niagara system assets in the project |
+| `save_system` | Save a Niagara asset (system, script, NPC, effect type) to disk |
+| `set_effect_type` | Assign a UNiagaraEffectType for scalability and cull distance |
+| `set_fixed_bounds` | Set explicit bounds on system or emitter for GPU performance |
+| `validate_system` | Pre-compile validation: check for common misconfigurations |
 
-**Module (15)**
+**Module (17)**
 | Action | Description |
 |--------|-------------|
 | `get_ordered_modules` | Get ordered modules in a script stage |
@@ -78,6 +86,8 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 | `set_static_switch_value` | Set a static switch value on a module |
 | `create_module_from_hlsl` | Create a Niagara module script from custom HLSL. Params: `name`, `save_path`, `hlsl` (body), optional `inputs[]`/`outputs[]` (`{name, type}` objects), `description`. **HLSL body rules:** use bare input/output names (no `Module.` prefix — compiler adds `In_`/`Out_` automatically). Write particle attributes via `Particles.X` ParameterMap tokens directly in the body. No swizzle via dot on map variables. |
 | `create_function_from_hlsl` | Create a Niagara function script from custom HLSL. Same params as `create_module_from_hlsl`. Script usage is set to `Function` instead of `Module`. |
+| `get_module_input_value` | Read the current override value for a specific module input |
+| `get_module_script_inputs` | Introspect a module script's inputs WITHOUT adding it to an emitter |
 
 **Parameter (10)**
 | Action | Description |
@@ -103,24 +113,30 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 | `get_renderer_bindings` | Get attribute bindings via reflection |
 | `set_renderer_binding` | Set attribute binding (ImportText with fallback format) |
 
-**Batch (3)**
+**Batch (7)**
 | Action | Description |
 |--------|-------------|
 | `batch_execute` | Execute multiple operations in one undo transaction (23 sub-op types — all write ops including: remove_user_parameter, set_parameter_default, set_module_input_di, set_curve_value, reorder_emitters, duplicate_emitter, set_renderer_binding, request_compile) |
 | `import_system_spec` | Overwrite an existing Niagara system with a JSON spec (removes all emitters/params, applies spec fresh) |
 | `create_system_from_spec` | Full declarative system builder from JSON spec. Uses `UNiagaraSystemFactoryNew::InitializeSystem` for proper system creation |
+| `configure_curve_keys` | Set keys on a DataInterface curve input (NiagaraDataInterfaceCurve/ColorCurve). For plain float inputs use set_curve_value instead |
+| `export_system_spec` | Reverse-engineer an existing system into create_system_from_spec-compatible JSON |
+| `get_scalability_settings` | Read scalability settings from a NiagaraEffectType asset |
+| `set_scalability_settings` | Set scalability settings on a NiagaraEffectType asset |
 
-**Data Interface (1)**
+**Data Interface (3)**
 | Action | Description |
 |--------|-------------|
 | `get_di_functions` | Get data interface function signatures |
+| `configure_data_interface` | Set arbitrary properties on a DI attached to a module input via reflection |
+| `get_di_properties` | Inspect editable properties on a Niagara DataInterface class (CDO reflection) |
 
 **HLSL (1)**
 | Action | Description |
 |--------|-------------|
 | `get_compiled_gpu_hlsl` | Get compiled GPU HLSL for an emitter |
 
-**Dynamic Inputs (5)**
+**Dynamic Inputs (8)**
 | Action | Description |
 |--------|-------------|
 | `list_dynamic_inputs` | List all dynamic inputs on a module |
@@ -128,14 +144,21 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 | `remove_dynamic_input` | Remove a dynamic input from a module |
 | `get_dynamic_input_value` | Get the current value of a dynamic input |
 | `get_dynamic_input_inputs` | Get all sub-inputs of a dynamic input |
+| `add_dynamic_input` | Attach a dynamic input script to a module input pin |
+| `search_dynamic_inputs` | Browse available dynamic input scripts with optional type filtering |
+| `set_dynamic_input_value` | Set an input value on a dynamic input node |
 
-**Emitter Management (4)**
+**Emitter Management (8)**
 | Action | Description |
 |--------|-------------|
 | `rename_emitter` | Rename an emitter within a system |
 | `get_emitter_parent` | Get the parent emitter asset of an emitter in a system (read-only) |
 | `get_emitter_property` | Get a property value from an emitter via reflection |
 | `list_available_renderers` | List all available renderer classes that can be added |
+| `clear_emitter_modules` | Remove all modules from an emitter, optionally filtered by stage |
+| `create_emitter` | Add a minimal empty emitter to a system (no template needed) |
+| `get_emitter_summary` | Deep view of a single emitter (modules per stage, renderers, properties) |
+| `list_emitter_properties` | List all editable properties on FVersionedNiagaraEmitterData with current values |
 
 **Renderer Configuration (3)**
 | Action | Description |
@@ -144,19 +167,21 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 | `configure_ribbon` | Configure ribbon renderer settings (width, facing, tessellation, etc.) |
 | `configure_subuv` | Configure SubUV animation settings on a renderer |
 
-**Event Handlers (3)**
+**Event Handlers (4)**
 | Action | Description |
 |--------|-------------|
 | `get_event_handlers` | Get all event handlers on an emitter |
 | `set_event_handler_property` | Set a property on an event handler |
 | `remove_event_handler` | Remove an event handler from an emitter |
+| `add_event_handler` | Add an inter-emitter event handler (death, collision, location events) |
 
-**Simulation Stages (3)**
+**Simulation Stages (4)**
 | Action | Description |
 |--------|-------------|
 | `get_simulation_stages` | Get all simulation stages on an emitter |
 | `set_simulation_stage_property` | Set a property on a simulation stage |
 | `remove_simulation_stage` | Remove a simulation stage from an emitter |
+| `add_simulation_stage` | Add a simulation stage to an emitter |
 
 **Module Outputs (1)**
 | Action | Description |
@@ -197,3 +222,8 @@ All marked with "UE 5.7 FIX" comments:
 6. `RapidIterationParameters` accessed via direct UPROPERTY (no getter)
 
 ---
+
+**Composite (1)**
+| Action | Description |
+|--------|-------------|
+| `set_spawn_shape` | Add a spawn shape (Cylinder, Sphere, Box, Cone, Torus) to an emitter with automatic switch setup |
