@@ -740,7 +740,12 @@ FMonolithActionResult FMonolithComboGraphActions::HandleGetComboNodeEffects(cons
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
 
-	int32 NodeIndex = static_cast<int32>(Params->GetNumberField(TEXT("node_index")));
+	double NodeIndexVal;
+	if (!Params->TryGetNumberField(TEXT("node_index"), NodeIndexVal))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'node_index' or not a number"));
+	}
+	int32 NodeIndex = static_cast<int32>(NodeIndexVal);
 
 	FString Error;
 	UObject* Graph = LoadComboGraph(AssetPath, Error);
@@ -1199,8 +1204,19 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboEdge(const TShar
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
 
-	int32 FromIndex = static_cast<int32>(Params->GetNumberField(TEXT("from_node_index")));
-	int32 ToIndex = static_cast<int32>(Params->GetNumberField(TEXT("to_node_index")));
+	double FromIndexVal;
+	if (!Params->TryGetNumberField(TEXT("from_node_index"), FromIndexVal))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'from_node_index' or not a number"));
+	}
+	int32 FromIndex = static_cast<int32>(FromIndexVal);
+
+	double ToIndexVal;
+	if (!Params->TryGetNumberField(TEXT("to_node_index"), ToIndexVal))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'to_node_index' or not a number"));
+	}
+	int32 ToIndex = static_cast<int32>(ToIndexVal);
 
 	FString InputAction;
 	Params->TryGetStringField(TEXT("input_action"), InputAction);
@@ -1308,7 +1324,12 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
 
-	int32 NodeIndex = static_cast<int32>(Params->GetNumberField(TEXT("node_index")));
+	double NodeIndexVal;
+	if (!Params->TryGetNumberField(TEXT("node_index"), NodeIndexVal))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'node_index' or not a number"));
+	}
+	int32 NodeIndex = static_cast<int32>(NodeIndexVal);
 
 	const TSharedPtr<FJsonObject>* EffectsObj = nullptr;
 	if (!Params->TryGetObjectField(TEXT("effects"), EffectsObj) || !EffectsObj || !(*EffectsObj).IsValid())
@@ -1455,7 +1476,12 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
 
-	int32 NodeIndex = static_cast<int32>(Params->GetNumberField(TEXT("node_index")));
+	double NodeIndexVal;
+	if (!Params->TryGetNumberField(TEXT("node_index"), NodeIndexVal))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'node_index' or not a number"));
+	}
+	int32 NodeIndex = static_cast<int32>(NodeIndexVal);
 
 	const TSharedPtr<FJsonObject>* CuesObj = nullptr;
 	if (!Params->TryGetObjectField(TEXT("cues"), CuesObj) || !CuesObj || !(*CuesObj).IsValid())
