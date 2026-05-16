@@ -1,5 +1,6 @@
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceSchema.h"
+#include "Dom/JsonValue.h"
 #include "SQLiteDatabase.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
@@ -902,6 +903,267 @@ bool FMonolithSourceDatabase::RollbackTransaction()
 	FScopeLock Lock(&DbLock);
 	if (!Database || !Database->IsValid()) return false;
 	return Database->Execute(TEXT("ROLLBACK;"));
+}
+
+// ============================================================
+// CRG-inspired health / repair
+//
+// Adapted from code-review-graph (0919071a): non-fatal health post-processing
+// and FTS rebuild. Engine-source-domain native: only the existing
+// modules/files/symbols/inheritance/"references"/symbols_fts/source_fts schema.
+// ============================================================
+
+TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCounts)
+{
+	FScopeLock Lock(&DbLock);
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> Checks;
+	TArray<TSharedPtr<FJsonValue>> Warnings;
+
+	auto Check = [&](const FString& Name, bool bPass, const FString& Detail)
+	{
+		TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
+		C->SetStringField(TEXT("check"), Name);
+		C->SetStringField(TEXT("result"), bPass ? TEXT("ok") : TEXT("warning"));
+		C->SetStringField(TEXT("detail"), Detail);
+		Checks.Add(MakeShared<FJsonValueObject>(C));
+		if (!bPass) Warnings.Add(MakeShared<FJsonValueString>(Detail));
+	};
+
+	if (!Database || !Database->IsValid())
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("EngineSource DB is not open"));
+		Root->SetArrayField(TEXT("checks"), Checks);
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		return Root;
+	}
+
+	auto Exists = [&](const TCHAR* Type, const TCHAR* Name) -> bool
+	{
+		FSQLitePreparedStatement S;
+		if (!S.Create(*Database, TEXT("SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?;")))
+		{
+			return false;
+		}
+		S.SetBindingValueByIndex(1, FString(Type));
+		S.SetBindingValueByIndex(2, FString(Name));
+		return S.Step() == ESQLitePreparedStatementStepResult::Row;
+	};
+	auto CountOf = [&](const TCHAR* Sql) -> int64
+	{
+		FSQLitePreparedStatement S;
+		if (!S.Create(*Database, Sql)) return -1;
+		int64 N = 0;
+		if (S.Step() == ESQLitePreparedStatementStepResult::Row) S.GetColumnValueByIndex(0, N);
+		return N;
+	};
+
+	static const TCHAR* Tables[] = { TEXT("modules"), TEXT("files"), TEXT("symbols"),
+		TEXT("inheritance"), TEXT("references"), TEXT("includes"), TEXT("meta") };
+	for (const TCHAR* T : Tables)
+	{
+		const bool bHas = Exists(TEXT("table"), T);
+		Check(FString::Printf(TEXT("table:%s"), T), bHas,
+			bHas ? FString::Printf(TEXT("table %s present"), T)
+				: FString::Printf(TEXT("missing table %s"), T));
+	}
+
+	for (const TCHAR* F : { TEXT("symbols_fts"), TEXT("source_fts") })
+	{
+		const bool bHas = Exists(TEXT("table"), F);
+		Check(FString::Printf(TEXT("fts:%s"), F), bHas,
+			bHas ? FString::Printf(TEXT("FTS table %s present"), F)
+				: FString::Printf(TEXT("missing FTS table %s"), F));
+	}
+
+	// Source has exactly symbols_ai / symbols_ad (no _au, no source_fts trigger).
+	for (const TCHAR* Tr : { TEXT("symbols_ai"), TEXT("symbols_ad") })
+	{
+		const bool bHas = Exists(TEXT("trigger"), Tr);
+		Check(FString::Printf(TEXT("trigger:%s"), Tr), bHas,
+			bHas ? FString::Printf(TEXT("trigger %s present"), Tr)
+				: FString::Printf(TEXT("missing trigger %s (symbols_fts may drift)"), Tr));
+	}
+
+	FString SchemaVer;
+	{
+		FSQLitePreparedStatement S;
+		if (S.Create(*Database, TEXT("SELECT value FROM meta WHERE key = 'schema_version';"))
+			&& S.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			S.GetColumnValueByIndex(0, SchemaVer);
+		}
+	}
+	Check(TEXT("meta:schema_version"), SchemaVer == TEXT("1"),
+		SchemaVer.IsEmpty() ? TEXT("meta.schema_version missing")
+			: FString::Printf(TEXT("schema_version=%s (expected 1)"), *SchemaVer));
+
+	const int64 OrphanRefs = CountOf(TEXT(
+		"SELECT COUNT(*) FROM \"references\" r "
+		"WHERE r.from_symbol_id NOT IN (SELECT id FROM symbols) "
+		"   OR r.to_symbol_id NOT IN (SELECT id FROM symbols);"));
+	Check(TEXT("integrity:orphan_references"), OrphanRefs == 0,
+		OrphanRefs == 0 ? TEXT("no orphan reference rows")
+			: FString::Printf(TEXT("%lld orphan reference row(s)"), OrphanRefs));
+
+	const int64 SymCnt = CountOf(TEXT("SELECT COUNT(*) FROM symbols;"));
+	const int64 SymFtsCnt = CountOf(TEXT("SELECT COUNT(*) FROM symbols_fts;"));
+	Check(TEXT("fts:symbols_row_parity"), SymCnt == SymFtsCnt,
+		FString::Printf(TEXT("symbols=%lld symbols_fts=%lld%s"), SymCnt, SymFtsCnt,
+			SymCnt == SymFtsCnt ? TEXT("") : TEXT(" (mismatch -> source.repair_fts target=symbols)")));
+
+	// source_fts is a plain (non external-content) fts5 table — a row-count
+	// difference is expected and informational, never a warning.
+	const int64 SrcFtsCnt = CountOf(TEXT("SELECT COUNT(*) FROM source_fts;"));
+	{
+		TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
+		C->SetStringField(TEXT("check"), TEXT("fts:source_fts_info"));
+		C->SetStringField(TEXT("result"), TEXT("info"));
+		C->SetStringField(TEXT("detail"), FString::Printf(
+			TEXT("source_fts rows=%lld (plain fts5; not rebuildable — reindex to repair)"), SrcFtsCnt));
+		Checks.Add(MakeShared<FJsonValueObject>(C));
+	}
+
+	FString Journal;
+	{
+		FSQLitePreparedStatement S;
+		if (S.Create(*Database, TEXT("PRAGMA journal_mode;"))
+			&& S.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			S.GetColumnValueByIndex(0, Journal);
+		}
+	}
+	TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
+	Schema->SetStringField(TEXT("schema_version"), SchemaVer);
+	Schema->SetStringField(TEXT("journal_mode"), Journal);
+	Root->SetObjectField(TEXT("schema"), Schema);
+
+	if (bIncludeCounts)
+	{
+		TSharedPtr<FJsonObject> Counts = MakeShared<FJsonObject>();
+		Counts->SetNumberField(TEXT("symbols"), static_cast<double>(SymCnt));
+		Counts->SetNumberField(TEXT("references"),
+			static_cast<double>(CountOf(TEXT("SELECT COUNT(*) FROM \"references\";"))));
+		Counts->SetNumberField(TEXT("inheritance"),
+			static_cast<double>(CountOf(TEXT("SELECT COUNT(*) FROM inheritance;"))));
+		Counts->SetNumberField(TEXT("source_fts"), static_cast<double>(SrcFtsCnt));
+		Root->SetObjectField(TEXT("row_counts"), Counts);
+	}
+
+	const bool bHealthy = Warnings.Num() == 0;
+	Root->SetStringField(TEXT("status"), bHealthy ? TEXT("ok") : TEXT("warning"));
+	Root->SetStringField(TEXT("summary"), bHealthy
+		? TEXT("EngineSource schema, triggers, symbols_fts parity and integrity OK")
+		: FString::Printf(TEXT("%d health warning(s)"), Warnings.Num()));
+	Root->SetArrayField(TEXT("checks"), Checks);
+	Root->SetArrayField(TEXT("warnings"), Warnings);
+	Root->SetBoolField(TEXT("truncated"), false);
+	return Root;
+}
+
+TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target, bool bExecute)
+{
+	FScopeLock Lock(&DbLock);
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	const FString T = Target.IsEmpty() ? TEXT("all") : Target;
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("target"), T);
+	Input->SetBoolField(TEXT("execute"), bExecute);
+	Root->SetObjectField(TEXT("input"), Input);
+
+	TArray<TSharedPtr<FJsonValue>> Warnings;
+	TArray<TSharedPtr<FJsonValue>> Plan;
+
+	if (!Database || !Database->IsValid())
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("EngineSource DB is not open"));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		return Root;
+	}
+
+	const bool bDoSymbols = (T == TEXT("all") || T == TEXT("symbols"));
+	const bool bAskedSource = (T == TEXT("all") || T == TEXT("source"));
+
+	if (T != TEXT("all") && T != TEXT("symbols") && T != TEXT("source"))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"),
+			FString::Printf(TEXT("Unknown target '%s' (expected all|symbols|source)"), *T));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		return Root;
+	}
+
+	auto Count = [&](const TCHAR* Sql) -> int64
+	{
+		FSQLitePreparedStatement S;
+		if (!S.Create(*Database, Sql)) return -1;
+		int64 N = 0;
+		if (S.Step() == ESQLitePreparedStatementStepResult::Row) S.GetColumnValueByIndex(0, N);
+		return N;
+	};
+
+	TSharedPtr<FJsonObject> Before = MakeShared<FJsonObject>();
+	if (bDoSymbols) Before->SetNumberField(TEXT("symbols_fts"),
+		static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM symbols_fts;"))));
+	Root->SetObjectField(TEXT("before"), Before);
+
+	if (bDoSymbols)
+	{
+		Plan.Add(MakeShared<FJsonValueString>(
+			TEXT("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');")));
+	}
+	if (bAskedSource)
+	{
+		// source_fts has no content table — 'rebuild' is meaningless. Always
+		// degrade to a reindex recommendation regardless of execute.
+		Warnings.Add(MakeShared<FJsonValueString>(TEXT(
+			"source_fts is a plain fts5 table (no backing content); it cannot be "
+			"rebuilt in place. Run source.trigger_reindex / trigger_project_reindex "
+			"to repopulate source line search.")));
+	}
+	Root->SetArrayField(TEXT("plan"), Plan);
+
+	if (!bExecute)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("ok"));
+		Root->SetStringField(TEXT("summary"), bDoSymbols
+			? TEXT("Dry-run: symbols_fts would be rebuilt. Pass execute=true to apply.")
+			: TEXT("Dry-run: nothing rebuildable for this target."));
+		Root->SetObjectField(TEXT("after"), MakeShared<FJsonObject>());
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		return Root;
+	}
+
+	bool bOk = true;
+	if (bDoSymbols)
+	{
+		bOk = Database->Execute(TEXT("BEGIN;"));
+		if (bOk && !Database->Execute(TEXT("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');")))
+		{
+			bOk = false;
+			Warnings.Add(MakeShared<FJsonValueString>(TEXT("symbols_fts rebuild failed")));
+		}
+		if (bOk) Database->Execute(TEXT("COMMIT;"));
+		else Database->Execute(TEXT("ROLLBACK;"));
+	}
+
+	TSharedPtr<FJsonObject> After = MakeShared<FJsonObject>();
+	if (bDoSymbols) After->SetNumberField(TEXT("symbols_fts"),
+		static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM symbols_fts;"))));
+	Root->SetObjectField(TEXT("after"), After);
+
+	Root->SetStringField(TEXT("status"), bOk ? TEXT("ok") : TEXT("error"));
+	Root->SetStringField(TEXT("summary"), bOk
+		? (bDoSymbols ? TEXT("Rebuilt symbols_fts")
+			: TEXT("Nothing rebuilt; see warnings for source_fts reindex guidance"))
+		: TEXT("symbols_fts rebuild failed; rolled back"));
+	Root->SetArrayField(TEXT("warnings"), Warnings);
+	Root->SetBoolField(TEXT("truncated"), false);
+	return Root;
 }
 
 // ============================================================

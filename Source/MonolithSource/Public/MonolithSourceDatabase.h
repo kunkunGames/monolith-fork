@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Dom/JsonObject.h"
 
 class FSQLiteDatabase;
 class FSQLitePreparedStatement;
@@ -115,6 +116,17 @@ public:
 
 	// --- FTS helper ---
 	static FString EscapeFTS(const FString& Query);
+
+	// --- CRG-inspired health / repair (additive; see MonolithSourceReview) ---
+	/** Read-only schema/trigger/FTS/orphan/meta diagnostics. Never mutates. */
+	TSharedPtr<FJsonObject> ComputeHealth(bool bIncludeCounts);
+	/**
+	 * Rebuild FTS. Default dry-run; mutates only when bExecute is true.
+	 * Only `symbols_fts` is external-content and rebuildable; `source_fts` is a
+	 * plain fts5 table with no backing content, so target=source always degrades
+	 * to a reindex recommendation. Caller must gate on subsystem IsIndexing().
+	 */
+	TSharedPtr<FJsonObject> RepairFts(const FString& Target, bool bExecute);
 
 	// --- Write methods (for C++ indexer) ---
 	bool OpenForWriting(const FString& DbPath);

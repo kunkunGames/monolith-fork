@@ -14,8 +14,9 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithIndexModule` | Registers 7 project actions |
+| `FMonolithIndexModule` | Registers 12 project actions |
 | `FMonolithIndexDatabase` | RAII SQLite wrapper. 13 tables + 2 FTS5 + 6 triggers + 1 meta. DELETE journal mode, 64MB cache. Schema v2: `saved_hash` column (Blake3 `FIoHash` hex), `schema_version` meta key |
+| `FMonolithIndexReview` | CRG-inspired navigation/review over the existing `dependencies` graph: bounded BFS impact radius, read-only health, execute-gated FTS repair, query-time risk, review-context packaging. Uses only the public `FMonolithIndexDatabase` surface — the DB impl file is untouched (additive, REQ-009) |
 | `UMonolithIndexSubsystem` | UEditorSubsystem. 3-layer indexing (startup delta, live AR callbacks, full fallback). Hash-based startup catch-up. Live batched AR delegates on 2s timer. Deep asset indexing with game-thread batching. Batches every 100 assets. Progress notifications |
 | `IMonolithIndexer` | Pure virtual interface: GetSupportedClasses(), IndexAsset(), GetName(), IsSentinel(), SupportsIncrementalIndex(), IndexScoped() |
 | `FBlueprintIndexer` | Blueprint, WidgetBlueprint, AnimBlueprint — graphs, nodes, variables |
@@ -31,7 +32,7 @@
 | `FDependencyIndexer` | Hard + Soft package dependencies (runs after all other indexers) |
 | `FMonolithIndexNotification` | Slate notification bar with throbber + percentage |
 
-### Actions (7 — namespace: "project")
+### Actions (12 — namespace: "project")
 
 | Action | Params | Description |
 |--------|--------|-------------|
@@ -42,6 +43,11 @@
 | `get_asset_details` | `asset_path` (required) | Deep inspection: nodes, variables, references for a single asset |
 | `list_gameplay_tags` | `prefix`, `limit`, `offset` (optional) | List indexed gameplay tags, optionally filtered by prefix |
 | `search_gameplay_tags` | `query` (required) | Search gameplay tags and return referencing assets |
+| `impact_radius` | `asset_path` (required), `direction` (both), `max_depth` (2), `max_results` (200), `dependency_type` | Bounded BFS over `dependencies`: who is impacted within N hops (cycle-safe, `truncated` flag) |
+| `health` | `include_counts` (true) | Read-only diagnostics: v2 schema, 6 triggers, FTS row parity, orphan deps, journal mode |
+| `repair_fts` | `target` (all\|assets\|nodes), `execute` (false) | Rebuild `fts_assets`/`fts_nodes`. Dry-run unless `execute=true` (sole write gate); refused while `IsIndexing()` |
+| `risk_index` | `asset_path`/`seed`, `limit` (20), `min_tier` (low) | Query-time risk `{score,tier,reasons[],raw_counts}` (fan-in, hard deps, class weight, graph density) |
+| `review_context` | `asset_path` (required), `direction` (both), `max_depth` (2), `max_results` (200), `detail_level` (minimal) | Token-efficient package: seed + impact + risk reasons + next actions; `minimal` omits full asset details |
 
 ### Database Schema
 
@@ -102,13 +108,18 @@ Migration is automatic: on startup, `PRAGMA table_info(assets)` checks for the `
 
 The `bInstalled` filter on plugin content paths was replaced with explicit path enumeration. This fixes discovery of project-local plugins (e.g., DrawCallReducer, NiagaraDestructionDriver) that previously reported `bInstalled=false` and were excluded from indexing. The `MeshCatalogIndexer` paths were also corrected to use the new enumeration.
 
-### Planned Extension — CRG-Inspired Navigation (spec accepted, NOT implemented as of v0.14.9)
+### CRG-Inspired Navigation — IMPLEMENTED (P0, 2026-05-16)
 
-A CRG-inspired review/navigation surface is specced but **not yet implemented** (no `impact_radius`/`health`/`repair_fts`/`risk_index`/`review_context` action exists in code). Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md`.
+The CRG-inspired review/navigation surface is **implemented** as 5 additive `project`
+actions (`impact_radius`, `health`, `repair_fts`, `risk_index`, `review_context`) over
+the **existing** `dependencies` graph — no new DB/schema, no Python runtime, no generic
+nodes/edges (monolith-native: asset-domain, lexical/local). Logic lives in
+`FMonolithIndexReview` (`Private/MonolithIndexReview.{h,cpp}`) using only the public
+`FMonolithIndexDatabase` surface; the DB impl file is unchanged (REQ-009). Spec source:
+`Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md`. Tests:
+`Monolith.IndexGuard.Project.*` in `Private/Tests/MonolithIndexQueryTests.cpp`.
 
-Accepted P0 scope (additive `project` actions over the **existing** `dependencies` graph — no new DB/schema): `project.impact_radius`, `project.health`, `project.repair_fts`, `project.risk_index`, `project.review_context`.
-
-Verified current invariants any implementation must respect:
+Invariants honored by the implementation:
 
 - `ProjectIndex.db` is **Schema v2** (`schema_version` meta key + `assets.saved_hash` column/index, `PRAGMA table_info` migration). `project.health` must validate v2, not generic v1.
 - 6 FTS triggers (`fts_assets`/`fts_nodes` × ai/ad/au) are external-content FTS5 → `'rebuild'` is valid for `repair_fts`.

@@ -436,14 +436,15 @@ The mesh module ships horror defaults (storytelling patterns, room templates, ac
 
 - [ ] **Mac/Linux support** — DEFERRED (Windows-only project). All build-related actions are `#if PLATFORM_WINDOWS` guarded. Live Coding is Windows-only. Update system is Windows-only.
 
-### MonolithIndex / MonolithSource — CRG-Inspired Navigation (spec accepted 2026-05-16, NOT implemented)
+### MonolithIndex / MonolithSource — CRG-Inspired Navigation (P0 IMPLEMENTED 2026-05-16)
 
-Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md` (re-verified against origin/master `1264893`; see PRD "코드·문서 재검증 업데이트 _(2026-05-16)_"). Additive actions over the **existing** `dependencies` / `"references"` + `inheritance` graphs — no new DB/schema in P0.
+Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md` (re-verified against origin/master; see PRD "코드·문서 재검증 업데이트 _(2026-05-16)_"). Additive actions over the **existing** `dependencies` / `"references"` + `inheritance` graphs — no new DB/schema in P0. UBT GoGameEditor build green; `Monolith.IndexGuard.*` automation tests added (run via in-editor Session Frontend — headless `-nullrhi` automation blocked by a pre-existing engine layout-save crash unrelated to this change).
 
-- [ ] **P0 — `project.{impact_radius,health,repair_fts,risk_index,review_context}`** — bounded traversal over `dependencies` (`GetDependenciesForAsset`/`GetReferencersOfAsset`), query-time risk, v2-aware health, execute-gated FTS rebuild.
-- [ ] **P0 — `source.{impact_radius,health,repair_fts,risk_index,review_context}`** — traversal over quoted `"references"` + `inheritance` (`include` opt-in only). `source_fts` is plain FTS5 → `target=source` repair degrades to reindex guidance. Decide new `review_context` action vs extending `context.build_attachment`.
-- [ ] **P0 — tests/docs** — extend existing `MonolithIndexQueryTests.cpp` / `MonolithSourceQueryTests.cpp` (`Monolith.IndexGuard.*`); sync `SPEC_MonolithIndex.md` / `SPEC_MonolithSource.md`; correct the stale `MonolithSourceSchema.h:5` `Scripts/source_indexer` comment.
+- [x] **P0 — `project.{impact_radius,health,repair_fts,risk_index,review_context}`** — `FMonolithIndexReview` bounded BFS over `dependencies` (`GetDependenciesForAsset`/`GetReferencersOfAsset`), query-time risk, v2-aware health, execute-gated FTS rebuild (gated on `IsIndexing()`).
+- [x] **P0 — `source.{impact_radius,health,repair_fts,risk_index,review_context}`** — `FMonolithSourceReview` traversal over quoted `"references"` + `inheritance` (`include` excluded). `source_fts` plain FTS5 → `target=source` degrades to reindex guidance. `review_context` is a new action, distinct from single-item `context.build_attachment`.
+- [x] **P0 — tests/docs** — extended `MonolithIndexQueryTests.cpp` / `MonolithSourceQueryTests.cpp` (`Monolith.IndexGuard.*`); synced `SPEC_MonolithIndex.md` / `SPEC_MonolithSource.md`; corrected the stale `MonolithSourceSchema.h:5` `Scripts/source_indexer` comment.
 - [ ] **P1/P2 (deferred)** — derived `*_risk_index` tables (only if measured latency requires), graph snapshot/diff, edge confidence, asset↔symbol bridge, wiki/PR-bot export.
+- [ ] **Follow-up** — execute `Monolith.IndexGuard.*` via in-editor Session Frontend (or a non-`-nullrhi` runner) to record pass/fail in `Docs/testing/`.
 
 ### MonolithIndex — Incremental Indexer Remaining Work
 

@@ -1,5 +1,6 @@
 #include "MonolithSourceActions.h"
 #include "MonolithSourceDatabase.h"
+#include "MonolithSourceReview.h"
 #include "MonolithSourceSubsystem.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
@@ -108,6 +109,51 @@ void FMonolithSourceActions::RegisterAll()
 		TEXT("Trigger incremental project-only C++ source indexing (loads existing engine symbols, indexes project Source/ and Plugins/)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleTriggerProjectReindex),
 		MakeShared<FJsonObject>());
+
+	// CRG-inspired navigation/review surface (additive; existing actions unchanged).
+	Registry.RegisterAction(TEXT("source"), TEXT("impact_radius"),
+		TEXT("Bounded BFS over the symbol graph (\"references\" + inheritance): who is impacted within N hops"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleImpactRadius),
+		FParamSchemaBuilder()
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("Seed symbol name"))
+			.Optional(TEXT("edge_kinds"), TEXT("string"), TEXT("call|type|inheritance (combine with |)"), TEXT("call|type|inheritance"))
+			.Optional(TEXT("direction"), TEXT("string"), TEXT("in|out|both"), TEXT("both"))
+			.Optional(TEXT("max_depth"), TEXT("integer"), TEXT("Max traversal hops"), TEXT("2"))
+			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max impacted symbols"), TEXT("200"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("health"),
+		TEXT("Read-only EngineSource diagnostics: schema v1, symbols_ai/ad triggers, symbols_fts parity, orphans"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleHealth),
+		FParamSchemaBuilder()
+			.Optional(TEXT("include_counts"), TEXT("bool"), TEXT("Include row-count summary"), TEXT("true"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("repair_fts"),
+		TEXT("Rebuild symbols_fts (external-content). source_fts is plain fts5 -> reindex guidance. Dry-run unless execute=true"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleRepairFts),
+		FParamSchemaBuilder()
+			.Optional(TEXT("target"), TEXT("string"), TEXT("all|symbols|source"), TEXT("all"))
+			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Apply rebuild (sole write gate). Default dry-run"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("risk_index"),
+		TEXT("Score symbol change risk (caller fan-in, descendants, UE macro, boundary crossing) with reasons"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleRiskIndex),
+		FParamSchemaBuilder()
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("Symbol name to score"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("review_context"),
+		TEXT("Token-efficient review package: seed + impact + risk reasons + next actions (minimal|standard)"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleReviewContext),
+		FParamSchemaBuilder()
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("Seed symbol name"))
+			.Optional(TEXT("direction"), TEXT("string"), TEXT("in|out|both"), TEXT("both"))
+			.Optional(TEXT("max_depth"), TEXT("integer"), TEXT("Max traversal hops"), TEXT("2"))
+			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max impacted symbols"), TEXT("200"))
+			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("minimal|standard"), TEXT("minimal"))
+			.Build());
 }
 
 // ============================================================================
@@ -120,6 +166,100 @@ FMonolithSourceDatabase* FMonolithSourceActions::GetDB()
 	UMonolithSourceSubsystem* Subsystem = Cast<UMonolithSourceSubsystem>(GEditor->GetEditorSubsystemBase(UMonolithSourceSubsystem::StaticClass()));
 	if (!Subsystem) return nullptr;
 	return Subsystem->GetDatabase();
+}
+
+// ============================================================================
+// CRG-inspired navigation/review handlers
+// ============================================================================
+
+FMonolithActionResult FMonolithSourceActions::HandleImpactRadius(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString Symbol = FMonolithSourceReview::PStr(Params, TEXT("symbol"));
+	if (Symbol.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("'symbol' parameter is required"), -32602);
+	}
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	TSharedPtr<FJsonObject> R = FMonolithSourceReview::ImpactRadius(*DB, Symbol,
+		FMonolithSourceReview::PStr(Params, TEXT("edge_kinds"), TEXT("call|type|inheritance")),
+		FMonolithSourceReview::PStr(Params, TEXT("direction"), TEXT("both")),
+		FMonolithSourceReview::PInt(Params, TEXT("max_depth"), 2),
+		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200));
+	return FMonolithActionResult::Success(R);
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleHealth(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	const bool bCounts = FMonolithSourceReview::PBool(Params, TEXT("include_counts"), true);
+	return FMonolithActionResult::Success(DB->ComputeHealth(bCounts));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleRepairFts(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	const FString Target = FMonolithSourceReview::PStr(Params, TEXT("target"), TEXT("all"));
+	const bool bExecute = FMonolithSourceReview::PBool(Params, TEXT("execute"), false);
+
+	if (bExecute && GEditor)
+	{
+		UMonolithSourceSubsystem* Sub = Cast<UMonolithSourceSubsystem>(
+			GEditor->GetEditorSubsystemBase(UMonolithSourceSubsystem::StaticClass()));
+		if (Sub && Sub->IsIndexing())
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Source indexing is in progress; retry repair_fts(execute=true) once it completes"), -32000)
+				.WithHint(TEXT("Use source.repair_fts (dry-run) meanwhile, or source.health"));
+		}
+	}
+	return FMonolithActionResult::Success(DB->RepairFts(Target, bExecute));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleRiskIndex(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString Symbol = FMonolithSourceReview::PStr(Params, TEXT("symbol"));
+	if (Symbol.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("'symbol' parameter is required"), -32602);
+	}
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	return FMonolithActionResult::Success(FMonolithSourceReview::RiskIndex(*DB, Symbol));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleReviewContext(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString Symbol = FMonolithSourceReview::PStr(Params, TEXT("symbol"));
+	if (Symbol.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("'symbol' parameter is required"), -32602);
+	}
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	TSharedPtr<FJsonObject> R = FMonolithSourceReview::ReviewContext(*DB, Symbol,
+		FMonolithSourceReview::PStr(Params, TEXT("direction"), TEXT("both")),
+		FMonolithSourceReview::PInt(Params, TEXT("max_depth"), 2),
+		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200),
+		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal")));
+	return FMonolithActionResult::Success(R);
 }
 
 FString FMonolithSourceActions::ShortPath(const FString& FullPath)

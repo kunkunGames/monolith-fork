@@ -2,7 +2,11 @@
 
 /**
  * DDL constants for the Monolith engine source SQLite database.
- * Must produce the EXACT same schema as Scripts/source_indexer/db/schema.py.
+ *
+ * This native schema is the SOLE source of truth for EngineSource.db. The legacy
+ * Python tree-sitter indexer (Scripts/source_indexer/db/schema.py) is no longer
+ * invoked (UMonolithSourceSubsystem builds the DB in-process); that script is
+ * vestigial and must not be treated as a schema authority.
  *
  * Each DDL_* constant may contain multiple semicolon-separated statements.
  * Use ExecuteMulti() in MonolithSourceDatabase.cpp — FSQLiteDatabase::Execute() only

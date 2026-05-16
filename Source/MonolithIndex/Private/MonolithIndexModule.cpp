@@ -9,12 +9,17 @@
 #include "Actions/ProjectListGameplayTagsAction.h"
 #include "Actions/ProjectSearchGameplayTagsAction.h"
 #include "Actions/AssetCollectionActions.h"
+#include "Actions/ProjectImpactRadiusAction.h"
+#include "Actions/ProjectHealthAction.h"
+#include "Actions/ProjectRepairFtsAction.h"
+#include "Actions/ProjectRiskIndexAction.h"
+#include "Actions/ProjectReviewContextAction.h"
 
 #define LOCTEXT_NAMESPACE "FMonolithIndexModule"
 
 void FMonolithIndexModule::StartupModule()
 {
-	UE_LOG(LogMonolithIndex, Verbose, TEXT("Monolith -- Index module loaded (7 actions, SQLite+FTS5)"));
+	UE_LOG(LogMonolithIndex, Verbose, TEXT("Monolith -- Index module loaded (12 actions, SQLite+FTS5)"));
 
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
@@ -54,6 +59,32 @@ void FMonolithIndexModule::StartupModule()
 		FProjectSearchGameplayTagsAction::GetSchema());
 
 	FAssetCollectionActions::Register(Registry);
+
+	// CRG-inspired navigation/review surface (additive; existing actions unchanged).
+	Registry.RegisterAction(TEXT("project"), FProjectImpactRadiusAction::GetName(),
+		FProjectImpactRadiusAction::GetDescription(),
+		FMonolithActionHandler::CreateStatic(&FProjectImpactRadiusAction::Execute),
+		FProjectImpactRadiusAction::GetSchema());
+
+	Registry.RegisterAction(TEXT("project"), FProjectHealthAction::GetName(),
+		FProjectHealthAction::GetDescription(),
+		FMonolithActionHandler::CreateStatic(&FProjectHealthAction::Execute),
+		FProjectHealthAction::GetSchema());
+
+	Registry.RegisterAction(TEXT("project"), FProjectRepairFtsAction::GetName(),
+		FProjectRepairFtsAction::GetDescription(),
+		FMonolithActionHandler::CreateStatic(&FProjectRepairFtsAction::Execute),
+		FProjectRepairFtsAction::GetSchema());
+
+	Registry.RegisterAction(TEXT("project"), FProjectRiskIndexAction::GetName(),
+		FProjectRiskIndexAction::GetDescription(),
+		FMonolithActionHandler::CreateStatic(&FProjectRiskIndexAction::Execute),
+		FProjectRiskIndexAction::GetSchema());
+
+	Registry.RegisterAction(TEXT("project"), FProjectReviewContextAction::GetName(),
+		FProjectReviewContextAction::GetDescription(),
+		FMonolithActionHandler::CreateStatic(&FProjectReviewContextAction::Execute),
+		FProjectReviewContextAction::GetSchema());
 }
 
 void FMonolithIndexModule::ShutdownModule()
