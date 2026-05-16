@@ -23,7 +23,7 @@ public class MonolithLogicDriver : ModuleRules
 					bHasLogicDriver = Directory.Exists(
 						Path.Combine(ProjectPluginsDir, "SMSystem"))
 						|| Directory.GetDirectories(
-							ProjectPluginsDir, "LogicDri*",
+							ProjectPluginsDir, "LogicDriver*",
 							SearchOption.TopDirectoryOnly).Length > 0;
 				}
 			}
@@ -36,7 +36,7 @@ public class MonolithLogicDriver : ModuleRules
 				if (Directory.Exists(MarketplaceDir))
 				{
 					bHasLogicDriver = Directory.GetDirectories(
-						MarketplaceDir, "LogicDri*",
+						MarketplaceDir, "LogicDriver*",
 						SearchOption.TopDirectoryOnly).Length > 0;
 				}
 
