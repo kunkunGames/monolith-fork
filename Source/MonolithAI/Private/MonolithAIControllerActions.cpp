@@ -546,7 +546,11 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSetAIControllerFlags(c
 	// wants_player_state (public)
 	if (Params->HasField(TEXT("wants_player_state")))
 	{
-		bool bVal = Params->GetBoolField(TEXT("wants_player_state"));
+		bool bVal = false;
+		if (!Params->TryGetBoolField(TEXT("wants_player_state"), bVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'wants_player_state' must be a boolean"));
+		}
 		CDO->bWantsPlayerState = bVal;
 		Result->SetBoolField(TEXT("wants_player_state"), bVal);
 		++ChangedCount;
@@ -555,7 +559,11 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSetAIControllerFlags(c
 	// allow_strafe (public)
 	if (Params->HasField(TEXT("allow_strafe")))
 	{
-		bool bVal = Params->GetBoolField(TEXT("allow_strafe"));
+		bool bVal = false;
+		if (!Params->TryGetBoolField(TEXT("allow_strafe"), bVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'allow_strafe' must be a boolean"));
+		}
 		CDO->bAllowStrafe = bVal;
 		Result->SetBoolField(TEXT("allow_strafe"), bVal);
 		++ChangedCount;
@@ -564,7 +572,11 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSetAIControllerFlags(c
 	// start_ai_on_possess (protected — via reflection)
 	if (Params->HasField(TEXT("start_ai_on_possess")))
 	{
-		bool bVal = Params->GetBoolField(TEXT("start_ai_on_possess"));
+		bool bVal = false;
+		if (!Params->TryGetBoolField(TEXT("start_ai_on_possess"), bVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'start_ai_on_possess' must be a boolean"));
+		}
 		if (FBoolProperty* Prop = CastField<FBoolProperty>(BP->GeneratedClass->FindPropertyByName(TEXT("bStartAILogicOnPossess"))))
 		{
 			Prop->SetPropertyValue_InContainer(CDO, bVal);
@@ -576,7 +588,11 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSetAIControllerFlags(c
 	// skip_extra_los_checks (protected — via reflection)
 	if (Params->HasField(TEXT("skip_extra_los_checks")))
 	{
-		bool bVal = Params->GetBoolField(TEXT("skip_extra_los_checks"));
+		bool bVal = false;
+		if (!Params->TryGetBoolField(TEXT("skip_extra_los_checks"), bVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'skip_extra_los_checks' must be a boolean"));
+		}
 		if (FBoolProperty* Prop = CastField<FBoolProperty>(BP->GeneratedClass->FindPropertyByName(TEXT("bSkipExtraLOSChecks"))))
 		{
 			Prop->SetPropertyValue_InContainer(CDO, bVal);
@@ -609,7 +625,11 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSetAITeam(const TShare
 		return FMonolithActionResult::Error(Error);
 	}
 
-	double TeamIdDouble = Params->GetNumberField(TEXT("team_id"));
+	double TeamIdDouble = 0.0;
+	if (!Params->TryGetNumberField(TEXT("team_id"), TeamIdDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'team_id' must be a number"));
+	}
 	int32 TeamId = FMath::RoundToInt32(TeamIdDouble);
 	if (TeamId < 0 || TeamId > 255)
 	{
