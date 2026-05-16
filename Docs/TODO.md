@@ -1,6 +1,6 @@
 # Monolith — TODO
 
-Last updated: 2026-04-24 (v0.14.3)
+Last updated: 2026-05-16 (CRG-inspired navigation spec accepted; v0.14.9 docs)
 
 ---
 
@@ -435,6 +435,15 @@ The mesh module ships horror defaults (storytelling patterns, room templates, ac
 ### Platform
 
 - [ ] **Mac/Linux support** — DEFERRED (Windows-only project). All build-related actions are `#if PLATFORM_WINDOWS` guarded. Live Coding is Windows-only. Update system is Windows-only.
+
+### MonolithIndex / MonolithSource — CRG-Inspired Navigation (spec accepted 2026-05-16, NOT implemented)
+
+Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md` (re-verified against origin/master `1264893`; see PRD "코드·문서 재검증 업데이트 _(2026-05-16)_"). Additive actions over the **existing** `dependencies` / `"references"` + `inheritance` graphs — no new DB/schema in P0.
+
+- [ ] **P0 — `project.{impact_radius,health,repair_fts,risk_index,review_context}`** — bounded traversal over `dependencies` (`GetDependenciesForAsset`/`GetReferencersOfAsset`), query-time risk, v2-aware health, execute-gated FTS rebuild.
+- [ ] **P0 — `source.{impact_radius,health,repair_fts,risk_index,review_context}`** — traversal over quoted `"references"` + `inheritance` (`include` opt-in only). `source_fts` is plain FTS5 → `target=source` repair degrades to reindex guidance. Decide new `review_context` action vs extending `context.build_attachment`.
+- [ ] **P0 — tests/docs** — extend existing `MonolithIndexQueryTests.cpp` / `MonolithSourceQueryTests.cpp` (`Monolith.IndexGuard.*`); sync `SPEC_MonolithIndex.md` / `SPEC_MonolithSource.md`; correct the stale `MonolithSourceSchema.h:5` `Scripts/source_indexer` comment.
+- [ ] **P1/P2 (deferred)** — derived `*_risk_index` tables (only if measured latency requires), graph snapshot/diff, edge confidence, asset↔symbol bridge, wiki/PR-bot export.
 
 ### MonolithIndex — Incremental Indexer Remaining Work
 

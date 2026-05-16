@@ -18,7 +18,7 @@
 |-------|---------------|
 | `FMonolithSourceModule` | Registers 15 actions total: 11 `source` actions and 4 `context` actions |
 | `UMonolithSourceSubsystem` | UEditorSubsystem. Owns engine source DB. Runs native C++ source indexer. Exposes `TriggerReindex()` (full engine re-index) and `TriggerProjectReindex()` (project C++ only, incremental). **F17 (2026-04-26):** Auto-binds `FCoreUObjectDelegates::ReloadCompleteDelegate` at `Initialize` to kick incremental project reindex on Live Coding / hot-reload completion (5s cooldown + `bIsIndexing` re-entrancy guard + bootstrap-DB-missing skip). Unbinds at `Deinitialize`. |
-| `FMonolithSourceDatabase` | Read-only SQLite wrapper. Thread-safe via FCriticalSection. FTS queries with prefix matching |
+| `FMonolithSourceDatabase` | Read/write SQLite wrapper (`Open`, `OpenForWriting`, schema reset, transactions, inserts). Thread-safe via FCriticalSection. FTS queries with prefix matching |
 | `FMonolithSourceActions` | 11 `source` handlers. Helpers: IsForwardDeclaration (regex), ExtractMembers (smart class outline) |
 | `FMonolithSourceContextActions` | 4 `context` handlers for index readiness, indexing dispatch, context item search, and attachment materialization |
 | ~~`UMonolithQueryCommandlet`~~ | **Removed.** Replaced by standalone `monolith_query.exe` (see Section 5.1). The exe has no UE runtime dependency and starts instantly |
@@ -54,5 +54,20 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 | `build_attachment` | `item_id`, `context_lines` | Materialize a context.search_items result into a bounded prompt attachment |
 
 **DB Location:** `Plugins/Monolith/Saved/EngineSource.db`
+
+### Planned Extension — CRG-Inspired Navigation (spec accepted, NOT implemented as of v0.14.9)
+
+A CRG-inspired review/navigation surface is specced but **not yet implemented** (no `impact_radius`/`health`/`repair_fts`/`risk_index`/`review_context` action exists in code). Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md`.
+
+Accepted P0 scope (additive over **existing** `"references"` + `inheritance` — no new DB/schema): `source.impact_radius`, `source.health`, `source.repair_fts`, `source.risk_index`, `source.review_context`.
+
+Verified current invariants any implementation must respect:
+
+- `EngineSource.db` is **Schema v1**; native `MonolithSourceSchema.h` (`SchemaVersion=1`, `meta.schema_version`) is the sole authority. The `MonolithSourceSchema.h:5` comment claiming parity with `Scripts/source_indexer/db/schema.py` is **stale drift** (that Python indexer is legacy/uninvoked since 2026-03-15 — see `Docs/TODO.md`); correct that comment when implementing `source.health`.
+- `symbols_fts` is external-content (`content=symbols`) → supports `'rebuild'`. `source_fts` is a plain `fts5(file_id UNINDEXED, line_number UNINDEXED, text)` with no backing table → `'rebuild'` is meaningless; `source.repair_fts(target=source)` always degrades to a reindex recommendation. Triggers are `symbols_ai`/`symbols_ad` only (no `symbols_au`, no `source_fts` trigger) — `source.health` must expect exactly that set.
+- `"references"` is a quoted SQLite reserved word in schema and every query; new traversal/fixtures must quote it. Traversal: calls/type refs `from_symbol_id → to_symbol_id` (`GetReferencesTo`/`GetReferencesFrom`), inheritance `child_id → parent_id`. `includes` is file/path-level (no `included_file_id`) and stays opt-in only after path→`files.path` resolution.
+- `FMonolithSourceDatabase` is a **read/write** wrapper with a private `DbLock`; `source.repair_fts` writes must run inside an existing DB/helper method that can take the private lock, gated on `UMonolithSourceSubsystem::IsIndexing()`.
+- `context.build_attachment` is the existing monolith-native analog of `source.review_context`; REQ-007/008 must decide new-action vs `context` extension before coding.
+- Test precedent: extend `Private/Tests/MonolithSourceQueryTests.cpp` (`Monolith.IndexGuard.Source.*`, temp-DB fixture) — do not introduce a new directory or `WITH_DEV_AUTOMATION_TESTS` guard.
 
 ---

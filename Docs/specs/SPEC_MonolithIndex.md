@@ -102,4 +102,18 @@ Migration is automatic: on startup, `PRAGMA table_info(assets)` checks for the `
 
 The `bInstalled` filter on plugin content paths was replaced with explicit path enumeration. This fixes discovery of project-local plugins (e.g., DrawCallReducer, NiagaraDestructionDriver) that previously reported `bInstalled=false` and were excluded from indexing. The `MeshCatalogIndexer` paths were also corrected to use the new enumeration.
 
+### Planned Extension — CRG-Inspired Navigation (spec accepted, NOT implemented as of v0.14.9)
+
+A CRG-inspired review/navigation surface is specced but **not yet implemented** (no `impact_radius`/`health`/`repair_fts`/`risk_index`/`review_context` action exists in code). Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md`.
+
+Accepted P0 scope (additive `project` actions over the **existing** `dependencies` graph — no new DB/schema): `project.impact_radius`, `project.health`, `project.repair_fts`, `project.risk_index`, `project.review_context`.
+
+Verified current invariants any implementation must respect:
+
+- `ProjectIndex.db` is **Schema v2** (`schema_version` meta key + `assets.saved_hash` column/index, `PRAGMA table_info` migration). `project.health` must validate v2, not generic v1.
+- 6 FTS triggers (`fts_assets`/`fts_nodes` × ai/ad/au) are external-content FTS5 → `'rebuild'` is valid for `repair_fts`.
+- `FMonolithIndexDatabase` exposes a raw `FSQLiteDatabase*` (`GetRawDatabase()`) with **no DB-internal lock**; writes are caller-serialized. `repair_fts` must gate on `UMonolithIndexSubsystem::IsIndexing()` and run inside a transaction-scoped helper.
+- Direct lookup helpers to build bounded traversal on: `GetDependenciesForAsset` (out / `source_asset_id`), `GetReferencersOfAsset` (in / `target_asset_id`).
+- Test precedent: extend `Private/Tests/MonolithIndexQueryTests.cpp` (`Monolith.IndexGuard.Project.*`, temp-DB fixture) — do not introduce a new directory or `WITH_DEV_AUTOMATION_TESTS` guard.
+
 ---
