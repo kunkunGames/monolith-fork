@@ -541,6 +541,7 @@ FMonolithActionResult FMonolithLevelSequenceActions::GetDirectorInfo(const TShar
 
 	// 4) Sample of up to 10 functions (user first, then custom_event, then sequencer_endpoint).
 	TArray<TSharedPtr<FJsonValue>> SampleFns;
+	SampleFns.Reserve(10);
 	{
 		FSQLitePreparedStatement Stmt;
 		// CASE-WHEN gives explicit kind ordering (user before custom_event before sequencer_endpoint).
