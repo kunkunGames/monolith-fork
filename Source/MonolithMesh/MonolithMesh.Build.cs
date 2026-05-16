@@ -53,10 +53,32 @@ public class MonolithMesh : ModuleRules
 		bool bHasGeometryScripting = false;
 		if (!bReleaseBuild)
 		{
-			string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-			string GeometryScriptingPath = Path.Combine(EngineDir,
-				"Plugins", "Runtime", "GeometryScripting");
-			bHasGeometryScripting = Directory.Exists(GeometryScriptingPath);
+			// 1. Check project Plugins/ folder
+			if (Target.ProjectFile != null)
+			{
+				string ProjectPluginsDir = Path.Combine(
+					Target.ProjectFile.Directory.FullName, "Plugins");
+				if (Directory.Exists(ProjectPluginsDir))
+				{
+					bHasGeometryScripting = Directory.Exists(
+						Path.Combine(ProjectPluginsDir, "GeometryScripting"))
+						|| Directory.GetDirectories(
+							ProjectPluginsDir, "GeometryScripting*",
+							SearchOption.TopDirectoryOnly).Length > 0;
+				}
+			}
+
+			// 2. Check Engine Plugins/ folder
+			if (!bHasGeometryScripting)
+			{
+				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
+				string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
+
+				bHasGeometryScripting =
+					Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "GeometryScripting"))
+					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace", "GeometryScripting"))
+					|| Directory.Exists(Path.Combine(EnginePluginsDir, "GeometryScripting"));
+			}
 		}
 
 		if (bHasGeometryScripting)
