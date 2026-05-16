@@ -93,25 +93,9 @@ bool FMonolithParamGuardMeshRoofMalformedParamsTest::RunTest(const FString& Para
         TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
         // Required fields
         TArray<TSharedPtr<FJsonValue>> Poly;
-        TArray<TSharedPtr<FJsonValue>> P0;
-        P0.Add(MakeShared<FJsonValueNumber>(0.0));
-        P0.Add(MakeShared<FJsonValueNumber>(0.0));
-        Poly.Add(MakeShared<FJsonValueArray>(P0));
-
-        TArray<TSharedPtr<FJsonValue>> P1;
-        P1.Add(MakeShared<FJsonValueNumber>(100.0));
-        P1.Add(MakeShared<FJsonValueNumber>(0.0));
-        Poly.Add(MakeShared<FJsonValueArray>(P1));
-
-        TArray<TSharedPtr<FJsonValue>> P2;
-        P2.Add(MakeShared<FJsonValueNumber>(100.0));
-        P2.Add(MakeShared<FJsonValueNumber>(100.0));
-        Poly.Add(MakeShared<FJsonValueArray>(P2));
-
-        TArray<TSharedPtr<FJsonValue>> P3;
-        P3.Add(MakeShared<FJsonValueNumber>(0.0));
-        P3.Add(MakeShared<FJsonValueNumber>(100.0));
-        Poly.Add(MakeShared<FJsonValueArray>(P3));
+        Poly.Add(MakeShared<FJsonValueNumber>(0.0));
+        Poly.Add(MakeShared<FJsonValueNumber>(0.0));
+        Poly.Add(MakeShared<FJsonValueNumber>(0.0));
         Params->SetArrayField(TEXT("footprint_polygon"), Poly);
         Params->SetStringField(TEXT("save_path"), TEXT("/Game/TestRoof"));
 
