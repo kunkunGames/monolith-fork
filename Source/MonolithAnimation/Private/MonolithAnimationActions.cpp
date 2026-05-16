@@ -6324,9 +6324,38 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddMontageAnimSegment(con
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString AnimPath = Params->GetStringField(TEXT("anim_path"));
-	int32 SlotIndex = Params->HasField(TEXT("slot_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("slot_index"))) : 0;
-	float PlayRate = Params->HasField(TEXT("play_rate")) ? static_cast<float>(Params->GetNumberField(TEXT("play_rate"))) : 1.0f;
-	int32 LoopingCount = Params->HasField(TEXT("looping_count")) ? static_cast<int32>(Params->GetNumberField(TEXT("looping_count"))) : 1;
+	int32 SlotIndex = 0;
+	if (Params->HasField(TEXT("slot_index")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("slot_index"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'slot_index' must be a number"));
+		}
+		SlotIndex = static_cast<int32>(TempVal);
+	}
+
+	float PlayRate = 1.0f;
+	if (Params->HasField(TEXT("play_rate")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("play_rate"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'play_rate' must be a number"));
+		}
+		PlayRate = static_cast<float>(TempVal);
+	}
+
+	int32 LoopingCount = 1;
+	if (Params->HasField(TEXT("looping_count")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("looping_count"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'looping_count' must be a number"));
+		}
+		LoopingCount = static_cast<int32>(TempVal);
+	}
 
 	UAnimMontage* Montage = FMonolithAssetUtils::LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage) return FMonolithActionResult::Error(FString::Printf(TEXT("Montage not found: %s"), *AssetPath));
@@ -6343,7 +6372,12 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddMontageAnimSegment(con
 	float StartPos = 0.0f;
 	if (Params->HasField(TEXT("start_pos")))
 	{
-		StartPos = static_cast<float>(Params->GetNumberField(TEXT("start_pos")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("start_pos"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'start_pos' must be a number"));
+		}
+		StartPos = static_cast<float>(TempVal);
 	}
 	else
 	{
@@ -6353,8 +6387,27 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddMontageAnimSegment(con
 		}
 	}
 
-	float AnimStartTime = Params->HasField(TEXT("anim_start_time")) ? static_cast<float>(Params->GetNumberField(TEXT("anim_start_time"))) : 0.0f;
-	float AnimEndTime = Params->HasField(TEXT("anim_end_time")) ? static_cast<float>(Params->GetNumberField(TEXT("anim_end_time"))) : Anim->GetPlayLength();
+	float AnimStartTime = 0.0f;
+	if (Params->HasField(TEXT("anim_start_time")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("anim_start_time"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'anim_start_time' must be a number"));
+		}
+		AnimStartTime = static_cast<float>(TempVal);
+	}
+
+	float AnimEndTime = Anim->GetPlayLength();
+	if (Params->HasField(TEXT("anim_end_time")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("anim_end_time"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'anim_end_time' must be a number"));
+		}
+		AnimEndTime = static_cast<float>(TempVal);
+	}
 
 	GEditor->BeginTransaction(FText::FromString(TEXT("Add Montage Anim Segment")));
 	Montage->Modify();
