@@ -30,7 +30,7 @@
 | `get_build_errors` | Build errors/warnings from log capture. Max 500 entries |
 | `get_build_status` | Live Coding availability, started, enabled, compiling status |
 | `get_build_summary` | Total error/warning counts + compile status |
-| `search_build_output` | Search build log by `pattern`. Default limit 100 |
+| `search_build_output` | Search build log by `pattern`. Default limit 100, max 1000 |
 | `get_recent_logs` | Recent log entries. Default 100, max 1000 |
 | `search_logs` | Search by `pattern`, `category`, `verbosity`, `limit` (max 2000) |
 | `tail_log` | Last N lines formatted `[category][verbosity] message`. Default 50, max 500 |
