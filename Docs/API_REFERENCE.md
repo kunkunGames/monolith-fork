@@ -2,7 +2,7 @@
 
 **Version:** v0.14.10 · **Last updated:** 2026-05-10
 
-**In-tree action total: 1542** active actions across **32 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1566). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1538** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 36.
+**In-tree action total: 1544** active actions across **32 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1568). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1540** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 36.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
@@ -448,16 +448,17 @@ List all config files with their hierarchy level.
 
 ## project
 
-Project-wide asset index backed by SQLite + FTS5. **12 actions.**
+Project-wide asset index backed by SQLite + FTS5. **13 actions.**
 
-CRG-inspired navigation/review (additive, over the existing `dependencies` graph — no new schema):
+CRG-inspired navigation/review (additive, over the existing `dependencies` graph plus rebuildable derived `crg_*` projection/cache tables):
 
 | Action | Key params | Purpose |
 |--------|-----------|---------|
 | `project.impact_radius` | `asset_path`*, `direction`=both, `max_depth`=2, `max_results`=200, `dependency_type` | Cycle-safe bounded BFS; returns `impacted_assets[]`, `edges[]`, `truncated` |
-| `project.health` | `include_counts`=true | Read-only: v2 schema, 6 triggers, FTS row parity, orphan deps, journal mode; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
+| `project.health` | `include_counts`=true | Read-only: v2 schema, 6 triggers, FTS row parity, orphan deps, CRG projection table/index/parity checks, journal mode; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
 | `project.repair_fts` | `target`=all\|assets\|nodes, `execute`=false | Rebuild `fts_assets`/`fts_nodes`. `execute=true` is the sole write gate; refused while indexing |
-| `project.risk_score` | `asset_path`/`seed`, `limit`=20, `min_tier`=low | `{score,tier,reasons[],raw_counts}` (fan-in, hard deps, class weight, density) |
+| `project.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `assets` and `dependencies`. Dry-run unless `execute=true`; refused while indexing |
+| `project.risk_score` | `asset_path`/`seed`, `limit`=20, `min_tier`=low | `{score,tier,reasons[],raw_counts,cache}` from `crg_node_metrics` when available; query-time fallback on cache miss |
 | `project.review_context` | `asset_path`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`; `minimal` omits full details |
 
 ### `project.search`
@@ -514,16 +515,17 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 
 ## source
 
-Unreal Engine C++ source code navigation. 1M+ symbols indexed. **16 actions.**
+Unreal Engine C++ source code navigation. 1M+ symbols indexed. **17 actions.**
 
-CRG-inspired navigation/review (additive, over the existing `"references"` + `inheritance` graph — no new schema):
+CRG-inspired navigation/review (additive, over the existing `"references"` + `inheritance` graph plus rebuildable derived `crg_*` projection/cache tables):
 
 | Action | Key params | Purpose |
 |--------|-----------|---------|
 | `source.impact_radius` | `symbol`*, `edge_kinds`=call\|type\|inheritance, `direction`=both, `max_depth`=2, `max_results`=200 | Cycle-safe bounded BFS; call/type filters are exact, `include` returns a warning until path resolution is supported. Returns `impacted_symbols[]`, `edges[]`, `warnings[]`, `truncated` |
-| `source.health` | `include_counts`=true | Read-only: v1 schema, `symbols_ai/ad` triggers, `symbols_fts` parity, orphan refs; `source_fts` info-only; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
+| `source.health` | `include_counts`=true | Read-only: v1 schema, `symbols_ai/ad` triggers, `symbols_fts` parity, orphan refs, CRG projection table/index/parity checks; `source_fts` info-only; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
 | `source.repair_fts` | `target`=all\|symbols\|source, `execute`=false | Rebuild `symbols_fts`. `target=source` → reindex guidance (plain fts5). Refused while indexing |
-| `source.risk_score` | `symbol`*, `limit`=10, `min_tier`=low | `{score,tier,reasons[],raw_counts}` (caller fan-in, descendants, UE macro, boundary crossing) |
+| `source.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `symbols`, `"references"`, and `inheritance`. Dry-run unless `execute=true`; refused while indexing |
+| `source.risk_score` | `symbol`*, `limit`=10, `min_tier`=low | `{score,tier,reasons[],raw_counts,cache}` from `crg_node_metrics` when available; query-time fallback on cache miss |
 | `source.review_context` | `symbol`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`. Distinct from single-item `context.build_attachment` |
 
 ### `source.read_source`

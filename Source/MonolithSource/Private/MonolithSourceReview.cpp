@@ -49,6 +49,19 @@ namespace
 		return 0;
 	}
 
+	TSharedPtr<FJsonObject> CacheMeta(const FString& Status, const FString& CacheVersion, const FString& ScoringVersion)
+	{
+		TSharedPtr<FJsonObject> Cache = MakeShared<FJsonObject>();
+		Cache->SetStringField(TEXT("status"), Status);
+		if (!CacheVersion.IsEmpty())
+		{
+			Cache->SetStringField(TEXT("version"), CacheVersion);
+			Cache->SetStringField(TEXT("cache_version"), CacheVersion);
+		}
+		if (!ScoringVersion.IsEmpty()) Cache->SetStringField(TEXT("scoring_version"), ScoringVersion);
+		return Cache;
+	}
+
 	FJsonArr TopRiskReasons(const TSharedPtr<FJsonObject>& Risk, int32 MaxItems)
 	{
 		FJsonArr Out;
@@ -66,6 +79,11 @@ namespace
 	/** Shared single-symbol risk used by risk_score and review_context. */
 	TSharedPtr<FJsonObject> ScoreSymbol(FMonolithSourceDatabase& Db, const FMonolithSourceSymbol& Sym)
 	{
+		if (TSharedPtr<FJsonObject> Cached = Db.GetCachedRiskForSymbol(Sym.Id))
+		{
+			return Cached;
+		}
+
 		const TArray<FMonolithSourceReference> Callers = Db.GetReferencesTo(Sym.Id, TEXT(""), 500);
 		const TArray<FMonolithSourceReference> Callees = Db.GetReferencesFrom(Sym.Id, TEXT(""), 500);
 		const TArray<FMonolithSourceInheritance> Children = Db.GetChildren(Sym.Id);
@@ -118,6 +136,7 @@ namespace
 		RC->SetNumberField(TEXT("caller_files"), CallerFiles.Num());
 		RC->SetBoolField(TEXT("is_ue_macro"), Sym.bIsUEMacro);
 		O->SetObjectField(TEXT("raw_counts"), RC);
+		O->SetObjectField(TEXT("cache"), CacheMeta(TEXT("miss"), TEXT(""), TEXT("1")));
 		return O;
 	}
 } // namespace
@@ -320,11 +339,11 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::RiskScore(
 
 	Root->SetStringField(TEXT("status"), TEXT("ok"));
 	Root->SetStringField(TEXT("summary"),
-		FString::Printf(TEXT("%d symbol overload(s) scored (scoring_version=1)"), Items.Num()));
-	Root->SetStringField(TEXT("scoring_version"), TEXT("1"));
+		FString::Printf(TEXT("%d symbol overload(s) scored (scoring_version=2 cached when available, v1 fallback)"), Items.Num()));
+	Root->SetStringField(TEXT("scoring_version"), TEXT("2"));
 	Root->SetArrayField(TEXT("items"), Items);
 	Root->SetBoolField(TEXT("truncated"), false);
-	AddNext(Root, { TEXT("source.review_context"), TEXT("source.impact_radius") });
+	AddNext(Root, { TEXT("source.repair_crg_cache"), TEXT("source.review_context"), TEXT("source.impact_radius") });
 	return Root;
 }
 

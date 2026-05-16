@@ -137,6 +137,14 @@ void FMonolithSourceActions::RegisterAll()
 			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Apply rebuild (sole write gate). Default dry-run"), TEXT("false"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("source"), TEXT("repair_crg_cache"),
+		TEXT("Rebuild derived EngineSource CRG projection/cache tables. Dry-run unless execute=true"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleRepairCrgCache),
+		FParamSchemaBuilder()
+			.Optional(TEXT("scope"), TEXT("string"), TEXT("Only 'all' is supported in this version"), TEXT("all"))
+			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Apply rebuild (sole write gate). Default dry-run"), TEXT("false"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("source"), TEXT("risk_score"),
 		TEXT("Score symbol change risk (caller fan-in, descendants, UE macro, boundary crossing) with reasons"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleRiskScore),
@@ -227,6 +235,34 @@ FMonolithActionResult FMonolithSourceActions::HandleRepairFts(const TSharedPtr<F
 		}
 	}
 	return FMonolithActionResult::Success(DB->RepairFts(Target, bExecute));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleRepairCrgCache(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	const bool bExecute = FMonolithSourceReview::PBool(Params, TEXT("execute"), false);
+	const FString Scope = FMonolithSourceReview::PStr(Params, TEXT("scope"), TEXT("all"));
+	if (Scope != TEXT("all"))
+	{
+		return FMonolithActionResult::Error(TEXT("Unsupported scope for repair_crg_cache (expected 'all')"), -32602);
+	}
+
+	if (bExecute && GEditor)
+	{
+		UMonolithSourceSubsystem* Sub = Cast<UMonolithSourceSubsystem>(
+			GEditor->GetEditorSubsystemBase(UMonolithSourceSubsystem::StaticClass()));
+		if (Sub && Sub->IsIndexing())
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Source indexing is in progress; retry repair_crg_cache(execute=true) once it completes"), -32000)
+				.WithHint(TEXT("Use source.repair_crg_cache (dry-run) meanwhile, or source.health"));
+		}
+	}
+	return FMonolithActionResult::Success(DB->RepairCrgCache(bExecute));
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleRiskScore(const TSharedPtr<FJsonObject>& Params)

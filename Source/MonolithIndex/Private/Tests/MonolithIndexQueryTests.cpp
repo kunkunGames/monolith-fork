@@ -69,7 +69,9 @@ namespace
 			Dep(C, A, TEXT("Soft"));
 			Dep(B, D, TEXT("Hard"));
 			Db.WriteMeta(TEXT("schema_version"), TEXT("2"));
-			return A > 0 && B > 0 && C > 0 && D > 0;
+			TSharedPtr<FJsonObject> Crg = FMonolithIndexReview::RepairCrgCache(Db, true);
+			return A > 0 && B > 0 && C > 0 && D > 0
+				&& Crg.IsValid() && Crg->GetStringField(TEXT("status")) == TEXT("ok");
 		}
 		~FTempIndexDb()
 		{
@@ -152,6 +154,44 @@ bool FProjectRepairFtsDryRunTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("plan present"), Dry->TryGetArrayField(TEXT("plan"), Plan) && Plan && Plan->Num() == 2);
 	TSharedPtr<FJsonObject> Exec = FMonolithIndexReview::RepairFts(T.Db, TEXT("all"), true);
 	TestEqual(TEXT("execute ok"), Exec->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectRepairCrgCacheTest, "Monolith.IndexGuard.Project.RepairCrgCache", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectRepairCrgCacheTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	TSharedPtr<FJsonObject> Dry = FMonolithIndexReview::RepairCrgCache(T.Db, false);
+	TestEqual(TEXT("dry-run ok"), Dry->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	const TArray<TSharedPtr<FJsonValue>>* Plan = nullptr;
+	TestTrue(TEXT("plan present"), Dry->TryGetArrayField(TEXT("plan"), Plan) && Plan && Plan->Num() >= 3);
+
+	TSharedPtr<FJsonObject> Exec = FMonolithIndexReview::RepairCrgCache(T.Db, true);
+	TestEqual(TEXT("execute ok"), Exec->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TSharedPtr<FJsonObject> After = Exec->GetObjectField(TEXT("after"));
+	TestTrue(TEXT("after counts present"), After.IsValid());
+	TestEqual(TEXT("one CRG node per asset"), After->GetIntegerField(TEXT("crg_nodes")), 4);
+	TestEqual(TEXT("one CRG edge per dependency"), After->GetIntegerField(TEXT("crg_edges")), 4);
+	TestEqual(TEXT("one metric per CRG node"), After->GetIntegerField(TEXT("crg_node_metrics")), 4);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectRiskScoreUsesCrgCacheTest, "Monolith.IndexGuard.Project.RiskScoreUsesCrgCache", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectRiskScoreUsesCrgCacheTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::RiskScore(T.Db, TEXT("/Game/B"), 10, TEXT("low"));
+	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+	TestTrue(TEXT("items present"), R->TryGetArrayField(TEXT("items"), Items) && Items && Items->Num() == 1);
+	TSharedPtr<FJsonObject> Item = (*Items)[0]->AsObject();
+	TestTrue(TEXT("item object"), Item.IsValid());
+	TSharedPtr<FJsonObject> Cache = Item->GetObjectField(TEXT("cache"));
+	TestTrue(TEXT("cache object"), Cache.IsValid());
+	TestEqual(TEXT("cache hit"), Cache->GetStringField(TEXT("status")), FString(TEXT("hit")));
+	double Score = 0.0;
+	TestTrue(TEXT("risk score present"), Item->TryGetNumberField(TEXT("score"), Score));
 	return true;
 }
 

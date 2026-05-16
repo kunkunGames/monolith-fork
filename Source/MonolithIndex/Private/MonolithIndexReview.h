@@ -44,7 +44,13 @@ public:
 	 */
 	static TSharedPtr<FJsonObject> RepairFts(FMonolithIndexDatabase& Db, const FString& Target, bool bExecute);
 
-	/** Query-time risk scoring -> {score,tier,reasons[],raw_counts}. */
+	/**
+	 * Rebuild derived CRG projection/cache tables. Default dry-run; mutates only
+	 * when bExecute is true. Caller MUST gate on active indexing first.
+	 */
+	static TSharedPtr<FJsonObject> RepairCrgCache(FMonolithIndexDatabase& Db, bool bExecute);
+
+	/** Cached risk scoring when present; query-time fallback -> {score,tier,reasons[],raw_counts}. */
 	static TSharedPtr<FJsonObject> RiskScore(
 		FMonolithIndexDatabase& Db,
 		const FString& SeedPath,

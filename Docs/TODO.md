@@ -436,15 +436,15 @@ The mesh module ships horror defaults (storytelling patterns, room templates, ac
 
 - [ ] **Mac/Linux support** — DEFERRED (Windows-only project). All build-related actions are `#if PLATFORM_WINDOWS` guarded. Live Coding is Windows-only. Update system is Windows-only.
 
-### MonolithIndex / MonolithSource — CRG-Inspired Navigation (P0 IMPLEMENTED 2026-05-16)
+### MonolithIndex / MonolithSource — CRG-Inspired Navigation (P0 IMPLEMENTED 2026-05-16; Projection Cache 2026-05-17)
 
-Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md` (re-verified against origin/master; see PRD "코드·문서 재검증 업데이트 _(2026-05-16)_"). Additive actions over the **existing** `dependencies` / `"references"` + `inheritance` graphs — no new DB/schema in P0. UBT GoGameEditor build green; `Monolith.IndexGuard.*` automation tests added (run via in-editor Session Frontend — headless `-nullrhi` automation blocked by a pre-existing engine layout-save crash unrelated to this change).
+Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md` plus `Plugins/Monolith/CRG/spec/monolith-crg-sqlite-projection-cache-spec.md`. Additive actions over the **existing** `dependencies` / `"references"` + `inheritance` graphs. The CRG `nodes`/`edges` idea is now adopted as rebuildable derived SQLite `crg_*` projection/cache tables; native `assets` and `symbols` tables remain source-of-truth. UBT GoGameEditor build green; `Monolith.IndexGuard.*` automation tests pass headless.
 
 - [x] **P0 — `project.{impact_radius,health,repair_fts,risk_score,review_context}`** — `FMonolithIndexReview` bounded BFS over `dependencies` (`GetDependenciesForAsset`/`GetReferencersOfAsset`), query-time risk, v2-aware health, execute-gated FTS rebuild (gated on `IsIndexing()`).
 - [x] **P0 — `source.{impact_radius,health,repair_fts,risk_score,review_context}`** — `FMonolithSourceReview` traversal over quoted `"references"` + `inheritance` (`include` excluded). `source_fts` plain FTS5 → `target=source` degrades to reindex guidance. `review_context` is a new action, distinct from single-item `context.build_attachment`.
+- [x] **Projection cache — `project.repair_crg_cache` / `source.repair_crg_cache`** — execute-gated rebuild creates `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta`; `health` validates table/index/parity/cache meta; `risk_score` uses cached `risk_score` when present and falls back safely on cache miss.
 - [x] **P0 — tests/docs** — extended `MonolithIndexQueryTests.cpp` / `MonolithSourceQueryTests.cpp` (`Monolith.IndexGuard.*`); synced `SPEC_MonolithIndex.md` / `SPEC_MonolithSource.md`; corrected the stale `MonolithSourceSchema.h:5` `Scripts/source_indexer` comment.
-- [ ] **P1/P2 (deferred)** — derived `*_risk_score` tables (only if measured latency requires), graph snapshot/diff, edge confidence, asset↔symbol bridge, wiki/PR-bot export.
-- [ ] **Follow-up** — execute `Monolith.IndexGuard.*` via in-editor Session Frontend (or a non-`-nullrhi` runner) to record pass/fail in `Docs/testing/`.
+- [ ] **P1/P2 (deferred)** — graph snapshot/diff, edge confidence, asset↔symbol bridge, wiki/PR-bot export, optional offline `repair_crg_cache` writer if the standalone CLI needs to rebuild cache without an editor.
 
 ### MonolithIndex — Incremental Indexer Remaining Work
 

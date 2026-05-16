@@ -127,6 +127,13 @@ public:
 	 * to a reindex recommendation. Caller must gate on subsystem IsIndexing().
 	 */
 	TSharedPtr<FJsonObject> RepairFts(const FString& Target, bool bExecute);
+	/**
+	 * Rebuild derived CRG projection/cache tables from symbols/references/
+	 * inheritance. Default dry-run; mutates only when bExecute is true.
+	 */
+	TSharedPtr<FJsonObject> RepairCrgCache(bool bExecute);
+	/** Cached symbol risk row, or nullptr when the derived cache is absent/stale. */
+	TSharedPtr<FJsonObject> GetCachedRiskForSymbol(int64 SymbolId);
 
 	// --- Write methods (for C++ indexer) ---
 	bool OpenForWriting(const FString& DbPath);

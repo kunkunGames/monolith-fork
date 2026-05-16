@@ -3,6 +3,8 @@
 #include "MonolithIndexLog.h"
 #include "SQLiteDatabase.h"
 #include "Dom/JsonValue.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include <initializer_list>
 
 // ============================================================================
@@ -133,9 +135,177 @@ namespace
 		Root->SetArrayField(TEXT("next_actions"), Arr);
 	}
 
+	bool ParseJsonArray(const FString& Json, FJsonArr& Out)
+	{
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+		return FJsonSerializer::Deserialize(Reader, Out);
+	}
+
+	TSharedPtr<FJsonObject> ParseJsonObject(const FString& Json)
+	{
+		TSharedPtr<FJsonObject> Out;
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
+		return FJsonSerializer::Deserialize(Reader, Out) ? Out : nullptr;
+	}
+
+	TSharedPtr<FJsonObject> CacheMeta(const FString& Status, const FString& CacheVersion, const FString& ScoringVersion)
+	{
+		TSharedPtr<FJsonObject> Cache = MakeShared<FJsonObject>();
+		Cache->SetStringField(TEXT("status"), Status);
+		if (!CacheVersion.IsEmpty())
+		{
+			Cache->SetStringField(TEXT("version"), CacheVersion);
+			Cache->SetStringField(TEXT("cache_version"), CacheVersion);
+		}
+		if (!ScoringVersion.IsEmpty()) Cache->SetStringField(TEXT("scoring_version"), ScoringVersion);
+		return Cache;
+	}
+
+	static const TCHAR* CrgProjectionDdl[] = {
+		TEXT("CREATE TABLE IF NOT EXISTS crg_nodes (")
+		TEXT("id INTEGER PRIMARY KEY AUTOINCREMENT,")
+		TEXT("domain TEXT NOT NULL,")
+		TEXT("native_table TEXT NOT NULL,")
+		TEXT("native_id INTEGER NOT NULL,")
+		TEXT("stable_key TEXT NOT NULL,")
+		TEXT("kind TEXT,")
+		TEXT("name TEXT,")
+		TEXT("path TEXT,")
+		TEXT("module TEXT,")
+		TEXT("source_revision TEXT,")
+		TEXT("extra TEXT,")
+		TEXT("updated_at INTEGER NOT NULL,")
+		TEXT("UNIQUE(domain, native_table, native_id),")
+		TEXT("UNIQUE(domain, stable_key)")
+		TEXT(");"),
+		TEXT("CREATE TABLE IF NOT EXISTS crg_edges (")
+		TEXT("id INTEGER PRIMARY KEY AUTOINCREMENT,")
+		TEXT("domain TEXT NOT NULL,")
+		TEXT("source_node_id INTEGER NOT NULL,")
+		TEXT("target_node_id INTEGER NOT NULL,")
+		TEXT("edge_kind TEXT NOT NULL,")
+		TEXT("edge_subkind TEXT,")
+		TEXT("weight REAL NOT NULL DEFAULT 1.0,")
+		TEXT("native_table TEXT,")
+		TEXT("native_id INTEGER,")
+		TEXT("updated_at INTEGER NOT NULL")
+		TEXT(");"),
+		TEXT("CREATE TABLE IF NOT EXISTS crg_node_metrics (")
+		TEXT("node_id INTEGER PRIMARY KEY,")
+		TEXT("fan_in INTEGER NOT NULL DEFAULT 0,")
+		TEXT("fan_out INTEGER NOT NULL DEFAULT 0,")
+		TEXT("hard_in INTEGER NOT NULL DEFAULT 0,")
+		TEXT("descendants INTEGER NOT NULL DEFAULT 0,")
+		TEXT("risk_score REAL NOT NULL DEFAULT 0.0,")
+		TEXT("risk_tier TEXT NOT NULL DEFAULT 'low',")
+		TEXT("reasons_json TEXT NOT NULL DEFAULT '[]',")
+		TEXT("raw_counts_json TEXT NOT NULL DEFAULT '{}',")
+		TEXT("scoring_version TEXT NOT NULL,")
+		TEXT("computed_at INTEGER NOT NULL")
+		TEXT(");"),
+		TEXT("CREATE TABLE IF NOT EXISTS crg_meta (")
+		TEXT("key TEXT PRIMARY KEY,")
+		TEXT("value TEXT NOT NULL")
+		TEXT(");"),
+		TEXT("CREATE INDEX IF NOT EXISTS idx_crg_nodes_domain_native ON crg_nodes(domain, native_table, native_id);"),
+		TEXT("CREATE INDEX IF NOT EXISTS idx_crg_nodes_stable ON crg_nodes(domain, stable_key);"),
+		TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_source ON crg_edges(domain, source_node_id);"),
+		TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_target ON crg_edges(domain, target_node_id);"),
+		TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_kind_subkind ON crg_edges(domain, edge_kind, edge_subkind);"),
+		TEXT("CREATE INDEX IF NOT EXISTS idx_crg_metrics_score ON crg_node_metrics(risk_score DESC);")
+	};
+
+	bool EnsureCrgProjectionTables(FMonolithIndexDatabase& Db)
+	{
+		FSQLiteDatabase* Raw = Db.GetRawDatabase();
+		if (!Raw) return false;
+		for (const TCHAR* Sql : CrgProjectionDdl)
+		{
+			if (!Raw->Execute(Sql))
+			{
+				UE_LOG(LogMonolithIndex, Warning, TEXT("Failed to create CRG projection object: %s"), Sql);
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool HasCrgProjectionTables(FMonolithIndexDatabase& Db)
+	{
+		return ObjectExists(Db, TEXT("table"), TEXT("crg_nodes"))
+			&& ObjectExists(Db, TEXT("table"), TEXT("crg_edges"))
+			&& ObjectExists(Db, TEXT("table"), TEXT("crg_node_metrics"))
+			&& ObjectExists(Db, TEXT("table"), TEXT("crg_meta"));
+	}
+
+	TSharedPtr<FJsonObject> TryCachedAssetRisk(FMonolithIndexDatabase& Db, const FIndexedAsset& Asset)
+	{
+		if (!HasCrgProjectionTables(Db)) return nullptr;
+		FSQLiteDatabase* Raw = Db.GetRawDatabase();
+		if (!Raw) return nullptr;
+
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Raw, TEXT(
+			"SELECT m.risk_score, m.risk_tier, m.reasons_json, m.raw_counts_json, "
+			"       m.scoring_version, COALESCE((SELECT value FROM crg_meta WHERE key = 'cache_version'), '1') "
+			"FROM crg_nodes n "
+			"JOIN crg_node_metrics m ON m.node_id = n.id "
+			"WHERE n.domain = 'project' AND n.native_table = 'assets' AND n.native_id = ? "
+			"LIMIT 1;")))
+		{
+			return nullptr;
+		}
+		Stmt.SetBindingValueByIndex(1, Asset.Id);
+		if (Stmt.Step() != ESQLitePreparedStatementStepResult::Row)
+		{
+			return nullptr;
+		}
+
+		double Score = 0.0;
+		FString Tier;
+		FString ReasonsJson;
+		FString RawCountsJson;
+		FString ScoringVersion;
+		FString CacheVersion;
+		Stmt.GetColumnValueByIndex(0, Score);
+		Stmt.GetColumnValueByIndex(1, Tier);
+		Stmt.GetColumnValueByIndex(2, ReasonsJson);
+		Stmt.GetColumnValueByIndex(3, RawCountsJson);
+		Stmt.GetColumnValueByIndex(4, ScoringVersion);
+		Stmt.GetColumnValueByIndex(5, CacheVersion);
+
+		FJsonArr Reasons;
+		if (!ParseJsonArray(ReasonsJson, Reasons))
+		{
+			Reasons.Add(MakeShared<FJsonValueString>(TEXT("cached reasons_json could not be parsed")));
+		}
+		TSharedPtr<FJsonObject> RawCounts = ParseJsonObject(RawCountsJson);
+		if (!RawCounts.IsValid())
+		{
+			RawCounts = MakeShared<FJsonObject>();
+		}
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("id"), static_cast<double>(Asset.Id));
+		O->SetStringField(TEXT("asset_path"), Asset.PackagePath);
+		O->SetStringField(TEXT("asset_name"), Asset.AssetName);
+		O->SetStringField(TEXT("asset_class"), Asset.AssetClass);
+		O->SetNumberField(TEXT("score"), FMath::RoundToDouble(Score * 1000.0) / 1000.0);
+		O->SetStringField(TEXT("tier"), Tier.IsEmpty() ? TierFor(Score) : Tier);
+		O->SetArrayField(TEXT("reasons"), Reasons);
+		O->SetObjectField(TEXT("raw_counts"), RawCounts);
+		O->SetObjectField(TEXT("cache"), CacheMeta(TEXT("hit"), CacheVersion, ScoringVersion));
+		return O;
+	}
+
 	/** Single-asset risk computation shared by risk_score and review_context. */
 	TSharedPtr<FJsonObject> ScoreAsset(FMonolithIndexDatabase& Db, const FIndexedAsset& Asset)
 	{
+		if (TSharedPtr<FJsonObject> Cached = TryCachedAssetRisk(Db, Asset))
+		{
+			return Cached;
+		}
+
 		const int64 Id = Asset.Id;
 		const TArray<FIndexedDependency> Out = Db.GetDependenciesForAsset(Id);
 		const TArray<FIndexedDependency> In = Db.GetReferencersOfAsset(Id);
@@ -211,6 +381,7 @@ namespace
 		RawCounts->SetNumberField(TEXT("tag_references"), static_cast<double>(TagRefs));
 		RawCounts->SetNumberField(TEXT("class_weight"), ClassW);
 		O->SetObjectField(TEXT("raw_counts"), RawCounts);
+		O->SetObjectField(TEXT("cache"), CacheMeta(TEXT("miss"), TEXT(""), TEXT("1")));
 		return O;
 	}
 } // namespace
@@ -443,6 +614,66 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 		FString::Printf(TEXT("nodes=%lld fts_nodes=%lld%s"), NCnt, FNCnt,
 			NCnt == FNCnt ? TEXT("") : TEXT(" (mismatch -> project.repair_fts)")));
 
+	bool bHasAllCrg = true;
+	static const TCHAR* ExpectedCrgTables[] = {
+		TEXT("crg_nodes"), TEXT("crg_edges"), TEXT("crg_node_metrics"), TEXT("crg_meta") };
+	for (const TCHAR* T : ExpectedCrgTables)
+	{
+		const bool bHas = ObjectExists(Db, TEXT("table"), T);
+		bHasAllCrg = bHasAllCrg && bHas;
+		Check(FString::Printf(TEXT("crg:table:%s"), T), bHas,
+			bHas ? FString::Printf(TEXT("CRG projection table %s present"), T)
+				: FString::Printf(TEXT("missing CRG projection table %s (run project.repair_crg_cache)"), T));
+	}
+	static const TCHAR* ExpectedCrgIndexes[] = {
+		TEXT("idx_crg_nodes_domain_native"), TEXT("idx_crg_nodes_stable"),
+		TEXT("idx_crg_edges_domain_source"), TEXT("idx_crg_edges_domain_target"),
+		TEXT("idx_crg_edges_kind_subkind"), TEXT("idx_crg_metrics_score") };
+	for (const TCHAR* I : ExpectedCrgIndexes)
+	{
+		const bool bHas = ObjectExists(Db, TEXT("index"), I);
+		Check(FString::Printf(TEXT("crg:index:%s"), I), bHas,
+			bHas ? FString::Printf(TEXT("CRG projection index %s present"), I)
+				: FString::Printf(TEXT("missing CRG projection index %s (run project.repair_crg_cache)"), I));
+	}
+	int64 CrgNodeCnt = -1;
+	int64 CrgEdgeCnt = -1;
+	int64 CrgMetricCnt = -1;
+	if (bHasAllCrg)
+	{
+		const int64 DepCnt = CountRows(Db, TEXT("SELECT COUNT(*) FROM dependencies;"));
+		CrgNodeCnt = CountRows(Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain = 'project';"));
+		CrgEdgeCnt = CountRows(Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain = 'project';"));
+		CrgMetricCnt = CountRows(Db, TEXT(
+			"SELECT COUNT(*) FROM crg_node_metrics m "
+			"JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain = 'project';"));
+		Check(TEXT("crg:nodes_row_parity"), CrgNodeCnt == ACnt,
+			FString::Printf(TEXT("assets=%lld crg_nodes(project)=%lld%s"), ACnt, CrgNodeCnt,
+				CrgNodeCnt == ACnt ? TEXT("") : TEXT(" (mismatch -> project.repair_crg_cache)")));
+		Check(TEXT("crg:edges_row_parity"), CrgEdgeCnt == DepCnt,
+			FString::Printf(TEXT("dependencies=%lld crg_edges(project)=%lld%s"), DepCnt, CrgEdgeCnt,
+				CrgEdgeCnt == DepCnt ? TEXT("") : TEXT(" (mismatch -> project.repair_crg_cache)")));
+		Check(TEXT("crg:metrics_row_parity"), CrgMetricCnt == CrgNodeCnt,
+			FString::Printf(TEXT("crg_nodes(project)=%lld crg_node_metrics=%lld%s"), CrgNodeCnt, CrgMetricCnt,
+				CrgMetricCnt == CrgNodeCnt ? TEXT("") : TEXT(" (mismatch -> project.repair_crg_cache)")));
+		const int64 OrphanCrgEdges = CountRows(Db, TEXT(
+			"SELECT COUNT(*) FROM crg_edges e "
+			"WHERE e.domain = 'project' AND ("
+			" e.source_node_id NOT IN (SELECT id FROM crg_nodes) "
+			" OR e.target_node_id NOT IN (SELECT id FROM crg_nodes));"));
+		Check(TEXT("crg:orphan_edges"), OrphanCrgEdges == 0,
+			OrphanCrgEdges == 0 ? TEXT("no orphan CRG projection edge rows")
+				: FString::Printf(TEXT("%lld orphan CRG projection edge row(s)"), OrphanCrgEdges));
+		const FString CacheVersion = ScalarStr(Db, TEXT("SELECT value FROM crg_meta WHERE key = 'cache_version';"));
+		Check(TEXT("crg:cache_version"), !CacheVersion.IsEmpty(),
+			CacheVersion.IsEmpty() ? TEXT("crg_meta.cache_version missing (run project.repair_crg_cache)")
+				: FString::Printf(TEXT("crg cache_version=%s"), *CacheVersion));
+		const FString CrgScoringVersion = ScalarStr(Db, TEXT("SELECT value FROM crg_meta WHERE key = 'scoring_version';"));
+		Check(TEXT("crg:scoring_version"), CrgScoringVersion == TEXT("2"),
+			CrgScoringVersion.IsEmpty() ? TEXT("crg_meta.scoring_version missing (run project.repair_crg_cache)")
+				: FString::Printf(TEXT("crg scoring_version=%s (expected 2)"), *CrgScoringVersion));
+	}
+
 	const FString Journal = ScalarStr(Db, TEXT("PRAGMA journal_mode;"));
 	TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
 	Schema->SetStringField(TEXT("schema_version"), SchemaVer);
@@ -456,6 +687,12 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 		Counts->SetNumberField(TEXT("nodes"), static_cast<double>(NCnt));
 		Counts->SetNumberField(TEXT("dependencies"),
 			static_cast<double>(CountRows(Db, TEXT("SELECT COUNT(*) FROM dependencies;"))));
+		if (bHasAllCrg)
+		{
+			Counts->SetNumberField(TEXT("crg_nodes"), static_cast<double>(CrgNodeCnt));
+			Counts->SetNumberField(TEXT("crg_edges"), static_cast<double>(CrgEdgeCnt));
+			Counts->SetNumberField(TEXT("crg_node_metrics"), static_cast<double>(CrgMetricCnt));
+		}
 		Root->SetObjectField(TEXT("row_counts"), Counts);
 	}
 
@@ -467,7 +704,7 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 	Root->SetArrayField(TEXT("checks"), Checks);
 	Root->SetArrayField(TEXT("warnings"), Warnings);
 	Root->SetBoolField(TEXT("truncated"), false);
-	AddNext(Root, { TEXT("project.repair_fts"), TEXT("project.get_stats") });
+	AddNext(Root, { TEXT("project.repair_crg_cache"), TEXT("project.repair_fts"), TEXT("project.get_stats") });
 	return Root;
 }
 
@@ -570,7 +807,164 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RepairFts(FMonolithIndexDatabase& 
 }
 
 // ============================================================================
-// risk_score (query-time)
+// repair_crg_cache (derived projection; write only when bExecute)
+// ============================================================================
+TSharedPtr<FJsonObject> FMonolithIndexReview::RepairCrgCache(FMonolithIndexDatabase& Db, bool bExecute)
+{
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetBoolField(TEXT("execute"), bExecute);
+	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetBoolField(TEXT("execute"), bExecute);
+	Root->SetObjectField(TEXT("limits"), Limits);
+
+	FJsonArr Warnings;
+	FJsonArr Plan;
+	Plan.Add(MakeShared<FJsonValueString>(TEXT("CREATE IF MISSING crg_nodes/crg_edges/crg_node_metrics/crg_meta")));
+	Plan.Add(MakeShared<FJsonValueString>(TEXT("DELETE existing project CRG projection rows")));
+	Plan.Add(MakeShared<FJsonValueString>(TEXT("PROJECT assets -> crg_nodes; dependencies -> crg_edges")));
+	Plan.Add(MakeShared<FJsonValueString>(TEXT("Recompute fan-in/fan-out/hard-in/risk_score into crg_node_metrics")));
+	Root->SetArrayField(TEXT("plan"), Plan);
+
+	if (!Db.IsOpen() || !Db.GetRawDatabase())
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("ProjectIndex DB is not open"));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNext(Root, { TEXT("project.get_stats"), TEXT("project.health") });
+		return Root;
+	}
+
+	TSharedPtr<FJsonObject> Before = MakeShared<FJsonObject>();
+	Before->SetNumberField(TEXT("assets"), static_cast<double>(CountRows(Db, TEXT("SELECT COUNT(*) FROM assets;"))));
+	Before->SetNumberField(TEXT("dependencies"), static_cast<double>(CountRows(Db, TEXT("SELECT COUNT(*) FROM dependencies;"))));
+	if (HasCrgProjectionTables(Db))
+	{
+		Before->SetNumberField(TEXT("crg_nodes"), static_cast<double>(
+			CountRows(Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain = 'project';"))));
+		Before->SetNumberField(TEXT("crg_edges"), static_cast<double>(
+			CountRows(Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain = 'project';"))));
+		Before->SetNumberField(TEXT("crg_node_metrics"), static_cast<double>(
+			CountRows(Db, TEXT("SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain = 'project';"))));
+	}
+	Root->SetObjectField(TEXT("before"), Before);
+
+	if (!bExecute)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("ok"));
+		Root->SetStringField(TEXT("summary"),
+			TEXT("Dry-run: project CRG projection/cache would be rebuilt. Pass execute=true to apply."));
+		Root->SetObjectField(TEXT("after"), MakeShared<FJsonObject>());
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNext(Root, { TEXT("project.repair_crg_cache (execute=true)"), TEXT("project.health"), TEXT("project.risk_score") });
+		return Root;
+	}
+
+	FSQLiteDatabase* Raw = Db.GetRawDatabase();
+	bool bOk = EnsureCrgProjectionTables(Db);
+	auto Exec = [&](const TCHAR* Sql, const TCHAR* Label)
+	{
+		if (!bOk) return;
+		if (!Raw->Execute(Sql))
+		{
+			bOk = false;
+			Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("CRG cache rebuild failed at %s"), Label)));
+		}
+	};
+
+	if (bOk)
+	{
+		bOk = Db.BeginTransaction();
+	}
+	Exec(TEXT("DELETE FROM crg_node_metrics WHERE node_id IN (SELECT id FROM crg_nodes WHERE domain = 'project');"), TEXT("clear metrics"));
+	Exec(TEXT("DELETE FROM crg_edges WHERE domain = 'project';"), TEXT("clear edges"));
+	Exec(TEXT("DELETE FROM crg_nodes WHERE domain = 'project';"), TEXT("clear nodes"));
+	Exec(TEXT(
+		"INSERT INTO crg_nodes(domain,native_table,native_id,stable_key,kind,name,path,module,source_revision,extra,updated_at) "
+		"SELECT 'project','assets',a.id,a.package_path,a.asset_class,a.asset_name,a.package_path,a.module_name,COALESCE(a.saved_hash,''),'{}',"
+		"CAST(strftime('%s','now') AS INTEGER) "
+		"FROM assets a;"), TEXT("project nodes"));
+	Exec(TEXT(
+		"INSERT INTO crg_edges(domain,source_node_id,target_node_id,edge_kind,edge_subkind,weight,native_table,native_id,updated_at) "
+		"SELECT 'project',sn.id,tn.id,'dependency',COALESCE(d.dependency_type,''),"
+		"CASE WHEN d.dependency_type = 'Hard' THEN 1.0 ELSE 0.5 END,"
+		"'dependencies',d.id,CAST(strftime('%s','now') AS INTEGER) "
+		"FROM dependencies d "
+		"JOIN crg_nodes sn ON sn.domain='project' AND sn.native_table='assets' AND sn.native_id=d.source_asset_id "
+		"JOIN crg_nodes tn ON tn.domain='project' AND tn.native_table='assets' AND tn.native_id=d.target_asset_id;"), TEXT("project edges"));
+	Exec(TEXT(
+		"WITH counts AS ("
+		" SELECT a.id AS native_id,"
+		"        (SELECT COUNT(*) FROM dependencies d WHERE d.target_asset_id = a.id) AS fan_in,"
+		"        (SELECT COUNT(*) FROM dependencies d WHERE d.source_asset_id = a.id) AS fan_out,"
+		"        (SELECT COUNT(*) FROM dependencies d WHERE d.target_asset_id = a.id AND d.dependency_type = 'Hard') AS hard_in,"
+		"        (SELECT COUNT(*) FROM nodes x WHERE x.asset_id = a.id) AS node_count,"
+		"        (SELECT COUNT(*) FROM variables x WHERE x.asset_id = a.id) AS var_count,"
+		"        (SELECT COUNT(*) FROM parameters x WHERE x.asset_id = a.id) AS param_count,"
+		"        (SELECT COUNT(*) FROM tag_references x WHERE x.asset_id = a.id) AS tag_refs,"
+		"        CASE"
+		"          WHEN a.asset_class LIKE '%World%' OR a.asset_class LIKE '%Level%' THEN 5"
+		"          WHEN a.asset_class LIKE '%GameplayAbility%' OR a.asset_class LIKE '%AttributeSet%' OR a.asset_class LIKE '%GameplayEffect%' THEN 4"
+		"          WHEN a.asset_class LIKE '%Blueprint%' THEN 3"
+		"          WHEN a.asset_class LIKE '%NiagaraSystem%' OR a.asset_class LIKE '%Material%' THEN 2"
+		"          WHEN a.asset_class LIKE '%DataTable%' OR a.asset_class LIKE '%DataAsset%' THEN 2"
+		"          ELSE 1"
+		"        END AS class_weight"
+		" FROM assets a"
+		"), scored AS ("
+		" SELECT c.*, MIN(1.0,"
+		"        MIN(c.fan_in,30) / 30.0 * 0.30 +"
+		"        MIN(c.hard_in,20) / 20.0 * 0.20 +"
+		"        MIN(c.fan_out,30) / 30.0 * 0.10 +"
+		"        (c.class_weight - 1) / 4.0 * 0.20 +"
+		"        MIN(c.node_count,400) / 400.0 * 0.15 +"
+		"        MIN(c.tag_refs,20) / 20.0 * 0.05) AS score"
+		" FROM counts c"
+		") "
+		"INSERT INTO crg_node_metrics(node_id,fan_in,fan_out,hard_in,descendants,risk_score,risk_tier,reasons_json,raw_counts_json,scoring_version,computed_at) "
+		"SELECT n.id,s.fan_in,s.fan_out,s.hard_in,0,ROUND(s.score,3),"
+		"       CASE WHEN s.score >= 0.66 THEN 'high' WHEN s.score >= 0.33 THEN 'medium' ELSE 'low' END,"
+		"       printf('[\"inbound dependency fan-in: %d referencer(s)\",\"hard inbound dependencies: %d\",\"outbound dependencies: %d\",\"graph density: %d node(s)\"]',"
+		"              s.fan_in,s.hard_in,s.fan_out,s.node_count),"
+		"       printf('{\"inbound\":%d,\"inbound_hard\":%d,\"outbound\":%d,\"nodes\":%d,\"variables\":%d,\"parameters\":%d,\"tag_references\":%d,\"class_weight\":%d}',"
+		"              s.fan_in,s.hard_in,s.fan_out,s.node_count,s.var_count,s.param_count,s.tag_refs,s.class_weight),"
+		"       '2',CAST(strftime('%s','now') AS INTEGER) "
+		"FROM scored s "
+		"JOIN crg_nodes n ON n.domain='project' AND n.native_table='assets' AND n.native_id=s.native_id;"), TEXT("project metrics"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('cache_version','1');"), TEXT("cache_version"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('scoring_version','2');"), TEXT("scoring_version"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('built_at',datetime('now'));"), TEXT("built_at"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('project_built_at',datetime('now'));"), TEXT("project_built_at"));
+
+	if (bOk) { Db.CommitTransaction(); }
+	else { Db.RollbackTransaction(); }
+
+	TSharedPtr<FJsonObject> After = MakeShared<FJsonObject>();
+	if (HasCrgProjectionTables(Db))
+	{
+		After->SetNumberField(TEXT("crg_nodes"), static_cast<double>(
+			CountRows(Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain = 'project';"))));
+		After->SetNumberField(TEXT("crg_edges"), static_cast<double>(
+			CountRows(Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain = 'project';"))));
+		After->SetNumberField(TEXT("crg_node_metrics"), static_cast<double>(
+			CountRows(Db, TEXT("SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain = 'project';"))));
+	}
+	Root->SetObjectField(TEXT("after"), After);
+	Root->SetStringField(TEXT("status"), bOk ? TEXT("ok") : TEXT("error"));
+	Root->SetStringField(TEXT("summary"), bOk
+		? TEXT("Rebuilt project CRG projection/cache from ProjectIndex assets and dependencies")
+		: TEXT("Project CRG projection/cache rebuild failed; rolled back"));
+	Root->SetArrayField(TEXT("warnings"), Warnings);
+	Root->SetBoolField(TEXT("truncated"), false);
+	AddNext(Root, { TEXT("project.health"), TEXT("project.risk_score"), TEXT("project.review_context") });
+	return Root;
+}
+
+// ============================================================================
+// risk_score (cached when available; query-time fallback)
 // ============================================================================
 TSharedPtr<FJsonObject> FMonolithIndexReview::RiskScore(
 	FMonolithIndexDatabase& Db,
@@ -663,11 +1057,11 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RiskScore(
 
 	Root->SetStringField(TEXT("status"), TEXT("ok"));
 	Root->SetStringField(TEXT("summary"),
-		FString::Printf(TEXT("%d asset(s) scored (scoring_version=1)"), Items.Num()));
-	Root->SetStringField(TEXT("scoring_version"), TEXT("1"));
+		FString::Printf(TEXT("%d asset(s) scored (scoring_version=2 cached when available, v1 fallback)"), Items.Num()));
+	Root->SetStringField(TEXT("scoring_version"), TEXT("2"));
 	Root->SetArrayField(TEXT("items"), Items);
 	Root->SetBoolField(TEXT("truncated"), false);
-	AddNext(Root, { TEXT("project.review_context"), TEXT("project.impact_radius") });
+	AddNext(Root, { TEXT("project.repair_crg_cache"), TEXT("project.review_context"), TEXT("project.impact_radius") });
 	return Root;
 }
 
