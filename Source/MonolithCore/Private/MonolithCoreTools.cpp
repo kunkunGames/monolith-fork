@@ -509,8 +509,14 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 	FString FilterCategory;
 	if (Params.IsValid())
 	{
-		Params->TryGetStringField(TEXT("namespace"), FilterNamespace);
-		Params->TryGetStringField(TEXT("category"), FilterCategory);
+		if (Params->HasField(TEXT("namespace")) && !Params->TryGetStringField(TEXT("namespace"), FilterNamespace))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'namespace' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (Params->HasField(TEXT("category")) && !Params->TryGetStringField(TEXT("category"), FilterCategory))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'category' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -709,7 +715,10 @@ FMonolithActionResult FMonolithCoreTools::HandleUpdate(const TSharedPtr<FJsonObj
 	FString Action = TEXT("check");
 	if (Params.IsValid())
 	{
-		Params->TryGetStringField(TEXT("action"), Action);
+		if (Params->HasField(TEXT("action")) && !Params->TryGetStringField(TEXT("action"), Action))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'action' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	if (!GEditor)
@@ -863,8 +872,14 @@ FMonolithActionResult FMonolithCoreTools::HandleSetOnboardingState(const TShared
 	FString Step;
 	if (Params.IsValid())
 	{
-		Params->TryGetStringField(TEXT("action"), Action);
-		Params->TryGetStringField(TEXT("step"), Step);
+		if (Params->HasField(TEXT("action")) && !Params->TryGetStringField(TEXT("action"), Action))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'action' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (Params->HasField(TEXT("step")) && !Params->TryGetStringField(TEXT("step"), Step))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'step' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	Action = Action.ToLower();
 
@@ -1036,7 +1051,10 @@ FMonolithActionResult FMonolithCoreTools::HandleGetReadinessHelp(const TSharedPt
 	FString FilterComponent;
 	if (Params.IsValid())
 	{
-		Params->TryGetStringField(TEXT("component"), FilterComponent);
+		if (Params->HasField(TEXT("component")) && !Params->TryGetStringField(TEXT("component"), FilterComponent))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'component' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	TArray<TSharedPtr<FJsonValue>> HelpRows;
@@ -1132,7 +1150,10 @@ FMonolithActionResult FMonolithCoreTools::HandleTestNotification(const TSharedPt
 	FString Message = TEXT("Monolith notification test");
 	if (Params.IsValid())
 	{
-		Params->TryGetStringField(TEXT("message"), Message);
+		if (Params->HasField(TEXT("message")) && !Params->TryGetStringField(TEXT("message"), Message))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'message' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	if (Message.IsEmpty())
 	{
@@ -1205,7 +1226,10 @@ FMonolithActionResult FMonolithCoreTools::HandleListMcpSessions(const TSharedPtr
 	double LimitValue = 100.0;
 	if (Params.IsValid())
 	{
-		Params->TryGetNumberField(TEXT("limit"), LimitValue);
+		if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'limit' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1222,7 +1246,10 @@ FMonolithActionResult FMonolithCoreTools::HandleTerminateMcpSession(const TShare
 	FString SessionId;
 	if (Params.IsValid())
 	{
-		Params->TryGetStringField(TEXT("session_id"), SessionId);
+		if (Params->HasField(TEXT("session_id")) && !Params->TryGetStringField(TEXT("session_id"), SessionId))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'session_id' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1281,7 +1308,10 @@ FMonolithActionResult FMonolithCoreTools::HandleListDomains(const TSharedPtr<FJs
 	bool bIncludeOptional = true;
 	if (Params.IsValid())
 	{
-		Params->TryGetBoolField(TEXT("include_optional"), bIncludeOptional);
+		if (Params->HasField(TEXT("include_optional")) && !Params->TryGetBoolField(TEXT("include_optional"), bIncludeOptional))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'include_optional' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
@@ -1379,7 +1409,10 @@ FMonolithActionResult FMonolithCoreTools::HandleDescribeDomain(const TSharedPtr<
 	FString Namespace;
 	if (Params.IsValid())
 	{
-		Params->TryGetStringField(TEXT("namespace"), Namespace);
+		if (Params->HasField(TEXT("namespace")) && !Params->TryGetStringField(TEXT("namespace"), Namespace))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'namespace' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	Namespace = NormalizeDomainNamespace(Namespace);
 	if (Namespace.IsEmpty())
@@ -1454,7 +1487,10 @@ FMonolithActionResult FMonolithCoreTools::HandleLoadDomain(const TSharedPtr<FJso
 	FString Namespace;
 	if (Params.IsValid())
 	{
-		Params->TryGetStringField(TEXT("namespace"), Namespace);
+		if (Params->HasField(TEXT("namespace")) && !Params->TryGetStringField(TEXT("namespace"), Namespace))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'namespace' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	Namespace = NormalizeDomainNamespace(Namespace);
 	if (Namespace.IsEmpty())
