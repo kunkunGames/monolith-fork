@@ -4316,12 +4316,14 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCloneBTSubtree(const
 	Result->SetNumberField(TEXT("nodes_cloned"), CreatedNodeIds.Num());
 
 	TArray<TSharedPtr<FJsonValue>> IdArr;
+	IdArr.Reserve(CreatedNodeIds.Num());
 	for (const FString& Id : CreatedNodeIds) IdArr.Add(MakeShared<FJsonValueString>(Id));
 	Result->SetArrayField(TEXT("created_node_ids"), IdArr);
 
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 		Result->SetArrayField(TEXT("warnings"), WarnArr);
 	}
