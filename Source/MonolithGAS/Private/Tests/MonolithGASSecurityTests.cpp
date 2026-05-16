@@ -75,13 +75,21 @@ bool FMonolithGASCueSecurityPathTest::RunTest(const FString& Parameters)
         // Setup payload to simulate malformed path
         TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
         Payload->SetStringField(TEXT("save_path"), Path);
+        Payload->SetStringField(TEXT("cue_tag"), TEXT("GameplayCue.Monolith.Test"));
 
-        // Call the action. "create_gameplay_cue" triggers ValidatePackagePath.
-        FMonolithActionResult Result = ExecuteGASAction(TEXT("create_gameplay_cue"), Payload);
+        // Call the registered cue action so the test reaches ValidatePackagePath.
+        FMonolithActionResult Result = ExecuteGASAction(TEXT("create_gameplay_cue_notify"), Payload);
 
         // Verify it failed gracefully and returned the validation error
         TestFalse(*FString::Printf(TEXT("Action should fail on malformed path: %s"), *Path), Result.bSuccess);
         TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), Result.ErrorMessage.IsEmpty());
+        if (!Path.IsEmpty())
+        {
+            TestTrue(*FString::Printf(TEXT("Error should complain about invalid package path for: %s"), *Path),
+                Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
+                Result.ErrorMessage.Contains(TEXT("Package path")) ||
+                Result.ErrorMessage.Contains(Path));
+        }
     }
 
     return true;
