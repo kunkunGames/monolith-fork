@@ -975,6 +975,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldCompleteAICharac
 	Result->SetObjectField(TEXT("assets"), Paths);
 
 	TArray<TSharedPtr<FJsonValue>> AssetArr;
+	AssetArr.Reserve(CreatedAssets.Num());
 	for (const FString& A : CreatedAssets) AssetArr.Add(MakeShared<FJsonValueString>(A));
 	Result->SetArrayField(TEXT("created_assets"), AssetArr);
 	Result->SetNumberField(TEXT("asset_count"), CreatedAssets.Num());
@@ -985,6 +986,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldCompleteAICharac
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 		Result->SetArrayField(TEXT("warnings"), WarnArr);
 	}
@@ -1156,6 +1158,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldPerceptionToBlac
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 		Result->SetArrayField(TEXT("warnings"), WarnArr);
 	}
@@ -1518,12 +1521,14 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldPatrolInvestigat
 	Result->SetObjectField(TEXT("assets"), Paths);
 
 	TArray<TSharedPtr<FJsonValue>> AssetArr;
+	AssetArr.Reserve(CreatedAssets.Num());
 	for (const FString& A : CreatedAssets) AssetArr.Add(MakeShared<FJsonValueString>(A));
 	Result->SetArrayField(TEXT("created_assets"), AssetArr);
 
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 		Result->SetArrayField(TEXT("warnings"), WarnArr);
 	}
@@ -1729,12 +1734,14 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldEQSMoveSequence(
 	Result->SetStringField(TEXT("bb_key"), BBKey);
 
 	TArray<TSharedPtr<FJsonValue>> NodeArr;
+	NodeArr.Reserve(CreatedNodeIds.Num());
 	for (const FString& NId : CreatedNodeIds) NodeArr.Add(MakeShared<FJsonValueString>(NId));
 	Result->SetArrayField(TEXT("created_node_ids"), NodeArr);
 
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 		Result->SetArrayField(TEXT("warnings"), WarnArr);
 	}
@@ -1831,6 +1838,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleCreateBTFromTemplate(con
 		if (Warnings.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> WarnArr;
+			WarnArr.Reserve(Warnings.Num());
 			for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 			R.Result->SetArrayField(TEXT("warnings"), WarnArr);
 		}
@@ -1979,6 +1987,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleCreateSTFromTemplate(con
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 		Result->SetArrayField(TEXT("warnings"), WarnArr);
 	}
@@ -2144,6 +2153,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleBatchValidateAIAssets(co
 		if (SkippedUnknown.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> SkippedArr;
+			SkippedArr.Reserve(SkippedUnknown.Num());
 			for (const FString& S : SkippedUnknown) SkippedArr.Add(MakeShared<FJsonValueString>(S));
 			Result->SetArrayField(TEXT("skipped_unknown_class"), SkippedArr);
 		}
@@ -2541,6 +2551,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldAIControllerBlue
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 		Result->SetArrayField(TEXT("warnings"), WarnArr);
 	}
@@ -2567,6 +2578,7 @@ namespace
 		Result->SetStringField(TEXT("archetype"), Archetype);
 
 		TArray<TSharedPtr<FJsonValue>> AssetArr;
+		AssetArr.Reserve(CreatedAssets.Num());
 		for (const FString& A : CreatedAssets) AssetArr.Add(MakeShared<FJsonValueString>(A));
 		Result->SetArrayField(TEXT("created_assets"), AssetArr);
 		Result->SetNumberField(TEXT("asset_count"), CreatedAssets.Num());
@@ -2574,6 +2586,7 @@ namespace
 		if (Warnings.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> WarnArr;
+			WarnArr.Reserve(Warnings.Num());
 			for (const FString& W : Warnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
 			Result->SetArrayField(TEXT("warnings"), WarnArr);
 		}
@@ -2581,6 +2594,7 @@ namespace
 		if (NextSteps.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> StepArr;
+			StepArr.Reserve(NextSteps.Num());
 			for (const FString& S : NextSteps) StepArr.Add(MakeShared<FJsonValueString>(S));
 			Result->SetArrayField(TEXT("next_steps"), StepArr);
 		}
@@ -4070,6 +4084,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldGroupCoordinator
 
 	TSharedPtr<FJsonObject> Result = BuildGenreScaffoldResult(Name, TEXT("Group Coordinator"), CreatedAssets, Warnings, NextSteps);
 	TArray<TSharedPtr<FJsonValue>> RoleValArr;
+	RoleValArr.Reserve(Roles.Num());
 	for (const FString& R : Roles) RoleValArr.Add(MakeShared<FJsonValueString>(R));
 	Result->SetArrayField(TEXT("roles"), RoleValArr);
 
