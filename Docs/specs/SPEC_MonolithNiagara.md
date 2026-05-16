@@ -116,7 +116,7 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 **Batch (7)**
 | Action | Description |
 |--------|-------------|
-| `batch_execute` | Execute multiple operations in one undo transaction (23 sub-op types — all write ops including: remove_user_parameter, set_parameter_default, set_module_input_di, set_curve_value, reorder_emitters, duplicate_emitter, set_renderer_binding, request_compile) |
+| `batch_execute` | Execute multiple operations in one undo transaction (max 500 actions, 23 sub-op types — all write ops including: remove_user_parameter, set_parameter_default, set_module_input_di, set_curve_value, reorder_emitters, duplicate_emitter, set_renderer_binding, request_compile) |
 | `import_system_spec` | Overwrite an existing Niagara system with a JSON spec (removes all emitters/params, applies spec fresh) |
 | `create_system_from_spec` | Full declarative system builder from JSON spec. Uses `UNiagaraSystemFactoryNew::InitializeSystem` for proper system creation |
 | `configure_curve_keys` | Set keys on a DataInterface curve input (NiagaraDataInterfaceCurve/ColorCurve). For plain float inputs use set_curve_value instead |

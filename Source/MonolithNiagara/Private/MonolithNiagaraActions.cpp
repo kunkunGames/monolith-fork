@@ -4974,6 +4974,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleBatchExecute(const TSharedP
 		return FMonolithActionResult::Error(TEXT("'operations' must be an array"));
 	}
 
+	if (Ops.Num() > 500)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Too many operations (max 500), got %d"), Ops.Num()));
+	}
+
 	// Track whether any write ops are in the batch — skip transaction/compile for read-only batches
 	static const TArray<FString> WritePrefixes = {
 		TEXT("add_"), TEXT("remove_"), TEXT("set_"), TEXT("move_"), TEXT("create_"),
