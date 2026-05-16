@@ -71,15 +71,18 @@ runtime, no generic nodes/edges (monolith-native: source-symbol, lexical/local).
 (`Private/MonolithSourceReview.{h,cpp}`) using only public DB queries;
 `ComputeHealth`/`RepairFts` are methods on `FMonolithSourceDatabase` (private `DbLock`).
 Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md`.
-Tests: `Monolith.IndexGuard.Source.*` in `Private/Tests/MonolithSourceQueryTests.cpp`.
+Tests: `Monolith.IndexGuard.Source.*` in `Private/Tests/MonolithSourceQueryTests.cpp`,
+including cycle guards, exact `call`/`type` edge filtering, orphan-reference health
+warnings, repair dry-run/degraded source-FTS handling, and minimal review-context
+output-contract coverage.
 
 Invariants honored by the implementation:
 
 - `EngineSource.db` is **Schema v1**; native `MonolithSourceSchema.h` (`SchemaVersion=1`, `meta.schema_version`) is the sole authority. The `MonolithSourceSchema.h:5` comment claiming parity with `Scripts/source_indexer/db/schema.py` is **stale drift** (that Python indexer is legacy/uninvoked since 2026-03-15 — see `Docs/TODO.md`); correct that comment when implementing `source.health`.
 - `symbols_fts` is external-content (`content=symbols`) → supports `'rebuild'`. `source_fts` is a plain `fts5(file_id UNINDEXED, line_number UNINDEXED, text)` with no backing table → `'rebuild'` is meaningless; `source.repair_fts(target=source)` always degrades to a reindex recommendation. Triggers are `symbols_ai`/`symbols_ad` only (no `symbols_au`, no `source_fts` trigger) — `source.health` must expect exactly that set.
-- `"references"` is a quoted SQLite reserved word in schema and every query; new traversal/fixtures must quote it. Traversal: calls/type refs `from_symbol_id → to_symbol_id` (`GetReferencesTo`/`GetReferencesFrom`), inheritance `child_id → parent_id`. `includes` is file/path-level (no `included_file_id`) and stays opt-in only after path→`files.path` resolution.
+- `"references"` is a quoted SQLite reserved word in schema and every query; new traversal/fixtures must quote it. Traversal: calls/type refs `from_symbol_id → to_symbol_id` (`GetReferencesTo`/`GetReferencesFrom`), inheritance `child_id → parent_id`. `call` and `type` edge filters are exact; `includes` is file/path-level (no `included_file_id`) and returns a P0 warning until path→`files.path` resolution exists.
 - `FMonolithSourceDatabase` is a **read/write** wrapper with a private `DbLock`; `source.repair_fts` writes must run inside an existing DB/helper method that can take the private lock, gated on `UMonolithSourceSubsystem::IsIndexing()`.
-- `context.build_attachment` is the existing monolith-native analog of `source.review_context`; REQ-007/008 must decide new-action vs `context` extension before coding.
+- `source.review_context` is a dedicated CRG-style review package distinct from single-item `context.build_attachment`; it exposes `input`, `limits`, `risk`, `top_risks[]`, `impact`, compact `context[]`, `truncated`, and `next_actions`.
 - Test precedent: extend `Private/Tests/MonolithSourceQueryTests.cpp` (`Monolith.IndexGuard.Source.*`, temp-DB fixture) — do not introduce a new directory or `WITH_DEV_AUTOMATION_TESTS` guard.
 
 ---

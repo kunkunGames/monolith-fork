@@ -4,6 +4,7 @@
 #include "SQLiteDatabase.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
+#include <initializer_list>
 
 DEFINE_LOG_CATEGORY(LogMonolithSource);
 
@@ -126,6 +127,16 @@ bool FMonolithSourceDatabase::Open(const FString& DbPath)
 
 	UE_LOG(LogMonolithSource, Log, TEXT("Engine source DB opened: %s"), *DbPath);
 	return true;
+}
+
+static void AddNextActions(const TSharedPtr<FJsonObject>& Root, std::initializer_list<const TCHAR*> Actions)
+{
+	TArray<TSharedPtr<FJsonValue>> Arr;
+	for (const TCHAR* Action : Actions)
+	{
+		Arr.Add(MakeShared<FJsonValueString>(FString(Action)));
+	}
+	Root->SetArrayField(TEXT("next_actions"), Arr);
 }
 
 void FMonolithSourceDatabase::Close()
@@ -920,6 +931,13 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	TArray<TSharedPtr<FJsonValue>> Checks;
 	TArray<TSharedPtr<FJsonValue>> Warnings;
 
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetBoolField(TEXT("include_counts"), bIncludeCounts);
+	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetBoolField(TEXT("include_counts"), bIncludeCounts);
+	Root->SetObjectField(TEXT("limits"), Limits);
+
 	auto Check = [&](const FString& Name, bool bPass, const FString& Detail)
 	{
 		TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
@@ -936,6 +954,8 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		Root->SetStringField(TEXT("summary"), TEXT("EngineSource DB is not open"));
 		Root->SetArrayField(TEXT("checks"), Checks);
 		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.trigger_reindex"), TEXT("source.health") });
 		return Root;
 	}
 
@@ -1059,6 +1079,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	Root->SetArrayField(TEXT("checks"), Checks);
 	Root->SetArrayField(TEXT("warnings"), Warnings);
 	Root->SetBoolField(TEXT("truncated"), false);
+	AddNextActions(Root, { TEXT("source.repair_fts"), TEXT("source.trigger_project_reindex"), TEXT("source.search_source") });
 	return Root;
 }
 
@@ -1072,6 +1093,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 	Input->SetStringField(TEXT("target"), T);
 	Input->SetBoolField(TEXT("execute"), bExecute);
 	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetStringField(TEXT("target"), T);
+	Limits->SetBoolField(TEXT("execute"), bExecute);
+	Root->SetObjectField(TEXT("limits"), Limits);
 
 	TArray<TSharedPtr<FJsonValue>> Warnings;
 	TArray<TSharedPtr<FJsonValue>> Plan;
@@ -1081,6 +1106,8 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 		Root->SetStringField(TEXT("status"), TEXT("error"));
 		Root->SetStringField(TEXT("summary"), TEXT("EngineSource DB is not open"));
 		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.trigger_reindex"), TEXT("source.health") });
 		return Root;
 	}
 
@@ -1093,6 +1120,8 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 		Root->SetStringField(TEXT("summary"),
 			FString::Printf(TEXT("Unknown target '%s' (expected all|symbols|source)"), *T));
 		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.repair_fts"), TEXT("source.health") });
 		return Root;
 	}
 
@@ -1135,6 +1164,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 		Root->SetObjectField(TEXT("after"), MakeShared<FJsonObject>());
 		Root->SetArrayField(TEXT("warnings"), Warnings);
 		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.repair_fts (execute=true)"), TEXT("source.health") });
 		return Root;
 	}
 
@@ -1163,6 +1193,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 		: TEXT("symbols_fts rebuild failed; rolled back"));
 	Root->SetArrayField(TEXT("warnings"), Warnings);
 	Root->SetBoolField(TEXT("truncated"), false);
+	AddNextActions(Root, { TEXT("source.health"), TEXT("source.search_symbols") });
 	return Root;
 }
 

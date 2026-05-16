@@ -42,6 +42,27 @@ namespace
 		return TEXT("low");
 	}
 
+	int32 TierRank(const FString& Tier)
+	{
+		if (Tier == TEXT("high")) return 2;
+		if (Tier == TEXT("medium")) return 1;
+		return 0;
+	}
+
+	FJsonArr TopRiskReasons(const TSharedPtr<FJsonObject>& Risk, int32 MaxItems)
+	{
+		FJsonArr Out;
+		const TArray<TSharedPtr<FJsonValue>>* Reasons = nullptr;
+		if (Risk.IsValid() && Risk->TryGetArrayField(TEXT("reasons"), Reasons) && Reasons)
+		{
+			for (int32 i = 0; i < Reasons->Num() && i < MaxItems; ++i)
+			{
+				Out.Add((*Reasons)[i]);
+			}
+		}
+		return Out;
+	}
+
 	/** Shared single-symbol risk used by risk_index and review_context. */
 	TSharedPtr<FJsonObject> ScoreSymbol(FMonolithSourceDatabase& Db, const FMonolithSourceSymbol& Sym)
 	{
@@ -114,8 +135,11 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ImpactRadius(
 	const int32 Limit = ClampResults(MaxResults);
 	const bool bIn = Direction != TEXT("out");
 	const bool bOut = Direction != TEXT("in");
-	const bool bRefs = WantsKind(EdgeKinds, TEXT("call")) || WantsKind(EdgeKinds, TEXT("type"));
+	const bool bCall = WantsKind(EdgeKinds, TEXT("call"));
+	const bool bType = WantsKind(EdgeKinds, TEXT("type"));
+	const bool bRefs = bCall || bType;
 	const bool bInh = WantsKind(EdgeKinds, TEXT("inheritance"));
+	const bool bIncludeRequested = !EdgeKinds.IsEmpty() && WantsKind(EdgeKinds, TEXT("include"));
 
 	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
 	Input->SetStringField(TEXT("symbol"), Symbol);
@@ -126,6 +150,12 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ImpactRadius(
 	Limits->SetNumberField(TEXT("max_depth"), Depth);
 	Limits->SetNumberField(TEXT("max_results"), Limit);
 	Root->SetObjectField(TEXT("limits"), Limits);
+	FJsonArr Warnings;
+	if (bIncludeRequested)
+	{
+		Warnings.Add(MakeShared<FJsonValueString>(TEXT(
+			"include edges are excluded in P0 until includes.included_path can be resolved to files.path with file-level fixtures")));
+	}
 
 	const TArray<FMonolithSourceSymbol> Seeds = Db.GetSymbolsByName(Symbol);
 	if (Seeds.Num() == 0)
@@ -135,6 +165,7 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ImpactRadius(
 			FString::Printf(TEXT("Symbol not found in EngineSource: %s"), *Symbol));
 		Root->SetArrayField(TEXT("impacted_symbols"), FJsonArr());
 		Root->SetArrayField(TEXT("edges"), FJsonArr());
+		Root->SetArrayField(TEXT("warnings"), Warnings);
 		Root->SetBoolField(TEXT("truncated"), false);
 		AddNext(Root, { TEXT("source.search_source"), TEXT("source.read_source") });
 		return Root;
@@ -169,14 +200,20 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ImpactRadius(
 
 			if (bRefs && bOut)
 			{
-				for (const FMonolithSourceReference& R : Db.GetReferencesFrom(Cur, TEXT(""), PerNode))
+				TArray<FMonolithSourceReference> Refs;
+				if (bCall) Refs.Append(Db.GetReferencesFrom(Cur, TEXT("call"), PerNode));
+				if (bType) Refs.Append(Db.GetReferencesFrom(Cur, TEXT("type"), PerNode));
+				for (const FMonolithSourceReference& R : Refs)
 				{
 					Neighbors.Emplace(R.ToSymbolId, R.RefKind.IsEmpty() ? TEXT("ref") : R.RefKind);
 				}
 			}
 			if (bRefs && bIn)
 			{
-				for (const FMonolithSourceReference& R : Db.GetReferencesTo(Cur, TEXT(""), PerNode))
+				TArray<FMonolithSourceReference> Refs;
+				if (bCall) Refs.Append(Db.GetReferencesTo(Cur, TEXT("call"), PerNode));
+				if (bType) Refs.Append(Db.GetReferencesTo(Cur, TEXT("type"), PerNode));
+				for (const FMonolithSourceReference& R : Refs)
 				{
 					Neighbors.Emplace(R.FromSymbolId, R.RefKind.IsEmpty() ? TEXT("ref") : R.RefKind);
 				}
@@ -230,16 +267,27 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ImpactRadius(
 	Root->SetArrayField(TEXT("impacted_symbols"), Impacted);
 	Root->SetArrayField(TEXT("edges"), Edges);
 	Root->SetBoolField(TEXT("truncated"), bTrunc);
+	Root->SetArrayField(TEXT("warnings"), Warnings);
 	AddNext(Root, { TEXT("source.review_context"), TEXT("source.risk_index"), TEXT("source.find_callers") });
 	return Root;
 }
 
-TSharedPtr<FJsonObject> FMonolithSourceReview::RiskIndex(FMonolithSourceDatabase& Db, const FString& Symbol)
+TSharedPtr<FJsonObject> FMonolithSourceReview::RiskIndex(
+	FMonolithSourceDatabase& Db,
+	const FString& Symbol,
+	int32 Limit,
+	const FString& MinTier)
 {
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
 	Input->SetStringField(TEXT("symbol"), Symbol);
 	Root->SetObjectField(TEXT("input"), Input);
+	const int32 Cap = FMath::Clamp(Limit <= 0 ? 10 : Limit, 1, 100);
+	const int32 MinRank = TierRank(MinTier.IsEmpty() ? TEXT("low") : MinTier);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("limit"), Cap);
+	Limits->SetStringField(TEXT("min_tier"), MinTier.IsEmpty() ? TEXT("low") : MinTier);
+	Root->SetObjectField(TEXT("limits"), Limits);
 
 	const TArray<FMonolithSourceSymbol> Syms = Db.GetSymbolsByName(Symbol);
 	if (Syms.Num() == 0)
@@ -248,15 +296,21 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::RiskIndex(FMonolithSourceDatabase
 		Root->SetStringField(TEXT("summary"),
 			FString::Printf(TEXT("Symbol not found: %s"), *Symbol));
 		Root->SetArrayField(TEXT("items"), FJsonArr());
+		Root->SetBoolField(TEXT("truncated"), false);
 		AddNext(Root, { TEXT("source.search_source") });
 		return Root;
 	}
 
 	FJsonArr Items;
-	for (int32 i = 0; i < Syms.Num() && i < 10; ++i)
+	for (int32 i = 0; i < Syms.Num() && i < Cap; ++i)
 	{
 		Items.Add(MakeShared<FJsonValueObject>(ScoreSymbol(Db, Syms[i])));
 	}
+	Items.RemoveAll([&](const TSharedPtr<FJsonValue>& V)
+	{
+		const TSharedPtr<FJsonObject> O = V->AsObject();
+		return O.IsValid() && TierRank(O->GetStringField(TEXT("tier"))) < MinRank;
+	});
 	Items.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
 	{
 		const double SA = A->AsObject().IsValid() ? A->AsObject()->GetNumberField(TEXT("score")) : 0.0;
@@ -289,6 +343,12 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(
 	Input->SetStringField(TEXT("direction"), Direction);
 	Input->SetStringField(TEXT("detail_level"), bMinimal ? TEXT("minimal") : TEXT("standard"));
 	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("max_depth"), FMonolithSourceReview::ClampDepth(MaxDepth));
+	Limits->SetNumberField(TEXT("max_results"), bMinimal
+		? FMath::Min(FMonolithSourceReview::ClampResults(MaxResults), 25)
+		: FMonolithSourceReview::ClampResults(MaxResults));
+	Root->SetObjectField(TEXT("limits"), Limits);
 
 	const TArray<FMonolithSourceSymbol> Syms = Db.GetSymbolsByName(Symbol);
 	if (Syms.Num() == 0)
@@ -296,6 +356,7 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(
 		Root->SetStringField(TEXT("status"), TEXT("error"));
 		Root->SetStringField(TEXT("summary"),
 			FString::Printf(TEXT("Symbol not found: %s"), *Symbol));
+		Root->SetBoolField(TEXT("truncated"), false);
 		AddNext(Root, { TEXT("source.search_source") });
 		return Root;
 	}
@@ -303,6 +364,7 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(
 	const FMonolithSourceSymbol& Seed = Syms[0];
 	TSharedPtr<FJsonObject> Risk = ScoreSymbol(Db, Seed);
 	Root->SetObjectField(TEXT("risk"), Risk);
+	Root->SetArrayField(TEXT("top_risks"), TopRiskReasons(Risk, 5));
 
 	TSharedPtr<FJsonObject> Impact = ImpactRadius(Db, Symbol,
 		TEXT("call|type|inheritance"),
@@ -335,6 +397,15 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(
 		SeedObj->SetStringField(TEXT("signature"), Seed.Signature);
 	}
 	Root->SetObjectField(TEXT("seed"), SeedObj);
+	FJsonArr Context;
+	TSharedPtr<FJsonObject> SeedContext = MakeShared<FJsonObject>();
+	SeedContext->SetStringField(TEXT("type"), TEXT("seed_symbol"));
+	SeedContext->SetStringField(TEXT("name"), Seed.Name);
+	SeedContext->SetStringField(TEXT("qualified_name"), Seed.QualifiedName);
+	SeedContext->SetStringField(TEXT("file"), Db.GetFilePath(Seed.FileId));
+	SeedContext->SetNumberField(TEXT("line"), Seed.LineStart);
+	Context.Add(MakeShared<FJsonValueObject>(SeedContext));
+	Root->SetArrayField(TEXT("context"), Context);
 
 	Root->SetStringField(TEXT("status"), TEXT("ok"));
 	Root->SetStringField(TEXT("summary"), FString::Printf(

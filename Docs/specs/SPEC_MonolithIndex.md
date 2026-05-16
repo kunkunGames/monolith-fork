@@ -117,7 +117,9 @@ nodes/edges (monolith-native: asset-domain, lexical/local). Logic lives in
 `FMonolithIndexReview` (`Private/MonolithIndexReview.{h,cpp}`) using only the public
 `FMonolithIndexDatabase` surface; the DB impl file is unchanged (REQ-009). Spec source:
 `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md`. Tests:
-`Monolith.IndexGuard.Project.*` in `Private/Tests/MonolithIndexQueryTests.cpp`.
+`Monolith.IndexGuard.Project.*` in `Private/Tests/MonolithIndexQueryTests.cpp`,
+including cycle/truncation guards, orphan-dependency health warnings, repair dry-run/execute,
+and minimal review-context output-contract coverage.
 
 Invariants honored by the implementation:
 
@@ -125,6 +127,7 @@ Invariants honored by the implementation:
 - 6 FTS triggers (`fts_assets`/`fts_nodes` × ai/ad/au) are external-content FTS5 → `'rebuild'` is valid for `repair_fts`.
 - `FMonolithIndexDatabase` exposes a raw `FSQLiteDatabase*` (`GetRawDatabase()`) with **no DB-internal lock**; writes are caller-serialized. `repair_fts` must gate on `UMonolithIndexSubsystem::IsIndexing()` and run inside a transaction-scoped helper.
 - Direct lookup helpers to build bounded traversal on: `GetDependenciesForAsset` (out / `source_asset_id`), `GetReferencersOfAsset` (in / `target_asset_id`).
+- P0 action outputs expose a stable review contract: `input`, `limits`, `truncated`, and `next_actions` where applicable; `project.review_context` additionally exposes compact `top_risks[]` and `context[]` fields so agents can triage without pulling full details.
 - Test precedent: extend `Private/Tests/MonolithIndexQueryTests.cpp` (`Monolith.IndexGuard.Project.*`, temp-DB fixture) — do not introduce a new directory or `WITH_DEV_AUTOMATION_TESTS` guard.
 
 ---

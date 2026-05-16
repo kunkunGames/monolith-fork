@@ -32,7 +32,9 @@ public:
 	/** Query-time risk: caller/callee degree, descendants, UE macro, fan. */
 	static TSharedPtr<FJsonObject> RiskIndex(
 		FMonolithSourceDatabase& Db,
-		const FString& Symbol);
+		const FString& Symbol,
+		int32 Limit,
+		const FString& MinTier);
 
 	/** Compose impact + risk + callers/callees/hierarchy + next actions. */
 	static TSharedPtr<FJsonObject> ReviewContext(

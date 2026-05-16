@@ -46,6 +46,7 @@ namespace
 	{
 		FMonolithSourceDatabase Db;
 		FString Path;
+		int64 FileId = 0;
 		int64 Sa = 0, Sb = 0, Sc = 0;
 
 		bool Build()
@@ -54,14 +55,14 @@ namespace
 			if (!Db.OpenForWriting(Path)) return false;
 			if (!Db.CreateTablesIfNeeded()) return false;
 			const int64 Mod = Db.InsertModule(TEXT("M"), TEXT("/tmp/M"), TEXT("Runtime"));
-			const int64 File = Db.InsertFile(TEXT("/tmp/M/M.cpp"), Mod, TEXT("cpp"), 100, 0.0);
-			Sa = Db.InsertSymbol(TEXT("Alpha"), TEXT("M::Alpha"), TEXT("function"), File, 1, 5, 0, TEXT("public"), TEXT("void Alpha()"), TEXT(""), false);
-			Sb = Db.InsertSymbol(TEXT("Beta"), TEXT("M::Beta"), TEXT("function"), File, 6, 10, 0, TEXT("public"), TEXT("void Beta()"), TEXT(""), true);
-			Sc = Db.InsertSymbol(TEXT("Gamma"), TEXT("M::Gamma"), TEXT("class"), File, 11, 20, 0, TEXT("public"), TEXT(""), TEXT(""), false);
+			FileId = Db.InsertFile(TEXT("/tmp/M/M.cpp"), Mod, TEXT("cpp"), 100, 0.0);
+			Sa = Db.InsertSymbol(TEXT("Alpha"), TEXT("M::Alpha"), TEXT("function"), FileId, 1, 5, 0, TEXT("public"), TEXT("void Alpha()"), TEXT(""), false);
+			Sb = Db.InsertSymbol(TEXT("Beta"), TEXT("M::Beta"), TEXT("function"), FileId, 6, 10, 0, TEXT("public"), TEXT("void Beta()"), TEXT(""), true);
+			Sc = Db.InsertSymbol(TEXT("Gamma"), TEXT("M::Gamma"), TEXT("class"), FileId, 11, 20, 0, TEXT("public"), TEXT(""), TEXT(""), false);
 			// Beta -> Gamma -> Alpha -> Beta  (reference cycle), plus inheritance
-			Db.InsertReference(Sb, Sc, TEXT("call"), File, 7);
-			Db.InsertReference(Sc, Sa, TEXT("type"), File, 12);
-			Db.InsertReference(Sa, Sb, TEXT("call"), File, 2);
+			Db.InsertReference(Sb, Sc, TEXT("call"), FileId, 7);
+			Db.InsertReference(Sc, Sa, TEXT("type"), FileId, 12);
+			Db.InsertReference(Sa, Sb, TEXT("call"), FileId, 2);
 			Db.InsertInheritance(Sc, Sa);
 			Db.SetMeta(TEXT("schema_version"), TEXT("1"));
 			return Sa > 0 && Sb > 0 && Sc > 0;
@@ -87,6 +88,29 @@ bool FSourceImpactRadiusCycleSafeTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceImpactRadiusFiltersRefKindTest, "Monolith.IndexGuard.Source.ImpactRadiusFiltersRefKind", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceImpactRadiusFiltersRefKindTest::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+
+	TSharedPtr<FJsonObject> CallOnly = FMonolithSourceReview::ImpactRadius(T.Db, TEXT("Beta"), TEXT("call"), TEXT("both"), 1, 200);
+	const TArray<TSharedPtr<FJsonValue>>* Edges = nullptr;
+	TestTrue(TEXT("call edges present"), CallOnly->TryGetArrayField(TEXT("edges"), Edges) && Edges != nullptr);
+	for (const TSharedPtr<FJsonValue>& EdgeValue : *Edges)
+	{
+		const TSharedPtr<FJsonObject> Edge = EdgeValue->AsObject();
+		TestTrue(TEXT("edge object valid"), Edge.IsValid());
+		TestEqual(TEXT("call-only excludes type references"), Edge->GetStringField(TEXT("kind")), FString(TEXT("call")));
+	}
+
+	TSharedPtr<FJsonObject> TypeOnly = FMonolithSourceReview::ImpactRadius(T.Db, TEXT("Beta"), TEXT("type"), TEXT("both"), 1, 200);
+	const TArray<TSharedPtr<FJsonValue>>* TypeImp = nullptr;
+	TestTrue(TEXT("type impacted_symbols present"), TypeOnly->TryGetArrayField(TEXT("impacted_symbols"), TypeImp) && TypeImp != nullptr);
+	TestEqual(TEXT("Beta has no direct type references"), TypeImp->Num(), 0);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceHealthHealthyTest, "Monolith.IndexGuard.Source.HealthHealthy", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FSourceHealthHealthyTest::RunTest(const FString& Parameters)
 {
@@ -97,6 +121,20 @@ bool FSourceHealthHealthyTest::RunTest(const FString& Parameters)
 	const TArray<TSharedPtr<FJsonValue>>* W = nullptr;
 	TestTrue(TEXT("warnings present"), R->TryGetArrayField(TEXT("warnings"), W) && W != nullptr);
 	TestEqual(TEXT("no warnings"), W->Num(), 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceHealthWarnsOnOrphanReferenceTest, "Monolith.IndexGuard.Source.HealthWarnsOnOrphanReference", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceHealthWarnsOnOrphanReferenceTest::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+	T.Db.InsertReference(T.Sa, 999999, TEXT("call"), T.FileId, 22);
+
+	TSharedPtr<FJsonObject> R = T.Db.ComputeHealth(false);
+	TestEqual(TEXT("orphan reference yields warning status"), R->GetStringField(TEXT("status")), FString(TEXT("warning")));
+	const TArray<TSharedPtr<FJsonValue>>* W = nullptr;
+	TestTrue(TEXT("warnings present"), R->TryGetArrayField(TEXT("warnings"), W) && W && W->Num() >= 1);
 	return true;
 }
 
@@ -124,6 +162,9 @@ bool FSourceReviewContextMinimalTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	TestTrue(TEXT("has risk"), R->HasField(TEXT("risk")));
 	TestTrue(TEXT("has impact"), R->HasField(TEXT("impact")));
+	TestTrue(TEXT("has limits"), R->HasField(TEXT("limits")));
+	TestTrue(TEXT("has top risks"), R->HasField(TEXT("top_risks")));
+	TestTrue(TEXT("has compact context"), R->HasField(TEXT("context")));
 	TestTrue(TEXT("has next_actions"), R->HasField(TEXT("next_actions")));
 	return true;
 }

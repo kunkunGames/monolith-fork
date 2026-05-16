@@ -4,6 +4,7 @@
 #include "MonolithIndexReview.h"
 #include "HAL/PlatformFileManager.h"
 #include "Misc/Paths.h"
+#include "SQLiteDatabase.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -118,6 +119,28 @@ bool FProjectHealthHealthyTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectHealthWarnsOnOrphanDependencyTest, "Monolith.IndexGuard.Project.HealthWarnsOnOrphanDependency", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectHealthWarnsOnOrphanDependencyTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	FIndexedDependency Orphan;
+	Orphan.SourceAssetId = T.B;
+	Orphan.TargetAssetId = 999999;
+	Orphan.DependencyType = TEXT("Hard");
+	FSQLiteDatabase* Raw = T.Db.GetRawDatabase();
+	TestTrue(TEXT("raw DB available"), Raw != nullptr);
+	TestTrue(TEXT("foreign keys disabled for corrupt fixture"), Raw && Raw->Execute(TEXT("PRAGMA foreign_keys=OFF;")));
+	TestTrue(TEXT("orphan dependency inserted"), T.Db.InsertDependency(Orphan) > 0);
+	TestTrue(TEXT("foreign keys re-enabled after corrupt fixture"), Raw && Raw->Execute(TEXT("PRAGMA foreign_keys=ON;")));
+
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::Health(T.Db, false);
+	TestEqual(TEXT("orphan dependency yields warning status"), R->GetStringField(TEXT("status")), FString(TEXT("warning")));
+	const TArray<TSharedPtr<FJsonValue>>* W = nullptr;
+	TestTrue(TEXT("warnings array present"), R->TryGetArrayField(TEXT("warnings"), W) && W && W->Num() >= 1);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectRepairFtsDryRunTest, "Monolith.IndexGuard.Project.RepairFtsDryRun", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectRepairFtsDryRunTest::RunTest(const FString& Parameters)
 {
@@ -141,6 +164,9 @@ bool FProjectReviewContextMinimalTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	TestTrue(TEXT("has risk"), R->HasField(TEXT("risk")));
 	TestTrue(TEXT("has impact"), R->HasField(TEXT("impact")));
+	TestTrue(TEXT("has limits"), R->HasField(TEXT("limits")));
+	TestTrue(TEXT("has top risks"), R->HasField(TEXT("top_risks")));
+	TestTrue(TEXT("has compact context"), R->HasField(TEXT("context")));
 	TestTrue(TEXT("has next_actions"), R->HasField(TEXT("next_actions")));
 	TestFalse(TEXT("minimal omits full details"), R->HasField(TEXT("details")));
 	return true;

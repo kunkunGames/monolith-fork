@@ -14,7 +14,7 @@ Command (per CLAUDE.md):
 & "D:\Engine\UE_5.7\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" GoGameEditor Win64 Development -Project="D:\P4\game\GO.uproject" -WaitMutex -NoHotReloadFromIDE
 ```
 
-**Result: `Succeeded`** (first attempt, no edits needed). 24 compile/link steps. All new/changed TUs compiled:
+**Result: `Succeeded`**. Final verification after the output-contract/test fixes reported `Target is up to date`; the preceding rebuild compiled and linked all changed TUs:
 `MonolithIndexReview.cpp`, `ProjectImpactRadiusAction.cpp`, `ProjectHealthAction.cpp`,
 `ProjectRepairFtsAction.cpp`, `ProjectRiskIndexAction.cpp`, `ProjectReviewContextAction.cpp`,
 `MonolithIndexModule.cpp`, `MonolithIndexQueryTests.cpp`, `MonolithSourceReview.cpp`,
@@ -23,21 +23,33 @@ Linked `UnrealEditor-MonolithIndex.dll` + `UnrealEditor-MonolithSource.dll`. Zer
 
 ## 2. Automation tests
 
-Added (compiled into the green build, `IMPLEMENT_SIMPLE_AUTOMATION_TEST`, temp-DB fixtures):
-
-- `Monolith.IndexGuard.Project.ImpactRadiusCycleSafe` / `ImpactRadiusTruncates` / `HealthHealthy` / `RepairFtsDryRun` / `ReviewContextMinimal`
-- `Monolith.IndexGuard.Source.ImpactRadiusCycleSafe` / `HealthHealthy` / `RepairFtsSourceDegrades` / `ReviewContextMinimal`
-
-**Headless execution blocked (environment, not the change).** `UnrealEditor-Cmd ... -ExecCmds="Automation RunTests Monolith.IndexGuard" -nullrhi` crashes with a fatal in engine code only:
+Command:
 
 ```
-FGenericWindow::GetRestoredDimensions()  "GetRestoredDimensions is not expected to be called on this platform"
- -> SWindow::GetNonMaximizedRectInScreen -> SDockingArea::GatherPersistentLayout
- -> FTabManager::SavePersistentLayout -> FEngineLoop::Tick
+& "D:\Engine\UE_5.7\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "D:\P4\game\GO.uproject" -unattended -nop4 -nosplash -NoSound -ExecCmds="Automation RunTests Monolith.IndexGuard; Quit" -TestExit="Automation Test Queue Empty"
 ```
 
-The crash is the editor saving its window/tab layout under `-nullrhi`, in `FEngineLoop::Tick`, with **no Monolith/CRG frames** — a pre-existing project+headless incompatibility, reproducible independent of this change. **Follow-up:** run `Monolith.IndexGuard.*` via the in-editor Session Frontend (or a non-`-nullrhi` runner) and append pass/fail here.
+**Result: `Succeeded`**. `Found 14 automation tests based on 'Monolith.IndexGuard'`; all completed with `Result={Success}` and `TEST COMPLETE. EXIT CODE: 0`.
+
+Covered tests:
+
+- `Monolith.IndexGuard.Project.FindByTypeClampsLimit`
+- `Monolith.IndexGuard.Project.HealthHealthy`
+- `Monolith.IndexGuard.Project.HealthWarnsOnOrphanDependency`
+- `Monolith.IndexGuard.Project.ImpactRadiusCycleSafe`
+- `Monolith.IndexGuard.Project.ImpactRadiusTruncates`
+- `Monolith.IndexGuard.Project.RepairFtsDryRun`
+- `Monolith.IndexGuard.Project.ReviewContextMinimal`
+- `Monolith.IndexGuard.Source.HealthHealthy`
+- `Monolith.IndexGuard.Source.HealthWarnsOnOrphanReference`
+- `Monolith.IndexGuard.Source.ImpactRadiusCycleSafe`
+- `Monolith.IndexGuard.Source.ImpactRadiusFiltersRefKind`
+- `Monolith.IndexGuard.Source.RepairFtsSourceDegrades`
+- `Monolith.IndexGuard.Source.ReviewContextMinimal`
+- `Monolith.IndexGuard.Source.SearchSymbolsClampsLimit`
+
+Note: the earlier `-nullrhi` command path hit an editor layout-save platform assertion unrelated to Monolith. The non-`nullrhi` command above is the verified runner for this test set.
 
 ## 3. Regression
 
-Existing direct actions/handlers and the existing `Monolith.IndexGuard.*` clamp tests were not modified — all new logic is additive (`FMonolithIndexReview` uses only the public DB surface; `MonolithIndexDatabase.cpp` untouched; Source adds 2 DB methods + a helper, existing methods unchanged).
+Existing direct actions/handlers and the existing `Monolith.IndexGuard.*` clamp tests remain covered. New logic is additive (`FMonolithIndexReview` uses only the public DB surface; `MonolithIndexDatabase.cpp` unchanged). Source adds review helpers plus DB-scoped `health`/`repair_fts`; existing source lookup actions remain unchanged.

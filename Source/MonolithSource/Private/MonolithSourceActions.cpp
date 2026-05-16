@@ -112,11 +112,11 @@ void FMonolithSourceActions::RegisterAll()
 
 	// CRG-inspired navigation/review surface (additive; existing actions unchanged).
 	Registry.RegisterAction(TEXT("source"), TEXT("impact_radius"),
-		TEXT("Bounded BFS over the symbol graph (\"references\" + inheritance): who is impacted within N hops"),
+		TEXT("Bounded BFS over call/type references and inheritance: who is impacted within N hops"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleImpactRadius),
 		FParamSchemaBuilder()
 			.Required(TEXT("symbol"), TEXT("string"), TEXT("Seed symbol name"))
-			.Optional(TEXT("edge_kinds"), TEXT("string"), TEXT("call|type|inheritance (combine with |)"), TEXT("call|type|inheritance"))
+			.Optional(TEXT("edge_kinds"), TEXT("string"), TEXT("call|type|inheritance (combine with |); include emits a warning until include paths resolve to files"), TEXT("call|type|inheritance"))
 			.Optional(TEXT("direction"), TEXT("string"), TEXT("in|out|both"), TEXT("both"))
 			.Optional(TEXT("max_depth"), TEXT("integer"), TEXT("Max traversal hops"), TEXT("2"))
 			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max impacted symbols"), TEXT("200"))
@@ -142,6 +142,8 @@ void FMonolithSourceActions::RegisterAll()
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleRiskIndex),
 		FParamSchemaBuilder()
 			.Required(TEXT("symbol"), TEXT("string"), TEXT("Symbol name to score"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max scored symbol overloads"), TEXT("10"))
+			.Optional(TEXT("min_tier"), TEXT("string"), TEXT("low|medium|high filter"), TEXT("low"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("review_context"),
@@ -239,7 +241,9 @@ FMonolithActionResult FMonolithSourceActions::HandleRiskIndex(const TSharedPtr<F
 	{
 		return FMonolithActionResult::Error(TEXT("Source index database not available"));
 	}
-	return FMonolithActionResult::Success(FMonolithSourceReview::RiskIndex(*DB, Symbol));
+	const int32 Limit = FMonolithSourceReview::PInt(Params, TEXT("limit"), 10);
+	const FString MinTier = FMonolithSourceReview::PStr(Params, TEXT("min_tier"), TEXT("low"));
+	return FMonolithActionResult::Success(FMonolithSourceReview::RiskIndex(*DB, Symbol, Limit, MinTier));
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleReviewContext(const TSharedPtr<FJsonObject>& Params)

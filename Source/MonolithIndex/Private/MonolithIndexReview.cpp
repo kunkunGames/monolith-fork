@@ -109,6 +109,20 @@ namespace
 		return 0;
 	}
 
+	FJsonArr TopRiskReasons(const TSharedPtr<FJsonObject>& Risk, int32 MaxItems)
+	{
+		FJsonArr Out;
+		const TArray<TSharedPtr<FJsonValue>>* Reasons = nullptr;
+		if (Risk.IsValid() && Risk->TryGetArrayField(TEXT("reasons"), Reasons) && Reasons)
+		{
+			for (int32 i = 0; i < Reasons->Num() && i < MaxItems; ++i)
+			{
+				Out.Add((*Reasons)[i]);
+			}
+		}
+		return Out;
+	}
+
 	void AddNext(const TSharedPtr<FJsonObject>& Root, std::initializer_list<const TCHAR*> Actions)
 	{
 		FJsonArr Arr;
@@ -325,6 +339,13 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 	FJsonArr Checks;
 	FJsonArr Warnings;
 
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetBoolField(TEXT("include_counts"), bIncludeCounts);
+	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetBoolField(TEXT("include_counts"), bIncludeCounts);
+	Root->SetObjectField(TEXT("limits"), Limits);
+
 	auto Check = [&](const FString& Name, bool bPass, const FString& Detail)
 	{
 		TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
@@ -341,6 +362,7 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 		Root->SetStringField(TEXT("summary"), TEXT("ProjectIndex DB is not open"));
 		Root->SetArrayField(TEXT("checks"), Checks);
 		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
 		AddNext(Root, { TEXT("project.get_stats") });
 		return Root;
 	}
@@ -459,6 +481,10 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RepairFts(FMonolithIndexDatabase& 
 	Input->SetStringField(TEXT("target"), Target.IsEmpty() ? TEXT("all") : Target);
 	Input->SetBoolField(TEXT("execute"), bExecute);
 	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetStringField(TEXT("target"), Target.IsEmpty() ? TEXT("all") : Target);
+	Limits->SetBoolField(TEXT("execute"), bExecute);
+	Root->SetObjectField(TEXT("limits"), Limits);
 
 	TArray<FString> FtsTables;
 	const FString T = Target.IsEmpty() ? TEXT("all") : Target;
@@ -471,6 +497,7 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RepairFts(FMonolithIndexDatabase& 
 		Root->SetStringField(TEXT("summary"),
 			FString::Printf(TEXT("Unknown target '%s' (expected all|assets|nodes)"), *T));
 		Root->SetArrayField(TEXT("warnings"), FJsonArr());
+		Root->SetBoolField(TEXT("truncated"), false);
 		AddNext(Root, { TEXT("project.health") });
 		return Root;
 	}
@@ -557,6 +584,10 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RiskIndex(
 	Root->SetObjectField(TEXT("input"), Input);
 	const int32 Cap = FMath::Clamp(Limit <= 0 ? 20 : Limit, 1, 200);
 	const int32 MinRank = TierRank(MinTier.IsEmpty() ? TEXT("low") : MinTier);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("limit"), Cap);
+	Limits->SetStringField(TEXT("min_tier"), MinTier.IsEmpty() ? TEXT("low") : MinTier);
+	Root->SetObjectField(TEXT("limits"), Limits);
 
 	FJsonArr Items;
 
@@ -569,6 +600,7 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RiskIndex(
 			Root->SetStringField(TEXT("summary"),
 				FString::Printf(TEXT("Asset not found: %s"), *SeedPath));
 			Root->SetArrayField(TEXT("items"), Items);
+			Root->SetBoolField(TEXT("truncated"), false);
 			AddNext(Root, { TEXT("project.search") });
 			return Root;
 		}
@@ -658,6 +690,10 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::ReviewContext(
 	Input->SetStringField(TEXT("direction"), Direction);
 	Input->SetStringField(TEXT("detail_level"), bMinimal ? TEXT("minimal") : TEXT("standard"));
 	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("max_depth"), ClampDepth(MaxDepth));
+	Limits->SetNumberField(TEXT("max_results"), bMinimal ? FMath::Min(ClampResults(MaxResults), 25) : ClampResults(MaxResults));
+	Root->SetObjectField(TEXT("limits"), Limits);
 
 	const TOptional<FIndexedAsset> Seed = Db.GetAssetByPath(AssetPath);
 	if (!Seed.IsSet())
@@ -665,12 +701,14 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::ReviewContext(
 		Root->SetStringField(TEXT("status"), TEXT("error"));
 		Root->SetStringField(TEXT("summary"),
 			FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
+		Root->SetBoolField(TEXT("truncated"), false);
 		AddNext(Root, { TEXT("project.search") });
 		return Root;
 	}
 
 	TSharedPtr<FJsonObject> Risk = ScoreAsset(Db, Seed.GetValue());
 	Root->SetObjectField(TEXT("risk"), Risk);
+	Root->SetArrayField(TEXT("top_risks"), TopRiskReasons(Risk, 5));
 
 	TSharedPtr<FJsonObject> Impact = ImpactRadius(Db, AssetPath,
 		Direction.IsEmpty() ? TEXT("both") : Direction, MaxDepth,
@@ -705,6 +743,15 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::ReviewContext(
 	SeedObj->SetStringField(TEXT("asset_name"), Seed->AssetName);
 	SeedObj->SetStringField(TEXT("asset_class"), Seed->AssetClass);
 	Root->SetObjectField(TEXT("seed"), SeedObj);
+	FJsonArr Context;
+	TSharedPtr<FJsonObject> SeedContext = MakeShared<FJsonObject>();
+	SeedContext->SetStringField(TEXT("type"), TEXT("seed_asset"));
+	SeedContext->SetStringField(TEXT("asset_path"), Seed->PackagePath);
+	SeedContext->SetStringField(TEXT("asset_name"), Seed->AssetName);
+	SeedContext->SetStringField(TEXT("asset_class"), Seed->AssetClass);
+	SeedContext->SetStringField(TEXT("module_name"), Seed->ModuleName);
+	Context.Add(MakeShared<FJsonValueObject>(SeedContext));
+	Root->SetArrayField(TEXT("context"), Context);
 
 	Root->SetStringField(TEXT("status"), TEXT("ok"));
 	Root->SetStringField(TEXT("summary"), FString::Printf(
