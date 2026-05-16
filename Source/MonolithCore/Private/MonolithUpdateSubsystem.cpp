@@ -937,6 +937,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT(")\r\n")
 		TEXT("if exist \"%s\\.gitignore\" copy /y \"%s\\.gitignore\" \"%s\\.gitignore\" > nul\r\n")
 		TEXT("if exist \"%s\\.github\" xcopy /s /e /i /q /h \"%s\\.github\" \"%s\\.github\\\"\r\n")
+		TEXT("if exist \"%s\\.jules\" xcopy /s /e /i /q /h \"%s\\.jules\" \"%s\\.jules\\\"\r\n")
 		TEXT("rem Preserve Saved/ (contains EngineSource.db, ProjectIndex.db, previews, etc.)\r\n")
 		TEXT("if exist \"%s\\Saved\" (\r\n")
 		TEXT("    echo  Preserving Saved directory...\r\n")
@@ -972,6 +973,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		// Preserve Saved/ from backup
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		// Cleanup
@@ -997,6 +999,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("[ -d \"%s/.git\" ] && cp -r \"%s/.git\" \"%s/.git\"\n")
 		TEXT("[ -f \"%s/.gitignore\" ] && cp \"%s/.gitignore\" \"%s/.gitignore\"\n")
 		TEXT("[ -d \"%s/.github\" ] && cp -r \"%s/.github\" \"%s/.github\"\n")
+		TEXT("[ -d \"%s/.jules\" ] && cp -r \"%s/.jules\" \"%s/.jules\"\n")
 		TEXT("# Preserve Saved/ (contains EngineSource.db, ProjectIndex.db, previews, etc.)\n")
 		TEXT("[ -d \"%s/Saved\" ] && cp -r \"%s/Saved\" \"%s/Saved\"\n")
 		TEXT("rm -rf \"%s\" \"%s\"\n")
@@ -1008,6 +1011,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*PluginDir,
 		// Preserve .git from backup
+		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
