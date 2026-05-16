@@ -39,3 +39,9 @@
 **Learning:** The actual auto-updater behavior logs a warning and proceeds if the SHA256 marker is completely missing.
 **Prevention:** Always verify documentation against the actual updater C++ code (`MonolithUpdateSubsystem.cpp`).
 **Avoid:** Writing release docs that claim the updater is stricter than it actually is.
+
+## 2026-05-16 - Preserve developer directories in release ZIP and auto-updater
+**Release risk:** Developer workflows (such as `.jules/` agent memories or `.github/` CI) accidentally shipping in end-user binaries, or being deleted by the auto-updater for source users.
+**Learning:** Monolith's release script packages the entire directory, meaning `.jules/` and `.github/` must be explicitly excluded. Additionally, the auto-updater does a destructive swap, so developer directories present in a local clone must be explicitly preserved from the backup.
+**Prevention:** Ensure `.github/` and `.jules/` are excluded in `Scripts/make_release.ps1`. Ensure the updater's `monolith_swap.bat` and `monolith_swap.sh` preserve these directories.
+**Avoid:** Packaging workflow artifacts into public release ZIPs or wiping out local developer state during an auto-update.
