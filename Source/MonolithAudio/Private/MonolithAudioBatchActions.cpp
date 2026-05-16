@@ -685,9 +685,11 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchRenameAudio(const TShared
 	IAssetTools& AssetTools = AssetToolsModule.Get();
 
 	TArray<FAssetRenameData> RenameList;
+	RenameList.Reserve(AssetPaths.Num());
 	TArray<TSharedPtr<FJsonValue>> Failed;
 	// Track new paths for the result
 	TArray<TSharedPtr<FJsonValue>> NewPathsArray;
+	NewPathsArray.Reserve(AssetPaths.Num());
 
 	for (const FString& Path : AssetPaths)
 	{
@@ -1218,6 +1220,7 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	auto ResultJson = MakeShared<FJsonObject>();
 	ResultJson->SetNumberField(TEXT("modified"), Modified);
 	TArray<TSharedPtr<FJsonValue>> AppliedFieldsJson;
+	AppliedFieldsJson.Reserve(AppliedFields.Num());
 	for (const FString& Field : AppliedFields)
 	{
 		AppliedFieldsJson.Add(MakeShared<FJsonValueString>(Field));
