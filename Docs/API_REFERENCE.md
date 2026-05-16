@@ -457,7 +457,7 @@ CRG-inspired navigation/review (additive, over the existing `dependencies` graph
 | `project.impact_radius` | `asset_path`*, `direction`=both, `max_depth`=2, `max_results`=200, `dependency_type` | Cycle-safe bounded BFS; returns `impacted_assets[]`, `edges[]`, `truncated` |
 | `project.health` | `include_counts`=true | Read-only: v2 schema, 6 triggers, FTS row parity, orphan deps, journal mode; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
 | `project.repair_fts` | `target`=all\|assets\|nodes, `execute`=false | Rebuild `fts_assets`/`fts_nodes`. `execute=true` is the sole write gate; refused while indexing |
-| `project.risk_index` | `asset_path`/`seed`, `limit`=20, `min_tier`=low | `{score,tier,reasons[],raw_counts}` (fan-in, hard deps, class weight, density) |
+| `project.risk_score` | `asset_path`/`seed`, `limit`=20, `min_tier`=low | `{score,tier,reasons[],raw_counts}` (fan-in, hard deps, class weight, density) |
 | `project.review_context` | `asset_path`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`; `minimal` omits full details |
 
 ### `project.search`
@@ -523,7 +523,7 @@ CRG-inspired navigation/review (additive, over the existing `"references"` + `in
 | `source.impact_radius` | `symbol`*, `edge_kinds`=call\|type\|inheritance, `direction`=both, `max_depth`=2, `max_results`=200 | Cycle-safe bounded BFS; call/type filters are exact, `include` returns a warning until path resolution is supported. Returns `impacted_symbols[]`, `edges[]`, `warnings[]`, `truncated` |
 | `source.health` | `include_counts`=true | Read-only: v1 schema, `symbols_ai/ad` triggers, `symbols_fts` parity, orphan refs; `source_fts` info-only; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
 | `source.repair_fts` | `target`=all\|symbols\|source, `execute`=false | Rebuild `symbols_fts`. `target=source` → reindex guidance (plain fts5). Refused while indexing |
-| `source.risk_index` | `symbol`*, `limit`=10, `min_tier`=low | `{score,tier,reasons[],raw_counts}` (caller fan-in, descendants, UE macro, boundary crossing) |
+| `source.risk_score` | `symbol`*, `limit`=10, `min_tier`=low | `{score,tier,reasons[],raw_counts}` (caller fan-in, descendants, UE macro, boundary crossing) |
 | `source.review_context` | `symbol`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`. Distinct from single-item `context.build_attachment` |
 
 ### `source.read_source`
@@ -964,7 +964,7 @@ Before writing any client code:
 
 When the editor is closed but you still need to query Monolith:
 
-- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool, read-only. Same actions for read-only namespaces (project, source, config).
+- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool. It mirrors the live `project` / `source` query actions, including CRG navigation/review (`impact_radius`, `health`, `repair_fts`, `risk_score`, `review_context`). It stays read-only by default; `repair_fts` writes only with explicit `--execute`.
 - **`python Plugins/Monolith/Saved/monolith_offline.py`** — same actions, stdlib-only.
 
 Both invoke the same SQLite indexes the live MCP uses.

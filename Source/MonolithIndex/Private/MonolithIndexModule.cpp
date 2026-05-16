@@ -12,7 +12,7 @@
 #include "Actions/ProjectImpactRadiusAction.h"
 #include "Actions/ProjectHealthAction.h"
 #include "Actions/ProjectRepairFtsAction.h"
-#include "Actions/ProjectRiskIndexAction.h"
+#include "Actions/ProjectRiskScoreAction.h"
 #include "Actions/ProjectReviewContextAction.h"
 
 #define LOCTEXT_NAMESPACE "FMonolithIndexModule"
@@ -76,10 +76,10 @@ void FMonolithIndexModule::StartupModule()
 		FMonolithActionHandler::CreateStatic(&FProjectRepairFtsAction::Execute),
 		FProjectRepairFtsAction::GetSchema());
 
-	Registry.RegisterAction(TEXT("project"), FProjectRiskIndexAction::GetName(),
-		FProjectRiskIndexAction::GetDescription(),
-		FMonolithActionHandler::CreateStatic(&FProjectRiskIndexAction::Execute),
-		FProjectRiskIndexAction::GetSchema());
+	Registry.RegisterAction(TEXT("project"), FProjectRiskScoreAction::GetName(),
+		FProjectRiskScoreAction::GetDescription(),
+		FMonolithActionHandler::CreateStatic(&FProjectRiskScoreAction::Execute),
+		FProjectRiskScoreAction::GetSchema());
 
 	Registry.RegisterAction(TEXT("project"), FProjectReviewContextAction::GetName(),
 		FProjectReviewContextAction::GetDescription(),

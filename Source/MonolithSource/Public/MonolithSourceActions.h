@@ -32,7 +32,7 @@ private:
 	static FMonolithActionResult HandleImpactRadius(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleHealth(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRepairFts(const TSharedPtr<FJsonObject>& Params);
-	static FMonolithActionResult HandleRiskIndex(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleRiskScore(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleReviewContext(const TSharedPtr<FJsonObject>& Params);
 
 	// Helpers

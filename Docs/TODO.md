@@ -440,10 +440,10 @@ The mesh module ships horror defaults (storytelling patterns, room templates, ac
 
 Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md` (re-verified against origin/master; see PRD "코드·문서 재검증 업데이트 _(2026-05-16)_"). Additive actions over the **existing** `dependencies` / `"references"` + `inheritance` graphs — no new DB/schema in P0. UBT GoGameEditor build green; `Monolith.IndexGuard.*` automation tests added (run via in-editor Session Frontend — headless `-nullrhi` automation blocked by a pre-existing engine layout-save crash unrelated to this change).
 
-- [x] **P0 — `project.{impact_radius,health,repair_fts,risk_index,review_context}`** — `FMonolithIndexReview` bounded BFS over `dependencies` (`GetDependenciesForAsset`/`GetReferencersOfAsset`), query-time risk, v2-aware health, execute-gated FTS rebuild (gated on `IsIndexing()`).
-- [x] **P0 — `source.{impact_radius,health,repair_fts,risk_index,review_context}`** — `FMonolithSourceReview` traversal over quoted `"references"` + `inheritance` (`include` excluded). `source_fts` plain FTS5 → `target=source` degrades to reindex guidance. `review_context` is a new action, distinct from single-item `context.build_attachment`.
+- [x] **P0 — `project.{impact_radius,health,repair_fts,risk_score,review_context}`** — `FMonolithIndexReview` bounded BFS over `dependencies` (`GetDependenciesForAsset`/`GetReferencersOfAsset`), query-time risk, v2-aware health, execute-gated FTS rebuild (gated on `IsIndexing()`).
+- [x] **P0 — `source.{impact_radius,health,repair_fts,risk_score,review_context}`** — `FMonolithSourceReview` traversal over quoted `"references"` + `inheritance` (`include` excluded). `source_fts` plain FTS5 → `target=source` degrades to reindex guidance. `review_context` is a new action, distinct from single-item `context.build_attachment`.
 - [x] **P0 — tests/docs** — extended `MonolithIndexQueryTests.cpp` / `MonolithSourceQueryTests.cpp` (`Monolith.IndexGuard.*`); synced `SPEC_MonolithIndex.md` / `SPEC_MonolithSource.md`; corrected the stale `MonolithSourceSchema.h:5` `Scripts/source_indexer` comment.
-- [ ] **P1/P2 (deferred)** — derived `*_risk_index` tables (only if measured latency requires), graph snapshot/diff, edge confidence, asset↔symbol bridge, wiki/PR-bot export.
+- [ ] **P1/P2 (deferred)** — derived `*_risk_score` tables (only if measured latency requires), graph snapshot/diff, edge confidence, asset↔symbol bridge, wiki/PR-bot export.
 - [ ] **Follow-up** — execute `Monolith.IndexGuard.*` via in-editor Session Frontend (or a non-`-nullrhi` runner) to record pass/fail in `Docs/testing/`.
 
 ### MonolithIndex — Incremental Indexer Remaining Work

@@ -30,7 +30,7 @@ public:
 		int32 MaxResults);
 
 	/** Query-time risk: caller/callee degree, descendants, UE macro, fan. */
-	static TSharedPtr<FJsonObject> RiskIndex(
+	static TSharedPtr<FJsonObject> RiskScore(
 		FMonolithSourceDatabase& Db,
 		const FString& Symbol,
 		int32 Limit,

@@ -56,7 +56,7 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 | `impact_radius` | `symbol` (required), `edge_kinds` (call\|type\|inheritance), `direction` (both), `max_depth` (2), `max_results` (200) | Bounded BFS over quoted `"references"` + `inheritance` (cycle-safe, `truncated`). `include` excluded |
 | `health` | `include_counts` (true) | Read-only diagnostics: v1 schema, `symbols_ai/ad` triggers, `symbols_fts` parity, orphan refs. `source_fts` reported as info |
 | `repair_fts` | `target` (all\|symbols\|source), `execute` (false) | Rebuilds `symbols_fts` (external-content). `target=source` always degrades to reindex guidance (plain fts5). Refused while `IsIndexing()` |
-| `risk_index` | `symbol` (required) | Query-time risk `{score,tier,reasons[],raw_counts}` (caller fan-in, descendants, UE macro, file-boundary crossing) |
+| `risk_score` | `symbol` (required), `limit` (10), `min_tier` (low) | Query-time risk `{score,tier,reasons[],raw_counts}` (caller fan-in, descendants, UE macro, file-boundary crossing) |
 | `review_context` | `symbol` (required), `direction` (both), `max_depth` (2), `max_results` (200), `detail_level` (minimal) | Token-efficient package: seed + impact + risk reasons + next actions. Distinct from single-item `context.build_attachment` |
 
 **DB Location:** `Plugins/Monolith/Saved/EngineSource.db`
@@ -64,10 +64,10 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 ### CRG-Inspired Navigation — IMPLEMENTED (P0, 2026-05-16)
 
 The CRG-inspired review/navigation surface is **implemented** as 5 additive `source`
-actions (`impact_radius`, `health`, `repair_fts`, `risk_index`, `review_context`) over
+actions (`impact_radius`, `health`, `repair_fts`, `risk_score`, `review_context`) over
 the **existing** `"references"` + `inheritance` graph — no new DB/schema, no Python
 runtime, no generic nodes/edges (monolith-native: source-symbol, lexical/local).
-`impact_radius`/`risk_index`/`review_context` live in `FMonolithSourceReview`
+`impact_radius`/`risk_score`/`review_context` live in `FMonolithSourceReview`
 (`Private/MonolithSourceReview.{h,cpp}`) using only public DB queries;
 `ComputeHealth`/`RepairFts` are methods on `FMonolithSourceDatabase` (private `DbLock`).
 Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md`.

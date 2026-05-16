@@ -137,9 +137,9 @@ void FMonolithSourceActions::RegisterAll()
 			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Apply rebuild (sole write gate). Default dry-run"), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("source"), TEXT("risk_index"),
+	Registry.RegisterAction(TEXT("source"), TEXT("risk_score"),
 		TEXT("Score symbol change risk (caller fan-in, descendants, UE macro, boundary crossing) with reasons"),
-		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleRiskIndex),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleRiskScore),
 		FParamSchemaBuilder()
 			.Required(TEXT("symbol"), TEXT("string"), TEXT("Symbol name to score"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max scored symbol overloads"), TEXT("10"))
@@ -229,7 +229,7 @@ FMonolithActionResult FMonolithSourceActions::HandleRepairFts(const TSharedPtr<F
 	return FMonolithActionResult::Success(DB->RepairFts(Target, bExecute));
 }
 
-FMonolithActionResult FMonolithSourceActions::HandleRiskIndex(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithSourceActions::HandleRiskScore(const TSharedPtr<FJsonObject>& Params)
 {
 	const FString Symbol = FMonolithSourceReview::PStr(Params, TEXT("symbol"));
 	if (Symbol.IsEmpty())
@@ -243,7 +243,7 @@ FMonolithActionResult FMonolithSourceActions::HandleRiskIndex(const TSharedPtr<F
 	}
 	const int32 Limit = FMonolithSourceReview::PInt(Params, TEXT("limit"), 10);
 	const FString MinTier = FMonolithSourceReview::PStr(Params, TEXT("min_tier"), TEXT("low"));
-	return FMonolithActionResult::Success(FMonolithSourceReview::RiskIndex(*DB, Symbol, Limit, MinTier));
+	return FMonolithActionResult::Success(FMonolithSourceReview::RiskScore(*DB, Symbol, Limit, MinTier));
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleReviewContext(const TSharedPtr<FJsonObject>& Params)

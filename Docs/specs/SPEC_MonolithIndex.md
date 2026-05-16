@@ -46,7 +46,7 @@
 | `impact_radius` | `asset_path` (required), `direction` (both), `max_depth` (2), `max_results` (200), `dependency_type` | Bounded BFS over `dependencies`: who is impacted within N hops (cycle-safe, `truncated` flag) |
 | `health` | `include_counts` (true) | Read-only diagnostics: v2 schema, 6 triggers, FTS row parity, orphan deps, journal mode |
 | `repair_fts` | `target` (all\|assets\|nodes), `execute` (false) | Rebuild `fts_assets`/`fts_nodes`. Dry-run unless `execute=true` (sole write gate); refused while `IsIndexing()` |
-| `risk_index` | `asset_path`/`seed`, `limit` (20), `min_tier` (low) | Query-time risk `{score,tier,reasons[],raw_counts}` (fan-in, hard deps, class weight, graph density) |
+| `risk_score` | `asset_path`/`seed`, `limit` (20), `min_tier` (low) | Query-time risk `{score,tier,reasons[],raw_counts}` (fan-in, hard deps, class weight, graph density) |
 | `review_context` | `asset_path` (required), `direction` (both), `max_depth` (2), `max_results` (200), `detail_level` (minimal) | Token-efficient package: seed + impact + risk reasons + next actions; `minimal` omits full asset details |
 
 ### Database Schema
@@ -111,7 +111,7 @@ The `bInstalled` filter on plugin content paths was replaced with explicit path 
 ### CRG-Inspired Navigation — IMPLEMENTED (P0, 2026-05-16)
 
 The CRG-inspired review/navigation surface is **implemented** as 5 additive `project`
-actions (`impact_radius`, `health`, `repair_fts`, `risk_index`, `review_context`) over
+actions (`impact_radius`, `health`, `repair_fts`, `risk_score`, `review_context`) over
 the **existing** `dependencies` graph — no new DB/schema, no Python runtime, no generic
 nodes/edges (monolith-native: asset-domain, lexical/local). Logic lives in
 `FMonolithIndexReview` (`Private/MonolithIndexReview.{h,cpp}`) using only the public

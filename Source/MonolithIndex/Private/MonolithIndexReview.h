@@ -45,7 +45,7 @@ public:
 	static TSharedPtr<FJsonObject> RepairFts(FMonolithIndexDatabase& Db, const FString& Target, bool bExecute);
 
 	/** Query-time risk scoring -> {score,tier,reasons[],raw_counts}. */
-	static TSharedPtr<FJsonObject> RiskIndex(
+	static TSharedPtr<FJsonObject> RiskScore(
 		FMonolithIndexDatabase& Db,
 		const FString& SeedPath,
 		int32 Limit,

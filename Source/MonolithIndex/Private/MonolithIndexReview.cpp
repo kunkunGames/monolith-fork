@@ -133,7 +133,7 @@ namespace
 		Root->SetArrayField(TEXT("next_actions"), Arr);
 	}
 
-	/** Single-asset risk computation shared by risk_index and review_context. */
+	/** Single-asset risk computation shared by risk_score and review_context. */
 	TSharedPtr<FJsonObject> ScoreAsset(FMonolithIndexDatabase& Db, const FIndexedAsset& Asset)
 	{
 		const int64 Id = Asset.Id;
@@ -326,7 +326,7 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::ImpactRadius(
 	Root->SetArrayField(TEXT("impacted_assets"), ImpactedArr);
 	Root->SetArrayField(TEXT("edges"), EdgeArr);
 	Root->SetBoolField(TEXT("truncated"), bTruncated);
-	AddNext(Root, { TEXT("project.review_context"), TEXT("project.risk_index"), TEXT("project.get_asset_details") });
+	AddNext(Root, { TEXT("project.review_context"), TEXT("project.risk_score"), TEXT("project.get_asset_details") });
 	return Root;
 }
 
@@ -570,9 +570,9 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RepairFts(FMonolithIndexDatabase& 
 }
 
 // ============================================================================
-// risk_index (query-time)
+// risk_score (query-time)
 // ============================================================================
-TSharedPtr<FJsonObject> FMonolithIndexReview::RiskIndex(
+TSharedPtr<FJsonObject> FMonolithIndexReview::RiskScore(
 	FMonolithIndexDatabase& Db,
 	const FString& SeedPath,
 	int32 Limit,

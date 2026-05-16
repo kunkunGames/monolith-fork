@@ -63,7 +63,7 @@ namespace
 		return Out;
 	}
 
-	/** Shared single-symbol risk used by risk_index and review_context. */
+	/** Shared single-symbol risk used by risk_score and review_context. */
 	TSharedPtr<FJsonObject> ScoreSymbol(FMonolithSourceDatabase& Db, const FMonolithSourceSymbol& Sym)
 	{
 		const TArray<FMonolithSourceReference> Callers = Db.GetReferencesTo(Sym.Id, TEXT(""), 500);
@@ -268,11 +268,11 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ImpactRadius(
 	Root->SetArrayField(TEXT("edges"), Edges);
 	Root->SetBoolField(TEXT("truncated"), bTrunc);
 	Root->SetArrayField(TEXT("warnings"), Warnings);
-	AddNext(Root, { TEXT("source.review_context"), TEXT("source.risk_index"), TEXT("source.find_callers") });
+	AddNext(Root, { TEXT("source.review_context"), TEXT("source.risk_score"), TEXT("source.find_callers") });
 	return Root;
 }
 
-TSharedPtr<FJsonObject> FMonolithSourceReview::RiskIndex(
+TSharedPtr<FJsonObject> FMonolithSourceReview::RiskScore(
 	FMonolithSourceDatabase& Db,
 	const FString& Symbol,
 	int32 Limit,
