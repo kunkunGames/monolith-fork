@@ -537,34 +537,6 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSetAIControllerFlags(c
 		return FMonolithActionResult::Error(TEXT("Failed to get AIController CDO"));
 	}
 
-	const bool bHasWantsPlayerState = Params->HasField(TEXT("wants_player_state"));
-	bool bWantsPlayerState = false;
-	if (bHasWantsPlayerState && !Params->TryGetBoolField(TEXT("wants_player_state"), bWantsPlayerState))
-	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'wants_player_state' must be a boolean"));
-	}
-
-	const bool bHasAllowStrafe = Params->HasField(TEXT("allow_strafe"));
-	bool bAllowStrafe = false;
-	if (bHasAllowStrafe && !Params->TryGetBoolField(TEXT("allow_strafe"), bAllowStrafe))
-	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'allow_strafe' must be a boolean"));
-	}
-
-	const bool bHasStartAIOnPossess = Params->HasField(TEXT("start_ai_on_possess"));
-	bool bStartAIOnPossess = false;
-	if (bHasStartAIOnPossess && !Params->TryGetBoolField(TEXT("start_ai_on_possess"), bStartAIOnPossess))
-	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'start_ai_on_possess' must be a boolean"));
-	}
-
-	const bool bHasSkipExtraLOSChecks = Params->HasField(TEXT("skip_extra_los_checks"));
-	bool bSkipExtraLOSChecks = false;
-	if (bHasSkipExtraLOSChecks && !Params->TryGetBoolField(TEXT("skip_extra_los_checks"), bSkipExtraLOSChecks))
-	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'skip_extra_los_checks' must be a boolean"));
-	}
-
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Set AI Controller Flags")));
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -572,39 +544,59 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSetAIControllerFlags(c
 	int32 ChangedCount = 0;
 
 	// wants_player_state (public)
-	if (bHasWantsPlayerState)
+	if (Params->HasField(TEXT("wants_player_state")))
 	{
-		CDO->bWantsPlayerState = bWantsPlayerState;
-		Result->SetBoolField(TEXT("wants_player_state"), bWantsPlayerState);
+		bool bVal = false;
+		if (!Params->TryGetBoolField(TEXT("wants_player_state"), bVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'wants_player_state' must be a boolean"));
+		}
+		CDO->bWantsPlayerState = bVal;
+		Result->SetBoolField(TEXT("wants_player_state"), bVal);
 		++ChangedCount;
 	}
 
 	// allow_strafe (public)
-	if (bHasAllowStrafe)
+	if (Params->HasField(TEXT("allow_strafe")))
 	{
-		CDO->bAllowStrafe = bAllowStrafe;
-		Result->SetBoolField(TEXT("allow_strafe"), bAllowStrafe);
+		bool bVal = false;
+		if (!Params->TryGetBoolField(TEXT("allow_strafe"), bVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'allow_strafe' must be a boolean"));
+		}
+		CDO->bAllowStrafe = bVal;
+		Result->SetBoolField(TEXT("allow_strafe"), bVal);
 		++ChangedCount;
 	}
 
 	// start_ai_on_possess (protected — via reflection)
-	if (bHasStartAIOnPossess)
+	if (Params->HasField(TEXT("start_ai_on_possess")))
 	{
+		bool bVal = false;
+		if (!Params->TryGetBoolField(TEXT("start_ai_on_possess"), bVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'start_ai_on_possess' must be a boolean"));
+		}
 		if (FBoolProperty* Prop = CastField<FBoolProperty>(BP->GeneratedClass->FindPropertyByName(TEXT("bStartAILogicOnPossess"))))
 		{
-			Prop->SetPropertyValue_InContainer(CDO, bStartAIOnPossess);
-			Result->SetBoolField(TEXT("start_ai_on_possess"), bStartAIOnPossess);
+			Prop->SetPropertyValue_InContainer(CDO, bVal);
+			Result->SetBoolField(TEXT("start_ai_on_possess"), bVal);
 			++ChangedCount;
 		}
 	}
 
 	// skip_extra_los_checks (protected — via reflection)
-	if (bHasSkipExtraLOSChecks)
+	if (Params->HasField(TEXT("skip_extra_los_checks")))
 	{
+		bool bVal = false;
+		if (!Params->TryGetBoolField(TEXT("skip_extra_los_checks"), bVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'skip_extra_los_checks' must be a boolean"));
+		}
 		if (FBoolProperty* Prop = CastField<FBoolProperty>(BP->GeneratedClass->FindPropertyByName(TEXT("bSkipExtraLOSChecks"))))
 		{
-			Prop->SetPropertyValue_InContainer(CDO, bSkipExtraLOSChecks);
-			Result->SetBoolField(TEXT("skip_extra_los_checks"), bSkipExtraLOSChecks);
+			Prop->SetPropertyValue_InContainer(CDO, bVal);
+			Result->SetBoolField(TEXT("skip_extra_los_checks"), bVal);
 			++ChangedCount;
 		}
 	}
