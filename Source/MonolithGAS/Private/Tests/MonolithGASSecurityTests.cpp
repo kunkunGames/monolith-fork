@@ -85,9 +85,10 @@ bool FMonolithGASCueSecurityPathTest::RunTest(const FString& Parameters)
         TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), Result.ErrorMessage.IsEmpty());
         if (!Path.IsEmpty())
         {
-            TestTrue(*FString::Printf(TEXT("Error should complain about invalid package path for: %s"), *Path),
+            TestTrue(*FString::Printf(TEXT("Error should complain about invalid cue save_path for: %s"), *Path),
                 Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
                 Result.ErrorMessage.Contains(TEXT("Package path")) ||
+                Result.ErrorMessage.Contains(TEXT("save_path")) ||
                 Result.ErrorMessage.Contains(Path));
         }
     }
