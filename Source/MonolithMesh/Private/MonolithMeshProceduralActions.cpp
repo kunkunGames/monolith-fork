@@ -2718,10 +2718,37 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateFragments(const TSha
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Handle '%s' not found: %s"), *SourceHandle, *HandleErr));
 	}
 
-	int32 FragCount = Params->HasField(TEXT("fragment_count")) ? static_cast<int32>(Params->GetNumberField(TEXT("fragment_count"))) : 8;
-	float Noise     = Params->HasField(TEXT("noise"))          ? static_cast<float>(Params->GetNumberField(TEXT("noise")))          : 0.0f;
-	int32 Seed      = Params->HasField(TEXT("seed"))           ? static_cast<int32>(Params->GetNumberField(TEXT("seed")))           : 0;
-	float GapWidth  = Params->HasField(TEXT("gap_width"))      ? static_cast<float>(Params->GetNumberField(TEXT("gap_width")))      : 0.5f;
+	int32 FragCount = 8;
+	if (Params->HasField(TEXT("fragment_count")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("fragment_count"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'fragment_count'. Expected number."));
+		FragCount = static_cast<int32>(TempVal);
+	}
+
+	float Noise = 0.0f;
+	if (Params->HasField(TEXT("noise")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("noise"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'noise'. Expected number."));
+		Noise = static_cast<float>(TempVal);
+	}
+
+	int32 Seed = 0;
+	if (Params->HasField(TEXT("seed")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("seed"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'seed'. Expected number."));
+		Seed = static_cast<int32>(TempVal);
+	}
+
+	float GapWidth = 0.5f;
+	if (Params->HasField(TEXT("gap_width")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("gap_width"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'gap_width'. Expected number."));
+		GapWidth = static_cast<float>(TempVal);
+	}
 	FString HandlePrefix;
 	if (!Params->TryGetStringField(TEXT("handle_prefix"), HandlePrefix) || HandlePrefix.IsEmpty())
 	{
