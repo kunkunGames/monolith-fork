@@ -666,8 +666,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleListComboGraphs(const TS
 
 FMonolithActionResult FMonolithComboGraphActions::HandleGetComboGraphInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
@@ -734,8 +734,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleGetComboGraphInfo(const 
 
 FMonolithActionResult FMonolithComboGraphActions::HandleGetComboNodeEffects(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
@@ -798,8 +798,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleGetComboNodeEffects(cons
 
 FMonolithActionResult FMonolithComboGraphActions::HandleValidateComboGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
@@ -942,8 +942,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleValidateComboGraph(const
 
 FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty())
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
 	}
@@ -1021,14 +1021,14 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboGraph(const T
 
 FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
 
-	FString AnimAssetPath = Params->GetStringField(TEXT("animation_asset"));
-	if (AnimAssetPath.IsEmpty())
+	FString AnimAssetPath;
+	if (!Params->TryGetStringField(TEXT("animation_asset"), AnimAssetPath) || AnimAssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'animation_asset'"));
 	}
@@ -1193,8 +1193,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 
 FMonolithActionResult FMonolithComboGraphActions::HandleAddComboEdge(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
@@ -1302,8 +1302,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboEdge(const TShar
 
 FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
@@ -1449,8 +1449,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 
 FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
@@ -1598,8 +1598,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 
 FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboAbility(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty())
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
 	}
@@ -1814,14 +1814,14 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboAbility(const
 
 FMonolithActionResult FMonolithComboGraphActions::HandleLinkAbilityToComboGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AbilityPath = Params->GetStringField(TEXT("ability_path"));
-	if (AbilityPath.IsEmpty())
+	FString AbilityPath;
+	if (!Params->TryGetStringField(TEXT("ability_path"), AbilityPath) || AbilityPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'ability_path'"));
 	}
 
-	FString ComboGraphPath = Params->GetStringField(TEXT("combo_graph"));
-	if (ComboGraphPath.IsEmpty())
+	FString ComboGraphPath;
+	if (!Params->TryGetStringField(TEXT("combo_graph"), ComboGraphPath) || ComboGraphPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'combo_graph'"));
 	}
@@ -1988,8 +1988,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleLinkAbilityToComboGraph(
 
 FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontages(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty())
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
 	}
@@ -2118,8 +2118,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontage
 
 FMonolithActionResult FMonolithComboGraphActions::HandleLayoutComboGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
