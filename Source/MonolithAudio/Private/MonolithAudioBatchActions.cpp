@@ -407,7 +407,10 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetCompression(const TSha
 	if (bHasType)
 	{
 		FString TypeStr;
-		Params->TryGetStringField(TEXT("type"), TypeStr);
+		if (!Params->TryGetStringField(TEXT("type"), TypeStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: type must be a string"));
+		}
 		FString TypeError;
 		if (!ParseCompressionType(TypeStr, CompressionType, TypeError))
 		{

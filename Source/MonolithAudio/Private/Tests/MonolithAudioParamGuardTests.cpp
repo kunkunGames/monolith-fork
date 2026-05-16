@@ -99,4 +99,35 @@ bool FMonolithParamGuardAudioCreateDistanceCrossfadeCueRejectsMalformedParamsTes
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioCreateMetaSoundSourceRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.CreateMetaSoundSourceRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioCreateMetaSoundSourceRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/MS_TestRejects"));
+	Params->SetStringField(TEXT("one_shot"), TEXT("malformed")); // Should be bool
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("create_metasound_source"), Params);
+
+	TestTrue(TEXT("CreateMetaSoundSource with malformed one_shot should return Error"), !Result.bSuccess);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioBuildMetaSoundRejectsMalformedSpecTest, "Monolith.ParamGuard.Audio.BuildMetaSoundRejectsMalformedSpec", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioBuildMetaSoundRejectsMalformedSpecTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/MS_TestRejectsSpec"));
+
+	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
+	Spec->SetStringField(TEXT("type"), TEXT("Source"));
+	Spec->SetStringField(TEXT("one_shot"), TEXT("malformed")); // Should be bool
+	Params->SetObjectField(TEXT("spec"), Spec);
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("build_metasound_from_spec"), Params);
+	TestTrue(TEXT("BuildMetaSoundFromSpec with malformed one_shot should return Error"), !Result.bSuccess);
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
