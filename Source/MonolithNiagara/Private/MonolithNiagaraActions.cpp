@@ -5232,7 +5232,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystemFromSpec(const 
 		SavePath = Params->GetStringField(TEXT("save_path"));
 	if (SavePath.IsEmpty() && Spec->HasField(TEXT("save_path")))
 		SavePath = Spec->GetStringField(TEXT("save_path"));
-	FString Template = Spec->HasField(TEXT("template")) ? Spec->GetStringField(TEXT("template")) : FString();
+	FString Template;
+	if (Spec->HasField(TEXT("template")) && !Spec->TryGetStringField(TEXT("template"), Template))
+		return FMonolithActionResult::Error(TEXT("Invalid template parameter type, must be string"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("save_path required (provide at params root or inside spec)"));
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
 		return FMonolithActionResult::Error(ValidationError);
@@ -12127,7 +12129,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 		return FMonolithActionResult::Error(TEXT("'spec' must be an object"));
 	}
 
-	FString Mode = Params->HasField(TEXT("mode")) ? Params->GetStringField(TEXT("mode")) : TEXT("overwrite");
+	FString Mode = TEXT("overwrite");
+	if (Params->HasField(TEXT("mode")) && !Params->TryGetStringField(TEXT("mode"), Mode))
+		return FMonolithActionResult::Error(TEXT("Invalid mode parameter type, must be string"));
 	if (!Mode.Equals(TEXT("overwrite"), ESearchCase::IgnoreCase) && !Mode.Equals(TEXT("merge"), ESearchCase::IgnoreCase))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Unsupported mode '%s' — use 'overwrite' or 'merge'"), *Mode));
 
