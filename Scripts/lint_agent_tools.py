@@ -31,23 +31,46 @@ def parse_tools_line(text: str) -> tuple[set[str], int] | None:
     Returns (tool_set, line_number_1based) or None if no `tools:`
     line was found inside the leading `---` frontmatter block.
     """
+    def clean_tool_value(raw: str) -> str:
+        return raw.split("#", 1)[0].strip().strip("'\"")
+
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return None
 
+    tools: set[str] = set()
+    found_tools = False
+    tools_lineno = 0
+    in_tools_list = False
+
     for idx in range(1, len(lines)):
         line = lines[idx]
-        if line.strip() == "---":
-            return None  # Frontmatter ended without a tools: line.
-        if line.lstrip().startswith("tools:"):
-            value = line.split(":", 1)[1].strip()
-            # Strip inline comments
-            value = value.split("#", 1)[0].strip()
-            # Strip list brackets
-            if value.startswith("[") and value.endswith("]"):
-                value = value[1:-1]
-            tools = {tok.strip() for tok in value.split(",") if tok.strip()}
-            return tools, idx + 1
+        stripped = line.strip()
+
+        if stripped == "---":
+            return (tools, tools_lineno) if found_tools else None
+
+        if in_tools_list:
+            if stripped.startswith("- "):
+                tools.add(clean_tool_value(stripped[2:]))
+                continue
+            if line and not line[0].isspace():
+                in_tools_list = False
+
+        if stripped.startswith("tools:"):
+            found_tools = True
+            tools_lineno = idx + 1
+            value = stripped.split(":", 1)[1].strip()
+            if value:
+                value = clean_tool_value(value).strip("[]")
+                tools.update(
+                    clean_tool_value(token)
+                    for token in value.split(",")
+                    if clean_tool_value(token)
+                )
+            else:
+                in_tools_list = True
+
     return None
 
 
@@ -115,6 +138,12 @@ def run_selftest() -> int:
             "csv list with inline comment",
             "---\ntools: mcp__monolith__alpha, mcp__monolith__beta # inline\n---\n",
             {"mcp__monolith__alpha", "mcp__monolith__beta"},
+            2,
+        ),
+        (
+            "multiline yaml list",
+            "---\ntools:\n  - mcp__monolith__first\n  - mcp__monolith__second\n---\n",
+            {"mcp__monolith__first", "mcp__monolith__second"},
             2,
         ),
     ]
