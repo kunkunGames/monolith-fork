@@ -603,19 +603,66 @@ FMonolithActionResult FMonolithMeshRoofActions::GenerateRoof(const TSharedPtr<FJ
 	Params->TryGetStringField(TEXT("roof_type"), RoofType);
 	RoofType = RoofType.ToLower();
 
-	float PitchDeg = Params->HasField(TEXT("pitch_degrees"))
-		? static_cast<float>(Params->GetNumberField(TEXT("pitch_degrees"))) : 30.0f;
-	float OverhangDist = Params->HasField(TEXT("overhang"))
-		? static_cast<float>(Params->GetNumberField(TEXT("overhang"))) : 30.0f;
-	float HeightOffset = Params->HasField(TEXT("height_offset"))
-		? static_cast<float>(Params->GetNumberField(TEXT("height_offset"))) : 0.0f;
-	float ParapetHeight = Params->HasField(TEXT("parapet_height"))
-		? static_cast<float>(Params->GetNumberField(TEXT("parapet_height"))) : 60.0f;
-	float ParapetThickness = Params->HasField(TEXT("parapet_thickness"))
-		? static_cast<float>(Params->GetNumberField(TEXT("parapet_thickness"))) : 10.0f;
-	float RidgeOffset = Params->HasField(TEXT("ridge_offset"))
-		? static_cast<float>(Params->GetNumberField(TEXT("ridge_offset"))) : 0.0f;
-	bool bOverwrite = Params->HasField(TEXT("overwrite")) ? Params->GetBoolField(TEXT("overwrite")) : false;
+	float PitchDeg = 30.0f;
+	if (Params->HasField(TEXT("pitch_degrees")))
+	{
+		double TempVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("pitch_degrees"), TempVal))
+			return FMonolithActionResult::Error(TEXT("pitch_degrees must be a number"));
+		PitchDeg = static_cast<float>(TempVal);
+	}
+
+	float OverhangDist = 30.0f;
+	if (Params->HasField(TEXT("overhang")))
+	{
+		double TempVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("overhang"), TempVal))
+			return FMonolithActionResult::Error(TEXT("overhang must be a number"));
+		OverhangDist = static_cast<float>(TempVal);
+	}
+
+	float HeightOffset = 0.0f;
+	if (Params->HasField(TEXT("height_offset")))
+	{
+		double TempVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("height_offset"), TempVal))
+			return FMonolithActionResult::Error(TEXT("height_offset must be a number"));
+		HeightOffset = static_cast<float>(TempVal);
+	}
+
+	float ParapetHeight = 60.0f;
+	if (Params->HasField(TEXT("parapet_height")))
+	{
+		double TempVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("parapet_height"), TempVal))
+			return FMonolithActionResult::Error(TEXT("parapet_height must be a number"));
+		ParapetHeight = static_cast<float>(TempVal);
+	}
+
+	float ParapetThickness = 10.0f;
+	if (Params->HasField(TEXT("parapet_thickness")))
+	{
+		double TempVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("parapet_thickness"), TempVal))
+			return FMonolithActionResult::Error(TEXT("parapet_thickness must be a number"));
+		ParapetThickness = static_cast<float>(TempVal);
+	}
+
+	float RidgeOffset = 0.0f;
+	if (Params->HasField(TEXT("ridge_offset")))
+	{
+		double TempVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("ridge_offset"), TempVal))
+			return FMonolithActionResult::Error(TEXT("ridge_offset must be a number"));
+		RidgeOffset = static_cast<float>(TempVal);
+	}
+
+	bool bOverwrite = false;
+	if (Params->HasField(TEXT("overwrite")))
+	{
+		if (!Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+			return FMonolithActionResult::Error(TEXT("overwrite must be a boolean"));
+	}
 
 	// Clamp pitch to sane range
 	PitchDeg = FMath::Clamp(PitchDeg, 5.0f, 75.0f);
