@@ -38,3 +38,9 @@ Avoid: Using short or generic wildcards like `Gameplaya*` when the plugin name i
 **Learning:** For optional Engine plugins that are conditionally queried and linked in a module's Build.cs, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file can cause the Engine to refuse to load the plugin entirely or fail dependency resolution when the optional dependency is enabled.
 **Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have a corresponding `"Optional": true` entry defined in `Monolith.uplugin`.
 **Avoid:** Linking optional plugins in `Build.cs` without adding them to `.uplugin`.
+
+## 2026-05-16 - Add missing PropertyBindingUtils and MovieRenderPipeline to Monolith.uplugin
+**Build pattern:** `PropertyBindingUtils` (required by `StateTree`) and `MovieRenderPipeline` were conditionally linked in their respective `Build.cs` modules but were missing from `Monolith.uplugin`.
+**Learning:** For optional Engine plugins that are conditionally linked, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file can cause the Engine to refuse to load the plugin entirely, rendering the conditional fallback logic useless.
+**Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have `"Optional": true` defined in `Monolith.uplugin`.
+**Avoid:** Do not omit optional plugins from `.uplugin` when they are explicitly queried in `Build.cs`.
