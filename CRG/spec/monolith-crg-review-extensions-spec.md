@@ -122,7 +122,18 @@ useful global "where should I be careful?" view.
 - **RX-8 — DONE (editor + offline).** `source.review_hotspots` /
   `project.review_hotspots` rank capped fan-in/fan-out/risk/large hotspots
   with optional advisory questions and no community/betweenness dependency.
-- **RX-4 / RX-5 / RX-6 — NOT STARTED** (spec'd P1/P2).
+- **RX-4 — DONE (editor).** `source.snapshot` / `project.snapshot`
+  store derived CRG projection manifests with explicit `execute=true`;
+  `source.diff_snapshots` / `project.diff_snapshots` compare stored/current
+  manifests read-only with capped new/removed node/edge samples.
+- **RX-5 — DONE (editor), offline parity SPEC'D 2026-05-18.**
+  `source.pre_merge_check` / `project.pre_merge_check` compose `health`,
+  `detect_changes`, and optional `find_unused` into an advisory `decision`,
+  `checks[]`, and `findings[]`. The offline CLI must expose the same
+  read-only contract so closed-editor review can run the same gate.
+- **RX-6 — DONE (editor).** `context.bridge_asset_symbols` provides the
+  read-only asset<->source heuristic bridge; offline cross-DB parity remains
+  deferred.
 - Verification record: `Docs/testing/2026-05-17-crg-review-extensions.md`.
 
 ## Non-Goals (correctly excluded — do not spec as work)
@@ -262,10 +273,18 @@ useful global "where should I be careful?" view.
 
 ### `*.pre_merge_check` (RX-5, P2)
 
-- Composition only: run `detect_changes` (RX-1) + `find_unused` (RX-3,
-  scoped to changed paths) + `health`, emit a single
-  `{verdict: GO|REVIEW|NO-GO, risk_score, blocking[], advisories[],
-  next_actions[]}`. Thresholds documented, no new traversal/scoring.
+- Composition only: run `health`, `detect_changes` (RX-1), and optional
+  `find_unused` (RX-3). Emit a single advisory gate: `status`, `decision`
+  (`pass` / `warn` / `fail`), `summary`, `risk_score`, `checks[]`,
+  `findings[]`, `changed_entity_count`, `impacted_count`, optional source
+  `test_gap_count`, `unused_count`, `truncated`, and `next_actions[]`.
+- `detail_level=minimal` returns the compact gate plus counts. `standard`
+  also embeds `health`, `change_analysis`, and `unused` when requested.
+- Thresholds mirror the editor implementation: any component `error` fails;
+  no changed match, high risk (`risk_score >= 0.66`), broad direct impact
+  (`impacted_count > 50`), source test gaps, or sampled unused candidates
+  warn. The action is read-only, accepts caller-supplied changed paths, and
+  never shells out to P4/git.
 
 ### `source.review_hotspots` / `project.review_hotspots` (RX-8, P2)
 
@@ -418,8 +437,10 @@ useful global "where should I be careful?" view.
 - [TEST-006] snapshot/diff: snapshot A, mutate fixture (add 1 node / drop 1
   edge), snapshot B, `diff_snapshots(A,B)` reports exactly the delta; the
   known dangling-ref baseline is not reported as added/removed.
-- [TEST-007] pre_merge_check: low-risk change -> GO; high-risk + test gap ->
-  NO-GO/REVIEW with blocking[] populated; pure composition (no new scoring).
+- [TEST-007] pre_merge_check: low-risk change -> `decision=pass`; no indexed
+  match, high-risk impact, test gaps, or unused candidates -> `warn`; failed
+  component health/change analysis -> `fail`; pure composition (no new
+  scoring).
 - [TEST-008] regression: existing `Monolith.IndexGuard.*` and the 5 seed
   actions (editor + offline) keep shape and behavior.
 - [TEST-009] sensitivity factor: a fixture symbol whose name matches a UE
