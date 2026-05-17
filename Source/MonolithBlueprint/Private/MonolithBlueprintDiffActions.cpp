@@ -46,6 +46,7 @@ namespace
 	TArray<FVarInfo> CollectVariables(UBlueprint* BP)
 	{
 		TArray<FVarInfo> Out;
+		Out.Reserve(BP->NewVariables.Num());
 		UClass* GenClass = BP->GeneratedClass;
 		UObject* CDO = GenClass ? GenClass->GetDefaultObject(false) : nullptr;
 
@@ -104,6 +105,7 @@ namespace
 		TArray<FCompInfo> Out;
 		USimpleConstructionScript* SCS = BP->SimpleConstructionScript;
 		if (!SCS) return Out;
+		Out.Reserve(SCS->GetAllNodes().Num());
 
 		for (USCS_Node* Node : SCS->GetAllNodes())
 		{
@@ -134,6 +136,7 @@ namespace
 	TArray<FFuncInfo> CollectFunctions(UBlueprint* BP)
 	{
 		TArray<FFuncInfo> Out;
+		Out.Reserve(BP->FunctionGraphs.Num());
 		for (UEdGraph* Graph : BP->FunctionGraphs)
 		{
 			if (!Graph) continue;
@@ -194,6 +197,7 @@ namespace
 	TArray<FGraphInfo> CollectGraphs(UBlueprint* BP)
 	{
 		TArray<FGraphInfo> Out;
+		Out.Reserve(BP->UbergraphPages.Num() + BP->FunctionGraphs.Num() + BP->MacroGraphs.Num() + BP->DelegateSignatureGraphs.Num());
 
 		auto AddGraphs = [&](const TArray<TObjectPtr<UEdGraph>>& Graphs, const FString& Type)
 		{
@@ -222,10 +226,14 @@ namespace
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 		TMap<FString, const FVarInfo*> MapA, MapB;
+		MapA.Reserve(A.Num());
+		MapB.Reserve(B.Num());
 		for (const FVarInfo& V : A) MapA.Add(V.Name, &V);
 		for (const FVarInfo& V : B) MapB.Add(V.Name, &V);
 
 		TArray<TSharedPtr<FJsonValue>> Added, Removed, Modified;
+		Added.Reserve(B.Num());
+		Removed.Reserve(A.Num());
 
 		// Added in B, not in A
 		for (const FVarInfo& V : B)
@@ -314,10 +322,14 @@ namespace
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 		TMap<FString, const FCompInfo*> MapA, MapB;
+		MapA.Reserve(A.Num());
+		MapB.Reserve(B.Num());
 		for (const FCompInfo& C : A) MapA.Add(C.Name, &C);
 		for (const FCompInfo& C : B) MapB.Add(C.Name, &C);
 
 		TArray<TSharedPtr<FJsonValue>> Added, Removed, Modified;
+		Added.Reserve(B.Num());
+		Removed.Reserve(A.Num());
 
 		for (const FCompInfo& C : B)
 		{
@@ -368,10 +380,14 @@ namespace
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 		TSet<FString> NamesA, NamesB;
+		NamesA.Reserve(A.Num());
+		NamesB.Reserve(B.Num());
 		for (const FFuncInfo& F : A) NamesA.Add(F.Name);
 		for (const FFuncInfo& F : B) NamesB.Add(F.Name);
 
 		TArray<TSharedPtr<FJsonValue>> Added, Removed;
+		Added.Reserve(B.Num());
+		Removed.Reserve(A.Num());
 
 		for (const FString& Name : NamesB)
 		{
@@ -398,10 +414,14 @@ namespace
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 		TMap<FString, const FGraphInfo*> MapA, MapB;
+		MapA.Reserve(A.Num());
+		MapB.Reserve(B.Num());
 		for (const FGraphInfo& G : A) MapA.Add(G.Name, &G);
 		for (const FGraphInfo& G : B) MapB.Add(G.Name, &G);
 
 		TArray<TSharedPtr<FJsonValue>> Added, Removed;
+		Added.Reserve(B.Num());
+		Removed.Reserve(A.Num());
 		TSharedPtr<FJsonObject> Shared = MakeShared<FJsonObject>();
 
 		for (const FGraphInfo& G : B)
