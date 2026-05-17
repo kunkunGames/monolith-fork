@@ -16,9 +16,9 @@ bool FMonolithBAFormatterImpl::SupportsGraph(UEdGraph* Graph) const
 	}
 
 	FBAFormatterSettings* Settings = UBASettings::FindFormatterSettings(Graph);
-	if (Settings && Settings->bEnabled)
+	if (Settings)
 	{
-		return true;
+		return Settings->bEnabled;
 	}
 
 	return FBAUtils::IsBlueprintGraph(Graph);
