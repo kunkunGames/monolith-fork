@@ -411,6 +411,8 @@ static bool ensure_snapshot_table(Database& db, std::string& error) {
         ");", error);
 }
 
+static std::string snapshot_edge_key(const Row& row);
+
 static bool load_current_manifest(Database& db, const std::string& domain, SnapshotManifest& out) {
     out.nodes.clear();
     out.edges.clear();
@@ -427,11 +429,50 @@ static bool load_current_manifest(Database& db, const std::string& domain, Snaps
         "JOIN crg_nodes tn ON tn.id = e.target_node_id "
         "WHERE e.domain = ? ORDER BY sn.stable_key,tn.stable_key,e.edge_kind,e.edge_subkind;",
         {domain});
-    for (const auto& row : edges) {
-        out.edges.insert(row.get("source_key") + "|" + row.get("target_key") + "|" +
-                         row.get("edge_kind") + "|" + row.get("edge_subkind"));
-    }
+    for (const auto& row : edges) out.edges.insert(snapshot_edge_key(row));
     return true;
+}
+
+static std::string snapshot_edge_key_part(const std::string& value) {
+    std::string out;
+    out.reserve(value.size());
+    for (char c : value) {
+        if (c == '\\' || c == '|') out.push_back('\\');
+        out.push_back(c);
+    }
+    return out;
+}
+
+static std::string snapshot_edge_key(const Row& row) {
+    return snapshot_edge_key_part(row.get("source_key")) + "|" +
+           snapshot_edge_key_part(row.get("target_key")) + "|" +
+           snapshot_edge_key_part(row.get("edge_kind")) + "|" +
+           snapshot_edge_key_part(row.get("edge_subkind"));
+}
+
+static std::vector<std::string> split_snapshot_edge_key(const std::string& key) {
+    std::vector<std::string> parts;
+    std::string part;
+    bool escaped = false;
+    for (char c : key) {
+        if (escaped) {
+            part.push_back(c);
+            escaped = false;
+            continue;
+        }
+        if (c == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (c == '|') {
+            parts.push_back(part);
+            part.clear();
+            continue;
+        }
+        part.push_back(c);
+    }
+    parts.push_back(part);
+    return parts;
 }
 
 static bool load_snapshot_record(Database& db, const std::string& domain,
@@ -443,12 +484,15 @@ static bool load_snapshot_record(Database& db, const std::string& domain,
         return load_current_manifest(db, domain, out.manifest);
     }
 
-    bool numeric = is_numeric_string(clean_ref);
-    Rows rows = numeric
-        ? query(db, "SELECT id,label,manifest_json FROM crg_snapshots WHERE domain = ? AND id = ? LIMIT 1;",
-                {domain, clean_ref})
-        : query(db, "SELECT id,label,manifest_json FROM crg_snapshots WHERE domain = ? AND label = ? LIMIT 1;",
-                {domain, clean_ref});
+    Rows rows;
+    if (is_numeric_string(clean_ref)) {
+        rows = query(db, "SELECT id,label,manifest_json FROM crg_snapshots WHERE domain = ? AND id = ? LIMIT 1;",
+                     {domain, clean_ref});
+    }
+    if (rows.empty()) {
+        rows = query(db, "SELECT id,label,manifest_json FROM crg_snapshots WHERE domain = ? AND label = ? LIMIT 1;",
+                     {domain, clean_ref});
+    }
     if (rows.empty()) return false;
     out.id = rows[0].get_int64("id");
     out.label = rows[0].get("label");
@@ -480,14 +524,12 @@ static json take_string_samples(const std::set<std::string>& values, int limit, 
 
 static json edge_object(const std::string& key) {
     json edge = {{"key", key}};
-    size_t p1 = key.find('|');
-    size_t p2 = p1 == std::string::npos ? std::string::npos : key.find('|', p1 + 1);
-    size_t p3 = p2 == std::string::npos ? std::string::npos : key.find('|', p2 + 1);
-    if (p1 != std::string::npos && p2 != std::string::npos && p3 != std::string::npos) {
-        edge["source"] = key.substr(0, p1);
-        edge["target"] = key.substr(p1 + 1, p2 - p1 - 1);
-        edge["kind"] = key.substr(p2 + 1, p3 - p2 - 1);
-        edge["subkind"] = key.substr(p3 + 1);
+    auto parts = split_snapshot_edge_key(key);
+    if (parts.size() == 4) {
+        edge["source"] = parts[0];
+        edge["target"] = parts[1];
+        edge["kind"] = parts[2];
+        edge["subkind"] = parts[3];
     }
     return edge;
 }
