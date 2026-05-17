@@ -236,8 +236,10 @@ useful global "where should I be careful?" view.
   checks the editor `ComputeHealth`/`Health` emit (table/index presence,
   node/edge/metric parity, orphan CRG edges, `crg_meta.cache_version`,
   `crg_meta.scoring_version`). Missing cache = informational, not error.
-- offline `repair_crg_cache` (write) remains out of scope (cache-spec
-  non-goal); this item is read-only parity only.
+- offline `repair_crg_cache` writer parity is now accepted as the next
+  execute-gated follow-up: `monolith_query.exe <source|project>
+  repair_crg_cache --execute` may rebuild the derived `crg_*` cache without
+  an editor, while dry-run stays read-only and reports the plan/counts.
 
 ### `source.find_unused` / `project.find_unused` (RX-3, P1)
 

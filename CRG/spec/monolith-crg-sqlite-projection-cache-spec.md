@@ -134,7 +134,7 @@ Behavior:
   `crg_meta`.
 - Execute is rejected while the owning subsystem is indexing.
 - `crg_meta.cache_version` is `1`.
-- `crg_meta.scoring_version` is `2` for projection-backed risk scoring.
+- `crg_meta.scoring_version` is `3` for projection-backed risk scoring.
 - `crg_meta.built_at` is written from SQLite `datetime('now')`.
 
 ## Projection Mapping
@@ -193,9 +193,9 @@ Existing actions keep their names.
 - [REQ-003] Add CRG projection health checks to project/source health.
 - [REQ-004] Make risk scoring prefer cached metrics and fall back safely.
 - [REQ-005] Keep direct action behavior and existing output shapes compatible.
-- [REQ-006] Keep offline `monolith_query.exe` behavior compatible; offline cache
-  use can be read-only in this change, while offline rebuild may follow later if
-  not needed for acceptance.
+- [REQ-006] Keep offline `monolith_query.exe` behavior compatible; offline
+  rebuild is execute-gated (`repair_crg_cache --execute`) and mutates only the
+  derived `crg_*` projection/cache rows.
 
 ## Tasks
 
