@@ -73,6 +73,10 @@ public:
 	// --- Read/Discovery (4) ---
 	static FMonolithActionResult HandleListEmitters(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleListRenderers(const TSharedPtr<FJsonObject>& Params);
+	static int32 ClampListModuleScriptsLimit(int32 Limit);
+	static int32 ClampSearchDynamicInputsLimit(int32 Limit);
+	static int32 ClampListSystemsLimit(int32 Limit);
+
 	static FMonolithActionResult HandleListModuleScripts(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleListRendererProperties(const TSharedPtr<FJsonObject>& Params);
 
