@@ -1,6 +1,6 @@
 # Monolith — TODO
 
-Last updated: 2026-05-16 (CRG-inspired navigation spec accepted; v0.14.9 docs)
+Last updated: 2026-05-18 (Niagara emitter selector parity accepted)
 
 ---
 
@@ -460,8 +460,7 @@ Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}
 
 ### Niagara Module — Improvements
 
-- [ ] **`FindEmitterHandleIndex` should accept numeric index** — `list_emitters` returns `"index"` for each emitter. Allow passing `"0"`, `"1"` etc. as emitter identifier for convenient fallback.
-  - **File:** `Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp` (~line 292)
+- [x] **Niagara emitter selectors accept numeric index** — IMPLEMENTED (2026-05-18). Core Niagara actions already accepted `list_emitters` numeric index strings; `auto_layout`'s duplicate emitter resolver now follows the same GUID/name/index contract.
 
 ### Animation Module — Wishlist
 

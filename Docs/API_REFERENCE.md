@@ -238,6 +238,8 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
 Niagara VFX system editing — emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types. **109 actions** (108 baseline + 1 layout).
 
 > For full param schemas, call `monolith_discover("niagara")` at runtime.
+>
+> Emitter selector parameters accept GUID, exact or case-insensitive display name, unique instance name, or a `list_emitters` numeric index string such as `"0"`. `auto_layout` follows the same selector contract as the core Niagara emitter actions.
 
 **Action categories:**
 

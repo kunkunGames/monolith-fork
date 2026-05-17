@@ -40,7 +40,7 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 >
 > **Param name aliases:** The canonical param names registered in schemas are `module_node` and `input`. All module write actions also accept these aliases: `module_node` → `module_name`, `module`; `input` → `input_name`. Use the canonical names when possible — aliases exist for backward compatibility.
 >
-> **Emitter name matching:** `FindEmitterHandleIndex` does NOT auto-select a single emitter when a specific non-matching name is passed. If a name is provided it must match exactly (case-insensitive). Numeric index strings (`"0"`, `"1"`, etc.) are also accepted as a fallback.
+> **Emitter selector matching:** Niagara emitter selectors, including `auto_layout`, do NOT auto-select a single emitter when a specific non-matching name is passed. If a selector is provided it must resolve by GUID, exact/case-insensitive display name, unique instance name, or numeric index string (`"0"`, `"1"`, etc.).
 
 **System (22)**
 | Action | Description |
