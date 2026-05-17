@@ -5,7 +5,7 @@ description: Use when working with Unreal Engine meshes, scene spatial queries, 
 
 # Unreal Mesh & Spatial Workflows
 
-**242 Mesh actions** (197 core + 45 experimental town gen) via `mesh_query()`. Town gen requires `bEnableProceduralTownGen = true` (disabled by default, known geometry issues).
+**268 Mesh actions** (244 core + 24 experimental town gen) via `mesh_query()`. Town gen requires `bEnableProceduralTownGen = true` (disabled by default, known geometry issues).
 
 **Overhaul additions:** `create_blueprint_prefab`, proc mesh cache (`list_cached_meshes`/`clear_cache`/`validate_cache`/`get_cache_stats`), sweep thin walls (`wall_mode: "sweep"`), auto-collision on `save_handle`, floor snap (`snap_to_floor`), collision-aware scatter (`collision_mode`), trim frames (`add_trim: true`), proc mesh caching (`use_cache`/`auto_save`).
 

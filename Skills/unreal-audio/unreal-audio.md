@@ -5,7 +5,7 @@ description: Use when creating, editing, or inspecting Unreal Engine audio asset
 
 # Unreal Audio Workflows
 
-**81 audio actions** via `audio_query()`. Discover first: `monolith_discover({ namespace: "audio" })`
+**98 audio actions** via `audio_query()`. Discover first: `monolith_discover({ namespace: "audio" })`
 
 ## Key Parameters
 
