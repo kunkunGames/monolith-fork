@@ -78,6 +78,22 @@ bool FMonolithToolResultStructuredShapeTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithToolResultStructuredEmptySuccessTest,
+	"Monolith.Core.ToolResults.StructuredEmptySuccess",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithToolResultStructuredEmptySuccessTest::RunTest(const FString& Parameters)
+{
+	FMonolithActionResult ActionResult = FMonolithActionResult::Success(TSharedPtr<FJsonObject>());
+	TSharedPtr<FJsonObject> Result = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, true);
+
+	TestTrue(TEXT("Empty success result exists"), Result.IsValid());
+	TestFalse(TEXT("Empty success is not an error"), Result->GetBoolField(TEXT("isError")));
+	TestEqual(TEXT("Empty success text JSON"), FirstTextContent(Result), TEXT("{}"));
+	TestTrue(TEXT("Empty success has structuredContent"), Result->HasTypedField<EJson::Object>(TEXT("structuredContent")));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithToolResultStructuredErrorTest,
 	"Monolith.Core.ToolResults.StructuredError",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

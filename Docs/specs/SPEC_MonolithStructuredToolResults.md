@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_MonolithCore.md](SPEC_MonolithCore.md)
 **Engine:** Unreal Engine 5.7+
-**Status:** Proposed
+**Status:** Implemented first slice
 **Owner module:** MonolithCore
 **Scope:** Add settings-gated MCP `structuredContent` helper output while preserving the legacy text JSON result envelope.
 **Non-goals:** Removing legacy text results, changing domain action result payloads, typed media content, resource links, session/progress metadata, per-action custom serializers.

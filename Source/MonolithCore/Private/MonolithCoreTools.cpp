@@ -157,6 +157,19 @@ static TSharedPtr<FJsonObject> MakeMcpResourcesStatus(const UMonolithSettings* S
 	return Obj;
 }
 
+static TSharedPtr<FJsonObject> MakeStructuredToolResultsStatus(const UMonolithSettings* Settings)
+{
+	const bool bConfigured = Settings && Settings->bEnableStructuredToolResults;
+	TSharedPtr<FJsonObject> Obj = MakeFeatureStatus(
+		bConfigured,
+		bConfigured,
+		bConfigured ? TEXT("active_structured_content") : TEXT("disabled"));
+	Obj->SetBoolField(TEXT("legacy_text_json"), true);
+	Obj->SetStringField(TEXT("content_mode"), bConfigured ? TEXT("text_plus_structured_content") : TEXT("legacy_text_json_only"));
+	Obj->SetStringField(TEXT("scope"), TEXT("tools_call_response_envelope"));
+	return Obj;
+}
+
 static FString BuildDomainDescription(const FString& Namespace, const TArray<FMonolithActionInfo>& Actions)
 {
 	if (Actions.Num() == 0)
@@ -1243,7 +1256,7 @@ FMonolithActionResult FMonolithCoreTools::HandleGetMcpServerStatus(const TShared
 	TSharedPtr<FJsonObject> Features = MakeShared<FJsonObject>();
 	Features->SetObjectField(TEXT("deferred_domain_catalog"), MakeDeferredDomainCatalogStatus(Settings));
 	Features->SetObjectField(TEXT("mcp_resources"), MakeMcpResourcesStatus(Settings));
-	Features->SetObjectField(TEXT("structured_tool_results"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableStructuredToolResults, TEXT("settings_only_result_helpers_pending")));
+	Features->SetObjectField(TEXT("structured_tool_results"), MakeStructuredToolResultsStatus(Settings));
 	Features->SetObjectField(TEXT("mcp_session_mode"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableMcpSessionMode, TEXT("settings_only_execution_context_pending")));
 	Features->SetObjectField(TEXT("advanced_tool_call_records"), MakeFeatureStatus(
 		Settings && Settings->bEnableAdvancedToolCallRecords,
