@@ -7,6 +7,7 @@
 #include "MonolithIndexSubsystem.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithSourceBridgeHelpers.h"
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceSubsystem.h"
 #include "MonolithToolRegistry.h"
@@ -17,6 +18,7 @@ constexpr int32 DefaultSearchLimit = 24;
 constexpr int32 MaxSearchLimit = 100;
 constexpr int32 DefaultMaxChars = 12000;
 constexpr int32 MaxAttachmentChars = 100000;
+constexpr int32 DefaultBridgeLimit = 20;
 
 UMonolithIndexSubsystem* GetProjectIndexSubsystem()
 {
@@ -140,6 +142,234 @@ void AddTextContent(TSharedPtr<FJsonObject>& Result, const FString& Text)
 	Item->SetStringField(TEXT("text"), Text);
 	Content.Add(MakeShared<FJsonValueObject>(Item));
 	Result->SetArrayField(TEXT("content"), Content);
+}
+
+TArray<TSharedPtr<FJsonValue>> MakeStringArray(const TArray<FString>& Values)
+{
+	TArray<TSharedPtr<FJsonValue>> Result;
+	Result.Reserve(Values.Num());
+	for (const FString& Value : Values)
+	{
+		Result.Add(MakeShared<FJsonValueString>(Value));
+	}
+	return Result;
+}
+
+TSharedPtr<FJsonObject> MakeAssetObject(const FString& AssetPath, const FString& AssetName, const FString& AssetClass, const FString& ModuleName)
+{
+	TSharedPtr<FJsonObject> Asset = MakeShared<FJsonObject>();
+	Asset->SetStringField(TEXT("asset_path"), AssetPath);
+	Asset->SetStringField(TEXT("asset_name"), AssetName);
+	Asset->SetStringField(TEXT("asset_class"), AssetClass);
+	Asset->SetStringField(TEXT("module_name"), ModuleName);
+	return Asset;
+}
+
+TSharedPtr<FJsonObject> MakeAssetObjectFromDetails(const TSharedPtr<FJsonObject>& Details)
+{
+	FString PackagePath;
+	FString AssetName;
+	FString AssetClass;
+	FString ModuleName;
+	if (Details.IsValid())
+	{
+		Details->TryGetStringField(TEXT("package_path"), PackagePath);
+		Details->TryGetStringField(TEXT("asset_name"), AssetName);
+		Details->TryGetStringField(TEXT("asset_class"), AssetClass);
+		Details->TryGetStringField(TEXT("module_name"), ModuleName);
+	}
+	return MakeAssetObject(PackagePath, AssetName, AssetClass, ModuleName);
+}
+
+TSharedPtr<FJsonObject> MakeSymbolObject(FMonolithSourceDatabase* DB, const FMonolithSourceSymbol& Symbol, bool bStandard)
+{
+	TSharedPtr<FJsonObject> Sym = MakeShared<FJsonObject>();
+	Sym->SetNumberField(TEXT("id"), static_cast<double>(Symbol.Id));
+	Sym->SetStringField(TEXT("name"), Symbol.Name);
+	Sym->SetStringField(TEXT("qualified_name"), Symbol.QualifiedName);
+	Sym->SetStringField(TEXT("kind"), Symbol.Kind);
+	Sym->SetNumberField(TEXT("line_start"), Symbol.LineStart);
+	Sym->SetNumberField(TEXT("line_end"), Symbol.LineEnd);
+	if (DB)
+	{
+		Sym->SetStringField(TEXT("path"), ShortenSourcePath(DB->GetFilePath(Symbol.FileId)));
+	}
+	if (bStandard)
+	{
+		Sym->SetStringField(TEXT("signature"), Symbol.Signature);
+		Sym->SetStringField(TEXT("docstring"), Symbol.Docstring);
+		Sym->SetStringField(TEXT("access"), Symbol.Access);
+		Sym->SetBoolField(TEXT("is_ue_macro"), Symbol.bIsUEMacro);
+	}
+	return Sym;
+}
+
+struct FBridgeLinkCandidate
+{
+	TSharedPtr<FJsonObject> Object;
+	double Score = 0.0;
+	FString Key;
+};
+
+FString ConfidenceFromScore(double Score)
+{
+	if (Score >= 0.80)
+	{
+		return TEXT("high");
+	}
+	if (Score >= 0.58)
+	{
+		return TEXT("medium");
+	}
+	return TEXT("low");
+}
+
+void AddBridgeLink(
+	TArray<FBridgeLinkCandidate>& Links,
+	TSet<FString>& Seen,
+	const TSharedPtr<FJsonObject>& Asset,
+	const TSharedPtr<FJsonObject>& Symbol,
+	const FString& Direction,
+	double Score,
+	const TArray<FString>& Reasons)
+{
+	FString AssetPath;
+	FString SymbolName;
+	if (Asset.IsValid())
+	{
+		Asset->TryGetStringField(TEXT("asset_path"), AssetPath);
+	}
+	if (Symbol.IsValid())
+	{
+		Symbol->TryGetStringField(TEXT("qualified_name"), SymbolName);
+		if (SymbolName.IsEmpty())
+		{
+			Symbol->TryGetStringField(TEXT("name"), SymbolName);
+		}
+	}
+
+	const FString Key = FString::Printf(TEXT("%s|%s|%s"), *Direction, *AssetPath.ToLower(), *SymbolName.ToLower());
+	if (Seen.Contains(Key))
+	{
+		return;
+	}
+	Seen.Add(Key);
+
+	TSharedPtr<FJsonObject> Link = MakeShared<FJsonObject>();
+	Link->SetStringField(TEXT("direction"), Direction);
+	Link->SetStringField(TEXT("confidence"), ConfidenceFromScore(Score));
+	Link->SetNumberField(TEXT("score"), Score);
+	Link->SetArrayField(TEXT("reasons"), MakeStringArray(Reasons));
+	if (Asset.IsValid())
+	{
+		Link->SetObjectField(TEXT("asset"), Asset);
+	}
+	if (Symbol.IsValid())
+	{
+		Link->SetObjectField(TEXT("symbol"), Symbol);
+	}
+
+	FBridgeLinkCandidate Candidate;
+	Candidate.Object = Link;
+	Candidate.Score = Score;
+	Candidate.Key = Key;
+	Links.Add(MoveTemp(Candidate));
+}
+
+void AddSourceMatchesForCandidate(
+	FMonolithSourceDatabase* DB,
+	const TSharedPtr<FJsonObject>& Asset,
+	const FString& AssetName,
+	const FString& Candidate,
+	int32 Limit,
+	bool bStandard,
+	TArray<FBridgeLinkCandidate>& Links,
+	TSet<FString>& Seen)
+{
+	if (!DB || !DB->IsOpen() || Candidate.IsEmpty())
+	{
+		return;
+	}
+
+	const TArray<FMonolithSourceSymbol> Exact = DB->GetSymbolsByName(Candidate);
+	for (const FMonolithSourceSymbol& Symbol : Exact)
+	{
+		TArray<FString> Reasons;
+		Reasons.Add(FString::Printf(TEXT("exact source symbol name match: %s"), *Candidate));
+		double Score = 0.90;
+		if (MonolithSourceBridge::NamesMatchNormalized(AssetName, Symbol.Name))
+		{
+			Reasons.Add(TEXT("normalized UE asset/symbol names match"));
+			Score = 0.95;
+		}
+		AddBridgeLink(Links, Seen, Asset, MakeSymbolObject(DB, Symbol, bStandard), TEXT("asset_to_symbol"), Score, Reasons);
+	}
+
+	const int32 Remaining = FMath::Max(1, Limit);
+	for (const FMonolithSourceSymbol& Symbol : DB->SearchSymbolsFTSFiltered(Candidate, TEXT(""), TEXT(""), TEXT(""), Remaining))
+	{
+		TArray<FString> Reasons;
+		double Score = 0.48;
+		if (Symbol.Name.Equals(Candidate, ESearchCase::IgnoreCase))
+		{
+			Reasons.Add(FString::Printf(TEXT("FTS result has exact symbol name: %s"), *Candidate));
+			Score = 0.82;
+		}
+		else if (MonolithSourceBridge::NamesMatchNormalized(AssetName, Symbol.Name))
+		{
+			Reasons.Add(TEXT("FTS result normalized name matches the asset"));
+			Score = 0.72;
+		}
+		else
+		{
+			Reasons.Add(FString::Printf(TEXT("source FTS fallback matched candidate: %s"), *Candidate));
+		}
+		AddBridgeLink(Links, Seen, Asset, MakeSymbolObject(DB, Symbol, bStandard), TEXT("asset_to_symbol"), Score, Reasons);
+	}
+}
+
+void AddAssetMatchesForSymbol(
+	UMonolithIndexSubsystem* ProjectIndex,
+	const FMonolithSourceSymbol& Symbol,
+	FMonolithSourceDatabase* DB,
+	const FString& Candidate,
+	int32 Limit,
+	bool bStandard,
+	TArray<FBridgeLinkCandidate>& Links,
+	TSet<FString>& Seen)
+{
+	if (!ProjectIndex || Candidate.IsEmpty())
+	{
+		return;
+	}
+
+	for (const FSearchResult& SearchResult : ProjectIndex->Search(Candidate, Limit))
+	{
+		TArray<FString> Reasons;
+		double Score = 0.45;
+		if (SearchResult.AssetName.Equals(Candidate, ESearchCase::IgnoreCase))
+		{
+			Reasons.Add(FString::Printf(TEXT("exact project asset name match: %s"), *Candidate));
+			Score = 0.88;
+		}
+		else if (MonolithSourceBridge::NamesMatchNormalized(SearchResult.AssetName, Symbol.Name))
+		{
+			Reasons.Add(TEXT("normalized UE symbol/asset names match"));
+			Score = 0.74;
+		}
+		else
+		{
+			Reasons.Add(FString::Printf(TEXT("project index FTS fallback matched candidate: %s"), *Candidate));
+		}
+
+		TSharedPtr<FJsonObject> Asset = MakeAssetObject(
+			SearchResult.AssetPath,
+			SearchResult.AssetName,
+			SearchResult.AssetClass,
+			SearchResult.ModuleName);
+		TSharedPtr<FJsonObject> SymbolObj = MakeSymbolObject(DB, Symbol, bStandard);
+		AddBridgeLink(Links, Seen, Asset, SymbolObj, TEXT("symbol_to_asset"), Score, Reasons);
+	}
 }
 
 FMonolithActionResult BuildAssetAttachment(const FString& AssetPath, int32 MaxChars)
@@ -299,6 +529,16 @@ void FMonolithSourceContextActions::RegisterAll()
 			.Required(TEXT("item_id"), TEXT("string"), TEXT("Context item id returned by context.search_items"))
 			.Optional(TEXT("context_lines"), TEXT("integer"), TEXT("Source lines before/after source hits"), TEXT("12"))
 			.Optional(TEXT("max_chars"), TEXT("integer"), TEXT("Maximum attachment text length"), TEXT("12000"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("context"), TEXT("bridge_asset_symbols"),
+		TEXT("Read-only RX-6 bridge between ProjectIndex assets and EngineSource symbols"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceContextActions::HandleBridgeAssetSymbols),
+		FParamSchemaBuilder()
+			.Optional(TEXT("asset_path"), TEXT("string"), TEXT("Project asset package path seed"))
+			.Optional(TEXT("symbol"), TEXT("string"), TEXT("Source symbol seed"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum bridge links"), TEXT("20"))
+			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("minimal or standard"), TEXT("minimal"))
 			.Build());
 }
 
@@ -596,4 +836,186 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBuildAttachment(const
 	}
 
 	return FMonolithActionResult::Error(TEXT("'item_id' must start with asset:, source_symbol:, or source_file:"), -32602);
+}
+
+FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	FString SymbolSeed;
+	const bool bHasAsset = Params->TryGetStringField(TEXT("asset_path"), AssetPath) && !AssetPath.TrimStartAndEnd().IsEmpty();
+	const bool bHasSymbol = Params->TryGetStringField(TEXT("symbol"), SymbolSeed) && !SymbolSeed.TrimStartAndEnd().IsEmpty();
+	if (bHasAsset == bHasSymbol)
+	{
+		return FMonolithActionResult::Error(TEXT("Provide exactly one of 'asset_path' or 'symbol'"), -32602);
+	}
+
+	FString Error;
+	int32 Limit = DefaultBridgeLimit;
+	if (!GetOptionalInt(Params, TEXT("limit"), DefaultBridgeLimit, Limit, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
+	Limit = FMath::Clamp(Limit, 1, MaxSearchLimit);
+
+	FString DetailLevel = TEXT("minimal");
+	if (Params->HasField(TEXT("detail_level")) && !Params->TryGetStringField(TEXT("detail_level"), DetailLevel))
+	{
+		return FMonolithActionResult::Error(TEXT("'detail_level' must be a string"), -32602);
+	}
+	if (DetailLevel != TEXT("minimal") && DetailLevel != TEXT("standard"))
+	{
+		return FMonolithActionResult::Error(TEXT("'detail_level' must be 'minimal' or 'standard'"), -32602);
+	}
+	const bool bStandard = DetailLevel == TEXT("standard");
+
+	UMonolithIndexSubsystem* ProjectIndex = GetProjectIndexSubsystem();
+	UMonolithSourceSubsystem* Source = GetSourceSubsystem();
+	FMonolithSourceDatabase* DB = Source ? Source->GetDatabase() : nullptr;
+
+	TArray<FString> WarningStrings;
+	TArray<FBridgeLinkCandidate> LinkCandidates;
+	TSet<FString> SeenLinks;
+	TArray<FString> CandidateStrings;
+
+	if (!ProjectIndex)
+	{
+		WarningStrings.Add(TEXT("project index subsystem unavailable"));
+	}
+	else if (ProjectIndex->IsIndexing())
+	{
+		WarningStrings.Add(TEXT("project index is currently indexing"));
+	}
+
+	if (!DB || !DB->IsOpen())
+	{
+		WarningStrings.Add(TEXT("source database unavailable. Run source.trigger_project_reindex first."));
+	}
+	if (Source && Source->IsIndexing())
+	{
+		WarningStrings.Add(TEXT("source index is currently indexing; bridge results may be stale"));
+	}
+
+	if (bHasAsset)
+	{
+		AssetPath.TrimStartAndEndInline();
+		TSharedPtr<FJsonObject> Details;
+		if (ProjectIndex && !ProjectIndex->IsIndexing())
+		{
+			Details = ProjectIndex->GetAssetDetails(AssetPath);
+			if (!Details.IsValid() || !Details->HasField(TEXT("asset_name")))
+			{
+				WarningStrings.Add(FString::Printf(TEXT("asset '%s' was not found in the project index"), *AssetPath));
+			}
+		}
+
+		FString AssetName = MonolithSourceBridge::CleanBridgeToken(AssetPath);
+		FString AssetClass;
+		if (Details.IsValid())
+		{
+			Details->TryGetStringField(TEXT("asset_name"), AssetName);
+			Details->TryGetStringField(TEXT("asset_class"), AssetClass);
+		}
+
+		CandidateStrings = MonolithSourceBridge::BuildAssetSymbolCandidates(AssetPath, AssetName, AssetClass);
+		const TSharedPtr<FJsonObject> AssetObj = Details.IsValid() ? MakeAssetObjectFromDetails(Details) : MakeAssetObject(AssetPath, AssetName, AssetClass, TEXT(""));
+		for (const FString& Candidate : CandidateStrings)
+		{
+			if (LinkCandidates.Num() >= Limit)
+			{
+				break;
+			}
+			AddSourceMatchesForCandidate(DB, AssetObj, AssetName, Candidate, Limit, bStandard, LinkCandidates, SeenLinks);
+		}
+	}
+	else
+	{
+		SymbolSeed.TrimStartAndEndInline();
+		TArray<FMonolithSourceSymbol> Symbols;
+		if (DB && DB->IsOpen())
+		{
+			Symbols = DB->GetSymbolsByName(SymbolSeed);
+			if (Symbols.Num() == 0)
+			{
+				Symbols = DB->SearchSymbolsFTSFiltered(SymbolSeed, TEXT(""), TEXT(""), TEXT(""), Limit);
+			}
+			if (Symbols.Num() == 0)
+			{
+				WarningStrings.Add(FString::Printf(TEXT("symbol '%s' was not found in the source index"), *SymbolSeed));
+			}
+		}
+
+		for (const FMonolithSourceSymbol& Symbol : Symbols)
+		{
+			if (LinkCandidates.Num() >= Limit)
+			{
+				break;
+			}
+			CandidateStrings.Append(MonolithSourceBridge::BuildSymbolAssetCandidates(Symbol.Name, Symbol.QualifiedName));
+			for (const FString& Candidate : MonolithSourceBridge::BuildSymbolAssetCandidates(Symbol.Name, Symbol.QualifiedName))
+			{
+				if (LinkCandidates.Num() >= Limit)
+				{
+					break;
+				}
+				AddAssetMatchesForSymbol(ProjectIndex, Symbol, DB, Candidate, Limit, bStandard, LinkCandidates, SeenLinks);
+			}
+		}
+	}
+
+	LinkCandidates.Sort([](const FBridgeLinkCandidate& A, const FBridgeLinkCandidate& B)
+	{
+		return A.Score > B.Score;
+	});
+
+	const bool bTruncated = LinkCandidates.Num() > Limit;
+	if (bTruncated)
+	{
+		LinkCandidates.SetNum(Limit);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Links;
+	Links.Reserve(LinkCandidates.Num());
+	for (const FBridgeLinkCandidate& Candidate : LinkCandidates)
+	{
+		Links.Add(MakeShared<FJsonValueObject>(Candidate.Object));
+	}
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("mode"), bHasAsset ? TEXT("asset") : TEXT("symbol"));
+	if (bHasAsset)
+	{
+		Input->SetStringField(TEXT("asset_path"), AssetPath);
+	}
+	else
+	{
+		Input->SetStringField(TEXT("symbol"), SymbolSeed);
+	}
+	Input->SetArrayField(TEXT("candidate_names"), MakeStringArray(CandidateStrings));
+
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("limit"), Limit);
+	Limits->SetStringField(TEXT("detail_level"), DetailLevel);
+
+	TArray<FString> NextActions = {
+		TEXT("Use context.build_attachment on matching asset/source_symbol items for prompt materialization."),
+		TEXT("Use source.review_context or project.review_context on high-confidence matches before code review.")
+	};
+	if (WarningStrings.Num() > 0)
+	{
+		NextActions.Add(TEXT("Run context.get_index_status or context.start_indexing if an index is unavailable or stale."));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("status"), WarningStrings.Num() > 0 ? TEXT("warning") : TEXT("ok"));
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetBoolField(TEXT("read_only"), true);
+	Result->SetBoolField(TEXT("lexical_only"), true);
+	Result->SetObjectField(TEXT("input"), Input);
+	Result->SetObjectField(TEXT("limits"), Limits);
+	Result->SetArrayField(TEXT("links"), Links);
+	Result->SetArrayField(TEXT("warnings"), MakeStringArray(WarningStrings));
+	Result->SetNumberField(TEXT("count"), Links.Num());
+	Result->SetBoolField(TEXT("truncated"), bTruncated);
+	Result->SetArrayField(TEXT("next_actions"), MakeStringArray(NextActions));
+	return FMonolithActionResult::Success(Result);
 }
