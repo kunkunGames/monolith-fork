@@ -1,4 +1,5 @@
 #include "Misc/AutomationTest.h"
+#include "MonolithSourceBridgeHelpers.h"
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceReview.h"
 #include "HAL/PlatformFilemanager.h"
@@ -426,6 +427,29 @@ bool FSourceReviewContextMinimalTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("has top risks"), R->HasField(TEXT("top_risks")));
 	TestTrue(TEXT("has compact context"), R->HasField(TEXT("context")));
 	TestTrue(TEXT("has next_actions"), R->HasField(TEXT("next_actions")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceBridgeCandidateNormalizationTest, "Monolith.IndexGuard.Source.BridgeCandidateNormalization", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceBridgeCandidateNormalizationTest::RunTest(const FString& Parameters)
+{
+	TestEqual(TEXT("BP_/GA_ prefixes and _C suffix normalize to source-style class seed"),
+		MonolithSourceBridge::NormalizeBridgeName(TEXT("/Game/Abilities/BP_GA_Fireball_C")),
+		FString(TEXT("Fireball")));
+	TestTrue(TEXT("UObject-style prefix matches normalized asset seed"),
+		MonolithSourceBridge::NamesMatchNormalized(TEXT("BP_PlayerCharacter"), TEXT("APlayerCharacter")));
+
+	const TArray<FString> AssetCandidates = MonolithSourceBridge::BuildAssetSymbolCandidates(
+		TEXT("/Game/UI/WBP_Inventory"),
+		TEXT("WBP_Inventory_C"),
+		TEXT("WidgetBlueprint"));
+	TestTrue(TEXT("asset candidates keep raw asset name"), AssetCandidates.Contains(TEXT("WBP_Inventory")));
+	TestTrue(TEXT("asset candidates include normalized class seed"), AssetCandidates.Contains(TEXT("Inventory")));
+	TestTrue(TEXT("asset candidates include U-prefixed source class seed"), AssetCandidates.Contains(TEXT("UInventory")));
+
+	const TArray<FString> SymbolCandidates = MonolithSourceBridge::BuildSymbolAssetCandidates(TEXT("UGameplayInventory"), TEXT("Go::UGameplayInventory"));
+	TestTrue(TEXT("symbol candidates include normalized asset token"), SymbolCandidates.Contains(TEXT("GameplayInventory")));
+	TestTrue(TEXT("symbol candidates include Blueprint-prefixed token"), SymbolCandidates.Contains(TEXT("BP_GameplayInventory")));
 	return true;
 }
 
