@@ -55,6 +55,36 @@ Bug found & fixed during test: default `min_confidence=medium` hid every
 genuine orphan (contradicts the spec's own recall-first mandate). Corrected
 to default `low` in code + spec RX-3 contract.
 
+## 3c. Sequential build + test of reflected features (clean rebuild from committed source)
+
+Working copy verified identical to committed `80ebc05`; full clean rebuild
+(obj/exe deleted) → `build.bat` PASS (only pre-existing C4819).
+
+| # | Test | Result |
+|---|---|---|
+| RX-2.1 | source `risk_score` cache hit (sv=2, `cache.status=hit`) | PASS |
+| RX-2.2 | source `health` emits 10 `crg:*` checks | PASS |
+| RX-2.3 | project `risk_score` cache hit (sv=2) | PASS |
+| RX-2.4 | project `health` 10 `crg:*` all ok | PASS |
+| RX-2.5a | cache-absent (temp DB, `crg_*` dropped) → query-time fallback sv=1, `cache.status=unavailable` | PASS |
+| RX-2.5b | cache-absent → `crg:cache_absent` info, no crg warning (no regression; native orphan check still drives `warning` as before) | PASS |
+| RX-1.1 | source `detect_changes` minimal, sv=2 (reuses RX-2 cache) | PASS |
+| RX-1.2 | source `detect_changes` standard: entities+impact+test_gaps+priorities, truncates at max-results | PASS |
+| RX-1.3 | source `detect_changes` no-path → graceful error | PASS |
+| RX-1.4 | project `detect_changes` cache hit + bounded impact (King → 47) | PASS |
+| RX-1.5 | project `detect_changes` unknown path → ok, minimal-shaped, 0 entities, clear summary | PASS (after fix) |
+| RX-3.1 | source `find_unused` function: items + confidence + reasons + truncation | PASS |
+| RX-3.2 | source `find_unused --min-confidence=medium` filters out `low` | PASS |
+| RX-3.3 | project `find_unused` default(low) returns orphans | PASS |
+| RX-3.4 | project `find_unused --min-confidence=high` → 0 (never reports `high`; advisory) | PASS |
+| RX-3.5 | `find_unused` never mutates (symbols/assets counts unchanged) | PASS |
+
+**Bug found & fixed during sequential test (RX-1.5):** project
+`detect_changes` empty-match path early-returned and skipped minimal/standard
+shaping (no `changed_entity_count`). Fixed: it now flows through normal
+shaping with a tailored summary + `next_actions`. Rebuilt; RX-1.1/1.4
+re-verified no regression.
+
 ## 4. Notes / Deferred
 
 - Editor-side `*.detect_changes` actions are deferred: the source variant needs a

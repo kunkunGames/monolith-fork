@@ -2189,12 +2189,6 @@ public:
         root["scoring_version"] = sv;
         root["truncated"] = truncated;
         root["status"] = "ok";
-        if (changed.empty()) {
-            root["summary"] = "no indexed asset matched the given changed path(s)";
-            root["changed_entities"] = json::array();
-            add_next(root, {"project.search", "project.find_by_type"});
-            return root;
-        }
         if (minimal) {
             json topn = json::array();
             for (size_t i = 0; i < changed.size() && i < 3; ++i) topn.push_back(changed[i].value("asset_name", std::string()));
@@ -2212,7 +2206,12 @@ public:
             root["test_gaps"] = json::array();  // assets have no native test concept
             root["review_priorities"] = priorities;
         }
-        add_next(root, {"project.review_context", "project.impact_radius", "project.risk_score"});
+        if (changed.empty()) {
+            root["summary"] = "no indexed asset matched the given changed path(s)";
+            add_next(root, {"project.search", "project.find_by_type"});
+        } else {
+            add_next(root, {"project.review_context", "project.impact_radius", "project.risk_score"});
+        }
         return root;
     }
 
