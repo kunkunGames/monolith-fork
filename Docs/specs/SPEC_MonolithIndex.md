@@ -14,9 +14,9 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithIndexModule` | Registers 17 project actions |
+| `FMonolithIndexModule` | Registers 19 project actions |
 | `FMonolithIndexDatabase` | RAII SQLite wrapper. 13 tables + 2 FTS5 + 6 triggers + 1 meta. DELETE journal mode, 64MB cache. Schema v2: `saved_hash` column (Blake3 `FIoHash` hex), `schema_version` meta key |
-| `FMonolithIndexReview` | CRG-inspired navigation/review over the existing `dependencies` graph plus rebuildable CRG projection/cache tables. Provides bounded BFS impact radius, read-only health, execute-gated FTS/CRG repair, cached/query-time risk scoring, changed-path impact detection, advisory unused-asset discovery, pre-merge gate aggregation, review-hotspot ranking, and review-context packaging. Uses only the public `FMonolithIndexDatabase` surface — the DB impl file is untouched (additive, REQ-009) |
+| `FMonolithIndexReview` | CRG-inspired navigation/review over the existing `dependencies` graph plus rebuildable CRG projection/cache tables. Provides bounded BFS impact radius, read-only health, execute-gated FTS/CRG repair, cached/query-time risk scoring, changed-path impact detection, advisory unused-asset discovery, pre-merge gate aggregation, CRG snapshot/diff comparison, review-hotspot ranking, and review-context packaging. Uses only the public `FMonolithIndexDatabase` surface — the DB impl file is untouched (additive, REQ-009) |
 | `UMonolithIndexSubsystem` | UEditorSubsystem. 3-layer indexing (startup delta, live AR callbacks, full fallback). Hash-based startup catch-up. Live batched AR delegates on 2s timer. Deep asset indexing with game-thread batching. Batches every 100 assets. Progress notifications |
 | `IMonolithIndexer` | Pure virtual interface: GetSupportedClasses(), IndexAsset(), GetName(), IsSentinel(), SupportsIncrementalIndex(), IndexScoped() |
 | `FBlueprintIndexer` | Blueprint, WidgetBlueprint, AnimBlueprint — graphs, nodes, variables |
@@ -32,7 +32,7 @@
 | `FDependencyIndexer` | Hard + Soft package dependencies (runs after all other indexers) |
 | `FMonolithIndexNotification` | Slate notification bar with throbber + percentage |
 
-### Actions (17 — namespace: "project")
+### Actions (19 — namespace: "project")
 
 | Action | Params | Description |
 |--------|--------|-------------|
@@ -51,6 +51,8 @@
 | `detect_changes` | `changed_paths` or `paths`, `max_results` (200), `detail_level` (minimal) | VCS-agnostic changed asset path mapping: `.uasset`/`.umap` path/name -> indexed assets -> risk + depth-1 dependency impact + review priorities. Path stems treat SQL `LIKE` wildcards (`_`, `%`) as literal filename characters. Never shells out to P4/git |
 | `find_unused` | `kind` (all), `limit` (100), `min_confidence` (low) | Advisory orphan-asset candidates with `confidence` + `reasons[]`; never reports `high`, never mutates, and excludes World/Level/PrimaryAssetLabel/root-like assets |
 | `pre_merge_check` | `changed_paths` or `paths`, `max_results` (200), `unused_limit` (20), `detail_level` (minimal), `include_unused` (true) | Read-only pre-merge gate that composes `health`, `detect_changes`, and optional `find_unused` into `decision` (`pass`/`warn`/`fail`), `checks[]`, `findings[]`, and next actions. Never shells out to P4/git |
+| `snapshot` | `label`, `execute` (false) | Dry-run by default; `execute=true` stores current `crg_nodes`/`crg_edges` manifest in derived `crg_snapshots` for later review diffs |
+| `diff_snapshots` | `before` (label/id), `after` (label/id or current), `limit` (100) | Read-only CRG projection diff. Returns new/removed node and edge samples plus summary counts; no cache rebuild or VCS shell-out |
 | `review_hotspots` | `kind` (all), `limit` (50), `min_lines` (100), `include_questions` (true) | Global review queue over fan-in/fan-out/risk/large asset graph signals with optional advisory questions |
 | `review_context` | `asset_path` (required), `direction` (both), `max_depth` (2), `max_results` (200), `detail_level` (minimal) | Token-efficient package: seed + impact + risk reasons + next actions; `minimal` omits full asset details |
 
@@ -64,12 +66,14 @@
 
 **DB Location:** `Plugins/Monolith/Saved/ProjectIndex.db`
 
-**Derived CRG Projection Cache:** `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta`.
+**Derived CRG Projection Cache:** `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta`, `crg_snapshots`.
 These tables are rebuildable projections over `assets` and `dependencies`, not
 source-of-truth tables. `project.repair_crg_cache execute=true` recreates the
 projection, and `project.risk_score` reads `crg_node_metrics` first before
 falling back to query-time scoring. Rebuilt projection metrics use
-`crg_meta.scoring_version=3` for the UE-domain sensitivity factor.
+`crg_meta.scoring_version=3` for the UE-domain sensitivity factor. `crg_snapshots`
+is a derived review aid created only by `project.snapshot execute=true`; it stores
+compact node/edge manifests and may be dropped/recreated without losing source data.
 
 ### Incremental Indexing
 
@@ -122,9 +126,9 @@ The `bInstalled` filter on plugin content paths was replaced with explicit path 
 
 ### CRG-Inspired Navigation + Projection Cache — IMPLEMENTED (P0, 2026-05-16; cache 2026-05-17)
 
-The CRG-inspired review/navigation surface is **implemented** as 10 additive `project`
+The CRG-inspired review/navigation surface is **implemented** as 12 additive `project`
 actions (`impact_radius`, `health`, `repair_fts`, `repair_crg_cache`, `risk_score`,
-`detect_changes`, `find_unused`, `pre_merge_check`, `review_hotspots`, `review_context`) over the **existing** `dependencies` graph. The CRG `nodes`/`edges`
+`detect_changes`, `find_unused`, `pre_merge_check`, `snapshot`, `diff_snapshots`, `review_hotspots`, `review_context`) over the **existing** `dependencies` graph. The CRG `nodes`/`edges`
 idea is adopted only as a derived SQLite projection/cache (`crg_*` tables), while
 `assets` and `dependencies` remain authoritative. There is no Python runtime or
 generic parser replacement (monolith-native: asset-domain, lexical/local). Logic lives in
@@ -143,7 +147,7 @@ Invariants honored by the implementation:
 - `FMonolithIndexDatabase` exposes a raw `FSQLiteDatabase*` (`GetRawDatabase()`) with **no DB-internal lock**; writes are caller-serialized. `repair_fts` and `repair_crg_cache` must gate on `UMonolithIndexSubsystem::IsIndexing()` and run inside transaction-scoped helpers.
 - CRG projection rows are disposable: `crg_nodes` maps one row per asset, `crg_edges` maps one row per dependency, and `crg_node_metrics` stores `risk_score`, tier, reasons JSON, raw count JSON, and `scoring_version`. Missing projection rows are cache misses, not action failures; current scoring is v3 and includes a bounded UE-domain sensitivity signal.
 - Direct lookup helpers to build bounded traversal on: `GetDependenciesForAsset` (out / `source_asset_id`), `GetReferencersOfAsset` (in / `target_asset_id`).
-- Review action outputs expose a stable contract: `input`, `limits`, `truncated`, and `next_actions` where applicable; `project.detect_changes` exposes minimal counts plus `review_priorities` by default and standard-mode `changed_entities[]` / `impact` / empty `test_gaps[]`, treats `_` and `%` literally when using path stems for package-path suffix matching, `project.find_unused` exposes capped `items[]` with `asset_path`, `asset_name`, `asset_class`, `confidence`, and `reasons[]` fields, `project.pre_merge_check` exposes `decision`, `checks[]`, `findings[]`, `risk_score`, and standard-mode nested `health` / `change_analysis` / `unused` payloads, `project.review_hotspots` exposes capped `hotspots[]` plus optional `questions[]`, while `project.review_context` additionally exposes compact `top_risks[]` and `context[]` fields so agents can triage without pulling full details.
+- Review action outputs expose a stable contract: `input`, `limits`, `truncated`, and `next_actions` where applicable; `project.detect_changes` exposes minimal counts plus `review_priorities` by default and standard-mode `changed_entities[]` / `impact` / empty `test_gaps[]`, treats `_` and `%` literally when using path stems for package-path suffix matching, `project.find_unused` exposes capped `items[]` with `asset_path`, `asset_name`, `asset_class`, `confidence`, and `reasons[]` fields, `project.pre_merge_check` exposes `decision`, `checks[]`, `findings[]`, `risk_score`, and standard-mode nested `health` / `change_analysis` / `unused` payloads, `project.snapshot` exposes dry-run or stored snapshot metadata, `project.diff_snapshots` exposes capped `new_nodes[]`, `removed_nodes[]`, `new_edges[]`, `removed_edges[]`, and `summary` counts, `project.review_hotspots` exposes capped `hotspots[]` plus optional `questions[]`, while `project.review_context` additionally exposes compact `top_risks[]` and `context[]` fields so agents can triage without pulling full details.
 - Test precedent: extend `Private/Tests/MonolithIndexQueryTests.cpp` (`Monolith.IndexGuard.Project.*`, temp-DB fixture) — do not introduce a new directory or `WITH_DEV_AUTOMATION_TESTS` guard.
 
 ---
