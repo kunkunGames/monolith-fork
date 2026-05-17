@@ -5766,19 +5766,36 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetSequenceProperties(con
 
 	if (Params->HasField(TEXT("rate_scale")))
 	{
-		Seq->RateScale = static_cast<float>(Params->GetNumberField(TEXT("rate_scale")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("rate_scale"), TempVal))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'rate_scale' must be a number"));
+		}
+		Seq->RateScale = static_cast<float>(TempVal);
 		bAnySet = true;
 	}
 
 	if (Params->HasField(TEXT("loop")))
 	{
-		Seq->bLoop = Params->GetBoolField(TEXT("loop"));
+		bool bLoop;
+		if (!Params->TryGetBoolField(TEXT("loop"), bLoop))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'loop' must be a boolean"));
+		}
+		Seq->bLoop = bLoop;
 		bAnySet = true;
 	}
 
 	if (Params->HasField(TEXT("interpolation")))
 	{
-		FString InterpStr = Params->GetStringField(TEXT("interpolation"));
+		FString InterpStr;
+		if (!Params->TryGetStringField(TEXT("interpolation"), InterpStr))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'interpolation' must be a string"));
+		}
 		if (InterpStr.Equals(TEXT("Linear"), ESearchCase::IgnoreCase))
 			Seq->Interpolation = EAnimInterpolationType::Linear;
 		else if (InterpStr.Equals(TEXT("Step"), ESearchCase::IgnoreCase))
@@ -5823,7 +5840,12 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetAdditiveSettings(const
 
 	if (Params->HasField(TEXT("additive_anim_type")))
 	{
-		FString TypeStr = Params->GetStringField(TEXT("additive_anim_type"));
+		FString TypeStr;
+		if (!Params->TryGetStringField(TEXT("additive_anim_type"), TypeStr))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'additive_anim_type' must be a string"));
+		}
 		if (TypeStr.Equals(TEXT("NoAdditive"), ESearchCase::IgnoreCase) || TypeStr.Equals(TEXT("None"), ESearchCase::IgnoreCase))
 			Seq->AdditiveAnimType = EAdditiveAnimationType::AAT_None;
 		else if (TypeStr.Equals(TEXT("LocalSpace"), ESearchCase::IgnoreCase) || TypeStr.Equals(TEXT("LocalSpaceBase"), ESearchCase::IgnoreCase))
@@ -5840,7 +5862,12 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetAdditiveSettings(const
 
 	if (Params->HasField(TEXT("ref_pose_type")))
 	{
-		FString RefStr = Params->GetStringField(TEXT("ref_pose_type"));
+		FString RefStr;
+		if (!Params->TryGetStringField(TEXT("ref_pose_type"), RefStr))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'ref_pose_type' must be a string"));
+		}
 		if (RefStr.Equals(TEXT("RefPose"), ESearchCase::IgnoreCase))
 			Seq->RefPoseType = EAdditiveBasePoseType::ABPT_RefPose;
 		else if (RefStr.Equals(TEXT("AnimScaled"), ESearchCase::IgnoreCase))
@@ -5859,13 +5886,24 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetAdditiveSettings(const
 
 	if (Params->HasField(TEXT("ref_frame_index")))
 	{
-		Seq->RefFrameIndex = static_cast<int32>(Params->GetNumberField(TEXT("ref_frame_index")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("ref_frame_index"), TempVal))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'ref_frame_index' must be a number"));
+		}
+		Seq->RefFrameIndex = static_cast<int32>(TempVal);
 		bAnySet = true;
 	}
 
 	if (Params->HasField(TEXT("ref_pose_seq")))
 	{
-		FString RefSeqPath = Params->GetStringField(TEXT("ref_pose_seq"));
+		FString RefSeqPath;
+		if (!Params->TryGetStringField(TEXT("ref_pose_seq"), RefSeqPath))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'ref_pose_seq' must be a string"));
+		}
 		if (RefSeqPath.IsEmpty())
 		{
 			Seq->RefPoseSeq = nullptr;
@@ -5943,7 +5981,12 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetCompressionSettings(co
 
 	if (Params->HasField(TEXT("bone_compression")))
 	{
-		FString BoneCompPath = Params->GetStringField(TEXT("bone_compression"));
+		FString BoneCompPath;
+		if (!Params->TryGetStringField(TEXT("bone_compression"), BoneCompPath))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'bone_compression' must be a string"));
+		}
 		if (BoneCompPath.IsEmpty())
 		{
 			Seq->BoneCompressionSettings = nullptr;
@@ -5963,7 +6006,12 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetCompressionSettings(co
 
 	if (Params->HasField(TEXT("curve_compression")))
 	{
-		FString CurveCompPath = Params->GetStringField(TEXT("curve_compression"));
+		FString CurveCompPath;
+		if (!Params->TryGetStringField(TEXT("curve_compression"), CurveCompPath))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'curve_compression' must be a string"));
+		}
 		if (CurveCompPath.IsEmpty())
 		{
 			Seq->CurveCompressionSettings = nullptr;
