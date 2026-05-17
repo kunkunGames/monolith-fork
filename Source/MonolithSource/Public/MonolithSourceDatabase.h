@@ -134,6 +134,8 @@ public:
 	TSharedPtr<FJsonObject> RepairCrgCache(bool bExecute);
 	/** Cached symbol risk row, or nullptr when the derived cache is absent/stale. */
 	TSharedPtr<FJsonObject> GetCachedRiskForSymbol(int64 SymbolId);
+	/** Advisory dead-symbol candidates. Read-only; never mutates and never reports high confidence. */
+	TSharedPtr<FJsonObject> FindUnused(const FString& Kind, int32 Limit, const FString& MinConfidence);
 	/** Top source review hotspots from CRG/native fan-in, fan-out, risk and LOC signals. */
 	TSharedPtr<FJsonObject> ReviewHotspots(const FString& Kind, int32 Limit, int32 MinLines, bool bIncludeQuestions);
 

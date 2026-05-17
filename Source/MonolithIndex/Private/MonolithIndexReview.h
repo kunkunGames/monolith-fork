@@ -57,6 +57,13 @@ public:
 		int32 Limit,
 		const FString& MinTier);
 
+	/** Advisory orphan-asset candidates. Read-only; never mutates and never reports high confidence. */
+	static TSharedPtr<FJsonObject> FindUnused(
+		FMonolithIndexDatabase& Db,
+		const FString& Kind,
+		int32 Limit,
+		const FString& MinConfidence);
+
 	/** Rank global project review hotspots by fan-in, fan-out, risk, graph size, or all. */
 	static TSharedPtr<FJsonObject> ReviewHotspots(
 		FMonolithIndexDatabase& Db,

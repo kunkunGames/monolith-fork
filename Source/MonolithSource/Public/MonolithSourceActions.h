@@ -5,10 +5,7 @@
 
 class FMonolithSourceDatabase;
 
-/**
- * 9 engine source intelligence actions + 1 reindex trigger.
- * Ports the Python unreal-source-mcp server tools to native C++.
- */
+/** Registers native source namespace actions. */
 class FMonolithSourceActions
 {
 public:
@@ -34,6 +31,7 @@ private:
 	static FMonolithActionResult HandleRepairFts(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRepairCrgCache(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRiskScore(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleFindUnused(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleReviewHotspots(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleReviewContext(const TSharedPtr<FJsonObject>& Params);
 

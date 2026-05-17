@@ -154,6 +154,15 @@ void FMonolithSourceActions::RegisterAll()
 			.Optional(TEXT("min_tier"), TEXT("string"), TEXT("low|medium|high filter"), TEXT("low"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("source"), TEXT("find_unused"),
+		TEXT("Find advisory dead-symbol candidates with confidence and reasons; read-only"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleFindUnused),
+		FParamSchemaBuilder()
+			.Optional(TEXT("kind"), TEXT("string"), TEXT("function|class|struct|all"), TEXT("all"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max candidates"), TEXT("100"))
+			.Optional(TEXT("min_confidence"), TEXT("string"), TEXT("low|medium|high filter"), TEXT("low"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("source"), TEXT("review_hotspots"),
 		TEXT("Rank global source review hotspots by fan-in, fan-out, risk, LOC size, or all signals"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleReviewHotspots),
@@ -290,6 +299,19 @@ FMonolithActionResult FMonolithSourceActions::HandleRiskScore(const TSharedPtr<F
 	const int32 Limit = FMonolithSourceReview::PInt(Params, TEXT("limit"), 10);
 	const FString MinTier = FMonolithSourceReview::PStr(Params, TEXT("min_tier"), TEXT("low"));
 	return FMonolithActionResult::Success(FMonolithSourceReview::RiskScore(*DB, Symbol, Limit, MinTier));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleFindUnused(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	return FMonolithActionResult::Success(DB->FindUnused(
+		FMonolithSourceReview::PStr(Params, TEXT("kind"), TEXT("all")),
+		FMonolithSourceReview::PInt(Params, TEXT("limit"), 100),
+		FMonolithSourceReview::PStr(Params, TEXT("min_confidence"), TEXT("low"))));
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleReviewHotspots(const TSharedPtr<FJsonObject>& Params)

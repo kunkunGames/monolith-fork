@@ -15,7 +15,7 @@ class FMonolithSourceDatabase;
  * FMonolithSourceDatabase query surface (each call self-locks). `include` edges
  * are intentionally excluded (file/path-level, not a symbol edge).
  *
- * health/repair_fts live on FMonolithSourceDatabase itself (private DbLock).
+ * health/repair_fts/find_unused live on FMonolithSourceDatabase itself (private DbLock).
  */
 class FMonolithSourceReview
 {

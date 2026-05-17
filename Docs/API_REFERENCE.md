@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.14.10 · **Last updated:** 2026-05-10
+**Version:** v0.14.10 · **Last updated:** 2026-05-18
 
 **In-tree action total: 1546** active actions across **32 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1570). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1542** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 36.
 
