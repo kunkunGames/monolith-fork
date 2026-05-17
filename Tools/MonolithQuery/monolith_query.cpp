@@ -4223,7 +4223,6 @@ public:
                 warnings.push_back("project index database unavailable. Provide --project-db or run project indexing first.");
 
             for (const auto& symbol : symbols) {
-                if ((int)candidates.size() >= limit * 3) break;
                 for (const auto& candidate : bridge_symbol_asset_candidates(symbol.get("name"), symbol.get("qualified_name"))) {
                     remember_candidate(candidate);
                     if (project_open)
