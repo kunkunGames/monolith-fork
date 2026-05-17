@@ -876,7 +876,6 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(co
 	TArray<FBridgeLinkCandidate> LinkCandidates;
 	TSet<FString> SeenLinks;
 	TArray<FString> CandidateStrings;
-	bool bStoppedAtLimit = false;
 
 	if (!ProjectIndex)
 	{
@@ -921,11 +920,6 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(co
 		const TSharedPtr<FJsonObject> AssetObj = Details.IsValid() ? MakeAssetObjectFromDetails(Details) : MakeAssetObject(AssetPath, AssetName, AssetClass, TEXT(""));
 		for (const FString& Candidate : CandidateStrings)
 		{
-			if (LinkCandidates.Num() >= Limit)
-			{
-				bStoppedAtLimit = true;
-				break;
-			}
 			AddSourceMatchesForCandidate(DB, AssetObj, AssetName, Candidate, Limit, bStandard, LinkCandidates, SeenLinks);
 		}
 	}
@@ -948,19 +942,9 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(co
 
 		for (const FMonolithSourceSymbol& Symbol : Symbols)
 		{
-			if (LinkCandidates.Num() >= Limit)
-			{
-				bStoppedAtLimit = true;
-				break;
-			}
 			CandidateStrings.Append(MonolithSourceBridge::BuildSymbolAssetCandidates(Symbol.Name, Symbol.QualifiedName));
 			for (const FString& Candidate : MonolithSourceBridge::BuildSymbolAssetCandidates(Symbol.Name, Symbol.QualifiedName))
 			{
-				if (LinkCandidates.Num() >= Limit)
-				{
-					bStoppedAtLimit = true;
-					break;
-				}
 				AddAssetMatchesForSymbol(ProjectIndex, Symbol, DB, Candidate, Limit, bStandard, LinkCandidates, SeenLinks);
 			}
 		}
@@ -971,7 +955,7 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(co
 		return A.Score > B.Score;
 	});
 
-	const bool bTruncated = bStoppedAtLimit || LinkCandidates.Num() > Limit;
+	const bool bTruncated = LinkCandidates.Num() > Limit;
 	if (bTruncated)
 	{
 		LinkCandidates.SetNum(Limit);
