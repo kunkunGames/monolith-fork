@@ -122,10 +122,12 @@ useful global "where should I be careful?" view.
 - **RX-8 — DONE (editor + offline).** `source.review_hotspots` /
   `project.review_hotspots` rank capped fan-in/fan-out/risk/large hotspots
   with optional advisory questions and no community/betweenness dependency.
-- **RX-4 — DONE (editor).** `source.snapshot` / `project.snapshot`
+- **RX-4 — DONE (editor), offline parity SPEC'D 2026-05-18.** `source.snapshot` / `project.snapshot`
   store derived CRG projection manifests with explicit `execute=true`;
   `source.diff_snapshots` / `project.diff_snapshots` compare stored/current
-  manifests read-only with capped new/removed node/edge samples.
+  manifests read-only with capped new/removed node/edge samples. The offline
+  CLI must mirror this so closed-editor index drift checks use the same
+  derived `crg_snapshots` contract.
 - **RX-5 — DONE (editor + offline).**
   `source.pre_merge_check` / `project.pre_merge_check` compose `health`,
   `detect_changes`, and optional `find_unused` into an advisory `decision`,
@@ -265,6 +267,11 @@ useful global "where should I be careful?" view.
   Rejected while the owning subsystem is indexing.
 - `diff_snapshots` params: `before` (label/id), `after` (label/id; default =
   current live projection). Read-only.
+- Offline parity mirrors the editor contract in `monolith_query.exe`:
+  `snapshot --execute` is the only new write path and must open the selected
+  DB read/write; dry-run `snapshot` and all `diff_snapshots` calls stay
+  read-only. The action must not rebuild the CRG projection and must not
+  shell out to P4/git.
 - diff output (port of `graph_diff.diff_snapshots`): `new_nodes[]`,
   `removed_nodes[]`, `new_edges[]`, `removed_edges[]`, capped lists +
   `summary{nodes_added,nodes_removed,edges_added,edges_removed,
