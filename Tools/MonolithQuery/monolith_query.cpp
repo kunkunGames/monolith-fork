@@ -2353,8 +2353,12 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
     void diff_snapshots(const Args& args) {
         std::string before = args.opt("before");
         std::string after = args.opt("after");
-        if (before.empty() && !args.positional.empty()) before = args.positional[0];
-        if (after.empty() && args.positional.size() > 1) after = args.positional[1];
+        if (before.empty()) {
+            if (!args.positional.empty()) before = args.positional[0];
+            if (after.empty() && args.positional.size() > 1) after = args.positional[1];
+        } else if (after.empty() && !args.positional.empty()) {
+            after = args.positional[0];
+        }
         print_json(crg_diff_snapshots_json(db, "source", before, after, args.opt_int("limit", 100)));
     }
 };
@@ -3400,8 +3404,12 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
     void diff_snapshots(const Args& args) {
         std::string before = args.opt("before");
         std::string after = args.opt("after");
-        if (before.empty() && !args.positional.empty()) before = args.positional[0];
-        if (after.empty() && args.positional.size() > 1) after = args.positional[1];
+        if (before.empty()) {
+            if (!args.positional.empty()) before = args.positional[0];
+            if (after.empty() && args.positional.size() > 1) after = args.positional[1];
+        } else if (after.empty() && !args.positional.empty()) {
+            after = args.positional[0];
+        }
         print_json(crg_diff_snapshots_json(db, "project", before, after, args.opt_int("limit", 100)));
     }
 };
