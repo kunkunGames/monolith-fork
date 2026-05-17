@@ -482,13 +482,76 @@ bool FMonolithMeshTerrainActions::ParseTerrainSample(const TSharedPtr<FJsonObjec
 	}
 
 	// Scalar fields
-	if (Json->HasField(TEXT("min_z")))  OutSample.MinZ = static_cast<float>(Json->GetNumberField(TEXT("min_z")));
-	if (Json->HasField(TEXT("max_z")))  OutSample.MaxZ = static_cast<float>(Json->GetNumberField(TEXT("max_z")));
-	if (Json->HasField(TEXT("avg_z")))  OutSample.AvgZ = static_cast<float>(Json->GetNumberField(TEXT("avg_z")));
-	if (Json->HasField(TEXT("height_diff")))       OutSample.HeightDiff = static_cast<float>(Json->GetNumberField(TEXT("height_diff")));
-	if (Json->HasField(TEXT("avg_slope_degrees")))  OutSample.AvgSlopeDegrees = static_cast<float>(Json->GetNumberField(TEXT("avg_slope_degrees")));
-	if (Json->HasField(TEXT("roughness")))          OutSample.Roughness = static_cast<float>(Json->GetNumberField(TEXT("roughness")));
-	if (Json->HasField(TEXT("all_hit")))            OutSample.bAllHit = Json->GetBoolField(TEXT("all_hit"));
+	if (Json->HasField(TEXT("min_z")))
+	{
+		double Val;
+		if (!Json->TryGetNumberField(TEXT("min_z"), Val))
+		{
+			OutError = TEXT("Invalid type for parameter 'min_z'. Expected number.");
+			return false;
+		}
+		OutSample.MinZ = static_cast<float>(Val);
+	}
+	if (Json->HasField(TEXT("max_z")))
+	{
+		double Val;
+		if (!Json->TryGetNumberField(TEXT("max_z"), Val))
+		{
+			OutError = TEXT("Invalid type for parameter 'max_z'. Expected number.");
+			return false;
+		}
+		OutSample.MaxZ = static_cast<float>(Val);
+	}
+	if (Json->HasField(TEXT("avg_z")))
+	{
+		double Val;
+		if (!Json->TryGetNumberField(TEXT("avg_z"), Val))
+		{
+			OutError = TEXT("Invalid type for parameter 'avg_z'. Expected number.");
+			return false;
+		}
+		OutSample.AvgZ = static_cast<float>(Val);
+	}
+	if (Json->HasField(TEXT("height_diff")))
+	{
+		double Val;
+		if (!Json->TryGetNumberField(TEXT("height_diff"), Val))
+		{
+			OutError = TEXT("Invalid type for parameter 'height_diff'. Expected number.");
+			return false;
+		}
+		OutSample.HeightDiff = static_cast<float>(Val);
+	}
+	if (Json->HasField(TEXT("avg_slope_degrees")))
+	{
+		double Val;
+		if (!Json->TryGetNumberField(TEXT("avg_slope_degrees"), Val))
+		{
+			OutError = TEXT("Invalid type for parameter 'avg_slope_degrees'. Expected number.");
+			return false;
+		}
+		OutSample.AvgSlopeDegrees = static_cast<float>(Val);
+	}
+	if (Json->HasField(TEXT("roughness")))
+	{
+		double Val;
+		if (!Json->TryGetNumberField(TEXT("roughness"), Val))
+		{
+			OutError = TEXT("Invalid type for parameter 'roughness'. Expected number.");
+			return false;
+		}
+		OutSample.Roughness = static_cast<float>(Val);
+	}
+	if (Json->HasField(TEXT("all_hit")))
+	{
+		bool bVal;
+		if (!Json->TryGetBoolField(TEXT("all_hit"), bVal))
+		{
+			OutError = TEXT("Invalid type for parameter 'all_hit'. Expected boolean.");
+			return false;
+		}
+		OutSample.bAllHit = bVal;
+	}
 
 	// Center
 	MonolithMeshUtils::ParseVector(Json, TEXT("center"), OutSample.Center);

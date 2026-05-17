@@ -5,6 +5,33 @@
 #include "Dom/JsonObject.h"
 #include "MonolithMeshDecalActions.h"
 #include "MonolithMeshProceduralActions.h"
+#include "MonolithMeshTerrainActions.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshTerrainSampleMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.TerrainSampleRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardMeshTerrainSampleMalformedParamsTest::RunTest(const FString& Parameters)
+{
+    TSharedPtr<FJsonObject> Json = MakeShared<FJsonObject>();
+
+    // Setup valid minimal samples array to pass first validation
+    TArray<TSharedPtr<FJsonValue>> Row;
+    Row.Add(MakeShared<FJsonValueNumber>(0.0));
+    TArray<TSharedPtr<FJsonValue>> Samples;
+    Samples.Add(MakeShared<FJsonValueArray>(Row));
+    Json->SetArrayField(TEXT("samples"), Samples);
+
+    // Add malformed min_z (string instead of number)
+    Json->SetStringField(TEXT("min_z"), TEXT("zero"));
+
+    FTerrainSample OutSample;
+    FString OutError;
+    bool bResult = FMonolithMeshTerrainActions::ParseTerrainSample(Json, OutSample, OutError);
+
+    TestFalse(TEXT("ParseTerrainSample rejects malformed min_z parameter"), bResult);
+    TestTrue(TEXT("ParseTerrainSample reports the validation error"), OutError.Contains(TEXT("min_z")));
+
+    return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshInspectionMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.InspectionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
