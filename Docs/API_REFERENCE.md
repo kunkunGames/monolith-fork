@@ -2,7 +2,7 @@
 
 **Version:** v0.14.10 · **Last updated:** 2026-05-18
 
-**In-tree action total: 1546** active actions across **32 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1570). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1542** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 36.
+**In-tree action total: 1548** active actions across **32 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1572). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1544** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 36.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
@@ -23,8 +23,8 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
 | [editor](#editor) | 36 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, selection inspection, PIE/console control |
 | [config](#config) | 6 | INI config inspection and search |
-| [project](#project) | 15 | Project-wide asset index (SQLite + FTS5) |
-| [source](#source) | 19 | Unreal Engine C++ source code navigation |
+| [project](#project) | 16 | Project-wide asset index (SQLite + FTS5) |
+| [source](#source) | 20 | Unreal Engine C++ source code navigation |
 | [mesh](#mesh) | 244 (+24 gated) | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental — +24 town gen registers only with `bEnableProceduralTownGen=true`) |
 | [ui](#ui) | 121 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
@@ -32,7 +32,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [ai](#ai) | 221 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD and document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
-| **In-tree subtotal** | **1544** | (default-active; +24 experimental town gen → 1568 when registered) |
+| **In-tree subtotal** | **1546** | (default-active; +24 experimental town gen → 1570 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -448,7 +448,7 @@ List all config files with their hierarchy level.
 
 ## project
 
-Project-wide asset index backed by SQLite + FTS5. **15 actions.**
+Project-wide asset index backed by SQLite + FTS5. **16 actions.**
 
 CRG-inspired navigation/review (additive, over the existing `dependencies` graph plus rebuildable derived `crg_*` projection/cache tables):
 
@@ -459,6 +459,7 @@ CRG-inspired navigation/review (additive, over the existing `dependencies` graph
 | `project.repair_fts` | `target`=all\|assets\|nodes, `execute`=false | Rebuild `fts_assets`/`fts_nodes`. `execute=true` is the sole write gate; refused while indexing |
 | `project.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `assets` and `dependencies`. Dry-run unless `execute=true`; refused while indexing |
 | `project.risk_score` | `asset_path`/`seed`, `limit`=20, `min_tier`=low | `{score,tier,reasons[],raw_counts,cache}` from `crg_node_metrics` when available; query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
+| `project.detect_changes` | `changed_paths` or `paths`, `max_results`=200, `detail_level`=minimal | Changed `.uasset`/`.umap` path/name mapping to indexed assets, risk, depth-1 dependency impact, and review priorities; no P4/git shell-out |
 | `project.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory orphan-asset candidates with `confidence` + `reasons[]`; excludes World/Level/PrimaryAssetLabel roots and never mutates |
 | `project.review_hotspots` | `kind`=all, `limit`=50, `min_lines`=100, `include_questions`=true | Global review queue ranked by fan-in/fan-out/risk/large graph signals with optional advisory questions |
 | `project.review_context` | `asset_path`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`; `minimal` omits full details |
@@ -517,7 +518,7 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 
 ## source
 
-Unreal Engine C++ source code navigation. 1M+ symbols indexed. **19 actions.**
+Unreal Engine C++ source code navigation. 1M+ symbols indexed. **20 actions.**
 
 CRG-inspired navigation/review (additive, over the existing `"references"` + `inheritance` graph plus rebuildable derived `crg_*` projection/cache tables):
 
@@ -528,6 +529,7 @@ CRG-inspired navigation/review (additive, over the existing `"references"` + `in
 | `source.repair_fts` | `target`=all\|symbols\|source, `execute`=false | Rebuild `symbols_fts`. `target=source` → reindex guidance (plain fts5). Refused while indexing |
 | `source.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `symbols`, `"references"`, and `inheritance`. Dry-run unless `execute=true`; refused while indexing |
 | `source.risk_score` | `symbol`*, `limit`=10, `min_tier`=low | `{score,tier,reasons[],raw_counts,cache}` from `crg_node_metrics` when available; query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
+| `source.detect_changes` | `changed_paths` or `paths`, `max_results`=200, `detail_level`=minimal | Changed source path suffix mapping to symbols, risk, depth-1 caller impact, heuristic test gaps, and review priorities; no P4/git shell-out |
 | `source.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory function/class/struct dead-symbol candidates with `confidence` + `reasons[]`; excludes UE reflection/automation/entry markers and never mutates |
 | `source.review_hotspots` | `kind`=all, `limit`=50, `min_lines`=100, `include_questions`=true | Global review queue ranked by fan-in/fan-out/risk/large symbol signals with optional advisory questions |
 | `source.review_context` | `symbol`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`. Distinct from single-item `context.build_attachment` |
@@ -970,9 +972,9 @@ Before writing any client code:
 
 When the editor is closed but you still need to query Monolith:
 
-- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool. It mirrors the live `project` / `source` query actions, including CRG navigation/review (`impact_radius`, `health`, `repair_fts`, `risk_score`, `find_unused`, `review_context`, `review_hotspots`) plus offline-only `detect_changes`. It stays read-only by default; `repair_fts` writes only with explicit `--execute`.
+- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool. It mirrors the live `project` / `source` query actions, including CRG navigation/review (`impact_radius`, `health`, `repair_fts`, `risk_score`, `detect_changes`, `find_unused`, `review_context`, `review_hotspots`). It stays read-only by default; `repair_fts` writes only with explicit `--execute`.
   - **RX-2/RX-7 (CRG cache read parity + scoring v3):** offline `risk_score` now reads `crg_node_metrics` when the projection cache is present (rebuilt caches report `scoring_version=3`, per-item `cache.status=hit`) and falls back to query-time scoring v3 otherwise, matching the editor. Offline `health` emits the same `crg:*` checks the editor `ComputeHealth`/`Health` produce (table/index/parity/orphan/cache_version/scoring_version); a missing cache is `info`, never a regression. Offline never writes the cache (`repair_crg_cache` stays editor-only).
-  - **RX-1 (`detect_changes`):** `monolith_query <source|project> detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]`. Maps a Perforce changelist / changed paths to indexed symbols (source: `files.path` suffix match) or assets (project: `package_path`/`asset_name`), reuses the RX-2 cached risk (or query-time fallback), adds a bounded depth-1 impact set, advisory heuristic test-gaps (source only; EngineSource has no `TESTED_BY` edge), and risk-ordered `review_priorities`. `changed_paths` is the VCS-agnostic primary input; no P4/git shell-out.
+  - **RX-1 (`detect_changes`):** live `source.detect_changes` / `project.detect_changes` and offline `monolith_query <source|project> detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]`. Maps a Perforce changelist / changed paths to indexed symbols (source: `files.path` suffix match) or assets (project: `package_path`/`asset_name`), reuses the RX-2 cached risk (or query-time fallback), adds a bounded depth-1 impact set, advisory heuristic test-gaps (source only; EngineSource has no `TESTED_BY` edge), and risk-ordered `review_priorities`. `changed_paths` is the VCS-agnostic primary input; no P4/git shell-out.
   - **RX-3 (`find_unused`):** live `source.find_unused` / `project.find_unused` and offline `monolith_query <source|project> find_unused [--kind=...] [--limit=N] [--min-confidence=low|medium|high]`. Advisory dead-symbol (source: 0 inbound `"references"`, not an inheritance parent, `is_ue_macro=0`, no UFUNCTION/automation/entry markers) / orphan-asset (project: never a `dependencies.target_asset_id`, not a World/Level/PrimaryAssetLabel root) detection. Each item has `confidence` + `reasons[]`; recall-first (default `min-confidence=low`) since UE reflection/delegate/Blueprint/soft-path edges are not in the graph — never reports `high`, never mutates.
   - **RX-8 (`review_hotspots`):** `monolith_query <source|project> review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]`. Read-only global triage over cached/native fan, risk, and size signals; outputs capped `hotspots[]`, optional `questions[]`, and `next_actions[]`.
 - **`python Plugins/Monolith/Saved/monolith_offline.py`** — same actions, stdlib-only.
