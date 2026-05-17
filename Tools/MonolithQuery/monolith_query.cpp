@@ -538,6 +538,7 @@ static json crg_repair_counts(Database& db, const std::string& domain) {
 static std::vector<std::pair<std::string, std::string>> crg_repair_sql(const std::string& domain) {
     if (domain == "source") {
         return {
+            {"clear orphan metrics", "DELETE FROM crg_node_metrics WHERE node_id NOT IN (SELECT id FROM crg_nodes);"},
             {"clear metrics", "DELETE FROM crg_node_metrics WHERE node_id IN (SELECT id FROM crg_nodes WHERE domain = 'source');"},
             {"clear edges", "DELETE FROM crg_edges WHERE domain = 'source';"},
             {"clear nodes", "DELETE FROM crg_nodes WHERE domain = 'source';"},
@@ -661,6 +662,7 @@ FROM scored s;
     }
 
     return {
+        {"clear orphan metrics", "DELETE FROM crg_node_metrics WHERE node_id NOT IN (SELECT id FROM crg_nodes);"},
         {"clear metrics", "DELETE FROM crg_node_metrics WHERE node_id IN (SELECT id FROM crg_nodes WHERE domain = 'project');"},
         {"clear edges", "DELETE FROM crg_edges WHERE domain = 'project';"},
         {"clear nodes", "DELETE FROM crg_nodes WHERE domain = 'project';"},

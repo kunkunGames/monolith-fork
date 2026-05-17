@@ -72,7 +72,7 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 **Derived CRG Projection Cache:** `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta`, `crg_snapshots`.
 These tables are rebuildable projections over `symbols`, `"references"`, and
 `inheritance`, not source-of-truth tables. `source.repair_crg_cache execute=true`
-recreates the projection, and `source.risk_score` reads `crg_node_metrics` first
+purges stale/orphan metrics, recreates the projection, and `source.risk_score` reads `crg_node_metrics` first
 before falling back to query-time scoring. Rebuilt projection metrics use
 `crg_meta.scoring_version=3` for the UE-domain sensitivity factor. `crg_snapshots`
 is a derived review aid created only by `source.snapshot execute=true`; it stores
