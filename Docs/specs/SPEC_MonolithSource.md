@@ -10,17 +10,17 @@
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, SQLiteCore, EditorSubsystem, UnrealEd, Json, JsonUtilities, Slate, SlateCore
 
-**Note:** Module structure was flattened — the vestigial outer stub has been removed. MonolithSource registers 23 actions. The engine source indexer is a native C++ implementation (`UMonolithSourceSubsystem` builds `EngineSource.db` in-process). The legacy Python tree-sitter indexer (`Scripts/source_indexer/`) is no longer used and is not a schema authority — `MonolithSourceSchema.h` is the sole source-of-truth.
+**Note:** Module structure was flattened — the vestigial outer stub has been removed. MonolithSource registers 24 actions. The engine source indexer is a native C++ implementation (`UMonolithSourceSubsystem` builds `EngineSource.db` in-process). The legacy Python tree-sitter indexer (`Scripts/source_indexer/`) is no longer used and is not a schema authority — `MonolithSourceSchema.h` is the sole source-of-truth.
 
 ### Classes
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithSourceModule` | Registers 23 actions total: 19 `source` actions and 4 `context` actions |
+| `FMonolithSourceModule` | Registers 24 actions total: 20 `source` actions and 4 `context` actions |
 | `UMonolithSourceSubsystem` | UEditorSubsystem. Owns engine source DB. Runs native C++ source indexer. Exposes `TriggerReindex()` (full engine re-index) and `TriggerProjectReindex()` (project C++ only, incremental). **F17 (2026-04-26):** Auto-binds `FCoreUObjectDelegates::ReloadCompleteDelegate` at `Initialize` to kick incremental project reindex on Live Coding / hot-reload completion (5s cooldown + `bIsIndexing` re-entrancy guard + bootstrap-DB-missing skip). Unbinds at `Deinitialize`. |
-| `FMonolithSourceDatabase` | Read/write SQLite wrapper (`Open`, `OpenForWriting`, schema reset, transactions, inserts). Thread-safe via FCriticalSection. FTS queries with prefix matching. Owns read/write `health`, `repair_fts`, `repair_crg_cache`, cached risk reads, and `review_hotspots` / `find_unused` SQL that needs the private lock/raw DB |
-| `FMonolithSourceActions` | 19 `source` handlers. Helpers: IsForwardDeclaration (regex), ExtractMembers (smart class outline) |
-| `FMonolithSourceReview` | CRG-inspired navigation/review over the existing `"references"` + `inheritance` graph: bounded BFS impact radius, cached/query-time risk scoring, review-hotspot forwarding, and review-context packaging. Uses only the public DB query surface. `health`/`repair_fts`/`repair_crg_cache`/`review_hotspots`/`find_unused` live on `FMonolithSourceDatabase` (private `DbLock`) |
+| `FMonolithSourceDatabase` | Read/write SQLite wrapper (`Open`, `OpenForWriting`, schema reset, transactions, inserts). Thread-safe via FCriticalSection. FTS queries with prefix matching. Owns read/write `health`, `repair_fts`, `repair_crg_cache`, cached risk reads, and `detect_changes` / `review_hotspots` / `find_unused` SQL that needs the private lock/raw DB |
+| `FMonolithSourceActions` | 20 `source` handlers. Helpers: IsForwardDeclaration (regex), ExtractMembers (smart class outline) |
+| `FMonolithSourceReview` | CRG-inspired navigation/review over the existing `"references"` + `inheritance` graph: bounded BFS impact radius, cached/query-time risk scoring, review-hotspot forwarding, and review-context packaging. Uses only the public DB query surface. `health`/`repair_fts`/`repair_crg_cache`/`detect_changes`/`review_hotspots`/`find_unused` live on `FMonolithSourceDatabase` (private `DbLock`) |
 | `FMonolithSourceContextActions` | 4 `context` handlers for index readiness, indexing dispatch, context item search, and attachment materialization |
 | ~~`UMonolithQueryCommandlet`~~ | **Removed.** Replaced by standalone `monolith_query.exe` (see Section 5.1). The exe has no UE runtime dependency and starts instantly |
 
@@ -34,7 +34,7 @@
 
 After F17, agents do not need to invoke any source-reindex action manually in the common dev loop — just run UBT or Live Coding and `source_query` reflects the new symbols within ~1 second.
 
-### Actions (23 — namespaces: "source", "context")
+### Actions (24 — namespaces: "source", "context")
 
 | Action | Params | Description |
 |--------|--------|-------------|
@@ -58,6 +58,7 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 | `repair_fts` | `target` (all\|symbols\|source), `execute` (false) | Rebuilds `symbols_fts` (external-content). `target=source` always degrades to reindex guidance (plain fts5). Refused while `IsIndexing()` |
 | `repair_crg_cache` | `scope` (all), `execute` (false) | Rebuild derived `crg_nodes`/`crg_edges`/`crg_node_metrics`/`crg_meta` from `symbols`, `"references"`, and `inheritance`. Dry-run unless `execute=true`; refused while `IsIndexing()` |
 | `risk_score` | `symbol` (required), `limit` (10), `min_tier` (low) | Cached risk `{score,tier,reasons[],raw_counts,cache}` from CRG projection when present; safe query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
+| `detect_changes` | `changed_paths` or `paths`, `max_results` (200), `detail_level` (minimal) | VCS-agnostic changed source path mapping: `files.path` suffix -> symbols -> risk + depth-1 caller impact + heuristic test gaps + review priorities. Path suffixes treat SQL `LIKE` wildcards (`_`, `%`) as literal filename characters. Never shells out to P4/git |
 | `find_unused` | `kind` (all), `limit` (100), `min_confidence` (low) | Advisory dead-symbol candidates for function/class/struct symbols with `confidence` + `reasons[]`; never reports `high`, never mutates, and excludes UE reflection/automation/entry markers |
 | `review_hotspots` | `kind` (all), `limit` (50), `min_lines` (100), `include_questions` (true) | Global review queue over fan-in/fan-out/risk/large symbol signals with optional advisory questions |
 | `review_context` | `symbol` (required), `direction` (both), `max_depth` (2), `max_results` (200), `detail_level` (minimal) | Token-efficient package: seed + impact + risk reasons + next actions. Distinct from single-item `context.build_attachment` |
@@ -73,9 +74,9 @@ before falling back to query-time scoring. Rebuilt projection metrics use
 
 ### CRG-Inspired Navigation + Projection Cache — IMPLEMENTED (P0, 2026-05-16; cache 2026-05-17)
 
-The CRG-inspired review/navigation surface is **implemented** as 8 additive `source`
+The CRG-inspired review/navigation surface is **implemented** as 9 additive `source`
 actions (`impact_radius`, `health`, `repair_fts`, `repair_crg_cache`, `risk_score`,
-`find_unused`, `review_hotspots`, `review_context`) over the **existing** `"references"` + `inheritance` graph. The CRG
+`detect_changes`, `find_unused`, `review_hotspots`, `review_context`) over the **existing** `"references"` + `inheritance` graph. The CRG
 `nodes`/`edges` idea is adopted only as a derived SQLite projection/cache (`crg_*`
 tables), while `symbols`, `"references"`, and `inheritance` remain authoritative.
 There is no Python runtime or generic parser replacement (monolith-native:
@@ -83,7 +84,7 @@ source-symbol, lexical/local).
 `impact_radius`/`risk_score`/`review_hotspots`/`review_context` live in
 `FMonolithSourceReview` (`Private/MonolithSourceReview.{h,cpp}`) using only
 public DB queries or DB-owned helpers; `ComputeHealth`/`RepairFts`/
-`RepairCrgCache`/`ReviewHotspots`/`FindUnused` are methods on `FMonolithSourceDatabase`
+`RepairCrgCache`/`DetectChanges`/`ReviewHotspots`/`FindUnused` are methods on `FMonolithSourceDatabase`
 (private `DbLock`).
 Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md`.
 Tests: `Monolith.IndexGuard.Source.*` in `Private/Tests/MonolithSourceQueryTests.cpp`,
@@ -99,6 +100,7 @@ Invariants honored by the implementation:
 - `"references"` is a quoted SQLite reserved word in schema and every query; new traversal/fixtures must quote it. Traversal: calls/type refs `from_symbol_id → to_symbol_id` (`GetReferencesTo`/`GetReferencesFrom`), inheritance `child_id → parent_id`. `call` and `type` edge filters are exact; `includes` is file/path-level (no `included_file_id`) and returns a P0 warning until path→`files.path` resolution exists.
 - `FMonolithSourceDatabase` is a **read/write** wrapper with a private `DbLock`; `source.repair_fts` and `source.repair_crg_cache` writes must run inside DB/helper methods that can take the private lock, gated on `UMonolithSourceSubsystem::IsIndexing()`.
 - CRG projection rows are disposable: `crg_nodes` maps one row per symbol, `crg_edges` maps one row per valid reference/inheritance edge, and `crg_node_metrics` stores `risk_score`, tier, reasons JSON, raw count JSON, and `scoring_version`. Missing projection rows are cache misses, not action failures; current scoring is v3 and includes a bounded UE-domain sensitivity signal.
+- `source.detect_changes` is read-only changed-path review triage over `files`, `symbols`, quoted `"references"`, and the cached/query-time risk path. It escapes SQL `LIKE` wildcards in changed path suffixes so `_` and `%` match literal source filenames rather than broad patterns. It exposes `input`, `limits`, `risk_score`, `scoring_version`, minimal count fields, standard-mode `changed_entities[]`, `impact`, heuristic `test_gaps[]`, `review_priorities`, `truncated`, and `next_actions`; it is VCS-agnostic and must not shell out to P4/git.
 - `source.review_hotspots` is read-only global triage over cached/native fan, risk, and LOC signals. It exposes `input`, `limits`, `hotspots[]`, optional `questions[]`, `truncated`, and `next_actions`, and intentionally avoids community/betweenness semantics.
 - `source.find_unused` is read-only advisory dead-symbol discovery over `symbols`, quoted `"references"`, and `inheritance`. It exposes `input`, `limits`, capped `items[]`, `confidence`, `reasons[]`, `truncated`, and `next_actions`; it must be recall-first (`min_confidence=low`) by default because UE reflection, delegates, Blueprint references, and soft-path references are outside the graph.
 - `source.review_context` is a dedicated CRG-style review package distinct from single-item `context.build_attachment`; it exposes `input`, `limits`, `risk`, `top_risks[]`, `impact`, compact `context[]`, `truncated`, and `next_actions`.

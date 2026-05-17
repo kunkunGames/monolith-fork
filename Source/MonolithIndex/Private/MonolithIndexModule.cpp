@@ -14,6 +14,7 @@
 #include "Actions/ProjectRepairFtsAction.h"
 #include "Actions/ProjectRepairCrgCacheAction.h"
 #include "Actions/ProjectRiskScoreAction.h"
+#include "Actions/ProjectDetectChangesAction.h"
 #include "Actions/ProjectFindUnusedAction.h"
 #include "Actions/ProjectReviewHotspotsAction.h"
 #include "Actions/ProjectReviewContextAction.h"
@@ -22,7 +23,7 @@
 
 void FMonolithIndexModule::StartupModule()
 {
-	UE_LOG(LogMonolithIndex, Verbose, TEXT("Monolith -- Index module loaded (15 actions, SQLite+FTS5)"));
+	UE_LOG(LogMonolithIndex, Verbose, TEXT("Monolith -- Index module loaded (16 actions, SQLite+FTS5)"));
 
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
@@ -88,6 +89,11 @@ void FMonolithIndexModule::StartupModule()
 		FProjectRiskScoreAction::GetDescription(),
 		FMonolithActionHandler::CreateStatic(&FProjectRiskScoreAction::Execute),
 		FProjectRiskScoreAction::GetSchema());
+
+	Registry.RegisterAction(TEXT("project"), FProjectDetectChangesAction::GetName(),
+		FProjectDetectChangesAction::GetDescription(),
+		FMonolithActionHandler::CreateStatic(&FProjectDetectChangesAction::Execute),
+		FProjectDetectChangesAction::GetSchema());
 
 	Registry.RegisterAction(TEXT("project"), FProjectFindUnusedAction::GetName(),
 		FProjectFindUnusedAction::GetDescription(),

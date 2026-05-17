@@ -57,6 +57,13 @@ public:
 		int32 Limit,
 		const FString& MinTier);
 
+	/** Changed asset path triage: changed_entities, direct referencer impact, and risk-prioritized review queue. */
+	static TSharedPtr<FJsonObject> DetectChanges(
+		FMonolithIndexDatabase& Db,
+		const TArray<FString>& ChangedPaths,
+		int32 MaxResults,
+		const FString& DetailLevel);
+
 	/** Advisory orphan-asset candidates. Read-only; never mutates and never reports high confidence. */
 	static TSharedPtr<FJsonObject> FindUnused(
 		FMonolithIndexDatabase& Db,
