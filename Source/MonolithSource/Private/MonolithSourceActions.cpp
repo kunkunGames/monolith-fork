@@ -239,6 +239,23 @@ void FMonolithSourceActions::RegisterAll()
 			.Optional(TEXT("include_unused"), TEXT("bool"), TEXT("Include advisory find_unused check"), TEXT("true"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("source"), TEXT("snapshot"),
+		TEXT("Capture current EngineSource CRG projection manifest. Dry-run unless execute=true"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleSnapshot),
+		FParamSchemaBuilder()
+			.Optional(TEXT("label"), TEXT("string"), TEXT("Snapshot label; defaults to source-<unix_time>"))
+			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Store the snapshot (sole write gate). Default dry-run"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("diff_snapshots"),
+		TEXT("Compare stored/current EngineSource CRG projection snapshots"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleDiffSnapshots),
+		FParamSchemaBuilder()
+			.Required(TEXT("before"), TEXT("string"), TEXT("Snapshot label/id to compare from"))
+			.Optional(TEXT("after"), TEXT("string"), TEXT("Snapshot label/id to compare to; defaults to current projection"), TEXT("current"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max new/removed node or edge samples per array"), TEXT("100"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("source"), TEXT("review_hotspots"),
 		TEXT("Rank global source review hotspots by fan-in, fan-out, risk, LOC size, or all signals"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleReviewHotspots),
@@ -416,6 +433,43 @@ FMonolithActionResult FMonolithSourceActions::HandlePreMergeCheck(const TSharedP
 		FMonolithSourceReview::PInt(Params, TEXT("unused_limit"), 20),
 		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal")),
 		FMonolithSourceReview::PBool(Params, TEXT("include_unused"), true)));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleSnapshot(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	const bool bExecute = FMonolithSourceReview::PBool(Params, TEXT("execute"), false);
+	if (bExecute && GEditor)
+	{
+		UMonolithSourceSubsystem* Sub = Cast<UMonolithSourceSubsystem>(
+			GEditor->GetEditorSubsystemBase(UMonolithSourceSubsystem::StaticClass()));
+		if (Sub && Sub->IsIndexing())
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Source indexing is in progress; retry snapshot(execute=true) once it completes"), -32000)
+				.WithHint(TEXT("Use source.snapshot (dry-run) meanwhile, or source.health"));
+		}
+	}
+	return FMonolithActionResult::Success(DB->Snapshot(
+		FMonolithSourceReview::PStr(Params, TEXT("label")),
+		bExecute));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleDiffSnapshots(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	return FMonolithActionResult::Success(DB->DiffSnapshots(
+		FMonolithSourceReview::PStr(Params, TEXT("before")),
+		FMonolithSourceReview::PStr(Params, TEXT("after"), TEXT("current")),
+		FMonolithSourceReview::PInt(Params, TEXT("limit"), 100)));
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleReviewHotspots(const TSharedPtr<FJsonObject>& Params)

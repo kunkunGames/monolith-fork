@@ -463,7 +463,7 @@ CRG-inspired navigation/review (additive, over the existing `dependencies` graph
 | `project.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory orphan-asset candidates with `confidence` + `reasons[]`; excludes World/Level/PrimaryAssetLabel roots and never mutates |
 | `project.pre_merge_check` | `changed_paths` or `paths`, `max_results`=200, `unused_limit`=20, `detail_level`=minimal | Advisory pre-merge gate composed from health, detect_changes, and optional find_unused; returns `decision`, `checks[]`, `findings[]`, and next actions; no P4/git shell-out |
 | `project.snapshot` | `label`, `execute`=false | Dry-run by default; `execute=true` stores current CRG projection node/edge manifest in derived `crg_snapshots` |
-| `project.diff_snapshots` | `before`*, `after`=current, `limit`=100 | Read-only diff between stored/current CRG manifests; returns summary counts and capped new/removed node/edge samples |
+| `project.diff_snapshots` | `before`*, `after`=current, `limit`=100 | Read-only diff between stored/current CRG manifests; returns `summary_counts` and capped new/removed node/edge samples |
 | `project.review_hotspots` | `kind`=all, `limit`=50, `min_lines`=100, `include_questions`=true | Global review queue ranked by fan-in/fan-out/risk/large graph signals with optional advisory questions |
 | `project.review_context` | `asset_path`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`; `minimal` omits full details |
 
@@ -536,7 +536,7 @@ CRG-inspired navigation/review (additive, over the existing `"references"` + `in
 | `source.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory function/class/struct dead-symbol candidates with `confidence` + `reasons[]`; excludes UE reflection/automation/entry markers and never mutates |
 | `source.pre_merge_check` | `changed_paths` or `paths`, `max_results`=200, `unused_limit`=20, `detail_level`=minimal | Advisory pre-merge gate composed from health, detect_changes, and optional find_unused; returns `decision`, `checks[]`, `findings[]`, and next actions; no P4/git shell-out |
 | `source.snapshot` | `label`, `execute`=false | Dry-run by default; `execute=true` stores current CRG projection node/edge manifest in derived `crg_snapshots` |
-| `source.diff_snapshots` | `before`*, `after`=current, `limit`=100 | Read-only diff between stored/current CRG manifests; returns summary counts and capped new/removed node/edge samples |
+| `source.diff_snapshots` | `before`*, `after`=current, `limit`=100 | Read-only diff between stored/current CRG manifests; returns `summary_counts` and capped new/removed node/edge samples |
 | `source.review_hotspots` | `kind`=all, `limit`=50, `min_lines`=100, `include_questions`=true | Global review queue ranked by fan-in/fan-out/risk/large symbol signals with optional advisory questions |
 | `source.review_context` | `symbol`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`. Distinct from single-item `context.build_attachment` |
 

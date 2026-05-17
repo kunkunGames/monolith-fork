@@ -6,6 +6,7 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include <initializer_list>
 
 // ============================================================================
@@ -238,6 +239,227 @@ namespace
 			Object->TryGetNumberField(TEXT("score"), Score);
 		}
 		return Score;
+	}
+
+	TSharedPtr<FJsonObject> ParseJsonObject(const FString& Json);
+
+	struct FSnapshotManifest
+	{
+		TSet<FString> Nodes;
+		TSet<FString> Edges;
+	};
+
+	struct FSnapshotRecord
+	{
+		int64 Id = 0;
+		FString Label;
+		FSnapshotManifest Manifest;
+	};
+
+	FJsonArr SetToJsonArray(const TSet<FString>& Values)
+	{
+		TArray<FString> Sorted = Values.Array();
+		Sorted.Sort();
+		FJsonArr Arr;
+		for (const FString& Value : Sorted)
+		{
+			Arr.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Arr;
+	}
+
+	bool JsonArrayToSet(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field, TSet<FString>& Out)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (!Object.IsValid() || !Object->TryGetArrayField(Field, Arr) || !Arr)
+		{
+			return false;
+		}
+		for (const TSharedPtr<FJsonValue>& Value : *Arr)
+		{
+			if (Value.IsValid())
+			{
+				Out.Add(Value->AsString());
+			}
+		}
+		return true;
+	}
+
+	FString SerializeManifest(const FSnapshotManifest& Manifest)
+	{
+		TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
+		Object->SetArrayField(TEXT("nodes"), SetToJsonArray(Manifest.Nodes));
+		Object->SetArrayField(TEXT("edges"), SetToJsonArray(Manifest.Edges));
+		FString Out;
+		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Out);
+		FJsonSerializer::Serialize(Object.ToSharedRef(), Writer);
+		return Out;
+	}
+
+	bool ParseManifest(const FString& Json, FSnapshotManifest& Out)
+	{
+		TSharedPtr<FJsonObject> Object = ParseJsonObject(Json);
+		if (!Object.IsValid())
+		{
+			return false;
+		}
+		return JsonArrayToSet(Object, TEXT("nodes"), Out.Nodes)
+			&& JsonArrayToSet(Object, TEXT("edges"), Out.Edges);
+	}
+
+	bool EnsureSnapshotTable(FSQLiteDatabase& Raw)
+	{
+		return Raw.Execute(TEXT(
+			"CREATE TABLE IF NOT EXISTS crg_snapshots ("
+			"id INTEGER PRIMARY KEY AUTOINCREMENT,"
+			"label TEXT NOT NULL,"
+			"domain TEXT NOT NULL,"
+			"captured_at INTEGER NOT NULL,"
+			"node_count INTEGER NOT NULL,"
+			"edge_count INTEGER NOT NULL,"
+			"manifest_json TEXT NOT NULL,"
+			"UNIQUE(domain,label)"
+			");"));
+	}
+
+	bool LoadCurrentManifest(FSQLiteDatabase& Raw, const TCHAR* Domain, FSnapshotManifest& Out)
+	{
+		FSQLitePreparedStatement NodeStmt;
+		if (!NodeStmt.Create(Raw, TEXT(
+			"SELECT stable_key FROM crg_nodes WHERE domain = ? ORDER BY stable_key;")))
+		{
+			return false;
+		}
+		NodeStmt.SetBindingValueByIndex(1, FString(Domain));
+		while (NodeStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			FString StableKey;
+			NodeStmt.GetColumnValueByIndex(0, StableKey);
+			Out.Nodes.Add(StableKey);
+		}
+
+		FSQLitePreparedStatement EdgeStmt;
+		if (!EdgeStmt.Create(Raw, TEXT(
+			"SELECT sn.stable_key,tn.stable_key,e.edge_kind,COALESCE(e.edge_subkind,'') "
+			"FROM crg_edges e "
+			"JOIN crg_nodes sn ON sn.id = e.source_node_id "
+			"JOIN crg_nodes tn ON tn.id = e.target_node_id "
+			"WHERE e.domain = ? ORDER BY sn.stable_key,tn.stable_key,e.edge_kind,e.edge_subkind;")))
+		{
+			return false;
+		}
+		EdgeStmt.SetBindingValueByIndex(1, FString(Domain));
+		while (EdgeStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			FString Source, Target, Kind, Subkind;
+			EdgeStmt.GetColumnValueByIndex(0, Source);
+			EdgeStmt.GetColumnValueByIndex(1, Target);
+			EdgeStmt.GetColumnValueByIndex(2, Kind);
+			EdgeStmt.GetColumnValueByIndex(3, Subkind);
+			Out.Edges.Add(FString::Printf(TEXT("%s|%s|%s|%s"), *Source, *Target, *Kind, *Subkind));
+		}
+		return true;
+	}
+
+	bool LoadSnapshotRecord(FSQLiteDatabase& Raw, const TCHAR* Domain, const FString& Ref, FSnapshotRecord& Out)
+	{
+		if (Ref.IsEmpty() || Ref.Equals(TEXT("current"), ESearchCase::IgnoreCase))
+		{
+			Out.Label = TEXT("current");
+			return LoadCurrentManifest(Raw, Domain, Out.Manifest);
+		}
+
+		const bool bNumeric = Ref.IsNumeric();
+		FSQLitePreparedStatement Stmt;
+		const TCHAR* Sql = bNumeric
+			? TEXT("SELECT id,label,manifest_json FROM crg_snapshots WHERE domain = ? AND id = ? LIMIT 1;")
+			: TEXT("SELECT id,label,manifest_json FROM crg_snapshots WHERE domain = ? AND label = ? LIMIT 1;");
+		if (!Stmt.Create(Raw, Sql))
+		{
+			return false;
+		}
+		Stmt.SetBindingValueByIndex(1, FString(Domain));
+		if (bNumeric)
+		{
+			Stmt.SetBindingValueByIndex(2, static_cast<int64>(FCString::Atoi64(*Ref)));
+		}
+		else
+		{
+			Stmt.SetBindingValueByIndex(2, Ref);
+		}
+		if (Stmt.Step() != ESQLitePreparedStatementStepResult::Row)
+		{
+			return false;
+		}
+
+		FString ManifestJson;
+		Stmt.GetColumnValueByIndex(0, Out.Id);
+		Stmt.GetColumnValueByIndex(1, Out.Label);
+		Stmt.GetColumnValueByIndex(2, ManifestJson);
+		return ParseManifest(ManifestJson, Out.Manifest);
+	}
+
+	FJsonArr TakeStringSamples(const TSet<FString>& Values, int32 Limit, bool& bTruncated)
+	{
+		TArray<FString> Sorted = Values.Array();
+		Sorted.Sort();
+		FJsonArr Arr;
+		for (int32 Index = 0; Index < Sorted.Num(); ++Index)
+		{
+			if (Index >= Limit)
+			{
+				bTruncated = true;
+				break;
+			}
+			Arr.Add(MakeShared<FJsonValueString>(Sorted[Index]));
+		}
+		return Arr;
+	}
+
+	TSharedPtr<FJsonObject> EdgeObject(const FString& Key)
+	{
+		TArray<FString> Parts;
+		Key.ParseIntoArray(Parts, TEXT("|"), false);
+		TSharedPtr<FJsonObject> Edge = MakeShared<FJsonObject>();
+		Edge->SetStringField(TEXT("key"), Key);
+		if (Parts.Num() >= 4)
+		{
+			Edge->SetStringField(TEXT("source"), Parts[0]);
+			Edge->SetStringField(TEXT("target"), Parts[1]);
+			Edge->SetStringField(TEXT("kind"), Parts[2]);
+			Edge->SetStringField(TEXT("subkind"), Parts[3]);
+		}
+		return Edge;
+	}
+
+	FJsonArr TakeEdgeSamples(const TSet<FString>& Values, int32 Limit, bool& bTruncated)
+	{
+		TArray<FString> Sorted = Values.Array();
+		Sorted.Sort();
+		FJsonArr Arr;
+		for (int32 Index = 0; Index < Sorted.Num(); ++Index)
+		{
+			if (Index >= Limit)
+			{
+				bTruncated = true;
+				break;
+			}
+			Arr.Add(MakeShared<FJsonValueObject>(EdgeObject(Sorted[Index])));
+		}
+		return Arr;
+	}
+
+	TSet<FString> SetDifference(const TSet<FString>& Left, const TSet<FString>& Right)
+	{
+		TSet<FString> Out;
+		for (const FString& Value : Left)
+		{
+			if (!Right.Contains(Value))
+			{
+				Out.Add(Value);
+			}
+		}
+		return Out;
 	}
 
 	bool ParseJsonArray(const FString& Json, FJsonArr& Out)
@@ -1755,6 +1977,196 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::PreMergeCheck(
 	{
 		AddNext(Root, { TEXT("project.detect_changes"), TEXT("project.review_context"), TEXT("project.find_unused") });
 	}
+	return Root;
+}
+
+// ============================================================================
+// snapshot / diff_snapshots (derived CRG projection review manifests)
+// ============================================================================
+TSharedPtr<FJsonObject> FMonolithIndexReview::Snapshot(
+	FMonolithIndexDatabase& Db,
+	const FString& Label,
+	bool bExecute)
+{
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	const FString RequestedLabel = Label.TrimStartAndEnd();
+	const FString CleanLabel = RequestedLabel.IsEmpty()
+		? FString::Printf(TEXT("project-%lld"), FDateTime::UtcNow().ToUnixTimestamp())
+		: RequestedLabel;
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("label"), CleanLabel);
+	Input->SetBoolField(TEXT("execute"), bExecute);
+	Root->SetObjectField(TEXT("input"), Input);
+
+	FSQLiteDatabase* Raw = Db.GetRawDatabase();
+	if (!Db.IsOpen() || !Raw)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("ProjectIndex DB is not open"));
+		AddNext(Root, { TEXT("project.health") });
+		return Root;
+	}
+	if (!ObjectExists(Db, TEXT("table"), TEXT("crg_nodes")) || !ObjectExists(Db, TEXT("table"), TEXT("crg_edges")))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("CRG projection tables are missing; run project.repair_crg_cache execute=true first"));
+		AddNext(Root, { TEXT("project.repair_crg_cache"), TEXT("project.health") });
+		return Root;
+	}
+
+	FSnapshotManifest Manifest;
+	if (!LoadCurrentManifest(*Raw, TEXT("project"), Manifest))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("Failed to read current project CRG projection"));
+		AddNext(Root, { TEXT("project.health"), TEXT("project.repair_crg_cache") });
+		return Root;
+	}
+
+	Root->SetNumberField(TEXT("node_count"), Manifest.Nodes.Num());
+	Root->SetNumberField(TEXT("edge_count"), Manifest.Edges.Num());
+	Root->SetBoolField(TEXT("executed"), bExecute);
+	Root->SetBoolField(TEXT("truncated"), false);
+	if (!bExecute)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("ok"));
+		Root->SetStringField(TEXT("summary"), FString::Printf(
+			TEXT("Would capture project CRG snapshot '%s' with %d node(s), %d edge(s)"),
+			*CleanLabel, Manifest.Nodes.Num(), Manifest.Edges.Num()));
+		AddNext(Root, { TEXT("project.snapshot execute=true"), TEXT("project.diff_snapshots") });
+		return Root;
+	}
+
+	if (!EnsureSnapshotTable(*Raw))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("Failed to create crg_snapshots table"));
+		AddNext(Root, { TEXT("project.health") });
+		return Root;
+	}
+
+	FSQLitePreparedStatement Stmt;
+	if (!Stmt.Create(*Raw, TEXT(
+		"INSERT OR REPLACE INTO crg_snapshots(label,domain,captured_at,node_count,edge_count,manifest_json) "
+		"VALUES(?,?,?,?,?,?);")))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("Failed to prepare project snapshot insert"));
+		AddNext(Root, { TEXT("project.health") });
+		return Root;
+	}
+	Stmt.SetBindingValueByIndex(1, CleanLabel);
+	Stmt.SetBindingValueByIndex(2, FString(TEXT("project")));
+	Stmt.SetBindingValueByIndex(3, static_cast<int64>(FDateTime::UtcNow().ToUnixTimestamp()));
+	Stmt.SetBindingValueByIndex(4, static_cast<int64>(Manifest.Nodes.Num()));
+	Stmt.SetBindingValueByIndex(5, static_cast<int64>(Manifest.Edges.Num()));
+	Stmt.SetBindingValueByIndex(6, SerializeManifest(Manifest));
+	if (!Stmt.Execute())
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("Failed to store project CRG snapshot"));
+		AddNext(Root, { TEXT("project.health") });
+		return Root;
+	}
+
+	Root->SetNumberField(TEXT("id"), static_cast<double>(Raw->GetLastInsertRowId()));
+	Root->SetStringField(TEXT("label"), CleanLabel);
+	Root->SetStringField(TEXT("status"), TEXT("ok"));
+	Root->SetStringField(TEXT("summary"), FString::Printf(
+		TEXT("Captured project CRG snapshot '%s' with %d node(s), %d edge(s)"),
+		*CleanLabel, Manifest.Nodes.Num(), Manifest.Edges.Num()));
+	AddNext(Root, { TEXT("project.diff_snapshots"), TEXT("project.repair_crg_cache") });
+	return Root;
+}
+
+TSharedPtr<FJsonObject> FMonolithIndexReview::DiffSnapshots(
+	FMonolithIndexDatabase& Db,
+	const FString& Before,
+	const FString& After,
+	int32 Limit)
+{
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	const int32 Cap = FMath::Clamp(Limit <= 0 ? 100 : Limit, 1, 1000);
+	const FString AfterRef = After.TrimStartAndEnd().IsEmpty() ? TEXT("current") : After.TrimStartAndEnd();
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("before"), Before);
+	Input->SetStringField(TEXT("after"), AfterRef);
+	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("limit"), Cap);
+	Root->SetObjectField(TEXT("limits"), Limits);
+
+	FSQLiteDatabase* Raw = Db.GetRawDatabase();
+	if (!Db.IsOpen() || !Raw)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("ProjectIndex DB is not open"));
+		AddNext(Root, { TEXT("project.health") });
+		return Root;
+	}
+	if (Before.TrimStartAndEnd().IsEmpty())
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("before snapshot label/id is required"));
+		AddNext(Root, { TEXT("project.snapshot execute=true") });
+		return Root;
+	}
+	if (!ObjectExists(Db, TEXT("table"), TEXT("crg_snapshots")))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("crg_snapshots table is missing; capture a project.snapshot first"));
+		AddNext(Root, { TEXT("project.snapshot execute=true") });
+		return Root;
+	}
+
+	FSnapshotRecord BeforeRecord;
+	FSnapshotRecord AfterRecord;
+	if (!LoadSnapshotRecord(*Raw, TEXT("project"), Before.TrimStartAndEnd(), BeforeRecord))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), FString::Printf(TEXT("Before snapshot not found or invalid: %s"), *Before));
+		AddNext(Root, { TEXT("project.snapshot execute=true") });
+		return Root;
+	}
+	if (!LoadSnapshotRecord(*Raw, TEXT("project"), AfterRef, AfterRecord))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), FString::Printf(TEXT("After snapshot not found or invalid: %s"), *AfterRef));
+		AddNext(Root, { TEXT("project.snapshot execute=true") });
+		return Root;
+	}
+
+	TSet<FString> NewNodes = SetDifference(AfterRecord.Manifest.Nodes, BeforeRecord.Manifest.Nodes);
+	TSet<FString> RemovedNodes = SetDifference(BeforeRecord.Manifest.Nodes, AfterRecord.Manifest.Nodes);
+	TSet<FString> NewEdges = SetDifference(AfterRecord.Manifest.Edges, BeforeRecord.Manifest.Edges);
+	TSet<FString> RemovedEdges = SetDifference(BeforeRecord.Manifest.Edges, AfterRecord.Manifest.Edges);
+
+	bool bTruncated = false;
+	Root->SetArrayField(TEXT("new_nodes"), TakeStringSamples(NewNodes, Cap, bTruncated));
+	Root->SetArrayField(TEXT("removed_nodes"), TakeStringSamples(RemovedNodes, Cap, bTruncated));
+	Root->SetArrayField(TEXT("new_edges"), TakeEdgeSamples(NewEdges, Cap, bTruncated));
+	Root->SetArrayField(TEXT("removed_edges"), TakeEdgeSamples(RemovedEdges, Cap, bTruncated));
+
+	TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
+	Summary->SetNumberField(TEXT("nodes_added"), NewNodes.Num());
+	Summary->SetNumberField(TEXT("nodes_removed"), RemovedNodes.Num());
+	Summary->SetNumberField(TEXT("edges_added"), NewEdges.Num());
+	Summary->SetNumberField(TEXT("edges_removed"), RemovedEdges.Num());
+	Summary->SetNumberField(TEXT("before_total_nodes"), BeforeRecord.Manifest.Nodes.Num());
+	Summary->SetNumberField(TEXT("after_total_nodes"), AfterRecord.Manifest.Nodes.Num());
+	Summary->SetNumberField(TEXT("before_total_edges"), BeforeRecord.Manifest.Edges.Num());
+	Summary->SetNumberField(TEXT("after_total_edges"), AfterRecord.Manifest.Edges.Num());
+	Root->SetObjectField(TEXT("summary_counts"), Summary);
+	Root->SetStringField(TEXT("before_label"), BeforeRecord.Label);
+	Root->SetStringField(TEXT("after_label"), AfterRecord.Label);
+	Root->SetBoolField(TEXT("truncated"), bTruncated);
+	Root->SetStringField(TEXT("status"), TEXT("ok"));
+	Root->SetStringField(TEXT("summary"), FString::Printf(
+		TEXT("Project CRG diff %s -> %s: +%d/-%d node(s), +%d/-%d edge(s)"),
+		*BeforeRecord.Label, *AfterRecord.Label, NewNodes.Num(), RemovedNodes.Num(), NewEdges.Num(), RemovedEdges.Num()));
+	AddNext(Root, { TEXT("project.snapshot"), TEXT("project.review_hotspots"), TEXT("project.health") });
 	return Root;
 }
 

@@ -187,6 +187,42 @@ bool FProjectRepairCrgCacheTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSnapshotDiffTest, "Monolith.IndexGuard.Project.SnapshotDiff", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectSnapshotDiffTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+
+	TSharedPtr<FJsonObject> Dry = FMonolithIndexReview::Snapshot(T.Db, TEXT("base"), false);
+	TestEqual(TEXT("snapshot dry-run ok"), Dry->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestFalse(TEXT("dry-run does not execute"), Dry->GetBoolField(TEXT("executed")));
+
+	TSharedPtr<FJsonObject> Snap = FMonolithIndexReview::Snapshot(T.Db, TEXT("base"), true);
+	TestEqual(TEXT("snapshot execute ok"), Snap->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestTrue(TEXT("snapshot executed"), Snap->GetBoolField(TEXT("executed")));
+	TestEqual(TEXT("snapshot captures five project nodes"), Snap->GetIntegerField(TEXT("node_count")), 5);
+	TestEqual(TEXT("snapshot captures four project edges"), Snap->GetIntegerField(TEXT("edge_count")), 4);
+
+	FIndexedAsset Asset;
+	Asset.PackagePath = TEXT("/Game/NewReviewAsset");
+	Asset.AssetName = TEXT("NewReviewAsset");
+	Asset.AssetClass = TEXT("Blueprint");
+	const int64 NewId = T.Db.InsertAsset(Asset);
+	TestTrue(TEXT("new asset inserted"), NewId > 0);
+	TSharedPtr<FJsonObject> Rebuilt = FMonolithIndexReview::RepairCrgCache(T.Db, true);
+	TestEqual(TEXT("crg cache rebuilt after insert"), Rebuilt->GetStringField(TEXT("status")), FString(TEXT("ok")));
+
+	TSharedPtr<FJsonObject> Diff = FMonolithIndexReview::DiffSnapshots(T.Db, TEXT("base"), TEXT("current"), 10);
+	TestEqual(TEXT("diff ok"), Diff->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TSharedPtr<FJsonObject> Counts = Diff->GetObjectField(TEXT("summary_counts"));
+	TestTrue(TEXT("summary counts present"), Counts.IsValid());
+	TestTrue(TEXT("one or more project nodes added"), Counts->GetIntegerField(TEXT("nodes_added")) >= 1);
+	const TArray<TSharedPtr<FJsonValue>>* NewNodes = nullptr;
+	TestTrue(TEXT("new_nodes sample present"), Diff->TryGetArrayField(TEXT("new_nodes"), NewNodes) && NewNodes && NewNodes->Num() >= 1);
+	TestFalse(TEXT("diff not truncated"), Diff->GetBoolField(TEXT("truncated")));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectRiskScoreUsesCrgCacheTest, "Monolith.IndexGuard.Project.RiskScoreUsesCrgCache", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectRiskScoreUsesCrgCacheTest::RunTest(const FString& Parameters)
 {

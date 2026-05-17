@@ -80,6 +80,19 @@ public:
 		const FString& DetailLevel,
 		bool bIncludeUnused);
 
+	/** Capture current CRG projection manifest. Dry-run unless bExecute is true. */
+	static TSharedPtr<FJsonObject> Snapshot(
+		FMonolithIndexDatabase& Db,
+		const FString& Label,
+		bool bExecute);
+
+	/** Compare a stored CRG snapshot against another stored snapshot or current projection. */
+	static TSharedPtr<FJsonObject> DiffSnapshots(
+		FMonolithIndexDatabase& Db,
+		const FString& Before,
+		const FString& After,
+		int32 Limit);
+
 	/** Rank global project review hotspots by fan-in, fan-out, risk, graph size, or all. */
 	static TSharedPtr<FJsonObject> ReviewHotspots(
 		FMonolithIndexDatabase& Db,

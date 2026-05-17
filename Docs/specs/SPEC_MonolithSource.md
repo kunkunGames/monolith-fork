@@ -62,7 +62,7 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 | `find_unused` | `kind` (all), `limit` (100), `min_confidence` (low) | Advisory dead-symbol candidates for function/class/struct symbols with `confidence` + `reasons[]`; never reports `high`, never mutates, and excludes UE reflection/automation/entry markers |
 | `pre_merge_check` | `changed_paths` or `paths`, `max_results` (200), `unused_limit` (20), `detail_level` (minimal), `include_unused` (true) | Read-only pre-merge gate that composes `health`, `detect_changes`, and optional `find_unused` into `decision` (`pass`/`warn`/`fail`), `checks[]`, `findings[]`, and next actions. Never shells out to P4/git |
 | `snapshot` | `label`, `execute` (false) | Dry-run by default; `execute=true` stores current `crg_nodes`/`crg_edges` manifest in derived `crg_snapshots` for later review diffs |
-| `diff_snapshots` | `before` (label/id), `after` (label/id or current), `limit` (100) | Read-only CRG projection diff. Returns new/removed node and edge samples plus summary counts; no cache rebuild or VCS shell-out |
+| `diff_snapshots` | `before` (label/id), `after` (label/id or current), `limit` (100) | Read-only CRG projection diff. Returns new/removed node and edge samples plus `summary_counts`; no cache rebuild or VCS shell-out |
 | `review_hotspots` | `kind` (all), `limit` (50), `min_lines` (100), `include_questions` (true) | Global review queue over fan-in/fan-out/risk/large symbol signals with optional advisory questions |
 | `review_context` | `symbol` (required), `direction` (both), `max_depth` (2), `max_results` (200), `detail_level` (minimal) | Token-efficient package: seed + impact + risk reasons + next actions. Distinct from single-item `context.build_attachment` |
 
