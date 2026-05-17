@@ -3,16 +3,41 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithParamSchema.h"
 
+#include "AssetToolsModule.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/ObjectLibrary.h"
+#include "Factories/StringTableFactory.h"
+#include "HAL/FileManager.h"
+#include "IAssetTools.h"
 #include "Internationalization/Culture.h"
 #include "Internationalization/Internationalization.h"
 #include "Internationalization/StringTable.h"
 #include "Internationalization/StringTableCore.h"
+#include "Misc/FileHelper.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
+#include "Modules/ModuleManager.h"
+#include "Serialization/Csv/CsvParser.h"
+#include "UObject/Package.h"
+#include "UObject/SavePackage.h"
 
 namespace
 {
+	struct FLocalizationMutationOptions
+	{
+		bool bDryRun = false;
+		bool bConfirm = false;
+		bool bSave = false;
+	};
+
+	struct FStringTableCsvRow
+	{
+		FString Key;
+		FString SourceString;
+		TMap<FString, FString> Metadata;
+	};
+
 	int32 GetClampedLimit(const TSharedPtr<FJsonObject>& Params, int32 DefaultValue)
 	{
 		double LimitNumber = static_cast<double>(DefaultValue);
@@ -58,6 +83,360 @@ namespace
 		}
 
 		return true;
+	}
+
+	bool ReadRequiredStringParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, FString& OutValue, FString& OutError, bool bAllowEmpty = false)
+	{
+		if (!Params.IsValid() || !Params->HasField(FieldName))
+		{
+			OutError = FString::Printf(TEXT("Missing required param '%s'"), FieldName);
+			return false;
+		}
+
+		if (!Params->TryGetStringField(FieldName, OutValue))
+		{
+			OutError = FString::Printf(TEXT("Malformed parameter: %s must be a string"), FieldName);
+			return false;
+		}
+
+		if (!bAllowEmpty && OutValue.TrimStartAndEnd().IsEmpty())
+		{
+			OutError = FString::Printf(TEXT("Missing required param '%s'"), FieldName);
+			return false;
+		}
+		return true;
+	}
+
+	bool ReadOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, bool& OutValue, FString& OutError)
+	{
+		if (Params.IsValid() && Params->HasField(FieldName) && !Params->TryGetBoolField(FieldName, OutValue))
+		{
+			OutError = FString::Printf(TEXT("Malformed parameter: %s must be a boolean"), FieldName);
+			return false;
+		}
+		return true;
+	}
+
+	bool ReadMutationOptions(const TSharedPtr<FJsonObject>& Params, FLocalizationMutationOptions& OutOptions, FString& OutError)
+	{
+		if (!ReadOptionalBoolParam(Params, TEXT("dry_run"), OutOptions.bDryRun, OutError) ||
+			!ReadOptionalBoolParam(Params, TEXT("confirm"), OutOptions.bConfirm, OutError) ||
+			!ReadOptionalBoolParam(Params, TEXT("save"), OutOptions.bSave, OutError))
+		{
+			return false;
+		}
+
+		if (!OutOptions.bDryRun && !OutOptions.bConfirm)
+		{
+			OutError = TEXT("Mutating localization actions require dry_run=true or confirm=true");
+			return false;
+		}
+		return true;
+	}
+
+	bool SplitStringTableAssetPath(const FString& RawPath, FString& OutPackagePath, FString& OutAssetName, FString& OutAssetPath, FString& OutError)
+	{
+		OutAssetPath = FMonolithAssetUtils::ResolveAssetPath(RawPath);
+		if (!IsProjectContentPath(OutAssetPath))
+		{
+			OutError = FString::Printf(TEXT("StringTable asset path '%s' must resolve under /Game"), *OutAssetPath);
+			return false;
+		}
+
+		int32 DotIndex = INDEX_NONE;
+		if (OutAssetPath.FindLastChar(TEXT('.'), DotIndex))
+		{
+			OutPackagePath = OutAssetPath.Left(DotIndex);
+			OutAssetName = OutAssetPath.Mid(DotIndex + 1);
+			OutAssetPath = OutPackagePath;
+		}
+		else
+		{
+			OutPackagePath = OutAssetPath;
+			OutAssetName = FPackageName::GetLongPackageAssetName(OutPackagePath);
+		}
+
+		if (OutAssetName.TrimStartAndEnd().IsEmpty())
+		{
+			OutError = FString::Printf(TEXT("Cannot derive StringTable asset name from '%s'"), *RawPath);
+			return false;
+		}
+
+		FText Reason;
+		if (!FPackageName::IsValidLongPackageName(OutPackagePath, false, &Reason))
+		{
+			OutError = FString::Printf(TEXT("Invalid StringTable package path '%s': %s"), *OutPackagePath, *Reason.ToString());
+			return false;
+		}
+		return true;
+	}
+
+	bool DoesStringTableAssetExist(const FString& PackagePath, const FString& AssetName)
+	{
+		if (FPackageName::DoesPackageExist(PackagePath))
+		{
+			return true;
+		}
+
+		if (UPackage* ExistingPackage = FindPackage(nullptr, *PackagePath))
+		{
+			return FindObject<UObject>(ExistingPackage, *AssetName) != nullptr;
+		}
+		return false;
+	}
+
+	bool ResolveProjectFilePath(const FString& RawPath, FString& OutFilePath, FString& OutError)
+	{
+		if (RawPath.TrimStartAndEnd().IsEmpty())
+		{
+			OutError = TEXT("Missing required param 'file_path'");
+			return false;
+		}
+
+		FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		FPaths::NormalizeDirectoryName(ProjectDir);
+		FString ProjectPrefix = ProjectDir;
+		if (!ProjectPrefix.EndsWith(TEXT("/")))
+		{
+			ProjectPrefix += TEXT("/");
+		}
+
+		OutFilePath = FPaths::IsRelative(RawPath)
+			? FPaths::ConvertRelativePathToFull(ProjectDir, RawPath)
+			: FPaths::ConvertRelativePathToFull(RawPath);
+		FPaths::NormalizeFilename(OutFilePath);
+
+		if (!(OutFilePath == ProjectDir || OutFilePath.StartsWith(ProjectPrefix)))
+		{
+			OutError = FString::Printf(TEXT("CSV file path '%s' must stay under project directory '%s'"), *OutFilePath, *ProjectDir);
+			return false;
+		}
+		return true;
+	}
+
+	bool SaveAssetIfRequested(UObject* Asset, bool bSave, bool& bOutSaved, FString& OutSavedPath, FString& OutError)
+	{
+		bOutSaved = false;
+		OutSavedPath.Reset();
+		if (!bSave)
+		{
+			return true;
+		}
+
+		if (!Asset || !Asset->GetPackage())
+		{
+			OutError = TEXT("Cannot save null asset or asset package");
+			return false;
+		}
+
+		if (!FPackageName::TryConvertLongPackageNameToFilename(Asset->GetPackage()->GetName(), OutSavedPath, FPackageName::GetAssetPackageExtension()))
+		{
+			OutError = FString::Printf(TEXT("Could not convert package '%s' to a package filename"), *Asset->GetPackage()->GetName());
+			return false;
+		}
+
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		bOutSaved = UPackage::SavePackage(Asset->GetPackage(), Asset, *OutSavedPath, SaveArgs);
+		if (!bOutSaved)
+		{
+			OutError = FString::Printf(TEXT("UPackage::SavePackage failed for '%s'"), *OutSavedPath);
+			return false;
+		}
+		return true;
+	}
+
+	void AddMutationBaseFields(TSharedPtr<FJsonObject>& Result, const FString& AssetPath, const FLocalizationMutationOptions& Options, bool bChanged, bool bSaved)
+	{
+		Result->SetStringField(TEXT("asset_path"), AssetPath);
+		Result->SetBoolField(TEXT("dry_run"), Options.bDryRun);
+		Result->SetBoolField(TEXT("confirm_received"), Options.bConfirm);
+		Result->SetBoolField(TEXT("changed"), bChanged);
+		Result->SetBoolField(TEXT("saved"), bSaved);
+	}
+
+	FString EscapeCsvCell(const FString& Cell)
+	{
+		FString Escaped = Cell;
+		Escaped.ReplaceInline(TEXT("\""), TEXT("\"\""));
+		if (Escaped.Contains(TEXT(",")) || Escaped.Contains(TEXT("\"")) || Escaped.Contains(TEXT("\r")) || Escaped.Contains(TEXT("\n")))
+		{
+			return FString::Printf(TEXT("\"%s\""), *Escaped);
+		}
+		return Escaped;
+	}
+
+	FString CsvCellAt(const FCsvParser::FRows::ElementType& Row, int32 Index)
+	{
+		if (!Row.IsValidIndex(Index) || Row[Index] == nullptr)
+		{
+			return FString();
+		}
+		return FString(Row[Index]);
+	}
+
+	TArray<FStringTableCsvRow> ParseStringTableCsv(const FString& CsvText, TArray<TSharedPtr<FJsonValue>>& OutRowResults, int32& OutSkippedCount, FString& OutError)
+	{
+		TArray<FStringTableCsvRow> ParsedRows;
+		OutSkippedCount = 0;
+
+		FCsvParser Parser(CsvText);
+		const FCsvParser::FRows& Rows = Parser.GetRows();
+		if (Rows.Num() == 0)
+		{
+			OutError = TEXT("CSV file is empty");
+			return ParsedRows;
+		}
+
+		const TArray<const TCHAR*>& Header = Rows[0];
+		int32 KeyIndex = INDEX_NONE;
+		int32 SourceIndex = INDEX_NONE;
+		TArray<TPair<FString, int32>> MetadataColumns;
+		for (int32 ColumnIndex = 0; ColumnIndex < Header.Num(); ++ColumnIndex)
+		{
+			const FString HeaderName = FString(Header[ColumnIndex]).TrimStartAndEnd();
+			if (HeaderName.Equals(TEXT("key"), ESearchCase::IgnoreCase))
+			{
+				KeyIndex = ColumnIndex;
+			}
+			else if (HeaderName.Equals(TEXT("source_string"), ESearchCase::IgnoreCase))
+			{
+				SourceIndex = ColumnIndex;
+			}
+			else if (!HeaderName.IsEmpty())
+			{
+				MetadataColumns.Add(TPair<FString, int32>(HeaderName, ColumnIndex));
+			}
+		}
+
+		if (KeyIndex == INDEX_NONE || SourceIndex == INDEX_NONE)
+		{
+			OutError = TEXT("CSV header must include 'key' and 'source_string'");
+			return ParsedRows;
+		}
+
+		for (int32 RowIndex = 1; RowIndex < Rows.Num(); ++RowIndex)
+		{
+			const TArray<const TCHAR*>& Row = Rows[RowIndex];
+			FStringTableCsvRow ParsedRow;
+			ParsedRow.Key = CsvCellAt(Row, KeyIndex);
+			ParsedRow.SourceString = CsvCellAt(Row, SourceIndex);
+
+			TSharedPtr<FJsonObject> RowResult = MakeShared<FJsonObject>();
+			RowResult->SetNumberField(TEXT("row"), RowIndex + 1);
+			RowResult->SetStringField(TEXT("key"), ParsedRow.Key);
+
+			if (ParsedRow.Key.TrimStartAndEnd().IsEmpty())
+			{
+				++OutSkippedCount;
+				RowResult->SetStringField(TEXT("status"), TEXT("skipped"));
+				RowResult->SetStringField(TEXT("reason"), TEXT("empty_key"));
+				if (OutRowResults.Num() < 200)
+				{
+					OutRowResults.Add(MakeShared<FJsonValueObject>(RowResult));
+				}
+				continue;
+			}
+
+			for (const TPair<FString, int32>& MetadataColumn : MetadataColumns)
+			{
+				const FString Value = CsvCellAt(Row, MetadataColumn.Value);
+				if (!Value.IsEmpty())
+				{
+					ParsedRow.Metadata.Add(MetadataColumn.Key, Value);
+				}
+			}
+
+			ParsedRows.Add(MoveTemp(ParsedRow));
+			RowResult->SetStringField(TEXT("status"), TEXT("accepted"));
+			if (OutRowResults.Num() < 200)
+			{
+				OutRowResults.Add(MakeShared<FJsonValueObject>(RowResult));
+			}
+		}
+
+		return ParsedRows;
+	}
+
+	void CollectStringTableRows(UStringTable* Table, bool bIncludeMetadata, TArray<FStringTableCsvRow>& OutRows, TArray<FString>& OutMetadataKeys)
+	{
+		if (!Table)
+		{
+			return;
+		}
+
+		TSet<FString> MetadataKeySet;
+		FStringTableConstRef TableRef = Table->GetStringTable();
+		TableRef->EnumerateKeysAndSourceStrings(
+			[TableRef, bIncludeMetadata, &OutRows, &MetadataKeySet](const FTextKey& Key, const FString& SourceString)
+			{
+				FStringTableCsvRow Row;
+				Row.Key = Key.ToString();
+				Row.SourceString = SourceString;
+				if (bIncludeMetadata)
+				{
+					TableRef->EnumerateMetaData(Key,
+						[&Row, &MetadataKeySet](FName MetadataId, const FString& MetadataValue)
+						{
+							const FString MetadataKey = MetadataId.ToString();
+							Row.Metadata.Add(MetadataKey, MetadataValue);
+							MetadataKeySet.Add(MetadataKey);
+							return true;
+						});
+				}
+				OutRows.Add(MoveTemp(Row));
+				return true;
+			});
+
+		OutRows.Sort([](const FStringTableCsvRow& A, const FStringTableCsvRow& B)
+		{
+			return A.Key < B.Key;
+		});
+
+		for (const FString& MetadataKey : MetadataKeySet)
+		{
+			OutMetadataKeys.Add(MetadataKey);
+		}
+		OutMetadataKeys.Sort();
+	}
+
+	FString BuildStringTableCsv(UStringTable* Table, bool bIncludeMetadata, int32& OutRowCount)
+	{
+		TArray<FStringTableCsvRow> Rows;
+		TArray<FString> MetadataKeys;
+		CollectStringTableRows(Table, bIncludeMetadata, Rows, MetadataKeys);
+		OutRowCount = Rows.Num();
+
+		TArray<FString> Lines;
+		TArray<FString> Header;
+		Header.Add(TEXT("key"));
+		Header.Add(TEXT("source_string"));
+		for (const FString& MetadataKey : MetadataKeys)
+		{
+			Header.Add(MetadataKey);
+		}
+		Lines.Add(FString::JoinBy(Header, TEXT(","), [](const FString& Cell) { return EscapeCsvCell(Cell); }));
+
+		for (const FStringTableCsvRow& Row : Rows)
+		{
+			TArray<FString> Cells;
+			Cells.Add(Row.Key);
+			Cells.Add(Row.SourceString);
+			for (const FString& MetadataKey : MetadataKeys)
+			{
+				if (const FString* MetadataValue = Row.Metadata.Find(MetadataKey))
+				{
+					Cells.Add(*MetadataValue);
+				}
+				else
+				{
+					Cells.Add(FString());
+				}
+			}
+			Lines.Add(FString::JoinBy(Cells, TEXT(","), [](const FString& Cell) { return EscapeCsvCell(Cell); }));
+		}
+
+		return FString::Join(Lines, TEXT("\n"));
 	}
 
 	TSharedPtr<FJsonObject> CultureToJson(const FCultureRef& Culture)
@@ -234,6 +613,78 @@ void FMonolithLocalizationActions::RegisterActions(FMonolithToolRegistry& Regist
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StringTable asset path"))
 			.Build());
+
+	Registry.RegisterAction(TEXT("localization"), TEXT("create_string_table"),
+		TEXT("Create a StringTable asset under /Game. Requires dry_run=true or confirm=true."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLocalizationActions::CreateStringTable),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("New StringTable asset path"))
+			.Optional(TEXT("namespace"), TEXT("string"), TEXT("StringTable namespace; defaults to asset name"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without writing"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for non-dry-run writes"), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save the package after creation"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("localization"), TEXT("set_string_entry"),
+		TEXT("Add or replace one StringTable entry and optional metadata. Requires dry_run=true or confirm=true."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLocalizationActions::SetStringEntry),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StringTable asset path"))
+			.Required(TEXT("key"), TEXT("string"), TEXT("Entry key"))
+			.Required(TEXT("source_string"), TEXT("string"), TEXT("Source string"))
+			.Optional(TEXT("metadata"), TEXT("object"), TEXT("String metadata fields"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without writing"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for non-dry-run writes"), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save the package after mutation"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("localization"), TEXT("remove_string_entry"),
+		TEXT("Remove one StringTable entry by key. Requires dry_run=true or confirm=true."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLocalizationActions::RemoveStringEntry),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StringTable asset path"))
+			.Required(TEXT("key"), TEXT("string"), TEXT("Entry key"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without writing"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for non-dry-run writes"), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save the package after mutation"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("localization"), TEXT("set_string_metadata"),
+		TEXT("Add, replace, or remove metadata on one StringTable entry. Requires dry_run=true or confirm=true."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLocalizationActions::SetStringMetadata),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StringTable asset path"))
+			.Required(TEXT("key"), TEXT("string"), TEXT("Entry key"))
+			.Required(TEXT("metadata_key"), TEXT("string"), TEXT("Metadata key"))
+			.Optional(TEXT("metadata_value"), TEXT("string"), TEXT("Metadata value to set"))
+			.Optional(TEXT("remove"), TEXT("boolean"), TEXT("Remove metadata_key instead of setting metadata_value"), TEXT("false"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without writing"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for non-dry-run writes"), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save the package after mutation"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("localization"), TEXT("import_string_table_csv"),
+		TEXT("Import key,source_string,metadata CSV rows into a StringTable. Requires dry_run=true or confirm=true."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLocalizationActions::ImportStringTableCsv),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StringTable asset path"))
+			.Required(TEXT("file_path"), TEXT("string"), TEXT("CSV path under the project directory"))
+			.Optional(TEXT("replace_existing"), TEXT("boolean"), TEXT("Clear existing entries before import"), TEXT("false"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without writing"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for non-dry-run writes"), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save the package after mutation"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("localization"), TEXT("export_string_table_csv"),
+		TEXT("Export a StringTable to CSV under the project directory. Requires dry_run=true or confirm=true."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLocalizationActions::ExportStringTableCsv),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StringTable asset path"))
+			.Required(TEXT("file_path"), TEXT("string"), TEXT("Destination CSV path under the project directory"))
+			.Optional(TEXT("include_metadata"), TEXT("boolean"), TEXT("Include metadata columns"), TEXT("true"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without writing"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for non-dry-run writes"), TEXT("false"))
+			.Build());
 }
 
 FMonolithActionResult FMonolithLocalizationActions::ListCultures(const TSharedPtr<FJsonObject>& Params)
@@ -408,5 +859,501 @@ FMonolithActionResult FMonolithLocalizationActions::ValidateStringTable(const TS
 	Result->SetNumberField(TEXT("issue_count"), Issues.Num());
 	Result->SetBoolField(TEXT("valid"), Issues.Num() == 0);
 	Result->SetBoolField(TEXT("read_only"), true);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLocalizationActions::CreateStringTable(const TSharedPtr<FJsonObject>& Params)
+{
+	FLocalizationMutationOptions Options;
+	FString Error;
+	if (!ReadMutationOptions(Params, Options, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString RawAssetPath;
+	if (!ReadRequiredStringParam(Params, TEXT("asset_path"), RawAssetPath, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString PackagePath, AssetName, AssetPath;
+	if (!SplitStringTableAssetPath(RawAssetPath, PackagePath, AssetName, AssetPath, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString Namespace = AssetName;
+	if (Params.IsValid() && Params->HasField(TEXT("namespace")) && !Params->TryGetStringField(TEXT("namespace"), Namespace))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: namespace must be a string"));
+	}
+	if (Namespace.TrimStartAndEnd().IsEmpty())
+	{
+		Namespace = AssetName;
+	}
+
+	if (DoesStringTableAssetExist(PackagePath, AssetName))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	AddMutationBaseFields(Result, AssetPath, Options, false, false);
+	Result->SetStringField(TEXT("package_path"), PackagePath);
+	Result->SetStringField(TEXT("name"), AssetName);
+	Result->SetStringField(TEXT("namespace"), Namespace);
+	if (Options.bDryRun)
+	{
+		Result->SetBoolField(TEXT("would_create"), true);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+	UStringTableFactory* Factory = NewObject<UStringTableFactory>();
+	if (!Factory)
+	{
+		return FMonolithActionResult::Error(TEXT("Failed to construct UStringTableFactory"));
+	}
+
+	const FString ParentPath = FPackageName::GetLongPackagePath(PackagePath);
+	UObject* Created = AssetTools.CreateAsset(AssetName, ParentPath, UStringTable::StaticClass(), Factory);
+	UStringTable* Table = Cast<UStringTable>(Created);
+	if (!Table)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("AssetTools.CreateAsset returned no UStringTable for '%s'"), *AssetPath));
+	}
+
+	Table->Modify();
+	Table->GetMutableStringTable()->SetNamespace(FTextKey(Namespace));
+	Table->MarkPackageDirty();
+
+	bool bSaved = false;
+	FString SavedPath;
+	if (!SaveAssetIfRequested(Table, Options.bSave, bSaved, SavedPath, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	AddMutationBaseFields(Result, AssetPath, Options, true, bSaved);
+	Result->SetObjectField(TEXT("string_table"), StringTableSummaryToJson(Table, true, 200, true));
+	if (!SavedPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("saved_path"), SavedPath);
+	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLocalizationActions::SetStringEntry(const TSharedPtr<FJsonObject>& Params)
+{
+	FLocalizationMutationOptions Options;
+	FString Error;
+	if (!ReadMutationOptions(Params, Options, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString Key;
+	if (!ReadRequiredStringParam(Params, TEXT("key"), Key, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString SourceString;
+	if (!ReadRequiredStringParam(Params, TEXT("source_string"), SourceString, Error, true))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString AssetPath;
+	UStringTable* Table = LoadStringTableFromParams(Params, AssetPath, Error);
+	if (!Table)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const TSharedPtr<FJsonObject>* MetadataObject = nullptr;
+	if (Params.IsValid() && Params->HasField(TEXT("metadata")) && !Params->TryGetObjectField(TEXT("metadata"), MetadataObject))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: metadata must be an object"));
+	}
+
+	FString ExistingSource;
+	const FTextKey TextKey(Key);
+	const bool bHadEntry = Table->GetStringTable()->GetSourceString(TextKey, ExistingSource);
+
+	TMap<FString, FString> MetadataToSet;
+	if (MetadataObject && MetadataObject->IsValid())
+	{
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*MetadataObject)->Values)
+		{
+			FString MetadataValue;
+			if (!Pair.Value.IsValid() || !Pair.Value->TryGetString(MetadataValue))
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("Malformed metadata value for '%s': expected string"), *Pair.Key));
+			}
+			MetadataToSet.Add(Pair.Key, MetadataValue);
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	AddMutationBaseFields(Result, AssetPath, Options, false, false);
+	Result->SetStringField(TEXT("key"), Key);
+	Result->SetBoolField(TEXT("entry_existed"), bHadEntry);
+	Result->SetStringField(TEXT("previous_source_string"), ExistingSource);
+	Result->SetStringField(TEXT("source_string"), SourceString);
+	if (Options.bDryRun)
+	{
+		Result->SetBoolField(TEXT("would_set"), true);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	Table->Modify();
+	FStringTableRef MutableTable = Table->GetMutableStringTable();
+	MutableTable->SetSourceString(TextKey, SourceString);
+	for (const TPair<FString, FString>& Pair : MetadataToSet)
+	{
+		MutableTable->SetMetaData(TextKey, FName(*Pair.Key), Pair.Value);
+	}
+	Table->MarkPackageDirty();
+
+	bool bSaved = false;
+	FString SavedPath;
+	if (!SaveAssetIfRequested(Table, Options.bSave, bSaved, SavedPath, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	AddMutationBaseFields(Result, AssetPath, Options, true, bSaved);
+	Result->SetObjectField(TEXT("string_table"), StringTableSummaryToJson(Table, true, 200, true));
+	if (!SavedPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("saved_path"), SavedPath);
+	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLocalizationActions::RemoveStringEntry(const TSharedPtr<FJsonObject>& Params)
+{
+	FLocalizationMutationOptions Options;
+	FString Error;
+	if (!ReadMutationOptions(Params, Options, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString Key;
+	if (!ReadRequiredStringParam(Params, TEXT("key"), Key, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString AssetPath;
+	UStringTable* Table = LoadStringTableFromParams(Params, AssetPath, Error);
+	if (!Table)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const FTextKey TextKey(Key);
+	FString ExistingSource;
+	const bool bHadEntry = Table->GetStringTable()->GetSourceString(TextKey, ExistingSource);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	AddMutationBaseFields(Result, AssetPath, Options, false, false);
+	Result->SetStringField(TEXT("key"), Key);
+	Result->SetBoolField(TEXT("entry_existed"), bHadEntry);
+	Result->SetStringField(TEXT("previous_source_string"), ExistingSource);
+	if (Options.bDryRun)
+	{
+		Result->SetBoolField(TEXT("would_remove"), bHadEntry);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	if (bHadEntry)
+	{
+		Table->Modify();
+		Table->GetMutableStringTable()->RemoveSourceString(TextKey);
+		Table->MarkPackageDirty();
+	}
+
+	bool bSaved = false;
+	FString SavedPath;
+	if (bHadEntry && !SaveAssetIfRequested(Table, Options.bSave, bSaved, SavedPath, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	AddMutationBaseFields(Result, AssetPath, Options, bHadEntry, bSaved);
+	Result->SetObjectField(TEXT("string_table"), StringTableSummaryToJson(Table, true, 200, true));
+	if (!SavedPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("saved_path"), SavedPath);
+	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLocalizationActions::SetStringMetadata(const TSharedPtr<FJsonObject>& Params)
+{
+	FLocalizationMutationOptions Options;
+	FString Error;
+	if (!ReadMutationOptions(Params, Options, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString Key;
+	if (!ReadRequiredStringParam(Params, TEXT("key"), Key, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString MetadataKey;
+	if (!ReadRequiredStringParam(Params, TEXT("metadata_key"), MetadataKey, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	bool bRemove = false;
+	if (!ReadOptionalBoolParam(Params, TEXT("remove"), bRemove, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString MetadataValue;
+	if (!bRemove && !ReadRequiredStringParam(Params, TEXT("metadata_value"), MetadataValue, Error, true))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+	if (bRemove && Params.IsValid() && Params->HasField(TEXT("metadata_value")) && !Params->TryGetStringField(TEXT("metadata_value"), MetadataValue))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: metadata_value must be a string"));
+	}
+
+	FString AssetPath;
+	UStringTable* Table = LoadStringTableFromParams(Params, AssetPath, Error);
+	if (!Table)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const FTextKey TextKey(Key);
+	FString SourceString;
+	if (!Table->GetStringTable()->GetSourceString(TextKey, SourceString))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("StringTable entry '%s' does not exist"), *Key));
+	}
+
+	const FString PreviousValue = Table->GetStringTable()->GetMetaData(TextKey, FName(*MetadataKey));
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	AddMutationBaseFields(Result, AssetPath, Options, false, false);
+	Result->SetStringField(TEXT("key"), Key);
+	Result->SetStringField(TEXT("metadata_key"), MetadataKey);
+	Result->SetStringField(TEXT("previous_metadata_value"), PreviousValue);
+	Result->SetBoolField(TEXT("remove"), bRemove);
+	if (!bRemove)
+	{
+		Result->SetStringField(TEXT("metadata_value"), MetadataValue);
+	}
+	if (Options.bDryRun)
+	{
+		Result->SetBoolField(TEXT("would_change"), bRemove ? !PreviousValue.IsEmpty() : PreviousValue != MetadataValue);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	const bool bChanged = bRemove ? !PreviousValue.IsEmpty() : PreviousValue != MetadataValue;
+	bool bSaved = false;
+	FString SavedPath;
+	if (bChanged)
+	{
+		Table->Modify();
+		if (bRemove)
+		{
+			Table->GetMutableStringTable()->RemoveMetaData(TextKey, FName(*MetadataKey));
+		}
+		else
+		{
+			Table->GetMutableStringTable()->SetMetaData(TextKey, FName(*MetadataKey), MetadataValue);
+		}
+		Table->MarkPackageDirty();
+
+		if (!SaveAssetIfRequested(Table, Options.bSave, bSaved, SavedPath, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+	}
+
+	AddMutationBaseFields(Result, AssetPath, Options, bChanged, bSaved);
+	Result->SetObjectField(TEXT("string_table"), StringTableSummaryToJson(Table, true, 200, true));
+	if (!SavedPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("saved_path"), SavedPath);
+	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLocalizationActions::ImportStringTableCsv(const TSharedPtr<FJsonObject>& Params)
+{
+	FLocalizationMutationOptions Options;
+	FString Error;
+	if (!ReadMutationOptions(Params, Options, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString RawFilePath;
+	if (!ReadRequiredStringParam(Params, TEXT("file_path"), RawFilePath, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString FilePath;
+	if (!ResolveProjectFilePath(RawFilePath, FilePath, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	bool bReplaceExisting = false;
+	if (!ReadOptionalBoolParam(Params, TEXT("replace_existing"), bReplaceExisting, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString CsvText;
+	if (!FFileHelper::LoadFileToString(CsvText, *FilePath))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to read CSV file '%s'"), *FilePath));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> RowResults;
+	int32 SkippedCount = 0;
+	TArray<FStringTableCsvRow> Rows = ParseStringTableCsv(CsvText, RowResults, SkippedCount, Error);
+	if (!Error.IsEmpty())
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString AssetPath;
+	UStringTable* Table = LoadStringTableFromParams(Params, AssetPath, Error);
+	if (!Table)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	AddMutationBaseFields(Result, AssetPath, Options, false, false);
+	Result->SetStringField(TEXT("file_path"), FilePath);
+	Result->SetBoolField(TEXT("replace_existing"), bReplaceExisting);
+	Result->SetNumberField(TEXT("accepted_count"), Rows.Num());
+	Result->SetNumberField(TEXT("skipped_count"), SkippedCount);
+	Result->SetArrayField(TEXT("row_results"), RowResults);
+	if (Rows.Num() + SkippedCount > RowResults.Num())
+	{
+		Result->SetNumberField(TEXT("truncated_row_results"), Rows.Num() + SkippedCount - RowResults.Num());
+	}
+	if (Options.bDryRun)
+	{
+		Result->SetBoolField(TEXT("would_import"), Rows.Num() > 0 || bReplaceExisting);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	const bool bChanged = Rows.Num() > 0 || bReplaceExisting;
+	bool bSaved = false;
+	FString SavedPath;
+	if (bChanged)
+	{
+		Table->Modify();
+		FStringTableRef MutableTable = Table->GetMutableStringTable();
+		if (bReplaceExisting)
+		{
+			MutableTable->ClearSourceStrings();
+		}
+		for (const FStringTableCsvRow& Row : Rows)
+		{
+			const FTextKey TextKey(Row.Key);
+			MutableTable->SetSourceString(TextKey, Row.SourceString);
+			for (const TPair<FString, FString>& MetadataPair : Row.Metadata)
+			{
+				MutableTable->SetMetaData(TextKey, FName(*MetadataPair.Key), MetadataPair.Value);
+			}
+		}
+		Table->MarkPackageDirty();
+
+		if (!SaveAssetIfRequested(Table, Options.bSave, bSaved, SavedPath, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+	}
+
+	AddMutationBaseFields(Result, AssetPath, Options, bChanged, bSaved);
+	Result->SetObjectField(TEXT("string_table"), StringTableSummaryToJson(Table, true, 200, true));
+	if (!SavedPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("saved_path"), SavedPath);
+	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLocalizationActions::ExportStringTableCsv(const TSharedPtr<FJsonObject>& Params)
+{
+	FLocalizationMutationOptions Options;
+	FString Error;
+	if (!ReadMutationOptions(Params, Options, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString RawFilePath;
+	if (!ReadRequiredStringParam(Params, TEXT("file_path"), RawFilePath, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString FilePath;
+	if (!ResolveProjectFilePath(RawFilePath, FilePath, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	bool bIncludeMetadata = true;
+	if (!ReadOptionalBoolParam(Params, TEXT("include_metadata"), bIncludeMetadata, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString AssetPath;
+	UStringTable* Table = LoadStringTableFromParams(Params, AssetPath, Error);
+	if (!Table)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	int32 RowCount = 0;
+	const FString CsvText = BuildStringTableCsv(Table, bIncludeMetadata, RowCount);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	AddMutationBaseFields(Result, AssetPath, Options, false, false);
+	Result->SetStringField(TEXT("file_path"), FilePath);
+	Result->SetBoolField(TEXT("include_metadata"), bIncludeMetadata);
+	Result->SetNumberField(TEXT("row_count"), RowCount);
+	Result->SetNumberField(TEXT("byte_count"), CsvText.Len() * sizeof(TCHAR));
+	if (Options.bDryRun)
+	{
+		Result->SetBoolField(TEXT("would_export"), true);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	const FString Directory = FPaths::GetPath(FilePath);
+	if (!Directory.IsEmpty())
+	{
+		IFileManager::Get().MakeDirectory(*Directory, true);
+	}
+	if (!FFileHelper::SaveStringToFile(CsvText, *FilePath))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to write CSV file '%s'"), *FilePath));
+	}
+
+	AddMutationBaseFields(Result, AssetPath, Options, true, true);
 	return FMonolithActionResult::Success(Result);
 }
