@@ -2,6 +2,7 @@
 #include "MonolithActionExecutionGuard.h"
 #include "MonolithCoreModule.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithMcpSessionTracker.h"
 #include "MonolithResourceRegistry.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithToolResultUtils.h"
@@ -18,6 +19,89 @@
 namespace
 {
 	constexpr int32 MaxMcpRequestBodyBytes = 16 * 1024 * 1024;
+
+	FString FirstHeaderValue(const FHttpServerRequest& Request, const TCHAR* HeaderName)
+	{
+		for (const TPair<FString, TArray<FString>>& Pair : Request.Headers)
+		{
+			if (Pair.Key.Equals(HeaderName, ESearchCase::IgnoreCase) && Pair.Value.Num() > 0)
+			{
+				return Pair.Value[0];
+			}
+		}
+		return FString();
+	}
+
+	TSharedPtr<FJsonObject> GetJsonRpcParams(const TSharedPtr<FJsonObject>& Request)
+	{
+		const TSharedPtr<FJsonObject>* ParamsObj = nullptr;
+		if (Request.IsValid() && Request->TryGetObjectField(TEXT("params"), ParamsObj) && ParamsObj)
+		{
+			return *ParamsObj;
+		}
+		return nullptr;
+	}
+
+	FString GetJsonRpcMethod(const TSharedPtr<FJsonObject>& Request)
+	{
+		FString Method;
+		if (Request.IsValid())
+		{
+			Request->TryGetStringField(TEXT("method"), Method);
+		}
+		return Method;
+	}
+
+	FString GetJsonRpcToolName(const TSharedPtr<FJsonObject>& Request, const FString& Method)
+	{
+		if (Method != TEXT("tools/call"))
+		{
+			return FString();
+		}
+
+		FString ToolName;
+		const TSharedPtr<FJsonObject> Params = GetJsonRpcParams(Request);
+		if (Params.IsValid())
+		{
+			Params->TryGetStringField(TEXT("name"), ToolName);
+		}
+		return ToolName;
+	}
+
+	FString GetJsonRpcProtocolVersion(const TSharedPtr<FJsonObject>& Request, const FString& HeaderProtocolVersion)
+	{
+		if (!HeaderProtocolVersion.IsEmpty())
+		{
+			return HeaderProtocolVersion;
+		}
+
+		const TSharedPtr<FJsonObject> Params = GetJsonRpcParams(Request);
+		FString ProtocolVersion;
+		if (Params.IsValid())
+		{
+			Params->TryGetStringField(TEXT("protocolVersion"), ProtocolVersion);
+		}
+		return ProtocolVersion;
+	}
+
+	void ObserveMcpSessionIfEnabled(
+		const TSharedPtr<FJsonObject>& Request,
+		const FString& HeaderSessionId,
+		const FString& HeaderProtocolVersion)
+	{
+		const UMonolithSettings* Settings = UMonolithSettings::Get();
+		if (!Settings || !Settings->bEnableMcpSessionMode || !Request.IsValid())
+		{
+			return;
+		}
+
+		const FString Method = GetJsonRpcMethod(Request);
+		FMonolithMcpSessionTracker::Get().ObserveRequest(
+			HeaderSessionId,
+			GetJsonRpcProtocolVersion(Request, HeaderProtocolVersion),
+			Method,
+			GetJsonRpcToolName(Request, Method));
+	}
 }
 
 FMonolithHttpServer::FMonolithHttpServer()
@@ -281,9 +365,12 @@ bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const
 	}
 
 	// Process each request
+	const FString HeaderSessionId = FirstHeaderValue(Request, TEXT("MCP-Session-Id"));
+	const FString HeaderProtocolVersion = FirstHeaderValue(Request, TEXT("MCP-Protocol-Version"));
 	Responses.Reserve(Requests.Num());
 	for (const TSharedPtr<FJsonObject>& Req : Requests)
 	{
+		ObserveMcpSessionIfEnabled(Req, HeaderSessionId, HeaderProtocolVersion);
 		TSharedPtr<FJsonObject> Resp = ProcessJsonRpcRequest(Req);
 		if (Resp.IsValid())
 		{

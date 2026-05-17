@@ -2,6 +2,7 @@
 #include "MonolithCoreModule.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithHttpServer.h"
+#include "MonolithMcpSessionTracker.h"
 #include "MonolithParamSchema.h"
 #include "MonolithResourceRegistry.h"
 #include "MonolithSettings.h"
@@ -167,6 +168,21 @@ static TSharedPtr<FJsonObject> MakeStructuredToolResultsStatus(const UMonolithSe
 	Obj->SetBoolField(TEXT("legacy_text_json"), true);
 	Obj->SetStringField(TEXT("content_mode"), bConfigured ? TEXT("text_plus_structured_content") : TEXT("legacy_text_json_only"));
 	Obj->SetStringField(TEXT("scope"), TEXT("tools_call_response_envelope"));
+	return Obj;
+}
+
+static TSharedPtr<FJsonObject> MakeMcpSessionModeStatus(const UMonolithSettings* Settings)
+{
+	const bool bConfigured = Settings && Settings->bEnableMcpSessionMode;
+	TSharedPtr<FJsonObject> Obj = MakeFeatureStatus(
+		bConfigured,
+		bConfigured,
+		bConfigured ? TEXT("active_in_memory_observer") : TEXT("disabled"));
+	Obj->SetStringField(TEXT("mode"), bConfigured ? TEXT("in_memory_observer") : TEXT("stateless"));
+	Obj->SetBoolField(TEXT("raw_session_ids_stored"), false);
+	Obj->SetBoolField(TEXT("persistent"), false);
+	Obj->SetBoolField(TEXT("progress_notifications"), false);
+	Obj->SetBoolField(TEXT("request_cancellation"), false);
 	return Obj;
 }
 
@@ -1251,13 +1267,16 @@ FMonolithActionResult FMonolithCoreTools::HandleGetMcpServerStatus(const TShared
 	Result->SetObjectField(TEXT("cors"), Cors);
 	Result->SetArrayField(TEXT("supported_protocol_versions"), Protocols);
 	Result->SetNumberField(TEXT("max_request_body_bytes"), MaxRequestBodyBytes);
-	Result->SetStringField(TEXT("session_tracking"), TEXT("not_persistent"));
-	Result->SetStringField(TEXT("session_tracking_note"), TEXT("Current streamable HTTP handling accepts MCP session/protocol headers but does not persist per-client session rows."));
+	const bool bSessionObserverEnabled = Settings && Settings->bEnableMcpSessionMode;
+	Result->SetStringField(TEXT("session_tracking"), bSessionObserverEnabled ? TEXT("in_memory_observer") : TEXT("not_persistent"));
+	Result->SetStringField(TEXT("session_tracking_note"), bSessionObserverEnabled
+		? TEXT("MCP session headers are observed in a bounded process-local table with redacted ids only; progress and request cancellation are not active.")
+		: TEXT("Current streamable HTTP handling accepts MCP session/protocol headers but does not persist per-client session rows."));
 	TSharedPtr<FJsonObject> Features = MakeShared<FJsonObject>();
 	Features->SetObjectField(TEXT("deferred_domain_catalog"), MakeDeferredDomainCatalogStatus(Settings));
 	Features->SetObjectField(TEXT("mcp_resources"), MakeMcpResourcesStatus(Settings));
 	Features->SetObjectField(TEXT("structured_tool_results"), MakeStructuredToolResultsStatus(Settings));
-	Features->SetObjectField(TEXT("mcp_session_mode"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableMcpSessionMode, TEXT("settings_only_execution_context_pending")));
+	Features->SetObjectField(TEXT("mcp_session_mode"), MakeMcpSessionModeStatus(Settings));
 	Features->SetObjectField(TEXT("advanced_tool_call_records"), MakeFeatureStatus(
 		Settings && Settings->bEnableAdvancedToolCallRecords,
 		Settings && Settings->bEnableAdvancedToolCallRecords,
@@ -1275,6 +1294,20 @@ FMonolithActionResult FMonolithCoreTools::HandleListMcpSessions(const TSharedPtr
 		{
 			return FMonolithActionResult::Error(TEXT("Parameter 'limit' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
+	}
+
+	if (!FMath::IsFinite(LimitValue) ||
+		LimitValue < static_cast<double>(TNumericLimits<int32>::Min()) ||
+		LimitValue > static_cast<double>(TNumericLimits<int32>::Max()))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'limit' must be a finite number within int32 range"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (Settings && Settings->bEnableMcpSessionMode)
+	{
+		return FMonolithActionResult::Success(
+			FMonolithMcpSessionTracker::Get().ListSessionsJson(FMath::FloorToInt(LimitValue)));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1296,11 +1329,21 @@ FMonolithActionResult FMonolithCoreTools::HandleTerminateMcpSession(const TShare
 			return FMonolithActionResult::Error(TEXT("Parameter 'session_id' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
+	SessionId.TrimStartAndEndInline();
+	if (SessionId.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter 'session_id'"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (Settings && Settings->bEnableMcpSessionMode)
+	{
+		return FMonolithActionResult::Success(FMonolithMcpSessionTracker::Get().RemoveSessionJson(SessionId));
+	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("status"), TEXT("unavailable"));
 	Result->SetBoolField(TEXT("terminated"), false);
-	Result->SetStringField(TEXT("session_id"), SessionId);
 	Result->SetStringField(TEXT("reason"), TEXT("No persistent MCP session registry exists yet, so there is no session object to terminate."));
 	return FMonolithActionResult::Success(Result);
 }

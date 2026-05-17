@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_MonolithCore.md](SPEC_MonolithCore.md)
 **Engine:** Unreal Engine 5.7+
-**Status:** Proposed
+**Status:** Implemented first slice
 **Owner module:** MonolithCore
 **Scope:** Add bounded, in-memory MCP session observation for Streamable HTTP requests while preserving stateless request execution.
 **Non-goals:** Persistent session storage, long-lived server push streams, progress notifications, interrupting running Unreal actions, storing raw session ids, storing raw request params or results.
