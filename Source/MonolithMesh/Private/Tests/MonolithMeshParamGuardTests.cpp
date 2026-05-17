@@ -125,3 +125,24 @@ bool FMonolithParamGuardMeshRoofMalformedParamsTest::RunTest(const FString& Para
 
     return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshFragmentsMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.CreateFragmentsRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardMeshFragmentsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+    FMonolithMeshProceduralActions::RegisterActions(FMonolithToolRegistry::Get());
+    TestTrue(TEXT("create_fragments action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("create_fragments")));
+
+    // Test with malformed noise (string instead of number)
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("source_handle"), TEXT("mesh_123"));
+        Params->SetStringField(TEXT("noise"), TEXT("high"));
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("create_fragments"), Params);
+        TestFalse(TEXT("CreateFragments rejects malformed noise parameter"), Result.bSuccess);
+        TestTrue(TEXT("CreateFragments reports the validation error"), Result.ErrorMessage.Contains(TEXT("Invalid type for parameter 'noise'. Expected number.")));
+    }
+
+    return true;
+}

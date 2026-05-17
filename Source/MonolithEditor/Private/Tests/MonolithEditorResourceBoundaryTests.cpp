@@ -26,6 +26,31 @@ bool FMonolithEditorDeleteAssetsRejectsOversizedArray::RunTest(const FString& Pa
 }
 
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorSearchBuildOutputClampsLimit, "Monolith.LimitGuard.MonolithEditor.SearchBuildOutputClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorSearchBuildOutputClampsLimit::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("pattern"), TEXT("TestPattern"));
+	Params->SetNumberField(TEXT("limit"), 10000.0);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("search_build_output"), Params);
+
+	TestTrue(TEXT("Should succeed since it executes the action"), Result.bSuccess);
+
+	// Test that an invalid type string returns an error
+	TSharedPtr<FJsonObject> InvalidParams = MakeShared<FJsonObject>();
+	InvalidParams->SetStringField(TEXT("pattern"), TEXT("TestPattern"));
+	InvalidParams->SetStringField(TEXT("limit"), TEXT("10000"));
+
+	FMonolithActionResult InvalidResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("search_build_output"), InvalidParams);
+	TestFalse(TEXT("Should fail on string limit type"), InvalidResult.bSuccess);
+	TestTrue(TEXT("Should return an invalid param error"), InvalidResult.ErrorMessage.Contains(TEXT("Invalid param")));
+
+	return true;
+}
+
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorRunAutomationTestsClampsLimit, "Monolith.LimitGuard.MonolithEditor.RunAutomationTestsClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithEditorRunAutomationTestsClampsLimit::RunTest(const FString& Parameters)

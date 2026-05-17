@@ -337,7 +337,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FMonolithActionHandler::CreateStatic(&HandleSearchBuildOutput),
 		FParamSchemaBuilder()
 			.Required(TEXT("pattern"), TEXT("string"), TEXT("Search pattern"))
-			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max results to return"), TEXT("100"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max results to return (default: 100, max: 1000)"), TEXT("100"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("get_recent_logs"),
@@ -800,8 +800,14 @@ FMonolithActionResult FMonolithEditorActions::HandleSearchBuildOutput(const TSha
 	int32 Limit = 100;
 	if (Params->HasField(TEXT("limit")))
 	{
-		Limit = static_cast<int32>(Params->GetNumberField(TEXT("limit")));
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
 	}
+	Limit = FMath::Clamp(Limit, 1, 1000);
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Matches;

@@ -5232,7 +5232,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystemFromSpec(const 
 		SavePath = Params->GetStringField(TEXT("save_path"));
 	if (SavePath.IsEmpty() && Spec->HasField(TEXT("save_path")))
 		SavePath = Spec->GetStringField(TEXT("save_path"));
-	FString Template = Spec->HasField(TEXT("template")) ? Spec->GetStringField(TEXT("template")) : FString();
+	FString Template;
+	if (Spec->HasField(TEXT("template")) && !Spec->TryGetStringField(TEXT("template"), Template))
+		return FMonolithActionResult::Error(TEXT("Invalid template parameter type, must be string"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("save_path required (provide at params root or inside spec)"));
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
 		return FMonolithActionResult::Error(ValidationError);
@@ -11131,7 +11133,9 @@ static TSharedPtr<FJsonObject> ExportSpecForDiff(UNiagaraSystem* System)
 	Params->SetBoolField(TEXT("include_values"), true);
 	FMonolithActionResult SpecResult = FMonolithNiagaraActions::HandleExportSystemSpec(Params);
 	if (!SpecResult.bSuccess || !SpecResult.Result.IsValid()) return nullptr;
-	return SpecResult.Result->GetObjectField(TEXT("spec"));
+	const TSharedPtr<FJsonObject>* SpecObj;
+	if (SpecResult.Result->TryGetObjectField(TEXT("spec"), SpecObj) && SpecObj->IsValid()) return *SpecObj;
+	return nullptr;
 }
 
 // Helper: compare two JSON objects, return fields that differ
@@ -11224,8 +11228,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 	Result->SetStringField(TEXT("system_b"), PathB);
 
 	// --- System property diffs ---
-	TSharedPtr<FJsonObject> SysPropsA = SpecA->GetObjectField(TEXT("system_properties"));
-	TSharedPtr<FJsonObject> SysPropsB = SpecB->GetObjectField(TEXT("system_properties"));
+	const TSharedPtr<FJsonObject>* SysPropsAPtr;
+	const TSharedPtr<FJsonObject>* SysPropsBPtr;
+	TSharedPtr<FJsonObject> SysPropsA = SpecA->TryGetObjectField(TEXT("system_properties"), SysPropsAPtr) && SysPropsAPtr->IsValid() ? *SysPropsAPtr : nullptr;
+	TSharedPtr<FJsonObject> SysPropsB = SpecB->TryGetObjectField(TEXT("system_properties"), SysPropsBPtr) && SysPropsBPtr->IsValid() ? *SysPropsBPtr : nullptr;
 	TSharedRef<FJsonObject> SysPropDiff = DiffJsonObjects(SysPropsA, SysPropsB, TEXT("system_properties"));
 	if (SysPropDiff->Values.Num() > 0)
 		Result->SetObjectField(TEXT("system_property_diffs"), SysPropDiff);
@@ -11399,8 +11405,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 						else
 						{
 							// Compare inputs
-							TSharedPtr<FJsonObject> InA = (*MA)->GetObjectField(TEXT("inputs"));
-							TSharedPtr<FJsonObject> InB = (*MB)->GetObjectField(TEXT("inputs"));
+							const TSharedPtr<FJsonObject>* InAPtr;
+							const TSharedPtr<FJsonObject>* InBPtr;
+							TSharedPtr<FJsonObject> InA = (*MA)->TryGetObjectField(TEXT("inputs"), InAPtr) && InAPtr->IsValid() ? *InAPtr : nullptr;
+							TSharedPtr<FJsonObject> InB = (*MB)->TryGetObjectField(TEXT("inputs"), InBPtr) && InBPtr->IsValid() ? *InBPtr : nullptr;
 							TSharedRef<FJsonObject> InDiff = DiffJsonObjects(InA, InB, TEXT("inputs"));
 							if (InDiff->Values.Num() > 0)
 							{
@@ -11957,8 +11965,10 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 			// Emitter properties
 			if (EO->HasField(TEXT("properties")))
 			{
-				TSharedPtr<FJsonObject> Props = EO->GetObjectField(TEXT("properties"));
-				for (auto& P : Props->Values)
+				const TSharedPtr<FJsonObject>* PropsPtr;
+				if (EO->TryGetObjectField(TEXT("properties"), PropsPtr) && PropsPtr->IsValid() && PropsPtr->Get() != nullptr)
+				{
+					for (auto& P : (*PropsPtr)->Values)
 				{
 					TSharedRef<FJsonObject> SP = MakeShared<FJsonObject>();
 					SP->SetStringField(TEXT("system_path"), SystemPath);
@@ -11967,6 +11977,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 					SP->SetField(TEXT("value"), P.Value);
 					FMonolithActionResult EPR = HandleSetEmitterProperty(SP);
 					if (!EPR.bSuccess) { OutErrors.Add(FString::Printf(TEXT("set_emitter_property[%s]: %s"), *P.Key, *EPR.ErrorMessage)); FailCount++; }
+				}
 				}
 			}
 
@@ -11995,8 +12006,10 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 
 					if (MO->HasField(TEXT("inputs")))
 					{
-						TSharedPtr<FJsonObject> Ins = MO->GetObjectField(TEXT("inputs"));
-						for (auto& IP : Ins->Values)
+						const TSharedPtr<FJsonObject>* InsPtr;
+						if (MO->TryGetObjectField(TEXT("inputs"), InsPtr) && InsPtr->IsValid() && InsPtr->Get() != nullptr)
+						{
+							for (auto& IP : (*InsPtr)->Values)
 						{
 							TSharedRef<FJsonObject> SIP = MakeShared<FJsonObject>();
 							SIP->SetStringField(TEXT("system_path"), SystemPath);
@@ -12007,11 +12020,14 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 							FMonolithActionResult SIVR = HandleSetModuleInputValue(SIP);
 							if (!SIVR.bSuccess) { OutErrors.Add(FString::Printf(TEXT("set_module_input[%s]: %s"), *IP.Key, *SIVR.ErrorMessage)); FailCount++; }
 						}
+						}
 					}
 					if (MO->HasField(TEXT("bindings")))
 					{
-						TSharedPtr<FJsonObject> Binds = MO->GetObjectField(TEXT("bindings"));
-						for (auto& BP2 : Binds->Values)
+						const TSharedPtr<FJsonObject>* BindsPtr;
+						if (MO->TryGetObjectField(TEXT("bindings"), BindsPtr) && BindsPtr->IsValid() && BindsPtr->Get() != nullptr)
+						{
+							for (auto& BP2 : (*BindsPtr)->Values)
 						{
 							TSharedRef<FJsonObject> SBP = MakeShared<FJsonObject>();
 							SBP->SetStringField(TEXT("system_path"), SystemPath);
@@ -12022,12 +12038,15 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 							FMonolithActionResult SIBR = HandleSetModuleInputBinding(SBP);
 							if (!SIBR.bSuccess) { OutErrors.Add(FString::Printf(TEXT("set_module_binding[%s]: %s"), *BP2.Key, *SIBR.ErrorMessage)); FailCount++; }
 						}
+						}
 					}
 					// Static switches
 					if (MO->HasField(TEXT("static_switches")))
 					{
-						TSharedPtr<FJsonObject> Switches = MO->GetObjectField(TEXT("static_switches"));
-						for (auto& SW : Switches->Values)
+						const TSharedPtr<FJsonObject>* SwitchesPtr;
+						if (MO->TryGetObjectField(TEXT("static_switches"), SwitchesPtr) && SwitchesPtr->IsValid() && SwitchesPtr->Get() != nullptr)
+						{
+							for (auto& SW : (*SwitchesPtr)->Values)
 						{
 							TSharedRef<FJsonObject> SSP = MakeShared<FJsonObject>();
 							SSP->SetStringField(TEXT("system_path"), SystemPath);
@@ -12037,6 +12056,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 							SSP->SetField(TEXT("value"), SW.Value);
 							FMonolithActionResult SSR = HandleSetStaticSwitchValue(SSP);
 							if (!SSR.bSuccess) { OutErrors.Add(FString::Printf(TEXT("set_static_switch[%s]: %s"), *SW.Key, *SSR.ErrorMessage)); FailCount++; }
+						}
 						}
 					}
 				}
@@ -12074,8 +12094,10 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 					}
 					if (RO->HasField(TEXT("properties")))
 					{
-						TSharedPtr<FJsonObject> RProps = RO->GetObjectField(TEXT("properties"));
-						for (auto& RP : RProps->Values)
+						const TSharedPtr<FJsonObject>* RPropsPtr;
+						if (RO->TryGetObjectField(TEXT("properties"), RPropsPtr) && RPropsPtr->IsValid() && RPropsPtr->Get() != nullptr)
+						{
+							for (auto& RP : (*RPropsPtr)->Values)
 						{
 							TSharedRef<FJsonObject> SRP = MakeShared<FJsonObject>();
 							SRP->SetStringField(TEXT("system_path"), SystemPath);
@@ -12085,6 +12107,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 							SRP->SetField(TEXT("value"), RP.Value);
 							FMonolithActionResult SRPR = HandleSetRendererProperty(SRP);
 							if (!SRPR.bSuccess) { OutErrors.Add(FString::Printf(TEXT("set_renderer_property[%s]: %s"), *RP.Key, *SRPR.ErrorMessage)); FailCount++; }
+						}
 						}
 					}
 				}
@@ -12127,7 +12150,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 		return FMonolithActionResult::Error(TEXT("'spec' must be an object"));
 	}
 
-	FString Mode = Params->HasField(TEXT("mode")) ? Params->GetStringField(TEXT("mode")) : TEXT("overwrite");
+	FString Mode = TEXT("overwrite");
+	if (Params->HasField(TEXT("mode")) && !Params->TryGetStringField(TEXT("mode"), Mode))
+		return FMonolithActionResult::Error(TEXT("Invalid mode parameter type, must be string"));
 	if (!Mode.Equals(TEXT("overwrite"), ESearchCase::IgnoreCase) && !Mode.Equals(TEXT("merge"), ESearchCase::IgnoreCase))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Unsupported mode '%s' — use 'overwrite' or 'merge'"), *Mode));
 

@@ -2,6 +2,7 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h" // LogMonolith
+#include "MonolithPackagePathValidator.h"
 #include "MonolithAssetUtils.h"
 
 // Sound Cue core
@@ -534,6 +535,13 @@ USoundCue* FMonolithAudioSoundCueActions::CreateEmptySoundCue(const FString& Ass
 	if (Existing)
 	{
 		OutError = FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath);
+		return nullptr;
+	}
+
+	// Defensive: reject malformed paths (e.g. "//Game/...") before StaticLoadObject/CreatePackage can assert.
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		OutError = ValidationError;
 		return nullptr;
 	}
 

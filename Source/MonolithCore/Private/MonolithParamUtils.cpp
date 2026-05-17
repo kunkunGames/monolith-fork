@@ -12,12 +12,16 @@ bool ParseVector(const TSharedPtr<FJsonObject>& Params, const FString& Key, FVec
 {
 	// Try array format: [x, y, z]
 	const TArray<TSharedPtr<FJsonValue>>* Arr;
-	if (Params->TryGetArrayField(Key, Arr) && Arr->Num() >= 3)
+	if (Params->TryGetArrayField(Key, Arr) && Arr && Arr->Num() >= 3)
 	{
-		Out.X = (*Arr)[0]->AsNumber();
-		Out.Y = (*Arr)[1]->AsNumber();
-		Out.Z = (*Arr)[2]->AsNumber();
-		return true;
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		if ((*Arr)[0]->TryGetNumber(X) && (*Arr)[1]->TryGetNumber(Y) && (*Arr)[2]->TryGetNumber(Z))
+		{
+			Out.X = X;
+			Out.Y = Y;
+			Out.Z = Z;
+			return true;
+		}
 	}
 
 	// Try object format: {x, y, z}
@@ -43,12 +47,16 @@ bool ParseRotator(const TSharedPtr<FJsonObject>& Params, const FString& Key, FRo
 {
 	// Try array format: [pitch, yaw, roll]
 	const TArray<TSharedPtr<FJsonValue>>* Arr;
-	if (Params->TryGetArrayField(Key, Arr) && Arr->Num() >= 3)
+	if (Params->TryGetArrayField(Key, Arr) && Arr && Arr->Num() >= 3)
 	{
-		Out.Pitch = (*Arr)[0]->AsNumber();
-		Out.Yaw   = (*Arr)[1]->AsNumber();
-		Out.Roll  = (*Arr)[2]->AsNumber();
-		return true;
+		double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
+		if ((*Arr)[0]->TryGetNumber(Pitch) && (*Arr)[1]->TryGetNumber(Yaw) && (*Arr)[2]->TryGetNumber(Roll))
+		{
+			Out.Pitch = Pitch;
+			Out.Yaw = Yaw;
+			Out.Roll = Roll;
+			return true;
+		}
 	}
 
 	// Try object format: {pitch, yaw, roll}

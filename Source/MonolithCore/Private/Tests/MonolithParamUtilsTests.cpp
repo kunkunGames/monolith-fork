@@ -98,6 +98,19 @@ bool FMonolithParseVectorTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("ParseVector array Z"), Out.Z, 3.5);
 	}
 
+	// Test case: invalid array (wrong value type)
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Add(MakeShared<FJsonValueString>(TEXT("one")));
+		Arr.Add(MakeShared<FJsonValueNumber>(2.5));
+		Arr.Add(MakeShared<FJsonValueNumber>(3.5));
+		Params->SetArrayField(TEXT("vec_arr_wrong_type"), Arr);
+
+		FVector Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseVector(Params, TEXT("vec_arr_wrong_type"), Out);
+		TestFalse(TEXT("ParseVector array wrong type fails gracefully"), bResult);
+	}
+
 
 	// Test case: valid object {x, y, z}
 	{
@@ -182,6 +195,19 @@ bool FMonolithParseRotatorTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("ParseRotator array Pitch"), Out.Pitch, 90.0);
 		TestEqual(TEXT("ParseRotator array Yaw"), Out.Yaw, 180.0);
 		TestEqual(TEXT("ParseRotator array Roll"), Out.Roll, 270.0);
+	}
+
+	// Test case: invalid array (wrong value type)
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Add(MakeShared<FJsonValueString>(TEXT("one")));
+		Arr.Add(MakeShared<FJsonValueNumber>(180.0));
+		Arr.Add(MakeShared<FJsonValueNumber>(270.0));
+		Params->SetArrayField(TEXT("rot_arr_wrong_type"), Arr);
+
+		FRotator Out(ForceInitToZero);
+		bool bResult = MonolithParamUtils::ParseRotator(Params, TEXT("rot_arr_wrong_type"), Out);
+		TestFalse(TEXT("ParseRotator array wrong type fails gracefully"), bResult);
 	}
 
 

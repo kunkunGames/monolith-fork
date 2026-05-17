@@ -5311,16 +5311,20 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateBlendSpace(const TS
 	{
 		FString XName = TEXT("None");
 	Params->TryGetStringField(TEXT("axis_x_name"), XName);
-		float XMin = Params->HasField(TEXT("axis_x_min")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_x_min"))) : 0.0f;
-		float XMax = Params->HasField(TEXT("axis_x_max")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_x_max"))) : 100.0f;
+		float XMin = 0.0f; double TempXMin;
+		if (Params->HasField(TEXT("axis_x_min"))) { if (!Params->TryGetNumberField(TEXT("axis_x_min"), TempXMin)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_x_min' must be a number")); XMin = static_cast<float>(TempXMin); }
+		float XMax = 100.0f; double TempXMax;
+		if (Params->HasField(TEXT("axis_x_max"))) { if (!Params->TryGetNumberField(TEXT("axis_x_max"), TempXMax)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_x_max' must be a number")); XMax = static_cast<float>(TempXMax); }
 		ConfigureBlendSpaceAxis(BS, 0, XName, XMin, XMax);
 	}
 	if (Params->HasField(TEXT("axis_y_name")) || Params->HasField(TEXT("axis_y_min")) || Params->HasField(TEXT("axis_y_max")))
 	{
 		FString YName = TEXT("None");
 	Params->TryGetStringField(TEXT("axis_y_name"), YName);
-		float YMin = Params->HasField(TEXT("axis_y_min")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_y_min"))) : 0.0f;
-		float YMax = Params->HasField(TEXT("axis_y_max")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_y_max"))) : 100.0f;
+		float YMin = 0.0f; double TempYMin;
+		if (Params->HasField(TEXT("axis_y_min"))) { if (!Params->TryGetNumberField(TEXT("axis_y_min"), TempYMin)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_y_min' must be a number")); YMin = static_cast<float>(TempYMin); }
+		float YMax = 100.0f; double TempYMax;
+		if (Params->HasField(TEXT("axis_y_max"))) { if (!Params->TryGetNumberField(TEXT("axis_y_max"), TempYMax)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_y_max' must be a number")); YMax = static_cast<float>(TempYMax); }
 		ConfigureBlendSpaceAxis(BS, 1, YName, YMin, YMax);
 	}
 
@@ -5375,8 +5379,10 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateBlendSpace1D(const 
 	{
 		FString AxisName = TEXT("None");
 	Params->TryGetStringField(TEXT("axis_name"), AxisName);
-		float AxisMin = Params->HasField(TEXT("axis_min")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_min"))) : 0.0f;
-		float AxisMax = Params->HasField(TEXT("axis_max")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_max"))) : 100.0f;
+		float AxisMin = 0.0f; double TempAxisMin;
+		if (Params->HasField(TEXT("axis_min"))) { if (!Params->TryGetNumberField(TEXT("axis_min"), TempAxisMin)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_min' must be a number")); AxisMin = static_cast<float>(TempAxisMin); }
+		float AxisMax = 100.0f; double TempAxisMax;
+		if (Params->HasField(TEXT("axis_max"))) { if (!Params->TryGetNumberField(TEXT("axis_max"), TempAxisMax)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_max' must be a number")); AxisMax = static_cast<float>(TempAxisMax); }
 		ConfigureBlendSpaceAxis(BS, 0, AxisName, AxisMin, AxisMax);
 	}
 
@@ -5429,15 +5435,19 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateAimOffset(const TSh
 	{
 		FString XName = TEXT("Yaw");
 	Params->TryGetStringField(TEXT("axis_x_name"), XName);
-		float XMin = Params->HasField(TEXT("axis_x_min")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_x_min"))) : -180.0f;
-		float XMax = Params->HasField(TEXT("axis_x_max")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_x_max"))) : 180.0f;
+		float XMin = -180.0f; double TempXMin;
+		if (Params->HasField(TEXT("axis_x_min"))) { if (!Params->TryGetNumberField(TEXT("axis_x_min"), TempXMin)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_x_min' must be a number")); XMin = static_cast<float>(TempXMin); }
+		float XMax = 180.0f; double TempXMax;
+		if (Params->HasField(TEXT("axis_x_max"))) { if (!Params->TryGetNumberField(TEXT("axis_x_max"), TempXMax)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_x_max' must be a number")); XMax = static_cast<float>(TempXMax); }
 		ConfigureBlendSpaceAxis(AO, 0, XName, XMin, XMax);
 	}
 	{
 		FString YName = TEXT("Pitch");
 	Params->TryGetStringField(TEXT("axis_y_name"), YName);
-		float YMin = Params->HasField(TEXT("axis_y_min")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_y_min"))) : -90.0f;
-		float YMax = Params->HasField(TEXT("axis_y_max")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_y_max"))) : 90.0f;
+		float YMin = -90.0f; double TempYMin;
+		if (Params->HasField(TEXT("axis_y_min"))) { if (!Params->TryGetNumberField(TEXT("axis_y_min"), TempYMin)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_y_min' must be a number")); YMin = static_cast<float>(TempYMin); }
+		float YMax = 90.0f; double TempYMax;
+		if (Params->HasField(TEXT("axis_y_max"))) { if (!Params->TryGetNumberField(TEXT("axis_y_max"), TempYMax)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_y_max' must be a number")); YMax = static_cast<float>(TempYMax); }
 		ConfigureBlendSpaceAxis(AO, 1, YName, YMin, YMax);
 	}
 
@@ -5491,8 +5501,10 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateAimOffset1D(const T
 	{
 		FString AxisName = TEXT("Yaw");
 	Params->TryGetStringField(TEXT("axis_name"), AxisName);
-		float AxisMin = Params->HasField(TEXT("axis_min")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_min"))) : -180.0f;
-		float AxisMax = Params->HasField(TEXT("axis_max")) ? static_cast<float>(Params->GetNumberField(TEXT("axis_max"))) : 180.0f;
+		float AxisMin = -180.0f; double TempAxisMin;
+		if (Params->HasField(TEXT("axis_min"))) { if (!Params->TryGetNumberField(TEXT("axis_min"), TempAxisMin)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_min' must be a number")); AxisMin = static_cast<float>(TempAxisMin); }
+		float AxisMax = 180.0f; double TempAxisMax;
+		if (Params->HasField(TEXT("axis_max"))) { if (!Params->TryGetNumberField(TEXT("axis_max"), TempAxisMax)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_max' must be a number")); AxisMax = static_cast<float>(TempAxisMax); }
 		ConfigureBlendSpaceAxis(AO, 0, AxisName, AxisMin, AxisMax);
 	}
 

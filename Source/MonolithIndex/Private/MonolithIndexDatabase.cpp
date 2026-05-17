@@ -1109,6 +1109,8 @@ TSharedPtr<FJsonObject> FMonolithIndexDatabase::GetStats()
 	Stats->SetNumberField(TEXT("configs"), GetCount(TEXT("configs")));
 	Stats->SetNumberField(TEXT("cpp_symbols"), GetCount(TEXT("cpp_symbols")));
 	Stats->SetNumberField(TEXT("datatable_rows"), GetCount(TEXT("datatable_rows")));
+	Stats->SetNumberField(TEXT("tag_references"), GetCount(TEXT("tag_references")));
+	Stats->SetNumberField(TEXT("meta"), GetCount(TEXT("meta")));
 
 	// Asset class breakdown
 	auto ClassBreakdown = MakeShared<FJsonObject>();
@@ -1127,7 +1129,7 @@ TSharedPtr<FJsonObject> FMonolithIndexDatabase::GetStats()
 	// Module breakdown (which plugins have how many assets)
 	auto ModuleBreakdown = MakeShared<FJsonObject>();
 	FSQLitePreparedStatement ModStmt;
-	ModStmt.Create(*Database, TEXT("SELECT CASE WHEN module_name = '' THEN 'Project' ELSE module_name END as mod, COUNT(*) as cnt FROM assets GROUP BY module_name ORDER BY cnt DESC;"));
+	ModStmt.Create(*Database, TEXT("SELECT CASE WHEN module_name = '' THEN 'Project' ELSE module_name END as mod, COUNT(*) as cnt FROM assets GROUP BY mod ORDER BY cnt DESC;"));
 	while (ModStmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FString ModName;

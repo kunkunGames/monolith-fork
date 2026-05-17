@@ -32,3 +32,9 @@
 **Learning:** `HasField` only checks if the key exists, not the type. Calling `GetStringField` directly causes assertion crashes if the user provides a different JSON type (like a number or boolean).
 **Prevention:** Handlers accessing optional string fields must use `TryGetStringField` after `HasField`, and explicitly handle the boolean return to reject malformed types with a clear `FMonolithActionResult::Error`.
 **Avoid:** Assuming `HasField` guarantees type safety for optional parameters.
+
+## 2026-05-14 - Reject malformed string types in optional number params
+**Malformed input pattern:** String values reaching optional number params parsed with `HasField` and `GetNumberField`, causing assert/crash.
+**Learning:** `GetNumberField` throws or asserts if a present field is the wrong JSON type (like a string where a number is expected).
+**Prevention:** Use `TryGetNumberField` inside a `HasField` block to validate present params. If `TryGetNumberField` fails, return an explicit error instead of a default fallback.
+**Avoid:** Falling back to default values when a client explicitly sends a malformed (wrong type) value. Defaults are only for absent fields.

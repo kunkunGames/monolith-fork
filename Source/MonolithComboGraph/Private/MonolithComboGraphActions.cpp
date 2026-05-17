@@ -2081,8 +2081,14 @@ FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontage
 					*MontagePaths[i], *NodeResult.ErrorMessage));
 		}
 
-		int32 NodeIndex = static_cast<int32>(NodeResult.Result->GetNumberField(TEXT("node_index")));
-		NodeIndices.Add(NodeIndex);
+		double NodeIndexVal;
+		if (!NodeResult.Result->TryGetNumberField(TEXT("node_index"), NodeIndexVal))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Internal error: HandleAddComboNode did not return a valid 'node_index' for montage '%s'"),
+					*MontagePaths[i]));
+		}
+		NodeIndices.Add(static_cast<int32>(NodeIndexVal));
 	}
 
 	// Step 3: Chain nodes with edges

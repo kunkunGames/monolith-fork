@@ -2028,7 +2028,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleBatchValidateAIAssets(co
 
 			if (R.bSuccess && R.Result.IsValid())
 			{
-				int32 IssueCount = FMath::RoundToInt32(R.Result->GetNumberField(TEXT("issue_count")));
+				int32 IssueCount = 0;
+				double TmpIssueCount = 0.0;
+				if (R.Result->TryGetNumberField(TEXT("issue_count"), TmpIssueCount)) {
+					IssueCount = FMath::RoundToInt32(TmpIssueCount);
+				}
 				if (IssueCount > 0)
 				{
 					TotalIssues += IssueCount;
@@ -2036,9 +2040,10 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleBatchValidateAIAssets(co
 					Entry->SetStringField(TEXT("asset_path"), AssetPath);
 					Entry->SetStringField(TEXT("type"), TypeName);
 					Entry->SetNumberField(TEXT("issue_count"), IssueCount);
-					if (R.Result->HasField(TEXT("issues")))
+					const TArray<TSharedPtr<FJsonValue>>* IssuesArray = nullptr;
+					if (R.Result->TryGetArrayField(TEXT("issues"), IssuesArray) && IssuesArray)
 					{
-						Entry->SetArrayField(TEXT("issues"), R.Result->GetArrayField(TEXT("issues")));
+						Entry->SetArrayField(TEXT("issues"), *IssuesArray);
 					}
 					AllResults.Add(MakeShared<FJsonValueObject>(Entry));
 				}
@@ -2184,7 +2189,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleBatchValidateAIAssets(co
 
 			if (R.bSuccess && R.Result.IsValid())
 			{
-				int32 IssueCount = FMath::RoundToInt32(R.Result->GetNumberField(TEXT("issue_count")));
+				int32 IssueCount = 0;
+				double TmpIssueCount = 0.0;
+				if (R.Result->TryGetNumberField(TEXT("issue_count"), TmpIssueCount)) {
+					IssueCount = FMath::RoundToInt32(TmpIssueCount);
+				}
 				if (IssueCount > 0)
 				{
 					Issues += IssueCount;
@@ -2193,9 +2202,10 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleBatchValidateAIAssets(co
 					Entry->SetStringField(TEXT("asset_path"), AssetPath);
 					Entry->SetStringField(TEXT("type"), TypeName);
 					Entry->SetNumberField(TEXT("issue_count"), IssueCount);
-					if (R.Result->HasField(TEXT("issues")))
+					const TArray<TSharedPtr<FJsonValue>>* IssuesArray = nullptr;
+					if (R.Result->TryGetArrayField(TEXT("issues"), IssuesArray) && IssuesArray)
 					{
-						Entry->SetArrayField(TEXT("issues"), R.Result->GetArrayField(TEXT("issues")));
+						Entry->SetArrayField(TEXT("issues"), *IssuesArray);
 					}
 					AllResults.Add(MakeShared<FJsonValueObject>(Entry));
 				}
@@ -2249,7 +2259,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleBatchValidateAIAssets(co
 
 			if (R.bSuccess && R.Result.IsValid())
 			{
-				int32 IssueCount = FMath::RoundToInt32(R.Result->GetNumberField(TEXT("issue_count")));
+				int32 IssueCount = 0;
+				double TmpIssueCount = 0.0;
+				if (R.Result->TryGetNumberField(TEXT("issue_count"), TmpIssueCount)) {
+					IssueCount = FMath::RoundToInt32(TmpIssueCount);
+				}
 				if (IssueCount > 0)
 				{
 					TotalIssues += IssueCount;
@@ -2257,9 +2271,10 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleBatchValidateAIAssets(co
 					Entry->SetStringField(TEXT("asset_path"), AssetPath);
 					Entry->SetStringField(TEXT("type"), TEXT("AIController"));
 					Entry->SetNumberField(TEXT("issue_count"), IssueCount);
-					if (R.Result->HasField(TEXT("issues")))
+					const TArray<TSharedPtr<FJsonValue>>* IssuesArray = nullptr;
+					if (R.Result->TryGetArrayField(TEXT("issues"), IssuesArray) && IssuesArray)
 					{
-						Entry->SetArrayField(TEXT("issues"), R.Result->GetArrayField(TEXT("issues")));
+						Entry->SetArrayField(TEXT("issues"), *IssuesArray);
 					}
 					AllResults.Add(MakeShared<FJsonValueObject>(Entry));
 				}
