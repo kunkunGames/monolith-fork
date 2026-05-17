@@ -21,6 +21,7 @@
 | `FMonolithAssetUtils` | Asset loading with 4-tier fallback: StaticLoadObject(resolved) -> PackageName.ObjectName -> FindObject+_C suffix -> ForEachObjectWithPackage |
 | `UMonolithSettings` | UDeveloperSettings (config=Monolith). ServerPort, bAutoUpdateEnabled, DatabasePathOverride, EngineSourceDBPathOverride, EngineSourcePath, 10 module enable toggles + `bEnableProceduralTownGen` (experimental, default false) (functional — checked at registration time), LogVerbosity. Settings UI customized via `FMonolithSettingsCustomization` (IDetailCustomization) with re-index buttons for project and source databases |
 | `UMonolithUpdateSubsystem` | UEditorSubsystem. GitHub Releases auto-updater. Shows dialog window with full release notes on update detection. Downloads zip, cross-platform extraction (PowerShell on Windows, unzip on Mac/Linux). Stages to Saved/Monolith/Staging/, hot-swaps on editor exit via FCoreDelegates::OnPreExit. Current version always from compiled MONOLITH_VERSION (version.json only stores pending/staging state). Release zips include pre-compiled DLLs. |
+| `FMonolithActionExecutionGuard` | Central action-dispatch scope and audit owner. First milestone records duration and dirty package deltas without raw payload logging or rollback claims. The next planned slice is the bounded ToolCall ledger in [SPEC_MonolithToolCallLedger.md](SPEC_MonolithToolCallLedger.md). |
 | `FMonolithCoreTools` | Registers 4 core actions |
 
 ### Helpers
@@ -39,3 +40,9 @@
 | `reindex` | `monolith_reindex` | Trigger project re-index. Defaults to incremental (hash-based delta); pass `force=true` for full wipe-and-rebuild (via reflection to MonolithIndex, no hard dependency) |
 
 ---
+
+### Planned ToolCall Ledger
+
+`bEnableAdvancedToolCallRecords` is the default-off setting reserved for redacted ToolCall records and local analysis. The accepted first slice is documented in [SPEC_MonolithToolCallLedger.md](SPEC_MonolithToolCallLedger.md).
+
+The first implementation must stay local and bounded, must not persist raw params or result payloads, and must preserve the current `monolith.list_recent_action_audit` response shape for compatibility.
