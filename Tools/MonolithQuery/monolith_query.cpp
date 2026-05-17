@@ -1648,7 +1648,7 @@ static Row bridge_asset_by_path(Database& db, const std::string& path) {
 }
 
 static Rows bridge_project_assets_search(Database& db, const std::string& candidate, int limit) {
-    Rows rows = query(db,
+    Rows exact = query(db,
         "SELECT id, package_path, asset_name, asset_class, module_name "
         "FROM assets WHERE lower(asset_name) = lower(?) LIMIT " + std::to_string(limit),
         {candidate});
@@ -1657,8 +1657,18 @@ static Rows bridge_project_assets_search(Database& db, const std::string& candid
         "FROM fts_assets f JOIN assets a ON a.id = f.rowid "
         "WHERE fts_assets MATCH ? ORDER BY rank LIMIT " + std::to_string(limit),
         {escape_fts(candidate)});
-    rows.insert(rows.end(), fts.begin(), fts.end());
-    if ((int)rows.size() > limit) rows.resize(limit);
+
+    Rows rows;
+    std::set<std::string> seen;
+    auto add_unique = [&](const Row& row) {
+        if ((int)rows.size() >= limit) return;
+        std::string key = row.get("id");
+        if (key.empty()) key = lower_copy(row.get("package_path"));
+        if (key.empty() || !seen.insert(key).second) return;
+        rows.push_back(row);
+    };
+    for (const auto& row : exact) add_unique(row);
+    for (const auto& row : fts) add_unique(row);
     return rows;
 }
 
