@@ -254,6 +254,44 @@ bool FSourceDetectChangesStandardTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceDetectChangesEscapesPathWildcardsTest, "Monolith.IndexGuard.Source.DetectChangesEscapesPathWildcards", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceDetectChangesEscapesPathWildcardsTest::RunTest(const FString& Parameters)
+{
+	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithSrcDetectWildcards"), TEXT(".sqlite"));
+	FMonolithSourceDatabase DB;
+
+	TestTrue(TEXT("temporary DB opens for writing"), DB.OpenForWriting(DbPath));
+	TestTrue(TEXT("temporary DB creates schema"), DB.CreateTablesIfNeeded());
+
+	const int64 ModuleId = DB.InsertModule(TEXT("M"), TEXT("/tmp/M"), TEXT("Runtime"));
+	const int64 UnderFileId = DB.InsertFile(TEXT("/tmp/M/Foo_Bar.cpp"), ModuleId, TEXT("cpp"), 12, 0.0);
+	const int64 PlainFileId = DB.InsertFile(TEXT("/tmp/M/FooXBar.cpp"), ModuleId, TEXT("cpp"), 12, 0.0);
+	const int64 UnderSymbolId = DB.InsertSymbol(TEXT("FooUnderSymbol"), TEXT("M::FooUnderSymbol"), TEXT("function"), UnderFileId, 1, 3, 0, TEXT("public"), TEXT("void FooUnderSymbol()"), TEXT(""), false);
+	const int64 PlainSymbolId = DB.InsertSymbol(TEXT("FooXSymbol"), TEXT("M::FooXSymbol"), TEXT("function"), PlainFileId, 1, 3, 0, TEXT("public"), TEXT("void FooXSymbol()"), TEXT(""), false);
+	TestTrue(TEXT("wildcard fixture inserted"), ModuleId > 0 && UnderFileId > 0 && PlainFileId > 0 && UnderSymbolId > 0 && PlainSymbolId > 0);
+
+	TSharedPtr<FJsonObject> R = DB.DetectChanges({ TEXT("Foo_Bar.cpp") }, 10, TEXT("standard"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("underscore path is treated literally"), R->GetIntegerField(TEXT("changed_entity_count")), 1);
+
+	const TArray<TSharedPtr<FJsonValue>>* Changed = nullptr;
+	TestTrue(TEXT("changed_entities present"), R->TryGetArrayField(TEXT("changed_entities"), Changed) && Changed && Changed->Num() == 1);
+	if (Changed && Changed->Num() == 1)
+	{
+		TSharedPtr<FJsonObject> First = (*Changed)[0]->AsObject();
+		TestTrue(TEXT("first changed object"), First.IsValid());
+		if (First.IsValid())
+		{
+			TestEqual(TEXT("literal underscore file matched"), First->GetStringField(TEXT("file")), FString(TEXT("/tmp/M/Foo_Bar.cpp")));
+			TestEqual(TEXT("overmatching file excluded"), First->GetStringField(TEXT("name")), FString(TEXT("FooUnderSymbol")));
+		}
+	}
+
+	DB.Close();
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*DbPath);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceReviewHotspotsLargeTest, "Monolith.IndexGuard.Source.ReviewHotspotsLarge", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FSourceReviewHotspotsLargeTest::RunTest(const FString& Parameters)
 {

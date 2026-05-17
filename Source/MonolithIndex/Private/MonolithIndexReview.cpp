@@ -1286,18 +1286,22 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::DetectChanges(
 		{
 			continue;
 		}
+		const FString EscapedStem = Stem
+			.Replace(TEXT("\\"), TEXT("\\\\"))
+			.Replace(TEXT("%"), TEXT("\\%"))
+			.Replace(TEXT("_"), TEXT("\\_"));
 
 		FSQLitePreparedStatement Stmt;
 		if (!Stmt.Create(*Raw, TEXT(
 			"SELECT id,package_path,asset_name,asset_class,COALESCE(module_name,'') "
 			"FROM assets "
-			"WHERE asset_name = ? OR replace(package_path,'\\','/') LIKE '%/' || ? "
+			"WHERE asset_name = ? OR replace(package_path,'\\','/') LIKE ? ESCAPE '\\' "
 			"ORDER BY id LIMIT ?;")))
 		{
 			continue;
 		}
 		Stmt.SetBindingValueByIndex(1, Stem);
-		Stmt.SetBindingValueByIndex(2, Stem);
+		Stmt.SetBindingValueByIndex(2, FString::Printf(TEXT("%%/%s"), *EscapedStem));
 		Stmt.SetBindingValueByIndex(3, static_cast<int64>(Cap + 1));
 
 		while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)

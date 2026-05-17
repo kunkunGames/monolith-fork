@@ -2084,18 +2084,22 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::DetectChanges(
 			bTruncated = true;
 			break;
 		}
+		const FString EscapedPath = Path
+			.Replace(TEXT("\\"), TEXT("\\\\"))
+			.Replace(TEXT("%"), TEXT("\\%"))
+			.Replace(TEXT("_"), TEXT("\\_"));
 
 		FSQLitePreparedStatement S;
 		if (!S.Create(*Database, TEXT(
 			"SELECT s.id,s.name,s.qualified_name,s.kind,s.file_id,COALESCE(f.path,''),"
 			"       s.line_start,s.line_end,COALESCE(s.signature,''),s.is_ue_macro "
 			"FROM symbols s JOIN files f ON f.id = s.file_id "
-			"WHERE replace(f.path,'\\','/') LIKE '%' || ? "
+			"WHERE replace(f.path,'\\','/') LIKE ? ESCAPE '\\' "
 			"ORDER BY s.id LIMIT ?;")))
 		{
 			continue;
 		}
-		S.SetBindingValueByIndex(1, Path);
+		S.SetBindingValueByIndex(1, FString::Printf(TEXT("%%%s"), *EscapedPath));
 		S.SetBindingValueByIndex(2, static_cast<int64>(Cap + 1));
 
 		while (S.Step() == ESQLitePreparedStatementStepResult::Row)

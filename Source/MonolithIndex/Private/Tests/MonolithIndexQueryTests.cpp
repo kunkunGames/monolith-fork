@@ -268,6 +268,47 @@ bool FProjectDetectChangesStandardTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectDetectChangesEscapesPathWildcardsTest, "Monolith.IndexGuard.Project.DetectChangesEscapesPathWildcards", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectDetectChangesEscapesPathWildcardsTest::RunTest(const FString& Parameters)
+{
+	FMonolithIndexDatabase Db;
+	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithIdxDetectWildcards"), TEXT(".sqlite"));
+	TestTrue(TEXT("temporary DB opens"), Db.Open(DbPath));
+
+	auto Mk = [&](const TCHAR* PackagePath) -> int64
+	{
+		FIndexedAsset Asset;
+		Asset.PackagePath = PackagePath;
+		Asset.AssetName = FPaths::GetCleanFilename(PackagePath);
+		Asset.AssetClass = TEXT("Blueprint");
+		return Db.InsertAsset(Asset);
+	};
+	const int64 UnderId = Mk(TEXT("/Game/BP_Player_Controller"));
+	const int64 PlainId = Mk(TEXT("/Game/BP_PlayerXController"));
+	TestTrue(TEXT("wildcard fixture inserted"), UnderId > 0 && PlainId > 0);
+
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::DetectChanges(Db, { TEXT("Content/BP_Player_Controller.uasset") }, 10, TEXT("standard"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("underscore asset path is treated literally"), R->GetIntegerField(TEXT("changed_entity_count")), 1);
+
+	const TArray<TSharedPtr<FJsonValue>>* Changed = nullptr;
+	TestTrue(TEXT("changed_entities present"), R->TryGetArrayField(TEXT("changed_entities"), Changed) && Changed && Changed->Num() == 1);
+	if (Changed && Changed->Num() == 1)
+	{
+		TSharedPtr<FJsonObject> First = (*Changed)[0]->AsObject();
+		TestTrue(TEXT("first changed object"), First.IsValid());
+		if (First.IsValid())
+		{
+			TestEqual(TEXT("literal underscore asset matched"), First->GetStringField(TEXT("asset_path")), FString(TEXT("/Game/BP_Player_Controller")));
+			TestEqual(TEXT("overmatching asset excluded"), First->GetStringField(TEXT("asset_name")), FString(TEXT("BP_Player_Controller")));
+		}
+	}
+
+	Db.Close();
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*DbPath);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectReviewHotspotsLargeTest, "Monolith.IndexGuard.Project.ReviewHotspotsLarge", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectReviewHotspotsLargeTest::RunTest(const FString& Parameters)
 {
