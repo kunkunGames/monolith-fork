@@ -11,6 +11,7 @@
 #include "NiagaraScriptSource.h"
 #include "NiagaraGraph.h"
 #include "NiagaraCommon.h"
+#include "Misc/AutomationTest.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMonolithNiagaraLayout, Log, All);
 
@@ -27,7 +28,7 @@ void FMonolithNiagaraLayoutActions::RegisterActions(FMonolithToolRegistry& Regis
 		FMonolithActionHandler::CreateStatic(&HandleAutoLayout),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("NiagaraSystem asset path"))
-			.Optional(TEXT("emitter"), TEXT("string"), TEXT("Filter to a specific emitter's graph (by name or handle ID)"))
+			.Optional(TEXT("emitter"), TEXT("string"), TEXT("Filter to a specific emitter's graph by name, handle ID, or list_emitters index"))
 			.Optional(TEXT("script_usage"), TEXT("string"),
 				TEXT("Script usage filter: 'system', 'emitter', 'particle'. "
 					"System spawn/update share one graph; emitter spawn/update/particle spawn/update share another per emitter. "
@@ -99,23 +100,53 @@ namespace
 		return false;
 	}
 
-	/** Find emitter handle index by name or ID string */
+	/** Find emitter handle index by name, ID string, or list_emitters index */
 	int32 FindEmitterHandleIndex(UNiagaraSystem* System, const FString& NameOrId)
 	{
+		if (!System) return INDEX_NONE;
+		const FString Selector = NameOrId.TrimStartAndEnd();
+		if (Selector.IsEmpty()) return INDEX_NONE;
+
 		const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
+
+		FGuid TestGuid;
+		if (FGuid::Parse(Selector, TestGuid))
+		{
+			for (int32 i = 0; i < Handles.Num(); ++i)
+			{
+				if (Handles[i].GetId() == TestGuid)
+				{
+					return i;
+				}
+			}
+		}
+
 		for (int32 i = 0; i < Handles.Num(); ++i)
 		{
-			if (Handles[i].GetUniqueInstanceName() == NameOrId || Handles[i].GetName().ToString() == NameOrId)
-			{
-				return i;
-			}
-			// Also match by ID GUID string
-			if (Handles[i].GetId().ToString(EGuidFormats::DigitsWithHyphensLower) == NameOrId
-				|| Handles[i].GetId().ToString(EGuidFormats::Digits) == NameOrId)
+			if (Handles[i].GetName().ToString() == Selector)
 			{
 				return i;
 			}
 		}
+
+		for (int32 i = 0; i < Handles.Num(); ++i)
+		{
+			if (Handles[i].GetName().ToString().Equals(Selector, ESearchCase::IgnoreCase) ||
+				Handles[i].GetUniqueInstanceName().Equals(Selector, ESearchCase::IgnoreCase))
+			{
+				return i;
+			}
+		}
+
+		if (Selector.IsNumeric())
+		{
+			const int32 Index = FCString::Atoi(*Selector);
+			if (Handles.IsValidIndex(Index))
+			{
+				return Index;
+			}
+		}
+
 		return INDEX_NONE;
 	}
 
@@ -374,4 +405,26 @@ FMonolithActionResult FMonolithNiagaraLayoutActions::HandleAutoLayout(const TSha
 	}
 
 	return FMonolithActionResult::Success(Result);
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraLayoutEmitterSelectorTest, "Monolith.ParamGuard.Niagara.LayoutEmitterSelector", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithNiagaraLayoutEmitterSelectorTest::RunTest(const FString& Parameters)
+{
+	UNiagaraSystem* System = NewObject<UNiagaraSystem>(GetTransientPackage(), TEXT("NS_MonolithLayoutEmitterSelector"));
+	TestNotNull(TEXT("transient Niagara system exists"), System);
+	if (!System)
+	{
+		return false;
+	}
+
+	System->GetEmitterHandles().AddDefaulted(2);
+
+	TestEqual(TEXT("numeric emitter selector resolves first handle"), FindEmitterHandleIndex(System, TEXT("0")), 0);
+	TestEqual(TEXT("numeric emitter selector resolves second handle"), FindEmitterHandleIndex(System, TEXT("1")), 1);
+	TestEqual(TEXT("out-of-range numeric selector is rejected"), FindEmitterHandleIndex(System, TEXT("2")), INDEX_NONE);
+	TestEqual(TEXT("empty selector is rejected"), FindEmitterHandleIndex(System, TEXT("")), INDEX_NONE);
+	TestEqual(TEXT("null system is rejected"), FindEmitterHandleIndex(nullptr, TEXT("0")), INDEX_NONE);
+
+	return true;
 }
