@@ -41,6 +41,8 @@ public:
 		int32 MaxChars = 65536);
 
 	void RegisterDefaultResources();
+	bool HasDefaultResourcesRegistered() const;
+	int32 GetResourceCount() const;
 
 	TSharedPtr<FJsonObject> ListResourcesJson(int32 Limit, const FString& Cursor) const;
 	FMonolithResourceReadResult ReadResource(const FString& Uri) const;

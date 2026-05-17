@@ -18,34 +18,34 @@ namespace
 	{
 		static const TArray<FDefaultDocResource> Resources = {
 			{
-				TEXT("monolith://docs/specs/unrealmcp/readme"),
-				TEXT("PRD/UnrealMCP/Spec/README.md"),
-				TEXT("UnrealMCP spec index"),
-				TEXT("Index for Monolith UnrealMCP implementation specs")
+				TEXT("monolith://docs/specs/core"),
+				TEXT("Docs/specs/SPEC_MonolithCore.md"),
+				TEXT("MonolithCore spec"),
+				TEXT("Top-level MonolithCore module behavior and contracts")
 			},
 			{
-				TEXT("monolith://docs/specs/unrealmcp/00"),
-				TEXT("PRD/UnrealMCP/Spec/00_implementation_order_and_flags.md"),
-				TEXT("UnrealMCP implementation order"),
-				TEXT("Implementation order, feature flags, and shared contracts")
+				TEXT("monolith://docs/specs/toolcall-ledger"),
+				TEXT("Docs/specs/SPEC_MonolithToolCallLedger.md"),
+				TEXT("ToolCall ledger spec"),
+				TEXT("Redacted local ToolCall record and analysis contract")
 			},
 			{
-				TEXT("monolith://docs/specs/unrealmcp/01"),
-				TEXT("PRD/UnrealMCP/Spec/01_deferred_monolith_domain_catalog.md"),
-				TEXT("Deferred Monolith domain catalog"),
-				TEXT("Deferred domain catalog contract and metadata-only loading behavior")
+				TEXT("monolith://docs/specs/mcp-resources"),
+				TEXT("Docs/specs/SPEC_MonolithMcpResources.md"),
+				TEXT("MCP resources spec"),
+				TEXT("Read-only MCP resources/list and resources/read contract")
 			},
 			{
-				TEXT("monolith://docs/specs/unrealmcp/03"),
-				TEXT("PRD/UnrealMCP/Spec/03_mcp_resources_and_typed_results.md"),
-				TEXT("MCP resources and typed results"),
-				TEXT("Resource endpoint and typed MCP result contract")
+				TEXT("monolith://docs/api-reference"),
+				TEXT("Docs/API_REFERENCE.md"),
+				TEXT("Monolith API reference"),
+				TEXT("Public C++ and Blueprint-facing Monolith API reference")
 			},
 			{
-				TEXT("monolith://docs/specs/unrealmcp/06"),
-				TEXT("PRD/UnrealMCP/Spec/06_local_toolcall_record_analysis.md"),
-				TEXT("Local ToolCall record and analysis"),
-				TEXT("Local redacted ToolCall record and analysis contract")
+				TEXT("monolith://docs/todo"),
+				TEXT("Docs/TODO.md"),
+				TEXT("Monolith docs TODO"),
+				TEXT("Accepted documentation and verification backlog")
 			}
 		};
 		return Resources;
@@ -131,6 +131,18 @@ void FMonolithResourceRegistry::RegisterDefaultResources()
 			}),
 			65536);
 	}
+}
+
+bool FMonolithResourceRegistry::HasDefaultResourcesRegistered() const
+{
+	FScopeLock Lock(&ResourceLock);
+	return bDefaultResourcesRegistered;
+}
+
+int32 FMonolithResourceRegistry::GetResourceCount() const
+{
+	FScopeLock Lock(&ResourceLock);
+	return Resources.Num();
 }
 
 TSharedPtr<FJsonObject> FMonolithResourceRegistry::ListResourcesJson(int32 Limit, const FString& Cursor) const

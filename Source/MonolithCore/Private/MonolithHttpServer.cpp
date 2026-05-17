@@ -444,7 +444,9 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::ProcessJsonRpcRequest(const TShared
 	// Dispatch by method
 	TSharedPtr<FJsonObject> Response;
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
-	const bool bResourcesEnabled = Settings && Settings->bEnableMcpResources;
+	const bool bResourcesEnabled = Settings
+		&& Settings->bEnableMcpResources
+		&& FMonolithResourceRegistry::Get().HasDefaultResourcesRegistered();
 
 	if (Method == TEXT("initialize"))
 	{
@@ -522,7 +524,9 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleInitialize(const TSharedPtr<F
 	Capabilities->SetObjectField(TEXT("tools"), ToolsCap);
 
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
-	if (Settings && Settings->bEnableMcpResources)
+	if (Settings
+		&& Settings->bEnableMcpResources
+		&& FMonolithResourceRegistry::Get().HasDefaultResourcesRegistered())
 	{
 		TSharedPtr<FJsonObject> ResourcesCap = MakeShared<FJsonObject>();
 		ResourcesCap->SetBoolField(TEXT("listChanged"), false);

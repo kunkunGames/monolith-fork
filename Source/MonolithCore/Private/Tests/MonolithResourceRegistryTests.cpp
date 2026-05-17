@@ -72,6 +72,24 @@ bool FMonolithResourceRegistryBasicTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Unknown resource is not found"), Missing.bFound);
 	TestTrue(TEXT("Unknown resource has error"), !Missing.Error.IsEmpty());
 
+	FMonolithResourceDescriptor LongDescriptor;
+	LongDescriptor.Uri = TEXT("monolith://test/truncated");
+	LongDescriptor.Name = TEXT("Truncated resource");
+	LongDescriptor.Description = TEXT("Resource truncation test payload");
+	LongDescriptor.MimeType = TEXT("text/plain");
+	Registry.RegisterTextResource(
+		LongDescriptor,
+		FMonolithResourceRegistry::FTextResourceProvider::CreateLambda([]()
+		{
+			return FString(TEXT("abcdef"));
+		}),
+		3);
+
+	FMonolithResourceReadResult Truncated = Registry.ReadResource(TEXT("monolith://test/truncated"));
+	TestTrue(TEXT("Truncated resource is found"), Truncated.bFound);
+	TestTrue(TEXT("Truncated resource marks truncation"), Truncated.bTruncated);
+	TestEqual(TEXT("Truncated resource text is capped"), Truncated.Text, TEXT("abc"));
+
 	Registry.ResetForTests();
 	return true;
 }
@@ -138,13 +156,14 @@ bool FMonolithDefaultSpecResourcesTest::RunTest(const FString& Parameters)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Resources = nullptr;
 		TestTrue(TEXT("Default resources array exists"), List->TryGetArrayField(TEXT("resources"), Resources));
-		TestTrue(TEXT("Spec 00 URI is listed"), ResourceArrayContainsUri(Resources, TEXT("monolith://docs/specs/unrealmcp/00")));
+		TestTrue(TEXT("Core spec URI is listed"), ResourceArrayContainsUri(Resources, TEXT("monolith://docs/specs/core")));
+		TestTrue(TEXT("MCP resources spec URI is listed"), ResourceArrayContainsUri(Resources, TEXT("monolith://docs/specs/mcp-resources")));
 	}
 
-	FMonolithResourceReadResult Read = Registry.ReadResource(TEXT("monolith://docs/specs/unrealmcp/00"));
-	TestTrue(TEXT("Spec 00 read succeeds"), Read.bFound);
-	TestTrue(TEXT("Spec 00 content is markdown"), Read.MimeType == TEXT("text/markdown"));
-	TestTrue(TEXT("Spec 00 content has expected heading"), Read.Text.Contains(TEXT("Implementation Order")));
+	FMonolithResourceReadResult Read = Registry.ReadResource(TEXT("monolith://docs/specs/mcp-resources"));
+	TestTrue(TEXT("MCP resources spec read succeeds"), Read.bFound);
+	TestTrue(TEXT("MCP resources spec content is markdown"), Read.MimeType == TEXT("text/markdown"));
+	TestTrue(TEXT("MCP resources spec content has expected heading"), Read.Text.Contains(TEXT("Monolith MCP Resources First Slice")));
 
 	Registry.ResetForTests();
 	return true;

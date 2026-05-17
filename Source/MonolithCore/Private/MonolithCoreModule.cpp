@@ -90,7 +90,11 @@ void FMonolithCoreModule::RegisterCoreTools()
 	FMonolithCoreTools::RegisterAll();
 	FMonolithToolProfileActions::RegisterAll();
 	RegisterMonolithExecutionGuardActions();
-	FMonolithResourceRegistry::Get().RegisterDefaultResources();
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (Settings && Settings->bEnableMcpResources)
+	{
+		FMonolithResourceRegistry::Get().RegisterDefaultResources();
+	}
 }
 
 FString FMonolithCoreModule::GetSentinelFilePath() const

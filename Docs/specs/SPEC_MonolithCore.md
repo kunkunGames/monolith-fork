@@ -23,7 +23,6 @@
 | `UMonolithSettings` | UDeveloperSettings (config=Monolith). ServerPort, bAutoUpdateEnabled, DatabasePathOverride, EngineSourceDBPathOverride, EngineSourcePath, 10 module enable toggles + `bEnableProceduralTownGen` (experimental, default false) (functional — checked at registration time), LogVerbosity. Settings UI customized via `FMonolithSettingsCustomization` (IDetailCustomization) with re-index buttons for project and source databases |
 | `UMonolithUpdateSubsystem` | UEditorSubsystem. GitHub Releases auto-updater. Shows dialog window with full release notes on update detection. Downloads zip, cross-platform extraction (PowerShell on Windows, unzip on Mac/Linux). Stages to Saved/Monolith/Staging/, hot-swaps on editor exit via FCoreDelegates::OnPreExit. Current version always from compiled MONOLITH_VERSION (version.json only stores pending/staging state). Release zips include pre-compiled DLLs. |
 | `FMonolithActionExecutionGuard` | Central action-dispatch scope and audit owner. First milestone records duration and dirty package deltas without raw payload logging or rollback claims. The next planned slice is the bounded ToolCall ledger in [SPEC_MonolithToolCallLedger.md](SPEC_MonolithToolCallLedger.md). |
-| `FMonolithResourceRegistry` | Planned read-only MCP resource registry. First slice contract is documented in [SPEC_MonolithMcpResources.md](SPEC_MonolithMcpResources.md). |
 | `FMonolithCoreTools` | Registers 4 core actions |
 
 ### Helpers
@@ -49,8 +48,8 @@
 
 The first implementation must stay local and bounded, must not persist raw params or result payloads, and must preserve the current `monolith.list_recent_action_audit` response shape for compatibility.
 
-### Planned MCP Resources
+### MCP Resources
 
-`bEnableMcpResources` is the default-off setting reserved for read-only MCP `resources/list` and `resources/read` support. The accepted first slice is documented in [SPEC_MonolithMcpResources.md](SPEC_MonolithMcpResources.md).
+`bEnableMcpResources` is the default-off setting for read-only MCP `resources/list` and `resources/read` support. The accepted first slice is documented in [SPEC_MonolithMcpResources.md](SPEC_MonolithMcpResources.md).
 
-The first implementation must expose only explicit Monolith providers, must not read arbitrary caller-provided filesystem paths, and must keep all resource payloads bounded.
+The first implementation exposes only explicit Monolith providers, does not read arbitrary caller-provided filesystem paths, and keeps all resource payloads bounded.
