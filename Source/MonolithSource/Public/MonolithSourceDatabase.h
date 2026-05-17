@@ -89,7 +89,7 @@ public:
 
 	// --- Symbol queries ---
 	TArray<FMonolithSourceSymbol> SearchSymbolsFTS(const FString& Query, int32 Limit = 20);
-	TArray<FMonolithSourceSymbol> GetSymbolsByName(const FString& Name, const FString& Kind = TEXT(""));
+	TArray<FMonolithSourceSymbol> GetSymbolsByName(const FString& Name, const FString& Kind = TEXT(""), int32 Limit = 0);
 	TOptional<FMonolithSourceSymbol> GetSymbolById(int64 Id);
 
 	// --- File queries ---

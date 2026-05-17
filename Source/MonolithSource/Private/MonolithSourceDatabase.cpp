@@ -928,23 +928,36 @@ FMonolithSourceReference FMonolithSourceDatabase::ReadReferenceFromStatement(FSQ
 // Symbol queries
 // ============================================================
 
-TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::GetSymbolsByName(const FString& Name, const FString& Kind)
+TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::GetSymbolsByName(const FString& Name, const FString& Kind, int32 Limit)
 {
 	FScopeLock Lock(&DbLock);
 	TArray<FMonolithSourceSymbol> Result;
 	if (!Database || !Database->IsValid()) return Result;
 
+	const int32 SafeLimit = Limit > 0 ? FMath::Clamp(Limit, 1, 1000) : 0;
 	FSQLitePreparedStatement Stmt;
 	if (Kind.IsEmpty())
 	{
-		Stmt.Create(*Database, TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC;"));
+		Stmt.Create(*Database, SafeLimit > 0
+			? TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC LIMIT ?;")
+			: TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC;"));
 		Stmt.SetBindingValueByIndex(1, Name);
+		if (SafeLimit > 0)
+		{
+			Stmt.SetBindingValueByIndex(2, static_cast<int64>(SafeLimit));
+		}
 	}
 	else
 	{
-		Stmt.Create(*Database, TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? AND kind = ? ORDER BY (line_end > line_start) DESC;"));
+		Stmt.Create(*Database, SafeLimit > 0
+			? TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? AND kind = ? ORDER BY (line_end > line_start) DESC LIMIT ?;")
+			: TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? AND kind = ? ORDER BY (line_end > line_start) DESC;"));
 		Stmt.SetBindingValueByIndex(1, Name);
 		Stmt.SetBindingValueByIndex(2, Kind);
+		if (SafeLimit > 0)
+		{
+			Stmt.SetBindingValueByIndex(3, static_cast<int64>(SafeLimit));
+		}
 	}
 
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)

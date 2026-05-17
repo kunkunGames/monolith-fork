@@ -291,7 +291,7 @@ void AddSourceMatchesForCandidate(
 		return;
 	}
 
-	const TArray<FMonolithSourceSymbol> Exact = DB->GetSymbolsByName(Candidate);
+	const TArray<FMonolithSourceSymbol> Exact = DB->GetSymbolsByName(Candidate, TEXT(""), FMath::Max(1, Limit) + 1);
 	for (const FMonolithSourceSymbol& Symbol : Exact)
 	{
 		TArray<FString> Reasons;
@@ -876,6 +876,7 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(co
 	TArray<FBridgeLinkCandidate> LinkCandidates;
 	TSet<FString> SeenLinks;
 	TArray<FString> CandidateStrings;
+	bool bStoppedAtLimit = false;
 
 	if (!ProjectIndex)
 	{
@@ -922,6 +923,7 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(co
 		{
 			if (LinkCandidates.Num() >= Limit)
 			{
+				bStoppedAtLimit = true;
 				break;
 			}
 			AddSourceMatchesForCandidate(DB, AssetObj, AssetName, Candidate, Limit, bStandard, LinkCandidates, SeenLinks);
@@ -933,7 +935,7 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(co
 		TArray<FMonolithSourceSymbol> Symbols;
 		if (DB && DB->IsOpen())
 		{
-			Symbols = DB->GetSymbolsByName(SymbolSeed);
+			Symbols = DB->GetSymbolsByName(SymbolSeed, TEXT(""), Limit + 1);
 			if (Symbols.Num() == 0)
 			{
 				Symbols = DB->SearchSymbolsFTSFiltered(SymbolSeed, TEXT(""), TEXT(""), TEXT(""), Limit);
@@ -948,6 +950,7 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(co
 		{
 			if (LinkCandidates.Num() >= Limit)
 			{
+				bStoppedAtLimit = true;
 				break;
 			}
 			CandidateStrings.Append(MonolithSourceBridge::BuildSymbolAssetCandidates(Symbol.Name, Symbol.QualifiedName));
@@ -955,6 +958,7 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(co
 			{
 				if (LinkCandidates.Num() >= Limit)
 				{
+					bStoppedAtLimit = true;
 					break;
 				}
 				AddAssetMatchesForSymbol(ProjectIndex, Symbol, DB, Candidate, Limit, bStandard, LinkCandidates, SeenLinks);
@@ -967,7 +971,7 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(co
 		return A.Score > B.Score;
 	});
 
-	const bool bTruncated = LinkCandidates.Num() > Limit;
+	const bool bTruncated = bStoppedAtLimit || LinkCandidates.Num() > Limit;
 	if (bTruncated)
 	{
 		LinkCandidates.SetNum(Limit);

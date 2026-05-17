@@ -529,7 +529,7 @@ Local context discovery backed by ProjectIndex and EngineSource. **5 actions.**
 | `context.start_indexing` | `scope`=all\|assets\|source, `full`=false | Start project asset and/or source indexing from one context entry point |
 | `context.search_items` | `query`*, `limit`=24, `include_assets`=true, `include_source`=true | Search indexed assets, source symbols, and source lines for prompt context |
 | `context.build_attachment` | `item_id`*, `context_lines`=12, `max_chars`=12000 | Materialize a `context.search_items` item into a bounded text attachment |
-| `context.bridge_asset_symbols` | `asset_path` or `symbol`, `limit`=20, `detail_level`=minimal | RX-6 read-only asset<->source bridge. Returns heuristic `links[]` with `confidence`, `reasons[]`, `asset`, `symbol`, `warnings[]`, and `next_actions`; never mutates indexes or shells out |
+| `context.bridge_asset_symbols` | `asset_path` or `symbol`, `limit`=20, `detail_level`=minimal | RX-6 read-only asset<->source bridge. Returns bounded heuristic `links[]` with `confidence`, `reasons[]`, `asset`, `symbol`, `warnings[]`, `truncated`, and `next_actions`; never mutates indexes or shells out |
 
 ---
 
