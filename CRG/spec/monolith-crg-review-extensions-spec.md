@@ -136,11 +136,10 @@ useful global "where should I be careful?" view.
   `detect_changes`, and optional `find_unused` into an advisory `decision`,
   `checks[]`, and `findings[]`. The offline CLI exposes the same read-only
   contract so closed-editor review can run the same gate.
-- **RX-6 — DONE (editor); OFFLINE SPEC'D.** `context.bridge_asset_symbols`
-  provides the read-only asset<->source heuristic bridge. Offline parity is
-  now accepted as the next additive CLI step: `monolith_query context
-  bridge_asset_symbols` should use copied/open ProjectIndex + EngineSource DBs
-  and preserve the same confidence/reasons contract without mutation.
+- **RX-6 — DONE (editor + offline).** `context.bridge_asset_symbols` provides
+  the read-only asset<->source heuristic bridge. Offline `monolith_query
+  context bridge_asset_symbols` uses ProjectIndex + EngineSource DBs read-only
+  and preserves the same confidence/reasons contract without mutation.
 - Verification record: `Docs/testing/2026-05-17-crg-review-extensions.md`.
 
 ## Non-Goals (correctly excluded — do not spec as work)
