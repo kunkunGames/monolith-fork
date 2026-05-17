@@ -68,8 +68,8 @@ The implementation preserves the legacy `content[]` text JSON response for compa
 
 The first implementation stays process-local and redacted: it observes session headers, protocol version, method names, and tool names, but does not store raw session ids, request params, result payloads, auth headers, cookies, bearer tokens, or API keys. Progress notifications and in-flight cancellation remain follow-up work.
 
-### Planned MCP Compatibility Options
+### MCP Compatibility Options
 
-`monolith.set_mcp_compatibility_options` currently reports unavailable. The accepted first slice is documented in [SPEC_MonolithMcpCompatibilityOptions.md](SPEC_MonolithMcpCompatibilityOptions.md).
+`monolith.set_mcp_compatibility_options` supports the first safe compatibility slice documented in [SPEC_MonolithMcpCompatibilityOptions.md](SPEC_MonolithMcpCompatibilityOptions.md).
 
-The first implementation should expose only a safe browser CORS toggle between `loopback_only` and `disabled`. Legacy SSE/message routes, wildcard CORS, and arbitrary origin allowlists remain out of scope.
+The implementation exposes only a safe browser CORS toggle between `loopback_only` and `disabled`. Legacy SSE/message routes, wildcard CORS, and arbitrary origin allowlists remain out of scope.

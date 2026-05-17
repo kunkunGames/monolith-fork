@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_MonolithCore.md](SPEC_MonolithCore.md)
 **Engine:** Unreal Engine 5.7+
-**Status:** Proposed
+**Status:** Implemented first slice
 **Owner module:** MonolithCore
 **Scope:** Make `monolith.set_mcp_compatibility_options` useful for safe browser-CORS compatibility without enabling legacy routes or broad origins.
 **Non-goals:** Re-enabling wildcard CORS, adding legacy `/sse` or `/message` routes, exposing the server to non-loopback browser origins, changing MCP JSON-RPC dispatch, changing `.mcp.json` generation.

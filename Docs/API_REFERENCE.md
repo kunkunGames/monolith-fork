@@ -68,6 +68,8 @@ When `bEnableStructuredToolResults=true`, MCP `tools/call` responses keep the le
 
 When `bEnableMcpSessionMode=true`, MonolithCore observes `MCP-Session-Id` and `MCP-Protocol-Version` on `POST /mcp` requests in a bounded process-local table. `monolith.list_mcp_sessions` returns redacted/hash identifiers, protocol version, request counts, timestamps, method names, and tool names only. It does not store raw session ids, params, result payloads, auth headers, cookies, bearer tokens, or API keys; progress notifications and in-flight cancellation are not active in this slice.
 
+`monolith.set_mcp_compatibility_options` supports `options.browser_access` values of `"loopback_only"` and `"disabled"`. `"loopback_only"` preserves the localhost/127.0.0.1/[::1] browser CORS allowlist; `"disabled"` omits `Access-Control-Allow-Origin` for browser origins while keeping non-browser MCP clients working. Legacy SSE/message routes, wildcard CORS, and arbitrary origin allowlists are not supported.
+
 ### `monolith.discover`
 
 List available tool namespaces and their actions. Pass `namespace` to filter; pass `category` to narrow further (e.g. `"CommonUI"` inside `ui`).

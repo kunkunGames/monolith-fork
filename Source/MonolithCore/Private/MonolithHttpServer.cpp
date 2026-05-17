@@ -466,7 +466,11 @@ bool FMonolithHttpServer::HandleHealthCheck(const FHttpServerRequest& Request, c
 	Transport->SetBoolField(TEXT("mcp_get_sse_endpoint_enabled"), true);
 	Transport->SetBoolField(TEXT("legacy_sse_route_enabled"), false);
 	Transport->SetBoolField(TEXT("legacy_message_route_enabled"), false);
-	Transport->SetStringField(TEXT("cors_mode"), TEXT("loopback_origin_allowlist"));
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	const bool bBrowserLoopbackCors = !Settings || Settings->bEnableBrowserLoopbackCors;
+	Transport->SetStringField(TEXT("cors_mode"), bBrowserLoopbackCors ? TEXT("loopback_origin_allowlist") : TEXT("browser_cors_disabled"));
+	Transport->SetStringField(TEXT("browser_access"), bBrowserLoopbackCors ? TEXT("loopback_only") : TEXT("disabled"));
+	Transport->SetBoolField(TEXT("allow_origin_header_enabled"), bBrowserLoopbackCors);
 	Transport->SetNumberField(TEXT("max_request_body_bytes"), MaxMcpRequestBodyBytes);
 
 	TArray<TSharedPtr<FJsonValue>> Protocols;
@@ -1027,6 +1031,12 @@ void FMonolithHttpServer::AddCorsHeaders(FHttpServerResponse& Response, const FH
 	Response.Headers.Add(TEXT("Access-Control-Allow-Methods"), {TEXT("GET, POST, DELETE, OPTIONS")});
 	Response.Headers.Add(TEXT("Access-Control-Allow-Headers"), {TEXT("Content-Type, Accept, MCP-Session-Id, MCP-Protocol-Version")});
 	Response.Headers.Add(TEXT("Vary"), {TEXT("Origin")});
+
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (Settings && !Settings->bEnableBrowserLoopbackCors)
+	{
+		return;
+	}
 
 	// Pull the Origin header (HTTP header names are case-insensitive per RFC 7230,
 	// but the underlying TMap keys may preserve case — try both common spellings).

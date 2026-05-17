@@ -36,6 +36,14 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="MCP Server", meta=(ClampMin="1024", ClampMax="65535"))
 	int32 ServerPort = 9316;
 
+	/** Allow browser pages from loopback origins to read MCP responses.
+	 *  Non-browser MCP clients do not rely on CORS and continue to work when
+	 *  this is disabled. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Compatibility",
+		meta=(DisplayName="Enable Browser Loopback CORS",
+			  ToolTip="Echo Access-Control-Allow-Origin only for localhost/127.0.0.1/[::1] browser origins. Disable to block browser reads while keeping non-browser MCP clients working."))
+	bool bEnableBrowserLoopbackCors = true;
+
 	/** Enable domain catalog actions that let clients list, describe, and mark
 	 *  active namespaces without exposing additional namespace tools by default. */
 	UPROPERTY(config, EditAnywhere, Category="MCP Server|Discovery",

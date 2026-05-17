@@ -36,7 +36,7 @@ public:
 	/** monolith_terminate_mcp_session — Report MCP session termination availability */
 	static FMonolithActionResult HandleTerminateMcpSession(const TSharedPtr<FJsonObject>& Params);
 
-	/** monolith_set_mcp_compatibility_options — Report compatibility option mutability */
+	/** monolith_set_mcp_compatibility_options — Set safe MCP compatibility options */
 	static FMonolithActionResult HandleSetMcpCompatibilityOptions(const TSharedPtr<FJsonObject>& Params);
 
 	/** monolith_get_mcp_discovery_state — Return current discovery snapshot status */
