@@ -23,6 +23,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
 | [editor](#editor) | 36 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, selection inspection, PIE/console control |
 | [config](#config) | 6 | INI config inspection and search |
+| [interchange](#interchange) | 16 | Normalized import/export validation, guarded import mutation, reimport metadata, reimport, and export actions registered by MonolithMesh |
 | [project](#project) | 14 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 18 | Unreal Engine C++ source code navigation |
 | [mesh](#mesh) | 244 (+24 gated) | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental — +24 town gen registers only with `bEnableProceduralTownGen=true`) |
@@ -100,6 +101,40 @@ Re-index the Monolith project database. Incremental by default (delta only). Pas
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `force` | bool | optional | Full wipe + rebuild instead of incremental delta. Default: `false` |
+
+---
+
+## interchange
+
+Normalized import/export workflow registered by `MonolithMesh`. Use this namespace
+when the caller has a local source file and wants validation, batch rows, reimport
+metadata, or a generic import/export path instead of a narrow mesh/material helper.
+
+All mutation actions require `confirm=true` unless `dry_run=true`. Source files are
+limited to project/content/saved roots unless `allow_external=true`.
+
+| Action | Required Params | Notes |
+|--------|-----------------|-------|
+| `get_supported_formats` | none | Lists known extensions, module availability, default allowed roots, and policy notes |
+| `can_import` | `source_file` | Validates source existence, extension, Interchange availability, root policy, and optional `destination_path` |
+| `can_reimport` | `asset_path` | Reports reflected source import data and source file existence |
+| `get_import_data` | `asset_path` | Returns reflected import source file rows without mutation |
+| `import_asset` | `source_file`, `destination_path`, `conflict_policy` | Imports one source file and returns one structured row |
+| `import_assets` | `source_files`, `destination_path`, `conflict_policy` | Imports files sequentially; per-file validation failures do not stop later rows |
+| `import_scene` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for scene-like formats |
+| `import_mesh` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for mesh-like formats |
+| `import_skeletal_mesh` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for skeletal mesh sources |
+| `import_texture` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for texture sources |
+| `import_audio` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for audio sources |
+| `import_with_options` | `source_file`, `destination_path`, `conflict_policy` | Same guarded import path with an optional forward-compatible `options` object |
+| `update_reimport_path` | `asset_path`, `source_file` | Updates the reflected source path after source/root validation |
+| `reimport_asset` | `asset_path` | Reimports one existing asset through Unreal's reimport manager |
+| `reimport_assets` | `asset_paths` | Reimports assets sequentially and returns one row per asset |
+| `export_asset` | `asset_path`, `file_path` | Exports one asset after output path validation |
+
+Conflict policy values are `fail`, `overwrite`, `rename`, and `reimport_only`.
+`fail` rejects likely destination package collisions before import; `overwrite`
+forwards replace intent; `rename` lets Unreal allocate a non-conflicting package.
 
 ---
 

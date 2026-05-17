@@ -37,9 +37,49 @@
 | `FMonolithMeshArchFeatureActions` | Architectural features: balconies, porches, fire escapes, railings (5 actions) |
 | `FMonolithMeshDebugViewActions` | Daredevil debug view: section clip, floor plan capture, camera bookmarks (6 actions) |
 | `FMonolithMeshFurnishingActions` | Room furnishing: room-type furniture mapping, placement rules (3 actions) |
+| `FMonolithMeshInterchangeActions` | Interchange namespace support: supported-format discovery, source/destination validation, import data inspection, guarded import mutation, reimport, and export entrypoints |
 | `FMonolithMeshBuildingTypes` | Shared structs: FBuildingGrid, FRoomDef, FDoorDef, FStairwellDef, FBuildingDescriptor |
 | `FMonolithMeshCatalog` | Mesh catalog database for search_meshes_by_size and get_mesh_catalog_stats |
 | `FMonolithMeshUtils` | Shared helpers for mesh loading, bounds calculation, actor queries |
+
+### Interchange Namespace
+
+`FMonolithMeshInterchangeActions` registers the `interchange` namespace from the
+MonolithMesh module. The namespace is intentionally separate from `mesh` so agents
+can choose a normalized import/export workflow when the asset type or pipeline is
+not known up front.
+
+Second milestone contract:
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `get_supported_formats` | none | Report known import/export extensions, default file roots, and Interchange module availability |
+| `can_import` | `source_file`, `destination_path`?, `allow_external`? | Validate a source file, destination package path, root policy, and format support without mutation |
+| `can_reimport` | `asset_path` | Check reflected import metadata and source file existence |
+| `get_import_data` | `asset_path` | Return reflected `UAssetImportData` source file rows |
+| `import_asset` | `source_file`, `destination_path`, `conflict_policy`, `confirm`?/`dry_run`? | Import one source file with guardrails and a structured result row |
+| `import_assets` | `source_files`, `destination_path`, `conflict_policy`, `confirm`?/`dry_run`? | Import files sequentially and return one row per source, continuing after per-file failures |
+| `import_scene` | same as `import_asset` | Typed scene import entrypoint over the same guarded import implementation |
+| `import_mesh` | same as `import_asset` | Typed mesh import entrypoint over the same guarded import implementation |
+| `import_skeletal_mesh` | same as `import_asset` | Typed skeletal mesh import entrypoint over the same guarded import implementation |
+| `import_texture` | same as `import_asset` | Typed texture import entrypoint over the same guarded import implementation |
+| `import_audio` | same as `import_asset` | Typed audio import entrypoint over the same guarded import implementation |
+| `import_with_options` | same as `import_asset`, plus optional `options` | Guarded import entrypoint that preserves a forward-compatible options object in the response |
+| `update_reimport_path` | `asset_path`, `source_file`, `source_file_index`?, `confirm`?/`dry_run`? | Update reflected reimport source path after root/source validation |
+| `reimport_asset` | `asset_path`, `source_file`?, `source_file_index`?, `confirm`?/`dry_run`? | Reimport one existing asset through `FReimportManager` |
+| `reimport_assets` | `asset_paths`, `confirm`?/`dry_run`? | Reimport assets sequentially and return one row per asset |
+| `export_asset` | `asset_path`, `file_path`, `replace_existing`?, `confirm`?/`dry_run`? | Export one asset through `UAssetExportTask` after destination validation |
+
+Mutation guardrails:
+
+- `confirm=true` is required unless `dry_run=true`.
+- Source files must be under project/content/saved roots unless
+  `allow_external=true`.
+- `destination_path` must be a valid `/Game/...` package path.
+- `conflict_policy` is explicit: `fail`, `overwrite`, `rename`, or
+  `reimport_only`.
+- Batch actions return per-row `status`, `messages`, imported/updated asset paths,
+  and dirty package names instead of failing the entire batch on one bad source.
 
 ### Actions (268 — namespace: "mesh")
 
