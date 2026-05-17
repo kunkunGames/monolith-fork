@@ -275,6 +275,56 @@ static void add_next(json& root, std::initializer_list<const char*> actions) {
     for (const char* action : actions) root["next_actions"].push_back(action);
 }
 
+static std::string json_string_field(const json& object, const std::string& field,
+                                     const std::string& fallback) {
+    if (object.is_object() && object.contains(field) && object[field].is_string())
+        return object[field].get<std::string>();
+    return fallback;
+}
+
+static int json_int_field(const json& object, const std::string& field) {
+    if (!object.is_object() || !object.contains(field) || !object[field].is_number())
+        return 0;
+    return object[field].get<int>();
+}
+
+static double json_num_field(const json& object, const std::string& field) {
+    if (!object.is_object() || !object.contains(field) || !object[field].is_number())
+        return 0.0;
+    return object[field].get<double>();
+}
+
+static bool json_bool_field(const json& object, const std::string& field) {
+    if (!object.is_object() || !object.contains(field) || !object[field].is_boolean())
+        return false;
+    return object[field].get<bool>();
+}
+
+static const char* premerge_severity_name(int severity) {
+    return severity >= 2 ? "fail" : severity == 1 ? "warn" : "pass";
+}
+
+static void premerge_add_check(json& checks, int& severity, const std::string& name,
+                               const std::string& status, const std::string& summary,
+                               int check_severity) {
+    checks.push_back({
+        {"name", name},
+        {"status", status},
+        {"severity", premerge_severity_name(check_severity)},
+        {"summary", summary},
+    });
+    severity = std::max(severity, check_severity);
+}
+
+static void premerge_add_finding(json& findings, const std::string& severity,
+                                 const std::string& check, const std::string& message) {
+    findings.push_back({
+        {"severity", severity},
+        {"check", check},
+        {"message", message},
+    });
+}
+
 // ============================================================
 // RX-2: offline CRG projection-cache READ parity
 //
@@ -440,6 +490,7 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  review_context <symbol> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
                   << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
                   << "  find_unused [--kind=function|class|struct|all] [--limit=N] [--min-confidence=low|medium|high]\n"
+                  << "  pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]\n"
                   << "\nProject actions:\n"
                   << "  search <query> [--limit=N]\n"
                   << "  find_by_type <asset_class> [--limit=N] [--offset=N]\n"
@@ -453,7 +504,8 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
                   << "  review_context <asset_path> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
                   << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
-                  << "  find_unused [--kind=<asset_class>] [--limit=N] [--min-confidence=low|medium|high]\n";
+                  << "  find_unused [--kind=<asset_class>] [--limit=N] [--min-confidence=low|medium|high]\n"
+                  << "  pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]\n";
         std::exit(1);
     }
 
@@ -481,6 +533,19 @@ static Args parse_args(int argc, char* argv[]) {
     }
 
     return args;
+}
+
+static std::vector<std::string> collect_changed_paths(const Args& args) {
+    std::vector<std::string> paths = args.positional;
+    std::string csv = args.opt("changed_paths");
+    if (!csv.empty()) {
+        std::stringstream ss(csv);
+        std::string path;
+        while (std::getline(ss, path, ',')) {
+            if (!path.empty()) paths.push_back(path);
+        }
+    }
+    return paths;
 }
 
 // ============================================================
@@ -1722,6 +1787,128 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
         print_json(source_find_unused_json(args.opt("kind", "all"), args.opt_int("limit", 100),
                                            args.opt("min_confidence", "low")));
     }
+
+    json source_pre_merge_check_json(const std::vector<std::string>& changed_paths,
+                                     int max_results, int unused_limit,
+                                     const std::string& detail_level,
+                                     bool include_unused) {
+        bool standard = detail_level == "standard";
+        int change_cap = clamp_int(max_results <= 0 ? 200 : max_results, 1, 2000);
+        int unused_cap = clamp_int(unused_limit <= 0 ? 20 : unused_limit, 1, 1000);
+        json root = {
+            {"input", {
+                {"changed_paths", changed_paths},
+                {"detail_level", standard ? "standard" : "minimal"},
+                {"include_unused", include_unused},
+            }},
+            {"limits", {{"max_results", change_cap}, {"unused_limit", unused_cap}}},
+            {"scoring_version", "3"},
+        };
+
+        json health = source_health_json(false);
+        json changes = source_detect_changes_json(changed_paths, change_cap, standard ? "standard" : "minimal");
+        json unused = include_unused ? source_find_unused_json("all", unused_cap, "low") : json();
+
+        json checks = json::array();
+        json findings = json::array();
+        int severity = 0;
+
+        std::string health_status = json_string_field(health, "status", "error");
+        int health_severity = health_status == "error" ? 2 : health_status == "warning" ? 1 : 0;
+        premerge_add_check(checks, severity, "health", health_status,
+                           json_string_field(health, "summary", "Source health could not run"),
+                           health_severity);
+        if (health_severity > 0) {
+            premerge_add_finding(findings, health_severity >= 2 ? "error" : "warning", "health",
+                                 json_string_field(health, "summary", "Source health failed"));
+        }
+
+        std::string change_status = json_string_field(changes, "status", "error");
+        int changed_count = json_int_field(changes, "changed_entity_count");
+        int impacted_count = json_int_field(changes, "impacted_count");
+        int test_gap_count = json_int_field(changes, "test_gap_count");
+        double risk_score = json_num_field(changes, "risk_score");
+        int change_severity = change_status == "error" ? 2 : 0;
+        if (change_severity == 0 && changed_count == 0) {
+            change_severity = 1;
+            premerge_add_finding(findings, "warning", "detect_changes",
+                                 "No indexed source symbol matched the changed path set");
+        }
+        if (risk_score >= 0.66) {
+            change_severity = std::max(change_severity, 1);
+            premerge_add_finding(findings, "warning", "detect_changes",
+                                 "Changed source risk score is high: " + std::to_string(std::round(risk_score * 1000.0) / 1000.0));
+        }
+        if (impacted_count > 50) {
+            change_severity = std::max(change_severity, 1);
+            premerge_add_finding(findings, "warning", "detect_changes",
+                                 "Changed source set has broad direct caller impact: " + std::to_string(impacted_count) + " caller(s)");
+        }
+        if (test_gap_count > 0) {
+            change_severity = std::max(change_severity, 1);
+            premerge_add_finding(findings, "warning", "detect_changes",
+                                 std::to_string(test_gap_count) + " changed function(s) have no indexed test/automation reference");
+        }
+        if (change_status == "error") {
+            premerge_add_finding(findings, "error", "detect_changes",
+                                 json_string_field(changes, "summary", "detect_changes failed"));
+        }
+        premerge_add_check(checks, severity, "detect_changes", change_status,
+                           std::to_string(changed_count) + " changed source symbol(s), " +
+                               std::to_string(impacted_count) + " impacted caller(s), " +
+                               std::to_string(test_gap_count) + " test gap(s), risk=" +
+                               std::to_string(std::round(risk_score * 1000.0) / 1000.0),
+                           change_severity);
+
+        int unused_count = 0;
+        if (include_unused && unused.is_object()) {
+            if (unused.contains("items") && unused["items"].is_array())
+                unused_count = static_cast<int>(unused["items"].size());
+            std::string unused_status = json_string_field(unused, "status", "error");
+            int unused_severity = unused_status == "error" ? 2 : unused_count > 0 ? 1 : 0;
+            premerge_add_check(checks, severity, "find_unused", unused_status,
+                               std::to_string(unused_count) + " advisory unused source candidate(s) sampled",
+                               unused_severity);
+            if (unused_count > 0) {
+                premerge_add_finding(findings, "warning", "find_unused",
+                                     std::to_string(unused_count) + " advisory unused source candidate(s) present in sampled index");
+            }
+        }
+
+        std::string decision = severity >= 2 ? "fail" : severity == 1 ? "warn" : "pass";
+        root["status"] = severity >= 2 ? "error" : severity == 1 ? "warning" : "ok";
+        root["decision"] = decision;
+        root["summary"] = "Source pre-merge check " + decision + ": " +
+            std::to_string(changed_count) + " changed symbol(s), " +
+            std::to_string(impacted_count) + " impacted caller(s), " +
+            std::to_string(test_gap_count) + " test gap(s), " +
+            std::to_string(findings.size()) + " finding(s)";
+        root["risk_score"] = std::round(risk_score * 1000.0) / 1000.0;
+        root["checks"] = checks;
+        root["findings"] = findings;
+        root["changed_entity_count"] = changed_count;
+        root["impacted_count"] = impacted_count;
+        root["test_gap_count"] = test_gap_count;
+        root["unused_count"] = unused_count;
+        root["truncated"] = json_bool_field(changes, "truncated") || json_bool_field(unused, "truncated");
+        if (standard) {
+            root["health"] = health;
+            root["change_analysis"] = changes;
+            if (include_unused && unused.is_object()) root["unused"] = unused;
+        }
+        add_next(root, severity >= 2
+            ? std::initializer_list<const char*>{"source.health", "source.search_source"}
+            : std::initializer_list<const char*>{"source.detect_changes", "source.review_context", "source.find_unused"});
+        return root;
+    }
+
+    void pre_merge_check(const Args& args) {
+        print_json(source_pre_merge_check_json(collect_changed_paths(args),
+                                               args.opt_int("max_results", 200),
+                                               args.opt_int("unused_limit", 20),
+                                               args.opt("detail_level", "minimal"),
+                                               args.opt_bool("include_unused", true)));
+    }
 };
 
 // ============================================================
@@ -2642,6 +2829,119 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
         print_json(project_find_unused_json(args.opt("kind", "all"), args.opt_int("limit", 100),
                                             args.opt("min_confidence", "low")));
     }
+
+    json project_pre_merge_check_json(const std::vector<std::string>& changed_paths,
+                                      int max_results, int unused_limit,
+                                      const std::string& detail_level,
+                                      bool include_unused) {
+        bool standard = detail_level == "standard";
+        int change_cap = clamp_int(max_results <= 0 ? 200 : max_results, 1, 2000);
+        int unused_cap = clamp_int(unused_limit <= 0 ? 20 : unused_limit, 1, 1000);
+        json root = {
+            {"input", {
+                {"changed_paths", changed_paths},
+                {"detail_level", standard ? "standard" : "minimal"},
+                {"include_unused", include_unused},
+            }},
+            {"limits", {{"max_results", change_cap}, {"unused_limit", unused_cap}}},
+            {"scoring_version", "3"},
+        };
+
+        json health = project_health_json(false);
+        json changes = project_detect_changes_json(changed_paths, change_cap, standard ? "standard" : "minimal");
+        json unused = include_unused ? project_find_unused_json("all", unused_cap, "low") : json();
+
+        json checks = json::array();
+        json findings = json::array();
+        int severity = 0;
+
+        std::string health_status = json_string_field(health, "status", "error");
+        int health_severity = health_status == "error" ? 2 : health_status == "warning" ? 1 : 0;
+        premerge_add_check(checks, severity, "health", health_status,
+                           json_string_field(health, "summary", "Project health could not run"),
+                           health_severity);
+        if (health_severity > 0) {
+            premerge_add_finding(findings, health_severity >= 2 ? "error" : "warning", "health",
+                                 json_string_field(health, "summary", "Project health failed"));
+        }
+
+        std::string change_status = json_string_field(changes, "status", "error");
+        int changed_count = json_int_field(changes, "changed_entity_count");
+        int impacted_count = json_int_field(changes, "impacted_count");
+        double risk_score = json_num_field(changes, "risk_score");
+        int change_severity = change_status == "error" ? 2 : 0;
+        if (change_severity == 0 && changed_count == 0) {
+            change_severity = 1;
+            premerge_add_finding(findings, "warning", "detect_changes",
+                                 "No indexed asset matched the changed path set");
+        }
+        if (risk_score >= 0.66) {
+            change_severity = std::max(change_severity, 1);
+            premerge_add_finding(findings, "warning", "detect_changes",
+                                 "Changed asset risk score is high: " + std::to_string(std::round(risk_score * 1000.0) / 1000.0));
+        }
+        if (impacted_count > 50) {
+            change_severity = std::max(change_severity, 1);
+            premerge_add_finding(findings, "warning", "detect_changes",
+                                 "Changed asset set has broad direct impact: " + std::to_string(impacted_count) + " referencer(s)");
+        }
+        if (change_status == "error") {
+            premerge_add_finding(findings, "error", "detect_changes",
+                                 json_string_field(changes, "summary", "detect_changes failed"));
+        }
+        premerge_add_check(checks, severity, "detect_changes", change_status,
+                           std::to_string(changed_count) + " changed asset(s), " +
+                               std::to_string(impacted_count) + " impacted referencer(s), risk=" +
+                               std::to_string(std::round(risk_score * 1000.0) / 1000.0),
+                           change_severity);
+
+        int unused_count = 0;
+        if (include_unused && unused.is_object()) {
+            if (unused.contains("items") && unused["items"].is_array())
+                unused_count = static_cast<int>(unused["items"].size());
+            std::string unused_status = json_string_field(unused, "status", "error");
+            int unused_severity = unused_status == "error" ? 2 : unused_count > 0 ? 1 : 0;
+            premerge_add_check(checks, severity, "find_unused", unused_status,
+                               std::to_string(unused_count) + " advisory unused asset candidate(s) sampled",
+                               unused_severity);
+            if (unused_count > 0) {
+                premerge_add_finding(findings, "warning", "find_unused",
+                                     std::to_string(unused_count) + " advisory unused asset candidate(s) present in sampled index");
+            }
+        }
+
+        std::string decision = severity >= 2 ? "fail" : severity == 1 ? "warn" : "pass";
+        root["status"] = severity >= 2 ? "error" : severity == 1 ? "warning" : "ok";
+        root["decision"] = decision;
+        root["summary"] = "Project pre-merge check " + decision + ": " +
+            std::to_string(changed_count) + " changed asset(s), " +
+            std::to_string(impacted_count) + " impacted referencer(s), " +
+            std::to_string(findings.size()) + " finding(s)";
+        root["risk_score"] = std::round(risk_score * 1000.0) / 1000.0;
+        root["checks"] = checks;
+        root["findings"] = findings;
+        root["changed_entity_count"] = changed_count;
+        root["impacted_count"] = impacted_count;
+        root["unused_count"] = unused_count;
+        root["truncated"] = json_bool_field(changes, "truncated") || json_bool_field(unused, "truncated");
+        if (standard) {
+            root["health"] = health;
+            root["change_analysis"] = changes;
+            if (include_unused && unused.is_object()) root["unused"] = unused;
+        }
+        add_next(root, severity >= 2
+            ? std::initializer_list<const char*>{"project.health", "project.search"}
+            : std::initializer_list<const char*>{"project.detect_changes", "project.review_context", "project.find_unused"});
+        return root;
+    }
+
+    void pre_merge_check(const Args& args) {
+        print_json(project_pre_merge_check_json(collect_changed_paths(args),
+                                                args.opt_int("max_results", 200),
+                                                args.opt_int("unused_limit", 20),
+                                                args.opt("detail_level", "minimal"),
+                                                args.opt_bool("include_unused", true)));
+    }
 };
 
 // ============================================================
@@ -2716,6 +3016,7 @@ int main(int argc, char* argv[]) {
             {"review_context",      [](SourceActions& s, const Args& a) { s.review_context(a); }},
             {"detect_changes",      [](SourceActions& s, const Args& a) { s.detect_changes(a); }},
             {"find_unused",         [](SourceActions& s, const Args& a) { s.find_unused(a); }},
+            {"pre_merge_check",     [](SourceActions& s, const Args& a) { s.pre_merge_check(a); }},
         };
 
         auto it = actions.find(args.action);
@@ -2743,6 +3044,7 @@ int main(int argc, char* argv[]) {
             {"review_context",    [](ProjectActions& p, const Args& a) { p.review_context(a); }},
             {"detect_changes",    [](ProjectActions& p, const Args& a) { p.detect_changes(a); }},
             {"find_unused",       [](ProjectActions& p, const Args& a) { p.find_unused(a); }},
+            {"pre_merge_check",   [](ProjectActions& p, const Args& a) { p.pre_merge_check(a); }},
         };
 
         auto it = actions.find(args.action);

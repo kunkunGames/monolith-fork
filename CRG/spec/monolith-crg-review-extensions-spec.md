@@ -126,11 +126,11 @@ useful global "where should I be careful?" view.
   store derived CRG projection manifests with explicit `execute=true`;
   `source.diff_snapshots` / `project.diff_snapshots` compare stored/current
   manifests read-only with capped new/removed node/edge samples.
-- **RX-5 — DONE (editor), offline parity SPEC'D 2026-05-18.**
+- **RX-5 — DONE (editor + offline).**
   `source.pre_merge_check` / `project.pre_merge_check` compose `health`,
   `detect_changes`, and optional `find_unused` into an advisory `decision`,
-  `checks[]`, and `findings[]`. The offline CLI must expose the same
-  read-only contract so closed-editor review can run the same gate.
+  `checks[]`, and `findings[]`. The offline CLI exposes the same read-only
+  contract so closed-editor review can run the same gate.
 - **RX-6 — DONE (editor).** `context.bridge_asset_symbols` provides the
   read-only asset<->source heuristic bridge; offline cross-DB parity remains
   deferred.
