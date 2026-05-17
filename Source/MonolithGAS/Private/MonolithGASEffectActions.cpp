@@ -348,9 +348,10 @@ bool ConfigureMagnitude(
 	if (TypeStr == TEXT("scalable_float"))
 	{
 		float Value = 0.f;
-		if (MagObj->HasField(TEXT("value")))
+		double TempValue = 0.0;
+		if (MagObj->TryGetNumberField(TEXT("value"), TempValue))
 		{
-			Value = MagObj->GetNumberField(TEXT("value"));
+			Value = static_cast<float>(TempValue);
 		}
 		OutMag = FGameplayEffectModifierMagnitude(FScalableFloat(Value));
 	}
@@ -391,17 +392,18 @@ bool ConfigureMagnitude(
 				return false;
 			}
 		}
-		if (MagObj->HasField(TEXT("coefficient")))
+		double TempVal = 0.0;
+		if (MagObj->TryGetNumberField(TEXT("coefficient"), TempVal))
 		{
-			ABF.Coefficient = FScalableFloat(MagObj->GetNumberField(TEXT("coefficient")));
+			ABF.Coefficient = FScalableFloat(static_cast<float>(TempVal));
 		}
-		if (MagObj->HasField(TEXT("pre_multiply_additive_value")))
+		if (MagObj->TryGetNumberField(TEXT("pre_multiply_additive_value"), TempVal))
 		{
-			ABF.PreMultiplyAdditiveValue = FScalableFloat(MagObj->GetNumberField(TEXT("pre_multiply_additive_value")));
+			ABF.PreMultiplyAdditiveValue = FScalableFloat(static_cast<float>(TempVal));
 		}
-		if (MagObj->HasField(TEXT("post_multiply_additive_value")))
+		if (MagObj->TryGetNumberField(TEXT("post_multiply_additive_value"), TempVal))
 		{
-			ABF.PostMultiplyAdditiveValue = FScalableFloat(MagObj->GetNumberField(TEXT("post_multiply_additive_value")));
+			ABF.PostMultiplyAdditiveValue = FScalableFloat(static_cast<float>(TempVal));
 		}
 		OutMag = FGameplayEffectModifierMagnitude(ABF);
 	}
@@ -424,9 +426,10 @@ bool ConfigureMagnitude(
 			}
 			CCF.CalculationClassMagnitude = CalcClass;
 		}
-		if (MagObj->HasField(TEXT("coefficient")))
+		double TempVal = 0.0;
+		if (MagObj->TryGetNumberField(TEXT("coefficient"), TempVal))
 		{
-			CCF.Coefficient = FScalableFloat(MagObj->GetNumberField(TEXT("coefficient")));
+			CCF.Coefficient = FScalableFloat(static_cast<float>(TempVal));
 		}
 		OutMag = FGameplayEffectModifierMagnitude(CCF);
 	}
@@ -1346,11 +1349,12 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetModifier(const TShared
 	FMonolithActionResult Err;
 	if (!LoadGEFromParams(Params, BP, GE, AssetPath, Err)) return Err;
 
-	if (!Params->HasField(TEXT("modifier_index")))
+	double IndexVal = 0.0;
+	if (!Params->TryGetNumberField(TEXT("modifier_index"), IndexVal))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: modifier_index"));
+		return FMonolithActionResult::Error(TEXT("Missing or invalid parameter: modifier_index must be a number"));
 	}
-	int32 Index = static_cast<int32>(Params->GetNumberField(TEXT("modifier_index")));
+	int32 Index = static_cast<int32>(IndexVal);
 
 	if (!GE->Modifiers.IsValidIndex(Index))
 	{
@@ -1419,19 +1423,20 @@ FMonolithActionResult FMonolithGASEffectActions::HandleRemoveModifier(const TSha
 	FMonolithActionResult Err;
 	if (!LoadGEFromParams(Params, BP, GE, AssetPath, Err)) return Err;
 
-	bool bHasIndex = Params->HasField(TEXT("modifier_index"));
+	double RemoveIndexVal = 0.0;
+	bool bHasIndex = Params->TryGetNumberField(TEXT("modifier_index"), RemoveIndexVal);
 	FString AttrStr = Params->GetStringField(TEXT("attribute"));
 
 	if (!bHasIndex && AttrStr.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Either modifier_index or attribute must be specified"));
+		return FMonolithActionResult::Error(TEXT("Either valid numeric modifier_index or attribute must be specified"));
 	}
 
 	int32 RemoveIndex = -1;
 
 	if (bHasIndex)
 	{
-		RemoveIndex = static_cast<int32>(Params->GetNumberField(TEXT("modifier_index")));
+		RemoveIndex = static_cast<int32>(RemoveIndexVal);
 	}
 	else
 	{
@@ -1613,18 +1618,20 @@ FMonolithActionResult FMonolithGASEffectActions::HandleAddGEComponent(const TSha
 	{
 		UChanceToApplyGameplayEffectComponent* Comp = CastChecked<UChanceToApplyGameplayEffectComponent>(NewComp);
 		float Chance = 1.0f;
-		if (Config->HasField(TEXT("chance")))
+		double TempVal = 0.0;
+		if (Config->TryGetNumberField(TEXT("chance"), TempVal))
 		{
-			Chance = Config->GetNumberField(TEXT("chance"));
+			Chance = static_cast<float>(TempVal);
 		}
 		Comp->SetChanceToApplyToTarget(FScalableFloat(Chance));
 	}
 	else if (ComponentType == TEXT("additional_effects"))
 	{
 		UAdditionalEffectsGameplayEffectComponent* Comp = CastChecked<UAdditionalEffectsGameplayEffectComponent>(NewComp);
-		if (Config->HasField(TEXT("copy_data_from_original_spec")))
+		bool bCopy = false;
+		if (Config->TryGetBoolField(TEXT("copy_data_from_original_spec"), bCopy))
 		{
-			Comp->bOnApplicationCopyDataFromOriginalSpec = Config->GetBoolField(TEXT("copy_data_from_original_spec"));
+			Comp->bOnApplicationCopyDataFromOriginalSpec = bCopy;
 		}
 		// Note: actual effect references require asset path resolution which is complex.
 		// This sets up the component skeleton; effects are added via subsequent calls or BP editing.
@@ -1706,9 +1713,10 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetGEComponent(const TSha
 
 	// Find existing component of this type
 	int32 TargetIndex = 0;
-	if (Params->HasField(TEXT("index")))
+	double TempIndex = 0.0;
+	if (Params->TryGetNumberField(TEXT("index"), TempIndex))
 	{
-		TargetIndex = static_cast<int32>(Params->GetNumberField(TEXT("index")));
+		TargetIndex = static_cast<int32>(TempIndex);
 	}
 
 	int32 FoundCount = 0;
@@ -1771,33 +1779,36 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetGEComponent(const TSha
 	{
 		UTargetTagRequirementsGameplayEffectComponent* Comp = CastChecked<UTargetTagRequirementsGameplayEffectComponent>(FoundComp);
 		// F.7b — collect dropped tags per field, surface as warnings on the response.
-		if (Config->HasField(TEXT("application_require_tags")))
+		const TArray<TSharedPtr<FJsonValue>>* TempArr = nullptr;
+		if (Config->TryGetArrayField(TEXT("application_require_tags"), TempArr))
 			Comp->ApplicationTagRequirements.RequireTags = MonolithGAS::ParseTagContainer(Config, TEXT("application_require_tags"), SkippedAppRequire);
-		if (Config->HasField(TEXT("application_ignore_tags")))
+		if (Config->TryGetArrayField(TEXT("application_ignore_tags"), TempArr))
 			Comp->ApplicationTagRequirements.IgnoreTags  = MonolithGAS::ParseTagContainer(Config, TEXT("application_ignore_tags"),  SkippedAppIgnore);
-		if (Config->HasField(TEXT("ongoing_require_tags")))
+		if (Config->TryGetArrayField(TEXT("ongoing_require_tags"), TempArr))
 			Comp->OngoingTagRequirements.RequireTags     = MonolithGAS::ParseTagContainer(Config, TEXT("ongoing_require_tags"),     SkippedOngoingRequire);
-		if (Config->HasField(TEXT("ongoing_ignore_tags")))
+		if (Config->TryGetArrayField(TEXT("ongoing_ignore_tags"), TempArr))
 			Comp->OngoingTagRequirements.IgnoreTags      = MonolithGAS::ParseTagContainer(Config, TEXT("ongoing_ignore_tags"),      SkippedOngoingIgnore);
-		if (Config->HasField(TEXT("removal_require_tags")))
+		if (Config->TryGetArrayField(TEXT("removal_require_tags"), TempArr))
 			Comp->RemovalTagRequirements.RequireTags     = MonolithGAS::ParseTagContainer(Config, TEXT("removal_require_tags"),     SkippedRemovalRequire);
-		if (Config->HasField(TEXT("removal_ignore_tags")))
+		if (Config->TryGetArrayField(TEXT("removal_ignore_tags"), TempArr))
 			Comp->RemovalTagRequirements.IgnoreTags      = MonolithGAS::ParseTagContainer(Config, TEXT("removal_ignore_tags"),      SkippedRemovalIgnore);
 	}
 	else if (ComponentType == TEXT("chance_to_apply"))
 	{
 		UChanceToApplyGameplayEffectComponent* Comp = CastChecked<UChanceToApplyGameplayEffectComponent>(FoundComp);
-		if (Config->HasField(TEXT("chance")))
+		double TempVal = 0.0;
+		if (Config->TryGetNumberField(TEXT("chance"), TempVal))
 		{
-			Comp->SetChanceToApplyToTarget(FScalableFloat(Config->GetNumberField(TEXT("chance"))));
+			Comp->SetChanceToApplyToTarget(FScalableFloat(static_cast<float>(TempVal)));
 		}
 	}
 	else if (ComponentType == TEXT("additional_effects"))
 	{
 		UAdditionalEffectsGameplayEffectComponent* Comp = CastChecked<UAdditionalEffectsGameplayEffectComponent>(FoundComp);
-		if (Config->HasField(TEXT("copy_data_from_original_spec")))
+		bool bCopy = false;
+		if (Config->TryGetBoolField(TEXT("copy_data_from_original_spec"), bCopy))
 		{
-			Comp->bOnApplicationCopyDataFromOriginalSpec = Config->GetBoolField(TEXT("copy_data_from_original_spec"));
+			Comp->bOnApplicationCopyDataFromOriginalSpec = bCopy;
 		}
 	}
 
@@ -1925,7 +1936,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetEffectStacking(const T
 
 	TSharedPtr<FJsonObject> Result = MonolithGAS::MakeAssetResult(AssetPath, TEXT("Stacking configuration updated"));
 	Result->SetStringField(TEXT("stacking_type"), StackTypeStr);
-	if (Params->HasField(TEXT("stack_limit")))
+	double OutLimit = 0.0;
+	if (Params->TryGetNumberField(TEXT("stack_limit"), OutLimit))
 	{
 		Result->SetNumberField(TEXT("stack_limit"), GE->StackLimitCount);
 	}
@@ -1957,19 +1969,19 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetDuration(const TShared
 	GE->DurationPolicy = DurationPolicy;
 
 	// Set duration magnitude for HasDuration
-	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && Params->HasField(TEXT("duration_magnitude")))
+	double TempDurationMag = 0.0;
+	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && Params->TryGetNumberField(TEXT("duration_magnitude"), TempDurationMag))
 	{
-		float DurationValue = Params->GetNumberField(TEXT("duration_magnitude"));
-		GE->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(DurationValue));
+		GE->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(static_cast<float>(TempDurationMag)));
 	}
 
 	MarkModified(BP);
 
 	TSharedPtr<FJsonObject> Result = MonolithGAS::MakeAssetResult(AssetPath, TEXT("Duration updated"));
 	Result->SetStringField(TEXT("duration_policy"), DurationPolicyToString(DurationPolicy));
-	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && Params->HasField(TEXT("duration_magnitude")))
+	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && Params->TryGetNumberField(TEXT("duration_magnitude"), TempDurationMag))
 	{
-		Result->SetNumberField(TEXT("duration_magnitude"), Params->GetNumberField(TEXT("duration_magnitude")));
+		Result->SetNumberField(TEXT("duration_magnitude"), TempDurationMag);
 	}
 	return FMonolithActionResult::Success(Result);
 }
@@ -1986,17 +1998,18 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetPeriod(const TSharedPt
 	FMonolithActionResult Err;
 	if (!LoadGEFromParams(Params, BP, GE, AssetPath, Err)) return Err;
 
-	if (!Params->HasField(TEXT("period")))
+	double TempPeriod = 0.0;
+	if (!Params->TryGetNumberField(TEXT("period"), TempPeriod))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: period"));
+		return FMonolithActionResult::Error(TEXT("Missing or invalid parameter: period must be a number"));
 	}
 
-	float PeriodValue = Params->GetNumberField(TEXT("period"));
-	GE->Period = FScalableFloat(PeriodValue);
+	GE->Period = FScalableFloat(static_cast<float>(TempPeriod));
 
-	if (Params->HasField(TEXT("execute_on_application")))
+	bool bExecute = false;
+	if (Params->TryGetBoolField(TEXT("execute_on_application"), bExecute))
 	{
-		GE->bExecutePeriodicEffectOnApplication = Params->GetBoolField(TEXT("execute_on_application"));
+		GE->bExecutePeriodicEffectOnApplication = bExecute;
 	}
 
 	MarkModified(BP);
@@ -2620,12 +2633,14 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 	}
 
 	// Period
-	if (Spec->HasField(TEXT("period")))
+	double TempPeriodVal = 0.0;
+	if (Spec->TryGetNumberField(TEXT("period"), TempPeriodVal))
 	{
-		GE->Period = FScalableFloat(Spec->GetNumberField(TEXT("period")));
-		if (Spec->HasField(TEXT("execute_on_application")))
+		GE->Period = FScalableFloat(static_cast<float>(TempPeriodVal));
+		bool bExecute = false;
+		if (Spec->TryGetBoolField(TEXT("execute_on_application"), bExecute))
 		{
-			GE->bExecutePeriodicEffectOnApplication = Spec->GetBoolField(TEXT("execute_on_application"));
+			GE->bExecutePeriodicEffectOnApplication = bExecute;
 		}
 	}
 
@@ -2679,10 +2694,14 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 						FString::Printf(TEXT("Modifier %d magnitude: %s"), i, *MagError)));
 				}
 			}
-			else if (ModObj->HasField(TEXT("value")))
+			else
 			{
-				// Simple shorthand: just a value
-				NewMod.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(ModObj->GetNumberField(TEXT("value"))));
+				double TempVal = 0.0;
+				if (ModObj->TryGetNumberField(TEXT("value"), TempVal))
+				{
+					// Simple shorthand: just a value
+					NewMod.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(static_cast<float>(TempVal)));
+				}
 			}
 
 			GE->Modifiers.Add(NewMod);
@@ -3071,9 +3090,13 @@ FMonolithActionResult FMonolithGASEffectActions::HandleDuplicateGameplayEffect(c
 					FString MagError;
 					ConfigureMagnitude(*MagObjPtr, NewMod.ModifierMagnitude, MagError);
 				}
-				else if (ModObj->HasField(TEXT("value")))
+				else
 				{
-					NewMod.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(ModObj->GetNumberField(TEXT("value"))));
+					double TempVal = 0.0;
+					if (ModObj->TryGetNumberField(TEXT("value"), TempVal))
+					{
+						NewMod.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(static_cast<float>(TempVal)));
+					}
 				}
 
 				DestGE->Modifiers.Add(NewMod);
