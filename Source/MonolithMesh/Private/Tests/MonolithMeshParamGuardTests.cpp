@@ -131,12 +131,28 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshFragmentsMalformedParams
 bool FMonolithParamGuardMeshFragmentsMalformedParamsTest::RunTest(const FString& Parameters)
 {
     FMonolithMeshProceduralActions::RegisterActions(FMonolithToolRegistry::Get());
+    TestTrue(TEXT("create_parametric_mesh action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("create_parametric_mesh")));
     TestTrue(TEXT("create_fragments action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("create_fragments")));
+
+    const FString SourceHandle = FString::Printf(TEXT("param_guard_fragment_source_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+    TSharedPtr<FJsonObject> SourceParams = MakeShared<FJsonObject>();
+    SourceParams->SetStringField(TEXT("type"), TEXT("chair"));
+    SourceParams->SetStringField(TEXT("handle"), SourceHandle);
+    SourceParams->SetBoolField(TEXT("use_cache"), false);
+    SourceParams->SetBoolField(TEXT("auto_save"), false);
+
+    FMonolithActionResult SourceResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("create_parametric_mesh"), SourceParams);
+    TestTrue(TEXT("CreateFragments test source mesh is created"), SourceResult.bSuccess);
+    if (!SourceResult.bSuccess)
+    {
+        AddError(SourceResult.ErrorMessage);
+        return false;
+    }
 
     // Test with malformed noise (string instead of number)
     {
         TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-        Params->SetStringField(TEXT("source_handle"), TEXT("mesh_123"));
+        Params->SetStringField(TEXT("source_handle"), SourceHandle);
         Params->SetStringField(TEXT("noise"), TEXT("high"));
 
         FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("create_fragments"), Params);
