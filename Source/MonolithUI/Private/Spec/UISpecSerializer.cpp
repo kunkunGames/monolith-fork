@@ -840,6 +840,7 @@ namespace MonolithUI::SpecSerializerInternal
         if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
         {
             const int32 N = Panel->GetChildrenCount();
+            Node->Children.Reserve(N);
             for (int32 i = 0; i < N; ++i)
             {
                 if (UWidget* Child = Panel->GetChildAt(i))
