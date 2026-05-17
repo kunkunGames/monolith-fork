@@ -122,12 +122,12 @@ useful global "where should I be careful?" view.
 - **RX-8 — DONE (editor + offline).** `source.review_hotspots` /
   `project.review_hotspots` rank capped fan-in/fan-out/risk/large hotspots
   with optional advisory questions and no community/betweenness dependency.
-- **RX-4 — DONE (editor), offline parity SPEC'D 2026-05-18.** `source.snapshot` / `project.snapshot`
+- **RX-4 — DONE (editor + offline).** `source.snapshot` / `project.snapshot`
   store derived CRG projection manifests with explicit `execute=true`;
   `source.diff_snapshots` / `project.diff_snapshots` compare stored/current
   manifests read-only with capped new/removed node/edge samples. The offline
-  CLI must mirror this so closed-editor index drift checks use the same
-  derived `crg_snapshots` contract.
+  CLI mirrors this so closed-editor index drift checks use the same derived
+  `crg_snapshots` contract.
 - **RX-5 — DONE (editor + offline).**
   `source.pre_merge_check` / `project.pre_merge_check` compose `health`,
   `detect_changes`, and optional `find_unused` into an advisory `decision`,

@@ -20,6 +20,7 @@
 #include <cmath>
 #include <functional>
 #include <filesystem>
+#include <ctime>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -221,6 +222,20 @@ static std::string lower_copy(std::string value) {
     return value;
 }
 
+static std::string trim_copy(std::string value) {
+    value.erase(value.begin(), std::find_if(value.begin(), value.end(),
+        [](unsigned char ch) { return !std::isspace(ch); }));
+    value.erase(std::find_if(value.rbegin(), value.rend(),
+        [](unsigned char ch) { return !std::isspace(ch); }).base(), value.end());
+    return value;
+}
+
+static bool is_numeric_string(const std::string& value) {
+    if (value.empty()) return false;
+    return std::all_of(value.begin(), value.end(),
+        [](unsigned char ch) { return std::isdigit(ch); });
+}
+
 static bool contains_any_token(const std::string& lower_text,
                                std::initializer_list<const char*> tokens) {
     for (const char* token : tokens) {
@@ -323,6 +338,332 @@ static void premerge_add_finding(json& findings, const std::string& severity,
         {"check", check},
         {"message", message},
     });
+}
+
+struct SnapshotManifest {
+    std::set<std::string> nodes;
+    std::set<std::string> edges;
+};
+
+struct SnapshotRecord {
+    int64_t id = 0;
+    std::string label;
+    SnapshotManifest manifest;
+};
+
+static json set_to_json_array(const std::set<std::string>& values) {
+    json arr = json::array();
+    for (const auto& value : values) arr.push_back(value);
+    return arr;
+}
+
+static std::string serialize_manifest(const SnapshotManifest& manifest) {
+    json object = {
+        {"nodes", set_to_json_array(manifest.nodes)},
+        {"edges", set_to_json_array(manifest.edges)},
+    };
+    return object.dump();
+}
+
+static bool parse_manifest(const std::string& text, SnapshotManifest& out) {
+    json object = json::parse(text, nullptr, false);
+    if (!object.is_object() || !object.contains("nodes") || !object.contains("edges")
+        || !object["nodes"].is_array() || !object["edges"].is_array())
+        return false;
+    out.nodes.clear();
+    out.edges.clear();
+    for (const auto& node : object["nodes"]) {
+        if (!node.is_string()) return false;
+        out.nodes.insert(node.get<std::string>());
+    }
+    for (const auto& edge : object["edges"]) {
+        if (!edge.is_string()) return false;
+        out.edges.insert(edge.get<std::string>());
+    }
+    return true;
+}
+
+static bool exec_sql_ok(Database& db, const std::string& sql, std::string& error) {
+    char* raw_error = nullptr;
+    int rc = sqlite3_exec(db.db, sql.c_str(), nullptr, nullptr, &raw_error);
+    if (raw_error) {
+        error = raw_error;
+        sqlite3_free(raw_error);
+    }
+    if (rc != SQLITE_OK) {
+        if (error.empty()) error = sqlite3_errmsg(db.db);
+        return false;
+    }
+    return true;
+}
+
+static bool ensure_snapshot_table(Database& db, std::string& error) {
+    return exec_sql_ok(db,
+        "CREATE TABLE IF NOT EXISTS crg_snapshots ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "label TEXT NOT NULL,"
+        "domain TEXT NOT NULL,"
+        "captured_at INTEGER NOT NULL,"
+        "node_count INTEGER NOT NULL,"
+        "edge_count INTEGER NOT NULL,"
+        "manifest_json TEXT NOT NULL,"
+        "UNIQUE(domain,label)"
+        ");", error);
+}
+
+static bool load_current_manifest(Database& db, const std::string& domain, SnapshotManifest& out) {
+    out.nodes.clear();
+    out.edges.clear();
+    auto nodes = query(db,
+        "SELECT stable_key FROM crg_nodes WHERE domain = ? ORDER BY stable_key;",
+        {domain});
+    for (const auto& row : nodes) out.nodes.insert(row.get("stable_key"));
+
+    auto edges = query(db,
+        "SELECT sn.stable_key AS source_key,tn.stable_key AS target_key,"
+        "e.edge_kind,COALESCE(e.edge_subkind,'') AS edge_subkind "
+        "FROM crg_edges e "
+        "JOIN crg_nodes sn ON sn.id = e.source_node_id "
+        "JOIN crg_nodes tn ON tn.id = e.target_node_id "
+        "WHERE e.domain = ? ORDER BY sn.stable_key,tn.stable_key,e.edge_kind,e.edge_subkind;",
+        {domain});
+    for (const auto& row : edges) {
+        out.edges.insert(row.get("source_key") + "|" + row.get("target_key") + "|" +
+                         row.get("edge_kind") + "|" + row.get("edge_subkind"));
+    }
+    return true;
+}
+
+static bool load_snapshot_record(Database& db, const std::string& domain,
+                                 const std::string& ref, SnapshotRecord& out) {
+    std::string clean_ref = trim_copy(ref);
+    out = SnapshotRecord{};
+    if (clean_ref.empty() || lower_copy(clean_ref) == "current") {
+        out.label = "current";
+        return load_current_manifest(db, domain, out.manifest);
+    }
+
+    bool numeric = is_numeric_string(clean_ref);
+    Rows rows = numeric
+        ? query(db, "SELECT id,label,manifest_json FROM crg_snapshots WHERE domain = ? AND id = ? LIMIT 1;",
+                {domain, clean_ref})
+        : query(db, "SELECT id,label,manifest_json FROM crg_snapshots WHERE domain = ? AND label = ? LIMIT 1;",
+                {domain, clean_ref});
+    if (rows.empty()) return false;
+    out.id = rows[0].get_int64("id");
+    out.label = rows[0].get("label");
+    return parse_manifest(rows[0].get("manifest_json"), out.manifest);
+}
+
+static std::set<std::string> set_difference(const std::set<std::string>& left,
+                                            const std::set<std::string>& right) {
+    std::set<std::string> out;
+    for (const auto& value : left) {
+        if (!right.count(value)) out.insert(value);
+    }
+    return out;
+}
+
+static json take_string_samples(const std::set<std::string>& values, int limit, bool& truncated) {
+    json arr = json::array();
+    int count = 0;
+    for (const auto& value : values) {
+        if (count >= limit) {
+            truncated = true;
+            break;
+        }
+        arr.push_back(value);
+        ++count;
+    }
+    return arr;
+}
+
+static json edge_object(const std::string& key) {
+    json edge = {{"key", key}};
+    size_t p1 = key.find('|');
+    size_t p2 = p1 == std::string::npos ? std::string::npos : key.find('|', p1 + 1);
+    size_t p3 = p2 == std::string::npos ? std::string::npos : key.find('|', p2 + 1);
+    if (p1 != std::string::npos && p2 != std::string::npos && p3 != std::string::npos) {
+        edge["source"] = key.substr(0, p1);
+        edge["target"] = key.substr(p1 + 1, p2 - p1 - 1);
+        edge["kind"] = key.substr(p2 + 1, p3 - p2 - 1);
+        edge["subkind"] = key.substr(p3 + 1);
+    }
+    return edge;
+}
+
+static json take_edge_samples(const std::set<std::string>& values, int limit, bool& truncated) {
+    json arr = json::array();
+    int count = 0;
+    for (const auto& value : values) {
+        if (count >= limit) {
+            truncated = true;
+            break;
+        }
+        arr.push_back(edge_object(value));
+        ++count;
+    }
+    return arr;
+}
+
+static bool insert_snapshot_record(Database& db, const std::string& domain,
+                                   const std::string& label,
+                                   const SnapshotManifest& manifest,
+                                   int64_t& out_id, std::string& error) {
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql =
+        "INSERT OR REPLACE INTO crg_snapshots(label,domain,captured_at,node_count,edge_count,manifest_json) "
+        "VALUES(?,?,?,?,?,?);";
+    int rc = sqlite3_prepare_v2(db.db, sql, -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        error = sqlite3_errmsg(db.db);
+        return false;
+    }
+    std::string manifest_json = serialize_manifest(manifest);
+    sqlite3_bind_text(stmt, 1, label.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, domain.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmt, 3, static_cast<sqlite3_int64>(std::time(nullptr)));
+    sqlite3_bind_int64(stmt, 4, static_cast<sqlite3_int64>(manifest.nodes.size()));
+    sqlite3_bind_int64(stmt, 5, static_cast<sqlite3_int64>(manifest.edges.size()));
+    sqlite3_bind_text(stmt, 6, manifest_json.c_str(), -1, SQLITE_TRANSIENT);
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) error = sqlite3_errmsg(db.db);
+    sqlite3_finalize(stmt);
+    if (rc != SQLITE_DONE) return false;
+    out_id = sqlite3_last_insert_rowid(db.db);
+    return true;
+}
+
+static json crg_snapshot_json(Database& db, const std::string& domain,
+                              const std::string& raw_label, bool execute) {
+    std::string label = trim_copy(raw_label);
+    if (label.empty()) label = domain + "-" + std::to_string(std::time(nullptr));
+    json root = {
+        {"input", {{"label", label}, {"execute", execute}}},
+    };
+
+    if (!object_exists(db, "table", "crg_nodes") || !object_exists(db, "table", "crg_edges")) {
+        root["status"] = "error";
+        root["summary"] = "CRG projection tables are missing; run " + domain + ".repair_crg_cache execute=true first";
+        root["next_actions"] = json::array({domain + ".repair_crg_cache", domain + ".health"});
+        return root;
+    }
+
+    SnapshotManifest manifest;
+    if (!load_current_manifest(db, domain, manifest)) {
+        root["status"] = "error";
+        root["summary"] = "Failed to read current " + domain + " CRG projection";
+        root["next_actions"] = json::array({domain + ".health", domain + ".repair_crg_cache"});
+        return root;
+    }
+
+    root["node_count"] = manifest.nodes.size();
+    root["edge_count"] = manifest.edges.size();
+    root["executed"] = execute;
+    root["truncated"] = false;
+    if (!execute) {
+        root["status"] = "ok";
+        root["summary"] = "Would capture " + domain + " CRG snapshot '" + label + "' with " +
+            std::to_string(manifest.nodes.size()) + " node(s), " +
+            std::to_string(manifest.edges.size()) + " edge(s)";
+        root["next_actions"] = json::array({domain + ".snapshot --execute", domain + ".diff_snapshots"});
+        return root;
+    }
+
+    std::string error;
+    if (!ensure_snapshot_table(db, error)) {
+        root["status"] = "error";
+        root["summary"] = "Failed to create crg_snapshots table: " + error;
+        root["next_actions"] = json::array({domain + ".health"});
+        return root;
+    }
+    int64_t id = 0;
+    if (!insert_snapshot_record(db, domain, label, manifest, id, error)) {
+        root["status"] = "error";
+        root["summary"] = "Failed to store " + domain + " CRG snapshot: " + error;
+        root["next_actions"] = json::array({domain + ".health"});
+        return root;
+    }
+    root["id"] = id;
+    root["label"] = label;
+    root["status"] = "ok";
+    root["summary"] = "Captured " + domain + " CRG snapshot '" + label + "' with " +
+        std::to_string(manifest.nodes.size()) + " node(s), " +
+        std::to_string(manifest.edges.size()) + " edge(s)";
+    root["next_actions"] = json::array({domain + ".diff_snapshots", domain + ".repair_crg_cache"});
+    return root;
+}
+
+static json crg_diff_snapshots_json(Database& db, const std::string& domain,
+                                    const std::string& before,
+                                    const std::string& after,
+                                    int limit) {
+    int cap = clamp_int(limit <= 0 ? 100 : limit, 1, 1000);
+    std::string before_ref = trim_copy(before);
+    std::string after_ref = trim_copy(after);
+    if (after_ref.empty()) after_ref = "current";
+    json root = {
+        {"input", {{"before", before_ref}, {"after", after_ref}}},
+        {"limits", {{"limit", cap}}},
+    };
+    if (before_ref.empty()) {
+        root["status"] = "error";
+        root["summary"] = "before snapshot label/id is required";
+        root["next_actions"] = json::array({domain + ".snapshot --execute"});
+        return root;
+    }
+    if (!object_exists(db, "table", "crg_snapshots")) {
+        root["status"] = "error";
+        root["summary"] = "crg_snapshots table is missing; capture a " + domain + ".snapshot first";
+        root["next_actions"] = json::array({domain + ".snapshot --execute"});
+        return root;
+    }
+
+    SnapshotRecord before_record;
+    SnapshotRecord after_record;
+    if (!load_snapshot_record(db, domain, before_ref, before_record)) {
+        root["status"] = "error";
+        root["summary"] = "Before snapshot not found or invalid: " + before_ref;
+        root["next_actions"] = json::array({domain + ".snapshot --execute"});
+        return root;
+    }
+    if (!load_snapshot_record(db, domain, after_ref, after_record)) {
+        root["status"] = "error";
+        root["summary"] = "After snapshot not found or invalid: " + after_ref;
+        root["next_actions"] = json::array({domain + ".snapshot --execute"});
+        return root;
+    }
+
+    auto new_nodes = set_difference(after_record.manifest.nodes, before_record.manifest.nodes);
+    auto removed_nodes = set_difference(before_record.manifest.nodes, after_record.manifest.nodes);
+    auto new_edges = set_difference(after_record.manifest.edges, before_record.manifest.edges);
+    auto removed_edges = set_difference(before_record.manifest.edges, after_record.manifest.edges);
+
+    bool truncated = false;
+    root["new_nodes"] = take_string_samples(new_nodes, cap, truncated);
+    root["removed_nodes"] = take_string_samples(removed_nodes, cap, truncated);
+    root["new_edges"] = take_edge_samples(new_edges, cap, truncated);
+    root["removed_edges"] = take_edge_samples(removed_edges, cap, truncated);
+    root["summary_counts"] = {
+        {"nodes_added", new_nodes.size()},
+        {"nodes_removed", removed_nodes.size()},
+        {"edges_added", new_edges.size()},
+        {"edges_removed", removed_edges.size()},
+        {"before_total_nodes", before_record.manifest.nodes.size()},
+        {"after_total_nodes", after_record.manifest.nodes.size()},
+        {"before_total_edges", before_record.manifest.edges.size()},
+        {"after_total_edges", after_record.manifest.edges.size()},
+    };
+    root["before_label"] = before_record.label;
+    root["after_label"] = after_record.label;
+    root["truncated"] = truncated;
+    root["status"] = "ok";
+    root["summary"] = domain + " CRG diff " + before_record.label + " -> " + after_record.label +
+        ": +" + std::to_string(new_nodes.size()) + "/-" + std::to_string(removed_nodes.size()) +
+        " node(s), +" + std::to_string(new_edges.size()) + "/-" + std::to_string(removed_edges.size()) +
+        " edge(s)";
+    root["next_actions"] = json::array({domain + ".snapshot", domain + ".review_hotspots", domain + ".health"});
+    return root;
 }
 
 // ============================================================
@@ -491,6 +832,8 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
                   << "  find_unused [--kind=function|class|struct|all] [--limit=N] [--min-confidence=low|medium|high]\n"
                   << "  pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]\n"
+                  << "  snapshot [label] [--label=name] [--execute]\n"
+                  << "  diff_snapshots <before> [after] [--before=label-or-id] [--after=label-or-id|current] [--limit=N]\n"
                   << "\nProject actions:\n"
                   << "  search <query> [--limit=N]\n"
                   << "  find_by_type <asset_class> [--limit=N] [--offset=N]\n"
@@ -505,7 +848,9 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  review_context <asset_path> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
                   << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
                   << "  find_unused [--kind=<asset_class>] [--limit=N] [--min-confidence=low|medium|high]\n"
-                  << "  pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]\n";
+                  << "  pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]\n"
+                  << "  snapshot [label] [--label=name] [--execute]\n"
+                  << "  diff_snapshots <before> [after] [--before=label-or-id] [--after=label-or-id|current] [--limit=N]\n";
         std::exit(1);
     }
 
@@ -1909,6 +2254,20 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                                                args.opt("detail_level", "minimal"),
                                                args.opt_bool("include_unused", true)));
     }
+
+    void snapshot(const Args& args) {
+        std::string label = args.opt("label");
+        if (label.empty() && !args.positional.empty()) label = args.positional[0];
+        print_json(crg_snapshot_json(db, "source", label, args.opt_bool("execute", false)));
+    }
+
+    void diff_snapshots(const Args& args) {
+        std::string before = args.opt("before");
+        std::string after = args.opt("after");
+        if (before.empty() && !args.positional.empty()) before = args.positional[0];
+        if (after.empty() && args.positional.size() > 1) after = args.positional[1];
+        print_json(crg_diff_snapshots_json(db, "source", before, after, args.opt_int("limit", 100)));
+    }
 };
 
 // ============================================================
@@ -2942,6 +3301,20 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                                                 args.opt("detail_level", "minimal"),
                                                 args.opt_bool("include_unused", true)));
     }
+
+    void snapshot(const Args& args) {
+        std::string label = args.opt("label");
+        if (label.empty() && !args.positional.empty()) label = args.positional[0];
+        print_json(crg_snapshot_json(db, "project", label, args.opt_bool("execute", false)));
+    }
+
+    void diff_snapshots(const Args& args) {
+        std::string before = args.opt("before");
+        std::string after = args.opt("after");
+        if (before.empty() && !args.positional.empty()) before = args.positional[0];
+        if (after.empty() && args.positional.size() > 1) after = args.positional[1];
+        print_json(crg_diff_snapshots_json(db, "project", before, after, args.opt_int("limit", 100)));
+    }
 };
 
 // ============================================================
@@ -2995,8 +3368,10 @@ int main(int argc, char* argv[]) {
         std::string db_path = args.opt("source_db");
         if (db_path.empty()) db_path = (fs::path(db_dir) / "EngineSource.db").string();
 
+        bool write_action = args.opt_bool("execute", false)
+            && (args.action == "repair_fts" || args.action == "snapshot");
         SourceActions sa;
-        sa.open(db_path, !(args.action == "repair_fts" && args.opt_bool("execute", false)));
+        sa.open(db_path, !write_action);
 
         static const std::map<std::string, std::function<void(SourceActions&, const Args&)>> actions = {
             {"search_source",       [](SourceActions& s, const Args& a) { s.search_source(a); }},
@@ -3017,6 +3392,8 @@ int main(int argc, char* argv[]) {
             {"detect_changes",      [](SourceActions& s, const Args& a) { s.detect_changes(a); }},
             {"find_unused",         [](SourceActions& s, const Args& a) { s.find_unused(a); }},
             {"pre_merge_check",     [](SourceActions& s, const Args& a) { s.pre_merge_check(a); }},
+            {"snapshot",            [](SourceActions& s, const Args& a) { s.snapshot(a); }},
+            {"diff_snapshots",      [](SourceActions& s, const Args& a) { s.diff_snapshots(a); }},
         };
 
         auto it = actions.find(args.action);
@@ -3027,8 +3404,10 @@ int main(int argc, char* argv[]) {
         std::string db_path = args.opt("project_db");
         if (db_path.empty()) db_path = (fs::path(db_dir) / "ProjectIndex.db").string();
 
+        bool write_action = args.opt_bool("execute", false)
+            && (args.action == "repair_fts" || args.action == "snapshot");
         ProjectActions pa;
-        pa.open(db_path, !(args.action == "repair_fts" && args.opt_bool("execute", false)));
+        pa.open(db_path, !write_action);
 
         static const std::map<std::string, std::function<void(ProjectActions&, const Args&)>> actions = {
             {"search",            [](ProjectActions& p, const Args& a) { p.search(a); }},
@@ -3045,6 +3424,8 @@ int main(int argc, char* argv[]) {
             {"detect_changes",    [](ProjectActions& p, const Args& a) { p.detect_changes(a); }},
             {"find_unused",       [](ProjectActions& p, const Args& a) { p.find_unused(a); }},
             {"pre_merge_check",   [](ProjectActions& p, const Args& a) { p.pre_merge_check(a); }},
+            {"snapshot",          [](ProjectActions& p, const Args& a) { p.snapshot(a); }},
+            {"diff_snapshots",    [](ProjectActions& p, const Args& a) { p.diff_snapshots(a); }},
         };
 
         auto it = actions.find(args.action);
