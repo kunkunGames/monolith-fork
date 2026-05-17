@@ -243,7 +243,7 @@ void FMonolithSourceActions::RegisterAll()
 		TEXT("Capture current EngineSource CRG projection manifest. Dry-run unless execute=true"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleSnapshot),
 		FParamSchemaBuilder()
-			.Optional(TEXT("label"), TEXT("string"), TEXT("Snapshot label; defaults to source-<unix_time>"))
+			.Optional(TEXT("label"), TEXT("string"), TEXT("Snapshot label; defaults to source-<utc_ticks>"))
 			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Store the snapshot (sole write gate). Default dry-run"), TEXT("false"))
 			.Build());
 

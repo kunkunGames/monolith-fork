@@ -11,6 +11,11 @@
 
 DEFINE_LOG_CATEGORY(LogMonolithSource);
 
+static FString MakeAutoSnapshotLabel(const TCHAR* Prefix)
+{
+	return FString::Printf(TEXT("%s-%lld"), Prefix, FDateTime::UtcNow().GetTicks());
+}
+
 // ============================================================
 // Helper: execute a multi-statement SQL string statement-by-statement.
 // FSQLiteDatabase::Execute() only runs the first statement when given
@@ -2711,7 +2716,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::Snapshot(const FString& Label, 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	const FString RequestedLabel = Label.TrimStartAndEnd();
 	const FString CleanLabel = RequestedLabel.IsEmpty()
-		? FString::Printf(TEXT("source-%lld"), FDateTime::UtcNow().ToUnixTimestamp())
+		? MakeAutoSnapshotLabel(TEXT("source"))
 		: RequestedLabel;
 
 	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();

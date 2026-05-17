@@ -17,6 +17,11 @@ namespace
 	using FJsonArr = TArray<TSharedPtr<FJsonValue>>;
 	constexpr const TCHAR* ExpectedScoringVersion = TEXT("3");
 
+	FString MakeAutoSnapshotLabel(const TCHAR* Prefix)
+	{
+		return FString::Printf(TEXT("%s-%lld"), Prefix, FDateTime::UtcNow().GetTicks());
+	}
+
 	int64 CountRows(FMonolithIndexDatabase& Db, const FString& Sql)
 	{
 		FSQLiteDatabase* Raw = Db.GetRawDatabase();
@@ -2015,7 +2020,7 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Snapshot(
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	const FString RequestedLabel = Label.TrimStartAndEnd();
 	const FString CleanLabel = RequestedLabel.IsEmpty()
-		? FString::Printf(TEXT("project-%lld"), FDateTime::UtcNow().ToUnixTimestamp())
+		? MakeAutoSnapshotLabel(TEXT("project"))
 		: RequestedLabel;
 
 	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();

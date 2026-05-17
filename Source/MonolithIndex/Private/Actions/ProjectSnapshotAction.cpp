@@ -29,7 +29,7 @@ FMonolithActionResult FProjectSnapshotAction::Execute(const TSharedPtr<FJsonObje
 TSharedPtr<FJsonObject> FProjectSnapshotAction::GetSchema()
 {
 	return FParamSchemaBuilder()
-		.Optional(TEXT("label"), TEXT("string"), TEXT("Snapshot label; defaults to project-<unix_time>"))
+		.Optional(TEXT("label"), TEXT("string"), TEXT("Snapshot label; defaults to project-<utc_ticks>"))
 		.Optional(TEXT("execute"), TEXT("bool"), TEXT("Store the snapshot (sole write gate). Default dry-run"), TEXT("false"))
 		.Build();
 }
