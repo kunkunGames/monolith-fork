@@ -14,11 +14,11 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithBlueprintModule` | Registers 89 blueprint actions |
+| `FMonolithBlueprintModule` | Registers 93 blueprint actions |
 | `FMonolithBlueprintActions` | Static handlers. Uses `FMonolithAssetUtils::LoadAssetByPath<UBlueprint>` |
 | `MonolithBlueprintInternal` | Helpers: AddGraphArray, FindGraphByName, PinTypeToString, SerializePin/Node, TraceExecFlow, FindEntryNode |
 
-### Actions (89 — namespace: "blueprint")
+### Actions (93 — namespace: "blueprint")
 
 **Read Actions (14)**
 | Action | Params | Description |
@@ -90,6 +90,27 @@
 | `create_blueprint` | `save_path`, `parent_class` | Create a new Blueprint asset |
 | `duplicate_blueprint` | `asset_path`, `new_path` | Duplicate a Blueprint asset to a new path |
 | `get_dependencies` | `asset_path` | List all hard and soft asset dependencies |
+
+**DataTable Maintenance (7)**
+| Action | Params | Description |
+|--------|--------|-------------|
+| `create_data_table` | `save_path`, `row_struct` | Create a `UDataTable` backed by an existing native or user-defined `UScriptStruct`. |
+| `add_data_table_row` | `asset_path`, `row_name`, `values` | Add a row; rejects duplicate row names. Values are imported through `FProperty::ImportText_Direct`. |
+| `get_data_table_rows` | `asset_path`, `row_name?` | Read one row or all rows as friendly property names. |
+| `get_data_table_schema` | `asset_path` | Inspect row struct columns with friendly name, internal name, C++ type, and property class. Read-only. |
+| `update_data_table_row` | `asset_path`, `row_name`, `values`, `dry_run?`, `confirm?`, `save?` | Update an existing row, or create it only when `create_if_missing=true`. Requires `dry_run=true` or `confirm=true`. |
+| `remove_data_table_row` | `asset_path`, `row_name`, `dry_run?`, `confirm?`, `save?` | Remove one row by name. Requires `dry_run=true` or `confirm=true`. |
+| `export_data_table_csv` | `asset_path`, `file_path`, `dry_run?`, `confirm?` | Export `UDataTable::GetTableAsCSV()` to a project-directory file. Requires `dry_run=true` or `confirm=true`. |
+
+### DataTable Mutation Contract
+
+| Rule | Requirement |
+|------|-------------|
+| Write gate | New DataTable maintenance writes reject calls unless `dry_run=true` or `confirm=true` is supplied. Existing `add_data_table_row` keeps its legacy contract. |
+| Asset scope | `asset_path` must resolve to a `UDataTable`; CSV export `file_path` must remain under the project directory. |
+| Return shape | Mutating actions return `dry_run`, `changed`, `saved`, `asset_path`, `row_name` where applicable, and row/schema summaries for agent readback. |
+| Field conversion | Row writes reuse the same friendly-name resolution and `ImportText` conversion behavior as `add_data_table_row`. Unknown or failed fields are reported in `skipped_fields`. |
+| Package handling | Successful non-dry-run writes call `Modify()`, mark the package dirty, and save only when `save=true` is supplied. |
 
 **Layout (1)**
 | Action | Params | Description |
