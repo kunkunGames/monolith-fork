@@ -71,6 +71,15 @@ public:
 		int32 Limit,
 		const FString& MinConfidence);
 
+	/** Read-only pre-merge gate composed from health, detect_changes, and optional find_unused. */
+	static TSharedPtr<FJsonObject> PreMergeCheck(
+		FMonolithIndexDatabase& Db,
+		const TArray<FString>& ChangedPaths,
+		int32 MaxResults,
+		int32 UnusedLimit,
+		const FString& DetailLevel,
+		bool bIncludeUnused);
+
 	/** Rank global project review hotspots by fan-in, fan-out, risk, graph size, or all. */
 	static TSharedPtr<FJsonObject> ReviewHotspots(
 		FMonolithIndexDatabase& Db,

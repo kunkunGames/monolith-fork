@@ -227,6 +227,18 @@ void FMonolithSourceActions::RegisterAll()
 			.Optional(TEXT("min_confidence"), TEXT("string"), TEXT("low|medium|high filter"), TEXT("low"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("source"), TEXT("pre_merge_check"),
+		TEXT("Read-only source pre-merge gate over health, detect_changes, and optional find_unused"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandlePreMergeCheck),
+		FParamSchemaBuilder()
+			.Optional(TEXT("changed_paths"), TEXT("array|string"), TEXT("Changed source paths; also accepts comma-separated string"))
+			.Optional(TEXT("paths"), TEXT("array|string"), TEXT("Alias for changed_paths"))
+			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max changed entities to inspect"), TEXT("200"))
+			.Optional(TEXT("unused_limit"), TEXT("integer"), TEXT("Max unused candidates to sample"), TEXT("20"))
+			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("minimal|standard"), TEXT("minimal"))
+			.Optional(TEXT("include_unused"), TEXT("bool"), TEXT("Include advisory find_unused check"), TEXT("true"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("source"), TEXT("review_hotspots"),
 		TEXT("Rank global source review hotspots by fan-in, fan-out, risk, LOC size, or all signals"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleReviewHotspots),
@@ -389,6 +401,21 @@ FMonolithActionResult FMonolithSourceActions::HandleFindUnused(const TSharedPtr<
 		FMonolithSourceReview::PStr(Params, TEXT("kind"), TEXT("all")),
 		FMonolithSourceReview::PInt(Params, TEXT("limit"), 100),
 		FMonolithSourceReview::PStr(Params, TEXT("min_confidence"), TEXT("low"))));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandlePreMergeCheck(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	return FMonolithActionResult::Success(DB->PreMergeCheck(
+		CollectChangedPaths(Params),
+		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200),
+		FMonolithSourceReview::PInt(Params, TEXT("unused_limit"), 20),
+		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal")),
+		FMonolithSourceReview::PBool(Params, TEXT("include_unused"), true)));
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleReviewHotspots(const TSharedPtr<FJsonObject>& Params)

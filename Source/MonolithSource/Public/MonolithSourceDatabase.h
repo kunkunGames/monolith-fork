@@ -138,6 +138,8 @@ public:
 	TSharedPtr<FJsonObject> DetectChanges(const TArray<FString>& ChangedPaths, int32 MaxResults, const FString& DetailLevel);
 	/** Advisory dead-symbol candidates. Read-only; never mutates and never reports high confidence. */
 	TSharedPtr<FJsonObject> FindUnused(const FString& Kind, int32 Limit, const FString& MinConfidence);
+	/** Read-only pre-merge gate composed from health, detect_changes, and optional find_unused. */
+	TSharedPtr<FJsonObject> PreMergeCheck(const TArray<FString>& ChangedPaths, int32 MaxResults, int32 UnusedLimit, const FString& DetailLevel, bool bIncludeUnused);
 	/** Top source review hotspots from CRG/native fan-in, fan-out, risk and LOC signals. */
 	TSharedPtr<FJsonObject> ReviewHotspots(const FString& Kind, int32 Limit, int32 MinLines, bool bIncludeQuestions);
 

@@ -1576,6 +1576,189 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::FindUnused(
 }
 
 // ============================================================================
+// pre_merge_check (advisory aggregate gate)
+// ============================================================================
+TSharedPtr<FJsonObject> FMonolithIndexReview::PreMergeCheck(
+	FMonolithIndexDatabase& Db,
+	const TArray<FString>& ChangedPaths,
+	int32 MaxResults,
+	int32 UnusedLimit,
+	const FString& DetailLevel,
+	bool bIncludeUnused)
+{
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	const int32 ChangeCap = FMath::Clamp(MaxResults <= 0 ? 200 : MaxResults, 1, 2000);
+	const int32 UnusedCap = FMath::Clamp(UnusedLimit <= 0 ? 20 : UnusedLimit, 1, 200);
+	const bool bStandard = DetailLevel.Equals(TEXT("standard"), ESearchCase::IgnoreCase);
+
+	TArray<FString> NormalizedPaths;
+	for (const FString& RawPath : ChangedPaths)
+	{
+		const FString Normalized = NormalizeChangedPath(RawPath);
+		if (!Normalized.IsEmpty() && !NormalizedPaths.Contains(Normalized))
+		{
+			NormalizedPaths.Add(Normalized);
+		}
+	}
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetArrayField(TEXT("changed_paths"), StringArray(NormalizedPaths));
+	Input->SetStringField(TEXT("detail_level"), bStandard ? TEXT("standard") : TEXT("minimal"));
+	Input->SetBoolField(TEXT("include_unused"), bIncludeUnused);
+	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("max_results"), ChangeCap);
+	Limits->SetNumberField(TEXT("unused_limit"), UnusedCap);
+	Root->SetObjectField(TEXT("limits"), Limits);
+	Root->SetStringField(TEXT("scoring_version"), ExpectedScoringVersion);
+
+	TSharedPtr<FJsonObject> HealthResult = Health(Db, false);
+	TSharedPtr<FJsonObject> ChangeResult = DetectChanges(Db, NormalizedPaths, ChangeCap, bStandard ? TEXT("standard") : TEXT("minimal"));
+	TSharedPtr<FJsonObject> UnusedResult = bIncludeUnused
+		? FindUnused(Db, TEXT("all"), UnusedCap, TEXT("low"))
+		: nullptr;
+
+	FJsonArr Checks;
+	FJsonArr Findings;
+	int32 Severity = 0; // 0 pass, 1 warn, 2 fail
+	auto Promote = [&](int32 Value)
+	{
+		Severity = FMath::Max(Severity, Value);
+	};
+	auto StatusOf = [](const TSharedPtr<FJsonObject>& Object) -> FString
+	{
+		return Object.IsValid() ? Object->GetStringField(TEXT("status")) : FString(TEXT("error"));
+	};
+	auto IntField = [](const TSharedPtr<FJsonObject>& Object, const TCHAR* Field) -> int32
+	{
+		double Value = 0.0;
+		return Object.IsValid() && Object->TryGetNumberField(Field, Value)
+			? static_cast<int32>(Value)
+			: 0;
+	};
+	auto NumField = [](const TSharedPtr<FJsonObject>& Object, const TCHAR* Field) -> double
+	{
+		double Value = 0.0;
+		if (Object.IsValid())
+		{
+			Object->TryGetNumberField(Field, Value);
+		}
+		return Value;
+	};
+	auto BoolField = [](const TSharedPtr<FJsonObject>& Object, const TCHAR* Field) -> bool
+	{
+		bool Value = false;
+		return Object.IsValid() && Object->TryGetBoolField(Field, Value) ? Value : false;
+	};
+	auto AddCheck = [&](const TCHAR* Name, const FString& Status, const FString& Summary, int32 CheckSeverity)
+	{
+		TSharedPtr<FJsonObject> Check = MakeShared<FJsonObject>();
+		Check->SetStringField(TEXT("name"), Name);
+		Check->SetStringField(TEXT("status"), Status);
+		Check->SetStringField(TEXT("severity"), CheckSeverity >= 2 ? TEXT("fail") : CheckSeverity == 1 ? TEXT("warn") : TEXT("pass"));
+		Check->SetStringField(TEXT("summary"), Summary);
+		Checks.Add(MakeShared<FJsonValueObject>(Check));
+		Promote(CheckSeverity);
+	};
+	auto AddFinding = [&](const TCHAR* SeverityName, const TCHAR* CheckName, const FString& Message)
+	{
+		TSharedPtr<FJsonObject> Finding = MakeShared<FJsonObject>();
+		Finding->SetStringField(TEXT("severity"), SeverityName);
+		Finding->SetStringField(TEXT("check"), CheckName);
+		Finding->SetStringField(TEXT("message"), Message);
+		Findings.Add(MakeShared<FJsonValueObject>(Finding));
+	};
+
+	const FString HealthStatus = StatusOf(HealthResult);
+	const int32 HealthSeverity = HealthStatus == TEXT("error") ? 2 : HealthStatus == TEXT("warning") ? 1 : 0;
+	AddCheck(TEXT("health"), HealthStatus, HealthResult.IsValid() ? HealthResult->GetStringField(TEXT("summary")) : TEXT("Project health could not run"), HealthSeverity);
+	if (HealthSeverity > 0)
+	{
+		AddFinding(HealthSeverity >= 2 ? TEXT("error") : TEXT("warning"), TEXT("health"),
+			HealthResult.IsValid() ? HealthResult->GetStringField(TEXT("summary")) : TEXT("Project health failed"));
+	}
+
+	const FString ChangeStatus = StatusOf(ChangeResult);
+	const int32 ChangedCount = IntField(ChangeResult, TEXT("changed_entity_count"));
+	const int32 ImpactCount = IntField(ChangeResult, TEXT("impacted_count"));
+	const double RiskScore = NumField(ChangeResult, TEXT("risk_score"));
+	int32 ChangeSeverity = ChangeStatus == TEXT("error") ? 2 : 0;
+	if (ChangeSeverity == 0 && ChangedCount == 0)
+	{
+		ChangeSeverity = 1;
+		AddFinding(TEXT("warning"), TEXT("detect_changes"), TEXT("No indexed asset matched the changed path set"));
+	}
+	if (RiskScore >= 0.66)
+	{
+		ChangeSeverity = FMath::Max(ChangeSeverity, 1);
+		AddFinding(TEXT("warning"), TEXT("detect_changes"),
+			FString::Printf(TEXT("Changed asset risk score is high: %.3f"), RiskScore));
+	}
+	if (ImpactCount > 50)
+	{
+		ChangeSeverity = FMath::Max(ChangeSeverity, 1);
+		AddFinding(TEXT("warning"), TEXT("detect_changes"),
+			FString::Printf(TEXT("Changed asset set has broad direct impact: %d referencer(s)"), ImpactCount));
+	}
+	if (ChangeStatus == TEXT("error"))
+	{
+		AddFinding(TEXT("error"), TEXT("detect_changes"),
+			ChangeResult.IsValid() ? ChangeResult->GetStringField(TEXT("summary")) : TEXT("detect_changes failed"));
+	}
+	AddCheck(TEXT("detect_changes"), ChangeStatus, FString::Printf(
+		TEXT("%d changed asset(s), %d impacted referencer(s), risk=%.3f"),
+		ChangedCount, ImpactCount, RiskScore), ChangeSeverity);
+
+	int32 UnusedCount = 0;
+	if (bIncludeUnused && UnusedResult.IsValid())
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+		UnusedCount = UnusedResult->TryGetArrayField(TEXT("items"), Items) && Items ? Items->Num() : 0;
+		const FString UnusedStatus = StatusOf(UnusedResult);
+		const int32 UnusedSeverity = UnusedStatus == TEXT("error") ? 2 : UnusedCount > 0 ? 1 : 0;
+		AddCheck(TEXT("find_unused"), UnusedStatus, FString::Printf(
+			TEXT("%d advisory unused asset candidate(s) sampled"), UnusedCount), UnusedSeverity);
+		if (UnusedCount > 0)
+		{
+			AddFinding(TEXT("warning"), TEXT("find_unused"),
+				FString::Printf(TEXT("%d advisory unused asset candidate(s) present in sampled index"), UnusedCount));
+		}
+	}
+
+	const FString Decision = Severity >= 2 ? TEXT("fail") : Severity == 1 ? TEXT("warn") : TEXT("pass");
+	Root->SetStringField(TEXT("status"), Severity >= 2 ? TEXT("error") : Severity == 1 ? TEXT("warning") : TEXT("ok"));
+	Root->SetStringField(TEXT("decision"), Decision);
+	Root->SetStringField(TEXT("summary"), FString::Printf(
+		TEXT("Project pre-merge check %s: %d changed asset(s), %d impacted referencer(s), %d finding(s)"),
+		*Decision, ChangedCount, ImpactCount, Findings.Num()));
+	Root->SetNumberField(TEXT("risk_score"), FMath::RoundToDouble(RiskScore * 1000.0) / 1000.0);
+	Root->SetArrayField(TEXT("checks"), Checks);
+	Root->SetArrayField(TEXT("findings"), Findings);
+	Root->SetNumberField(TEXT("changed_entity_count"), ChangedCount);
+	Root->SetNumberField(TEXT("impacted_count"), ImpactCount);
+	Root->SetNumberField(TEXT("unused_count"), UnusedCount);
+	Root->SetBoolField(TEXT("truncated"), BoolField(ChangeResult, TEXT("truncated")) || BoolField(UnusedResult, TEXT("truncated")));
+	if (bStandard)
+	{
+		Root->SetObjectField(TEXT("health"), HealthResult);
+		Root->SetObjectField(TEXT("change_analysis"), ChangeResult);
+		if (UnusedResult.IsValid())
+		{
+			Root->SetObjectField(TEXT("unused"), UnusedResult);
+		}
+	}
+	if (Severity >= 2)
+	{
+		AddNext(Root, { TEXT("project.health"), TEXT("project.search") });
+	}
+	else
+	{
+		AddNext(Root, { TEXT("project.detect_changes"), TEXT("project.review_context"), TEXT("project.find_unused") });
+	}
+	return Root;
+}
+
+// ============================================================================
 // review_hotspots (global top fan/risk/size review queue)
 // ============================================================================
 TSharedPtr<FJsonObject> FMonolithIndexReview::ReviewHotspots(
