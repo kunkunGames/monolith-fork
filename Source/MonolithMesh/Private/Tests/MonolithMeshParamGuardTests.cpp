@@ -30,6 +30,15 @@ bool FMonolithParamGuardMeshTerrainSampleMalformedParamsTest::RunTest(const FStr
     TestFalse(TEXT("ParseTerrainSample rejects malformed min_z parameter"), bResult);
     TestTrue(TEXT("ParseTerrainSample reports the validation error"), OutError.Contains(TEXT("min_z")));
 
+    // Test malformed bool all_hit (string instead of bool)
+    Json->RemoveField(TEXT("min_z"));
+    Json->SetStringField(TEXT("all_hit"), TEXT("true"));
+
+    bResult = FMonolithMeshTerrainActions::ParseTerrainSample(Json, OutSample, OutError);
+
+    TestFalse(TEXT("ParseTerrainSample rejects malformed all_hit parameter"), bResult);
+    TestTrue(TEXT("ParseTerrainSample reports the validation error"), OutError.Contains(TEXT("all_hit")));
+
     return true;
 }
 
