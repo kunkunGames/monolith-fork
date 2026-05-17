@@ -17,6 +17,7 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <filesystem>
 
@@ -88,16 +89,18 @@ public:
     Database(const Database&) = delete;
     Database& operator=(const Database&) = delete;
 
-    void open(const std::string& path) {
+    void open(const std::string& path, bool query_only = true) {
         if (!fs::exists(path))
             die("Database not found: " + path);
 
-        int rc = sqlite3_open_v2(path.c_str(), &db, SQLITE_OPEN_READWRITE, nullptr);
+        int rc = sqlite3_open_v2(path.c_str(), &db, query_only ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE, nullptr);
         if (rc != SQLITE_OK)
             die("Failed to open database: " + path + " — " + sqlite3_errmsg(db));
 
-        exec("PRAGMA journal_mode=DELETE;");
-        exec("PRAGMA query_only=ON;");
+        if (query_only)
+            exec("PRAGMA query_only=ON;");
+        else
+            exec("PRAGMA journal_mode=DELETE;");
     }
 
     void exec(const char* sql) {
@@ -172,6 +175,219 @@ static Rows query(Database& db, const std::string& sql, const std::vector<std::s
     return rows;
 }
 
+static void print_json(const json& value) {
+    std::cout << value.dump(2) << std::endl;
+}
+
+static int clamp_int(int value, int lo, int hi) {
+    return std::max(lo, std::min(value, hi));
+}
+
+static std::vector<std::string> split_kinds(const std::string& kinds) {
+    std::vector<std::string> out;
+    std::string cur;
+    std::istringstream ss(kinds);
+    while (std::getline(ss, cur, '|')) {
+        cur.erase(cur.begin(), std::find_if(cur.begin(), cur.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+        cur.erase(std::find_if(cur.rbegin(), cur.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), cur.end());
+        if (!cur.empty()) out.push_back(cur);
+    }
+    return out;
+}
+
+static bool wants_kind(const std::string& kinds, const std::string& kind) {
+    if (kinds.empty()) return true;
+    for (const auto& k : split_kinds(kinds)) {
+        if (k == kind) return true;
+    }
+    return false;
+}
+
+static std::string tier_for(double score) {
+    if (score >= 0.66) return "high";
+    if (score >= 0.33) return "medium";
+    return "low";
+}
+
+static int tier_rank(const std::string& tier) {
+    if (tier == "high") return 2;
+    if (tier == "medium") return 1;
+    return 0;
+}
+
+static std::string lower_copy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value;
+}
+
+static bool contains_any_token(const std::string& lower_text,
+                               std::initializer_list<const char*> tokens) {
+    for (const char* token : tokens) {
+        if (lower_text.find(token) != std::string::npos)
+            return true;
+    }
+    return false;
+}
+
+static std::pair<double, std::string> sensitivity_factor(const std::string& text,
+                                                         bool source_domain) {
+    std::string lower = lower_copy(text);
+    if (source_domain && contains_any_token(lower, {"ufunction", "server", "client", "netmulticast", "onrep", "replication", "rpc", "network"}))
+        return {0.15, "sensitivity: replication/RPC or network surface"};
+    if (!source_domain && contains_any_token(lower, {"replication", "network", "rpc", "netmulticast", "onrep", "server", "client"}))
+        return {0.15, "sensitivity: replication/RPC or network surface"};
+    if (contains_any_token(lower, {"save", "serialize", "archive"}))
+        return {0.15, "sensitivity: save/serialization surface"};
+    if (contains_any_token(lower, {"auth", "login", "account", "session"}))
+        return {0.15, "sensitivity: auth/account/session surface"};
+    if (contains_any_token(lower, {"purchase", "iap", "store", "entitlement"}))
+        return {0.15, "sensitivity: purchase/store entitlement surface"};
+    if (contains_any_token(lower, {"anticheat", "anti_cheat", "cheat"}))
+        return {0.15, "sensitivity: anticheat surface"};
+    if (contains_any_token(lower, {"crypt", "encrypt", "decrypt", "sign", "hash"}))
+        return {0.15, "sensitivity: crypto/signing/hash surface"};
+    if (contains_any_token(lower, {"exec", "eval", "command"}))
+        return {0.15, "sensitivity: exec/eval/command surface"};
+    if (contains_any_token(lower, {"file", "registry", "process"}))
+        return {0.15, "sensitivity: file/registry/process surface"};
+    return {0.0, ""};
+}
+
+static int64_t count_rows(Database& db, const std::string& sql) {
+    auto rows = query(db, sql);
+    if (rows.empty() || rows[0].cols.empty()) return -1;
+    return rows[0].cols.begin()->second.empty() ? 0 : rows[0].get_int64(rows[0].cols.begin()->first);
+}
+
+static std::string scalar_str(Database& db, const std::string& sql) {
+    auto rows = query(db, sql);
+    if (rows.empty() || rows[0].cols.empty()) return "";
+    return rows[0].cols.begin()->second;
+}
+
+static bool object_exists(Database& db, const std::string& type, const std::string& name) {
+    return !query(db, "SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?;", {type, name}).empty();
+}
+
+static void add_next(json& root, std::initializer_list<const char*> actions) {
+    root["next_actions"] = json::array();
+    for (const char* action : actions) root["next_actions"].push_back(action);
+}
+
+// ============================================================
+// RX-2: offline CRG projection-cache READ parity
+//
+// The editor (FMonolithIndexReview::TryCachedAssetRisk /
+// FMonolithSourceDatabase::GetCachedRiskForSymbol) reads crg_node_metrics
+// when present and falls back to query-time scoring otherwise. The offline
+// tool previously NEVER read the cache (always scoring_version=1, no
+// cache metadata, no crg:* health). These read-only helpers mirror the
+// editor behavior; they never write and never run repair_crg_cache
+// (offline cache WRITE remains out of scope per the projection-cache spec).
+// ============================================================
+
+static bool crg_cache_present(Database& db) {
+    return object_exists(db, "table", "crg_nodes")
+        && object_exists(db, "table", "crg_node_metrics")
+        && object_exists(db, "table", "crg_meta");
+}
+
+// Returns a populated risk item (score/tier/reasons/raw_counts + cache) on a
+// cache hit, or a null json on miss/absent. Joins on native_id so it is
+// robust whether crg_nodes.id is AUTOINCREMENT or aliased to the native id.
+static json try_cached_risk(Database& db, const std::string& domain,
+                            const std::string& native_table, int64_t native_id) {
+    if (!crg_cache_present(db)) return json();
+    auto rows = query(db,
+        "SELECT m.risk_score, m.risk_tier, m.reasons_json, m.raw_counts_json, "
+        "m.scoring_version, "
+        "COALESCE((SELECT value FROM crg_meta WHERE key='cache_version'),'1') AS cache_version "
+        "FROM crg_nodes n JOIN crg_node_metrics m ON m.node_id = n.id "
+        "WHERE n.domain = ? AND n.native_table = ? AND n.native_id = ? LIMIT 1;",
+        {domain, native_table, std::to_string(native_id)});
+    if (rows.empty()) return json();
+    const Row& r = rows[0];
+    json reasons = json::array();
+    {
+        json p = json::parse(r.get("reasons_json", "[]"), nullptr, false);
+        if (p.is_array()) reasons = p;
+    }
+    json raw = json::object();
+    {
+        json p = json::parse(r.get("raw_counts_json", "{}"), nullptr, false);
+        if (p.is_object()) raw = p;
+    }
+    double score = r.get_double("risk_score");
+    std::string sv = r.get("scoring_version", "3");
+    std::string cv = r.get("cache_version", "1");
+    json item;
+    item["score"] = std::round(score * 1000.0) / 1000.0;
+    item["tier"] = r.get("risk_tier", tier_for(score));
+    item["reasons"] = reasons;
+    item["raw_counts"] = raw;
+    item["scoring_version"] = sv;
+    item["cache"] = {
+        {"status", "hit"}, {"version", cv}, {"cache_version", cv}, {"scoring_version", sv},
+    };
+    return item;
+}
+
+// Appends crg:* checks mirroring the editor ComputeHealth. Cache ABSENT is
+// informational only (keeps offline `health` "ok" for pre-cache DBs, per
+// projection-cache REQ-006); cache PRESENT-but-inconsistent warns like the
+// editor. `valid_edges` lets the caller pass the dangling-ref-corrected
+// native edge count so parity matches the editor's current behavior.
+static void append_crg_health_checks(Database& db, const std::string& domain,
+                                     int64_t native_node_cnt, int64_t valid_edges,
+                                     json& root) {
+    auto info = [&](const std::string& name, const std::string& detail) {
+        root["checks"].push_back({{"check", name}, {"result", "info"}, {"detail", detail}});
+    };
+    auto check = [&](const std::string& name, bool pass, const std::string& detail) {
+        root["checks"].push_back({{"check", name}, {"result", pass ? "ok" : "warning"}, {"detail", detail}});
+        if (!pass) root["warnings"].push_back(detail);
+    };
+    if (!crg_cache_present(db)) {
+        info("crg:cache_absent",
+             "CRG projection cache not built (run repair_crg_cache for cached risk + parity checks)");
+        return;
+    }
+    for (const char* t : {"crg_nodes", "crg_edges", "crg_node_metrics", "crg_meta"})
+        check(std::string("crg:table:") + t, object_exists(db, "table", t),
+              object_exists(db, "table", t) ? std::string("CRG table ") + t + " present"
+                                            : std::string("missing CRG table ") + t);
+    int64_t cnodes = count_rows(db, "SELECT COUNT(*) FROM crg_nodes WHERE domain = '" + domain + "';");
+    int64_t cedges = count_rows(db, "SELECT COUNT(*) FROM crg_edges WHERE domain = '" + domain + "';");
+    int64_t cmetrics = count_rows(db,
+        "SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id "
+        "WHERE n.domain = '" + domain + "';");
+    check("crg:nodes_row_parity", cnodes == native_node_cnt,
+          domain + " native=" + std::to_string(native_node_cnt) + " crg_nodes=" + std::to_string(cnodes) +
+          (cnodes == native_node_cnt ? "" : " (mismatch -> repair_crg_cache)"));
+    check("crg:edges_row_parity", cedges == valid_edges,
+          "valid native edges=" + std::to_string(valid_edges) + " crg_edges=" + std::to_string(cedges) +
+          (cedges == valid_edges ? "" : " (mismatch -> repair_crg_cache)"));
+    check("crg:metrics_row_parity", cmetrics == cnodes,
+          "crg_nodes=" + std::to_string(cnodes) + " crg_node_metrics=" + std::to_string(cmetrics) +
+          (cmetrics == cnodes ? "" : " (mismatch -> repair_crg_cache)"));
+    int64_t orphan = count_rows(db,
+        "SELECT COUNT(*) FROM crg_edges e WHERE e.domain = '" + domain + "' AND ("
+        "e.source_node_id NOT IN (SELECT id FROM crg_nodes) OR "
+        "e.target_node_id NOT IN (SELECT id FROM crg_nodes));");
+    check("crg:orphan_edges", orphan == 0,
+          orphan == 0 ? "no orphan CRG projection edge rows"
+                      : std::to_string(orphan) + " orphan CRG projection edge row(s)");
+    std::string cache_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'cache_version';");
+    check("crg:cache_version", !cache_ver.empty(),
+          cache_ver.empty() ? "crg_meta.cache_version missing (run repair_crg_cache)"
+                            : "crg cache_version=" + cache_ver);
+    std::string scoring_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'scoring_version';");
+    check("crg:scoring_version", scoring_ver == "3",
+          scoring_ver.empty() ? "crg_meta.scoring_version missing (run repair_crg_cache)"
+                              : "crg scoring_version=" + scoring_ver + " (expected 3)");
+}
+
 // ============================================================
 // CLI argument parser
 // ============================================================
@@ -216,12 +432,28 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  get_module_info <module_name>\n"
                   << "  get_symbol_context <symbol> [--context-lines=N]\n"
                   << "  read_file <file_path> [--start=N] [--end=N]\n"
+                  << "  impact_radius <symbol> [--edge-kinds=call|type|inheritance] [--direction=in|out|both] [--max-depth=N] [--max-results=N]\n"
+                  << "  health [--include-counts=false]\n"
+                  << "  repair_fts [--target=all|symbols|source] [--execute]\n"
+                  << "  risk_score <symbol> [--limit=N] [--min-tier=low|medium|high]\n"
+                  << "  review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
+                  << "  review_context <symbol> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
+                  << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
+                  << "  find_unused [--kind=function|class|struct|all] [--limit=N] [--min-confidence=low|medium|high]\n"
                   << "\nProject actions:\n"
                   << "  search <query> [--limit=N]\n"
                   << "  find_by_type <asset_class> [--limit=N] [--offset=N]\n"
                   << "  find_references <asset_path>\n"
                   << "  get_stats\n"
-                  << "  get_asset_details <asset_path>\n";
+                  << "  get_asset_details <asset_path>\n"
+                  << "  impact_radius <asset_path> [--direction=in|out|both] [--max-depth=N] [--max-results=N] [--dependency-type=Hard|Soft]\n"
+                  << "  health [--include-counts=false]\n"
+                  << "  repair_fts [--target=all|assets|nodes] [--execute]\n"
+                  << "  risk_score [asset_path] [--limit=N] [--min-tier=low|medium|high]\n"
+                  << "  review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
+                  << "  review_context <asset_path> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
+                  << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
+                  << "  find_unused [--kind=<asset_class>] [--limit=N] [--min-confidence=low|medium|high]\n";
         std::exit(1);
     }
 
@@ -304,7 +536,7 @@ class SourceActions {
     Database db;
 
 public:
-    void open(const std::string& path) { db.open(path); }
+    void open(const std::string& path, bool query_only = true) { db.open(path, query_only); }
 
     std::string get_file_path(int file_id) {
         auto rows = query(db, "SELECT path FROM files WHERE id = ?", {std::to_string(file_id)});
@@ -764,6 +996,732 @@ public:
         std::cout << "--- " << short_path(resolved) << " (lines " << start << "-" << end << ") ---\n";
         std::cout << read_file_lines(resolved, start, end) << std::endl;
     }
+
+    Rows symbols_by_name(const std::string& symbol, int limit = 5) {
+        auto rows = query(db,
+            "SELECT id, name, qualified_name, kind, file_id, line_start, line_end, "
+            "parent_symbol_id, access, signature, docstring, is_ue_macro "
+            "FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC LIMIT " + std::to_string(limit),
+            {symbol});
+        if (rows.empty()) {
+            rows = query(db,
+                "SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, "
+                "s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro "
+                "FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
+                "WHERE symbols_fts MATCH ? ORDER BY bm25(symbols_fts) LIMIT " + std::to_string(limit),
+                {escape_fts(symbol)});
+        }
+        return rows;
+    }
+
+    Row symbol_by_id(const std::string& id) {
+        auto rows = query(db,
+            "SELECT id, name, qualified_name, kind, file_id, line_start, line_end, "
+            "parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE id = ?",
+            {id});
+        return rows.empty() ? Row{} : rows[0];
+    }
+
+    json symbol_json(const Row& r, int depth = -1) {
+        json o = {
+            {"id", r.get_int64("id")},
+            {"name", r.get("name")},
+            {"qualified_name", r.get("qualified_name")},
+            {"kind", r.get("kind")},
+            {"file", short_path(get_file_path(r.get_int("file_id")))},
+            {"line_start", r.get_int("line_start")},
+            {"line_end", r.get_int("line_end")},
+        };
+        if (depth >= 0) o["depth"] = depth;
+        std::string sig = r.get("signature");
+        if (!sig.empty()) o["signature"] = sig;
+        return o;
+    }
+
+    json source_health_json(bool include_counts) {
+        json root = {
+            {"input", {{"include_counts", include_counts}}},
+            {"limits", {{"include_counts", include_counts}}},
+            {"checks", json::array()},
+            {"warnings", json::array()},
+            {"truncated", false},
+        };
+        auto check = [&](const std::string& name, bool pass, const std::string& detail) {
+            root["checks"].push_back({{"check", name}, {"result", pass ? "ok" : "warning"}, {"detail", detail}});
+            if (!pass) root["warnings"].push_back(detail);
+        };
+
+        for (const char* t : {"modules", "files", "symbols", "inheritance", "references", "includes", "meta"})
+            check(std::string("table:") + t, object_exists(db, "table", t), object_exists(db, "table", t) ? std::string("table ") + t + " present" : std::string("missing table ") + t);
+        for (const char* f : {"symbols_fts", "source_fts"})
+            check(std::string("fts:") + f, object_exists(db, "table", f), object_exists(db, "table", f) ? std::string("FTS table ") + f + " present" : std::string("missing FTS table ") + f);
+        for (const char* tr : {"symbols_ai", "symbols_ad"})
+            check(std::string("trigger:") + tr, object_exists(db, "trigger", tr), object_exists(db, "trigger", tr) ? std::string("trigger ") + tr + " present" : std::string("missing trigger ") + tr + " (symbols_fts may drift)");
+
+        std::string schema_ver = scalar_str(db, "SELECT value FROM meta WHERE key = 'schema_version';");
+        check("meta:schema_version", schema_ver == "1", schema_ver.empty() ? "meta.schema_version missing" : "schema_version=" + schema_ver + " (expected 1)");
+        int64_t orphan_refs = count_rows(db,
+            "SELECT COUNT(*) FROM \"references\" r "
+            "WHERE r.from_symbol_id NOT IN (SELECT id FROM symbols) "
+            "OR r.to_symbol_id NOT IN (SELECT id FROM symbols);");
+        check("integrity:orphan_references", orphan_refs == 0, orphan_refs == 0 ? "no orphan reference rows" : std::to_string(orphan_refs) + " orphan reference row(s)");
+
+        int64_t sym_cnt = count_rows(db, "SELECT COUNT(*) FROM symbols;");
+        int64_t sym_fts_cnt = count_rows(db, "SELECT COUNT(*) FROM symbols_fts;");
+        check("fts:symbols_row_parity", sym_cnt == sym_fts_cnt,
+            "symbols=" + std::to_string(sym_cnt) + " symbols_fts=" + std::to_string(sym_fts_cnt) + (sym_cnt == sym_fts_cnt ? "" : " (mismatch -> source.repair_fts target=symbols)"));
+        int64_t source_fts_cnt = count_rows(db, "SELECT COUNT(*) FROM source_fts;");
+        root["checks"].push_back({{"check", "fts:source_fts_info"}, {"result", "info"}, {"detail", "source_fts rows=" + std::to_string(source_fts_cnt) + " (plain fts5; not rebuildable; reindex to repair)"}});
+        root["schema"] = {{"schema_version", schema_ver}, {"journal_mode", scalar_str(db, "PRAGMA journal_mode;")}};
+        if (include_counts) {
+            root["row_counts"] = {
+                {"symbols", sym_cnt},
+                {"references", count_rows(db, "SELECT COUNT(*) FROM \"references\";")},
+                {"inheritance", count_rows(db, "SELECT COUNT(*) FROM inheritance;")},
+                {"source_fts", source_fts_cnt},
+            };
+        }
+        // RX-2: CRG projection-cache health parity (mirrors editor ComputeHealth).
+        // valid edges use the symbols-joined ref count so parity matches the
+        // editor's dangling-ref-corrected rebuild.
+        int64_t valid_refs = count_rows(db,
+            "SELECT COUNT(*) FROM \"references\" r "
+            "JOIN symbols fs ON fs.id = r.from_symbol_id "
+            "JOIN symbols ts ON ts.id = r.to_symbol_id;");
+        int64_t inh_cnt = count_rows(db, "SELECT COUNT(*) FROM inheritance;");
+        append_crg_health_checks(db, "source", sym_cnt, valid_refs + inh_cnt, root);
+        root["status"] = root["warnings"].empty() ? "ok" : "warning";
+        root["summary"] = root["warnings"].empty() ? "EngineSource schema, triggers, symbols_fts parity, CRG cache and integrity OK" : std::to_string(root["warnings"].size()) + " health warning(s)";
+        add_next(root, {"source.repair_crg_cache", "source.repair_fts", "source.trigger_project_reindex", "source.search_source"});
+        return root;
+    }
+
+    void health(const Args& args) {
+        print_json(source_health_json(args.opt_bool("include_counts", true)));
+    }
+
+    json source_repair_fts_json(const std::string& target, bool execute) {
+        std::string t = target.empty() ? "all" : target;
+        json root = {
+            {"input", {{"target", t}, {"execute", execute}}},
+            {"limits", {{"target", t}, {"execute", execute}}},
+            {"warnings", json::array()},
+            {"plan", json::array()},
+            {"truncated", false},
+        };
+        if (t != "all" && t != "symbols" && t != "source") {
+            root["status"] = "error";
+            root["summary"] = "Unknown target '" + t + "' (expected all|symbols|source)";
+            add_next(root, {"source.repair_fts", "source.health"});
+            return root;
+        }
+        bool do_symbols = (t == "all" || t == "symbols");
+        bool asked_source = (t == "all" || t == "source");
+        json before = json::object();
+        if (do_symbols) before["symbols_fts"] = count_rows(db, "SELECT COUNT(*) FROM symbols_fts;");
+        root["before"] = before;
+        if (do_symbols) root["plan"].push_back("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');");
+        if (asked_source) root["warnings"].push_back("source_fts is a plain fts5 table (no backing content); run source.trigger_reindex / trigger_project_reindex to repopulate source line search.");
+        if (!execute) {
+            root["status"] = "ok";
+            root["summary"] = do_symbols ? "Dry-run: symbols_fts would be rebuilt. Pass --execute to apply." : "Dry-run: nothing rebuildable for this target.";
+            root["after"] = json::object();
+            add_next(root, {"source.repair_fts", "source.health"});
+            return root;
+        }
+        if (do_symbols) {
+            db.exec("BEGIN;");
+            db.exec("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');");
+            db.exec("COMMIT;");
+        }
+        json after = json::object();
+        if (do_symbols) after["symbols_fts"] = count_rows(db, "SELECT COUNT(*) FROM symbols_fts;");
+        root["after"] = after;
+        root["status"] = "ok";
+        root["summary"] = do_symbols ? "Rebuilt symbols_fts" : "Nothing rebuilt; see warnings for source_fts reindex guidance";
+        add_next(root, {"source.health", "source.search_symbols"});
+        return root;
+    }
+
+    void repair_fts(const Args& args) {
+        print_json(source_repair_fts_json(args.opt("target", "all"), args.opt_bool("execute", false)));
+    }
+
+    json score_symbol(const Row& sym) {
+        std::string id = sym.get("id");
+        auto callers = query(db, "SELECT ref_kind, file_id FROM \"references\" WHERE to_symbol_id = ? LIMIT 500", {id});
+        auto callees = query(db, "SELECT ref_kind, file_id FROM \"references\" WHERE from_symbol_id = ? LIMIT 500", {id});
+        auto children = query(db, "SELECT child_id FROM inheritance WHERE parent_id = ?", {id});
+        auto parents = query(db, "SELECT parent_id FROM inheritance WHERE child_id = ?", {id});
+        std::set<std::string> caller_files;
+        for (const auto& r : callers) caller_files.insert(r.get("file_id"));
+        json reasons = json::array();
+        double raw = 0.0;
+        auto factor = [&](double c, const std::string& why) {
+            if (c > 0.0) { raw += c; reasons.push_back(why); }
+        };
+        factor(std::min<double>(callers.size(), 50) / 50.0 * 0.35, "caller fan-in: " + std::to_string(callers.size()));
+        factor(std::min<double>(children.size(), 30) / 30.0 * 0.25, "inheritance descendants (1-hop): " + std::to_string(children.size()));
+        factor(std::min<double>(callees.size(), 50) / 50.0 * 0.10, "callee fan-out: " + std::to_string(callees.size()));
+        factor(sym.get_int("is_ue_macro") != 0 ? 0.15 : 0.0, "UE reflection macro symbol (UCLASS/UFUNCTION/UPROPERTY family)");
+        factor(caller_files.size() > 1 ? std::min<double>(caller_files.size(), 20) / 20.0 * 0.15 : 0.0,
+            "module/file boundary crossing: " + std::to_string(caller_files.size()) + " distinct caller file(s)");
+        auto sensitivity = sensitivity_factor(
+            sym.get("name") + " " + sym.get("qualified_name") + " " + sym.get("kind") + " " + sym.get("signature"),
+            true);
+        factor(sensitivity.first, sensitivity.second);
+        if (callers.empty() && sym.get("kind").find("function") != std::string::npos)
+            reasons.push_back("missing direct callers: function has 0 indexed callers; may be reflection/delegate/Blueprint-invoked");
+        double score = std::max(0.0, std::min(raw, 1.0));
+        return {
+            {"id", sym.get_int64("id")},
+            {"name", sym.get("name")},
+            {"qualified_name", sym.get("qualified_name")},
+            {"kind", sym.get("kind")},
+            {"score", std::round(score * 1000.0) / 1000.0},
+            {"tier", tier_for(score)},
+            {"reasons", reasons},
+            {"raw_counts", {
+                {"callers", callers.size()},
+                {"callees", callees.size()},
+                {"descendants", children.size()},
+                {"ancestors", parents.size()},
+                {"caller_files", caller_files.size()},
+                {"is_ue_macro", sym.get_int("is_ue_macro") != 0},
+                {"sensitivity", sensitivity.first},
+            }},
+        };
+    }
+
+    json source_risk_score_json(const std::string& symbol, int limit, const std::string& min_tier) {
+        int cap = clamp_int(limit <= 0 ? 10 : limit, 1, 100);
+        json root = {{"input", {{"symbol", symbol}}}, {"limits", {{"limit", cap}, {"min_tier", min_tier.empty() ? "low" : min_tier}}}};
+        auto rows = symbols_by_name(symbol, cap);
+        json items = json::array();
+        if (rows.empty()) {
+            root["status"] = "error";
+            root["summary"] = "Symbol not found: " + symbol;
+            root["items"] = items;
+            root["truncated"] = false;
+            add_next(root, {"source.search_source"});
+            return root;
+        }
+        int min_rank = tier_rank(min_tier.empty() ? "low" : min_tier);
+        bool any_cache_hit = false;
+        for (const auto& row : rows) {
+            json cached = try_cached_risk(db, "source", "symbols", row.get_int64("id"));
+            json scored;
+            if (!cached.is_null()) {
+                any_cache_hit = true;
+                scored = cached;
+                scored["id"] = row.get_int64("id");
+                scored["name"] = row.get("name");
+                scored["qualified_name"] = row.get("qualified_name");
+                scored["kind"] = row.get("kind");
+            } else {
+                scored = score_symbol(row);
+                scored["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}};
+                scored["scoring_version"] = "3";
+            }
+            if (tier_rank(scored["tier"].get<std::string>()) >= min_rank) items.push_back(scored);
+        }
+        std::sort(items.begin(), items.end(), [](const json& a, const json& b) { return a["score"].get<double>() > b["score"].get<double>(); });
+        const char* sv = "3";
+        root["status"] = "ok";
+        root["summary"] = std::to_string(items.size()) + " symbol overload(s) scored (scoring_version="
+            + std::string(sv) + (any_cache_hit ? " cached when available, v3 query fallback; CRG cache hit)" : " cached when available, v3 query fallback)");
+        root["scoring_version"] = sv;
+        root["items"] = items;
+        root["truncated"] = false;
+        add_next(root, {"source.review_context", "source.impact_radius"});
+        return root;
+    }
+
+    void risk_score(const Args& args) {
+        std::string symbol = args.opt("symbol");
+        if (symbol.empty() && !args.positional.empty()) symbol = args.positional[0];
+        if (symbol.empty()) die("risk_score requires a symbol argument");
+        print_json(source_risk_score_json(symbol, args.opt_int("limit", 10), args.opt("min_tier", "low")));
+    }
+
+    json source_review_hotspots_json(const std::string& kind, int limit, int min_lines, bool include_questions) {
+        std::string k = kind.empty() ? "all" : lower_copy(kind);
+        int cap = clamp_int(limit <= 0 ? 50 : limit, 1, 200);
+        int loc_floor = std::max(min_lines <= 0 ? 100 : min_lines, 0);
+        json root = {
+            {"input", {{"kind", k}, {"include_questions", include_questions}}},
+            {"limits", {{"limit", cap}, {"min_lines", loc_floor}}},
+        };
+        if (k != "fan_in" && k != "fan_out" && k != "risk" && k != "large" && k != "all") {
+            root["status"] = "error";
+            root["summary"] = "Unsupported kind for source.review_hotspots (expected fan_in|fan_out|risk|large|all)";
+            root["hotspots"] = json::array();
+            root["truncated"] = false;
+            add_next(root, {"source.review_hotspots", "source.risk_score"});
+            return root;
+        }
+
+        bool has_cache = crg_cache_present(db);
+        std::string cache_join = has_cache
+            ? "LEFT JOIN crg_nodes n ON n.domain='source' AND n.native_table='symbols' AND n.native_id=c.id "
+              "LEFT JOIN crg_node_metrics m ON m.node_id=n.id "
+            : "";
+        std::string risk_expr = has_cache ? "COALESCE(m.risk_score, c.estimated_risk)" : "c.estimated_risk";
+        std::string tier_expr = has_cache
+            ? "COALESCE(m.risk_tier, CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END)"
+            : "CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END";
+        std::string where = (k == "large")
+            ? "WHERE lines >= " + std::to_string(loc_floor) + " "
+            : "WHERE fan_in > 0 OR fan_out > 0 OR descendants > 0 OR risk_score > 0 OR lines >= " + std::to_string(loc_floor) + " ";
+        std::string order = "ORDER BY hotspot_score DESC, risk_score DESC, fan_in DESC, lines DESC ";
+        if (k == "fan_in") order = "ORDER BY fan_in DESC, risk_score DESC, lines DESC ";
+        else if (k == "fan_out") order = "ORDER BY fan_out DESC, risk_score DESC, lines DESC ";
+        else if (k == "risk") order = "ORDER BY risk_score DESC, fan_in DESC, lines DESC ";
+        else if (k == "large") order = "ORDER BY lines DESC, risk_score DESC, fan_in DESC ";
+
+        std::string sql = R"SQL(
+WITH ref_in AS (
+  SELECT to_symbol_id AS symbol_id, COUNT(*) AS fan_in, COUNT(DISTINCT r.file_id) AS caller_files
+  FROM "references" r JOIN symbols fs ON fs.id=r.from_symbol_id JOIN symbols ts ON ts.id=r.to_symbol_id GROUP BY to_symbol_id
+), ref_out AS (
+  SELECT from_symbol_id AS symbol_id, COUNT(*) AS fan_out
+  FROM "references" r JOIN symbols fs ON fs.id=r.from_symbol_id JOIN symbols ts ON ts.id=r.to_symbol_id GROUP BY from_symbol_id
+), inh_desc AS (
+  SELECT parent_id AS symbol_id, COUNT(*) AS descendants FROM inheritance i
+  JOIN symbols cs ON cs.id=i.child_id JOIN symbols ps ON ps.id=i.parent_id GROUP BY parent_id
+), base AS (
+  SELECT s.id,s.name,s.qualified_name,s.kind,COALESCE(f.path,'') AS file,s.line_start,s.line_end,
+         CASE WHEN s.line_end >= s.line_start THEN s.line_end - s.line_start + 1 ELSE 0 END AS lines,
+         COALESCE(ri.fan_in,0) AS fan_in,COALESCE(ro.fan_out,0) AS fan_out,
+         COALESCE(id.descendants,0) AS descendants,COALESCE(ri.caller_files,0) AS caller_files,
+         s.is_ue_macro AS is_ue_macro,
+         CASE WHEN lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%ufunction%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%server%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%client%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%netmulticast%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%save%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%serialize%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%auth%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%purchase%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%anticheat%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%crypt%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%exec%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%file%'
+          THEN 1 ELSE 0 END AS sensitivity
+  FROM symbols s LEFT JOIN files f ON f.id=s.file_id
+  LEFT JOIN ref_in ri ON ri.symbol_id=s.id LEFT JOIN ref_out ro ON ro.symbol_id=s.id LEFT JOIN inh_desc id ON id.symbol_id=s.id
+), counts AS (
+  SELECT *, MIN(1.0, MIN(fan_in,50)/50.0*0.35 + MIN(descendants,30)/30.0*0.25 +
+         MIN(fan_out,50)/50.0*0.10 + CASE WHEN is_ue_macro != 0 THEN 0.15 ELSE 0 END +
+         MIN(caller_files,20)/20.0*0.15 + CASE WHEN sensitivity != 0 THEN 0.15 ELSE 0 END) AS estimated_risk
+  FROM base
+), scored AS (
+  SELECT c.id,c.name,c.qualified_name,c.kind,c.file,c.line_start,c.line_end,c.lines,
+         c.fan_in,c.fan_out,c.descendants,)SQL" + risk_expr + R"SQL( AS risk_score,)SQL" + tier_expr + R"SQL( AS risk_tier
+  FROM counts c )SQL" + cache_join + R"SQL(
+)
+SELECT *, MAX(risk_score, MIN(fan_in,50)/50.0, MIN(fan_out,50)/50.0, MIN(lines,500)/500.0) AS hotspot_score
+FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
+
+        Rows rows = query(db, sql);
+        bool truncated = (int)rows.size() > cap;
+        if (truncated) rows.pop_back();
+        json hotspots = json::array();
+        json questions = json::array();
+        for (const auto& r : rows) {
+            int fan_in = r.get_int("fan_in");
+            int fan_out = r.get_int("fan_out");
+            int lines = r.get_int("lines");
+            double risk = r.get_double("risk_score");
+            std::string primary = k;
+            if (primary == "all") {
+                double best = risk;
+                primary = "risk";
+                double in_signal = std::min<double>(fan_in, 50) / 50.0;
+                double out_signal = std::min<double>(fan_out, 50) / 50.0;
+                double large_signal = std::min<double>(lines, 500) / 500.0;
+                if (in_signal > best) { best = in_signal; primary = "fan_in"; }
+                if (out_signal > best) { best = out_signal; primary = "fan_out"; }
+                if (large_signal > best) primary = "large";
+            }
+            json signals = {
+                {"fan_in", fan_in},
+                {"fan_out", fan_out},
+                {"descendants", r.get_int("descendants")},
+                {"risk_score", std::round(risk * 1000.0) / 1000.0},
+                {"risk_tier", r.get("risk_tier", tier_for(risk))},
+                {"lines", lines},
+            };
+            hotspots.push_back({
+                {"primary_kind", primary},
+                {"id", r.get_int64("id")},
+                {"name", r.get("name")},
+                {"qualified_name", r.get("qualified_name")},
+                {"kind", r.get("kind")},
+                {"file", short_path(r.get("file"))},
+                {"line_start", r.get_int("line_start")},
+                {"line_end", r.get_int("line_end")},
+                {"signals", signals},
+                {"metrics", signals},
+            });
+            if (include_questions && questions.size() < 5) {
+                questions.push_back({
+                    {"target", r.get("qualified_name").empty() ? r.get("name") : r.get("qualified_name")},
+                    {"reason", primary},
+                    {"question", primary == "large"
+                        ? "Can this large symbol be split or covered by focused tests before risky edits?"
+                        : "Which callers and tests cover this hotspot before changing it?"},
+                });
+            }
+        }
+        root["status"] = "ok";
+        root["summary"] = std::to_string(hotspots.size()) + " source review hotspot(s) ranked by " + k
+            + (has_cache ? " using CRG cache when available" : " using native fallback");
+        root["hotspots"] = hotspots;
+        if (include_questions) root["questions"] = questions;
+        root["truncated"] = truncated;
+        add_next(root, {"source.review_context", "source.risk_score", "source.impact_radius"});
+        return root;
+    }
+
+    void review_hotspots(const Args& args) {
+        print_json(source_review_hotspots_json(args.opt("kind", "all"),
+                                               args.opt_int("limit", 50),
+                                               args.opt_int("min_lines", 100),
+                                               args.opt_bool("include_questions", true)));
+    }
+
+    json source_impact_radius_json(const std::string& symbol, const std::string& edge_kinds, const std::string& direction, int max_depth, int max_results) {
+        int depth = clamp_int(max_depth <= 0 ? 2 : max_depth, 0, 8);
+        int limit = clamp_int(max_results <= 0 ? 200 : max_results, 1, 1000);
+        std::string kinds = edge_kinds.empty() ? "call|type|inheritance" : edge_kinds;
+        json root = {
+            {"input", {{"symbol", symbol}, {"edge_kinds", kinds}, {"direction", direction}}},
+            {"limits", {{"max_depth", depth}, {"max_results", limit}}},
+            {"warnings", json::array()},
+        };
+        bool include_requested = !edge_kinds.empty() && wants_kind(edge_kinds, "include");
+        if (include_requested) root["warnings"].push_back("include edges are excluded in P0 until includes.included_path can be resolved to files.path with file-level fixtures");
+        auto seeds = symbols_by_name(symbol, 5);
+        if (seeds.empty()) {
+            root["status"] = "error";
+            root["summary"] = "Symbol not found in EngineSource: " + symbol;
+            root["impacted_symbols"] = json::array();
+            root["edges"] = json::array();
+            root["truncated"] = false;
+            add_next(root, {"source.search_source", "source.read_source"});
+            return root;
+        }
+        bool in = direction != "out";
+        bool out = direction != "in";
+        bool call = wants_kind(kinds, "call");
+        bool type = wants_kind(kinds, "type");
+        bool inh = wants_kind(kinds, "inheritance");
+        std::set<std::string> visited;
+        std::vector<std::string> frontier;
+        root["seed_symbols"] = json::array();
+        for (const auto& s : seeds) {
+            visited.insert(s.get("id"));
+            frontier.push_back(s.get("id"));
+            root["seed_symbols"].push_back(symbol_json(s, 0));
+        }
+        json impacted = json::array();
+        json edges = json::array();
+        bool truncated = false;
+        int emitted = 0;
+        int per_node = clamp_int(limit, 50, 500);
+        for (int d = 1; d <= depth && !frontier.empty() && !truncated; ++d) {
+            std::vector<std::string> next;
+            for (const auto& cur : frontier) {
+                std::vector<std::pair<std::string, std::string>> neighbors;
+                auto append_refs = [&](const char* sql, const std::string& kind, bool reverse) {
+                    auto refs = query(db, sql, {cur, kind, std::to_string(per_node)});
+                    for (const auto& r : refs) neighbors.push_back({r.get(reverse ? "from_symbol_id" : "to_symbol_id"), r.get("ref_kind", kind)});
+                };
+                if (out && call) append_refs("SELECT from_symbol_id, to_symbol_id, ref_kind FROM \"references\" WHERE from_symbol_id = ? AND ref_kind = ? LIMIT ?", "call", false);
+                if (out && type) append_refs("SELECT from_symbol_id, to_symbol_id, ref_kind FROM \"references\" WHERE from_symbol_id = ? AND ref_kind = ? LIMIT ?", "type", false);
+                if (in && call) append_refs("SELECT from_symbol_id, to_symbol_id, ref_kind FROM \"references\" WHERE to_symbol_id = ? AND ref_kind = ? LIMIT ?", "call", true);
+                if (in && type) append_refs("SELECT from_symbol_id, to_symbol_id, ref_kind FROM \"references\" WHERE to_symbol_id = ? AND ref_kind = ? LIMIT ?", "type", true);
+                if (out && inh) for (const auto& r : query(db, "SELECT parent_id AS id FROM inheritance WHERE child_id = ?", {cur})) neighbors.push_back({r.get("id"), "inheritance"});
+                if (in && inh) for (const auto& r : query(db, "SELECT child_id AS id FROM inheritance WHERE parent_id = ?", {cur})) neighbors.push_back({r.get("id"), "inheritance"});
+                for (const auto& n : neighbors) {
+                    if (n.first.empty() || n.first == cur) continue;
+                    edges.push_back({{"from", std::stoll(cur)}, {"to", std::stoll(n.first)}, {"kind", n.second}, {"depth", d}});
+                    if (visited.count(n.first)) continue;
+                    visited.insert(n.first);
+                    if (emitted >= limit) { truncated = true; break; }
+                    Row other = symbol_by_id(n.first);
+                    if (!other.cols.empty()) {
+                        impacted.push_back(symbol_json(other, d));
+                        ++emitted;
+                    }
+                    next.push_back(n.first);
+                }
+                if (truncated) break;
+            }
+            frontier = std::move(next);
+        }
+        root["status"] = "ok";
+        root["summary"] = std::to_string(emitted) + " impacted symbol(s) within depth " + std::to_string(depth) + " (" + direction + ") of " + symbol + (truncated ? " [truncated]" : "");
+        root["impacted_symbols"] = impacted;
+        root["edges"] = edges;
+        root["truncated"] = truncated;
+        add_next(root, {"source.review_context", "source.risk_score", "source.find_callers"});
+        return root;
+    }
+
+    void impact_radius(const Args& args) {
+        std::string symbol = args.opt("symbol");
+        if (symbol.empty() && !args.positional.empty()) symbol = args.positional[0];
+        if (symbol.empty()) die("impact_radius requires a symbol argument");
+        print_json(source_impact_radius_json(symbol, args.opt("edge_kinds", "call|type|inheritance"), args.opt("direction", "both"), args.opt_int("max_depth", 2), args.opt_int("max_results", 200)));
+    }
+
+    void review_context(const Args& args) {
+        std::string symbol = args.opt("symbol");
+        if (symbol.empty() && !args.positional.empty()) symbol = args.positional[0];
+        if (symbol.empty()) die("review_context requires a symbol argument");
+        std::string direction = args.opt("direction", "both");
+        std::string detail = args.opt("detail_level", "minimal");
+        bool minimal = detail != "standard";
+        int max_depth = args.opt_int("max_depth", 2);
+        int max_results = args.opt_int("max_results", 200);
+        auto seeds = symbols_by_name(symbol, 1);
+        json root = {{"input", {{"symbol", symbol}, {"direction", direction}, {"detail_level", minimal ? "minimal" : "standard"}}},
+                     {"limits", {{"max_depth", clamp_int(max_depth <= 0 ? 2 : max_depth, 0, 8)}, {"max_results", minimal ? std::min(clamp_int(max_results <= 0 ? 200 : max_results, 1, 1000), 25) : clamp_int(max_results <= 0 ? 200 : max_results, 1, 1000)}}}};
+        if (seeds.empty()) {
+            root["status"] = "error";
+            root["summary"] = "Symbol not found: " + symbol;
+            root["truncated"] = false;
+            add_next(root, {"source.search_source"});
+            print_json(root);
+            return;
+        }
+        Row seed = seeds[0];
+        json risk = score_symbol(seed);
+        root["risk"] = risk;
+        root["top_risks"] = json::array();
+        for (size_t i = 0; i < risk["reasons"].size() && i < 5; ++i) root["top_risks"].push_back(risk["reasons"][i]);
+        json impact = source_impact_radius_json(symbol, "call|type|inheritance", direction, max_depth, minimal ? std::min(max_results, 25) : max_results);
+        json summary = {{"truncated", impact.value("truncated", false)}};
+        summary["impacted_count"] = impact["impacted_symbols"].size();
+        summary["top_impacted"] = json::array();
+        for (size_t i = 0; i < impact["impacted_symbols"].size() && i < (minimal ? 5u : 25u); ++i) summary["top_impacted"].push_back(impact["impacted_symbols"][i]);
+        root["impact"] = summary;
+        root["seed"] = symbol_json(seed, 0);
+        root["context"] = json::array({{{"type", "seed_symbol"}, {"name", seed.get("name")}, {"qualified_name", seed.get("qualified_name")}, {"file", short_path(get_file_path(seed.get_int("file_id")))}, {"line", seed.get_int("line_start")}}});
+        if (!minimal) root["details"] = symbol_json(seed, 0);
+        root["status"] = "ok";
+        root["summary"] = seed.get("name") + " risk=" + risk["tier"].get<std::string>() + " (" + (minimal ? "minimal" : "standard") + "); review the top impacted symbols and high-risk reasons";
+        root["truncated"] = impact.value("truncated", false);
+        add_next(root, {"source.read_source", "source.impact_radius", "source.get_class_hierarchy"});
+        print_json(root);
+    }
+
+    // ============================================================
+    // RX-1: detect_changes — changelist/diff -> mapped symbols ->
+    // reused risk (RX-2 cache or query-time) + bounded impact +
+    // advisory (heuristic) test-gaps + review priorities.
+    // changed_paths is the VCS-agnostic primary input (positional or
+    // --changed-paths=a,b); no P4/git shell-out in this path.
+    // ============================================================
+    json source_detect_changes_json(const std::vector<std::string>& changed_paths,
+                                    int max_results, const std::string& detail_level) {
+        int cap = clamp_int(max_results <= 0 ? 200 : max_results, 1, 2000);
+        bool minimal = (detail_level != "standard");
+        json root = {
+            {"input", {{"changed_paths", changed_paths}, {"detail_level", minimal ? "minimal" : "standard"}}},
+            {"limits", {{"max_results", cap}, {"detail_level", minimal ? "minimal" : "standard"}}},
+            {"truncated", false},
+        };
+        if (changed_paths.empty()) {
+            root["status"] = "error";
+            root["summary"] = "detect_changes requires >=1 changed path (positional or --changed-paths=a,b)";
+            root["changed_entities"] = json::array();
+            add_next(root, {"source.search_source"});
+            return root;
+        }
+        std::set<int64_t> seen;
+        json changed = json::array();
+        bool truncated = false, any_cache = false;
+        for (const auto& raw : changed_paths) {
+            std::string norm = raw;
+            std::replace(norm.begin(), norm.end(), '\\', '/');
+            auto rows = query(db,
+                "SELECT s.id,s.name,s.qualified_name,s.kind,s.file_id,s.line_start,s.line_end,s.is_ue_macro "
+                "FROM symbols s JOIN files f ON f.id = s.file_id "
+                "WHERE replace(f.path,'\\','/') LIKE '%' || ? ORDER BY s.id LIMIT " + std::to_string(cap + 1),
+                {norm});
+            for (const auto& r : rows) {
+                int64_t sid = r.get_int64("id");
+                if (seen.count(sid)) continue;
+                if ((int)seen.size() >= cap) { truncated = true; break; }
+                seen.insert(sid);
+                json cached = try_cached_risk(db, "source", "symbols", sid);
+                json item;
+                if (!cached.is_null()) { any_cache = true; item = cached; }
+                else { item = score_symbol(r); item["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}}; item["scoring_version"] = "3"; }
+                item["id"] = sid;
+                item["name"] = r.get("name");
+                item["qualified_name"] = r.get("qualified_name");
+                item["kind"] = r.get("kind");
+                item["file"] = short_path(get_file_path(r.get_int("file_id")));
+                changed.push_back(item);
+            }
+        }
+        double overall = 0.0;
+        for (const auto& c : changed) overall = std::max(overall, c.value("score", 0.0));
+        std::set<int64_t> impacted;
+        for (const auto& c : changed) {
+            if ((int)impacted.size() >= cap) { truncated = true; break; }
+            auto callers = query(db,
+                "SELECT DISTINCT from_symbol_id FROM \"references\" WHERE to_symbol_id = ? LIMIT 200",
+                {std::to_string(c.value("id", (int64_t)0))});
+            for (const auto& cr : callers) {
+                int64_t fid = cr.get_int64("from_symbol_id");
+                if (fid > 0 && !seen.count(fid)) impacted.insert(fid);
+            }
+        }
+        json test_gaps = json::array();
+        for (const auto& c : changed) {
+            if (c.value("kind", std::string()).find("function") == std::string::npos) continue;
+            auto cov = query(db,
+                "SELECT 1 FROM \"references\" r JOIN symbols fs ON fs.id = r.from_symbol_id "
+                "JOIN files ff ON ff.id = fs.file_id WHERE r.to_symbol_id = ? AND ("
+                "replace(ff.path,'\\','/') LIKE '%/Tests/%' OR fs.name LIKE '%Spec%' "
+                "OR fs.qualified_name LIKE '%AutomationTest%' OR fs.name LIKE '%_Test%') LIMIT 1",
+                {std::to_string(c.value("id", (int64_t)0))});
+            if (cov.empty())
+                test_gaps.push_back({
+                    {"name", c.value("name", std::string())},
+                    {"qualified_name", c.value("qualified_name", std::string())},
+                    {"confidence", "medium"},
+                    {"reason", "no inbound reference from a Tests/ file or automation-named symbol "
+                               "(heuristic: EngineSource has no TESTED_BY edge; may miss "
+                               "reflection/Blueprint-driven tests)"},
+                });
+        }
+        std::sort(changed.begin(), changed.end(),
+                  [](const json& a, const json& b) { return a.value("score", 0.0) > b.value("score", 0.0); });
+        json priorities = json::array();
+        for (size_t i = 0; i < changed.size() && i < 10; ++i) priorities.push_back(changed[i]);
+        const char* sv = "3";
+        root["risk_score"] = std::round(overall * 1000.0) / 1000.0;
+        root["scoring_version"] = sv;
+        root["truncated"] = truncated;
+        root["status"] = "ok";
+        if (minimal) {
+            json topn = json::array();
+            for (size_t i = 0; i < changed.size() && i < 3; ++i) topn.push_back(changed[i].value("name", std::string()));
+            root["summary"] = "changed " + std::to_string(changed.size()) + " symbol(s), risk=" + tier_for(overall)
+                + ", " + std::to_string(test_gaps.size()) + " advisory test-gap(s), scoring_version=" + sv;
+            root["changed_entity_count"] = changed.size();
+            root["impacted_count"] = impacted.size();
+            root["test_gap_count"] = test_gaps.size();
+            root["review_priorities"] = topn;
+        } else {
+            root["summary"] = "changed " + std::to_string(changed.size()) + " symbol(s) across "
+                + std::to_string(changed_paths.size()) + " path(s); risk=" + tier_for(overall)
+                + " scoring_version=" + sv;
+            root["changed_entities"] = changed;
+            root["impact"] = {{"depth", 1}, {"impacted_count", impacted.size()}};
+            root["test_gaps"] = test_gaps;
+            root["review_priorities"] = priorities;
+        }
+        add_next(root, {"source.review_context", "source.impact_radius", "source.risk_score"});
+        return root;
+    }
+
+    void detect_changes(const Args& args) {
+        std::vector<std::string> paths = args.positional;
+        std::string csv = args.opt("changed_paths");
+        if (!csv.empty()) {
+            std::stringstream ss(csv);
+            std::string p;
+            while (std::getline(ss, p, ',')) if (!p.empty()) paths.push_back(p);
+        }
+        print_json(source_detect_changes_json(paths, args.opt_int("max_results", 200),
+                                              args.opt("detail_level", "minimal")));
+    }
+
+    // ============================================================
+    // RX-3: find_unused — advisory dead-symbol detection.
+    // 0 inbound "references", not an inheritance parent, is_ue_macro=0,
+    // name/signature not matching UE reflection/automation/entry patterns.
+    // Recall-first & advisory: UE reflection/delegate/Blueprint call edges
+    // are not in the symbol graph, so confidence is lowered on ambiguity
+    // (overloaded name) and never reported as "high".
+    // ============================================================
+    json source_find_unused_json(const std::string& kind, int limit, const std::string& min_conf) {
+        int cap = clamp_int(limit <= 0 ? 100 : limit, 1, 1000);
+        json root = {
+            {"input", {{"kind", kind.empty() ? "all" : kind}, {"min_confidence", min_conf.empty() ? "low" : min_conf}}},
+            {"limits", {{"limit", cap}, {"min_confidence", min_conf.empty() ? "low" : min_conf}}},
+            {"truncated", false},
+        };
+        std::string kfilter;
+        if (kind == "function" || kind == "class" || kind == "struct")
+            kfilter = " AND s.kind = '" + kind + "'";
+        else
+            kfilter = " AND s.kind IN ('function','class','struct')";
+        // Candidate set: zero inbound refs, not an inheritance parent, not a
+        // reflection/automation/entry symbol. LIMIT cap+1 for truncation flag.
+        auto rows = query(db,
+            "SELECT s.id,s.name,s.qualified_name,s.kind,s.file_id,s.signature "
+            "FROM symbols s WHERE s.is_ue_macro = 0" + kfilter + " "
+            "AND NOT EXISTS (SELECT 1 FROM \"references\" r WHERE r.to_symbol_id = s.id) "
+            "AND NOT EXISTS (SELECT 1 FROM inheritance i WHERE i.parent_id = s.id) "
+            "AND s.name NOT LIKE '~%' "
+            "AND s.name NOT IN ('main','WinMain','DllMain','StaticClass','StaticRegisterNatives','GetPrivateStaticClass') "
+            "AND s.name NOT LIKE 'Execute_%' AND s.name NOT LIKE 'exec%' "
+            "AND s.name NOT LIKE '%AutomationTest%' AND s.name NOT LIKE '%Spec' "
+            "AND s.qualified_name NOT LIKE '%AutomationTest%' "
+            "AND COALESCE(s.signature,'') NOT LIKE '%UFUNCTION%' "
+            "AND COALESCE(s.signature,'') NOT LIKE '%UPROPERTY%' "
+            "ORDER BY s.id LIMIT " + std::to_string(cap + 1));
+        bool truncated = (int)rows.size() > cap;
+        if (truncated) rows.pop_back();
+        auto conf_rank = [](const std::string& c) { return c == "high" ? 2 : c == "medium" ? 1 : 0; };
+        int min_rank = conf_rank(min_conf.empty() ? "low" : min_conf);
+        json items = json::array();
+        for (const auto& r : rows) {
+            // Ambiguity: a non-unique symbol name means a 0-inbound result is
+            // less reliable (call may resolve to another overload).
+            auto ncrow = query(db, "SELECT COUNT(*) AS c FROM symbols WHERE name = ?;", {r.get("name")});
+            int64_t namecount = ncrow.empty() ? 1 : ncrow[0].get_int64("c");
+            std::string conf = (namecount <= 1) ? "medium" : "low";
+            if (conf_rank(conf) < min_rank) continue;
+            json reasons = json::array();
+            reasons.push_back("0 inbound references (no indexed caller/user)");
+            reasons.push_back("not an inheritance parent; is_ue_macro=0; no UFUNCTION/UPROPERTY in signature");
+            if (namecount > 1)
+                reasons.push_back("ambiguous: " + std::to_string(namecount) +
+                                  " symbols share this name — may be reflection/Blueprint/overload-invoked (advisory)");
+            else
+                reasons.push_back("unique name — but UE reflection/delegate/Blueprint edges are not in the symbol graph (advisory, never 'high')");
+            items.push_back({
+                {"id", r.get_int64("id")},
+                {"name", r.get("name")},
+                {"qualified_name", r.get("qualified_name")},
+                {"kind", r.get("kind")},
+                {"file", short_path(get_file_path(r.get_int("file_id")))},
+                {"confidence", conf},
+                {"reasons", reasons},
+            });
+        }
+        root["status"] = "ok";
+        root["summary"] = std::to_string(items.size()) + " advisory unused symbol candidate(s) "
+            "(recall-first; verify reflection/Blueprint usage before removal)";
+        root["items"] = items;
+        root["truncated"] = truncated;
+        add_next(root, {"source.find_callers", "source.review_context", "source.impact_radius"});
+        return root;
+    }
+
+    void find_unused(const Args& args) {
+        print_json(source_find_unused_json(args.opt("kind", "all"), args.opt_int("limit", 100),
+                                           args.opt("min_confidence", "low")));
+    }
 };
 
 // ============================================================
@@ -774,7 +1732,7 @@ class ProjectActions {
     Database db;
 
 public:
-    void open(const std::string& path) { db.open(path); }
+    void open(const std::string& path, bool query_only = true) { db.open(path, query_only); }
 
     // --- search ---
     void search(const Args& args) {
@@ -995,6 +1953,695 @@ public:
 
         std::cout << details.dump(2) << std::endl;
     }
+
+    Row asset_by_id(const std::string& id) {
+        auto rows = query(db, "SELECT id, package_path, asset_name, asset_class, module_name FROM assets WHERE id = ?", {id});
+        return rows.empty() ? Row{} : rows[0];
+    }
+
+    Row asset_by_path(const std::string& path) {
+        auto rows = query(db, "SELECT id, package_path, asset_name, asset_class, module_name FROM assets WHERE package_path = ?", {path});
+        return rows.empty() ? Row{} : rows[0];
+    }
+
+    json asset_json(const Row& r, int depth = -1) {
+        json o = {
+            {"id", r.get_int64("id")},
+            {"asset_path", r.get("package_path")},
+            {"asset_name", r.get("asset_name")},
+            {"asset_class", r.get("asset_class")},
+            {"module_name", r.get("module_name")},
+        };
+        if (depth >= 0) o["depth"] = depth;
+        return o;
+    }
+
+    int asset_class_weight(const std::string& cls) {
+        if (cls.find("World") != std::string::npos || cls.find("Level") != std::string::npos) return 5;
+        if (cls.find("GameplayAbility") != std::string::npos || cls.find("AttributeSet") != std::string::npos || cls.find("GameplayEffect") != std::string::npos) return 4;
+        if (cls.find("Blueprint") != std::string::npos) return 3;
+        if (cls.find("NiagaraSystem") != std::string::npos || cls.find("Material") != std::string::npos) return 2;
+        if (cls.find("DataTable") != std::string::npos || cls.find("DataAsset") != std::string::npos) return 2;
+        return 1;
+    }
+
+    json project_impact_radius_json(const std::string& asset_path, const std::string& direction, int max_depth, int max_results, const std::string& dependency_type) {
+        int depth = clamp_int(max_depth <= 0 ? 2 : max_depth, 0, 8);
+        int limit = clamp_int(max_results <= 0 ? 200 : max_results, 1, 1000);
+        json root = {
+            {"input", {{"asset_path", asset_path}, {"direction", direction}}},
+            {"limits", {{"max_depth", depth}, {"max_results", limit}}},
+        };
+        if (!dependency_type.empty()) root["input"]["dependency_type"] = dependency_type;
+        Row seed = asset_by_path(asset_path);
+        if (seed.cols.empty()) {
+            root["status"] = "error";
+            root["summary"] = "Asset not found in ProjectIndex: " + asset_path;
+            root["impacted_assets"] = json::array();
+            root["edges"] = json::array();
+            root["truncated"] = false;
+            add_next(root, {"project.search", "project.find_by_type"});
+            return root;
+        }
+        root["seed"] = asset_json(seed, 0);
+        bool in = direction != "out";
+        bool out = direction != "in";
+        std::set<std::string> visited;
+        std::vector<std::string> frontier = {seed.get("id")};
+        visited.insert(seed.get("id"));
+        json impacted = json::array();
+        json edges = json::array();
+        bool truncated = false;
+        int emitted = 0;
+        for (int d = 1; d <= depth && !frontier.empty() && !truncated; ++d) {
+            std::vector<std::string> next;
+            for (const auto& cur : frontier) {
+                Rows edge_rows;
+                if (out) {
+                    auto rows = query(db, "SELECT id, source_asset_id, target_asset_id, dependency_type FROM dependencies WHERE source_asset_id = ?", {cur});
+                    edge_rows.insert(edge_rows.end(), rows.begin(), rows.end());
+                }
+                if (in) {
+                    auto rows = query(db, "SELECT id, source_asset_id, target_asset_id, dependency_type FROM dependencies WHERE target_asset_id = ?", {cur});
+                    edge_rows.insert(edge_rows.end(), rows.begin(), rows.end());
+                }
+                for (const auto& e : edge_rows) {
+                    if (!dependency_type.empty() && e.get("dependency_type") != dependency_type) continue;
+                    std::string other = (e.get("source_asset_id") == cur) ? e.get("target_asset_id") : e.get("source_asset_id");
+                    if (other.empty() || other == cur) continue;
+                    edges.push_back({{"from", e.get_int64("source_asset_id")}, {"to", e.get_int64("target_asset_id")}, {"dependency_type", e.get("dependency_type")}, {"depth", d}});
+                    if (visited.count(other)) continue;
+                    visited.insert(other);
+                    if (emitted >= limit) { truncated = true; break; }
+                    Row a = asset_by_id(other);
+                    if (!a.cols.empty()) {
+                        impacted.push_back(asset_json(a, d));
+                        ++emitted;
+                    }
+                    next.push_back(other);
+                }
+                if (truncated) break;
+            }
+            frontier = std::move(next);
+        }
+        root["status"] = "ok";
+        root["summary"] = std::to_string(emitted) + " impacted asset(s) within depth " + std::to_string(depth) + " (" + direction + ") of " + asset_path + (truncated ? " [truncated]" : "");
+        root["impacted_assets"] = impacted;
+        root["edges"] = edges;
+        root["truncated"] = truncated;
+        add_next(root, {"project.review_context", "project.risk_score", "project.get_asset_details"});
+        return root;
+    }
+
+    void impact_radius(const Args& args) {
+        std::string asset_path = args.opt("asset_path");
+        if (asset_path.empty() && !args.positional.empty()) asset_path = args.positional[0];
+        if (asset_path.empty()) die("impact_radius requires an asset_path argument");
+        print_json(project_impact_radius_json(asset_path, args.opt("direction", "both"), args.opt_int("max_depth", 2), args.opt_int("max_results", 200), args.opt("dependency_type")));
+    }
+
+    json project_health_json(bool include_counts) {
+        json root = {
+            {"input", {{"include_counts", include_counts}}},
+            {"limits", {{"include_counts", include_counts}}},
+            {"checks", json::array()},
+            {"warnings", json::array()},
+            {"truncated", false},
+        };
+        auto check = [&](const std::string& name, bool pass, const std::string& detail) {
+            root["checks"].push_back({{"check", name}, {"result", pass ? "ok" : "warning"}, {"detail", detail}});
+            if (!pass) root["warnings"].push_back(detail);
+        };
+        for (const char* t : {"assets", "nodes", "connections", "variables", "parameters", "dependencies", "actors", "tags", "tag_references", "configs", "cpp_symbols", "datatable_rows", "meta"})
+            check(std::string("table:") + t, object_exists(db, "table", t), object_exists(db, "table", t) ? std::string("table ") + t + " present" : std::string("missing table ") + t);
+        for (const char* f : {"fts_assets", "fts_nodes"})
+            check(std::string("fts:") + f, object_exists(db, "table", f), object_exists(db, "table", f) ? std::string("FTS table ") + f + " present" : std::string("missing FTS table ") + f);
+        for (const char* tr : {"fts_assets_ai", "fts_assets_ad", "fts_assets_au", "fts_nodes_ai", "fts_nodes_ad", "fts_nodes_au"})
+            check(std::string("trigger:") + tr, object_exists(db, "trigger", tr), object_exists(db, "trigger", tr) ? std::string("trigger ") + tr + " present" : std::string("missing trigger ") + tr + " (FTS may drift)");
+        std::string schema_ver = scalar_str(db, "SELECT value FROM meta WHERE key = 'schema_version';");
+        check("meta:schema_version", !schema_ver.empty(), schema_ver.empty() ? "meta.schema_version missing (pre-v2 / corrupt)" : "schema_version=" + schema_ver);
+        bool saved_hash = false;
+        for (const auto& col : query(db, "PRAGMA table_info(assets);")) {
+            if (col.get("name") == "saved_hash") saved_hash = true;
+        }
+        check("schema:assets.saved_hash", saved_hash, saved_hash ? "assets.saved_hash present (v2)" : "assets.saved_hash missing (incremental index disabled)");
+        int64_t orphan_deps = count_rows(db,
+            "SELECT COUNT(*) FROM dependencies d "
+            "WHERE d.source_asset_id NOT IN (SELECT id FROM assets) "
+            "OR d.target_asset_id NOT IN (SELECT id FROM assets);");
+        check("integrity:orphan_dependencies", orphan_deps == 0, orphan_deps == 0 ? "no orphan dependency rows" : std::to_string(orphan_deps) + " orphan dependency row(s)");
+        int64_t acnt = count_rows(db, "SELECT COUNT(*) FROM assets;");
+        int64_t facnt = count_rows(db, "SELECT COUNT(*) FROM fts_assets;");
+        int64_t ncnt = count_rows(db, "SELECT COUNT(*) FROM nodes;");
+        int64_t fncnt = count_rows(db, "SELECT COUNT(*) FROM fts_nodes;");
+        check("fts:assets_row_parity", acnt == facnt, "assets=" + std::to_string(acnt) + " fts_assets=" + std::to_string(facnt) + (acnt == facnt ? "" : " (mismatch -> project.repair_fts)"));
+        check("fts:nodes_row_parity", ncnt == fncnt, "nodes=" + std::to_string(ncnt) + " fts_nodes=" + std::to_string(fncnt) + (ncnt == fncnt ? "" : " (mismatch -> project.repair_fts)"));
+        root["schema"] = {{"schema_version", schema_ver}, {"journal_mode", scalar_str(db, "PRAGMA journal_mode;")}};
+        if (include_counts) root["row_counts"] = {{"assets", acnt}, {"nodes", ncnt}, {"dependencies", count_rows(db, "SELECT COUNT(*) FROM dependencies;")}};
+        // RX-2: CRG projection-cache health parity (mirrors editor Health).
+        int64_t dep_cnt = count_rows(db, "SELECT COUNT(*) FROM dependencies;");
+        append_crg_health_checks(db, "project", acnt, dep_cnt, root);
+        root["status"] = root["warnings"].empty() ? "ok" : "warning";
+        root["summary"] = root["warnings"].empty() ? "ProjectIndex schema, triggers, FTS parity, CRG cache and integrity OK" : std::to_string(root["warnings"].size()) + " health warning(s)";
+        add_next(root, {"project.repair_crg_cache", "project.repair_fts", "project.get_stats"});
+        return root;
+    }
+
+    void health(const Args& args) {
+        print_json(project_health_json(args.opt_bool("include_counts", true)));
+    }
+
+    json project_repair_fts_json(const std::string& target, bool execute) {
+        std::string t = target.empty() ? "all" : target;
+        json root = {
+            {"input", {{"target", t}, {"execute", execute}}},
+            {"limits", {{"target", t}, {"execute", execute}}},
+            {"warnings", json::array()},
+            {"plan", json::array()},
+            {"truncated", false},
+        };
+        std::vector<std::string> tables;
+        if (t == "all" || t == "assets") tables.push_back("fts_assets");
+        if (t == "all" || t == "nodes") tables.push_back("fts_nodes");
+        if (tables.empty()) {
+            root["status"] = "error";
+            root["summary"] = "Unknown target '" + t + "' (expected all|assets|nodes)";
+            add_next(root, {"project.health"});
+            return root;
+        }
+        json before = json::object();
+        for (const auto& table : tables) {
+            before[table] = count_rows(db, "SELECT COUNT(*) FROM " + table + ";");
+            root["plan"].push_back("INSERT INTO " + table + "(" + table + ") VALUES('rebuild');");
+        }
+        root["before"] = before;
+        if (!execute) {
+            root["status"] = "ok";
+            root["summary"] = "Dry-run: " + std::to_string(tables.size()) + " FTS table(s) would be rebuilt. Pass --execute to apply.";
+            root["after"] = json::object();
+            add_next(root, {"project.repair_fts", "project.health"});
+            return root;
+        }
+        db.exec("BEGIN;");
+        for (const auto& table : tables) {
+            db.exec(("INSERT INTO " + table + "(" + table + ") VALUES('rebuild');").c_str());
+        }
+        db.exec("COMMIT;");
+        json after = json::object();
+        for (const auto& table : tables) after[table] = count_rows(db, "SELECT COUNT(*) FROM " + table + ";");
+        root["after"] = after;
+        root["status"] = "ok";
+        root["summary"] = "Rebuilt " + std::to_string(tables.size()) + " FTS table(s)";
+        add_next(root, {"project.health", "project.search"});
+        return root;
+    }
+
+    void repair_fts(const Args& args) {
+        print_json(project_repair_fts_json(args.opt("target", "all"), args.opt_bool("execute", false)));
+    }
+
+    json score_asset(const Row& asset) {
+        std::string id = asset.get("id");
+        auto out = query(db, "SELECT dependency_type FROM dependencies WHERE source_asset_id = ?", {id});
+        auto in = query(db, "SELECT dependency_type FROM dependencies WHERE target_asset_id = ?", {id});
+        int hard_in = 0;
+        for (const auto& d : in) if (d.get("dependency_type") == "Hard") ++hard_in;
+        int64_t node_count = count_rows(db, "SELECT COUNT(*) FROM nodes WHERE asset_id = " + id + ";");
+        int64_t var_count = count_rows(db, "SELECT COUNT(*) FROM variables WHERE asset_id = " + id + ";");
+        int64_t param_count = count_rows(db, "SELECT COUNT(*) FROM parameters WHERE asset_id = " + id + ";");
+        int64_t tag_refs = count_rows(db, "SELECT COUNT(*) FROM tag_references WHERE asset_id = " + id + ";");
+        int class_w = asset_class_weight(asset.get("asset_class"));
+        auto sensitivity = sensitivity_factor(
+            asset.get("asset_class") + " " + asset.get("package_path") + " " + asset.get("asset_name"),
+            false);
+        json reasons = json::array();
+        double raw = 0.0;
+        auto factor = [&](double c, const std::string& why) {
+            if (c > 0.0) { raw += c; reasons.push_back(why); }
+        };
+        factor(std::min<double>(in.size(), 30) / 30.0 * 0.30, "inbound dependency fan-in: " + std::to_string(in.size()) + " referencer(s)");
+        factor(std::min<double>(hard_in, 20) / 20.0 * 0.20, "hard inbound dependencies: " + std::to_string(hard_in));
+        factor(std::min<double>(out.size(), 30) / 30.0 * 0.10, "outbound dependencies: " + std::to_string(out.size()));
+        factor((class_w - 1) / 4.0 * 0.20, "asset class weight: " + asset.get("asset_class") + " (w=" + std::to_string(class_w) + ")");
+        factor(sensitivity.first, sensitivity.second);
+        factor(std::min<double>(node_count, 400) / 400.0 * 0.15, "graph density: " + std::to_string(node_count) + " node(s), " + std::to_string(var_count) + " var(s), " + std::to_string(param_count) + " param(s)");
+        factor(std::min<double>(tag_refs, 20) / 20.0 * 0.05, "gameplay tag involvement: " + std::to_string(tag_refs) + " reference(s)");
+        if (node_count == 0 && asset.get("asset_class").find("Blueprint") != std::string::npos) reasons.push_back("missing detail signal: Blueprint indexed with 0 graph nodes (stale index?)");
+        double score = std::max(0.0, std::min(raw, 1.0));
+        return {
+            {"id", asset.get_int64("id")},
+            {"asset_path", asset.get("package_path")},
+            {"asset_name", asset.get("asset_name")},
+            {"asset_class", asset.get("asset_class")},
+            {"score", std::round(score * 1000.0) / 1000.0},
+            {"tier", tier_for(score)},
+            {"reasons", reasons},
+            {"raw_counts", {
+                {"inbound", in.size()},
+                {"inbound_hard", hard_in},
+                {"outbound", out.size()},
+                {"nodes", node_count},
+                {"variables", var_count},
+                {"parameters", param_count},
+                {"tag_references", tag_refs},
+                {"class_weight", class_w},
+                {"sensitivity", sensitivity.first},
+            }},
+        };
+    }
+
+    json project_risk_score_json(const std::string& seed_path, int limit, const std::string& min_tier) {
+        int cap = clamp_int(limit <= 0 ? 20 : limit, 1, 200);
+        json root = {{"input", {{"seed", seed_path}}}, {"limits", {{"limit", cap}, {"min_tier", min_tier.empty() ? "low" : min_tier}}}};
+        json items = json::array();
+        bool any_cache_hit = false;
+        auto score_or_cached = [&](const Row& a) -> json {
+            json cached = try_cached_risk(db, "project", "assets", a.get_int64("id"));
+            if (!cached.is_null()) {
+                any_cache_hit = true;
+                cached["id"] = a.get_int64("id");
+                cached["asset_path"] = a.get("package_path");
+                cached["asset_name"] = a.get("asset_name");
+                cached["asset_class"] = a.get("asset_class");
+                return cached;
+            }
+            json s = score_asset(a);
+            s["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}};
+            s["scoring_version"] = "3";
+            return s;
+        };
+        if (!seed_path.empty()) {
+            Row seed = asset_by_path(seed_path);
+            if (seed.cols.empty()) {
+                root["status"] = "error";
+                root["summary"] = "Asset not found: " + seed_path;
+                root["items"] = items;
+                root["truncated"] = false;
+                add_next(root, {"project.search"});
+                return root;
+            }
+            items.push_back(score_or_cached(seed));
+        } else {
+            auto candidates = query(db,
+                "SELECT target_asset_id, COUNT(*) c FROM dependencies GROUP BY target_asset_id ORDER BY c DESC LIMIT " + std::to_string(cap));
+            for (const auto& c : candidates) {
+                Row a = asset_by_id(c.get("target_asset_id"));
+                if (!a.cols.empty()) items.push_back(score_or_cached(a));
+            }
+        }
+        int min_rank = tier_rank(min_tier.empty() ? "low" : min_tier);
+        json filtered = json::array();
+        for (const auto& item : items) if (tier_rank(item["tier"].get<std::string>()) >= min_rank) filtered.push_back(item);
+        std::sort(filtered.begin(), filtered.end(), [](const json& a, const json& b) { return a["score"].get<double>() > b["score"].get<double>(); });
+        const char* sv = "3";
+        root["status"] = "ok";
+        root["summary"] = std::to_string(filtered.size()) + " asset(s) scored (scoring_version="
+            + std::string(sv) + (any_cache_hit ? " cached when available, v3 query fallback; CRG cache hit)" : " cached when available, v3 query fallback)");
+        root["scoring_version"] = sv;
+        root["items"] = filtered;
+        root["truncated"] = false;
+        add_next(root, {"project.review_context", "project.impact_radius"});
+        return root;
+    }
+
+    void risk_score(const Args& args) {
+        std::string seed = args.opt("asset_path", args.opt("seed"));
+        if (seed.empty() && !args.positional.empty()) seed = args.positional[0];
+        print_json(project_risk_score_json(seed, args.opt_int("limit", 20), args.opt("min_tier", "low")));
+    }
+
+    json project_review_hotspots_json(const std::string& kind, int limit, int min_lines, bool include_questions) {
+        std::string k = kind.empty() ? "all" : lower_copy(kind);
+        int cap = clamp_int(limit <= 0 ? 50 : limit, 1, 200);
+        int size_floor = std::max(min_lines <= 0 ? 100 : min_lines, 0);
+        json root = {
+            {"input", {{"kind", k}, {"include_questions", include_questions}}},
+            {"limits", {{"limit", cap}, {"min_lines", size_floor}}},
+        };
+        if (k != "fan_in" && k != "fan_out" && k != "risk" && k != "large" && k != "all") {
+            root["status"] = "error";
+            root["summary"] = "Unsupported kind for project.review_hotspots (expected fan_in|fan_out|risk|large|all)";
+            root["hotspots"] = json::array();
+            root["truncated"] = false;
+            add_next(root, {"project.review_hotspots", "project.risk_score"});
+            return root;
+        }
+
+        bool has_cache = crg_cache_present(db);
+        std::string cache_join = has_cache
+            ? "LEFT JOIN crg_nodes n ON n.domain='project' AND n.native_table='assets' AND n.native_id=c.id "
+              "LEFT JOIN crg_node_metrics m ON m.node_id=n.id "
+            : "";
+        std::string risk_expr = has_cache ? "COALESCE(m.risk_score, c.estimated_risk)" : "c.estimated_risk";
+        std::string tier_expr = has_cache
+            ? "COALESCE(m.risk_tier, CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END)"
+            : "CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END";
+        std::string where = (k == "large")
+            ? "WHERE size_signal >= " + std::to_string(size_floor) + " "
+            : "WHERE fan_in > 0 OR fan_out > 0 OR hard_in > 0 OR risk_score > 0 OR size_signal >= " + std::to_string(size_floor) + " ";
+        std::string order = "ORDER BY hotspot_score DESC, risk_score DESC, fan_in DESC, size_signal DESC ";
+        if (k == "fan_in") order = "ORDER BY fan_in DESC, risk_score DESC, hard_in DESC ";
+        else if (k == "fan_out") order = "ORDER BY fan_out DESC, risk_score DESC, size_signal DESC ";
+        else if (k == "risk") order = "ORDER BY risk_score DESC, fan_in DESC, size_signal DESC ";
+        else if (k == "large") order = "ORDER BY size_signal DESC, risk_score DESC, fan_in DESC ";
+
+        std::string sql = R"SQL(
+WITH base AS (
+ SELECT a.id,a.package_path,a.asset_name,a.asset_class,COALESCE(a.module_name,'') AS module_name,
+        (SELECT COUNT(*) FROM dependencies d WHERE d.target_asset_id=a.id) AS fan_in,
+        (SELECT COUNT(*) FROM dependencies d WHERE d.source_asset_id=a.id) AS fan_out,
+        (SELECT COUNT(*) FROM dependencies d WHERE d.target_asset_id=a.id AND d.dependency_type='Hard') AS hard_in,
+        (SELECT COUNT(*) FROM nodes x WHERE x.asset_id=a.id) AS node_count,
+        (SELECT COUNT(*) FROM variables x WHERE x.asset_id=a.id) AS variable_count,
+        (SELECT COUNT(*) FROM parameters x WHERE x.asset_id=a.id) AS parameter_count,
+        (SELECT COUNT(*) FROM tag_references x WHERE x.asset_id=a.id) AS tag_refs,
+        CASE
+          WHEN a.asset_class LIKE '%World%' OR a.asset_class LIKE '%Level%' THEN 5
+          WHEN a.asset_class LIKE '%GameplayAbility%' OR a.asset_class LIKE '%AttributeSet%' OR a.asset_class LIKE '%GameplayEffect%' THEN 4
+          WHEN a.asset_class LIKE '%Blueprint%' THEN 3
+          WHEN a.asset_class LIKE '%NiagaraSystem%' OR a.asset_class LIKE '%Material%' THEN 2
+          WHEN a.asset_class LIKE '%DataTable%' OR a.asset_class LIKE '%DataAsset%' THEN 2
+          ELSE 1 END AS class_weight,
+        CASE WHEN lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%network%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%replication%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%save%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%serialize%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%auth%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%purchase%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%anticheat%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%crypt%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%exec%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%file%'
+          THEN 1 ELSE 0 END AS sensitivity
+ FROM assets a
+), counts AS (
+ SELECT *, (node_count + variable_count + parameter_count + tag_refs) AS size_signal,
+        MIN(1.0, MIN(fan_in,30)/30.0*0.30 + MIN(hard_in,20)/20.0*0.20 +
+        MIN(fan_out,30)/30.0*0.10 + (class_weight-1)/4.0*0.20 +
+        CASE WHEN sensitivity != 0 THEN 0.15 ELSE 0 END +
+        MIN(node_count,400)/400.0*0.15 + MIN(tag_refs,20)/20.0*0.05) AS estimated_risk
+ FROM base
+), scored AS (
+ SELECT c.id,c.package_path,c.asset_name,c.asset_class,c.module_name,c.fan_in,c.fan_out,c.hard_in,
+        c.node_count,c.variable_count,c.parameter_count,c.tag_refs,c.size_signal,)SQL" + risk_expr + R"SQL( AS risk_score,)SQL" + tier_expr + R"SQL( AS risk_tier
+ FROM counts c )SQL" + cache_join + R"SQL(
+)
+SELECT *, MAX(risk_score, MIN(fan_in,30)/30.0, MIN(fan_out,30)/30.0, MIN(size_signal,500)/500.0) AS hotspot_score
+FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
+
+        Rows rows = query(db, sql);
+        bool truncated = (int)rows.size() > cap;
+        if (truncated) rows.pop_back();
+        json hotspots = json::array();
+        json questions = json::array();
+        for (const auto& r : rows) {
+            int fan_in = r.get_int("fan_in");
+            int fan_out = r.get_int("fan_out");
+            int size_signal = r.get_int("size_signal");
+            double risk = r.get_double("risk_score");
+            std::string primary = k;
+            if (primary == "all") {
+                double best = risk;
+                primary = "risk";
+                double in_signal = std::min<double>(fan_in, 30) / 30.0;
+                double out_signal = std::min<double>(fan_out, 30) / 30.0;
+                double large_signal = std::min<double>(size_signal, 500) / 500.0;
+                if (in_signal > best) { best = in_signal; primary = "fan_in"; }
+                if (out_signal > best) { best = out_signal; primary = "fan_out"; }
+                if (large_signal > best) primary = "large";
+            }
+            json signals = {
+                {"fan_in", fan_in},
+                {"fan_out", fan_out},
+                {"hard_in", r.get_int("hard_in")},
+                {"risk_score", std::round(risk * 1000.0) / 1000.0},
+                {"risk_tier", r.get("risk_tier", tier_for(risk))},
+                {"nodes", r.get_int("node_count")},
+                {"variables", r.get_int("variable_count")},
+                {"parameters", r.get_int("parameter_count")},
+                {"tag_references", r.get_int("tag_refs")},
+                {"size_signal", size_signal},
+            };
+            hotspots.push_back({
+                {"primary_kind", primary},
+                {"id", r.get_int64("id")},
+                {"asset_path", r.get("package_path")},
+                {"asset_name", r.get("asset_name")},
+                {"asset_class", r.get("asset_class")},
+                {"module_name", r.get("module_name")},
+                {"signals", signals},
+                {"metrics", signals},
+            });
+            if (include_questions && questions.size() < 5) {
+                questions.push_back({
+                    {"target", r.get("package_path")},
+                    {"reason", primary},
+                    {"question", primary == "large"
+                        ? "Can this asset's graph/detail size be reduced or validated with focused coverage before editing?"
+                        : "Which dependent assets and gameplay paths should be checked before changing this hotspot?"},
+                });
+            }
+        }
+        root["status"] = "ok";
+        root["summary"] = std::to_string(hotspots.size()) + " project review hotspot(s) ranked by " + k
+            + (has_cache ? " using CRG cache when available" : " using native fallback");
+        root["hotspots"] = hotspots;
+        if (include_questions) root["questions"] = questions;
+        root["truncated"] = truncated;
+        add_next(root, {"project.review_context", "project.risk_score", "project.impact_radius"});
+        return root;
+    }
+
+    void review_hotspots(const Args& args) {
+        print_json(project_review_hotspots_json(args.opt("kind", "all"),
+                                                args.opt_int("limit", 50),
+                                                args.opt_int("min_lines", 100),
+                                                args.opt_bool("include_questions", true)));
+    }
+
+    void review_context(const Args& args) {
+        std::string asset_path = args.opt("asset_path");
+        if (asset_path.empty() && !args.positional.empty()) asset_path = args.positional[0];
+        if (asset_path.empty()) die("review_context requires an asset_path argument");
+        std::string direction = args.opt("direction", "both");
+        std::string detail = args.opt("detail_level", "minimal");
+        bool minimal = detail != "standard";
+        int max_depth = args.opt_int("max_depth", 2);
+        int max_results = args.opt_int("max_results", 200);
+        int effective_results = minimal ? std::min(clamp_int(max_results <= 0 ? 200 : max_results, 1, 1000), 25) : clamp_int(max_results <= 0 ? 200 : max_results, 1, 1000);
+        Row seed = asset_by_path(asset_path);
+        json root = {{"input", {{"asset_path", asset_path}, {"direction", direction}, {"detail_level", minimal ? "minimal" : "standard"}}},
+                     {"limits", {{"max_depth", clamp_int(max_depth <= 0 ? 2 : max_depth, 0, 8)}, {"max_results", effective_results}}}};
+        if (seed.cols.empty()) {
+            root["status"] = "error";
+            root["summary"] = "Asset not found: " + asset_path;
+            root["truncated"] = false;
+            add_next(root, {"project.search"});
+            print_json(root);
+            return;
+        }
+        json risk = score_asset(seed);
+        root["risk"] = risk;
+        root["top_risks"] = json::array();
+        for (size_t i = 0; i < risk["reasons"].size() && i < 5; ++i) root["top_risks"].push_back(risk["reasons"][i]);
+        json impact = project_impact_radius_json(asset_path, direction, max_depth, effective_results, "");
+        json summary = {{"truncated", impact.value("truncated", false)}};
+        summary["impacted_count"] = impact["impacted_assets"].size();
+        summary["top_impacted"] = json::array();
+        for (size_t i = 0; i < impact["impacted_assets"].size() && i < (minimal ? 5u : 25u); ++i) summary["top_impacted"].push_back(impact["impacted_assets"][i]);
+        root["impact"] = summary;
+        root["seed"] = asset_json(seed, 0);
+        root["context"] = json::array({{{"type", "seed_asset"}, {"asset_path", seed.get("package_path")}, {"asset_name", seed.get("asset_name")}, {"asset_class", seed.get("asset_class")}, {"module_name", seed.get("module_name")}}});
+        if (!minimal) root["details"] = asset_json(seed, 0);
+        root["status"] = "ok";
+        root["summary"] = seed.get("asset_name") + " risk=" + risk["tier"].get<std::string>() + " (" + (minimal ? "minimal" : "standard") + "); review the top impacted assets and high-risk reasons";
+        root["truncated"] = impact.value("truncated", false);
+        add_next(root, {"project.get_asset_details", "project.impact_radius", "project.find_references"});
+        print_json(root);
+    }
+
+    // ============================================================
+    // RX-1: detect_changes (project) — changed .uasset/.umap paths ->
+    // assets -> reused risk (RX-2 cache or query-time) + bounded
+    // dependency impact + review priorities. No test-gap (assets have
+    // no test concept). changed_paths is the VCS-agnostic input.
+    // ============================================================
+    json project_detect_changes_json(const std::vector<std::string>& changed_paths,
+                                     int max_results, const std::string& detail_level) {
+        int cap = clamp_int(max_results <= 0 ? 200 : max_results, 1, 2000);
+        bool minimal = (detail_level != "standard");
+        json root = {
+            {"input", {{"changed_paths", changed_paths}, {"detail_level", minimal ? "minimal" : "standard"}}},
+            {"limits", {{"max_results", cap}, {"detail_level", minimal ? "minimal" : "standard"}}},
+            {"truncated", false},
+        };
+        if (changed_paths.empty()) {
+            root["status"] = "error";
+            root["summary"] = "detect_changes requires >=1 changed path (positional or --changed-paths=a,b)";
+            root["changed_entities"] = json::array();
+            add_next(root, {"project.search"});
+            return root;
+        }
+        std::set<int64_t> seen;
+        json changed = json::array();
+        bool truncated = false, any_cache = false;
+        for (const auto& rawp : changed_paths) {
+            std::string norm = rawp;
+            std::replace(norm.begin(), norm.end(), '\\', '/');
+            // stem = filename without directory or extension
+            std::string base = norm;
+            auto sl = base.find_last_of('/');
+            if (sl != std::string::npos) base = base.substr(sl + 1);
+            auto dot = base.find_last_of('.');
+            std::string stem = (dot != std::string::npos) ? base.substr(0, dot) : base;
+            auto rows = query(db,
+                "SELECT id,package_path,asset_name,asset_class FROM assets "
+                "WHERE asset_name = ? OR replace(package_path,'\\','/') LIKE '%/' || ? "
+                "ORDER BY id LIMIT " + std::to_string(cap + 1), {stem, stem});
+            for (const auto& r : rows) {
+                int64_t aid = r.get_int64("id");
+                if (seen.count(aid)) continue;
+                if ((int)seen.size() >= cap) { truncated = true; break; }
+                seen.insert(aid);
+                json cached = try_cached_risk(db, "project", "assets", aid);
+                json item;
+                if (!cached.is_null()) { any_cache = true; item = cached; }
+                else { item = score_asset(r); item["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}}; item["scoring_version"] = "3"; }
+                item["id"] = aid;
+                item["asset_path"] = r.get("package_path");
+                item["asset_name"] = r.get("asset_name");
+                item["asset_class"] = r.get("asset_class");
+                changed.push_back(item);
+            }
+        }
+        double overall = 0.0;
+        for (const auto& c : changed) overall = std::max(overall, c.value("score", 0.0));
+        std::set<int64_t> impacted;
+        for (const auto& c : changed) {
+            if ((int)impacted.size() >= cap) { truncated = true; break; }
+            auto refs = query(db,
+                "SELECT DISTINCT source_asset_id FROM dependencies WHERE target_asset_id = ? LIMIT 200",
+                {std::to_string(c.value("id", (int64_t)0))});
+            for (const auto& rr : refs) {
+                int64_t s = rr.get_int64("source_asset_id");
+                if (s > 0 && !seen.count(s)) impacted.insert(s);
+            }
+        }
+        std::sort(changed.begin(), changed.end(),
+                  [](const json& a, const json& b) { return a.value("score", 0.0) > b.value("score", 0.0); });
+        json priorities = json::array();
+        for (size_t i = 0; i < changed.size() && i < 10; ++i) priorities.push_back(changed[i]);
+        const char* sv = "3";
+        root["risk_score"] = std::round(overall * 1000.0) / 1000.0;
+        root["scoring_version"] = sv;
+        root["truncated"] = truncated;
+        root["status"] = "ok";
+        if (minimal) {
+            json topn = json::array();
+            for (size_t i = 0; i < changed.size() && i < 3; ++i) topn.push_back(changed[i].value("asset_name", std::string()));
+            root["summary"] = "changed " + std::to_string(changed.size()) + " asset(s), risk=" + tier_for(overall)
+                + ", scoring_version=" + sv;
+            root["changed_entity_count"] = changed.size();
+            root["impacted_count"] = impacted.size();
+            root["review_priorities"] = topn;
+        } else {
+            root["summary"] = "changed " + std::to_string(changed.size()) + " asset(s) across "
+                + std::to_string(changed_paths.size()) + " path(s); risk=" + tier_for(overall)
+                + " scoring_version=" + sv;
+            root["changed_entities"] = changed;
+            root["impact"] = {{"depth", 1}, {"impacted_count", impacted.size()}};
+            root["test_gaps"] = json::array();  // assets have no native test concept
+            root["review_priorities"] = priorities;
+        }
+        if (changed.empty()) {
+            root["summary"] = "no indexed asset matched the given changed path(s)";
+            add_next(root, {"project.search", "project.find_by_type"});
+        } else {
+            add_next(root, {"project.review_context", "project.impact_radius", "project.risk_score"});
+        }
+        return root;
+    }
+
+    void detect_changes(const Args& args) {
+        std::vector<std::string> paths = args.positional;
+        std::string csv = args.opt("changed_paths");
+        if (!csv.empty()) {
+            std::stringstream ss(csv);
+            std::string p;
+            while (std::getline(ss, p, ',')) if (!p.empty()) paths.push_back(p);
+        }
+        print_json(project_detect_changes_json(paths, args.opt_int("max_results", 200),
+                                               args.opt("detail_level", "minimal")));
+    }
+
+    // ============================================================
+    // RX-3: find_unused — advisory orphan-asset detection.
+    // Assets that are never a dependencies.target_asset_id (0 referencers)
+    // and are not roots (World/Level/PrimaryAssetLabel). Advisory: soft /
+    // path-based / config references are not in the dependency table, so
+    // confidence is lowered for classes commonly referenced indirectly.
+    // ============================================================
+    json project_find_unused_json(const std::string& kind, int limit, const std::string& min_conf) {
+        int cap = clamp_int(limit <= 0 ? 100 : limit, 1, 1000);
+        json root = {
+            {"input", {{"kind", kind.empty() ? "all" : kind}, {"min_confidence", min_conf.empty() ? "low" : min_conf}}},
+            {"limits", {{"limit", cap}, {"min_confidence", min_conf.empty() ? "low" : min_conf}}},
+            {"truncated", false},
+        };
+        std::vector<std::string> params;
+        std::string kfilter;
+        if (!kind.empty() && kind != "all") { kfilter = " AND a.asset_class = ?"; params.push_back(kind); }
+        auto rows = query(db,
+            "SELECT a.id,a.package_path,a.asset_name,a.asset_class FROM assets a "
+            "WHERE NOT EXISTS (SELECT 1 FROM dependencies d WHERE d.target_asset_id = a.id) "
+            "AND a.asset_class NOT LIKE '%World%' AND a.asset_class NOT LIKE '%Level%' "
+            "AND a.asset_class NOT LIKE '%PrimaryAssetLabel%' "
+            "AND a.asset_class NOT LIKE '%DirectoryPlaceholder%'" + kfilter + " "
+            "ORDER BY a.id LIMIT " + std::to_string(cap + 1), params);
+        bool truncated = (int)rows.size() > cap;
+        if (truncated) rows.pop_back();
+        auto conf_rank = [](const std::string& c) { return c == "high" ? 2 : c == "medium" ? 1 : 0; };
+        int min_rank = conf_rank(min_conf.empty() ? "low" : min_conf);
+        json items = json::array();
+        for (const auto& r : rows) {
+            std::string cls = r.get("asset_class");
+            // Classes commonly referenced by soft/path/config (not in the
+            // dependency table) -> lower confidence to advisory 'low'.
+            bool indirect = cls.find("Texture") != std::string::npos
+                || cls.find("Material") != std::string::npos
+                || cls.find("Sound") != std::string::npos
+                || cls.find("DataTable") != std::string::npos
+                || cls.find("DataAsset") != std::string::npos
+                || cls.find("Paper") != std::string::npos;
+            std::string conf = indirect ? "low" : "medium";
+            if (conf_rank(conf) < min_rank) continue;
+            json reasons = json::array();
+            reasons.push_back("0 inbound dependency referencers (no asset hard/soft-references it in the index)");
+            reasons.push_back(indirect
+                ? cls + " is often referenced by soft/path/config (not in the dependency table) — low confidence, advisory"
+                : "not a World/Level/PrimaryAssetLabel root — likely orphan content (advisory; verify soft refs)");
+            items.push_back({
+                {"id", r.get_int64("id")},
+                {"asset_path", r.get("package_path")},
+                {"asset_name", r.get("asset_name")},
+                {"asset_class", cls},
+                {"confidence", conf},
+                {"reasons", reasons},
+            });
+        }
+        root["status"] = "ok";
+        root["summary"] = std::to_string(items.size()) + " advisory unused asset candidate(s) "
+            "(recall-first; verify soft/path references before deletion)";
+        root["items"] = items;
+        root["truncated"] = truncated;
+        add_next(root, {"project.find_references", "project.review_context", "project.impact_radius"});
+        return root;
+    }
+
+    void find_unused(const Args& args) {
+        print_json(project_find_unused_json(args.opt("kind", "all"), args.opt_int("limit", 100),
+                                            args.opt("min_confidence", "low")));
+    }
 };
 
 // ============================================================
@@ -1049,7 +2696,7 @@ int main(int argc, char* argv[]) {
         if (db_path.empty()) db_path = (fs::path(db_dir) / "EngineSource.db").string();
 
         SourceActions sa;
-        sa.open(db_path);
+        sa.open(db_path, !(args.action == "repair_fts" && args.opt_bool("execute", false)));
 
         static const std::map<std::string, std::function<void(SourceActions&, const Args&)>> actions = {
             {"search_source",       [](SourceActions& s, const Args& a) { s.search_source(a); }},
@@ -1061,6 +2708,14 @@ int main(int argc, char* argv[]) {
             {"get_module_info",     [](SourceActions& s, const Args& a) { s.get_module_info(a); }},
             {"get_symbol_context",  [](SourceActions& s, const Args& a) { s.get_symbol_context(a); }},
             {"read_file",           [](SourceActions& s, const Args& a) { s.read_file(a); }},
+            {"impact_radius",       [](SourceActions& s, const Args& a) { s.impact_radius(a); }},
+            {"health",              [](SourceActions& s, const Args& a) { s.health(a); }},
+            {"repair_fts",          [](SourceActions& s, const Args& a) { s.repair_fts(a); }},
+            {"risk_score",          [](SourceActions& s, const Args& a) { s.risk_score(a); }},
+            {"review_hotspots",     [](SourceActions& s, const Args& a) { s.review_hotspots(a); }},
+            {"review_context",      [](SourceActions& s, const Args& a) { s.review_context(a); }},
+            {"detect_changes",      [](SourceActions& s, const Args& a) { s.detect_changes(a); }},
+            {"find_unused",         [](SourceActions& s, const Args& a) { s.find_unused(a); }},
         };
 
         auto it = actions.find(args.action);
@@ -1072,7 +2727,7 @@ int main(int argc, char* argv[]) {
         if (db_path.empty()) db_path = (fs::path(db_dir) / "ProjectIndex.db").string();
 
         ProjectActions pa;
-        pa.open(db_path);
+        pa.open(db_path, !(args.action == "repair_fts" && args.opt_bool("execute", false)));
 
         static const std::map<std::string, std::function<void(ProjectActions&, const Args&)>> actions = {
             {"search",            [](ProjectActions& p, const Args& a) { p.search(a); }},
@@ -1080,6 +2735,14 @@ int main(int argc, char* argv[]) {
             {"find_references",   [](ProjectActions& p, const Args& a) { p.find_references(a); }},
             {"get_stats",         [](ProjectActions& p, const Args& a) { p.get_stats(a); }},
             {"get_asset_details", [](ProjectActions& p, const Args& a) { p.get_asset_details(a); }},
+            {"impact_radius",     [](ProjectActions& p, const Args& a) { p.impact_radius(a); }},
+            {"health",            [](ProjectActions& p, const Args& a) { p.health(a); }},
+            {"repair_fts",        [](ProjectActions& p, const Args& a) { p.repair_fts(a); }},
+            {"risk_score",        [](ProjectActions& p, const Args& a) { p.risk_score(a); }},
+            {"review_hotspots",   [](ProjectActions& p, const Args& a) { p.review_hotspots(a); }},
+            {"review_context",    [](ProjectActions& p, const Args& a) { p.review_context(a); }},
+            {"detect_changes",    [](ProjectActions& p, const Args& a) { p.detect_changes(a); }},
+            {"find_unused",       [](ProjectActions& p, const Args& a) { p.find_unused(a); }},
         };
 
         auto it = actions.find(args.action);
