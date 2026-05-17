@@ -5712,19 +5712,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetSystemDiagnostics(const 
 // ============================================================================
 // list_module_scripts — Search available Niagara module scripts via Asset Registry
 // ============================================================================
-int32 FMonolithNiagaraActions::ClampListModuleScriptsLimit(int32 Limit)
+int32 FMonolithNiagaraActions::ClampNiagaraQueryLimit(int32 Limit, int32 Max)
 {
-	return FMath::Clamp(Limit, 1, 1000);
-}
-
-int32 FMonolithNiagaraActions::ClampSearchDynamicInputsLimit(int32 Limit)
-{
-	return FMath::Clamp(Limit, 1, 1000);
-}
-
-int32 FMonolithNiagaraActions::ClampListSystemsLimit(int32 Limit)
-{
-	return FMath::Clamp(Limit, 1, 1000);
+	return FMath::Clamp(Limit, 1, Max);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleListModuleScripts(const TSharedPtr<FJsonObject>& Params)
@@ -5741,7 +5731,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListModuleScripts(const TSh
 		}
 		Limit = static_cast<int32>(LimitValue);
 	}
-	Limit = ClampListModuleScriptsLimit(Limit);
+	Limit = ClampNiagaraQueryLimit(Limit);
 	bool bIncludeMetadata = Params->HasField(TEXT("include_metadata")) && Params->GetBoolField(TEXT("include_metadata"));
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -7643,7 +7633,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchDynamicInputs(const T
 		}
 		Limit = static_cast<int32>(LimitValue);
 	}
-	Limit = ClampSearchDynamicInputsLimit(Limit);
+	Limit = ClampNiagaraQueryLimit(Limit);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -12817,7 +12807,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListSystems(const TSharedPt
 		}
 		Limit = static_cast<int32>(LimitValue);
 	}
-	Limit = ClampListSystemsLimit(Limit);
+	Limit = ClampNiagaraQueryLimit(Limit);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
