@@ -399,6 +399,7 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  risk_score <symbol> [--limit=N] [--min-tier=low|medium|high]\n"
                   << "  review_context <symbol> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
                   << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
+                  << "  find_unused [--kind=function|class|struct|all] [--limit=N] [--min-confidence=low|medium|high]\n"
                   << "\nProject actions:\n"
                   << "  search <query> [--limit=N]\n"
                   << "  find_by_type <asset_class> [--limit=N] [--offset=N]\n"
@@ -410,7 +411,8 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  repair_fts [--target=all|assets|nodes] [--execute]\n"
                   << "  risk_score [asset_path] [--limit=N] [--min-tier=low|medium|high]\n"
                   << "  review_context <asset_path> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
-                  << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n";
+                  << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
+                  << "  find_unused [--kind=<asset_class>] [--limit=N] [--min-confidence=low|medium|high]\n";
         std::exit(1);
     }
 
@@ -1448,6 +1450,85 @@ public:
         print_json(source_detect_changes_json(paths, args.opt_int("max_results", 200),
                                               args.opt("detail_level", "minimal")));
     }
+
+    // ============================================================
+    // RX-3: find_unused — advisory dead-symbol detection.
+    // 0 inbound "references", not an inheritance parent, is_ue_macro=0,
+    // name/signature not matching UE reflection/automation/entry patterns.
+    // Recall-first & advisory: UE reflection/delegate/Blueprint call edges
+    // are not in the symbol graph, so confidence is lowered on ambiguity
+    // (overloaded name) and never reported as "high".
+    // ============================================================
+    json source_find_unused_json(const std::string& kind, int limit, const std::string& min_conf) {
+        int cap = clamp_int(limit <= 0 ? 100 : limit, 1, 1000);
+        json root = {
+            {"input", {{"kind", kind.empty() ? "all" : kind}, {"min_confidence", min_conf.empty() ? "low" : min_conf}}},
+            {"limits", {{"limit", cap}, {"min_confidence", min_conf.empty() ? "low" : min_conf}}},
+            {"truncated", false},
+        };
+        std::string kfilter;
+        if (kind == "function" || kind == "class" || kind == "struct")
+            kfilter = " AND s.kind = '" + kind + "'";
+        else
+            kfilter = " AND s.kind IN ('function','class','struct')";
+        // Candidate set: zero inbound refs, not an inheritance parent, not a
+        // reflection/automation/entry symbol. LIMIT cap+1 for truncation flag.
+        auto rows = query(db,
+            "SELECT s.id,s.name,s.qualified_name,s.kind,s.file_id,s.signature "
+            "FROM symbols s WHERE s.is_ue_macro = 0" + kfilter + " "
+            "AND NOT EXISTS (SELECT 1 FROM \"references\" r WHERE r.to_symbol_id = s.id) "
+            "AND NOT EXISTS (SELECT 1 FROM inheritance i WHERE i.parent_id = s.id) "
+            "AND s.name NOT LIKE '~%' "
+            "AND s.name NOT IN ('main','WinMain','DllMain','StaticClass','StaticRegisterNatives','GetPrivateStaticClass') "
+            "AND s.name NOT LIKE 'Execute_%' AND s.name NOT LIKE 'exec%' "
+            "AND s.name NOT LIKE '%AutomationTest%' AND s.name NOT LIKE '%Spec' "
+            "AND s.qualified_name NOT LIKE '%AutomationTest%' "
+            "AND COALESCE(s.signature,'') NOT LIKE '%UFUNCTION%' "
+            "AND COALESCE(s.signature,'') NOT LIKE '%UPROPERTY%' "
+            "ORDER BY s.id LIMIT " + std::to_string(cap + 1));
+        bool truncated = (int)rows.size() > cap;
+        if (truncated) rows.pop_back();
+        auto conf_rank = [](const std::string& c) { return c == "high" ? 2 : c == "medium" ? 1 : 0; };
+        int min_rank = conf_rank(min_conf.empty() ? "low" : min_conf);
+        json items = json::array();
+        for (const auto& r : rows) {
+            // Ambiguity: a non-unique symbol name means a 0-inbound result is
+            // less reliable (call may resolve to another overload).
+            auto ncrow = query(db, "SELECT COUNT(*) AS c FROM symbols WHERE name = ?;", {r.get("name")});
+            int64_t namecount = ncrow.empty() ? 1 : ncrow[0].get_int64("c");
+            std::string conf = (namecount <= 1) ? "medium" : "low";
+            if (conf_rank(conf) < min_rank) continue;
+            json reasons = json::array();
+            reasons.push_back("0 inbound references (no indexed caller/user)");
+            reasons.push_back("not an inheritance parent; is_ue_macro=0; no UFUNCTION/UPROPERTY in signature");
+            if (namecount > 1)
+                reasons.push_back("ambiguous: " + std::to_string(namecount) +
+                                  " symbols share this name — may be reflection/Blueprint/overload-invoked (advisory)");
+            else
+                reasons.push_back("unique name — but UE reflection/delegate/Blueprint edges are not in the symbol graph (advisory, never 'high')");
+            items.push_back({
+                {"id", r.get_int64("id")},
+                {"name", r.get("name")},
+                {"qualified_name", r.get("qualified_name")},
+                {"kind", r.get("kind")},
+                {"file", short_path(get_file_path(r.get_int("file_id")))},
+                {"confidence", conf},
+                {"reasons", reasons},
+            });
+        }
+        root["status"] = "ok";
+        root["summary"] = std::to_string(items.size()) + " advisory unused symbol candidate(s) "
+            "(recall-first; verify reflection/Blueprint usage before removal)";
+        root["items"] = items;
+        root["truncated"] = truncated;
+        add_next(root, {"source.find_callers", "source.review_context", "source.impact_radius"});
+        return root;
+    }
+
+    void find_unused(const Args& args) {
+        print_json(source_find_unused_json(args.opt("kind", "all"), args.opt_int("limit", 100),
+                                           args.opt("min_confidence", "low")));
+    }
 };
 
 // ============================================================
@@ -2146,6 +2227,75 @@ public:
         print_json(project_detect_changes_json(paths, args.opt_int("max_results", 200),
                                                args.opt("detail_level", "minimal")));
     }
+
+    // ============================================================
+    // RX-3: find_unused — advisory orphan-asset detection.
+    // Assets that are never a dependencies.target_asset_id (0 referencers)
+    // and are not roots (World/Level/PrimaryAssetLabel). Advisory: soft /
+    // path-based / config references are not in the dependency table, so
+    // confidence is lowered for classes commonly referenced indirectly.
+    // ============================================================
+    json project_find_unused_json(const std::string& kind, int limit, const std::string& min_conf) {
+        int cap = clamp_int(limit <= 0 ? 100 : limit, 1, 1000);
+        json root = {
+            {"input", {{"kind", kind.empty() ? "all" : kind}, {"min_confidence", min_conf.empty() ? "low" : min_conf}}},
+            {"limits", {{"limit", cap}, {"min_confidence", min_conf.empty() ? "low" : min_conf}}},
+            {"truncated", false},
+        };
+        std::vector<std::string> params;
+        std::string kfilter;
+        if (!kind.empty() && kind != "all") { kfilter = " AND a.asset_class = ?"; params.push_back(kind); }
+        auto rows = query(db,
+            "SELECT a.id,a.package_path,a.asset_name,a.asset_class FROM assets a "
+            "WHERE NOT EXISTS (SELECT 1 FROM dependencies d WHERE d.target_asset_id = a.id) "
+            "AND a.asset_class NOT LIKE '%World%' AND a.asset_class NOT LIKE '%Level%' "
+            "AND a.asset_class NOT LIKE '%PrimaryAssetLabel%' "
+            "AND a.asset_class NOT LIKE '%DirectoryPlaceholder%'" + kfilter + " "
+            "ORDER BY a.id LIMIT " + std::to_string(cap + 1), params);
+        bool truncated = (int)rows.size() > cap;
+        if (truncated) rows.pop_back();
+        auto conf_rank = [](const std::string& c) { return c == "high" ? 2 : c == "medium" ? 1 : 0; };
+        int min_rank = conf_rank(min_conf.empty() ? "low" : min_conf);
+        json items = json::array();
+        for (const auto& r : rows) {
+            std::string cls = r.get("asset_class");
+            // Classes commonly referenced by soft/path/config (not in the
+            // dependency table) -> lower confidence to advisory 'low'.
+            bool indirect = cls.find("Texture") != std::string::npos
+                || cls.find("Material") != std::string::npos
+                || cls.find("Sound") != std::string::npos
+                || cls.find("DataTable") != std::string::npos
+                || cls.find("DataAsset") != std::string::npos
+                || cls.find("Paper") != std::string::npos;
+            std::string conf = indirect ? "low" : "medium";
+            if (conf_rank(conf) < min_rank) continue;
+            json reasons = json::array();
+            reasons.push_back("0 inbound dependency referencers (no asset hard/soft-references it in the index)");
+            reasons.push_back(indirect
+                ? cls + " is often referenced by soft/path/config (not in the dependency table) — low confidence, advisory"
+                : "not a World/Level/PrimaryAssetLabel root — likely orphan content (advisory; verify soft refs)");
+            items.push_back({
+                {"id", r.get_int64("id")},
+                {"asset_path", r.get("package_path")},
+                {"asset_name", r.get("asset_name")},
+                {"asset_class", cls},
+                {"confidence", conf},
+                {"reasons", reasons},
+            });
+        }
+        root["status"] = "ok";
+        root["summary"] = std::to_string(items.size()) + " advisory unused asset candidate(s) "
+            "(recall-first; verify soft/path references before deletion)";
+        root["items"] = items;
+        root["truncated"] = truncated;
+        add_next(root, {"project.find_references", "project.review_context", "project.impact_radius"});
+        return root;
+    }
+
+    void find_unused(const Args& args) {
+        print_json(project_find_unused_json(args.opt("kind", "all"), args.opt_int("limit", 100),
+                                            args.opt("min_confidence", "low")));
+    }
 };
 
 // ============================================================
@@ -2218,6 +2368,7 @@ int main(int argc, char* argv[]) {
             {"risk_score",          [](SourceActions& s, const Args& a) { s.risk_score(a); }},
             {"review_context",      [](SourceActions& s, const Args& a) { s.review_context(a); }},
             {"detect_changes",      [](SourceActions& s, const Args& a) { s.detect_changes(a); }},
+            {"find_unused",         [](SourceActions& s, const Args& a) { s.find_unused(a); }},
         };
 
         auto it = actions.find(args.action);
@@ -2243,6 +2394,7 @@ int main(int argc, char* argv[]) {
             {"risk_score",        [](ProjectActions& p, const Args& a) { p.risk_score(a); }},
             {"review_context",    [](ProjectActions& p, const Args& a) { p.review_context(a); }},
             {"detect_changes",    [](ProjectActions& p, const Args& a) { p.detect_changes(a); }},
+            {"find_unused",       [](ProjectActions& p, const Args& a) { p.find_unused(a); }},
         };
 
         auto it = actions.find(args.action);

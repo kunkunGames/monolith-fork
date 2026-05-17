@@ -41,6 +41,20 @@ Cache-absent path (`crg:cache_absent` `info`, no warning) preserves offline
 RX-1 correctly reuses the RX-2 cached risk (`scoring_version=2`, `cache.status=hit`)
 and falls back to query-time when the cache is absent.
 
+## 3b. RX-3 — offline `find_unused` (live DBs)
+
+| Command | Result |
+|---|---|
+| `source find_unused --kind=function --limit=3` | `ok`, 3 items, `truncated`, `confidence=medium`, 3 reasons each |
+| `source find_unused --kind=class --limit=3` | `ok`, 3 items, confidence graded by name-ambiguity |
+| `project find_unused --limit=5` (default `min-confidence=low`) | `ok`, returns orphan assets (e.g. `DT_*` DataTables) `confidence=low` with reasons; `truncated` |
+| `project find_unused --min-confidence=medium` | filters to 0 here (all 77 orphans are indirect-reference classes → honest `low`) |
+| raw SQL cross-check | 81 assets never a dep target; 77 after root-class exclusion — matches the action |
+
+Bug found & fixed during test: default `min_confidence=medium` hid every
+genuine orphan (contradicts the spec's own recall-first mandate). Corrected
+to default `low` in code + spec RX-3 contract.
+
 ## 4. Notes / Deferred
 
 - Editor-side `*.detect_changes` actions are deferred: the source variant needs a

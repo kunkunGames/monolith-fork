@@ -109,7 +109,13 @@ useful global "where should I be careful?" view.
   carries an unrelated uncommitted local change; adding to it now would
   entangle the commit. Project-editor variant is feasible via the public
   `FMonolithIndexReview` + raw DB and is the next step.
-- **RX-3 / RX-4 / RX-5 / RX-7 / RX-8 — NOT STARTED** (spec'd P1/P2).
+- **RX-3 — DONE (offline).** `source.find_unused` / `project.find_unused`
+  in `monolith_query.cpp`: advisory dead-symbol / orphan-asset detection
+  (0 inbound refs; UE reflection/automation/entry exclusions + inheritance-
+  parent guard for source; root-class exclusion for project), confidence
+  graded by name-ambiguity (source) / indirect-reference class (project),
+  recall-first default. Built + live-verified.
+- **RX-4 / RX-5 / RX-7 / RX-8 — NOT STARTED** (spec'd P1/P2).
 - Verification record: `Docs/testing/2026-05-17-crg-review-extensions.md`.
 
 ## Non-Goals (correctly excluded — do not spec as work)
@@ -217,7 +223,11 @@ useful global "where should I be careful?" view.
 
 - params: `kind` (project: optional asset_class filter; source: `function|
   class|struct|all`), `limit` (default 100), `min_confidence` (default
-  `medium`), `include_reasons=true`.
+  **`low`** — recall-first: an advisory dead-code action must surface all
+  candidates by default; raising to `medium`/`high` is an explicit
+  narrowing. The earlier `medium` default was corrected during
+  implementation because it hid every genuine orphan whose class is
+  commonly referenced indirectly), `include_reasons=true`.
 - project: assets that are never a `dependencies.target_asset_id` and are not
   roots (exclude `World`/`Level`/`PrimaryAssetLabel`/explicit root config).
 - source: `symbols` with 0 inbound `"references"`, `is_ue_macro=0`, not an
