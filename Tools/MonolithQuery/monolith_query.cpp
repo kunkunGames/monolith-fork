@@ -237,6 +237,119 @@ static void add_next(json& root, std::initializer_list<const char*> actions) {
 }
 
 // ============================================================
+// RX-2: offline CRG projection-cache READ parity
+//
+// The editor (FMonolithIndexReview::TryCachedAssetRisk /
+// FMonolithSourceDatabase::GetCachedRiskForSymbol) reads crg_node_metrics
+// when present and falls back to query-time scoring otherwise. The offline
+// tool previously NEVER read the cache (always scoring_version=1, no
+// cache metadata, no crg:* health). These read-only helpers mirror the
+// editor behavior; they never write and never run repair_crg_cache
+// (offline cache WRITE remains out of scope per the projection-cache spec).
+// ============================================================
+
+static bool crg_cache_present(Database& db) {
+    return object_exists(db, "table", "crg_nodes")
+        && object_exists(db, "table", "crg_node_metrics")
+        && object_exists(db, "table", "crg_meta");
+}
+
+// Returns a populated risk item (score/tier/reasons/raw_counts + cache) on a
+// cache hit, or a null json on miss/absent. Joins on native_id so it is
+// robust whether crg_nodes.id is AUTOINCREMENT or aliased to the native id.
+static json try_cached_risk(Database& db, const std::string& domain,
+                            const std::string& native_table, int64_t native_id) {
+    if (!crg_cache_present(db)) return json();
+    auto rows = query(db,
+        "SELECT m.risk_score, m.risk_tier, m.reasons_json, m.raw_counts_json, "
+        "m.scoring_version, "
+        "COALESCE((SELECT value FROM crg_meta WHERE key='cache_version'),'1') AS cache_version "
+        "FROM crg_nodes n JOIN crg_node_metrics m ON m.node_id = n.id "
+        "WHERE n.domain = ? AND n.native_table = ? AND n.native_id = ? LIMIT 1;",
+        {domain, native_table, std::to_string(native_id)});
+    if (rows.empty()) return json();
+    const Row& r = rows[0];
+    json reasons = json::array();
+    {
+        json p = json::parse(r.get("reasons_json", "[]"), nullptr, false);
+        if (p.is_array()) reasons = p;
+    }
+    json raw = json::object();
+    {
+        json p = json::parse(r.get("raw_counts_json", "{}"), nullptr, false);
+        if (p.is_object()) raw = p;
+    }
+    double score = r.get_double("risk_score");
+    std::string sv = r.get("scoring_version", "2");
+    std::string cv = r.get("cache_version", "1");
+    json item;
+    item["score"] = std::round(score * 1000.0) / 1000.0;
+    item["tier"] = r.get("risk_tier", tier_for(score));
+    item["reasons"] = reasons;
+    item["raw_counts"] = raw;
+    item["scoring_version"] = sv;
+    item["cache"] = {
+        {"status", "hit"}, {"version", cv}, {"cache_version", cv}, {"scoring_version", sv},
+    };
+    return item;
+}
+
+// Appends crg:* checks mirroring the editor ComputeHealth. Cache ABSENT is
+// informational only (keeps offline `health` "ok" for pre-cache DBs, per
+// projection-cache REQ-006); cache PRESENT-but-inconsistent warns like the
+// editor. `valid_edges` lets the caller pass the dangling-ref-corrected
+// native edge count so parity matches the editor's current behavior.
+static void append_crg_health_checks(Database& db, const std::string& domain,
+                                     int64_t native_node_cnt, int64_t valid_edges,
+                                     json& root) {
+    auto info = [&](const std::string& name, const std::string& detail) {
+        root["checks"].push_back({{"check", name}, {"result", "info"}, {"detail", detail}});
+    };
+    auto check = [&](const std::string& name, bool pass, const std::string& detail) {
+        root["checks"].push_back({{"check", name}, {"result", pass ? "ok" : "warning"}, {"detail", detail}});
+        if (!pass) root["warnings"].push_back(detail);
+    };
+    if (!crg_cache_present(db)) {
+        info("crg:cache_absent",
+             "CRG projection cache not built (run repair_crg_cache for cached risk + parity checks)");
+        return;
+    }
+    for (const char* t : {"crg_nodes", "crg_edges", "crg_node_metrics", "crg_meta"})
+        check(std::string("crg:table:") + t, object_exists(db, "table", t),
+              object_exists(db, "table", t) ? std::string("CRG table ") + t + " present"
+                                            : std::string("missing CRG table ") + t);
+    int64_t cnodes = count_rows(db, "SELECT COUNT(*) FROM crg_nodes WHERE domain = '" + domain + "';");
+    int64_t cedges = count_rows(db, "SELECT COUNT(*) FROM crg_edges WHERE domain = '" + domain + "';");
+    int64_t cmetrics = count_rows(db,
+        "SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id "
+        "WHERE n.domain = '" + domain + "';");
+    check("crg:nodes_row_parity", cnodes == native_node_cnt,
+          domain + " native=" + std::to_string(native_node_cnt) + " crg_nodes=" + std::to_string(cnodes) +
+          (cnodes == native_node_cnt ? "" : " (mismatch -> repair_crg_cache)"));
+    check("crg:edges_row_parity", cedges == valid_edges,
+          "valid native edges=" + std::to_string(valid_edges) + " crg_edges=" + std::to_string(cedges) +
+          (cedges == valid_edges ? "" : " (mismatch -> repair_crg_cache)"));
+    check("crg:metrics_row_parity", cmetrics == cnodes,
+          "crg_nodes=" + std::to_string(cnodes) + " crg_node_metrics=" + std::to_string(cmetrics) +
+          (cmetrics == cnodes ? "" : " (mismatch -> repair_crg_cache)"));
+    int64_t orphan = count_rows(db,
+        "SELECT COUNT(*) FROM crg_edges e WHERE e.domain = '" + domain + "' AND ("
+        "e.source_node_id NOT IN (SELECT id FROM crg_nodes) OR "
+        "e.target_node_id NOT IN (SELECT id FROM crg_nodes));");
+    check("crg:orphan_edges", orphan == 0,
+          orphan == 0 ? "no orphan CRG projection edge rows"
+                      : std::to_string(orphan) + " orphan CRG projection edge row(s)");
+    std::string cache_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'cache_version';");
+    check("crg:cache_version", !cache_ver.empty(),
+          cache_ver.empty() ? "crg_meta.cache_version missing (run repair_crg_cache)"
+                            : "crg cache_version=" + cache_ver);
+    std::string scoring_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'scoring_version';");
+    check("crg:scoring_version", !scoring_ver.empty(),
+          scoring_ver.empty() ? "crg_meta.scoring_version missing (run repair_crg_cache)"
+                             : "crg scoring_version=" + scoring_ver);
+}
+
+// ============================================================
 // CLI argument parser
 // ============================================================
 
@@ -285,6 +398,7 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  repair_fts [--target=all|symbols|source] [--execute]\n"
                   << "  risk_score <symbol> [--limit=N] [--min-tier=low|medium|high]\n"
                   << "  review_context <symbol> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
+                  << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
                   << "\nProject actions:\n"
                   << "  search <query> [--limit=N]\n"
                   << "  find_by_type <asset_class> [--limit=N] [--offset=N]\n"
@@ -295,7 +409,8 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  health [--include-counts=false]\n"
                   << "  repair_fts [--target=all|assets|nodes] [--execute]\n"
                   << "  risk_score [asset_path] [--limit=N] [--min-tier=low|medium|high]\n"
-                  << "  review_context <asset_path> [--direction=in|out|both] [--detail-level=minimal|standard]\n";
+                  << "  review_context <asset_path> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
+                  << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n";
         std::exit(1);
     }
 
@@ -923,9 +1038,18 @@ public:
                 {"source_fts", source_fts_cnt},
             };
         }
+        // RX-2: CRG projection-cache health parity (mirrors editor ComputeHealth).
+        // valid edges use the symbols-joined ref count so parity matches the
+        // editor's dangling-ref-corrected rebuild.
+        int64_t valid_refs = count_rows(db,
+            "SELECT COUNT(*) FROM \"references\" r "
+            "JOIN symbols fs ON fs.id = r.from_symbol_id "
+            "JOIN symbols ts ON ts.id = r.to_symbol_id;");
+        int64_t inh_cnt = count_rows(db, "SELECT COUNT(*) FROM inheritance;");
+        append_crg_health_checks(db, "source", sym_cnt, valid_refs + inh_cnt, root);
         root["status"] = root["warnings"].empty() ? "ok" : "warning";
-        root["summary"] = root["warnings"].empty() ? "EngineSource schema, triggers, symbols_fts parity and integrity OK" : std::to_string(root["warnings"].size()) + " health warning(s)";
-        add_next(root, {"source.repair_fts", "source.trigger_project_reindex", "source.search_source"});
+        root["summary"] = root["warnings"].empty() ? "EngineSource schema, triggers, symbols_fts parity, CRG cache and integrity OK" : std::to_string(root["warnings"].size()) + " health warning(s)";
+        add_next(root, {"source.repair_crg_cache", "source.repair_fts", "source.trigger_project_reindex", "source.search_source"});
         return root;
     }
 
@@ -1035,14 +1159,30 @@ public:
             return root;
         }
         int min_rank = tier_rank(min_tier.empty() ? "low" : min_tier);
+        bool any_cache_hit = false;
         for (const auto& row : rows) {
-            json scored = score_symbol(row);
+            json cached = try_cached_risk(db, "source", "symbols", row.get_int64("id"));
+            json scored;
+            if (!cached.is_null()) {
+                any_cache_hit = true;
+                scored = cached;
+                scored["id"] = row.get_int64("id");
+                scored["name"] = row.get("name");
+                scored["qualified_name"] = row.get("qualified_name");
+                scored["kind"] = row.get("kind");
+            } else {
+                scored = score_symbol(row);
+                scored["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}};
+                scored["scoring_version"] = "1";
+            }
             if (tier_rank(scored["tier"].get<std::string>()) >= min_rank) items.push_back(scored);
         }
         std::sort(items.begin(), items.end(), [](const json& a, const json& b) { return a["score"].get<double>() > b["score"].get<double>(); });
+        const char* sv = any_cache_hit ? "2" : "1";
         root["status"] = "ok";
-        root["summary"] = std::to_string(items.size()) + " symbol overload(s) scored (scoring_version=1)";
-        root["scoring_version"] = "1";
+        root["summary"] = std::to_string(items.size()) + " symbol overload(s) scored (scoring_version="
+            + std::string(sv) + (any_cache_hit ? ", CRG cache hit)" : ")");
+        root["scoring_version"] = sv;
         root["items"] = items;
         root["truncated"] = false;
         add_next(root, {"source.review_context", "source.impact_radius"});
@@ -1181,6 +1321,132 @@ public:
         root["truncated"] = impact.value("truncated", false);
         add_next(root, {"source.read_source", "source.impact_radius", "source.get_class_hierarchy"});
         print_json(root);
+    }
+
+    // ============================================================
+    // RX-1: detect_changes — changelist/diff -> mapped symbols ->
+    // reused risk (RX-2 cache or query-time) + bounded impact +
+    // advisory (heuristic) test-gaps + review priorities.
+    // changed_paths is the VCS-agnostic primary input (positional or
+    // --changed-paths=a,b); no P4/git shell-out in this path.
+    // ============================================================
+    json source_detect_changes_json(const std::vector<std::string>& changed_paths,
+                                    int max_results, const std::string& detail_level) {
+        int cap = clamp_int(max_results <= 0 ? 200 : max_results, 1, 2000);
+        bool minimal = (detail_level != "standard");
+        json root = {
+            {"input", {{"changed_paths", changed_paths}, {"detail_level", minimal ? "minimal" : "standard"}}},
+            {"limits", {{"max_results", cap}, {"detail_level", minimal ? "minimal" : "standard"}}},
+            {"truncated", false},
+        };
+        if (changed_paths.empty()) {
+            root["status"] = "error";
+            root["summary"] = "detect_changes requires >=1 changed path (positional or --changed-paths=a,b)";
+            root["changed_entities"] = json::array();
+            add_next(root, {"source.search_source"});
+            return root;
+        }
+        std::set<int64_t> seen;
+        json changed = json::array();
+        bool truncated = false, any_cache = false;
+        for (const auto& raw : changed_paths) {
+            std::string norm = raw;
+            std::replace(norm.begin(), norm.end(), '\\', '/');
+            auto rows = query(db,
+                "SELECT s.id,s.name,s.qualified_name,s.kind,s.file_id,s.line_start,s.line_end,s.is_ue_macro "
+                "FROM symbols s JOIN files f ON f.id = s.file_id "
+                "WHERE replace(f.path,'\\','/') LIKE '%' || ? ORDER BY s.id LIMIT " + std::to_string(cap + 1),
+                {norm});
+            for (const auto& r : rows) {
+                int64_t sid = r.get_int64("id");
+                if (seen.count(sid)) continue;
+                if ((int)seen.size() >= cap) { truncated = true; break; }
+                seen.insert(sid);
+                json cached = try_cached_risk(db, "source", "symbols", sid);
+                json item;
+                if (!cached.is_null()) { any_cache = true; item = cached; }
+                else { item = score_symbol(r); item["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}}; item["scoring_version"] = "1"; }
+                item["id"] = sid;
+                item["name"] = r.get("name");
+                item["qualified_name"] = r.get("qualified_name");
+                item["kind"] = r.get("kind");
+                item["file"] = short_path(get_file_path(r.get_int("file_id")));
+                changed.push_back(item);
+            }
+        }
+        double overall = 0.0;
+        for (const auto& c : changed) overall = std::max(overall, c.value("score", 0.0));
+        std::set<int64_t> impacted;
+        for (const auto& c : changed) {
+            if ((int)impacted.size() >= cap) { truncated = true; break; }
+            auto callers = query(db,
+                "SELECT DISTINCT from_symbol_id FROM \"references\" WHERE to_symbol_id = ? LIMIT 200",
+                {std::to_string(c.value("id", (int64_t)0))});
+            for (const auto& cr : callers) {
+                int64_t fid = cr.get_int64("from_symbol_id");
+                if (fid > 0 && !seen.count(fid)) impacted.insert(fid);
+            }
+        }
+        json test_gaps = json::array();
+        for (const auto& c : changed) {
+            if (c.value("kind", std::string()).find("function") == std::string::npos) continue;
+            auto cov = query(db,
+                "SELECT 1 FROM \"references\" r JOIN symbols fs ON fs.id = r.from_symbol_id "
+                "JOIN files ff ON ff.id = fs.file_id WHERE r.to_symbol_id = ? AND ("
+                "replace(ff.path,'\\','/') LIKE '%/Tests/%' OR fs.name LIKE '%Spec%' "
+                "OR fs.qualified_name LIKE '%AutomationTest%' OR fs.name LIKE '%_Test%') LIMIT 1",
+                {std::to_string(c.value("id", (int64_t)0))});
+            if (cov.empty())
+                test_gaps.push_back({
+                    {"name", c.value("name", std::string())},
+                    {"qualified_name", c.value("qualified_name", std::string())},
+                    {"confidence", "medium"},
+                    {"reason", "no inbound reference from a Tests/ file or automation-named symbol "
+                               "(heuristic: EngineSource has no TESTED_BY edge; may miss "
+                               "reflection/Blueprint-driven tests)"},
+                });
+        }
+        std::sort(changed.begin(), changed.end(),
+                  [](const json& a, const json& b) { return a.value("score", 0.0) > b.value("score", 0.0); });
+        json priorities = json::array();
+        for (size_t i = 0; i < changed.size() && i < 10; ++i) priorities.push_back(changed[i]);
+        const char* sv = any_cache ? "2" : "1";
+        root["risk_score"] = std::round(overall * 1000.0) / 1000.0;
+        root["scoring_version"] = sv;
+        root["truncated"] = truncated;
+        root["status"] = "ok";
+        if (minimal) {
+            json topn = json::array();
+            for (size_t i = 0; i < changed.size() && i < 3; ++i) topn.push_back(changed[i].value("name", std::string()));
+            root["summary"] = "changed " + std::to_string(changed.size()) + " symbol(s), risk=" + tier_for(overall)
+                + ", " + std::to_string(test_gaps.size()) + " advisory test-gap(s), scoring_version=" + sv;
+            root["changed_entity_count"] = changed.size();
+            root["impacted_count"] = impacted.size();
+            root["test_gap_count"] = test_gaps.size();
+            root["review_priorities"] = topn;
+        } else {
+            root["summary"] = "changed " + std::to_string(changed.size()) + " symbol(s) across "
+                + std::to_string(changed_paths.size()) + " path(s); risk=" + tier_for(overall)
+                + " scoring_version=" + sv;
+            root["changed_entities"] = changed;
+            root["impact"] = {{"depth", 1}, {"impacted_count", impacted.size()}};
+            root["test_gaps"] = test_gaps;
+            root["review_priorities"] = priorities;
+        }
+        add_next(root, {"source.review_context", "source.impact_radius", "source.risk_score"});
+        return root;
+    }
+
+    void detect_changes(const Args& args) {
+        std::vector<std::string> paths = args.positional;
+        std::string csv = args.opt("changed_paths");
+        if (!csv.empty()) {
+            std::stringstream ss(csv);
+            std::string p;
+            while (std::getline(ss, p, ',')) if (!p.empty()) paths.push_back(p);
+        }
+        print_json(source_detect_changes_json(paths, args.opt_int("max_results", 200),
+                                              args.opt("detail_level", "minimal")));
     }
 };
 
@@ -1558,9 +1824,12 @@ public:
         check("fts:nodes_row_parity", ncnt == fncnt, "nodes=" + std::to_string(ncnt) + " fts_nodes=" + std::to_string(fncnt) + (ncnt == fncnt ? "" : " (mismatch -> project.repair_fts)"));
         root["schema"] = {{"schema_version", schema_ver}, {"journal_mode", scalar_str(db, "PRAGMA journal_mode;")}};
         if (include_counts) root["row_counts"] = {{"assets", acnt}, {"nodes", ncnt}, {"dependencies", count_rows(db, "SELECT COUNT(*) FROM dependencies;")}};
+        // RX-2: CRG projection-cache health parity (mirrors editor Health).
+        int64_t dep_cnt = count_rows(db, "SELECT COUNT(*) FROM dependencies;");
+        append_crg_health_checks(db, "project", acnt, dep_cnt, root);
         root["status"] = root["warnings"].empty() ? "ok" : "warning";
-        root["summary"] = root["warnings"].empty() ? "ProjectIndex schema, triggers, FTS parity and integrity OK" : std::to_string(root["warnings"].size()) + " health warning(s)";
-        add_next(root, {"project.repair_fts", "project.get_stats"});
+        root["summary"] = root["warnings"].empty() ? "ProjectIndex schema, triggers, FTS parity, CRG cache and integrity OK" : std::to_string(root["warnings"].size()) + " health warning(s)";
+        add_next(root, {"project.repair_crg_cache", "project.repair_fts", "project.get_stats"});
         return root;
     }
 
@@ -1666,6 +1935,22 @@ public:
         int cap = clamp_int(limit <= 0 ? 20 : limit, 1, 200);
         json root = {{"input", {{"seed", seed_path}}}, {"limits", {{"limit", cap}, {"min_tier", min_tier.empty() ? "low" : min_tier}}}};
         json items = json::array();
+        bool any_cache_hit = false;
+        auto score_or_cached = [&](const Row& a) -> json {
+            json cached = try_cached_risk(db, "project", "assets", a.get_int64("id"));
+            if (!cached.is_null()) {
+                any_cache_hit = true;
+                cached["id"] = a.get_int64("id");
+                cached["asset_path"] = a.get("package_path");
+                cached["asset_name"] = a.get("asset_name");
+                cached["asset_class"] = a.get("asset_class");
+                return cached;
+            }
+            json s = score_asset(a);
+            s["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}};
+            s["scoring_version"] = "1";
+            return s;
+        };
         if (!seed_path.empty()) {
             Row seed = asset_by_path(seed_path);
             if (seed.cols.empty()) {
@@ -1676,22 +1961,24 @@ public:
                 add_next(root, {"project.search"});
                 return root;
             }
-            items.push_back(score_asset(seed));
+            items.push_back(score_or_cached(seed));
         } else {
             auto candidates = query(db,
                 "SELECT target_asset_id, COUNT(*) c FROM dependencies GROUP BY target_asset_id ORDER BY c DESC LIMIT " + std::to_string(cap));
             for (const auto& c : candidates) {
                 Row a = asset_by_id(c.get("target_asset_id"));
-                if (!a.cols.empty()) items.push_back(score_asset(a));
+                if (!a.cols.empty()) items.push_back(score_or_cached(a));
             }
         }
         int min_rank = tier_rank(min_tier.empty() ? "low" : min_tier);
         json filtered = json::array();
         for (const auto& item : items) if (tier_rank(item["tier"].get<std::string>()) >= min_rank) filtered.push_back(item);
         std::sort(filtered.begin(), filtered.end(), [](const json& a, const json& b) { return a["score"].get<double>() > b["score"].get<double>(); });
+        const char* sv = any_cache_hit ? "2" : "1";
         root["status"] = "ok";
-        root["summary"] = std::to_string(filtered.size()) + " asset(s) scored (scoring_version=1)";
-        root["scoring_version"] = "1";
+        root["summary"] = std::to_string(filtered.size()) + " asset(s) scored (scoring_version="
+            + std::string(sv) + (any_cache_hit ? ", CRG cache hit)" : ")");
+        root["scoring_version"] = sv;
         root["items"] = filtered;
         root["truncated"] = false;
         add_next(root, {"project.review_context", "project.impact_radius"});
@@ -1743,6 +2030,121 @@ public:
         root["truncated"] = impact.value("truncated", false);
         add_next(root, {"project.get_asset_details", "project.impact_radius", "project.find_references"});
         print_json(root);
+    }
+
+    // ============================================================
+    // RX-1: detect_changes (project) — changed .uasset/.umap paths ->
+    // assets -> reused risk (RX-2 cache or query-time) + bounded
+    // dependency impact + review priorities. No test-gap (assets have
+    // no test concept). changed_paths is the VCS-agnostic input.
+    // ============================================================
+    json project_detect_changes_json(const std::vector<std::string>& changed_paths,
+                                     int max_results, const std::string& detail_level) {
+        int cap = clamp_int(max_results <= 0 ? 200 : max_results, 1, 2000);
+        bool minimal = (detail_level != "standard");
+        json root = {
+            {"input", {{"changed_paths", changed_paths}, {"detail_level", minimal ? "minimal" : "standard"}}},
+            {"limits", {{"max_results", cap}, {"detail_level", minimal ? "minimal" : "standard"}}},
+            {"truncated", false},
+        };
+        if (changed_paths.empty()) {
+            root["status"] = "error";
+            root["summary"] = "detect_changes requires >=1 changed path (positional or --changed-paths=a,b)";
+            root["changed_entities"] = json::array();
+            add_next(root, {"project.search"});
+            return root;
+        }
+        std::set<int64_t> seen;
+        json changed = json::array();
+        bool truncated = false, any_cache = false;
+        for (const auto& rawp : changed_paths) {
+            std::string norm = rawp;
+            std::replace(norm.begin(), norm.end(), '\\', '/');
+            // stem = filename without directory or extension
+            std::string base = norm;
+            auto sl = base.find_last_of('/');
+            if (sl != std::string::npos) base = base.substr(sl + 1);
+            auto dot = base.find_last_of('.');
+            std::string stem = (dot != std::string::npos) ? base.substr(0, dot) : base;
+            auto rows = query(db,
+                "SELECT id,package_path,asset_name,asset_class FROM assets "
+                "WHERE asset_name = ? OR replace(package_path,'\\','/') LIKE '%/' || ? "
+                "ORDER BY id LIMIT " + std::to_string(cap + 1), {stem, stem});
+            for (const auto& r : rows) {
+                int64_t aid = r.get_int64("id");
+                if (seen.count(aid)) continue;
+                if ((int)seen.size() >= cap) { truncated = true; break; }
+                seen.insert(aid);
+                json cached = try_cached_risk(db, "project", "assets", aid);
+                json item;
+                if (!cached.is_null()) { any_cache = true; item = cached; }
+                else { item = score_asset(r); item["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}}; item["scoring_version"] = "1"; }
+                item["id"] = aid;
+                item["asset_path"] = r.get("package_path");
+                item["asset_name"] = r.get("asset_name");
+                item["asset_class"] = r.get("asset_class");
+                changed.push_back(item);
+            }
+        }
+        double overall = 0.0;
+        for (const auto& c : changed) overall = std::max(overall, c.value("score", 0.0));
+        std::set<int64_t> impacted;
+        for (const auto& c : changed) {
+            if ((int)impacted.size() >= cap) { truncated = true; break; }
+            auto refs = query(db,
+                "SELECT DISTINCT source_asset_id FROM dependencies WHERE target_asset_id = ? LIMIT 200",
+                {std::to_string(c.value("id", (int64_t)0))});
+            for (const auto& rr : refs) {
+                int64_t s = rr.get_int64("source_asset_id");
+                if (s > 0 && !seen.count(s)) impacted.insert(s);
+            }
+        }
+        std::sort(changed.begin(), changed.end(),
+                  [](const json& a, const json& b) { return a.value("score", 0.0) > b.value("score", 0.0); });
+        json priorities = json::array();
+        for (size_t i = 0; i < changed.size() && i < 10; ++i) priorities.push_back(changed[i]);
+        const char* sv = any_cache ? "2" : "1";
+        root["risk_score"] = std::round(overall * 1000.0) / 1000.0;
+        root["scoring_version"] = sv;
+        root["truncated"] = truncated;
+        root["status"] = "ok";
+        if (changed.empty()) {
+            root["summary"] = "no indexed asset matched the given changed path(s)";
+            root["changed_entities"] = json::array();
+            add_next(root, {"project.search", "project.find_by_type"});
+            return root;
+        }
+        if (minimal) {
+            json topn = json::array();
+            for (size_t i = 0; i < changed.size() && i < 3; ++i) topn.push_back(changed[i].value("asset_name", std::string()));
+            root["summary"] = "changed " + std::to_string(changed.size()) + " asset(s), risk=" + tier_for(overall)
+                + ", scoring_version=" + sv;
+            root["changed_entity_count"] = changed.size();
+            root["impacted_count"] = impacted.size();
+            root["review_priorities"] = topn;
+        } else {
+            root["summary"] = "changed " + std::to_string(changed.size()) + " asset(s) across "
+                + std::to_string(changed_paths.size()) + " path(s); risk=" + tier_for(overall)
+                + " scoring_version=" + sv;
+            root["changed_entities"] = changed;
+            root["impact"] = {{"depth", 1}, {"impacted_count", impacted.size()}};
+            root["test_gaps"] = json::array();  // assets have no native test concept
+            root["review_priorities"] = priorities;
+        }
+        add_next(root, {"project.review_context", "project.impact_radius", "project.risk_score"});
+        return root;
+    }
+
+    void detect_changes(const Args& args) {
+        std::vector<std::string> paths = args.positional;
+        std::string csv = args.opt("changed_paths");
+        if (!csv.empty()) {
+            std::stringstream ss(csv);
+            std::string p;
+            while (std::getline(ss, p, ',')) if (!p.empty()) paths.push_back(p);
+        }
+        print_json(project_detect_changes_json(paths, args.opt_int("max_results", 200),
+                                               args.opt("detail_level", "minimal")));
     }
 };
 
@@ -1815,6 +2217,7 @@ int main(int argc, char* argv[]) {
             {"repair_fts",          [](SourceActions& s, const Args& a) { s.repair_fts(a); }},
             {"risk_score",          [](SourceActions& s, const Args& a) { s.risk_score(a); }},
             {"review_context",      [](SourceActions& s, const Args& a) { s.review_context(a); }},
+            {"detect_changes",      [](SourceActions& s, const Args& a) { s.detect_changes(a); }},
         };
 
         auto it = actions.find(args.action);
@@ -1839,6 +2242,7 @@ int main(int argc, char* argv[]) {
             {"repair_fts",        [](ProjectActions& p, const Args& a) { p.repair_fts(a); }},
             {"risk_score",        [](ProjectActions& p, const Args& a) { p.risk_score(a); }},
             {"review_context",    [](ProjectActions& p, const Args& a) { p.review_context(a); }},
+            {"detect_changes",    [](ProjectActions& p, const Args& a) { p.detect_changes(a); }},
         };
 
         auto it = actions.find(args.action);

@@ -966,7 +966,9 @@ Before writing any client code:
 
 When the editor is closed but you still need to query Monolith:
 
-- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool. It mirrors the live `project` / `source` query actions, including CRG navigation/review (`impact_radius`, `health`, `repair_fts`, `risk_score`, `review_context`). It stays read-only by default; `repair_fts` writes only with explicit `--execute`.
+- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool. It mirrors the live `project` / `source` query actions, including CRG navigation/review (`impact_radius`, `health`, `repair_fts`, `risk_score`, `review_context`, `detect_changes`). It stays read-only by default; `repair_fts` writes only with explicit `--execute`.
+  - **RX-2 (CRG cache read parity):** offline `risk_score` now reads `crg_node_metrics` when the projection cache is present (`scoring_version=2`, per-item `cache.status=hit`) and falls back to query-time scoring (`scoring_version=1`, `cache.status=miss`) otherwise — matching the editor. Offline `health` now emits the same `crg:*` checks the editor `ComputeHealth`/`Health` produce (table/index/parity/orphan/cache_version/scoring_version); a missing cache is `info`, never a regression. Offline never writes the cache (`repair_crg_cache` stays editor-only).
+  - **RX-1 (`detect_changes`):** `monolith_query <source|project> detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]`. Maps a Perforce changelist / changed paths to indexed symbols (source: `files.path` suffix match) or assets (project: `package_path`/`asset_name`), reuses the RX-2 cached risk (or query-time fallback), adds a bounded depth-1 impact set, advisory heuristic test-gaps (source only; EngineSource has no `TESTED_BY` edge), and risk-ordered `review_priorities`. `changed_paths` is the VCS-agnostic primary input; no P4/git shell-out.
 - **`python Plugins/Monolith/Saved/monolith_offline.py`** — same actions, stdlib-only.
 
 Both invoke the same SQLite indexes the live MCP uses.
