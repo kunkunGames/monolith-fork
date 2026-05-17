@@ -174,6 +174,341 @@ static int32 ConfidenceRank(const FString& Confidence)
 	return 0;
 }
 
+static FString TierForScore(double Score)
+{
+	if (Score >= 0.66) return TEXT("high");
+	if (Score >= 0.33) return TEXT("medium");
+	return TEXT("low");
+}
+
+static bool ContainsAnyToken(const FString& LowerText, std::initializer_list<const TCHAR*> Tokens)
+{
+	for (const TCHAR* Token : Tokens)
+	{
+		if (LowerText.Contains(FString(Token)))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+static double SourceSensitivityFactor(const FString& Text, FString& OutReason)
+{
+	const FString Lower = Text.ToLower();
+	if (ContainsAnyToken(Lower, { TEXT("ufunction"), TEXT("server"), TEXT("client"), TEXT("netmulticast"), TEXT("onrep"), TEXT("replication"), TEXT("rpc"), TEXT("network") }))
+	{
+		OutReason = TEXT("sensitivity: replication/RPC or network surface");
+		return 0.15;
+	}
+	if (ContainsAnyToken(Lower, { TEXT("save"), TEXT("serialize"), TEXT("archive") }))
+	{
+		OutReason = TEXT("sensitivity: save/serialization surface");
+		return 0.15;
+	}
+	if (ContainsAnyToken(Lower, { TEXT("auth"), TEXT("login"), TEXT("account"), TEXT("session") }))
+	{
+		OutReason = TEXT("sensitivity: auth/account/session surface");
+		return 0.15;
+	}
+	if (ContainsAnyToken(Lower, { TEXT("purchase"), TEXT("iap"), TEXT("store"), TEXT("entitlement") }))
+	{
+		OutReason = TEXT("sensitivity: purchase/store entitlement surface");
+		return 0.15;
+	}
+	if (ContainsAnyToken(Lower, { TEXT("anticheat"), TEXT("anti_cheat"), TEXT("cheat") }))
+	{
+		OutReason = TEXT("sensitivity: anticheat surface");
+		return 0.15;
+	}
+	if (ContainsAnyToken(Lower, { TEXT("crypt"), TEXT("encrypt"), TEXT("decrypt"), TEXT("sign"), TEXT("hash") }))
+	{
+		OutReason = TEXT("sensitivity: crypto/signing/hash surface");
+		return 0.15;
+	}
+	if (ContainsAnyToken(Lower, { TEXT("exec"), TEXT("eval"), TEXT("command") }))
+	{
+		OutReason = TEXT("sensitivity: exec/eval/command surface");
+		return 0.15;
+	}
+	if (ContainsAnyToken(Lower, { TEXT("file"), TEXT("registry"), TEXT("process") }))
+	{
+		OutReason = TEXT("sensitivity: file/registry/process surface");
+		return 0.15;
+	}
+	return 0.0;
+}
+
+static TArray<TSharedPtr<FJsonValue>> StringArray(const TArray<FString>& Values)
+{
+	TArray<TSharedPtr<FJsonValue>> Arr;
+	for (const FString& Value : Values)
+	{
+		Arr.Add(MakeShared<FJsonValueString>(Value));
+	}
+	return Arr;
+}
+
+static FString NormalizeChangedPath(FString Path)
+{
+	Path.TrimStartAndEndInline();
+	Path.ReplaceInline(TEXT("\\"), TEXT("/"));
+	return Path;
+}
+
+static double JsonScore(const TSharedPtr<FJsonObject>& Object)
+{
+	double Score = 0.0;
+	if (Object.IsValid())
+	{
+		Object->TryGetNumberField(TEXT("score"), Score);
+	}
+	return Score;
+}
+
+static bool TableExistsLocked(FSQLiteDatabase& DB, const TCHAR* Name)
+{
+	FSQLitePreparedStatement S;
+	if (!S.Create(DB, TEXT("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?;")))
+	{
+		return false;
+	}
+	S.SetBindingValueByIndex(1, FString(Name));
+	return S.Step() == ESQLitePreparedStatementStepResult::Row;
+}
+
+static int64 CountIdLocked(FSQLiteDatabase& DB, const TCHAR* Sql, int64 Id)
+{
+	FSQLitePreparedStatement S;
+	if (!S.Create(DB, Sql))
+	{
+		return 0;
+	}
+	S.SetBindingValueByIndex(1, Id);
+	int64 Count = 0;
+	if (S.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		S.GetColumnValueByIndex(0, Count);
+	}
+	return Count;
+}
+
+struct FDetectSymbolRow
+{
+	int64 Id = 0;
+	int64 FileId = 0;
+	FString Name;
+	FString QualifiedName;
+	FString Kind;
+	FString File;
+	FString Signature;
+	int32 LineStart = 0;
+	int32 LineEnd = 0;
+	bool bIsUEMacro = false;
+};
+
+static TSharedPtr<FJsonObject> CachedRiskForSymbolLocked(FSQLiteDatabase& DB, int64 SymbolId)
+{
+	if (!TableExistsLocked(DB, TEXT("crg_nodes"))
+		|| !TableExistsLocked(DB, TEXT("crg_node_metrics"))
+		|| !TableExistsLocked(DB, TEXT("crg_meta")))
+	{
+		return nullptr;
+	}
+
+	FSQLitePreparedStatement S;
+	if (!S.Create(DB, TEXT(
+		"SELECT s.name,s.qualified_name,s.kind,COALESCE(f.path,''),s.line_start,"
+		"       m.risk_score,m.risk_tier,m.reasons_json,m.raw_counts_json,m.scoring_version,"
+		"       COALESCE((SELECT value FROM crg_meta WHERE key = 'cache_version'), '1') "
+		"FROM crg_nodes n "
+		"JOIN crg_node_metrics m ON m.node_id = n.id "
+		"JOIN symbols s ON s.id = n.native_id "
+		"LEFT JOIN files f ON f.id = s.file_id "
+		"WHERE n.domain = 'source' AND n.native_table = 'symbols' AND n.native_id = ? "
+		"LIMIT 1;")))
+	{
+		return nullptr;
+	}
+	S.SetBindingValueByIndex(1, SymbolId);
+	if (S.Step() != ESQLitePreparedStatementStepResult::Row)
+	{
+		return nullptr;
+	}
+
+	FString Name, QualifiedName, Kind, File, Tier, ReasonsJson, RawCountsJson, ScoringVersion, CacheVersion;
+	int32 Line = 0;
+	double Score = 0.0;
+	S.GetColumnValueByIndex(0, Name);
+	S.GetColumnValueByIndex(1, QualifiedName);
+	S.GetColumnValueByIndex(2, Kind);
+	S.GetColumnValueByIndex(3, File);
+	S.GetColumnValueByIndex(4, Line);
+	S.GetColumnValueByIndex(5, Score);
+	S.GetColumnValueByIndex(6, Tier);
+	S.GetColumnValueByIndex(7, ReasonsJson);
+	S.GetColumnValueByIndex(8, RawCountsJson);
+	S.GetColumnValueByIndex(9, ScoringVersion);
+	S.GetColumnValueByIndex(10, CacheVersion);
+
+	TArray<TSharedPtr<FJsonValue>> Reasons;
+	if (!ParseJsonArray(ReasonsJson, Reasons))
+	{
+		Reasons.Add(MakeShared<FJsonValueString>(TEXT("cached reasons_json could not be parsed")));
+	}
+	TSharedPtr<FJsonObject> RawCounts = ParseJsonObject(RawCountsJson);
+	if (!RawCounts.IsValid())
+	{
+		RawCounts = MakeShared<FJsonObject>();
+	}
+
+	TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+	O->SetNumberField(TEXT("id"), static_cast<double>(SymbolId));
+	O->SetStringField(TEXT("name"), Name);
+	O->SetStringField(TEXT("qualified_name"), QualifiedName);
+	O->SetStringField(TEXT("kind"), Kind);
+	O->SetStringField(TEXT("file"), File);
+	O->SetNumberField(TEXT("line"), Line);
+	O->SetNumberField(TEXT("score"), FMath::RoundToDouble(Score * 1000.0) / 1000.0);
+	O->SetStringField(TEXT("tier"), Tier.IsEmpty() ? TierForScore(Score) : Tier);
+	O->SetArrayField(TEXT("reasons"), Reasons);
+	O->SetObjectField(TEXT("raw_counts"), RawCounts);
+	O->SetObjectField(TEXT("cache"), CacheMeta(TEXT("hit"), CacheVersion, ScoringVersion));
+	return O;
+}
+
+static TSharedPtr<FJsonObject> ScoreSymbolLocked(FSQLiteDatabase& DB, const FDetectSymbolRow& Sym)
+{
+	if (TSharedPtr<FJsonObject> Cached = CachedRiskForSymbolLocked(DB, Sym.Id))
+	{
+		return Cached;
+	}
+
+	const int64 Callers = CountIdLocked(DB, TEXT("SELECT COUNT(*) FROM \"references\" WHERE to_symbol_id = ?;"), Sym.Id);
+	const int64 Callees = CountIdLocked(DB, TEXT("SELECT COUNT(*) FROM \"references\" WHERE from_symbol_id = ?;"), Sym.Id);
+	const int64 Descendants = CountIdLocked(DB, TEXT("SELECT COUNT(*) FROM inheritance WHERE parent_id = ?;"), Sym.Id);
+	const int64 Ancestors = CountIdLocked(DB, TEXT("SELECT COUNT(*) FROM inheritance WHERE child_id = ?;"), Sym.Id);
+	const int64 CallerFiles = CountIdLocked(DB, TEXT("SELECT COUNT(DISTINCT file_id) FROM \"references\" WHERE to_symbol_id = ?;"), Sym.Id);
+
+	FString SensitivityReason;
+	const double Sensitivity = SourceSensitivityFactor(
+		FString::Printf(TEXT("%s %s %s %s"), *Sym.Name, *Sym.QualifiedName, *Sym.Kind, *Sym.Signature),
+		SensitivityReason);
+
+	TArray<TSharedPtr<FJsonValue>> Reasons;
+	double Raw = 0.0;
+	auto Factor = [&](double Contribution, const FString& Why)
+	{
+		if (Contribution > 0.0)
+		{
+			Raw += Contribution;
+			Reasons.Add(MakeShared<FJsonValueString>(Why));
+		}
+	};
+
+	Factor(FMath::Min<double>(Callers, 50) / 50.0 * 0.35,
+		FString::Printf(TEXT("caller fan-in: %lld"), Callers));
+	Factor(FMath::Min<double>(Descendants, 30) / 30.0 * 0.25,
+		FString::Printf(TEXT("inheritance descendants (1-hop): %lld"), Descendants));
+	Factor(FMath::Min<double>(Callees, 50) / 50.0 * 0.10,
+		FString::Printf(TEXT("callee fan-out: %lld"), Callees));
+	Factor(Sym.bIsUEMacro ? 0.15 : 0.0,
+		TEXT("UE reflection macro symbol (UCLASS/UFUNCTION/UPROPERTY family)"));
+	Factor(CallerFiles > 1 ? FMath::Min<double>(CallerFiles, 20) / 20.0 * 0.15 : 0.0,
+		FString::Printf(TEXT("module/file boundary crossing: %lld distinct caller file(s)"), CallerFiles));
+	Factor(Sensitivity, SensitivityReason);
+
+	if (Callers == 0 && Sym.Kind.Contains(TEXT("function")))
+	{
+		Reasons.Add(MakeShared<FJsonValueString>(TEXT(
+			"missing direct callers: function has 0 indexed callers — may be reflection/delegate/Blueprint-invoked (static graph cannot see those)")));
+	}
+
+	const double Score = FMath::Clamp(Raw, 0.0, 1.0);
+	TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+	O->SetNumberField(TEXT("id"), static_cast<double>(Sym.Id));
+	O->SetStringField(TEXT("name"), Sym.Name);
+	O->SetStringField(TEXT("qualified_name"), Sym.QualifiedName);
+	O->SetStringField(TEXT("kind"), Sym.Kind);
+	O->SetNumberField(TEXT("file_id"), static_cast<double>(Sym.FileId));
+	O->SetStringField(TEXT("file"), Sym.File);
+	O->SetNumberField(TEXT("line"), Sym.LineStart);
+	O->SetNumberField(TEXT("line_start"), Sym.LineStart);
+	O->SetNumberField(TEXT("line_end"), Sym.LineEnd);
+	O->SetNumberField(TEXT("score"), FMath::RoundToDouble(Score * 1000.0) / 1000.0);
+	O->SetStringField(TEXT("tier"), TierForScore(Score));
+	O->SetArrayField(TEXT("reasons"), Reasons);
+
+	TSharedPtr<FJsonObject> RawCounts = MakeShared<FJsonObject>();
+	RawCounts->SetNumberField(TEXT("callers"), static_cast<double>(Callers));
+	RawCounts->SetNumberField(TEXT("callees"), static_cast<double>(Callees));
+	RawCounts->SetNumberField(TEXT("descendants"), static_cast<double>(Descendants));
+	RawCounts->SetNumberField(TEXT("ancestors"), static_cast<double>(Ancestors));
+	RawCounts->SetNumberField(TEXT("caller_files"), static_cast<double>(CallerFiles));
+	RawCounts->SetBoolField(TEXT("is_ue_macro"), Sym.bIsUEMacro);
+	RawCounts->SetNumberField(TEXT("sensitivity"), Sensitivity);
+	O->SetObjectField(TEXT("raw_counts"), RawCounts);
+	O->SetObjectField(TEXT("cache"), CacheMeta(TEXT("miss"), TEXT(""), TEXT("3")));
+	return O;
+}
+
+static TSharedPtr<FJsonObject> SymbolByIdLocked(FSQLiteDatabase& DB, int64 SymbolId)
+{
+	FSQLitePreparedStatement S;
+	if (!S.Create(DB, TEXT(
+		"SELECT s.name,s.qualified_name,s.kind,s.file_id,COALESCE(f.path,''),s.line_start,s.line_end "
+		"FROM symbols s LEFT JOIN files f ON f.id = s.file_id WHERE s.id = ? LIMIT 1;")))
+	{
+		return nullptr;
+	}
+	S.SetBindingValueByIndex(1, SymbolId);
+	if (S.Step() != ESQLitePreparedStatementStepResult::Row)
+	{
+		return nullptr;
+	}
+	FString Name, QualifiedName, Kind, File;
+	int64 FileId = 0;
+	int32 LineStart = 0, LineEnd = 0;
+	S.GetColumnValueByIndex(0, Name);
+	S.GetColumnValueByIndex(1, QualifiedName);
+	S.GetColumnValueByIndex(2, Kind);
+	S.GetColumnValueByIndex(3, FileId);
+	S.GetColumnValueByIndex(4, File);
+	S.GetColumnValueByIndex(5, LineStart);
+	S.GetColumnValueByIndex(6, LineEnd);
+
+	TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+	O->SetNumberField(TEXT("id"), static_cast<double>(SymbolId));
+	O->SetStringField(TEXT("name"), Name);
+	O->SetStringField(TEXT("qualified_name"), QualifiedName);
+	O->SetStringField(TEXT("kind"), Kind);
+	O->SetNumberField(TEXT("file_id"), static_cast<double>(FileId));
+	O->SetStringField(TEXT("file"), File);
+	O->SetNumberField(TEXT("line_start"), LineStart);
+	O->SetNumberField(TEXT("line_end"), LineEnd);
+	return O;
+}
+
+static bool HasIndexedTestReferenceLocked(FSQLiteDatabase& DB, int64 SymbolId)
+{
+	FSQLitePreparedStatement S;
+	if (!S.Create(DB, TEXT(
+		"SELECT 1 FROM \"references\" r "
+		"JOIN symbols fs ON fs.id = r.from_symbol_id "
+		"LEFT JOIN files ff ON ff.id = fs.file_id "
+		"WHERE r.to_symbol_id = ? "
+		"AND (replace(COALESCE(ff.path,''),'\\','/') LIKE '%/Tests/%' "
+		"  OR fs.name LIKE '%Spec%' "
+		"  OR fs.qualified_name LIKE '%AutomationTest%' "
+		"  OR fs.name LIKE '%_Test%') "
+		"LIMIT 1;")))
+	{
+		return false;
+	}
+	S.SetBindingValueByIndex(1, SymbolId);
+	return S.Step() == ESQLitePreparedStatementStepResult::Row;
+}
+
 static const TCHAR* GCrgProjectionDdl =
 	TEXT("CREATE TABLE IF NOT EXISTS crg_nodes (")
 	TEXT("id INTEGER PRIMARY KEY AUTOINCREMENT,")
@@ -1679,6 +2014,256 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::GetCachedRiskForSymbol(int64 Sy
 	O->SetObjectField(TEXT("raw_counts"), RawCounts);
 	O->SetObjectField(TEXT("cache"), CacheMeta(TEXT("hit"), CacheVersion, ScoringVersion));
 	return O;
+}
+
+TSharedPtr<FJsonObject> FMonolithSourceDatabase::DetectChanges(
+	const TArray<FString>& ChangedPaths,
+	int32 MaxResults,
+	const FString& DetailLevel)
+{
+	FScopeLock Lock(&DbLock);
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	const int32 Cap = FMath::Clamp(MaxResults <= 0 ? 200 : MaxResults, 1, 2000);
+	const bool bStandard = DetailLevel.Equals(TEXT("standard"), ESearchCase::IgnoreCase);
+
+	TArray<FString> NormalizedPaths;
+	for (const FString& RawPath : ChangedPaths)
+	{
+		const FString Normalized = NormalizeChangedPath(RawPath);
+		if (!Normalized.IsEmpty() && !NormalizedPaths.Contains(Normalized))
+		{
+			NormalizedPaths.Add(Normalized);
+		}
+	}
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetArrayField(TEXT("changed_paths"), StringArray(NormalizedPaths));
+	Input->SetStringField(TEXT("detail_level"), bStandard ? TEXT("standard") : TEXT("minimal"));
+	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("max_results"), Cap);
+	Root->SetObjectField(TEXT("limits"), Limits);
+	Root->SetStringField(TEXT("scoring_version"), TEXT("3"));
+	Root->SetNumberField(TEXT("risk_score"), 0.0);
+
+	if (!Database || !Database->IsValid())
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("EngineSource DB is not open"));
+		Root->SetArrayField(TEXT("changed_entities"), TArray<TSharedPtr<FJsonValue>>());
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.trigger_reindex"), TEXT("source.health") });
+		return Root;
+	}
+
+	if (NormalizedPaths.Num() == 0)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("changed_paths or paths must include at least one path"));
+		Root->SetArrayField(TEXT("changed_entities"), TArray<TSharedPtr<FJsonValue>>());
+		TSharedPtr<FJsonObject> Impact = MakeShared<FJsonObject>();
+		Impact->SetNumberField(TEXT("depth"), 1);
+		Impact->SetNumberField(TEXT("impacted_count"), 0);
+		Root->SetObjectField(TEXT("impact"), Impact);
+		Root->SetNumberField(TEXT("changed_entity_count"), 0);
+		Root->SetNumberField(TEXT("impacted_count"), 0);
+		Root->SetNumberField(TEXT("test_gap_count"), 0);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.search_source"), TEXT("source.read_file") });
+		return Root;
+	}
+
+	TSet<int64> ChangedIds;
+	TArray<TSharedPtr<FJsonValue>> ChangedEntities;
+	bool bTruncated = false;
+
+	for (const FString& Path : NormalizedPaths)
+	{
+		if (ChangedEntities.Num() >= Cap)
+		{
+			bTruncated = true;
+			break;
+		}
+
+		FSQLitePreparedStatement S;
+		if (!S.Create(*Database, TEXT(
+			"SELECT s.id,s.name,s.qualified_name,s.kind,s.file_id,COALESCE(f.path,''),"
+			"       s.line_start,s.line_end,COALESCE(s.signature,''),s.is_ue_macro "
+			"FROM symbols s JOIN files f ON f.id = s.file_id "
+			"WHERE replace(f.path,'\\','/') LIKE '%' || ? "
+			"ORDER BY s.id LIMIT ?;")))
+		{
+			continue;
+		}
+		S.SetBindingValueByIndex(1, Path);
+		S.SetBindingValueByIndex(2, static_cast<int64>(Cap + 1));
+
+		while (S.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			if (ChangedEntities.Num() >= Cap)
+			{
+				bTruncated = true;
+				break;
+			}
+
+			FDetectSymbolRow Sym;
+			int32 UeMacro = 0;
+			S.GetColumnValueByIndex(0, Sym.Id);
+			S.GetColumnValueByIndex(1, Sym.Name);
+			S.GetColumnValueByIndex(2, Sym.QualifiedName);
+			S.GetColumnValueByIndex(3, Sym.Kind);
+			S.GetColumnValueByIndex(4, Sym.FileId);
+			S.GetColumnValueByIndex(5, Sym.File);
+			S.GetColumnValueByIndex(6, Sym.LineStart);
+			S.GetColumnValueByIndex(7, Sym.LineEnd);
+			S.GetColumnValueByIndex(8, Sym.Signature);
+			S.GetColumnValueByIndex(9, UeMacro);
+			Sym.bIsUEMacro = UeMacro != 0;
+
+			if (ChangedIds.Contains(Sym.Id))
+			{
+				continue;
+			}
+			ChangedIds.Add(Sym.Id);
+
+			TSharedPtr<FJsonObject> Scored = ScoreSymbolLocked(*Database, Sym);
+			Scored->SetStringField(TEXT("matched_path"), Path);
+			ChangedEntities.Add(MakeShared<FJsonValueObject>(Scored));
+		}
+	}
+
+	ChangedEntities.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
+	{
+		return JsonScore(A->AsObject()) > JsonScore(B->AsObject());
+	});
+
+	TSet<int64> ImpactedIds;
+	for (int64 ChangedId : ChangedIds)
+	{
+		FSQLitePreparedStatement S;
+		if (!S.Create(*Database, TEXT("SELECT DISTINCT from_symbol_id FROM \"references\" WHERE to_symbol_id = ? LIMIT 201;")))
+		{
+			continue;
+		}
+		S.SetBindingValueByIndex(1, ChangedId);
+		while (S.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			int64 FromId = 0;
+			S.GetColumnValueByIndex(0, FromId);
+			if (!ChangedIds.Contains(FromId))
+			{
+				ImpactedIds.Add(FromId);
+			}
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> ImpactedEntities;
+	if (bStandard)
+	{
+		int32 Emitted = 0;
+		for (int64 Id : ImpactedIds)
+		{
+			if (Emitted >= 200)
+			{
+				break;
+			}
+			if (TSharedPtr<FJsonObject> Symbol = SymbolByIdLocked(*Database, Id))
+			{
+				ImpactedEntities.Add(MakeShared<FJsonValueObject>(Symbol));
+				++Emitted;
+			}
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> TestGaps;
+	for (const TSharedPtr<FJsonValue>& ChangedValue : ChangedEntities)
+	{
+		const TSharedPtr<FJsonObject> Changed = ChangedValue->AsObject();
+		if (!Changed.IsValid() || !Changed->GetStringField(TEXT("kind")).Contains(TEXT("function")))
+		{
+			continue;
+		}
+		int64 Id = 0;
+		double IdNumber = 0.0;
+		if (Changed->TryGetNumberField(TEXT("id"), IdNumber))
+		{
+			Id = static_cast<int64>(IdNumber);
+		}
+		if (Id <= 0 || HasIndexedTestReferenceLocked(*Database, Id))
+		{
+			continue;
+		}
+		TSharedPtr<FJsonObject> Gap = MakeShared<FJsonObject>();
+		Gap->SetNumberField(TEXT("id"), static_cast<double>(Id));
+		Gap->SetStringField(TEXT("name"), Changed->GetStringField(TEXT("name")));
+		Gap->SetStringField(TEXT("qualified_name"), Changed->GetStringField(TEXT("qualified_name")));
+		Gap->SetStringField(TEXT("reason"), TEXT("no indexed inbound test or automation reference"));
+		TestGaps.Add(MakeShared<FJsonValueObject>(Gap));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Priorities;
+	const int32 PriorityLimit = bStandard ? FMath::Min(ChangedEntities.Num(), 10) : FMath::Min(ChangedEntities.Num(), 3);
+	for (int32 Index = 0; Index < PriorityLimit; ++Index)
+	{
+		const TSharedPtr<FJsonObject> O = ChangedEntities[Index]->AsObject();
+		if (!O.IsValid())
+		{
+			continue;
+		}
+		if (bStandard)
+		{
+			Priorities.Add(MakeShared<FJsonValueObject>(O));
+		}
+		else
+		{
+			FString Name;
+			if (!O->TryGetStringField(TEXT("qualified_name"), Name) || Name.IsEmpty())
+			{
+				O->TryGetStringField(TEXT("name"), Name);
+			}
+			Priorities.Add(MakeShared<FJsonValueString>(Name));
+		}
+	}
+
+	double MaxRisk = 0.0;
+	if (ChangedEntities.Num() > 0)
+	{
+		MaxRisk = JsonScore(ChangedEntities[0]->AsObject());
+	}
+
+	TSharedPtr<FJsonObject> Impact = MakeShared<FJsonObject>();
+	Impact->SetNumberField(TEXT("depth"), 1);
+	Impact->SetNumberField(TEXT("impacted_count"), ImpactedIds.Num());
+	if (bStandard)
+	{
+		Impact->SetArrayField(TEXT("impacted_entities"), ImpactedEntities);
+	}
+
+	Root->SetStringField(TEXT("status"), TEXT("ok"));
+	Root->SetStringField(TEXT("summary"), FString::Printf(
+		TEXT("%d changed source symbol(s), %d direct impacted caller(s), %d heuristic test gap(s), %d review priorit%s"),
+		ChangedEntities.Num(), ImpactedIds.Num(), TestGaps.Num(), Priorities.Num(), Priorities.Num() == 1 ? TEXT("y") : TEXT("ies")));
+	Root->SetNumberField(TEXT("risk_score"), FMath::RoundToDouble(MaxRisk * 1000.0) / 1000.0);
+	Root->SetNumberField(TEXT("changed_entity_count"), ChangedEntities.Num());
+	Root->SetNumberField(TEXT("impacted_count"), ImpactedIds.Num());
+	Root->SetNumberField(TEXT("test_gap_count"), TestGaps.Num());
+	Root->SetObjectField(TEXT("impact"), Impact);
+	Root->SetArrayField(TEXT("review_priorities"), Priorities);
+	if (bStandard)
+	{
+		Root->SetArrayField(TEXT("changed_entities"), ChangedEntities);
+		Root->SetArrayField(TEXT("test_gaps"), TestGaps);
+	}
+	Root->SetBoolField(TEXT("truncated"), bTruncated);
+	if (ChangedEntities.Num() == 0)
+	{
+		AddNextActions(Root, { TEXT("source.search_source"), TEXT("source.read_file") });
+	}
+	else
+	{
+		AddNextActions(Root, { TEXT("source.review_context"), TEXT("source.find_callers"), TEXT("source.risk_score") });
+	}
+	return Root;
 }
 
 TSharedPtr<FJsonObject> FMonolithSourceDatabase::FindUnused(

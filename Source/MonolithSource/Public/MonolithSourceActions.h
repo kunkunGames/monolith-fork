@@ -31,6 +31,7 @@ private:
 	static FMonolithActionResult HandleRepairFts(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRepairCrgCache(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRiskScore(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleDetectChanges(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleFindUnused(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleReviewHotspots(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleReviewContext(const TSharedPtr<FJsonObject>& Params);

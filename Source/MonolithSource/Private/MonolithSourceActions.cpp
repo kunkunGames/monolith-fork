@@ -11,6 +11,60 @@
 #include "Editor.h"
 #include "Internationalization/Regex.h"
 
+namespace
+{
+	void AppendPathString(const FString& Raw, TArray<FString>& Out)
+	{
+		TArray<FString> Parts;
+		Raw.ParseIntoArray(Parts, TEXT(","), true);
+		if (Parts.Num() == 0 && !Raw.IsEmpty())
+		{
+			Parts.Add(Raw);
+		}
+		for (FString Part : Parts)
+		{
+			Part.TrimStartAndEndInline();
+			if (!Part.IsEmpty() && !Out.Contains(Part))
+			{
+				Out.Add(Part);
+			}
+		}
+	}
+
+	void AppendPathField(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, TArray<FString>& Out)
+	{
+		if (!Params.IsValid())
+		{
+			return;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (Params->TryGetArrayField(Key, Arr) && Arr)
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Arr)
+			{
+				if (Value.IsValid())
+				{
+					AppendPathString(Value->AsString(), Out);
+				}
+			}
+			return;
+		}
+		FString S;
+		if (Params->TryGetStringField(Key, S))
+		{
+			AppendPathString(S, Out);
+		}
+	}
+
+	TArray<FString> CollectChangedPaths(const TSharedPtr<FJsonObject>& Params)
+	{
+		TArray<FString> Paths;
+		AppendPathField(Params, TEXT("changed_paths"), Paths);
+		AppendPathField(Params, TEXT("paths"), Paths);
+		return Paths;
+	}
+}
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -152,6 +206,16 @@ void FMonolithSourceActions::RegisterAll()
 			.Required(TEXT("symbol"), TEXT("string"), TEXT("Symbol name to score"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max scored symbol overloads"), TEXT("10"))
 			.Optional(TEXT("min_tier"), TEXT("string"), TEXT("low|medium|high filter"), TEXT("low"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("detect_changes"),
+		TEXT("Map changed source paths to indexed symbols, direct caller impact, test gaps, and risk-ranked review priorities"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleDetectChanges),
+		FParamSchemaBuilder()
+			.Optional(TEXT("changed_paths"), TEXT("array|string"), TEXT("Changed source paths; also accepts comma-separated string"))
+			.Optional(TEXT("paths"), TEXT("array|string"), TEXT("Alias for changed_paths"))
+			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max changed entities to return"), TEXT("200"))
+			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("minimal|standard"), TEXT("minimal"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("find_unused"),
@@ -299,6 +363,19 @@ FMonolithActionResult FMonolithSourceActions::HandleRiskScore(const TSharedPtr<F
 	const int32 Limit = FMonolithSourceReview::PInt(Params, TEXT("limit"), 10);
 	const FString MinTier = FMonolithSourceReview::PStr(Params, TEXT("min_tier"), TEXT("low"));
 	return FMonolithActionResult::Success(FMonolithSourceReview::RiskScore(*DB, Symbol, Limit, MinTier));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleDetectChanges(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	return FMonolithActionResult::Success(DB->DetectChanges(
+		CollectChangedPaths(Params),
+		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200),
+		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal"))));
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleFindUnused(const TSharedPtr<FJsonObject>& Params)

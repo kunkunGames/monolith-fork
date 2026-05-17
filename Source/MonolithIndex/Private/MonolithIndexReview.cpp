@@ -3,6 +3,7 @@
 #include "MonolithIndexLog.h"
 #include "SQLiteDatabase.h"
 #include "Dom/JsonValue.h"
+#include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include <initializer_list>
@@ -210,6 +211,33 @@ namespace
 			Arr.Add(MakeShared<FJsonValueString>(FString(A)));
 		}
 		Root->SetArrayField(TEXT("next_actions"), Arr);
+	}
+
+	FJsonArr StringArray(const TArray<FString>& Values)
+	{
+		FJsonArr Arr;
+		for (const FString& Value : Values)
+		{
+			Arr.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Arr;
+	}
+
+	FString NormalizeChangedPath(FString Path)
+	{
+		Path.TrimStartAndEndInline();
+		Path.ReplaceInline(TEXT("\\"), TEXT("/"));
+		return Path;
+	}
+
+	double JsonScore(const TSharedPtr<FJsonObject>& Object)
+	{
+		double Score = 0.0;
+		if (Object.IsValid())
+		{
+			Object->TryGetNumberField(TEXT("score"), Score);
+		}
+		return Score;
 	}
 
 	bool ParseJsonArray(const FString& Json, FJsonArr& Out)
@@ -1180,6 +1208,230 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RiskScore(
 	Root->SetArrayField(TEXT("items"), Items);
 	Root->SetBoolField(TEXT("truncated"), false);
 	AddNext(Root, { TEXT("project.repair_crg_cache"), TEXT("project.review_context"), TEXT("project.impact_radius") });
+	return Root;
+}
+
+// ============================================================================
+// detect_changes (changed asset paths -> review queue)
+// ============================================================================
+TSharedPtr<FJsonObject> FMonolithIndexReview::DetectChanges(
+	FMonolithIndexDatabase& Db,
+	const TArray<FString>& ChangedPaths,
+	int32 MaxResults,
+	const FString& DetailLevel)
+{
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	const int32 Cap = FMath::Clamp(MaxResults <= 0 ? 200 : MaxResults, 1, 2000);
+	const bool bStandard = DetailLevel.Equals(TEXT("standard"), ESearchCase::IgnoreCase);
+
+	TArray<FString> NormalizedPaths;
+	for (const FString& RawPath : ChangedPaths)
+	{
+		const FString Normalized = NormalizeChangedPath(RawPath);
+		if (!Normalized.IsEmpty() && !NormalizedPaths.Contains(Normalized))
+		{
+			NormalizedPaths.Add(Normalized);
+		}
+	}
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetArrayField(TEXT("changed_paths"), StringArray(NormalizedPaths));
+	Input->SetStringField(TEXT("detail_level"), bStandard ? TEXT("standard") : TEXT("minimal"));
+	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("max_results"), Cap);
+	Root->SetObjectField(TEXT("limits"), Limits);
+	Root->SetStringField(TEXT("scoring_version"), ExpectedScoringVersion);
+	Root->SetNumberField(TEXT("risk_score"), 0.0);
+
+	FSQLiteDatabase* Raw = Db.GetRawDatabase();
+	if (!Db.IsOpen() || !Raw)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("ProjectIndex DB is not open"));
+		Root->SetArrayField(TEXT("changed_entities"), FJsonArr());
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNext(Root, { TEXT("project.get_stats"), TEXT("project.health") });
+		return Root;
+	}
+
+	if (NormalizedPaths.Num() == 0)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("changed_paths or paths must include at least one path"));
+		Root->SetArrayField(TEXT("changed_entities"), FJsonArr());
+		TSharedPtr<FJsonObject> Impact = MakeShared<FJsonObject>();
+		Impact->SetNumberField(TEXT("depth"), 1);
+		Impact->SetNumberField(TEXT("impacted_count"), 0);
+		Root->SetObjectField(TEXT("impact"), Impact);
+		Root->SetArrayField(TEXT("test_gaps"), FJsonArr());
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNext(Root, { TEXT("project.search"), TEXT("project.find_by_type") });
+		return Root;
+	}
+
+	TSet<int64> ChangedIds;
+	FJsonArr ChangedEntities;
+	bool bTruncated = false;
+
+	for (const FString& Path : NormalizedPaths)
+	{
+		if (ChangedEntities.Num() >= Cap)
+		{
+			bTruncated = true;
+			break;
+		}
+		const FString Stem = FPaths::GetBaseFilename(Path);
+		if (Stem.IsEmpty())
+		{
+			continue;
+		}
+
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Raw, TEXT(
+			"SELECT id,package_path,asset_name,asset_class,COALESCE(module_name,'') "
+			"FROM assets "
+			"WHERE asset_name = ? OR replace(package_path,'\\','/') LIKE '%/' || ? "
+			"ORDER BY id LIMIT ?;")))
+		{
+			continue;
+		}
+		Stmt.SetBindingValueByIndex(1, Stem);
+		Stmt.SetBindingValueByIndex(2, Stem);
+		Stmt.SetBindingValueByIndex(3, static_cast<int64>(Cap + 1));
+
+		while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			if (ChangedEntities.Num() >= Cap)
+			{
+				bTruncated = true;
+				break;
+			}
+
+			FIndexedAsset Asset;
+			Stmt.GetColumnValueByIndex(0, Asset.Id);
+			Stmt.GetColumnValueByIndex(1, Asset.PackagePath);
+			Stmt.GetColumnValueByIndex(2, Asset.AssetName);
+			Stmt.GetColumnValueByIndex(3, Asset.AssetClass);
+			Stmt.GetColumnValueByIndex(4, Asset.ModuleName);
+			if (ChangedIds.Contains(Asset.Id))
+			{
+				continue;
+			}
+			ChangedIds.Add(Asset.Id);
+
+			TSharedPtr<FJsonObject> Scored = ScoreAsset(Db, Asset);
+			Scored->SetStringField(TEXT("matched_path"), Path);
+			ChangedEntities.Add(MakeShared<FJsonValueObject>(Scored));
+		}
+	}
+
+	ChangedEntities.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
+	{
+		return JsonScore(A->AsObject()) > JsonScore(B->AsObject());
+	});
+
+	TSet<int64> ImpactedIds;
+	for (int64 ChangedId : ChangedIds)
+	{
+		FSQLitePreparedStatement ImpactStmt;
+		if (!ImpactStmt.Create(*Raw, TEXT(
+			"SELECT DISTINCT source_asset_id FROM dependencies WHERE target_asset_id = ? LIMIT 201;")))
+		{
+			continue;
+		}
+		ImpactStmt.SetBindingValueByIndex(1, ChangedId);
+		while (ImpactStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			int64 SourceId = 0;
+			ImpactStmt.GetColumnValueByIndex(0, SourceId);
+			if (!ChangedIds.Contains(SourceId))
+			{
+				ImpactedIds.Add(SourceId);
+			}
+		}
+	}
+
+	FJsonArr ImpactedEntities;
+	if (bStandard)
+	{
+		int32 Emitted = 0;
+		for (int64 Id : ImpactedIds)
+		{
+			if (Emitted >= 200)
+			{
+				break;
+			}
+			if (TSharedPtr<FJsonObject> Asset = AssetJsonById(Db, Id))
+			{
+				ImpactedEntities.Add(MakeShared<FJsonValueObject>(Asset));
+				++Emitted;
+			}
+		}
+	}
+
+	FJsonArr Priorities;
+	const int32 PriorityLimit = bStandard ? FMath::Min(ChangedEntities.Num(), 10) : FMath::Min(ChangedEntities.Num(), 3);
+	for (int32 Index = 0; Index < PriorityLimit; ++Index)
+	{
+		const TSharedPtr<FJsonObject> O = ChangedEntities[Index]->AsObject();
+		if (!O.IsValid())
+		{
+			continue;
+		}
+		if (bStandard)
+		{
+			Priorities.Add(MakeShared<FJsonValueObject>(O));
+		}
+		else
+		{
+			FString Name;
+			if (!O->TryGetStringField(TEXT("asset_name"), Name) || Name.IsEmpty())
+			{
+				O->TryGetStringField(TEXT("asset_path"), Name);
+			}
+			Priorities.Add(MakeShared<FJsonValueString>(Name));
+		}
+	}
+
+	double MaxRisk = 0.0;
+	if (ChangedEntities.Num() > 0)
+	{
+		MaxRisk = JsonScore(ChangedEntities[0]->AsObject());
+	}
+
+	TSharedPtr<FJsonObject> Impact = MakeShared<FJsonObject>();
+	Impact->SetNumberField(TEXT("depth"), 1);
+	Impact->SetNumberField(TEXT("impacted_count"), ImpactedIds.Num());
+	if (bStandard)
+	{
+		Impact->SetArrayField(TEXT("impacted_entities"), ImpactedEntities);
+	}
+
+	Root->SetStringField(TEXT("status"), TEXT("ok"));
+	Root->SetStringField(TEXT("summary"), FString::Printf(
+		TEXT("%d changed asset(s), %d direct impacted referencer(s), %d review priorit%s"),
+		ChangedEntities.Num(), ImpactedIds.Num(), Priorities.Num(), Priorities.Num() == 1 ? TEXT("y") : TEXT("ies")));
+	Root->SetNumberField(TEXT("risk_score"), FMath::RoundToDouble(MaxRisk * 1000.0) / 1000.0);
+	Root->SetNumberField(TEXT("changed_entity_count"), ChangedEntities.Num());
+	Root->SetNumberField(TEXT("impacted_count"), ImpactedIds.Num());
+	Root->SetNumberField(TEXT("test_gap_count"), 0);
+	Root->SetObjectField(TEXT("impact"), Impact);
+	Root->SetArrayField(TEXT("review_priorities"), Priorities);
+	Root->SetArrayField(TEXT("test_gaps"), FJsonArr());
+	if (bStandard)
+	{
+		Root->SetArrayField(TEXT("changed_entities"), ChangedEntities);
+	}
+	Root->SetBoolField(TEXT("truncated"), bTruncated);
+	if (ChangedEntities.Num() == 0)
+	{
+		AddNext(Root, { TEXT("project.search"), TEXT("project.find_by_type") });
+	}
+	else
+	{
+		AddNext(Root, { TEXT("project.review_context"), TEXT("project.find_references"), TEXT("project.risk_score") });
+	}
 	return Root;
 }
 

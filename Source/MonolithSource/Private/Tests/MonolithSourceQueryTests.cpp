@@ -222,6 +222,38 @@ bool FSourceRiskScoreSensitivityTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceDetectChangesMinimalTest, "Monolith.IndexGuard.Source.DetectChangesMinimal", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceDetectChangesMinimalTest::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+	TSharedPtr<FJsonObject> R = T.Db.DetectChanges({ TEXT("/tmp/M/M.cpp") }, 10, TEXT("minimal"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("all file symbols changed"), R->GetIntegerField(TEXT("changed_entity_count")), 5);
+	TestTrue(TEXT("heuristic test gaps present"), R->GetIntegerField(TEXT("test_gap_count")) >= 1);
+	TestFalse(TEXT("minimal omits full changed_entities"), R->HasField(TEXT("changed_entities")));
+	const TArray<TSharedPtr<FJsonValue>>* Priorities = nullptr;
+	TestTrue(TEXT("priorities present"), R->TryGetArrayField(TEXT("review_priorities"), Priorities) && Priorities && Priorities->Num() >= 1);
+	TestTrue(TEXT("scoring version set"), R->GetStringField(TEXT("scoring_version")) == TEXT("3"));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceDetectChangesStandardTest, "Monolith.IndexGuard.Source.DetectChangesStandard", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceDetectChangesStandardTest::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+	TSharedPtr<FJsonObject> R = T.Db.DetectChanges({ TEXT("M.cpp") }, 10, TEXT("standard"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	const TArray<TSharedPtr<FJsonValue>>* Changed = nullptr;
+	TestTrue(TEXT("changed_entities present"), R->TryGetArrayField(TEXT("changed_entities"), Changed) && Changed && Changed->Num() == 5);
+	const TArray<TSharedPtr<FJsonValue>>* Gaps = nullptr;
+	TestTrue(TEXT("test_gaps present"), R->TryGetArrayField(TEXT("test_gaps"), Gaps) && Gaps && Gaps->Num() >= 1);
+	TSharedPtr<FJsonObject> Impact = R->GetObjectField(TEXT("impact"));
+	TestTrue(TEXT("impact present"), Impact.IsValid());
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceReviewHotspotsLargeTest, "Monolith.IndexGuard.Source.ReviewHotspotsLarge", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FSourceReviewHotspotsLargeTest::RunTest(const FString& Parameters)
 {

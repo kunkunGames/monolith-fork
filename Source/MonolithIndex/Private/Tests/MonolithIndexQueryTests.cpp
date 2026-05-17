@@ -232,6 +232,42 @@ bool FProjectRiskScoreSensitivityTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectDetectChangesMinimalTest, "Monolith.IndexGuard.Project.DetectChangesMinimal", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectDetectChangesMinimalTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::DetectChanges(T.Db, { TEXT("Content/A.uasset") }, 5, TEXT("minimal"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("one changed asset"), R->GetIntegerField(TEXT("changed_entity_count")), 1);
+	TestEqual(TEXT("one direct impacted referencer"), R->GetIntegerField(TEXT("impacted_count")), 1);
+	TestEqual(TEXT("no project test gaps"), R->GetIntegerField(TEXT("test_gap_count")), 0);
+	TestFalse(TEXT("minimal omits full changed_entities"), R->HasField(TEXT("changed_entities")));
+	const TArray<TSharedPtr<FJsonValue>>* Priorities = nullptr;
+	TestTrue(TEXT("priorities present"), R->TryGetArrayField(TEXT("review_priorities"), Priorities) && Priorities && Priorities->Num() == 1);
+	TestEqual(TEXT("priority names changed asset"), (*Priorities)[0]->AsString(), FString(TEXT("A")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectDetectChangesStandardTest, "Monolith.IndexGuard.Project.DetectChangesStandard", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectDetectChangesStandardTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::DetectChanges(T.Db, { TEXT("/Game/B.umap") }, 5, TEXT("standard"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	const TArray<TSharedPtr<FJsonValue>>* Changed = nullptr;
+	TestTrue(TEXT("changed_entities present"), R->TryGetArrayField(TEXT("changed_entities"), Changed) && Changed && Changed->Num() == 1);
+	TSharedPtr<FJsonObject> First = (*Changed)[0]->AsObject();
+	TestTrue(TEXT("first changed object"), First.IsValid());
+	TestEqual(TEXT("asset name B"), First->GetStringField(TEXT("asset_name")), FString(TEXT("B")));
+	TSharedPtr<FJsonObject> Impact = R->GetObjectField(TEXT("impact"));
+	TestTrue(TEXT("impact present"), Impact.IsValid());
+	const TArray<TSharedPtr<FJsonValue>>* Impacted = nullptr;
+	TestTrue(TEXT("standard impact has impacted_entities"), Impact->TryGetArrayField(TEXT("impacted_entities"), Impacted) && Impacted);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectReviewHotspotsLargeTest, "Monolith.IndexGuard.Project.ReviewHotspotsLarge", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectReviewHotspotsLargeTest::RunTest(const FString& Parameters)
 {
