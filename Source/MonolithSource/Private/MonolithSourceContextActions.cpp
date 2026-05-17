@@ -842,6 +842,14 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(co
 {
 	FString AssetPath;
 	FString SymbolSeed;
+	if (Params->HasField(TEXT("asset_path")) && !Params->HasTypedField<EJson::String>(TEXT("asset_path")))
+	{
+		return FMonolithActionResult::Error(TEXT("'asset_path' must be a string"), -32602);
+	}
+	if (Params->HasField(TEXT("symbol")) && !Params->HasTypedField<EJson::String>(TEXT("symbol")))
+	{
+		return FMonolithActionResult::Error(TEXT("'symbol' must be a string"), -32602);
+	}
 	const bool bHasAsset = Params->TryGetStringField(TEXT("asset_path"), AssetPath) && !AssetPath.TrimStartAndEnd().IsEmpty();
 	const bool bHasSymbol = Params->TryGetStringField(TEXT("symbol"), SymbolSeed) && !SymbolSeed.TrimStartAndEnd().IsEmpty();
 	if (bHasAsset == bHasSymbol)
