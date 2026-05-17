@@ -21,6 +21,7 @@
 #include <functional>
 #include <filesystem>
 #include <ctime>
+#include <chrono>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -174,6 +175,39 @@ static Rows query(Database& db, const std::string& sql, const std::vector<std::s
     }
     sqlite3_finalize(stmt);
     return rows;
+}
+
+static bool query_rows_ok(Database& db, const std::string& sql,
+                          const std::vector<std::string>& params,
+                          Rows& rows, std::string& error) {
+    rows.clear();
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(db.db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        error = sqlite3_errmsg(db.db);
+        return false;
+    }
+
+    for (int i = 0; i < (int)params.size(); ++i)
+        sqlite3_bind_text(stmt, i + 1, params[i].c_str(), -1, SQLITE_TRANSIENT);
+
+    int ncols = sqlite3_column_count(stmt);
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        Row row;
+        for (int c = 0; c < ncols; ++c) {
+            const char* name = sqlite3_column_name(stmt, c);
+            const char* val = (const char*)sqlite3_column_text(stmt, c);
+            row.cols[name ? name : ""] = val ? val : "";
+        }
+        rows.push_back(std::move(row));
+    }
+    if (rc != SQLITE_DONE) {
+        error = sqlite3_errmsg(db.db);
+        sqlite3_finalize(stmt);
+        return false;
+    }
+    sqlite3_finalize(stmt);
+    return true;
 }
 
 static void print_json(const json& value) {
@@ -416,19 +450,28 @@ static std::string snapshot_edge_key(const Row& row);
 static bool load_current_manifest(Database& db, const std::string& domain, SnapshotManifest& out) {
     out.nodes.clear();
     out.edges.clear();
-    auto nodes = query(db,
+    std::string error;
+    Rows nodes;
+    if (!query_rows_ok(db,
         "SELECT stable_key FROM crg_nodes WHERE domain = ? ORDER BY stable_key;",
-        {domain});
+        {domain}, nodes, error)) {
+        std::cerr << "[snapshot current manifest error] " << error << std::endl;
+        return false;
+    }
     for (const auto& row : nodes) out.nodes.insert(row.get("stable_key"));
 
-    auto edges = query(db,
+    Rows edges;
+    if (!query_rows_ok(db,
         "SELECT sn.stable_key AS source_key,tn.stable_key AS target_key,"
         "e.edge_kind,COALESCE(e.edge_subkind,'') AS edge_subkind "
         "FROM crg_edges e "
         "JOIN crg_nodes sn ON sn.id = e.source_node_id "
         "JOIN crg_nodes tn ON tn.id = e.target_node_id "
         "WHERE e.domain = ? ORDER BY sn.stable_key,tn.stable_key,e.edge_kind,e.edge_subkind;",
-        {domain});
+        {domain}, edges, error)) {
+        std::cerr << "[snapshot current manifest error] " << error << std::endl;
+        return false;
+    }
     for (const auto& row : edges) out.edges.insert(snapshot_edge_key(row));
     return true;
 }
@@ -579,7 +622,11 @@ static bool insert_snapshot_record(Database& db, const std::string& domain,
 static json crg_snapshot_json(Database& db, const std::string& domain,
                               const std::string& raw_label, bool execute) {
     std::string label = trim_copy(raw_label);
-    if (label.empty()) label = domain + "-" + std::to_string(std::time(nullptr));
+    if (label.empty()) {
+        const auto ticks = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        label = domain + "-" + std::to_string(ticks);
+    }
     json root = {
         {"input", {{"label", label}, {"execute", execute}}},
     };
