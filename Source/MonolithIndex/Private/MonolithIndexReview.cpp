@@ -170,6 +170,24 @@ namespace
 		return 0;
 	}
 
+	int32 ConfidenceRank(const FString& Confidence)
+	{
+		if (Confidence == TEXT("high")) return 2;
+		if (Confidence == TEXT("medium")) return 1;
+		return 0;
+	}
+
+	FString ConfidenceForUnusedAssetClass(const FString& AssetClass)
+	{
+		if (AssetClass.Contains(TEXT("Texture")) || AssetClass.Contains(TEXT("Material"))
+			|| AssetClass.Contains(TEXT("Sound")) || AssetClass.Contains(TEXT("DataTable"))
+			|| AssetClass.Contains(TEXT("DataAsset")) || AssetClass.Contains(TEXT("Paper")))
+		{
+			return TEXT("low");
+		}
+		return TEXT("medium");
+	}
+
 	FJsonArr TopRiskReasons(const TSharedPtr<FJsonObject>& Risk, int32 MaxItems)
 	{
 		FJsonArr Out;
@@ -1162,6 +1180,142 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RiskScore(
 	Root->SetArrayField(TEXT("items"), Items);
 	Root->SetBoolField(TEXT("truncated"), false);
 	AddNext(Root, { TEXT("project.repair_crg_cache"), TEXT("project.review_context"), TEXT("project.impact_radius") });
+	return Root;
+}
+
+// ============================================================================
+// find_unused (advisory orphan-asset candidates)
+// ============================================================================
+TSharedPtr<FJsonObject> FMonolithIndexReview::FindUnused(
+	FMonolithIndexDatabase& Db,
+	const FString& Kind,
+	int32 Limit,
+	const FString& MinConfidence)
+{
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	const FString KindFilter = Kind.TrimStartAndEnd();
+	const bool bFilterKind = !KindFilter.IsEmpty() && !KindFilter.Equals(TEXT("all"), ESearchCase::IgnoreCase);
+	FString MinConf = MinConfidence.IsEmpty() ? TEXT("low") : MinConfidence.ToLower();
+	if (MinConf != TEXT("low") && MinConf != TEXT("medium") && MinConf != TEXT("high"))
+	{
+		MinConf = TEXT("low");
+	}
+	const int32 MinRank = ConfidenceRank(MinConf);
+	const int32 Cap = FMath::Clamp(Limit <= 0 ? 100 : Limit, 1, 1000);
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("kind"), bFilterKind ? KindFilter : TEXT("all"));
+	Input->SetStringField(TEXT("min_confidence"), MinConf);
+	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("limit"), Cap);
+	Root->SetObjectField(TEXT("limits"), Limits);
+
+	FSQLiteDatabase* Raw = Db.GetRawDatabase();
+	if (!Db.IsOpen() || !Raw)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("ProjectIndex DB is not open"));
+		Root->SetArrayField(TEXT("items"), FJsonArr());
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNext(Root, { TEXT("project.get_stats"), TEXT("project.health") });
+		return Root;
+	}
+
+	if (MinRank >= ConfidenceRank(TEXT("high")))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("ok"));
+		Root->SetStringField(TEXT("summary"), TEXT("0 advisory project unused candidate(s) found (find_unused never reports high confidence)"));
+		Root->SetArrayField(TEXT("items"), FJsonArr());
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNext(Root, { TEXT("project.find_references"), TEXT("project.review_context"), TEXT("project.impact_radius") });
+		return Root;
+	}
+
+	const FString KindClause = bFilterKind ? TEXT("AND a.asset_class = ? ") : TEXT("");
+	const FString ConfidenceClause = MinRank >= ConfidenceRank(TEXT("medium"))
+		? TEXT("AND a.asset_class NOT LIKE '%%Texture%%' "
+			"AND a.asset_class NOT LIKE '%%Material%%' "
+			"AND a.asset_class NOT LIKE '%%Sound%%' "
+			"AND a.asset_class NOT LIKE '%%DataTable%%' "
+			"AND a.asset_class NOT LIKE '%%DataAsset%%' "
+			"AND a.asset_class NOT LIKE '%%Paper%%' ")
+		: TEXT("");
+	const FString Sql = FString::Printf(TEXT(
+		"SELECT a.id,a.package_path,a.asset_name,a.asset_class,COALESCE(a.module_name,'') "
+		"FROM assets a "
+		"WHERE NOT EXISTS (SELECT 1 FROM dependencies d WHERE d.target_asset_id = a.id) "
+		"AND a.asset_class NOT LIKE '%%World%%' "
+		"AND a.asset_class NOT LIKE '%%Level%%' "
+		"AND a.asset_class NOT LIKE '%%PrimaryAssetLabel%%' "
+		"AND a.asset_class NOT LIKE '%%DirectoryPlaceholder%%' "
+		"%s"
+		"%s"
+		"ORDER BY a.id LIMIT ?;"), *KindClause, *ConfidenceClause);
+
+	FJsonArr Items;
+	bool bTruncated = false;
+	FSQLitePreparedStatement Stmt;
+	if (Stmt.Create(*Raw, *Sql))
+	{
+		int32 BindIndex = 1;
+		if (bFilterKind)
+		{
+			Stmt.SetBindingValueByIndex(BindIndex++, KindFilter);
+		}
+		Stmt.SetBindingValueByIndex(BindIndex, static_cast<int64>(Cap + 1));
+
+		while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			int64 Id = 0;
+			FString Path, Name, Class, Module;
+			Stmt.GetColumnValueByIndex(0, Id);
+			Stmt.GetColumnValueByIndex(1, Path);
+			Stmt.GetColumnValueByIndex(2, Name);
+			Stmt.GetColumnValueByIndex(3, Class);
+			Stmt.GetColumnValueByIndex(4, Module);
+
+			const FString Confidence = ConfidenceForUnusedAssetClass(Class);
+			if (ConfidenceRank(Confidence) < MinRank)
+			{
+				continue;
+			}
+			if (Items.Num() >= Cap)
+			{
+				bTruncated = true;
+				break;
+			}
+
+			FJsonArr Reasons;
+			Reasons.Add(MakeShared<FJsonValueString>(TEXT("no indexed inbound dependencies")));
+			Reasons.Add(MakeShared<FJsonValueString>(TEXT("World/Level/PrimaryAssetLabel root-like classes excluded")));
+			if (Confidence == TEXT("low"))
+			{
+				Reasons.Add(MakeShared<FJsonValueString>(TEXT("asset class is commonly referenced by convention, editor settings, soft paths, or runtime loads")));
+			}
+			else
+			{
+				Reasons.Add(MakeShared<FJsonValueString>(TEXT("asset class is not in the known low-confidence convention-loaded set")));
+			}
+
+			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetNumberField(TEXT("id"), static_cast<double>(Id));
+			O->SetStringField(TEXT("asset_path"), Path);
+			O->SetStringField(TEXT("asset_name"), Name);
+			O->SetStringField(TEXT("asset_class"), Class);
+			O->SetStringField(TEXT("module_name"), Module);
+			O->SetStringField(TEXT("confidence"), Confidence);
+			O->SetArrayField(TEXT("reasons"), Reasons);
+			Items.Add(MakeShared<FJsonValueObject>(O));
+		}
+	}
+
+	Root->SetStringField(TEXT("status"), TEXT("ok"));
+	Root->SetStringField(TEXT("summary"), FString::Printf(
+		TEXT("%d advisory project unused candidate(s) found (never high confidence; no mutation)"), Items.Num()));
+	Root->SetArrayField(TEXT("items"), Items);
+	Root->SetBoolField(TEXT("truncated"), bTruncated);
+	AddNext(Root, { TEXT("project.find_references"), TEXT("project.review_context"), TEXT("project.impact_radius") });
 	return Root;
 }
 

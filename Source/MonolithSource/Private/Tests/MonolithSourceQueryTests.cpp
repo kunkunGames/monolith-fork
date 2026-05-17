@@ -47,7 +47,7 @@ namespace
 		FMonolithSourceDatabase Db;
 		FString Path;
 		int64 FileId = 0;
-		int64 Sa = 0, Sb = 0, Sc = 0, Sd = 0;
+		int64 Sa = 0, Sb = 0, Sc = 0, Sd = 0, Se = 0;
 
 		bool Build()
 		{
@@ -55,11 +55,12 @@ namespace
 			if (!Db.OpenForWriting(Path)) return false;
 			if (!Db.CreateTablesIfNeeded()) return false;
 			const int64 Mod = Db.InsertModule(TEXT("M"), TEXT("/tmp/M"), TEXT("Runtime"));
-			FileId = Db.InsertFile(TEXT("/tmp/M/M.cpp"), Mod, TEXT("cpp"), 100, 0.0);
+			FileId = Db.InsertFile(TEXT("/tmp/M/M.cpp"), Mod, TEXT("cpp"), 200, 0.0);
 			Sa = Db.InsertSymbol(TEXT("Alpha"), TEXT("M::Alpha"), TEXT("function"), FileId, 1, 5, 0, TEXT("public"), TEXT("void Alpha()"), TEXT(""), false);
 			Sb = Db.InsertSymbol(TEXT("Beta"), TEXT("M::Beta"), TEXT("function"), FileId, 6, 10, 0, TEXT("public"), TEXT("void Beta()"), TEXT(""), true);
 			Sc = Db.InsertSymbol(TEXT("Gamma"), TEXT("M::Gamma"), TEXT("class"), FileId, 11, 20, 0, TEXT("public"), TEXT(""), TEXT(""), false);
 			Sd = Db.InsertSymbol(TEXT("ServerSaveGame"), TEXT("M::ServerSaveGame"), TEXT("function"), FileId, 21, 160, 0, TEXT("public"), TEXT("UFUNCTION(Server) void ServerSaveGame()"), TEXT(""), false);
+			Se = Db.InsertSymbol(TEXT("UnusedUtility"), TEXT("M::UnusedUtility"), TEXT("function"), FileId, 161, 170, 0, TEXT("public"), TEXT("void UnusedUtility()"), TEXT(""), false);
 			// Beta -> Gamma -> Alpha -> Beta  (reference cycle), plus inheritance
 			Db.InsertReference(Sb, Sc, TEXT("call"), FileId, 7);
 			Db.InsertReference(Sc, Sa, TEXT("type"), FileId, 12);
@@ -67,7 +68,7 @@ namespace
 			Db.InsertInheritance(Sc, Sa);
 			Db.SetMeta(TEXT("schema_version"), TEXT("1"));
 			TSharedPtr<FJsonObject> Crg = Db.RepairCrgCache(true);
-			return Sa > 0 && Sb > 0 && Sc > 0 && Sd > 0
+			return Sa > 0 && Sb > 0 && Sc > 0 && Sd > 0 && Se > 0
 				&& Crg.IsValid() && Crg->GetStringField(TEXT("status")) == TEXT("ok");
 		}
 		~FTempSourceDb()
@@ -170,9 +171,9 @@ bool FSourceRepairCrgCacheTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("execute ok"), Exec->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	TSharedPtr<FJsonObject> After = Exec->GetObjectField(TEXT("after"));
 	TestTrue(TEXT("after counts present"), After.IsValid());
-	TestEqual(TEXT("one CRG node per symbol"), After->GetIntegerField(TEXT("crg_nodes")), 4);
+	TestEqual(TEXT("one CRG node per symbol"), After->GetIntegerField(TEXT("crg_nodes")), 5);
 	TestEqual(TEXT("reference + inheritance edges"), After->GetIntegerField(TEXT("crg_edges")), 4);
-	TestEqual(TEXT("one metric per CRG node"), After->GetIntegerField(TEXT("crg_node_metrics")), 4);
+	TestEqual(TEXT("one metric per CRG node"), After->GetIntegerField(TEXT("crg_node_metrics")), 5);
 	return true;
 }
 
@@ -239,6 +240,29 @@ bool FSourceReviewHotspotsLargeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("signals include lines"), Signals->HasField(TEXT("lines")));
 	const TArray<TSharedPtr<FJsonValue>>* Questions = nullptr;
 	TestTrue(TEXT("questions present"), R->TryGetArrayField(TEXT("questions"), Questions) && Questions && Questions->Num() >= 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceFindUnusedAdvisoryTest, "Monolith.IndexGuard.Source.FindUnusedAdvisory", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceFindUnusedAdvisoryTest::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+	TSharedPtr<FJsonObject> R = T.Db.FindUnused(TEXT("function"), 5, TEXT("medium"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+	TestTrue(TEXT("items present"), R->TryGetArrayField(TEXT("items"), Items) && Items && Items->Num() == 1);
+	TSharedPtr<FJsonObject> First = (*Items)[0]->AsObject();
+	TestTrue(TEXT("first candidate object"), First.IsValid());
+	TestEqual(TEXT("unused candidate is non-reflected function"), First->GetStringField(TEXT("name")), FString(TEXT("UnusedUtility")));
+	TestEqual(TEXT("unused candidate is medium confidence"), First->GetStringField(TEXT("confidence")), FString(TEXT("medium")));
+	const TArray<TSharedPtr<FJsonValue>>* Reasons = nullptr;
+	TestTrue(TEXT("reasons present"), First->TryGetArrayField(TEXT("reasons"), Reasons) && Reasons && Reasons->Num() >= 3);
+
+	TSharedPtr<FJsonObject> High = T.Db.FindUnused(TEXT("function"), 5, TEXT("high"));
+	const TArray<TSharedPtr<FJsonValue>>* HighItems = nullptr;
+	TestTrue(TEXT("high-confidence filter returns array"), High->TryGetArrayField(TEXT("items"), HighItems) && HighItems != nullptr);
+	TestEqual(TEXT("find_unused never reports high confidence"), HighItems->Num(), 0);
 	return true;
 }
 

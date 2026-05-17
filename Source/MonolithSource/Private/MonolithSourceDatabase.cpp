@@ -167,6 +167,13 @@ static TSharedPtr<FJsonObject> CacheMeta(const FString& Status, const FString& C
 	return Cache;
 }
 
+static int32 ConfidenceRank(const FString& Confidence)
+{
+	if (Confidence == TEXT("high")) return 2;
+	if (Confidence == TEXT("medium")) return 1;
+	return 0;
+}
+
 static const TCHAR* GCrgProjectionDdl =
 	TEXT("CREATE TABLE IF NOT EXISTS crg_nodes (")
 	TEXT("id INTEGER PRIMARY KEY AUTOINCREMENT,")
@@ -1672,6 +1679,164 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::GetCachedRiskForSymbol(int64 Sy
 	O->SetObjectField(TEXT("raw_counts"), RawCounts);
 	O->SetObjectField(TEXT("cache"), CacheMeta(TEXT("hit"), CacheVersion, ScoringVersion));
 	return O;
+}
+
+TSharedPtr<FJsonObject> FMonolithSourceDatabase::FindUnused(
+	const FString& Kind,
+	int32 Limit,
+	const FString& MinConfidence)
+{
+	FScopeLock Lock(&DbLock);
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	FString NormalizedKind = Kind.TrimStartAndEnd().ToLower();
+	if (NormalizedKind != TEXT("function") && NormalizedKind != TEXT("class") && NormalizedKind != TEXT("struct"))
+	{
+		NormalizedKind = TEXT("all");
+	}
+	FString MinConf = MinConfidence.IsEmpty() ? TEXT("low") : MinConfidence.ToLower();
+	if (MinConf != TEXT("low") && MinConf != TEXT("medium") && MinConf != TEXT("high"))
+	{
+		MinConf = TEXT("low");
+	}
+	const int32 MinRank = ConfidenceRank(MinConf);
+	const int32 Cap = FMath::Clamp(Limit <= 0 ? 100 : Limit, 1, 1000);
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("kind"), NormalizedKind);
+	Input->SetStringField(TEXT("min_confidence"), MinConf);
+	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("limit"), Cap);
+	Root->SetObjectField(TEXT("limits"), Limits);
+
+	if (!Database || !Database->IsValid())
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("EngineSource DB is not open"));
+		Root->SetArrayField(TEXT("items"), TArray<TSharedPtr<FJsonValue>>());
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.trigger_reindex"), TEXT("source.health") });
+		return Root;
+	}
+
+	if (MinRank >= ConfidenceRank(TEXT("high")))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("ok"));
+		Root->SetStringField(TEXT("summary"), TEXT("0 advisory source unused candidate(s) found (find_unused never reports high confidence)"));
+		Root->SetArrayField(TEXT("items"), TArray<TSharedPtr<FJsonValue>>());
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.find_callers"), TEXT("source.review_context"), TEXT("source.impact_radius") });
+		return Root;
+	}
+
+	const bool bFilterKind = NormalizedKind != TEXT("all");
+	const FString KindClause = bFilterKind
+		? TEXT("AND s.kind = ? ")
+		: TEXT("AND s.kind IN ('function','class','struct') ");
+	const FString ConfidenceClause = MinRank >= ConfidenceRank(TEXT("medium"))
+		? TEXT("AND nc.name_count = 1 ")
+		: TEXT("");
+	const FString Sql = FString::Printf(TEXT(
+		"WITH name_counts AS ("
+		"  SELECT name, COUNT(*) AS name_count FROM symbols GROUP BY name"
+		") "
+		"SELECT s.id,s.name,s.qualified_name,s.kind,s.file_id,COALESCE(f.path,''),"
+		"       s.line_start,s.line_end,COALESCE(s.signature,''),nc.name_count "
+		"FROM symbols s "
+		"LEFT JOIN files f ON f.id = s.file_id "
+		"JOIN name_counts nc ON nc.name = s.name "
+		"WHERE s.is_ue_macro = 0 "
+		"%s"
+		"%s"
+		"AND NOT EXISTS (SELECT 1 FROM \"references\" r WHERE r.to_symbol_id = s.id) "
+		"AND NOT EXISTS (SELECT 1 FROM inheritance i WHERE i.parent_id = s.id) "
+		"AND s.name NOT LIKE '~%%' "
+		"AND s.name NOT IN ('main','WinMain','DllMain','StaticClass','StaticRegisterNatives','GetPrivateStaticClass') "
+		"AND s.name NOT LIKE 'Execute_%%' "
+		"AND s.name NOT LIKE 'exec%%' "
+		"AND s.name NOT LIKE '%%AutomationTest%%' "
+		"AND s.name NOT LIKE '%%Spec' "
+		"AND s.qualified_name NOT LIKE '%%AutomationTest%%' "
+		"AND COALESCE(s.signature,'') NOT LIKE '%%UFUNCTION%%' "
+		"AND COALESCE(s.signature,'') NOT LIKE '%%UPROPERTY%%' "
+		"ORDER BY s.id LIMIT ?;"), *KindClause, *ConfidenceClause);
+
+	FSQLitePreparedStatement S;
+	TArray<TSharedPtr<FJsonValue>> Items;
+	bool bTruncated = false;
+	if (S.Create(*Database, *Sql))
+	{
+		int32 BindIndex = 1;
+		if (bFilterKind)
+		{
+			S.SetBindingValueByIndex(BindIndex++, NormalizedKind);
+		}
+		S.SetBindingValueByIndex(BindIndex, static_cast<int64>(Cap + 1));
+
+		while (S.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			if (Items.Num() >= Cap)
+			{
+				bTruncated = true;
+				break;
+			}
+
+			int64 Id = 0, FileId = 0;
+			FString Name, QualifiedName, SymKind, File, Signature;
+			int32 LineStart = 0, LineEnd = 0, NameCount = 0;
+			S.GetColumnValueByIndex(0, Id);
+			S.GetColumnValueByIndex(1, Name);
+			S.GetColumnValueByIndex(2, QualifiedName);
+			S.GetColumnValueByIndex(3, SymKind);
+			S.GetColumnValueByIndex(4, FileId);
+			S.GetColumnValueByIndex(5, File);
+			S.GetColumnValueByIndex(6, LineStart);
+			S.GetColumnValueByIndex(7, LineEnd);
+			S.GetColumnValueByIndex(8, Signature);
+			S.GetColumnValueByIndex(9, NameCount);
+
+			const FString Confidence = NameCount == 1 ? TEXT("medium") : TEXT("low");
+			if (ConfidenceRank(Confidence) < MinRank)
+			{
+				continue;
+			}
+
+			TArray<TSharedPtr<FJsonValue>> Reasons;
+			Reasons.Add(MakeShared<FJsonValueString>(TEXT("no indexed inbound references")));
+			Reasons.Add(MakeShared<FJsonValueString>(TEXT("not an inheritance parent")));
+			Reasons.Add(MakeShared<FJsonValueString>(TEXT("UE macro, reflection, automation, and entry-point markers excluded")));
+			if (Confidence == TEXT("medium"))
+			{
+				Reasons.Add(MakeShared<FJsonValueString>(TEXT("unique symbol name in index")));
+			}
+			else
+			{
+				Reasons.Add(MakeShared<FJsonValueString>(TEXT("overloaded symbol name reduces confidence")));
+			}
+
+			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetNumberField(TEXT("id"), static_cast<double>(Id));
+			O->SetStringField(TEXT("name"), Name);
+			O->SetStringField(TEXT("qualified_name"), QualifiedName);
+			O->SetStringField(TEXT("kind"), SymKind);
+			O->SetNumberField(TEXT("file_id"), static_cast<double>(FileId));
+			O->SetStringField(TEXT("file"), File);
+			O->SetNumberField(TEXT("line_start"), LineStart);
+			O->SetNumberField(TEXT("line_end"), LineEnd);
+			O->SetStringField(TEXT("signature"), Signature);
+			O->SetStringField(TEXT("confidence"), Confidence);
+			O->SetArrayField(TEXT("reasons"), Reasons);
+			Items.Add(MakeShared<FJsonValueObject>(O));
+		}
+	}
+
+	Root->SetStringField(TEXT("status"), TEXT("ok"));
+	Root->SetStringField(TEXT("summary"), FString::Printf(
+		TEXT("%d advisory source unused candidate(s) found (never high confidence; no mutation)"), Items.Num()));
+	Root->SetArrayField(TEXT("items"), Items);
+	Root->SetBoolField(TEXT("truncated"), bTruncated);
+	AddNextActions(Root, { TEXT("source.find_callers"), TEXT("source.review_context"), TEXT("source.impact_radius") });
+	return Root;
 }
 
 TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(

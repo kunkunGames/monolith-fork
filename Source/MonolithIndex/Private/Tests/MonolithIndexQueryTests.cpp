@@ -253,6 +253,29 @@ bool FProjectReviewHotspotsLargeTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectFindUnusedAdvisoryTest, "Monolith.IndexGuard.Project.FindUnusedAdvisory", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectFindUnusedAdvisoryTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::FindUnused(T.Db, TEXT("Blueprint"), 5, TEXT("medium"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+	TestTrue(TEXT("items present"), R->TryGetArrayField(TEXT("items"), Items) && Items && Items->Num() == 1);
+	TSharedPtr<FJsonObject> First = (*Items)[0]->AsObject();
+	TestTrue(TEXT("first candidate object"), First.IsValid());
+	TestEqual(TEXT("unused candidate is unreferenced Blueprint"), First->GetStringField(TEXT("asset_path")), FString(TEXT("/Game/Systems/SaveSession")));
+	TestEqual(TEXT("unused candidate is medium confidence"), First->GetStringField(TEXT("confidence")), FString(TEXT("medium")));
+	const TArray<TSharedPtr<FJsonValue>>* Reasons = nullptr;
+	TestTrue(TEXT("reasons present"), First->TryGetArrayField(TEXT("reasons"), Reasons) && Reasons && Reasons->Num() >= 2);
+
+	TSharedPtr<FJsonObject> High = FMonolithIndexReview::FindUnused(T.Db, TEXT("Blueprint"), 5, TEXT("high"));
+	const TArray<TSharedPtr<FJsonValue>>* HighItems = nullptr;
+	TestTrue(TEXT("high-confidence filter returns array"), High->TryGetArrayField(TEXT("items"), HighItems) && HighItems != nullptr);
+	TestEqual(TEXT("find_unused never reports high confidence"), HighItems->Num(), 0);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectReviewContextMinimalTest, "Monolith.IndexGuard.Project.ReviewContextMinimal", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectReviewContextMinimalTest::RunTest(const FString& Parameters)
 {
