@@ -7,9 +7,16 @@
 FMonolithActionResult FProjectSearchGameplayTagsAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Query;
-	if (!Params->TryGetStringField(TEXT("query"), Query) || Query.IsEmpty())
+	if (Params->HasField(TEXT("query")))
 	{
-		return FMonolithActionResult::Error(TEXT("'query' parameter is required"), -32602);
+		if (!Params->TryGetStringField(TEXT("query"), Query))
+		{
+			return FMonolithActionResult::Error(TEXT("'query' parameter must be a string"), -32602);
+		}
+	}
+	if (Query.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("'query' parameter is required and cannot be empty"), -32602);
 	}
 
 	int32 Limit = 100;
