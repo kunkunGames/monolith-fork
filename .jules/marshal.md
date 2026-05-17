@@ -76,3 +76,9 @@
 **Learning:** Passing static CI is not enough to make a scheduled PR worth merging; a PR must also be non-overlapping, current after rebase, and clearly more valuable than a no-op.
 **Prevention:** During duplicate checks, treat same intended files, same WorkFingerprint, stale action-count baselines, and micro-PRs against shared coordination docs as reasons to stop without PR unless the change is uniquely valuable.
 **Avoid:** Creating a PR just because a tiny edit is available, especially in `AGENTS.md`, `.jules/*`, `.gitignore`, release docs, or action-count docs where multiple agents often race.
+
+## 2026-05-16 - Establish file boundary map for agent coordination
+**Coordination issue:** Agents from different domains (e.g., Code vs. Docs vs. Infrastructure) overlapping and modifying files outside their primary responsibility, leading to mixed-concern PRs and collisions.
+**Learning:** High-level 'single responsibility' rules were not sufficient without concrete mappings of which agent types own which files/directories.
+**Prevention:** Created `.jules/agent-coordination.md` to explicitly map agent categories to their primary target directories and established strict domain boundaries.
+**Avoid:** Agents creating PRs that mix codebase changes with broad coordination doc changes (`AGENTS.md`) or documentation updates, ensuring single responsibility at the directory level.
