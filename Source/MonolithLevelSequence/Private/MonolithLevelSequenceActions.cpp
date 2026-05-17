@@ -1040,11 +1040,16 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectorVariables(const
 	// Probe the director exists so we can distinguish "no Director / wrong path"
 	// from "Director with no variables".
 	bool bDirectorKnown = false;
+	int64 VariableCount = 0;
 	{
 		FSQLitePreparedStatement Probe;
-		Probe.Create(*RawDB, TEXT("SELECT 1 FROM level_sequence_directors WHERE ls_path = ?"));
+		Probe.Create(*RawDB, TEXT("SELECT variable_count FROM level_sequence_directors WHERE ls_path = ?"));
 		Probe.SetBindingValueByIndex(1, AssetPath);
-		bDirectorKnown = (Probe.Step() == ESQLitePreparedStatementStepResult::Row);
+		if (Probe.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			bDirectorKnown = true;
+			Probe.GetColumnValueByIndex(0, VariableCount);
+		}
 		Probe.Destroy();
 	}
 	if (!bDirectorKnown)
@@ -1068,6 +1073,10 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectorVariables(const
 	Stmt.SetBindingValueByIndex(1, AssetPath);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	if (VariableCount > 0)
+	{
+		Rows.Reserve(static_cast<int32>(VariableCount));
+	}
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FString Name, Type;
