@@ -10,18 +10,18 @@
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, SQLiteCore, EditorSubsystem, UnrealEd, Json, JsonUtilities, Slate, SlateCore
 
-**Note:** Module structure was flattened — the vestigial outer stub has been removed. MonolithSource registers 27 actions. The engine source indexer is a native C++ implementation (`UMonolithSourceSubsystem` builds `EngineSource.db` in-process). The legacy Python tree-sitter indexer (`Scripts/source_indexer/`) is no longer used and is not a schema authority — `MonolithSourceSchema.h` is the sole source-of-truth.
+**Note:** Module structure was flattened — the vestigial outer stub has been removed. MonolithSource registers 28 actions. The engine source indexer is a native C++ implementation (`UMonolithSourceSubsystem` builds `EngineSource.db` in-process). The legacy Python tree-sitter indexer (`Scripts/source_indexer/`) is no longer used and is not a schema authority — `MonolithSourceSchema.h` is the sole source-of-truth.
 
 ### Classes
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithSourceModule` | Registers 27 actions total: 23 `source` actions and 4 `context` actions |
+| `FMonolithSourceModule` | Registers 28 actions total: 23 `source` actions and 5 `context` actions |
 | `UMonolithSourceSubsystem` | UEditorSubsystem. Owns engine source DB. Runs native C++ source indexer. Exposes `TriggerReindex()` (full engine re-index) and `TriggerProjectReindex()` (project C++ only, incremental). **F17 (2026-04-26):** Auto-binds `FCoreUObjectDelegates::ReloadCompleteDelegate` at `Initialize` to kick incremental project reindex on Live Coding / hot-reload completion (5s cooldown + `bIsIndexing` re-entrancy guard + bootstrap-DB-missing skip). Unbinds at `Deinitialize`. |
 | `FMonolithSourceDatabase` | Read/write SQLite wrapper (`Open`, `OpenForWriting`, schema reset, transactions, inserts). Thread-safe via FCriticalSection. FTS queries with prefix matching. Owns read/write `health`, `repair_fts`, `repair_crg_cache`, cached risk reads, `snapshot`, `diff_snapshots`, and `detect_changes` / `pre_merge_check` / `review_hotspots` / `find_unused` SQL or aggregation that needs the DB-owned surface |
 | `FMonolithSourceActions` | 23 `source` handlers. Helpers: IsForwardDeclaration (regex), ExtractMembers (smart class outline) |
 | `FMonolithSourceReview` | CRG-inspired navigation/review over the existing `"references"` + `inheritance` graph: bounded BFS impact radius, cached/query-time risk scoring, review-hotspot forwarding, and review-context packaging. Uses only the public DB query surface. `health`/`repair_fts`/`repair_crg_cache`/`detect_changes`/`pre_merge_check`/`snapshot`/`diff_snapshots`/`review_hotspots`/`find_unused` live on `FMonolithSourceDatabase` |
-| `FMonolithSourceContextActions` | 4 `context` handlers for index readiness, indexing dispatch, context item search, and attachment materialization |
+| `FMonolithSourceContextActions` | 5 `context` handlers for index readiness, indexing dispatch, context item search, attachment materialization, and read-only asset<->symbol bridge lookup |
 | ~~`UMonolithQueryCommandlet`~~ | **Removed.** Replaced by standalone `monolith_query.exe` (see Section 5.1). The exe has no UE runtime dependency and starts instantly |
 
 ### Auto-Reindex on Hot-Reload (F17)
@@ -34,7 +34,7 @@
 
 After F17, agents do not need to invoke any source-reindex action manually in the common dev loop — just run UBT or Live Coding and `source_query` reflects the new symbols within ~1 second.
 
-### Actions (27 — namespaces: "source", "context")
+### Actions (28 — namespaces: "source", "context")
 
 | Action | Params | Description |
 |--------|--------|-------------|
@@ -53,6 +53,7 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 | `start_indexing` | `scope`, `full` | Start local project asset and/or source indexing for context search |
 | `search_items` | `query`, `limit` | Search local indexed assets and source entries for mention-style prompt context |
 | `build_attachment` | `item_id`, `context_lines` | Materialize a context.search_items result into a bounded prompt attachment |
+| `bridge_asset_symbols` | `asset_path` or `symbol`, `limit` (20), `detail_level` (minimal) | RX-6 read-only bridge between ProjectIndex assets and EngineSource symbols. Returns heuristic `links[]` with `confidence`, `reasons[]`, `asset`, `symbol`, `warnings[]`, and `next_actions` |
 | `impact_radius` | `symbol` (required), `edge_kinds` (call\|type\|inheritance), `direction` (both), `max_depth` (2), `max_results` (200) | Bounded BFS over quoted `"references"` + `inheritance` (cycle-safe, `truncated`). `include` excluded |
 | `health` | `include_counts` (true) | Read-only diagnostics: v1 schema, `symbols_ai/ad` triggers, `symbols_fts` parity, orphan refs, CRG projection table/index/parity checks. `source_fts` reported as info |
 | `repair_fts` | `target` (all\|symbols\|source), `execute` (false) | Rebuilds `symbols_fts` (external-content). `target=source` always degrades to reindex guidance (plain fts5). Refused while `IsIndexing()` |
@@ -112,6 +113,7 @@ Invariants honored by the implementation:
 - `source.review_hotspots` is read-only global triage over cached/native fan, risk, and LOC signals. It exposes `input`, `limits`, `hotspots[]`, optional `questions[]`, `truncated`, and `next_actions`, and intentionally avoids community/betweenness semantics.
 - `source.find_unused` is read-only advisory dead-symbol discovery over `symbols`, quoted `"references"`, and `inheritance`. It exposes `input`, `limits`, capped `items[]`, `confidence`, `reasons[]`, `truncated`, and `next_actions`; it must be recall-first (`min_confidence=low`) by default because UE reflection, delegates, Blueprint references, and soft-path references are outside the graph.
 - `source.review_context` is a dedicated CRG-style review package distinct from single-item `context.build_attachment`; it exposes `input`, `limits`, `risk`, `top_risks[]`, `impact`, compact `context[]`, `truncated`, and `next_actions`.
+- `context.bridge_asset_symbols` is the RX-6 cross-DB bridge. It remains read-only and editor-only in this phase: it never writes ProjectIndex, EngineSource, CRG cache, or snapshots; it never shells out to P4/git; and it must degrade with `warnings[]` when either index is unavailable or currently indexing. The bridge is heuristic rather than authoritative: asset-seeded lookups derive candidate native class names from the package path, asset name, asset class, and common UE prefixes/suffixes, then search EngineSource symbols; symbol-seeded lookups search source symbols first and then ProjectIndex assets by exact/normalized names. Every returned item must include `confidence` (`high|medium|low`) plus concrete `reasons[]` so reviewers can tell whether a match came from exact name parity, normalized prefix stripping, asset class hints, or lexical fallback.
 - Test precedent: extend `Private/Tests/MonolithSourceQueryTests.cpp` (`Monolith.IndexGuard.Source.*`, temp-DB fixture) — do not introduce a new directory or `WITH_DEV_AUTOMATION_TESTS` guard.
 
 ---
