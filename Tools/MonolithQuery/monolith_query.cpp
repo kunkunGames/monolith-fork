@@ -1608,7 +1608,6 @@ static void bridge_add_link(std::vector<BridgeLinkCandidate>& links,
     std::string symbol_name = json_string_field(symbol, "qualified_name",
         json_string_field(symbol, "name", ""));
     std::string key = lower_copy(direction + "|" + asset_path + "|" + symbol_name);
-    if (!seen.insert(key).second) return;
 
     json link = {
         {"direction", direction},
@@ -1618,6 +1617,15 @@ static void bridge_add_link(std::vector<BridgeLinkCandidate>& links,
         {"asset", asset},
         {"symbol", symbol},
     };
+    if (!seen.insert(key).second) {
+        auto existing = std::find_if(links.begin(), links.end(),
+            [&](const BridgeLinkCandidate& candidate) { return candidate.key == key; });
+        if (existing != links.end() && score > existing->score) {
+            existing->object = link;
+            existing->score = score;
+        }
+        return;
+    }
     links.push_back({link, score, key});
 }
 
