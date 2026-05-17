@@ -1853,6 +1853,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 			Metrics->SetNumberField(TEXT("risk_score"), FMath::RoundToDouble(Risk * 1000.0) / 1000.0);
 			Metrics->SetStringField(TEXT("risk_tier"), Tier);
 			Metrics->SetNumberField(TEXT("lines"), Lines);
+			O->SetObjectField(TEXT("signals"), Metrics);
 			O->SetObjectField(TEXT("metrics"), Metrics);
 			Hotspots.Add(MakeShared<FJsonValueObject>(O));
 

@@ -244,6 +244,10 @@ bool FProjectReviewHotspotsLargeTest::RunTest(const FString& Parameters)
 	TSharedPtr<FJsonObject> First = (*Hotspots)[0]->AsObject();
 	TestTrue(TEXT("first hotspot object"), First.IsValid());
 	TestEqual(TEXT("large hotspot picks SaveSession"), First->GetStringField(TEXT("asset_path")), FString(TEXT("/Game/Systems/SaveSession")));
+	TestTrue(TEXT("signals field present"), First->HasField(TEXT("signals")));
+	TSharedPtr<FJsonObject> Signals = First->GetObjectField(TEXT("signals"));
+	TestTrue(TEXT("signals object valid"), Signals.IsValid());
+	TestTrue(TEXT("signals include size"), Signals->HasField(TEXT("size_signal")));
 	const TArray<TSharedPtr<FJsonValue>>* Questions = nullptr;
 	TestTrue(TEXT("questions present"), R->TryGetArrayField(TEXT("questions"), Questions) && Questions && Questions->Num() >= 1);
 	return true;

@@ -1344,6 +1344,14 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                 if (out_signal > best) { best = out_signal; primary = "fan_out"; }
                 if (large_signal > best) primary = "large";
             }
+            json signals = {
+                {"fan_in", fan_in},
+                {"fan_out", fan_out},
+                {"descendants", r.get_int("descendants")},
+                {"risk_score", std::round(risk * 1000.0) / 1000.0},
+                {"risk_tier", r.get("risk_tier", tier_for(risk))},
+                {"lines", lines},
+            };
             hotspots.push_back({
                 {"primary_kind", primary},
                 {"id", r.get_int64("id")},
@@ -1353,14 +1361,8 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                 {"file", short_path(r.get("file"))},
                 {"line_start", r.get_int("line_start")},
                 {"line_end", r.get_int("line_end")},
-                {"metrics", {
-                    {"fan_in", fan_in},
-                    {"fan_out", fan_out},
-                    {"descendants", r.get_int("descendants")},
-                    {"risk_score", std::round(risk * 1000.0) / 1000.0},
-                    {"risk_tier", r.get("risk_tier", tier_for(risk))},
-                    {"lines", lines},
-                }},
+                {"signals", signals},
+                {"metrics", signals},
             });
             if (include_questions && questions.size() < 5) {
                 questions.push_back({
@@ -2368,6 +2370,18 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                 if (out_signal > best) { best = out_signal; primary = "fan_out"; }
                 if (large_signal > best) primary = "large";
             }
+            json signals = {
+                {"fan_in", fan_in},
+                {"fan_out", fan_out},
+                {"hard_in", r.get_int("hard_in")},
+                {"risk_score", std::round(risk * 1000.0) / 1000.0},
+                {"risk_tier", r.get("risk_tier", tier_for(risk))},
+                {"nodes", r.get_int("node_count")},
+                {"variables", r.get_int("variable_count")},
+                {"parameters", r.get_int("parameter_count")},
+                {"tag_references", r.get_int("tag_refs")},
+                {"size_signal", size_signal},
+            };
             hotspots.push_back({
                 {"primary_kind", primary},
                 {"id", r.get_int64("id")},
@@ -2375,18 +2389,8 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                 {"asset_name", r.get("asset_name")},
                 {"asset_class", r.get("asset_class")},
                 {"module_name", r.get("module_name")},
-                {"metrics", {
-                    {"fan_in", fan_in},
-                    {"fan_out", fan_out},
-                    {"hard_in", r.get_int("hard_in")},
-                    {"risk_score", std::round(risk * 1000.0) / 1000.0},
-                    {"risk_tier", r.get("risk_tier", tier_for(risk))},
-                    {"nodes", r.get_int("node_count")},
-                    {"variables", r.get_int("variable_count")},
-                    {"parameters", r.get_int("parameter_count")},
-                    {"tag_references", r.get_int("tag_refs")},
-                    {"size_signal", size_signal},
-                }},
+                {"signals", signals},
+                {"metrics", signals},
             });
             if (include_questions && questions.size() < 5) {
                 questions.push_back({

@@ -1339,6 +1339,7 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::ReviewHotspots(
 			Metrics->SetNumberField(TEXT("parameters"), ParamCount);
 			Metrics->SetNumberField(TEXT("tag_references"), TagRefs);
 			Metrics->SetNumberField(TEXT("size_signal"), SizeSignal);
+			O->SetObjectField(TEXT("signals"), Metrics);
 			O->SetObjectField(TEXT("metrics"), Metrics);
 			Hotspots.Add(MakeShared<FJsonValueObject>(O));
 
