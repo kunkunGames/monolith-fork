@@ -296,6 +296,22 @@ namespace
 		return Out;
 	}
 
+	FString SnapshotEdgeKeyPart(FString Value)
+	{
+		Value.ReplaceInline(TEXT("\\"), TEXT("\\\\"));
+		Value.ReplaceInline(TEXT("|"), TEXT("\\|"));
+		return Value;
+	}
+
+	FString SnapshotEdgeKey(const FString& Source, const FString& Target, const FString& Kind, const FString& Subkind)
+	{
+		return FString::Printf(TEXT("%s|%s|%s|%s"),
+			*SnapshotEdgeKeyPart(Source),
+			*SnapshotEdgeKeyPart(Target),
+			*SnapshotEdgeKeyPart(Kind),
+			*SnapshotEdgeKeyPart(Subkind));
+	}
+
 	bool ParseManifest(const FString& Json, FSnapshotManifest& Out)
 	{
 		TSharedPtr<FJsonObject> Object = ParseJsonObject(Json);
@@ -356,7 +372,7 @@ namespace
 			EdgeStmt.GetColumnValueByIndex(1, Target);
 			EdgeStmt.GetColumnValueByIndex(2, Kind);
 			EdgeStmt.GetColumnValueByIndex(3, Subkind);
-			Out.Edges.Add(FString::Printf(TEXT("%s|%s|%s|%s"), *Source, *Target, *Kind, *Subkind));
+			Out.Edges.Add(SnapshotEdgeKey(Source, Target, Kind, Subkind));
 		}
 		return true;
 	}
@@ -369,34 +385,42 @@ namespace
 			return LoadCurrentManifest(Raw, Domain, Out.Manifest);
 		}
 
-		const bool bNumeric = Ref.IsNumeric();
-		FSQLitePreparedStatement Stmt;
-		const TCHAR* Sql = bNumeric
-			? TEXT("SELECT id,label,manifest_json FROM crg_snapshots WHERE domain = ? AND id = ? LIMIT 1;")
-			: TEXT("SELECT id,label,manifest_json FROM crg_snapshots WHERE domain = ? AND label = ? LIMIT 1;");
-		if (!Stmt.Create(Raw, Sql))
+		auto LoadFromStatement = [&Out](FSQLitePreparedStatement& Stmt) -> bool
 		{
-			return false;
-		}
-		Stmt.SetBindingValueByIndex(1, FString(Domain));
-		if (bNumeric)
+			if (Stmt.Step() != ESQLitePreparedStatementStepResult::Row)
+			{
+				return false;
+			}
+			FString ManifestJson;
+			Stmt.GetColumnValueByIndex(0, Out.Id);
+			Stmt.GetColumnValueByIndex(1, Out.Label);
+			Stmt.GetColumnValueByIndex(2, ManifestJson);
+			return ParseManifest(ManifestJson, Out.Manifest);
+		};
+
+		if (Ref.IsNumeric())
 		{
-			Stmt.SetBindingValueByIndex(2, static_cast<int64>(FCString::Atoi64(*Ref)));
-		}
-		else
-		{
-			Stmt.SetBindingValueByIndex(2, Ref);
-		}
-		if (Stmt.Step() != ESQLitePreparedStatementStepResult::Row)
-		{
-			return false;
+			FSQLitePreparedStatement IdStmt;
+			if (!IdStmt.Create(Raw, TEXT("SELECT id,label,manifest_json FROM crg_snapshots WHERE domain = ? AND id = ? LIMIT 1;")))
+			{
+				return false;
+			}
+			IdStmt.SetBindingValueByIndex(1, FString(Domain));
+			IdStmt.SetBindingValueByIndex(2, static_cast<int64>(FCString::Atoi64(*Ref)));
+			if (LoadFromStatement(IdStmt))
+			{
+				return true;
+			}
 		}
 
-		FString ManifestJson;
-		Stmt.GetColumnValueByIndex(0, Out.Id);
-		Stmt.GetColumnValueByIndex(1, Out.Label);
-		Stmt.GetColumnValueByIndex(2, ManifestJson);
-		return ParseManifest(ManifestJson, Out.Manifest);
+		FSQLitePreparedStatement LabelStmt;
+		if (!LabelStmt.Create(Raw, TEXT("SELECT id,label,manifest_json FROM crg_snapshots WHERE domain = ? AND label = ? LIMIT 1;")))
+		{
+			return false;
+		}
+		LabelStmt.SetBindingValueByIndex(1, FString(Domain));
+		LabelStmt.SetBindingValueByIndex(2, Ref);
+		return LoadFromStatement(LabelStmt);
 	}
 
 	FJsonArr TakeStringSamples(const TSet<FString>& Values, int32 Limit, bool& bTruncated)
