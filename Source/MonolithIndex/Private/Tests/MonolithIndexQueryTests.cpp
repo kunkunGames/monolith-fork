@@ -40,7 +40,7 @@ namespace
 	{
 		FMonolithIndexDatabase Db;
 		FString Path;
-		int64 A = 0, B = 0, C = 0, D = 0;
+		int64 A = 0, B = 0, C = 0, D = 0, E = 0;
 
 		bool Build()
 		{
@@ -58,6 +58,7 @@ namespace
 			B = Mk(TEXT("/Game/B"), TEXT("Blueprint"));
 			C = Mk(TEXT("/Game/C"), TEXT("WidgetBlueprint"));
 			D = Mk(TEXT("/Game/D"), TEXT("Material"));
+			E = Mk(TEXT("/Game/Systems/SaveSession"), TEXT("Blueprint"));
 			auto Dep = [&](int64 S, int64 T, const TCHAR* K)
 			{
 				FIndexedDependency Dp; Dp.SourceAssetId = S; Dp.TargetAssetId = T; Dp.DependencyType = K;
@@ -68,9 +69,18 @@ namespace
 			Dep(B, C, TEXT("Hard"));
 			Dep(C, A, TEXT("Soft"));
 			Dep(B, D, TEXT("Hard"));
+			for (int32 Index = 0; Index < 120; ++Index)
+			{
+				FIndexedNode Node;
+				Node.AssetId = E;
+				Node.NodeType = TEXT("Function");
+				Node.NodeName = FString::Printf(TEXT("SaveNode%d"), Index);
+				Node.NodeClass = TEXT("K2Node_CallFunction");
+				Db.InsertNode(Node);
+			}
 			Db.WriteMeta(TEXT("schema_version"), TEXT("2"));
 			TSharedPtr<FJsonObject> Crg = FMonolithIndexReview::RepairCrgCache(Db, true);
-			return A > 0 && B > 0 && C > 0 && D > 0
+			return A > 0 && B > 0 && C > 0 && D > 0 && E > 0
 				&& Crg.IsValid() && Crg->GetStringField(TEXT("status")) == TEXT("ok");
 		}
 		~FTempIndexDb()
@@ -171,9 +181,9 @@ bool FProjectRepairCrgCacheTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("execute ok"), Exec->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	TSharedPtr<FJsonObject> After = Exec->GetObjectField(TEXT("after"));
 	TestTrue(TEXT("after counts present"), After.IsValid());
-	TestEqual(TEXT("one CRG node per asset"), After->GetIntegerField(TEXT("crg_nodes")), 4);
+	TestEqual(TEXT("one CRG node per asset"), After->GetIntegerField(TEXT("crg_nodes")), 5);
 	TestEqual(TEXT("one CRG edge per dependency"), After->GetIntegerField(TEXT("crg_edges")), 4);
-	TestEqual(TEXT("one metric per CRG node"), After->GetIntegerField(TEXT("crg_node_metrics")), 4);
+	TestEqual(TEXT("one metric per CRG node"), After->GetIntegerField(TEXT("crg_node_metrics")), 5);
 	return true;
 }
 
@@ -195,6 +205,50 @@ bool FProjectRiskScoreUsesCrgCacheTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectRiskScoreSensitivityTest, "Monolith.IndexGuard.Project.RiskScoreSensitivity", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectRiskScoreSensitivityTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::RiskScore(T.Db, TEXT("/Game/Systems/SaveSession"), 10, TEXT("low"));
+	TestEqual(TEXT("root scoring version is v3"), R->GetStringField(TEXT("scoring_version")), FString(TEXT("3")));
+	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+	TestTrue(TEXT("items present"), R->TryGetArrayField(TEXT("items"), Items) && Items && Items->Num() == 1);
+	TSharedPtr<FJsonObject> Item = (*Items)[0]->AsObject();
+	TestTrue(TEXT("item object"), Item.IsValid());
+	TSharedPtr<FJsonObject> Raw = Item->GetObjectField(TEXT("raw_counts"));
+	TestTrue(TEXT("raw counts present"), Raw.IsValid());
+	double Sensitivity = 0.0;
+	TestTrue(TEXT("sensitivity raw count present"), Raw->TryGetNumberField(TEXT("sensitivity"), Sensitivity));
+	TestTrue(TEXT("sensitivity contributes"), Sensitivity > 0.0);
+	const TArray<TSharedPtr<FJsonValue>>* Reasons = nullptr;
+	TestTrue(TEXT("reasons present"), Item->TryGetArrayField(TEXT("reasons"), Reasons) && Reasons);
+	bool bFound = false;
+	for (const TSharedPtr<FJsonValue>& Reason : *Reasons)
+	{
+		bFound = bFound || Reason->AsString().Contains(TEXT("sensitivity:"));
+	}
+	TestTrue(TEXT("sensitivity reason present"), bFound);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectReviewHotspotsLargeTest, "Monolith.IndexGuard.Project.ReviewHotspotsLarge", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectReviewHotspotsLargeTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::ReviewHotspots(T.Db, TEXT("large"), 5, 100, true);
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	const TArray<TSharedPtr<FJsonValue>>* Hotspots = nullptr;
+	TestTrue(TEXT("hotspots present"), R->TryGetArrayField(TEXT("hotspots"), Hotspots) && Hotspots && Hotspots->Num() >= 1);
+	TSharedPtr<FJsonObject> First = (*Hotspots)[0]->AsObject();
+	TestTrue(TEXT("first hotspot object"), First.IsValid());
+	TestEqual(TEXT("large hotspot picks SaveSession"), First->GetStringField(TEXT("asset_path")), FString(TEXT("/Game/Systems/SaveSession")));
+	const TArray<TSharedPtr<FJsonValue>>* Questions = nullptr;
+	TestTrue(TEXT("questions present"), R->TryGetArrayField(TEXT("questions"), Questions) && Questions && Questions->Num() >= 1);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectReviewContextMinimalTest, "Monolith.IndexGuard.Project.ReviewContextMinimal", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectReviewContextMinimalTest::RunTest(const FString& Parameters)
 {
@@ -211,4 +265,3 @@ bool FProjectReviewContextMinimalTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("minimal omits full details"), R->HasField(TEXT("details")));
 	return true;
 }
-

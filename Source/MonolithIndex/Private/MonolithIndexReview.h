@@ -57,6 +57,14 @@ public:
 		int32 Limit,
 		const FString& MinTier);
 
+	/** Rank global project review hotspots by fan-in, fan-out, risk, graph size, or all. */
+	static TSharedPtr<FJsonObject> ReviewHotspots(
+		FMonolithIndexDatabase& Db,
+		const FString& Kind,
+		int32 Limit,
+		int32 MinLines,
+		bool bIncludeQuestions);
+
 	/** Compose impact + risk + direct details + next actions. detail_level: minimal|standard. */
 	static TSharedPtr<FJsonObject> ReviewContext(
 		FMonolithIndexDatabase& Db,

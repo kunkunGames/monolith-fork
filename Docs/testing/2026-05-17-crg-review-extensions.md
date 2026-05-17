@@ -1,11 +1,11 @@
-# CRG Review Extensions — RX-1 / RX-2 Offline Verification
+# CRG Review Extensions — RX-1 / RX-2 / RX-3 / RX-7 / RX-8 Verification
 
 | | |
 |---|---|
 | Date | 2026-05-17 |
 | Branch | `feat/crg-index-navigation-p0` (PR #447) |
 | Spec | `Plugins/Monolith/CRG/spec/monolith-crg-review-extensions-spec.md` |
-| Scope | RX-2 (offline CRG cache read parity) + RX-1 (offline `detect_changes`), `Tools/MonolithQuery/monolith_query.cpp` only |
+| Scope | RX-2 (offline CRG cache read parity), RX-1 (offline `detect_changes`), RX-3 (offline `find_unused`), RX-7 (scoring v3 sensitivity), RX-8 (`review_hotspots`) |
 
 ---
 
@@ -96,3 +96,41 @@ re-verified no regression.
 - The 81,252 dangling-ref baseline is pre-existing native data (documented in
   `2026-05-16-crg-index-navigation.md` and the projection-cache spec); RX-2 health
   surfaces it accurately rather than hiding it.
+
+## 5. RX-7 / RX-8 editor + offline validation (follow-up)
+
+### Build
+
+- `Tools/MonolithQuery/build.bat`
+  - Result: PASS. `monolith_query.exe` rebuilt and copied to `Plugins/Monolith/Binaries/monolith_query.exe`.
+  - Warnings: pre-existing MSVC `C4819` codepage warnings only.
+- `UnrealBuildTool.exe GoGameEditor Win64 Development -Project="D:\P4\_codex_build\game-pr447-roi\GO.uproject" -WaitMutex -NoHotReloadFromIDE`
+  - Result: PASS, 729 actions.
+  - Notes: P4 password/prebuild warning and deprecated MassEntity Build.cs warnings did not fail the build.
+
+### Automation
+
+Command:
+
+```powershell
+& "D:\Engine\UE_5.7\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "D:\P4\_codex_build\game-pr447-roi\GO.uproject" -NullRHI -NoSound -Unattended -NoSplash -NoP4 -ExecCmds="Automation RunTests Monolith.IndexGuard" -TestExit="Automation Test Queue Empty" -ReportExportPath="D:\P4\_codex_build\game-pr447-roi\Saved\AutomationReports\pr447-roi"
+```
+
+Result: PASS. Automation report `index.json` shows 23 succeeded, 0 failed, 0 succeeded-with-warnings, total duration 9.029s.
+
+New coverage:
+
+| Test | Result |
+|---|---|
+| `Monolith.IndexGuard.Project.RiskScoreSensitivity` | PASS |
+| `Monolith.IndexGuard.Project.ReviewHotspotsLarge` | PASS |
+| `Monolith.IndexGuard.Source.RiskScoreSensitivity` | PASS |
+| `Monolith.IndexGuard.Source.ReviewHotspotsLarge` | PASS |
+
+RX-7 behavior verified: query-time scoring and CRG cache rebuild paths surface
+`raw_counts.sensitivity`, a sensitivity reason, and `scoring_version=3`.
+
+RX-8 behavior verified: source/project `review_hotspots` return capped hotspot
+lists for large/sensitive fixture entries and preserve the expected output
+contract (`input`, `limits`, `hotspots`, optional `questions`, `truncated`,
+`next_actions`).

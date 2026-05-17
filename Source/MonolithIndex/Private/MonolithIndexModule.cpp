@@ -14,13 +14,14 @@
 #include "Actions/ProjectRepairFtsAction.h"
 #include "Actions/ProjectRepairCrgCacheAction.h"
 #include "Actions/ProjectRiskScoreAction.h"
+#include "Actions/ProjectReviewHotspotsAction.h"
 #include "Actions/ProjectReviewContextAction.h"
 
 #define LOCTEXT_NAMESPACE "FMonolithIndexModule"
 
 void FMonolithIndexModule::StartupModule()
 {
-	UE_LOG(LogMonolithIndex, Verbose, TEXT("Monolith -- Index module loaded (13 actions, SQLite+FTS5)"));
+	UE_LOG(LogMonolithIndex, Verbose, TEXT("Monolith -- Index module loaded (14 actions, SQLite+FTS5)"));
 
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
@@ -86,6 +87,11 @@ void FMonolithIndexModule::StartupModule()
 		FProjectRiskScoreAction::GetDescription(),
 		FMonolithActionHandler::CreateStatic(&FProjectRiskScoreAction::Execute),
 		FProjectRiskScoreAction::GetSchema());
+
+	Registry.RegisterAction(TEXT("project"), FProjectReviewHotspotsAction::GetName(),
+		FProjectReviewHotspotsAction::GetDescription(),
+		FMonolithActionHandler::CreateStatic(&FProjectReviewHotspotsAction::Execute),
+		FProjectReviewHotspotsAction::GetSchema());
 
 	Registry.RegisterAction(TEXT("project"), FProjectReviewContextAction::GetName(),
 		FProjectReviewContextAction::GetDescription(),

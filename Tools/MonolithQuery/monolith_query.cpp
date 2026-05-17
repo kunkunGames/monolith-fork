@@ -215,6 +215,45 @@ static int tier_rank(const std::string& tier) {
     return 0;
 }
 
+static std::string lower_copy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value;
+}
+
+static bool contains_any_token(const std::string& lower_text,
+                               std::initializer_list<const char*> tokens) {
+    for (const char* token : tokens) {
+        if (lower_text.find(token) != std::string::npos)
+            return true;
+    }
+    return false;
+}
+
+static std::pair<double, std::string> sensitivity_factor(const std::string& text,
+                                                         bool source_domain) {
+    std::string lower = lower_copy(text);
+    if (source_domain && contains_any_token(lower, {"ufunction", "server", "client", "netmulticast", "onrep", "replication", "rpc", "network"}))
+        return {0.15, "sensitivity: replication/RPC or network surface"};
+    if (!source_domain && contains_any_token(lower, {"replication", "network", "rpc", "netmulticast", "onrep", "server", "client"}))
+        return {0.15, "sensitivity: replication/RPC or network surface"};
+    if (contains_any_token(lower, {"save", "serialize", "archive"}))
+        return {0.15, "sensitivity: save/serialization surface"};
+    if (contains_any_token(lower, {"auth", "login", "account", "session"}))
+        return {0.15, "sensitivity: auth/account/session surface"};
+    if (contains_any_token(lower, {"purchase", "iap", "store", "entitlement"}))
+        return {0.15, "sensitivity: purchase/store entitlement surface"};
+    if (contains_any_token(lower, {"anticheat", "anti_cheat", "cheat"}))
+        return {0.15, "sensitivity: anticheat surface"};
+    if (contains_any_token(lower, {"crypt", "encrypt", "decrypt", "sign", "hash"}))
+        return {0.15, "sensitivity: crypto/signing/hash surface"};
+    if (contains_any_token(lower, {"exec", "eval", "command"}))
+        return {0.15, "sensitivity: exec/eval/command surface"};
+    if (contains_any_token(lower, {"file", "registry", "process"}))
+        return {0.15, "sensitivity: file/registry/process surface"};
+    return {0.0, ""};
+}
+
 static int64_t count_rows(Database& db, const std::string& sql) {
     auto rows = query(db, sql);
     if (rows.empty() || rows[0].cols.empty()) return -1;
@@ -280,7 +319,7 @@ static json try_cached_risk(Database& db, const std::string& domain,
         if (p.is_object()) raw = p;
     }
     double score = r.get_double("risk_score");
-    std::string sv = r.get("scoring_version", "2");
+    std::string sv = r.get("scoring_version", "3");
     std::string cv = r.get("cache_version", "1");
     json item;
     item["score"] = std::round(score * 1000.0) / 1000.0;
@@ -344,9 +383,9 @@ static void append_crg_health_checks(Database& db, const std::string& domain,
           cache_ver.empty() ? "crg_meta.cache_version missing (run repair_crg_cache)"
                             : "crg cache_version=" + cache_ver);
     std::string scoring_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'scoring_version';");
-    check("crg:scoring_version", !scoring_ver.empty(),
+    check("crg:scoring_version", scoring_ver == "3",
           scoring_ver.empty() ? "crg_meta.scoring_version missing (run repair_crg_cache)"
-                             : "crg scoring_version=" + scoring_ver);
+                              : "crg scoring_version=" + scoring_ver + " (expected 3)");
 }
 
 // ============================================================
@@ -397,6 +436,7 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  health [--include-counts=false]\n"
                   << "  repair_fts [--target=all|symbols|source] [--execute]\n"
                   << "  risk_score <symbol> [--limit=N] [--min-tier=low|medium|high]\n"
+                  << "  review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
                   << "  review_context <symbol> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
                   << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
                   << "  find_unused [--kind=function|class|struct|all] [--limit=N] [--min-confidence=low|medium|high]\n"
@@ -410,6 +450,7 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  health [--include-counts=false]\n"
                   << "  repair_fts [--target=all|assets|nodes] [--execute]\n"
                   << "  risk_score [asset_path] [--limit=N] [--min-tier=low|medium|high]\n"
+                  << "  review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
                   << "  review_context <asset_path> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
                   << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
                   << "  find_unused [--kind=<asset_class>] [--limit=N] [--min-confidence=low|medium|high]\n";
@@ -1125,6 +1166,10 @@ public:
         factor(sym.get_int("is_ue_macro") != 0 ? 0.15 : 0.0, "UE reflection macro symbol (UCLASS/UFUNCTION/UPROPERTY family)");
         factor(caller_files.size() > 1 ? std::min<double>(caller_files.size(), 20) / 20.0 * 0.15 : 0.0,
             "module/file boundary crossing: " + std::to_string(caller_files.size()) + " distinct caller file(s)");
+        auto sensitivity = sensitivity_factor(
+            sym.get("name") + " " + sym.get("qualified_name") + " " + sym.get("kind") + " " + sym.get("signature"),
+            true);
+        factor(sensitivity.first, sensitivity.second);
         if (callers.empty() && sym.get("kind").find("function") != std::string::npos)
             reasons.push_back("missing direct callers: function has 0 indexed callers; may be reflection/delegate/Blueprint-invoked");
         double score = std::max(0.0, std::min(raw, 1.0));
@@ -1143,6 +1188,7 @@ public:
                 {"ancestors", parents.size()},
                 {"caller_files", caller_files.size()},
                 {"is_ue_macro", sym.get_int("is_ue_macro") != 0},
+                {"sensitivity", sensitivity.first},
             }},
         };
     }
@@ -1175,15 +1221,15 @@ public:
             } else {
                 scored = score_symbol(row);
                 scored["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}};
-                scored["scoring_version"] = "1";
+                scored["scoring_version"] = "3";
             }
             if (tier_rank(scored["tier"].get<std::string>()) >= min_rank) items.push_back(scored);
         }
         std::sort(items.begin(), items.end(), [](const json& a, const json& b) { return a["score"].get<double>() > b["score"].get<double>(); });
-        const char* sv = any_cache_hit ? "2" : "1";
+        const char* sv = "3";
         root["status"] = "ok";
         root["summary"] = std::to_string(items.size()) + " symbol overload(s) scored (scoring_version="
-            + std::string(sv) + (any_cache_hit ? ", CRG cache hit)" : ")");
+            + std::string(sv) + (any_cache_hit ? " cached when available, v3 query fallback; CRG cache hit)" : " cached when available, v3 query fallback)");
         root["scoring_version"] = sv;
         root["items"] = items;
         root["truncated"] = false;
@@ -1196,6 +1242,151 @@ public:
         if (symbol.empty() && !args.positional.empty()) symbol = args.positional[0];
         if (symbol.empty()) die("risk_score requires a symbol argument");
         print_json(source_risk_score_json(symbol, args.opt_int("limit", 10), args.opt("min_tier", "low")));
+    }
+
+    json source_review_hotspots_json(const std::string& kind, int limit, int min_lines, bool include_questions) {
+        std::string k = kind.empty() ? "all" : lower_copy(kind);
+        int cap = clamp_int(limit <= 0 ? 50 : limit, 1, 200);
+        int loc_floor = std::max(min_lines <= 0 ? 100 : min_lines, 0);
+        json root = {
+            {"input", {{"kind", k}, {"include_questions", include_questions}}},
+            {"limits", {{"limit", cap}, {"min_lines", loc_floor}}},
+        };
+        if (k != "fan_in" && k != "fan_out" && k != "risk" && k != "large" && k != "all") {
+            root["status"] = "error";
+            root["summary"] = "Unsupported kind for source.review_hotspots (expected fan_in|fan_out|risk|large|all)";
+            root["hotspots"] = json::array();
+            root["truncated"] = false;
+            add_next(root, {"source.review_hotspots", "source.risk_score"});
+            return root;
+        }
+
+        bool has_cache = crg_cache_present(db);
+        std::string cache_join = has_cache
+            ? "LEFT JOIN crg_nodes n ON n.domain='source' AND n.native_table='symbols' AND n.native_id=c.id "
+              "LEFT JOIN crg_node_metrics m ON m.node_id=n.id "
+            : "";
+        std::string risk_expr = has_cache ? "COALESCE(m.risk_score, c.estimated_risk)" : "c.estimated_risk";
+        std::string tier_expr = has_cache
+            ? "COALESCE(m.risk_tier, CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END)"
+            : "CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END";
+        std::string where = (k == "large")
+            ? "WHERE lines >= " + std::to_string(loc_floor) + " "
+            : "WHERE fan_in > 0 OR fan_out > 0 OR descendants > 0 OR risk_score > 0 OR lines >= " + std::to_string(loc_floor) + " ";
+        std::string order = "ORDER BY hotspot_score DESC, risk_score DESC, fan_in DESC, lines DESC ";
+        if (k == "fan_in") order = "ORDER BY fan_in DESC, risk_score DESC, lines DESC ";
+        else if (k == "fan_out") order = "ORDER BY fan_out DESC, risk_score DESC, lines DESC ";
+        else if (k == "risk") order = "ORDER BY risk_score DESC, fan_in DESC, lines DESC ";
+        else if (k == "large") order = "ORDER BY lines DESC, risk_score DESC, fan_in DESC ";
+
+        std::string sql = R"SQL(
+WITH ref_in AS (
+  SELECT to_symbol_id AS symbol_id, COUNT(*) AS fan_in, COUNT(DISTINCT r.file_id) AS caller_files
+  FROM "references" r JOIN symbols fs ON fs.id=r.from_symbol_id JOIN symbols ts ON ts.id=r.to_symbol_id GROUP BY to_symbol_id
+), ref_out AS (
+  SELECT from_symbol_id AS symbol_id, COUNT(*) AS fan_out
+  FROM "references" r JOIN symbols fs ON fs.id=r.from_symbol_id JOIN symbols ts ON ts.id=r.to_symbol_id GROUP BY from_symbol_id
+), inh_desc AS (
+  SELECT parent_id AS symbol_id, COUNT(*) AS descendants FROM inheritance i
+  JOIN symbols cs ON cs.id=i.child_id JOIN symbols ps ON ps.id=i.parent_id GROUP BY parent_id
+), base AS (
+  SELECT s.id,s.name,s.qualified_name,s.kind,COALESCE(f.path,'') AS file,s.line_start,s.line_end,
+         CASE WHEN s.line_end >= s.line_start THEN s.line_end - s.line_start + 1 ELSE 0 END AS lines,
+         COALESCE(ri.fan_in,0) AS fan_in,COALESCE(ro.fan_out,0) AS fan_out,
+         COALESCE(id.descendants,0) AS descendants,COALESCE(ri.caller_files,0) AS caller_files,
+         s.is_ue_macro AS is_ue_macro,
+         CASE WHEN lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%ufunction%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%server%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%client%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%netmulticast%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%save%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%serialize%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%auth%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%purchase%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%anticheat%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%crypt%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%exec%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%file%'
+          THEN 1 ELSE 0 END AS sensitivity
+  FROM symbols s LEFT JOIN files f ON f.id=s.file_id
+  LEFT JOIN ref_in ri ON ri.symbol_id=s.id LEFT JOIN ref_out ro ON ro.symbol_id=s.id LEFT JOIN inh_desc id ON id.symbol_id=s.id
+), counts AS (
+  SELECT *, MIN(1.0, MIN(fan_in,50)/50.0*0.35 + MIN(descendants,30)/30.0*0.25 +
+         MIN(fan_out,50)/50.0*0.10 + CASE WHEN is_ue_macro != 0 THEN 0.15 ELSE 0 END +
+         MIN(caller_files,20)/20.0*0.15 + CASE WHEN sensitivity != 0 THEN 0.15 ELSE 0 END) AS estimated_risk
+  FROM base
+), scored AS (
+  SELECT c.id,c.name,c.qualified_name,c.kind,c.file,c.line_start,c.line_end,c.lines,
+         c.fan_in,c.fan_out,c.descendants,)SQL" + risk_expr + R"SQL( AS risk_score,)SQL" + tier_expr + R"SQL( AS risk_tier
+  FROM counts c )SQL" + cache_join + R"SQL(
+)
+SELECT *, MAX(risk_score, MIN(fan_in,50)/50.0, MIN(fan_out,50)/50.0, MIN(lines,500)/500.0) AS hotspot_score
+FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
+
+        Rows rows = query(db, sql);
+        bool truncated = (int)rows.size() > cap;
+        if (truncated) rows.pop_back();
+        json hotspots = json::array();
+        json questions = json::array();
+        for (const auto& r : rows) {
+            int fan_in = r.get_int("fan_in");
+            int fan_out = r.get_int("fan_out");
+            int lines = r.get_int("lines");
+            double risk = r.get_double("risk_score");
+            std::string primary = k;
+            if (primary == "all") {
+                double best = risk;
+                primary = "risk";
+                double in_signal = std::min<double>(fan_in, 50) / 50.0;
+                double out_signal = std::min<double>(fan_out, 50) / 50.0;
+                double large_signal = std::min<double>(lines, 500) / 500.0;
+                if (in_signal > best) { best = in_signal; primary = "fan_in"; }
+                if (out_signal > best) { best = out_signal; primary = "fan_out"; }
+                if (large_signal > best) primary = "large";
+            }
+            hotspots.push_back({
+                {"primary_kind", primary},
+                {"id", r.get_int64("id")},
+                {"name", r.get("name")},
+                {"qualified_name", r.get("qualified_name")},
+                {"kind", r.get("kind")},
+                {"file", short_path(r.get("file"))},
+                {"line_start", r.get_int("line_start")},
+                {"line_end", r.get_int("line_end")},
+                {"metrics", {
+                    {"fan_in", fan_in},
+                    {"fan_out", fan_out},
+                    {"descendants", r.get_int("descendants")},
+                    {"risk_score", std::round(risk * 1000.0) / 1000.0},
+                    {"risk_tier", r.get("risk_tier", tier_for(risk))},
+                    {"lines", lines},
+                }},
+            });
+            if (include_questions && questions.size() < 5) {
+                questions.push_back({
+                    {"target", r.get("qualified_name").empty() ? r.get("name") : r.get("qualified_name")},
+                    {"reason", primary},
+                    {"question", primary == "large"
+                        ? "Can this large symbol be split or covered by focused tests before risky edits?"
+                        : "Which callers and tests cover this hotspot before changing it?"},
+                });
+            }
+        }
+        root["status"] = "ok";
+        root["summary"] = std::to_string(hotspots.size()) + " source review hotspot(s) ranked by " + k
+            + (has_cache ? " using CRG cache when available" : " using native fallback");
+        root["hotspots"] = hotspots;
+        if (include_questions) root["questions"] = questions;
+        root["truncated"] = truncated;
+        add_next(root, {"source.review_context", "source.risk_score", "source.impact_radius"});
+        return root;
+    }
+
+    void review_hotspots(const Args& args) {
+        print_json(source_review_hotspots_json(args.opt("kind", "all"),
+                                               args.opt_int("limit", 50),
+                                               args.opt_int("min_lines", 100),
+                                               args.opt_bool("include_questions", true)));
     }
 
     json source_impact_radius_json(const std::string& symbol, const std::string& edge_kinds, const std::string& direction, int max_depth, int max_results) {
@@ -1367,7 +1558,7 @@ public:
                 json cached = try_cached_risk(db, "source", "symbols", sid);
                 json item;
                 if (!cached.is_null()) { any_cache = true; item = cached; }
-                else { item = score_symbol(r); item["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}}; item["scoring_version"] = "1"; }
+                else { item = score_symbol(r); item["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}}; item["scoring_version"] = "3"; }
                 item["id"] = sid;
                 item["name"] = r.get("name");
                 item["qualified_name"] = r.get("qualified_name");
@@ -1412,7 +1603,7 @@ public:
                   [](const json& a, const json& b) { return a.value("score", 0.0) > b.value("score", 0.0); });
         json priorities = json::array();
         for (size_t i = 0; i < changed.size() && i < 10; ++i) priorities.push_back(changed[i]);
-        const char* sv = any_cache ? "2" : "1";
+        const char* sv = "3";
         root["risk_score"] = std::round(overall * 1000.0) / 1000.0;
         root["scoring_version"] = sv;
         root["truncated"] = truncated;
@@ -1978,6 +2169,9 @@ public:
         int64_t param_count = count_rows(db, "SELECT COUNT(*) FROM parameters WHERE asset_id = " + id + ";");
         int64_t tag_refs = count_rows(db, "SELECT COUNT(*) FROM tag_references WHERE asset_id = " + id + ";");
         int class_w = asset_class_weight(asset.get("asset_class"));
+        auto sensitivity = sensitivity_factor(
+            asset.get("asset_class") + " " + asset.get("package_path") + " " + asset.get("asset_name"),
+            false);
         json reasons = json::array();
         double raw = 0.0;
         auto factor = [&](double c, const std::string& why) {
@@ -1987,6 +2181,7 @@ public:
         factor(std::min<double>(hard_in, 20) / 20.0 * 0.20, "hard inbound dependencies: " + std::to_string(hard_in));
         factor(std::min<double>(out.size(), 30) / 30.0 * 0.10, "outbound dependencies: " + std::to_string(out.size()));
         factor((class_w - 1) / 4.0 * 0.20, "asset class weight: " + asset.get("asset_class") + " (w=" + std::to_string(class_w) + ")");
+        factor(sensitivity.first, sensitivity.second);
         factor(std::min<double>(node_count, 400) / 400.0 * 0.15, "graph density: " + std::to_string(node_count) + " node(s), " + std::to_string(var_count) + " var(s), " + std::to_string(param_count) + " param(s)");
         factor(std::min<double>(tag_refs, 20) / 20.0 * 0.05, "gameplay tag involvement: " + std::to_string(tag_refs) + " reference(s)");
         if (node_count == 0 && asset.get("asset_class").find("Blueprint") != std::string::npos) reasons.push_back("missing detail signal: Blueprint indexed with 0 graph nodes (stale index?)");
@@ -2008,6 +2203,7 @@ public:
                 {"parameters", param_count},
                 {"tag_references", tag_refs},
                 {"class_weight", class_w},
+                {"sensitivity", sensitivity.first},
             }},
         };
     }
@@ -2029,7 +2225,7 @@ public:
             }
             json s = score_asset(a);
             s["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}};
-            s["scoring_version"] = "1";
+            s["scoring_version"] = "3";
             return s;
         };
         if (!seed_path.empty()) {
@@ -2055,10 +2251,10 @@ public:
         json filtered = json::array();
         for (const auto& item : items) if (tier_rank(item["tier"].get<std::string>()) >= min_rank) filtered.push_back(item);
         std::sort(filtered.begin(), filtered.end(), [](const json& a, const json& b) { return a["score"].get<double>() > b["score"].get<double>(); });
-        const char* sv = any_cache_hit ? "2" : "1";
+        const char* sv = "3";
         root["status"] = "ok";
         root["summary"] = std::to_string(filtered.size()) + " asset(s) scored (scoring_version="
-            + std::string(sv) + (any_cache_hit ? ", CRG cache hit)" : ")");
+            + std::string(sv) + (any_cache_hit ? " cached when available, v3 query fallback; CRG cache hit)" : " cached when available, v3 query fallback)");
         root["scoring_version"] = sv;
         root["items"] = filtered;
         root["truncated"] = false;
@@ -2070,6 +2266,153 @@ public:
         std::string seed = args.opt("asset_path", args.opt("seed"));
         if (seed.empty() && !args.positional.empty()) seed = args.positional[0];
         print_json(project_risk_score_json(seed, args.opt_int("limit", 20), args.opt("min_tier", "low")));
+    }
+
+    json project_review_hotspots_json(const std::string& kind, int limit, int min_lines, bool include_questions) {
+        std::string k = kind.empty() ? "all" : lower_copy(kind);
+        int cap = clamp_int(limit <= 0 ? 50 : limit, 1, 200);
+        int size_floor = std::max(min_lines <= 0 ? 100 : min_lines, 0);
+        json root = {
+            {"input", {{"kind", k}, {"include_questions", include_questions}}},
+            {"limits", {{"limit", cap}, {"min_lines", size_floor}}},
+        };
+        if (k != "fan_in" && k != "fan_out" && k != "risk" && k != "large" && k != "all") {
+            root["status"] = "error";
+            root["summary"] = "Unsupported kind for project.review_hotspots (expected fan_in|fan_out|risk|large|all)";
+            root["hotspots"] = json::array();
+            root["truncated"] = false;
+            add_next(root, {"project.review_hotspots", "project.risk_score"});
+            return root;
+        }
+
+        bool has_cache = crg_cache_present(db);
+        std::string cache_join = has_cache
+            ? "LEFT JOIN crg_nodes n ON n.domain='project' AND n.native_table='assets' AND n.native_id=c.id "
+              "LEFT JOIN crg_node_metrics m ON m.node_id=n.id "
+            : "";
+        std::string risk_expr = has_cache ? "COALESCE(m.risk_score, c.estimated_risk)" : "c.estimated_risk";
+        std::string tier_expr = has_cache
+            ? "COALESCE(m.risk_tier, CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END)"
+            : "CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END";
+        std::string where = (k == "large")
+            ? "WHERE size_signal >= " + std::to_string(size_floor) + " "
+            : "WHERE fan_in > 0 OR fan_out > 0 OR hard_in > 0 OR risk_score > 0 OR size_signal >= " + std::to_string(size_floor) + " ";
+        std::string order = "ORDER BY hotspot_score DESC, risk_score DESC, fan_in DESC, size_signal DESC ";
+        if (k == "fan_in") order = "ORDER BY fan_in DESC, risk_score DESC, hard_in DESC ";
+        else if (k == "fan_out") order = "ORDER BY fan_out DESC, risk_score DESC, size_signal DESC ";
+        else if (k == "risk") order = "ORDER BY risk_score DESC, fan_in DESC, size_signal DESC ";
+        else if (k == "large") order = "ORDER BY size_signal DESC, risk_score DESC, fan_in DESC ";
+
+        std::string sql = R"SQL(
+WITH base AS (
+ SELECT a.id,a.package_path,a.asset_name,a.asset_class,COALESCE(a.module_name,'') AS module_name,
+        (SELECT COUNT(*) FROM dependencies d WHERE d.target_asset_id=a.id) AS fan_in,
+        (SELECT COUNT(*) FROM dependencies d WHERE d.source_asset_id=a.id) AS fan_out,
+        (SELECT COUNT(*) FROM dependencies d WHERE d.target_asset_id=a.id AND d.dependency_type='Hard') AS hard_in,
+        (SELECT COUNT(*) FROM nodes x WHERE x.asset_id=a.id) AS node_count,
+        (SELECT COUNT(*) FROM variables x WHERE x.asset_id=a.id) AS variable_count,
+        (SELECT COUNT(*) FROM parameters x WHERE x.asset_id=a.id) AS parameter_count,
+        (SELECT COUNT(*) FROM tag_references x WHERE x.asset_id=a.id) AS tag_refs,
+        CASE
+          WHEN a.asset_class LIKE '%World%' OR a.asset_class LIKE '%Level%' THEN 5
+          WHEN a.asset_class LIKE '%GameplayAbility%' OR a.asset_class LIKE '%AttributeSet%' OR a.asset_class LIKE '%GameplayEffect%' THEN 4
+          WHEN a.asset_class LIKE '%Blueprint%' THEN 3
+          WHEN a.asset_class LIKE '%NiagaraSystem%' OR a.asset_class LIKE '%Material%' THEN 2
+          WHEN a.asset_class LIKE '%DataTable%' OR a.asset_class LIKE '%DataAsset%' THEN 2
+          ELSE 1 END AS class_weight,
+        CASE WHEN lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%network%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%replication%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%save%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%serialize%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%auth%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%purchase%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%anticheat%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%crypt%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%exec%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%file%'
+          THEN 1 ELSE 0 END AS sensitivity
+ FROM assets a
+), counts AS (
+ SELECT *, (node_count + variable_count + parameter_count + tag_refs) AS size_signal,
+        MIN(1.0, MIN(fan_in,30)/30.0*0.30 + MIN(hard_in,20)/20.0*0.20 +
+        MIN(fan_out,30)/30.0*0.10 + (class_weight-1)/4.0*0.20 +
+        CASE WHEN sensitivity != 0 THEN 0.15 ELSE 0 END +
+        MIN(node_count,400)/400.0*0.15 + MIN(tag_refs,20)/20.0*0.05) AS estimated_risk
+ FROM base
+), scored AS (
+ SELECT c.id,c.package_path,c.asset_name,c.asset_class,c.module_name,c.fan_in,c.fan_out,c.hard_in,
+        c.node_count,c.variable_count,c.parameter_count,c.tag_refs,c.size_signal,)SQL" + risk_expr + R"SQL( AS risk_score,)SQL" + tier_expr + R"SQL( AS risk_tier
+ FROM counts c )SQL" + cache_join + R"SQL(
+)
+SELECT *, MAX(risk_score, MIN(fan_in,30)/30.0, MIN(fan_out,30)/30.0, MIN(size_signal,500)/500.0) AS hotspot_score
+FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
+
+        Rows rows = query(db, sql);
+        bool truncated = (int)rows.size() > cap;
+        if (truncated) rows.pop_back();
+        json hotspots = json::array();
+        json questions = json::array();
+        for (const auto& r : rows) {
+            int fan_in = r.get_int("fan_in");
+            int fan_out = r.get_int("fan_out");
+            int size_signal = r.get_int("size_signal");
+            double risk = r.get_double("risk_score");
+            std::string primary = k;
+            if (primary == "all") {
+                double best = risk;
+                primary = "risk";
+                double in_signal = std::min<double>(fan_in, 30) / 30.0;
+                double out_signal = std::min<double>(fan_out, 30) / 30.0;
+                double large_signal = std::min<double>(size_signal, 500) / 500.0;
+                if (in_signal > best) { best = in_signal; primary = "fan_in"; }
+                if (out_signal > best) { best = out_signal; primary = "fan_out"; }
+                if (large_signal > best) primary = "large";
+            }
+            hotspots.push_back({
+                {"primary_kind", primary},
+                {"id", r.get_int64("id")},
+                {"asset_path", r.get("package_path")},
+                {"asset_name", r.get("asset_name")},
+                {"asset_class", r.get("asset_class")},
+                {"module_name", r.get("module_name")},
+                {"metrics", {
+                    {"fan_in", fan_in},
+                    {"fan_out", fan_out},
+                    {"hard_in", r.get_int("hard_in")},
+                    {"risk_score", std::round(risk * 1000.0) / 1000.0},
+                    {"risk_tier", r.get("risk_tier", tier_for(risk))},
+                    {"nodes", r.get_int("node_count")},
+                    {"variables", r.get_int("variable_count")},
+                    {"parameters", r.get_int("parameter_count")},
+                    {"tag_references", r.get_int("tag_refs")},
+                    {"size_signal", size_signal},
+                }},
+            });
+            if (include_questions && questions.size() < 5) {
+                questions.push_back({
+                    {"target", r.get("package_path")},
+                    {"reason", primary},
+                    {"question", primary == "large"
+                        ? "Can this asset's graph/detail size be reduced or validated with focused coverage before editing?"
+                        : "Which dependent assets and gameplay paths should be checked before changing this hotspot?"},
+                });
+            }
+        }
+        root["status"] = "ok";
+        root["summary"] = std::to_string(hotspots.size()) + " project review hotspot(s) ranked by " + k
+            + (has_cache ? " using CRG cache when available" : " using native fallback");
+        root["hotspots"] = hotspots;
+        if (include_questions) root["questions"] = questions;
+        root["truncated"] = truncated;
+        add_next(root, {"project.review_context", "project.risk_score", "project.impact_radius"});
+        return root;
+    }
+
+    void review_hotspots(const Args& args) {
+        print_json(project_review_hotspots_json(args.opt("kind", "all"),
+                                                args.opt_int("limit", 50),
+                                                args.opt_int("min_lines", 100),
+                                                args.opt_bool("include_questions", true)));
     }
 
     void review_context(const Args& args) {
@@ -2159,7 +2502,7 @@ public:
                 json cached = try_cached_risk(db, "project", "assets", aid);
                 json item;
                 if (!cached.is_null()) { any_cache = true; item = cached; }
-                else { item = score_asset(r); item["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}}; item["scoring_version"] = "1"; }
+                else { item = score_asset(r); item["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}}; item["scoring_version"] = "3"; }
                 item["id"] = aid;
                 item["asset_path"] = r.get("package_path");
                 item["asset_name"] = r.get("asset_name");
@@ -2184,7 +2527,7 @@ public:
                   [](const json& a, const json& b) { return a.value("score", 0.0) > b.value("score", 0.0); });
         json priorities = json::array();
         for (size_t i = 0; i < changed.size() && i < 10; ++i) priorities.push_back(changed[i]);
-        const char* sv = any_cache ? "2" : "1";
+        const char* sv = "3";
         root["risk_score"] = std::round(overall * 1000.0) / 1000.0;
         root["scoring_version"] = sv;
         root["truncated"] = truncated;
@@ -2365,6 +2708,7 @@ int main(int argc, char* argv[]) {
             {"health",              [](SourceActions& s, const Args& a) { s.health(a); }},
             {"repair_fts",          [](SourceActions& s, const Args& a) { s.repair_fts(a); }},
             {"risk_score",          [](SourceActions& s, const Args& a) { s.risk_score(a); }},
+            {"review_hotspots",     [](SourceActions& s, const Args& a) { s.review_hotspots(a); }},
             {"review_context",      [](SourceActions& s, const Args& a) { s.review_context(a); }},
             {"detect_changes",      [](SourceActions& s, const Args& a) { s.detect_changes(a); }},
             {"find_unused",         [](SourceActions& s, const Args& a) { s.find_unused(a); }},
@@ -2391,6 +2735,7 @@ int main(int argc, char* argv[]) {
             {"health",            [](ProjectActions& p, const Args& a) { p.health(a); }},
             {"repair_fts",        [](ProjectActions& p, const Args& a) { p.repair_fts(a); }},
             {"risk_score",        [](ProjectActions& p, const Args& a) { p.risk_score(a); }},
+            {"review_hotspots",   [](ProjectActions& p, const Args& a) { p.review_hotspots(a); }},
             {"review_context",    [](ProjectActions& p, const Args& a) { p.review_context(a); }},
             {"detect_changes",    [](ProjectActions& p, const Args& a) { p.detect_changes(a); }},
             {"find_unused",       [](ProjectActions& p, const Args& a) { p.find_unused(a); }},

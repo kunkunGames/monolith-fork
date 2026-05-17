@@ -14,9 +14,9 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithIndexModule` | Registers 13 project actions |
+| `FMonolithIndexModule` | Registers 14 project actions |
 | `FMonolithIndexDatabase` | RAII SQLite wrapper. 13 tables + 2 FTS5 + 6 triggers + 1 meta. DELETE journal mode, 64MB cache. Schema v2: `saved_hash` column (Blake3 `FIoHash` hex), `schema_version` meta key |
-| `FMonolithIndexReview` | CRG-inspired navigation/review over the existing `dependencies` graph plus rebuildable CRG projection/cache tables. Provides bounded BFS impact radius, read-only health, execute-gated FTS/CRG repair, cached risk with query-time fallback, and review-context packaging. Uses only the public `FMonolithIndexDatabase` surface — the DB impl file is untouched (additive, REQ-009) |
+| `FMonolithIndexReview` | CRG-inspired navigation/review over the existing `dependencies` graph plus rebuildable CRG projection/cache tables. Provides bounded BFS impact radius, read-only health, execute-gated FTS/CRG repair, cached/query-time risk scoring, review-hotspot ranking, and review-context packaging. Uses only the public `FMonolithIndexDatabase` surface — the DB impl file is untouched (additive, REQ-009) |
 | `UMonolithIndexSubsystem` | UEditorSubsystem. 3-layer indexing (startup delta, live AR callbacks, full fallback). Hash-based startup catch-up. Live batched AR delegates on 2s timer. Deep asset indexing with game-thread batching. Batches every 100 assets. Progress notifications |
 | `IMonolithIndexer` | Pure virtual interface: GetSupportedClasses(), IndexAsset(), GetName(), IsSentinel(), SupportsIncrementalIndex(), IndexScoped() |
 | `FBlueprintIndexer` | Blueprint, WidgetBlueprint, AnimBlueprint — graphs, nodes, variables |
@@ -32,7 +32,7 @@
 | `FDependencyIndexer` | Hard + Soft package dependencies (runs after all other indexers) |
 | `FMonolithIndexNotification` | Slate notification bar with throbber + percentage |
 
-### Actions (13 — namespace: "project")
+### Actions (14 — namespace: "project")
 
 | Action | Params | Description |
 |--------|--------|-------------|
@@ -47,7 +47,8 @@
 | `health` | `include_counts` (true) | Read-only diagnostics: v2 schema, 6 triggers, FTS row parity, orphan deps, CRG projection table/index/parity checks, journal mode |
 | `repair_fts` | `target` (all\|assets\|nodes), `execute` (false) | Rebuild `fts_assets`/`fts_nodes`. Dry-run unless `execute=true` (sole write gate); refused while `IsIndexing()` |
 | `repair_crg_cache` | `scope` (all), `execute` (false) | Rebuild derived `crg_nodes`/`crg_edges`/`crg_node_metrics`/`crg_meta` from `assets` and `dependencies`. Dry-run unless `execute=true`; refused while `IsIndexing()` |
-| `risk_score` | `asset_path`/`seed`, `limit` (20), `min_tier` (low) | Cached risk `{score,tier,reasons[],raw_counts,cache}` from CRG projection when present; safe query-time fallback on cache miss |
+| `risk_score` | `asset_path`/`seed`, `limit` (20), `min_tier` (low) | Cached risk `{score,tier,reasons[],raw_counts,cache}` from CRG projection when present; safe query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
+| `review_hotspots` | `kind` (all), `limit` (50), `min_lines` (100), `include_questions` (true) | Global review queue over fan-in/fan-out/risk/large asset graph signals with optional advisory questions |
 | `review_context` | `asset_path` (required), `direction` (both), `max_depth` (2), `max_results` (200), `detail_level` (minimal) | Token-efficient package: seed + impact + risk reasons + next actions; `minimal` omits full asset details |
 
 ### Database Schema
@@ -64,7 +65,8 @@
 These tables are rebuildable projections over `assets` and `dependencies`, not
 source-of-truth tables. `project.repair_crg_cache execute=true` recreates the
 projection, and `project.risk_score` reads `crg_node_metrics` first before
-falling back to query-time scoring.
+falling back to query-time scoring. Rebuilt projection metrics use
+`crg_meta.scoring_version=3` for the UE-domain sensitivity factor.
 
 ### Incremental Indexing
 
@@ -117,9 +119,9 @@ The `bInstalled` filter on plugin content paths was replaced with explicit path 
 
 ### CRG-Inspired Navigation + Projection Cache — IMPLEMENTED (P0, 2026-05-16; cache 2026-05-17)
 
-The CRG-inspired review/navigation surface is **implemented** as 6 additive `project`
+The CRG-inspired review/navigation surface is **implemented** as 7 additive `project`
 actions (`impact_radius`, `health`, `repair_fts`, `repair_crg_cache`, `risk_score`,
-`review_context`) over the **existing** `dependencies` graph. The CRG `nodes`/`edges`
+`review_hotspots`, `review_context`) over the **existing** `dependencies` graph. The CRG `nodes`/`edges`
 idea is adopted only as a derived SQLite projection/cache (`crg_*` tables), while
 `assets` and `dependencies` remain authoritative. There is no Python runtime or
 generic parser replacement (monolith-native: asset-domain, lexical/local). Logic lives in
@@ -128,16 +130,17 @@ generic parser replacement (monolith-native: asset-domain, lexical/local). Logic
 `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md`. Tests:
 `Monolith.IndexGuard.Project.*` in `Private/Tests/MonolithIndexQueryTests.cpp`,
 including cycle/truncation guards, orphan-dependency health warnings, repair dry-run/execute,
-CRG cache rebuild/cache-hit coverage, and minimal review-context output-contract coverage.
+CRG cache rebuild/cache-hit coverage, sensitivity scoring, review-hotspot ranking,
+and minimal review-context output-contract coverage.
 
 Invariants honored by the implementation:
 
 - `ProjectIndex.db` is **Schema v2** (`schema_version` meta key + `assets.saved_hash` column/index, `PRAGMA table_info` migration). `project.health` must validate v2, not generic v1.
 - 6 FTS triggers (`fts_assets`/`fts_nodes` × ai/ad/au) are external-content FTS5 → `'rebuild'` is valid for `repair_fts`.
 - `FMonolithIndexDatabase` exposes a raw `FSQLiteDatabase*` (`GetRawDatabase()`) with **no DB-internal lock**; writes are caller-serialized. `repair_fts` and `repair_crg_cache` must gate on `UMonolithIndexSubsystem::IsIndexing()` and run inside transaction-scoped helpers.
-- CRG projection rows are disposable: `crg_nodes` maps one row per asset, `crg_edges` maps one row per dependency, and `crg_node_metrics` stores `risk_score`, tier, reasons JSON, and raw count JSON. Missing projection rows are cache misses, not action failures.
+- CRG projection rows are disposable: `crg_nodes` maps one row per asset, `crg_edges` maps one row per dependency, and `crg_node_metrics` stores `risk_score`, tier, reasons JSON, raw count JSON, and `scoring_version`. Missing projection rows are cache misses, not action failures; current scoring is v3 and includes a bounded UE-domain sensitivity signal.
 - Direct lookup helpers to build bounded traversal on: `GetDependenciesForAsset` (out / `source_asset_id`), `GetReferencersOfAsset` (in / `target_asset_id`).
-- P0 action outputs expose a stable review contract: `input`, `limits`, `truncated`, and `next_actions` where applicable; `project.review_context` additionally exposes compact `top_risks[]` and `context[]` fields so agents can triage without pulling full details.
+- Review action outputs expose a stable contract: `input`, `limits`, `truncated`, and `next_actions` where applicable; `project.review_hotspots` exposes capped `hotspots[]` plus optional `questions[]`, while `project.review_context` additionally exposes compact `top_risks[]` and `context[]` fields so agents can triage without pulling full details.
 - Test precedent: extend `Private/Tests/MonolithIndexQueryTests.cpp` (`Monolith.IndexGuard.Project.*`, temp-DB fixture) — do not introduce a new directory or `WITH_DEV_AUTOMATION_TESTS` guard.
 
 ---

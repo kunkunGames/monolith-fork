@@ -36,6 +36,14 @@ public:
 		int32 Limit,
 		const FString& MinTier);
 
+	/** Rank global source review hotspots by fan-in, fan-out, risk, LOC, or all. */
+	static TSharedPtr<FJsonObject> ReviewHotspots(
+		FMonolithSourceDatabase& Db,
+		const FString& Kind,
+		int32 Limit,
+		int32 MinLines,
+		bool bIncludeQuestions);
+
 	/** Compose impact + risk + callers/callees/hierarchy + next actions. */
 	static TSharedPtr<FJsonObject> ReviewContext(
 		FMonolithSourceDatabase& Db,

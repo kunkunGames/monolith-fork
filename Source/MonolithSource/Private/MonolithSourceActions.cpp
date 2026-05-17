@@ -146,12 +146,22 @@ void FMonolithSourceActions::RegisterAll()
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("risk_score"),
-		TEXT("Score symbol change risk (caller fan-in, descendants, UE macro, boundary crossing) with reasons"),
+		TEXT("Score symbol change risk (caller fan-in, descendants, UE macro, sensitivity, boundary crossing) with reasons"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleRiskScore),
 		FParamSchemaBuilder()
 			.Required(TEXT("symbol"), TEXT("string"), TEXT("Symbol name to score"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max scored symbol overloads"), TEXT("10"))
 			.Optional(TEXT("min_tier"), TEXT("string"), TEXT("low|medium|high filter"), TEXT("low"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("review_hotspots"),
+		TEXT("Rank global source review hotspots by fan-in, fan-out, risk, LOC size, or all signals"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleReviewHotspots),
+		FParamSchemaBuilder()
+			.Optional(TEXT("kind"), TEXT("string"), TEXT("fan_in|fan_out|risk|large|all"), TEXT("all"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max hotspots"), TEXT("50"))
+			.Optional(TEXT("min_lines"), TEXT("integer"), TEXT("Large-symbol LOC floor"), TEXT("100"))
+			.Optional(TEXT("include_questions"), TEXT("bool"), TEXT("Add advisory review questions"), TEXT("true"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("review_context"),
@@ -280,6 +290,20 @@ FMonolithActionResult FMonolithSourceActions::HandleRiskScore(const TSharedPtr<F
 	const int32 Limit = FMonolithSourceReview::PInt(Params, TEXT("limit"), 10);
 	const FString MinTier = FMonolithSourceReview::PStr(Params, TEXT("min_tier"), TEXT("low"));
 	return FMonolithActionResult::Success(FMonolithSourceReview::RiskScore(*DB, Symbol, Limit, MinTier));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleReviewHotspots(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	return FMonolithActionResult::Success(FMonolithSourceReview::ReviewHotspots(*DB,
+		FMonolithSourceReview::PStr(Params, TEXT("kind"), TEXT("all")),
+		FMonolithSourceReview::PInt(Params, TEXT("limit"), 50),
+		FMonolithSourceReview::PInt(Params, TEXT("min_lines"), 100),
+		FMonolithSourceReview::PBool(Params, TEXT("include_questions"), true)));
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleReviewContext(const TSharedPtr<FJsonObject>& Params)

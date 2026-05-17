@@ -40,9 +40,10 @@ seed 기반 액션을 넣었다. 하지만 리뷰어가 실제로 시작하는 �
 | Capability | Where | Status |
 |---|---|---|
 | seed `impact_radius`, `health`, `repair_fts`, `risk_score`, `review_context` (project + source) | `FMonolithIndexReview`, `FMonolithSourceReview`, `FMonolithSourceDatabase` | PR #447 done |
-| CRG projection cache `crg_nodes/crg_edges/crg_node_metrics/crg_meta` + `repair_crg_cache` | both DBs | PR #447 done (cache_version=1, scoring_version=2) |
-| editor cached risk (`cache.status=hit`, scoring_version=2) | `TryCachedAssetRisk`, `GetCachedRiskForSymbol` | PR #447 done (editor only) |
-| offline parity for the 5 seed actions | `Tools/MonolithQuery/monolith_query.cpp` | PR #447 done (query-time only) |
+| CRG projection cache `crg_nodes/crg_edges/crg_node_metrics/crg_meta` + `repair_crg_cache` | both DBs | PR #447 done (cache_version=1, scoring_version=3) |
+| editor cached risk (`cache.status=hit`, scoring_version=3 after rebuild) | `TryCachedAssetRisk`, `GetCachedRiskForSymbol` | PR #447 done |
+| offline parity for seed/review actions | `Tools/MonolithQuery/monolith_query.cpp` | PR #447 done (read-only) |
+| sensitivity risk factor + `review_hotspots` | editor + offline source/project review paths | PR #447 done |
 | derived risk/metric table (nav `TSK-P1-001`) | superseded by `crg_node_metrics` | effectively delivered (editor only) |
 
 ## Verified Current State (2026-05-17 measurements)
@@ -59,10 +60,10 @@ seed 기반 액션을 넣었다. 하지만 리뷰어가 실제로 시작하는 �
   surfaced by `integrity:orphan_references` and `crg:orphan_edges` as a
   non-fatal warning. Snapshot/diff must treat this as baseline noise, not a
   regression.
-- Offline `monolith_query.exe`: 5 seed actions work but `risk_score` returns
-  `scoring_version=1, cache=null` and `health` emits zero `crg:*` checks —
-  the offline path never reads the projection cache, although cache-spec
-  `REQ-006` explicitly allows offline read-only cache use.
+- Offline `monolith_query.exe`: seed/review actions now include CRG cache read
+  parity, scoring v3 sensitivity, `detect_changes`, `find_unused`, and
+  `review_hotspots`. Offline remains read-only for the CRG cache; only
+  `repair_fts --execute` writes.
 
 ## Prioritized High-ROI Backlog (ROI = reviewer value / (cost x regression risk))
 
@@ -96,8 +97,8 @@ useful global "where should I be careful?" view.
 
 - **RX-2 — DONE (offline).** `Tools/MonolithQuery/monolith_query.cpp`:
   `try_cached_risk` + `append_crg_health_checks`; `risk_score`
-  (source+project) reads `crg_node_metrics` (`scoring_version=2`,
-  `cache.status=hit`) with query-time fallback; `health` emits `crg:*`
+  (source+project) reads `crg_node_metrics` (`scoring_version=3` after
+  rebuild, `cache.status=hit`) with query-time fallback; `health` emits `crg:*`
   checks. Built + live-verified. Read-only; offline never writes the cache.
 - **RX-1 — DONE (offline).** `source.detect_changes` /
   `project.detect_changes` in `monolith_query.cpp`: changelist → symbols/
@@ -115,7 +116,13 @@ useful global "where should I be careful?" view.
   parent guard for source; root-class exclusion for project), confidence
   graded by name-ambiguity (source) / indirect-reference class (project),
   recall-first default. Built + live-verified.
-- **RX-4 / RX-5 / RX-7 / RX-8 — NOT STARTED** (spec'd P1/P2).
+- **RX-7 — DONE (editor + offline).** Project/source risk scoring and CRG
+  cache rebuild SQL now include a bounded UE-domain sensitivity factor with
+  `raw_counts.sensitivity`, explicit reasons, and scoring_version=3.
+- **RX-8 — DONE (editor + offline).** `source.review_hotspots` /
+  `project.review_hotspots` rank capped fan-in/fan-out/risk/large hotspots
+  with optional advisory questions and no community/betweenness dependency.
+- **RX-4 / RX-5 / RX-6 — NOT STARTED** (spec'd P1/P2).
 - Verification record: `Docs/testing/2026-05-17-crg-review-extensions.md`.
 
 ## Non-Goals (correctly excluded — do not spec as work)
@@ -208,10 +215,10 @@ useful global "where should I be careful?" view.
 ### Offline cache read parity (RX-2, P0)
 
 - `monolith_query.exe <source|project> risk_score`: when `crg_node_metrics`
-  + `crg_meta` exist and are consistent, read them (scoring_version=2,
-  `cache.status=hit`); else fall back to query-time
-  (scoring_version=1, `cache.status=miss`) — behavior identical to the editor
-  helper, read-only, never writes, never runs `repair_crg_cache`.
+  + `crg_meta` exist and are consistent, read them (rebuilt caches use
+  scoring_version=3, `cache.status=hit`); else fall back to query-time
+  scoring v3 (`cache.status=miss`/`unavailable`) — behavior identical to the
+  editor helper, read-only, never writes, never runs `repair_crg_cache`.
 - `monolith_query.exe <source|project> health`: include the same `crg:*`
   checks the editor `ComputeHealth`/`Health` emit (table/index presence,
   node/edge/metric parity, orphan CRG edges, `crg_meta.cache_version`,
@@ -324,7 +331,7 @@ useful global "where should I be careful?" view.
   (changelist/diff -> mapped entities -> reused risk + bounded impact +
   advisory test-gaps + review priorities; minimal default).
 - [REQ-002] Offline `monolith_query.exe` `risk_score` reads
-  `crg_node_metrics` (scoring_version=2/`cache.status=hit`) with safe
+  `crg_node_metrics` (scoring_version=3 after rebuild/`cache.status=hit`) with safe
   query-time fallback; offline `health` emits the editor `crg:*` checks.
   Read-only; no offline cache writer.
 - [REQ-003] Add `project.find_unused` + `source.find_unused` advisory
@@ -382,9 +389,10 @@ useful global "where should I be careful?" view.
   `package_path` resolves; risk + bounded impact present; unknown path =
   warning not crash.
 - [TEST-003] offline parity: against a fixture DB with a rebuilt cache,
-  `monolith_query risk_score` reports scoring_version=2 + `cache.status=hit`;
-  without cache, scoring_version=1 + `cache.status=miss`; `health` lists
-  `crg:*` checks.
+  `monolith_query risk_score` reports scoring_version=3 + `cache.status=hit`;
+  without cache, query-time scoring stays v3 with `cache.status=miss` or
+  `cache.status=unavailable`; `health` lists `crg:*` checks and expects
+  `crg_meta.scoring_version=3`.
 - [TEST-004] find_unused (source): a symbol with 0 inbound refs and no UE
   reflection markers is listed with confidence/reasons; a UFUNCTION/override
   /macro symbol is excluded or low-confidence.

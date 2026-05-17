@@ -6,6 +6,7 @@
 namespace
 {
 	using FJsonArr = TArray<TSharedPtr<FJsonValue>>;
+	constexpr const TCHAR* ExpectedScoringVersion = TEXT("3");
 
 	bool WantsKind(const FString& EdgeKinds, const TCHAR* Kind)
 	{
@@ -40,6 +41,64 @@ namespace
 		if (S >= 0.66) return TEXT("high");
 		if (S >= 0.33) return TEXT("medium");
 		return TEXT("low");
+	}
+
+	bool ContainsAnyToken(const FString& LowerText, std::initializer_list<const TCHAR*> Tokens)
+	{
+		for (const TCHAR* Token : Tokens)
+		{
+			if (LowerText.Contains(FString(Token)))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	double SensitivityFactor(const FString& Text, FString& OutReason)
+	{
+		const FString Lower = Text.ToLower();
+		if (ContainsAnyToken(Lower, { TEXT("ufunction"), TEXT("server"), TEXT("client"), TEXT("netmulticast"), TEXT("onrep"), TEXT("replication"), TEXT("rpc"), TEXT("network") }))
+		{
+			OutReason = TEXT("sensitivity: replication/RPC or network surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("save"), TEXT("serialize"), TEXT("archive") }))
+		{
+			OutReason = TEXT("sensitivity: save/serialization surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("auth"), TEXT("login"), TEXT("account"), TEXT("session") }))
+		{
+			OutReason = TEXT("sensitivity: auth/account/session surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("purchase"), TEXT("iap"), TEXT("store"), TEXT("entitlement") }))
+		{
+			OutReason = TEXT("sensitivity: purchase/store entitlement surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("anticheat"), TEXT("anti_cheat"), TEXT("cheat") }))
+		{
+			OutReason = TEXT("sensitivity: anticheat surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("crypt"), TEXT("encrypt"), TEXT("decrypt"), TEXT("sign"), TEXT("hash") }))
+		{
+			OutReason = TEXT("sensitivity: crypto/signing/hash surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("exec"), TEXT("eval"), TEXT("command") }))
+		{
+			OutReason = TEXT("sensitivity: exec/eval/command surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("file"), TEXT("registry"), TEXT("process") }))
+		{
+			OutReason = TEXT("sensitivity: file/registry/process surface");
+			return 0.15;
+		}
+		return 0.0;
 	}
 
 	int32 TierRank(const FString& Tier)
@@ -92,6 +151,10 @@ namespace
 		TSet<int64> CallerFiles;
 		for (const FMonolithSourceReference& R : Callers) CallerFiles.Add(R.FileId);
 		const bool bCrossesFiles = CallerFiles.Num() > 1;
+		FString SensitivityReason;
+		const double Sensitivity = SensitivityFactor(
+			FString::Printf(TEXT("%s %s %s %s"), *Sym.Name, *Sym.QualifiedName, *Sym.Kind, *Sym.Signature),
+			SensitivityReason);
 
 		FJsonArr Reasons;
 		double Raw = 0.0;
@@ -111,6 +174,7 @@ namespace
 		Factor(bCrossesFiles ? FMath::Min<double>(CallerFiles.Num(), 20) / 20.0 * 0.15 : 0.0,
 			FString::Printf(TEXT("module/file boundary crossing: %d distinct caller file(s)"),
 				CallerFiles.Num()));
+		Factor(Sensitivity, SensitivityReason);
 
 		if (Callers.Num() == 0 && Sym.Kind.Contains(TEXT("function")))
 		{
@@ -135,8 +199,9 @@ namespace
 		RC->SetNumberField(TEXT("ancestors"), Parents.Num());
 		RC->SetNumberField(TEXT("caller_files"), CallerFiles.Num());
 		RC->SetBoolField(TEXT("is_ue_macro"), Sym.bIsUEMacro);
+		RC->SetNumberField(TEXT("sensitivity"), Sensitivity);
 		O->SetObjectField(TEXT("raw_counts"), RC);
-		O->SetObjectField(TEXT("cache"), CacheMeta(TEXT("miss"), TEXT(""), TEXT("1")));
+		O->SetObjectField(TEXT("cache"), CacheMeta(TEXT("miss"), TEXT(""), ExpectedScoringVersion));
 		return O;
 	}
 } // namespace
@@ -339,12 +404,22 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::RiskScore(
 
 	Root->SetStringField(TEXT("status"), TEXT("ok"));
 	Root->SetStringField(TEXT("summary"),
-		FString::Printf(TEXT("%d symbol overload(s) scored (scoring_version=2 cached when available, v1 fallback)"), Items.Num()));
-	Root->SetStringField(TEXT("scoring_version"), TEXT("2"));
+		FString::Printf(TEXT("%d symbol overload(s) scored (scoring_version=3 cached when available, v3 query fallback)"), Items.Num()));
+	Root->SetStringField(TEXT("scoring_version"), ExpectedScoringVersion);
 	Root->SetArrayField(TEXT("items"), Items);
 	Root->SetBoolField(TEXT("truncated"), false);
 	AddNext(Root, { TEXT("source.repair_crg_cache"), TEXT("source.review_context"), TEXT("source.impact_radius") });
 	return Root;
+}
+
+TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewHotspots(
+	FMonolithSourceDatabase& Db,
+	const FString& Kind,
+	int32 Limit,
+	int32 MinLines,
+	bool bIncludeQuestions)
+{
+	return Db.ReviewHotspots(Kind, Limit, MinLines, bIncludeQuestions);
 }
 
 TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(

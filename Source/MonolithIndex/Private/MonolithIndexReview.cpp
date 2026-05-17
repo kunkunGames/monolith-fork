@@ -13,6 +13,7 @@
 namespace
 {
 	using FJsonArr = TArray<TSharedPtr<FJsonValue>>;
+	constexpr const TCHAR* ExpectedScoringVersion = TEXT("3");
 
 	int64 CountRows(FMonolithIndexDatabase& Db, const FString& Sql)
 	{
@@ -87,7 +88,7 @@ namespace
 
 	int32 AssetClassWeight(const FString& AssetClass)
 	{
-		// UE-domain risk weighting (replaces CRG's security/flow factors).
+		// UE-domain risk weighting. Sensitivity is a separate decomposed factor.
 		if (AssetClass.Contains(TEXT("World")) || AssetClass.Contains(TEXT("Level"))) return 5;
 		if (AssetClass.Contains(TEXT("GameplayAbility")) || AssetClass.Contains(TEXT("AttributeSet"))
 			|| AssetClass.Contains(TEXT("GameplayEffect"))) return 4;
@@ -95,6 +96,64 @@ namespace
 		if (AssetClass.Contains(TEXT("NiagaraSystem")) || AssetClass.Contains(TEXT("Material"))) return 2;
 		if (AssetClass.Contains(TEXT("DataTable")) || AssetClass.Contains(TEXT("DataAsset"))) return 2;
 		return 1;
+	}
+
+	bool ContainsAnyToken(const FString& LowerText, std::initializer_list<const TCHAR*> Tokens)
+	{
+		for (const TCHAR* Token : Tokens)
+		{
+			if (LowerText.Contains(FString(Token)))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	double SensitivityFactor(const FString& Text, FString& OutReason)
+	{
+		const FString Lower = Text.ToLower();
+		if (ContainsAnyToken(Lower, { TEXT("replication"), TEXT("network"), TEXT("rpc"), TEXT("netmulticast"), TEXT("onrep"), TEXT("server"), TEXT("client") }))
+		{
+			OutReason = TEXT("sensitivity: replication/RPC or network surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("save"), TEXT("serialize"), TEXT("archive") }))
+		{
+			OutReason = TEXT("sensitivity: save/serialization surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("auth"), TEXT("login"), TEXT("account"), TEXT("session") }))
+		{
+			OutReason = TEXT("sensitivity: auth/account/session surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("purchase"), TEXT("iap"), TEXT("store"), TEXT("entitlement") }))
+		{
+			OutReason = TEXT("sensitivity: purchase/store entitlement surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("anticheat"), TEXT("anti_cheat"), TEXT("cheat") }))
+		{
+			OutReason = TEXT("sensitivity: anticheat surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("crypt"), TEXT("encrypt"), TEXT("decrypt"), TEXT("sign"), TEXT("hash") }))
+		{
+			OutReason = TEXT("sensitivity: crypto/signing/hash surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("exec"), TEXT("eval"), TEXT("command") }))
+		{
+			OutReason = TEXT("sensitivity: exec/eval/command surface");
+			return 0.15;
+		}
+		if (ContainsAnyToken(Lower, { TEXT("file"), TEXT("registry"), TEXT("process") }))
+		{
+			OutReason = TEXT("sensitivity: file/registry/process surface");
+			return 0.15;
+		}
+		return 0.0;
 	}
 
 	FString TierFor(double Score)
@@ -326,6 +385,10 @@ namespace
 			FString::Printf(TEXT("SELECT COUNT(*) FROM tag_references WHERE asset_id = %lld;"), Id));
 
 		const int32 ClassW = AssetClassWeight(Asset.AssetClass);
+		FString SensitivityReason;
+		const double Sensitivity = SensitivityFactor(
+			FString::Printf(TEXT("%s %s %s"), *Asset.AssetClass, *Asset.PackagePath, *Asset.AssetName),
+			SensitivityReason);
 
 		// Transparent additive factors, each capped, normalized to 0..1.
 		FJsonArr Reasons;
@@ -348,6 +411,7 @@ namespace
 			FString::Printf(TEXT("outbound dependencies: %d"), Out.Num()));
 		Factor((ClassW - 1) / 4.0 * 0.20,
 			FString::Printf(TEXT("asset class weight: %s (w=%d)"), *Asset.AssetClass, ClassW));
+		Factor(Sensitivity, SensitivityReason);
 		Factor(FMath::Min<double>(NodeCount, 400) / 400.0 * 0.15,
 			FString::Printf(TEXT("graph density: %lld node(s), %lld var(s), %lld param(s)"),
 				NodeCount, VarCount, ParamCount));
@@ -380,8 +444,9 @@ namespace
 		RawCounts->SetNumberField(TEXT("parameters"), static_cast<double>(ParamCount));
 		RawCounts->SetNumberField(TEXT("tag_references"), static_cast<double>(TagRefs));
 		RawCounts->SetNumberField(TEXT("class_weight"), ClassW);
+		RawCounts->SetNumberField(TEXT("sensitivity"), Sensitivity);
 		O->SetObjectField(TEXT("raw_counts"), RawCounts);
-		O->SetObjectField(TEXT("cache"), CacheMeta(TEXT("miss"), TEXT(""), TEXT("1")));
+		O->SetObjectField(TEXT("cache"), CacheMeta(TEXT("miss"), TEXT(""), ExpectedScoringVersion));
 		return O;
 	}
 } // namespace
@@ -669,9 +734,9 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 			CacheVersion.IsEmpty() ? TEXT("crg_meta.cache_version missing (run project.repair_crg_cache)")
 				: FString::Printf(TEXT("crg cache_version=%s"), *CacheVersion));
 		const FString CrgScoringVersion = ScalarStr(Db, TEXT("SELECT value FROM crg_meta WHERE key = 'scoring_version';"));
-		Check(TEXT("crg:scoring_version"), CrgScoringVersion == TEXT("2"),
+		Check(TEXT("crg:scoring_version"), CrgScoringVersion == FString(ExpectedScoringVersion),
 			CrgScoringVersion.IsEmpty() ? TEXT("crg_meta.scoring_version missing (run project.repair_crg_cache)")
-				: FString::Printf(TEXT("crg scoring_version=%s (expected 2)"), *CrgScoringVersion));
+				: FString::Printf(TEXT("crg scoring_version=%s (expected %s)"), *CrgScoringVersion, ExpectedScoringVersion));
 	}
 
 	const FString Journal = ScalarStr(Db, TEXT("PRAGMA journal_mode;"));
@@ -912,7 +977,36 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RepairCrgCache(FMonolithIndexDatab
 		"          WHEN a.asset_class LIKE '%NiagaraSystem%' OR a.asset_class LIKE '%Material%' THEN 2"
 		"          WHEN a.asset_class LIKE '%DataTable%' OR a.asset_class LIKE '%DataAsset%' THEN 2"
 		"          ELSE 1"
-		"        END AS class_weight"
+		"        END AS class_weight,"
+		"        CASE"
+		"          WHEN lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%network%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%replication%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%rpc%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%netmulticast%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%onrep%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%save%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%serialize%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%archive%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%auth%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%login%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%account%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%session%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%purchase%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%store%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%entitlement%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%anticheat%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%crypt%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%encrypt%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%decrypt%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%sign%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%hash%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%exec%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%eval%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%command%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%file%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%registry%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%process%'"
+		"          THEN 1 ELSE 0 END AS sensitivity"
 		" FROM assets a"
 		"), scored AS ("
 		" SELECT c.*, MIN(1.0,"
@@ -920,6 +1014,7 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RepairCrgCache(FMonolithIndexDatab
 		"        MIN(c.hard_in,20) / 20.0 * 0.20 +"
 		"        MIN(c.fan_out,30) / 30.0 * 0.10 +"
 		"        (c.class_weight - 1) / 4.0 * 0.20 +"
+		"        CASE WHEN c.sensitivity != 0 THEN 0.15 ELSE 0.0 END +"
 		"        MIN(c.node_count,400) / 400.0 * 0.15 +"
 		"        MIN(c.tag_refs,20) / 20.0 * 0.05) AS score"
 		" FROM counts c"
@@ -927,15 +1022,20 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RepairCrgCache(FMonolithIndexDatab
 		"INSERT INTO crg_node_metrics(node_id,fan_in,fan_out,hard_in,descendants,risk_score,risk_tier,reasons_json,raw_counts_json,scoring_version,computed_at) "
 		"SELECT n.id,s.fan_in,s.fan_out,s.hard_in,0,ROUND(s.score,3),"
 		"       CASE WHEN s.score >= 0.66 THEN 'high' WHEN s.score >= 0.33 THEN 'medium' ELSE 'low' END,"
-		"       printf('[\"inbound dependency fan-in: %d referencer(s)\",\"hard inbound dependencies: %d\",\"outbound dependencies: %d\",\"graph density: %d node(s)\"]',"
-		"              s.fan_in,s.hard_in,s.fan_out,s.node_count),"
-		"       printf('{\"inbound\":%d,\"inbound_hard\":%d,\"outbound\":%d,\"nodes\":%d,\"variables\":%d,\"parameters\":%d,\"tag_references\":%d,\"class_weight\":%d}',"
-		"              s.fan_in,s.hard_in,s.fan_out,s.node_count,s.var_count,s.param_count,s.tag_refs,s.class_weight),"
-		"       '2',CAST(strftime('%s','now') AS INTEGER) "
+		"       CASE WHEN s.sensitivity != 0 THEN"
+		"         printf('[\"inbound dependency fan-in: %d referencer(s)\",\"hard inbound dependencies: %d\",\"outbound dependencies: %d\",\"sensitivity: UE-domain sensitive surface\",\"graph density: %d node(s)\"]',"
+		"                s.fan_in,s.hard_in,s.fan_out,s.node_count)"
+		"       ELSE"
+		"         printf('[\"inbound dependency fan-in: %d referencer(s)\",\"hard inbound dependencies: %d\",\"outbound dependencies: %d\",\"graph density: %d node(s)\"]',"
+		"                s.fan_in,s.hard_in,s.fan_out,s.node_count)"
+		"       END,"
+		"       printf('{\"inbound\":%d,\"inbound_hard\":%d,\"outbound\":%d,\"nodes\":%d,\"variables\":%d,\"parameters\":%d,\"tag_references\":%d,\"class_weight\":%d,\"sensitivity\":%d}',"
+		"              s.fan_in,s.hard_in,s.fan_out,s.node_count,s.var_count,s.param_count,s.tag_refs,s.class_weight,s.sensitivity),"
+		"       '3',CAST(strftime('%s','now') AS INTEGER) "
 		"FROM scored s "
 		"JOIN crg_nodes n ON n.domain='project' AND n.native_table='assets' AND n.native_id=s.native_id;"), TEXT("project metrics"));
 	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('cache_version','1');"), TEXT("cache_version"));
-	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('scoring_version','2');"), TEXT("scoring_version"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('scoring_version','3');"), TEXT("scoring_version"));
 	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('built_at',datetime('now'));"), TEXT("built_at"));
 	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('project_built_at',datetime('now'));"), TEXT("project_built_at"));
 
@@ -1057,11 +1157,215 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RiskScore(
 
 	Root->SetStringField(TEXT("status"), TEXT("ok"));
 	Root->SetStringField(TEXT("summary"),
-		FString::Printf(TEXT("%d asset(s) scored (scoring_version=2 cached when available, v1 fallback)"), Items.Num()));
-	Root->SetStringField(TEXT("scoring_version"), TEXT("2"));
+		FString::Printf(TEXT("%d asset(s) scored (scoring_version=3 cached when available, v3 query fallback)"), Items.Num()));
+	Root->SetStringField(TEXT("scoring_version"), ExpectedScoringVersion);
 	Root->SetArrayField(TEXT("items"), Items);
 	Root->SetBoolField(TEXT("truncated"), false);
 	AddNext(Root, { TEXT("project.repair_crg_cache"), TEXT("project.review_context"), TEXT("project.impact_radius") });
+	return Root;
+}
+
+// ============================================================================
+// review_hotspots (global top fan/risk/size review queue)
+// ============================================================================
+TSharedPtr<FJsonObject> FMonolithIndexReview::ReviewHotspots(
+	FMonolithIndexDatabase& Db,
+	const FString& Kind,
+	int32 Limit,
+	int32 MinLines,
+	bool bIncludeQuestions)
+{
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	const FString NormalizedKind = Kind.IsEmpty() ? TEXT("all") : Kind.ToLower();
+	const int32 Cap = FMath::Clamp(Limit <= 0 ? 50 : Limit, 1, 200);
+	const int32 SizeFloor = FMath::Max(MinLines <= 0 ? 100 : MinLines, 0);
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("kind"), NormalizedKind);
+	Input->SetBoolField(TEXT("include_questions"), bIncludeQuestions);
+	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("limit"), Cap);
+	Limits->SetNumberField(TEXT("min_lines"), SizeFloor);
+	Root->SetObjectField(TEXT("limits"), Limits);
+
+	if (NormalizedKind != TEXT("fan_in") && NormalizedKind != TEXT("fan_out")
+		&& NormalizedKind != TEXT("risk") && NormalizedKind != TEXT("large")
+		&& NormalizedKind != TEXT("all"))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("Unsupported kind for project.review_hotspots (expected fan_in|fan_out|risk|large|all)"));
+		Root->SetArrayField(TEXT("hotspots"), FJsonArr());
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNext(Root, { TEXT("project.review_hotspots kind=all"), TEXT("project.risk_score") });
+		return Root;
+	}
+
+	FSQLiteDatabase* Raw = Db.GetRawDatabase();
+	if (!Db.IsOpen() || !Raw)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("ProjectIndex DB is not open"));
+		Root->SetArrayField(TEXT("hotspots"), FJsonArr());
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNext(Root, { TEXT("project.get_stats"), TEXT("project.health") });
+		return Root;
+	}
+
+	const bool bHasCrg = HasCrgProjectionTables(Db);
+	const FString CacheJoin = bHasCrg
+		? TEXT("LEFT JOIN crg_nodes n ON n.domain='project' AND n.native_table='assets' AND n.native_id=c.id "
+			"LEFT JOIN crg_node_metrics m ON m.node_id=n.id ")
+		: TEXT("");
+	const FString RiskScoreExpr = bHasCrg ? TEXT("COALESCE(m.risk_score, c.estimated_risk)") : TEXT("c.estimated_risk");
+	const FString RiskTierExpr = bHasCrg
+		? TEXT("COALESCE(m.risk_tier, CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END)")
+		: TEXT("CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END");
+	const FString WhereClause = NormalizedKind == TEXT("large")
+		? FString::Printf(TEXT("WHERE size_signal >= %d "), SizeFloor)
+		: TEXT("WHERE fan_in > 0 OR fan_out > 0 OR hard_in > 0 OR risk_score > 0 OR size_signal >= ") + FString::FromInt(SizeFloor) + TEXT(" ");
+	FString OrderBy = TEXT("ORDER BY hotspot_score DESC, risk_score DESC, fan_in DESC, size_signal DESC ");
+	if (NormalizedKind == TEXT("fan_in")) OrderBy = TEXT("ORDER BY fan_in DESC, risk_score DESC, hard_in DESC ");
+	else if (NormalizedKind == TEXT("fan_out")) OrderBy = TEXT("ORDER BY fan_out DESC, risk_score DESC, size_signal DESC ");
+	else if (NormalizedKind == TEXT("risk")) OrderBy = TEXT("ORDER BY risk_score DESC, fan_in DESC, size_signal DESC ");
+	else if (NormalizedKind == TEXT("large")) OrderBy = TEXT("ORDER BY size_signal DESC, risk_score DESC, fan_in DESC ");
+
+	const FString Sql = FString::Printf(TEXT(
+		"WITH base AS ("
+		" SELECT a.id,a.package_path,a.asset_name,a.asset_class,COALESCE(a.module_name,'') AS module_name,"
+		"        (SELECT COUNT(*) FROM dependencies d WHERE d.target_asset_id=a.id) AS fan_in,"
+		"        (SELECT COUNT(*) FROM dependencies d WHERE d.source_asset_id=a.id) AS fan_out,"
+		"        (SELECT COUNT(*) FROM dependencies d WHERE d.target_asset_id=a.id AND d.dependency_type='Hard') AS hard_in,"
+		"        (SELECT COUNT(*) FROM nodes x WHERE x.asset_id=a.id) AS node_count,"
+		"        (SELECT COUNT(*) FROM variables x WHERE x.asset_id=a.id) AS variable_count,"
+		"        (SELECT COUNT(*) FROM parameters x WHERE x.asset_id=a.id) AS parameter_count,"
+		"        (SELECT COUNT(*) FROM tag_references x WHERE x.asset_id=a.id) AS tag_refs,"
+		"        CASE"
+		"          WHEN a.asset_class LIKE '%%World%%' OR a.asset_class LIKE '%%Level%%' THEN 5"
+		"          WHEN a.asset_class LIKE '%%GameplayAbility%%' OR a.asset_class LIKE '%%AttributeSet%%' OR a.asset_class LIKE '%%GameplayEffect%%' THEN 4"
+		"          WHEN a.asset_class LIKE '%%Blueprint%%' THEN 3"
+		"          WHEN a.asset_class LIKE '%%NiagaraSystem%%' OR a.asset_class LIKE '%%Material%%' THEN 2"
+		"          WHEN a.asset_class LIKE '%%DataTable%%' OR a.asset_class LIKE '%%DataAsset%%' THEN 2"
+		"          ELSE 1 END AS class_weight,"
+		"        CASE WHEN lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%%network%%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%%replication%%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%%save%%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%%serialize%%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%%auth%%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%%purchase%%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%%anticheat%%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%%crypt%%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%%exec%%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%%file%%'"
+		"          THEN 1 ELSE 0 END AS sensitivity"
+		" FROM assets a"
+		"), counts AS ("
+		" SELECT *, (node_count + variable_count + parameter_count + tag_refs) AS size_signal,"
+		"        MIN(1.0, MIN(fan_in,30)/30.0*0.30 + MIN(hard_in,20)/20.0*0.20 + "
+		"        MIN(fan_out,30)/30.0*0.10 + (class_weight-1)/4.0*0.20 + "
+		"        CASE WHEN sensitivity != 0 THEN 0.15 ELSE 0 END + "
+		"        MIN(node_count,400)/400.0*0.15 + MIN(tag_refs,20)/20.0*0.05) AS estimated_risk "
+		" FROM base"
+		"), scored AS ("
+		" SELECT c.id,c.package_path,c.asset_name,c.asset_class,c.module_name,c.fan_in,c.fan_out,c.hard_in,"
+		"        c.node_count,c.variable_count,c.parameter_count,c.tag_refs,c.size_signal,"
+		"        %s AS risk_score,%s AS risk_tier FROM counts c %s"
+		") "
+		"SELECT *, MAX(risk_score, MIN(fan_in,30)/30.0, MIN(fan_out,30)/30.0, MIN(size_signal,500)/500.0) AS hotspot_score "
+		"FROM scored %s%sLIMIT %d;"),
+		*RiskScoreExpr, *RiskTierExpr, *CacheJoin, *WhereClause, *OrderBy, Cap + 1);
+
+	FSQLitePreparedStatement Stmt;
+	FJsonArr Hotspots;
+	FJsonArr Questions;
+	bool bTruncated = false;
+	if (Stmt.Create(*Raw, *Sql))
+	{
+		while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			if (Hotspots.Num() >= Cap)
+			{
+				bTruncated = true;
+				break;
+			}
+			int64 Id = 0;
+			FString Path, Name, Class, Module, Tier;
+			int32 FanIn = 0, FanOut = 0, HardIn = 0, NodeCount = 0, VarCount = 0, ParamCount = 0, TagRefs = 0, SizeSignal = 0;
+			double Risk = 0.0;
+			Stmt.GetColumnValueByIndex(0, Id);
+			Stmt.GetColumnValueByIndex(1, Path);
+			Stmt.GetColumnValueByIndex(2, Name);
+			Stmt.GetColumnValueByIndex(3, Class);
+			Stmt.GetColumnValueByIndex(4, Module);
+			Stmt.GetColumnValueByIndex(5, FanIn);
+			Stmt.GetColumnValueByIndex(6, FanOut);
+			Stmt.GetColumnValueByIndex(7, HardIn);
+			Stmt.GetColumnValueByIndex(8, NodeCount);
+			Stmt.GetColumnValueByIndex(9, VarCount);
+			Stmt.GetColumnValueByIndex(10, ParamCount);
+			Stmt.GetColumnValueByIndex(11, TagRefs);
+			Stmt.GetColumnValueByIndex(12, SizeSignal);
+			Stmt.GetColumnValueByIndex(13, Risk);
+			Stmt.GetColumnValueByIndex(14, Tier);
+
+			FString Primary = NormalizedKind;
+			if (Primary == TEXT("all"))
+			{
+				const double InSignal = FMath::Min<double>(FanIn, 30) / 30.0;
+				const double OutSignal = FMath::Min<double>(FanOut, 30) / 30.0;
+				const double LargeSignal = FMath::Min<double>(SizeSignal, 500) / 500.0;
+				Primary = TEXT("risk");
+				double Best = Risk;
+				if (InSignal > Best) { Best = InSignal; Primary = TEXT("fan_in"); }
+				if (OutSignal > Best) { Best = OutSignal; Primary = TEXT("fan_out"); }
+				if (LargeSignal > Best) { Primary = TEXT("large"); }
+			}
+
+			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetStringField(TEXT("primary_kind"), Primary);
+			O->SetNumberField(TEXT("id"), static_cast<double>(Id));
+			O->SetStringField(TEXT("asset_path"), Path);
+			O->SetStringField(TEXT("asset_name"), Name);
+			O->SetStringField(TEXT("asset_class"), Class);
+			O->SetStringField(TEXT("module_name"), Module);
+			TSharedPtr<FJsonObject> Metrics = MakeShared<FJsonObject>();
+			Metrics->SetNumberField(TEXT("fan_in"), FanIn);
+			Metrics->SetNumberField(TEXT("fan_out"), FanOut);
+			Metrics->SetNumberField(TEXT("hard_in"), HardIn);
+			Metrics->SetNumberField(TEXT("risk_score"), FMath::RoundToDouble(Risk * 1000.0) / 1000.0);
+			Metrics->SetStringField(TEXT("risk_tier"), Tier);
+			Metrics->SetNumberField(TEXT("nodes"), NodeCount);
+			Metrics->SetNumberField(TEXT("variables"), VarCount);
+			Metrics->SetNumberField(TEXT("parameters"), ParamCount);
+			Metrics->SetNumberField(TEXT("tag_references"), TagRefs);
+			Metrics->SetNumberField(TEXT("size_signal"), SizeSignal);
+			O->SetObjectField(TEXT("metrics"), Metrics);
+			Hotspots.Add(MakeShared<FJsonValueObject>(O));
+
+			if (bIncludeQuestions && Questions.Num() < 5)
+			{
+				TSharedPtr<FJsonObject> Q = MakeShared<FJsonObject>();
+				Q->SetStringField(TEXT("target"), Path);
+				Q->SetStringField(TEXT("reason"), Primary);
+				Q->SetStringField(TEXT("question"), Primary == TEXT("large")
+					? TEXT("Can this asset's graph/detail size be reduced or validated with focused coverage before editing?")
+					: TEXT("Which dependent assets and gameplay paths should be checked before changing this hotspot?"));
+				Questions.Add(MakeShared<FJsonValueObject>(Q));
+			}
+		}
+	}
+
+	Root->SetStringField(TEXT("status"), TEXT("ok"));
+	Root->SetStringField(TEXT("summary"), FString::Printf(
+		TEXT("%d project review hotspot(s) ranked by %s%s"),
+		Hotspots.Num(), *NormalizedKind, bHasCrg ? TEXT(" using CRG cache when available") : TEXT(" using native fallback")));
+	Root->SetArrayField(TEXT("hotspots"), Hotspots);
+	if (bIncludeQuestions)
+	{
+		Root->SetArrayField(TEXT("questions"), Questions);
+	}
+	Root->SetBoolField(TEXT("truncated"), bTruncated);
+	AddNext(Root, { TEXT("project.review_context"), TEXT("project.risk_score"), TEXT("project.impact_radius") });
 	return Root;
 }
 

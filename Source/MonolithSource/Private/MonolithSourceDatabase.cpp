@@ -1138,7 +1138,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	int64 CrgMetricCnt = -1;
 	if (bHasAllCrg)
 	{
-		const int64 RefCnt = CountOf(TEXT("SELECT COUNT(*) FROM \"references\";"));
+		const int64 ValidRefCnt = CountOf(TEXT(
+			"SELECT COUNT(*) FROM \"references\" r "
+			"JOIN symbols fs ON fs.id = r.from_symbol_id "
+			"JOIN symbols ts ON ts.id = r.to_symbol_id;"));
 		const int64 InhCnt = CountOf(TEXT("SELECT COUNT(*) FROM inheritance;"));
 		CrgNodeCnt = CountOf(TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain = 'source';"));
 		CrgEdgeCnt = CountOf(TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain = 'source';"));
@@ -1148,9 +1151,9 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		Check(TEXT("crg:nodes_row_parity"), CrgNodeCnt == SymCnt,
 			FString::Printf(TEXT("symbols=%lld crg_nodes(source)=%lld%s"), SymCnt, CrgNodeCnt,
 				CrgNodeCnt == SymCnt ? TEXT("") : TEXT(" (mismatch -> source.repair_crg_cache)")));
-		Check(TEXT("crg:edges_row_parity"), CrgEdgeCnt == RefCnt + InhCnt,
-			FString::Printf(TEXT("references+inheritance=%lld crg_edges(source)=%lld%s"), RefCnt + InhCnt, CrgEdgeCnt,
-				CrgEdgeCnt == RefCnt + InhCnt ? TEXT("") : TEXT(" (mismatch -> source.repair_crg_cache)")));
+		Check(TEXT("crg:edges_row_parity"), CrgEdgeCnt == ValidRefCnt + InhCnt,
+			FString::Printf(TEXT("valid references+inheritance=%lld crg_edges(source)=%lld%s"), ValidRefCnt + InhCnt, CrgEdgeCnt,
+				CrgEdgeCnt == ValidRefCnt + InhCnt ? TEXT("") : TEXT(" (mismatch -> source.repair_crg_cache)")));
 		Check(TEXT("crg:metrics_row_parity"), CrgMetricCnt == CrgNodeCnt,
 			FString::Printf(TEXT("crg_nodes(source)=%lld crg_node_metrics=%lld%s"), CrgNodeCnt, CrgMetricCnt,
 				CrgMetricCnt == CrgNodeCnt ? TEXT("") : TEXT(" (mismatch -> source.repair_crg_cache)")));
@@ -1179,9 +1182,9 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		{
 			S2.GetColumnValueByIndex(0, CrgScoringVersion);
 		}
-		Check(TEXT("crg:scoring_version"), CrgScoringVersion == TEXT("2"),
+		Check(TEXT("crg:scoring_version"), CrgScoringVersion == TEXT("3"),
 			CrgScoringVersion.IsEmpty() ? TEXT("crg_meta.scoring_version missing (run source.repair_crg_cache)")
-				: FString::Printf(TEXT("crg scoring_version=%s (expected 2)"), *CrgScoringVersion));
+				: FString::Printf(TEXT("crg scoring_version=%s (expected 3)"), *CrgScoringVersion));
 	}
 
 	// source_fts is a plain (non external-content) fts5 table — a row-count
@@ -1454,55 +1457,115 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(bool bExecute)
 	Exec(TEXT("DELETE FROM crg_edges WHERE domain = 'source';"), TEXT("clear edges"));
 	Exec(TEXT("DELETE FROM crg_nodes WHERE domain = 'source';"), TEXT("clear nodes"));
 	Exec(TEXT(
-		"INSERT INTO crg_nodes(domain,native_table,native_id,stable_key,kind,name,path,module,source_revision,extra,updated_at) "
-		"SELECT 'source','symbols',s.id,COALESCE(s.qualified_name,s.name) || '#' || s.id,"
+		"INSERT INTO crg_nodes(id,domain,native_table,native_id,stable_key,kind,name,path,module,source_revision,extra,updated_at) "
+		"SELECT s.id,'source','symbols',s.id,COALESCE(s.qualified_name,s.name) || '#' || s.id,"
 		"s.kind,s.name,COALESCE(f.path,''),COALESCE(m.name,''),'','{}',CAST(strftime('%s','now') AS INTEGER) "
 		"FROM symbols s "
 		"LEFT JOIN files f ON f.id = s.file_id "
 		"LEFT JOIN modules m ON m.id = f.module_id;"), TEXT("source nodes"));
 	Exec(TEXT(
 		"INSERT INTO crg_edges(domain,source_node_id,target_node_id,edge_kind,edge_subkind,weight,native_table,native_id,updated_at) "
-		"SELECT 'source',sn.id,tn.id,COALESCE(r.ref_kind,'reference'),'reference',1.0,'references',r.id,CAST(strftime('%s','now') AS INTEGER) "
+		"SELECT 'source',r.from_symbol_id,r.to_symbol_id,COALESCE(r.ref_kind,'reference'),'reference',1.0,'references',r.id,CAST(strftime('%s','now') AS INTEGER) "
 		"FROM \"references\" r "
-		"JOIN crg_nodes sn ON sn.domain='source' AND sn.native_table='symbols' AND sn.native_id=r.from_symbol_id "
-		"JOIN crg_nodes tn ON tn.domain='source' AND tn.native_table='symbols' AND tn.native_id=r.to_symbol_id;"), TEXT("source reference edges"));
+		"JOIN symbols fs ON fs.id = r.from_symbol_id "
+		"JOIN symbols ts ON ts.id = r.to_symbol_id;"), TEXT("source reference edges"));
 	Exec(TEXT(
 		"INSERT INTO crg_edges(domain,source_node_id,target_node_id,edge_kind,edge_subkind,weight,native_table,native_id,updated_at) "
-		"SELECT 'source',cn.id,pn.id,'inheritance','extends',1.0,'inheritance',i.id,CAST(strftime('%s','now') AS INTEGER) "
+		"SELECT 'source',i.child_id,i.parent_id,'inheritance','extends',1.0,'inheritance',i.id,CAST(strftime('%s','now') AS INTEGER) "
 		"FROM inheritance i "
-		"JOIN crg_nodes cn ON cn.domain='source' AND cn.native_table='symbols' AND cn.native_id=i.child_id "
-		"JOIN crg_nodes pn ON pn.domain='source' AND pn.native_table='symbols' AND pn.native_id=i.parent_id;"), TEXT("source inheritance edges"));
+		"JOIN symbols cs ON cs.id = i.child_id "
+		"JOIN symbols ps ON ps.id = i.parent_id;"), TEXT("source inheritance edges"));
 	Exec(TEXT(
-		"WITH counts AS ("
+		"WITH ref_in AS ("
+		"   SELECT to_symbol_id AS symbol_id, COUNT(*) AS fan_in, COUNT(DISTINCT r.file_id) AS caller_files"
+		"   FROM \"references\" r "
+		"   JOIN symbols fs ON fs.id = r.from_symbol_id "
+		"   JOIN symbols ts ON ts.id = r.to_symbol_id "
+		"   GROUP BY to_symbol_id"
+		" ), ref_out AS ("
+		"   SELECT from_symbol_id AS symbol_id, COUNT(*) AS fan_out"
+		"   FROM \"references\" r "
+		"   JOIN symbols fs ON fs.id = r.from_symbol_id "
+		"   JOIN symbols ts ON ts.id = r.to_symbol_id "
+		"   GROUP BY from_symbol_id"
+		" ), inh_desc AS ("
+		"   SELECT parent_id AS symbol_id, COUNT(*) AS descendants"
+		"   FROM inheritance i JOIN symbols cs ON cs.id = i.child_id JOIN symbols ps ON ps.id = i.parent_id GROUP BY parent_id"
+		" ), inh_anc AS ("
+		"   SELECT child_id AS symbol_id, COUNT(*) AS ancestors"
+		"   FROM inheritance i JOIN symbols cs ON cs.id = i.child_id JOIN symbols ps ON ps.id = i.parent_id GROUP BY child_id"
+		" ), counts AS ("
 		" SELECT s.id AS native_id,"
-		"        (SELECT COUNT(*) FROM \"references\" r WHERE r.to_symbol_id = s.id) AS fan_in,"
-		"        (SELECT COUNT(*) FROM \"references\" r WHERE r.from_symbol_id = s.id) AS fan_out,"
-		"        (SELECT COUNT(*) FROM inheritance i WHERE i.parent_id = s.id) AS descendants,"
-		"        (SELECT COUNT(*) FROM inheritance i WHERE i.child_id = s.id) AS ancestors,"
-		"        (SELECT COUNT(DISTINCT r.file_id) FROM \"references\" r WHERE r.to_symbol_id = s.id) AS caller_files,"
-		"        s.is_ue_macro AS is_ue_macro"
+		"        COALESCE(ri.fan_in,0) AS fan_in,"
+		"        COALESCE(ro.fan_out,0) AS fan_out,"
+		"        COALESCE(id.descendants,0) AS descendants,"
+		"        COALESCE(ia.ancestors,0) AS ancestors,"
+		"        COALESCE(ri.caller_files,0) AS caller_files,"
+		"        s.is_ue_macro AS is_ue_macro,"
+		"        CASE"
+		"          WHEN lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%ufunction%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%server%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%client%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%netmulticast%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%onrep%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%replication%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%rpc%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%network%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%save%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%serialize%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%archive%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%auth%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%login%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%account%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%session%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%purchase%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%iap%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%store%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%entitlement%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%anticheat%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%crypt%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%encrypt%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%decrypt%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%sign%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%hash%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%exec%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%eval%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%command%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%file%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%registry%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%process%'"
+		"          THEN 1 ELSE 0 END AS sensitivity"
 		" FROM symbols s"
+		" LEFT JOIN ref_in ri ON ri.symbol_id = s.id"
+		" LEFT JOIN ref_out ro ON ro.symbol_id = s.id"
+		" LEFT JOIN inh_desc id ON id.symbol_id = s.id"
+		" LEFT JOIN inh_anc ia ON ia.symbol_id = s.id"
 		"), scored AS ("
 		" SELECT c.*, MIN(1.0,"
 		"        MIN(c.fan_in,50) / 50.0 * 0.35 +"
 		"        MIN(c.descendants,30) / 30.0 * 0.25 +"
 		"        MIN(c.fan_out,50) / 50.0 * 0.10 +"
 		"        CASE WHEN c.is_ue_macro != 0 THEN 0.15 ELSE 0.0 END +"
-		"        MIN(c.caller_files,20) / 20.0 * 0.15) AS score"
+		"        MIN(c.caller_files,20) / 20.0 * 0.15 +"
+		"        CASE WHEN c.sensitivity != 0 THEN 0.15 ELSE 0.0 END) AS score"
 		" FROM counts c"
 		") "
 		"INSERT INTO crg_node_metrics(node_id,fan_in,fan_out,hard_in,descendants,risk_score,risk_tier,reasons_json,raw_counts_json,scoring_version,computed_at) "
-		"SELECT n.id,s.fan_in,s.fan_out,0,s.descendants,ROUND(s.score,3),"
+		"SELECT s.native_id,s.fan_in,s.fan_out,0,s.descendants,ROUND(s.score,3),"
 		"       CASE WHEN s.score >= 0.66 THEN 'high' WHEN s.score >= 0.33 THEN 'medium' ELSE 'low' END,"
-		"       printf('[\"caller fan-in: %d\",\"inheritance descendants (1-hop): %d\",\"callee fan-out: %d\",\"module/file boundary crossing: %d distinct caller file(s)\"]',"
-		"              s.fan_in,s.descendants,s.fan_out,s.caller_files),"
-		"       printf('{\"callers\":%d,\"callees\":%d,\"descendants\":%d,\"ancestors\":%d,\"caller_files\":%d,\"is_ue_macro\":%d}',"
-		"              s.fan_in,s.fan_out,s.descendants,s.ancestors,s.caller_files,s.is_ue_macro),"
-		"       '2',CAST(strftime('%s','now') AS INTEGER) "
-		"FROM scored s "
-		"JOIN crg_nodes n ON n.domain='source' AND n.native_table='symbols' AND n.native_id=s.native_id;"), TEXT("source metrics"));
+		"       CASE WHEN s.sensitivity != 0 THEN"
+		"         printf('[\"caller fan-in: %d\",\"inheritance descendants (1-hop): %d\",\"callee fan-out: %d\",\"module/file boundary crossing: %d distinct caller file(s)\",\"sensitivity: UE-domain sensitive surface\"]',"
+		"                s.fan_in,s.descendants,s.fan_out,s.caller_files)"
+		"       ELSE"
+		"         printf('[\"caller fan-in: %d\",\"inheritance descendants (1-hop): %d\",\"callee fan-out: %d\",\"module/file boundary crossing: %d distinct caller file(s)\"]',"
+		"                s.fan_in,s.descendants,s.fan_out,s.caller_files)"
+		"       END,"
+		"       printf('{\"callers\":%d,\"callees\":%d,\"descendants\":%d,\"ancestors\":%d,\"caller_files\":%d,\"is_ue_macro\":%d,\"sensitivity\":%d}',"
+		"              s.fan_in,s.fan_out,s.descendants,s.ancestors,s.caller_files,s.is_ue_macro,s.sensitivity),"
+		"       '3',CAST(strftime('%s','now') AS INTEGER) "
+		"FROM scored s;"), TEXT("source metrics"));
 	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('cache_version','1');"), TEXT("cache_version"));
-	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('scoring_version','2');"), TEXT("scoring_version"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('scoring_version','3');"), TEXT("scoring_version"));
 	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('built_at',datetime('now'));"), TEXT("built_at"));
 	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_built_at',datetime('now'));"), TEXT("source_built_at"));
 
@@ -1609,6 +1672,215 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::GetCachedRiskForSymbol(int64 Sy
 	O->SetObjectField(TEXT("raw_counts"), RawCounts);
 	O->SetObjectField(TEXT("cache"), CacheMeta(TEXT("hit"), CacheVersion, ScoringVersion));
 	return O;
+}
+
+TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
+	const FString& Kind,
+	int32 Limit,
+	int32 MinLines,
+	bool bIncludeQuestions)
+{
+	FScopeLock Lock(&DbLock);
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	const FString NormalizedKind = Kind.IsEmpty() ? TEXT("all") : Kind.ToLower();
+	const int32 Cap = FMath::Clamp(Limit <= 0 ? 50 : Limit, 1, 200);
+	const int32 LocFloor = FMath::Max(MinLines <= 0 ? 100 : MinLines, 0);
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("kind"), NormalizedKind);
+	Input->SetBoolField(TEXT("include_questions"), bIncludeQuestions);
+	Root->SetObjectField(TEXT("input"), Input);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("limit"), Cap);
+	Limits->SetNumberField(TEXT("min_lines"), LocFloor);
+	Root->SetObjectField(TEXT("limits"), Limits);
+
+	if (NormalizedKind != TEXT("fan_in") && NormalizedKind != TEXT("fan_out")
+		&& NormalizedKind != TEXT("risk") && NormalizedKind != TEXT("large")
+		&& NormalizedKind != TEXT("all"))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("Unsupported kind for source.review_hotspots (expected fan_in|fan_out|risk|large|all)"));
+		Root->SetArrayField(TEXT("hotspots"), TArray<TSharedPtr<FJsonValue>>());
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.review_hotspots kind=all"), TEXT("source.risk_score") });
+		return Root;
+	}
+
+	if (!Database || !Database->IsValid())
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("EngineSource DB is not open"));
+		Root->SetArrayField(TEXT("hotspots"), TArray<TSharedPtr<FJsonValue>>());
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.trigger_reindex"), TEXT("source.health") });
+		return Root;
+	}
+
+	auto Exists = [&](const TCHAR* Name) -> bool
+	{
+		FSQLitePreparedStatement S;
+		if (!S.Create(*Database, TEXT("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?;")))
+		{
+			return false;
+		}
+		S.SetBindingValueByIndex(1, FString(Name));
+		return S.Step() == ESQLitePreparedStatementStepResult::Row;
+	};
+	const bool bHasCrg = Exists(TEXT("crg_nodes")) && Exists(TEXT("crg_node_metrics"));
+
+	const FString CacheJoin = bHasCrg
+		? TEXT("LEFT JOIN crg_nodes n ON n.domain='source' AND n.native_table='symbols' AND n.native_id=c.id "
+			"LEFT JOIN crg_node_metrics m ON m.node_id=n.id ")
+		: TEXT("");
+	const FString RiskScoreExpr = bHasCrg
+		? TEXT("COALESCE(m.risk_score, c.estimated_risk)")
+		: TEXT("c.estimated_risk");
+	const FString RiskTierExpr = bHasCrg
+		? TEXT("COALESCE(m.risk_tier, CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END)")
+		: TEXT("CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END");
+	const FString WhereClause = NormalizedKind == TEXT("large")
+		? FString::Printf(TEXT("WHERE lines >= %d "), LocFloor)
+		: TEXT("WHERE fan_in > 0 OR fan_out > 0 OR descendants > 0 OR risk_score > 0 OR lines >= ") + FString::FromInt(LocFloor) + TEXT(" ");
+	FString OrderBy = TEXT("ORDER BY hotspot_score DESC, risk_score DESC, fan_in DESC, lines DESC ");
+	if (NormalizedKind == TEXT("fan_in")) OrderBy = TEXT("ORDER BY fan_in DESC, risk_score DESC, lines DESC ");
+	else if (NormalizedKind == TEXT("fan_out")) OrderBy = TEXT("ORDER BY fan_out DESC, risk_score DESC, lines DESC ");
+	else if (NormalizedKind == TEXT("risk")) OrderBy = TEXT("ORDER BY risk_score DESC, fan_in DESC, lines DESC ");
+	else if (NormalizedKind == TEXT("large")) OrderBy = TEXT("ORDER BY lines DESC, risk_score DESC, fan_in DESC ");
+
+	const FString Sql = FString::Printf(TEXT(
+		"WITH ref_in AS ("
+		"  SELECT to_symbol_id AS symbol_id, COUNT(*) AS fan_in, COUNT(DISTINCT r.file_id) AS caller_files "
+		"  FROM \"references\" r JOIN symbols fs ON fs.id=r.from_symbol_id JOIN symbols ts ON ts.id=r.to_symbol_id GROUP BY to_symbol_id"
+		"), ref_out AS ("
+		"  SELECT from_symbol_id AS symbol_id, COUNT(*) AS fan_out "
+		"  FROM \"references\" r JOIN symbols fs ON fs.id=r.from_symbol_id JOIN symbols ts ON ts.id=r.to_symbol_id GROUP BY from_symbol_id"
+		"), inh_desc AS ("
+		"  SELECT parent_id AS symbol_id, COUNT(*) AS descendants FROM inheritance i "
+		"  JOIN symbols cs ON cs.id=i.child_id JOIN symbols ps ON ps.id=i.parent_id GROUP BY parent_id"
+		"), base AS ("
+		"  SELECT s.id,s.name,s.qualified_name,s.kind,COALESCE(f.path,'') AS file,s.line_start,s.line_end,"
+		"         CASE WHEN s.line_end >= s.line_start THEN s.line_end - s.line_start + 1 ELSE 0 END AS lines,"
+		"         COALESCE(ri.fan_in,0) AS fan_in,COALESCE(ro.fan_out,0) AS fan_out,"
+		"         COALESCE(id.descendants,0) AS descendants,COALESCE(ri.caller_files,0) AS caller_files,"
+		"         s.is_ue_macro AS is_ue_macro,"
+		"         CASE WHEN lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%ufunction%%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%server%%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%client%%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%netmulticast%%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%save%%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%serialize%%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%auth%%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%purchase%%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%anticheat%%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%crypt%%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%exec%%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%file%%'"
+		"          THEN 1 ELSE 0 END AS sensitivity "
+		"  FROM symbols s LEFT JOIN files f ON f.id=s.file_id "
+		"  LEFT JOIN ref_in ri ON ri.symbol_id=s.id LEFT JOIN ref_out ro ON ro.symbol_id=s.id LEFT JOIN inh_desc id ON id.symbol_id=s.id"
+		"), counts AS ("
+		"  SELECT *, MIN(1.0, MIN(fan_in,50)/50.0*0.35 + MIN(descendants,30)/30.0*0.25 + "
+		"         MIN(fan_out,50)/50.0*0.10 + CASE WHEN is_ue_macro != 0 THEN 0.15 ELSE 0 END + "
+		"         MIN(caller_files,20)/20.0*0.15 + CASE WHEN sensitivity != 0 THEN 0.15 ELSE 0 END) AS estimated_risk "
+		"  FROM base"
+		"), scored AS ("
+		"  SELECT c.id,c.name,c.qualified_name,c.kind,c.file,c.line_start,c.line_end,c.lines,"
+		"         c.fan_in,c.fan_out,c.descendants,%s AS risk_score,%s AS risk_tier "
+		"  FROM counts c %s"
+		") "
+		"SELECT *, MAX(risk_score, MIN(fan_in,50)/50.0, MIN(fan_out,50)/50.0, MIN(lines,500)/500.0) AS hotspot_score "
+		"FROM scored %s%sLIMIT %d;"),
+		*RiskScoreExpr, *RiskTierExpr, *CacheJoin, *WhereClause, *OrderBy, Cap + 1);
+
+	FSQLitePreparedStatement S;
+	TArray<TSharedPtr<FJsonValue>> Hotspots;
+	TArray<TSharedPtr<FJsonValue>> Questions;
+	bool bTruncated = false;
+	if (S.Create(*Database, *Sql))
+	{
+		while (S.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			if (Hotspots.Num() >= Cap)
+			{
+				bTruncated = true;
+				break;
+			}
+			int64 Id = 0;
+			FString Name, QualifiedName, SymKind, File, Tier;
+			int32 LineStart = 0, LineEnd = 0, Lines = 0, FanIn = 0, FanOut = 0, Desc = 0;
+			double Risk = 0.0;
+			S.GetColumnValueByIndex(0, Id);
+			S.GetColumnValueByIndex(1, Name);
+			S.GetColumnValueByIndex(2, QualifiedName);
+			S.GetColumnValueByIndex(3, SymKind);
+			S.GetColumnValueByIndex(4, File);
+			S.GetColumnValueByIndex(5, LineStart);
+			S.GetColumnValueByIndex(6, LineEnd);
+			S.GetColumnValueByIndex(7, Lines);
+			S.GetColumnValueByIndex(8, FanIn);
+			S.GetColumnValueByIndex(9, FanOut);
+			S.GetColumnValueByIndex(10, Desc);
+			S.GetColumnValueByIndex(11, Risk);
+			S.GetColumnValueByIndex(12, Tier);
+
+			FString Primary = NormalizedKind;
+			if (Primary == TEXT("all"))
+			{
+				const double InSignal = FMath::Min<double>(FanIn, 50) / 50.0;
+				const double OutSignal = FMath::Min<double>(FanOut, 50) / 50.0;
+				const double LargeSignal = FMath::Min<double>(Lines, 500) / 500.0;
+				Primary = TEXT("risk");
+				double Best = Risk;
+				if (InSignal > Best) { Best = InSignal; Primary = TEXT("fan_in"); }
+				if (OutSignal > Best) { Best = OutSignal; Primary = TEXT("fan_out"); }
+				if (LargeSignal > Best) { Primary = TEXT("large"); }
+			}
+
+			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetStringField(TEXT("primary_kind"), Primary);
+			O->SetNumberField(TEXT("id"), static_cast<double>(Id));
+			O->SetStringField(TEXT("name"), Name);
+			O->SetStringField(TEXT("qualified_name"), QualifiedName);
+			O->SetStringField(TEXT("kind"), SymKind);
+			O->SetStringField(TEXT("file"), File);
+			O->SetNumberField(TEXT("line_start"), LineStart);
+			O->SetNumberField(TEXT("line_end"), LineEnd);
+			TSharedPtr<FJsonObject> Metrics = MakeShared<FJsonObject>();
+			Metrics->SetNumberField(TEXT("fan_in"), FanIn);
+			Metrics->SetNumberField(TEXT("fan_out"), FanOut);
+			Metrics->SetNumberField(TEXT("descendants"), Desc);
+			Metrics->SetNumberField(TEXT("risk_score"), FMath::RoundToDouble(Risk * 1000.0) / 1000.0);
+			Metrics->SetStringField(TEXT("risk_tier"), Tier);
+			Metrics->SetNumberField(TEXT("lines"), Lines);
+			O->SetObjectField(TEXT("metrics"), Metrics);
+			Hotspots.Add(MakeShared<FJsonValueObject>(O));
+
+			if (bIncludeQuestions && Questions.Num() < 5)
+			{
+				TSharedPtr<FJsonObject> Q = MakeShared<FJsonObject>();
+				Q->SetStringField(TEXT("target"), QualifiedName.IsEmpty() ? Name : QualifiedName);
+				Q->SetStringField(TEXT("reason"), Primary);
+				Q->SetStringField(TEXT("question"), Primary == TEXT("large")
+					? TEXT("Can this large symbol be split or covered by focused tests before risky edits?")
+					: TEXT("Which callers and tests cover this hotspot before changing it?"));
+				Questions.Add(MakeShared<FJsonValueObject>(Q));
+			}
+		}
+	}
+
+	Root->SetStringField(TEXT("status"), TEXT("ok"));
+	Root->SetStringField(TEXT("summary"), FString::Printf(
+		TEXT("%d source review hotspot(s) ranked by %s%s"),
+		Hotspots.Num(), *NormalizedKind, bHasCrg ? TEXT(" using CRG cache when available") : TEXT(" using native fallback")));
+	Root->SetArrayField(TEXT("hotspots"), Hotspots);
+	if (bIncludeQuestions)
+	{
+		Root->SetArrayField(TEXT("questions"), Questions);
+	}
+	Root->SetBoolField(TEXT("truncated"), bTruncated);
+	AddNextActions(Root, { TEXT("source.review_context"), TEXT("source.risk_score"), TEXT("source.impact_radius") });
+	return Root;
 }
 
 // ============================================================
