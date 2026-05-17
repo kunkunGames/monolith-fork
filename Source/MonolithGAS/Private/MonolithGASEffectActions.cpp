@@ -350,13 +350,7 @@ bool ConfigureMagnitude(
 		float Value = 0.f;
 		if (MagObj->HasField(TEXT("value")))
 		{
-			double TempValue = 0.0;
-			if (!MagObj->TryGetNumberField(TEXT("value"), TempValue))
-			{
-				OutError = TEXT("Malformed parameter: scalable_float value must be a number");
-				return false;
-			}
-			Value = static_cast<float>(TempValue);
+			Value = MagObj->GetNumberField(TEXT("value"));
 		}
 		OutMag = FGameplayEffectModifierMagnitude(FScalableFloat(Value));
 	}
@@ -399,33 +393,15 @@ bool ConfigureMagnitude(
 		}
 		if (MagObj->HasField(TEXT("coefficient")))
 		{
-			double TempVal = 0.0;
-			if (!MagObj->TryGetNumberField(TEXT("coefficient"), TempVal))
-			{
-				OutError = TEXT("Malformed parameter: coefficient must be a number");
-				return false;
-			}
-			ABF.Coefficient = FScalableFloat(static_cast<float>(TempVal));
+			ABF.Coefficient = FScalableFloat(MagObj->GetNumberField(TEXT("coefficient")));
 		}
 		if (MagObj->HasField(TEXT("pre_multiply_additive_value")))
 		{
-			double TempVal = 0.0;
-			if (!MagObj->TryGetNumberField(TEXT("pre_multiply_additive_value"), TempVal))
-			{
-				OutError = TEXT("Malformed parameter: pre_multiply_additive_value must be a number");
-				return false;
-			}
-			ABF.PreMultiplyAdditiveValue = FScalableFloat(static_cast<float>(TempVal));
+			ABF.PreMultiplyAdditiveValue = FScalableFloat(MagObj->GetNumberField(TEXT("pre_multiply_additive_value")));
 		}
 		if (MagObj->HasField(TEXT("post_multiply_additive_value")))
 		{
-			double TempVal = 0.0;
-			if (!MagObj->TryGetNumberField(TEXT("post_multiply_additive_value"), TempVal))
-			{
-				OutError = TEXT("Malformed parameter: post_multiply_additive_value must be a number");
-				return false;
-			}
-			ABF.PostMultiplyAdditiveValue = FScalableFloat(static_cast<float>(TempVal));
+			ABF.PostMultiplyAdditiveValue = FScalableFloat(MagObj->GetNumberField(TEXT("post_multiply_additive_value")));
 		}
 		OutMag = FGameplayEffectModifierMagnitude(ABF);
 	}
@@ -450,13 +426,7 @@ bool ConfigureMagnitude(
 		}
 		if (MagObj->HasField(TEXT("coefficient")))
 		{
-			double TempVal = 0.0;
-			if (!MagObj->TryGetNumberField(TEXT("coefficient"), TempVal))
-			{
-				OutError = TEXT("Malformed parameter: coefficient must be a number");
-				return false;
-			}
-			CCF.Coefficient = FScalableFloat(static_cast<float>(TempVal));
+			CCF.Coefficient = FScalableFloat(MagObj->GetNumberField(TEXT("coefficient")));
 		}
 		OutMag = FGameplayEffectModifierMagnitude(CCF);
 	}
@@ -1376,12 +1346,11 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetModifier(const TShared
 	FMonolithActionResult Err;
 	if (!LoadGEFromParams(Params, BP, GE, AssetPath, Err)) return Err;
 
-	double IndexVal = 0.0;
-	if (!Params->TryGetNumberField(TEXT("modifier_index"), IndexVal))
+	if (!Params->HasField(TEXT("modifier_index")))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing or invalid parameter: modifier_index must be a number"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: modifier_index"));
 	}
-	int32 Index = static_cast<int32>(IndexVal);
+	int32 Index = static_cast<int32>(Params->GetNumberField(TEXT("modifier_index")));
 
 	if (!GE->Modifiers.IsValidIndex(Index))
 	{
@@ -1450,21 +1419,19 @@ FMonolithActionResult FMonolithGASEffectActions::HandleRemoveModifier(const TSha
 	FMonolithActionResult Err;
 	if (!LoadGEFromParams(Params, BP, GE, AssetPath, Err)) return Err;
 
-	double RemoveIndexVal = 0.0;
-	bool bHasIndex = Params->TryGetNumberField(TEXT("modifier_index"), RemoveIndexVal);
-	FString AttrStr;
-	bool bHasAttr = Params->TryGetStringField(TEXT("attribute"), AttrStr);
+	bool bHasIndex = Params->HasField(TEXT("modifier_index"));
+	FString AttrStr = Params->GetStringField(TEXT("attribute"));
 
-	if (!bHasIndex && !bHasAttr)
+	if (!bHasIndex && AttrStr.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Either valid numeric modifier_index or attribute string must be specified"));
+		return FMonolithActionResult::Error(TEXT("Either modifier_index or attribute must be specified"));
 	}
 
 	int32 RemoveIndex = -1;
 
 	if (bHasIndex)
 	{
-		RemoveIndex = static_cast<int32>(RemoveIndexVal);
+		RemoveIndex = static_cast<int32>(Params->GetNumberField(TEXT("modifier_index")));
 	}
 	else
 	{
@@ -1890,13 +1857,9 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetEffectStacking(const T
 	// Set StackingType via reflection (SetStackingType is not exported)
 	SetGameplayEffectStackingTypeValue(GE, StackType);
 
-	if (Params->HasField(TEXT("stack_limit")))
+	double StackLimitVal = 0.0;
+	if (Params->TryGetNumberField(TEXT("stack_limit"), StackLimitVal))
 	{
-		double StackLimitVal = 0.0;
-		if (!Params->TryGetNumberField(TEXT("stack_limit"), StackLimitVal))
-		{
-			return FMonolithActionResult::Error(TEXT("stack_limit must be a number"));
-		}
 		GE->StackLimitCount = FMath::Clamp(static_cast<int32>(StackLimitVal), 0, 1000);
 	}
 
@@ -1964,11 +1927,7 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetEffectStacking(const T
 	Result->SetStringField(TEXT("stacking_type"), StackTypeStr);
 	if (Params->HasField(TEXT("stack_limit")))
 	{
-		double OutLimit = 0.0;
-		if (Params->TryGetNumberField(TEXT("stack_limit"), OutLimit))
-		{
-			Result->SetNumberField(TEXT("stack_limit"), GE->StackLimitCount);
-		}
+		Result->SetNumberField(TEXT("stack_limit"), GE->StackLimitCount);
 	}
 	return FMonolithActionResult::Success(Result);
 }
