@@ -159,7 +159,7 @@ def run_selftest() -> int:
 
 def main() -> int:
     if not AGENTS_DIR.is_dir():
-        print(f"ERROR: agents directory not found: {AGENTS_DIR}", file=sys.stderr)
+        print(f"ERROR: agents directory not found: {AGENTS_DIR}\nNote: This directory is an external prerequisite and may not be tracked in the repository.", file=sys.stderr)
         return 2
 
     agent_files = sorted(AGENTS_DIR.glob("*.md"))

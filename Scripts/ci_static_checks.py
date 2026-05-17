@@ -336,7 +336,7 @@ def check_agent_tools(ctx: CheckContext) -> None:
     dispatcher_prefix = str(config.get("dispatcher_prefix", "mcp__monolith__"))
     missing_is_error = bool(config.get("missing_agents_dir_is_error", False))
     if not agents_dir.exists():
-        message = f"Agents directory missing: {ctx.rel(agents_dir)}"
+        message = f"Agents directory missing: {ctx.rel(agents_dir)} (Note: This directory is an external prerequisite and may not be tracked in the repository.)"
         if missing_is_error:
             ctx.block("agent-tools", message, agents_dir)
         else:
