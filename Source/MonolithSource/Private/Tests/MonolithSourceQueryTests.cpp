@@ -292,6 +292,40 @@ bool FSourceDetectChangesEscapesPathWildcardsTest::RunTest(const FString& Parame
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourcePreMergeCheckWarnsOnTestGaps, "Monolith.IndexGuard.Source.PreMergeCheckWarnsOnTestGaps", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourcePreMergeCheckWarnsOnTestGaps::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+	TSharedPtr<FJsonObject> R = T.Db.PreMergeCheck({ TEXT("/tmp/M/M.cpp") }, 10, 5, TEXT("minimal"), false);
+	TestEqual(TEXT("warning status"), R->GetStringField(TEXT("status")), FString(TEXT("warning")));
+	TestEqual(TEXT("decision warn"), R->GetStringField(TEXT("decision")), FString(TEXT("warn")));
+	TestEqual(TEXT("all file symbols changed"), R->GetIntegerField(TEXT("changed_entity_count")), 5);
+	TestTrue(TEXT("heuristic test gaps carried into gate"), R->GetIntegerField(TEXT("test_gap_count")) >= 1);
+	TestFalse(TEXT("minimal omits nested change analysis"), R->HasField(TEXT("change_analysis")));
+	const TArray<TSharedPtr<FJsonValue>>* Checks = nullptr;
+	TestTrue(TEXT("checks present"), R->TryGetArrayField(TEXT("checks"), Checks) && Checks && Checks->Num() >= 2);
+	const TArray<TSharedPtr<FJsonValue>>* Findings = nullptr;
+	TestTrue(TEXT("findings present"), R->TryGetArrayField(TEXT("findings"), Findings) && Findings && Findings->Num() >= 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourcePreMergeCheckStandardIncludesNestedPayloads, "Monolith.IndexGuard.Source.PreMergeCheckStandardIncludesNestedPayloads", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourcePreMergeCheckStandardIncludesNestedPayloads::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+	TSharedPtr<FJsonObject> R = T.Db.PreMergeCheck({ TEXT("M.cpp") }, 10, 5, TEXT("standard"), true);
+	TestEqual(TEXT("decision warn"), R->GetStringField(TEXT("decision")), FString(TEXT("warn")));
+	TestTrue(TEXT("unused sample surfaced"), R->GetIntegerField(TEXT("unused_count")) >= 1);
+	TestTrue(TEXT("standard includes health payload"), R->HasField(TEXT("health")));
+	TestTrue(TEXT("standard includes change analysis"), R->HasField(TEXT("change_analysis")));
+	TestTrue(TEXT("standard includes unused payload"), R->HasField(TEXT("unused")));
+	const TArray<TSharedPtr<FJsonValue>>* Checks = nullptr;
+	TestTrue(TEXT("health/detect/unused checks present"), R->TryGetArrayField(TEXT("checks"), Checks) && Checks && Checks->Num() >= 3);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceReviewHotspotsLargeTest, "Monolith.IndexGuard.Source.ReviewHotspotsLarge", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FSourceReviewHotspotsLargeTest::RunTest(const FString& Parameters)
 {
