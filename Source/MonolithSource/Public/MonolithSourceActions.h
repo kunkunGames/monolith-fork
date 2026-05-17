@@ -34,6 +34,8 @@ private:
 	static FMonolithActionResult HandleDetectChanges(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleFindUnused(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandlePreMergeCheck(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSnapshot(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleDiffSnapshots(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleReviewHotspots(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleReviewContext(const TSharedPtr<FJsonObject>& Params);
 

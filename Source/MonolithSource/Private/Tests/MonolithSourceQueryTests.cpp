@@ -177,6 +177,49 @@ bool FSourceRepairCrgCacheTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceSnapshotDiffTest, "Monolith.IndexGuard.Source.SnapshotDiff", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceSnapshotDiffTest::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+
+	TSharedPtr<FJsonObject> Dry = T.Db.Snapshot(TEXT("base"), false);
+	TestEqual(TEXT("snapshot dry-run ok"), Dry->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestFalse(TEXT("dry-run does not execute"), Dry->GetBoolField(TEXT("executed")));
+
+	TSharedPtr<FJsonObject> Snap = T.Db.Snapshot(TEXT("base"), true);
+	TestEqual(TEXT("snapshot execute ok"), Snap->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestTrue(TEXT("snapshot executed"), Snap->GetBoolField(TEXT("executed")));
+	TestEqual(TEXT("snapshot captures five source nodes"), Snap->GetIntegerField(TEXT("node_count")), 5);
+	TestEqual(TEXT("snapshot captures four source edges"), Snap->GetIntegerField(TEXT("edge_count")), 4);
+
+	const int64 NewId = T.Db.InsertSymbol(
+		TEXT("NewReviewSymbol"),
+		TEXT("M::NewReviewSymbol"),
+		TEXT("function"),
+		T.FileId,
+		171,
+		172,
+		0,
+		TEXT("public"),
+		TEXT("void NewReviewSymbol()"),
+		TEXT(""),
+		false);
+	TestTrue(TEXT("new source symbol inserted"), NewId > 0);
+	TSharedPtr<FJsonObject> Rebuilt = T.Db.RepairCrgCache(true);
+	TestEqual(TEXT("crg cache rebuilt after insert"), Rebuilt->GetStringField(TEXT("status")), FString(TEXT("ok")));
+
+	TSharedPtr<FJsonObject> Diff = T.Db.DiffSnapshots(TEXT("base"), TEXT("current"), 10);
+	TestEqual(TEXT("diff ok"), Diff->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TSharedPtr<FJsonObject> Counts = Diff->GetObjectField(TEXT("summary_counts"));
+	TestTrue(TEXT("summary counts present"), Counts.IsValid());
+	TestTrue(TEXT("one or more source nodes added"), Counts->GetIntegerField(TEXT("nodes_added")) >= 1);
+	const TArray<TSharedPtr<FJsonValue>>* NewNodes = nullptr;
+	TestTrue(TEXT("new_nodes sample present"), Diff->TryGetArrayField(TEXT("new_nodes"), NewNodes) && NewNodes && NewNodes->Num() >= 1);
+	TestFalse(TEXT("diff not truncated"), Diff->GetBoolField(TEXT("truncated")));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceRiskScoreUsesCrgCacheTest, "Monolith.IndexGuard.Source.RiskScoreUsesCrgCache", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FSourceRiskScoreUsesCrgCacheTest::RunTest(const FString& Parameters)
 {

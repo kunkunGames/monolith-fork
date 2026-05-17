@@ -2,7 +2,7 @@
 
 **Version:** v0.14.10 · **Last updated:** 2026-05-18
 
-**In-tree action total: 1550** active actions across **32 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1574). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1546** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 36.
+**In-tree action total: 1554** active actions across **32 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1578). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1550** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 36.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
@@ -448,7 +448,7 @@ List all config files with their hierarchy level.
 
 ## project
 
-Project-wide asset index backed by SQLite + FTS5. **17 actions.**
+Project-wide asset index backed by SQLite + FTS5. **19 actions.**
 
 CRG-inspired navigation/review (additive, over the existing `dependencies` graph plus rebuildable derived `crg_*` projection/cache tables):
 
@@ -462,6 +462,8 @@ CRG-inspired navigation/review (additive, over the existing `dependencies` graph
 | `project.detect_changes` | `changed_paths` or `paths`, `max_results`=200, `detail_level`=minimal | Changed `.uasset`/`.umap` path/name mapping to indexed assets, risk, depth-1 dependency impact, and review priorities; no P4/git shell-out |
 | `project.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory orphan-asset candidates with `confidence` + `reasons[]`; excludes World/Level/PrimaryAssetLabel roots and never mutates |
 | `project.pre_merge_check` | `changed_paths` or `paths`, `max_results`=200, `unused_limit`=20, `detail_level`=minimal | Advisory pre-merge gate composed from health, detect_changes, and optional find_unused; returns `decision`, `checks[]`, `findings[]`, and next actions; no P4/git shell-out |
+| `project.snapshot` | `label`, `execute`=false | Dry-run by default; `execute=true` stores current CRG projection node/edge manifest in derived `crg_snapshots` |
+| `project.diff_snapshots` | `before`*, `after`=current, `limit`=100 | Read-only diff between stored/current CRG manifests; returns `summary_counts` and capped new/removed node/edge samples |
 | `project.review_hotspots` | `kind`=all, `limit`=50, `min_lines`=100, `include_questions`=true | Global review queue ranked by fan-in/fan-out/risk/large graph signals with optional advisory questions |
 | `project.review_context` | `asset_path`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`; `minimal` omits full details |
 
@@ -519,7 +521,7 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 
 ## source
 
-Unreal Engine C++ source code navigation. 1M+ symbols indexed. **21 actions.**
+Unreal Engine C++ source code navigation. 1M+ symbols indexed. **23 actions.**
 
 CRG-inspired navigation/review (additive, over the existing `"references"` + `inheritance` graph plus rebuildable derived `crg_*` projection/cache tables):
 
@@ -533,6 +535,8 @@ CRG-inspired navigation/review (additive, over the existing `"references"` + `in
 | `source.detect_changes` | `changed_paths` or `paths`, `max_results`=200, `detail_level`=minimal | Changed source path suffix mapping to symbols, risk, depth-1 caller impact, heuristic test gaps, and review priorities; no P4/git shell-out |
 | `source.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory function/class/struct dead-symbol candidates with `confidence` + `reasons[]`; excludes UE reflection/automation/entry markers and never mutates |
 | `source.pre_merge_check` | `changed_paths` or `paths`, `max_results`=200, `unused_limit`=20, `detail_level`=minimal | Advisory pre-merge gate composed from health, detect_changes, and optional find_unused; returns `decision`, `checks[]`, `findings[]`, and next actions; no P4/git shell-out |
+| `source.snapshot` | `label`, `execute`=false | Dry-run by default; `execute=true` stores current CRG projection node/edge manifest in derived `crg_snapshots` |
+| `source.diff_snapshots` | `before`*, `after`=current, `limit`=100 | Read-only diff between stored/current CRG manifests; returns `summary_counts` and capped new/removed node/edge samples |
 | `source.review_hotspots` | `kind`=all, `limit`=50, `min_lines`=100, `include_questions`=true | Global review queue ranked by fan-in/fan-out/risk/large symbol signals with optional advisory questions |
 | `source.review_context` | `symbol`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`. Distinct from single-item `context.build_attachment` |
 
@@ -979,6 +983,7 @@ When the editor is closed but you still need to query Monolith:
   - **RX-1 (`detect_changes`):** live `source.detect_changes` / `project.detect_changes` and offline `monolith_query <source|project> detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]`. Maps a Perforce changelist / changed paths to indexed symbols (source: `files.path` suffix match) or assets (project: `package_path`/`asset_name`), escaping SQL `LIKE` wildcards so `_` and `%` in filenames are matched literally. Reuses the RX-2 cached risk (or query-time fallback), adds a bounded depth-1 impact set, advisory heuristic test-gaps (source only; EngineSource has no `TESTED_BY` edge), and risk-ordered `review_priorities`. `changed_paths` is the VCS-agnostic primary input; no P4/git shell-out.
   - **RX-3 (`find_unused`):** live `source.find_unused` / `project.find_unused` and offline `monolith_query <source|project> find_unused [--kind=...] [--limit=N] [--min-confidence=low|medium|high]`. Advisory dead-symbol (source: 0 inbound `"references"`, not an inheritance parent, `is_ue_macro=0`, no UFUNCTION/automation/entry markers) / orphan-asset (project: never a `dependencies.target_asset_id`, not a World/Level/PrimaryAssetLabel root) detection. Each item has `confidence` + `reasons[]`; recall-first (default `min-confidence=low`) since UE reflection/delegate/Blueprint/soft-path edges are not in the graph — never reports `high`, never mutates.
   - **RX-5 (`pre_merge_check`):** live `source.pre_merge_check` / `project.pre_merge_check` compose `health`, `detect_changes`, and optional `find_unused` into an advisory `decision` (`pass`/`warn`/`fail`), `checks[]`, and `findings[]`. This is an editor-only action in this phase; the standalone offline CLI remains read-only query parity for the underlying components.
+  - **RX-4 (`snapshot` / `diff_snapshots`):** live `source.snapshot` / `project.snapshot` and `source.diff_snapshots` / `project.diff_snapshots` store and compare derived CRG projection manifests in `crg_snapshots`. Snapshot writes are explicit (`execute=true`); diffs are read-only and editor-only in this phase.
   - **RX-8 (`review_hotspots`):** `monolith_query <source|project> review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]`. Read-only global triage over cached/native fan, risk, and size signals; outputs capped `hotspots[]`, optional `questions[]`, and `next_actions[]`.
 - **`python Plugins/Monolith/Saved/monolith_offline.py`** — same actions, stdlib-only.
 
