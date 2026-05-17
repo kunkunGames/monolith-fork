@@ -20,3 +20,7 @@
 **Boundary:** `max_tests` parameter in `run_automation_tests`.
 **Learning:** `run_automation_tests` operates synchronously inside the editor (without PIE or a separate process). Using the `max_tests` argument with extreme values allows thousands of tests to be executed sequentially on the main thread, resulting in potentially massive editor hangs/freezes.
 **Prevention:** Clamp the maximum tests limit using `FMath::Clamp` with a hard limit (e.g. 1000) to prevent single-action test exhaustion and document it properly in schemas.
+## 2026-05-16 - 🧱 LimitGuard: Bound editor/search_build_output limit
+**Boundary:** `limit` parameter in `search_build_output`.
+**Learning:** `search_build_output` scans the cached log capture for build-related entries. An unbounded limit combined with unsafe `GetNumberField` usage could lead to type-casting errors or excessive JSON array allocation for very large build logs.
+**Prevention:** Always use `TryGetNumberField` to validate the `limit` param and apply `FMath::Clamp` with a hard limit (e.g. 1000) to prevent oversized payloads.
