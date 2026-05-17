@@ -1675,14 +1675,14 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
         root["scoring_version"] = sv;
         root["truncated"] = truncated;
         root["status"] = "ok";
+        root["changed_entity_count"] = changed.size();
+        root["impacted_count"] = impacted.size();
+        root["test_gap_count"] = test_gaps.size();
         if (minimal) {
             json topn = json::array();
             for (size_t i = 0; i < changed.size() && i < 3; ++i) topn.push_back(changed[i].value("name", std::string()));
             root["summary"] = "changed " + std::to_string(changed.size()) + " symbol(s), risk=" + tier_for(overall)
                 + ", " + std::to_string(test_gaps.size()) + " advisory test-gap(s), scoring_version=" + sv;
-            root["changed_entity_count"] = changed.size();
-            root["impacted_count"] = impacted.size();
-            root["test_gap_count"] = test_gaps.size();
             root["review_priorities"] = topn;
         } else {
             root["summary"] = "changed " + std::to_string(changed.size()) + " symbol(s) across "
@@ -2723,13 +2723,13 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
         root["scoring_version"] = sv;
         root["truncated"] = truncated;
         root["status"] = "ok";
+        root["changed_entity_count"] = changed.size();
+        root["impacted_count"] = impacted.size();
         if (minimal) {
             json topn = json::array();
             for (size_t i = 0; i < changed.size() && i < 3; ++i) topn.push_back(changed[i].value("asset_name", std::string()));
             root["summary"] = "changed " + std::to_string(changed.size()) + " asset(s), risk=" + tier_for(overall)
                 + ", scoring_version=" + sv;
-            root["changed_entity_count"] = changed.size();
-            root["impacted_count"] = impacted.size();
             root["review_priorities"] = topn;
         } else {
             root["summary"] = "changed " + std::to_string(changed.size()) + " asset(s) across "
