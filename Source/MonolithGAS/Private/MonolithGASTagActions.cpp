@@ -383,7 +383,10 @@ FMonolithActionResult FMonolithGASTagActions::HandleGetTagHierarchy(const TShare
 	bool bIncludeUsage = false;
 	if (Params->HasField(TEXT("include_usage")))
 	{
-		bIncludeUsage = Params->GetBoolField(TEXT("include_usage"));
+		if (!Params->TryGetBoolField(TEXT("include_usage"), bIncludeUsage))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: include_usage must be a boolean"));
+		}
 	}
 
 	UGameplayTagsManager& TagManager = UGameplayTagsManager::Get();
@@ -775,7 +778,10 @@ FMonolithActionResult FMonolithGASTagActions::HandleRenameTag(const TSharedPtr<F
 	bool bDryRun = false;
 	if (Params->HasField(TEXT("dry_run")))
 	{
-		bDryRun = Params->GetBoolField(TEXT("dry_run"));
+		if (!Params->TryGetBoolField(TEXT("dry_run"), bDryRun))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: dry_run must be a boolean"));
+		}
 	}
 
 	IAssetRegistry& AssetRegistry =
@@ -935,7 +941,10 @@ FMonolithActionResult FMonolithGASTagActions::HandleRemoveGameplayTags(const TSh
 	bool bCheckReferences = true;
 	if (Params->HasField(TEXT("check_references")))
 	{
-		bCheckReferences = Params->GetBoolField(TEXT("check_references"));
+		if (!Params->TryGetBoolField(TEXT("check_references"), bCheckReferences))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: check_references must be a boolean"));
+		}
 	}
 
 	IAssetRegistry& AssetRegistry =
@@ -1320,7 +1329,10 @@ FMonolithActionResult FMonolithGASTagActions::HandleAuditTagNaming(const TShared
 		}
 		if ((*ConventionsObj)->HasField(TEXT("allow_underscores")))
 		{
-			bAllowUnderscores = (*ConventionsObj)->GetBoolField(TEXT("allow_underscores"));
+			if (!(*ConventionsObj)->TryGetBoolField(TEXT("allow_underscores"), bAllowUnderscores))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: conventions.allow_underscores must be a boolean"));
+			}
 		}
 		const TArray<TSharedPtr<FJsonValue>>* PrefixArray;
 		if ((*ConventionsObj)->TryGetArrayField(TEXT("required_prefixes"), PrefixArray))
@@ -1538,7 +1550,10 @@ FMonolithActionResult FMonolithGASTagActions::HandleImportTagHierarchy(const TSh
 	bool bDryRun = false;
 	if (Params->HasField(TEXT("dry_run")))
 	{
-		bDryRun = Params->GetBoolField(TEXT("dry_run"));
+		if (!Params->TryGetBoolField(TEXT("dry_run"), bDryRun))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: dry_run must be a boolean"));
+		}
 	}
 
 	// Read the file
