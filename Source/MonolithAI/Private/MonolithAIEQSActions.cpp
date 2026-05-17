@@ -980,6 +980,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleAddEQSGenerator(const TShared
 	if (PropErrors.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> ErrArr;
+		ErrArr.Reserve(PropErrors.Num());
 		for (const FString& Err : PropErrors)
 		{
 			ErrArr.Add(MakeShared<FJsonValueString>(Err));
@@ -1077,6 +1078,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSGenerator(const T
 	if (PropErrors.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> ErrArr;
+		ErrArr.Reserve(PropErrors.Num());
 		for (const FString& Err : PropErrors)
 		{
 			ErrArr.Add(MakeShared<FJsonValueString>(Err));
@@ -1148,6 +1150,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleAddEQSTest(const TSharedPtr<F
 	if (PropErrors.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> ErrArr;
+		ErrArr.Reserve(PropErrors.Num());
 		for (const FString& Err : PropErrors)
 		{
 			ErrArr.Add(MakeShared<FJsonValueString>(Err));
@@ -1246,6 +1249,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSTest(const TShare
 	if (PropErrors.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> ErrArr;
+		ErrArr.Reserve(PropErrors.Num());
 		for (const FString& Err : PropErrors)
 		{
 			ErrArr.Add(MakeShared<FJsonValueString>(Err));
