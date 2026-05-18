@@ -68,4 +68,26 @@ bool FMonolithAnimationParamGuardSetSequencePropertiesTest::RunTest(const FStrin
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimMontageBlendParamGuardTest, "Monolith.ParamGuard.Animation.SetMontageBlend", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAnimMontageBlendParamGuardTest::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/AnimWeaver_Montage");
+	UPackage* Package = CreatePackage(*FPackageName::ObjectPathToPackageName(AssetPath));
+	UAnimMontage* Montage = NewObject<UAnimMontage>(Package, FName("AnimWeaver_Montage"), RF_Public | RF_Standalone);
+	Montage->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), AssetPath);
+	Params->SetStringField(TEXT("blend_in_time"), TEXT("not_a_number"));
+	Params->SetStringField(TEXT("blend_out_time"), TEXT("not_a_number"));
+	Params->SetStringField(TEXT("blend_out_trigger_time"), TEXT("not_a_number"));
+	Params->SetStringField(TEXT("enable_auto_blend_out"), TEXT("not_a_bool"));
+
+	FMonolithActionResult Result = FMonolithAnimationActions::HandleSetMontageBlend(Params);
+	TestFalse(TEXT("SetMontageBlend with malformed params should return Error"), Result.bSuccess);
+	TestTrue(TEXT("Error message should mention number"), Result.ErrorMessage.Contains(TEXT("must be a number")));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
