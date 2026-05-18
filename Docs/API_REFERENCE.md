@@ -68,6 +68,8 @@ Core server management and introspection.
 
 When `bEnableMcpResources=true`, MonolithCore also exposes MCP `resources/list` and `resources/read` through `FMonolithResourceRegistry`. Default docs are registered only after their backing markdown is readable and non-empty. `resources/list` returns a string `nextCursor` only when another page exists; the exhausted page omits `nextCursor`.
 
+When `bEnableStructuredToolResults=true`, MCP `tools/call` responses keep the legacy `content[]` text JSON entry and additionally include `structuredContent` plus `_meta`. Successful calls mirror the action result object in `structuredContent`; errors expose `ok=false`, `error`, `error_code`, optional `hints`, `related_actions`, and `error_data` while preserving the existing human-readable text error.
+
 ### `monolith.discover`
 
 List available tool namespaces and their actions. Pass `namespace` to filter; pass `category` to narrow further (e.g. `"CommonUI"` inside `ui`).
