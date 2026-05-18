@@ -248,6 +248,7 @@ static double SourceSensitivityFactor(const FString& Text, FString& OutReason)
 static TArray<TSharedPtr<FJsonValue>> StringArray(const TArray<FString>& Values)
 {
 	TArray<TSharedPtr<FJsonValue>> Arr;
+	Arr.Reserve(Values.Num());
 	for (const FString& Value : Values)
 	{
 		Arr.Add(MakeShared<FJsonValueString>(Value));
@@ -290,6 +291,7 @@ static TArray<TSharedPtr<FJsonValue>> SetToJsonArray(const TSet<FString>& Values
 	TArray<FString> Sorted = Values.Array();
 	Sorted.Sort();
 	TArray<TSharedPtr<FJsonValue>> Arr;
+	Arr.Reserve(Sorted.Num());
 	for (const FString& Value : Sorted)
 	{
 		Arr.Add(MakeShared<FJsonValueString>(Value));
@@ -456,6 +458,7 @@ static TArray<TSharedPtr<FJsonValue>> TakeStringSamples(const TSet<FString>& Val
 	TArray<FString> Sorted = Values.Array();
 	Sorted.Sort();
 	TArray<TSharedPtr<FJsonValue>> Arr;
+	Arr.Reserve(FMath::Min(Sorted.Num(), Limit + 1));
 	for (int32 Index = 0; Index < Sorted.Num(); ++Index)
 	{
 		if (Index >= Limit)
@@ -489,6 +492,7 @@ static TArray<TSharedPtr<FJsonValue>> TakeEdgeSamples(const TSet<FString>& Value
 	TArray<FString> Sorted = Values.Array();
 	Sorted.Sort();
 	TArray<TSharedPtr<FJsonValue>> Arr;
+	Arr.Reserve(FMath::Min(Sorted.Num(), Limit + 1));
 	for (int32 Index = 0; Index < Sorted.Num(); ++Index)
 	{
 		if (Index >= Limit)
