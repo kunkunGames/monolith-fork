@@ -131,6 +131,12 @@ namespace
 			return false;
 		}
 
+		if (PolicyObject.IsValid() && PolicyObject->HasField(TEXT("post_edit_validate")))
+		{
+			OutError = TEXT("policy.post_edit_validate is not supported. Use policy.policy_id='post_edit_validate' and policy.post_edit_validation=true.");
+			return false;
+		}
+
 		bool bRequestedDirtyTracking = Policy.bDirtyPackageTracking;
 		if (!GetPolicyBoolIfPresent(PolicyObject, TEXT("dirty_package_tracking"), bRequestedDirtyTracking))
 		{

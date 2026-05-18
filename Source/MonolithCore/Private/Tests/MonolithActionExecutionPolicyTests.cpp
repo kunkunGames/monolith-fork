@@ -340,6 +340,31 @@ bool FMonolithActionExecutionPolicyOverrideAcceptsValidationTest::RunTest(const 
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyOverrideRejectsLegacyValidationFlagTest,
+	"Monolith.Core.ActionExecutionPolicy.OverrideRejectsLegacyValidationFlag",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionExecutionPolicyOverrideRejectsLegacyValidationFlagTest::RunTest(const FString& Parameters)
+{
+	RegisterPolicySliceTestNamespace();
+	RegisterMonolithExecutionGuardActions();
+
+	TSharedPtr<FJsonObject> PolicyObject = MakeShared<FJsonObject>();
+	PolicyObject->SetStringField(TEXT("policy_id"), TEXT("read_only"));
+	PolicyObject->SetBoolField(TEXT("post_edit_validate"), true);
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("action"), TEXT("policytest.default_action"));
+	Params->SetObjectField(TEXT("policy"), PolicyObject);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("monolith"), TEXT("set_action_execution_policy"), Params);
+	TestFalse(TEXT("Legacy validator flag is rejected"), Result.bSuccess);
+	TestTrue(TEXT("Legacy validator rejection names field"), Result.ErrorMessage.Contains(TEXT("post_edit_validate")));
+
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("policytest"));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyPostEditValidationHookTest,
 	"Monolith.Core.ActionExecutionPolicy.PostEditValidationHook",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

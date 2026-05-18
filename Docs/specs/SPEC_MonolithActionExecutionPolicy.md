@@ -84,6 +84,8 @@ Supported policy ids:
 
 The action returns a structured success object with `changed=true`, the normalized policy, and the target action. Unknown actions, malformed names, unsupported policy ids, and unavailable validation requests return normal Monolith errors.
 
+Legacy boolean aliases such as `policy.post_edit_validate` are rejected instead of being ignored. Callers must request validation through `policy.policy_id="post_edit_validate"` plus the normalized `policy.post_edit_validation=true` field when they send explicit flags.
+
 ---
 
 ## 5. User-Visible Surfaces
