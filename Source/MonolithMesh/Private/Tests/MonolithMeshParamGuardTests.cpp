@@ -5,42 +5,59 @@
 #include "Dom/JsonObject.h"
 #include "MonolithMeshDecalActions.h"
 #include "MonolithMeshProceduralActions.h"
+
+#if WITH_GEOMETRYSCRIPT
 #include "MonolithMeshTerrainActions.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshTerrainSampleMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.TerrainSampleRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardMeshTerrainSampleMalformedParamsTest::RunTest(const FString& Parameters)
 {
-    TSharedPtr<FJsonObject> Json = MakeShared<FJsonObject>();
+    FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry::Get());
+    TestTrue(TEXT("analyze_building_site action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("analyze_building_site")));
 
-    // Setup valid minimal samples array to pass first validation
+    TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+    // Minimal footprint polygon
+    TArray<TSharedPtr<FJsonValue>> Poly;
+    TArray<TSharedPtr<FJsonValue>> P0; P0.Add(MakeShared<FJsonValueNumber>(0)); P0.Add(MakeShared<FJsonValueNumber>(0));
+    Poly.Add(MakeShared<FJsonValueArray>(P0));
+    TArray<TSharedPtr<FJsonValue>> P1; P1.Add(MakeShared<FJsonValueNumber>(100)); P1.Add(MakeShared<FJsonValueNumber>(0));
+    Poly.Add(MakeShared<FJsonValueArray>(P1));
+    TArray<TSharedPtr<FJsonValue>> P2; P2.Add(MakeShared<FJsonValueNumber>(0)); P2.Add(MakeShared<FJsonValueNumber>(100));
+    Poly.Add(MakeShared<FJsonValueArray>(P2));
+    Params->SetArrayField(TEXT("footprint_polygon"), Poly);
+
+    // Minimal terrain samples
+    TSharedPtr<FJsonObject> TerrainObj = MakeShared<FJsonObject>();
     TArray<TSharedPtr<FJsonValue>> Row;
     Row.Add(MakeShared<FJsonValueNumber>(0.0));
     TArray<TSharedPtr<FJsonValue>> Samples;
     Samples.Add(MakeShared<FJsonValueArray>(Row));
-    Json->SetArrayField(TEXT("samples"), Samples);
+    TerrainObj->SetArrayField(TEXT("samples"), Samples);
 
-    // Add malformed min_z (string instead of number)
-    Json->SetStringField(TEXT("min_z"), TEXT("zero"));
+    // Add malformed min_z
+    TerrainObj->SetStringField(TEXT("min_z"), TEXT("zero"));
+    Params->SetObjectField(TEXT("terrain_samples"), TerrainObj);
 
-    FTerrainSample OutSample;
-    FString OutError;
-    bool bResult = FMonolithMeshTerrainActions::ParseTerrainSample(Json, OutSample, OutError);
+    FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("analyze_building_site"), Params);
 
-    TestFalse(TEXT("ParseTerrainSample rejects malformed min_z parameter"), bResult);
-    TestTrue(TEXT("ParseTerrainSample reports the validation error"), OutError.Contains(TEXT("min_z")));
+    TestFalse(TEXT("analyze_building_site rejects malformed min_z parameter"), Result.bSuccess);
+    TestTrue(TEXT("analyze_building_site reports the validation error"), Result.ErrorMessage.Contains(TEXT("min_z")));
 
-    // Test malformed bool all_hit (string instead of bool)
-    Json->RemoveField(TEXT("min_z"));
-    Json->SetStringField(TEXT("all_hit"), TEXT("true"));
+    // Test malformed bool all_hit
+    TerrainObj->RemoveField(TEXT("min_z"));
+    TerrainObj->SetStringField(TEXT("all_hit"), TEXT("true"));
+    Params->SetObjectField(TEXT("terrain_samples"), TerrainObj);
 
-    bResult = FMonolithMeshTerrainActions::ParseTerrainSample(Json, OutSample, OutError);
+    Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("analyze_building_site"), Params);
 
-    TestFalse(TEXT("ParseTerrainSample rejects malformed all_hit parameter"), bResult);
-    TestTrue(TEXT("ParseTerrainSample reports the validation error"), OutError.Contains(TEXT("all_hit")));
+    TestFalse(TEXT("analyze_building_site rejects malformed all_hit parameter"), Result.bSuccess);
+    TestTrue(TEXT("analyze_building_site reports the validation error"), Result.ErrorMessage.Contains(TEXT("all_hit")));
 
     return true;
 }
+#endif // WITH_GEOMETRYSCRIPT
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshInspectionMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.InspectionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
