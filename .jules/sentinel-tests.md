@@ -17,3 +17,8 @@
 **Target:** MonolithMesh / place_storytelling_scene / ParseVector
 **Learning:** Adding test cases for actions that accept arrays or vectors ensures that malformed inputs (like providing a string where an array of numbers is expected) are correctly rejected without crashing the editor.
 **Prevention:** Future Sentinel Test tasks targeting parameter schemas should test that helper parsers gracefully reject badly-typed fields (like strings passed to array params).
+
+## 2024-05-18 - Test Core JSON Utils
+**Target:** MonolithCore / FMonolithJsonUtils
+**Learning:** Monolith core JSON infrastructure functions like FMonolithJsonUtils `Parse`, `Serialize`, `SuccessResponse`, and `ErrorResponse` form the foundation of Monolith's safety boundaries. Validating them with comprehensive checks (e.g. malformed JSON strings properly returning `nullptr` without crashing) ensures safe MCP communication layers.
+**Prevention:** Future tests targeting static protocol helpers should verify edge cases (null results, malformed strings, exact response schema compliance) instead of just testing valid structures.
