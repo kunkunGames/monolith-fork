@@ -31,7 +31,7 @@ public class MonolithBABridge : ModuleRules
 					if (!bHasBlueprintAssist)
 					{
 						bHasBlueprintAssist = Directory.GetDirectories(
-							ProjectPluginsDir, "BlueprintAssist*",
+							ProjectPluginsDir, "BlueprintAssist_*",
 							SearchOption.TopDirectoryOnly).Length > 0;
 					}
 				}
@@ -44,9 +44,15 @@ public class MonolithBABridge : ModuleRules
 				string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
 				if (Directory.Exists(MarketplaceDir))
 				{
-					bHasBlueprintAssist = Directory.GetDirectories(
-						MarketplaceDir, "BlueprintAssist*",
-						SearchOption.TopDirectoryOnly).Length > 0;
+					bHasBlueprintAssist = Directory.Exists(
+						Path.Combine(MarketplaceDir, "BlueprintAssist"));
+
+					if (!bHasBlueprintAssist)
+					{
+						bHasBlueprintAssist = Directory.GetDirectories(
+							MarketplaceDir, "BlueprintAssist_*",
+							SearchOption.TopDirectoryOnly).Length > 0;
+					}
 				}
 
 				// 3. Check Engine Plugins/ root (some installs go here)
