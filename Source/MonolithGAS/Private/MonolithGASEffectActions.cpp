@@ -348,9 +348,18 @@ bool ConfigureMagnitude(
 	if (TypeStr == TEXT("scalable_float"))
 	{
 		float Value = 0.f;
+		double TempValue = 0.0;
 		if (MagObj->HasField(TEXT("value")))
 		{
-			Value = MagObj->GetNumberField(TEXT("value"));
+			if (MagObj->TryGetNumberField(TEXT("value"), TempValue))
+			{
+				Value = static_cast<float>(TempValue);
+			}
+			else
+			{
+				OutError = TEXT("Malformed parameter: scalable_float value must be a number");
+				return false;
+			}
 		}
 		OutMag = FGameplayEffectModifierMagnitude(FScalableFloat(Value));
 	}
@@ -391,17 +400,21 @@ bool ConfigureMagnitude(
 				return false;
 			}
 		}
+		double TempVal = 0.0;
 		if (MagObj->HasField(TEXT("coefficient")))
 		{
-			ABF.Coefficient = FScalableFloat(MagObj->GetNumberField(TEXT("coefficient")));
+			if (!MagObj->TryGetNumberField(TEXT("coefficient"), TempVal)) { OutError = TEXT("coefficient must be a number"); return false; }
+			ABF.Coefficient = FScalableFloat(static_cast<float>(TempVal));
 		}
 		if (MagObj->HasField(TEXT("pre_multiply_additive_value")))
 		{
-			ABF.PreMultiplyAdditiveValue = FScalableFloat(MagObj->GetNumberField(TEXT("pre_multiply_additive_value")));
+			if (!MagObj->TryGetNumberField(TEXT("pre_multiply_additive_value"), TempVal)) { OutError = TEXT("pre_multiply_additive_value must be a number"); return false; }
+			ABF.PreMultiplyAdditiveValue = FScalableFloat(static_cast<float>(TempVal));
 		}
 		if (MagObj->HasField(TEXT("post_multiply_additive_value")))
 		{
-			ABF.PostMultiplyAdditiveValue = FScalableFloat(MagObj->GetNumberField(TEXT("post_multiply_additive_value")));
+			if (!MagObj->TryGetNumberField(TEXT("post_multiply_additive_value"), TempVal)) { OutError = TEXT("post_multiply_additive_value must be a number"); return false; }
+			ABF.PostMultiplyAdditiveValue = FScalableFloat(static_cast<float>(TempVal));
 		}
 		OutMag = FGameplayEffectModifierMagnitude(ABF);
 	}
@@ -424,9 +437,11 @@ bool ConfigureMagnitude(
 			}
 			CCF.CalculationClassMagnitude = CalcClass;
 		}
+		double TempVal = 0.0;
 		if (MagObj->HasField(TEXT("coefficient")))
 		{
-			CCF.Coefficient = FScalableFloat(MagObj->GetNumberField(TEXT("coefficient")));
+			if (!MagObj->TryGetNumberField(TEXT("coefficient"), TempVal)) { OutError = TEXT("coefficient must be a number"); return false; }
+			CCF.Coefficient = FScalableFloat(static_cast<float>(TempVal));
 		}
 		OutMag = FGameplayEffectModifierMagnitude(CCF);
 	}
@@ -1346,11 +1361,12 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetModifier(const TShared
 	FMonolithActionResult Err;
 	if (!LoadGEFromParams(Params, BP, GE, AssetPath, Err)) return Err;
 
-	if (!Params->HasField(TEXT("modifier_index")))
+	double IndexVal = 0.0;
+	if (!Params->TryGetNumberField(TEXT("modifier_index"), IndexVal))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: modifier_index"));
+		return FMonolithActionResult::Error(TEXT("Missing or invalid parameter: modifier_index must be a number"));
 	}
-	int32 Index = static_cast<int32>(Params->GetNumberField(TEXT("modifier_index")));
+	int32 Index = static_cast<int32>(IndexVal);
 
 	if (!GE->Modifiers.IsValidIndex(Index))
 	{
@@ -1419,19 +1435,21 @@ FMonolithActionResult FMonolithGASEffectActions::HandleRemoveModifier(const TSha
 	FMonolithActionResult Err;
 	if (!LoadGEFromParams(Params, BP, GE, AssetPath, Err)) return Err;
 
-	bool bHasIndex = Params->HasField(TEXT("modifier_index"));
-	FString AttrStr = Params->GetStringField(TEXT("attribute"));
+	double RemoveIndexVal = 0.0;
+	bool bHasIndex = Params->TryGetNumberField(TEXT("modifier_index"), RemoveIndexVal);
+	FString AttrStr;
+	bool bHasAttr = Params->TryGetStringField(TEXT("attribute"), AttrStr);
 
-	if (!bHasIndex && AttrStr.IsEmpty())
+	if (!bHasIndex && !bHasAttr)
 	{
-		return FMonolithActionResult::Error(TEXT("Either modifier_index or attribute must be specified"));
+		return FMonolithActionResult::Error(TEXT("Either valid numeric modifier_index or attribute string must be specified"));
 	}
 
 	int32 RemoveIndex = -1;
 
 	if (bHasIndex)
 	{
-		RemoveIndex = static_cast<int32>(Params->GetNumberField(TEXT("modifier_index")));
+		RemoveIndex = static_cast<int32>(RemoveIndexVal);
 	}
 	else
 	{
@@ -1615,7 +1633,12 @@ FMonolithActionResult FMonolithGASEffectActions::HandleAddGEComponent(const TSha
 		float Chance = 1.0f;
 		if (Config->HasField(TEXT("chance")))
 		{
-			Chance = Config->GetNumberField(TEXT("chance"));
+			double TempVal = 0.0;
+			if (!Config->TryGetNumberField(TEXT("chance"), TempVal))
+			{
+				return FMonolithActionResult::Error(TEXT("chance must be a number"));
+			}
+			Chance = static_cast<float>(TempVal);
 		}
 		Comp->SetChanceToApplyToTarget(FScalableFloat(Chance));
 	}
@@ -1624,7 +1647,12 @@ FMonolithActionResult FMonolithGASEffectActions::HandleAddGEComponent(const TSha
 		UAdditionalEffectsGameplayEffectComponent* Comp = CastChecked<UAdditionalEffectsGameplayEffectComponent>(NewComp);
 		if (Config->HasField(TEXT("copy_data_from_original_spec")))
 		{
-			Comp->bOnApplicationCopyDataFromOriginalSpec = Config->GetBoolField(TEXT("copy_data_from_original_spec"));
+			bool bCopy = false;
+			if (!Config->TryGetBoolField(TEXT("copy_data_from_original_spec"), bCopy))
+			{
+				return FMonolithActionResult::Error(TEXT("copy_data_from_original_spec must be a boolean"));
+			}
+			Comp->bOnApplicationCopyDataFromOriginalSpec = bCopy;
 		}
 		// Note: actual effect references require asset path resolution which is complex.
 		// This sets up the component skeleton; effects are added via subsequent calls or BP editing.
@@ -1789,7 +1817,12 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetGEComponent(const TSha
 		UChanceToApplyGameplayEffectComponent* Comp = CastChecked<UChanceToApplyGameplayEffectComponent>(FoundComp);
 		if (Config->HasField(TEXT("chance")))
 		{
-			Comp->SetChanceToApplyToTarget(FScalableFloat(Config->GetNumberField(TEXT("chance"))));
+			double TempVal = 0.0;
+			if (!Config->TryGetNumberField(TEXT("chance"), TempVal))
+			{
+				return FMonolithActionResult::Error(TEXT("chance must be a number"));
+			}
+			Comp->SetChanceToApplyToTarget(FScalableFloat(static_cast<float>(TempVal)));
 		}
 	}
 	else if (ComponentType == TEXT("additional_effects"))
@@ -1797,7 +1830,12 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetGEComponent(const TSha
 		UAdditionalEffectsGameplayEffectComponent* Comp = CastChecked<UAdditionalEffectsGameplayEffectComponent>(FoundComp);
 		if (Config->HasField(TEXT("copy_data_from_original_spec")))
 		{
-			Comp->bOnApplicationCopyDataFromOriginalSpec = Config->GetBoolField(TEXT("copy_data_from_original_spec"));
+			bool bCopy = false;
+			if (!Config->TryGetBoolField(TEXT("copy_data_from_original_spec"), bCopy))
+			{
+				return FMonolithActionResult::Error(TEXT("copy_data_from_original_spec must be a boolean"));
+			}
+			Comp->bOnApplicationCopyDataFromOriginalSpec = bCopy;
 		}
 	}
 
