@@ -50,7 +50,7 @@ namespace
 			|| ClassPath.Contains(TEXT("HLOD"), ESearchCase::IgnoreCase);
 	}
 
-	TArray<TSharedPtr<FJsonValue>> VectorToJson(const FVector& Value)
+	TArray<TSharedPtr<FJsonValue>> HlodVectorToJson(const FVector& Value)
 	{
 		TArray<TSharedPtr<FJsonValue>> Arr;
 		Arr.Add(MakeShared<FJsonValueNumber>(Value.X));
@@ -72,7 +72,7 @@ namespace
 		return Row;
 	}
 
-	TSharedPtr<FJsonObject> MakeActorRow(AActor* Actor)
+	TSharedPtr<FJsonObject> MakeHlodActorRow(AActor* Actor)
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
 		if (!Actor)
@@ -85,9 +85,9 @@ namespace
 		Row->SetStringField(TEXT("path"), Actor->GetPathName());
 		Row->SetStringField(TEXT("class"), Actor->GetClass() ? Actor->GetClass()->GetName() : TEXT(""));
 		Row->SetStringField(TEXT("class_path"), Actor->GetClass() ? Actor->GetClass()->GetClassPathName().ToString() : TEXT(""));
-		Row->SetArrayField(TEXT("location"), VectorToJson(Actor->GetActorLocation()));
-		Row->SetArrayField(TEXT("bounds_origin"), VectorToJson(Actor->GetComponentsBoundingBox(true).GetCenter()));
-		Row->SetArrayField(TEXT("bounds_extent"), VectorToJson(Actor->GetComponentsBoundingBox(true).GetExtent()));
+		Row->SetArrayField(TEXT("location"), HlodVectorToJson(Actor->GetActorLocation()));
+		Row->SetArrayField(TEXT("bounds_origin"), HlodVectorToJson(Actor->GetComponentsBoundingBox(true).GetCenter()));
+		Row->SetArrayField(TEXT("bounds_extent"), HlodVectorToJson(Actor->GetComponentsBoundingBox(true).GetExtent()));
 		return Row;
 	}
 
@@ -313,7 +313,7 @@ FMonolithActionResult FMonolithHlodActions::ListHlodSourceActors(const TSharedPt
 		++MatchedCount;
 		if (Rows.Num() < Limit)
 		{
-			Rows.Add(MakeShared<FJsonValueObject>(MakeActorRow(Actor)));
+			Rows.Add(MakeShared<FJsonValueObject>(MakeHlodActorRow(Actor)));
 		}
 	}
 
@@ -350,7 +350,7 @@ FMonolithActionResult FMonolithHlodActions::ListHlodActors(const TSharedPtr<FJso
 		++MatchedCount;
 		if (Rows.Num() < Limit)
 		{
-			Rows.Add(MakeShared<FJsonValueObject>(MakeActorRow(Actor)));
+			Rows.Add(MakeShared<FJsonValueObject>(MakeHlodActorRow(Actor)));
 		}
 	}
 

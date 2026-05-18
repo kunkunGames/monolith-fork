@@ -10,6 +10,8 @@
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AssetRegistry, Json, JsonUtilities, SQLiteCore, Slate, SlateCore, BlueprintGraph, KismetCompiler, EditorSubsystem
 
+**UE 5.7 unity-build rule:** action `.cpp` helpers must use action-specific names even inside anonymous namespaces. Adaptive unity can include sibling action files in a single generated translation unit, so generic helpers like `AppendPathString`, `AppendPathField`, and `CollectChangedPaths` must not be duplicated across Project action sources.
+
 ### Classes
 
 | Class | Responsibility |

@@ -1,12 +1,137 @@
 #include "MonolithActionExecutionGuard.h"
 
+#include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
 #include "MonolithToolProfileManager.h"
 #include "MonolithToolRegistry.h"
+#include "Engine/Blueprint.h"
+#include "Kismet2/CompilerResultsLog.h"
+#include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/App.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectIterator.h"
+
+namespace
+{
+	FString BlueprintStatusToString(EBlueprintStatus Status)
+	{
+		switch (Status)
+		{
+		case BS_Unknown: return TEXT("Unknown");
+		case BS_Dirty: return TEXT("Dirty");
+		case BS_Error: return TEXT("Error");
+		case BS_UpToDate: return TEXT("UpToDate");
+		case BS_UpToDateWithWarnings: return TEXT("UpToDateWithWarnings");
+		case BS_BeingCreated: return TEXT("BeingCreated");
+		default: return TEXT("Unknown");
+		}
+	}
+
+	bool TryGetNonEmptyStringField(const TSharedPtr<FJsonObject>& Object, const FString& FieldName, FString& OutValue)
+	{
+		if (!Object.IsValid())
+		{
+			return false;
+		}
+
+		FString Value;
+		if (Object->TryGetStringField(FieldName, Value) && !Value.IsEmpty())
+		{
+			OutValue = Value;
+			return true;
+		}
+		return false;
+	}
+
+	FString FindPostEditValidationTargetPath(
+		const TSharedPtr<FJsonObject>& ResultObject,
+		const TSharedPtr<FJsonObject>& Params)
+	{
+		static const TCHAR* CandidateFields[] =
+		{
+			TEXT("asset_path"),
+			TEXT("blueprint_path"),
+			TEXT("widget_blueprint"),
+			TEXT("wbp_path"),
+			TEXT("save_path"),
+			TEXT("new_path")
+		};
+
+		FString TargetPath;
+		for (const TCHAR* FieldName : CandidateFields)
+		{
+			if (TryGetNonEmptyStringField(ResultObject, FieldName, TargetPath)
+				|| TryGetNonEmptyStringField(Params, FieldName, TargetPath))
+			{
+				return TargetPath;
+			}
+		}
+		return FString();
+	}
+}
+
+FMonolithPostEditValidationResult FMonolithPostEditValidationResult::Passed(
+	const FString& InValidatorName,
+	const FString& InTargetAssetPath)
+{
+	FMonolithPostEditValidationResult Result;
+	Result.bSuccess = true;
+	Result.Status = TEXT("passed_by_validator");
+	Result.ValidatorName = InValidatorName;
+	Result.TargetAssetPath = InTargetAssetPath;
+	return Result;
+}
+
+FMonolithPostEditValidationResult FMonolithPostEditValidationResult::Failed(
+	const FString& InStatus,
+	const FString& InValidatorName,
+	const FString& InErrorMessage,
+	const FString& InTargetAssetPath)
+{
+	FMonolithPostEditValidationResult Result;
+	Result.bSuccess = false;
+	Result.Status = InStatus.IsEmpty() ? TEXT("failed_by_validator") : InStatus;
+	Result.ValidatorName = InValidatorName;
+	Result.ErrorMessage = InErrorMessage;
+	Result.TargetAssetPath = InTargetAssetPath;
+	return Result;
+}
+
+FMonolithPostEditValidationResult FMonolithPostEditValidationResult::Skipped(
+	const FString& InStatus,
+	const FString& Reason)
+{
+	FMonolithPostEditValidationResult Result;
+	Result.bSuccess = true;
+	Result.Status = InStatus;
+	Result.ErrorMessage = Reason;
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FMonolithPostEditValidationResult::ToJson() const
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetBoolField(TEXT("success"), bSuccess);
+	Obj->SetStringField(TEXT("status"), Status);
+	if (!ValidatorName.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("validator"), ValidatorName);
+	}
+	if (!TargetAssetPath.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("target_asset_path"), TargetAssetPath);
+	}
+	if (!ErrorMessage.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("message"), ErrorMessage);
+	}
+	if (Details.IsValid())
+	{
+		Obj->SetObjectField(TEXT("details"), Details);
+	}
+	return Obj;
+}
 
 FMonolithActionExecutionGuard& FMonolithActionExecutionGuard::Get()
 {
@@ -34,6 +159,9 @@ FMonolithActionExecutionGuard::FExecutionScope FMonolithActionExecutionGuard::Be
 	Scope.TransactionStatus = Scope.ExecutionPolicy.bTransactionWrapping
 		? TEXT("requested_by_policy")
 		: TEXT("not_requested");
+	Scope.PostEditValidationStatus = Scope.ExecutionPolicy.bPostEditValidation
+		? TEXT("requested_by_policy")
+		: TEXT("not_requested");
 	Scope.RollbackStatus = Scope.ExecutionPolicy.bTransactionWrapping
 		? TEXT("not_available_without_rollback_policy")
 		: TEXT("not_available_without_policy");
@@ -43,6 +171,77 @@ FMonolithActionExecutionGuard::FExecutionScope FMonolithActionExecutionGuard::Be
 	}
 	Scope.bActive = true;
 	return Scope;
+}
+
+bool FMonolithActionExecutionGuard::RegisterPostEditValidator(
+	const FString& Namespace,
+	const FString& Action,
+	const FMonolithPostEditValidator& Validator,
+	FString& OutError)
+{
+	if (Namespace.IsEmpty() || Action.IsEmpty())
+	{
+		OutError = TEXT("Post-edit validator registration requires a namespace and action.");
+		return false;
+	}
+	if (!Validator.IsBound())
+	{
+		OutError = FString::Printf(TEXT("Post-edit validator for %s.%s is not bound."), *Namespace, *Action);
+		return false;
+	}
+
+	FScopeLock Lock(&GuardLock);
+	PostEditValidators.Add(MakeActionKey(Namespace, Action), Validator);
+	OutError.Empty();
+	return true;
+}
+
+FMonolithPostEditValidationResult FMonolithActionExecutionGuard::RunPostEditValidation(
+	FExecutionScope& Scope,
+	const TSharedPtr<FJsonObject>& Params,
+	const TSharedPtr<FJsonObject>& ResultObject)
+{
+	if (!Scope.bActive)
+	{
+		return FMonolithPostEditValidationResult::Skipped(
+			TEXT("skipped_inactive_scope"),
+			TEXT("Execution scope is not active."));
+	}
+
+	if (!Scope.ExecutionPolicy.bPostEditValidation)
+	{
+		Scope.PostEditValidationStatus = TEXT("not_requested");
+		return FMonolithPostEditValidationResult::Skipped(
+			TEXT("not_requested"),
+			TEXT("Action policy did not request post-edit validation."));
+	}
+
+	FMonolithPostEditValidator Validator;
+	{
+		FScopeLock Lock(&GuardLock);
+		if (const FMonolithPostEditValidator* Registered = PostEditValidators.Find(MakeActionKey(Scope.Namespace, Scope.Action)))
+		{
+			Validator = *Registered;
+		}
+	}
+
+	FMonolithPostEditValidationContext Context;
+	Context.Namespace = Scope.Namespace;
+	Context.Action = Scope.Action;
+	Context.Params = Params;
+	Context.ResultObject = ResultObject;
+
+	FMonolithPostEditValidationResult Validation = Validator.IsBound()
+		? Validator.Execute(Context)
+		: RunDefaultPostEditValidation(Context);
+
+	if (Validation.Status.IsEmpty())
+	{
+		Validation.Status = Validation.bSuccess ? TEXT("passed_by_validator") : TEXT("failed_by_validator");
+	}
+	Scope.PostEditValidationStatus = Validation.Status;
+	Scope.PostEditValidationMessage = Validation.ErrorMessage;
+	return Validation;
 }
 
 void FMonolithActionExecutionGuard::SetActionOutcome(
@@ -127,6 +326,10 @@ void FMonolithActionExecutionGuard::EndAction(FExecutionScope& Scope)
 	Row.TransactionStatus = Scope.TransactionStatus.IsEmpty()
 		? TEXT("not_requested")
 		: Scope.TransactionStatus;
+	Row.PostEditValidationStatus = Scope.PostEditValidationStatus.IsEmpty()
+		? TEXT("not_requested")
+		: Scope.PostEditValidationStatus;
+	Row.PostEditValidationMessage = Scope.PostEditValidationMessage;
 	Row.ResultChars = Scope.ResultChars;
 	Row.bResultTruncated = Scope.bResultTruncated;
 	Row.RollbackStatus = Scope.RollbackStatus.IsEmpty()
@@ -170,6 +373,7 @@ void FMonolithActionExecutionGuard::RecordRejectedToolCall(
 	Row.ExecutionPolicy = FMonolithActionExecutionPolicy::DefaultReadOnly();
 	Row.DirtyPackageTrackingStatus = TEXT("skipped_by_policy");
 	Row.TransactionStatus = TEXT("not_requested");
+	Row.PostEditValidationStatus = TEXT("not_requested");
 	Row.ResultChars = Reason.Len();
 	Row.bResultTruncated = false;
 	Row.RollbackStatus = TEXT("not_available_without_policy");
@@ -204,8 +408,14 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Result->SetStringField(TEXT("transaction_wrapping_mode"), TEXT("policy_gated"));
 	Result->SetBoolField(TEXT("policy_gated_transaction_wrapping"), true);
 	Result->SetBoolField(TEXT("automatic_rollback"), false);
-	Result->SetBoolField(TEXT("post_edit_validation"), false);
+	Result->SetBoolField(TEXT("post_edit_validation"), true);
+	Result->SetStringField(TEXT("post_edit_validation_mode"), TEXT("policy_gated"));
 	Result->SetBoolField(TEXT("execution_policy_metadata"), true);
+	{
+		FScopeLock Lock(&GuardLock);
+		Result->SetNumberField(TEXT("registered_post_edit_validators"), PostEditValidators.Num());
+	}
+	Result->SetBoolField(TEXT("builtin_blueprint_post_edit_validator"), true);
 
 	TArray<TSharedPtr<FJsonValue>> Implemented;
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.get_execution_guard_status")));
@@ -214,6 +424,7 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("registry execution_policy metadata")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("policy-gated dirty package tracking")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("policy-gated transaction wrapping")));
+	Implemented.Add(MakeShared<FJsonValueString>(TEXT("post-edit validator hooks")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.set_action_execution_policy")));
 	// Advanced ToolCall actions are only registered during RegisterMonolithExecutionGuardActions
 	// when the setting was true at startup. Gate the advertised list on actual registry state
@@ -233,14 +444,13 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Result->SetArrayField(TEXT("implemented_actions"), Implemented);
 
 	TArray<TSharedPtr<FJsonValue>> Future;
-	Future.Add(MakeShared<FJsonValueString>(TEXT("post-edit validators")));
 	Future.Add(MakeShared<FJsonValueString>(TEXT("rollback reports for policy failures")));
 	Result->SetArrayField(TEXT("future_work"), Future);
 
 	TArray<TSharedPtr<FJsonValue>> Notes;
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Audit capture is wired through the existing central crash-breadcrumb execution scope, so it applies to action dispatch without changing each domain action.")));
-	Notes.Add(MakeShared<FJsonValueString>(TEXT("Default read_only policies skip package scans and transactions; explicit mutating policies can opt into central dirty-package tracking and transaction wrapping.")));
-	Notes.Add(MakeShared<FJsonValueString>(TEXT("Rollback and post-edit validation are still unavailable until validator hooks are wired.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Default read_only policies skip package scans, transactions, and post-edit validation; explicit mutating policies can opt into each central guard feature.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Post-edit validation failure returns a structured action error, but automatic asset rollback remains unavailable.")));
 	Result->SetArrayField(TEXT("notes"), Notes);
 
 	return Result;
@@ -451,6 +661,91 @@ bool FMonolithActionExecutionGuard::IsAdvancedToolCallRecordsEnabled()
 	return Settings && Settings->bEnableAdvancedToolCallRecords;
 }
 
+FString FMonolithActionExecutionGuard::MakeActionKey(const FString& Namespace, const FString& Action)
+{
+	return Namespace + TEXT(".") + Action;
+}
+
+FMonolithPostEditValidationResult FMonolithActionExecutionGuard::RunDefaultPostEditValidation(
+	const FMonolithPostEditValidationContext& Context)
+{
+	const bool bBlueprintLikeNamespace = Context.Namespace == TEXT("blueprint") || Context.Namespace == TEXT("ui");
+	if (!bBlueprintLikeNamespace)
+	{
+		return FMonolithPostEditValidationResult::Failed(
+			TEXT("missing_post_edit_validator"),
+			TEXT("default"),
+			FString::Printf(TEXT("No post-edit validator is registered for %s.%s."), *Context.Namespace, *Context.Action));
+	}
+
+	const FString TargetPathRaw = FindPostEditValidationTargetPath(Context.ResultObject, Context.Params);
+	if (TargetPathRaw.IsEmpty())
+	{
+		return FMonolithPostEditValidationResult::Failed(
+			TEXT("missing_validation_target"),
+			TEXT("builtin_blueprint_compile"),
+			FString::Printf(TEXT("Post-edit validation for %s.%s could not find an asset_path, blueprint_path, widget_blueprint, wbp_path, save_path, or new_path target."), *Context.Namespace, *Context.Action));
+	}
+
+	const FString TargetPath = FMonolithAssetUtils::ResolveAssetPath(TargetPathRaw);
+	UBlueprint* Blueprint = FMonolithAssetUtils::LoadAssetByPath<UBlueprint>(TargetPath);
+	if (!Blueprint)
+	{
+		return FMonolithPostEditValidationResult::Failed(
+			TEXT("validation_target_not_blueprint"),
+			TEXT("builtin_blueprint_compile"),
+			FString::Printf(TEXT("Post-edit validation target is not a Blueprint asset: %s"), *TargetPath),
+			TargetPath);
+	}
+
+	FCompilerResultsLog Results;
+	FKismetEditorUtilities::CompileBlueprint(
+		Blueprint,
+		EBlueprintCompileOptions::SkipGarbageCollection,
+		&Results);
+
+	int32 ErrorCount = 0;
+	int32 WarningCount = 0;
+	for (const TSharedRef<FTokenizedMessage>& Message : Results.Messages)
+	{
+		if (Message->GetSeverity() == EMessageSeverity::Error)
+		{
+			++ErrorCount;
+		}
+		else if (Message->GetSeverity() == EMessageSeverity::Warning)
+		{
+			++WarningCount;
+		}
+	}
+
+	const FString StatusString = BlueprintStatusToString(Blueprint->Status);
+	TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+	Details->SetStringField(TEXT("blueprint_status"), StatusString);
+	Details->SetNumberField(TEXT("error_count"), ErrorCount);
+	Details->SetNumberField(TEXT("warning_count"), WarningCount);
+
+	if (!Blueprint->IsUpToDate() || ErrorCount > 0)
+	{
+		FMonolithPostEditValidationResult Failed = FMonolithPostEditValidationResult::Failed(
+			TEXT("failed_by_validator"),
+			TEXT("builtin_blueprint_compile"),
+			FString::Printf(TEXT("Post-edit Blueprint validation failed for %s: status=%s, errors=%d, warnings=%d."),
+				*TargetPath,
+				*StatusString,
+				ErrorCount,
+				WarningCount),
+			TargetPath);
+		Failed.Details = Details;
+		return Failed;
+	}
+
+	FMonolithPostEditValidationResult Passed = FMonolithPostEditValidationResult::Passed(
+		TEXT("builtin_blueprint_compile"),
+		TargetPath);
+	Passed.Details = Details;
+	return Passed;
+}
+
 TSet<FString> FMonolithActionExecutionGuard::SnapshotDirtyPackages()
 {
 	TSet<FString> DirtyPackages;
@@ -497,6 +792,11 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::AuditRowToJson(const FAud
 	Obj->SetObjectField(TEXT("execution_policy"), Row.ExecutionPolicy.ToJson());
 	Obj->SetStringField(TEXT("dirty_package_tracking_status"), Row.DirtyPackageTrackingStatus.IsEmpty() ? TEXT("skipped_by_policy") : Row.DirtyPackageTrackingStatus);
 	Obj->SetStringField(TEXT("transaction_status"), Row.TransactionStatus.IsEmpty() ? TEXT("not_requested") : Row.TransactionStatus);
+	Obj->SetStringField(TEXT("post_edit_validation_status"), Row.PostEditValidationStatus.IsEmpty() ? TEXT("not_requested") : Row.PostEditValidationStatus);
+	if (!Row.PostEditValidationMessage.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("post_edit_validation_message"), Row.PostEditValidationMessage);
+	}
 	Obj->SetStringField(TEXT("rollback_status"), Row.RollbackStatus);
 	return Obj;
 }
@@ -526,6 +826,11 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::ToolCallRecordToJson(cons
 	Obj->SetObjectField(TEXT("execution_policy"), Row.ExecutionPolicy.ToJson());
 	Obj->SetStringField(TEXT("dirty_package_tracking_status"), Row.DirtyPackageTrackingStatus.IsEmpty() ? TEXT("skipped_by_policy") : Row.DirtyPackageTrackingStatus);
 	Obj->SetStringField(TEXT("transaction_status"), Row.TransactionStatus.IsEmpty() ? TEXT("not_requested") : Row.TransactionStatus);
+	Obj->SetStringField(TEXT("post_edit_validation_status"), Row.PostEditValidationStatus.IsEmpty() ? TEXT("not_requested") : Row.PostEditValidationStatus);
+	if (!Row.PostEditValidationMessage.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("post_edit_validation_message"), Row.PostEditValidationMessage);
+	}
 	Obj->SetBoolField(TEXT("raw_payload_logging"), false);
 	Obj->SetNumberField(TEXT("redaction_version"), 1);
 	Obj->SetStringField(TEXT("rollback_status"), Row.RollbackStatus);
@@ -565,6 +870,7 @@ void FMonolithActionExecutionGuard::ResetForTests()
 {
 	FScopeLock Lock(&GuardLock);
 	AuditRows.Empty();
+	PostEditValidators.Empty();
 	LastRollback.Reset();
 }
 #endif

@@ -267,3 +267,54 @@ void FMonolithCrashBreadcrumb::FScopedCapture::SetOutcome(
 		ResultObject,
 		ErrorMessage);
 }
+
+void FMonolithCrashBreadcrumb::FScopedCapture::ApplyPostEditValidation(
+	FMonolithActionResult& ActionResult,
+	const TSharedPtr<FJsonObject>& Params)
+{
+	if (!bOwnsSlot || !ExecutionScope.ExecutionPolicy.bPostEditValidation)
+	{
+		return;
+	}
+
+	if (!ActionResult.bSuccess)
+	{
+		ExecutionScope.PostEditValidationStatus = TEXT("skipped_handler_error");
+		return;
+	}
+
+	FMonolithPostEditValidationResult Validation = FMonolithActionExecutionGuard::Get().RunPostEditValidation(
+		ExecutionScope,
+		Params,
+		ActionResult.Result);
+
+	if (Validation.bSuccess)
+	{
+		if (ActionResult.Result.IsValid())
+		{
+			ActionResult.Result->SetObjectField(TEXT("post_edit_validation"), Validation.ToJson());
+		}
+		return;
+	}
+
+	if (ScopedTransaction.IsValid() && ScopedTransaction->IsOutstanding())
+	{
+		ScopedTransaction->Cancel();
+		ExecutionScope.RollbackStatus = TEXT("transaction_record_canceled_after_validation_failure");
+	}
+	else
+	{
+		ExecutionScope.RollbackStatus = TEXT("not_available_without_open_transaction");
+	}
+
+	FMonolithActionResult Error = FMonolithActionResult::Error(
+		Validation.ErrorMessage.IsEmpty()
+			? TEXT("Post-edit validation failed.")
+			: Validation.ErrorMessage,
+		FMonolithJsonUtils::ErrInternalError);
+	TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+	ErrorData->SetObjectField(TEXT("post_edit_validation"), Validation.ToJson());
+	Error.WithErrorData(ErrorData);
+	Error.WithHint(TEXT("Inspect error.data.post_edit_validation and repair the target asset before retrying."));
+	ActionResult = MoveTemp(Error);
+}

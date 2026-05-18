@@ -57,6 +57,7 @@ public:
 		~FScopedCapture();
 
 		void SetOutcome(bool bSuccess, int32 ErrorCode, const TSharedPtr<FJsonObject>& ResultObject, const FString& ErrorMessage);
+		void ApplyPostEditValidation(FMonolithActionResult& ActionResult, const TSharedPtr<FJsonObject>& Params);
 
 	private:
 		// Non-copyable / non-movable to keep slot lifetime predictable.

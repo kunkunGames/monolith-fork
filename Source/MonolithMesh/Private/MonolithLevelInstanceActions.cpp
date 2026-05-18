@@ -44,7 +44,7 @@ namespace
 		return Note;
 	}
 
-	TArray<TSharedPtr<FJsonValue>> VectorToJson(const FVector& Value)
+	TArray<TSharedPtr<FJsonValue>> LevelInstanceVectorToJson(const FVector& Value)
 	{
 		TArray<TSharedPtr<FJsonValue>> Arr;
 		Arr.Add(MakeShared<FJsonValueNumber>(Value.X));
@@ -53,7 +53,7 @@ namespace
 		return Arr;
 	}
 
-	TSharedPtr<FJsonObject> MakeActorRow(AActor* Actor)
+	TSharedPtr<FJsonObject> MakeLevelInstanceActorRow(AActor* Actor)
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
 		if (!Actor)
@@ -67,7 +67,7 @@ namespace
 		Row->SetStringField(TEXT("class"), Actor->GetClass() ? Actor->GetClass()->GetName() : TEXT(""));
 		Row->SetStringField(TEXT("class_path"), Actor->GetClass() ? Actor->GetClass()->GetClassPathName().ToString() : TEXT(""));
 		Row->SetBoolField(TEXT("is_level_instance"), IsLevelInstanceLikeActor(Actor));
-		Row->SetArrayField(TEXT("location"), VectorToJson(Actor->GetActorLocation()));
+		Row->SetArrayField(TEXT("location"), LevelInstanceVectorToJson(Actor->GetActorLocation()));
 
 		if (ULevel* Level = Actor->GetLevel())
 		{
@@ -195,7 +195,7 @@ namespace
 		FString Error;
 		if (AActor* Actor = ResolveLevelInstanceActor(Params, Error))
 		{
-			Result->SetObjectField(TEXT("level_instance"), MakeActorRow(Actor));
+			Result->SetObjectField(TEXT("level_instance"), MakeLevelInstanceActorRow(Actor));
 		}
 		else
 		{
@@ -312,7 +312,7 @@ FMonolithActionResult FMonolithLevelInstanceActions::ListLevelInstances(const TS
 		++MatchedCount;
 		if (Rows.Num() < Limit)
 		{
-			Rows.Add(MakeShared<FJsonValueObject>(MakeActorRow(Actor)));
+			Rows.Add(MakeShared<FJsonValueObject>(MakeLevelInstanceActorRow(Actor)));
 		}
 	}
 
@@ -336,7 +336,7 @@ FMonolithActionResult FMonolithLevelInstanceActions::GetLevelInstance(const TSha
 		return FMonolithActionResult::Error(Error);
 	}
 
-	TSharedPtr<FJsonObject> Result = MakeActorRow(Actor);
+	TSharedPtr<FJsonObject> Result = MakeLevelInstanceActorRow(Actor);
 	Result->SetObjectField(TEXT("edit_session"), MakeCapabilityNote());
 	return FMonolithActionResult::Success(Result);
 }
@@ -388,12 +388,12 @@ FMonolithActionResult FMonolithLevelInstanceActions::ListChildInstances(const TS
 	{
 		if (IsLevelInstanceLikeActor(Child))
 		{
-			Rows.Add(MakeShared<FJsonValueObject>(MakeActorRow(Child)));
+			Rows.Add(MakeShared<FJsonValueObject>(MakeLevelInstanceActorRow(Child)));
 		}
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetObjectField(TEXT("parent"), MakeActorRow(Actor));
+	Result->SetObjectField(TEXT("parent"), MakeLevelInstanceActorRow(Actor));
 	Result->SetNumberField(TEXT("child_instance_count"), Rows.Num());
 	Result->SetArrayField(TEXT("child_instances"), Rows);
 	return FMonolithActionResult::Success(Result);
@@ -414,11 +414,11 @@ FMonolithActionResult FMonolithLevelInstanceActions::ListInstanceActors(const TS
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	for (AActor* Child : Attached)
 	{
-		Rows.Add(MakeShared<FJsonValueObject>(MakeActorRow(Child)));
+		Rows.Add(MakeShared<FJsonValueObject>(MakeLevelInstanceActorRow(Child)));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetObjectField(TEXT("level_instance"), MakeActorRow(Actor));
+	Result->SetObjectField(TEXT("level_instance"), MakeLevelInstanceActorRow(Actor));
 	Result->SetNumberField(TEXT("actor_count"), Rows.Num());
 	Result->SetArrayField(TEXT("actors"), Rows);
 	Result->SetStringField(TEXT("scope_note"), TEXT("Reports directly attached loaded actors. Nested edit-session contents remain guarded until explicit editor-state support is added."));
@@ -435,7 +435,7 @@ FMonolithActionResult FMonolithLevelInstanceActions::MoveActorsToInstance(const 
 	FString Error;
 	if (AActor* Actor = ResolveLevelInstanceActor(Params, Error))
 	{
-		Result->SetObjectField(TEXT("target_level_instance"), MakeActorRow(Actor));
+		Result->SetObjectField(TEXT("target_level_instance"), MakeLevelInstanceActorRow(Actor));
 	}
 	else
 	{

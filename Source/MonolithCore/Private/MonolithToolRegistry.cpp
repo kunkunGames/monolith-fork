@@ -483,6 +483,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		ActionResult.Result->SetArrayField(TEXT("warnings"), Existing);
 	}
 
+	CrashCapture.ApplyPostEditValidation(ActionResult, EffectiveParams);
 	CrashCapture.SetOutcome(ActionResult.bSuccess, ActionResult.ErrorCode, ActionResult.Result, ActionResult.ErrorMessage);
 	return ActionResult;
 }

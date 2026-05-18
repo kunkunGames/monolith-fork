@@ -5,6 +5,31 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
+struct MONOLITHCORE_API FMonolithPostEditValidationContext
+{
+	FString Namespace;
+	FString Action;
+	TSharedPtr<FJsonObject> Params;
+	TSharedPtr<FJsonObject> ResultObject;
+};
+
+struct MONOLITHCORE_API FMonolithPostEditValidationResult
+{
+	bool bSuccess = true;
+	FString Status = TEXT("passed_by_validator");
+	FString ValidatorName;
+	FString TargetAssetPath;
+	FString ErrorMessage;
+	TSharedPtr<FJsonObject> Details;
+
+	static FMonolithPostEditValidationResult Passed(const FString& ValidatorName, const FString& TargetAssetPath = FString());
+	static FMonolithPostEditValidationResult Failed(const FString& Status, const FString& ValidatorName, const FString& ErrorMessage, const FString& TargetAssetPath = FString());
+	static FMonolithPostEditValidationResult Skipped(const FString& Status, const FString& Reason);
+	TSharedPtr<FJsonObject> ToJson() const;
+};
+
+DECLARE_DELEGATE_RetVal_OneParam(FMonolithPostEditValidationResult, FMonolithPostEditValidator, const FMonolithPostEditValidationContext& /* Context */);
+
 class MONOLITHCORE_API FMonolithActionExecutionGuard
 {
 public:
@@ -26,6 +51,8 @@ public:
 		FMonolithActionExecutionPolicy ExecutionPolicy;
 		FString DirtyPackageTrackingStatus;
 		FString TransactionStatus;
+		FString PostEditValidationStatus;
+		FString PostEditValidationMessage;
 		FString RollbackStatus;
 		int32 JsonRpcErrorCode = 0;
 		int32 ResultChars = 0;
@@ -37,6 +64,8 @@ public:
 	static FMonolithActionExecutionGuard& Get();
 
 	FExecutionScope BeginAction(const FString& Namespace, const FString& Action);
+	bool RegisterPostEditValidator(const FString& Namespace, const FString& Action, const FMonolithPostEditValidator& Validator, FString& OutError);
+	FMonolithPostEditValidationResult RunPostEditValidation(FExecutionScope& Scope, const TSharedPtr<FJsonObject>& Params, const TSharedPtr<FJsonObject>& ResultObject);
 	void SetActionOutcome(FExecutionScope& Scope, bool bSuccess, int32 ErrorCode, const TSharedPtr<FJsonObject>& ResultObject, const FString& ErrorMessage);
 	void EndAction(FExecutionScope& Scope);
 	void RecordRejectedToolCall(const FString& SourceToolName, const FString& Namespace, const FString& Action, const FString& Status, int32 ErrorCode, const FString& Reason);
@@ -74,6 +103,8 @@ private:
 		FMonolithActionExecutionPolicy ExecutionPolicy;
 		FString DirtyPackageTrackingStatus;
 		FString TransactionStatus;
+		FString PostEditValidationStatus;
+		FString PostEditValidationMessage;
 		FString Reason;
 		int32 JsonRpcErrorCode = 0;
 		int32 ResultChars = 0;
@@ -82,6 +113,8 @@ private:
 	};
 
 	static bool IsAdvancedToolCallRecordsEnabled();
+	static FString MakeActionKey(const FString& Namespace, const FString& Action);
+	static FMonolithPostEditValidationResult RunDefaultPostEditValidation(const FMonolithPostEditValidationContext& Context);
 	static TSet<FString> SnapshotDirtyPackages();
 	static TArray<TSharedPtr<FJsonValue>> StringsToJson(const TArray<FString>& Values, int32 Limit = MAX_int32);
 	static TSharedPtr<FJsonObject> AuditRowToJson(const FAuditRow& Row);
@@ -92,6 +125,7 @@ private:
 
 	mutable FCriticalSection GuardLock;
 	TArray<FAuditRow> AuditRows;
+	TMap<FString, FMonolithPostEditValidator> PostEditValidators;
 	TSharedPtr<FJsonObject> LastRollback;
 	static constexpr int32 AuditCapacity = 100;
 };

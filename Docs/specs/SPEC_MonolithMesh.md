@@ -14,6 +14,8 @@
 
 **Build.cs notes — conditional GeometryScripting (v0.14.1):** The Build.cs probes `Engine/Plugins/Runtime/GeometryScripting` and adds `GeometryScriptingCore`, `GeometryFramework`, `GeometryCore` + `WITH_GEOMETRYSCRIPT=1` only when found. **Release escape hatch:** setting `MONOLITH_RELEASE_BUILD=1` (env var) short-circuits detection so `WITH_GEOMETRYSCRIPT=0` regardless — the released DLL no longer carries a hard import on `UnrealEditor-GeometryScriptingCore.dll`. This fixes #26 / #30 where users without GeometryScripting enabled in their `.uproject` were hitting `GetLastError=126` at module load. Mirrors the canonical `MonolithBABridge.Build.cs` pattern (and matches the `MonolithUI` CommonUI detection). Source-tree users with GeometryScripting enabled still get full Tier 5 functionality.
 
+**UE 5.7 unity-build rule:** file-local helpers in Mesh action `.cpp` files must use action-family-specific names, even inside anonymous namespaces. Adaptive unity can include sibling Mesh action files in one generated translation unit, so generic helpers such as `VectorToJson` or `MakeActorRow` collide across ActorMerge/HLOD/LevelInstance sources.
+
 ### Classes
 
 | Class | Responsibility |

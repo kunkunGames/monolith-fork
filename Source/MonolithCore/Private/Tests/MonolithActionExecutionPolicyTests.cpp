@@ -31,6 +31,32 @@ namespace
 		return Policy;
 	}
 
+	FMonolithActionExecutionPolicy MakePolicySlicePostEditValidationPolicy()
+	{
+		FMonolithActionExecutionPolicy Policy;
+		Policy.PolicyId = TEXT("post_edit_validate");
+		Policy.bDefaulted = false;
+		Policy.bDirtyPackageTracking = true;
+		Policy.bTransactionWrapping = true;
+		Policy.bPostEditValidation = true;
+		Policy.bEnforced = true;
+		return Policy;
+	}
+
+	FMonolithPostEditValidationResult MakePolicySlicePassingValidator(const FMonolithPostEditValidationContext& /*Context*/)
+	{
+		return FMonolithPostEditValidationResult::Passed(TEXT("policytest_validator"), TEXT("/Game/PolicyTest/BP_OK"));
+	}
+
+	FMonolithPostEditValidationResult MakePolicySliceFailingValidator(const FMonolithPostEditValidationContext& /*Context*/)
+	{
+		return FMonolithPostEditValidationResult::Failed(
+			TEXT("failed_by_validator"),
+			TEXT("policytest_validator"),
+			TEXT("Policy test forced validator failure."),
+			TEXT("/Game/PolicyTest/BP_Bad"));
+	}
+
 	void RegisterPolicySliceTestNamespace()
 	{
 		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
@@ -49,6 +75,15 @@ namespace
 			nullptr,
 			TEXT("Test"),
 			MakePolicySliceExplicitMutationPolicy());
+
+		Registry.RegisterAction(
+			TEXT("policytest"),
+			TEXT("post_edit_action"),
+			TEXT("Policy metadata post-edit validation test action."),
+			FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult),
+			nullptr,
+			TEXT("Test"),
+			MakePolicySlicePostEditValidationPolicy());
 	}
 
 	const TSharedPtr<FJsonObject>* FindPolicySliceActionRow(const TArray<TSharedPtr<FJsonValue>>* Rows, const FString& ActionName)
@@ -274,11 +309,11 @@ bool FMonolithActionExecutionPolicyOverrideTest::RunTest(const FString& Paramete
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyOverrideRejectsValidationTest,
-	"Monolith.Core.ActionExecutionPolicy.OverrideRejectsValidation",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyOverrideAcceptsValidationTest,
+	"Monolith.Core.ActionExecutionPolicy.OverrideAcceptsValidation",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FMonolithActionExecutionPolicyOverrideRejectsValidationTest::RunTest(const FString& Parameters)
+bool FMonolithActionExecutionPolicyOverrideAcceptsValidationTest::RunTest(const FString& Parameters)
 {
 	RegisterPolicySliceTestNamespace();
 	RegisterMonolithExecutionGuardActions();
@@ -291,8 +326,80 @@ bool FMonolithActionExecutionPolicyOverrideRejectsValidationTest::RunTest(const 
 	Params->SetObjectField(TEXT("policy"), PolicyObject);
 
 	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("monolith"), TEXT("set_action_execution_policy"), Params);
-	TestFalse(TEXT("Validator override is rejected"), Result.bSuccess);
-	TestTrue(TEXT("Validator rejection explains reservation"), Result.ErrorMessage.Contains(TEXT("validator")));
+	TestTrue(TEXT("Validator override succeeds"), Result.bSuccess);
+	TestTrue(TEXT("Validator override result valid"), Result.Result.IsValid());
+
+	FMonolithActionExecutionPolicy Policy = FMonolithToolRegistry::Get().GetActionExecutionPolicy(TEXT("policytest"), TEXT("default_action"));
+	TestEqual(TEXT("Policy id updated to validator"), Policy.PolicyId, TEXT("post_edit_validate"));
+	TestTrue(TEXT("Override policy tracks dirty packages"), Policy.bDirtyPackageTracking);
+	TestTrue(TEXT("Override policy wraps transaction"), Policy.bTransactionWrapping);
+	TestTrue(TEXT("Override policy requests validation"), Policy.bPostEditValidation);
+	TestTrue(TEXT("Override policy is enforced"), Policy.bEnforced);
+
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("policytest"));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyPostEditValidationHookTest,
+	"Monolith.Core.ActionExecutionPolicy.PostEditValidationHook",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionExecutionPolicyPostEditValidationHookTest::RunTest(const FString& Parameters)
+{
+	RegisterPolicySliceTestNamespace();
+	FMonolithActionExecutionGuard& Guard = FMonolithActionExecutionGuard::Get();
+	Guard.ResetForTests();
+
+	FString RegisterError;
+	TestTrue(
+		TEXT("Passing validator registers"),
+		Guard.RegisterPostEditValidator(
+			TEXT("policytest"),
+			TEXT("post_edit_action"),
+			FMonolithPostEditValidator::CreateStatic(&MakePolicySlicePassingValidator),
+			RegisterError));
+	TestTrue(TEXT("Register error empty"), RegisterError.IsEmpty());
+
+	FMonolithActionExecutionGuard::FExecutionScope Scope = Guard.BeginAction(TEXT("policytest"), TEXT("post_edit_action"));
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	TSharedPtr<FJsonObject> ResultObject = MakeShared<FJsonObject>();
+	ResultObject->SetStringField(TEXT("asset_path"), TEXT("/Game/PolicyTest/BP_OK"));
+
+	FMonolithPostEditValidationResult Validation = Guard.RunPostEditValidation(Scope, Params, ResultObject);
+	TestTrue(TEXT("Validator passes"), Validation.bSuccess);
+	TestEqual(TEXT("Validation status"), Scope.PostEditValidationStatus, TEXT("passed_by_validator"));
+	Guard.SetActionOutcome(Scope, true, 0, ResultObject, FString());
+	Guard.EndAction(Scope);
+
+	TSharedPtr<FJsonObject> Audit = Guard.GetRecentAuditJson(1);
+	const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+	TestTrue(TEXT("Audit rows exist"), Audit.IsValid() && Audit->TryGetArrayField(TEXT("rows"), Rows));
+	if (Rows && Rows->Num() == 1)
+	{
+		const TSharedPtr<FJsonObject>* Row = nullptr;
+		TestTrue(TEXT("Audit row object"), (*Rows)[0]->TryGetObject(Row));
+		if (Row && Row->IsValid())
+		{
+			TestEqual(TEXT("Audit validation status"), (*Row)->GetStringField(TEXT("post_edit_validation_status")), TEXT("passed_by_validator"));
+		}
+	}
+
+	Guard.ResetForTests();
+	TestTrue(
+		TEXT("Failing validator registers"),
+		Guard.RegisterPostEditValidator(
+			TEXT("policytest"),
+			TEXT("post_edit_action"),
+			FMonolithPostEditValidator::CreateStatic(&MakePolicySliceFailingValidator),
+			RegisterError));
+
+	FMonolithActionExecutionGuard::FExecutionScope FailingScope = Guard.BeginAction(TEXT("policytest"), TEXT("post_edit_action"));
+	FMonolithPostEditValidationResult FailingValidation = Guard.RunPostEditValidation(FailingScope, Params, ResultObject);
+	TestFalse(TEXT("Validator fails"), FailingValidation.bSuccess);
+	TestEqual(TEXT("Failure validation status"), FailingScope.PostEditValidationStatus, TEXT("failed_by_validator"));
+	TestTrue(TEXT("Failure message preserved"), FailingScope.PostEditValidationMessage.Contains(TEXT("forced validator failure")));
+	Guard.SetActionOutcome(FailingScope, false, -32603, nullptr, FailingValidation.ErrorMessage);
+	Guard.EndAction(FailingScope);
 
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("policytest"));
 	return true;

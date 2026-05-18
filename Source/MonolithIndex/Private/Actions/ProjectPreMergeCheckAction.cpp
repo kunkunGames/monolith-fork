@@ -7,7 +7,7 @@
 
 namespace
 {
-	void AppendPathString(const FString& Raw, TArray<FString>& Out)
+	void AppendPreMergePathString(const FString& Raw, TArray<FString>& Out)
 	{
 		TArray<FString> Parts;
 		Raw.ParseIntoArray(Parts, TEXT(","), true);
@@ -25,7 +25,7 @@ namespace
 		}
 	}
 
-	void AppendPathField(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, TArray<FString>& Out)
+	void AppendPreMergePathField(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, TArray<FString>& Out)
 	{
 		if (!Params.IsValid())
 		{
@@ -38,7 +38,7 @@ namespace
 			{
 				if (Value.IsValid())
 				{
-					AppendPathString(Value->AsString(), Out);
+					AppendPreMergePathString(Value->AsString(), Out);
 				}
 			}
 			return;
@@ -46,15 +46,15 @@ namespace
 		FString S;
 		if (Params->TryGetStringField(Key, S))
 		{
-			AppendPathString(S, Out);
+			AppendPreMergePathString(S, Out);
 		}
 	}
 
-	TArray<FString> CollectChangedPaths(const TSharedPtr<FJsonObject>& Params)
+	TArray<FString> CollectPreMergeChangedPaths(const TSharedPtr<FJsonObject>& Params)
 	{
 		TArray<FString> Paths;
-		AppendPathField(Params, TEXT("changed_paths"), Paths);
-		AppendPathField(Params, TEXT("paths"), Paths);
+		AppendPreMergePathField(Params, TEXT("changed_paths"), Paths);
+		AppendPreMergePathField(Params, TEXT("paths"), Paths);
 		return Paths;
 	}
 }
@@ -69,7 +69,7 @@ FMonolithActionResult FProjectPreMergeCheckAction::Execute(const TSharedPtr<FJso
 	}
 
 	return FMonolithActionResult::Success(FMonolithIndexReview::PreMergeCheck(*Db,
-		CollectChangedPaths(Params),
+		CollectPreMergeChangedPaths(Params),
 		FMonolithIndexReview::PInt(Params, TEXT("max_results"), 200),
 		FMonolithIndexReview::PInt(Params, TEXT("unused_limit"), 20),
 		FMonolithIndexReview::PStr(Params, TEXT("detail_level"), TEXT("minimal")),

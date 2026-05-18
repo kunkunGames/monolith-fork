@@ -10,6 +10,8 @@
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, MaterialEditor, EditorScriptingUtilities, RenderCore, RHI, Slate, SlateCore, Json, JsonUtilities
 
+**UE 5.7 compile rule:** static C-style material output tables must use `UE_ARRAY_COUNT(...)` or convert to a UE container before reserving capacity. C arrays do not expose `.Num()` under UE 5.7/MSVC, even when range-for iteration is valid.
+
 ### Classes
 
 | Class | Responsibility |

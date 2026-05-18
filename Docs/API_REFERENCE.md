@@ -57,8 +57,8 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `gas` UI binding response | Shape change (Phase J F5) | Returns `{ bindings: [...], count: N }` instead of a bare array. Wrap your client parsers. |
 | `blueprint` DataTable maintenance | **NEW** | Adds schema inspection, guarded row update/remove, and guarded CSV export for `UDataTable` assets. |
 | `localization` StringTable actions | **NEW** | Adds guarded StringTable create/edit/remove/metadata plus CSV import/export with `dry_run`/`confirm` write gates. |
-| `monolith.discover` / `monolith.describe_domain` action rows | Metadata added | Each action row includes `execution_policy` metadata (`policy_id`, `defaulted`, dirty-package/transaction/validation flags). Explicit mutating policies can now opt into central dirty-package tracking and transaction wrapping. |
-| `monolith.set_action_execution_policy` | Placeholder promoted | Developer-only local override for known action execution policies. Supports `read_only`, `track_dirty_packages`, `transaction_optional`, and `transaction_required`; post-edit validation remains unavailable. |
+| `monolith.discover` / `monolith.describe_domain` action rows | Metadata added | Each action row includes `execution_policy` metadata (`policy_id`, `defaulted`, dirty-package/transaction/validation flags). Explicit mutating policies can now opt into central dirty-package tracking, transaction wrapping, and post-edit validation. |
+| `monolith.set_action_execution_policy` | Placeholder promoted | Developer-only local override for known action execution policies. Supports `read_only`, `track_dirty_packages`, `transaction_optional`, `transaction_required`, and `post_edit_validate`. |
 
 The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespaces — same handler, two callable paths. Pick whichever reads better from your client.
 
@@ -85,7 +85,7 @@ List available tool namespaces and their actions. Pass `namespace` to filter; pa
 | `namespace` | string | optional | Filter to a specific namespace |
 | `category` | string | optional | Filter actions within the namespace by category |
 
-**Returns:** Per-action param schemas and `execution_policy` metadata for every registered action. Default `read_only` policies avoid package scans and transaction wrapping; explicit mutating policies can request central dirty-package tracking and UE transaction wrapping. AI clients also receive schemas in `tools/list` at session start, so most callers never need to call `discover` explicitly.
+**Returns:** Per-action param schemas and `execution_policy` metadata for every registered action. Default `read_only` policies avoid package scans, transaction wrapping, and post-edit validation; explicit mutating policies can request central dirty-package tracking, UE transaction wrapping, and validator hooks. AI clients also receive schemas in `tools/list` at session start, so most callers never need to call `discover` explicitly.
 
 ---
 
@@ -98,7 +98,7 @@ Developer-only local override for a registered action's execution policy. This i
 | `action` | string | **required** | Fully qualified action name such as `blueprint.add_node` |
 | `policy` | object | optional | Policy object. Omit to reset to `read_only` |
 
-Supported `policy.policy_id` values are `read_only`, `track_dirty_packages`, `transaction_optional`, and `transaction_required`. Requests for `post_edit_validation=true` or `post_edit_validate` return an error until validator hooks exist.
+Supported `policy.policy_id` values are `read_only`, `track_dirty_packages`, `transaction_optional`, `transaction_required`, and `post_edit_validate`. `post_edit_validate` runs a policy-gated post-handler validator and reports `post_edit_validation_status` in audit rows; validation failure returns structured `error.data.post_edit_validation` without claiming automatic asset rollback.
 
 ---
 

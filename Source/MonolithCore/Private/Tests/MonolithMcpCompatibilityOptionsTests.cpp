@@ -19,7 +19,7 @@ namespace
 		return Params;
 	}
 
-	bool JsonStringArrayContains(const TArray<TSharedPtr<FJsonValue>>* Values, const FString& Expected)
+	bool McpCompatibilityJsonStringArrayContains(const TArray<TSharedPtr<FJsonValue>>* Values, const FString& Expected)
 	{
 		if (!Values)
 		{
@@ -124,8 +124,8 @@ bool FMonolithMcpCompatibilityUnsupportedLegacyRoutesTest::RunTest(const FString
 
 		const TArray<TSharedPtr<FJsonValue>>* Unsupported = nullptr;
 		TestTrue(TEXT("Unsupported array exists"), Result.Result->TryGetArrayField(TEXT("unsupported_options"), Unsupported));
-		TestTrue(TEXT("SSE unsupported"), JsonStringArrayContains(Unsupported, TEXT("legacy_sse_route_enabled")));
-		TestTrue(TEXT("Message unsupported"), JsonStringArrayContains(Unsupported, TEXT("legacy_message_route_enabled")));
+		TestTrue(TEXT("SSE unsupported"), McpCompatibilityJsonStringArrayContains(Unsupported, TEXT("legacy_sse_route_enabled")));
+		TestTrue(TEXT("Message unsupported"), McpCompatibilityJsonStringArrayContains(Unsupported, TEXT("legacy_message_route_enabled")));
 	}
 
 	Settings->bEnableBrowserLoopbackCors = bOriginalCors;

@@ -119,13 +119,14 @@ namespace
 		}
 		else if (PolicyId == TEXT("post_edit_validate"))
 		{
-			OutError = TEXT("post_edit_validate policy is reserved until post-edit validator hooks are implemented.");
-			return false;
+			Policy.bDirtyPackageTracking = true;
+			Policy.bTransactionWrapping = true;
+			Policy.bPostEditValidation = true;
 		}
 		else
 		{
 			OutError = FString::Printf(
-				TEXT("Unsupported execution policy '%s'. Supported: read_only, track_dirty_packages, transaction_optional, transaction_required."),
+				TEXT("Unsupported execution policy '%s'. Supported: read_only, track_dirty_packages, transaction_optional, transaction_required, post_edit_validate."),
 				*PolicyId);
 			return false;
 		}
@@ -160,18 +161,21 @@ namespace
 			return false;
 		}
 
-		bool bRequestedPostEditValidation = false;
+		bool bRequestedPostEditValidation = Policy.bPostEditValidation;
 		if (!GetPolicyBoolIfPresent(PolicyObject, TEXT("post_edit_validation"), bRequestedPostEditValidation))
 		{
 			OutError = TEXT("policy.post_edit_validation must be a boolean when provided.");
 			return false;
 		}
-		if (bRequestedPostEditValidation)
+		if (bRequestedPostEditValidation != Policy.bPostEditValidation)
 		{
-			OutError = TEXT("policy.post_edit_validation is reserved until validator hooks are implemented.");
+			OutError = FString::Printf(
+				TEXT("policy.post_edit_validation=%s is incompatible with policy_id '%s'."),
+				bRequestedPostEditValidation ? TEXT("true") : TEXT("false"),
+				*PolicyId);
 			return false;
 		}
-		Policy.bPostEditValidation = false;
+		Policy.bPostEditValidation = bRequestedPostEditValidation;
 
 		OutPolicy = Policy;
 		OutError.Empty();
@@ -268,7 +272,7 @@ void RegisterMonolithExecutionGuardActions()
 
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("set_action_execution_policy"),
-		TEXT("Developer-only process-local override for a known action execution policy. Supports read_only, track_dirty_packages, transaction_optional, and transaction_required."),
+		TEXT("Developer-only process-local override for a known action execution policy. Supports read_only, track_dirty_packages, transaction_optional, transaction_required, and post_edit_validate."),
 		FMonolithActionHandler::CreateStatic(&HandleSetActionExecutionPolicy),
 		FParamSchemaBuilder()
 			.Required(TEXT("action"), TEXT("string"), TEXT("Fully qualified action name such as blueprint.add_node"))
