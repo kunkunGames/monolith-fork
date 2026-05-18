@@ -1896,8 +1896,12 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetEffectStacking(const T
 	SetGameplayEffectStackingTypeValue(GE, StackType);
 
 	double StackLimitVal = 0.0;
-	if (Params->TryGetNumberField(TEXT("stack_limit"), StackLimitVal))
+	if (Params->HasField(TEXT("stack_limit")))
 	{
+		if (!Params->TryGetNumberField(TEXT("stack_limit"), StackLimitVal))
+		{
+			return FMonolithActionResult::Error(TEXT("stack_limit must be a number"));
+		}
 		GE->StackLimitCount = FMath::Clamp(static_cast<int32>(StackLimitVal), 0, 1000);
 	}
 
@@ -1995,19 +1999,24 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetDuration(const TShared
 	GE->DurationPolicy = DurationPolicy;
 
 	// Set duration magnitude for HasDuration
-	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && Params->HasField(TEXT("duration_magnitude")))
+	double DurationValue = 0.0;
+	const bool bHasDurationMagnitude = Params->HasField(TEXT("duration_magnitude"));
+	if (bHasDurationMagnitude && !Params->TryGetNumberField(TEXT("duration_magnitude"), DurationValue))
 	{
-		float DurationValue = Params->GetNumberField(TEXT("duration_magnitude"));
-		GE->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(DurationValue));
+		return FMonolithActionResult::Error(TEXT("duration_magnitude must be a number"));
+	}
+	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && bHasDurationMagnitude)
+	{
+		GE->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(static_cast<float>(DurationValue)));
 	}
 
 	MarkModified(BP);
 
 	TSharedPtr<FJsonObject> Result = MonolithGAS::MakeAssetResult(AssetPath, TEXT("Duration updated"));
 	Result->SetStringField(TEXT("duration_policy"), DurationPolicyToString(DurationPolicy));
-	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && Params->HasField(TEXT("duration_magnitude")))
+	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && bHasDurationMagnitude)
 	{
-		Result->SetNumberField(TEXT("duration_magnitude"), Params->GetNumberField(TEXT("duration_magnitude")));
+		Result->SetNumberField(TEXT("duration_magnitude"), DurationValue);
 	}
 	return FMonolithActionResult::Success(Result);
 }
@@ -2652,18 +2661,32 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 
 	// Duration magnitude
 	double DurationMagVal = 0.0;
-	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && Spec->TryGetNumberField(TEXT("duration_magnitude"), DurationMagVal))
+	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && Spec->HasField(TEXT("duration_magnitude")))
 	{
+		if (!Spec->TryGetNumberField(TEXT("duration_magnitude"), DurationMagVal))
+		{
+			return FMonolithActionResult::Error(TEXT("spec.duration_magnitude must be a number"));
+		}
 		GE->DurationMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(DurationMagVal));
 	}
 
 	// Period
 	if (Spec->HasField(TEXT("period")))
 	{
-		GE->Period = FScalableFloat(Spec->GetNumberField(TEXT("period")));
+		double PeriodVal = 0.0;
+		if (!Spec->TryGetNumberField(TEXT("period"), PeriodVal))
+		{
+			return FMonolithActionResult::Error(TEXT("spec.period must be a number"));
+		}
+		GE->Period = FScalableFloat(static_cast<float>(PeriodVal));
 		if (Spec->HasField(TEXT("execute_on_application")))
 		{
-			GE->bExecutePeriodicEffectOnApplication = Spec->GetBoolField(TEXT("execute_on_application"));
+			bool bExecuteOnApplication = false;
+			if (!Spec->TryGetBoolField(TEXT("execute_on_application"), bExecuteOnApplication))
+			{
+				return FMonolithActionResult::Error(TEXT("spec.execute_on_application must be a boolean"));
+			}
+			GE->bExecutePeriodicEffectOnApplication = bExecuteOnApplication;
 		}
 	}
 
@@ -2720,7 +2743,13 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 			else if (ModObj->HasField(TEXT("value")))
 			{
 				// Simple shorthand: just a value
-				NewMod.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(ModObj->GetNumberField(TEXT("value"))));
+				double Value = 0.0;
+				if (!ModObj->TryGetNumberField(TEXT("value"), Value))
+				{
+					return FMonolithActionResult::Error(
+						FString::Printf(TEXT("spec.modifiers[%d].value must be a number"), i));
+				}
+				NewMod.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(static_cast<float>(Value)));
 			}
 
 			GE->Modifiers.Add(NewMod);
@@ -2734,8 +2763,12 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 		FString StackType = (*StackPtr)->GetStringField(TEXT("type"));
 		int32 StackLimit = 0;
 		double StackLimitVal = 0.0;
-		if ((*StackPtr)->TryGetNumberField(TEXT("limit"), StackLimitVal))
+		if ((*StackPtr)->HasField(TEXT("limit")))
 		{
+			if (!(*StackPtr)->TryGetNumberField(TEXT("limit"), StackLimitVal))
+			{
+				return FMonolithActionResult::Error(TEXT("spec.stacking.limit must be a number"));
+			}
 			StackLimit = FMath::Clamp(static_cast<int32>(StackLimitVal), 0, 1000);
 		}
 		ConfigureStacking(GE, StackType, StackLimit);
@@ -3111,7 +3144,12 @@ FMonolithActionResult FMonolithGASEffectActions::HandleDuplicateGameplayEffect(c
 				}
 				else if (ModObj->HasField(TEXT("value")))
 				{
-					NewMod.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(ModObj->GetNumberField(TEXT("value"))));
+					double Value = 0.0;
+					if (!ModObj->TryGetNumberField(TEXT("value"), Value))
+					{
+						return FMonolithActionResult::Error(TEXT("overrides.modifiers.value must be a number"));
+					}
+					NewMod.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(static_cast<float>(Value)));
 				}
 
 				DestGE->Modifiers.Add(NewMod);
