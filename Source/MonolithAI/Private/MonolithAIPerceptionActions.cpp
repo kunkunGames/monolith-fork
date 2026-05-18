@@ -736,7 +736,7 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureSightSense(co
 	// Affiliation
 	bool bEnemies, bNeutrals, bFriendlies;
 		FMonolithActionResult AffilResult = ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
-		if (!AffilResult.bSuccess) return AffilResult;
+		if (!AffilResult.bIsSuccess) return AffilResult;
 
 	if (Params->HasField(TEXT("affiliation")))
 	{
@@ -813,7 +813,7 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureSightSense(co
 
 	// Base-class params (max_age, bStartsEnabled) lifted via shared helper
 		FMonolithActionResult BaseResult = ApplyBaseSenseConfigParams(Sight, Params, Verified, Warnings);
-		if (!BaseResult.bSuccess) return BaseResult;
+		if (!BaseResult.bIsSuccess) return BaseResult;
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Ctx.BP);
 
@@ -866,7 +866,7 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureHearingSense(
 	// Affiliation
 	bool bEnemies, bNeutrals, bFriendlies;
 		FMonolithActionResult AffilResult = ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
-		if (!AffilResult.bSuccess) return AffilResult;
+		if (!AffilResult.bIsSuccess) return AffilResult;
 
 	if (Params->HasField(TEXT("affiliation")))
 	{
@@ -879,7 +879,7 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureHearingSense(
 	TSharedPtr<FJsonObject> Verified = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Warnings;
 		FMonolithActionResult BaseResult = ApplyBaseSenseConfigParams(Hearing, Params, Verified, Warnings);
-		if (!BaseResult.bSuccess) return BaseResult;
+		if (!BaseResult.bIsSuccess) return BaseResult;
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Ctx.BP);
 
@@ -942,7 +942,7 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureDamageSense(c
 	TSharedPtr<FJsonObject> Verified = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Warnings;
 		FMonolithActionResult BaseResult = ApplyBaseSenseConfigParams(Damage, Params, Verified, Warnings);
-		if (!BaseResult.bSuccess) return BaseResult;
+		if (!BaseResult.bIsSuccess) return BaseResult;
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Ctx.BP);
 
@@ -985,7 +985,7 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureTouchSense(co
 	// Affiliation
 	bool bEnemies, bNeutrals, bFriendlies;
 		FMonolithActionResult AffilResult = ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
-		if (!AffilResult.bSuccess) return AffilResult;
+		if (!AffilResult.bIsSuccess) return AffilResult;
 	if (Params->HasField(TEXT("affiliation")))
 	{
 		Touch->DetectionByAffiliation.bDetectEnemies = bEnemies;
@@ -999,7 +999,7 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureTouchSense(co
 	TSharedPtr<FJsonObject> Verified = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Warnings;
 		FMonolithActionResult BaseResult = ApplyBaseSenseConfigParams(Touch, Params, Verified, Warnings);
-		if (!BaseResult.bSuccess) return BaseResult;
+		if (!BaseResult.bIsSuccess) return BaseResult;
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Ctx.BP);
 
