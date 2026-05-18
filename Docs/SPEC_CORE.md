@@ -129,7 +129,8 @@ Modules that probe for optional plugins follow a unified Build.cs convention: 3-
 | MonolithGAS | GameplayAbilities | `WITH_GBA` | `MonolithGAS.Build.cs` | (existing) |
 | MonolithComboGraph | ComboGraph | `WITH_COMBOGRAPH` | `MonolithComboGraph.Build.cs` | (existing) |
 | MonolithLogicDriver | Logic Driver Pro | `WITH_LOGICDRIVER` | `MonolithLogicDriver.Build.cs` | (existing) |
-| MonolithAudio | MetaSound | `WITH_METASOUND` | `MonolithAudio.Build.cs` | (existing) |
+| MonolithAudio | MetaSound | `WITH_METASOUND` | `MonolithAudio.Build.cs` | **v0.14.10** |
+| MonolithIndex | MetaSound indexer | `WITH_METASOUND` | `MonolithIndex.Build.cs` | **v0.14.10** |
 | MonolithUI | CommonUI | `WITH_COMMONUI` | `MonolithUI.Build.cs` | **v0.14.0** (M0.5) |
 | MonolithAI | StateTree, SmartObjects | `WITH_STATETREE`, `WITH_SMARTOBJECTS` (required); `WITH_MASSENTITY`, `WITH_ZONEGRAPH` (optional) | `MonolithAI.Build.cs` | (existing) |
 | MonolithDataflow | Dataflow runtime/editor modules | none; AssetRegistry/module-status-only probe | `MonolithDataflow.Build.cs` | **v0.14.10** |

@@ -37,19 +37,34 @@ public class MonolithIndex : ModuleRules
 		});
 
 		// --- Conditional: MetaSound (engine-shipped Runtime plugin) ---
-		// 3-location probe (engine Plugins/Runtime, Plugins/Marketplace, top-level Plugins fallback).
+		// Project Plugins plus 3-location engine probe (Runtime, Marketplace, top-level fallback).
 		// Release builds: set MONOLITH_RELEASE_BUILD=1 to force optional deps off (Issue #30 defense).
 		bool bHasMetasound = false;
 		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
 
 		if (!bReleaseBuild)
 		{
-			string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-			string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-			bHasMetasound =
-				Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "Metasound"))
-				|| Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace", "Metasound"))
-				|| Directory.Exists(Path.Combine(EnginePluginsDir, "Metasound"));
+			if (Target.ProjectFile != null)
+			{
+				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
+				if (Directory.Exists(ProjectPluginsDir))
+				{
+					bHasMetasound =
+						Directory.Exists(Path.Combine(ProjectPluginsDir, "Metasound"))
+						|| Directory.Exists(Path.Combine(ProjectPluginsDir, "Runtime", "Metasound"))
+						|| Directory.Exists(Path.Combine(ProjectPluginsDir, "Marketplace", "Metasound"));
+				}
+			}
+
+			if (!bHasMetasound)
+			{
+				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
+				string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
+				bHasMetasound =
+					Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "Metasound"))
+					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace", "Metasound"))
+					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Metasound"));
+			}
 		}
 
 		if (bHasMetasound)
