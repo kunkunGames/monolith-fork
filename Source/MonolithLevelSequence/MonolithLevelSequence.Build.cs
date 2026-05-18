@@ -36,9 +36,28 @@ public class MonolithLevelSequence : ModuleRules
 
 		if (!bReleaseBuild)
 		{
-			string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-			string MovieRenderPipelineDir = Path.Combine(EngineDir, "Plugins", "MovieScene", "MovieRenderPipeline");
-			bHasMovieRenderPipeline = Directory.Exists(MovieRenderPipelineDir);
+			// 1. Check project Plugins/ folder
+			if (Target.ProjectFile != null)
+			{
+				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
+				if (Directory.Exists(ProjectPluginsDir))
+				{
+					bHasMovieRenderPipeline = Directory.Exists(Path.Combine(ProjectPluginsDir, "MovieRenderPipeline"));
+				}
+			}
+
+			// 2. Check Engine Plugins/ folder
+			if (!bHasMovieRenderPipeline)
+			{
+				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
+				string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
+
+				bHasMovieRenderPipeline =
+					Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "MovieRenderPipeline"))
+					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace", "MovieRenderPipeline"))
+					|| Directory.Exists(Path.Combine(EnginePluginsDir, "MovieScene", "MovieRenderPipeline"))
+					|| Directory.Exists(Path.Combine(EnginePluginsDir, "MovieRenderPipeline"));
+			}
 		}
 
 		PublicDefinitions.Add("WITH_MONOLITH_MRQ=" + (bHasMovieRenderPipeline ? "1" : "0"));
