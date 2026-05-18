@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -22,6 +23,7 @@ public:
 		TSet<FString> DirtyPackagesBefore;
 		FString OutcomeStatus;
 		FString ResultKind;
+		FMonolithActionExecutionPolicy ExecutionPolicy;
 		int32 JsonRpcErrorCode = 0;
 		int32 ResultChars = 0;
 		bool bResultTruncated = false;
@@ -65,6 +67,7 @@ private:
 		FString ActiveProfileId;
 		FString SessionIdRedacted;
 		FString ResultKind;
+		FMonolithActionExecutionPolicy ExecutionPolicy;
 		FString Reason;
 		int32 JsonRpcErrorCode = 0;
 		int32 ResultChars = 0;

@@ -57,6 +57,7 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `gas` UI binding response | Shape change (Phase J F5) | Returns `{ bindings: [...], count: N }` instead of a bare array. Wrap your client parsers. |
 | `blueprint` DataTable maintenance | **NEW** | Adds schema inspection, guarded row update/remove, and guarded CSV export for `UDataTable` assets. |
 | `localization` StringTable actions | **NEW** | Adds guarded StringTable create/edit/remove/metadata plus CSV import/export with `dry_run`/`confirm` write gates. |
+| `monolith.discover` / `monolith.describe_domain` action rows | Metadata added | Each action row now includes non-enforced `execution_policy` metadata (`policy_id`, `defaulted`, dirty-package/transaction/validation flags) for the first safe-execution policy slice. |
 
 The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespaces — same handler, two callable paths. Pick whichever reads better from your client.
 
@@ -83,7 +84,7 @@ List available tool namespaces and their actions. Pass `namespace` to filter; pa
 | `namespace` | string | optional | Filter to a specific namespace |
 | `category` | string | optional | Filter actions within the namespace by category |
 
-**Returns:** Per-action param schemas for every registered action. AI clients also receive these in `tools/list` at session start, so most callers never need to call `discover` explicitly.
+**Returns:** Per-action param schemas and non-enforced `execution_policy` metadata for every registered action. AI clients also receive schemas in `tools/list` at session start, so most callers never need to call `discover` explicitly.
 
 ---
 

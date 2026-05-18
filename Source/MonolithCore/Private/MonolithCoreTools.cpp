@@ -665,6 +665,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			TSharedPtr<FJsonObject> ActionObj = MakeShared<FJsonObject>();
 			ActionObj->SetStringField(TEXT("action"), ActionInfo.Action);
 			ActionObj->SetStringField(TEXT("description"), ActionInfo.Description);
+			ActionObj->SetObjectField(TEXT("execution_policy"), ActionInfo.ExecutionPolicy.ToJson());
 			if (!ActionInfo.Category.IsEmpty())
 			{
 				ActionObj->SetStringField(TEXT("category"), ActionInfo.Category);
@@ -1627,6 +1628,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDescribeDomain(const TSharedPtr<
 		Row->SetStringField(TEXT("name"), Action.Action);
 		Row->SetStringField(TEXT("action"), Action.Action);
 		Row->SetStringField(TEXT("description"), Action.Description);
+		Row->SetObjectField(TEXT("execution_policy"), Action.ExecutionPolicy.ToJson());
 		if (!Action.Category.IsEmpty())
 		{
 			Row->SetStringField(TEXT("category"), Action.Category);

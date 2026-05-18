@@ -27,6 +27,7 @@ FMonolithActionExecutionGuard::FExecutionScope FMonolithActionExecutionGuard::Be
 	Scope.DirtyPackagesBefore = SnapshotDirtyPackages();
 	Scope.OutcomeStatus = TEXT("running");
 	Scope.ResultKind = TEXT("unknown");
+	Scope.ExecutionPolicy = FMonolithToolRegistry::Get().GetActionExecutionPolicy(Namespace, Action);
 	Scope.bActive = true;
 	return Scope;
 }
@@ -103,6 +104,7 @@ void FMonolithActionExecutionGuard::EndAction(FExecutionScope& Scope)
 		: Scope.OutcomeStatus;
 	Row.JsonRpcErrorCode = Scope.JsonRpcErrorCode;
 	Row.ResultKind = Scope.ResultKind;
+	Row.ExecutionPolicy = Scope.ExecutionPolicy;
 	Row.ResultChars = Scope.ResultChars;
 	Row.bResultTruncated = Scope.bResultTruncated;
 	Row.RollbackStatus = TEXT("not_available_without_policy");
@@ -141,6 +143,7 @@ void FMonolithActionExecutionGuard::RecordRejectedToolCall(
 	Row.ToolCallStatus = Status;
 	Row.JsonRpcErrorCode = ErrorCode;
 	Row.ResultKind = TEXT("error_text");
+	Row.ExecutionPolicy = FMonolithActionExecutionPolicy::DefaultReadOnly();
 	Row.ResultChars = Reason.Len();
 	Row.bResultTruncated = false;
 	Row.RollbackStatus = TEXT("not_available_without_policy");
@@ -172,11 +175,13 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Result->SetBoolField(TEXT("automatic_transaction_wrapping"), false);
 	Result->SetBoolField(TEXT("automatic_rollback"), false);
 	Result->SetBoolField(TEXT("post_edit_validation"), false);
+	Result->SetBoolField(TEXT("execution_policy_metadata"), true);
 
 	TArray<TSharedPtr<FJsonValue>> Implemented;
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.get_execution_guard_status")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.list_recent_action_audit")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.get_last_rollback")));
+	Implemented.Add(MakeShared<FJsonValueString>(TEXT("registry execution_policy metadata")));
 	// Advanced ToolCall actions are only registered during RegisterMonolithExecutionGuardActions
 	// when the setting was true at startup. Gate the advertised list on actual registry state
 	// so toggling the setting at runtime (without restart) doesn't make capability discovery
@@ -195,7 +200,6 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Result->SetArrayField(TEXT("implemented_actions"), Implemented);
 
 	TArray<TSharedPtr<FJsonValue>> Future;
-	Future.Add(MakeShared<FJsonValueString>(TEXT("central execution policy metadata")));
 	Future.Add(MakeShared<FJsonValueString>(TEXT("policy-driven transaction wrapping")));
 	Future.Add(MakeShared<FJsonValueString>(TEXT("post-edit validators")));
 	Future.Add(MakeShared<FJsonValueString>(TEXT("rollback reports for policy failures")));
@@ -203,7 +207,7 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 
 	TArray<TSharedPtr<FJsonValue>> Notes;
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Audit capture is wired through the existing central crash-breadcrumb execution scope, so it applies to action dispatch without changing each domain action.")));
-	Notes.Add(MakeShared<FJsonValueString>(TEXT("This milestone intentionally does not claim rollback support; rollback requires future registry policy metadata and transaction integration.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Execution policy metadata is discoverable and audited but not enforced yet; rollback requires future transaction integration.")));
 	Result->SetArrayField(TEXT("notes"), Notes);
 
 	return Result;
@@ -457,6 +461,7 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::AuditRowToJson(const FAud
 	Obj->SetNumberField(TEXT("changed_package_count"), Row.ChangedPackageCount);
 	Obj->SetArrayField(TEXT("changed_packages"), StringsToJson(Row.ChangedPackages, 25));
 	Obj->SetBoolField(TEXT("changed_packages_truncated"), Row.ChangedPackages.Num() > 25);
+	Obj->SetObjectField(TEXT("execution_policy"), Row.ExecutionPolicy.ToJson());
 	Obj->SetStringField(TEXT("rollback_status"), Row.RollbackStatus);
 	return Obj;
 }
@@ -483,6 +488,7 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::ToolCallRecordToJson(cons
 	Obj->SetNumberField(TEXT("changed_package_count"), Row.ChangedPackageCount);
 	Obj->SetArrayField(TEXT("changed_packages"), StringsToJson(Row.ChangedPackages, 25));
 	Obj->SetBoolField(TEXT("changed_packages_truncated"), Row.ChangedPackages.Num() > 25);
+	Obj->SetObjectField(TEXT("execution_policy"), Row.ExecutionPolicy.ToJson());
 	Obj->SetBoolField(TEXT("raw_payload_logging"), false);
 	Obj->SetNumberField(TEXT("redaction_version"), 1);
 	Obj->SetStringField(TEXT("rollback_status"), Row.RollbackStatus);

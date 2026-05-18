@@ -397,6 +397,7 @@ FMonolithActionResult FMonolithToolProfileActions::HandleGetEffectiveDiscovery(c
 		Obj->SetStringField(TEXT("namespace"), Info.Namespace);
 		Obj->SetStringField(TEXT("action"), Info.Action);
 		Obj->SetStringField(TEXT("description"), Info.Description);
+		Obj->SetObjectField(TEXT("execution_policy"), Info.ExecutionPolicy.ToJson());
 		if (!Info.Category.IsEmpty())
 		{
 			Obj->SetStringField(TEXT("category"), Info.Category);

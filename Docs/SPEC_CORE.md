@@ -34,7 +34,7 @@ Monolith is a unified Unreal Engine editor plugin that consolidates 9 separate M
 
 ```
 Monolith.uplugin
-  MonolithCore          — HTTP server (bind retry with port probe, Restart()), tool registry, discovery, settings, auto-updater
+  MonolithCore          — HTTP server (bind retry with port probe, Restart()), tool registry, discovery, action execution policy metadata, settings, auto-updater
   MonolithBlueprint     — Blueprint inspection, variable/component/graph CRUD, node operations, compile, spawn (89 actions)
   MonolithMaterial      — Material inspection + graph editing + CRUD + function suite + tiling quality + texture preview (63 actions)
   MonolithAnimation     — Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP/ControlRig write, layout (125 actions)
@@ -65,7 +65,7 @@ For the architectural pattern that lets you write your own sibling plugin and re
 
 ### Discovery/Dispatch Pattern
 
-All domain modules register actions with `FMonolithToolRegistry` (central singleton). Each domain exposes a single `{namespace}_query(action, params)` MCP tool. The 4 core tools (`monolith_discover`, `monolith_status`, `monolith_reindex`, `monolith_update`) are standalone. Conditional modules gate registration on compile-time defines: MonolithGAS (`#if WITH_GBA`), MonolithComboGraph (`#if WITH_COMBOGRAPH`), MonolithLogicDriver (`#if WITH_LOGICDRIVER`), MonolithUI CommonUI actions (`#if WITH_COMMONUI`), MonolithAI (`#if WITH_STATETREE` + `#if WITH_SMARTOBJECTS` required; `#if WITH_MASSENTITY` + `#if WITH_ZONEGRAPH` optional), MonolithAudio (MetaSound actions conditional on `#if WITH_METASOUND`).
+All domain modules register actions with `FMonolithToolRegistry` (central singleton). Each action carries a first-slice `execution_policy` metadata object for discovery and audit surfaces; it is not enforced yet, so transaction wrapping, rollback, and post-edit validation remain future policy work. Each domain exposes a single `{namespace}_query(action, params)` MCP tool. The 4 core tools (`monolith_discover`, `monolith_status`, `monolith_reindex`, `monolith_update`) are standalone. Conditional modules gate registration on compile-time defines: MonolithGAS (`#if WITH_GBA`), MonolithComboGraph (`#if WITH_COMBOGRAPH`), MonolithLogicDriver (`#if WITH_LOGICDRIVER`), MonolithUI CommonUI actions (`#if WITH_COMMONUI`), MonolithAI (`#if WITH_STATETREE` + `#if WITH_SMARTOBJECTS` required; `#if WITH_MASSENTITY` + `#if WITH_ZONEGRAPH` optional), MonolithAudio (MetaSound actions conditional on `#if WITH_METASOUND`).
 
 ### MCP Protocol
 
@@ -135,7 +135,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 
 | # | Module | Spec | Summary |
 |---|--------|------|---------|
-| 3.1 | MonolithCore | [specs/SPEC_MonolithCore.md](specs/SPEC_MonolithCore.md) | HTTP server (bind retry, Restart(), `Monolith.Restart` console cmd), tool registry, discovery, settings, auto-updater |
+| 3.1 | MonolithCore | [specs/SPEC_MonolithCore.md](specs/SPEC_MonolithCore.md) | HTTP server (bind retry, Restart(), `Monolith.Restart` console cmd), tool registry, discovery, action execution policy metadata, settings, auto-updater |
 | 3.2 | MonolithBlueprint | [specs/SPEC_MonolithBlueprint.md](specs/SPEC_MonolithBlueprint.md) | Blueprint inspection, variable/component/graph CRUD, node ops, compile, spawn (89 actions) |
 | 3.3 | MonolithMaterial | [specs/SPEC_MonolithMaterial.md](specs/SPEC_MonolithMaterial.md) | Material inspection + graph editing + CRUD + function suite (63 actions) |
 | 3.4 | MonolithAnimation | [specs/SPEC_MonolithAnimation.md](specs/SPEC_MonolithAnimation.md) | Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP write, ControlRig (125 actions) |

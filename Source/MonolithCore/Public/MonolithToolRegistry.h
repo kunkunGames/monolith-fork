@@ -73,6 +73,20 @@ struct FMonolithActionResult
 /** Delegate type for action handlers */
 DECLARE_DELEGATE_RetVal_OneParam(FMonolithActionResult, FMonolithActionHandler, const TSharedPtr<FJsonObject>& /* Params */);
 
+/** First-slice registry metadata for future policy-driven execution guard behavior. */
+struct MONOLITHCORE_API FMonolithActionExecutionPolicy
+{
+	FString PolicyId = TEXT("read_only");
+	bool bDefaulted = true;
+	bool bDirtyPackageTracking = false;
+	bool bTransactionWrapping = false;
+	bool bPostEditValidation = false;
+	bool bEnforced = false;
+
+	static FMonolithActionExecutionPolicy DefaultReadOnly();
+	TSharedPtr<FJsonObject> ToJson() const;
+};
+
 /** Metadata describing a registered action */
 struct FMonolithActionInfo
 {
@@ -80,6 +94,7 @@ struct FMonolithActionInfo
 	FString Action;
 	FString Description;
 	FString Category;                     // Optional sub-grouping within a namespace (e.g. "CommonUI" inside "ui"). Empty = uncategorized.
+	FMonolithActionExecutionPolicy ExecutionPolicy;
 	TSharedPtr<FJsonObject> ParamSchema;  // JSON Schema for parameter validation
 };
 
@@ -106,7 +121,8 @@ public:
 		const FString& Description,
 		const FMonolithActionHandler& Handler,
 		const TSharedPtr<FJsonObject>& ParamSchema = nullptr,
-		const FString& Category = FString()  // Optional sub-group within namespace — defaults to uncategorized
+		const FString& Category = FString(),  // Optional sub-group within namespace — defaults to uncategorized
+		const FMonolithActionExecutionPolicy& ExecutionPolicy = FMonolithActionExecutionPolicy::DefaultReadOnly()
 	);
 
 	/** Unregister all actions in a namespace (called during module shutdown) */
@@ -132,6 +148,9 @@ public:
 
 	/** Check if a namespace exists in the raw registry */
 	bool HasNamespace(const FString& Namespace) const;
+
+	/** Get action execution policy metadata, or the default read-only policy if missing. */
+	FMonolithActionExecutionPolicy GetActionExecutionPolicy(const FString& Namespace, const FString& Action) const;
 
 	/** Get total number of registered actions */
 	int32 GetActionCount() const;

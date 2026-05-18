@@ -171,6 +171,30 @@ bool FMonolithParamSchema::IsStrictParamsEnabled()
 //  FMonolithToolRegistry
 // =============================================================================
 
+FMonolithActionExecutionPolicy FMonolithActionExecutionPolicy::DefaultReadOnly()
+{
+	FMonolithActionExecutionPolicy Policy;
+	Policy.PolicyId = TEXT("read_only");
+	Policy.bDefaulted = true;
+	Policy.bDirtyPackageTracking = false;
+	Policy.bTransactionWrapping = false;
+	Policy.bPostEditValidation = false;
+	Policy.bEnforced = false;
+	return Policy;
+}
+
+TSharedPtr<FJsonObject> FMonolithActionExecutionPolicy::ToJson() const
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("policy_id"), PolicyId.IsEmpty() ? TEXT("read_only") : PolicyId);
+	Obj->SetBoolField(TEXT("defaulted"), bDefaulted);
+	Obj->SetBoolField(TEXT("dirty_package_tracking"), bDirtyPackageTracking);
+	Obj->SetBoolField(TEXT("transaction_wrapping"), bTransactionWrapping);
+	Obj->SetBoolField(TEXT("post_edit_validation"), bPostEditValidation);
+	Obj->SetBoolField(TEXT("enforced"), bEnforced);
+	return Obj;
+}
+
 FMonolithToolRegistry& FMonolithToolRegistry::Get()
 {
 	static FMonolithToolRegistry Instance;
@@ -183,7 +207,8 @@ void FMonolithToolRegistry::RegisterAction(
 	const FString& Description,
 	const FMonolithActionHandler& Handler,
 	const TSharedPtr<FJsonObject>& ParamSchema,
-	const FString& Category)
+	const FString& Category,
+	const FMonolithActionExecutionPolicy& ExecutionPolicy)
 {
 	FScopeLock Lock(&RegistryLock);
 
@@ -199,6 +224,7 @@ void FMonolithToolRegistry::RegisterAction(
 	RegAction.Info.Action = Action;
 	RegAction.Info.Description = Description;
 	RegAction.Info.Category = Category;
+	RegAction.Info.ExecutionPolicy = ExecutionPolicy;
 	RegAction.Info.ParamSchema = ParamSchema;
 	RegAction.Handler = Handler;
 
@@ -557,6 +583,16 @@ bool FMonolithToolRegistry::HasNamespace(const FString& Namespace) const
 {
 	FScopeLock Lock(&RegistryLock);
 	return NamespaceActions.Contains(Namespace);
+}
+
+FMonolithActionExecutionPolicy FMonolithToolRegistry::GetActionExecutionPolicy(const FString& Namespace, const FString& Action) const
+{
+	FScopeLock Lock(&RegistryLock);
+	if (const FRegisteredAction* RegAction = Actions.Find(MakeKey(Namespace, Action)))
+	{
+		return RegAction->Info.ExecutionPolicy;
+	}
+	return FMonolithActionExecutionPolicy::DefaultReadOnly();
 }
 
 int32 FMonolithToolRegistry::GetActionCount() const
