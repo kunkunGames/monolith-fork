@@ -5,6 +5,8 @@
 #include "Dom/JsonObject.h"
 #include "Delegates/IDelegateInstance.h"
 
+class FScopedTransaction;
+
 /**
  * Crash Breadcrumb & Post-Mortem (PRD: MonolithCrashRecovery_PRD.md)
  *
@@ -64,6 +66,7 @@ public:
 		// True if this scope owns the active slot (false for nested calls).
 		bool bOwnsSlot = false;
 		FMonolithActionExecutionGuard::FExecutionScope ExecutionScope;
+		TUniquePtr<FScopedTransaction> ScopedTransaction;
 	};
 
 private:

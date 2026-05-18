@@ -24,9 +24,13 @@ public:
 		FString OutcomeStatus;
 		FString ResultKind;
 		FMonolithActionExecutionPolicy ExecutionPolicy;
+		FString DirtyPackageTrackingStatus;
+		FString TransactionStatus;
+		FString RollbackStatus;
 		int32 JsonRpcErrorCode = 0;
 		int32 ResultChars = 0;
 		bool bResultTruncated = false;
+		bool bDirtyPackageTrackingActive = false;
 		bool bActive = false;
 	};
 
@@ -68,6 +72,8 @@ private:
 		FString SessionIdRedacted;
 		FString ResultKind;
 		FMonolithActionExecutionPolicy ExecutionPolicy;
+		FString DirtyPackageTrackingStatus;
+		FString TransactionStatus;
 		FString Reason;
 		int32 JsonRpcErrorCode = 0;
 		int32 ResultChars = 0;

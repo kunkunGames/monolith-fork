@@ -595,6 +595,24 @@ FMonolithActionExecutionPolicy FMonolithToolRegistry::GetActionExecutionPolicy(c
 	return FMonolithActionExecutionPolicy::DefaultReadOnly();
 }
 
+bool FMonolithToolRegistry::SetActionExecutionPolicy(
+	const FString& Namespace,
+	const FString& Action,
+	const FMonolithActionExecutionPolicy& ExecutionPolicy,
+	FString& OutError)
+{
+	FScopeLock Lock(&RegistryLock);
+	if (FRegisteredAction* RegAction = Actions.Find(MakeKey(Namespace, Action)))
+	{
+		RegAction->Info.ExecutionPolicy = ExecutionPolicy;
+		OutError.Empty();
+		return true;
+	}
+
+	OutError = FString::Printf(TEXT("Unknown action: %s.%s"), *Namespace, *Action);
+	return false;
+}
+
 int32 FMonolithToolRegistry::GetActionCount() const
 {
 	FScopeLock Lock(&RegistryLock);

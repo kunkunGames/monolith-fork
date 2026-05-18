@@ -10,6 +10,7 @@
 #include "GenericPlatform/GenericPlatformCrashContext.h"
 #include "Interfaces/IPluginManager.h"
 #include "HAL/PlatformFileManager.h"
+#include "ScopedTransaction.h"
 
 #ifndef MONOLITH_VERSION
 #define MONOLITH_VERSION TEXT("0.0.0")
@@ -221,6 +222,14 @@ FMonolithCrashBreadcrumb::FScopedCapture::FScopedCapture(
 		Namespace, Action, ParamsSerialized, B.SessionId, Now);
 
 	ExecutionScope = FMonolithActionExecutionGuard::Get().BeginAction(Namespace, Action);
+	if (ExecutionScope.ExecutionPolicy.bTransactionWrapping)
+	{
+		const FText TransactionName = FText::FromString(
+			FString::Printf(TEXT("Monolith %s.%s"), *Namespace, *Action));
+		ScopedTransaction = MakeUnique<FScopedTransaction>(TransactionName, true);
+		ExecutionScope.TransactionStatus = TEXT("wrapped_by_policy");
+		ExecutionScope.RollbackStatus = TEXT("not_requested");
+	}
 	B.bSlotActive = true;
 	bOwnsSlot = true;
 }
@@ -232,6 +241,7 @@ FMonolithCrashBreadcrumb::FScopedCapture::~FScopedCapture()
 		return;
 	}
 	FMonolithCrashBreadcrumb& B = FMonolithCrashBreadcrumb::Get();
+	ScopedTransaction.Reset();
 	FMonolithActionExecutionGuard::Get().EndAction(ExecutionScope);
 	B.bSlotActive = false;
 	// Strings are kept (we do not Empty()) — there is no harm and avoiding

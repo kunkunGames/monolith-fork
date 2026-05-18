@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-18
 **Engine:** Unreal Engine 5.7+
-**Scope:** MonolithCore first-slice execution policy metadata.
+**Scope:** MonolithCore execution policy metadata, policy-gated dirty tracking, transaction wrapping, and developer override.
 
 ---
 
@@ -10,9 +10,9 @@
 
 | Artifact | Purpose |
 |----------|---------|
-| `Docs/specs/SPEC_MonolithActionExecutionPolicy.md` | Defines registry policy metadata and non-enforced first-slice behavior. |
-| `Docs/specs/SPEC_MonolithCore.md` | Links Core registry and audit behavior to the policy metadata slice. |
-| `PRD/AgentIntegrationKitGapSpecs/ApplyToMonolith/41-safe-tool-execution-rollback.md` | Marks policy metadata as the next completed step after audit rows. |
+| `Docs/specs/SPEC_MonolithActionExecutionPolicy.md` | Defines registry policy metadata, policy-gated dirty tracking, transaction wrapping, and developer override behavior. |
+| `Docs/specs/SPEC_MonolithCore.md` | Links Core registry and audit behavior to the policy execution slice. |
+| `PRD/AgentIntegrationKitGapSpecs/ApplyToMonolith/41-safe-tool-execution-rollback.md` | Source gap spec that made dirty-package tracking and transaction wrapping the next high-ROI step after policy metadata. |
 
 ---
 
@@ -24,8 +24,12 @@
 | Discovery output | `FMonolithActionExecutionPolicyDiscoverTest` calls `HandleDiscover` and checks `execution_policy` exists on action rows. | Added; compile reached this test file. |
 | Domain catalog output | `FMonolithActionExecutionPolicyDomainCatalogTest` calls `HandleDescribeDomain` and checks policy metadata is present. | Added; compile reached this test file. |
 | Audit output | `FMonolithActionExecutionPolicyAuditTest` executes the test action and checks the recent audit row includes policy metadata. | Added; compile reached this test file. |
-| Full project build | `UnrealBuildTool.exe GoGameEditor Win64 Development -Project="D:\P4\game\GO.uproject" -WaitMutex -NoHotReloadFromIDE` | Blocked before C++ compile by duplicate Monolith module rule definitions under `D:\P4\game\Plugins\Monolith-worktrees\gamefeatures-readonly`. |
-| HostProject compile | `UnrealBuildTool.exe UnrealEditor Win64 Development -Project="<Saved>\MonolithBuildPlugin_20260519_001206\HostProject\HostProject.uproject" -plugin="<Saved>\MonolithBuildPlugin_20260519_001206\HostProject\Plugins\Monolith\Monolith.uplugin" -WaitMutex -NoHotReloadFromIDE` | New/modified policy files compiled; build later failed in pre-existing MonolithCore/Material/Index/Mesh sources unrelated to policy metadata. |
+| Read-only fast path | `FMonolithActionExecutionPolicyAuditTest` checks default actions report `dirty_package_tracking_status=skipped_by_policy`. | Added in second slice; HostProject compile produced `MonolithActionExecutionPolicyTests.cpp.obj`. |
+| Policy override | `FMonolithActionExecutionPolicyOverrideTest` updates a known action to `track_dirty_packages` and verifies registry/discovery metadata changed. | Added in second slice; HostProject compile produced `MonolithActionExecutionPolicyTests.cpp.obj`. |
+| Unsupported validation rejection | `FMonolithActionExecutionPolicyOverrideRejectsValidationTest` rejects `post_edit_validate` / `post_edit_validation=true` override requests. | Added in second slice; HostProject compile produced `MonolithActionExecutionPolicyTests.cpp.obj`. |
+| Full project build | `UnrealBuildTool.exe GoGameEditor Win64 Development -Project="D:\P4\game\GO.uproject" -WaitMutex -NoHotReloadFromIDE` | Blocked before C++ compile by duplicate Monolith module rule definitions under `D:\P4\game\Plugins\Monolith-worktrees\slate-readonly`. |
+| HostProject compile | `UnrealBuildTool.exe UnrealEditor Win64 Development -Project="D:\P4\game\Saved\MonolithPolicyBuild_20260519_004408\HostProject\HostProject.uproject" -plugin="D:\P4\game\Saved\MonolithPolicyBuild_20260519_004408\HostProject\Plugins\Monolith\Monolith.uplugin" -WaitMutex -NoHotReloadFromIDE` | New/modified Core files compiled and produced objects; build later failed in pre-existing `MonolithMesh` anonymous-namespace helper collisions. |
+| MonolithCore targeted compile | Same HostProject UBT command with `-Module=MonolithCore` | New/modified Core files were up to date from the HostProject compile; targeted build stopped in pre-existing `MonolithJsonUtilsTests.cpp` UE 5.7 `GetField` API drift and `MonolithMcpCompatibilityOptionsTests.cpp` anonymous-namespace helper collision. |
 
 ---
 

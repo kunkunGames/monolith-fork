@@ -24,10 +24,23 @@ FMonolithActionExecutionGuard::FExecutionScope FMonolithActionExecutionGuard::Be
 	Scope.Action = Action;
 	Scope.StartedUtc = FDateTime::UtcNow();
 	Scope.StartedSeconds = FPlatformTime::Seconds();
-	Scope.DirtyPackagesBefore = SnapshotDirtyPackages();
 	Scope.OutcomeStatus = TEXT("running");
 	Scope.ResultKind = TEXT("unknown");
 	Scope.ExecutionPolicy = FMonolithToolRegistry::Get().GetActionExecutionPolicy(Namespace, Action);
+	Scope.bDirtyPackageTrackingActive = Scope.ExecutionPolicy.bDirtyPackageTracking;
+	Scope.DirtyPackageTrackingStatus = Scope.bDirtyPackageTrackingActive
+		? TEXT("tracked_by_policy")
+		: TEXT("skipped_by_policy");
+	Scope.TransactionStatus = Scope.ExecutionPolicy.bTransactionWrapping
+		? TEXT("requested_by_policy")
+		: TEXT("not_requested");
+	Scope.RollbackStatus = Scope.ExecutionPolicy.bTransactionWrapping
+		? TEXT("not_available_without_rollback_policy")
+		: TEXT("not_available_without_policy");
+	if (Scope.bDirtyPackageTrackingActive)
+	{
+		Scope.DirtyPackagesBefore = SnapshotDirtyPackages();
+	}
 	Scope.bActive = true;
 	return Scope;
 }
@@ -73,13 +86,16 @@ void FMonolithActionExecutionGuard::EndAction(FExecutionScope& Scope)
 		return;
 	}
 
-	const TSet<FString> DirtyPackagesAfter = SnapshotDirtyPackages();
 	TArray<FString> ChangedPackages;
-	for (const FString& PackageName : DirtyPackagesAfter)
+	if (Scope.bDirtyPackageTrackingActive)
 	{
-		if (!Scope.DirtyPackagesBefore.Contains(PackageName))
+		const TSet<FString> DirtyPackagesAfter = SnapshotDirtyPackages();
+		for (const FString& PackageName : DirtyPackagesAfter)
 		{
-			ChangedPackages.Add(PackageName);
+			if (!Scope.DirtyPackagesBefore.Contains(PackageName))
+			{
+				ChangedPackages.Add(PackageName);
+			}
 		}
 	}
 	ChangedPackages.Sort();
@@ -105,9 +121,17 @@ void FMonolithActionExecutionGuard::EndAction(FExecutionScope& Scope)
 	Row.JsonRpcErrorCode = Scope.JsonRpcErrorCode;
 	Row.ResultKind = Scope.ResultKind;
 	Row.ExecutionPolicy = Scope.ExecutionPolicy;
+	Row.DirtyPackageTrackingStatus = Scope.DirtyPackageTrackingStatus.IsEmpty()
+		? TEXT("skipped_by_policy")
+		: Scope.DirtyPackageTrackingStatus;
+	Row.TransactionStatus = Scope.TransactionStatus.IsEmpty()
+		? TEXT("not_requested")
+		: Scope.TransactionStatus;
 	Row.ResultChars = Scope.ResultChars;
 	Row.bResultTruncated = Scope.bResultTruncated;
-	Row.RollbackStatus = TEXT("not_available_without_policy");
+	Row.RollbackStatus = Scope.RollbackStatus.IsEmpty()
+		? TEXT("not_available_without_policy")
+		: Scope.RollbackStatus;
 
 	AppendAuditRow(Row);
 	Scope.bActive = false;
@@ -144,6 +168,8 @@ void FMonolithActionExecutionGuard::RecordRejectedToolCall(
 	Row.JsonRpcErrorCode = ErrorCode;
 	Row.ResultKind = TEXT("error_text");
 	Row.ExecutionPolicy = FMonolithActionExecutionPolicy::DefaultReadOnly();
+	Row.DirtyPackageTrackingStatus = TEXT("skipped_by_policy");
+	Row.TransactionStatus = TEXT("not_requested");
 	Row.ResultChars = Reason.Len();
 	Row.bResultTruncated = false;
 	Row.RollbackStatus = TEXT("not_available_without_policy");
@@ -165,14 +191,18 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("namespace"), TEXT("monolith"));
 	Result->SetStringField(TEXT("domain"), TEXT("execution_guard"));
-	Result->SetStringField(TEXT("mode"), TEXT("central_audit_first_milestone"));
+	Result->SetStringField(TEXT("mode"), TEXT("central_policy_gated_audit"));
 	Result->SetBoolField(TEXT("enabled"), true);
 	Result->SetBoolField(TEXT("advanced_tool_call_records"), bAdvancedRecords);
 	Result->SetNumberField(TEXT("audit_capacity"), AuditCapacity);
 	Result->SetNumberField(TEXT("audit_count"), AuditCount);
 	Result->SetBoolField(TEXT("dirty_package_tracking"), true);
+	Result->SetStringField(TEXT("dirty_package_tracking_mode"), TEXT("policy_gated"));
+	Result->SetBoolField(TEXT("policy_gated_dirty_package_tracking"), true);
 	Result->SetBoolField(TEXT("raw_payload_logging"), false);
-	Result->SetBoolField(TEXT("automatic_transaction_wrapping"), false);
+	Result->SetBoolField(TEXT("automatic_transaction_wrapping"), true);
+	Result->SetStringField(TEXT("transaction_wrapping_mode"), TEXT("policy_gated"));
+	Result->SetBoolField(TEXT("policy_gated_transaction_wrapping"), true);
 	Result->SetBoolField(TEXT("automatic_rollback"), false);
 	Result->SetBoolField(TEXT("post_edit_validation"), false);
 	Result->SetBoolField(TEXT("execution_policy_metadata"), true);
@@ -182,6 +212,9 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.list_recent_action_audit")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.get_last_rollback")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("registry execution_policy metadata")));
+	Implemented.Add(MakeShared<FJsonValueString>(TEXT("policy-gated dirty package tracking")));
+	Implemented.Add(MakeShared<FJsonValueString>(TEXT("policy-gated transaction wrapping")));
+	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.set_action_execution_policy")));
 	// Advanced ToolCall actions are only registered during RegisterMonolithExecutionGuardActions
 	// when the setting was true at startup. Gate the advertised list on actual registry state
 	// so toggling the setting at runtime (without restart) doesn't make capability discovery
@@ -200,14 +233,14 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Result->SetArrayField(TEXT("implemented_actions"), Implemented);
 
 	TArray<TSharedPtr<FJsonValue>> Future;
-	Future.Add(MakeShared<FJsonValueString>(TEXT("policy-driven transaction wrapping")));
 	Future.Add(MakeShared<FJsonValueString>(TEXT("post-edit validators")));
 	Future.Add(MakeShared<FJsonValueString>(TEXT("rollback reports for policy failures")));
 	Result->SetArrayField(TEXT("future_work"), Future);
 
 	TArray<TSharedPtr<FJsonValue>> Notes;
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Audit capture is wired through the existing central crash-breadcrumb execution scope, so it applies to action dispatch without changing each domain action.")));
-	Notes.Add(MakeShared<FJsonValueString>(TEXT("Execution policy metadata is discoverable and audited but not enforced yet; rollback requires future transaction integration.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Default read_only policies skip package scans and transactions; explicit mutating policies can opt into central dirty-package tracking and transaction wrapping.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Rollback and post-edit validation are still unavailable until validator hooks are wired.")));
 	Result->SetArrayField(TEXT("notes"), Notes);
 
 	return Result;
@@ -462,6 +495,8 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::AuditRowToJson(const FAud
 	Obj->SetArrayField(TEXT("changed_packages"), StringsToJson(Row.ChangedPackages, 25));
 	Obj->SetBoolField(TEXT("changed_packages_truncated"), Row.ChangedPackages.Num() > 25);
 	Obj->SetObjectField(TEXT("execution_policy"), Row.ExecutionPolicy.ToJson());
+	Obj->SetStringField(TEXT("dirty_package_tracking_status"), Row.DirtyPackageTrackingStatus.IsEmpty() ? TEXT("skipped_by_policy") : Row.DirtyPackageTrackingStatus);
+	Obj->SetStringField(TEXT("transaction_status"), Row.TransactionStatus.IsEmpty() ? TEXT("not_requested") : Row.TransactionStatus);
 	Obj->SetStringField(TEXT("rollback_status"), Row.RollbackStatus);
 	return Obj;
 }
@@ -489,6 +524,8 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::ToolCallRecordToJson(cons
 	Obj->SetArrayField(TEXT("changed_packages"), StringsToJson(Row.ChangedPackages, 25));
 	Obj->SetBoolField(TEXT("changed_packages_truncated"), Row.ChangedPackages.Num() > 25);
 	Obj->SetObjectField(TEXT("execution_policy"), Row.ExecutionPolicy.ToJson());
+	Obj->SetStringField(TEXT("dirty_package_tracking_status"), Row.DirtyPackageTrackingStatus.IsEmpty() ? TEXT("skipped_by_policy") : Row.DirtyPackageTrackingStatus);
+	Obj->SetStringField(TEXT("transaction_status"), Row.TransactionStatus.IsEmpty() ? TEXT("not_requested") : Row.TransactionStatus);
 	Obj->SetBoolField(TEXT("raw_payload_logging"), false);
 	Obj->SetNumberField(TEXT("redaction_version"), 1);
 	Obj->SetStringField(TEXT("rollback_status"), Row.RollbackStatus);

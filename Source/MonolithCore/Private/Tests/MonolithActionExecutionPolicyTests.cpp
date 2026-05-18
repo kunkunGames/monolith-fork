@@ -8,16 +8,18 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
+void RegisterMonolithExecutionGuardActions();
+
 namespace
 {
-	FMonolithActionResult MakePolicyTestResult(const TSharedPtr<FJsonObject>& /*Params*/)
+	FMonolithActionResult MakePolicySliceTestResult(const TSharedPtr<FJsonObject>& /*Params*/)
 	{
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 		Result->SetBoolField(TEXT("ok"), true);
 		return FMonolithActionResult::Success(Result);
 	}
 
-	FMonolithActionExecutionPolicy MakeExplicitMutationPolicy()
+	FMonolithActionExecutionPolicy MakePolicySliceExplicitMutationPolicy()
 	{
 		FMonolithActionExecutionPolicy Policy;
 		Policy.PolicyId = TEXT("transaction_required");
@@ -25,30 +27,31 @@ namespace
 		Policy.bDirtyPackageTracking = true;
 		Policy.bTransactionWrapping = true;
 		Policy.bPostEditValidation = false;
-		Policy.bEnforced = false;
+		Policy.bEnforced = true;
 		return Policy;
 	}
 
-	void RegisterPolicyTestNamespace()
+	void RegisterPolicySliceTestNamespace()
 	{
 		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+		Registry.UnregisterNamespace(TEXT("policytest"));
 		Registry.RegisterAction(
 			TEXT("policytest"),
 			TEXT("default_action"),
 			TEXT("Policy metadata default test action."),
-			FMonolithActionHandler::CreateStatic(&MakePolicyTestResult));
+			FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult));
 
 		Registry.RegisterAction(
 			TEXT("policytest"),
 			TEXT("explicit_action"),
 			TEXT("Policy metadata explicit test action."),
-			FMonolithActionHandler::CreateStatic(&MakePolicyTestResult),
+			FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult),
 			nullptr,
 			TEXT("Test"),
-			MakeExplicitMutationPolicy());
+			MakePolicySliceExplicitMutationPolicy());
 	}
 
-	const TSharedPtr<FJsonObject>* FindActionRow(const TArray<TSharedPtr<FJsonValue>>* Rows, const FString& ActionName)
+	const TSharedPtr<FJsonObject>* FindPolicySliceActionRow(const TArray<TSharedPtr<FJsonValue>>* Rows, const FString& ActionName)
 	{
 		if (!Rows)
 		{
@@ -80,7 +83,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyDiscoverTest,
 
 bool FMonolithActionExecutionPolicyDiscoverTest::RunTest(const FString& Parameters)
 {
-	RegisterPolicyTestNamespace();
+	RegisterPolicySliceTestNamespace();
 
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 	Params->SetStringField(TEXT("namespace"), TEXT("policytest"));
@@ -93,7 +96,7 @@ bool FMonolithActionExecutionPolicyDiscoverTest::RunTest(const FString& Paramete
 		const TArray<TSharedPtr<FJsonValue>>* Actions = nullptr;
 		TestTrue(TEXT("Actions array exists"), Result.Result->TryGetArrayField(TEXT("actions"), Actions));
 
-		const TSharedPtr<FJsonObject>* DefaultRow = FindActionRow(Actions, TEXT("default_action"));
+		const TSharedPtr<FJsonObject>* DefaultRow = FindPolicySliceActionRow(Actions, TEXT("default_action"));
 		TestTrue(TEXT("Default action row found"), DefaultRow && DefaultRow->IsValid());
 		if (DefaultRow && DefaultRow->IsValid())
 		{
@@ -107,7 +110,7 @@ bool FMonolithActionExecutionPolicyDiscoverTest::RunTest(const FString& Paramete
 			}
 		}
 
-		const TSharedPtr<FJsonObject>* ExplicitRow = FindActionRow(Actions, TEXT("explicit_action"));
+		const TSharedPtr<FJsonObject>* ExplicitRow = FindPolicySliceActionRow(Actions, TEXT("explicit_action"));
 		TestTrue(TEXT("Explicit action row found"), ExplicitRow && ExplicitRow->IsValid());
 		if (ExplicitRow && ExplicitRow->IsValid())
 		{
@@ -118,7 +121,7 @@ bool FMonolithActionExecutionPolicyDiscoverTest::RunTest(const FString& Paramete
 				TestEqual(TEXT("Explicit policy id"), (*Policy)->GetStringField(TEXT("policy_id")), TEXT("transaction_required"));
 				TestFalse(TEXT("Explicit policy is not defaulted"), (*Policy)->GetBoolField(TEXT("defaulted")));
 				TestTrue(TEXT("Explicit policy requests transaction metadata"), (*Policy)->GetBoolField(TEXT("transaction_wrapping")));
-				TestFalse(TEXT("Explicit policy is not enforced"), (*Policy)->GetBoolField(TEXT("enforced")));
+				TestTrue(TEXT("Explicit policy is enforced"), (*Policy)->GetBoolField(TEXT("enforced")));
 			}
 		}
 	}
@@ -143,7 +146,7 @@ bool FMonolithActionExecutionPolicyDomainCatalogTest::RunTest(const FString& Par
 	const bool bOriginalCatalog = Settings->bEnableDeferredDomainCatalog;
 	Settings->bEnableDeferredDomainCatalog = true;
 
-	RegisterPolicyTestNamespace();
+	RegisterPolicySliceTestNamespace();
 
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 	Params->SetStringField(TEXT("namespace"), TEXT("policytest"));
@@ -156,7 +159,7 @@ bool FMonolithActionExecutionPolicyDomainCatalogTest::RunTest(const FString& Par
 		const TArray<TSharedPtr<FJsonValue>>* Actions = nullptr;
 		TestTrue(TEXT("Actions array exists"), Result.Result->TryGetArrayField(TEXT("actions"), Actions));
 
-		const TSharedPtr<FJsonObject>* ExplicitRow = FindActionRow(Actions, TEXT("explicit_action"));
+		const TSharedPtr<FJsonObject>* ExplicitRow = FindPolicySliceActionRow(Actions, TEXT("explicit_action"));
 		TestTrue(TEXT("Explicit action row found"), ExplicitRow && ExplicitRow->IsValid());
 		if (ExplicitRow && ExplicitRow->IsValid())
 		{
@@ -180,9 +183,15 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyAuditTest,
 
 bool FMonolithActionExecutionPolicyAuditTest::RunTest(const FString& Parameters)
 {
-	RegisterPolicyTestNamespace();
+	RegisterPolicySliceTestNamespace();
 	FMonolithActionExecutionGuard& Guard = FMonolithActionExecutionGuard::Get();
 	Guard.ResetForTests();
+
+	FMonolithActionExecutionGuard::FExecutionScope DefaultScope = Guard.BeginAction(TEXT("policytest"), TEXT("default_action"));
+	TSharedPtr<FJsonObject> DefaultResultObject = MakeShared<FJsonObject>();
+	DefaultResultObject->SetBoolField(TEXT("ok"), true);
+	Guard.SetActionOutcome(DefaultScope, true, 0, DefaultResultObject, FString());
+	Guard.EndAction(DefaultScope);
 
 	FMonolithActionExecutionGuard::FExecutionScope Scope = Guard.BeginAction(TEXT("policytest"), TEXT("explicit_action"));
 	TSharedPtr<FJsonObject> ResultObject = MakeShared<FJsonObject>();
@@ -190,30 +199,100 @@ bool FMonolithActionExecutionPolicyAuditTest::RunTest(const FString& Parameters)
 	Guard.SetActionOutcome(Scope, true, 0, ResultObject, FString());
 	Guard.EndAction(Scope);
 
-	TSharedPtr<FJsonObject> Audit = Guard.GetRecentAuditJson(1);
+	TSharedPtr<FJsonObject> Audit = Guard.GetRecentAuditJson(2);
 	TestTrue(TEXT("Audit object valid"), Audit.IsValid());
 	if (Audit.IsValid())
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
 		TestTrue(TEXT("Audit rows exist"), Audit->TryGetArrayField(TEXT("rows"), Rows));
-		TestTrue(TEXT("One audit row returned"), Rows && Rows->Num() == 1);
-		if (Rows && Rows->Num() == 1)
+		TestTrue(TEXT("Two audit rows returned"), Rows && Rows->Num() == 2);
+		if (Rows && Rows->Num() == 2)
 		{
-			const TSharedPtr<FJsonObject>* Row = nullptr;
-			TestTrue(TEXT("Audit row is object"), (*Rows)[0]->TryGetObject(Row));
-			if (Row && Row->IsValid())
+			const TSharedPtr<FJsonObject>* ExplicitRow = FindPolicySliceActionRow(Rows, TEXT("policytest.explicit_action"));
+			TestTrue(TEXT("Explicit audit row found"), ExplicitRow && ExplicitRow->IsValid());
+			if (ExplicitRow && ExplicitRow->IsValid())
 			{
 				const TSharedPtr<FJsonObject>* Policy = nullptr;
-				TestTrue(TEXT("Audit row has execution policy"), (*Row)->TryGetObjectField(TEXT("execution_policy"), Policy));
+				TestTrue(TEXT("Audit row has execution policy"), (*ExplicitRow)->TryGetObjectField(TEXT("execution_policy"), Policy));
 				if (Policy && Policy->IsValid())
 				{
 					TestEqual(TEXT("Audit policy id"), (*Policy)->GetStringField(TEXT("policy_id")), TEXT("transaction_required"));
 					TestFalse(TEXT("Audit policy not defaulted"), (*Policy)->GetBoolField(TEXT("defaulted")));
 					TestTrue(TEXT("Audit policy dirty tracking metadata"), (*Policy)->GetBoolField(TEXT("dirty_package_tracking")));
 				}
+				TestEqual(TEXT("Explicit audit row tracks dirty packages"), (*ExplicitRow)->GetStringField(TEXT("dirty_package_tracking_status")), TEXT("tracked_by_policy"));
+				TestEqual(TEXT("Explicit audit row transaction requested"), (*ExplicitRow)->GetStringField(TEXT("transaction_status")), TEXT("requested_by_policy"));
+			}
+
+			const TSharedPtr<FJsonObject>* DefaultRow = FindPolicySliceActionRow(Rows, TEXT("policytest.default_action"));
+			TestTrue(TEXT("Default audit row found"), DefaultRow && DefaultRow->IsValid());
+			if (DefaultRow && DefaultRow->IsValid())
+			{
+				TestEqual(TEXT("Default audit row skips dirty package tracking"), (*DefaultRow)->GetStringField(TEXT("dirty_package_tracking_status")), TEXT("skipped_by_policy"));
+				TestEqual(TEXT("Default audit row skips transactions"), (*DefaultRow)->GetStringField(TEXT("transaction_status")), TEXT("not_requested"));
 			}
 		}
 	}
+
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("policytest"));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyOverrideTest,
+	"Monolith.Core.ActionExecutionPolicy.RuntimeOverride",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionExecutionPolicyOverrideTest::RunTest(const FString& Parameters)
+{
+	RegisterPolicySliceTestNamespace();
+	RegisterMonolithExecutionGuardActions();
+
+	TSharedPtr<FJsonObject> PolicyObject = MakeShared<FJsonObject>();
+	PolicyObject->SetStringField(TEXT("policy_id"), TEXT("track_dirty_packages"));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("action"), TEXT("policytest.default_action"));
+	Params->SetObjectField(TEXT("policy"), PolicyObject);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("monolith"), TEXT("set_action_execution_policy"), Params);
+	TestTrue(TEXT("Override succeeds"), Result.bSuccess);
+	TestTrue(TEXT("Override result valid"), Result.Result.IsValid());
+	if (Result.Result.IsValid())
+	{
+		TestEqual(TEXT("Override status"), Result.Result->GetStringField(TEXT("status")), TEXT("ok"));
+		TestTrue(TEXT("Override changed"), Result.Result->GetBoolField(TEXT("changed")));
+	}
+
+	FMonolithActionExecutionPolicy Policy = FMonolithToolRegistry::Get().GetActionExecutionPolicy(TEXT("policytest"), TEXT("default_action"));
+	TestEqual(TEXT("Policy id updated"), Policy.PolicyId, TEXT("track_dirty_packages"));
+	TestFalse(TEXT("Override policy is not defaulted"), Policy.bDefaulted);
+	TestTrue(TEXT("Override policy tracks dirty packages"), Policy.bDirtyPackageTracking);
+	TestFalse(TEXT("Override policy does not wrap transaction"), Policy.bTransactionWrapping);
+	TestTrue(TEXT("Override policy is enforced"), Policy.bEnforced);
+
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("policytest"));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyOverrideRejectsValidationTest,
+	"Monolith.Core.ActionExecutionPolicy.OverrideRejectsValidation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionExecutionPolicyOverrideRejectsValidationTest::RunTest(const FString& Parameters)
+{
+	RegisterPolicySliceTestNamespace();
+	RegisterMonolithExecutionGuardActions();
+
+	TSharedPtr<FJsonObject> PolicyObject = MakeShared<FJsonObject>();
+	PolicyObject->SetStringField(TEXT("policy_id"), TEXT("post_edit_validate"));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("action"), TEXT("policytest.default_action"));
+	Params->SetObjectField(TEXT("policy"), PolicyObject);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("monolith"), TEXT("set_action_execution_policy"), Params);
+	TestFalse(TEXT("Validator override is rejected"), Result.bSuccess);
+	TestTrue(TEXT("Validator rejection explains reservation"), Result.ErrorMessage.Contains(TEXT("validator")));
 
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("policytest"));
 	return true;

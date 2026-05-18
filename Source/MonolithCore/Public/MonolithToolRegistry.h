@@ -152,6 +152,9 @@ public:
 	/** Get action execution policy metadata, or the default read-only policy if missing. */
 	FMonolithActionExecutionPolicy GetActionExecutionPolicy(const FString& Namespace, const FString& Action) const;
 
+	/** Override action execution policy metadata for a known action in this process. */
+	bool SetActionExecutionPolicy(const FString& Namespace, const FString& Action, const FMonolithActionExecutionPolicy& ExecutionPolicy, FString& OutError);
+
 	/** Get total number of registered actions */
 	int32 GetActionCount() const;
 

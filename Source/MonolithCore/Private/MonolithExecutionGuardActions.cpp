@@ -1,4 +1,5 @@
 #include "MonolithActionExecutionGuard.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithSettings.h"
 #include "MonolithToolRegistry.h"
@@ -69,6 +70,114 @@ namespace
 			FMonolithActionExecutionGuard::Get().AnalyzeToolCallRecordsJson(static_cast<int32>(LimitValue)));
 	}
 
+	bool GetPolicyBoolIfPresent(
+		const TSharedPtr<FJsonObject>& PolicyObject,
+		const FString& FieldName,
+		bool& bOutValue)
+	{
+		if (!PolicyObject.IsValid() || !PolicyObject->HasField(FieldName))
+		{
+			return true;
+		}
+		return PolicyObject->TryGetBoolField(FieldName, bOutValue);
+	}
+
+	bool ParseActionExecutionPolicyOverride(
+		const TSharedPtr<FJsonObject>& PolicyObject,
+		FMonolithActionExecutionPolicy& OutPolicy,
+		FString& OutError)
+	{
+		FString PolicyId = TEXT("read_only");
+		if (PolicyObject.IsValid() && PolicyObject->HasField(TEXT("policy_id")))
+		{
+			if (!PolicyObject->TryGetStringField(TEXT("policy_id"), PolicyId) || PolicyId.IsEmpty())
+			{
+				OutError = TEXT("policy.policy_id must be a non-empty string when provided.");
+				return false;
+			}
+		}
+
+		FMonolithActionExecutionPolicy Policy = FMonolithActionExecutionPolicy::DefaultReadOnly();
+		Policy.PolicyId = PolicyId;
+		Policy.bDefaulted = false;
+		Policy.bEnforced = PolicyId != TEXT("read_only");
+
+		if (PolicyId == TEXT("read_only"))
+		{
+			Policy.bDirtyPackageTracking = false;
+			Policy.bTransactionWrapping = false;
+		}
+		else if (PolicyId == TEXT("track_dirty_packages"))
+		{
+			Policy.bDirtyPackageTracking = true;
+			Policy.bTransactionWrapping = false;
+		}
+		else if (PolicyId == TEXT("transaction_optional") || PolicyId == TEXT("transaction_required"))
+		{
+			Policy.bDirtyPackageTracking = true;
+			Policy.bTransactionWrapping = true;
+		}
+		else if (PolicyId == TEXT("post_edit_validate"))
+		{
+			OutError = TEXT("post_edit_validate policy is reserved until post-edit validator hooks are implemented.");
+			return false;
+		}
+		else
+		{
+			OutError = FString::Printf(
+				TEXT("Unsupported execution policy '%s'. Supported: read_only, track_dirty_packages, transaction_optional, transaction_required."),
+				*PolicyId);
+			return false;
+		}
+
+		bool bRequestedDirtyTracking = Policy.bDirtyPackageTracking;
+		if (!GetPolicyBoolIfPresent(PolicyObject, TEXT("dirty_package_tracking"), bRequestedDirtyTracking))
+		{
+			OutError = TEXT("policy.dirty_package_tracking must be a boolean when provided.");
+			return false;
+		}
+		if (bRequestedDirtyTracking != Policy.bDirtyPackageTracking)
+		{
+			OutError = FString::Printf(
+				TEXT("policy.dirty_package_tracking=%s is incompatible with policy_id '%s'."),
+				bRequestedDirtyTracking ? TEXT("true") : TEXT("false"),
+				*PolicyId);
+			return false;
+		}
+
+		bool bRequestedTransactionWrapping = Policy.bTransactionWrapping;
+		if (!GetPolicyBoolIfPresent(PolicyObject, TEXT("transaction_wrapping"), bRequestedTransactionWrapping))
+		{
+			OutError = TEXT("policy.transaction_wrapping must be a boolean when provided.");
+			return false;
+		}
+		if (bRequestedTransactionWrapping != Policy.bTransactionWrapping)
+		{
+			OutError = FString::Printf(
+				TEXT("policy.transaction_wrapping=%s is incompatible with policy_id '%s'."),
+				bRequestedTransactionWrapping ? TEXT("true") : TEXT("false"),
+				*PolicyId);
+			return false;
+		}
+
+		bool bRequestedPostEditValidation = false;
+		if (!GetPolicyBoolIfPresent(PolicyObject, TEXT("post_edit_validation"), bRequestedPostEditValidation))
+		{
+			OutError = TEXT("policy.post_edit_validation must be a boolean when provided.");
+			return false;
+		}
+		if (bRequestedPostEditValidation)
+		{
+			OutError = TEXT("policy.post_edit_validation is reserved until validator hooks are implemented.");
+			return false;
+		}
+		Policy.bPostEditValidation = false;
+
+		OutPolicy = Policy;
+		OutError.Empty();
+		return true;
+	}
+
 	FMonolithActionResult HandleSetActionExecutionPolicy(const TSharedPtr<FJsonObject>& Params)
 	{
 		FString ActionName;
@@ -77,11 +186,58 @@ namespace
 			Params->TryGetStringField(TEXT("action"), ActionName);
 		}
 
+		if (ActionName.IsEmpty())
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Missing required param 'action'."),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		FString Namespace;
+		FString Action;
+		if (!ActionName.Split(TEXT("."), &Namespace, &Action, ESearchCase::CaseSensitive, ESearchDir::FromEnd)
+			|| Namespace.IsEmpty()
+			|| Action.IsEmpty())
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Param 'action' must be a fully qualified action name such as blueprint.add_node."),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		TSharedPtr<FJsonObject> PolicyObject;
+		if (Params.IsValid() && Params->HasField(TEXT("policy")))
+		{
+			const TSharedPtr<FJsonObject>* PolicyObjectPtr = nullptr;
+			if (!Params->TryGetObjectField(TEXT("policy"), PolicyObjectPtr) || !PolicyObjectPtr || !PolicyObjectPtr->IsValid())
+			{
+				return FMonolithActionResult::Error(
+					TEXT("Param 'policy' must be an object when provided."),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+			PolicyObject = *PolicyObjectPtr;
+		}
+
+		FMonolithActionExecutionPolicy Policy;
+		FString ParseError;
+		if (!ParseActionExecutionPolicyOverride(PolicyObject, Policy, ParseError))
+		{
+			return FMonolithActionResult::Error(ParseError, FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		FString SetError;
+		if (!FMonolithToolRegistry::Get().SetActionExecutionPolicy(Namespace, Action, Policy, SetError))
+		{
+			return FMonolithActionResult::Error(SetError, FMonolithJsonUtils::ErrMethodNotFound);
+		}
+
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		Result->SetStringField(TEXT("status"), TEXT("unavailable"));
-		Result->SetBoolField(TEXT("changed"), false);
+		Result->SetStringField(TEXT("status"), TEXT("ok"));
+		Result->SetBoolField(TEXT("changed"), true);
 		Result->SetStringField(TEXT("action"), ActionName);
-		Result->SetStringField(TEXT("reason"), TEXT("Execution policy metadata is not mutable at runtime yet; this developer-only override is future guarded work."));
+		Result->SetStringField(TEXT("namespace"), Namespace);
+		Result->SetStringField(TEXT("action_name"), Action);
+		Result->SetStringField(TEXT("scope"), TEXT("process_local"));
+		Result->SetObjectField(TEXT("execution_policy"), Policy.ToJson());
 		return FMonolithActionResult::Success(Result);
 	}
 
@@ -112,11 +268,11 @@ void RegisterMonolithExecutionGuardActions()
 
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("set_action_execution_policy"),
-		TEXT("Developer-only placeholder for future execution policy overrides. Current milestone reports unavailable instead of mutating guard policy."),
+		TEXT("Developer-only process-local override for a known action execution policy. Supports read_only, track_dirty_packages, transaction_optional, and transaction_required."),
 		FMonolithActionHandler::CreateStatic(&HandleSetActionExecutionPolicy),
 		FParamSchemaBuilder()
 			.Required(TEXT("action"), TEXT("string"), TEXT("Fully qualified action name such as blueprint.add_node"))
-			.Optional(TEXT("policy"), TEXT("object"), TEXT("Future policy object"))
+			.Optional(TEXT("policy"), TEXT("object"), TEXT("Policy object; omit to reset to read_only"))
 			.Build());
 
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
