@@ -526,6 +526,13 @@ bool FSourceDetectChangesDiffParseTest::RunTest(const FString& Parameters)
 	TMap<FString, TArray<TPair<int32, int32>>> Parsed = FMonolithSourceDatabase::ParseUnifiedDiffRanges(Diff);
 	const TArray<TPair<int32, int32>>* M = Parsed.Find(TEXT("M.cpp"));
 	TestTrue(TEXT("M.cpp parsed"), M != nullptr && M->Num() == 2);
+	if (M == nullptr || M->Num() < 2)
+	{
+		// UE automation assertions do not abort the test; bail here so a
+		// parse regression reports a clean failure instead of crashing CI
+		// on the unguarded (*M)[0] dereferences below.
+		return false;
+	}
 	if (M && M->Num() == 2)
 	{
 		TestEqual(TEXT("hunk +7,2 -> start 7"), (*M)[0].Key, 7);

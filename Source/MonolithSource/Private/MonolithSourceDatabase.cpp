@@ -2296,17 +2296,40 @@ TMap<FString, TArray<TPair<int32, int32>>> FMonolithSourceDatabase::ParseUnified
 	DiffText.ParseIntoArrayLines(Lines, /*bCullEmpty=*/false);
 	FString CurrentFile;
 	bool bHaveFile = false;
-	for (const FString& Line : Lines)
+	for (int32 LineIdx = 0; LineIdx < Lines.Num(); ++LineIdx)
 	{
-		if (Line.StartsWith(TEXT("+++ b/"), ESearchCase::CaseSensitive))
+		const FString& Line = Lines[LineIdx];
+		// Accept both git-style ("+++ b/path") and plain ("+++ path")
+		// unified-diff new-file headers. The RX-1 contract feeds git diffs,
+		// but non-git producers omit the "b/" prefix; without this the parser
+		// never sets CurrentFile and every hunk range is silently dropped,
+		// degrading RX-1.1 line precision back to file-level matching. A bare
+		// "+++ " can also be added file content, so a plain header is only
+		// honored when the previous line was the matching "--- " header.
+		const bool bGitNewFileHeader =
+			Line.StartsWith(TEXT("+++ b/"), ESearchCase::CaseSensitive);
+		const bool bPlainNewFileHeader =
+			!bGitNewFileHeader
+			&& Line.StartsWith(TEXT("+++ "), ESearchCase::CaseSensitive)
+			&& LineIdx > 0
+			&& Lines[LineIdx - 1].StartsWith(TEXT("--- "), ESearchCase::CaseSensitive);
+		if (bGitNewFileHeader || bPlainNewFileHeader)
 		{
-			CurrentFile = Line.RightChop(6);
+			FString HeaderPath = Line.RightChop(bGitNewFileHeader ? 6 : 4);
 			int32 TabIdx = INDEX_NONE;
-			if (CurrentFile.FindChar(TEXT('\t'), TabIdx))
+			if (HeaderPath.FindChar(TEXT('\t'), TabIdx))
 			{
-				CurrentFile = CurrentFile.Left(TabIdx);
+				HeaderPath = HeaderPath.Left(TabIdx);
 			}
-			CurrentFile = NormalizeChangedPath(CurrentFile);
+			HeaderPath.TrimStartAndEndInline();
+			if (HeaderPath == TEXT("/dev/null"))
+			{
+				// Deleted file: no new-side ranges to record.
+				CurrentFile.Reset();
+				bHaveFile = false;
+				continue;
+			}
+			CurrentFile = NormalizeChangedPath(HeaderPath);
 			bHaveFile = !CurrentFile.IsEmpty();
 			continue;
 		}
