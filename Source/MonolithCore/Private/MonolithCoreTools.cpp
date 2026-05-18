@@ -77,6 +77,11 @@ static TArray<TSharedPtr<FJsonValue>> StringArrayToJson(const TArray<FString>& V
 	return Result;
 }
 
+static FString GetBrowserAccessMode(const UMonolithSettings* Settings)
+{
+	return (!Settings || Settings->bEnableBrowserLoopbackCors) ? TEXT("loopback_only") : TEXT("disabled");
+}
+
 static FString NormalizeDomainNamespace(FString Namespace)
 {
 	Namespace.TrimStartAndEndInline();
@@ -453,10 +458,10 @@ void FMonolithCoreTools::RegisterAll()
 
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("set_mcp_compatibility_options"),
-		TEXT("Report MCP compatibility option mutability. Legacy route/browser compatibility remains disabled until settings-backed policy lands."),
+		TEXT("Set safe MCP compatibility options. Supports browser_access=loopback_only|disabled; legacy routes remain unsupported."),
 		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleSetMcpCompatibilityOptions),
 		FParamSchemaBuilder()
-			.Optional(TEXT("options"), TEXT("object"), TEXT("Requested compatibility options for a future settings-backed implementation"))
+			.Optional(TEXT("options"), TEXT("object"), TEXT("Compatibility options. Supported: browser_access = loopback_only or disabled."))
 			.Build()
 	);
 
@@ -1248,7 +1253,10 @@ FMonolithActionResult FMonolithCoreTools::HandleGetMcpServerStatus(const TShared
 	Routes->SetBoolField(TEXT("legacy_message"), false);
 
 	TSharedPtr<FJsonObject> Cors = MakeShared<FJsonObject>();
-	Cors->SetStringField(TEXT("mode"), TEXT("loopback_origin_allowlist"));
+	const bool bBrowserLoopbackCors = !Settings || Settings->bEnableBrowserLoopbackCors;
+	Cors->SetStringField(TEXT("mode"), bBrowserLoopbackCors ? TEXT("loopback_origin_allowlist") : TEXT("browser_cors_disabled"));
+	Cors->SetStringField(TEXT("browser_access"), bBrowserLoopbackCors ? TEXT("loopback_only") : TEXT("disabled"));
+	Cors->SetBoolField(TEXT("allow_origin_header_enabled"), bBrowserLoopbackCors);
 	Cors->SetArrayField(TEXT("allowed_request_headers"), StringArrayToJson({
 		TEXT("Content-Type"),
 		TEXT("Accept"),
@@ -1348,15 +1356,96 @@ FMonolithActionResult FMonolithCoreTools::HandleTerminateMcpSession(const TShare
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithCoreTools::HandleSetMcpCompatibilityOptions(const TSharedPtr<FJsonObject>& /*Params*/)
+FMonolithActionResult FMonolithCoreTools::HandleSetMcpCompatibilityOptions(const TSharedPtr<FJsonObject>& Params)
 {
+	UMonolithSettings* Settings = GetMutableDefault<UMonolithSettings>();
+	if (!Settings)
+	{
+		return FMonolithActionResult::Error(TEXT("Monolith settings unavailable"));
+	}
+
+	bool bDesiredBrowserLoopbackCors = Settings->bEnableBrowserLoopbackCors;
+	TArray<FString> UnsupportedOptions;
+
+	if (Params.IsValid() && Params->HasField(TEXT("options")))
+	{
+		const TSharedPtr<FJsonObject>* Options = nullptr;
+		if (!Params->TryGetObjectField(TEXT("options"), Options) || !Options || !Options->IsValid())
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'options' must be an object"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		FString BrowserAccess;
+		if ((*Options)->HasField(TEXT("browser_access")))
+		{
+			if (!(*Options)->TryGetStringField(TEXT("browser_access"), BrowserAccess))
+			{
+				return FMonolithActionResult::Error(TEXT("Option 'browser_access' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+
+			BrowserAccess.TrimStartAndEndInline();
+			BrowserAccess.ToLowerInline();
+			if (BrowserAccess == TEXT("loopback_only"))
+			{
+				bDesiredBrowserLoopbackCors = true;
+			}
+			else if (BrowserAccess == TEXT("disabled"))
+			{
+				bDesiredBrowserLoopbackCors = false;
+			}
+			else
+			{
+				return FMonolithActionResult::Error(
+					TEXT("Option 'browser_access' must be 'loopback_only' or 'disabled'"),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
+
+		bool bRequestedLegacySse = false;
+		if ((*Options)->HasField(TEXT("legacy_sse_route_enabled")))
+		{
+			if (!(*Options)->TryGetBoolField(TEXT("legacy_sse_route_enabled"), bRequestedLegacySse))
+			{
+				return FMonolithActionResult::Error(TEXT("Option 'legacy_sse_route_enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			if (bRequestedLegacySse)
+			{
+				UnsupportedOptions.Add(TEXT("legacy_sse_route_enabled"));
+			}
+		}
+
+		bool bRequestedLegacyMessage = false;
+		if ((*Options)->HasField(TEXT("legacy_message_route_enabled")))
+		{
+			if (!(*Options)->TryGetBoolField(TEXT("legacy_message_route_enabled"), bRequestedLegacyMessage))
+			{
+				return FMonolithActionResult::Error(TEXT("Option 'legacy_message_route_enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			if (bRequestedLegacyMessage)
+			{
+				UnsupportedOptions.Add(TEXT("legacy_message_route_enabled"));
+			}
+		}
+	}
+
+	const bool bChanged = Settings->bEnableBrowserLoopbackCors != bDesiredBrowserLoopbackCors;
+	if (bChanged)
+	{
+		Settings->bEnableBrowserLoopbackCors = bDesiredBrowserLoopbackCors;
+		Settings->SaveConfig();
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("status"), TEXT("unavailable"));
-	Result->SetBoolField(TEXT("changed"), false);
-	Result->SetStringField(TEXT("reason"), TEXT("MCP compatibility options are currently hard-coded safe defaults; settings-backed mutation is future guarded work."));
+	Result->SetStringField(TEXT("status"), TEXT("ok"));
+	Result->SetBoolField(TEXT("changed"), bChanged);
+	Result->SetStringField(TEXT("browser_access"), GetBrowserAccessMode(Settings));
 	Result->SetBoolField(TEXT("legacy_sse_route_enabled"), false);
 	Result->SetBoolField(TEXT("legacy_message_route_enabled"), false);
-	Result->SetStringField(TEXT("browser_access"), TEXT("loopback_only"));
+	Result->SetArrayField(TEXT("unsupported_options"), StringArrayToJson(UnsupportedOptions));
+	if (UnsupportedOptions.Num() > 0)
+	{
+		Result->SetStringField(TEXT("reason"), TEXT("Legacy SSE/message routes are not implemented in this slice."));
+	}
 	return FMonolithActionResult::Success(Result);
 }
 
