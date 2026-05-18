@@ -134,8 +134,22 @@ public:
 	TSharedPtr<FJsonObject> RepairCrgCache(bool bExecute);
 	/** Cached symbol risk row, or nullptr when the derived cache is absent/stale. */
 	TSharedPtr<FJsonObject> GetCachedRiskForSymbol(int64 SymbolId);
-	/** Changed source path triage: changed_entities, direct caller impact, heuristic test gaps, and review queue. */
-	TSharedPtr<FJsonObject> DetectChanges(const TArray<FString>& ChangedPaths, int32 MaxResults, const FString& DetailLevel);
+	/**
+	 * Changed source path triage: changed_entities, direct caller impact, heuristic test gaps, and review queue.
+	 *
+	 * RX-1.1 line precision: when ChangedRanges has entries for a (normalized) path, only symbols whose
+	 * [line_start,line_end] overlaps a supplied [start,end] range are returned for that path (CRG
+	 * changes.py:204 rule); paths with no ranges keep the existing file-level behavior. Backward compatible:
+	 * an empty ChangedRanges map reproduces the original output exactly.
+	 */
+	TSharedPtr<FJsonObject> DetectChanges(const TArray<FString>& ChangedPaths, int32 MaxResults, const FString& DetailLevel, const TMap<FString, TArray<TPair<int32, int32>>>& ChangedRanges = {});
+
+	/**
+	 * Parse a unified diff (git or `p4 diff -du`) into normalized-path -> added line ranges.
+	 * Pure text parsing, no VCS shell-out (port of code_review_graph/changes.py:_parse_unified_diff).
+	 * Public + static for offline/editor parity and direct test coverage.
+	 */
+	static TMap<FString, TArray<TPair<int32, int32>>> ParseUnifiedDiffRanges(const FString& DiffText);
 	/** Advisory dead-symbol candidates. Read-only; never mutates and never reports high confidence. */
 	TSharedPtr<FJsonObject> FindUnused(const FString& Kind, int32 Limit, const FString& MinConfidence);
 	/** Read-only pre-merge gate composed from health, detect_changes, and optional find_unused. */

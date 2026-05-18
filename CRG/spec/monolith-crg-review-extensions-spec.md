@@ -541,8 +541,17 @@ make this a demonstrably full audit, not a sampled one.
 | `jedi_resolver.py`, `rescript_resolver.py`, `tsconfig_resolver.py`, CRG VSCode extension | Python/Rescript/TypeScript alias/call enrichment and editor UI affordances | language/editor-specific; useful UX precedent only. Review-change UI maps to RX-1; SCM/test decorations rely on TESTED_BY edges Monolith does not have |
 
 Net: P0 = RX-1, RX-2; P1 = RX-3, RX-4, RX-7; P2 = RX-5, RX-6, RX-8. Everything
-else in CRG is either already in #447 or correctly out of scope — there is
-no further un-triaged high-ROI pattern.
+else in CRG is either already in #447 or correctly out of scope.
+
+Pass-4 audit (2026-05-18) — behavioral cross-check, not just coverage: a
+line-by-line `detect_changes` vs `changes.py` comparison found that RX-1 as
+shipped maps a changed file to **all** of its symbols (CRG's optional
+`_parse_unified_diff` + `line_start<=end AND line_end>=start` overlap rule
+was never ported anywhere on `origin/master`). This is the single remaining
+behavioral-fidelity gap; carved out as **RX-1.1** and specified in
+`./monolith-crg-detect-changes-line-precision-spec.md` (additive, opt-in,
+no VCS shell-out, project side N/A). With RX-1.1 there is no further
+un-triaged high-ROI pattern.
 
 ## Implementation Notes
 

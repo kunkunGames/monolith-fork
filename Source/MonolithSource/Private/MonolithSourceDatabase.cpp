@@ -2281,15 +2281,117 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::GetCachedRiskForSymbol(int64 Sy
 	return O;
 }
 
+// RX-1.1: unified-diff parsing (port of code_review_graph/changes.py
+// _parse_unified_diff). Pure text; no VCS shell-out — the caller produces
+// the diff (parent RX-1 contract; CRG incremental.py is the caller's job).
+TMap<FString, TArray<TPair<int32, int32>>> FMonolithSourceDatabase::ParseUnifiedDiffRanges(const FString& DiffText)
+{
+	TMap<FString, TArray<TPair<int32, int32>>> Ranges;
+	if (DiffText.IsEmpty())
+	{
+		return Ranges;
+	}
+
+	TArray<FString> Lines;
+	DiffText.ParseIntoArrayLines(Lines, /*bCullEmpty=*/false);
+	FString CurrentFile;
+	bool bHaveFile = false;
+	for (const FString& Line : Lines)
+	{
+		if (Line.StartsWith(TEXT("+++ b/"), ESearchCase::CaseSensitive))
+		{
+			CurrentFile = Line.RightChop(6);
+			int32 TabIdx = INDEX_NONE;
+			if (CurrentFile.FindChar(TEXT('\t'), TabIdx))
+			{
+				CurrentFile = CurrentFile.Left(TabIdx);
+			}
+			CurrentFile = NormalizeChangedPath(CurrentFile);
+			bHaveFile = !CurrentFile.IsEmpty();
+			continue;
+		}
+		if (!bHaveFile || !Line.StartsWith(TEXT("@@ "), ESearchCase::CaseSensitive))
+		{
+			continue;
+		}
+		// "@@ -<old>[,<n>] +<start>[,<count>] @@ ..." — read the new-file side.
+		int32 PlusIdx = INDEX_NONE;
+		if (!Line.FindChar(TEXT('+'), PlusIdx) || PlusIdx + 1 >= Line.Len())
+		{
+			continue;
+		}
+		int32 Cursor = PlusIdx + 1;
+		auto ReadInt = [&Line, &Cursor]() -> int32
+		{
+			int32 Value = 0;
+			bool bAny = false;
+			while (Cursor < Line.Len() && FChar::IsDigit(Line[Cursor]))
+			{
+				Value = Value * 10 + (Line[Cursor] - TEXT('0'));
+				++Cursor;
+				bAny = true;
+			}
+			return bAny ? Value : -1;
+		};
+		const int32 Start = ReadInt();
+		if (Start <= 0)
+		{
+			continue;
+		}
+		int32 Count = 1;
+		if (Cursor < Line.Len() && Line[Cursor] == TEXT(','))
+		{
+			++Cursor;
+			const int32 Parsed = ReadInt();
+			Count = (Parsed >= 0) ? Parsed : 1;
+		}
+		const int32 End = (Count == 0) ? Start : (Start + Count - 1);
+		Ranges.FindOrAdd(CurrentFile).Add(TPair<int32, int32>(Start, End));
+	}
+	return Ranges;
+}
+
 TSharedPtr<FJsonObject> FMonolithSourceDatabase::DetectChanges(
 	const TArray<FString>& ChangedPaths,
 	int32 MaxResults,
-	const FString& DetailLevel)
+	const FString& DetailLevel,
+	const TMap<FString, TArray<TPair<int32, int32>>>& ChangedRanges)
 {
 	FScopeLock Lock(&DbLock);
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	const int32 Cap = FMath::Clamp(MaxResults <= 0 ? 200 : MaxResults, 1, 2000);
 	const bool bStandard = DetailLevel.Equals(TEXT("standard"), ESearchCase::IgnoreCase);
+	constexpr int32 MaxRangesPerPath = 256;
+
+	// Resolve per-path line ranges (normalized keys, sanitized). A path that
+	// only appears in ChangedRanges still counts as a changed path.
+	TMap<FString, TArray<TPair<int32, int32>>> PathRanges;
+	for (const TPair<FString, TArray<TPair<int32, int32>>>& Kv : ChangedRanges)
+	{
+		const FString Key = NormalizeChangedPath(Kv.Key);
+		if (Key.IsEmpty())
+		{
+			continue;
+		}
+		TArray<TPair<int32, int32>>& Out = PathRanges.FindOrAdd(Key);
+		for (const TPair<int32, int32>& R : Kv.Value)
+		{
+			if (Out.Num() >= MaxRangesPerPath)
+			{
+				break;
+			}
+			const int32 RStart = R.Key;
+			const int32 REnd = R.Value;
+			if (RStart > 0 && REnd >= RStart)
+			{
+				Out.Add(TPair<int32, int32>(RStart, REnd));
+			}
+		}
+		if (Out.Num() == 0)
+		{
+			PathRanges.Remove(Key);
+		}
+	}
 
 	TArray<FString> NormalizedPaths;
 	for (const FString& RawPath : ChangedPaths)
@@ -2300,10 +2402,21 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::DetectChanges(
 			NormalizedPaths.Add(Normalized);
 		}
 	}
+	for (const TPair<FString, TArray<TPair<int32, int32>>>& Kv : PathRanges)
+	{
+		if (!NormalizedPaths.Contains(Kv.Key))
+		{
+			NormalizedPaths.Add(Kv.Key);
+		}
+	}
+
+	const bool bLinePrecision = PathRanges.Num() > 0;
 
 	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
 	Input->SetArrayField(TEXT("changed_paths"), StringArray(NormalizedPaths));
 	Input->SetStringField(TEXT("detail_level"), bStandard ? TEXT("standard") : TEXT("minimal"));
+	Input->SetStringField(TEXT("precision"), bLinePrecision ? TEXT("line") : TEXT("file"));
+	Input->SetNumberField(TEXT("range_paths"), PathRanges.Num());
 	Root->SetObjectField(TEXT("input"), Input);
 	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
 	Limits->SetNumberField(TEXT("max_results"), Cap);
@@ -2324,7 +2437,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::DetectChanges(
 	if (NormalizedPaths.Num() == 0)
 	{
 		Root->SetStringField(TEXT("status"), TEXT("error"));
-		Root->SetStringField(TEXT("summary"), TEXT("changed_paths or paths must include at least one path"));
+		Root->SetStringField(TEXT("summary"), TEXT("changed_paths/paths, changed_ranges, or diff_text must yield at least one path"));
 		Root->SetArrayField(TEXT("changed_entities"), TArray<TSharedPtr<FJsonValue>>());
 		TSharedPtr<FJsonObject> Impact = MakeShared<FJsonObject>();
 		Impact->SetNumberField(TEXT("depth"), 1);
@@ -2354,18 +2467,45 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::DetectChanges(
 			.Replace(TEXT("%"), TEXT("\\%"))
 			.Replace(TEXT("_"), TEXT("\\_"));
 
+		const TArray<TPair<int32, int32>>* Ranges = PathRanges.Find(Path);
+		const bool bLineMode = Ranges != nullptr && Ranges->Num() > 0;
+
+		FString Sql =
+			TEXT("SELECT s.id,s.name,s.qualified_name,s.kind,s.file_id,COALESCE(f.path,''),")
+			TEXT("       s.line_start,s.line_end,COALESCE(s.signature,''),s.is_ue_macro ")
+			TEXT("FROM symbols s JOIN files f ON f.id = s.file_id ")
+			TEXT("WHERE replace(f.path,'\\','/') LIKE ? ESCAPE '\\' ");
+		if (bLineMode)
+		{
+			// CRG changes.py:204 overlap rule: line_start <= end AND line_end >= start.
+			// Non-positive spans are not line-provable (Monolith analog of CRG's None-skip).
+			Sql += TEXT("AND s.line_start > 0 AND s.line_end > 0 AND (");
+			for (int32 RIdx = 0; RIdx < Ranges->Num(); ++RIdx)
+			{
+				Sql += (RIdx == 0)
+					? TEXT("(s.line_start <= ? AND s.line_end >= ?)")
+					: TEXT(" OR (s.line_start <= ? AND s.line_end >= ?)");
+			}
+			Sql += TEXT(") ");
+		}
+		Sql += TEXT("ORDER BY s.id LIMIT ?;");
+
 		FSQLitePreparedStatement S;
-		if (!S.Create(*Database, TEXT(
-			"SELECT s.id,s.name,s.qualified_name,s.kind,s.file_id,COALESCE(f.path,''),"
-			"       s.line_start,s.line_end,COALESCE(s.signature,''),s.is_ue_macro "
-			"FROM symbols s JOIN files f ON f.id = s.file_id "
-			"WHERE replace(f.path,'\\','/') LIKE ? ESCAPE '\\' "
-			"ORDER BY s.id LIMIT ?;")))
+		if (!S.Create(*Database, *Sql))
 		{
 			continue;
 		}
-		S.SetBindingValueByIndex(1, FString::Printf(TEXT("%%%s"), *EscapedPath));
-		S.SetBindingValueByIndex(2, static_cast<int64>(Cap + 1));
+		int32 BindIdx = 1;
+		S.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s"), *EscapedPath));
+		if (bLineMode)
+		{
+			for (const TPair<int32, int32>& R : *Ranges)
+			{
+				S.SetBindingValueByIndex(BindIdx++, static_cast<int64>(R.Value)); // range end
+				S.SetBindingValueByIndex(BindIdx++, static_cast<int64>(R.Key));   // range start
+			}
+		}
+		S.SetBindingValueByIndex(BindIdx, static_cast<int64>(Cap + 1));
 
 		while (S.Step() == ESQLitePreparedStatementStepResult::Row)
 		{
@@ -2397,6 +2537,21 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::DetectChanges(
 
 			TSharedPtr<FJsonObject> Scored = ScoreSymbolLocked(*Database, Sym);
 			Scored->SetStringField(TEXT("matched_path"), Path);
+			if (bStandard && bLineMode)
+			{
+				TArray<TSharedPtr<FJsonValue>> MatchedRanges;
+				for (const TPair<int32, int32>& R : *Ranges)
+				{
+					if (Sym.LineStart <= R.Value && Sym.LineEnd >= R.Key)
+					{
+						TSharedPtr<FJsonObject> RangeObj = MakeShared<FJsonObject>();
+						RangeObj->SetNumberField(TEXT("start"), R.Key);
+						RangeObj->SetNumberField(TEXT("end"), R.Value);
+						MatchedRanges.Add(MakeShared<FJsonValueObject>(RangeObj));
+					}
+				}
+				Scored->SetArrayField(TEXT("matched_ranges"), MatchedRanges);
+			}
 			ChangedEntities.Add(MakeShared<FJsonValueObject>(Scored));
 		}
 	}
@@ -2569,6 +2724,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::PreMergeCheck(
 	Root->SetStringField(TEXT("scoring_version"), TEXT("3"));
 
 	TSharedPtr<FJsonObject> HealthResult = ComputeHealth(false);
+	// pre_merge_check stays file-level (no line ranges): default empty range map = original behavior.
 	TSharedPtr<FJsonObject> ChangeResult = DetectChanges(NormalizedPaths, ChangeCap, bStandard ? TEXT("standard") : TEXT("minimal"));
 	TSharedPtr<FJsonObject> UnusedResult = bIncludeUnused
 		? FindUnused(TEXT("all"), UnusedCap, TEXT("low"))
