@@ -1299,7 +1299,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFullConnectionGraph(const TSh
 
 	// Material output connections
 	TArray<TSharedPtr<FJsonValue>> MaterialOutputsArray;
-	MaterialOutputsArray.Reserve(MaterialOutputEntries.Num());
+	MaterialOutputsArray.Reserve(UE_ARRAY_COUNT(MaterialOutputEntries));
 	for (const FMaterialOutputEntry& Entry : MaterialOutputEntries)
 	{
 		FExpressionInput* Input = Mat->GetExpressionInputForProperty(Entry.Property);

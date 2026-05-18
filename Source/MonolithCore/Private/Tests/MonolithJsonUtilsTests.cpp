@@ -79,7 +79,7 @@ bool FMonolithJsonUtilsResponseTest::RunTest(const FString& Parameters)
 
 		TestTrue(TEXT("SuccessResponse with null result is valid"), Response.IsValid());
 		TestTrue(TEXT("SuccessResponse fallback to empty object result"), Response->HasField(TEXT("result")));
-		TestEqual(TEXT("SuccessResponse empty object result type"), Response->GetField(TEXT("result"))->Type, EJson::Object);
+		TestTrue(TEXT("SuccessResponse empty object result type"), Response->HasTypedField<EJson::Object>(TEXT("result")));
 	}
 
 	// Test 3: SuccessObject

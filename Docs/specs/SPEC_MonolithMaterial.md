@@ -24,7 +24,7 @@
 |--------|-------------|
 | `get_all_expressions` | Get all expression nodes in a base material |
 | `get_expression_details` | Full property reflection, inputs, outputs for a single expression |
-| `get_full_connection_graph` | Complete connection graph (all wires) of a material |
+| `get_full_connection_graph` | Complete connection graph (all expression-to-expression wires) plus material output property links such as BaseColor, EmissiveColor, and Opacity |
 | `export_material_graph` | Export complete graph to JSON (round-trippable with build_material_graph) |
 | `validate_material` | BFS reachability check — detects islands, broken textures, missing functions, duplicate params, unused params, high expression count (>200). Optional auto-fix |
 | `render_preview` | Save preview PNG to Saved/Monolith/previews/ |
