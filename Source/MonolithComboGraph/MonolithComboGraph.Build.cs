@@ -23,7 +23,7 @@ public class MonolithComboGraph : ModuleRules
 					bHasComboGraph = Directory.Exists(
 						Path.Combine(ProjectPluginsDir, "ComboGraph"))
 						|| Directory.GetDirectories(
-							ProjectPluginsDir, "ComboGraph*",
+							ProjectPluginsDir, "ComboGraph_*",
 							SearchOption.TopDirectoryOnly).Length > 0;
 				}
 			}
@@ -35,9 +35,15 @@ public class MonolithComboGraph : ModuleRules
 				string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
 				if (Directory.Exists(MarketplaceDir))
 				{
-					bHasComboGraph = Directory.GetDirectories(
-						MarketplaceDir, "ComboGraph*",
-						SearchOption.TopDirectoryOnly).Length > 0;
+					bHasComboGraph = Directory.Exists(
+						Path.Combine(MarketplaceDir, "ComboGraph"));
+
+					if (!bHasComboGraph)
+					{
+						bHasComboGraph = Directory.GetDirectories(
+							MarketplaceDir, "ComboGraph_*",
+							SearchOption.TopDirectoryOnly).Length > 0;
+					}
 				}
 
 				// 3. Check Engine Plugins/ root

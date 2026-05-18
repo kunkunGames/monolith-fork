@@ -122,7 +122,18 @@ useful global "where should I be careful?" view.
 - **RX-8 — DONE (editor + offline).** `source.review_hotspots` /
   `project.review_hotspots` rank capped fan-in/fan-out/risk/large hotspots
   with optional advisory questions and no community/betweenness dependency.
-- **RX-4 / RX-5 / RX-6 — NOT STARTED** (spec'd P1/P2).
+- **RX-4 — DONE (editor).** `source.snapshot` / `project.snapshot`
+  store derived CRG projection manifests with explicit `execute=true`;
+  `source.diff_snapshots` / `project.diff_snapshots` compare stored/current
+  manifests read-only with capped new/removed node/edge samples.
+- **RX-5 — DONE (editor + offline).**
+  `source.pre_merge_check` / `project.pre_merge_check` compose `health`,
+  `detect_changes`, and optional `find_unused` into an advisory `decision`,
+  `checks[]`, and `findings[]`. The offline CLI exposes the same read-only
+  contract so closed-editor review can run the same gate.
+- **RX-6 — DONE (editor).** `context.bridge_asset_symbols` provides the
+  read-only asset<->source heuristic bridge; offline cross-DB parity remains
+  deferred.
 - Verification record: `Docs/testing/2026-05-17-crg-review-extensions.md`.
 
 ## Non-Goals (correctly excluded — do not spec as work)
@@ -262,10 +273,18 @@ useful global "where should I be careful?" view.
 
 ### `*.pre_merge_check` (RX-5, P2)
 
-- Composition only: run `detect_changes` (RX-1) + `find_unused` (RX-3,
-  scoped to changed paths) + `health`, emit a single
-  `{verdict: GO|REVIEW|NO-GO, risk_score, blocking[], advisories[],
-  next_actions[]}`. Thresholds documented, no new traversal/scoring.
+- Composition only: run `health`, `detect_changes` (RX-1), and optional
+  `find_unused` (RX-3). Emit a single advisory gate: `status`, `decision`
+  (`pass` / `warn` / `fail`), `summary`, `risk_score`, `checks[]`,
+  `findings[]`, `changed_entity_count`, `impacted_count`, optional source
+  `test_gap_count`, `unused_count`, `truncated`, and `next_actions[]`.
+- `detail_level=minimal` returns the compact gate plus counts. `standard`
+  also embeds `health`, `change_analysis`, and `unused` when requested.
+- Thresholds mirror the editor implementation: any component `error` fails;
+  no changed match, high risk (`risk_score >= 0.66`), broad direct impact
+  (`impacted_count > 50`), source test gaps, or sampled unused candidates
+  warn. The action is read-only, accepts caller-supplied changed paths, and
+  never shells out to P4/git.
 
 ### `source.review_hotspots` / `project.review_hotspots` (RX-8, P2)
 
@@ -290,13 +309,26 @@ useful global "where should I be careful?" view.
   TESTED_BY edges, Monolith should surface cache-backed hotspot facts and
   advisory questions, not pretend it has CRG's Python/community semantics.
 
-### Cross-DB bridge (RX-6, P2 — documented, deferred)
+### Cross-DB bridge (RX-6, P2 — editor-only, read-only)
 
-- Document the design only: `assets`(Blueprint/GAS/DataAsset) ->
-  parent native class -> `ProjectIndex.cpp_symbols` -> `EngineSource.symbols
-  .qualified_name`. Deferred for cost/regression risk (two independent
-  sqlite files, editor-load side effects) per nav `TSK-P2-002`. No P0/P1
-  implementation.
+- Add `context.bridge_asset_symbols` as the editor RX-6 bridge because the
+  `context` namespace already owns both ProjectIndex and EngineSource access.
+  The first implementation is heuristic/read-only rather than a persisted
+  cross-sqlite join: no ProjectIndex, EngineSource, CRG cache, snapshot, P4, or
+  git mutation.
+- Params: one of `asset_path` or `symbol` is required; optional `limit`
+  (default 20) and `detail_level` (`minimal|standard`, default `minimal`).
+- Asset-seeded flow: load ProjectIndex asset details, derive candidate native
+  symbol names from package path, asset name, asset class, and common UE
+  prefixes/suffixes (`BP_`, `WBP_`, `DA_`, `GA_`, `_C`), then query
+  EngineSource exact name and FTS results.
+- Symbol-seeded flow: query EngineSource exact name/FTS first, then search
+  ProjectIndex by exact and normalized symbol tokens.
+- Output contract: `status`, `input`, `limits`, capped `links[]`, `warnings[]`,
+  `truncated`, and `next_actions`. Each link contains `confidence`
+  (`high|medium|low`), `reasons[]`, an `asset` object when available, and a
+  `symbol` object when available. The action must make uncertainty explicit;
+  a lexical fallback cannot masquerade as a guaranteed parent-class relation.
 
 ### UE-domain sensitivity risk factor (RX-7, P1)
 
@@ -344,8 +376,10 @@ useful global "where should I be careful?" view.
   REQ-003 + `health` producing a GO/REVIEW/NO-GO verdict.
 - [REQ-006] Preserve all existing direct/seed action output shapes and
   offline behavior (additive only).
-- [REQ-007] Document the cross-DB asset<->symbol bridge design only;
-  no P0/P1 implementation.
+- [REQ-007] Add an editor-only read-only `context.bridge_asset_symbols`
+  cross-DB asset<->symbol bridge with explicit confidence/reasons, graceful
+  unavailable/indexing warnings, and no index/cache/VCS mutation. Offline
+  parity is deferred.
 - [REQ-008] Add one decomposed UE-domain sensitivity factor to the shared
   risk helpers (project + source + `crg_node_metrics` rebuild + offline),
   bump `crg_meta.scoring_version` 2->3, rebuild cache for parity; bounded,
@@ -374,7 +408,9 @@ useful global "where should I be careful?" view.
   risk path; bump scoring_version 2->3; update cache/health version checks.
 - [TSK-P2-001] Implement `*.pre_merge_check` composition + verdict
   thresholds.
-- [TSK-P2-002] Author cross-DB bridge design note (no code).
+- [TSK-P2-002] Implement `context.bridge_asset_symbols` on the existing
+  `FMonolithSourceContextActions` surface; use bounded ProjectIndex search and
+  EngineSource symbol search; expose heuristic confidence.
 - [TSK-P2-003] Implement `*.review_hotspots` with capped fan/risk/LOC
   queries and advisory question output; register editor + offline actions.
 - [TSK-001..n test tasks] see Test Registry; extend existing
@@ -401,8 +437,10 @@ useful global "where should I be careful?" view.
 - [TEST-006] snapshot/diff: snapshot A, mutate fixture (add 1 node / drop 1
   edge), snapshot B, `diff_snapshots(A,B)` reports exactly the delta; the
   known dangling-ref baseline is not reported as added/removed.
-- [TEST-007] pre_merge_check: low-risk change -> GO; high-risk + test gap ->
-  NO-GO/REVIEW with blocking[] populated; pure composition (no new scoring).
+- [TEST-007] pre_merge_check: low-risk change -> `decision=pass`; no indexed
+  match, high-risk impact, test gaps, or unused candidates -> `warn`; failed
+  component health/change analysis -> `fail`; pure composition (no new
+  scoring).
 - [TEST-008] regression: existing `Monolith.IndexGuard.*` and the 5 seed
   actions (editor + offline) keep shape and behavior.
 - [TEST-009] sensitivity factor: a fixture symbol whose name matches a UE
@@ -414,6 +452,9 @@ useful global "where should I be careful?" view.
   fan-out, cached risk, and source LOC values return the expected capped
   hotspot ordering and advisory questions; full community/betweenness fields
   are absent by design.
+- [TEST-011] bridge_asset_symbols: asset-seeded and symbol-seeded smoke tests
+  return bounded `links[]` with confidence/reasons; missing index/search
+  conditions degrade to `warnings[]` instead of crashing; no write path exists.
 
 ## Traceability
 
@@ -423,7 +464,7 @@ useful global "where should I be careful?" view.
 - REQ-004 -> TSK-P1-002 -> TEST-006
 - REQ-005 -> TSK-P2-001 -> TEST-007
 - REQ-006 -> all TSK -> TEST-008
-- REQ-007 -> TSK-P2-002 -> (design note; no automated test)
+- REQ-007 -> TSK-P2-002 -> TEST-011
 - REQ-008 -> TSK-P1-003 -> TEST-009
 - REQ-009 -> TSK-P2-003 -> TEST-010
 - P2 items are outside P0/P1 acceptance until P0/P1 land and latency/value

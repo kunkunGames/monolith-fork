@@ -89,7 +89,7 @@ public:
 
 	// --- Symbol queries ---
 	TArray<FMonolithSourceSymbol> SearchSymbolsFTS(const FString& Query, int32 Limit = 20);
-	TArray<FMonolithSourceSymbol> GetSymbolsByName(const FString& Name, const FString& Kind = TEXT(""));
+	TArray<FMonolithSourceSymbol> GetSymbolsByName(const FString& Name, const FString& Kind = TEXT(""), int32 Limit = 0);
 	TOptional<FMonolithSourceSymbol> GetSymbolById(int64 Id);
 
 	// --- File queries ---
@@ -134,6 +134,16 @@ public:
 	TSharedPtr<FJsonObject> RepairCrgCache(bool bExecute);
 	/** Cached symbol risk row, or nullptr when the derived cache is absent/stale. */
 	TSharedPtr<FJsonObject> GetCachedRiskForSymbol(int64 SymbolId);
+	/** Changed source path triage: changed_entities, direct caller impact, heuristic test gaps, and review queue. */
+	TSharedPtr<FJsonObject> DetectChanges(const TArray<FString>& ChangedPaths, int32 MaxResults, const FString& DetailLevel);
+	/** Advisory dead-symbol candidates. Read-only; never mutates and never reports high confidence. */
+	TSharedPtr<FJsonObject> FindUnused(const FString& Kind, int32 Limit, const FString& MinConfidence);
+	/** Read-only pre-merge gate composed from health, detect_changes, and optional find_unused. */
+	TSharedPtr<FJsonObject> PreMergeCheck(const TArray<FString>& ChangedPaths, int32 MaxResults, int32 UnusedLimit, const FString& DetailLevel, bool bIncludeUnused);
+	/** Capture the current derived CRG projection manifest. Default dry-run; mutates only when bExecute is true. */
+	TSharedPtr<FJsonObject> Snapshot(const FString& Label, bool bExecute);
+	/** Read-only diff between a stored CRG projection snapshot and another stored/current manifest. */
+	TSharedPtr<FJsonObject> DiffSnapshots(const FString& Before, const FString& After, int32 Limit);
 	/** Top source review hotspots from CRG/native fan-in, fan-out, risk and LOC signals. */
 	TSharedPtr<FJsonObject> ReviewHotspots(const FString& Kind, int32 Limit, int32 MinLines, bool bIncludeQuestions);
 

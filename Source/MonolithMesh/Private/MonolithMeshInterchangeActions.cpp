@@ -167,6 +167,11 @@ namespace
 			IsUnderRoot(SourceFile, FPaths::ProjectSavedDir());
 	}
 
+	bool IsGamePackagePath(const FString& PackagePath)
+	{
+		return PackagePath == TEXT("/Game") || PackagePath.StartsWith(TEXT("/Game/"));
+	}
+
 	TSharedPtr<FJsonObject> ValidateDestinationPackage(const FString& DestinationPath)
 	{
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -181,11 +186,17 @@ namespace
 
 		Result->SetBoolField(TEXT("provided"), true);
 		FText Reason;
-		const bool bValid = FPackageName::IsValidLongPackageName(DestinationPath, false, &Reason);
+		const bool bLongPackageName = FPackageName::IsValidLongPackageName(DestinationPath, false, &Reason);
+		const bool bUnderGameRoot = IsGamePackagePath(DestinationPath);
+		const bool bValid = bLongPackageName && bUnderGameRoot;
 		Result->SetBoolField(TEXT("valid"), bValid);
+		Result->SetBoolField(TEXT("under_game_root"), bUnderGameRoot);
 		if (!bValid)
 		{
-			Result->SetStringField(TEXT("reason"), Reason.ToString());
+			Result->SetStringField(TEXT("reason"),
+				bLongPackageName
+					? TEXT("destination_path must be under /Game")
+					: Reason.ToString());
 		}
 		return Result;
 	}
@@ -436,7 +447,9 @@ namespace
 		const bool bInterchangeAvailable = IsInterchangeAvailable();
 		const bool bFileExists = FPaths::FileExists(NormalizedSource);
 		const bool bUnderRoots = IsUnderDefaultImportRoots(NormalizedSource);
-		const bool bDestinationValid = !DestinationPath.IsEmpty() && FPackageName::IsValidLongPackageName(DestinationPath, false);
+			const bool bDestinationValid = !DestinationPath.IsEmpty() &&
+				FPackageName::IsValidLongPackageName(DestinationPath, false) &&
+				IsGamePackagePath(DestinationPath);
 		const FString ExpectedAssetName = SanitizeAssetName(NormalizedSource);
 		const FString ExpectedPackage = !DestinationPath.IsEmpty() ? JoinPackagePath(DestinationPath, ExpectedAssetName) : FString();
 		const bool bLikelyConflict = !ExpectedPackage.IsEmpty() && FPackageName::DoesPackageExist(ExpectedPackage);
@@ -466,7 +479,7 @@ namespace
 		}
 		if (!bDestinationValid)
 		{
-			AddMessage(Messages, TEXT("invalid_destination_path"), TEXT("destination_path must be a valid long package path such as /Game/Imported."));
+				AddMessage(Messages, TEXT("invalid_destination_path"), TEXT("destination_path must be a valid /Game long package path such as /Game/Imported."));
 		}
 		if (ConflictPolicy != TEXT("fail") && ConflictPolicy != TEXT("overwrite") && ConflictPolicy != TEXT("rename") && ConflictPolicy != TEXT("reimport_only"))
 		{
@@ -797,7 +810,7 @@ FMonolithActionResult FMonolithMeshInterchangeActions::CanImport(const TSharedPt
 	const bool bFileExists = FPaths::FileExists(NormalizedSource);
 	const bool bUnderRoots = IsUnderDefaultImportRoots(NormalizedSource);
 	const bool bDestinationValid = !DestinationPath.IsEmpty()
-		? FPackageName::IsValidLongPackageName(DestinationPath, false)
+		? FPackageName::IsValidLongPackageName(DestinationPath, false) && IsGamePackagePath(DestinationPath)
 		: true;
 	const bool bInterchangeAvailable = IsInterchangeAvailable();
 	const bool bCanImport = bInterchangeAvailable && bFileExists && Format != nullptr && (bAllowExternal || bUnderRoots) && bDestinationValid;
@@ -829,7 +842,7 @@ FMonolithActionResult FMonolithMeshInterchangeActions::CanImport(const TSharedPt
 	}
 	if (!bDestinationValid)
 	{
-		AddIssue(TEXT("invalid_destination_path"), TEXT("destination_path must be a valid long package path such as /Game/Imported/MyAsset."));
+		AddIssue(TEXT("invalid_destination_path"), TEXT("destination_path must be a valid /Game long package path such as /Game/Imported/MyAsset."));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();

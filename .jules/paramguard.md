@@ -38,3 +38,9 @@
 **Learning:** `GetNumberField` throws or asserts if a present field is the wrong JSON type (like a string where a number is expected).
 **Prevention:** Use `TryGetNumberField` inside a `HasField` block to validate present params. If `TryGetNumberField` fails, return an explicit error instead of a default fallback.
 **Avoid:** Falling back to default values when a client explicitly sends a malformed (wrong type) value. Defaults are only for absent fields.
+
+## 2026-05-18 - Do not use HasField with GetNumberField or GetBoolField for optional untrusted JSON properties
+**Malformed input pattern:** A field is present with the wrong JSON type (e.g., a string instead of a number/boolean) and is accessed with `HasField` followed by an unsafe cast like `GetNumberField` or `GetBoolField`.
+**Learning:** This crashes or defaults to incorrect values (like 0.0) without throwing a validation error because `HasField` returns true even for wrong types. This allows malformed client input to mutate assets with unintended defaults.
+**Prevention:** Always use `TryGetNumberField`, `TryGetBoolField`, etc. If it fails, explicitly return an invalid-param error instead of silently falling back to defaults.
+**Avoid:** Leaving `HasField` plus `GetNumberField` or `GetBoolField` around optional properties.

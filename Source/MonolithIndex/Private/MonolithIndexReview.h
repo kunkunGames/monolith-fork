@@ -57,6 +57,42 @@ public:
 		int32 Limit,
 		const FString& MinTier);
 
+	/** Changed asset path triage: changed_entities, direct referencer impact, and risk-prioritized review queue. */
+	static TSharedPtr<FJsonObject> DetectChanges(
+		FMonolithIndexDatabase& Db,
+		const TArray<FString>& ChangedPaths,
+		int32 MaxResults,
+		const FString& DetailLevel);
+
+	/** Advisory orphan-asset candidates. Read-only; never mutates and never reports high confidence. */
+	static TSharedPtr<FJsonObject> FindUnused(
+		FMonolithIndexDatabase& Db,
+		const FString& Kind,
+		int32 Limit,
+		const FString& MinConfidence);
+
+	/** Read-only pre-merge gate composed from health, detect_changes, and optional find_unused. */
+	static TSharedPtr<FJsonObject> PreMergeCheck(
+		FMonolithIndexDatabase& Db,
+		const TArray<FString>& ChangedPaths,
+		int32 MaxResults,
+		int32 UnusedLimit,
+		const FString& DetailLevel,
+		bool bIncludeUnused);
+
+	/** Capture current CRG projection manifest. Dry-run unless bExecute is true. */
+	static TSharedPtr<FJsonObject> Snapshot(
+		FMonolithIndexDatabase& Db,
+		const FString& Label,
+		bool bExecute);
+
+	/** Compare a stored CRG snapshot against another stored snapshot or current projection. */
+	static TSharedPtr<FJsonObject> DiffSnapshots(
+		FMonolithIndexDatabase& Db,
+		const FString& Before,
+		const FString& After,
+		int32 Limit);
+
 	/** Rank global project review hotspots by fan-in, fan-out, risk, graph size, or all. */
 	static TSharedPtr<FJsonObject> ReviewHotspots(
 		FMonolithIndexDatabase& Db,

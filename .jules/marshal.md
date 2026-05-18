@@ -82,3 +82,9 @@
 **Learning:** High-level 'single responsibility' rules were not sufficient without concrete mappings of which agent types own which files/directories.
 **Prevention:** Created `.jules/agent-coordination.md` to explicitly map agent categories to their primary target directories and established strict domain boundaries.
 **Avoid:** Agents creating PRs that mix codebase changes with broad coordination doc changes (`AGENTS.md`) or documentation updates, ensuring single responsibility at the directory level.
+
+## 2026-05-18 - Recognize external CI billing limits
+**Coordination issue:** Agents were attempting to fix external GitHub Actions billing-related errors ("spending limit needs to be increased") via code changes.
+**Learning:** Billing or spending-limit errors in remote GitHub Actions are an external repository configuration state, not a code defect that an agent can resolve.
+**Prevention:** Updated `AGENTS.md` to instruct agents to recognize these external limit errors and inform the user rather than attempting to fix them via code changes.
+**Avoid:** Creating pointless PRs to "fix" an external CI billing issue.

@@ -18,4 +18,5 @@ private:
 	static FMonolithActionResult HandleStartIndexing(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleSearchItems(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleBuildAttachment(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleBridgeAssetSymbols(const TSharedPtr<FJsonObject>& Params);
 };

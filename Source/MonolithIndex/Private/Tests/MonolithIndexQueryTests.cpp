@@ -187,6 +187,42 @@ bool FProjectRepairCrgCacheTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSnapshotDiffTest, "Monolith.IndexGuard.Project.SnapshotDiff", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectSnapshotDiffTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+
+	TSharedPtr<FJsonObject> Dry = FMonolithIndexReview::Snapshot(T.Db, TEXT("base"), false);
+	TestEqual(TEXT("snapshot dry-run ok"), Dry->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestFalse(TEXT("dry-run does not execute"), Dry->GetBoolField(TEXT("executed")));
+
+	TSharedPtr<FJsonObject> Snap = FMonolithIndexReview::Snapshot(T.Db, TEXT("base"), true);
+	TestEqual(TEXT("snapshot execute ok"), Snap->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestTrue(TEXT("snapshot executed"), Snap->GetBoolField(TEXT("executed")));
+	TestEqual(TEXT("snapshot captures five project nodes"), Snap->GetIntegerField(TEXT("node_count")), 5);
+	TestEqual(TEXT("snapshot captures four project edges"), Snap->GetIntegerField(TEXT("edge_count")), 4);
+
+	FIndexedAsset Asset;
+	Asset.PackagePath = TEXT("/Game/NewReviewAsset");
+	Asset.AssetName = TEXT("NewReviewAsset");
+	Asset.AssetClass = TEXT("Blueprint");
+	const int64 NewId = T.Db.InsertAsset(Asset);
+	TestTrue(TEXT("new asset inserted"), NewId > 0);
+	TSharedPtr<FJsonObject> Rebuilt = FMonolithIndexReview::RepairCrgCache(T.Db, true);
+	TestEqual(TEXT("crg cache rebuilt after insert"), Rebuilt->GetStringField(TEXT("status")), FString(TEXT("ok")));
+
+	TSharedPtr<FJsonObject> Diff = FMonolithIndexReview::DiffSnapshots(T.Db, TEXT("base"), TEXT("current"), 10);
+	TestEqual(TEXT("diff ok"), Diff->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TSharedPtr<FJsonObject> Counts = Diff->GetObjectField(TEXT("summary_counts"));
+	TestTrue(TEXT("summary counts present"), Counts.IsValid());
+	TestTrue(TEXT("one or more project nodes added"), Counts->GetIntegerField(TEXT("nodes_added")) >= 1);
+	const TArray<TSharedPtr<FJsonValue>>* NewNodes = nullptr;
+	TestTrue(TEXT("new_nodes sample present"), Diff->TryGetArrayField(TEXT("new_nodes"), NewNodes) && NewNodes && NewNodes->Num() >= 1);
+	TestFalse(TEXT("diff not truncated"), Diff->GetBoolField(TEXT("truncated")));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectRiskScoreUsesCrgCacheTest, "Monolith.IndexGuard.Project.RiskScoreUsesCrgCache", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectRiskScoreUsesCrgCacheTest::RunTest(const FString& Parameters)
 {
@@ -232,6 +268,118 @@ bool FProjectRiskScoreSensitivityTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectDetectChangesMinimalTest, "Monolith.IndexGuard.Project.DetectChangesMinimal", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectDetectChangesMinimalTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::DetectChanges(T.Db, { TEXT("Content/A.uasset") }, 5, TEXT("minimal"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("one changed asset"), R->GetIntegerField(TEXT("changed_entity_count")), 1);
+	TestEqual(TEXT("one direct impacted referencer"), R->GetIntegerField(TEXT("impacted_count")), 1);
+	TestEqual(TEXT("no project test gaps"), R->GetIntegerField(TEXT("test_gap_count")), 0);
+	TestFalse(TEXT("minimal omits full changed_entities"), R->HasField(TEXT("changed_entities")));
+	const TArray<TSharedPtr<FJsonValue>>* Priorities = nullptr;
+	TestTrue(TEXT("priorities present"), R->TryGetArrayField(TEXT("review_priorities"), Priorities) && Priorities && Priorities->Num() == 1);
+	TestEqual(TEXT("priority names changed asset"), (*Priorities)[0]->AsString(), FString(TEXT("A")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectDetectChangesStandardTest, "Monolith.IndexGuard.Project.DetectChangesStandard", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectDetectChangesStandardTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::DetectChanges(T.Db, { TEXT("/Game/B.umap") }, 5, TEXT("standard"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	const TArray<TSharedPtr<FJsonValue>>* Changed = nullptr;
+	TestTrue(TEXT("changed_entities present"), R->TryGetArrayField(TEXT("changed_entities"), Changed) && Changed && Changed->Num() == 1);
+	TSharedPtr<FJsonObject> First = (*Changed)[0]->AsObject();
+	TestTrue(TEXT("first changed object"), First.IsValid());
+	TestEqual(TEXT("asset name B"), First->GetStringField(TEXT("asset_name")), FString(TEXT("B")));
+	TSharedPtr<FJsonObject> Impact = R->GetObjectField(TEXT("impact"));
+	TestTrue(TEXT("impact present"), Impact.IsValid());
+	const TArray<TSharedPtr<FJsonValue>>* Impacted = nullptr;
+	TestTrue(TEXT("standard impact has impacted_entities"), Impact->TryGetArrayField(TEXT("impacted_entities"), Impacted) && Impacted);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectDetectChangesEscapesPathWildcardsTest, "Monolith.IndexGuard.Project.DetectChangesEscapesPathWildcards", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectDetectChangesEscapesPathWildcardsTest::RunTest(const FString& Parameters)
+{
+	FMonolithIndexDatabase Db;
+	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithIdxDetectWildcards"), TEXT(".sqlite"));
+	TestTrue(TEXT("temporary DB opens"), Db.Open(DbPath));
+
+	auto Mk = [&](const TCHAR* PackagePath) -> int64
+	{
+		FIndexedAsset Asset;
+		Asset.PackagePath = PackagePath;
+		Asset.AssetName = FPaths::GetCleanFilename(PackagePath);
+		Asset.AssetClass = TEXT("Blueprint");
+		return Db.InsertAsset(Asset);
+	};
+	const int64 UnderId = Mk(TEXT("/Game/BP_Player_Controller"));
+	const int64 PlainId = Mk(TEXT("/Game/BP_PlayerXController"));
+	TestTrue(TEXT("wildcard fixture inserted"), UnderId > 0 && PlainId > 0);
+
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::DetectChanges(Db, { TEXT("Content/BP_Player_Controller.uasset") }, 10, TEXT("standard"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("underscore asset path is treated literally"), R->GetIntegerField(TEXT("changed_entity_count")), 1);
+
+	const TArray<TSharedPtr<FJsonValue>>* Changed = nullptr;
+	TestTrue(TEXT("changed_entities present"), R->TryGetArrayField(TEXT("changed_entities"), Changed) && Changed && Changed->Num() == 1);
+	if (Changed && Changed->Num() == 1)
+	{
+		TSharedPtr<FJsonObject> First = (*Changed)[0]->AsObject();
+		TestTrue(TEXT("first changed object"), First.IsValid());
+		if (First.IsValid())
+		{
+			TestEqual(TEXT("literal underscore asset matched"), First->GetStringField(TEXT("asset_path")), FString(TEXT("/Game/BP_Player_Controller")));
+			TestEqual(TEXT("overmatching asset excluded"), First->GetStringField(TEXT("asset_name")), FString(TEXT("BP_Player_Controller")));
+		}
+	}
+
+	Db.Close();
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*DbPath);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectPreMergeCheckPassTest, "Monolith.IndexGuard.Project.PreMergeCheckPass", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectPreMergeCheckPassTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::PreMergeCheck(T.Db, { TEXT("Content/A.uasset") }, 5, 5, TEXT("minimal"), false);
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("decision pass"), R->GetStringField(TEXT("decision")), FString(TEXT("pass")));
+	TestEqual(TEXT("one changed asset"), R->GetIntegerField(TEXT("changed_entity_count")), 1);
+	TestEqual(TEXT("no sampled unused candidates"), R->GetIntegerField(TEXT("unused_count")), 0);
+	TestFalse(TEXT("minimal omits nested change analysis"), R->HasField(TEXT("change_analysis")));
+	const TArray<TSharedPtr<FJsonValue>>* Checks = nullptr;
+	TestTrue(TEXT("checks present"), R->TryGetArrayField(TEXT("checks"), Checks) && Checks && Checks->Num() >= 2);
+	const TArray<TSharedPtr<FJsonValue>>* Findings = nullptr;
+	TestTrue(TEXT("findings present"), R->TryGetArrayField(TEXT("findings"), Findings) && Findings && Findings->Num() == 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectPreMergeCheckWarnsOnUnusedSampleTest, "Monolith.IndexGuard.Project.PreMergeCheckWarnsOnUnusedSample", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectPreMergeCheckWarnsOnUnusedSampleTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::PreMergeCheck(T.Db, { TEXT("/Game/Systems/SaveSession.uasset") }, 5, 5, TEXT("standard"), true);
+	TestEqual(TEXT("warning status"), R->GetStringField(TEXT("status")), FString(TEXT("warning")));
+	TestEqual(TEXT("decision warn"), R->GetStringField(TEXT("decision")), FString(TEXT("warn")));
+	TestTrue(TEXT("unused sample surfaced"), R->GetIntegerField(TEXT("unused_count")) >= 1);
+	TestTrue(TEXT("standard includes health payload"), R->HasField(TEXT("health")));
+	TestTrue(TEXT("standard includes change analysis"), R->HasField(TEXT("change_analysis")));
+	TestTrue(TEXT("standard includes unused payload"), R->HasField(TEXT("unused")));
+	const TArray<TSharedPtr<FJsonValue>>* Findings = nullptr;
+	TestTrue(TEXT("warning finding present"), R->TryGetArrayField(TEXT("findings"), Findings) && Findings && Findings->Num() >= 1);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectReviewHotspotsLargeTest, "Monolith.IndexGuard.Project.ReviewHotspotsLarge", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectReviewHotspotsLargeTest::RunTest(const FString& Parameters)
 {
@@ -250,6 +398,29 @@ bool FProjectReviewHotspotsLargeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("signals include size"), Signals->HasField(TEXT("size_signal")));
 	const TArray<TSharedPtr<FJsonValue>>* Questions = nullptr;
 	TestTrue(TEXT("questions present"), R->TryGetArrayField(TEXT("questions"), Questions) && Questions && Questions->Num() >= 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectFindUnusedAdvisoryTest, "Monolith.IndexGuard.Project.FindUnusedAdvisory", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectFindUnusedAdvisoryTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::FindUnused(T.Db, TEXT("Blueprint"), 5, TEXT("medium"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+	TestTrue(TEXT("items present"), R->TryGetArrayField(TEXT("items"), Items) && Items && Items->Num() == 1);
+	TSharedPtr<FJsonObject> First = (*Items)[0]->AsObject();
+	TestTrue(TEXT("first candidate object"), First.IsValid());
+	TestEqual(TEXT("unused candidate is unreferenced Blueprint"), First->GetStringField(TEXT("asset_path")), FString(TEXT("/Game/Systems/SaveSession")));
+	TestEqual(TEXT("unused candidate is medium confidence"), First->GetStringField(TEXT("confidence")), FString(TEXT("medium")));
+	const TArray<TSharedPtr<FJsonValue>>* Reasons = nullptr;
+	TestTrue(TEXT("reasons present"), First->TryGetArrayField(TEXT("reasons"), Reasons) && Reasons && Reasons->Num() >= 2);
+
+	TSharedPtr<FJsonObject> High = FMonolithIndexReview::FindUnused(T.Db, TEXT("Blueprint"), 5, TEXT("high"));
+	const TArray<TSharedPtr<FJsonValue>>* HighItems = nullptr;
+	TestTrue(TEXT("high-confidence filter returns array"), High->TryGetArrayField(TEXT("items"), HighItems) && HighItems != nullptr);
+	TestEqual(TEXT("find_unused never reports high confidence"), HighItems->Num(), 0);
 	return true;
 }
 
