@@ -551,7 +551,7 @@ Import `key,source_string,<metadata...>` rows from an in-project CSV file into a
 |-----------|------|----------|-------------|
 | `asset_path` | string | **required** | StringTable asset path under `/Game` |
 | `file_path` | string | **required** | CSV path under the project directory |
-| `replace_existing` | bool | optional | Clear existing entries before importing; default `false` |
+| `replace_existing` | bool | optional | Clear existing entries before importing; default `false`. Refuses empty or fully skipped imports to avoid accidental table clears |
 | `dry_run` | bool | optional | Preview without writing |
 | `confirm` | bool | optional | Required for non-dry-run writes |
 | `save` | bool | optional | Save the package after mutation; default `false` |

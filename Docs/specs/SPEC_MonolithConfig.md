@@ -45,7 +45,7 @@
 | `set_string_entry` | Add or replace one StringTable entry and optional metadata. Requires `asset_path`, `key`, `source_string`, and `dry_run=true` or `confirm=true`. |
 | `remove_string_entry` | Remove one StringTable entry by key. Requires `asset_path`, `key`, and `dry_run=true` or `confirm=true`. |
 | `set_string_metadata` | Add, replace, or remove metadata on one entry. Requires `asset_path`, `key`, `metadata_key`, and `dry_run=true` or `confirm=true`. |
-| `import_string_table_csv` | Import CSV rows into a StringTable from an in-project file path. Requires `dry_run=true` or `confirm=true`; supports `replace_existing`. |
+| `import_string_table_csv` | Import CSV rows into a StringTable from an in-project file path. Requires `dry_run=true` or `confirm=true`; supports `replace_existing`, but refuses `replace_existing=true` when the CSV has zero accepted rows. |
 | `export_string_table_csv` | Export StringTable rows to CSV under the project directory. Requires `dry_run=true` or `confirm=true`. |
 
 ### Localization Mutation Contract

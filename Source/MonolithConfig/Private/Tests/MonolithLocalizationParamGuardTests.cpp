@@ -1,6 +1,8 @@
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "MonolithLocalizationActions.h"
 #include "MonolithToolRegistry.h"
 
@@ -80,6 +82,22 @@ bool FMonolithParamGuardLocalizationStringTableMalformedParamsTest::RunTest(cons
 		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("localization"), TEXT("export_string_table_csv"), Params);
 		TestFalse(TEXT("export_string_table_csv rejects filesystem paths outside the project"), Result.bSuccess);
 		TestTrue(TEXT("export_string_table_csv reports project directory scope"), Result.ErrorMessage.Contains(TEXT("project directory")));
+	}
+
+	{
+		const FString CsvPath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("MonolithTests/empty_string_table_import.csv"));
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(CsvPath), true);
+		TestTrue(TEXT("header-only CSV fixture is written"), FFileHelper::SaveStringToFile(TEXT("key,source_string\n"), *CsvPath));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Tests/Monolith/Localization/MissingTable"));
+		Params->SetStringField(TEXT("file_path"), CsvPath);
+		Params->SetBoolField(TEXT("replace_existing"), true);
+		Params->SetBoolField(TEXT("confirm"), true);
+
+		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("localization"), TEXT("import_string_table_csv"), Params);
+		TestFalse(TEXT("import_string_table_csv rejects destructive empty replace"), Result.bSuccess);
+		TestTrue(TEXT("import_string_table_csv reports replace_existing guard"), Result.ErrorMessage.Contains(TEXT("replace_existing")));
 	}
 
 	return true;

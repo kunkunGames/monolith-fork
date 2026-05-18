@@ -206,7 +206,7 @@ namespace
 			: FPaths::ConvertRelativePathToFull(RawPath);
 		FPaths::NormalizeFilename(OutFilePath);
 
-		if (!(OutFilePath == ProjectDir || OutFilePath.StartsWith(ProjectPrefix)))
+		if (!(OutFilePath.Equals(ProjectDir, ESearchCase::IgnoreCase) || OutFilePath.StartsWith(ProjectPrefix, ESearchCase::IgnoreCase)))
 		{
 			OutError = FString::Printf(TEXT("CSV file path '%s' must stay under project directory '%s'"), *OutFilePath, *ProjectDir);
 			return false;
@@ -1233,6 +1233,10 @@ FMonolithActionResult FMonolithLocalizationActions::ImportStringTableCsv(const T
 	{
 		return FMonolithActionResult::Error(Error);
 	}
+	if (bReplaceExisting && Rows.Num() == 0)
+	{
+		return FMonolithActionResult::Error(TEXT("replace_existing=true requires at least one accepted CSV row; refusing to clear the StringTable from an empty or fully skipped import"));
+	}
 
 	FString AssetPath;
 	UStringTable* Table = LoadStringTableFromParams(Params, AssetPath, Error);
@@ -1337,7 +1341,8 @@ FMonolithActionResult FMonolithLocalizationActions::ExportStringTableCsv(const T
 	Result->SetStringField(TEXT("file_path"), FilePath);
 	Result->SetBoolField(TEXT("include_metadata"), bIncludeMetadata);
 	Result->SetNumberField(TEXT("row_count"), RowCount);
-	Result->SetNumberField(TEXT("byte_count"), CsvText.Len() * sizeof(TCHAR));
+	const FTCHARToUTF8 CsvUtf8(*CsvText);
+	Result->SetNumberField(TEXT("byte_count"), CsvUtf8.Length());
 	if (Options.bDryRun)
 	{
 		Result->SetBoolField(TEXT("would_export"), true);
@@ -1352,6 +1357,11 @@ FMonolithActionResult FMonolithLocalizationActions::ExportStringTableCsv(const T
 	if (!FFileHelper::SaveStringToFile(CsvText, *FilePath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to write CSV file '%s'"), *FilePath));
+	}
+	const int64 ActualByteCount = IFileManager::Get().FileSize(*FilePath);
+	if (ActualByteCount >= 0)
+	{
+		Result->SetNumberField(TEXT("byte_count"), static_cast<double>(ActualByteCount));
 	}
 
 	AddMutationBaseFields(Result, AssetPath, Options, true, true);
