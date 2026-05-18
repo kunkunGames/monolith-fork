@@ -19,6 +19,7 @@
 | `FMonolithToolRegistry` | Central singleton action registry. `TMap<FString, FRegisteredAction>` keyed by "namespace.action". Thread-safe — releases lock before executing handlers. Validates required params from schema before dispatch (skips `asset_path` — `GetAssetPath()` handles aliases itself). Returns descriptive error listing missing + provided keys |
 | `FMonolithJsonUtils` | Static JSON-RPC 2.0 helpers. Standard error codes (-32700 through -32603). Declares `LogMonolith` category |
 | `FMonolithAssetUtils` | Asset loading with 4-tier fallback: StaticLoadObject(resolved) -> PackageName.ObjectName -> FindObject+_C suffix -> ForEachObjectWithPackage |
+| `FMonolithResourceRegistry` | Read-only MCP resource registry for `resources/list` and `resources/read`. Default docs are loaded before registration, so unreadable or empty docs are not advertised. Pagination emits `nextCursor` only when another page exists and omits it on the exhausted page |
 | `UMonolithSettings` | UDeveloperSettings (config=Monolith). ServerPort, bAutoUpdateEnabled, DatabasePathOverride, EngineSourceDBPathOverride, EngineSourcePath, 10 module enable toggles + `bEnableProceduralTownGen` (experimental, default false) (functional — checked at registration time), LogVerbosity. Settings UI customized via `FMonolithSettingsCustomization` (IDetailCustomization) with re-index buttons for project and source databases |
 | `UMonolithUpdateSubsystem` | UEditorSubsystem. GitHub Releases auto-updater. Shows dialog window with full release notes on update detection. Downloads zip, cross-platform extraction (PowerShell on Windows, unzip on Mac/Linux). Stages to Saved/Monolith/Staging/, hot-swaps on editor exit via FCoreDelegates::OnPreExit. Current version always from compiled MONOLITH_VERSION (version.json only stores pending/staging state). Release zips include pre-compiled DLLs. |
 | `FMonolithActionExecutionGuard` | Central action-dispatch scope and audit owner. First milestone records duration and dirty package deltas without raw payload logging or rollback claims. The next planned slice is the bounded ToolCall ledger in [SPEC_MonolithToolCallLedger.md](SPEC_MonolithToolCallLedger.md). |
@@ -46,3 +47,9 @@
 `bEnableAdvancedToolCallRecords` is the default-off setting reserved for redacted ToolCall records and local analysis. The accepted first slice is documented in [SPEC_MonolithToolCallLedger.md](SPEC_MonolithToolCallLedger.md).
 
 The first implementation must stay local and bounded, must not persist raw params or result payloads, and must preserve the current `monolith.list_recent_action_audit` response shape for compatibility.
+
+### MCP Resources
+
+`bEnableMcpResources` is the default-off setting for read-only MCP `resources/list` and `resources/read` support. The accepted first slice is documented in [SPEC_MonolithMcpResources.md](SPEC_MonolithMcpResources.md).
+
+The first implementation exposes only explicit Monolith providers, does not read arbitrary caller-provided filesystem paths, and keeps all resource payloads bounded.

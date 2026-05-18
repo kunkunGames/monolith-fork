@@ -3,6 +3,7 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithHttpServer.h"
 #include "MonolithParamSchema.h"
+#include "MonolithResourceRegistry.h"
 #include "MonolithSettings.h"
 #include "MonolithToolProfileManager.h"
 #include "MonolithUpdateSubsystem.h"
@@ -130,6 +131,29 @@ static TSharedPtr<FJsonObject> MakeDeferredDomainCatalogStatus(const UMonolithSe
 	Obj->SetBoolField(TEXT("domain_tool_exposure"), bExposeTools);
 	Obj->SetStringField(TEXT("tool_exposure_mode"), bExposeTools ? TEXT("legacy_opt_in_reserved") : TEXT("disabled"));
 	Obj->SetStringField(TEXT("tool_list_mutation"), TEXT("not_implemented_in_metadata_slice"));
+	return Obj;
+}
+
+static TSharedPtr<FJsonObject> MakeMcpResourcesStatus(const UMonolithSettings* Settings)
+{
+	const bool bConfigured = Settings && Settings->bEnableMcpResources;
+	const bool bRegistryInitialized = FMonolithResourceRegistry::Get().HasDefaultResourcesRegistered();
+	const int32 ResourceCount = FMonolithResourceRegistry::Get().GetResourceCount();
+	const bool bActive = bConfigured && bRegistryInitialized;
+
+	TSharedPtr<FJsonObject> Obj = MakeFeatureStatus(
+		bConfigured,
+		bActive,
+		bActive ? TEXT("active_readonly_registry") : (bConfigured ? TEXT("configured_restart_required") : TEXT("disabled")));
+	Obj->SetBoolField(TEXT("handlers_registered"), bActive);
+	Obj->SetBoolField(TEXT("provider_registry_initialized"), bRegistryInitialized);
+	Obj->SetNumberField(TEXT("resource_count"), ResourceCount);
+	Obj->SetStringField(TEXT("provider_mode"), TEXT("explicit_readonly"));
+	Obj->SetStringField(TEXT("payload_mode"), TEXT("bounded_text"));
+	if (bConfigured && !bRegistryInitialized)
+	{
+		Obj->SetBoolField(TEXT("restart_required"), true);
+	}
 	return Obj;
 }
 
@@ -1218,7 +1242,7 @@ FMonolithActionResult FMonolithCoreTools::HandleGetMcpServerStatus(const TShared
 	Result->SetStringField(TEXT("session_tracking_note"), TEXT("Current streamable HTTP handling accepts MCP session/protocol headers but does not persist per-client session rows."));
 	TSharedPtr<FJsonObject> Features = MakeShared<FJsonObject>();
 	Features->SetObjectField(TEXT("deferred_domain_catalog"), MakeDeferredDomainCatalogStatus(Settings));
-	Features->SetObjectField(TEXT("mcp_resources"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableMcpResources, TEXT("settings_only_provider_registry_pending")));
+	Features->SetObjectField(TEXT("mcp_resources"), MakeMcpResourcesStatus(Settings));
 	Features->SetObjectField(TEXT("structured_tool_results"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableStructuredToolResults, TEXT("settings_only_result_helpers_pending")));
 	Features->SetObjectField(TEXT("mcp_session_mode"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableMcpSessionMode, TEXT("settings_only_execution_context_pending")));
 	Features->SetObjectField(TEXT("advanced_tool_call_records"), MakeFeatureStatus(

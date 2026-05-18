@@ -66,6 +66,8 @@ The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespa
 
 Core server management and introspection.
 
+When `bEnableMcpResources=true`, MonolithCore also exposes MCP `resources/list` and `resources/read` through `FMonolithResourceRegistry`. Default docs are registered only after their backing markdown is readable and non-empty. `resources/list` returns a string `nextCursor` only when another page exists; the exhausted page omits `nextCursor`.
+
 ### `monolith.discover`
 
 List available tool namespaces and their actions. Pass `namespace` to filter; pass `category` to narrow further (e.g. `"CommonUI"` inside `ui`).
