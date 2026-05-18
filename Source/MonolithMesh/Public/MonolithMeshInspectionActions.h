@@ -36,5 +36,6 @@ private:
 	// --- Optional PCG visibility (no hard PCG dependency) ---
 	static FMonolithActionResult GetPcgStatus(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ListPcgGraphAssets(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GetPcgGraphAsset(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ListPcgComponents(const TSharedPtr<FJsonObject>& Params);
 };

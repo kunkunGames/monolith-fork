@@ -68,12 +68,22 @@ bool FMonolithParamGuardMeshInspectionMalformedParamsTest::RunTest(const FString
     {
         FMonolithMeshInspectionActions::RegisterActions(FMonolithToolRegistry::Get());
         TestTrue(TEXT("get_mesh_info action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("get_mesh_info")));
+        TestTrue(TEXT("get_pcg_graph_asset action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("get_pcg_graph_asset")));
 
         TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
         // No asset_path
         FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("get_mesh_info"), Params);
         TestFalse(TEXT("GetMeshInfo rejects missing asset_path"), Result.bSuccess);
         TestTrue(TEXT("GetMeshInfo reports the missing asset_path validation error"), Result.ErrorMessage.Contains(TEXT("asset_path is required")));
+    }
+
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("asset_path"), TEXT("D:/OutsideProject/PCGGraph.uasset"));
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("get_pcg_graph_asset"), Params);
+        TestFalse(TEXT("GetPcgGraphAsset rejects out-of-project paths"), Result.bSuccess);
+        TestTrue(TEXT("GetPcgGraphAsset reports the /Game boundary"), Result.ErrorMessage.Contains(TEXT("/Game")));
     }
 
     return true;

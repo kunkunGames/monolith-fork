@@ -20,8 +20,8 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithMeshModule` | Registers 244 core mesh actions across 30+ action classes (+ GeometryScript ops conditional). 24 additional experimental town gen actions registered only when `bEnableProceduralTownGen = true` (default: false). Total: 268 |
-| `FMonolithMeshInspectionActions` | Mesh asset inspection: geometry stats, LODs, UVs, materials, collision, quality analysis, catalog (12 actions) |
+| `FMonolithMeshModule` | Registers 245 core mesh actions across 30+ action classes (+ GeometryScript ops conditional). 24 additional experimental town gen actions registered only when `bEnableProceduralTownGen = true` (default: false). Total: 269 |
+| `FMonolithMeshInspectionActions` | Mesh asset inspection: geometry stats, LODs, UVs, materials, collision, quality analysis, catalog, and optional PCG visibility (16 actions) |
 | `FMonolithMeshSceneActions` | Scene actor manipulation: spawn, move, duplicate, delete, group, batch execute (8 actions) |
 | `FMonolithMeshSpatialActions` | Spatial queries: raycasts, sweeps, overlaps, nearest, line of sight, navmesh, scene bounds/stats (11 actions) |
 | `FMonolithMeshBlockoutActions` | Level blockout: volumes, primitives, grids, asset matching, replacement, layout import/export, prop scatter (15 actions) |
@@ -90,9 +90,24 @@ Mutation guardrails:
 - Batch actions return per-row `status`, `messages`, imported/updated asset paths,
   and dirty package names instead of failing the entire batch on one bad source.
 
-### Actions (268 — namespace: "mesh")
+### Optional PCG Visibility
 
-> **Note:** 244 core actions (Phases 1-22 + Proc Geo Overhaul) always registered + 24 experimental Procedural Town Generator actions (SP1-SP10 + `validate_building`) registered only when `bEnableProceduralTownGen = true` (default: false). Town gen has known geometry issues (wall misalignment, room separation) — very much a work-in-progress. Unless you're willing to dig in and help improve it, it's best left alone for now. Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain.
+The optional PCG first slice stays in `FMonolithMeshInspectionActions` and uses
+AssetRegistry/reflection only. It does not add a hard dependency on `PCG` or
+`PCGEditor`; full graph mutation and execution remain future work for an owned
+optional `pcg` namespace. The focused contract is documented in
+[SPEC_MonolithPcgGraphAssetMetadata.md](SPEC_MonolithPcgGraphAssetMetadata.md).
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `get_pcg_status` | none | Report optional PCG module/type availability without loading PCG or mutating the level |
+| `list_pcg_graph_assets` | `package_path`?, `limit`? | List PCG graph-like assets using AssetRegistry class paths |
+| `get_pcg_graph_asset` | `asset_path`, `include_tags`?, `tag_limit`? | Return bounded AssetRegistry metadata for one PCG graph-like asset under `/Game` |
+| `list_pcg_components` | `limit`? | List PCG-like components in the current editor world using reflected class names |
+
+### Actions (269 — namespace: "mesh")
+
+> **Note:** 245 core actions (Phases 1-22 + Proc Geo Overhaul + optional PCG metadata) always registered + 24 experimental Procedural Town Generator actions (SP1-SP10 + `validate_building`) registered only when `bEnableProceduralTownGen = true` (default: false). Town gen has known geometry issues (wall misalignment, room separation) — very much a work-in-progress. Unless you're willing to dig in and help improve it, it's best left alone for now. Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain.
 
 **Inspection (12)**
 | Action | Params | Description |
@@ -163,6 +178,14 @@ Mutation guardrails:
 | `clear_cache` | `type_filter`? | Clear cached meshes — all or filtered by type. Returns cleared_count |
 | `validate_cache` | none | Remove stale cache entries where the asset no longer exists on disk. Returns removed_count |
 | `get_cache_stats` | none | Cache statistics: total_entries and per-type breakdown |
+
+**Optional PCG Discovery (4)** — AssetRegistry/reflection-only, no hard PCG dependency
+| Action | Params | Description |
+|--------|--------|-------------|
+| `get_pcg_status` | none | Report optional PCG module/type availability and current/future action boundaries |
+| `list_pcg_graph_assets` | `package_path`?, `limit`? | List PCG graph-like assets under `/Game` without loading PCG classes |
+| `get_pcg_graph_asset` | `asset_path`, `include_tags`?, `tag_limit`? | Inspect one PCG graph-like asset's bounded registry metadata |
+| `list_pcg_components` | `limit`? | List PCG-like components in the current editor world by reflected class identity |
 
 **Blueprint Prefabs (1)** — Dialog-free blueprint creation from placed actors
 | Action | Params | Description |
