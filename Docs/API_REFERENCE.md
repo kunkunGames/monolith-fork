@@ -320,7 +320,7 @@ Render a Niagara system or material in a preview scene and screenshot it.
 
 ### `editor.capture_sequence_frames`
 
-Capture multiple frames at specified timestamps. Same params as `capture_scene_preview` plus `timestamps[]`, `output_dir`, `filename_prefix`, `persistent`.
+Capture multiple frames at specified timestamps. Same params as `capture_scene_preview` plus `timestamps[]` (Max: 1000), `output_dir`, `filename_prefix`, `persistent`.
 
 ### `editor.import_texture`
 
