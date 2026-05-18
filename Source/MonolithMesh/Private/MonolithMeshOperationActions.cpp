@@ -359,15 +359,44 @@ FMonolithActionResult FMonolithMeshOperationActions::SaveHandle(const TSharedPtr
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	FString HandleName = Params->GetStringField(TEXT("handle"));
-	FString TargetPath = Params->GetStringField(TEXT("target_path"));
-	bool bOverwrite = Params->HasField(TEXT("overwrite")) ? Params->GetBoolField(TEXT("overwrite")) : false;
-	FString CollisionMode = Params->HasField(TEXT("collision")) ? Params->GetStringField(TEXT("collision")).ToLower() : TEXT("auto");
-	int32 MaxHulls = Params->HasField(TEXT("max_hulls")) ? static_cast<int32>(Params->GetNumberField(TEXT("max_hulls"))) : 4;
-
-	if (HandleName.IsEmpty() || TargetPath.IsEmpty())
+	FString HandleName;
+	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Both 'handle' and 'target_path' are required"));
+		return FMonolithActionResult::Error(TEXT("Parameter 'handle' is required and must be a string"));
+	}
+
+	FString TargetPath;
+	if (!Params->TryGetStringField(TEXT("target_path"), TargetPath) || TargetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'target_path' is required and must be a string"));
+	}
+
+	bool bOverwrite = false;
+	if (Params->HasField(TEXT("overwrite")) && !Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'overwrite' must be a boolean"));
+	}
+
+	FString CollisionMode = TEXT("auto");
+	if (Params->HasField(TEXT("collision")))
+	{
+		FString InputCollision;
+		if (!Params->TryGetStringField(TEXT("collision"), InputCollision))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'collision' must be a string"));
+		}
+		CollisionMode = InputCollision.ToLower();
+	}
+
+	int32 MaxHulls = 4;
+	if (Params->HasField(TEXT("max_hulls")))
+	{
+		double TempMaxHulls;
+		if (!Params->TryGetNumberField(TEXT("max_hulls"), TempMaxHulls))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'max_hulls' must be a number"));
+		}
+		MaxHulls = static_cast<int32>(TempMaxHulls);
 	}
 
 	// Validate collision mode
