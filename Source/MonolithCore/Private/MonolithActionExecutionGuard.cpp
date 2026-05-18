@@ -46,6 +46,14 @@ void FMonolithActionExecutionGuard::SetActionOutcome(
 	Scope.OutcomeStatus = bSuccess ? TEXT("success") : TEXT("error");
 	Scope.JsonRpcErrorCode = bSuccess ? 0 : ErrorCode;
 	Scope.ResultKind = bSuccess ? TEXT("json_object") : TEXT("error_text");
+
+	if (!IsAdvancedToolCallRecordsEnabled())
+	{
+		Scope.ResultChars = 0;
+		Scope.bResultTruncated = false;
+		return;
+	}
+
 	if (bSuccess && ResultObject.IsValid())
 	{
 		Scope.ResultChars = FMonolithJsonUtils::Serialize(ResultObject).Len();
