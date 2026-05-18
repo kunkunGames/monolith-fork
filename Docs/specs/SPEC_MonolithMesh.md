@@ -78,6 +78,13 @@ Mutation guardrails:
 - `destination_path` must be a valid `/Game/...` package path.
 - `conflict_policy` is explicit: `fail`, `overwrite`, `rename`, or
   `reimport_only`.
+- `fail` conflict detection is a conservative preflight against the expected
+  package derived from the source filename. Scene imports or factory-specific
+  naming can still produce additional packages, so callers must inspect the
+  returned `imported_assets` rows after import.
+- `rename` is a best-effort pass-through to Unreal's import pipeline with
+  overwrite disabled; Monolith does not pre-allocate the final non-conflicting
+  package name.
 - Batch actions return per-row `status`, `messages`, imported/updated asset paths,
   and dirty package names instead of failing the entire batch on one bad source.
 

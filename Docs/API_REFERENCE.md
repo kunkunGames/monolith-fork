@@ -133,8 +133,11 @@ limited to project/content/saved roots unless `allow_external=true`.
 | `export_asset` | `asset_path`, `file_path` | Exports one asset after output path validation |
 
 Conflict policy values are `fail`, `overwrite`, `rename`, and `reimport_only`.
-`fail` rejects likely destination package collisions before import; `overwrite`
-forwards replace intent; `rename` lets Unreal allocate a non-conflicting package.
+`fail` rejects likely destination package collisions before import using the
+expected package derived from the source filename, but scene/factory outputs can
+still create differently named packages. `overwrite` forwards replace intent.
+`rename` is a best-effort pass-through with overwrite disabled; inspect
+`imported_assets` for the final package names.
 
 ---
 

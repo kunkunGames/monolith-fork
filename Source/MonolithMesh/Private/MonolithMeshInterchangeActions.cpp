@@ -316,9 +316,10 @@ namespace
 	bool RequireConfirmOrDryRun(const TSharedPtr<FJsonObject>& Params, TArray<TSharedPtr<FJsonValue>>& Messages, bool& bOutDryRun)
 	{
 		bOutDryRun = false;
-		if (Params.IsValid())
+		if (Params.IsValid() && Params->HasField(TEXT("dry_run")) && !Params->TryGetBoolField(TEXT("dry_run"), bOutDryRun))
 		{
-			Params->TryGetBoolField(TEXT("dry_run"), bOutDryRun);
+			AddMessage(Messages, TEXT("invalid_dry_run"), TEXT("dry_run must be a boolean."));
+			return false;
 		}
 		if (bOutDryRun)
 		{
@@ -326,9 +327,10 @@ namespace
 		}
 
 		bool bConfirm = false;
-		if (Params.IsValid())
+		if (Params.IsValid() && Params->HasField(TEXT("confirm")) && !Params->TryGetBoolField(TEXT("confirm"), bConfirm))
 		{
-			Params->TryGetBoolField(TEXT("confirm"), bConfirm);
+			AddMessage(Messages, TEXT("invalid_confirm"), TEXT("confirm must be a boolean."));
+			return false;
 		}
 		if (!bConfirm)
 		{
@@ -608,11 +610,11 @@ namespace
 		Row->SetStringField(TEXT("status"), bSucceeded ? TEXT("reimported") : TEXT("error"));
 		if (!bSucceeded)
 		{
-		AddMessage(Messages, TEXT("reimport_failed"), TEXT("Unreal reimport manager returned failure."));
-	}
-	TArray<UObject*> Objects;
-	Objects.Add(Asset);
-	Row->SetArrayField(TEXT("dirty_packages"), DirtyPackagesToJson(Objects));
+			AddMessage(Messages, TEXT("reimport_failed"), TEXT("Unreal reimport manager returned failure."));
+		}
+		TArray<UObject*> Objects;
+		Objects.Add(Asset);
+		Row->SetArrayField(TEXT("dirty_packages"), DirtyPackagesToJson(Objects));
 		Row->SetArrayField(TEXT("messages"), Messages);
 		return Row;
 	}
