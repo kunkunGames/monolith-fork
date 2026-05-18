@@ -486,14 +486,14 @@ Capture a level editor viewport to PNG. The action errors when the requested vie
 
 ### `editor.capture_asset_thumbnail`
 
-Capture an asset thumbnail to PNG. This is an explicit fallback path, not an asset-editor viewport capture; callers must pass `thumbnail_fallback=true`.
+Capture an asset thumbnail to an image file (PNG by default). This is an explicit fallback path, not an asset-editor viewport capture; callers must pass `thumbnail_fallback=true`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `asset_path` | string | **required** | Asset path to capture |
 | `thumbnail_fallback` | bool | **required** | Must be `true`; prevents silent viewport-to-thumbnail substitution |
 | `thumbnail_size` | integer | optional | Square thumbnail size in pixels, `16..2048`. Default: `256` |
-| `output_path` | string | optional | Output PNG path. Relative paths resolve under the project directory |
+| `output_path` | string | optional | Output image path. Relative paths resolve under the project directory. Supported extensions are `png`, `jpg`/`jpeg`, `bmp`, `exr`, `tga`, and `hdr`; unknown or missing extensions are normalized to `.png`. The response `output_path` and `format` fields report the normalized file path and actual encoder used |
 
 ### `editor.capture_asset_editor_viewport` · `editor.capture_widget_designer`
 

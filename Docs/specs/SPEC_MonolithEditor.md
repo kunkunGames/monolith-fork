@@ -71,4 +71,4 @@
 
 ### Visual Capture Fallback Contract
 
-`capture_asset_thumbnail` is the implemented fallback for PRD 34 visual verification when an actual asset-editor viewport cannot be identified. The caller must pass `thumbnail_fallback=true`; otherwise the action errors so clients do not mistake thumbnail output for viewport output. Asset-editor and widget-designer viewport captures remain explicit `unavailable` responses until Monolith can name the captured viewport source.
+`capture_asset_thumbnail` is the implemented fallback for PRD 34 visual verification when an actual asset-editor viewport cannot be identified. The caller must pass `thumbnail_fallback=true`; otherwise the action errors so clients do not mistake thumbnail output for viewport output. Supported `output_path` extensions (`png`, `jpg`/`jpeg`, `bmp`, `exr`, `tga`, `hdr`) select the image encoder; unknown or missing extensions are normalized to `.png`, and the response `output_path` and `format` fields report the normalized file path and actual encoder used. Asset-editor and widget-designer viewport captures remain explicit `unavailable` responses until Monolith can name the captured viewport source.

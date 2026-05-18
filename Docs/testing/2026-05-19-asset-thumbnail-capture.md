@@ -23,7 +23,8 @@
 | Explicit fallback | `thumbnail_fallback=true` is required; otherwise the action returns invalid params. |
 | No misleading viewport capture | Successful responses use `source="asset_thumbnail"` and `fallback_used=true`. |
 | Bounded output | `thumbnail_size` must be an integer from 16 through 2048. |
-| Local artifact | The action writes a PNG to the requested path or `Saved/Screenshots/Monolith`. |
+| Local artifact | The action writes an image to the requested path or `Saved/Screenshots/Monolith` (PNG by default). |
+| Format metadata | Supported `output_path` extensions select the image encoder; unknown or missing extensions are normalized to `.png`, and the response `output_path` and `format` fields report the normalized file path and actual encoder. |
 | Guarded future work | Asset-editor and widget-designer viewport actions remain explicit `unavailable` responses. |
 
 ---

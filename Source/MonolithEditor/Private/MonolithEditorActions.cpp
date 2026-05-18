@@ -2587,6 +2587,39 @@ namespace
 
 		return OutputPath;
 	}
+
+	bool IsSupportedCaptureImageExtension(const FString& Extension)
+	{
+		return Extension == TEXT("png")
+			|| Extension == TEXT("jpg")
+			|| Extension == TEXT("jpeg")
+			|| Extension == TEXT("bmp")
+			|| Extension == TEXT("exr")
+			|| Extension == TEXT("tga")
+			|| Extension == TEXT("hdr");
+	}
+
+	FString NormalizeCaptureImageOutputPath(const FString& OutputPath)
+	{
+		const FString Extension = FPaths::GetExtension(OutputPath).ToLower();
+		return IsSupportedCaptureImageExtension(Extension)
+			? OutputPath
+			: FPaths::SetExtension(OutputPath, TEXT("png"));
+	}
+
+	FString ResolveCapturedImageFormat(const FString& OutputPath)
+	{
+		const FString Extension = FPaths::GetExtension(OutputPath).ToLower();
+		if (Extension == TEXT("jpg") || Extension == TEXT("jpeg"))
+		{
+			return TEXT("jpg");
+		}
+		if (IsSupportedCaptureImageExtension(Extension))
+		{
+			return Extension;
+		}
+		return TEXT("png");
+	}
 }
 
 FMonolithActionResult FMonolithEditorActions::HandleListOpenViewports(const TSharedPtr<FJsonObject>& Params)
@@ -2771,13 +2804,13 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAssetThumbnail(const 
 			.WithErrorData(ErrorData);
 	}
 
-	const FString OutputPath = ResolveCaptureOutputPath(Params, TEXT("AssetThumbnail"), Asset->GetName());
+	const FString OutputPath = NormalizeCaptureImageOutputPath(ResolveCaptureOutputPath(Params, TEXT("AssetThumbnail"), Asset->GetName()));
 	IFileManager::Get().MakeDirectory(*FPaths::GetPath(OutputPath), true);
 
 	FImage Image;
 	Image.Init(Width, Height, ERawImageFormat::BGRA8, EGammaSpace::sRGB);
 	FMemory::Memcpy(Image.RawData.GetData(), ImageData.GetData(), ExpectedBytes);
-	if (!FImageUtils::SaveImageAutoFormat(*OutputPath, Image))
+	if (!FImageUtils::SaveImageByExtension(*OutputPath, Image))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save asset thumbnail capture: %s"), *OutputPath));
 	}
@@ -2789,7 +2822,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAssetThumbnail(const 
 	Result->SetStringField(TEXT("asset_name"), Asset->GetName());
 	Result->SetStringField(TEXT("asset_class"), Asset->GetClass() ? Asset->GetClass()->GetName() : TEXT(""));
 	Result->SetStringField(TEXT("output_path"), OutputPath);
-	Result->SetStringField(TEXT("format"), TEXT("png"));
+	Result->SetStringField(TEXT("format"), ResolveCapturedImageFormat(OutputPath));
 	Result->SetNumberField(TEXT("width"), Width);
 	Result->SetNumberField(TEXT("height"), Height);
 	Result->SetBoolField(TEXT("fallback_used"), true);
