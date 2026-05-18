@@ -1436,9 +1436,27 @@ FMonolithActionResult FMonolithGASEffectActions::HandleRemoveModifier(const TSha
 	if (!LoadGEFromParams(Params, BP, GE, AssetPath, Err)) return Err;
 
 	double RemoveIndexVal = 0.0;
-	bool bHasIndex = Params->TryGetNumberField(TEXT("modifier_index"), RemoveIndexVal);
+	const bool bHasIndexField = Params->HasField(TEXT("modifier_index"));
+	bool bHasIndex = false;
+	if (bHasIndexField)
+	{
+		if (!Params->TryGetNumberField(TEXT("modifier_index"), RemoveIndexVal))
+		{
+			return FMonolithActionResult::Error(TEXT("modifier_index must be a number when provided"));
+		}
+		bHasIndex = true;
+	}
 	FString AttrStr;
-	bool bHasAttr = Params->TryGetStringField(TEXT("attribute"), AttrStr);
+	const bool bHasAttrField = Params->HasField(TEXT("attribute"));
+	bool bHasAttr = false;
+	if (bHasAttrField)
+	{
+		if (!Params->TryGetStringField(TEXT("attribute"), AttrStr) || AttrStr.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("attribute must be a non-empty string when provided"));
+		}
+		bHasAttr = true;
+	}
 
 	if (!bHasIndex && !bHasAttr)
 	{
@@ -2651,6 +2669,50 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 		return FMonolithActionResult::Error(ParseError);
 	}
 
+	double ValidationNumber = 0.0;
+	if (DurationPolicy == EGameplayEffectDurationType::HasDuration &&
+		Spec->HasField(TEXT("duration_magnitude")) &&
+		!Spec->TryGetNumberField(TEXT("duration_magnitude"), ValidationNumber))
+	{
+		return FMonolithActionResult::Error(TEXT("spec.duration_magnitude must be a number"));
+	}
+	if (Spec->HasField(TEXT("period")) && !Spec->TryGetNumberField(TEXT("period"), ValidationNumber))
+	{
+		return FMonolithActionResult::Error(TEXT("spec.period must be a number"));
+	}
+	bool bValidationBool = false;
+	if (Spec->HasField(TEXT("execute_on_application")) &&
+		!Spec->TryGetBoolField(TEXT("execute_on_application"), bValidationBool))
+	{
+		return FMonolithActionResult::Error(TEXT("spec.execute_on_application must be a boolean"));
+	}
+	const TArray<TSharedPtr<FJsonValue>>* ValidationModArray = nullptr;
+	if (Spec->TryGetArrayField(TEXT("modifiers"), ValidationModArray))
+	{
+		for (int32 i = 0; i < ValidationModArray->Num(); ++i)
+		{
+			const TSharedPtr<FJsonObject>* ModObjPtr = nullptr;
+			if (!(*ValidationModArray)[i]->TryGetObject(ModObjPtr) || !ModObjPtr || !(*ModObjPtr).IsValid())
+			{
+				continue;
+			}
+			if ((*ModObjPtr)->HasField(TEXT("value")) &&
+				!(*ModObjPtr)->TryGetNumberField(TEXT("value"), ValidationNumber))
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(TEXT("spec.modifiers[%d].value must be a number"), i));
+			}
+		}
+	}
+	const TSharedPtr<FJsonObject>* ValidationStackPtr = nullptr;
+	if (Spec->TryGetObjectField(TEXT("stacking"), ValidationStackPtr) &&
+		ValidationStackPtr && (*ValidationStackPtr).IsValid() &&
+		(*ValidationStackPtr)->HasField(TEXT("limit")) &&
+		!(*ValidationStackPtr)->TryGetNumberField(TEXT("limit"), ValidationNumber))
+	{
+		return FMonolithActionResult::Error(TEXT("spec.stacking.limit must be a number"));
+	}
+
 	// Create the GE
 	UGameplayEffect* GE = nullptr;
 	FMonolithActionResult CreateError;
@@ -3062,6 +3124,35 @@ FMonolithActionResult FMonolithGASEffectActions::HandleDuplicateGameplayEffect(c
 	FMonolithActionResult LoadErr;
 	if (!LoadGEFromParams(SourceParams, SourceBP, SourceGE, SourceAssetPath, LoadErr)) return LoadErr;
 
+	const TSharedPtr<FJsonObject>* OverridesPtr = nullptr;
+	if (Params->HasField(TEXT("overrides")))
+	{
+		if (!Params->TryGetObjectField(TEXT("overrides"), OverridesPtr) || !OverridesPtr || !(*OverridesPtr).IsValid())
+		{
+			return FMonolithActionResult::Error(TEXT("overrides must be an object when provided"));
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* ValidationModArray = nullptr;
+		if ((*OverridesPtr)->TryGetArrayField(TEXT("modifiers"), ValidationModArray))
+		{
+			for (int32 i = 0; i < ValidationModArray->Num(); ++i)
+			{
+				const TSharedPtr<FJsonObject>* ModObjPtr = nullptr;
+				if (!(*ValidationModArray)[i]->TryGetObject(ModObjPtr) || !ModObjPtr || !(*ModObjPtr).IsValid())
+				{
+					continue;
+				}
+
+				double Value = 0.0;
+				if ((*ModObjPtr)->HasField(TEXT("value")) &&
+					!(*ModObjPtr)->TryGetNumberField(TEXT("value"), Value))
+				{
+					return FMonolithActionResult::Error(TEXT("overrides.modifiers.value must be a number"));
+				}
+			}
+		}
+	}
+
 	// Create destination GE with same duration policy
 	UGameplayEffect* DestGE = nullptr;
 	FMonolithActionResult CreateErr;
@@ -3091,8 +3182,7 @@ FMonolithActionResult FMonolithGASEffectActions::HandleDuplicateGameplayEffect(c
 	DestGE->Executions = SourceGE->Executions;
 
 	// Apply overrides
-	const TSharedPtr<FJsonObject>* OverridesPtr = nullptr;
-	if (Params->TryGetObjectField(TEXT("overrides"), OverridesPtr) && OverridesPtr && (*OverridesPtr).IsValid())
+	if (OverridesPtr && (*OverridesPtr).IsValid())
 	{
 		const TSharedPtr<FJsonObject>& Ov = *OverridesPtr;
 
