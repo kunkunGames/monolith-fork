@@ -480,14 +480,20 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 
 	FString Error;
 	bool bOverwrite = false;
-	if (Params->HasField(TEXT("overwrite")) && !Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+	if (Params->HasField(TEXT("overwrite")))
 	{
-		return FMonolithActionResult::Error(TEXT("overwrite must be a boolean"));
+		if (!Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+		{
+			return FMonolithActionResult::Error(TEXT("overwrite must be a boolean"));
+		}
 	}
 	bool bSave = true;
-	if (Params->HasField(TEXT("save")) && !Params->TryGetBoolField(TEXT("save"), bSave))
+	if (Params->HasField(TEXT("save")))
 	{
-		return FMonolithActionResult::Error(TEXT("save must be a boolean"));
+		if (!Params->TryGetBoolField(TEXT("save"), bSave))
+		{
+			return FMonolithActionResult::Error(TEXT("save must be a boolean"));
+		}
 	}
 
 	const FString PackagePath = NormalizePackagePath(AssetPath);
@@ -504,9 +510,12 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 	if (bApplyValueType)
 	{
 		FString ValueTypeString = TEXT("Boolean");
-		if (Params->HasField(TEXT("value_type")) && !Params->TryGetStringField(TEXT("value_type"), ValueTypeString))
+		if (Params->HasField(TEXT("value_type")))
 		{
-			return FMonolithActionResult::Error(TEXT("value_type must be a string"));
+			if (!Params->TryGetStringField(TEXT("value_type"), ValueTypeString))
+			{
+				return FMonolithActionResult::Error(TEXT("value_type must be a string"));
+			}
 		}
 		if (!ParseValueType(ValueTypeString, ValueType))
 		{
@@ -516,23 +525,32 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 
 	FString Description;
 	bool bHasDescription = Params->HasField(TEXT("description"));
-	if (bHasDescription && !Params->TryGetStringField(TEXT("description"), Description))
+	if (bHasDescription)
 	{
-		return FMonolithActionResult::Error(TEXT("description must be a string"));
+		if (!Params->TryGetStringField(TEXT("description"), Description))
+		{
+			return FMonolithActionResult::Error(TEXT("description must be a string"));
+		}
 	}
 
 	bool bConsumeInput = false;
 	bool bHasConsumeInput = Params->HasField(TEXT("consume_input"));
-	if (bHasConsumeInput && !Params->TryGetBoolField(TEXT("consume_input"), bConsumeInput))
+	if (bHasConsumeInput)
 	{
-		return FMonolithActionResult::Error(TEXT("consume_input must be a boolean"));
+		if (!Params->TryGetBoolField(TEXT("consume_input"), bConsumeInput))
+		{
+			return FMonolithActionResult::Error(TEXT("consume_input must be a boolean"));
+		}
 	}
 
 	bool bTriggerWhenPaused = false;
 	bool bHasTriggerWhenPaused = Params->HasField(TEXT("trigger_when_paused"));
-	if (bHasTriggerWhenPaused && !Params->TryGetBoolField(TEXT("trigger_when_paused"), bTriggerWhenPaused))
+	if (bHasTriggerWhenPaused)
 	{
-		return FMonolithActionResult::Error(TEXT("trigger_when_paused must be a boolean"));
+		if (!Params->TryGetBoolField(TEXT("trigger_when_paused"), bTriggerWhenPaused))
+		{
+			return FMonolithActionResult::Error(TEXT("trigger_when_paused must be a boolean"));
+		}
 	}
 
 	EInputActionAccumulationBehavior AccumulationBehavior = EInputActionAccumulationBehavior::TakeHighestAbsoluteValue;
@@ -632,7 +650,11 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleSetInputActionPropert
 	if (Params->HasField(TEXT("value_type")))
 	{
 		EInputActionValueType ValueType;
-		const FString ValueTypeString = Params->GetStringField(TEXT("value_type"));
+		FString ValueTypeString;
+		if (!Params->TryGetStringField(TEXT("value_type"), ValueTypeString))
+		{
+			return FMonolithActionResult::Error(TEXT("value_type must be a string"));
+		}
 		if (!ParseValueType(ValueTypeString, ValueType))
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid value_type: %s"), *ValueTypeString));
@@ -641,32 +663,57 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleSetInputActionPropert
 	}
 	if (Params->HasField(TEXT("description")))
 	{
-		Action->ActionDescription = FText::FromString(Params->GetStringField(TEXT("description")));
+		FString Description;
+		if (!Params->TryGetStringField(TEXT("description"), Description))
+		{
+			return FMonolithActionResult::Error(TEXT("description must be a string"));
+		}
+		Action->ActionDescription = FText::FromString(Description);
 	}
-	bool bConsumeInput = false;
-	if (Params->TryGetBoolField(TEXT("consume_input"), bConsumeInput))
+	if (Params->HasField(TEXT("consume_input")))
 	{
+		bool bConsumeInput = false;
+		if (!Params->TryGetBoolField(TEXT("consume_input"), bConsumeInput))
+		{
+			return FMonolithActionResult::Error(TEXT("consume_input must be a boolean"));
+		}
 		Action->bConsumeInput = bConsumeInput;
 	}
-	bool bConsumeLegacy = false;
-	if (Params->TryGetBoolField(TEXT("consume_legacy_mappings"), bConsumeLegacy))
+	if (Params->HasField(TEXT("consume_legacy_mappings")))
 	{
+		bool bConsumeLegacy = false;
+		if (!Params->TryGetBoolField(TEXT("consume_legacy_mappings"), bConsumeLegacy))
+		{
+			return FMonolithActionResult::Error(TEXT("consume_legacy_mappings must be a boolean"));
+		}
 		Action->bConsumesActionAndAxisMappings = bConsumeLegacy;
 	}
-	bool bTriggerWhenPaused = false;
-	if (Params->TryGetBoolField(TEXT("trigger_when_paused"), bTriggerWhenPaused))
+	if (Params->HasField(TEXT("trigger_when_paused")))
 	{
+		bool bTriggerWhenPaused = false;
+		if (!Params->TryGetBoolField(TEXT("trigger_when_paused"), bTriggerWhenPaused))
+		{
+			return FMonolithActionResult::Error(TEXT("trigger_when_paused must be a boolean"));
+		}
 		Action->bTriggerWhenPaused = bTriggerWhenPaused;
 	}
-	bool bReserveMappings = false;
-	if (Params->TryGetBoolField(TEXT("reserve_all_mappings"), bReserveMappings))
+	if (Params->HasField(TEXT("reserve_all_mappings")))
 	{
+		bool bReserveMappings = false;
+		if (!Params->TryGetBoolField(TEXT("reserve_all_mappings"), bReserveMappings))
+		{
+			return FMonolithActionResult::Error(TEXT("reserve_all_mappings must be a boolean"));
+		}
 		Action->bReserveAllMappings = bReserveMappings;
 	}
 	if (Params->HasField(TEXT("accumulation")))
 	{
 		EInputActionAccumulationBehavior Behavior;
-		const FString Accumulation = Params->GetStringField(TEXT("accumulation"));
+		FString Accumulation;
+		if (!Params->TryGetStringField(TEXT("accumulation"), Accumulation))
+		{
+			return FMonolithActionResult::Error(TEXT("accumulation must be a string"));
+		}
 		if (!ParseAccumulation(Accumulation, Behavior))
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid accumulation: %s"), *Accumulation));
@@ -737,14 +784,20 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 
 	FString Error;
 	bool bOverwrite = false;
-	if (Params->HasField(TEXT("overwrite")) && !Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+	if (Params->HasField(TEXT("overwrite")))
 	{
-		return FMonolithActionResult::Error(TEXT("overwrite must be a boolean"));
+		if (!Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+		{
+			return FMonolithActionResult::Error(TEXT("overwrite must be a boolean"));
+		}
 	}
 	bool bSave = true;
-	if (Params->HasField(TEXT("save")) && !Params->TryGetBoolField(TEXT("save"), bSave))
+	if (Params->HasField(TEXT("save")))
 	{
-		return FMonolithActionResult::Error(TEXT("save must be a boolean"));
+		if (!Params->TryGetBoolField(TEXT("save"), bSave))
+		{
+			return FMonolithActionResult::Error(TEXT("save must be a boolean"));
+		}
 	}
 
 	const FString PackagePath = NormalizePackagePath(AssetPath);
@@ -757,9 +810,12 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 
 	FString Description;
 	bool bHasDescription = Params->HasField(TEXT("description"));
-	if (bHasDescription && !Params->TryGetStringField(TEXT("description"), Description))
+	if (bHasDescription)
 	{
-		return FMonolithActionResult::Error(TEXT("description must be a string"));
+		if (!Params->TryGetStringField(TEXT("description"), Description))
+		{
+			return FMonolithActionResult::Error(TEXT("description must be a string"));
+		}
 	}
 
 	bool bCreated = false;
