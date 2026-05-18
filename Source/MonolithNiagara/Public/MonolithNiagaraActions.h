@@ -24,6 +24,8 @@ struct FNiagaraParameterStore;
 class FMonolithNiagaraActions
 {
 public:
+	static int32 ClampNiagaraQueryLimit(int32 Limit, int32 Max = 1000);
+
 	/** Register all niagara actions with the tool registry */
 	static void RegisterActions(FMonolithToolRegistry& Registry);
 
