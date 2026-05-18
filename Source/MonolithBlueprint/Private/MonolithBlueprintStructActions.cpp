@@ -15,6 +15,9 @@
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "MonolithBlueprintEditCradle.h"
+#include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "ScopedTransaction.h"
 
 // ============================================================
@@ -63,6 +66,47 @@ void FMonolithBlueprintStructActions::RegisterActions(FMonolithToolRegistry& Reg
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
 			.Optional(TEXT("row_name"),   TEXT("string"), TEXT("If provided, return only this row. Otherwise return all rows."))
+			.Build());
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_data_table_schema"),
+		TEXT("Inspect a DataTable row struct and return column metadata without row payloads."),
+		FMonolithActionHandler::CreateStatic(&HandleGetDataTableSchema),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("update_data_table_row"),
+		TEXT("Update an existing DataTable row, optionally creating it when create_if_missing=true. Requires dry_run=true or confirm=true."),
+		FMonolithActionHandler::CreateStatic(&HandleUpdateDataTableRow),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
+			.Required(TEXT("row_name"), TEXT("string"), TEXT("Row name / key"))
+			.Required(TEXT("values"), TEXT("object"), TEXT("JSON object of {column_name: value, ...}. Values are converted via ImportText."))
+			.Optional(TEXT("create_if_missing"), TEXT("boolean"), TEXT("Create row when it does not already exist"), TEXT("false"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without writing"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for non-dry-run writes"), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save DataTable package after mutation"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("remove_data_table_row"),
+		TEXT("Remove one DataTable row by key. Requires dry_run=true or confirm=true."),
+		FMonolithActionHandler::CreateStatic(&HandleRemoveDataTableRow),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
+			.Required(TEXT("row_name"), TEXT("string"), TEXT("Row name / key"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without writing"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for non-dry-run writes"), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save DataTable package after mutation"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("export_data_table_csv"),
+		TEXT("Export a DataTable to CSV under the project directory. Requires dry_run=true or confirm=true."),
+		FMonolithActionHandler::CreateStatic(&HandleExportDataTableCsv),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
+			.Required(TEXT("file_path"), TEXT("string"), TEXT("Destination CSV path under the project directory"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview without writing"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for non-dry-run writes"), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("create_data_asset"),
@@ -427,6 +471,213 @@ static TSharedPtr<FJsonObject> SerializeRowToJson(const UScriptStruct* RowStruct
 	return ValuesObj;
 }
 
+struct FDataTableMutationOptions
+{
+	bool bDryRun = false;
+	bool bConfirm = false;
+	bool bSave = false;
+};
+
+static bool ReadRequiredStringParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, FString& OutValue, FString& OutError)
+{
+	if (!Params.IsValid() || !Params->HasField(FieldName))
+	{
+		OutError = FString::Printf(TEXT("Missing required parameter: %s"), FieldName);
+		return false;
+	}
+	if (!Params->TryGetStringField(FieldName, OutValue) || OutValue.TrimStartAndEnd().IsEmpty())
+	{
+		OutError = FString::Printf(TEXT("Missing required parameter: %s"), FieldName);
+		return false;
+	}
+	return true;
+}
+
+static bool ReadOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, bool& OutValue, FString& OutError)
+{
+	if (Params.IsValid() && Params->HasField(FieldName) && !Params->TryGetBoolField(FieldName, OutValue))
+	{
+		OutError = FString::Printf(TEXT("Malformed parameter: %s must be a boolean"), FieldName);
+		return false;
+	}
+	return true;
+}
+
+static bool ReadDataTableMutationOptions(const TSharedPtr<FJsonObject>& Params, FDataTableMutationOptions& OutOptions, FString& OutError)
+{
+	if (!ReadOptionalBoolParam(Params, TEXT("dry_run"), OutOptions.bDryRun, OutError) ||
+		!ReadOptionalBoolParam(Params, TEXT("confirm"), OutOptions.bConfirm, OutError) ||
+		!ReadOptionalBoolParam(Params, TEXT("save"), OutOptions.bSave, OutError))
+	{
+		return false;
+	}
+	if (!OutOptions.bDryRun && !OutOptions.bConfirm)
+	{
+		OutError = TEXT("Mutating DataTable actions require dry_run=true or confirm=true");
+		return false;
+	}
+	return true;
+}
+
+static UDataTable* LoadDataTableFromParams(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)
+{
+	if (!ReadRequiredStringParam(Params, TEXT("asset_path"), OutAssetPath, OutError))
+	{
+		return nullptr;
+	}
+
+	OutAssetPath = FMonolithAssetUtils::ResolveAssetPath(OutAssetPath);
+	UDataTable* DataTable = FMonolithAssetUtils::LoadAssetByPath<UDataTable>(OutAssetPath);
+	if (!DataTable)
+	{
+		OutError = FString::Printf(TEXT("DataTable not found: %s"), *OutAssetPath);
+		return nullptr;
+	}
+	if (!DataTable->GetRowStruct())
+	{
+		OutError = FString::Printf(TEXT("DataTable '%s' has no RowStruct set"), *OutAssetPath);
+		return nullptr;
+	}
+	return DataTable;
+}
+
+static bool ResolveProjectFilePath(const FString& RawPath, FString& OutFilePath, FString& OutError)
+{
+	if (RawPath.TrimStartAndEnd().IsEmpty())
+	{
+		OutError = TEXT("Missing required parameter: file_path");
+		return false;
+	}
+
+	FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	FPaths::NormalizeDirectoryName(ProjectDir);
+	FString ProjectPrefix = ProjectDir;
+	if (!ProjectPrefix.EndsWith(TEXT("/")))
+	{
+		ProjectPrefix += TEXT("/");
+	}
+
+	OutFilePath = FPaths::IsRelative(RawPath)
+		? FPaths::ConvertRelativePathToFull(ProjectDir, RawPath)
+		: FPaths::ConvertRelativePathToFull(RawPath);
+	FPaths::NormalizeFilename(OutFilePath);
+
+	if (!(OutFilePath.Equals(ProjectDir, ESearchCase::IgnoreCase) || OutFilePath.StartsWith(ProjectPrefix, ESearchCase::IgnoreCase)))
+	{
+		OutError = FString::Printf(TEXT("DataTable CSV file path '%s' must stay under project directory '%s'"), *OutFilePath, *ProjectDir);
+		return false;
+	}
+	return true;
+}
+
+static FProperty* FindDataTableProperty(const UScriptStruct* RowStruct, const FString& FieldName)
+{
+	if (!RowStruct)
+	{
+		return nullptr;
+	}
+
+	if (FProperty* Prop = RowStruct->FindPropertyByName(FName(*FieldName)))
+	{
+		return Prop;
+	}
+
+	for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
+	{
+		if (It->GetName().Equals(FieldName, ESearchCase::IgnoreCase))
+		{
+			return *It;
+		}
+
+		const FString DisplayName = It->GetMetaData(TEXT("DisplayName"));
+		if (!DisplayName.IsEmpty() && DisplayName.Equals(FieldName, ESearchCase::IgnoreCase))
+		{
+			return *It;
+		}
+
+		FString PropName = It->GetName();
+		int32 UnderscoreIdx = INDEX_NONE;
+		if (PropName.FindChar(TEXT('_'), UnderscoreIdx) && PropName.Left(UnderscoreIdx).Equals(FieldName, ESearchCase::IgnoreCase))
+		{
+			return *It;
+		}
+	}
+
+	return nullptr;
+}
+
+static FString JsonValueToImportText(const TSharedPtr<FJsonValue>& JsonVal, const FProperty* Property)
+{
+	if (!JsonVal.IsValid())
+	{
+		return FString();
+	}
+	if (JsonVal->Type == EJson::Number)
+	{
+		const double NumberValue = JsonVal->AsNumber();
+		const FNumericProperty* NumericProperty = CastField<FNumericProperty>(Property);
+		if (NumericProperty && NumericProperty->IsInteger())
+		{
+			const int64 WholeValue = static_cast<int64>(NumberValue);
+			if (FMath::IsNearlyEqual(NumberValue, static_cast<double>(WholeValue)))
+			{
+				return FString::Printf(TEXT("%lld"), WholeValue);
+			}
+		}
+		return FString::SanitizeFloat(NumberValue);
+	}
+	if (JsonVal->Type == EJson::Boolean)
+	{
+		return JsonVal->AsBool() ? TEXT("true") : TEXT("false");
+	}
+	return JsonVal->AsString();
+}
+
+static void PopulateDataTableRowFromJson(const UScriptStruct* RowStruct, uint8* RowData, const TSharedPtr<FJsonObject>& ValuesObj, TArray<FString>& OutSetFields, TArray<FString>& OutSkippedFields)
+{
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : ValuesObj->Values)
+	{
+		const FString& FieldName = Pair.Key;
+		FProperty* Prop = FindDataTableProperty(RowStruct, FieldName);
+		if (!Prop)
+		{
+			OutSkippedFields.Add(FString::Printf(TEXT("%s (not found)"), *FieldName));
+			continue;
+		}
+
+		const FString ValueStr = JsonValueToImportText(Pair.Value, Prop);
+		void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(RowData);
+		const TCHAR* ImportResult = Prop->ImportText_Direct(*ValueStr, ValuePtr, nullptr, PPF_None);
+		if (ImportResult)
+		{
+			OutSetFields.Add(FieldName);
+		}
+		else
+		{
+			OutSkippedFields.Add(FString::Printf(TEXT("%s (ImportText failed for value: %s)"), *FieldName, *ValueStr));
+		}
+	}
+}
+
+static TArray<TSharedPtr<FJsonValue>> StringsToJsonValues(const TArray<FString>& Values)
+{
+	TArray<TSharedPtr<FJsonValue>> Out;
+	for (const FString& Value : Values)
+	{
+		Out.Add(MakeShared<FJsonValueString>(Value));
+	}
+	return Out;
+}
+
+static void AddDataTableMutationFields(TSharedPtr<FJsonObject>& Result, const FString& AssetPath, const FDataTableMutationOptions& Options, bool bChanged, bool bSaved)
+{
+	Result->SetStringField(TEXT("asset_path"), AssetPath);
+	Result->SetBoolField(TEXT("dry_run"), Options.bDryRun);
+	Result->SetBoolField(TEXT("confirm_received"), Options.bConfirm);
+	Result->SetBoolField(TEXT("changed"), bChanged);
+	Result->SetBoolField(TEXT("saved"), bSaved);
+}
+
 // ============================================================
 //  create_data_table
 // ============================================================
@@ -573,83 +824,7 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleAddDataTableRow(con
 	// Populate fields from the values JSON object
 	TArray<FString> SetFields;
 	TArray<FString> SkippedFields;
-
-	for (const auto& Pair : (*ValuesObj)->Values)
-	{
-		const FString& FieldName = Pair.Key;
-		const TSharedPtr<FJsonValue>& JsonVal = Pair.Value;
-
-		// Find property by name — try exact, case-insensitive, then display name
-		// UDS properties have GUID-encoded names (e.g., "Name_2_C392053F...") but
-		// callers use friendly display names ("Name"). Check DisplayName metadata.
-		FProperty* Prop = RowStruct->FindPropertyByName(FName(*FieldName));
-		if (!Prop)
-		{
-			for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
-			{
-				// Case-insensitive internal name match
-				if (It->GetName().Equals(FieldName, ESearchCase::IgnoreCase))
-				{
-					Prop = *It;
-					break;
-				}
-				// Display name match (critical for UserDefinedStructs)
-				FString DisplayName = It->GetMetaData(TEXT("DisplayName"));
-				if (!DisplayName.IsEmpty() && DisplayName.Equals(FieldName, ESearchCase::IgnoreCase))
-				{
-					Prop = *It;
-					break;
-				}
-				// Also try stripping the GUID suffix: "Name_2_GUID" → check if starts with "FieldName_"
-				FString PropName = It->GetName();
-				int32 UnderscoreIdx;
-				if (PropName.FindChar(TEXT('_'), UnderscoreIdx))
-				{
-					FString ShortName = PropName.Left(UnderscoreIdx);
-					if (ShortName.Equals(FieldName, ESearchCase::IgnoreCase))
-					{
-						Prop = *It;
-						break;
-					}
-				}
-			}
-		}
-
-		if (!Prop)
-		{
-			SkippedFields.Add(FString::Printf(TEXT("%s (not found)"), *FieldName));
-			continue;
-		}
-
-		// Convert JSON value to string for ImportText
-		FString ValueStr;
-		if (JsonVal.IsValid())
-		{
-			if (JsonVal->Type == EJson::Number)
-			{
-				ValueStr = FString::SanitizeFloat(JsonVal->AsNumber());
-			}
-			else if (JsonVal->Type == EJson::Boolean)
-			{
-				ValueStr = JsonVal->AsBool() ? TEXT("true") : TEXT("false");
-			}
-			else
-			{
-				ValueStr = JsonVal->AsString();
-			}
-		}
-
-		void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(RowData);
-		const TCHAR* ImportResult = Prop->ImportText_Direct(*ValueStr, ValuePtr, nullptr, PPF_None);
-		if (ImportResult)
-		{
-			SetFields.Add(FieldName);
-		}
-		else
-		{
-			SkippedFields.Add(FString::Printf(TEXT("%s (ImportText failed for value: %s)"), *FieldName, *ValueStr));
-		}
-	}
+	PopulateDataTableRowFromJson(RowStruct, RowData, *ValuesObj, SetFields, SkippedFields);
 
 	// Add the row to the DataTable — uses the uint8*/UScriptStruct overload which copies internally
 	DataTable->AddRow(RowFName, RowData, RowStruct);
@@ -750,6 +925,275 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleGetDataTableRows(co
 	Root->SetNumberField(TEXT("row_count"), RowResults.Num());
 	Root->SetNumberField(TEXT("total_rows"), RowMap.Num());
 	Root->SetArrayField(TEXT("rows"), RowResults);
+	Root->SetBoolField(TEXT("success"), true);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ============================================================
+//  get_data_table_schema
+// ============================================================
+
+FMonolithActionResult FMonolithBlueprintStructActions::HandleGetDataTableSchema(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath, Error;
+	UDataTable* DataTable = LoadDataTableFromParams(Params, AssetPath, Error);
+	if (!DataTable)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	TArray<TSharedPtr<FJsonValue>> Columns;
+	for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
+	{
+		FProperty* Prop = *It;
+		TSharedPtr<FJsonObject> Column = MakeShared<FJsonObject>();
+		Column->SetStringField(TEXT("name"), GetFriendlyPropertyName(Prop));
+		Column->SetStringField(TEXT("internal_name"), Prop->GetName());
+		Column->SetStringField(TEXT("cpp_type"), Prop->GetCPPType());
+		Column->SetStringField(TEXT("property_class"), Prop->GetClass()->GetName());
+		Columns.Add(MakeShared<FJsonValueObject>(Column));
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("row_struct"), RowStruct->GetName());
+	Root->SetStringField(TEXT("row_struct_path"), RowStruct->GetPathName());
+	Root->SetNumberField(TEXT("row_count"), DataTable->GetRowMap().Num());
+	Root->SetNumberField(TEXT("column_count"), Columns.Num());
+	Root->SetArrayField(TEXT("columns"), Columns);
+	Root->SetBoolField(TEXT("read_only"), true);
+	Root->SetBoolField(TEXT("success"), true);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ============================================================
+//  update_data_table_row
+// ============================================================
+
+FMonolithActionResult FMonolithBlueprintStructActions::HandleUpdateDataTableRow(const TSharedPtr<FJsonObject>& Params)
+{
+	FDataTableMutationOptions Options;
+	FString Error;
+	if (!ReadDataTableMutationOptions(Params, Options, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString RowName;
+	if (!ReadRequiredStringParam(Params, TEXT("row_name"), RowName, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const TSharedPtr<FJsonObject>* ValuesObj = nullptr;
+	if (!Params.IsValid() || !Params->TryGetObjectField(TEXT("values"), ValuesObj) || !ValuesObj || !(*ValuesObj).IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: values (JSON object of column->value)"));
+	}
+
+	bool bCreateIfMissing = false;
+	if (!ReadOptionalBoolParam(Params, TEXT("create_if_missing"), bCreateIfMissing, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString AssetPath;
+	UDataTable* DataTable = LoadDataTableFromParams(Params, AssetPath, Error);
+	if (!DataTable)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	const FName RowFName(*RowName);
+	uint8* const* ExistingRowPtr = DataTable->GetRowMap().Find(RowFName);
+	const bool bHadRow = ExistingRowPtr && *ExistingRowPtr;
+	if (!bHadRow && !bCreateIfMissing)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Row '%s' not found in DataTable '%s'. Pass create_if_missing=true to create it."), *RowName, *AssetPath));
+	}
+
+	const int32 StructSize = RowStruct->GetStructureSize();
+	uint8* RowData = static_cast<uint8*>(FMemory::Malloc(StructSize));
+	RowStruct->InitializeStruct(RowData);
+	if (bHadRow)
+	{
+		RowStruct->CopyScriptStruct(RowData, *ExistingRowPtr);
+	}
+
+	TArray<FString> SetFields;
+	TArray<FString> SkippedFields;
+	PopulateDataTableRowFromJson(RowStruct, RowData, *ValuesObj, SetFields, SkippedFields);
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	AddDataTableMutationFields(Root, AssetPath, Options, false, false);
+	Root->SetStringField(TEXT("row_name"), RowName);
+	Root->SetBoolField(TEXT("row_existed"), bHadRow);
+	Root->SetBoolField(TEXT("create_if_missing"), bCreateIfMissing);
+	Root->SetNumberField(TEXT("fields_set"), SetFields.Num());
+	Root->SetArrayField(TEXT("set_fields"), StringsToJsonValues(SetFields));
+	if (SkippedFields.Num() > 0)
+	{
+		Root->SetArrayField(TEXT("skipped_fields"), StringsToJsonValues(SkippedFields));
+	}
+	Root->SetObjectField(TEXT("preview_values"), SerializeRowToJson(RowStruct, RowData));
+
+	const bool bChanged = SetFields.Num() > 0 || !bHadRow;
+	if (Options.bDryRun)
+	{
+		Root->SetBoolField(TEXT("would_update"), bChanged);
+		RowStruct->DestroyStruct(RowData);
+		FMemory::Free(RowData);
+		return FMonolithActionResult::Success(Root);
+	}
+
+	if (bChanged)
+	{
+		DataTable->Modify();
+		DataTable->AddRow(RowFName, RowData, RowStruct);
+		DataTable->MarkPackageDirty();
+	}
+	RowStruct->DestroyStruct(RowData);
+	FMemory::Free(RowData);
+
+	bool bSaved = false;
+	if (bChanged && Options.bSave)
+	{
+		bSaved = UEditorAssetLibrary::SaveLoadedAsset(DataTable, false);
+	}
+
+	AddDataTableMutationFields(Root, AssetPath, Options, bChanged, bSaved);
+	if (uint8* UpdatedRow = DataTable->FindRowUnchecked(RowFName))
+	{
+		Root->SetObjectField(TEXT("row"), SerializeRowToJson(RowStruct, UpdatedRow));
+	}
+	Root->SetBoolField(TEXT("success"), true);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ============================================================
+//  remove_data_table_row
+// ============================================================
+
+FMonolithActionResult FMonolithBlueprintStructActions::HandleRemoveDataTableRow(const TSharedPtr<FJsonObject>& Params)
+{
+	FDataTableMutationOptions Options;
+	FString Error;
+	if (!ReadDataTableMutationOptions(Params, Options, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString RowName;
+	if (!ReadRequiredStringParam(Params, TEXT("row_name"), RowName, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString AssetPath;
+	UDataTable* DataTable = LoadDataTableFromParams(Params, AssetPath, Error);
+	if (!DataTable)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const FName RowFName(*RowName);
+	const uint8* ExistingRow = DataTable->FindRowUnchecked(RowFName);
+	if (!ExistingRow)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Row '%s' not found in DataTable '%s'"), *RowName, *AssetPath));
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	AddDataTableMutationFields(Root, AssetPath, Options, false, false);
+	Root->SetStringField(TEXT("row_name"), RowName);
+	Root->SetObjectField(TEXT("removed_row_preview"), SerializeRowToJson(DataTable->GetRowStruct(), ExistingRow));
+	if (Options.bDryRun)
+	{
+		Root->SetBoolField(TEXT("would_remove"), true);
+		return FMonolithActionResult::Success(Root);
+	}
+
+	DataTable->Modify();
+	DataTable->RemoveRow(RowFName);
+	DataTable->MarkPackageDirty();
+
+	bool bSaved = false;
+	if (Options.bSave)
+	{
+		bSaved = UEditorAssetLibrary::SaveLoadedAsset(DataTable, false);
+	}
+
+	AddDataTableMutationFields(Root, AssetPath, Options, true, bSaved);
+	Root->SetNumberField(TEXT("remaining_rows"), DataTable->GetRowMap().Num());
+	Root->SetBoolField(TEXT("success"), true);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ============================================================
+//  export_data_table_csv
+// ============================================================
+
+FMonolithActionResult FMonolithBlueprintStructActions::HandleExportDataTableCsv(const TSharedPtr<FJsonObject>& Params)
+{
+	FDataTableMutationOptions Options;
+	FString Error;
+	if (!ReadDataTableMutationOptions(Params, Options, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString RawFilePath;
+	if (!ReadRequiredStringParam(Params, TEXT("file_path"), RawFilePath, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString FilePath;
+	if (!ResolveProjectFilePath(RawFilePath, FilePath, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	FString AssetPath;
+	UDataTable* DataTable = LoadDataTableFromParams(Params, AssetPath, Error);
+	if (!DataTable)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	const FString Csv = DataTable->GetTableAsCSV();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	AddDataTableMutationFields(Root, AssetPath, Options, false, false);
+	Root->SetStringField(TEXT("file_path"), FilePath);
+	Root->SetNumberField(TEXT("row_count"), DataTable->GetRowMap().Num());
+	const FTCHARToUTF8 CsvUtf8(*Csv);
+	Root->SetNumberField(TEXT("byte_count"), CsvUtf8.Length());
+	if (Options.bDryRun)
+	{
+		Root->SetBoolField(TEXT("would_export"), true);
+		return FMonolithActionResult::Success(Root);
+	}
+
+	const FString Directory = FPaths::GetPath(FilePath);
+	if (!Directory.IsEmpty())
+	{
+		IFileManager::Get().MakeDirectory(*Directory, true);
+	}
+	if (!FFileHelper::SaveStringToFile(Csv, *FilePath))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to write CSV file '%s'"), *FilePath));
+	}
+	const int64 ActualByteCount = IFileManager::Get().FileSize(*FilePath);
+	if (ActualByteCount >= 0)
+	{
+		Root->SetNumberField(TEXT("byte_count"), static_cast<double>(ActualByteCount));
+	}
+
+	AddDataTableMutationFields(Root, AssetPath, Options, true, true);
 	Root->SetBoolField(TEXT("success"), true);
 	return FMonolithActionResult::Success(Root);
 }

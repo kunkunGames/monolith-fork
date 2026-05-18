@@ -2,7 +2,7 @@
 
 **Version:** v0.14.10 · **Last updated:** 2026-05-18
 
-**In-tree action total: 1568** active actions across **33 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1592). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1564** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 37.
+**In-tree action total: 1572** active actions across **33 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1596). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1568** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 37.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
@@ -17,7 +17,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | Namespace | Actions | Description |
 |-----------|---------|-------------|
 | [monolith](#monolith) | 4 | Core server tools (discover, status, update, reindex) |
-| [blueprint](#blueprint) | 89 | Blueprint read/write, variable/component/graph CRUD, node ops, compile, auto-layout, spawn actors |
+| [blueprint](#blueprint) | 93 | Blueprint read/write, variable/component/graph CRUD, DataTable maintenance, node ops, compile, auto-layout, spawn actors |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
@@ -34,7 +34,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [ai](#ai) | 221 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD and document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
-| **In-tree subtotal** | **1562** | (default-active; +24 experimental town gen → 1586 when registered) |
+| **In-tree subtotal** | **1566** | (default-active; +24 experimental town gen → 1590 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -55,6 +55,7 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `gas.bind_widget_to_attribute` (and 3 aliases) | Param validation tightened (Phase J F2/F3) | Empty `widget_path`, missing `attribute`, or unresolvable ASC now return structured errors before any reflection writes. |
 | `ai` BT actions | Error message standardization (Phase J F15) | All BT-related actions now return `{ "error": "<code>", "detail": "<human>" }` instead of mixed prose. |
 | `gas` UI binding response | Shape change (Phase J F5) | Returns `{ bindings: [...], count: N }` instead of a bare array. Wrap your client parsers. |
+| `blueprint` DataTable maintenance | **NEW** | Adds schema inspection, guarded row update/remove, and guarded CSV export for `UDataTable` assets. |
 | `localization` StringTable actions | **NEW** | Adds guarded StringTable create/edit/remove/metadata plus CSV import/export with `dry_run`/`confirm` write gates. |
 
 The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespaces — same handler, two callable paths. Pick whichever reads better from your client.
@@ -145,7 +146,7 @@ still create differently named packages. `overwrite` forwards replace intent.
 
 ## blueprint
 
-Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, and spawn-time actor placement. **89 actions.**
+Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, DataTables, and spawn-time actor placement. **93 actions.**
 
 > For full param schemas, call `monolith_discover("blueprint")` at runtime. The action surface is too broad to enumerate here without bloat — high-traffic actions are documented below; the rest are listed and discoverable.
 
@@ -162,7 +163,7 @@ Full read/write access to Blueprint graphs, variables, components, functions, no
 | Bulk / batch | 4 | `batch_execute`, `add_nodes_bulk`, `connect_pins_bulk`, `set_pin_defaults_bulk` |
 | Timelines | 4 | `add_timeline`, `add_timeline_track`, `set_timeline_keys`, `get_timeline_data` |
 | Compile / validate | 3 | `compile_blueprint`, `validate_blueprint`, `get_dependencies` |
-| Asset CRUD | 8 | `create_blueprint`, `duplicate_blueprint`, `save_asset`, `create_user_defined_struct`, `create_user_defined_enum`, `create_data_table`, `add_data_table_row`, `get_data_table_rows`, `create_data_asset` |
+| Asset CRUD | 13 | `create_blueprint`, `duplicate_blueprint`, `save_asset`, `create_user_defined_struct`, `create_user_defined_enum`, `create_data_table`, `add_data_table_row`, `get_data_table_rows`, `get_data_table_schema`, `update_data_table_row`, `remove_data_table_row`, `export_data_table_csv`, `create_data_asset` |
 | CDO | 2 | `get_cdo_properties`, `set_cdo_property` |
 | Templates / spec | 4 | `build_blueprint_from_spec`, `apply_template`, `list_templates`, `compare_blueprints` |
 | Layout | 2 | `auto_layout`, `export_graph` |
@@ -190,6 +191,53 @@ Lightweight overview with node id/class/title and exec connections only. ~10 KB 
 ### `blueprint.build_blueprint_from_spec`
 
 The crown jewel — author an entire Blueprint (parent class, variables, components, functions, event graph nodes, connections) from a single JSON spec. Validates and compiles in one call. See `monolith_discover("blueprint")` for the full spec schema.
+
+### `blueprint.get_data_table_schema`
+
+Inspect a `UDataTable` row struct without returning row data.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | DataTable asset path |
+
+**Returns:** `row_struct`, `row_struct_path`, `column_count`, and `columns[]` with friendly/internal names, C++ type, and property class.
+
+### `blueprint.update_data_table_row`
+
+Update an existing DataTable row with the same JSON-to-`ImportText` conversion used by `add_data_table_row`. JSON numbers targeting integer fields are emitted as integer text before import.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | DataTable asset path |
+| `row_name` | string | **required** | Row key |
+| `values` | object | **required** | Column/value object |
+| `create_if_missing` | bool | optional | Create the row if it does not exist; default `false` |
+| `dry_run` | bool | optional | Preview without writing |
+| `confirm` | bool | optional | Required for non-dry-run writes |
+| `save` | bool | optional | Save the package after mutation; default `false` |
+
+### `blueprint.remove_data_table_row`
+
+Remove one row from a DataTable by row name.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | DataTable asset path |
+| `row_name` | string | **required** | Row key |
+| `dry_run` | bool | optional | Preview without writing |
+| `confirm` | bool | optional | Required for non-dry-run writes |
+| `save` | bool | optional | Save the package after mutation; default `false` |
+
+### `blueprint.export_data_table_csv`
+
+Export a DataTable to CSV under the project directory. `byte_count` reports the actual file size after writing; dry-run reports a UTF-8 byte estimate.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | DataTable asset path |
+| `file_path` | string | **required** | Destination CSV path under the project directory |
+| `dry_run` | bool | optional | Preview without writing |
+| `confirm` | bool | optional | Required for non-dry-run writes |
 
 ### `blueprint.spawn_blueprint_actor`
 

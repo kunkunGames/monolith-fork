@@ -14,6 +14,10 @@ public:
 	static FMonolithActionResult HandleCreateDataTable(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleAddDataTableRow(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetDataTableRows(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleGetDataTableSchema(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleUpdateDataTableRow(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleRemoveDataTableRow(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleExportDataTableCsv(const TSharedPtr<FJsonObject>& Params);
 
 	// Raw UObject asset creation (not Blueprint)
 	static FMonolithActionResult HandleCreateDataAsset(const TSharedPtr<FJsonObject>& Params);
