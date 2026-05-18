@@ -562,7 +562,7 @@ static bool ResolveProjectFilePath(const FString& RawPath, FString& OutFilePath,
 		: FPaths::ConvertRelativePathToFull(RawPath);
 	FPaths::NormalizeFilename(OutFilePath);
 
-	if (!(OutFilePath == ProjectDir || OutFilePath.StartsWith(ProjectPrefix)))
+	if (!(OutFilePath.Equals(ProjectDir, ESearchCase::IgnoreCase) || OutFilePath.StartsWith(ProjectPrefix, ESearchCase::IgnoreCase)))
 	{
 		OutError = FString::Printf(TEXT("DataTable CSV file path '%s' must stay under project directory '%s'"), *OutFilePath, *ProjectDir);
 		return false;
@@ -606,7 +606,7 @@ static FProperty* FindDataTableProperty(const UScriptStruct* RowStruct, const FS
 	return nullptr;
 }
 
-static FString JsonValueToImportText(const TSharedPtr<FJsonValue>& JsonVal)
+static FString JsonValueToImportText(const TSharedPtr<FJsonValue>& JsonVal, const FProperty* Property)
 {
 	if (!JsonVal.IsValid())
 	{
@@ -614,7 +614,17 @@ static FString JsonValueToImportText(const TSharedPtr<FJsonValue>& JsonVal)
 	}
 	if (JsonVal->Type == EJson::Number)
 	{
-		return FString::SanitizeFloat(JsonVal->AsNumber());
+		const double NumberValue = JsonVal->AsNumber();
+		const FNumericProperty* NumericProperty = CastField<FNumericProperty>(Property);
+		if (NumericProperty && NumericProperty->IsInteger())
+		{
+			const int64 WholeValue = static_cast<int64>(NumberValue);
+			if (FMath::IsNearlyEqual(NumberValue, static_cast<double>(WholeValue)))
+			{
+				return FString::Printf(TEXT("%lld"), WholeValue);
+			}
+		}
+		return FString::SanitizeFloat(NumberValue);
 	}
 	if (JsonVal->Type == EJson::Boolean)
 	{
@@ -635,7 +645,7 @@ static void PopulateDataTableRowFromJson(const UScriptStruct* RowStruct, uint8* 
 			continue;
 		}
 
-		const FString ValueStr = JsonValueToImportText(Pair.Value);
+		const FString ValueStr = JsonValueToImportText(Pair.Value, Prop);
 		void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(RowData);
 		const TCHAR* ImportResult = Prop->ImportText_Direct(*ValueStr, ValuePtr, nullptr, PPF_None);
 		if (ImportResult)
@@ -1160,7 +1170,8 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleExportDataTableCsv(
 	AddDataTableMutationFields(Root, AssetPath, Options, false, false);
 	Root->SetStringField(TEXT("file_path"), FilePath);
 	Root->SetNumberField(TEXT("row_count"), DataTable->GetRowMap().Num());
-	Root->SetNumberField(TEXT("byte_count"), Csv.Len() * sizeof(TCHAR));
+	const FTCHARToUTF8 CsvUtf8(*Csv);
+	Root->SetNumberField(TEXT("byte_count"), CsvUtf8.Length());
 	if (Options.bDryRun)
 	{
 		Root->SetBoolField(TEXT("would_export"), true);
@@ -1175,6 +1186,11 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleExportDataTableCsv(
 	if (!FFileHelper::SaveStringToFile(Csv, *FilePath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to write CSV file '%s'"), *FilePath));
+	}
+	const int64 ActualByteCount = IFileManager::Get().FileSize(*FilePath);
+	if (ActualByteCount >= 0)
+	{
+		Root->SetNumberField(TEXT("byte_count"), static_cast<double>(ActualByteCount));
 	}
 
 	AddDataTableMutationFields(Root, AssetPath, Options, true, true);

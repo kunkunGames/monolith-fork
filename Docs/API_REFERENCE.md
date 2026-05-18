@@ -164,7 +164,7 @@ Inspect a `UDataTable` row struct without returning row data.
 
 ### `blueprint.update_data_table_row`
 
-Update an existing DataTable row with the same JSON-to-`ImportText` conversion used by `add_data_table_row`.
+Update an existing DataTable row with the same JSON-to-`ImportText` conversion used by `add_data_table_row`. JSON numbers targeting integer fields are emitted as integer text before import.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -190,7 +190,7 @@ Remove one row from a DataTable by row name.
 
 ### `blueprint.export_data_table_csv`
 
-Export a DataTable to CSV under the project directory.
+Export a DataTable to CSV under the project directory. `byte_count` reports the actual file size after writing; dry-run reports a UTF-8 byte estimate.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|

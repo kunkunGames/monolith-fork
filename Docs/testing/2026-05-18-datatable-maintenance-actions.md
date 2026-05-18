@@ -66,3 +66,5 @@ Result: PASS. Clean detached worktree run reported 0 blocking findings and 1 adv
 | `remove_data_table_row` dry-run returns `would_remove=true` and `changed=false` | PASS |
 | `export_data_table_csv` dry-run returns `would_export=true` without writing | PASS |
 | `export_data_table_csv` rejects filesystem paths outside the project directory | PASS |
+| JSON number import into an integer row field uses integer text and does not enter `skipped_fields` | PASS |
+| `export_data_table_csv` reports actual file size after write; dry-run reports a UTF-8 byte estimate | PASS |

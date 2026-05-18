@@ -2,6 +2,7 @@
 #include "Dom/JsonObject.h"
 #include "Engine/DataTable.h"
 #include "Misc/AutomationTest.h"
+#include "MonolithBlueprintDataTableTestRows.h"
 #include "MonolithBlueprintStructActions.h"
 #include "MonolithToolRegistry.h"
 #include "UObject/Package.h"
@@ -24,6 +25,36 @@ namespace
 			DataTable->AddRow(TEXT("RowA"), Row);
 		}
 		return DataTable;
+	}
+
+	UDataTable* GetOrCreateTypedDataTableMaintenanceTestAsset()
+	{
+		const FString PackageName = TEXT("/Game/Tests/Monolith/Blueprint/DT_DataTableMaintenanceTypedGuard");
+		UPackage* Package = CreatePackage(*PackageName);
+		UDataTable* DataTable = FindObject<UDataTable>(Package, TEXT("DT_DataTableMaintenanceTypedGuard"));
+		if (!DataTable)
+		{
+			DataTable = NewObject<UDataTable>(Package, TEXT("DT_DataTableMaintenanceTypedGuard"), RF_Public | RF_Standalone);
+		}
+		DataTable->RowStruct = FMonolithBlueprintDataTableTypedTestRow::StaticStruct();
+		return DataTable;
+	}
+
+	bool JsonStringArrayContains(const TSharedPtr<FJsonObject>& Object, const TCHAR* FieldName, const FString& Expected)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Object.IsValid() || !Object->TryGetArrayField(FieldName, Values) || !Values)
+		{
+			return false;
+		}
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			if (Value.IsValid() && Value->AsString() == Expected)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 }
 
@@ -111,6 +142,28 @@ bool FMonolithBlueprintDataTableMaintenanceDryRunTest::RunTest(const FString& Pa
 		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("export_data_table_csv"), Params);
 		TestTrue(TEXT("export_data_table_csv dry_run succeeds"), Result.bSuccess);
 		TestTrue(TEXT("export_data_table_csv dry_run reports would_export"), Result.Result.IsValid() && Result.Result->GetBoolField(TEXT("would_export")));
+	}
+
+	{
+		UDataTable* TypedDataTable = GetOrCreateTypedDataTableMaintenanceTestAsset();
+		TestNotNull(TEXT("typed test DataTable exists"), TypedDataTable);
+
+		TSharedPtr<FJsonObject> Values = MakeShared<FJsonObject>();
+		Values->SetNumberField(TEXT("Count"), 5);
+		Values->SetStringField(TEXT("Label"), TEXT("Five"));
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Tests/Monolith/Blueprint/DT_DataTableMaintenanceTypedGuard"));
+		Params->SetStringField(TEXT("row_name"), TEXT("RowWithInt"));
+		Params->SetObjectField(TEXT("values"), Values);
+		Params->SetBoolField(TEXT("create_if_missing"), true);
+		Params->SetBoolField(TEXT("dry_run"), true);
+
+		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("update_data_table_row"), Params);
+		TestTrue(TEXT("update_data_table_row accepts integer JSON number for int property"), Result.bSuccess);
+		TestEqual(TEXT("two fields are imported"), Result.Result.IsValid() ? Result.Result->GetIntegerField(TEXT("fields_set")) : 0, 2);
+		TestTrue(TEXT("Count appears in set_fields"), JsonStringArrayContains(Result.Result, TEXT("set_fields"), TEXT("Count")));
+		TestFalse(TEXT("no fields are skipped"), Result.Result.IsValid() && Result.Result->HasField(TEXT("skipped_fields")));
 	}
 
 	return true;
