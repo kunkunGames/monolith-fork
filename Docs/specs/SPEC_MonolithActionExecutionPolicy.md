@@ -53,9 +53,9 @@ Existing `RegisterAction(...)` call sites remain source-compatible. If no explic
 }
 ```
 
-The read-only default is a fast-path guard behavior, not a final authoritative claim that every legacy action is side-effect free. Explicit mutating policies are opt-in and can be declared at registration time or set for local testing through `monolith.set_action_execution_policy`.
+The read-only default is a fast-path guard behavior, not a final authoritative claim that every legacy action is side-effect free. Explicit policies are preferred and can be declared at registration time or set for local testing through `monolith.set_action_execution_policy`.
 
-For backward compatibility with existing production registrations, the registry also applies a conservative mutating-name inference before storing metadata. Action names with mutating verbs such as `create`, `add`, `set`, `remove`, `delete`, `import`, `spawn`, `move`, `rename`, `duplicate`, `save`, `compile`, `layout`, `merge`, `bake`, `pack`, `commit`, `discard`, `load`, `unload`, `pause`, `resume`, `clear`, `rebuild`, `repair`, `trigger`, `submit`, `download`, `cancel`, `mark`, `terminate`, `connect`, or `disconnect` default to `transaction_optional` unless the registration supplies an explicit policy. This keeps existing mutating actions under dirty-package tracking and a central transaction boundary without requiring a bulk per-action registration rewrite in this slice.
+For backward compatibility with existing production registrations, the registry applies conservative inference before storing metadata. Read-like names such as `get`, `list`, `find`, `search`, `read`, `validate`, `preview`, `describe`, `detect`, `analyze`, `compare`, `check`, `status`, `inspect`, `query`, and `resolve` keep the implicit `read_only` fast path. Every other implicit default legacy registration falls forward to `transaction_optional` unless the registration supplies an explicit policy. This keeps editor mutations such as `place_light`, `generate_floor_plan`, `edit_level_instance`, `connect_pins`, and future write verbs under dirty-package tracking and a central transaction boundary without requiring a bulk per-action registration rewrite in this slice.
 
 Supported policy ids:
 

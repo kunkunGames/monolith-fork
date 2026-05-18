@@ -240,6 +240,21 @@ bool FMonolithActionExecutionPolicyInferredMutationTest::RunTest(const FString& 
 		TEXT("disconnect_pins"),
 		TEXT("Graph disconnection inferred policy test action."),
 		FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult));
+	Registry.RegisterAction(
+		TEXT("policyinfer"),
+		TEXT("place_light"),
+		TEXT("Implicit mesh placement inferred policy test action."),
+		FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult));
+	Registry.RegisterAction(
+		TEXT("policyinfer"),
+		TEXT("generate_floor_plan"),
+		TEXT("Implicit floor-plan generation inferred policy test action."),
+		FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult));
+	Registry.RegisterAction(
+		TEXT("policyinfer"),
+		TEXT("edit_level_instance"),
+		TEXT("Implicit level-instance edit inferred policy test action."),
+		FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult));
 
 	FMonolithActionExecutionPolicy ReadPolicy = Registry.GetActionExecutionPolicy(TEXT("policyinfer"), TEXT("list_assets"));
 	TestEqual(TEXT("Read-like action remains read_only"), ReadPolicy.PolicyId, TEXT("read_only"));
@@ -262,6 +277,21 @@ bool FMonolithActionExecutionPolicyInferredMutationTest::RunTest(const FString& 
 	TestEqual(TEXT("Graph disconnection action infers transaction policy"), DisconnectPolicy.PolicyId, TEXT("transaction_optional"));
 	TestTrue(TEXT("Graph disconnection action tracks dirty packages"), DisconnectPolicy.bDirtyPackageTracking);
 	TestTrue(TEXT("Graph disconnection action wraps transaction"), DisconnectPolicy.bTransactionWrapping);
+
+	FMonolithActionExecutionPolicy PlacePolicy = Registry.GetActionExecutionPolicy(TEXT("policyinfer"), TEXT("place_light"));
+	TestEqual(TEXT("Implicit placement action infers transaction policy"), PlacePolicy.PolicyId, TEXT("transaction_optional"));
+	TestTrue(TEXT("Implicit placement action tracks dirty packages"), PlacePolicy.bDirtyPackageTracking);
+	TestTrue(TEXT("Implicit placement action wraps transaction"), PlacePolicy.bTransactionWrapping);
+
+	FMonolithActionExecutionPolicy GeneratePolicy = Registry.GetActionExecutionPolicy(TEXT("policyinfer"), TEXT("generate_floor_plan"));
+	TestEqual(TEXT("Implicit generation action infers transaction policy"), GeneratePolicy.PolicyId, TEXT("transaction_optional"));
+	TestTrue(TEXT("Implicit generation action tracks dirty packages"), GeneratePolicy.bDirtyPackageTracking);
+	TestTrue(TEXT("Implicit generation action wraps transaction"), GeneratePolicy.bTransactionWrapping);
+
+	FMonolithActionExecutionPolicy EditPolicy = Registry.GetActionExecutionPolicy(TEXT("policyinfer"), TEXT("edit_level_instance"));
+	TestEqual(TEXT("Implicit edit action infers transaction policy"), EditPolicy.PolicyId, TEXT("transaction_optional"));
+	TestTrue(TEXT("Implicit edit action tracks dirty packages"), EditPolicy.bDirtyPackageTracking);
+	TestTrue(TEXT("Implicit edit action wraps transaction"), EditPolicy.bTransactionWrapping);
 
 	Registry.UnregisterNamespace(TEXT("policyinfer"));
 	return true;

@@ -89,53 +89,6 @@ namespace
 		return StartsWithAnyActionVerb(Action, ReadVerbs);
 	}
 
-	bool IsMutatingActionName(const FString& Action)
-	{
-		static const TArray<FString> MutatingVerbs =
-		{
-			TEXT("create"),
-			TEXT("add"),
-			TEXT("set"),
-			TEXT("remove"),
-			TEXT("delete"),
-			TEXT("import"),
-			TEXT("spawn"),
-			TEXT("move"),
-			TEXT("rename"),
-			TEXT("duplicate"),
-			TEXT("save"),
-			TEXT("compile"),
-			TEXT("layout"),
-			TEXT("auto_arrange"),
-			TEXT("merge"),
-			TEXT("bake"),
-			TEXT("pack"),
-			TEXT("commit"),
-			TEXT("discard"),
-			TEXT("load"),
-			TEXT("unload"),
-			TEXT("pause"),
-			TEXT("resume"),
-			TEXT("clear"),
-			TEXT("rebuild"),
-			TEXT("repair"),
-			TEXT("trigger"),
-			TEXT("submit"),
-			TEXT("download"),
-			TEXT("cancel"),
-			TEXT("mark"),
-			TEXT("terminate"),
-			TEXT("connect"),
-			TEXT("disconnect"),
-			TEXT("link"),
-			TEXT("unlink"),
-			TEXT("apply"),
-			TEXT("assign"),
-			TEXT("copy")
-		};
-		return StartsWithAnyActionVerb(Action, MutatingVerbs);
-	}
-
 	FMonolithActionExecutionPolicy MakeInferredMutationPolicy()
 	{
 		FMonolithActionExecutionPolicy Policy;
@@ -327,12 +280,7 @@ FMonolithActionExecutionPolicy FMonolithToolRegistry::InferExecutionPolicy(
 		return RequestedPolicy;
 	}
 
-	if (IsMutatingActionName(Action))
-	{
-		return MakeInferredMutationPolicy();
-	}
-
-	return RequestedPolicy;
+	return MakeInferredMutationPolicy();
 }
 
 FMonolithToolRegistry& FMonolithToolRegistry::Get()
