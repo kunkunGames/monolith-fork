@@ -633,6 +633,8 @@ FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldQuestSM
 	// States: Inactive(0) -> Active(1) -> [Obj_0..N](2..N+1) -> Complete(N+2) / Failed(N+3)
 	TArray<FScaffoldStateDesc> States;
 	TArray<FScaffoldTransitionDesc> Transitions;
+	States.Reserve(Objectives.Num() + 4);
+	Transitions.Reserve(Objectives.Num() + 3);
 
 	int32 PosX = 0;
 	States.Add({ TEXT("Inactive"), PosX, 0 }); PosX += 300;       // 0
@@ -704,6 +706,8 @@ FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldInterac
 	// Build states at evenly spaced positions
 	TArray<FScaffoldStateDesc> States;
 	TArray<FScaffoldTransitionDesc> Transitions;
+	States.Reserve(StateNames.Num());
+	Transitions.Reserve(StateNames.Num() * 2);
 
 	int32 PosX = 300;
 	for (int32 i = 0; i < StateNames.Num(); ++i)
