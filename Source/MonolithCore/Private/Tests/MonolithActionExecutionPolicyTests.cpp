@@ -212,6 +212,41 @@ bool FMonolithActionExecutionPolicyDomainCatalogTest::RunTest(const FString& Par
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyInferredMutationTest,
+	"Monolith.Core.ActionExecutionPolicy.InferredMutationMetadata",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionExecutionPolicyInferredMutationTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	Registry.UnregisterNamespace(TEXT("policyinfer"));
+	Registry.RegisterAction(
+		TEXT("policyinfer"),
+		TEXT("list_assets"),
+		TEXT("Read-like inferred policy test action."),
+		FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult));
+	Registry.RegisterAction(
+		TEXT("policyinfer"),
+		TEXT("create_asset"),
+		TEXT("Mutating inferred policy test action."),
+		FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult));
+
+	FMonolithActionExecutionPolicy ReadPolicy = Registry.GetActionExecutionPolicy(TEXT("policyinfer"), TEXT("list_assets"));
+	TestEqual(TEXT("Read-like action remains read_only"), ReadPolicy.PolicyId, TEXT("read_only"));
+	TestFalse(TEXT("Read-like action does not track dirty packages"), ReadPolicy.bDirtyPackageTracking);
+	TestFalse(TEXT("Read-like action does not wrap transactions"), ReadPolicy.bTransactionWrapping);
+
+	FMonolithActionExecutionPolicy MutationPolicy = Registry.GetActionExecutionPolicy(TEXT("policyinfer"), TEXT("create_asset"));
+	TestEqual(TEXT("Mutating action infers transaction policy"), MutationPolicy.PolicyId, TEXT("transaction_optional"));
+	TestTrue(TEXT("Mutating action tracks dirty packages"), MutationPolicy.bDirtyPackageTracking);
+	TestTrue(TEXT("Mutating action wraps transaction"), MutationPolicy.bTransactionWrapping);
+	TestTrue(TEXT("Mutating action is enforced"), MutationPolicy.bEnforced);
+	TestTrue(TEXT("Mutating inferred policy is still defaulted"), MutationPolicy.bDefaulted);
+
+	Registry.UnregisterNamespace(TEXT("policyinfer"));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyAuditTest,
 	"Monolith.Core.ActionExecutionPolicy.AuditMetadata",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

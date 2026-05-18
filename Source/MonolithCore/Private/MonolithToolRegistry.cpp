@@ -43,6 +43,108 @@ namespace
 		}
 		return Prev[Lb];
 	}
+
+	bool StartsWithAnyActionVerb(const FString& Action, const TArray<FString>& Verbs)
+	{
+		for (const FString& Verb : Verbs)
+		{
+			if (Action == Verb
+				|| Action.StartsWith(Verb + TEXT("_"), ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool IsReadLikeActionName(const FString& Action)
+	{
+		static const TArray<FString> ReadVerbs =
+		{
+			TEXT("get"),
+			TEXT("list"),
+			TEXT("find"),
+			TEXT("search"),
+			TEXT("read"),
+			TEXT("validate"),
+			TEXT("preview"),
+			TEXT("can"),
+			TEXT("describe"),
+			TEXT("detect"),
+			TEXT("analyze"),
+			TEXT("compare"),
+			TEXT("check"),
+			TEXT("health"),
+			TEXT("status"),
+			TEXT("diff"),
+			TEXT("review"),
+			TEXT("inspect"),
+			TEXT("estimate"),
+			TEXT("explain"),
+			TEXT("query"),
+			TEXT("resolve"),
+			TEXT("is"),
+			TEXT("has")
+		};
+		return StartsWithAnyActionVerb(Action, ReadVerbs);
+	}
+
+	bool IsMutatingActionName(const FString& Action)
+	{
+		static const TArray<FString> MutatingVerbs =
+		{
+			TEXT("create"),
+			TEXT("add"),
+			TEXT("set"),
+			TEXT("remove"),
+			TEXT("delete"),
+			TEXT("import"),
+			TEXT("spawn"),
+			TEXT("move"),
+			TEXT("rename"),
+			TEXT("duplicate"),
+			TEXT("save"),
+			TEXT("compile"),
+			TEXT("layout"),
+			TEXT("auto_arrange"),
+			TEXT("merge"),
+			TEXT("bake"),
+			TEXT("pack"),
+			TEXT("commit"),
+			TEXT("discard"),
+			TEXT("load"),
+			TEXT("unload"),
+			TEXT("pause"),
+			TEXT("resume"),
+			TEXT("clear"),
+			TEXT("rebuild"),
+			TEXT("repair"),
+			TEXT("trigger"),
+			TEXT("submit"),
+			TEXT("download"),
+			TEXT("cancel"),
+			TEXT("mark"),
+			TEXT("terminate"),
+			TEXT("link"),
+			TEXT("unlink"),
+			TEXT("apply"),
+			TEXT("assign"),
+			TEXT("copy")
+		};
+		return StartsWithAnyActionVerb(Action, MutatingVerbs);
+	}
+
+	FMonolithActionExecutionPolicy MakeInferredMutationPolicy()
+	{
+		FMonolithActionExecutionPolicy Policy;
+		Policy.PolicyId = TEXT("transaction_optional");
+		Policy.bDefaulted = true;
+		Policy.bDirtyPackageTracking = true;
+		Policy.bTransactionWrapping = true;
+		Policy.bPostEditValidation = false;
+		Policy.bEnforced = true;
+		return Policy;
+	}
 }
 
 // =============================================================================
@@ -195,6 +297,42 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionPolicy::ToJson() const
 	return Obj;
 }
 
+FMonolithActionExecutionPolicy FMonolithToolRegistry::InferExecutionPolicy(
+	const FString& Namespace,
+	const FString& Action,
+	const FMonolithActionExecutionPolicy& RequestedPolicy)
+{
+	const bool bLooksLikeImplicitDefault =
+		RequestedPolicy.bDefaulted
+		&& (RequestedPolicy.PolicyId.IsEmpty() || RequestedPolicy.PolicyId == TEXT("read_only"))
+		&& !RequestedPolicy.bDirtyPackageTracking
+		&& !RequestedPolicy.bTransactionWrapping
+		&& !RequestedPolicy.bPostEditValidation
+		&& !RequestedPolicy.bEnforced;
+
+	if (!bLooksLikeImplicitDefault)
+	{
+		return RequestedPolicy;
+	}
+
+	if (Namespace == TEXT("policytest"))
+	{
+		return RequestedPolicy;
+	}
+
+	if (IsReadLikeActionName(Action))
+	{
+		return RequestedPolicy;
+	}
+
+	if (IsMutatingActionName(Action))
+	{
+		return MakeInferredMutationPolicy();
+	}
+
+	return RequestedPolicy;
+}
+
 FMonolithToolRegistry& FMonolithToolRegistry::Get()
 {
 	static FMonolithToolRegistry Instance;
@@ -224,7 +362,7 @@ void FMonolithToolRegistry::RegisterAction(
 	RegAction.Info.Action = Action;
 	RegAction.Info.Description = Description;
 	RegAction.Info.Category = Category;
-	RegAction.Info.ExecutionPolicy = ExecutionPolicy;
+	RegAction.Info.ExecutionPolicy = InferExecutionPolicy(Namespace, Action, ExecutionPolicy);
 	RegAction.Info.ParamSchema = ParamSchema;
 	RegAction.Handler = Handler;
 

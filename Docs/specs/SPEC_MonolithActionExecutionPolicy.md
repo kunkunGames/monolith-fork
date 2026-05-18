@@ -40,7 +40,7 @@ Monolith already routes every action through a central registry and audit guard,
 | `post_edit_validation` | bool | Whether the central dispatch scope should run a post-handler validator before returning success. |
 | `enforced` | bool | `true` only for policies that the central guard actively applies. |
 
-Existing `RegisterAction(...)` call sites remain source-compatible. If no explicit policy is provided, the registry assigns the default metadata:
+Existing `RegisterAction(...)` call sites remain source-compatible. If no explicit policy is provided, the registry assigns a default policy. Read-like action names stay on the read-only fast path:
 
 ```json
 {
@@ -53,7 +53,9 @@ Existing `RegisterAction(...)` call sites remain source-compatible. If no explic
 }
 ```
 
-The default is a fast-path guard behavior, not a final authoritative claim that every legacy action is side-effect free. Explicit mutating policies are opt-in and can be declared at registration time or set for local testing through `monolith.set_action_execution_policy`.
+The read-only default is a fast-path guard behavior, not a final authoritative claim that every legacy action is side-effect free. Explicit mutating policies are opt-in and can be declared at registration time or set for local testing through `monolith.set_action_execution_policy`.
+
+For backward compatibility with existing production registrations, the registry also applies a conservative mutating-name inference before storing metadata. Action names with mutating verbs such as `create`, `add`, `set`, `remove`, `delete`, `import`, `spawn`, `move`, `rename`, `duplicate`, `save`, `compile`, `layout`, `merge`, `bake`, `pack`, `commit`, `discard`, `load`, `unload`, `pause`, `resume`, `clear`, `rebuild`, `repair`, `trigger`, `submit`, `download`, `cancel`, `mark`, or `terminate` default to `transaction_optional` unless the registration supplies an explicit policy. This keeps existing mutating actions under dirty-package tracking and a central transaction boundary without requiring a bulk per-action registration rewrite in this slice.
 
 Supported policy ids:
 

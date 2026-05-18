@@ -191,5 +191,7 @@ private:
 		return Namespace + TEXT(".") + Action;
 	}
 
+	static FMonolithActionExecutionPolicy InferExecutionPolicy(const FString& Namespace, const FString& Action, const FMonolithActionExecutionPolicy& RequestedPolicy);
+
 	mutable FCriticalSection RegistryLock;
 };
