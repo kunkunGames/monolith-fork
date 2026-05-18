@@ -136,9 +136,10 @@ useful global "where should I be careful?" view.
   `detect_changes`, and optional `find_unused` into an advisory `decision`,
   `checks[]`, and `findings[]`. The offline CLI exposes the same read-only
   contract so closed-editor review can run the same gate.
-- **RX-6 — DONE (editor).** `context.bridge_asset_symbols` provides the
-  read-only asset<->source heuristic bridge; offline cross-DB parity remains
-  deferred.
+- **RX-6 — DONE (editor + offline).** `context.bridge_asset_symbols` provides
+  the read-only asset<->source heuristic bridge. Offline `monolith_query
+  context bridge_asset_symbols` uses ProjectIndex + EngineSource DBs read-only
+  and preserves the same confidence/reasons contract without mutation.
 - Verification record: `Docs/testing/2026-05-17-crg-review-extensions.md`.
 
 ## Non-Goals (correctly excluded — do not spec as work)
@@ -321,7 +322,7 @@ useful global "where should I be careful?" view.
   TESTED_BY edges, Monolith should surface cache-backed hotspot facts and
   advisory questions, not pretend it has CRG's Python/community semantics.
 
-### Cross-DB bridge (RX-6, P2 — editor-only, read-only)
+### Cross-DB bridge (RX-6, P2 — editor + offline, read-only)
 
 - Add `context.bridge_asset_symbols` as the editor RX-6 bridge because the
   `context` namespace already owns both ProjectIndex and EngineSource access.
@@ -341,6 +342,13 @@ useful global "where should I be careful?" view.
   (`high|medium|low`), `reasons[]`, an `asset` object when available, and a
   `symbol` object when available. The action must make uncertainty explicit;
   a lexical fallback cannot masquerade as a guaranteed parent-class relation.
+- Offline parity: `monolith_query context bridge_asset_symbols` mirrors the
+  editor contract over `ProjectIndex.db` + `EngineSource.db` from `--db` (or
+  explicit `--project-db` / `--source-db`), opens both read-only, never writes
+  CRG cache/snapshots/FTS tables, and never shells out. Asset-seeded and
+  symbol-seeded flows must return the same `input`, `limits`, `links[]`,
+  `warnings[]`, `count`, `truncated`, `lexical_only=true`, and `next_actions`
+  shape as the editor action.
 
 ### UE-domain sensitivity risk factor (RX-7, P1)
 
@@ -389,10 +397,10 @@ useful global "where should I be careful?" view.
   REQ-003 + `health` producing a GO/REVIEW/NO-GO verdict.
 - [REQ-006] Preserve all existing direct/seed action output shapes and
   offline behavior (additive only).
-- [REQ-007] Add an editor-only read-only `context.bridge_asset_symbols`
+- [REQ-007] Add a read-only `context.bridge_asset_symbols`
   cross-DB asset<->symbol bridge with explicit confidence/reasons, graceful
-  unavailable/indexing warnings, and no index/cache/VCS mutation. Offline
-  parity is deferred.
+  unavailable/indexing warnings, and no index/cache/VCS mutation. Offline CLI
+  parity uses existing DB files only and remains read-only.
 - [REQ-008] Add one decomposed UE-domain sensitivity factor to the shared
   risk helpers (project + source + `crg_node_metrics` rebuild + offline),
   bump `crg_meta.scoring_version` 2->3, rebuild cache for parity; bounded,
@@ -428,6 +436,8 @@ useful global "where should I be careful?" view.
   EngineSource symbol search; expose heuristic confidence.
 - [TSK-P2-003] Implement `*.review_hotspots` with capped fan/risk/LOC
   queries and advisory question output; register editor + offline actions.
+- [TSK-P2-004] Implement offline `monolith_query context bridge_asset_symbols`
+  over `ProjectIndex.db` + `EngineSource.db` with the editor RX-6 output shape.
 - [TSK-001..n test tasks] see Test Registry; extend existing
   `Monolith.IndexGuard.*` temp-DB fixtures (project + source).
 
@@ -473,6 +483,9 @@ useful global "where should I be careful?" view.
 - [TEST-011] bridge_asset_symbols: asset-seeded and symbol-seeded smoke tests
   return bounded `links[]` with confidence/reasons; missing index/search
   conditions degrade to `warnings[]` instead of crashing; no write path exists.
+- [TEST-011b] offline bridge_asset_symbols: copied/live read-only DB smoke
+  covers asset-seeded `/Game/Maps/Interactable/BP_Wave` and symbol-seeded
+  `Wave`, with non-empty links and explicit confidence/reasons.
 
 ## Traceability
 
@@ -482,7 +495,7 @@ useful global "where should I be careful?" view.
 - REQ-004 -> TSK-P1-002 -> TEST-006
 - REQ-005 -> TSK-P2-001 -> TEST-007
 - REQ-006 -> all TSK -> TEST-008
-- REQ-007 -> TSK-P2-002 -> TEST-011
+- REQ-007 -> TSK-P2-002, TSK-P2-004 -> TEST-011, TEST-011b
 - REQ-008 -> TSK-P1-003 -> TEST-009
 - REQ-009 -> TSK-P2-003 -> TEST-010
 - P2 items are outside P0/P1 acceptance until P0/P1 land and latency/value
