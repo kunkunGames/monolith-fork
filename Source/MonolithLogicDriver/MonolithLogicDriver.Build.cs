@@ -22,8 +22,10 @@ public class MonolithLogicDriver : ModuleRules
 				{
 					bHasLogicDriver = Directory.Exists(
 						Path.Combine(ProjectPluginsDir, "SMSystem"))
+						|| Directory.Exists(
+							Path.Combine(ProjectPluginsDir, "LogicDriver"))
 						|| Directory.GetDirectories(
-							ProjectPluginsDir, "LogicDriver*",
+							ProjectPluginsDir, "LogicDriver_*",
 							SearchOption.TopDirectoryOnly).Length > 0;
 				}
 			}
@@ -35,9 +37,15 @@ public class MonolithLogicDriver : ModuleRules
 				string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
 				if (Directory.Exists(MarketplaceDir))
 				{
-					bHasLogicDriver = Directory.GetDirectories(
-						MarketplaceDir, "LogicDriver*",
-						SearchOption.TopDirectoryOnly).Length > 0;
+					bHasLogicDriver = Directory.Exists(
+						Path.Combine(MarketplaceDir, "LogicDriver"));
+
+					if (!bHasLogicDriver)
+					{
+						bHasLogicDriver = Directory.GetDirectories(
+							MarketplaceDir, "LogicDriver_*",
+							SearchOption.TopDirectoryOnly).Length > 0;
+					}
 				}
 
 				// 3. Check Engine Plugins/ root

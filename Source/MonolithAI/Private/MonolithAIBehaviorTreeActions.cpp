@@ -3772,6 +3772,8 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleBuildBTFromSpec(cons
 	if (Ctx.Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Ctx.Warnings.Num());
+
 		for (const FString& W : Ctx.Warnings)
 		{
 			WarnArr.Add(MakeShared<FJsonValueString>(W));
@@ -3934,6 +3936,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleImportBTSpec(const T
 	if (Ctx.Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Ctx.Warnings.Num());
 		for (const FString& W : Ctx.Warnings)
 		{
 			WarnArr.Add(MakeShared<FJsonValueString>(W));

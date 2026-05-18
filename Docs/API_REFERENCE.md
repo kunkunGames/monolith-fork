@@ -238,6 +238,13 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
 Niagara VFX system editing — emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types. **109 actions** (108 baseline + 1 layout).
 
 > For full param schemas, call `monolith_discover("niagara")` at runtime.
+>
+> Emitter selector parameters accept GUID, exact or case-insensitive display name, unique instance name, or a `list_emitters` numeric index string such as `"0"`. `auto_layout` follows the same selector contract as the core Niagara emitter actions.
+
+`list_systems`, `list_module_scripts`, and `search_dynamic_inputs` accept a numeric
+`limit`. Missing values keep their existing defaults (`50`, `50`, and `20`
+respectively), present non-numeric values return an invalid-param error, and
+numeric values are clamped to the inclusive range `[1, 1000]`.
 
 **Action categories:**
 
@@ -313,7 +320,7 @@ Render a Niagara system or material in a preview scene and screenshot it.
 
 ### `editor.capture_sequence_frames`
 
-Capture multiple frames at specified timestamps. Same params as `capture_scene_preview` plus `timestamps[]`, `output_dir`, `filename_prefix`, `persistent`.
+Capture multiple frames at specified timestamps. Same params as `capture_scene_preview` plus `timestamps[]` (Max: 1000), `output_dir`, `filename_prefix`, `persistent`.
 
 ### `editor.import_texture`
 

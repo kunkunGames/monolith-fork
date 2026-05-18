@@ -5732,6 +5732,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetSystemDiagnostics(const 
 // ============================================================================
 // list_module_scripts — Search available Niagara module scripts via Asset Registry
 // ============================================================================
+int32 FMonolithNiagaraActions::ClampNiagaraQueryLimit(int32 Limit, int32 Max)
+{
+	return FMath::Clamp(Limit, 1, Max);
+}
+
 FMonolithActionResult FMonolithNiagaraActions::HandleListModuleScripts(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Search = TEXT("");
@@ -5739,8 +5744,16 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListModuleScripts(const TSh
 	FString UsageFilter = TEXT("");
 	if (Params->TryGetStringField(TEXT("usage"), UsageFilter)) UsageFilter = UsageFilter.ToLower();
 	int32 Limit = 50;
-	double Limit_Double = Limit;
-	if (Params->TryGetNumberField(TEXT("limit"), Limit_Double)) Limit = static_cast<int32>(Limit_Double);
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = ClampNiagaraQueryLimit(Limit);
 	bool bIncludeMetadata = Params->HasField(TEXT("include_metadata")) && Params->GetBoolField(TEXT("include_metadata"));
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -7638,8 +7651,16 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchDynamicInputs(const T
 	FString InputType = TEXT("");
 	if (Params->TryGetStringField(TEXT("input_type"), InputType)) InputType = InputType.ToLower();
 	int32 Limit = 20;
-	double Limit_Double = Limit;
-	if (Params->TryGetNumberField(TEXT("limit"), Limit_Double)) Limit = static_cast<int32>(Limit_Double);
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = ClampNiagaraQueryLimit(Limit);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -12838,8 +12859,16 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListSystems(const TSharedPt
 	FString PathFilter = TEXT("");
 	Params->TryGetStringField(TEXT("path"), PathFilter);
 	int32 Limit = 50;
-	double Limit_Double = Limit;
-	if (Params->TryGetNumberField(TEXT("limit"), Limit_Double)) Limit = static_cast<int32>(Limit_Double);
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = ClampNiagaraQueryLimit(Limit);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
