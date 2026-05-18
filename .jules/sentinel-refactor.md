@@ -62,3 +62,9 @@
 **Learning:** Monolith MCP actions should always validate optional JSON fields properly using `TryGetStringField` instead of blindly assuming their existence, even when a schema defines them as optional, because schema validation alone does not populate missing optional JSON fields before handler execution.
 **Reuse rule:** Future handlers should prefer using `TryGetStringField` or checking `HasField` prior to accessing optional JSON values.
 **Avoid:** Avoid using `GetStringField` directly on `Params` JSON objects unless the parameter has been strictly guaranteed to exist through prior programmatic validation (like `RequireStringParam`).
+
+## 2026-05-14 - Normalize parameter extraction across MonolithNiagara
+**Pattern:** Repeated missing-param checks like `HasField(...) ? GetNumberField(...) : Default` and `HasField(...) ? GetStringField(...) : Default` in `MonolithNiagaraActions.cpp`.
+**Learning:** `TryGetNumberField` and `TryGetStringField` safely extract numeric and string parameters, avoiding ad-hoc type casts directly inside ternary statements and making the error/default handling clearer and safer against missing fields.
+**Reuse rule:** Use `TryGetNumberField` and `TryGetStringField` for extracting optional numbers/strings into an existing variable with a fallback default.
+**Avoid:** Duplicated `if HasField then GetNumberField` or `HasField ? GetNumberField : Default` blocks.
