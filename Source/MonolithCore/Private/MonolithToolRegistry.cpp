@@ -125,6 +125,8 @@ namespace
 			TEXT("cancel"),
 			TEXT("mark"),
 			TEXT("terminate"),
+			TEXT("connect"),
+			TEXT("disconnect"),
 			TEXT("link"),
 			TEXT("unlink"),
 			TEXT("apply"),

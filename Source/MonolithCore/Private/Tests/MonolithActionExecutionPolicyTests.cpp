@@ -230,6 +230,16 @@ bool FMonolithActionExecutionPolicyInferredMutationTest::RunTest(const FString& 
 		TEXT("create_asset"),
 		TEXT("Mutating inferred policy test action."),
 		FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult));
+	Registry.RegisterAction(
+		TEXT("policyinfer"),
+		TEXT("connect_pins"),
+		TEXT("Graph connection inferred policy test action."),
+		FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult));
+	Registry.RegisterAction(
+		TEXT("policyinfer"),
+		TEXT("disconnect_pins"),
+		TEXT("Graph disconnection inferred policy test action."),
+		FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult));
 
 	FMonolithActionExecutionPolicy ReadPolicy = Registry.GetActionExecutionPolicy(TEXT("policyinfer"), TEXT("list_assets"));
 	TestEqual(TEXT("Read-like action remains read_only"), ReadPolicy.PolicyId, TEXT("read_only"));
@@ -242,6 +252,16 @@ bool FMonolithActionExecutionPolicyInferredMutationTest::RunTest(const FString& 
 	TestTrue(TEXT("Mutating action wraps transaction"), MutationPolicy.bTransactionWrapping);
 	TestTrue(TEXT("Mutating action is enforced"), MutationPolicy.bEnforced);
 	TestTrue(TEXT("Mutating inferred policy is still defaulted"), MutationPolicy.bDefaulted);
+
+	FMonolithActionExecutionPolicy ConnectPolicy = Registry.GetActionExecutionPolicy(TEXT("policyinfer"), TEXT("connect_pins"));
+	TestEqual(TEXT("Graph connection action infers transaction policy"), ConnectPolicy.PolicyId, TEXT("transaction_optional"));
+	TestTrue(TEXT("Graph connection action tracks dirty packages"), ConnectPolicy.bDirtyPackageTracking);
+	TestTrue(TEXT("Graph connection action wraps transaction"), ConnectPolicy.bTransactionWrapping);
+
+	FMonolithActionExecutionPolicy DisconnectPolicy = Registry.GetActionExecutionPolicy(TEXT("policyinfer"), TEXT("disconnect_pins"));
+	TestEqual(TEXT("Graph disconnection action infers transaction policy"), DisconnectPolicy.PolicyId, TEXT("transaction_optional"));
+	TestTrue(TEXT("Graph disconnection action tracks dirty packages"), DisconnectPolicy.bDirtyPackageTracking);
+	TestTrue(TEXT("Graph disconnection action wraps transaction"), DisconnectPolicy.bTransactionWrapping);
 
 	Registry.UnregisterNamespace(TEXT("policyinfer"));
 	return true;
