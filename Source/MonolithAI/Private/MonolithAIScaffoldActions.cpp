@@ -778,6 +778,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleHelloWorldAI(const TShar
 	Result->SetObjectField(TEXT("assets"), Paths);
 
 	TArray<TSharedPtr<FJsonValue>> AssetArr;
+	AssetArr.Reserve(CreatedAssets.Num());
 	for (const FString& A : CreatedAssets)
 	{
 		AssetArr.Add(MakeShared<FJsonValueString>(A));
@@ -788,6 +789,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleHelloWorldAI(const TShar
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings)
 		{
 			WarnArr.Add(MakeShared<FJsonValueString>(W));
