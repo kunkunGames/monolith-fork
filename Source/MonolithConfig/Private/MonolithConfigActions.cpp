@@ -607,6 +607,12 @@ FMonolithActionResult FMonolithConfigActions::SearchConfig(const TSharedPtr<FJso
 	ConfigDirs.Add(FPaths::EngineConfigDir());
 	ConfigDirs.Add(FPaths::ProjectConfigDir());
 
+	FString SavedConfigDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Config"), FPlatformProperties::IniPlatformName());
+	if (FPaths::DirectoryExists(SavedConfigDir))
+	{
+		ConfigDirs.Add(SavedConfigDir);
+	}
+
 	TArray<TSharedPtr<FJsonValue>> MatchesArray;
 	int32 MaxResults = 100;
 
