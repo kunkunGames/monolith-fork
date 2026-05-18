@@ -24,6 +24,7 @@
 | `UMonolithUpdateSubsystem` | UEditorSubsystem. GitHub Releases auto-updater. Shows dialog window with full release notes on update detection. Downloads zip, cross-platform extraction (PowerShell on Windows, unzip on Mac/Linux). Stages to Saved/Monolith/Staging/, hot-swaps on editor exit via FCoreDelegates::OnPreExit. Current version always from compiled MONOLITH_VERSION (version.json only stores pending/staging state). Release zips include pre-compiled DLLs. |
 | `FMonolithActionExecutionGuard` | Central action-dispatch scope and audit owner. First milestone records duration and dirty package deltas without raw payload logging or rollback claims. The next planned slice is the bounded ToolCall ledger in [SPEC_MonolithToolCallLedger.md](SPEC_MonolithToolCallLedger.md). |
 | `FMonolithToolResultUtils` | MCP `tools/call` result-envelope helper. Preserves legacy text JSON and adds settings-gated `structuredContent` / `_meta` fields when `bEnableStructuredToolResults=true`. First slice contract is documented in [SPEC_MonolithStructuredToolResults.md](SPEC_MonolithStructuredToolResults.md). |
+| `FMonolithMcpSessionTracker` | Bounded, in-memory MCP session observer for redacted `MCP-Session-Id` diagnostics. First slice contract is documented in [SPEC_MonolithMcpSessionMode.md](SPEC_MonolithMcpSessionMode.md). |
 | `FMonolithCoreTools` | Registers 4 core actions |
 
 ### Helpers
@@ -60,3 +61,9 @@ The first implementation exposes only explicit Monolith providers, does not read
 `bEnableStructuredToolResults` is the default-off setting for MCP `structuredContent` output on `tools/call` responses. The accepted first slice is documented in [SPEC_MonolithStructuredToolResults.md](SPEC_MonolithStructuredToolResults.md).
 
 The implementation preserves the legacy `content[]` text JSON response for compatibility while adding structured fields only when configured. `monolith.get_mcp_server_status` reports the feature as `active_structured_content` when the setting is enabled because result shaping is evaluated per `tools/call`.
+
+### MCP Session Mode
+
+`bEnableMcpSessionMode` is the default-off setting for MCP session/request observation, progress, and cancellation. The accepted first slice is documented in [SPEC_MonolithMcpSessionMode.md](SPEC_MonolithMcpSessionMode.md).
+
+The first implementation stays process-local and redacted: it observes session headers, protocol version, method names, and tool names, but does not store raw session ids, request params, result payloads, auth headers, cookies, bearer tokens, or API keys. Progress notifications and in-flight cancellation remain follow-up work.
