@@ -68,7 +68,7 @@
 
 **Derived CRG Projection Cache:** `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta`, `crg_snapshots`.
 These tables are rebuildable projections over `assets` and `dependencies`, not
-source-of-truth tables. `project.repair_crg_cache execute=true` recreates the
+source-of-truth tables. `project.repair_crg_cache execute=true` purges stale/orphan metrics, recreates the
 projection, and `project.risk_score` reads `crg_node_metrics` first before
 falling back to query-time scoring. Rebuilt projection metrics use
 `crg_meta.scoring_version=3` for the UE-domain sensitivity factor. `crg_snapshots`

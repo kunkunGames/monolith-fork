@@ -62,15 +62,16 @@ seed 기반 액션을 넣었다. 하지만 리뷰어가 실제로 시작하는 �
   regression.
 - Offline `monolith_query.exe`: seed/review actions now include CRG cache read
   parity, scoring v3 sensitivity, `detect_changes`, `find_unused`, and
-  `review_hotspots`. Offline remains read-only for the CRG cache; only
-  `repair_fts --execute` writes.
+  `review_hotspots`. Offline remains read-only by default; only explicit
+  `repair_fts --execute`, `repair_crg_cache --execute`, and `snapshot
+  --execute` mutate derived/offline-maintenance tables.
 
 ## Prioritized High-ROI Backlog (ROI = reviewer value / (cost x regression risk))
 
 | ID | Pattern | CRG origin | Monolith feasibility | Tier |
 |---|---|---|---|---|
 | RX-1 | `detect_changes` (diff/changelist -> mapped entities -> risk + impact + test-gap + priorities) | `changes.py`, `tools/review.py` | `symbols.line_start/end`+`files.path`; `assets.saved_hash`/`package_path`; reuses existing risk + impact helpers | **P0** |
-| RX-2 | Offline CRG cache **read** parity | editor already does it; cache-spec `REQ-006` allows offline read-only | mirror `GetCachedRiskForSymbol`/`TryCachedAssetRisk` + `crg:*` health into `monolith_query.cpp` | **P0** |
+| RX-2 | Offline CRG cache parity | editor already does cached risk + repair; cache-spec `REQ-006` now allows execute-gated offline rebuild | mirror `GetCachedRiskForSymbol`/`TryCachedAssetRisk` + `crg:*` health into `monolith_query.cpp`, plus `repair_crg_cache --execute` over derived `crg_*` rows | **P0** |
 | RX-3 | `find_unused` (dead asset / dead symbol, advisory) | `refactor.py:find_dead_code` | 0-fan-in over `dependencies`/`"references"` + entry/macro/reflection exclusions | **P1** |
 | RX-4 | `snapshot` + `diff_snapshots` (index drift) | `graph_diff.py` | over existing `crg_nodes`/`crg_edges` + `crg_meta.built_at`; nav `TSK-P1-002` | **P1** |
 | RX-5 | `pre_merge_check` composed GO/NO-GO | `prompts.py:pre_merge_check` | pure composition of RX-1 + RX-3 + `health` | **P2** (after RX-1, RX-3) |
@@ -99,7 +100,9 @@ useful global "where should I be careful?" view.
   `try_cached_risk` + `append_crg_health_checks`; `risk_score`
   (source+project) reads `crg_node_metrics` (`scoring_version=3` after
   rebuild, `cache.status=hit`) with query-time fallback; `health` emits `crg:*`
-  checks. Built + live-verified. Read-only; offline never writes the cache.
+  checks. `repair_crg_cache --execute` rebuilds only derived `crg_*` rows from
+  existing indexed source/project tables; dry-run reports the plan/counts and
+  stays read-only. Built + live-verified.
 - **RX-1 — DONE (offline).** `source.detect_changes` /
   `project.detect_changes` in `monolith_query.cpp`: changelist → symbols/
   assets, reuses RX-2 cached risk + fallback, bounded depth-1 impact,
@@ -236,8 +239,10 @@ useful global "where should I be careful?" view.
   checks the editor `ComputeHealth`/`Health` emit (table/index presence,
   node/edge/metric parity, orphan CRG edges, `crg_meta.cache_version`,
   `crg_meta.scoring_version`). Missing cache = informational, not error.
-- offline `repair_crg_cache` (write) remains out of scope (cache-spec
-  non-goal); this item is read-only parity only.
+- offline `repair_crg_cache` writer parity is now accepted as the next
+  implemented execute-gated follow-up: `monolith_query.exe <source|project>
+  repair_crg_cache --execute` may rebuild the derived `crg_*` cache without
+  an editor, while dry-run stays read-only and reports the plan/counts.
 
 ### `source.find_unused` / `project.find_unused` (RX-3, P1)
 
@@ -372,7 +377,8 @@ useful global "where should I be careful?" view.
 - [REQ-002] Offline `monolith_query.exe` `risk_score` reads
   `crg_node_metrics` (scoring_version=3 after rebuild/`cache.status=hit`) with safe
   query-time fallback; offline `health` emits the editor `crg:*` checks.
-  Read-only; no offline cache writer.
+  `risk_score` and `health` stay read-only; offline `repair_crg_cache` is an
+  explicit `--execute` writer for derived `crg_*` rows only.
 - [REQ-003] Add `project.find_unused` + `source.find_unused` advisory
   dead-asset / dead-symbol detection with `confidence` + `reasons[]` and
   UE reflection/automation/entry exclusions.
@@ -406,6 +412,8 @@ useful global "where should I be careful?" view.
   both namespaces and in `monolith_query.cpp`.
 - [TSK-P0-003] Wire offline `risk_score` + `health` to read the CRG
   projection cache (mirror editor helpers; read-only).
+- [TSK-P0-004] Wire offline `repair_crg_cache --execute` to rebuild derived
+  source/project `crg_*` projection rows without editor startup.
 - [TSK-P1-001] Implement `*.find_unused` advisory detection with confidence
   and UE exclusion rules.
 - [TSK-P1-002] Implement `crg_snapshots` derived table + `*.snapshot` /
@@ -436,6 +444,9 @@ useful global "where should I be careful?" view.
   without cache, query-time scoring stays v3 with `cache.status=miss` or
   `cache.status=unavailable`; `health` lists `crg:*` checks and expects
   `crg_meta.scoring_version=3`.
+- [TEST-003b] offline repair parity: copied EngineSource/ProjectIndex DBs
+  support dry-run `repair_crg_cache`, execute-gated rebuild, CRG health
+  parity, and cached `risk_score` hits without mutating live DBs.
 - [TEST-004] find_unused (source): a symbol with 0 inbound refs and no UE
   reflection markers is listed with confidence/reasons; a UFUNCTION/override
   /macro symbol is excluded or low-confidence.

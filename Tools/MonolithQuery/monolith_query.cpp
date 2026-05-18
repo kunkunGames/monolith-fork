@@ -447,6 +447,397 @@ static bool ensure_snapshot_table(Database& db, std::string& error) {
 
 static std::string snapshot_edge_key(const Row& row);
 
+static const char* kCrgProjectionDdl[] = {
+    "CREATE TABLE IF NOT EXISTS crg_nodes ("
+    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "domain TEXT NOT NULL,"
+    "native_table TEXT NOT NULL,"
+    "native_id INTEGER NOT NULL,"
+    "stable_key TEXT NOT NULL,"
+    "kind TEXT,"
+    "name TEXT,"
+    "path TEXT,"
+    "module TEXT,"
+    "source_revision TEXT,"
+    "extra TEXT,"
+    "updated_at INTEGER NOT NULL,"
+    "UNIQUE(domain, native_table, native_id),"
+    "UNIQUE(domain, stable_key)"
+    ");",
+    "CREATE TABLE IF NOT EXISTS crg_edges ("
+    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "domain TEXT NOT NULL,"
+    "source_node_id INTEGER NOT NULL,"
+    "target_node_id INTEGER NOT NULL,"
+    "edge_kind TEXT NOT NULL,"
+    "edge_subkind TEXT,"
+    "weight REAL NOT NULL DEFAULT 1.0,"
+    "native_table TEXT,"
+    "native_id INTEGER,"
+    "updated_at INTEGER NOT NULL"
+    ");",
+    "CREATE TABLE IF NOT EXISTS crg_node_metrics ("
+    "node_id INTEGER PRIMARY KEY,"
+    "fan_in INTEGER NOT NULL DEFAULT 0,"
+    "fan_out INTEGER NOT NULL DEFAULT 0,"
+    "hard_in INTEGER NOT NULL DEFAULT 0,"
+    "descendants INTEGER NOT NULL DEFAULT 0,"
+    "risk_score REAL NOT NULL DEFAULT 0.0,"
+    "risk_tier TEXT NOT NULL DEFAULT 'low',"
+    "reasons_json TEXT NOT NULL DEFAULT '[]',"
+    "raw_counts_json TEXT NOT NULL DEFAULT '{}',"
+    "scoring_version TEXT NOT NULL,"
+    "computed_at INTEGER NOT NULL"
+    ");",
+    "CREATE TABLE IF NOT EXISTS crg_meta ("
+    "key TEXT PRIMARY KEY,"
+    "value TEXT NOT NULL"
+    ");",
+    "CREATE INDEX IF NOT EXISTS idx_crg_nodes_domain_native ON crg_nodes(domain, native_table, native_id);",
+    "CREATE INDEX IF NOT EXISTS idx_crg_nodes_stable ON crg_nodes(domain, stable_key);",
+    "CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_source ON crg_edges(domain, source_node_id);",
+    "CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_target ON crg_edges(domain, target_node_id);",
+    "CREATE INDEX IF NOT EXISTS idx_crg_edges_kind_subkind ON crg_edges(domain, edge_kind, edge_subkind);",
+    "CREATE INDEX IF NOT EXISTS idx_crg_metrics_score ON crg_node_metrics(risk_score DESC);",
+};
+
+static bool ensure_crg_projection_tables(Database& db, std::string& error) {
+    for (const char* sql : kCrgProjectionDdl) {
+        if (!exec_sql_ok(db, sql, error)) return false;
+    }
+    return true;
+}
+
+static bool has_crg_projection_tables(Database& db) {
+    return object_exists(db, "table", "crg_nodes")
+        && object_exists(db, "table", "crg_edges")
+        && object_exists(db, "table", "crg_node_metrics")
+        && object_exists(db, "table", "crg_meta");
+}
+
+static json crg_repair_counts(Database& db, const std::string& domain) {
+    json counts = json::object();
+    if (domain == "source") {
+        counts["symbols"] = count_rows(db, "SELECT COUNT(*) FROM symbols;");
+        counts["references"] = count_rows(db, "SELECT COUNT(*) FROM \"references\";");
+        counts["inheritance"] = count_rows(db, "SELECT COUNT(*) FROM inheritance;");
+    } else {
+        counts["assets"] = count_rows(db, "SELECT COUNT(*) FROM assets;");
+        counts["dependencies"] = count_rows(db, "SELECT COUNT(*) FROM dependencies;");
+    }
+    if (has_crg_projection_tables(db)) {
+        counts["crg_nodes"] = count_rows(db, "SELECT COUNT(*) FROM crg_nodes WHERE domain = '" + domain + "';");
+        counts["crg_edges"] = count_rows(db, "SELECT COUNT(*) FROM crg_edges WHERE domain = '" + domain + "';");
+        counts["crg_node_metrics"] = count_rows(db,
+            "SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id "
+            "WHERE n.domain = '" + domain + "';");
+    }
+    return counts;
+}
+
+static std::vector<std::pair<std::string, std::string>> crg_repair_sql(const std::string& domain) {
+    if (domain == "source") {
+        return {
+            {"clear orphan metrics", "DELETE FROM crg_node_metrics WHERE node_id NOT IN (SELECT id FROM crg_nodes);"},
+            {"clear metrics", "DELETE FROM crg_node_metrics WHERE node_id IN (SELECT id FROM crg_nodes WHERE domain = 'source');"},
+            {"clear edges", "DELETE FROM crg_edges WHERE domain = 'source';"},
+            {"clear nodes", "DELETE FROM crg_nodes WHERE domain = 'source';"},
+            {"source nodes", R"SQL(
+INSERT INTO crg_nodes(id,domain,native_table,native_id,stable_key,kind,name,path,module,source_revision,extra,updated_at)
+SELECT s.id,'source','symbols',s.id,COALESCE(s.qualified_name,s.name) || '#' || s.id,
+s.kind,s.name,COALESCE(f.path,''),COALESCE(m.name,''),'','{}',CAST(strftime('%s','now') AS INTEGER)
+FROM symbols s
+LEFT JOIN files f ON f.id = s.file_id
+LEFT JOIN modules m ON m.id = f.module_id;
+)SQL"},
+            {"source reference edges", R"SQL(
+INSERT INTO crg_edges(domain,source_node_id,target_node_id,edge_kind,edge_subkind,weight,native_table,native_id,updated_at)
+SELECT 'source',r.from_symbol_id,r.to_symbol_id,COALESCE(r.ref_kind,'reference'),'reference',1.0,'references',r.id,CAST(strftime('%s','now') AS INTEGER)
+FROM "references" r
+JOIN symbols fs ON fs.id = r.from_symbol_id
+JOIN symbols ts ON ts.id = r.to_symbol_id;
+)SQL"},
+            {"source inheritance edges", R"SQL(
+INSERT INTO crg_edges(domain,source_node_id,target_node_id,edge_kind,edge_subkind,weight,native_table,native_id,updated_at)
+SELECT 'source',i.child_id,i.parent_id,'inheritance','extends',1.0,'inheritance',i.id,CAST(strftime('%s','now') AS INTEGER)
+FROM inheritance i
+JOIN symbols cs ON cs.id = i.child_id
+JOIN symbols ps ON ps.id = i.parent_id;
+)SQL"},
+            {"source metrics", R"SQL(
+WITH ref_in AS (
+   SELECT to_symbol_id AS symbol_id, COUNT(*) AS fan_in, COUNT(DISTINCT r.file_id) AS caller_files
+   FROM "references" r
+   JOIN symbols fs ON fs.id = r.from_symbol_id
+   JOIN symbols ts ON ts.id = r.to_symbol_id
+   GROUP BY to_symbol_id
+ ), ref_out AS (
+   SELECT from_symbol_id AS symbol_id, COUNT(*) AS fan_out
+   FROM "references" r
+   JOIN symbols fs ON fs.id = r.from_symbol_id
+   JOIN symbols ts ON ts.id = r.to_symbol_id
+   GROUP BY from_symbol_id
+ ), inh_desc AS (
+   SELECT parent_id AS symbol_id, COUNT(*) AS descendants
+   FROM inheritance i JOIN symbols cs ON cs.id = i.child_id JOIN symbols ps ON ps.id = i.parent_id GROUP BY parent_id
+ ), inh_anc AS (
+   SELECT child_id AS symbol_id, COUNT(*) AS ancestors
+   FROM inheritance i JOIN symbols cs ON cs.id = i.child_id JOIN symbols ps ON ps.id = i.parent_id GROUP BY child_id
+ ), counts AS (
+ SELECT s.id AS native_id,
+        COALESCE(ri.fan_in,0) AS fan_in,
+        COALESCE(ro.fan_out,0) AS fan_out,
+        COALESCE(id.descendants,0) AS descendants,
+        COALESCE(ia.ancestors,0) AS ancestors,
+        COALESCE(ri.caller_files,0) AS caller_files,
+        s.is_ue_macro AS is_ue_macro,
+        CASE
+          WHEN lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%ufunction%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%server%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%client%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%netmulticast%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%onrep%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%replication%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%rpc%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%network%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%save%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%serialize%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%archive%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%auth%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%login%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%account%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%session%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%purchase%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%iap%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%store%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%entitlement%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%anticheat%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%crypt%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%encrypt%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%decrypt%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%sign%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%hash%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%exec%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%eval%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%command%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%file%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%registry%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%process%'
+          THEN 1 ELSE 0 END AS sensitivity
+ FROM symbols s
+ LEFT JOIN ref_in ri ON ri.symbol_id = s.id
+ LEFT JOIN ref_out ro ON ro.symbol_id = s.id
+ LEFT JOIN inh_desc id ON id.symbol_id = s.id
+ LEFT JOIN inh_anc ia ON ia.symbol_id = s.id
+), scored AS (
+ SELECT c.*, MIN(1.0,
+        MIN(c.fan_in,50) / 50.0 * 0.35 +
+        MIN(c.descendants,30) / 30.0 * 0.25 +
+        MIN(c.fan_out,50) / 50.0 * 0.10 +
+        CASE WHEN c.is_ue_macro != 0 THEN 0.15 ELSE 0.0 END +
+        MIN(c.caller_files,20) / 20.0 * 0.15 +
+        CASE WHEN c.sensitivity != 0 THEN 0.15 ELSE 0.0 END) AS score
+ FROM counts c
+)
+INSERT INTO crg_node_metrics(node_id,fan_in,fan_out,hard_in,descendants,risk_score,risk_tier,reasons_json,raw_counts_json,scoring_version,computed_at)
+SELECT s.native_id,s.fan_in,s.fan_out,0,s.descendants,ROUND(s.score,3),
+       CASE WHEN s.score >= 0.66 THEN 'high' WHEN s.score >= 0.33 THEN 'medium' ELSE 'low' END,
+       CASE WHEN s.sensitivity != 0 THEN
+         printf('["caller fan-in: %d","inheritance descendants (1-hop): %d","callee fan-out: %d","module/file boundary crossing: %d distinct caller file(s)","sensitivity: UE-domain sensitive surface"]',
+                s.fan_in,s.descendants,s.fan_out,s.caller_files)
+       ELSE
+         printf('["caller fan-in: %d","inheritance descendants (1-hop): %d","callee fan-out: %d","module/file boundary crossing: %d distinct caller file(s)"]',
+                s.fan_in,s.descendants,s.fan_out,s.caller_files)
+       END,
+       printf('{"callers":%d,"callees":%d,"descendants":%d,"ancestors":%d,"caller_files":%d,"is_ue_macro":%d,"sensitivity":%d}',
+              s.fan_in,s.fan_out,s.descendants,s.ancestors,s.caller_files,s.is_ue_macro,s.sensitivity),
+       '3',CAST(strftime('%s','now') AS INTEGER)
+FROM scored s;
+)SQL"},
+            {"cache_version", "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('cache_version','1');"},
+            {"scoring_version", "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('scoring_version','3');"},
+            {"built_at", "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('built_at',datetime('now'));"},
+            {"source_built_at", "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_built_at',datetime('now'));"},
+        };
+    }
+
+    return {
+        {"clear orphan metrics", "DELETE FROM crg_node_metrics WHERE node_id NOT IN (SELECT id FROM crg_nodes);"},
+        {"clear metrics", "DELETE FROM crg_node_metrics WHERE node_id IN (SELECT id FROM crg_nodes WHERE domain = 'project');"},
+        {"clear edges", "DELETE FROM crg_edges WHERE domain = 'project';"},
+        {"clear nodes", "DELETE FROM crg_nodes WHERE domain = 'project';"},
+        {"project nodes", R"SQL(
+INSERT INTO crg_nodes(domain,native_table,native_id,stable_key,kind,name,path,module,source_revision,extra,updated_at)
+SELECT 'project','assets',a.id,a.package_path,a.asset_class,a.asset_name,a.package_path,a.module_name,COALESCE(a.saved_hash,''),'{}',
+CAST(strftime('%s','now') AS INTEGER)
+FROM assets a;
+)SQL"},
+        {"project edges", R"SQL(
+INSERT INTO crg_edges(domain,source_node_id,target_node_id,edge_kind,edge_subkind,weight,native_table,native_id,updated_at)
+SELECT 'project',sn.id,tn.id,'dependency',COALESCE(d.dependency_type,''),
+CASE WHEN d.dependency_type = 'Hard' THEN 1.0 ELSE 0.5 END,
+'dependencies',d.id,CAST(strftime('%s','now') AS INTEGER)
+FROM dependencies d
+JOIN crg_nodes sn ON sn.domain='project' AND sn.native_table='assets' AND sn.native_id=d.source_asset_id
+JOIN crg_nodes tn ON tn.domain='project' AND tn.native_table='assets' AND tn.native_id=d.target_asset_id;
+)SQL"},
+        {"project metrics", R"SQL(
+WITH counts AS (
+ SELECT a.id AS native_id,
+        (SELECT COUNT(*) FROM dependencies d WHERE d.target_asset_id = a.id) AS fan_in,
+        (SELECT COUNT(*) FROM dependencies d WHERE d.source_asset_id = a.id) AS fan_out,
+        (SELECT COUNT(*) FROM dependencies d WHERE d.target_asset_id = a.id AND d.dependency_type = 'Hard') AS hard_in,
+        (SELECT COUNT(*) FROM nodes x WHERE x.asset_id = a.id) AS node_count,
+        (SELECT COUNT(*) FROM variables x WHERE x.asset_id = a.id) AS var_count,
+        (SELECT COUNT(*) FROM parameters x WHERE x.asset_id = a.id) AS param_count,
+        (SELECT COUNT(*) FROM tag_references x WHERE x.asset_id = a.id) AS tag_refs,
+        CASE
+          WHEN a.asset_class LIKE '%World%' OR a.asset_class LIKE '%Level%' THEN 5
+          WHEN a.asset_class LIKE '%GameplayAbility%' OR a.asset_class LIKE '%AttributeSet%' OR a.asset_class LIKE '%GameplayEffect%' THEN 4
+          WHEN a.asset_class LIKE '%Blueprint%' THEN 3
+          WHEN a.asset_class LIKE '%NiagaraSystem%' OR a.asset_class LIKE '%Material%' THEN 2
+          WHEN a.asset_class LIKE '%DataTable%' OR a.asset_class LIKE '%DataAsset%' THEN 2
+          ELSE 1
+        END AS class_weight,
+        CASE
+          WHEN lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%network%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%replication%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%rpc%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%netmulticast%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%onrep%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%save%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%serialize%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%archive%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%auth%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%login%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%account%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%session%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%purchase%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%store%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%entitlement%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%anticheat%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%crypt%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%encrypt%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%decrypt%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%sign%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%hash%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%exec%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%eval%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%command%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%file%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%registry%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%process%'
+          THEN 1 ELSE 0 END AS sensitivity
+ FROM assets a
+), scored AS (
+ SELECT c.*, MIN(1.0,
+        MIN(c.fan_in,30) / 30.0 * 0.30 +
+        MIN(c.hard_in,20) / 20.0 * 0.20 +
+        MIN(c.fan_out,30) / 30.0 * 0.10 +
+        (c.class_weight - 1) / 4.0 * 0.20 +
+        CASE WHEN c.sensitivity != 0 THEN 0.15 ELSE 0.0 END +
+        MIN(c.node_count,400) / 400.0 * 0.15 +
+        MIN(c.tag_refs,20) / 20.0 * 0.05) AS score
+ FROM counts c
+)
+INSERT INTO crg_node_metrics(node_id,fan_in,fan_out,hard_in,descendants,risk_score,risk_tier,reasons_json,raw_counts_json,scoring_version,computed_at)
+SELECT n.id,s.fan_in,s.fan_out,s.hard_in,0,ROUND(s.score,3),
+       CASE WHEN s.score >= 0.66 THEN 'high' WHEN s.score >= 0.33 THEN 'medium' ELSE 'low' END,
+       CASE WHEN s.sensitivity != 0 THEN
+         printf('["inbound dependency fan-in: %d referencer(s)","hard inbound dependencies: %d","outbound dependencies: %d","sensitivity: UE-domain sensitive surface","graph density: %d node(s)"]',
+                s.fan_in,s.hard_in,s.fan_out,s.node_count)
+       ELSE
+         printf('["inbound dependency fan-in: %d referencer(s)","hard inbound dependencies: %d","outbound dependencies: %d","graph density: %d node(s)"]',
+                s.fan_in,s.hard_in,s.fan_out,s.node_count)
+       END,
+       printf('{"inbound":%d,"inbound_hard":%d,"outbound":%d,"nodes":%d,"variables":%d,"parameters":%d,"tag_references":%d,"class_weight":%d,"sensitivity":%d}',
+              s.fan_in,s.hard_in,s.fan_out,s.node_count,s.var_count,s.param_count,s.tag_refs,s.class_weight,s.sensitivity),
+       '3',CAST(strftime('%s','now') AS INTEGER)
+FROM scored s
+JOIN crg_nodes n ON n.domain='project' AND n.native_table='assets' AND n.native_id=s.native_id;
+)SQL"},
+        {"cache_version", "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('cache_version','1');"},
+        {"scoring_version", "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('scoring_version','3');"},
+        {"built_at", "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('built_at',datetime('now'));"},
+        {"project_built_at", "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('project_built_at',datetime('now'));"},
+    };
+}
+
+static json crg_repair_cache_json(Database& db, const std::string& domain,
+                                  const std::string& scope, bool execute) {
+    std::string normalized_scope = scope.empty() ? "all" : lower_copy(scope);
+    json warnings = json::array();
+    json plan = json::array({
+        "CREATE IF MISSING crg_nodes/crg_edges/crg_node_metrics/crg_meta",
+        "DELETE existing " + domain + " CRG projection rows",
+        domain == "source"
+            ? "SOURCE symbols -> crg_nodes; references/inheritance -> crg_edges"
+            : "PROJECT assets -> crg_nodes; dependencies -> crg_edges",
+        domain == "source"
+            ? "Recompute caller/callee/descendant/risk_score into crg_node_metrics"
+            : "Recompute fan-in/fan-out/hard-in/risk_score into crg_node_metrics",
+    });
+    json root = {
+        {"input", {{"execute", execute}, {"scope", normalized_scope}}},
+        {"limits", {{"execute", execute}, {"scope", normalized_scope}}},
+        {"plan", plan},
+        {"warnings", warnings},
+        {"truncated", false},
+    };
+    if (normalized_scope != "all") {
+        root["status"] = "error";
+        root["summary"] = "Unsupported scope for repair_crg_cache (expected 'all')";
+        root["next_actions"] = json::array({domain + ".repair_crg_cache --scope=all", domain + ".health"});
+        return root;
+    }
+
+    root["before"] = crg_repair_counts(db, domain);
+    if (!execute) {
+        root["status"] = "ok";
+        root["summary"] = "Dry-run: " + domain + " CRG projection/cache would be rebuilt. Pass --execute to apply.";
+        root["after"] = json::object();
+        root["next_actions"] = json::array({domain + ".repair_crg_cache --execute", domain + ".health", domain + ".risk_score"});
+        return root;
+    }
+
+    bool ok = true;
+    std::string error;
+    auto fail = [&](const std::string& label, const std::string& err) {
+        ok = false;
+        root["warnings"].push_back("CRG cache rebuild failed at " + label + (err.empty() ? "" : ": " + err));
+    };
+    if (!ensure_crg_projection_tables(db, error)) {
+        fail("create schema", error);
+    }
+    if (ok && !exec_sql_ok(db, "BEGIN;", error)) {
+        fail("begin transaction", error);
+    }
+    if (ok) {
+        for (const auto& step : crg_repair_sql(domain)) {
+            if (!exec_sql_ok(db, step.second, error)) {
+                fail(step.first, error);
+                break;
+            }
+        }
+    }
+    if (ok) {
+        if (!exec_sql_ok(db, "COMMIT;", error)) fail("commit", error);
+    } else {
+        std::string rollback_error;
+        exec_sql_ok(db, "ROLLBACK;", rollback_error);
+    }
+
+    root["after"] = crg_repair_counts(db, domain);
+    root["status"] = ok ? "ok" : "error";
+    root["summary"] = ok
+        ? std::string("Rebuilt ") + domain + " CRG projection/cache from indexed " + (domain == "source" ? "source symbols, references and inheritance" : "project assets and dependencies")
+        : domain + " CRG projection/cache rebuild failed; rolled back";
+    root["next_actions"] = domain == "source"
+        ? json::array({"source.health", "source.risk_score", "source.review_context"})
+        : json::array({"project.health", "project.risk_score", "project.review_context"});
+    return root;
+}
+
 static bool load_current_manifest(Database& db, const std::string& domain, SnapshotManifest& out) {
     out.nodes.clear();
     out.edges.clear();
@@ -633,7 +1024,7 @@ static json crg_snapshot_json(Database& db, const std::string& domain,
 
     if (!object_exists(db, "table", "crg_nodes") || !object_exists(db, "table", "crg_edges")) {
         root["status"] = "error";
-        root["summary"] = "CRG projection tables are missing; run " + domain + ".repair_crg_cache execute=true first";
+        root["summary"] = "CRG projection tables are missing; run " + domain + ".repair_crg_cache --execute first";
         root["next_actions"] = json::array({domain + ".repair_crg_cache", domain + ".health"});
         return root;
     }
@@ -763,8 +1154,8 @@ static json crg_diff_snapshots_json(Database& db, const std::string& domain,
 // when present and falls back to query-time scoring otherwise. The offline
 // tool previously NEVER read the cache (always scoring_version=1, no
 // cache metadata, no crg:* health). These read-only helpers mirror the
-// editor behavior; they never write and never run repair_crg_cache
-// (offline cache WRITE remains out of scope per the projection-cache spec).
+// editor behavior. Offline CRG cache writes are execute-gated behind
+// repair_crg_cache so read-only actions can keep read-only database handles.
 // ============================================================
 
 static bool crg_cache_present(Database& db) {
@@ -915,6 +1306,7 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  impact_radius <symbol> [--edge-kinds=call|type|inheritance] [--direction=in|out|both] [--max-depth=N] [--max-results=N]\n"
                   << "  health [--include-counts=false]\n"
                   << "  repair_fts [--target=all|symbols|source] [--execute]\n"
+                  << "  repair_crg_cache [--scope=all] [--execute]\n"
                   << "  risk_score <symbol> [--limit=N] [--min-tier=low|medium|high]\n"
                   << "  review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
                   << "  review_context <symbol> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
@@ -932,6 +1324,7 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  impact_radius <asset_path> [--direction=in|out|both] [--max-depth=N] [--max-results=N] [--dependency-type=Hard|Soft]\n"
                   << "  health [--include-counts=false]\n"
                   << "  repair_fts [--target=all|assets|nodes] [--execute]\n"
+                  << "  repair_crg_cache [--scope=all] [--execute]\n"
                   << "  risk_score [asset_path] [--limit=N] [--min-tier=low|medium|high]\n"
                   << "  review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
                   << "  review_context <asset_path> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
@@ -1644,6 +2037,10 @@ public:
 
     void repair_fts(const Args& args) {
         print_json(source_repair_fts_json(args.opt("target", "all"), args.opt_bool("execute", false)));
+    }
+
+    void repair_crg_cache(const Args& args) {
+        print_json(crg_repair_cache_json(db, "source", args.opt("scope", "all"), args.opt_bool("execute", false)));
     }
 
     json score_symbol(const Row& sym) {
@@ -2799,6 +3196,10 @@ public:
         print_json(project_repair_fts_json(args.opt("target", "all"), args.opt_bool("execute", false)));
     }
 
+    void repair_crg_cache(const Args& args) {
+        print_json(crg_repair_cache_json(db, "project", args.opt("scope", "all"), args.opt_bool("execute", false)));
+    }
+
     json score_asset(const Row& asset) {
         std::string id = asset.get("id");
         auto out = query(db, "SELECT dependency_type FROM dependencies WHERE source_asset_id = ?", {id});
@@ -3466,7 +3867,7 @@ int main(int argc, char* argv[]) {
         if (db_path.empty()) db_path = (fs::path(db_dir) / "EngineSource.db").string();
 
         bool write_action = args.opt_bool("execute", false)
-            && (args.action == "repair_fts" || args.action == "snapshot");
+            && (args.action == "repair_fts" || args.action == "snapshot" || args.action == "repair_crg_cache");
         SourceActions sa;
         sa.open(db_path, !write_action);
 
@@ -3483,6 +3884,7 @@ int main(int argc, char* argv[]) {
             {"impact_radius",       [](SourceActions& s, const Args& a) { s.impact_radius(a); }},
             {"health",              [](SourceActions& s, const Args& a) { s.health(a); }},
             {"repair_fts",          [](SourceActions& s, const Args& a) { s.repair_fts(a); }},
+            {"repair_crg_cache",    [](SourceActions& s, const Args& a) { s.repair_crg_cache(a); }},
             {"risk_score",          [](SourceActions& s, const Args& a) { s.risk_score(a); }},
             {"review_hotspots",     [](SourceActions& s, const Args& a) { s.review_hotspots(a); }},
             {"review_context",      [](SourceActions& s, const Args& a) { s.review_context(a); }},
@@ -3502,7 +3904,7 @@ int main(int argc, char* argv[]) {
         if (db_path.empty()) db_path = (fs::path(db_dir) / "ProjectIndex.db").string();
 
         bool write_action = args.opt_bool("execute", false)
-            && (args.action == "repair_fts" || args.action == "snapshot");
+            && (args.action == "repair_fts" || args.action == "snapshot" || args.action == "repair_crg_cache");
         ProjectActions pa;
         pa.open(db_path, !write_action);
 
@@ -3515,6 +3917,7 @@ int main(int argc, char* argv[]) {
             {"impact_radius",     [](ProjectActions& p, const Args& a) { p.impact_radius(a); }},
             {"health",            [](ProjectActions& p, const Args& a) { p.health(a); }},
             {"repair_fts",        [](ProjectActions& p, const Args& a) { p.repair_fts(a); }},
+            {"repair_crg_cache",  [](ProjectActions& p, const Args& a) { p.repair_crg_cache(a); }},
             {"risk_score",        [](ProjectActions& p, const Args& a) { p.risk_score(a); }},
             {"review_hotspots",   [](ProjectActions& p, const Args& a) { p.review_hotspots(a); }},
             {"review_context",    [](ProjectActions& p, const Args& a) { p.review_context(a); }},
