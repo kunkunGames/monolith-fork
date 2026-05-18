@@ -21,6 +21,8 @@
 
 ### Actions (63 — namespace: "material")
 
+**Resource guard:** `preview_textures` accepts at most 100 `asset_paths` entries per contact sheet request. Oversized requests fail before texture traversal or uncompressed grid allocation.
+
 **Read Actions (10)**
 | Action | Description |
 |--------|-------------|

@@ -23,4 +23,24 @@ bool FMonolithMaterialSecurityPathTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithMaterialPreviewTexturesLimitTest, "Monolith.LimitGuard.Material.PreviewTexturesLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithMaterialPreviewTexturesLimitTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> PathsArray;
+	for (int32 i = 0; i < 101; ++i)
+	{
+		PathsArray.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("/Game/Textures/Tex_%d"), i)));
+	}
+	Payload->SetArrayField(TEXT("asset_paths"), PathsArray);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("material"), TEXT("preview_textures"), Payload);
+
+	TestFalse(TEXT("Action should fail on oversized input array"), Result.bSuccess);
+	TestTrue(TEXT("Error should complain about maximum allowed size"), Result.ErrorMessage.Contains(TEXT("exceeds maximum allowed size")));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
