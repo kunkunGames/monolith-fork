@@ -997,6 +997,7 @@ FMonolithActionResult FMonolithMaterialActions::GetAllExpressions(const TSharedP
 		Mat ? Mat->GetExpressions() : MatFunc->GetExpressions();
 
 	TArray<TSharedPtr<FJsonValue>> ExpressionsArray;
+	ExpressionsArray.Reserve(Expressions.Num());
 	for (const TObjectPtr<UMaterialExpression>& Expr : Expressions)
 	{
 		if (Expr)
@@ -1228,6 +1229,7 @@ FMonolithActionResult FMonolithMaterialActions::GetExpressionDetails(const TShar
 	// List output pins
 	TArray<TSharedPtr<FJsonValue>> OutputsArray;
 	const TArray<FExpressionOutput>& Outputs = FoundExpr->Outputs;
+	OutputsArray.Reserve(Outputs.Num());
 	for (int32 i = 0; i < Outputs.Num(); ++i)
 	{
 		auto OutputJson = MakeShared<FJsonObject>();
@@ -1297,6 +1299,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFullConnectionGraph(const TSh
 
 	// Material output connections
 	TArray<TSharedPtr<FJsonValue>> MaterialOutputsArray;
+	MaterialOutputsArray.Reserve(MaterialOutputEntries.Num());
 	for (const FMaterialOutputEntry& Entry : MaterialOutputEntries)
 	{
 		FExpressionInput* Input = Mat->GetExpressionInputForProperty(Entry.Property);
@@ -1773,7 +1776,9 @@ FMonolithActionResult FMonolithMaterialActions::ExportMaterialGraph(const TShare
 	}
 
 	TArray<TSharedPtr<FJsonValue>> NodesArray;
+	NodesArray.Reserve(Expressions.Num());
 	TArray<TSharedPtr<FJsonValue>> CustomHlslArray;
+	CustomHlslArray.Reserve(Expressions.Num());
 
 	for (const TObjectPtr<UMaterialExpression>& Expr : Expressions)
 	{
@@ -2661,6 +2666,8 @@ FMonolithActionResult FMonolithMaterialActions::GetLayerInfo(const TSharedPtr<FJ
 	TArray<TSharedPtr<FJsonValue>> FuncOutputsArray;
 
 	TConstArrayView<TObjectPtr<UMaterialExpression>> FuncExprs = MatFunc->GetExpressions();
+
+	FuncExpressionsArray.Reserve(FuncExprs.Num());
 
 	for (const TObjectPtr<UMaterialExpression>& Expr : FuncExprs)
 	{
@@ -9477,6 +9484,7 @@ FMonolithActionResult FMonolithMaterialActions::ClearGraph(const TSharedPtr<FJso
 	// Collect expressions to delete (copy first to avoid iterator invalidation)
 	TArray<UMaterialExpression*> ToDelete;
 	TArray<TSharedPtr<FJsonValue>> PreservedArray;
+	PreservedArray.Reserve(Mat->GetExpressions().Num());
 	for (const TObjectPtr<UMaterialExpression>& Expr : Mat->GetExpressions())
 	{
 		if (!Expr) continue;
@@ -9562,7 +9570,9 @@ FMonolithActionResult FMonolithMaterialActions::DeleteExpressions(const TSharedP
 	// Collect matching expressions into local array first (avoid iterator invalidation)
 	TArray<UMaterialExpression*> ToDelete;
 	TArray<TSharedPtr<FJsonValue>> DeletedArray;
+	DeletedArray.Reserve(RequestedNames.Num());
 	TSet<FString> FoundNames;
+	FoundNames.Reserve(RequestedNames.Num());
 	for (const TObjectPtr<UMaterialExpression>& Expr : Mat->GetExpressions())
 	{
 		if (Expr && RequestedNames.Contains(Expr->GetName()))
@@ -9579,6 +9589,7 @@ FMonolithActionResult FMonolithMaterialActions::DeleteExpressions(const TSharedP
 
 	// Find names that weren't matched
 	TArray<TSharedPtr<FJsonValue>> NotFoundArray;
+	NotFoundArray.Reserve(RequestedNames.Num());
 	for (const FString& Requested : RequestedNames)
 	{
 		if (!FoundNames.Contains(Requested))
@@ -9797,6 +9808,7 @@ FMonolithActionResult FMonolithMaterialActions::PreviewTextures(const TSharedPtr
 	SheetData.SetNumZeroed(SheetWidth * SheetHeight * 4);
 
 	TArray<TSharedPtr<FJsonValue>> TextureInfoArray;
+	TextureInfoArray.Reserve(Count);
 	int32 SuccessCount = 0;
 
 	for (int32 i = 0; i < Count; ++i)

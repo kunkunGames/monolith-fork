@@ -400,6 +400,24 @@ namespace
 		OutMetadataKeys.Sort();
 	}
 
+	bool TryGetStringTableMetaData(FStringTableConstRef TableRef, const FTextKey& Key, const FString& MetadataKey, FString& OutValue)
+	{
+		bool bFound = false;
+		const FName TargetKey(*MetadataKey);
+		TableRef->EnumerateMetaData(Key,
+			[&OutValue, &bFound, TargetKey](FName MetadataId, const FString& MetadataValue)
+			{
+				if (MetadataId == TargetKey)
+				{
+					OutValue = MetadataValue;
+					bFound = true;
+					return false;
+				}
+				return true;
+			});
+		return bFound;
+	}
+
 	FString BuildStringTableCsv(UStringTable* Table, bool bIncludeMetadata, int32& OutRowCount)
 	{
 		TArray<FStringTableCsvRow> Rows;
@@ -1002,9 +1020,29 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringEntry(const TShared
 	Result->SetBoolField(TEXT("entry_existed"), bHadEntry);
 	Result->SetStringField(TEXT("previous_source_string"), ExistingSource);
 	Result->SetStringField(TEXT("source_string"), SourceString);
+
+	bool bChanged = !bHadEntry || ExistingSource != SourceString;
+	for (const TPair<FString, FString>& Pair : MetadataToSet)
+	{
+		FString PreviousMetadataValue;
+		const bool bHadMetadata = TryGetStringTableMetaData(Table->GetStringTable(), TextKey, Pair.Key, PreviousMetadataValue);
+		if (!bHadMetadata || PreviousMetadataValue != Pair.Value)
+		{
+			bChanged = true;
+			break;
+		}
+	}
+
 	if (Options.bDryRun)
 	{
-		Result->SetBoolField(TEXT("would_set"), true);
+		Result->SetBoolField(TEXT("would_set"), bChanged);
+		Result->SetBoolField(TEXT("would_change"), bChanged);
+		return FMonolithActionResult::Success(Result);
+	}
+
+	if (!bChanged)
+	{
+		Result->SetObjectField(TEXT("string_table"), StringTableSummaryToJson(Table, true, 200, true));
 		return FMonolithActionResult::Success(Result);
 	}
 
@@ -1144,7 +1182,8 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringMetadata(const TSha
 		return FMonolithActionResult::Error(FString::Printf(TEXT("StringTable entry '%s' does not exist"), *Key));
 	}
 
-	const FString PreviousValue = Table->GetStringTable()->GetMetaData(TextKey, FName(*MetadataKey));
+	FString PreviousValue;
+	const bool bHadMetadata = TryGetStringTableMetaData(Table->GetStringTable(), TextKey, MetadataKey, PreviousValue);
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	AddMutationBaseFields(Result, AssetPath, Options, false, false);
@@ -1158,11 +1197,11 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringMetadata(const TSha
 	}
 	if (Options.bDryRun)
 	{
-		Result->SetBoolField(TEXT("would_change"), bRemove ? !PreviousValue.IsEmpty() : PreviousValue != MetadataValue);
+		Result->SetBoolField(TEXT("would_change"), bRemove ? bHadMetadata : PreviousValue != MetadataValue);
 		return FMonolithActionResult::Success(Result);
 	}
 
-	const bool bChanged = bRemove ? !PreviousValue.IsEmpty() : PreviousValue != MetadataValue;
+	const bool bChanged = bRemove ? bHadMetadata : PreviousValue != MetadataValue;
 	bool bSaved = false;
 	FString SavedPath;
 	if (bChanged)

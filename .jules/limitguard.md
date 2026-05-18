@@ -24,3 +24,7 @@
 **Boundary:** `limit` parameter in `search_build_output`.
 **Learning:** `search_build_output` scans the cached log capture for build-related entries. An unbounded limit combined with unsafe `GetNumberField` usage could lead to type-casting errors or excessive JSON array allocation for very large build logs.
 **Prevention:** Always use `TryGetNumberField` to validate the `limit` param and apply `FMath::Clamp` with a hard limit (e.g. 1000) to prevent oversized payloads.
+## 2026-05-17 - 🧱 LimitGuard: Bound editor/capture_sequence_frames timestamps array
+**Boundary:** `timestamps` array limit in `capture_sequence_frames`.
+**Learning:** An unbounded timestamps array combined with synchronous frame rendering in `capture_sequence_frames` can lock up the editor and use immense memory/disk space if extremely large payloads are supplied.
+**Prevention:** Always use `TryGetArrayField` to parse arrays safely and assert a hard maximum (e.g., 1000) using `Num()` on array size before allocating frame-capture loops.

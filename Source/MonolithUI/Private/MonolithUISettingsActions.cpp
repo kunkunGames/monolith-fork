@@ -145,6 +145,7 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldGameUserSettings
     const TArray<TSharedPtr<FJsonValue>>* FeaturesArray = nullptr;
     if (Params->TryGetArrayField(TEXT("features"), FeaturesArray))
     {
+        Features.Reserve(FeaturesArray->Num());
         for (const auto& Val : *FeaturesArray)
         {
             Features.Add(Val->AsString());
@@ -366,6 +367,7 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveGame(const T
     const TArray<TSharedPtr<FJsonValue>>* PropsArray = nullptr;
     if (Params->TryGetArrayField(TEXT("properties"), PropsArray))
     {
+        Properties.Reserve(PropsArray->Num());
         for (const auto& Val : *PropsArray)
         {
             if (!Val.IsValid() || Val->Type != EJson::Object) continue;
@@ -669,6 +671,7 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldAudioSettings(co
     const TArray<TSharedPtr<FJsonValue>>* CatsArray = nullptr;
     if (Params->TryGetArrayField(TEXT("categories"), CatsArray))
     {
+        Categories.Reserve(CatsArray->Num());
         for (const auto& Val : *CatsArray)
         {
             Categories.Add(Val->AsString());
@@ -764,6 +767,7 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldInputRemapping(c
     const TArray<TSharedPtr<FJsonValue>>* ActionsArray = nullptr;
     if (Params->TryGetArrayField(TEXT("actions"), ActionsArray))
     {
+        Actions.Reserve(ActionsArray->Num());
         for (const auto& Val : *ActionsArray)
         {
             Actions.Add(Val->AsString());

@@ -1,6 +1,6 @@
 # Monolith — TODO
 
-Last updated: 2026-05-16 (CRG-inspired navigation spec accepted; v0.14.9 docs)
+Last updated: 2026-05-18 (Niagara emitter selector parity accepted)
 
 ---
 
@@ -445,12 +445,14 @@ Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}
 - [x] **Projection cache — `project.repair_crg_cache` / `source.repair_crg_cache`** — execute-gated rebuild creates `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta`; `health` validates table/index/parity/cache meta; `risk_score` uses cached `risk_score` when present and falls back safely on cache miss.
 - [x] **P0 — tests/docs** — extended `MonolithIndexQueryTests.cpp` / `MonolithSourceQueryTests.cpp` (`Monolith.IndexGuard.*`); synced `SPEC_MonolithIndex.md` / `SPEC_MonolithSource.md`; corrected the stale `MonolithSourceSchema.h:5` `Scripts/source_indexer` comment.
 - [x] **Review Extensions RX-2 (offline CRG cache read parity)** — IMPLEMENTED 2026-05-17. Offline `monolith_query.exe` `risk_score` now reads `crg_node_metrics` (rebuilt caches use `scoring_version=3` after RX-7, per-item `cache.status=hit`) with safe query-time fallback; offline `health` emits the editor `crg:*` checks (table/parity/orphan/cache_version/scoring_version), cache-absent is `info` (no regression). Read-only; offline never writes the cache. Verified live against `Saved/EngineSource.db` + `Saved/ProjectIndex.db`.
-- [x] **Review Extensions RX-1 (offline `detect_changes`)** — IMPLEMENTED 2026-05-17. `monolith_query <source|project> detect_changes <path...>` maps a changelist to symbols/assets, reuses RX-2 cached risk (or query-time fallback), bounded depth-1 impact, advisory heuristic test-gaps (source), risk-ordered priorities, minimal/standard. `changed_paths` VCS-agnostic; no P4/git shell-out. Spec: `Plugins/Monolith/CRG/spec/monolith-crg-review-extensions-spec.md`.
-- [x] **Review Extensions RX-3 (offline `find_unused`)** — IMPLEMENTED 2026-05-17. `monolith_query <source|project> find_unused`: advisory dead-symbol / orphan-asset detection with confidence+reasons, recall-first default (`min-confidence=low`), UE reflection/automation/root exclusions. Never mutates. Built + live-verified (project: 77 orphan candidates incl. DataTables low-conf; source: function/class candidates).
+- [x] **Review Extensions RX-1 (`detect_changes`)** — OFFLINE IMPLEMENTED 2026-05-17; EDITOR PARITY IMPLEMENTED 2026-05-18. Live `source.detect_changes` / `project.detect_changes` and `monolith_query <source|project> detect_changes <path...>` map changed paths to symbols/assets, reuse RX-2 cached risk (or query-time fallback), add bounded depth-1 impact, advisory heuristic test-gaps (source), risk-ordered priorities, minimal/standard. `changed_paths` is VCS-agnostic; no P4/git shell-out. Spec: `Plugins/Monolith/CRG/spec/monolith-crg-review-extensions-spec.md`.
+- [x] **Review Extensions RX-3 (`find_unused`)** — OFFLINE IMPLEMENTED 2026-05-17; EDITOR PARITY IMPLEMENTED 2026-05-18. Live `source.find_unused` / `project.find_unused` and `monolith_query <source|project> find_unused`: advisory dead-symbol / orphan-asset detection with confidence+reasons, recall-first default (`min_confidence` / `--min-confidence=low`), UE reflection/automation/root exclusions. Never mutates.
+- [x] **Review Extensions RX-4 (`snapshot` / `diff_snapshots`)** — EDITOR PARITY IMPLEMENTED 2026-05-18. Live `source.snapshot` / `project.snapshot` store derived CRG node/edge manifests in `crg_snapshots` only with `execute=true`; `source.diff_snapshots` / `project.diff_snapshots` compare stored/current manifests read-only with capped new/removed node/edge samples and `summary_counts`. No cache rebuild or VCS shell-out.
+- [x] **Review Extensions RX-5 (`pre_merge_check`)** — EDITOR PARITY IMPLEMENTED 2026-05-18; OFFLINE PARITY IMPLEMENTED 2026-05-18. Live `source.pre_merge_check` / `project.pre_merge_check` and offline `monolith_query <source|project> pre_merge_check` compose health, detect_changes, and optional find_unused into an advisory pre-merge `decision`, `checks[]`, and `findings[]`. Read-only, VCS-agnostic input; no P4/git shell-out.
 - [x] **Review Extensions RX-7 (UE-domain sensitivity scoring)** — IMPLEMENTED 2026-05-17. Project/source/editor/offline risk scoring and CRG cache rebuilds now add a bounded sensitivity factor for save/network/session/store/auth/crypto/exec/file surfaces, surface `raw_counts.sensitivity`, and expect `crg_meta.scoring_version=3`.
 - [x] **Review Extensions RX-8 (`review_hotspots`)** — IMPLEMENTED 2026-05-17. Added editor + offline `source.review_hotspots` / `project.review_hotspots` with capped fan-in/fan-out/risk/large ranking, optional advisory questions, and no community/betweenness dependency.
-- [ ] **Review Extensions — editor parity for RX-1 / RX-3 + RX-4/RX-5/RX-6** — DEFERRED. Editor `*.detect_changes` actions need a by-file-path symbol query on `FMonolithSourceDatabase` (currently has a pending uncommitted change; deferred to avoid merge entanglement). RX-3 editor `find_unused`, RX-4 snapshot/diff, RX-5 pre_merge_check, and RX-6 cross-DB bridge remain spec'd follow-ups. See `monolith-crg-review-extensions-spec.md`.
-- [ ] **P1/P2 (deferred)** — graph snapshot/diff, edge confidence, asset↔symbol bridge, wiki/PR-bot export, optional offline `repair_crg_cache` writer if the standalone CLI needs to rebuild cache without an editor.
+- [x] **Review Extensions RX-6 (`context.bridge_asset_symbols`)** — EDITOR PARITY IMPLEMENTED 2026-05-18. Read-only editor bridge between ProjectIndex assets and EngineSource symbols with heuristic `confidence` + `reasons[]`; no cross-sqlite mutation, no P4/git shell-out, no offline parity in this phase. Verified with UBT, `Monolith.IndexGuard.Source.*`, and live MCP smoke against `/Game/Maps/Interactable/BP_Wave`.
+- [ ] **P1/P2 (deferred)** — edge confidence, wiki/PR-bot export, optional offline `snapshot` / `diff_snapshots` parity, optional offline RX-6 bridge parity, and optional offline `repair_crg_cache` writer if the standalone CLI needs to rebuild cache without an editor.
 
 ### MonolithIndex — Incremental Indexer Remaining Work
 
@@ -460,8 +462,7 @@ Spec source: `Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}
 
 ### Niagara Module — Improvements
 
-- [ ] **`FindEmitterHandleIndex` should accept numeric index** — `list_emitters` returns `"index"` for each emitter. Allow passing `"0"`, `"1"` etc. as emitter identifier for convenient fallback.
-  - **File:** `Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp` (~line 292)
+- [x] **Niagara emitter selectors accept numeric index** — IMPLEMENTED (2026-05-18). Core Niagara actions already accepted `list_emitters` numeric index strings; `auto_layout`'s duplicate emitter resolver now follows the same GUID/name/index contract.
 
 ### Animation Module — Wishlist
 

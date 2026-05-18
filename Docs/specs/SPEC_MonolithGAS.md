@@ -33,6 +33,11 @@ MonolithGAS provides full MCP coverage of the Gameplay Ability System. It covers
 
 **Total:** 28 + 20 + 26 + 14 + 10 + 10 + 5 + 5 + 6 + 7 + 4 = **135**.
 
+Effect authoring follows the ParamGuard rule: optional scalar fields use defaults only
+when absent. Present wrong-type values, including modifier `value`, stacking limits,
+duration magnitudes, component `chance`, and copy flags, return invalid-param errors
+instead of being silently ignored.
+
 ### Phase J fixes touching this module
 
 - **F2 (2026-04-26)** — `gas::bind_widget_to_attribute` rejects unknown `owner_resolver` (`ParseOwner` no longer silently coerces to `OwningPlayerPawn`).
@@ -51,4 +56,3 @@ See [SPEC_CORE.md §11 Recent Fixes](../SPEC_CORE.md#recent-fixes-phase-j--shipp
 > **GBA conditional support:** The `WITH_GBA` define is set automatically by the module's `Build.cs` when GameplayAbilities is found. Projects without GAS get zero compile overhead — the entire module compiles to an empty stub.
 >
 > **UI Binding cooked-build caveat.** `UMonolithGASAttributeBindingClassExtension` is an editor-only class — content WBPs that reference it will fail to apply bindings in cooked Steam builds. See [COOKED_BUILD_TODO.md](../COOKED_BUILD_TODO.md) for the resolution path (Option A/B/C deferred to pre-Steam-launch checkpoint).
-

@@ -53,7 +53,7 @@ public class MonolithGAS : ModuleRules
 					bHasGBA = Directory.Exists(
 						Path.Combine(ProjectPluginsDir, "BlueprintAttributes"))
 						|| Directory.GetDirectories(
-							ProjectPluginsDir, "BlueprintAttributes*",
+							ProjectPluginsDir, "BlueprintAttributes_*",
 							SearchOption.TopDirectoryOnly).Length > 0;
 				}
 			}
@@ -66,9 +66,15 @@ public class MonolithGAS : ModuleRules
 					EngineDir, "Plugins", "Marketplace");
 				if (Directory.Exists(MarketplaceDir))
 				{
-					bHasGBA = Directory.GetDirectories(
-						MarketplaceDir, "BlueprintAttributes*",
-						SearchOption.TopDirectoryOnly).Length > 0;
+					bHasGBA = Directory.Exists(
+						Path.Combine(MarketplaceDir, "BlueprintAttributes"));
+
+					if (!bHasGBA)
+					{
+						bHasGBA = Directory.GetDirectories(
+							MarketplaceDir, "BlueprintAttributes_*",
+							SearchOption.TopDirectoryOnly).Length > 0;
+					}
 				}
 
 				// 3. Engine Plugins/ root

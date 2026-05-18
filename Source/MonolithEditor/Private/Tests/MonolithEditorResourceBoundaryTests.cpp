@@ -26,6 +26,32 @@ bool FMonolithEditorDeleteAssetsRejectsOversizedArray::RunTest(const FString& Pa
 }
 
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorCaptureSequenceFramesRejectsOversizedTimestamps, "Monolith.LimitGuard.MonolithEditor.CaptureSequenceFramesRejectsOversizedTimestamps", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorCaptureSequenceFramesRejectsOversizedTimestamps::RunTest(const FString& Parameters)
+{
+	// Create params with > 1000 items
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Test/Asset"));
+	Params->SetStringField(TEXT("asset_type"), TEXT("niagara"));
+
+	TArray<TSharedPtr<FJsonValue>> Timestamps;
+	for (int32 i = 0; i < 1001; ++i)
+	{
+		Timestamps.Add(MakeShared<FJsonValueNumber>(1.0));
+	}
+	Params->SetArrayField(TEXT("timestamps"), Timestamps);
+
+	// Dispatch
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("capture_sequence_frames"), Params);
+
+	TestFalse(TEXT("Should fail on oversized timestamps array"), Result.bSuccess);
+	TestTrue(TEXT("Should complain about exceeding maximum allowed size"), Result.ErrorMessage.Contains(TEXT("exceeds maximum allowed size")));
+
+	return true;
+}
+
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorSearchBuildOutputClampsLimit, "Monolith.LimitGuard.MonolithEditor.SearchBuildOutputClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithEditorSearchBuildOutputClampsLimit::RunTest(const FString& Parameters)

@@ -199,6 +199,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleListGraphs(const TSharedP
 	}
 
 	TArray<TSharedPtr<FJsonValue>> GraphsArr;
+	GraphsArr.Reserve(BP->UbergraphPages.Num() + BP->FunctionGraphs.Num() + BP->MacroGraphs.Num() + BP->DelegateSignatureGraphs.Num());
 	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->UbergraphPages, TEXT("event_graph"));
 	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->FunctionGraphs, TEXT("function"));
 	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->MacroGraphs, TEXT("macro"));
@@ -240,6 +241,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetGraphData(const TShare
 	Root->SetStringField(TEXT("graph_type"), GraphType);
 
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
+	NodesArr.Reserve(Graph->Nodes.Num());
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
 		if (!Node) continue;
@@ -282,6 +284,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetGraphSummary(const TSh
 
 			// Collect exec-only output connections
 			TArray<TSharedPtr<FJsonValue>> ExecTargets;
+			ExecTargets.Reserve(Node->Pins.Num());
 			for (const UEdGraphPin* Pin : Node->Pins)
 			{
 				if (!Pin || Pin->Direction != EGPD_Output) continue;
@@ -318,6 +321,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetGraphSummary(const TSh
 		Root->SetStringField(TEXT("graph_name"), Graph->GetName());
 
 		TArray<TSharedPtr<FJsonValue>> NodesArr;
+		NodesArr.Reserve(Graph->Nodes.Num());
 		SummarizeGraph(Graph, NodesArr);
 		Root->SetArrayField(TEXT("nodes"), NodesArr);
 		Root->SetNumberField(TEXT("node_count"), Graph->Nodes.Num());
@@ -354,6 +358,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetGraphSummary(const TSh
 			GObj->SetStringField(TEXT("graph_type"), Info.Type);
 
 			TArray<TSharedPtr<FJsonValue>> NodesArr;
+			NodesArr.Reserve(Graph->Nodes.Num());
 			SummarizeGraph(Graph, NodesArr);
 			GObj->SetArrayField(TEXT("nodes"), NodesArr);
 			GObj->SetNumberField(TEXT("node_count"), Graph->Nodes.Num());
@@ -383,6 +388,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetVariables(const TShare
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> VarsArr;
+	VarsArr.Reserve(BP->NewVariables.Num());
 
 	UClass* GenClass = BP->GeneratedClass;
 	UObject* CDO = GenClass ? GenClass->GetDefaultObject(false) : nullptr;
@@ -597,6 +603,7 @@ namespace
 
 		// Serialize children recursively
 		TArray<TSharedPtr<FJsonValue>> ChildrenArr;
+		ChildrenArr.Reserve(Node->GetChildNodes().Num());
 		for (USCS_Node* Child : Node->GetChildNodes())
 		{
 			TSharedPtr<FJsonObject> ChildObj = SerializeSCSNode(Child);
@@ -629,6 +636,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetComponents(const TShar
 	USimpleConstructionScript* SCS = BP->SimpleConstructionScript;
 	if (SCS)
 	{
+		ComponentsArr.Reserve(SCS->GetRootNodes().Num());
 		// Walk root nodes — each represents a top-level component
 		for (USCS_Node* RootNode : SCS->GetRootNodes())
 		{
@@ -654,6 +662,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetComponents(const TShar
 		{
 			TArray<UActorComponent*> NativeComps;
 			CDO->GetComponents(NativeComps);
+			NativeComponentsArr.Reserve(NativeComps.Num());
 			for (UActorComponent* Comp : NativeComps)
 			{
 				if (!Comp) continue;
@@ -810,6 +819,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetFunctions(const TShare
 	}
 
 	TArray<TSharedPtr<FJsonValue>> FuncsArr;
+	FuncsArr.Reserve(BP->FunctionGraphs.Num());
 
 	for (UEdGraph* Graph : BP->FunctionGraphs)
 	{
@@ -844,6 +854,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetFunctions(const TShare
 
 			// Inputs: output pins on the entry node (excluding exec)
 			TArray<TSharedPtr<FJsonValue>> InputsArr;
+			InputsArr.Reserve(EntryNode->Pins.Num());
 			for (const UEdGraphPin* Pin : EntryNode->Pins)
 			{
 				if (!Pin || Pin->bHidden) continue;
@@ -874,6 +885,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetFunctions(const TShare
 		TArray<TSharedPtr<FJsonValue>> OutputsArr;
 		if (ResultNode)
 		{
+			OutputsArr.Reserve(ResultNode->Pins.Num());
 			for (const UEdGraphPin* Pin : ResultNode->Pins)
 			{
 				if (!Pin || Pin->bHidden) continue;
@@ -910,6 +922,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetEventDispatchers(const
 	}
 
 	TArray<TSharedPtr<FJsonValue>> DispatchersArr;
+	DispatchersArr.Reserve(BP->DelegateSignatureGraphs.Num());
 
 	for (UEdGraph* Graph : BP->DelegateSignatureGraphs)
 	{
@@ -928,6 +941,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetEventDispatchers(const
 
 		// Signature pins from the entry node (excluding exec)
 		TArray<TSharedPtr<FJsonValue>> PinsArr;
+		PinsArr.Reserve(Graph->Nodes.Num());
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
 			UK2Node_FunctionEntry* EntryNode = Cast<UK2Node_FunctionEntry>(Node);
@@ -1031,6 +1045,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetInterfaces(const TShar
 	}
 
 	TArray<TSharedPtr<FJsonValue>> InterfacesArr;
+	InterfacesArr.Reserve(BP->ImplementedInterfaces.Num());
 
 	for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
 	{
@@ -1073,6 +1088,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetConstructionScript(con
 	Root->SetStringField(TEXT("graph_type"), TEXT("construction_script"));
 
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
+	NodesArr.Reserve(CSGraph->Nodes.Num());
 	for (UEdGraphNode* Node : CSGraph->Nodes)
 	{
 		if (!Node) continue;
@@ -1213,6 +1229,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 	const TArray<FFunctionCacheEntry>& Cache = GetFunctionCache();
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(Limit);
 	for (const FFunctionCacheEntry& Entry : Cache)
 	{
 		if (Results.Num() >= Limit) break;
@@ -1267,6 +1284,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 		}
 
 		TArray<TSharedPtr<FJsonValue>> InputsArr;
+		InputsArr.Reserve(Entry.Inputs.Num());
 		for (const auto& P : Entry.Inputs)
 		{
 			InputsArr.Add(MakeShared<FJsonValueObject>(P));
@@ -1274,6 +1292,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 		RObj->SetArrayField(TEXT("inputs"), InputsArr);
 
 		TArray<TSharedPtr<FJsonValue>> OutputsArr;
+		OutputsArr.Reserve(Entry.Outputs.Num());
 		for (const auto& P : Entry.Outputs)
 		{
 			OutputsArr.Add(MakeShared<FJsonValueObject>(P));
@@ -1325,6 +1344,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetNodeDetails(const TSha
 	// Add orphan flag per pin — SerializeNode already includes pins but without bOrphanedPin
 	// Rebuild the pins array with the extra field rather than patching the existing one
 	TArray<TSharedPtr<FJsonValue>> PinsArr;
+	PinsArr.Reserve(Node->Pins.Num());
 	for (const UEdGraphPin* Pin : Node->Pins)
 	{
 		if (!Pin || Pin->bHidden) continue;
@@ -1349,6 +1369,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetNodeDetails(const TSha
 		}
 
 		TArray<TSharedPtr<FJsonValue>> ConnArr;
+		ConnArr.Reserve(Pin->LinkedTo.Num());
 		for (const UEdGraphPin* Linked : Pin->LinkedTo)
 		{
 			if (!Linked || !Linked->GetOwningNode()) continue;
@@ -1568,6 +1589,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetFunctionSignature(cons
 
 			// Local variables from the entry node
 			TArray<TSharedPtr<FJsonValue>> LocalsArr;
+			LocalsArr.Reserve(EntryNode->LocalVariables.Num());
 			for (const FBPVariableDescription& LVar : EntryNode->LocalVariables)
 			{
 				TSharedPtr<FJsonObject> LObj = MakeShared<FJsonObject>();
@@ -1754,6 +1776,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetEventDispatcherDetails
 
 	// Collect signature pins from entry node
 	TArray<TSharedPtr<FJsonValue>> PinsArr;
+	PinsArr.Reserve(SigGraph->Nodes.Num());
 	for (UEdGraphNode* Node : SigGraph->Nodes)
 	{
 		UK2Node_FunctionEntry* EntryNode = Cast<UK2Node_FunctionEntry>(Node);
@@ -1894,6 +1917,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetBlueprintInfo(const TS
 
 	// Graph names
 	TArray<TSharedPtr<FJsonValue>> GraphNamesArr;
+	GraphNamesArr.Reserve(BP->UbergraphPages.Num() + BP->FunctionGraphs.Num() + BP->MacroGraphs.Num());
 	for (const UEdGraph* G : BP->UbergraphPages)
 	{
 		if (G) GraphNamesArr.Add(MakeShared<FJsonValueString>(G->GetName()));

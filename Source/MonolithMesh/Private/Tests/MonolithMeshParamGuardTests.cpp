@@ -3,8 +3,62 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithMeshInspectionActions.h"
 #include "Dom/JsonObject.h"
+#include "MonolithMeshInterchangeActions.h"
 #include "MonolithMeshDecalActions.h"
 #include "MonolithMeshProceduralActions.h"
+
+#if WITH_GEOMETRYSCRIPT
+#include "MonolithMeshTerrainActions.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshTerrainSampleMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.TerrainSampleRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardMeshTerrainSampleMalformedParamsTest::RunTest(const FString& Parameters)
+{
+    FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry::Get());
+    TestTrue(TEXT("analyze_building_site action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("analyze_building_site")));
+
+    TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+    // Minimal footprint polygon
+    TArray<TSharedPtr<FJsonValue>> Poly;
+    TArray<TSharedPtr<FJsonValue>> P0; P0.Add(MakeShared<FJsonValueNumber>(0)); P0.Add(MakeShared<FJsonValueNumber>(0));
+    Poly.Add(MakeShared<FJsonValueArray>(P0));
+    TArray<TSharedPtr<FJsonValue>> P1; P1.Add(MakeShared<FJsonValueNumber>(100)); P1.Add(MakeShared<FJsonValueNumber>(0));
+    Poly.Add(MakeShared<FJsonValueArray>(P1));
+    TArray<TSharedPtr<FJsonValue>> P2; P2.Add(MakeShared<FJsonValueNumber>(0)); P2.Add(MakeShared<FJsonValueNumber>(100));
+    Poly.Add(MakeShared<FJsonValueArray>(P2));
+    Params->SetArrayField(TEXT("footprint_polygon"), Poly);
+
+    // Minimal terrain samples
+    TSharedPtr<FJsonObject> TerrainObj = MakeShared<FJsonObject>();
+    TArray<TSharedPtr<FJsonValue>> Row;
+    Row.Add(MakeShared<FJsonValueNumber>(0.0));
+    TArray<TSharedPtr<FJsonValue>> Samples;
+    Samples.Add(MakeShared<FJsonValueArray>(Row));
+    TerrainObj->SetArrayField(TEXT("samples"), Samples);
+
+    // Add malformed min_z
+    TerrainObj->SetStringField(TEXT("min_z"), TEXT("zero"));
+    Params->SetObjectField(TEXT("terrain_samples"), TerrainObj);
+
+    FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("analyze_building_site"), Params);
+
+    TestFalse(TEXT("analyze_building_site rejects malformed min_z parameter"), Result.bSuccess);
+    TestTrue(TEXT("analyze_building_site reports the validation error"), Result.ErrorMessage.Contains(TEXT("min_z")));
+
+    // Test malformed bool all_hit
+    TerrainObj->RemoveField(TEXT("min_z"));
+    TerrainObj->SetStringField(TEXT("all_hit"), TEXT("true"));
+    Params->SetObjectField(TEXT("terrain_samples"), TerrainObj);
+
+    Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("analyze_building_site"), Params);
+
+    TestFalse(TEXT("analyze_building_site rejects malformed all_hit parameter"), Result.bSuccess);
+    TestTrue(TEXT("analyze_building_site reports the validation error"), Result.ErrorMessage.Contains(TEXT("all_hit")));
+
+    return true;
+}
+#endif // WITH_GEOMETRYSCRIPT
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshInspectionMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.InspectionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -20,6 +74,40 @@ bool FMonolithParamGuardMeshInspectionMalformedParamsTest::RunTest(const FString
         FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("get_mesh_info"), Params);
         TestFalse(TEXT("GetMeshInfo rejects missing asset_path"), Result.bSuccess);
         TestTrue(TEXT("GetMeshInfo reports the missing asset_path validation error"), Result.ErrorMessage.Contains(TEXT("asset_path is required")));
+    }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardInterchangeImportMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.InterchangeImportRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardInterchangeImportMalformedParamsTest::RunTest(const FString& Parameters)
+{
+    FMonolithMeshInterchangeActions::RegisterActions(FMonolithToolRegistry::Get());
+    TestTrue(TEXT("interchange.import_asset action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("interchange"), TEXT("import_asset")));
+    TestTrue(TEXT("interchange.import_assets action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("interchange"), TEXT("import_assets")));
+    TestTrue(TEXT("interchange.export_asset action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("interchange"), TEXT("export_asset")));
+
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("destination_path"), TEXT("/Game/Imported"));
+        Params->SetStringField(TEXT("conflict_policy"), TEXT("fail"));
+        Params->SetBoolField(TEXT("dry_run"), true);
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("interchange"), TEXT("import_asset"), Params);
+        TestFalse(TEXT("import_asset rejects missing source_file"), Result.bSuccess);
+        TestTrue(TEXT("import_asset reports missing source_file"), Result.ErrorMessage.Contains(TEXT("source_file")));
+    }
+
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("source_file"), TEXT("missing.fbx"));
+        Params->SetStringField(TEXT("destination_path"), TEXT("/Game/Imported"));
+        Params->SetStringField(TEXT("conflict_policy"), TEXT("fail"));
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("interchange"), TEXT("import_asset"), Params);
+        TestTrue(TEXT("import_asset returns structured row for guarded mutation failure"), Result.bSuccess);
+        TestTrue(TEXT("import_asset response object is valid"), Result.Result.IsValid());
     }
 
     return true;

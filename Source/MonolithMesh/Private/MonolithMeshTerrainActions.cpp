@@ -482,13 +482,38 @@ bool FMonolithMeshTerrainActions::ParseTerrainSample(const TSharedPtr<FJsonObjec
 	}
 
 	// Scalar fields
-	if (Json->HasField(TEXT("min_z")))  OutSample.MinZ = static_cast<float>(Json->GetNumberField(TEXT("min_z")));
-	if (Json->HasField(TEXT("max_z")))  OutSample.MaxZ = static_cast<float>(Json->GetNumberField(TEXT("max_z")));
-	if (Json->HasField(TEXT("avg_z")))  OutSample.AvgZ = static_cast<float>(Json->GetNumberField(TEXT("avg_z")));
-	if (Json->HasField(TEXT("height_diff")))       OutSample.HeightDiff = static_cast<float>(Json->GetNumberField(TEXT("height_diff")));
-	if (Json->HasField(TEXT("avg_slope_degrees")))  OutSample.AvgSlopeDegrees = static_cast<float>(Json->GetNumberField(TEXT("avg_slope_degrees")));
-	if (Json->HasField(TEXT("roughness")))          OutSample.Roughness = static_cast<float>(Json->GetNumberField(TEXT("roughness")));
-	if (Json->HasField(TEXT("all_hit")))            OutSample.bAllHit = Json->GetBoolField(TEXT("all_hit"));
+	auto TryScalar = [&](const TCHAR* Name, float& OutVal) -> bool
+	{
+		if (!Json->HasField(Name)) return true;
+		double Val;
+		if (!Json->TryGetNumberField(Name, Val))
+		{
+			OutError = FString::Printf(TEXT("Invalid type for parameter '%s'. Expected number."), Name);
+			return false;
+		}
+		OutVal = static_cast<float>(Val);
+		return true;
+	};
+
+	if (!TryScalar(TEXT("min_z"), OutSample.MinZ)) return false;
+	if (!TryScalar(TEXT("max_z"), OutSample.MaxZ)) return false;
+	if (!TryScalar(TEXT("avg_z"), OutSample.AvgZ)) return false;
+	if (!TryScalar(TEXT("height_diff"), OutSample.HeightDiff)) return false;
+	if (!TryScalar(TEXT("avg_slope_degrees"), OutSample.AvgSlopeDegrees)) return false;
+	if (!TryScalar(TEXT("roughness"), OutSample.Roughness)) return false;
+
+	auto TryBool = [&](const TCHAR* Name, bool& OutVal) -> bool
+	{
+		if (!Json->HasField(Name)) return true;
+		if (!Json->TryGetBoolField(Name, OutVal))
+		{
+			OutError = FString::Printf(TEXT("Invalid type for parameter '%s'. Expected boolean."), Name);
+			return false;
+		}
+		return true;
+	};
+
+	if (!TryBool(TEXT("all_hit"), OutSample.bAllHit)) return false;
 
 	// Center
 	MonolithMeshUtils::ParseVector(Json, TEXT("center"), OutSample.Center);

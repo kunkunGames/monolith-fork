@@ -335,8 +335,12 @@ namespace MonolithNiagaraHelpers
 			if (!KO.IsValid()) continue;
 			float Time = static_cast<float>(KO->GetNumberField(TEXT("time")));
 			float Value = static_cast<float>(KO->GetNumberField(TEXT("value")));
-			float ArriveTangent = KO->HasField(TEXT("arrive_tangent")) ? static_cast<float>(KO->GetNumberField(TEXT("arrive_tangent"))) : 0.f;
-			float LeaveTangent = KO->HasField(TEXT("leave_tangent")) ? static_cast<float>(KO->GetNumberField(TEXT("leave_tangent"))) : 0.f;
+			float ArriveTangent = 0.f;
+			double ArriveTangent_Double = ArriveTangent;
+			if (KO->TryGetNumberField(TEXT("arrive_tangent"), ArriveTangent_Double)) ArriveTangent = static_cast<float>(ArriveTangent_Double);
+			float LeaveTangent = 0.f;
+			double LeaveTangent_Double = LeaveTangent;
+			if (KO->TryGetNumberField(TEXT("leave_tangent"), LeaveTangent_Double)) LeaveTangent = static_cast<float>(LeaveTangent_Double);
 
 			ERichCurveInterpMode InterpMode = RCIM_Linear;
 			if (KO->HasField(TEXT("interp_mode")))
@@ -1145,9 +1149,10 @@ static bool SetTypedParameterValue(FNiagaraUserRedirectionParameterStore& Store,
 	{
 		TSharedPtr<FJsonObject> O = AsObjectOrParseString(JsonValue);
 		if (!O) return false;
-		FLinearColor V(static_cast<float>(O->GetNumberField(TEXT("r"))), static_cast<float>(O->GetNumberField(TEXT("g"))),
-			static_cast<float>(O->GetNumberField(TEXT("b"))),
-			O->HasField(TEXT("a")) ? static_cast<float>(O->GetNumberField(TEXT("a"))) : 1.0f);
+		float V_A = 1.0f;
+		double V_A_Double = V_A;
+		if (O->TryGetNumberField(TEXT("a"), V_A_Double)) V_A = static_cast<float>(V_A_Double);
+		FLinearColor V(static_cast<float>(O->GetNumberField(TEXT("r"))), static_cast<float>(O->GetNumberField(TEXT("g"))), static_cast<float>(O->GetNumberField(TEXT("b"))), V_A);
 		Store.SetParameterValue<FLinearColor>(V, Var, true);
 		return true;
 	}
@@ -2049,7 +2054,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddEmitter(const TSharedPtr
 	if (EmitterAssetPath.IsEmpty()) EmitterAssetPath = Params->GetStringField(TEXT("template_path"));
 	if (EmitterAssetPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param 'emitter_asset': provide a NiagaraEmitter asset path"));
-	FString EmitterName = Params->HasField(TEXT("name")) ? Params->GetStringField(TEXT("name")) : FString();
+	FString EmitterName = FString();
+	Params->TryGetStringField(TEXT("name"), EmitterName);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -2389,7 +2395,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystem(const TSharedP
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
 		return FMonolithActionResult::Error(ValidationError);
 
-	FString TemplatePath = Params->HasField(TEXT("template")) ? Params->GetStringField(TEXT("template")) : FString();
+	FString TemplatePath = FString();
+	Params->TryGetStringField(TEXT("template"), TemplatePath);
 
 	if (!TemplatePath.IsEmpty())
 	{
@@ -2707,7 +2714,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddModule(const TSharedPtr<
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ScriptUsage = Params->GetStringField(TEXT("usage"));
 	FString ModuleScriptPath = Params->GetStringField(TEXT("module_script"));
-	int32 Index = Params->HasField(TEXT("index")) ? static_cast<int32>(Params->GetNumberField(TEXT("index"))) : -1;
+	int32 Index = -1;
+	double Index_Double = Index;
+	if (Params->TryGetNumberField(TEXT("index"), Index_Double)) Index = static_cast<int32>(Index_Double);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -3067,7 +3076,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputValue(const T
 		else if (O->HasField(TEXT("r")))
 		{
 			double R2 = O->GetNumberField(TEXT("r")), G = O->GetNumberField(TEXT("g"));
-			double B = O->GetNumberField(TEXT("b")), A = O->HasField(TEXT("a")) ? O->GetNumberField(TEXT("a")) : 1.0;
+			double B = O->GetNumberField(TEXT("b"));
+			double A = 1.0;
+			O->TryGetNumberField(TEXT("a"), A);
 			ValStr = FString::Printf(TEXT("%f,%f,%f,%f"), R2, G, B, A);
 		}
 		else
@@ -3563,7 +3574,8 @@ FMonolithActionResult FMonolithNiagaraActions::CreateScriptFromHLSL(const TShare
 	FString Name = Params->GetStringField(TEXT("name"));
 	FString SavePath = Params->GetStringField(TEXT("save_path"));
 	FString HlslBody = Params->GetStringField(TEXT("hlsl"));
-	FString Description = Params->HasField(TEXT("description")) ? Params->GetStringField(TEXT("description")) : FString();
+	FString Description = FString();
+	Params->TryGetStringField(TEXT("description"), Description);
 
 	if (Name.IsEmpty()) return FMonolithActionResult::Error(TEXT("'name' is required"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("'save_path' is required"));
@@ -3940,8 +3952,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetAllParameters(const TSha
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
 
-	FString EmitterFilter = Params->HasField(TEXT("emitter")) ? Params->GetStringField(TEXT("emitter")) : TEXT("");
-	FString ScopeFilter = Params->HasField(TEXT("scope")) ? Params->GetStringField(TEXT("scope")) : TEXT("");
+	FString EmitterFilter = TEXT("");
+	Params->TryGetStringField(TEXT("emitter"), EmitterFilter);
+	FString ScopeFilter = TEXT("");
+	Params->TryGetStringField(TEXT("scope"), ScopeFilter);
 
 	TArray<TSharedPtr<FJsonValue>> All;
 
@@ -4125,7 +4139,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddUserParameter(const TSha
 {
 	FString SystemPath = GetAssetPath(Params);
 	// Accept "name" (canonical) or "parameter_name" (common alias)
-	FString ParamName = Params->HasField(TEXT("name")) ? Params->GetStringField(TEXT("name")) : Params->GetStringField(TEXT("parameter_name"));
+	FString ParamName = FString();
+	if (!Params->TryGetStringField(TEXT("name"), ParamName))
+	{
+		Params->TryGetStringField(TEXT("parameter_name"), ParamName);
+	}
 	FString TypeName = Params->GetStringField(TEXT("type"));
 	// Accept "default" (canonical) or "default_value" (common alias)
 	TSharedPtr<FJsonValue> DefaultJV = Params->HasField(TEXT("default")) ? Params->TryGetField(TEXT("default"))
@@ -4156,11 +4174,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddUserParameter(const TSha
 			TSharedPtr<FJsonObject> O = AsObjectOrParseString(DefaultJV);
 			if (O.IsValid())
 			{
-				FLinearColor V(
-					static_cast<float>(O->GetNumberField(TEXT("r"))),
-					static_cast<float>(O->GetNumberField(TEXT("g"))),
-					static_cast<float>(O->GetNumberField(TEXT("b"))),
-					O->HasField(TEXT("a")) ? static_cast<float>(O->GetNumberField(TEXT("a"))) : 1.0f);
+				float V_A = 1.0f;
+		double V_A_Double = V_A;
+		if (O->TryGetNumberField(TEXT("a"), V_A_Double)) V_A = static_cast<float>(V_A_Double);
+		FLinearColor V(static_cast<float>(O->GetNumberField(TEXT("r"))), static_cast<float>(O->GetNumberField(TEXT("g"))), static_cast<float>(O->GetNumberField(TEXT("b"))), V_A);
 				NV.SetValue<FLinearColor>(V);
 				bDefaultSet = true;
 			}
@@ -4473,11 +4490,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetParameterDefault(const T
 				TSharedPtr<FJsonObject> O = AsObjectOrParseString(JV);
 				if (O.IsValid())
 				{
-					FLinearColor V(
-						static_cast<float>(O->GetNumberField(TEXT("r"))),
-						static_cast<float>(O->GetNumberField(TEXT("g"))),
-						static_cast<float>(O->GetNumberField(TEXT("b"))),
-						O->HasField(TEXT("a")) ? static_cast<float>(O->GetNumberField(TEXT("a"))) : 1.0f);
+					float V_A = 1.0f;
+		double V_A_Double = V_A;
+		if (O->TryGetNumberField(TEXT("a"), V_A_Double)) V_A = static_cast<float>(V_A_Double);
+		FLinearColor V(static_cast<float>(O->GetNumberField(TEXT("r"))), static_cast<float>(O->GetNumberField(TEXT("g"))), static_cast<float>(O->GetNumberField(TEXT("b"))), V_A);
 					WriteVar.SetValue<FLinearColor>(V);
 				}
 			}
@@ -4583,8 +4599,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetCurveValue(const TShared
 		if (!KO) continue;
 		float T = static_cast<float>(KO->GetNumberField(TEXT("time")));
 		float V = static_cast<float>(KO->GetNumberField(TEXT("value")));
-		float AT = KO->HasField(TEXT("arrive_tangent")) ? static_cast<float>(KO->GetNumberField(TEXT("arrive_tangent"))) : 0.f;
-		float LT = KO->HasField(TEXT("leave_tangent")) ? static_cast<float>(KO->GetNumberField(TEXT("leave_tangent"))) : 0.f;
+		float AT = 0.f;
+			double AT_Double = AT;
+			if (KO->TryGetNumberField(TEXT("arrive_tangent"), AT_Double)) AT = static_cast<float>(AT_Double);
+		float LT = 0.f;
+			double LT_Double = LT;
+			if (KO->TryGetNumberField(TEXT("leave_tangent"), LT_Double)) LT = static_cast<float>(LT_Double);
 		KS.Add(FString::Printf(TEXT("(Time=%f,Value=%f,ArriveTangent=%f,LeaveTangent=%f)"), T, V, AT, LT));
 	}
 	FString CurveStr = TEXT("(") + FString::Join(KS, TEXT(",")) + TEXT(")");
@@ -5712,11 +5732,28 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetSystemDiagnostics(const 
 // ============================================================================
 // list_module_scripts — Search available Niagara module scripts via Asset Registry
 // ============================================================================
+int32 FMonolithNiagaraActions::ClampNiagaraQueryLimit(int32 Limit, int32 Max)
+{
+	return FMath::Clamp(Limit, 1, Max);
+}
+
 FMonolithActionResult FMonolithNiagaraActions::HandleListModuleScripts(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Search = Params->HasField(TEXT("search")) ? Params->GetStringField(TEXT("search")) : TEXT("");
-	FString UsageFilter = Params->HasField(TEXT("usage")) ? Params->GetStringField(TEXT("usage")).ToLower() : TEXT("");
-	int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
+	FString Search = TEXT("");
+	Params->TryGetStringField(TEXT("search"), Search);
+	FString UsageFilter = TEXT("");
+	if (Params->TryGetStringField(TEXT("usage"), UsageFilter)) UsageFilter = UsageFilter.ToLower();
+	int32 Limit = 50;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = ClampNiagaraQueryLimit(Limit);
 	bool bIncludeMetadata = Params->HasField(TEXT("include_metadata")) && Params->GetBoolField(TEXT("include_metadata"));
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -6539,7 +6576,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureCurveKeys(const TS
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	FString InputName = Params->GetStringField(TEXT("input"));
-	FString InterpStr = Params->HasField(TEXT("interp")) ? Params->GetStringField(TEXT("interp")).ToLower() : TEXT("cubic");
+	FString InterpStr = TEXT("cubic");
+	if (Params->TryGetStringField(TEXT("interp"), InterpStr)) InterpStr = InterpStr.ToLower();
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -6975,7 +7013,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateSystem(const TShar
 FMonolithActionResult FMonolithNiagaraActions::HandleSetFixedBounds(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = GetAssetPath(Params);
-	FString EmitterHandleId = Params->HasField(TEXT("emitter")) ? Params->GetStringField(TEXT("emitter")) : FString();
+	FString EmitterHandleId = FString();
+	Params->TryGetStringField(TEXT("emitter"), EmitterHandleId);
 	bool bEnabled = !Params->HasField(TEXT("enabled")) || Params->GetBoolField(TEXT("enabled"));
 
 	// Parse min/max arrays
@@ -7073,7 +7112,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateEmitter(const TShared
 {
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterName = Params->GetStringField(TEXT("name"));
-	FString SimTarget = Params->HasField(TEXT("sim_target")) ? Params->GetStringField(TEXT("sim_target")).ToLower() : TEXT("cpu");
+	FString SimTarget = TEXT("cpu");
+	if (Params->TryGetStringField(TEXT("sim_target"), SimTarget)) SimTarget = SimTarget.ToLower();
 	if (EmitterName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: name"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -7606,9 +7646,21 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetDynamicInputValue(const 
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSearchDynamicInputs(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Query = Params->HasField(TEXT("query")) ? Params->GetStringField(TEXT("query")) : TEXT("");
-	FString InputType = Params->HasField(TEXT("input_type")) ? Params->GetStringField(TEXT("input_type")).ToLower() : TEXT("");
-	int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 20;
+	FString Query = TEXT("");
+	Params->TryGetStringField(TEXT("query"), Query);
+	FString InputType = TEXT("");
+	if (Params->TryGetStringField(TEXT("input_type"), InputType)) InputType = InputType.ToLower();
+	int32 Limit = 20;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = ClampNiagaraQueryLimit(Limit);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -7681,10 +7733,16 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddEventHandler(const TShar
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString EventName = Params->GetStringField(TEXT("event_name"));
-	FString SourceEmitterStr = Params->HasField(TEXT("source_emitter")) ? Params->GetStringField(TEXT("source_emitter")) : FString();
-	FString ExecModeStr = Params->HasField(TEXT("execution_mode")) ? Params->GetStringField(TEXT("execution_mode")).ToLower() : TEXT("every_particle");
-	int32 MaxEvents = Params->HasField(TEXT("max_events_per_frame")) ? static_cast<int32>(Params->GetNumberField(TEXT("max_events_per_frame"))) : 0;
-	int32 SpawnNum = Params->HasField(TEXT("spawn_number")) ? static_cast<int32>(Params->GetNumberField(TEXT("spawn_number"))) : 0;
+	FString SourceEmitterStr = FString();
+	Params->TryGetStringField(TEXT("source_emitter"), SourceEmitterStr);
+	FString ExecModeStr = TEXT("every_particle");
+	if (Params->TryGetStringField(TEXT("execution_mode"), ExecModeStr)) ExecModeStr = ExecModeStr.ToLower();
+	int32 MaxEvents = 0;
+	double MaxEvents_Double = MaxEvents;
+	if (Params->TryGetNumberField(TEXT("max_events_per_frame"), MaxEvents_Double)) MaxEvents = static_cast<int32>(MaxEvents_Double);
+	int32 SpawnNum = 0;
+	double SpawnNum_Double = SpawnNum;
+	if (Params->TryGetNumberField(TEXT("spawn_number"), SpawnNum_Double)) SpawnNum = static_cast<int32>(SpawnNum_Double);
 
 	if (EventName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: event_name"));
 
@@ -8032,7 +8090,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddSimulationStage(const TS
 		NewStage->SimulationStageName = FName(*StageName);
 	}
 
-	FString IterSourceStr = Params->HasField(TEXT("iteration_source")) ? Params->GetStringField(TEXT("iteration_source")) : TEXT("particles");
+	FString IterSourceStr = TEXT("particles");
+	Params->TryGetStringField(TEXT("iteration_source"), IterSourceStr);
 	if (IterSourceStr.Equals(TEXT("data_interface"), ESearchCase::IgnoreCase))
 	{
 		NewStage->IterationSource = ENiagaraIterationSource::DataInterface;
@@ -8544,7 +8603,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetDynamicInputTree(const T
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
-	int32 MaxDepth = Params->HasField(TEXT("max_depth")) ? static_cast<int32>(Params->GetNumberField(TEXT("max_depth"))) : 10;
+	int32 MaxDepth = 10;
+	double MaxDepth_Double = MaxDepth;
+	if (Params->TryGetNumberField(TEXT("max_depth"), MaxDepth_Double)) MaxDepth = static_cast<int32>(MaxDepth_Double);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -9029,7 +9090,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMesh(const TShar
 	int32 RendererIndex = static_cast<int32>(Params->GetNumberField(TEXT("renderer_index")));
 	FString MeshPath = Params->GetStringField(TEXT("mesh"));
 	if (MeshPath.IsEmpty()) MeshPath = Params->GetStringField(TEXT("mesh_path"));
-	int32 MeshIndex = Params->HasField(TEXT("mesh_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("mesh_index"))) : 0;
+	int32 MeshIndex = 0;
+	double MeshIndex_Double = MeshIndex;
+	if (Params->TryGetNumberField(TEXT("mesh_index"), MeshIndex_Double)) MeshIndex = static_cast<int32>(MeshIndex_Double);
 
 	if (MeshPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: mesh"));
 
@@ -9105,7 +9168,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureRibbon(const TShar
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	int32 RendererIndex = static_cast<int32>(Params->GetNumberField(TEXT("renderer_index")));
-	FString Preset = Params->HasField(TEXT("preset")) ? Params->GetStringField(TEXT("preset")).ToLower() : FString();
+	FString Preset = FString();
+	if (Params->TryGetStringField(TEXT("preset"), Preset)) Preset = Preset.ToLower();
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -9261,8 +9325,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureSubUV(const TShare
 	int32 RendererIndex = static_cast<int32>(Params->GetNumberField(TEXT("renderer_index")));
 	int32 Columns = static_cast<int32>(Params->GetNumberField(TEXT("columns")));
 	int32 Rows = static_cast<int32>(Params->GetNumberField(TEXT("rows")));
-	bool bBlend = Params->HasField(TEXT("blend")) ? Params->GetBoolField(TEXT("blend")) : false;
-	bool bAddModule = Params->HasField(TEXT("add_animation_module")) ? Params->GetBoolField(TEXT("add_animation_module")) : false;
+	bool bBlend = false;
+	Params->TryGetBoolField(TEXT("blend"), bBlend);
+	bool bAddModule = false;
+	Params->TryGetBoolField(TEXT("add_animation_module"), bAddModule);
 
 	if (Columns <= 0 || Rows <= 0)
 		return FMonolithActionResult::Error(TEXT("columns and rows must be positive integers"));
@@ -9842,11 +9908,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetNPCDefault(const TShared
 		TSharedPtr<FJsonObject> O = AsObjectOrParseString(ValueJV);
 		if (O.IsValid())
 		{
-			FLinearColor LC(
-				static_cast<float>(O->GetNumberField(TEXT("r"))),
-				static_cast<float>(O->GetNumberField(TEXT("g"))),
-				static_cast<float>(O->GetNumberField(TEXT("b"))),
-				O->HasField(TEXT("a")) ? static_cast<float>(O->GetNumberField(TEXT("a"))) : 1.0f);
+			float LC_A = 1.0f;
+		double LC_A_Double = LC_A;
+		if (O->TryGetNumberField(TEXT("a"), LC_A_Double)) LC_A = static_cast<float>(LC_A_Double);
+		FLinearColor LC(static_cast<float>(O->GetNumberField(TEXT("r"))), static_cast<float>(O->GetNumberField(TEXT("g"))), static_cast<float>(O->GetNumberField(TEXT("b"))), LC_A);
 			Store.SetParameterValue(LC, *Found);
 			bSet = true;
 		}
@@ -10096,8 +10161,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetEffectTypeProperty(const
 FMonolithActionResult FMonolithNiagaraActions::HandleGetAvailableParameters(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = GetAssetPath(Params);
-	FString EmitterFilter = Params->HasField(TEXT("emitter")) ? Params->GetStringField(TEXT("emitter")) : FString();
-	FString UsageFilter = Params->HasField(TEXT("usage")) ? Params->GetStringField(TEXT("usage")).ToLower() : TEXT("all");
+	FString EmitterFilter = FString();
+	Params->TryGetStringField(TEXT("emitter"), EmitterFilter);
+	FString UsageFilter = TEXT("all");
+	if (Params->TryGetStringField(TEXT("usage"), UsageFilter)) UsageFilter = UsageFilter.ToLower();
 
 	if (SystemPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
 
@@ -10366,7 +10433,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandlePreviewSystem(const TShared
 	FRotator CameraRotation(-20.0f, -135.0f, 0.0f);
 	float FOV = 60.0f;
 
-	FString CameraAngle = Params->HasField(TEXT("camera_angle")) ? Params->GetStringField(TEXT("camera_angle")).ToLower() : TEXT("three_quarter");
+	FString CameraAngle = TEXT("three_quarter");
+	if (Params->TryGetStringField(TEXT("camera_angle"), CameraAngle)) CameraAngle = CameraAngle.ToLower();
 	if (CameraAngle == TEXT("front"))
 	{
 		CameraLocation = FVector(300.0f, 0.0f, 50.0f);
@@ -10531,8 +10599,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetEventHandlerProperty(con
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
 	if (!JV.IsValid()) return FMonolithActionResult::Error(TEXT("Missing required field: value"));
 
-	int32 HandlerIndex = Params->HasField(TEXT("handler_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("handler_index"))) : -1;
-	FString UsageIdStr = Params->HasField(TEXT("usage_id")) ? Params->GetStringField(TEXT("usage_id")) : FString();
+	int32 HandlerIndex = -1;
+	double HandlerIndex_Double = HandlerIndex;
+	if (Params->TryGetNumberField(TEXT("handler_index"), HandlerIndex_Double)) HandlerIndex = static_cast<int32>(HandlerIndex_Double);
+	FString UsageIdStr = FString();
+	Params->TryGetStringField(TEXT("usage_id"), UsageIdStr);
 
 	if (HandlerIndex < 0 && UsageIdStr.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Must provide handler_index or usage_id"));
@@ -10659,8 +10730,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveEventHandler(const TS
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 
-	int32 HandlerIndex = Params->HasField(TEXT("handler_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("handler_index"))) : -1;
-	FString UsageIdStr = Params->HasField(TEXT("usage_id")) ? Params->GetStringField(TEXT("usage_id")) : FString();
+	int32 HandlerIndex = -1;
+	double HandlerIndex_Double = HandlerIndex;
+	if (Params->TryGetNumberField(TEXT("handler_index"), HandlerIndex_Double)) HandlerIndex = static_cast<int32>(HandlerIndex_Double);
+	FString UsageIdStr = FString();
+	Params->TryGetStringField(TEXT("usage_id"), UsageIdStr);
 
 	if (HandlerIndex < 0 && UsageIdStr.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Must provide handler_index or usage_id"));
@@ -10833,8 +10907,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSimulationStageProperty(
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
 	if (!JV.IsValid()) return FMonolithActionResult::Error(TEXT("Missing required field: value"));
 
-	int32 StageIndex = Params->HasField(TEXT("stage_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("stage_index"))) : -1;
-	FString StageName = Params->HasField(TEXT("stage_name")) ? Params->GetStringField(TEXT("stage_name")) : FString();
+	int32 StageIndex = -1;
+	double StageIndex_Double = StageIndex;
+	if (Params->TryGetNumberField(TEXT("stage_index"), StageIndex_Double)) StageIndex = static_cast<int32>(StageIndex_Double);
+	FString StageName = FString();
+	Params->TryGetStringField(TEXT("stage_name"), StageName);
 
 	if (StageIndex < 0 && StageName.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Must provide stage_index or stage_name"));
@@ -10993,8 +11070,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveSimulationStage(const
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 
-	int32 StageIndex = Params->HasField(TEXT("stage_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("stage_index"))) : -1;
-	FString StageName = Params->HasField(TEXT("stage_name")) ? Params->GetStringField(TEXT("stage_name")) : FString();
+	int32 StageIndex = -1;
+	double StageIndex_Double = StageIndex;
+	if (Params->TryGetNumberField(TEXT("stage_index"), StageIndex_Double)) StageIndex = static_cast<int32>(StageIndex_Double);
+	FString StageName = FString();
+	Params->TryGetStringField(TEXT("stage_name"), StageName);
 
 	if (StageIndex < 0 && StageName.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Must provide stage_index or stage_name"));
@@ -11207,7 +11287,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 {
 	FString PathA = Params->GetStringField(TEXT("asset_path_a"));
 	FString PathB = Params->GetStringField(TEXT("asset_path_b"));
-	FString DetailLevel = Params->HasField(TEXT("detail_level")) ? Params->GetStringField(TEXT("detail_level")).ToLower() : TEXT("full");
+	FString DetailLevel = TEXT("full");
+	if (Params->TryGetStringField(TEXT("detail_level"), DetailLevel)) DetailLevel = DetailLevel.ToLower();
 	bool bSummary = (DetailLevel == TEXT("summary"));
 
 	if (PathA.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path_a"));
@@ -11755,7 +11836,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveSystem(const TSharedPtr
 	if (AssetPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param: asset_path"));
 
-	bool bOnlyIfDirty = Params->HasField(TEXT("only_if_dirty")) ? Params->GetBoolField(TEXT("only_if_dirty")) : true;
+	bool bOnlyIfDirty = true;
+	Params->TryGetBoolField(TEXT("only_if_dirty"), bOnlyIfDirty);
 
 	// Load via FMonolithAssetUtils which handles path normalization
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath<UObject>(AssetPath);
@@ -11809,7 +11891,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetStaticSwitchValue(const 
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	if (ModuleNodeGuid.IsEmpty()) ModuleNodeGuid = Params->GetStringField(TEXT("module_name"));
-	FString InputName = Params->HasField(TEXT("input")) ? Params->GetStringField(TEXT("input")) : FString();
+	FString InputName = FString();
+	Params->TryGetStringField(TEXT("input"), InputName);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -12405,7 +12488,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleClearEmitterModules(const T
 {
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString UsageFilter = Params->HasField(TEXT("usage")) ? Params->GetStringField(TEXT("usage")).ToLower() : TEXT("all");
+	FString UsageFilter = TEXT("all");
+	if (Params->TryGetStringField(TEXT("usage"), UsageFilter)) UsageFilter = UsageFilter.ToLower();
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -12770,9 +12854,21 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetScalabilitySettings(cons
 // ============================================================================
 FMonolithActionResult FMonolithNiagaraActions::HandleListSystems(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Search = Params->HasField(TEXT("search")) ? Params->GetStringField(TEXT("search")) : TEXT("");
-	FString PathFilter = Params->HasField(TEXT("path")) ? Params->GetStringField(TEXT("path")) : TEXT("");
-	int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
+	FString Search = TEXT("");
+	Params->TryGetStringField(TEXT("search"), Search);
+	FString PathFilter = TEXT("");
+	Params->TryGetStringField(TEXT("path"), PathFilter);
+	int32 Limit = 50;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = ClampNiagaraQueryLimit(Limit);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -12860,8 +12956,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TShar
 	if (SystemPath.IsEmpty() || SrcEmitter.IsEmpty() || SrcModuleGuid.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("asset_path, source_emitter, and source_module_node are required"));
 
-	FString TgtEmitter = Params->HasField(TEXT("target_emitter")) ? Params->GetStringField(TEXT("target_emitter")) : SrcEmitter;
-	int32 TgtIndex = Params->HasField(TEXT("target_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("target_index"))) : -1;
+	FString TgtEmitter = SrcEmitter;
+	Params->TryGetStringField(TEXT("target_emitter"), TgtEmitter);
+	int32 TgtIndex = -1;
+	double TgtIndex_Double = TgtIndex;
+	if (Params->TryGetNumberField(TEXT("target_index"), TgtIndex_Double)) TgtIndex = static_cast<int32>(TgtIndex_Double);
 
 	// Load system and find source module
 	UNiagaraSystem* System = LoadSystem(SystemPath);
