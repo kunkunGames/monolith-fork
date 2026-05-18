@@ -56,13 +56,13 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 | `create_system` | Create new system (blank or from template via DuplicateAsset) |
 | `list_emitters` | List all emitters with name, index, enabled, sim_target, renderer_count, GUID |
 | `list_renderers` | List all renderers across emitters with class (short `type` name), index, enabled, material |
-| `list_module_scripts` | Search available Niagara module scripts by keyword. Returns matching script asset paths |
+| `list_module_scripts` | Search available Niagara module scripts by keyword. Returns matching script asset paths. Numeric `limit` defaults to 50, rejects wrong-type values, and clamps to `[1, 1000]` |
 | `list_renderer_properties` | List editable properties on a renderer. Params: `asset_path`, `emitter`, `renderer` |
 | `get_system_diagnostics` | Compile errors, warnings, renderer/SimTarget incompatibility, GPU+dynamic bounds warnings, per-script stats (op count, registers, compile status). Added 2026-03-13 |
 | `duplicate_system` | Clone an entire Niagara system to a new path |
 | `get_system_property` | Read a system-level property (WarmupTime, bDeterminism, RandomSeed, etc.) |
 | `get_system_summary` | One-call overview of an entire Niagara system (emitters, params, renderers, module counts) |
-| `list_systems` | Search/list Niagara system assets in the project |
+| `list_systems` | Search/list Niagara system assets in the project. Numeric `limit` defaults to 50, rejects wrong-type values, and clamps to `[1, 1000]` |
 | `save_system` | Save a Niagara asset (system, script, NPC, effect type) to disk |
 | `set_effect_type` | Assign a UNiagaraEffectType for scalability and cull distance |
 | `set_fixed_bounds` | Set explicit bounds on system or emitter for GPU performance |
@@ -145,7 +145,7 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 | `get_dynamic_input_value` | Get the current value of a dynamic input |
 | `get_dynamic_input_inputs` | Get all sub-inputs of a dynamic input |
 | `add_dynamic_input` | Attach a dynamic input script to a module input pin |
-| `search_dynamic_inputs` | Browse available dynamic input scripts with optional type filtering |
+| `search_dynamic_inputs` | Browse available dynamic input scripts with optional type filtering. Numeric `limit` defaults to 20, rejects wrong-type values, and clamps to `[1, 1000]` |
 | `set_dynamic_input_value` | Set an input value on a dynamic input node |
 
 **Emitter Management (8)**

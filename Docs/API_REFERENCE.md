@@ -239,6 +239,11 @@ Niagara VFX system editing — emitters, modules, params, renderers, HLSL, dynam
 
 > For full param schemas, call `monolith_discover("niagara")` at runtime.
 
+`list_systems`, `list_module_scripts`, and `search_dynamic_inputs` accept a numeric
+`limit`. Missing values keep their existing defaults (`50`, `50`, and `20`
+respectively), present non-numeric values return an invalid-param error, and
+numeric values are clamped to the inclusive range `[1, 1000]`.
+
 **Action categories:**
 
 | Category | Actions | Examples |
