@@ -22,6 +22,8 @@ public class MonolithLogicDriver : ModuleRules
 				{
 					bHasLogicDriver = Directory.Exists(
 						Path.Combine(ProjectPluginsDir, "SMSystem"))
+						|| Directory.Exists(
+							Path.Combine(ProjectPluginsDir, "LogicDriver"))
 						|| Directory.GetDirectories(
 							ProjectPluginsDir, "LogicDriver_*",
 							SearchOption.TopDirectoryOnly).Length > 0;
