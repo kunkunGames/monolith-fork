@@ -187,7 +187,7 @@ UAIPerceptionComponent* FMonolithAIPerceptionActions::GetPerceptionTemplate(USCS
 	return Cast<UAIPerceptionComponent>(Node->ComponentTemplate);
 }
 
-void FMonolithAIPerceptionActions::ParseAffiliation(const TSharedPtr<FJsonObject>& Params, const FString& FieldName,
+FMonolithActionResult FMonolithAIPerceptionActions::ParseAffiliation(const TSharedPtr<FJsonObject>& Params, const FString& FieldName,
 	bool& bEnemies, bool& bNeutrals, bool& bFriendlies)
 {
 	// Defaults
@@ -197,25 +197,40 @@ void FMonolithAIPerceptionActions::ParseAffiliation(const TSharedPtr<FJsonObject
 
 	if (!Params->HasField(FieldName))
 	{
-		return;
+		return FMonolithActionResult::Success(nullptr);
 	}
 
 	// Try as object: {"enemies": true, "neutrals": true, "friendlies": false}
 	const TSharedPtr<FJsonObject>* AffObj = nullptr;
-	if (Params->TryGetObjectField(FieldName, AffObj) && AffObj && (*AffObj)->Values.Num() > 0)
+	if (Params->TryGetObjectField(FieldName, AffObj) && AffObj && (*AffObj).IsValid())
 	{
 		if ((*AffObj)->HasField(TEXT("enemies")))
-			bEnemies = (*AffObj)->GetBoolField(TEXT("enemies"));
+		{
+			if (!(*AffObj)->TryGetBoolField(TEXT("enemies"), bEnemies))
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter '%s.enemies' must be a boolean"), *FieldName));
+			}
+		}
 		if ((*AffObj)->HasField(TEXT("neutrals")))
-			bNeutrals = (*AffObj)->GetBoolField(TEXT("neutrals"));
+		{
+			if (!(*AffObj)->TryGetBoolField(TEXT("neutrals"), bNeutrals))
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter '%s.neutrals' must be a boolean"), *FieldName));
+			}
+		}
 		if ((*AffObj)->HasField(TEXT("friendlies")))
-			bFriendlies = (*AffObj)->GetBoolField(TEXT("friendlies"));
-		return;
+		{
+			if (!(*AffObj)->TryGetBoolField(TEXT("friendlies"), bFriendlies))
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter '%s.friendlies' must be a boolean"), *FieldName));
+			}
+		}
+		return FMonolithActionResult::Success(nullptr);
 	}
 
 	// Try as comma-separated string: "enemies,neutrals"
-	FString AffStr = Params->GetStringField(FieldName);
-	if (!AffStr.IsEmpty())
+	FString AffStr;
+	if (Params->TryGetStringField(FieldName, AffStr) && !AffStr.IsEmpty())
 	{
 		bEnemies = false;
 		bNeutrals = false;
@@ -233,7 +248,12 @@ void FMonolithAIPerceptionActions::ParseAffiliation(const TSharedPtr<FJsonObject
 			else if (Part.Equals(TEXT("friendlies"), ESearchCase::IgnoreCase))
 				bFriendlies = true;
 		}
+		return FMonolithActionResult::Success(nullptr);
 	}
+
+	return FMonolithActionResult::Error(FString::Printf(
+		TEXT("Parameter '%s' must be an object or a comma-separated string"),
+		*FieldName));
 }
 
 TSharedPtr<FJsonObject> FMonolithAIPerceptionActions::AffiliationToJson(const FAISenseAffiliationFilter& Filter)
@@ -558,6 +578,29 @@ namespace
 		return true;
 	}
 
+	FMonolithActionResult ValidateBaseSenseConfigParamTypes(const TSharedPtr<FJsonObject>& Params)
+	{
+		if (!Params.IsValid())
+		{
+			return FMonolithActionResult::Success(nullptr);
+		}
+
+		double TmpMaxAge = 0.0;
+		if (Params->HasField(TEXT("max_age")) && !Params->TryGetNumberField(TEXT("max_age"), TmpMaxAge))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'max_age' must be a number"));
+		}
+
+		bool bTmpStartsEnabled = false;
+		if (Params->HasField(TEXT("starts_enabled")) &&
+			!Params->TryGetBoolField(TEXT("starts_enabled"), bTmpStartsEnabled))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'starts_enabled' must be a boolean"));
+		}
+
+		return FMonolithActionResult::Success(nullptr);
+	}
+
 	/**
 	 * Apply UAISenseConfig base-class params (MaxAge, bStartsEnabled) to the given sense config via reflection,
 	 * and emit verified_value entries into OutVerified for each one the caller passed.
@@ -570,7 +613,7 @@ namespace
 	 * @param OutVerified  Verified-value JSON object the caller emits under top-level "verified_value".
 	 * @param OutWarnings  Append-only warnings array; gets entries when reflection lookup fails (silent reverts).
 	 */
-	void ApplyBaseSenseConfigParams(
+	FMonolithActionResult ApplyBaseSenseConfigParams(
 		UAISenseConfig* SenseConfig,
 		const TSharedPtr<FJsonObject>& Params,
 		const TSharedPtr<FJsonObject>& OutVerified,
@@ -578,13 +621,27 @@ namespace
 	{
 		if (!SenseConfig || !Params.IsValid() || !OutVerified.IsValid())
 		{
-			return;
+			return FMonolithActionResult::Success(nullptr);
+		}
+
+		double TmpMaxAge = 0.0;
+		const bool bHasMaxAge = Params->HasField(TEXT("max_age"));
+		if (bHasMaxAge && !Params->TryGetNumberField(TEXT("max_age"), TmpMaxAge))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'max_age' must be a number"));
+		}
+
+		bool bRequestedStartsEnabled = false;
+		const bool bHasStartsEnabled = Params->HasField(TEXT("starts_enabled"));
+		if (bHasStartsEnabled && !Params->TryGetBoolField(TEXT("starts_enabled"), bRequestedStartsEnabled))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'starts_enabled' must be a boolean"));
 		}
 
 		// max_age — protected float on UAISenseConfig
-		if (Params->HasField(TEXT("max_age")))
+		if (bHasMaxAge)
 		{
-			const float Requested = (float)Params->GetNumberField(TEXT("max_age"));
+			const float Requested = (float)TmpMaxAge;
 			float Actual = 0.0f;
 			bool bWrote = false;
 			if (FFloatProperty* MaxAgeProp = CastField<FFloatProperty>(
@@ -609,9 +666,9 @@ namespace
 		}
 
 		// bStartsEnabled — uint32:1 bitfield UPROPERTY (UHT exposes as FBoolProperty)
-		if (Params->HasField(TEXT("starts_enabled")))
+		if (bHasStartsEnabled)
 		{
-			const bool Requested = Params->GetBoolField(TEXT("starts_enabled"));
+			const bool Requested = bRequestedStartsEnabled;
 			bool Actual = false;
 			bool bWrote = false;
 			if (FBoolProperty* StartsProp = CastField<FBoolProperty>(
@@ -634,6 +691,8 @@ namespace
 					TEXT("UAISenseConfig::bStartsEnabled property not found via reflection — write skipped.")));
 			}
 		}
+
+		return FMonolithActionResult::Success(nullptr);
 	}
 }
 
@@ -650,10 +709,53 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureSightSense(co
 		return ErrResult;
 	}
 
-	double Radius = Params->GetNumberField(TEXT("radius"));
+		double Radius;
+		if (!Params->TryGetNumberField(TEXT("radius"), Radius))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'radius' must be a number"));
+		}
 	if (Radius <= 0.0)
 	{
 		return FMonolithActionResult::Error(TEXT("radius must be a positive number"));
+	}
+
+	double TmpNumber = 0.0;
+	if (Params->HasField(TEXT("lose_radius")) && !Params->TryGetNumberField(TEXT("lose_radius"), TmpNumber))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'lose_radius' must be a number"));
+	}
+	if (Params->HasField(TEXT("peripheral_angle")) && !Params->TryGetNumberField(TEXT("peripheral_angle"), TmpNumber))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'peripheral_angle' must be a number"));
+	}
+	if (Params->HasField(TEXT("auto_success_range")) && !Params->TryGetNumberField(TEXT("auto_success_range"), TmpNumber))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'auto_success_range' must be a number"));
+	}
+	if (Params->HasField(TEXT("pov_offset")) && !Params->TryGetNumberField(TEXT("pov_offset"), TmpNumber))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'pov_offset' must be a number"));
+	}
+	if (Params->HasField(TEXT("near_clipping_radius")) && !Params->TryGetNumberField(TEXT("near_clipping_radius"), TmpNumber))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'near_clipping_radius' must be a number"));
+	}
+	bool bTmpBool = false;
+	if (Params->HasField(TEXT("auto_register_all_pawns")) &&
+		!Params->TryGetBoolField(TEXT("auto_register_all_pawns"), bTmpBool))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'auto_register_all_pawns' must be a boolean"));
+	}
+	FMonolithActionResult BaseParamValidation = ValidateBaseSenseConfigParamTypes(Params);
+	if (!BaseParamValidation.bSuccess)
+	{
+		return BaseParamValidation;
+	}
+	bool bEnemies, bNeutrals, bFriendlies;
+	FMonolithActionResult AffilResult = ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
+	if (!AffilResult.bSuccess)
+	{
+		return AffilResult;
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Configure Sight Sense")));
@@ -669,7 +771,9 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureSightSense(co
 	// Lose radius: default to radius * 1.1
 	if (Params->HasField(TEXT("lose_radius")))
 	{
-		Sight->LoseSightRadius = static_cast<float>(Params->GetNumberField(TEXT("lose_radius")));
+			double Tmp;
+			if (!Params->TryGetNumberField(TEXT("lose_radius"), Tmp)) return FMonolithActionResult::Error(TEXT("Parameter 'lose_radius' must be a number"));
+			Sight->LoseSightRadius = static_cast<float>(Tmp);
 	}
 	else
 	{
@@ -679,24 +783,28 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureSightSense(co
 	// Peripheral vision angle
 	if (Params->HasField(TEXT("peripheral_angle")))
 	{
-		Sight->PeripheralVisionAngleDegrees = static_cast<float>(Params->GetNumberField(TEXT("peripheral_angle")));
+			double Tmp;
+			if (!Params->TryGetNumberField(TEXT("peripheral_angle"), Tmp)) return FMonolithActionResult::Error(TEXT("Parameter 'peripheral_angle' must be a number"));
+			Sight->PeripheralVisionAngleDegrees = static_cast<float>(Tmp);
 	}
 
 	// Auto success range
 	if (Params->HasField(TEXT("auto_success_range")))
 	{
-		Sight->AutoSuccessRangeFromLastSeenLocation = static_cast<float>(Params->GetNumberField(TEXT("auto_success_range")));
+			double Tmp;
+			if (!Params->TryGetNumberField(TEXT("auto_success_range"), Tmp)) return FMonolithActionResult::Error(TEXT("Parameter 'auto_success_range' must be a number"));
+			Sight->AutoSuccessRangeFromLastSeenLocation = static_cast<float>(Tmp);
 	}
 
 	// POV offset
 	if (Params->HasField(TEXT("pov_offset")))
 	{
-		Sight->PointOfViewBackwardOffset = static_cast<float>(Params->GetNumberField(TEXT("pov_offset")));
+			double Tmp;
+			if (!Params->TryGetNumberField(TEXT("pov_offset"), Tmp)) return FMonolithActionResult::Error(TEXT("Parameter 'pov_offset' must be a number"));
+			Sight->PointOfViewBackwardOffset = static_cast<float>(Tmp);
 	}
 
 	// Affiliation
-	bool bEnemies, bNeutrals, bFriendlies;
-	ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
 	if (Params->HasField(TEXT("affiliation")))
 	{
 		Sight->DetectionByAffiliation.bDetectEnemies = bEnemies;
@@ -711,7 +819,9 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureSightSense(co
 	// near_clipping_radius — UAISenseConfig_Sight::NearClippingRadius (float)
 	if (Params->HasField(TEXT("near_clipping_radius")))
 	{
-		const float Requested = (float)Params->GetNumberField(TEXT("near_clipping_radius"));
+			double Tmp;
+			if (!Params->TryGetNumberField(TEXT("near_clipping_radius"), Tmp)) return FMonolithActionResult::Error(TEXT("Parameter 'near_clipping_radius' must be a number"));
+			const float Requested = (float)Tmp;
 		float Actual = 0.0f;
 		bool bWrote = false;
 		if (FFloatProperty* Prop = CastField<FFloatProperty>(
@@ -739,7 +849,8 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureSightSense(co
 	// object (EditDefaultsOnly). Writing here mutates the CDO so all sight-sense instances inherit the new value.
 	if (Params->HasField(TEXT("auto_register_all_pawns")))
 	{
-		const bool Requested = Params->GetBoolField(TEXT("auto_register_all_pawns"));
+			bool Requested;
+			if (!Params->TryGetBoolField(TEXT("auto_register_all_pawns"), Requested)) return FMonolithActionResult::Error(TEXT("Parameter 'auto_register_all_pawns' must be a boolean"));
 		bool Actual = false;
 		bool bWrote = false;
 		if (UAISense_Sight* SenseCDO = GetMutableDefault<UAISense_Sight>())
@@ -768,7 +879,8 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureSightSense(co
 	}
 
 	// Base-class params (max_age, bStartsEnabled) lifted via shared helper
-	ApplyBaseSenseConfigParams(Sight, Params, Verified, Warnings);
+		FMonolithActionResult BaseResult = ApplyBaseSenseConfigParams(Sight, Params, Verified, Warnings);
+		if (!BaseResult.bSuccess) return BaseResult;
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Ctx.BP);
 
@@ -798,7 +910,11 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureHearingSense(
 		return ErrResult;
 	}
 
-	double Range = Params->GetNumberField(TEXT("range"));
+		double Range;
+		if (!Params->TryGetNumberField(TEXT("range"), Range))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'range' must be a number"));
+		}
 	if (Range <= 0.0)
 	{
 		return FMonolithActionResult::Error(TEXT("range must be a positive number"));
@@ -816,7 +932,9 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureHearingSense(
 
 	// Affiliation
 	bool bEnemies, bNeutrals, bFriendlies;
-	ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
+		FMonolithActionResult AffilResult = ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
+		if (!AffilResult.bSuccess) return AffilResult;
+
 	if (Params->HasField(TEXT("affiliation")))
 	{
 		Hearing->DetectionByAffiliation.bDetectEnemies = bEnemies;
@@ -827,7 +945,8 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureHearingSense(
 	// Base-class params (max_age, bStartsEnabled) via shared helper
 	TSharedPtr<FJsonObject> Verified = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Warnings;
-	ApplyBaseSenseConfigParams(Hearing, Params, Verified, Warnings);
+		FMonolithActionResult BaseResult = ApplyBaseSenseConfigParams(Hearing, Params, Verified, Warnings);
+		if (!BaseResult.bSuccess) return BaseResult;
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Ctx.BP);
 
@@ -889,7 +1008,8 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureDamageSense(c
 	// max_age block — same semantics, now extended with bStartsEnabled and reused across all sense actions.
 	TSharedPtr<FJsonObject> Verified = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Warnings;
-	ApplyBaseSenseConfigParams(Damage, Params, Verified, Warnings);
+		FMonolithActionResult BaseResult = ApplyBaseSenseConfigParams(Damage, Params, Verified, Warnings);
+		if (!BaseResult.bSuccess) return BaseResult;
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Ctx.BP);
 
@@ -931,7 +1051,8 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureTouchSense(co
 
 	// Affiliation
 	bool bEnemies, bNeutrals, bFriendlies;
-	ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
+		FMonolithActionResult AffilResult = ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
+		if (!AffilResult.bSuccess) return AffilResult;
 	if (Params->HasField(TEXT("affiliation")))
 	{
 		Touch->DetectionByAffiliation.bDetectEnemies = bEnemies;
@@ -944,7 +1065,8 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureTouchSense(co
 	// the runtime sense class is hardcoded by GetSenseImplementation(). No "implementation" param is wired.
 	TSharedPtr<FJsonObject> Verified = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Warnings;
-	ApplyBaseSenseConfigParams(Touch, Params, Verified, Warnings);
+		FMonolithActionResult BaseResult = ApplyBaseSenseConfigParams(Touch, Params, Verified, Warnings);
+		if (!BaseResult.bSuccess) return BaseResult;
 
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Ctx.BP);
 
@@ -1090,7 +1212,7 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleAddStimuliSourceCompon
 	bool bAutoRegister = true;
 	if (Params->HasField(TEXT("auto_register")))
 	{
-		bAutoRegister = Params->GetBoolField(TEXT("auto_register"));
+			if (!Params->TryGetBoolField(TEXT("auto_register"), bAutoRegister)) return FMonolithActionResult::Error(TEXT("Parameter 'auto_register' must be a boolean"));
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Add Stimuli Source Component")));
@@ -1204,6 +1326,13 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureStimuliSource
 		SenseClasses.Add(SC);
 	}
 
+	bool bAutoRegisterVal = true;
+	const bool bHasAutoRegister = Params->HasField(TEXT("auto_register"));
+	if (bHasAutoRegister && !Params->TryGetBoolField(TEXT("auto_register"), bAutoRegisterVal))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'auto_register' must be a boolean"));
+	}
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Configure Stimuli Source")));
 
 	// Replace the registered stimuli list via reflection (protected member)
@@ -1224,10 +1353,8 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureStimuliSource
 	}
 
 	// Auto-register flag via reflection
-	bool bAutoRegisterVal = true;
-	if (Params->HasField(TEXT("auto_register")))
+	if (bHasAutoRegister)
 	{
-		bAutoRegisterVal = Params->GetBoolField(TEXT("auto_register"));
 		if (FBoolProperty* AutoRegProp = CastField<FBoolProperty>(
 			UAIPerceptionStimuliSourceComponent::StaticClass()->FindPropertyByName(TEXT("bAutoRegisterAsSource"))))
 		{

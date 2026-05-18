@@ -57,7 +57,7 @@ private:
 	// ── Helpers ──
 
 	/** Parse affiliation from JSON (object with enemies/neutrals/friendlies bools, or comma-separated string) */
-	static void ParseAffiliation(const TSharedPtr<FJsonObject>& Params, const FString& FieldName,
+	static FMonolithActionResult ParseAffiliation(const TSharedPtr<FJsonObject>& Params, const FString& FieldName,
 		bool& bEnemies, bool& bNeutrals, bool& bFriendlies);
 
 	/** Serialize affiliation filter to JSON */
