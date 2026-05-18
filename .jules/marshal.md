@@ -88,3 +88,9 @@
 **Learning:** Billing or spending-limit errors in remote GitHub Actions are an external repository configuration state, not a code defect that an agent can resolve.
 **Prevention:** Updated `AGENTS.md` to instruct agents to recognize these external limit errors and inform the user rather than attempting to fix them via code changes.
 **Avoid:** Creating pointless PRs to "fix" an external CI billing issue.
+
+## 2026-05-19 - Forbid literal branch name placeholders
+**Coordination issue:** Agents were creating branches like `jules/skill-doc-smith/short-topic` or `jules/ui-smith/short-topic`, using literal prompt placeholder strings instead of describing their work.
+**Learning:** Without explicit instruction, agents often copy-paste the exact placeholder string provided in their system prompts rather than replacing them with descriptive text.
+**Prevention:** Updated `AGENTS.md` to explicitly forbid using literal strings like `short-topic` or `module-or-area`, requiring them to be replaced with descriptive text.
+**Avoid:** Creating branches containing literal placeholder strings like `short-topic` or `module-or-area`.
