@@ -238,3 +238,22 @@ FMonolithCrashBreadcrumb::FScopedCapture::~FScopedCapture()
 	// reallocation on the next ExecuteAction is a small win. The contents
 	// are only read by the fatal handler when bSlotActive==true.
 }
+
+void FMonolithCrashBreadcrumb::FScopedCapture::SetOutcome(
+	bool bSuccess,
+	int32 ErrorCode,
+	const TSharedPtr<FJsonObject>& ResultObject,
+	const FString& ErrorMessage)
+{
+	if (!bOwnsSlot)
+	{
+		return;
+	}
+
+	FMonolithActionExecutionGuard::Get().SetActionOutcome(
+		ExecutionScope,
+		bSuccess,
+		ErrorCode,
+		ResultObject,
+		ErrorMessage);
+}

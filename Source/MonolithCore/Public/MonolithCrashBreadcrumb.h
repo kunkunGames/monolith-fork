@@ -54,6 +54,8 @@ public:
 			const TSharedPtr<FJsonObject>& Params);
 		~FScopedCapture();
 
+		void SetOutcome(bool bSuccess, int32 ErrorCode, const TSharedPtr<FJsonObject>& ResultObject, const FString& ErrorMessage);
+
 	private:
 		// Non-copyable / non-movable to keep slot lifetime predictable.
 		FScopedCapture(const FScopedCapture&) = delete;

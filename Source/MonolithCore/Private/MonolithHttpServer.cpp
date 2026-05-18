@@ -1,4 +1,5 @@
 #include "MonolithHttpServer.h"
+#include "MonolithActionExecutionGuard.h"
 #include "MonolithCoreModule.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
@@ -647,12 +648,26 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 {
 	if (!Params.IsValid())
 	{
+		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+			TEXT(""),
+			TEXT(""),
+			TEXT(""),
+			TEXT("malformed_dispatch"),
+			FMonolithJsonUtils::ErrInvalidParams,
+			TEXT("Missing params"));
 		return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams, TEXT("Missing params"));
 	}
 
 	FString ToolName;
 	if (!Params->TryGetStringField(TEXT("name"), ToolName))
 	{
+		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+			TEXT(""),
+			TEXT(""),
+			TEXT(""),
+			TEXT("malformed_dispatch"),
+			FMonolithJsonUtils::ErrInvalidParams,
+			TEXT("Missing tool name"));
 		return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams, TEXT("Missing tool name"));
 	}
 
@@ -685,6 +700,13 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 
 		if (!Arguments->TryGetStringField(TEXT("action"), Action))
 		{
+			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+				ToolName,
+				Namespace,
+				TEXT(""),
+				TEXT("malformed_dispatch"),
+				FMonolithJsonUtils::ErrInvalidParams,
+				TEXT("Missing 'action' in arguments"));
 			return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams,
 				TEXT("Missing 'action' in arguments"));
 		}
@@ -749,6 +771,13 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 	}
 	else
 	{
+		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+			ToolName,
+			TEXT(""),
+			TEXT(""),
+			TEXT("malformed_dispatch"),
+			FMonolithJsonUtils::ErrMethodNotFound,
+			FString::Printf(TEXT("Unknown tool: %s"), *ToolName));
 		return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrMethodNotFound,
 			FString::Printf(TEXT("Unknown tool: %s"), *ToolName));
 	}
@@ -929,4 +958,3 @@ void FMonolithHttpServer::AddCorsHeaders(FHttpServerResponse& Response, const FH
 	// read by the requesting page. Same-origin and non-browser callers
 	// (Claude Code via the proxy) are unaffected.
 }
-

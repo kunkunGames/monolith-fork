@@ -92,14 +92,19 @@ static bool IsDomainToolExposureEnabled(const UMonolithSettings* Settings)
 	return Settings && Settings->bEnableDeferredDomainCatalog && Settings->bExposeLoadedDomainsAsMcpTools;
 }
 
-static TSharedPtr<FJsonObject> MakeSettingsOnlyFeatureStatus(bool bConfigured, const FString& State)
+static TSharedPtr<FJsonObject> MakeFeatureStatus(bool bConfigured, bool bActive, const FString& State)
 {
 	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 	Obj->SetBoolField(TEXT("compiled"), true);
 	Obj->SetBoolField(TEXT("configured"), bConfigured);
-	Obj->SetBoolField(TEXT("active"), false);
+	Obj->SetBoolField(TEXT("active"), bActive);
 	Obj->SetStringField(TEXT("state"), State);
 	return Obj;
+}
+
+static TSharedPtr<FJsonObject> MakeSettingsOnlyFeatureStatus(bool bConfigured, const FString& State)
+{
+	return MakeFeatureStatus(bConfigured, false, State);
 }
 
 static TSharedPtr<FJsonObject> MakeDeferredDomainCatalogStatus(const UMonolithSettings* Settings)
@@ -1216,7 +1221,10 @@ FMonolithActionResult FMonolithCoreTools::HandleGetMcpServerStatus(const TShared
 	Features->SetObjectField(TEXT("mcp_resources"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableMcpResources, TEXT("settings_only_provider_registry_pending")));
 	Features->SetObjectField(TEXT("structured_tool_results"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableStructuredToolResults, TEXT("settings_only_result_helpers_pending")));
 	Features->SetObjectField(TEXT("mcp_session_mode"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableMcpSessionMode, TEXT("settings_only_execution_context_pending")));
-	Features->SetObjectField(TEXT("advanced_tool_call_records"), MakeSettingsOnlyFeatureStatus(Settings && Settings->bEnableAdvancedToolCallRecords, TEXT("settings_only_guard_wiring_pending")));
+	Features->SetObjectField(TEXT("advanced_tool_call_records"), MakeFeatureStatus(
+		Settings && Settings->bEnableAdvancedToolCallRecords,
+		Settings && Settings->bEnableAdvancedToolCallRecords,
+		Settings && Settings->bEnableAdvancedToolCallRecords ? TEXT("active_local_redacted_records") : TEXT("disabled")));
 	Result->SetObjectField(TEXT("features"), Features);
 	return FMonolithActionResult::Success(Result);
 }

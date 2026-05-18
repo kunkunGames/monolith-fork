@@ -20,17 +20,31 @@ public:
 		FDateTime StartedUtc;
 		double StartedSeconds = 0.0;
 		TSet<FString> DirtyPackagesBefore;
+		FString OutcomeStatus;
+		FString ResultKind;
+		int32 JsonRpcErrorCode = 0;
+		int32 ResultChars = 0;
+		bool bResultTruncated = false;
 		bool bActive = false;
 	};
 
 	static FMonolithActionExecutionGuard& Get();
 
 	FExecutionScope BeginAction(const FString& Namespace, const FString& Action);
+	void SetActionOutcome(FExecutionScope& Scope, bool bSuccess, int32 ErrorCode, const TSharedPtr<FJsonObject>& ResultObject, const FString& ErrorMessage);
 	void EndAction(FExecutionScope& Scope);
+	void RecordRejectedToolCall(const FString& SourceToolName, const FString& Namespace, const FString& Action, const FString& Status, int32 ErrorCode, const FString& Reason);
 
 	TSharedPtr<FJsonObject> GetStatusJson() const;
 	TSharedPtr<FJsonObject> GetRecentAuditJson(int32 Limit) const;
 	TSharedPtr<FJsonObject> GetLastRollbackJson() const;
+	TSharedPtr<FJsonObject> GetToolCallRecordsJson(int32 Limit, const FString& StatusFilter, const FString& ActionFilter) const;
+	TSharedPtr<FJsonObject> GetToolCallRecordJson(const FString& RecordId) const;
+	TSharedPtr<FJsonObject> AnalyzeToolCallRecordsJson(int32 Limit) const;
+
+#if WITH_DEV_AUTOMATION_TESTS
+	void ResetForTests();
+#endif
 
 private:
 	FMonolithActionExecutionGuard() = default;
@@ -44,12 +58,26 @@ private:
 		int32 ChangedPackageCount = 0;
 		TArray<FString> ChangedPackages;
 		FString Status;
+		FString ToolCallStatus;
+		FString Namespace;
+		FString Action;
+		FString SourceToolName;
+		FString ActiveProfileId;
+		FString SessionIdRedacted;
+		FString ResultKind;
+		FString Reason;
+		int32 JsonRpcErrorCode = 0;
+		int32 ResultChars = 0;
+		bool bResultTruncated = false;
 		FString RollbackStatus;
 	};
 
+	static bool IsAdvancedToolCallRecordsEnabled();
 	static TSet<FString> SnapshotDirtyPackages();
 	static TArray<TSharedPtr<FJsonValue>> StringsToJson(const TArray<FString>& Values, int32 Limit = MAX_int32);
 	static TSharedPtr<FJsonObject> AuditRowToJson(const FAuditRow& Row);
+	static TSharedPtr<FJsonObject> ToolCallRecordToJson(const FAuditRow& Row);
+	static bool RowMatchesFilters(const FAuditRow& Row, const FString& StatusFilter, const FString& ActionFilter);
 
 	void AppendAuditRow(const FAuditRow& Row);
 
