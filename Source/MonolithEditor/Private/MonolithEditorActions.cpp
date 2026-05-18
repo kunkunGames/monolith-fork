@@ -422,7 +422,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to preview"))
 			.Required(TEXT("asset_type"), TEXT("string"), TEXT("niagara"))
-			.Required(TEXT("timestamps"), TEXT("array"), TEXT("Array of capture times in seconds"))
+			.Required(TEXT("timestamps"), TEXT("array"), TEXT("Array of capture times in seconds (Max: 1000)"))
 			.Optional(TEXT("camera"), TEXT("object"), TEXT("{location:[x,y,z], rotation:[p,y,r], fov:60}"))
 			.Optional(TEXT("resolution"), TEXT("array"), TEXT("[width, height]"), TEXT("[512,512]"))
 			.Optional(TEXT("output_dir"), TEXT("string"), TEXT("Output directory for frame PNGs"))
@@ -1705,15 +1705,20 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 		return FMonolithActionResult::Error(TEXT("asset_path and asset_type are required"));
 	}
 
-	if (!Params->HasField(TEXT("timestamps")))
+	// Parse timestamps
+	const TArray<TSharedPtr<FJsonValue>>* TimestampArray = nullptr;
+	if (!Params->TryGetArrayField(TEXT("timestamps"), TimestampArray) || !TimestampArray)
 	{
 		return FMonolithActionResult::Error(TEXT("timestamps array is required"));
 	}
 
-	// Parse timestamps
+	if (TimestampArray->Num() > 1000)
+	{
+		return FMonolithActionResult::Error(TEXT("timestamps array exceeds maximum allowed size (1000)"));
+	}
+
 	TArray<float> Timestamps;
-	const TArray<TSharedPtr<FJsonValue>>& TimestampArray = Params->GetArrayField(TEXT("timestamps"));
-	for (const auto& Val : TimestampArray)
+	for (const auto& Val : *TimestampArray)
 	{
 		Timestamps.Add((float)Val->AsNumber());
 	}

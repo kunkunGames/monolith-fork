@@ -11,6 +11,60 @@
 #include "Editor.h"
 #include "Internationalization/Regex.h"
 
+namespace
+{
+	void AppendPathString(const FString& Raw, TArray<FString>& Out)
+	{
+		TArray<FString> Parts;
+		Raw.ParseIntoArray(Parts, TEXT(","), true);
+		if (Parts.Num() == 0 && !Raw.IsEmpty())
+		{
+			Parts.Add(Raw);
+		}
+		for (FString Part : Parts)
+		{
+			Part.TrimStartAndEndInline();
+			if (!Part.IsEmpty() && !Out.Contains(Part))
+			{
+				Out.Add(Part);
+			}
+		}
+	}
+
+	void AppendPathField(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, TArray<FString>& Out)
+	{
+		if (!Params.IsValid())
+		{
+			return;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (Params->TryGetArrayField(Key, Arr) && Arr)
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Arr)
+			{
+				if (Value.IsValid())
+				{
+					AppendPathString(Value->AsString(), Out);
+				}
+			}
+			return;
+		}
+		FString S;
+		if (Params->TryGetStringField(Key, S))
+		{
+			AppendPathString(S, Out);
+		}
+	}
+
+	TArray<FString> CollectChangedPaths(const TSharedPtr<FJsonObject>& Params)
+	{
+		TArray<FString> Paths;
+		AppendPathField(Params, TEXT("changed_paths"), Paths);
+		AppendPathField(Params, TEXT("paths"), Paths);
+		return Paths;
+	}
+}
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -154,6 +208,54 @@ void FMonolithSourceActions::RegisterAll()
 			.Optional(TEXT("min_tier"), TEXT("string"), TEXT("low|medium|high filter"), TEXT("low"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("source"), TEXT("detect_changes"),
+		TEXT("Map changed source paths to indexed symbols, direct caller impact, test gaps, and risk-ranked review priorities"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleDetectChanges),
+		FParamSchemaBuilder()
+			.Optional(TEXT("changed_paths"), TEXT("array|string"), TEXT("Changed source paths; also accepts comma-separated string"))
+			.Optional(TEXT("paths"), TEXT("array|string"), TEXT("Alias for changed_paths"))
+			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max changed entities to return"), TEXT("200"))
+			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("minimal|standard"), TEXT("minimal"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("find_unused"),
+		TEXT("Find advisory dead-symbol candidates with confidence and reasons; read-only"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleFindUnused),
+		FParamSchemaBuilder()
+			.Optional(TEXT("kind"), TEXT("string"), TEXT("function|class|struct|all"), TEXT("all"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max candidates"), TEXT("100"))
+			.Optional(TEXT("min_confidence"), TEXT("string"), TEXT("low|medium|high filter"), TEXT("low"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("pre_merge_check"),
+		TEXT("Read-only source pre-merge gate over health, detect_changes, and optional find_unused"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandlePreMergeCheck),
+		FParamSchemaBuilder()
+			.Optional(TEXT("changed_paths"), TEXT("array|string"), TEXT("Changed source paths; also accepts comma-separated string"))
+			.Optional(TEXT("paths"), TEXT("array|string"), TEXT("Alias for changed_paths"))
+			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max changed entities to inspect"), TEXT("200"))
+			.Optional(TEXT("unused_limit"), TEXT("integer"), TEXT("Max unused candidates to sample"), TEXT("20"))
+			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("minimal|standard"), TEXT("minimal"))
+			.Optional(TEXT("include_unused"), TEXT("bool"), TEXT("Include advisory find_unused check"), TEXT("true"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("snapshot"),
+		TEXT("Capture current EngineSource CRG projection manifest. Dry-run unless execute=true"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleSnapshot),
+		FParamSchemaBuilder()
+			.Optional(TEXT("label"), TEXT("string"), TEXT("Snapshot label; defaults to source-<utc_ticks>"))
+			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Store the snapshot (sole write gate). Default dry-run"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("diff_snapshots"),
+		TEXT("Compare stored/current EngineSource CRG projection snapshots"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleDiffSnapshots),
+		FParamSchemaBuilder()
+			.Required(TEXT("before"), TEXT("string"), TEXT("Snapshot label/id to compare from"))
+			.Optional(TEXT("after"), TEXT("string"), TEXT("Snapshot label/id to compare to; defaults to current projection"), TEXT("current"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max new/removed node or edge samples per array"), TEXT("100"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("source"), TEXT("review_hotspots"),
 		TEXT("Rank global source review hotspots by fan-in, fan-out, risk, LOC size, or all signals"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleReviewHotspots),
@@ -290,6 +392,84 @@ FMonolithActionResult FMonolithSourceActions::HandleRiskScore(const TSharedPtr<F
 	const int32 Limit = FMonolithSourceReview::PInt(Params, TEXT("limit"), 10);
 	const FString MinTier = FMonolithSourceReview::PStr(Params, TEXT("min_tier"), TEXT("low"));
 	return FMonolithActionResult::Success(FMonolithSourceReview::RiskScore(*DB, Symbol, Limit, MinTier));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleDetectChanges(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	return FMonolithActionResult::Success(DB->DetectChanges(
+		CollectChangedPaths(Params),
+		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200),
+		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal"))));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleFindUnused(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	return FMonolithActionResult::Success(DB->FindUnused(
+		FMonolithSourceReview::PStr(Params, TEXT("kind"), TEXT("all")),
+		FMonolithSourceReview::PInt(Params, TEXT("limit"), 100),
+		FMonolithSourceReview::PStr(Params, TEXT("min_confidence"), TEXT("low"))));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandlePreMergeCheck(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	return FMonolithActionResult::Success(DB->PreMergeCheck(
+		CollectChangedPaths(Params),
+		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200),
+		FMonolithSourceReview::PInt(Params, TEXT("unused_limit"), 20),
+		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal")),
+		FMonolithSourceReview::PBool(Params, TEXT("include_unused"), true)));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleSnapshot(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	const bool bExecute = FMonolithSourceReview::PBool(Params, TEXT("execute"), false);
+	if (bExecute && GEditor)
+	{
+		UMonolithSourceSubsystem* Sub = Cast<UMonolithSourceSubsystem>(
+			GEditor->GetEditorSubsystemBase(UMonolithSourceSubsystem::StaticClass()));
+		if (Sub && Sub->IsIndexing())
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Source indexing is in progress; retry snapshot(execute=true) once it completes"), -32000)
+				.WithHint(TEXT("Use source.snapshot (dry-run) meanwhile, or source.health"));
+		}
+	}
+	return FMonolithActionResult::Success(DB->Snapshot(
+		FMonolithSourceReview::PStr(Params, TEXT("label")),
+		bExecute));
+}
+
+FMonolithActionResult FMonolithSourceActions::HandleDiffSnapshots(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	return FMonolithActionResult::Success(DB->DiffSnapshots(
+		FMonolithSourceReview::PStr(Params, TEXT("before")),
+		FMonolithSourceReview::PStr(Params, TEXT("after"), TEXT("current")),
+		FMonolithSourceReview::PInt(Params, TEXT("limit"), 100)));
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleReviewHotspots(const TSharedPtr<FJsonObject>& Params)

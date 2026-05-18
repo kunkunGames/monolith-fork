@@ -44,3 +44,6 @@ Agents performing routine refactoring, performance optimization (Bolt), or hygie
 
 ## 9. Minimum PR Value Threshold
 Passing static CI is not enough to make a scheduled PR worth merging; a PR must also be non-overlapping, current after rebase, and clearly more valuable than a no-op. Stop without PR if the only available change is a micro-edit against shared coordination docs, action-count docs, or release docs where multiple agents often race.
+
+## 10. External CI Limits
+If a GitHub Actions CI check fails with a billing-related error (e.g., "recent account payments have failed" or "spending limit needs to be increased"), recognize that this is an external repository limit, not a code defect. Do not attempt to fix it via code changes; simply inform the user.

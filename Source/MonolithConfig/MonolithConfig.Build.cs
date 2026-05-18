@@ -17,6 +17,7 @@ public class MonolithConfig : ModuleRules
 		{
 			"MonolithCore",
 			"UnrealEd",
+			"AssetTools",
 			"Json",
 			"JsonUtilities",
 			"Projects"

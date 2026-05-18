@@ -2,7 +2,7 @@
 
 **Version:** v0.14.10 · **Last updated:** 2026-05-18
 
-**In-tree action total: 1548** active actions across **32 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1572). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1544** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 36.
+**In-tree action total: 1572** active actions across **33 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1596). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1568** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 37.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
@@ -22,9 +22,11 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
 | [editor](#editor) | 36 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, selection inspection, PIE/console control |
-| [config](#config) | 6 | INI config inspection and search |
-| [project](#project) | 14 | Project-wide asset index (SQLite + FTS5) |
-| [source](#source) | 18 | Unreal Engine C++ source code navigation |
+| [config](#config) | 10 | INI config, plugin, and cvar inspection/search |
+| [localization](#localization) | 10 | Culture inspection and guarded StringTable CRUD/import/export |
+| [interchange](#interchange) | 16 | Normalized import/export validation, guarded import mutation, reimport metadata, reimport, and export actions registered by MonolithMesh |
+| [project](#project) | 17 | Project-wide asset index (SQLite + FTS5) |
+| [source](#source) | 21 | Unreal Engine C++ source code navigation |
 | [mesh](#mesh) | 244 (+24 gated) | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental — +24 town gen registers only with `bEnableProceduralTownGen=true`) |
 | [ui](#ui) | 121 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
@@ -32,7 +34,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [ai](#ai) | 221 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD and document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
-| **In-tree subtotal** | **1546** | (default-active; +24 experimental town gen -> 1570 when registered) |
+| **In-tree subtotal** | **1566** | (default-active; +24 experimental town gen → 1590 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -54,6 +56,7 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `ai` BT actions | Error message standardization (Phase J F15) | All BT-related actions now return `{ "error": "<code>", "detail": "<human>" }` instead of mixed prose. |
 | `gas` UI binding response | Shape change (Phase J F5) | Returns `{ bindings: [...], count: N }` instead of a bare array. Wrap your client parsers. |
 | `blueprint` DataTable maintenance | **NEW** | Adds schema inspection, guarded row update/remove, and guarded CSV export for `UDataTable` assets. |
+| `localization` StringTable actions | **NEW** | Adds guarded StringTable create/edit/remove/metadata plus CSV import/export with `dry_run`/`confirm` write gates. |
 
 The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespaces — same handler, two callable paths. Pick whichever reads better from your client.
 
@@ -101,6 +104,43 @@ Re-index the Monolith project database. Incremental by default (delta only). Pas
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `force` | bool | optional | Full wipe + rebuild instead of incremental delta. Default: `false` |
+
+---
+
+## interchange
+
+Normalized import/export workflow registered by `MonolithMesh`. Use this namespace
+when the caller has a local source file and wants validation, batch rows, reimport
+metadata, or a generic import/export path instead of a narrow mesh/material helper.
+
+All mutation actions require `confirm=true` unless `dry_run=true`. Source files are
+limited to project/content/saved roots unless `allow_external=true`.
+
+| Action | Required Params | Notes |
+|--------|-----------------|-------|
+| `get_supported_formats` | none | Lists known extensions, module availability, default allowed roots, and policy notes |
+| `can_import` | `source_file` | Validates source existence, extension, Interchange availability, root policy, and optional `destination_path` |
+| `can_reimport` | `asset_path` | Reports reflected source import data and source file existence |
+| `get_import_data` | `asset_path` | Returns reflected import source file rows without mutation |
+| `import_asset` | `source_file`, `destination_path`, `conflict_policy` | Imports one source file and returns one structured row |
+| `import_assets` | `source_files`, `destination_path`, `conflict_policy` | Imports files sequentially; per-file validation failures do not stop later rows |
+| `import_scene` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for scene-like formats |
+| `import_mesh` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for mesh-like formats |
+| `import_skeletal_mesh` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for skeletal mesh sources |
+| `import_texture` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for texture sources |
+| `import_audio` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for audio sources |
+| `import_with_options` | `source_file`, `destination_path`, `conflict_policy` | Same guarded import path with an optional forward-compatible `options` object |
+| `update_reimport_path` | `asset_path`, `source_file` | Updates the reflected source path after source/root validation |
+| `reimport_asset` | `asset_path` | Reimports one existing asset through Unreal's reimport manager |
+| `reimport_assets` | `asset_paths` | Reimports assets sequentially and returns one row per asset |
+| `export_asset` | `asset_path`, `file_path` | Exports one asset after output path validation |
+
+Conflict policy values are `fail`, `overwrite`, `rename`, and `reimport_only`.
+`fail` rejects likely destination package collisions before import using the
+expected package derived from the source filename, but scene/factory outputs can
+still create differently named packages. `overwrite` forwards replace intent.
+`rename` is a best-effort pass-through with overwrite disabled; inspect
+`imported_assets` for the final package names.
 
 ---
 
@@ -286,6 +326,13 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
 Niagara VFX system editing — emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types. **109 actions** (108 baseline + 1 layout).
 
 > For full param schemas, call `monolith_discover("niagara")` at runtime.
+>
+> Emitter selector parameters accept GUID, exact or case-insensitive display name, unique instance name, or a `list_emitters` numeric index string such as `"0"`. `auto_layout` follows the same selector contract as the core Niagara emitter actions.
+
+`list_systems`, `list_module_scripts`, and `search_dynamic_inputs` accept a numeric
+`limit`. Missing values keep their existing defaults (`50`, `50`, and `20`
+respectively), present non-numeric values return an invalid-param error, and
+numeric values are clamped to the inclusive range `[1, 1000]`.
 
 **Action categories:**
 
@@ -361,7 +408,7 @@ Render a Niagara system or material in a preview scene and screenshot it.
 
 ### `editor.capture_sequence_frames`
 
-Capture multiple frames at specified timestamps. Same params as `capture_scene_preview` plus `timestamps[]`, `output_dir`, `filename_prefix`, `persistent`.
+Capture multiple frames at specified timestamps. Same params as `capture_scene_preview` plus `timestamps[]` (Max: 1000), `output_dir`, `filename_prefix`, `persistent`.
 
 ### `editor.import_texture`
 
@@ -434,7 +481,7 @@ Report plugin-enabled + module-loaded status for Monolith (or arbitrary) modules
 
 ## config
 
-INI config file inspection and search. **6 actions.** Read-only.
+INI config, plugin, and cvar inspection/search. **10 actions.** Read-only.
 
 ### `config.resolve_setting`
 
@@ -494,9 +541,131 @@ List all config files with their hierarchy level.
 
 ---
 
+## localization
+
+Culture and StringTable operations. **10 actions.** Inspection actions are read-only; StringTable write actions require `dry_run=true` or `confirm=true`.
+
+### `localization.list_cultures`
+
+List available cultures known to Unreal internationalization.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `culture_names` | array | optional | Culture names to resolve; omitted returns current culture context |
+| `include_derived` | bool | optional | Include derived cultures when resolving `culture_names`; default `true` |
+
+### `localization.list_string_tables`
+
+List StringTable assets under a project content path.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | optional | `/Game` content path to scan; default `/Game` |
+| `include_entries` | bool | optional | Include capped entry rows; default `false` |
+| `include_metadata` | bool | optional | Include per-entry metadata when entries are included; default `false` |
+| `limit` | integer | optional | Maximum tables or entries to return; clamped to 1-1000 |
+
+### `localization.get_string_table`
+
+Inspect a StringTable asset and return capped entries.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+| `include_metadata` | bool | optional | Include per-entry metadata; default `true` |
+| `limit` | integer | optional | Maximum entries to return; clamped to 1-1000 |
+
+### `localization.validate_string_table`
+
+Validate a StringTable asset for empty keys, empty strings, case-insensitive duplicate-looking keys, and large-table warnings.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+
+### `localization.create_string_table`
+
+Create a `UStringTable` asset under `/Game`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | New StringTable asset path under `/Game` |
+| `namespace` | string | optional | StringTable namespace; defaults to asset name |
+| `dry_run` | bool | optional | Preview without writing |
+| `confirm` | bool | optional | Required for non-dry-run writes |
+| `save` | bool | optional | Save the package after creation; default `false` |
+
+### `localization.set_string_entry`
+
+Add or replace one StringTable entry and optional metadata.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+| `key` | string | **required** | Entry key |
+| `source_string` | string | **required** | Source string to store |
+| `metadata` | object | optional | String metadata fields to set on the entry |
+| `dry_run` | bool | optional | Preview without writing |
+| `confirm` | bool | optional | Required for non-dry-run writes |
+| `save` | bool | optional | Save the package after mutation; default `false` |
+
+### `localization.remove_string_entry`
+
+Remove one StringTable entry by key.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+| `key` | string | **required** | Entry key |
+| `dry_run` | bool | optional | Preview without writing |
+| `confirm` | bool | optional | Required for non-dry-run writes |
+| `save` | bool | optional | Save the package after mutation; default `false` |
+
+### `localization.set_string_metadata`
+
+Add, replace, or remove one metadata value on one entry.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+| `key` | string | **required** | Entry key |
+| `metadata_key` | string | **required** | Metadata key |
+| `metadata_value` | string | optional | Metadata value to set |
+| `remove` | bool | optional | Remove `metadata_key` instead of setting `metadata_value` |
+| `dry_run` | bool | optional | Preview without writing |
+| `confirm` | bool | optional | Required for non-dry-run writes |
+| `save` | bool | optional | Save the package after mutation; default `false` |
+
+### `localization.import_string_table_csv`
+
+Import `key,source_string,<metadata...>` rows from an in-project CSV file into a StringTable.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+| `file_path` | string | **required** | CSV path under the project directory |
+| `replace_existing` | bool | optional | Clear existing entries before importing; default `false`. Refuses empty or fully skipped imports to avoid accidental table clears |
+| `dry_run` | bool | optional | Preview without writing |
+| `confirm` | bool | optional | Required for non-dry-run writes |
+| `save` | bool | optional | Save the package after mutation; default `false` |
+
+### `localization.export_string_table_csv`
+
+Export StringTable entries to a CSV file under the project directory.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path under `/Game` |
+| `file_path` | string | **required** | Destination CSV path under the project directory |
+| `include_metadata` | bool | optional | Include metadata columns; default `true` |
+| `dry_run` | bool | optional | Preview without writing |
+| `confirm` | bool | optional | Required for non-dry-run writes |
+
+---
+
 ## project
 
-Project-wide asset index backed by SQLite + FTS5. **14 actions.**
+Project-wide asset index backed by SQLite + FTS5. **19 actions.**
 
 CRG-inspired navigation/review (additive, over the existing `dependencies` graph plus rebuildable derived `crg_*` projection/cache tables):
 
@@ -507,6 +676,11 @@ CRG-inspired navigation/review (additive, over the existing `dependencies` graph
 | `project.repair_fts` | `target`=all\|assets\|nodes, `execute`=false | Rebuild `fts_assets`/`fts_nodes`. `execute=true` is the sole write gate; refused while indexing |
 | `project.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `assets` and `dependencies`. Dry-run unless `execute=true`; refused while indexing |
 | `project.risk_score` | `asset_path`/`seed`, `limit`=20, `min_tier`=low | `{score,tier,reasons[],raw_counts,cache}` from `crg_node_metrics` when available; query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
+| `project.detect_changes` | `changed_paths` or `paths`, `max_results`=200, `detail_level`=minimal | Changed `.uasset`/`.umap` path/name mapping to indexed assets, risk, depth-1 dependency impact, and review priorities; no P4/git shell-out |
+| `project.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory orphan-asset candidates with `confidence` + `reasons[]`; excludes World/Level/PrimaryAssetLabel roots and never mutates |
+| `project.pre_merge_check` | `changed_paths` or `paths`, `max_results`=200, `unused_limit`=20, `detail_level`=minimal | Advisory pre-merge gate composed from health, detect_changes, and optional find_unused; returns `decision`, `checks[]`, `findings[]`, and next actions; no P4/git shell-out |
+| `project.snapshot` | `label`, `execute`=false | Dry-run by default; `execute=true` stores current CRG projection node/edge manifest in derived `crg_snapshots` |
+| `project.diff_snapshots` | `before`*, `after`=current, `limit`=100 | Read-only diff between stored/current CRG manifests; returns `summary_counts` and capped new/removed node/edge samples |
 | `project.review_hotspots` | `kind`=all, `limit`=50, `min_lines`=100, `include_questions`=true | Global review queue ranked by fan-in/fan-out/risk/large graph signals with optional advisory questions |
 | `project.review_context` | `asset_path`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`; `minimal` omits full details |
 
@@ -562,9 +736,23 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 
 ---
 
+## context
+
+Local context discovery backed by ProjectIndex and EngineSource. **5 actions.**
+
+| Action | Key params | Purpose |
+|--------|-----------|---------|
+| `context.get_index_status` | `include_stats`=false | Report local project/source index readiness for mention search and bridge lookups |
+| `context.start_indexing` | `scope`=all\|assets\|source, `full`=false | Start project asset and/or source indexing from one context entry point |
+| `context.search_items` | `query`*, `limit`=24, `include_assets`=true, `include_source`=true | Search indexed assets, source symbols, and source lines for prompt context |
+| `context.build_attachment` | `item_id`*, `context_lines`=12, `max_chars`=12000 | Materialize a `context.search_items` item into a bounded text attachment |
+| `context.bridge_asset_symbols` | `asset_path` or `symbol`, `limit`=20, `detail_level`=minimal | RX-6 read-only asset<->source bridge. Requires exactly one non-empty string seed and rejects wrong-typed seeds with `-32602`. Returns bounded heuristic `links[]` with `confidence`, `reasons[]`, `asset`, `symbol`, `warnings[]`, `truncated`, and `next_actions`; never mutates indexes or shells out |
+
+---
+
 ## source
 
-Unreal Engine C++ source code navigation. 1M+ symbols indexed. **18 actions.**
+Unreal Engine C++ source code navigation. 1M+ symbols indexed. **23 actions.**
 
 CRG-inspired navigation/review (additive, over the existing `"references"` + `inheritance` graph plus rebuildable derived `crg_*` projection/cache tables):
 
@@ -575,6 +763,11 @@ CRG-inspired navigation/review (additive, over the existing `"references"` + `in
 | `source.repair_fts` | `target`=all\|symbols\|source, `execute`=false | Rebuild `symbols_fts`. `target=source` → reindex guidance (plain fts5). Refused while indexing |
 | `source.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `symbols`, `"references"`, and `inheritance`. Dry-run unless `execute=true`; refused while indexing |
 | `source.risk_score` | `symbol`*, `limit`=10, `min_tier`=low | `{score,tier,reasons[],raw_counts,cache}` from `crg_node_metrics` when available; query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
+| `source.detect_changes` | `changed_paths` or `paths`, `max_results`=200, `detail_level`=minimal | Changed source path suffix mapping to symbols, risk, depth-1 caller impact, heuristic test gaps, and review priorities; no P4/git shell-out |
+| `source.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory function/class/struct dead-symbol candidates with `confidence` + `reasons[]`; excludes UE reflection/automation/entry markers and never mutates |
+| `source.pre_merge_check` | `changed_paths` or `paths`, `max_results`=200, `unused_limit`=20, `detail_level`=minimal | Advisory pre-merge gate composed from health, detect_changes, and optional find_unused; returns `decision`, `checks[]`, `findings[]`, and next actions; no P4/git shell-out |
+| `source.snapshot` | `label`, `execute`=false | Dry-run by default; `execute=true` stores current CRG projection node/edge manifest in derived `crg_snapshots` |
+| `source.diff_snapshots` | `before`*, `after`=current, `limit`=100 | Read-only diff between stored/current CRG manifests; returns `summary_counts` and capped new/removed node/edge samples |
 | `source.review_hotspots` | `kind`=all, `limit`=50, `min_lines`=100, `include_questions`=true | Global review queue ranked by fan-in/fan-out/risk/large symbol signals with optional advisory questions |
 | `source.review_context` | `symbol`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`. Distinct from single-item `context.build_attachment` |
 
@@ -1016,10 +1209,12 @@ Before writing any client code:
 
 When the editor is closed but you still need to query Monolith:
 
-- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool. It mirrors the live `project` / `source` query actions, including CRG navigation/review (`impact_radius`, `health`, `repair_fts`, `risk_score`, `review_context`, `review_hotspots`, `detect_changes`). It stays read-only by default; `repair_fts` writes only with explicit `--execute`.
+- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool. It mirrors the live `project` / `source` query actions, including CRG navigation/review (`impact_radius`, `health`, `repair_fts`, `risk_score`, `detect_changes`, `find_unused`, `review_context`, `review_hotspots`). It stays read-only by default; `repair_fts` writes only with explicit `--execute`.
   - **RX-2/RX-7 (CRG cache read parity + scoring v3):** offline `risk_score` now reads `crg_node_metrics` when the projection cache is present (rebuilt caches report `scoring_version=3`, per-item `cache.status=hit`) and falls back to query-time scoring v3 otherwise, matching the editor. Offline `health` emits the same `crg:*` checks the editor `ComputeHealth`/`Health` produce (table/index/parity/orphan/cache_version/scoring_version); a missing cache is `info`, never a regression. Offline never writes the cache (`repair_crg_cache` stays editor-only).
-  - **RX-1 (`detect_changes`):** `monolith_query <source|project> detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]`. Maps a Perforce changelist / changed paths to indexed symbols (source: `files.path` suffix match) or assets (project: `package_path`/`asset_name`), reuses the RX-2 cached risk (or query-time fallback), adds a bounded depth-1 impact set, advisory heuristic test-gaps (source only; EngineSource has no `TESTED_BY` edge), and risk-ordered `review_priorities`. `changed_paths` is the VCS-agnostic primary input; no P4/git shell-out.
-  - **RX-3 (`find_unused`):** `monolith_query <source|project> find_unused [--kind=...] [--limit=N] [--min-confidence=low|medium|high]`. Advisory dead-symbol (source: 0 inbound `"references"`, not an inheritance parent, `is_ue_macro=0`, no UFUNCTION/automation/entry markers) / orphan-asset (project: never a `dependencies.target_asset_id`, not a World/Level/PrimaryAssetLabel root) detection. Each item has `confidence` + `reasons[]`; recall-first (default `min-confidence=low`) since UE reflection/delegate/Blueprint/soft-path edges are not in the graph — never reports `high`, never mutates.
+  - **RX-1 (`detect_changes`):** live `source.detect_changes` / `project.detect_changes` and offline `monolith_query <source|project> detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]`. Maps a Perforce changelist / changed paths to indexed symbols (source: `files.path` suffix match) or assets (project: `package_path`/`asset_name`), escaping SQL `LIKE` wildcards so `_` and `%` in filenames are matched literally. Reuses the RX-2 cached risk (or query-time fallback), adds a bounded depth-1 impact set, advisory heuristic test-gaps (source only; EngineSource has no `TESTED_BY` edge), and risk-ordered `review_priorities`. `changed_paths` is the VCS-agnostic primary input; no P4/git shell-out.
+  - **RX-3 (`find_unused`):** live `source.find_unused` / `project.find_unused` and offline `monolith_query <source|project> find_unused [--kind=...] [--limit=N] [--min-confidence=low|medium|high]`. Advisory dead-symbol (source: 0 inbound `"references"`, not an inheritance parent, `is_ue_macro=0`, no UFUNCTION/automation/entry markers) / orphan-asset (project: never a `dependencies.target_asset_id`, not a World/Level/PrimaryAssetLabel root) detection. Each item has `confidence` + `reasons[]`; recall-first (default `min-confidence=low`) since UE reflection/delegate/Blueprint/soft-path edges are not in the graph — never reports `high`, never mutates.
+  - **RX-5 (`pre_merge_check`):** live `source.pre_merge_check` / `project.pre_merge_check` and offline `monolith_query <source|project> pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]` compose `health`, `detect_changes`, and optional `find_unused` into an advisory `decision` (`pass`/`warn`/`fail`), `checks[]`, and `findings[]`. The offline action remains read-only and VCS-agnostic; it never shells out to P4/git.
+  - **RX-4 (`snapshot` / `diff_snapshots`):** live `source.snapshot` / `project.snapshot` and `source.diff_snapshots` / `project.diff_snapshots` store and compare derived CRG projection manifests in `crg_snapshots`. Snapshot writes are explicit (`execute=true`); diffs are read-only and editor-only in this phase.
   - **RX-8 (`review_hotspots`):** `monolith_query <source|project> review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]`. Read-only global triage over cached/native fan, risk, and size signals; outputs capped `hotspots[]`, optional `questions[]`, and `next_actions[]`.
 - **`python Plugins/Monolith/Saved/monolith_offline.py`** — same actions, stdlib-only.
 

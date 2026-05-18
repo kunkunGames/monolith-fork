@@ -63,7 +63,7 @@ public class MonolithMesh : ModuleRules
 					bHasGeometryScripting = Directory.Exists(
 						Path.Combine(ProjectPluginsDir, "GeometryScripting"))
 						|| Directory.GetDirectories(
-							ProjectPluginsDir, "GeometryScripting*",
+							ProjectPluginsDir, "GeometryScripting_*",
 							SearchOption.TopDirectoryOnly).Length > 0;
 				}
 			}
