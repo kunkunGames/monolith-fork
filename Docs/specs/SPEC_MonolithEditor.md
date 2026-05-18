@@ -44,6 +44,11 @@
 | `stitch_flipbook` | Stitch multiple texture assets into a flipbook atlas. Params: `frames[]`, `columns`, `save_path` |
 | `delete_assets` | Delete one or more assets by path. Params: `asset_paths[]` (Max: 200), `force` |
 | `get_viewport_info` | Get active editor viewport camera location, rotation, FOV, resolution, realtime state |
+| `list_open_viewports` | List level editor viewport capture sources and report visual-capture availability for asset-editor, widget-designer, and thumbnail paths. |
+| `capture_level_viewport` | Capture a named level editor viewport to a PNG. Errors when the requested viewport is unavailable instead of silently falling back. |
+| `capture_asset_thumbnail` | Capture an asset thumbnail to PNG only when `thumbnail_fallback=true`; returns `source="asset_thumbnail"` and never claims an asset-editor viewport capture. |
+| `capture_asset_editor_viewport` | Reports structured `unavailable` until asset-editor viewport source discovery is safe. No level-viewport fallback. |
+| `capture_widget_designer` | Reports structured `unavailable` until widget-designer viewport source discovery is safe. No level-viewport fallback. |
 | `create_empty_map` | **Phase J F8.** Create a fully blank UWorld asset at `path` and save the package. v1 supports `map_template="blank"` only. Errors cleanly on path collision, malformed package path, factory/save failure |
 | `get_module_status` | **Phase J F8.** Report `{ module_name, plugin_name, enabled, loaded, is_runtime, version? }` for the named modules (or all Monolith modules if `module_names` is omitted). Unknown modules return `enabled=false / loaded=false / plugin_name=""` without error |
 | `dev_trigger_ensure` | DEV ONLY: Fires ensure(false) inside the breadcrumb scope to exercise the CrashRecovery capture pipeline. Editor stays alive. |
@@ -63,3 +68,7 @@
 | `run_console_command` | Execute a console command. Routes to the first PIE PlayerController found (multi-client PIE not disambiguated); falls back to `GEngine->Exec` (with null-guard) when no PIE session is active. |
 
 ---
+
+### Visual Capture Fallback Contract
+
+`capture_asset_thumbnail` is the implemented fallback for PRD 34 visual verification when an actual asset-editor viewport cannot be identified. The caller must pass `thumbnail_fallback=true`; otherwise the action errors so clients do not mistake thumbnail output for viewport output. Asset-editor and widget-designer viewport captures remain explicit `unavailable` responses until Monolith can name the captured viewport source.

@@ -470,6 +470,35 @@ Delete UE assets by path. **Experimental.** Use the `allowed_prefixes` safety gu
 
 Current editor viewport camera position, rotation, FOV, resolution. *No parameters.*
 
+### `editor.list_open_viewports`
+
+List level editor viewport capture sources plus visual-capture capability status for asset-editor, widget-designer, and thumbnail paths. *No parameters.*
+
+### `editor.capture_level_viewport`
+
+Capture a level editor viewport to PNG. The action errors when the requested viewport is unavailable instead of substituting another capture source.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `viewport_index` | integer | optional | Index from `editor.list_open_viewports`. Default: `0` |
+| `camera` | object | optional | `{location:[x,y,z], rotation:[p,y,r], fov:60}` applied before capture |
+| `output_path` | string | optional | Output PNG path. Defaults under `Saved/Screenshots/Monolith` |
+
+### `editor.capture_asset_thumbnail`
+
+Capture an asset thumbnail to PNG. This is an explicit fallback path, not an asset-editor viewport capture; callers must pass `thumbnail_fallback=true`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Asset path to capture |
+| `thumbnail_fallback` | bool | **required** | Must be `true`; prevents silent viewport-to-thumbnail substitution |
+| `thumbnail_size` | integer | optional | Square thumbnail size in pixels, `16..2048`. Default: `256` |
+| `output_path` | string | optional | Output PNG path. Relative paths resolve under the project directory |
+
+### `editor.capture_asset_editor_viewport` · `editor.capture_widget_designer`
+
+Return structured `unavailable` responses until Monolith can identify and report the exact asset-editor or widget-designer viewport source. These actions do not fall back to level viewport or thumbnail captures.
+
 ### `editor.capture_system_gif`
 
 Capture a Niagara system as a sequence of PNG frames with optional GIF encoding via ffmpeg or python.

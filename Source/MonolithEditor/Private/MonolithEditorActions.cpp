@@ -1,4 +1,5 @@
 #include "MonolithEditorActions.h"
+#include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "EditorAssetLibrary.h"
@@ -43,6 +44,7 @@
 #include "LevelEditorViewport.h"
 #include "PixelFormat.h"
 #include "ObjectTools.h"
+#include "Misc/ObjectThumbnail.h"
 
 // Scripting action includes (HOFF 7)
 #include "IPythonScriptPlugin.h"
@@ -490,11 +492,13 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FParamSchemaBuilder().Required(TEXT("widget_path"), TEXT("string"), TEXT("Widget Blueprint path")).Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("capture_asset_thumbnail"),
-		TEXT("Report asset thumbnail capture availability with explicit thumbnail_fallback contract."),
+		TEXT("Capture an asset thumbnail to PNG when thumbnail_fallback=true. Does not claim asset-editor viewport capture."),
 		FMonolithActionHandler::CreateStatic(&HandleCaptureAssetThumbnail),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to capture"))
-			.Optional(TEXT("thumbnail_fallback"), TEXT("boolean"), TEXT("Must be true to allow future thumbnail fallback"), TEXT("false"))
+			.Optional(TEXT("thumbnail_fallback"), TEXT("bool"), TEXT("Must be true to allow thumbnail fallback capture"), TEXT("false"))
+			.Optional(TEXT("thumbnail_size"), TEXT("integer"), TEXT("Square thumbnail size in pixels, clamped to 16..2048"), TEXT("256"))
+			.Optional(TEXT("output_path"), TEXT("string"), TEXT("Output PNG path. Defaults under Saved/Screenshots/Monolith."))
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("capture_system_gif"),
@@ -2526,6 +2530,63 @@ namespace
 		Result->SetStringField(TEXT("reason"), Reason);
 		return FMonolithActionResult::Success(Result);
 	}
+
+	FString MakeCaptureSafeFileName(const FString& Value)
+	{
+		FString Safe = FPaths::MakeValidFileName(Value);
+		return Safe.IsEmpty() ? TEXT("Asset") : Safe;
+	}
+
+	bool ReadThumbnailSize(const TSharedPtr<FJsonObject>& Params, int32& OutSize, FString& OutError)
+	{
+		OutSize = 256;
+		if (!Params.IsValid() || !Params->HasField(TEXT("thumbnail_size")))
+		{
+			return true;
+		}
+
+		double SizeNumber = 0.0;
+		if (!Params->TryGetNumberField(TEXT("thumbnail_size"), SizeNumber)
+			|| SizeNumber < 16.0
+			|| SizeNumber > 2048.0
+			|| static_cast<double>(static_cast<int64>(SizeNumber)) != SizeNumber)
+		{
+			OutError = TEXT("thumbnail_size must be an integer between 16 and 2048.");
+			return false;
+		}
+
+		OutSize = static_cast<int32>(SizeNumber);
+		return true;
+	}
+
+	FString ResolveCaptureOutputPath(
+		const TSharedPtr<FJsonObject>& Params,
+		const FString& Prefix,
+		const FString& AssetName)
+	{
+		FString OutputPath;
+		if (Params.IsValid())
+		{
+			Params->TryGetStringField(TEXT("output_path"), OutputPath);
+		}
+
+		if (OutputPath.IsEmpty())
+		{
+			OutputPath = FPaths::ProjectSavedDir() / TEXT("Screenshots/Monolith/")
+				+ Prefix
+				+ TEXT("_")
+				+ MakeCaptureSafeFileName(AssetName)
+				+ TEXT("_")
+				+ FDateTime::UtcNow().ToString(TEXT("%Y%m%d_%H%M%S"))
+				+ TEXT(".png");
+		}
+		else if (FPaths::IsRelative(OutputPath))
+		{
+			OutputPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), OutputPath);
+		}
+
+		return OutputPath;
+	}
 }
 
 FMonolithActionResult FMonolithEditorActions::HandleListOpenViewports(const TSharedPtr<FJsonObject>& Params)
@@ -2545,6 +2606,7 @@ FMonolithActionResult FMonolithEditorActions::HandleListOpenViewports(const TSha
 	Result->SetArrayField(TEXT("viewports"), Rows);
 	Result->SetStringField(TEXT("asset_editor_capture_status"), TEXT("unavailable"));
 	Result->SetStringField(TEXT("widget_designer_capture_status"), TEXT("unavailable"));
+	Result->SetStringField(TEXT("asset_thumbnail_capture_status"), TEXT("available_with_explicit_thumbnail_fallback"));
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -2648,13 +2710,91 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureWidgetDesigner(const 
 FMonolithActionResult FMonolithEditorActions::HandleCaptureAssetThumbnail(const TSharedPtr<FJsonObject>& Params)
 {
 	bool bThumbnailFallback = false;
-	Params->TryGetBoolField(TEXT("thumbnail_fallback"), bThumbnailFallback);
+	if (Params->HasField(TEXT("thumbnail_fallback"))
+		&& !Params->TryGetBoolField(TEXT("thumbnail_fallback"), bThumbnailFallback))
+	{
+		return FMonolithActionResult::Error(
+			TEXT("thumbnail_fallback must be a boolean."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (!bThumbnailFallback)
 	{
-		return FMonolithActionResult::Error(TEXT("thumbnail_fallback=true is required for thumbnail capture; Monolith will not silently substitute thumbnails for viewport captures."));
+		return FMonolithActionResult::Error(
+			TEXT("thumbnail_fallback=true is required for thumbnail capture; Monolith will not silently substitute thumbnails for viewport captures."),
+			FMonolithJsonUtils::ErrInvalidParams);
 	}
-	return MakeViewportCaptureUnavailable(TEXT("editor.capture_asset_thumbnail"),
-		TEXT("Explicit thumbnail fallback contract is present, but thumbnail rendering is not implemented yet."));
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("asset_path is required."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	int32 ThumbnailSize = 256;
+	FString SizeError;
+	if (!ReadThumbnailSize(Params, ThumbnailSize, SizeError))
+	{
+		return FMonolithActionResult::Error(SizeError, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	const FString ResolvedAssetPath = FMonolithAssetUtils::ResolveAssetPath(AssetPath);
+	UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(ResolvedAssetPath);
+	if (!Asset)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Asset not found or could not be loaded: %s"), *ResolvedAssetPath),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FObjectThumbnail Thumbnail;
+	ThumbnailTools::RenderThumbnail(
+		Asset,
+		static_cast<uint32>(ThumbnailSize),
+		static_cast<uint32>(ThumbnailSize),
+		ThumbnailTools::EThumbnailTextureFlushMode::NeverFlush,
+		nullptr,
+		&Thumbnail);
+
+	const int32 Width = Thumbnail.GetImageWidth();
+	const int32 Height = Thumbnail.GetImageHeight();
+	const TArray<uint8>& ImageData = Thumbnail.GetUncompressedImageData();
+	const int64 ExpectedBytes = static_cast<int64>(Width) * static_cast<int64>(Height) * 4;
+	if (Width <= 0 || Height <= 0 || ExpectedBytes <= 0 || ImageData.Num() < ExpectedBytes)
+	{
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("status"), TEXT("thumbnail_unavailable"));
+		ErrorData->SetStringField(TEXT("source"), TEXT("asset_thumbnail"));
+		ErrorData->SetStringField(TEXT("asset_path"), ResolvedAssetPath);
+		ErrorData->SetStringField(TEXT("asset_class"), Asset->GetClass() ? Asset->GetClass()->GetName() : TEXT(""));
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("No renderable thumbnail pixels were produced for asset: %s"), *ResolvedAssetPath))
+			.WithErrorData(ErrorData);
+	}
+
+	const FString OutputPath = ResolveCaptureOutputPath(Params, TEXT("AssetThumbnail"), Asset->GetName());
+	IFileManager::Get().MakeDirectory(*FPaths::GetPath(OutputPath), true);
+
+	FImage Image;
+	Image.Init(Width, Height, ERawImageFormat::BGRA8, EGammaSpace::sRGB);
+	FMemory::Memcpy(Image.RawData.GetData(), ImageData.GetData(), ExpectedBytes);
+	if (!FImageUtils::SaveImageAutoFormat(*OutputPath, Image))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save asset thumbnail capture: %s"), *OutputPath));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("status"), TEXT("captured"));
+	Result->SetStringField(TEXT("source"), TEXT("asset_thumbnail"));
+	Result->SetStringField(TEXT("asset_path"), ResolvedAssetPath);
+	Result->SetStringField(TEXT("asset_name"), Asset->GetName());
+	Result->SetStringField(TEXT("asset_class"), Asset->GetClass() ? Asset->GetClass()->GetName() : TEXT(""));
+	Result->SetStringField(TEXT("output_path"), OutputPath);
+	Result->SetStringField(TEXT("format"), TEXT("png"));
+	Result->SetNumberField(TEXT("width"), Width);
+	Result->SetNumberField(TEXT("height"), Height);
+	Result->SetBoolField(TEXT("fallback_used"), true);
+	Result->SetBoolField(TEXT("thumbnail_fallback"), true);
+	return FMonolithActionResult::Success(Result);
 }
 
 FMonolithActionResult FMonolithEditorActions::HandleDeleteAssets(
