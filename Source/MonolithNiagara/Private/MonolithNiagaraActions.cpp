@@ -2378,8 +2378,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRequestCompile(const TShare
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
 
-	bool bForce = Params->HasField(TEXT("force")) && Params->GetBoolField(TEXT("force"));
-	bool bSync = Params->HasField(TEXT("synchronous")) && Params->GetBoolField(TEXT("synchronous"));
+	bool bForce = false;
+	Params->TryGetBoolField(TEXT("force"), bForce);
+	bool bSync = false;
+	Params->TryGetBoolField(TEXT("synchronous"), bSync);
 
 	System->RequestCompile(bForce);
 	if (bSync)
@@ -5754,7 +5756,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListModuleScripts(const TSh
 		Limit = static_cast<int32>(LimitValue);
 	}
 	Limit = ClampNiagaraQueryLimit(Limit);
-	bool bIncludeMetadata = Params->HasField(TEXT("include_metadata")) && Params->GetBoolField(TEXT("include_metadata"));
+	bool bIncludeMetadata = false;
+	Params->TryGetBoolField(TEXT("include_metadata"), bIncludeMetadata);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -7015,7 +7018,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetFixedBounds(const TShare
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = FString();
 	Params->TryGetStringField(TEXT("emitter"), EmitterHandleId);
-	bool bEnabled = !Params->HasField(TEXT("enabled")) || Params->GetBoolField(TEXT("enabled"));
+	bool bEnabled = true;
+	Params->TryGetBoolField(TEXT("enabled"), bEnabled);
 
 	// Parse min/max arrays
 	auto ParseVec3 = [](const TSharedPtr<FJsonObject>& P, const FString& Key) -> TOptional<FVector>
@@ -7164,7 +7168,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateEmitter(const TShared
 FMonolithActionResult FMonolithNiagaraActions::HandleExportSystemSpec(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = GetAssetPath(Params);
-	bool bIncludeValues = !Params->HasField(TEXT("include_values")) || Params->GetBoolField(TEXT("include_values"));
+	bool bIncludeValues = true;
+	Params->TryGetBoolField(TEXT("include_values"), bIncludeValues);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -9220,13 +9225,16 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureRibbon(const TShar
 	}
 
 	// Override with explicit params
-	if (Params->HasField(TEXT("shape")))        ShapeStr = Params->GetStringField(TEXT("shape"));
-	if (Params->HasField(TEXT("facing_mode")))  FacingStr = Params->GetStringField(TEXT("facing_mode"));
-	if (Params->HasField(TEXT("tessellation_mode"))) TessModeStr = Params->GetStringField(TEXT("tessellation_mode"));
-	if (Params->HasField(TEXT("tessellation_factor"))) TessFactor = static_cast<int32>(Params->GetNumberField(TEXT("tessellation_factor")));
-	if (Params->HasField(TEXT("tube_subdivisions"))) TubeSubdivisions = static_cast<int32>(Params->GetNumberField(TEXT("tube_subdivisions")));
-	if (Params->HasField(TEXT("uv_mode")))      UVModeStr = Params->GetStringField(TEXT("uv_mode"));
-	if (Params->HasField(TEXT("tiling_length"))) TilingLength = static_cast<float>(Params->GetNumberField(TEXT("tiling_length")));
+		Params->TryGetStringField(TEXT("shape"), ShapeStr);
+		Params->TryGetStringField(TEXT("facing_mode"), FacingStr);
+		Params->TryGetStringField(TEXT("tessellation_mode"), TessModeStr);
+		double TempTessFactor;
+		if (Params->TryGetNumberField(TEXT("tessellation_factor"), TempTessFactor)) TessFactor = static_cast<int32>(TempTessFactor);
+		double TempTubeSubdivisions;
+		if (Params->TryGetNumberField(TEXT("tube_subdivisions"), TempTubeSubdivisions)) TubeSubdivisions = static_cast<int32>(TempTubeSubdivisions);
+		Params->TryGetStringField(TEXT("uv_mode"), UVModeStr);
+		double TempTilingLength;
+		if (Params->TryGetNumberField(TEXT("tiling_length"), TempTilingLength)) TilingLength = static_cast<float>(TempTilingLength);
 
 	TArray<FString> PropsSet;
 	TArray<FString> Warnings;
@@ -10383,7 +10391,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandlePreviewSystem(const TShared
 	FString AssetPath = GetAssetPath(Params);
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
 
-	float SeekTime = Params->HasField(TEXT("seek_time")) ? static_cast<float>(Params->GetNumberField(TEXT("seek_time"))) : 1.0f;
+	float SeekTime = 1.0f;
+	double TempSeekTime;
+	if (Params->TryGetNumberField(TEXT("seek_time"), TempSeekTime)) SeekTime = static_cast<float>(TempSeekTime);
 
 	int32 ResX = 512, ResY = 512;
 	if (Params->HasField(TEXT("resolution")))
@@ -12078,7 +12088,9 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 					AMP->SetStringField(TEXT("emitter"), EmitterId);
 					AMP->SetStringField(TEXT("usage"), MO->GetStringField(TEXT("stage")));
 					AMP->SetStringField(TEXT("module_script"), MO->GetStringField(TEXT("script")));
-					AMP->SetNumberField(TEXT("index"), MO->HasField(TEXT("index")) ? MO->GetNumberField(TEXT("index")) : MI);
+					double ModuleIndex = MI;
+					MO->TryGetNumberField(TEXT("index"), ModuleIndex);
+					AMP->SetNumberField(TEXT("index"), ModuleIndex);
 					FMonolithActionResult AMR = HandleAddModule(AMP);
 					if (!AMR.bSuccess) { OutErrors.Add(FString::Printf(TEXT("add_module[%s]: %s"), *MO->GetStringField(TEXT("script")), *AMR.ErrorMessage)); FailCount++; continue; }
 
