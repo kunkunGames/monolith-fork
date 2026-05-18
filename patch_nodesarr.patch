@@ -1,0 +1,76 @@
+--- Source/MonolithBlueprint/Private/MonolithBlueprintActions.cpp
++++ Source/MonolithBlueprint/Private/MonolithBlueprintActions.cpp
+@@ -198,8 +198,12 @@
+	}
+
+	TArray<TSharedPtr<FJsonValue>> GraphsArr;
++	GraphsArr.Reserve(BP->UbergraphPages.Num() + BP->FunctionGraphs.Num() + BP->MacroGraphs.Num() + BP->DelegateSignatureGraphs.Num());
+	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->UbergraphPages, TEXT("event_graph"));
+	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->FunctionGraphs, TEXT("function"));
+	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->MacroGraphs, TEXT("macro"));
+	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->DelegateSignatureGraphs, TEXT("delegate_signature"));
+	Root->SetArrayField(TEXT("graphs"), GraphsArr);
+@@ -240,6 +244,7 @@
+	Root->SetStringField(TEXT("graph_type"), GraphType);
+
+	TArray<TSharedPtr<FJsonValue>> NodesArr;
++	NodesArr.Reserve(Graph->Nodes.Num());
+	for (UEdGraphNode* Node : Graph->Nodes)
+	{
+		if (!Node) continue;
+@@ -318,6 +323,7 @@
+		Root->SetStringField(TEXT("graph_name"), Graph->GetName());
+
+		TArray<TSharedPtr<FJsonValue>> NodesArr;
++		NodesArr.Reserve(Graph->Nodes.Num());
+		SummarizeGraph(Graph, NodesArr);
+		Root->SetArrayField(TEXT("nodes"), NodesArr);
+		Root->SetNumberField(TEXT("node_count"), Graph->Nodes.Num());
+@@ -354,6 +360,7 @@
+			GObj->SetStringField(TEXT("graph_type"), Info.Type);
+
+			TArray<TSharedPtr<FJsonValue>> NodesArr;
++			NodesArr.Reserve(Graph->Nodes.Num());
+			SummarizeGraph(Graph, NodesArr);
+			GObj->SetArrayField(TEXT("nodes"), NodesArr);
+			GObj->SetNumberField(TEXT("node_count"), Graph->Nodes.Num());
+@@ -383,6 +390,7 @@
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> VarsArr;
++	VarsArr.Reserve(BP->NewVariables.Num());
+
+	UClass* GenClass = BP->GeneratedClass;
+	UObject* CDO = GenClass ? GenClass->GetDefaultObject(false) : nullptr;
+@@ -810,6 +818,7 @@
+	}
+
+	TArray<TSharedPtr<FJsonValue>> FuncsArr;
++	FuncsArr.Reserve(BP->FunctionGraphs.Num());
+
+	for (UEdGraph* Graph : BP->FunctionGraphs)
+	{
+@@ -910,6 +919,7 @@
+	}
+
+	TArray<TSharedPtr<FJsonValue>> DispatchersArr;
++	DispatchersArr.Reserve(BP->DelegateSignatureGraphs.Num());
+
+	for (UEdGraph* Graph : BP->DelegateSignatureGraphs)
+	{
+@@ -1031,6 +1041,7 @@
+	}
+
+	TArray<TSharedPtr<FJsonValue>> InterfacesArr;
++	InterfacesArr.Reserve(BP->ImplementedInterfaces.Num());
+
+	for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
+	{
+@@ -1073,6 +1084,7 @@
+	Root->SetStringField(TEXT("graph_type"), TEXT("construction_script"));
+
+	TArray<TSharedPtr<FJsonValue>> NodesArr;
++	NodesArr.Reserve(CSGraph->Nodes.Num());
+	for (UEdGraphNode* Node : CSGraph->Nodes)
+	{
+		if (!Node) continue;
