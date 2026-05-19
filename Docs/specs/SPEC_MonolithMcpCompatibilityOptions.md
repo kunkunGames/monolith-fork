@@ -15,10 +15,10 @@ This is a small Core follow-up after session observation:
 
 | Candidate | Current state | ROI | Order |
 |-----------|---------------|-----|-------|
-| MCP session observer | Spec/implementation stack is open. | Medium-high: safe client/session diagnostics. | Prior slice. |
+| MCP session observer | Implemented as a bounded in-memory observer. | Medium-high: safe client/session diagnostics. | Prior slice. |
 | Progress/cancel | Existing remote branches already cover active request rows, progress, and cancel contracts. | High but collision-prone. | Skip in this stack. |
 | Resource links / typed media | Existing remote branches already cover resource-link and typed-media results. | High but collision-prone. | Skip in this stack. |
-| Compatibility options | `set_mcp_compatibility_options` exists but always reports unavailable. | Medium: lets operators intentionally close browser CORS while keeping default loopback compatibility. | This slice. |
+| Compatibility options | Implemented for the safe `browser_access` toggle. | Medium: lets operators intentionally close browser CORS while keeping default loopback compatibility. | This slice. |
 
 ---
 
@@ -28,9 +28,9 @@ Monolith's transport defaults are intentionally conservative after the CORS hard
 
 | Question | Current state | Needed first slice |
 |----------|---------------|--------------------|
-| Can browser loopback CORS be disabled without shutting down the MCP server? | No. | Add a setting-backed `browser_access` option. |
+| Can browser loopback CORS be disabled without shutting down the MCP server? | Implemented. | Keep the setting-backed `browser_access` option restricted to safe modes. |
 | Can legacy routes be toggled? | No, and this is safer. | Continue rejecting legacy route enable requests explicitly. |
-| Does the action tell callers what changed? | No. It always returns unavailable. | Return current/applied options and unsupported requests. |
+| Does the action tell callers what changed? | Implemented. | Return current/applied options and unsupported requests. |
 
 ---
 

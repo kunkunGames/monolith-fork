@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_MonolithCore.md](SPEC_MonolithCore.md)
 **Engine:** Unreal Engine 5.7+
-**Status:** Proposed
+**Status:** Implemented first slice
 **Owner module:** MonolithCore
 **Scope:** Add a bounded, read-only MCP `resources/list` and `resources/read` surface backed by explicit Monolith resource providers.
 **Non-goals:** Arbitrary filesystem access, binary/blob resources, writable resources, subscriptions, resource templates, external network fetches, persistent caches.
@@ -15,10 +15,10 @@ This is the next high-ROI Core slice after the ToolCall ledger:
 
 | Candidate | Current state | ROI | Order |
 |-----------|---------------|-----|-------|
-| ToolCall ledger | Spec and implementation PRs are open as the prior stack. | High: makes MCP calls auditable. | Done first. |
-| MCP resources | `bEnableMcpResources` exists but reports `settings_only_provider_registry_pending`. | High: exposes durable docs and diagnostics without bloating `tools/list` or tool results. | This slice. |
-| Structured tool results | `bEnableStructuredToolResults` exists but helper/result contract is pending. | High: improves client parsing after resources exist. | Next candidate. |
-| MCP session/progress/cancel mode | `bEnableMcpSessionMode` exists but request/session rows are not active on master. | Medium-high: valuable for long-running operations, but broader transport state. | Later stack. |
+| ToolCall ledger | Implemented as settings-gated redacted in-memory records. | High: makes MCP calls auditable. | Done first. |
+| MCP resources | Implemented as a settings-gated read-only provider registry. | High: exposes durable docs and diagnostics without bloating `tools/list` or tool results. | This slice. |
+| Structured tool results | Implemented as settings-gated `structuredContent` / `_meta` output. | High: improves client parsing after resources exist. | Done next. |
+| MCP session/progress/cancel mode | Session observation is implemented; progress/cancel remain follow-up transport work. | Medium-high: valuable for long-running operations, but broader transport state. | Session observer done; progress/cancel later. |
 
 The resources slice is intentionally read-only and provider-based so it can land before session mode.
 
@@ -26,14 +26,14 @@ The resources slice is intentionally read-only and provider-based so it can land
 
 ## 2. Problem
 
-Monolith currently sends most context through tools and text JSON responses. That keeps the protocol simple, but it makes stable reference material harder for MCP clients to discover:
+Monolith sends most context through tools and text JSON responses. The resource slice adds a standard read-only MCP resource surface so stable reference material is discoverable without scanning the checkout:
 
 | Question | Current state | Needed state |
 |----------|---------------|--------------|
-| What stable Monolith docs can the client read without scanning the checkout? | No MCP resource endpoint. | A bounded `resources/list` response with explicit Monolith resource descriptors. |
-| Can a client fetch one spec or API reference through standard MCP? | No `resources/read` method. | A read-only provider registry that returns text content by URI. |
+| What stable Monolith docs can the client read without scanning the checkout? | Implemented through bounded `resources/list` descriptors. | Keep descriptors explicit and sorted. |
+| Can a client fetch one spec or API reference through standard MCP? | Implemented through `resources/read` over registered providers. | Keep reads bounded and text-only. |
 | Can resources expose project files safely? | Not yet; arbitrary filesystem reads would be unsafe. | Only registered providers may serve content, and each content item has a size cap. |
-| Can the server report whether resources are active? | Server status says settings-only. | Status must distinguish configured, active, and handler-registered state. |
+| Can the server report whether resources are active? | Implemented through configured, active, handler-registered, and restart-required status fields. | Keep status tied to real registry state. |
 
 ---
 
@@ -156,15 +156,13 @@ Rules:
 
 ---
 
-## 7. Implementation Plan
+## 7. Implementation Notes
 
-1. Add `MonolithResourceRegistry.h/.cpp` with descriptor registration, deterministic list pagination, bounded text read, and test reset hooks.
-2. Register default docs resources during MonolithCore startup only when `bEnableMcpResources=true`.
-3. Add `resources/list` and `resources/read` handling to `FMonolithHttpServer::HandleJsonRpc`.
-4. Add `ErrResourceNotFound` to `FMonolithJsonUtils` in the server-defined range.
-5. Update `monolith.get_mcp_server_status` feature reporting from settings-only to actual registered handler state.
-6. Add automation tests for registry list/read, pagination, missing URI, missing resource, truncation, and default docs registration.
-7. Update `Docs/API_REFERENCE.md` and `Docs/specs/SPEC_MonolithCore.md` in the implementation PR when public methods land.
+1. `MonolithResourceRegistry.h/.cpp` owns descriptor registration, deterministic list pagination, bounded text read, and test reset hooks.
+2. MonolithCore startup registers default docs resources only when `bEnableMcpResources=true`.
+3. `FMonolithHttpServer::HandleJsonRpc` handles `resources/list` and `resources/read` only when the resource feature is active.
+4. Server status reports configured, active, handler-registered, and restart-required state from real settings and registry data.
+5. `MonolithResourceRegistryTests.cpp` covers list/read, pagination, missing URI, missing resource, truncation, and default docs registration.
 
 ---
 

@@ -15,10 +15,10 @@ This is the next high-ROI Core slice after MCP resources:
 
 | Candidate | Current state | ROI | Order |
 |-----------|---------------|-----|-------|
-| ToolCall ledger | Prior spec/implementation stack is open. | High: local observability. | Done first. |
-| MCP resources | Prior spec/implementation stack is open. | High: durable docs and diagnostics through standard MCP resources. | Done second. |
-| Structured tool results | `bEnableStructuredToolResults` exists but still reports settings-only. | High: lets clients parse native JSON without scraping text. | This slice. |
-| MCP session/progress/cancel mode | `bEnableMcpSessionMode` exists but requires broader transport state. | Medium-high but larger blast radius. | Later stack. |
+| ToolCall ledger | Implemented as settings-gated redacted in-memory records. | High: local observability. | Done first. |
+| MCP resources | Implemented as settings-gated read-only MCP resources. | High: durable docs and diagnostics through standard MCP resources. | Done second. |
+| Structured tool results | Implemented as settings-gated `structuredContent` / `_meta` output. | High: lets clients parse native JSON without scraping text. | This slice. |
+| MCP session/progress/cancel mode | Session observation is implemented; progress/cancel remain follow-up transport work. | Medium-high but larger blast radius. | Session observer done; progress/cancel later. |
 
 Structured results should land after resources because later slices can add resource links and typed media entries on top of the same helper surface.
 
@@ -33,7 +33,7 @@ Monolith's MCP `tools/call` response currently serializes the action result JSON
 | Can clients read successful results as JSON without text parsing? | No; JSON is embedded as a string. | Add `structuredContent` when opted in. |
 | Do old clients keep working? | Yes today. | Preserve `content[]` text JSON exactly as the compatibility surface. |
 | Can errors expose hints and related actions structurally? | Mostly text plus top-level legacy fields. | Add structured error content while preserving text and legacy fields. |
-| Is the behavior safely gated? | Setting exists but implementation is pending. | Gate helper output behind `bEnableStructuredToolResults`. |
+| Is the behavior safely gated? | Implemented behind `bEnableStructuredToolResults`. | Keep helper output settings-gated. |
 
 ---
 

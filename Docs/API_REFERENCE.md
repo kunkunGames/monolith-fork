@@ -81,6 +81,8 @@ Core server management and introspection.
 
 When `bEnableMcpResources=true`, MonolithCore also exposes MCP `resources/list` and `resources/read` through `FMonolithResourceRegistry`. Default docs are registered only after their backing markdown is readable and non-empty. `resources/list` returns a string `nextCursor` only when another page exists; the exhausted page omits `nextCursor`.
 
+When `bEnableAdvancedToolCallRecords=true`, MonolithCore registers `monolith.list_tool_call_records`, `monolith.get_tool_call_record`, and `monolith.analyze_tool_call_records`. These actions expose bounded, redacted, in-memory ToolCall records for local diagnostics; raw params, result payloads, auth headers, cookies, bearer tokens, and API keys are not stored.
+
 When `bEnableStructuredToolResults=true`, MCP `tools/call` responses keep the legacy `content[]` text JSON entry and additionally include `structuredContent` plus `_meta`. Successful calls mirror the action result object in `structuredContent`; errors expose `ok=false`, `error`, `error_code`, optional `hints`, `related_actions`, and `error_data` while preserving the existing human-readable text error.
 
 When `bEnableMcpSessionMode=true`, MonolithCore observes `MCP-Session-Id` and `MCP-Protocol-Version` on `POST /mcp` requests in a bounded process-local table. `monolith.list_mcp_sessions` returns redacted/hash identifiers, protocol version, request counts, timestamps, method names, and tool names only. It does not store raw session ids, params, result payloads, auth headers, cookies, bearer tokens, or API keys; progress notifications and in-flight cancellation are not active in this slice.

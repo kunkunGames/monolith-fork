@@ -44,11 +44,11 @@
 
 ---
 
-### Planned ToolCall Ledger
+### ToolCall Ledger
 
-`bEnableAdvancedToolCallRecords` is the default-off setting reserved for redacted ToolCall records and local analysis. The accepted first slice is documented in [SPEC_MonolithToolCallLedger.md](SPEC_MonolithToolCallLedger.md).
+`bEnableAdvancedToolCallRecords` is the default-off setting for redacted ToolCall records and local analysis. The implemented first slice is documented in [SPEC_MonolithToolCallLedger.md](SPEC_MonolithToolCallLedger.md).
 
-The first implementation must stay local and bounded, must not persist raw params or result payloads, and must preserve the current `monolith.list_recent_action_audit` response shape for compatibility.
+The implementation stays local and bounded, does not persist raw params or result payloads, and preserves the current `monolith.list_recent_action_audit` response shape for compatibility.
 
 ### Action Execution Policy Metadata
 
@@ -60,24 +60,24 @@ MonolithCore automation tests must compile under Unreal Engine 5.7 both in non-u
 
 ### MCP Resources
 
-`bEnableMcpResources` is the default-off setting for read-only MCP `resources/list` and `resources/read` support. The accepted first slice is documented in [SPEC_MonolithMcpResources.md](SPEC_MonolithMcpResources.md).
+`bEnableMcpResources` is the default-off setting for read-only MCP `resources/list` and `resources/read` support. The implemented first slice is documented in [SPEC_MonolithMcpResources.md](SPEC_MonolithMcpResources.md).
 
 The first implementation exposes only explicit Monolith providers, does not read arbitrary caller-provided filesystem paths, and keeps all resource payloads bounded.
 
 ### Structured Tool Results
 
-`bEnableStructuredToolResults` is the default-off setting for MCP `structuredContent` output on `tools/call` responses. The accepted first slice is documented in [SPEC_MonolithStructuredToolResults.md](SPEC_MonolithStructuredToolResults.md).
+`bEnableStructuredToolResults` is the default-off setting for MCP `structuredContent` output on `tools/call` responses. The implemented first slice is documented in [SPEC_MonolithStructuredToolResults.md](SPEC_MonolithStructuredToolResults.md).
 
 The implementation preserves the legacy `content[]` text JSON response for compatibility while adding structured fields only when configured. `monolith.get_mcp_server_status` reports the feature as `active_structured_content` when the setting is enabled because result shaping is evaluated per `tools/call`.
 
 ### MCP Session Mode
 
-`bEnableMcpSessionMode` is the default-off setting for MCP session/request observation, progress, and cancellation. The accepted first slice is documented in [SPEC_MonolithMcpSessionMode.md](SPEC_MonolithMcpSessionMode.md).
+`bEnableMcpSessionMode` is the default-off setting for MCP session/request observation, progress, and cancellation. The implemented first slice is documented in [SPEC_MonolithMcpSessionMode.md](SPEC_MonolithMcpSessionMode.md).
 
-The first implementation stays process-local and redacted: it observes session headers, protocol version, method names, and tool names, but does not store raw session ids, request params, result payloads, auth headers, cookies, bearer tokens, or API keys. Progress notifications and in-flight cancellation remain follow-up work.
+The implementation stays process-local and redacted: it observes session headers, protocol version, method names, and tool names, but does not store raw session ids, request params, result payloads, auth headers, cookies, bearer tokens, or API keys. Progress notifications and in-flight cancellation remain follow-up work.
 
 ### MCP Compatibility Options
 
-`monolith.set_mcp_compatibility_options` supports the first safe compatibility slice documented in [SPEC_MonolithMcpCompatibilityOptions.md](SPEC_MonolithMcpCompatibilityOptions.md).
+`monolith.set_mcp_compatibility_options` supports the implemented safe compatibility slice documented in [SPEC_MonolithMcpCompatibilityOptions.md](SPEC_MonolithMcpCompatibilityOptions.md).
 
 The implementation exposes only a safe browser CORS toggle between `loopback_only` and `disabled`. Legacy SSE/message routes, wildcard CORS, and arbitrary origin allowlists remain out of scope.

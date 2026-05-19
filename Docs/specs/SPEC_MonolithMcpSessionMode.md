@@ -15,10 +15,10 @@ This is the next MonolithCore slice after structured tool results:
 
 | Candidate | Current state | ROI | Order |
 |-----------|---------------|-----|-------|
-| ToolCall ledger | Spec and implementation stack is open. | High: local observability. | Done first. |
-| MCP resources | Spec and implementation stack is open. | High: durable docs and diagnostics through standard MCP resources. | Done second. |
-| Structured tool results | Spec and implementation stack is open. | High: native JSON parsing for modern clients. | Done third. |
-| MCP session mode | `bEnableMcpSessionMode` exists but reports settings-only. Session actions return unavailable. | Medium-high: lets clients/operators see active MCP clients before progress/cancel work. | This slice. |
+| ToolCall ledger | Implemented as settings-gated redacted in-memory records. | High: local observability. | Done first. |
+| MCP resources | Implemented as settings-gated read-only MCP resources. | High: durable docs and diagnostics through standard MCP resources. | Done second. |
+| Structured tool results | Implemented as settings-gated `structuredContent` / `_meta` output. | High: native JSON parsing for modern clients. | Done third. |
+| MCP session mode | Implemented as a settings-gated, bounded, in-memory observer. | Medium-high: lets clients/operators see active MCP clients before progress/cancel work. | This slice. |
 
 Session observation should land before progress/cancel because cancellation needs a request/session correlation surface that is safe to expose.
 
@@ -26,12 +26,12 @@ Session observation should land before progress/cancel because cancellation need
 
 ## 2. Problem
 
-Monolith's current Streamable HTTP endpoint accepts MCP protocol/session headers, but the server remains completely stateless:
+Monolith's Streamable HTTP endpoint accepts MCP protocol/session headers. The first implemented session slice keeps request execution stateless, but adds bounded observation when `bEnableMcpSessionMode=true`:
 
 | Question | Current state | Needed first slice |
 |----------|---------------|--------------------|
-| Can an operator see whether clients are sending `MCP-Session-Id`? | No. `list_mcp_sessions` reports unavailable. | Return bounded observed session rows when enabled. |
-| Does enabling `bEnableMcpSessionMode` change behavior? | Only status says settings-only pending. | Status reports an active in-memory observer. |
+| Can an operator see whether clients are sending `MCP-Session-Id`? | Implemented: `list_mcp_sessions` returns bounded observed rows when enabled. | Keep rows redacted and bounded. |
+| Does enabling `bEnableMcpSessionMode` change behavior? | Implemented: status reports an active in-memory observer. | Keep request execution stateless. |
 | Are raw session ids stored? | No. | Continue not storing raw session ids; expose redacted/hash identifiers only. |
 | Can clients cancel active work? | No. | Keep cancellation out of scope and report that no in-flight request was interrupted. |
 
