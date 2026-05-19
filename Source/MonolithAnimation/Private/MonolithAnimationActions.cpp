@@ -3707,22 +3707,30 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetMontageBlend(const TSh
 
 	if (Params->HasField(TEXT("blend_in_time")))
 	{
-		Montage->BlendIn.SetBlendTime(static_cast<float>(Params->GetNumberField(TEXT("blend_in_time"))));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("blend_in_time"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'blend_in_time' must be a number"));
+		Montage->BlendIn.SetBlendTime(static_cast<float>(TempVal));
 		bAnySet = true;
 	}
 	if (Params->HasField(TEXT("blend_out_time")))
 	{
-		Montage->BlendOut.SetBlendTime(static_cast<float>(Params->GetNumberField(TEXT("blend_out_time"))));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("blend_out_time"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'blend_out_time' must be a number"));
+		Montage->BlendOut.SetBlendTime(static_cast<float>(TempVal));
 		bAnySet = true;
 	}
 	if (Params->HasField(TEXT("blend_out_trigger_time")))
 	{
-		Montage->BlendOutTriggerTime = static_cast<float>(Params->GetNumberField(TEXT("blend_out_trigger_time")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("blend_out_trigger_time"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'blend_out_trigger_time' must be a number"));
+		Montage->BlendOutTriggerTime = static_cast<float>(TempVal);
 		bAnySet = true;
 	}
 	if (Params->HasField(TEXT("enable_auto_blend_out")))
 	{
-		Montage->bEnableAutoBlendOut = Params->GetBoolField(TEXT("enable_auto_blend_out"));
+		bool bTempVal;
+		if (!Params->TryGetBoolField(TEXT("enable_auto_blend_out"), bTempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'enable_auto_blend_out' must be a boolean"));
+		Montage->bEnableAutoBlendOut = bTempVal;
 		bAnySet = true;
 	}
 
