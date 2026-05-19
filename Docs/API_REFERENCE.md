@@ -2,7 +2,7 @@
 
 **Version:** v0.14.10 · **Last updated:** 2026-05-18
 
-**In-tree action total: 1576** active actions across **35 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1600). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1572** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 39.
+**In-tree action total: 1576** active actions across **37 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1600). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1572** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 41.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
@@ -18,17 +18,20 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 |-----------|---------|-------------|
 | [monolith](#monolith) | 4 | Core server tools (discover, status, update, reindex) |
 | [blueprint](#blueprint) | 93 | Blueprint read/write, variable/component/graph CRUD, DataTable maintenance, node ops, compile, auto-layout, spawn actors |
+| [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection / Fracture visibility registered by MonolithChaosFracture |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [paper2d](#paper2d) | 3 | Optional Paper2D AssetRegistry discovery registered by MonolithPaper2D |
 | [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
 | [editor](#editor) | 36 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, selection inspection, PIE/console control |
 | [config](#config) | 10 | INI config, plugin, and cvar inspection/search |
+| [dataflow](#dataflow) | 2 | Optional Dataflow AssetRegistry/module-status discovery registered by MonolithDataflow |
 | [localization](#localization) | 10 | Culture inspection and guarded StringTable CRUD/import/export |
-| [interchange](#interchange) | 16 | Normalized import/export validation, guarded import mutation, reimport metadata, reimport, and export actions registered by MonolithMesh |
+| [interchange](#interchange) | 16 | Normalized import/export validation, guarded import mutation, reimport metadata, reimport, and export actions registered by MonolithInterchange |
 | [project](#project) | 17 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 21 | Unreal Engine C++ source code navigation |
-| [mesh](#mesh) | 241 (+24 gated) | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental — +24 town gen registers only with `bEnableProceduralTownGen=true`) |
+| [mesh](#mesh) | 236 (+24 gated) | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental — +24 town gen registers only with `bEnableProceduralTownGen=true`) |
+| [ndisplay](#ndisplay) | 2 | Optional nDisplay / DisplayCluster config discovery registered by MonolithNDisplay |
 | [pcg](#pcg) | 4 | Optional PCG AssetRegistry/reflection discovery registered by MonolithPCG |
 | [ui](#ui) | 121 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
@@ -63,6 +66,10 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `monolith.set_action_execution_policy` | Placeholder promoted | Developer-only local override for known action execution policies. Supports `read_only`, `track_dirty_packages`, `transaction_optional`, `transaction_required`, and `post_edit_validate`. |
 | `pcg.get_graph_asset` | **NEW** | Adds bounded AssetRegistry metadata inspection for one PCG graph-like asset without loading PCG classes or adding a hard PCG dependency. |
 | `paper2d.get_asset` | **NEW** | Returns one Paper2D AssetRegistry row and bounded tags under `/Game` without loading Paper2D assets or depending on Paper2D headers. |
+| `dataflow.get_status`, `dataflow.list_assets` | **ROUTE CHANGE** | Moved Dataflow discovery from `mesh.get_dataflow_status` / `mesh.list_dataflow_assets` into the dedicated `MonolithDataflow` module and `dataflow` namespace. |
+| `chaos_fracture.*` | **ROUTE CHANGE** | Moved Geometry Collection / Fracture visibility from `mesh.*` action names into the dedicated `MonolithChaosFracture` module and `chaos_fracture` namespace. |
+| `ndisplay.*` | **OWNER CHANGE** | Kept the public `ndisplay` action names but moved registration from `MonolithMesh` to `MonolithNDisplay`. |
+| `interchange.*` | **OWNER CHANGE** | Kept the public `interchange` action names but moved registration from `MonolithMesh` to `MonolithInterchange`. |
 
 The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespaces — same handler, two callable paths. Pick whichever reads better from your client.
 
@@ -136,7 +143,7 @@ Re-index the Monolith project database. Incremental by default (delta only). Pas
 
 ## interchange
 
-Normalized import/export workflow registered by `MonolithMesh`. Use this namespace
+Normalized import/export workflow registered by `MonolithInterchange`. Use this namespace
 when the caller has a local source file and wants validation, batch rows, reimport
 metadata, or a generic import/export path instead of a narrow mesh/material helper.
 
@@ -168,6 +175,40 @@ expected package derived from the source filename, but scene/factory outputs can
 still create differently named packages. `overwrite` forwards replace intent.
 `rename` is a best-effort pass-through with overwrite disabled; inspect
 `imported_assets` for the final package names.
+
+---
+
+## dataflow
+
+Optional Dataflow discovery registered by `MonolithDataflow`. The namespace is read-only and AssetRegistry/module-status-only; it does not include Dataflow headers, load assets, evaluate graphs, regenerate assets, or require the Dataflow plugin at compile time. **2 actions.**
+
+| Action | Required Params | Notes |
+|--------|-----------------|-------|
+| `get_status` | none | Reports Dataflow/Chaos graph module availability, implemented actions, and future action boundaries |
+| `list_assets` | none | Lists Dataflow-like registry rows under `/Game`; optional `package_path`, `limit` |
+
+---
+
+## chaos_fracture
+
+Optional Geometry Collection / Fracture visibility registered by `MonolithChaosFracture`. The namespace is read-only and reflection/AssetRegistry-only; it does not include Fracture headers, load Fracture tooling, run fracture operations, or mutate assets. **3 actions.**
+
+| Action | Required Params | Notes |
+|--------|-----------------|-------|
+| `get_status` | none | Reports Geometry Collection / Fracture module availability, reflected type presence, implemented actions, and future boundaries |
+| `list_geometry_collection_assets` | none | Lists Geometry Collection-like registry rows under `/Game`; optional `package_path`, `limit` |
+| `list_geometry_collection_components` | none | Lists reflected Geometry Collection-like components in the current editor world; optional `limit` |
+
+---
+
+## ndisplay
+
+Optional nDisplay / DisplayCluster config discovery registered by `MonolithNDisplay`. The namespace is read-only and AssetRegistry/module-status-only; it does not include DisplayCluster headers, load configs, edit projection policies, or save assets. **2 actions.**
+
+| Action | Required Params | Notes |
+|--------|-----------------|-------|
+| `get_status` | none | Reports DisplayCluster module availability, implemented actions, and future action boundaries |
+| `list_config_assets` | none | Lists DisplayCluster/nDisplay config-like registry rows under `/Game`; optional `package_path`, `limit` |
 
 ---
 
@@ -1323,7 +1364,11 @@ Both invoke the same SQLite indexes the live MCP uses.
 | MonolithAI | `WITH_STATETREE` + `WITH_SMARTOBJECTS` (engine plugins) | 0 |
 | MonolithUI CommonUI | `WITH_COMMONUI` | 42 (UMG baseline only) |
 | MonolithAudio MetaSound | `WITH_METASOUND` | Sound Cue + CRUD + batch (no MetaSound graph) |
-| MonolithMesh town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | 241 core `mesh` actions (24 additional town gen actions when enabled) |
+| MonolithMesh town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | 236 core `mesh` actions (24 additional town gen actions when enabled) |
+| MonolithDataflow | none (AssetRegistry/module-status-only optional plugin probe) | 2 `dataflow` namespace discovery actions |
+| MonolithChaosFracture | none (AssetRegistry/reflection-only optional plugin probe) | 3 `chaos_fracture` namespace visibility actions |
+| MonolithNDisplay | none (AssetRegistry/module-status-only optional plugin probe) | 2 `ndisplay` namespace discovery actions |
+| MonolithInterchange | none (guarded Unreal import/export integration; probes Interchange module availability at runtime) | 16 `interchange` namespace import/export actions |
 | MonolithPCG | none (AssetRegistry/reflection-only optional plugin probe) | 4 `pcg` namespace discovery actions |
 | MonolithPaper2D | none (AssetRegistry-only optional plugin probe) | 3 `paper2d` namespace discovery actions |
 

@@ -1,4 +1,4 @@
-#include "MonolithMeshInterchangeActions.h"
+#include "MonolithInterchangeActions.h"
 
 #include "MonolithAssetUtils.h"
 #include "MonolithParamSchema.h"
@@ -633,16 +633,16 @@ namespace
 	}
 }
 
-void FMonolithMeshInterchangeActions::RegisterActions(FMonolithToolRegistry& Registry)
+void FMonolithInterchangeActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	Registry.RegisterAction(TEXT("interchange"), TEXT("get_supported_formats"),
 		TEXT("List Monolith Interchange import/export validation capabilities without mutating assets."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::GetSupportedFormats),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::GetSupportedFormats),
 		FParamSchemaBuilder().Build());
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("can_import"),
 		TEXT("Validate whether a source file can be handed to an Interchange import workflow."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::CanImport),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::CanImport),
 		FParamSchemaBuilder()
 			.Required(TEXT("source_file"), TEXT("string"), TEXT("Source file to validate"))
 			.Optional(TEXT("destination_path"), TEXT("string"), TEXT("Optional /Game destination package path"))
@@ -651,14 +651,14 @@ void FMonolithMeshInterchangeActions::RegisterActions(FMonolithToolRegistry& Reg
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("can_reimport"),
 		TEXT("Check whether an existing asset has source import data usable for reimport."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::CanReimport),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::CanReimport),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to inspect"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("get_import_data"),
 		TEXT("Read import source metadata from an existing asset without mutation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::GetImportData),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::GetImportData),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to inspect"))
 			.Build());
@@ -675,12 +675,12 @@ void FMonolithMeshInterchangeActions::RegisterActions(FMonolithToolRegistry& Reg
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_asset"),
 		TEXT("Import one source file with root, destination, conflict, confirmation, and dry-run guardrails."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::ImportAsset),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
 		ImportSchema);
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_assets"),
 		TEXT("Import multiple source files sequentially and return one result row per source."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::ImportAssets),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAssets),
 		FParamSchemaBuilder()
 			.Required(TEXT("source_files"), TEXT("array"), TEXT("Source files to import"))
 			.Required(TEXT("destination_path"), TEXT("string"), TEXT("Destination content folder such as /Game/Imported"))
@@ -693,32 +693,32 @@ void FMonolithMeshInterchangeActions::RegisterActions(FMonolithToolRegistry& Reg
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_scene"),
 		TEXT("Typed scene import entrypoint over the guarded Interchange import implementation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::ImportAsset),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
 		ImportSchema);
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_mesh"),
 		TEXT("Typed mesh import entrypoint over the guarded Interchange import implementation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::ImportAsset),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
 		ImportSchema);
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_skeletal_mesh"),
 		TEXT("Typed skeletal mesh import entrypoint over the guarded Interchange import implementation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::ImportAsset),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
 		ImportSchema);
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_texture"),
 		TEXT("Typed texture import entrypoint over the guarded Interchange import implementation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::ImportAsset),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
 		ImportSchema);
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_audio"),
 		TEXT("Typed audio import entrypoint over the guarded Interchange import implementation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::ImportAsset),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
 		ImportSchema);
 	Registry.RegisterAction(TEXT("interchange"), TEXT("import_with_options"),
 		TEXT("Guarded import entrypoint that accepts a forward-compatible options object."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::ImportAsset),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ImportAsset),
 		ImportSchema);
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("update_reimport_path"),
 		TEXT("Update an asset reimport source path after source/root validation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::UpdateReimportPath),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::UpdateReimportPath),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to update"))
 			.Required(TEXT("source_file"), TEXT("string"), TEXT("New source file path"))
@@ -730,7 +730,7 @@ void FMonolithMeshInterchangeActions::RegisterActions(FMonolithToolRegistry& Reg
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("reimport_asset"),
 		TEXT("Reimport one existing asset through Unreal's reimport manager."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::ReimportAsset),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ReimportAsset),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to reimport"))
 			.Optional(TEXT("source_file"), TEXT("string"), TEXT("Optional replacement source file"))
@@ -742,7 +742,7 @@ void FMonolithMeshInterchangeActions::RegisterActions(FMonolithToolRegistry& Reg
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("reimport_assets"),
 		TEXT("Reimport multiple assets sequentially and return one result row per asset."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::ReimportAssets),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ReimportAssets),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_paths"), TEXT("array"), TEXT("Asset paths to reimport"))
 			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required for mutation unless dry_run=true"), TEXT("false"))
@@ -751,7 +751,7 @@ void FMonolithMeshInterchangeActions::RegisterActions(FMonolithToolRegistry& Reg
 
 	Registry.RegisterAction(TEXT("interchange"), TEXT("export_asset"),
 		TEXT("Export one asset to a local file through UAssetExportTask after path validation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshInterchangeActions::ExportAsset),
+		FMonolithActionHandler::CreateStatic(&FMonolithInterchangeActions::ExportAsset),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to export"))
 			.Required(TEXT("file_path"), TEXT("string"), TEXT("Output file path"))
@@ -762,7 +762,7 @@ void FMonolithMeshInterchangeActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Build());
 }
 
-FMonolithActionResult FMonolithMeshInterchangeActions::GetSupportedFormats(const TSharedPtr<FJsonObject>&)
+FMonolithActionResult FMonolithInterchangeActions::GetSupportedFormats(const TSharedPtr<FJsonObject>&)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("read_only"), true);
@@ -790,7 +790,7 @@ FMonolithActionResult FMonolithMeshInterchangeActions::GetSupportedFormats(const
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithMeshInterchangeActions::CanImport(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithInterchangeActions::CanImport(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SourceFile;
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("source_file"), SourceFile) || SourceFile.IsEmpty())
@@ -865,7 +865,7 @@ FMonolithActionResult FMonolithMeshInterchangeActions::CanImport(const TSharedPt
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithMeshInterchangeActions::CanReimport(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithInterchangeActions::CanReimport(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath, Error;
 	UObject* Asset = LoadAssetFromParams(Params, AssetPath, Error);
@@ -899,7 +899,7 @@ FMonolithActionResult FMonolithMeshInterchangeActions::CanReimport(const TShared
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithMeshInterchangeActions::GetImportData(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithInterchangeActions::GetImportData(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath, Error;
 	UObject* Asset = LoadAssetFromParams(Params, AssetPath, Error);
@@ -918,7 +918,7 @@ FMonolithActionResult FMonolithMeshInterchangeActions::GetImportData(const TShar
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithMeshInterchangeActions::ImportAsset(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithInterchangeActions::ImportAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SourceFile;
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("source_file"), SourceFile) || SourceFile.IsEmpty())
@@ -939,7 +939,7 @@ FMonolithActionResult FMonolithMeshInterchangeActions::ImportAsset(const TShared
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithMeshInterchangeActions::ImportAssets(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithInterchangeActions::ImportAssets(const TSharedPtr<FJsonObject>& Params)
 {
 	TArray<FString> SourceFiles;
 	FString Error;
@@ -966,7 +966,7 @@ FMonolithActionResult FMonolithMeshInterchangeActions::ImportAssets(const TShare
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithMeshInterchangeActions::UpdateReimportPath(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithInterchangeActions::UpdateReimportPath(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath, Error;
 	UObject* Asset = LoadAssetFromParams(Params, AssetPath, Error);
@@ -1031,7 +1031,7 @@ FMonolithActionResult FMonolithMeshInterchangeActions::UpdateReimportPath(const 
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithMeshInterchangeActions::ReimportAsset(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithInterchangeActions::ReimportAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
@@ -1047,7 +1047,7 @@ FMonolithActionResult FMonolithMeshInterchangeActions::ReimportAsset(const TShar
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithMeshInterchangeActions::ReimportAssets(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithInterchangeActions::ReimportAssets(const TSharedPtr<FJsonObject>& Params)
 {
 	TArray<FString> AssetPaths;
 	FString Error;
@@ -1069,7 +1069,7 @@ FMonolithActionResult FMonolithMeshInterchangeActions::ReimportAssets(const TSha
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithMeshInterchangeActions::ExportAsset(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithInterchangeActions::ExportAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath, Error;
 	UObject* Asset = LoadAssetFromParams(Params, AssetPath, Error);

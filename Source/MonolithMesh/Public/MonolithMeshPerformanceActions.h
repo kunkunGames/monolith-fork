@@ -4,7 +4,7 @@
 #include "MonolithToolRegistry.h"
 
 /**
- * Phase 9: Performance Analysis (7 actions)
+ * Phase 9: Performance Analysis (5 actions)
  * Budget-aware placement analysis with conservative estimates.
  * No occlusion culling assumed — all estimates trend HIGH for safe budgeting.
  */
@@ -29,10 +29,6 @@ private:
 
 	// --- Triangle budget ---
 	static FMonolithActionResult GetTriangleBudget(const TSharedPtr<FJsonObject>& Params);
-
-	// --- Dataflow discovery ---
-	static FMonolithActionResult GetDataflowStatus(const TSharedPtr<FJsonObject>& Params);
-	static FMonolithActionResult ListDataflowAssets(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Helpers ---
 	static TArray<TSharedPtr<FJsonValue>> VectorToJsonArray(const FVector& V);

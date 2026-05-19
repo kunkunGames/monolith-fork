@@ -19,7 +19,6 @@
 #include "MonolithMeshPresetActions.h"
 #include "MonolithMeshEncounterActions.h"
 #include "MonolithMeshQualityActions.h"
-#include "MonolithMeshInterchangeActions.h"
 #include "MonolithLevelInstanceActions.h"
 #include "MonolithHlodActions.h"
 #include "MonolithActorMergeActions.h"
@@ -76,7 +75,6 @@ void FMonolithMeshModule::StartupModule()
 	FMonolithMeshPresetActions::RegisterActions(FMonolithToolRegistry::Get());
 	FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry::Get());
 	FMonolithMeshQualityActions::RegisterActions(FMonolithToolRegistry::Get());
-	FMonolithMeshInterchangeActions::RegisterActions(FMonolithToolRegistry::Get());
 	FMonolithLevelInstanceActions::RegisterActions(FMonolithToolRegistry::Get());
 	FMonolithHlodActions::RegisterActions(FMonolithToolRegistry::Get());
 	FMonolithActorMergeActions::RegisterActions(FMonolithToolRegistry::Get());
@@ -157,10 +155,8 @@ void FMonolithMeshModule::ShutdownModule()
 #endif
 
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("mesh"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("interchange"));
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("level_instance"));
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("hlod"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("ndisplay"));
 }
 
 #undef LOCTEXT_NAMESPACE

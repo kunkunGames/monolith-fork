@@ -4,7 +4,7 @@
 **Engine:** Unreal Engine 5.7+
 **Version:** 0.14.9 (Beta)
 
-> **Action-count audit (2026-05-19):** source-of-truth count is **241 `mesh` actions + 24 experimental town gen actions when enabled**. PCG discovery is owned by `MonolithPCG` and documented in [SPEC_MonolithPCG.md](SPEC_MonolithPCG.md). The detailed per-action tables below predate the audit and may sum to slightly different numbers per category — they are accurate per-row but the category subtotals have drifted. A full per-action sweep against `Source/MonolithMesh/Private/Monolith*Actions.cpp` is on the audit backlog.
+> **Action-count audit (2026-05-19):** source-of-truth count is **236 `mesh` actions + 24 experimental town gen actions when enabled**. PCG discovery is owned by `MonolithPCG`; Dataflow discovery is owned by `MonolithDataflow`; Chaos/Fracture discovery is owned by `MonolithChaosFracture`; nDisplay discovery is owned by `MonolithNDisplay`; Interchange import/export is owned by `MonolithInterchange`. The detailed per-action tables below predate the audit and may sum to slightly different numbers per category — they are accurate per-row but the category subtotals have drifted. A full per-action sweep against `Source/MonolithMesh/Private/Monolith*Actions.cpp` is on the audit backlog.
 
 ---
 
@@ -20,7 +20,7 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithMeshModule` | Registers 241 `mesh` actions across 30+ action classes (+ GeometryScript ops conditional). 24 additional experimental town gen actions registered only when `bEnableProceduralTownGen = true` (default: false). |
+| `FMonolithMeshModule` | Registers 236 `mesh` actions across 30+ action classes (+ GeometryScript ops conditional). 24 additional experimental town gen actions registered only when `bEnableProceduralTownGen = true` (default: false). |
 | `FMonolithMeshInspectionActions` | Mesh asset inspection: geometry stats, LODs, UVs, materials, collision, quality analysis, and catalog queries (12 `mesh` actions) |
 | `FMonolithMeshSceneActions` | Scene actor manipulation: spawn, move, duplicate, delete, group, batch execute (8 actions) |
 | `FMonolithMeshSpatialActions` | Spatial queries: raycasts, sweeps, overlaps, nearest, line of sight, navmesh, scene bounds/stats (11 actions) |
@@ -39,60 +39,24 @@
 | `FMonolithMeshArchFeatureActions` | Architectural features: balconies, porches, fire escapes, railings (5 actions) |
 | `FMonolithMeshDebugViewActions` | Daredevil debug view: section clip, floor plan capture, camera bookmarks (6 actions) |
 | `FMonolithMeshFurnishingActions` | Room furnishing: room-type furniture mapping, placement rules (3 actions) |
-| `FMonolithMeshInterchangeActions` | Interchange namespace support: supported-format discovery, source/destination validation, import data inspection, guarded import mutation, reimport, and export entrypoints |
 | `FMonolithMeshBuildingTypes` | Shared structs: FBuildingGrid, FRoomDef, FDoorDef, FStairwellDef, FBuildingDescriptor |
 | `FMonolithMeshCatalog` | Mesh catalog database for search_meshes_by_size and get_mesh_catalog_stats |
 | `FMonolithMeshUtils` | Shared helpers for mesh loading, bounds calculation, actor queries |
 
-### Interchange Namespace
+### Moved Optional Namespaces
 
-`FMonolithMeshInterchangeActions` registers the `interchange` namespace from the
-MonolithMesh module. The namespace is intentionally separate from `mesh` so agents
-can choose a normalized import/export workflow when the asset type or pipeline is
-not known up front.
+The following optional plugin surfaces are no longer owned by `MonolithMesh`:
 
-Second milestone contract:
+| Namespace | Owning module | Spec |
+|-----------|---------------|------|
+| `interchange` | `MonolithInterchange` | [SPEC_MonolithInterchange.md](SPEC_MonolithInterchange.md) |
+| `ndisplay` | `MonolithNDisplay` | [SPEC_MonolithNDisplay.md](SPEC_MonolithNDisplay.md) |
+| `dataflow` | `MonolithDataflow` | [SPEC_MonolithDataflow.md](SPEC_MonolithDataflow.md) |
+| `chaos_fracture` | `MonolithChaosFracture` | [SPEC_MonolithChaosFracture.md](SPEC_MonolithChaosFracture.md) |
 
-| Action | Params | Description |
-|--------|--------|-------------|
-| `get_supported_formats` | none | Report known import/export extensions, default file roots, and Interchange module availability |
-| `can_import` | `source_file`, `destination_path`?, `allow_external`? | Validate a source file, destination package path, root policy, and format support without mutation |
-| `can_reimport` | `asset_path` | Check reflected import metadata and source file existence |
-| `get_import_data` | `asset_path` | Return reflected `UAssetImportData` source file rows |
-| `import_asset` | `source_file`, `destination_path`, `conflict_policy`, `confirm`?/`dry_run`? | Import one source file with guardrails and a structured result row |
-| `import_assets` | `source_files`, `destination_path`, `conflict_policy`, `confirm`?/`dry_run`? | Import files sequentially and return one row per source, continuing after per-file failures |
-| `import_scene` | same as `import_asset` | Typed scene import entrypoint over the same guarded import implementation |
-| `import_mesh` | same as `import_asset` | Typed mesh import entrypoint over the same guarded import implementation |
-| `import_skeletal_mesh` | same as `import_asset` | Typed skeletal mesh import entrypoint over the same guarded import implementation |
-| `import_texture` | same as `import_asset` | Typed texture import entrypoint over the same guarded import implementation |
-| `import_audio` | same as `import_asset` | Typed audio import entrypoint over the same guarded import implementation |
-| `import_with_options` | same as `import_asset`, plus optional `options` | Guarded import entrypoint that preserves a forward-compatible options object in the response |
-| `update_reimport_path` | `asset_path`, `source_file`, `source_file_index`?, `confirm`?/`dry_run`? | Update reflected reimport source path after root/source validation |
-| `reimport_asset` | `asset_path`, `source_file`?, `source_file_index`?, `confirm`?/`dry_run`? | Reimport one existing asset through `FReimportManager` |
-| `reimport_assets` | `asset_paths`, `confirm`?/`dry_run`? | Reimport assets sequentially and return one row per asset |
-| `export_asset` | `asset_path`, `file_path`, `replace_existing`?, `confirm`?/`dry_run`? | Export one asset through `UAssetExportTask` after destination validation |
+### Actions (260 — namespace: "mesh")
 
-Mutation guardrails:
-
-- `confirm=true` is required unless `dry_run=true`.
-- Source files must be under project/content/saved roots unless
-  `allow_external=true`.
-- `destination_path` must be a valid `/Game/...` package path.
-- `conflict_policy` is explicit: `fail`, `overwrite`, `rename`, or
-  `reimport_only`.
-- `fail` conflict detection is a conservative preflight against the expected
-  package derived from the source filename. Scene imports or factory-specific
-  naming can still produce additional packages, so callers must inspect the
-  returned `imported_assets` rows after import.
-- `rename` is a best-effort pass-through to Unreal's import pipeline with
-  overwrite disabled; Monolith does not pre-allocate the final non-conflicting
-  package name.
-- Batch actions return per-row `status`, `messages`, imported/updated asset paths,
-  and dirty package names instead of failing the entire batch on one bad source.
-
-### Actions (265 — namespace: "mesh")
-
-> **Note:** 241 `mesh` actions (Phases 1-22 + Proc Geo Overhaul) always registered + 24 experimental Procedural Town Generator actions (SP1-SP10 + `validate_building`) registered only when `bEnableProceduralTownGen = true` (default: false). PCG discovery has moved to `MonolithPCG`. Town gen has known geometry issues (wall misalignment, room separation) — very much a work-in-progress. Unless you're willing to dig in and help improve it, it's best left alone for now. Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain.
+> **Note:** 236 `mesh` actions (Phases 1-22 + Proc Geo Overhaul) always registered + 24 experimental Procedural Town Generator actions (SP1-SP10 + `validate_building`) registered only when `bEnableProceduralTownGen = true` (default: false). PCG, Dataflow, Chaos/Fracture, nDisplay, and Interchange discovery/import surfaces have moved to dedicated modules. Town gen has known geometry issues (wall misalignment, room separation) — very much a work-in-progress. Unless you're willing to dig in and help improve it, it's best left alone for now. Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain.
 
 **Inspection (12)**
 | Action | Params | Description |

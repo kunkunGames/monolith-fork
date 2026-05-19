@@ -35,11 +35,6 @@ private:
 	static FMonolithActionResult AnalyzeCoOpBalance(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult IntegrationHooksStub(const TSharedPtr<FJsonObject>& Params);
 
-	// --- Optional Chaos Fracture visibility (no hard Fracture dependency) ---
-	static FMonolithActionResult GetChaosFractureStatus(const TSharedPtr<FJsonObject>& Params);
-	static FMonolithActionResult ListGeometryCollectionAssets(const TSharedPtr<FJsonObject>& Params);
-	static FMonolithActionResult ListGeometryCollectionComponents(const TSharedPtr<FJsonObject>& Params);
-
 	// --- Helpers ---
 	static TArray<TSharedPtr<FJsonValue>> VectorToJsonArray(const FVector& V);
 };

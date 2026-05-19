@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "MonolithToolRegistry.h"
 
-class FMonolithMeshInterchangeActions
+class FMonolithInterchangeActions
 {
 public:
 	static void RegisterActions(FMonolithToolRegistry& Registry);
