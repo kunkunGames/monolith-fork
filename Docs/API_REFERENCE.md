@@ -19,7 +19,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [monolith](#monolith) | 4 | Core server tools (discover, status, update, reindex) |
 | [blueprint](#blueprint) | 93 | Blueprint read/write, variable/component/graph CRUD, DataTable maintenance, node ops, compile, auto-layout, spawn actors |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
-| [paper2d](#paper2d) | 3 | Optional Paper2D AssetRegistry discovery registered by MonolithMaterial |
+| [paper2d](#paper2d) | 3 | Optional Paper2D AssetRegistry discovery registered by MonolithPaper2D |
 | [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
 | [editor](#editor) | 36 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, selection inspection, PIE/console control |
@@ -317,7 +317,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithMaterial.md` for full graph_spec s
 
 ## paper2d
 
-Optional Paper2D discovery registered by `MonolithMaterial`. The namespace is read-only and AssetRegistry-only; it does not include Paper2D headers, load Paper2D assets, or require the Paper2D plugin at compile time. **3 actions.**
+Optional Paper2D discovery registered by `MonolithPaper2D`. The namespace is read-only and AssetRegistry-only; it does not include Paper2D headers, load Paper2D assets, or require the Paper2D plugin at compile time. **3 actions.**
 
 | Action | Required Params | Notes |
 |--------|-----------------|-------|
@@ -1325,6 +1325,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 | MonolithAudio MetaSound | `WITH_METASOUND` | Sound Cue + CRUD + batch (no MetaSound graph) |
 | MonolithMesh town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | 241 core `mesh` actions (24 additional town gen actions when enabled) |
 | MonolithPCG | none (AssetRegistry/reflection-only optional plugin probe) | 4 `pcg` namespace discovery actions |
+| MonolithPaper2D | none (AssetRegistry-only optional plugin probe) | 3 `paper2d` namespace discovery actions |
 
 ---
 

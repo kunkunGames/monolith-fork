@@ -1,9 +1,9 @@
 # Monolith - Paper2D Asset Metadata Spec
 
-**Parent:** [SPEC_MonolithMaterial.md](SPEC_MonolithMaterial.md)
+**Parent:** [SPEC_MonolithPaper2D.md](SPEC_MonolithPaper2D.md)
 **Engine:** Unreal Engine 5.7+
 **Version:** 0.14.10
-**Status:** Implemented in `MonolithMaterial`, exposed through the `paper2d` namespace
+**Status:** Implemented in `MonolithPaper2D`
 
 ---
 
@@ -65,5 +65,5 @@ Expose a low-risk, high-signal Paper2D inspection action without introducing a h
 | Gate | Expected Result |
 |------|-----------------|
 | Param guard automation | Non-`/Game` paths are rejected before lookup. |
-| UE 5.7 compile | `MonolithMaterial` builds against the resolved project engine root. |
-| Docs sync | `SPEC_MonolithMaterial.md`, `SPEC_CORE.md`, and `API_REFERENCE.md` reflect the `paper2d` namespace and contract. |
+| UE 5.7 compile | `MonolithPaper2D` builds against the resolved project engine root. |
+| Docs sync | `SPEC_MonolithPaper2D.md`, `SPEC_CORE.md`, and `API_REFERENCE.md` reflect the module owner, namespace, and contract. |
