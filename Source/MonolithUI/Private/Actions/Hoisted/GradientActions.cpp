@@ -2,6 +2,7 @@
 #include "Actions/Hoisted/GradientActions.h"
 
 // Monolith registry
+#include "MonolithPackagePathValidator.h"
 #include "MonolithToolRegistry.h"
 
 // JSON
@@ -240,6 +241,11 @@ FMonolithActionResult MonolithUI::FGradientActions::HandleCreateGradientMidFromS
     AssetToolsModule.Get().CreateUniqueAssetName(
         Destination, /*Suffix=*/FString(),
         /*out*/ UniquePackageName, /*out*/ UniqueAssetName);
+
+    if (const FString ValidationError = MonolithCore::ValidatePackagePath(UniquePackageName); !ValidationError.IsEmpty())
+    {
+        return FMonolithActionResult::Error(ValidationError, -32603);
+    }
 
     UPackage* Package = CreatePackage(*UniquePackageName);
     if (!Package)

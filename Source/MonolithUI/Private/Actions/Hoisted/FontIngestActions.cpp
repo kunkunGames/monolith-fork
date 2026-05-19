@@ -2,6 +2,7 @@
 #include "Actions/Hoisted/FontIngestActions.h"
 
 // Monolith registry
+#include "MonolithPackagePathValidator.h"
 #include "MonolithToolRegistry.h"
 
 // Core / JSON
@@ -232,6 +233,14 @@ FMonolithActionResult MonolithUI::FFontIngestActions::HandleImportFontFamily(con
             DesiredFacePackageBase, /*Suffix=*/FString(),
             /*out*/ UniqueFacePackageName, /*out*/ UniqueFaceAssetName);
 
+        if (const FString ValidationError = MonolithCore::ValidatePackagePath(UniqueFacePackageName); !ValidationError.IsEmpty())
+        {
+            Warnings.Add(FString::Printf(
+                TEXT("faces[%d] ('%s'): ValidatePackagePath failed: %s -- skipping"),
+                i, *Spec.Typeface, *ValidationError));
+            continue;
+        }
+
         UPackage* FacePackage = CreatePackage(*UniqueFacePackageName);
         if (!FacePackage)
         {
@@ -306,6 +315,11 @@ FMonolithActionResult MonolithUI::FFontIngestActions::HandleImportFontFamily(con
     AssetToolsModule.Get().CreateUniqueAssetName(
         DesiredFamilyPackageBase, /*Suffix=*/FString(),
         /*out*/ UniqueFamilyPackageName, /*out*/ UniqueFamilyAssetName);
+
+    if (const FString ValidationError = MonolithCore::ValidatePackagePath(UniqueFamilyPackageName); !ValidationError.IsEmpty())
+    {
+        return FMonolithActionResult::Error(ValidationError, -32603);
+    }
 
     UPackage* FamilyPackage = CreatePackage(*UniqueFamilyPackageName);
     if (!FamilyPackage)

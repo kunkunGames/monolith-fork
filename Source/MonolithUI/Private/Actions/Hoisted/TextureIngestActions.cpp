@@ -2,6 +2,7 @@
 #include "Actions/Hoisted/TextureIngestActions.h"
 
 // Monolith registry
+#include "MonolithPackagePathValidator.h"
 #include "MonolithToolRegistry.h"
 
 // Core / JSON
@@ -274,6 +275,11 @@ FMonolithActionResult MonolithUI::FTextureIngestActions::HandleImportTextureFrom
         /*out*/ UniquePackageName, /*out*/ UniqueAssetName);
 
     // --- Create package + texture ---
+    if (const FString ValidationError = MonolithCore::ValidatePackagePath(UniquePackageName); !ValidationError.IsEmpty())
+    {
+        return FMonolithActionResult::Error(ValidationError, -32603);
+    }
+
     UPackage* Package = CreatePackage(*UniquePackageName);
     if (!Package)
     {
