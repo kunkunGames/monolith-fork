@@ -486,6 +486,7 @@ TSharedPtr<FJsonObject> FMonolithAudioQueryActions::BuildSoundClassTree(USoundCl
 
 	// Children
 	TArray<TSharedPtr<FJsonValue>> ChildrenArray;
+	ChildrenArray.Reserve(SoundClass->ChildClasses.Num());
 	for (USoundClass* ChildClass : SoundClass->ChildClasses)
 	{
 		if (TSharedPtr<FJsonObject> ChildJson = BuildSoundClassTree(ChildClass, Visited))
@@ -543,6 +544,7 @@ FMonolithActionResult FMonolithAudioQueryActions::GetSoundClassHierarchy(const T
 	}
 
 	TArray<TSharedPtr<FJsonValue>> TreesArray;
+	TreesArray.Reserve(FMath::Max(0, AllClasses.Num() - NonRoots.Num()));
 	for (USoundClass* SC : AllClasses)
 	{
 		if (!NonRoots.Contains(SC))
@@ -597,6 +599,7 @@ TSharedPtr<FJsonObject> FMonolithAudioQueryActions::BuildSubmixTree(USoundSubmix
 
 	// Children — USoundSubmixBase has ChildSubmixes
 	TArray<TSharedPtr<FJsonValue>> ChildrenArray;
+	ChildrenArray.Reserve(SubmixBase->ChildSubmixes.Num());
 	for (USoundSubmixBase* ChildSubmix : SubmixBase->ChildSubmixes)
 	{
 		if (TSharedPtr<FJsonObject> ChildJson = BuildSubmixTree(ChildSubmix, Visited))
@@ -652,6 +655,7 @@ FMonolithActionResult FMonolithAudioQueryActions::GetSubmixHierarchy(const TShar
 	}
 
 	TArray<TSharedPtr<FJsonValue>> TreesArray;
+	TreesArray.Reserve(FMath::Max(0, AllSubmixes.Num() - NonRoots.Num()));
 	for (USoundSubmixBase* SM : AllSubmixes)
 	{
 		if (!NonRoots.Contains(SM))
@@ -696,6 +700,7 @@ FMonolithActionResult FMonolithAudioQueryActions::FindAudioReferences(const TSha
 	AR.GetReferencers(FAssetIdentifier(PackageFName), Referencers);
 
 	TArray<TSharedPtr<FJsonValue>> ReferencersArray;
+	ReferencersArray.Reserve(Referencers.Num());
 	for (const FAssetIdentifier& Ref : Referencers)
 	{
 		if (!Ref.PackageName.IsNone())
@@ -709,6 +714,7 @@ FMonolithActionResult FMonolithAudioQueryActions::FindAudioReferences(const TSha
 	AR.GetDependencies(FAssetIdentifier(PackageFName), Dependencies);
 
 	TArray<TSharedPtr<FJsonValue>> DependenciesArray;
+	DependenciesArray.Reserve(Dependencies.Num());
 	for (const FAssetIdentifier& Dep : Dependencies)
 	{
 		if (!Dep.PackageName.IsNone())
@@ -772,6 +778,7 @@ FMonolithActionResult FMonolithAudioQueryActions::FindUnusedAudio(const TSharedP
 	}
 
 	TArray<TSharedPtr<FJsonValue>> UnusedArray;
+	UnusedArray.Reserve(FMath::Max(0, Limit));
 	int32 ScannedCount = 0;
 
 	for (UClass* AssetClass : ClassesToScan)
