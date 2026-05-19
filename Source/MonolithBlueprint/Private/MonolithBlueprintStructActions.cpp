@@ -495,7 +495,11 @@ static bool ReadRequiredStringParam(const TSharedPtr<FJsonObject>& Params, const
 
 static bool ReadOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, bool& OutValue, FString& OutError)
 {
-	if (Params.IsValid() && Params->HasField(FieldName) && !Params->TryGetBoolField(FieldName, OutValue))
+	if (!Params.IsValid() || !Params->HasField(FieldName))
+	{
+		return true;
+	}
+	if (!Params->TryGetBoolField(FieldName, OutValue))
 	{
 		OutError = FString::Printf(TEXT("Malformed parameter: %s must be a boolean"), FieldName);
 		return false;

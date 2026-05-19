@@ -107,6 +107,7 @@
 | Rule | Requirement |
 |------|-------------|
 | Write gate | New DataTable maintenance writes reject calls unless `dry_run=true` or `confirm=true` is supplied. Existing `add_data_table_row` keeps its legacy contract. |
+| Boolean params | Optional mutation booleans (`dry_run`, `confirm`, `save`, `create_if_missing`) must be JSON booleans when present; malformed values are rejected before asset lookup or mutation. |
 | Asset scope | `asset_path` must resolve to a `UDataTable`; CSV export `file_path` must remain under the project directory, using case-insensitive prefix checks for filesystem paths. |
 | Return shape | Mutating actions return `dry_run`, `changed`, `saved`, `asset_path`, `row_name` where applicable, and row/schema summaries for agent readback. |
 | Field conversion | Row writes reuse the same friendly-name resolution and `ImportText` conversion behavior as `add_data_table_row`. JSON numbers targeting integer properties are formatted without a decimal suffix before `ImportText`. Unknown or failed fields are reported in `skipped_fields`. |

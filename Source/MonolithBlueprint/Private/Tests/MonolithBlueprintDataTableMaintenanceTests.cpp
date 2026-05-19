@@ -90,6 +90,25 @@ bool FMonolithBlueprintDataTableMaintenanceWriteGateTest::RunTest(const FString&
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithBlueprintDataTableMaintenanceMalformedBoolTest, "Monolith.ParamGuard.Blueprint.DataTableMaintenanceMalformedBool", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithBlueprintDataTableMaintenanceMalformedBoolTest::RunTest(const FString& Parameters)
+{
+	FMonolithBlueprintStructActions::RegisterActions(FMonolithToolRegistry::Get());
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Tests/Monolith/Blueprint/DT_Missing"));
+	Params->SetStringField(TEXT("row_name"), TEXT("RowA"));
+	Params->SetObjectField(TEXT("values"), MakeShared<FJsonObject>());
+	Params->SetStringField(TEXT("dry_run"), TEXT("yes"));
+
+	const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("update_data_table_row"), Params);
+	TestFalse(TEXT("update_data_table_row rejects malformed dry_run"), Result.bSuccess);
+	TestTrue(TEXT("malformed dry_run reports boolean requirement"), Result.ErrorMessage.Contains(TEXT("dry_run must be a boolean")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithBlueprintDataTableMaintenanceDryRunTest, "Monolith.ParamGuard.Blueprint.DataTableMaintenanceDryRun", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithBlueprintDataTableMaintenanceDryRunTest::RunTest(const FString& Parameters)
