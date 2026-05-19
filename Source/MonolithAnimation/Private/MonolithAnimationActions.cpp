@@ -6848,7 +6848,16 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 			if (!SecObj.IsValid()) continue;
 
 			FString SectionName = SecObj->GetStringField(TEXT("name"));
-			float StartTime = SecObj->HasField(TEXT("start_time")) ? static_cast<float>(SecObj->GetNumberField(TEXT("start_time"))) : 0.0f;
+				float StartTime = 0.0f;
+				if (SecObj->HasField(TEXT("start_time")))
+				{
+					double TempTime;
+					if (!SecObj->TryGetNumberField(TEXT("start_time"), TempTime))
+					{
+						return FMonolithActionResult::Error(TEXT("Parameter 'start_time' in section must be a number"));
+					}
+					StartTime = static_cast<float>(TempTime);
+				}
 
 			// Add section
 			Montage->AddAnimCompositeSection(FName(*SectionName), StartTime);
@@ -6905,11 +6914,23 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 	if (Params->TryGetObjectField(TEXT("blend"), BlendObj) && BlendObj && BlendObj->IsValid())
 	{
 		if ((*BlendObj)->HasField(TEXT("blend_in_time")))
-			Montage->BlendIn.SetBlendTime(static_cast<float>((*BlendObj)->GetNumberField(TEXT("blend_in_time"))));
+			{
+				double TempVal;
+				if (!(*BlendObj)->TryGetNumberField(TEXT("blend_in_time"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'blend_in_time' must be a number"));
+				Montage->BlendIn.SetBlendTime(static_cast<float>(TempVal));
+			}
 		if ((*BlendObj)->HasField(TEXT("blend_out_time")))
-			Montage->BlendOut.SetBlendTime(static_cast<float>((*BlendObj)->GetNumberField(TEXT("blend_out_time"))));
+			{
+				double TempVal;
+				if (!(*BlendObj)->TryGetNumberField(TEXT("blend_out_time"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'blend_out_time' must be a number"));
+				Montage->BlendOut.SetBlendTime(static_cast<float>(TempVal));
+			}
 		if ((*BlendObj)->HasField(TEXT("blend_out_trigger_time")))
-			Montage->BlendOutTriggerTime = static_cast<float>((*BlendObj)->GetNumberField(TEXT("blend_out_trigger_time")));
+			{
+				double TempVal;
+				if (!(*BlendObj)->TryGetNumberField(TEXT("blend_out_trigger_time"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'blend_out_trigger_time' must be a number"));
+				Montage->BlendOutTriggerTime = static_cast<float>(TempVal);
+			}
 		bool bAutoBlendOut = true;
 		if ((*BlendObj)->TryGetBoolField(TEXT("enable_auto_blend_out"), bAutoBlendOut))
 			Montage->bEnableAutoBlendOut = bAutoBlendOut;
@@ -6943,7 +6964,16 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 
 			if (NClass->IsChildOf(UAnimNotifyState::StaticClass()))
 			{
-				float NDuration = NObj->HasField(TEXT("duration")) ? static_cast<float>(NObj->GetNumberField(TEXT("duration"))) : 0.1f;
+					float NDuration = 0.1f;
+					if (NObj->HasField(TEXT("duration")))
+					{
+						double TempDuration;
+						if (!NObj->TryGetNumberField(TEXT("duration"), TempDuration))
+						{
+							return FMonolithActionResult::Error(TEXT("Parameter 'duration' in notify must be a number"));
+						}
+						NDuration = static_cast<float>(TempDuration);
+					}
 				UAnimNotifyState* NS = NewObject<UAnimNotifyState>(Montage, NClass);
 				UAnimationBlueprintLibrary::AddAnimationNotifyStateEventObject(Montage, NTime, NDuration, NS, FName(*NTrackName));
 			}
