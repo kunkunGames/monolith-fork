@@ -67,7 +67,7 @@ Companion deep indexer: `FMetaSoundIndexer` lives in `MonolithIndex/Private/Inde
 
 ### Key Actions
 
-> **`build_sound_cue_from_spec` (power action).** Creates a complete Sound Cue graph from a JSON specification in a single call. The spec defines nodes (with type and properties), connections (from/to with child_index), and the first node. Handles node creation via `ConstructSoundNode`, property setting via reflection, connection wiring via `ChildNodes[]`, `LinkGraphNodesFromSoundNodes()`, and `CacheAggregateValues()`.
+> **`build_sound_cue_from_spec` (power action).** Creates a complete Sound Cue graph from a JSON specification in a single call. The spec defines nodes (with type and properties), connections (from/to with child_index), first node, and optional cue-level properties. Cue-level numeric and boolean property types are validated before package creation so malformed specs fail without leaving a partial Sound Cue asset. Handles node creation via `ConstructSoundNode`, property setting via reflection, connection wiring via `ChildNodes[]`, `LinkGraphNodesFromSoundNodes()`, and `CacheAggregateValues()`.
 >
 > **`build_metasound_from_spec` (power action).** Creates a complete MetaSound from a JSON specification in a single call. The spec defines type (Source/Patch), format, interfaces, graph inputs/outputs, nodes, connections, and interface wiring. Uses `UMetaSoundBuilderSubsystem::CreateSourceBuilder()`, `AddNodeByClassName()`, `ConnectNodes()`, and `BuildToAsset()`.
 >
