@@ -33,7 +33,7 @@
 |--------|--------|---------------|
 | `MonolithCore::ValidatePackagePath(const FString&)` | `MonolithPackagePathValidator.h` (inline) | Wraps `FPackageName::IsValidLongPackageName` with an empty-string-on-success / error-msg-on-failure contract. Rejects empty input, double-slash (`//Game/...`), missing `/Game/` root, trailing slash, illegal chars. Added `dv.367` after a fatal `UObjectGlobals.cpp:1012` ensure from a malformed `//Game/...` JSON payload reaching `CreatePackage`. Currently routed at four sites: `HandleCreateWidgetBlueprint` (direct crash site), `MonolithAIInternal::GetOrCreatePackage` (~17 AI callers), `MonolithGASInternal::GetOrCreatePackage` (~6 GAS callers), `MonolithMaterialActions` (~5 Material callers). ~29 of 80 `CreatePackage` call sites guarded; remaining ~51 sites across MonolithBlueprint / MonolithLogicDriver / MonolithUITemplateActions / MonolithCommonUI* / MonolithMesh are follow-up backlog. |
 
-### Actions (4 — namespace: "monolith")
+### Actions (6 — namespace: "monolith")
 
 | Action | MCP Tool | Description |
 |--------|----------|-------------|
@@ -41,6 +41,8 @@
 | `status` | `monolith_status` | Server health: version, uptime, port, action count, engine_version, project_name |
 | `update` | `monolith_update` | Check/install updates from GitHub Releases. `action`: "check" or "install" |
 | `reindex` | `monolith_reindex` | Trigger project re-index. Defaults to incremental (hash-based delta); pass `force=true` for full wipe-and-rebuild (via reflection to MonolithIndex, no hard dependency) |
+| `list_mcp_sessions` | `monolith_list_mcp_sessions` | Report MCP session tracking availability. Current Monolith streamable HTTP mode does not persist per-client sessions. |
+| `terminate_mcp_session` | `monolith_terminate_mcp_session` | Report MCP session termination availability without inventing session state. |
 
 ---
 

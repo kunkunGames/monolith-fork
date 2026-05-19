@@ -543,7 +543,7 @@ Counts below were re-verified against the live `monolith_discover()` registry on
 
 | Module | Namespace | Actions | Source-of-truth notes |
 |--------|-----------|---------|------------------------|
-| MonolithCore | monolith | 4 | discover, status, update, reindex |
+| MonolithCore | monolith | 6 | discover, status, update, reindex, list_mcp_sessions, terminate_mcp_session |
 | MonolithBlueprint | blueprint | 89 | |
 | MonolithMaterial | material | 63 | |
 | MonolithPaper2D | paper2d | 3 | `paper2d.get_status`, `paper2d.list_assets`, and `paper2d.get_asset` are registered from MonolithPaper2D without a hard Paper2D dependency. |
