@@ -87,6 +87,20 @@ public:
 			  ToolTip="Reserved feature flag for redacted ToolCall records and analysis. Raw payload logging remains disabled."))
 	bool bEnableAdvancedToolCallRecords = false;
 
+	/** Enables read-only GameFeatures inspection actions beyond get_status. */
+	UPROPERTY(config, EditAnywhere, Category="Project|GameFeatures",
+		meta=(DisplayName="Enable GameFeature Inspection Actions",
+			  ToolTip="Registers read-only gamefeatures inspection actions beyond get_status. Default off."))
+	bool bEnableGameFeatureActions = false;
+
+	/** Reserved guard for a future plugin creation slice. No creation action is
+	 *  registered in the read-only first slice. */
+	UPROPERTY(config, EditAnywhere, Category="Project|GameFeatures",
+		meta=(DisplayName="Allow GameFeature Plugin Creation",
+			  EditCondition="bEnableGameFeatureActions",
+			  ToolTip="Reserved for future manifest-based GameFeature plugin creation. Current Monolith builds only report this gate."))
+	bool bAllowGameFeaturePluginCreation = false;
+
 	// --- Auto-Update ---
 
 	/** Check GitHub Releases for updates on editor startup. Off by default

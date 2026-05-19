@@ -1,6 +1,14 @@
 # Monolith — TODO
 
-Last updated: 2026-05-18 (Niagara emitter selector parity accepted)
+Last updated: 2026-05-19 (GameFeatures read-only inspection accepted)
+
+---
+
+### MonolithGameFeatures — Read-Only Inspection COMPLETE (2026-05-19)
+
+- [x] `MonolithGameFeatures` owns the `gamefeatures` namespace instead of mounting Game Feature inspection from `MonolithIndex` or `MonolithMesh`.
+- [x] `gamefeatures.get_status` is always registered; `list_plugins`, `find_game_feature_data`, `describe_game_feature_data`, and `validate_plugin` register only when `bEnableGameFeatureActions=true`.
+- [x] Creation remains reserved behind `bAllowGameFeaturePluginCreation`; no create, activate, deactivate, overwrite, delete, or descriptor mutation action is registered.
 
 ---
 

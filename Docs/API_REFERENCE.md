@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.14.10 · **Last updated:** 2026-05-18
+**Version:** v0.14.10 · **Last updated:** 2026-05-19
 
 Action and dispatcher totals are runtime-discovered. Call `monolith_status()` for live totals and `monolith_discover("<namespace>")` for current action schemas; 24 town-gen actions remain experimental and disabled until `bEnableProceduralTownGen=true`.
 
@@ -26,6 +26,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [editor](#editor) | 36 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, selection inspection, PIE/console control |
 | [config](#config) | 10 | INI config, plugin, and cvar inspection/search |
 | [dataflow](#dataflow) | 2 | Optional Dataflow AssetRegistry/module-status discovery registered by MonolithDataflow |
+| [gamefeatures](#gamefeatures) | 1 (+4 gated) | Optional Game Feature plugin inventory and GameFeatureData inspection registered by MonolithGameFeatures |
 | [localization](#localization) | 10 | Culture inspection and guarded StringTable CRUD/import/export |
 | [interchange](#interchange) | 16 | Normalized import/export validation, guarded import mutation, reimport metadata, reimport, and export actions registered by MonolithInterchange |
 | [project](#project) | 17 | Project-wide asset index (SQLite + FTS5) |
@@ -68,6 +69,7 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `paper2d.get_asset` | **NEW** | Returns one Paper2D AssetRegistry row and bounded tags under `/Game` without loading Paper2D assets or depending on Paper2D headers. |
 | `dataflow.get_status`, `dataflow.list_assets` | **ROUTE CHANGE** | Moved Dataflow discovery from `mesh.get_dataflow_status` / `mesh.list_dataflow_assets` into the dedicated `MonolithDataflow` module and `dataflow` namespace. |
 | `chaos_fracture.*` | **ROUTE CHANGE** | Moved Geometry Collection / Fracture visibility from `mesh.*` action names into the dedicated `MonolithChaosFracture` module and `chaos_fracture` namespace. |
+| `gamefeatures.*` | **NEW** | Adds `gamefeatures.get_status` plus four opt-in read-only inspection actions in the dedicated `MonolithGameFeatures` module. |
 | `ndisplay.*` | **OWNER CHANGE** | Kept the public `ndisplay` action names but moved registration from `MonolithMesh` to `MonolithNDisplay`. |
 | `interchange.*` | **OWNER CHANGE** | Kept the public `interchange` action names but moved registration from `MonolithMesh` to `MonolithInterchange`. |
 
@@ -961,6 +963,22 @@ Optional PCG discovery registered by `MonolithPCG`. The namespace is read-only a
 
 ---
 
+## gamefeatures
+
+Optional Game Feature plugin inventory and `GameFeatureData` inspection registered by `MonolithGameFeatures`. The namespace is read-only and uses plugin descriptors, AssetRegistry metadata, and bounded reflection; it does not link Epic's experimental `GameFeaturesToolset`, activate/deactivate plugins, or create plugin files. **1 action is always registered; 4 detailed inspection actions register when `bEnableGameFeatureActions=true` and the editor restarts.**
+
+| Action | Required Params | Notes |
+|--------|-----------------|-------|
+| `get_status` | none | Always registered. Reports flags, module load state, scan roots, registered actions, actions available after opt-in, and reserved creation boundaries |
+| `list_plugins` | none | Gated. Lists Game Feature-style plugin descriptors; optional `limit`, `include_engine` |
+| `find_game_feature_data` | `plugin_name` or `asset_path` | Gated. Resolves a plugin or package/object path to one `GameFeatureData` AssetRegistry row without loading arbitrary paths |
+| `describe_game_feature_data` | `plugin_name` or `asset_path` | Gated. Loads one resolved `GameFeatureData` asset and returns bounded reflected action summaries |
+| `validate_plugin` | `plugin_name` | Gated. Checks descriptor, enabled `GameFeatures` dependency, content root, GameFeatureData presence, and creation gate state |
+
+Creation is reserved for a later spec. The current module does not register `create_plugin`, `activate_plugin`, `deactivate_plugin`, delete, overwrite, or descriptor mutation actions.
+
+---
+
 ## mesh
 
 Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript, procedural geometry, lighting, audio, performance, and **experimental** procedural town generation. **241 default-active actions** — plus 24 experimental town gen actions when `bEnableProceduralTownGen=true` (default `false`), for 265 total mesh actions when fully registered.
@@ -1389,6 +1407,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 | MonolithChaosFracture | none (AssetRegistry/reflection-only optional plugin probe) | 3 `chaos_fracture` namespace visibility actions |
 | MonolithNDisplay | none (AssetRegistry/module-status-only optional plugin probe) | 2 `ndisplay` namespace discovery actions |
 | MonolithInterchange | none (guarded Unreal import/export integration; probes Interchange module availability at runtime) | 16 `interchange` namespace import/export actions |
+| MonolithGameFeatures | `bEnableGameFeatureActions` for detailed inspection actions | 1 `gamefeatures.get_status` action always registered; 4 more read-only inspection actions when enabled |
 | MonolithPCG | none (AssetRegistry/reflection-only optional plugin probe) | 4 `pcg` namespace discovery actions |
 | MonolithPaper2D | none (AssetRegistry-only optional plugin probe) | 3 `paper2d` namespace discovery actions |
 

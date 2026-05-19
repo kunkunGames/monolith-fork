@@ -108,6 +108,7 @@ static const std::vector<std::string> CORE_QUERY_TOOLS = {
     "context_query",
     "dataflow_query",
     "editor_query",
+    "gamefeatures_query",
     "gas_query",
     "hlod_query",
     "input_query",

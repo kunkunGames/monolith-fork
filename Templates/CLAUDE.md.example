@@ -26,6 +26,7 @@ Use `{namespace}_query(action, params)` after discovering the namespace. Common 
 - `context_query` — Runtime/editor context inspection
 - `dataflow_query` — Dataflow graph inspection
 - `editor_query` — Build, logs, compile output, crash context, scene capture
+- `gamefeatures_query` — Game Feature plugin inventory and GameFeatureData inspection
 - `gas_query` — Gameplay Ability System: abilities, attributes, effects, ASC
 - `hlod_query` — HLOD inspection and diagnostics
 - `input_query` — Enhanced Input mapping inspection
