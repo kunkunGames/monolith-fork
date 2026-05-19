@@ -1387,16 +1387,30 @@ parse_unified_diff_ranges(const std::string& diff_text) {
     std::stringstream ss(diff_text);
     std::string line, current;
     bool have_file = false;
+    bool prev_minus_header = false;
     while (std::getline(ss, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (line.rfind("+++ b/", 0) == 0) {
-            current = line.substr(6);
+        // Accept git-style ("+++ b/path") and plain ("+++ path") unified-diff
+        // new-file headers so non-git producers (e.g. `p4 -du`) keep RX-1.1
+        // line precision instead of dropping every hunk range. A bare "+++ "
+        // can also be added file content, so a plain header is only honored
+        // when the previous line was the matching "--- " header.
+        const bool git_new = line.rfind("+++ b/", 0) == 0;
+        const bool plain_new = !git_new && line.rfind("+++ ", 0) == 0 && prev_minus_header;
+        if (git_new || plain_new) {
+            current = line.substr(git_new ? 6 : 4);
             size_t tab = current.find('\t');
             if (tab != std::string::npos) current = current.substr(0, tab);
+            while (!current.empty() && current.front() == ' ') current.erase(current.begin());
+            while (!current.empty() && (current.back() == ' ' || current.back() == '\r')) current.pop_back();
+            if (current.rfind("b/", 0) == 0) current = current.substr(2);
             std::replace(current.begin(), current.end(), '\\', '/');
+            if (current == "/dev/null") { current.clear(); have_file = false; prev_minus_header = false; continue; }
             have_file = !current.empty();
+            prev_minus_header = false;
             continue;
         }
+        prev_minus_header = line.rfind("--- ", 0) == 0;
         if (!have_file || line.rfind("@@ ", 0) != 0) continue;
         size_t plus = line.find('+');
         if (plus == std::string::npos || plus + 1 >= line.size()) continue;
