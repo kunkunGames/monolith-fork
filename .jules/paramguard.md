@@ -44,3 +44,8 @@
 **Learning:** This crashes or defaults to incorrect values (like 0.0) without throwing a validation error because `HasField` returns true even for wrong types. This allows malformed client input to mutate assets with unintended defaults.
 **Prevention:** Always use `TryGetNumberField`, `TryGetBoolField`, etc. If it fails, explicitly return an invalid-param error instead of silently falling back to defaults.
 **Avoid:** Leaving `HasField` plus `GetNumberField` or `GetBoolField` around optional properties.
+
+## 2026-05-14 - Harden MonolithSource JSON Parameter Parsing
+**Boundary:** JSON parameter parsing (`GetStringField`, `GetNumberField`, `GetBoolField`)
+**Learning:** Legacy `Get*Field` API crashes the engine when the key is missing or not of the expected type, making actions vulnerable to malformed payloads.
+**Prevention:** Always use `TryGetStringField`, `TryGetNumberField`, or `TryGetBoolField` instead. Verify all `Source/MonolithSource` parsing locations use robust extraction with safe fallbacks.
