@@ -1756,6 +1756,13 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListAnimMixerTracks(const T
 	TArray<TSharedPtr<FJsonValue>> Tracks;
 	const UMovieScene* ConstMovieScene = MovieScene;
 
+	int32 MaxTracks = ConstMovieScene->GetTracks().Num();
+	for (const FMovieSceneBinding& Binding : ConstMovieScene->GetBindings())
+	{
+		MaxTracks += Binding.GetTracks().Num();
+	}
+	Tracks.Reserve(MaxTracks);
+
 	for (UMovieSceneTrack* Track : ConstMovieScene->GetTracks())
 	{
 		AddAnimMixerTrackIfMatched(
