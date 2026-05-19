@@ -779,9 +779,14 @@ FMonolithActionResult FMonolithCoreTools::HandleUpdate(const TSharedPtr<FJsonObj
 	FString Action = TEXT("check");
 	if (Params.IsValid())
 	{
-		if (Params->HasField(TEXT("action")) && !Params->TryGetStringField(TEXT("action"), Action))
+		if (Params->HasField(TEXT("action")))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'action' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			const TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("action"));
+			if (!Field.IsValid() || Field->Type != EJson::String)
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'action' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Action = Field->AsString();
 		}
 	}
 
@@ -855,10 +860,12 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 	bool bForce = false;
 	if (Params.IsValid() && Params->HasField(TEXT("force")))
 	{
-		if (!Params->TryGetBoolField(TEXT("force"), bForce))
+		const TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("force"));
+		if (!Field.IsValid() || Field->Type != EJson::Boolean)
 		{
 			return FMonolithActionResult::Error(TEXT("Parameter 'force' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
+		bForce = Field->AsBool();
 	}
 
 	UClass* IndexSubsystemClass = FindObject<UClass>(nullptr, TEXT("/Script/MonolithIndex.MonolithIndexSubsystem"));
@@ -1587,9 +1594,14 @@ FMonolithActionResult FMonolithCoreTools::HandleDescribeDomain(const TSharedPtr<
 	FString Namespace;
 	if (Params.IsValid())
 	{
-		if (Params->HasField(TEXT("namespace")) && !Params->TryGetStringField(TEXT("namespace"), Namespace))
+		if (Params->HasField(TEXT("namespace")))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'namespace' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			const TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("namespace"));
+			if (!Field.IsValid() || Field->Type != EJson::String)
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'namespace' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Namespace = Field->AsString();
 		}
 	}
 	Namespace = NormalizeDomainNamespace(Namespace);
@@ -1666,9 +1678,14 @@ FMonolithActionResult FMonolithCoreTools::HandleLoadDomain(const TSharedPtr<FJso
 	FString Namespace;
 	if (Params.IsValid())
 	{
-		if (Params->HasField(TEXT("namespace")) && !Params->TryGetStringField(TEXT("namespace"), Namespace))
+		if (Params->HasField(TEXT("namespace")))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'namespace' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			const TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("namespace"));
+			if (!Field.IsValid() || Field->Type != EJson::String)
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'namespace' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Namespace = Field->AsString();
 		}
 	}
 	Namespace = NormalizeDomainNamespace(Namespace);
