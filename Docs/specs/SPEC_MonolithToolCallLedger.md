@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_MonolithCore.md](SPEC_MonolithCore.md)
 **Engine:** Unreal Engine 5.7+
-**Status:** Proposed
+**Status:** Implemented first slice
 **Owner module:** MonolithCore
 **Scope:** Extend the existing central execution guard audit into a local, redacted ToolCall ledger.
 **Non-goals:** External analytics, raw parameter logging, automatic rollback, persistent disk storage, session-progress/cancel support.
@@ -11,16 +11,16 @@
 
 ## 1. Problem
 
-Monolith already records a small in-memory audit row through `FMonolithActionExecutionGuard`, but the row is not yet a ToolCall-shaped contract. The current row is useful for debugging duration and dirty package changes, but it cannot answer common operator questions:
+Monolith records a small in-memory audit row through `FMonolithActionExecutionGuard`, and the first implemented slice extends that guard into a settings-gated ToolCall-shaped contract. The original gap was that the legacy row was useful for debugging duration and dirty package changes, but could not answer common operator questions:
 
 | Question | Current state | Needed state |
 |----------|---------------|--------------|
-| Which MCP request or tool call produced this action? | No request or tool call id is recorded. | Store a stable local `tool_call_id`, optional redacted MCP request id, and action name. |
-| Did the handler succeed, fail, or get profile-blocked? | Status is always `handler_returned`. | Store normalized `outcome` and `error_code` when available. |
-| Did a mutating action dirty assets? | Dirty package count exists. | Keep package deltas, truncation flags, and a mutation hint in the ToolCall row. |
-| Can clients fetch one row or analyze recent failures? | Only recent audit rows are exposed. | Add lookup and aggregate analysis actions. |
+| Which MCP request or tool call produced this action? | Implemented with a local `tool_call_id`; rejected calls are also recorded when the feature flag is enabled. | Preserve stable local ids and redaction. |
+| Did the handler succeed, fail, or get profile-blocked? | Implemented with normalized ToolCall status plus JSON-RPC error code where available. | Keep the outcome/error fields bounded and payload-free. |
+| Did a mutating action dirty assets? | Implemented with package delta counts, capped package rows, and truncation flags. | Keep package reporting bounded. |
+| Can clients fetch one row or analyze recent failures? | Implemented via `list_tool_call_records`, `get_tool_call_record`, and `analyze_tool_call_records`. | Keep the analysis local and in-memory. |
 
-The first slice should improve local observability without changing any domain action contracts.
+The first slice improves local observability without changing any domain action contracts.
 
 ---
 
@@ -38,7 +38,7 @@ The first slice should improve local observability without changing any domain a
 
 ## 3. First Slice Actions
 
-Add these actions under the existing `monolith` namespace only when `bEnableAdvancedToolCallRecords=true`.
+These actions register under the existing `monolith` namespace only when `bEnableAdvancedToolCallRecords=true`.
 
 | Action | Purpose | Required params | Optional params |
 |--------|---------|-----------------|-----------------|
@@ -84,16 +84,15 @@ Rules:
 
 ---
 
-## 5. Implementation Plan
+## 5. Implementation Notes
 
-1. Extend `FMonolithActionExecutionGuard::FExecutionScope` with optional request metadata and a normalized outcome field.
-2. Add a separate bounded `FToolCallRecord` array or evolve `FAuditRow` only if `list_recent_action_audit` can keep its old shape.
-3. Add `GetToolCallRecordsJson`, `GetToolCallRecordJson`, and `AnalyzeToolCallRecordsJson` methods.
-4. Register the three new actions in `MonolithExecutionGuardActions.cpp` only when `UMonolithSettings::bEnableAdvancedToolCallRecords` is true.
-5. Keep status fields honest:
+1. `FMonolithActionExecutionGuard::FAuditRow` carries the ToolCall-facing fields while `list_recent_action_audit` keeps its compatibility response shape.
+2. `GetToolCallRecordsJson`, `GetToolCallRecordJson`, and `AnalyzeToolCallRecordsJson` are implemented on the guard.
+3. `MonolithExecutionGuardActions.cpp` registers the three new actions only when `UMonolithSettings::bEnableAdvancedToolCallRecords` is true.
+4. Status fields stay honest:
    - disabled: `configured=false`, `active=false`, `reason="advanced_tool_call_records_disabled"`;
    - enabled: `configured=true`, `active=true`, `storage="bounded_memory"`, `raw_payload_logging=false`.
-6. Add automation tests that execute one success action and one invalid/profile-blocked action, then verify the ledger row shape and redaction flags.
+5. `MonolithToolCallRecordTests.cpp` covers disabled behavior, enabled redacted rows, lookup, and aggregate analysis.
 
 ---
 
