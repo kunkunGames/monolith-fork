@@ -1,6 +1,15 @@
 # Monolith — TODO
 
-Last updated: 2026-05-19 (Level Sequence Anim Mixer read-only probe accepted)
+Last updated: 2026-05-19 (Dataflow read-only graph inspection accepted)
+
+---
+
+### MonolithDataflow — Read-Only Graph Inspection (2026-05-19)
+
+- [x] `MonolithDataflow` owns Dataflow graph inspection under the `dataflow` namespace instead of mounting it from `MonolithMesh`.
+- [x] `dataflow.get_status` and `dataflow.list_assets` remain always-on and dependency-light.
+- [x] `dataflow.get_dataflow_graph`, `dataflow.list_dataflow_node_types`, `dataflow.get_dataflow_node_schema`, `dataflow.validate_dataflow_graph`, `dataflow.list_dataflow_variables`, and `dataflow.list_dataflow_comments` compile only when `WITH_MONOLITH_DATAFLOW=1`.
+- [ ] **Functional Dataflow fixture** — Run editor automation against a real `UDataflow` asset containing nodes, variables, comments, and connections once a stable fixture is available.
 
 ---
 

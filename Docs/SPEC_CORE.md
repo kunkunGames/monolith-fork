@@ -50,7 +50,7 @@ Monolith.uplugin
   MonolithMesh          — Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript ops, horror/accessibility, lighting, audio/acoustics, performance, decals, level design, tech art, context props, procedural geometry (sweep walls, auto-collision, proc mesh caching, blueprint prefabs), genre presets, encounter design, accessibility reports (234 mesh actions, including experimental town gen when enabled)
   MonolithInterchange   — Normalized import/export validation, guarded import mutation, reimport metadata, reimport, and export workflows under `interchange` (16 actions)
   MonolithNDisplay      — Optional nDisplay / DisplayCluster config discovery under `ndisplay` (2 actions, no hard DisplayCluster dependency)
-  MonolithDataflow      — Optional Dataflow AssetRegistry/module-status discovery under `dataflow` (2 actions, no hard Dataflow dependency)
+  MonolithDataflow      — Optional Dataflow AssetRegistry/module-status discovery plus gated read-only graph inspection under `dataflow` (2 always-on + 6 optional actions, no release hard Dataflow dependency)
   MonolithChaosFracture — Optional Geometry Collection / Fracture visibility under `chaos_fracture` (3 actions, no hard Fracture dependency)
   MonolithGameFeatures  — Optional Game Feature plugin inventory and GameFeatureData inspection under `gamefeatures` (1 always-on status + 4 opt-in inspection actions, no hard ToolsetRegistry dependency)
   MonolithPCG           — Optional PCG AssetRegistry/reflection discovery under the `pcg` namespace (4 actions, no hard PCG dependency)
@@ -140,7 +140,7 @@ Modules that probe for optional plugins follow a unified Build.cs convention: 3-
 | MonolithUI | CommonUI | `WITH_COMMONUI` | `MonolithUI.Build.cs` | **v0.14.0** (M0.5) |
 | MonolithSlate | Slate editor framework / UE 5.8 SlateInspectorToolset reference | none; setting-gated read-only inspector | `MonolithSlate.Build.cs` | 2026-05-19 |
 | MonolithAI | StateTree, SmartObjects | `WITH_STATETREE`, `WITH_SMARTOBJECTS` (required); `WITH_MASSENTITY`, `WITH_ZONEGRAPH` (optional) | `MonolithAI.Build.cs` | (existing) |
-| MonolithDataflow | Dataflow runtime/editor modules | none; AssetRegistry/module-status-only probe | `MonolithDataflow.Build.cs` | **v0.14.10** |
+| MonolithDataflow | Dataflow runtime/editor modules | `WITH_MONOLITH_DATAFLOW` for graph inspection; AssetRegistry/module-status probe always available | `MonolithDataflow.Build.cs` | **v0.14.10** |
 | MonolithChaosFracture | GeometryCollection / Fracture modules | none; AssetRegistry/reflection-only probe | `MonolithChaosFracture.Build.cs` | **v0.14.10** |
 | MonolithNDisplay | DisplayCluster modules | none; AssetRegistry/module-status-only probe | `MonolithNDisplay.Build.cs` | **v0.14.10** |
 | MonolithGameFeatures | GameFeatures runtime/editor modules, UE 5.8 GameFeaturesToolset reference | none; descriptor/AssetRegistry/reflection-only probe | `MonolithGameFeatures.Build.cs` | 2026-05-19 |
@@ -173,7 +173,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.14 | MonolithMesh | [specs/SPEC_MonolithMesh.md](specs/SPEC_MonolithMesh.md) | Mesh/scene/spatial/blockout/GeometryScript/procedural (234 mesh actions, including experimental town gen when enabled) |
 | 3.15 | MonolithInterchange | [specs/SPEC_MonolithInterchange.md](specs/SPEC_MonolithInterchange.md) | Normalized import/export validation and guarded import/reimport/export workflows (16 actions) |
 | 3.16 | MonolithNDisplay | [specs/SPEC_MonolithNDisplay.md](specs/SPEC_MonolithNDisplay.md) | Optional nDisplay / DisplayCluster config discovery (2 actions, no hard DisplayCluster dependency) |
-| 3.17 | MonolithDataflow | [specs/SPEC_MonolithDataflow.md](specs/SPEC_MonolithDataflow.md) | Optional Dataflow AssetRegistry/module-status discovery (2 actions, no hard Dataflow dependency) |
+| 3.17 | MonolithDataflow | [specs/SPEC_MonolithDataflow.md](specs/SPEC_MonolithDataflow.md) | Optional Dataflow AssetRegistry/module-status discovery plus gated read-only graph inspection (2 always-on + 6 optional actions, no release hard Dataflow dependency) |
 | 3.18 | MonolithChaosFracture | [specs/SPEC_MonolithChaosFracture.md](specs/SPEC_MonolithChaosFracture.md) | Optional Geometry Collection / Fracture visibility (3 actions, no hard Fracture dependency) |
 | 3.19 | MonolithGameFeatures | [specs/SPEC_MonolithGameFeatures.md](specs/SPEC_MonolithGameFeatures.md) | Optional Game Feature plugin inventory and GameFeatureData inspection (1 always-on status + 4 opt-in inspection actions, no hard ToolsetRegistry dependency) |
 | 3.20 | MonolithPCG | [specs/SPEC_MonolithPCG.md](specs/SPEC_MonolithPCG.md) | Optional PCG AssetRegistry/reflection discovery (4 actions, no hard PCG dependency) |
@@ -552,7 +552,7 @@ Counts below were re-verified against the live `monolith_discover()` registry on
 | MonolithMesh | mesh | 234 | Town gen registered only when `bEnableProceduralTownGen=true` (default false). |
 | MonolithInterchange | interchange | 16 | Import/export validation, guarded import mutation, reimport metadata, reimport, and export actions are registered from MonolithInterchange. |
 | MonolithNDisplay | ndisplay | 2 | `ndisplay.get_status` and `ndisplay.list_config_assets` are registered from MonolithNDisplay without a hard DisplayCluster dependency. |
-| MonolithDataflow | dataflow | 2 | `dataflow.get_status` and `dataflow.list_assets` are registered from MonolithDataflow without a hard Dataflow dependency. |
+| MonolithDataflow | dataflow | 2 always-on + 6 optional | `dataflow.get_status` and `dataflow.list_assets` are always registered from MonolithDataflow. `dataflow.get_dataflow_graph`, `dataflow.list_dataflow_node_types`, `dataflow.get_dataflow_node_schema`, `dataflow.validate_dataflow_graph`, `dataflow.list_dataflow_variables`, and `dataflow.list_dataflow_comments` register only when `WITH_MONOLITH_DATAFLOW=1`. |
 | MonolithChaosFracture | chaos_fracture | 3 | `chaos_fracture.get_status`, `chaos_fracture.list_geometry_collection_assets`, and `chaos_fracture.list_geometry_collection_components` are registered from MonolithChaosFracture without a hard Fracture dependency. |
 | MonolithGameFeatures | gamefeatures | 1 always-on + 4 gated | `gamefeatures.get_status` is always registered from MonolithGameFeatures. `gamefeatures.list_plugins`, `gamefeatures.find_game_feature_data`, `gamefeatures.describe_game_feature_data`, and `gamefeatures.validate_plugin` register only when `bEnableGameFeatureActions=true`. |
 | MonolithPCG | pcg | 4 | `pcg.get_status`, `pcg.list_graph_assets`, `pcg.get_graph_asset`, and `pcg.list_components` are registered from MonolithPCG without a hard PCG dependency. |
