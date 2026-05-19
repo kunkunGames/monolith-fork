@@ -465,3 +465,109 @@ bool FSourceEscapeFTSPreservesSafeTokensTest::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+// ============================================================================
+// RX-1.1 detect_changes line-range precision
+// Fixture symbols (all in /tmp/M/M.cpp): Alpha 1-5, Beta 6-10, Gamma 11-20,
+// ServerSaveGame 21-160, UnusedUtility 161-170.
+// ============================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceDetectChangesLinePrecisionTest, "Monolith.IndexGuard.Source.DetectChangesLinePrecision", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceDetectChangesLinePrecisionTest::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+
+	TMap<FString, TArray<TPair<int32, int32>>> Ranges;
+	Ranges.Add(TEXT("M.cpp"), { TPair<int32, int32>(7, 8) });
+	TSharedPtr<FJsonObject> R = T.Db.DetectChanges({ TEXT("M.cpp") }, 200, TEXT("standard"), Ranges);
+
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	const TSharedPtr<FJsonObject>* In = nullptr;
+	TestTrue(TEXT("input present"), R->TryGetObjectField(TEXT("input"), In) && In);
+	TestEqual(TEXT("precision is line"), (*In)->GetStringField(TEXT("precision")), FString(TEXT("line")));
+	TestEqual(TEXT("range_paths is 1"), (int32)(*In)->GetNumberField(TEXT("range_paths")), 1);
+	TestEqual(TEXT("only the overlapping symbol (Beta 6-10) is changed"), (int32)R->GetNumberField(TEXT("changed_entity_count")), 1);
+	const TArray<TSharedPtr<FJsonValue>>* Ents = nullptr;
+	TestTrue(TEXT("changed_entities present in standard"), R->TryGetArrayField(TEXT("changed_entities"), Ents) && Ents);
+	if (Ents && Ents->Num() == 1)
+	{
+		TestEqual(TEXT("changed symbol is Beta"), (*Ents)[0]->AsObject()->GetStringField(TEXT("name")), FString(TEXT("Beta")));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceDetectChangesNoRangeRegressionTest, "Monolith.IndexGuard.Source.DetectChangesNoRangeRegression", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceDetectChangesNoRangeRegressionTest::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+
+	// No ranges supplied -> original file-level behavior (all 5 symbols in M.cpp).
+	TSharedPtr<FJsonObject> R = T.Db.DetectChanges({ TEXT("M.cpp") }, 200, TEXT("standard"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	const TSharedPtr<FJsonObject>* In = nullptr;
+	TestTrue(TEXT("input present"), R->TryGetObjectField(TEXT("input"), In) && In);
+	TestEqual(TEXT("precision is file when no ranges"), (*In)->GetStringField(TEXT("precision")), FString(TEXT("file")));
+	TestEqual(TEXT("all file-level symbols returned (regression)"), (int32)R->GetNumberField(TEXT("changed_entity_count")), 5);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceDetectChangesDiffParseTest, "Monolith.IndexGuard.Source.DetectChangesDiffParse", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceDetectChangesDiffParseTest::RunTest(const FString& Parameters)
+{
+	// Normal hunk (count given) + pure-deletion hunk (count==0 -> end=start).
+	const FString Diff =
+		TEXT("--- a/M.cpp\n")
+		TEXT("+++ b/M.cpp\n")
+		TEXT("@@ -6,0 +7,2 @@ void Beta()\n")
+		TEXT("+added\n+added\n")
+		TEXT("@@ -20,3 +25,0 @@ void Gone()\n");
+	TMap<FString, TArray<TPair<int32, int32>>> Parsed = FMonolithSourceDatabase::ParseUnifiedDiffRanges(Diff);
+	const TArray<TPair<int32, int32>>* M = Parsed.Find(TEXT("M.cpp"));
+	TestTrue(TEXT("M.cpp parsed"), M != nullptr && M->Num() == 2);
+	if (M == nullptr || M->Num() < 2)
+	{
+		// UE automation assertions do not abort the test; bail here so a
+		// parse regression reports a clean failure instead of crashing CI
+		// on the unguarded (*M)[0] dereferences below.
+		return false;
+	}
+	if (M && M->Num() == 2)
+	{
+		TestEqual(TEXT("hunk +7,2 -> start 7"), (*M)[0].Key, 7);
+		TestEqual(TEXT("hunk +7,2 -> end 8"), (*M)[0].Value, 8);
+		TestEqual(TEXT("deletion +25,0 -> start 25"), (*M)[1].Key, 25);
+		TestEqual(TEXT("deletion +25,0 -> end 25"), (*M)[1].Value, 25);
+	}
+	TestEqual(TEXT("empty diff -> empty map"), FMonolithSourceDatabase::ParseUnifiedDiffRanges(TEXT("")).Num(), 0);
+	TestEqual(TEXT("garbage diff -> empty map"), FMonolithSourceDatabase::ParseUnifiedDiffRanges(TEXT("not a diff\nrandom")).Num(), 0);
+
+	// End-to-end: parsed diff drives precision selection (Beta only).
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+	TMap<FString, TArray<TPair<int32, int32>>> Only78;
+	Only78.Add(TEXT("M.cpp"), { (*M)[0] });
+	TSharedPtr<FJsonObject> R = T.Db.DetectChanges(TArray<FString>{}, 200, TEXT("minimal"), Only78);
+	TestEqual(TEXT("range-only path is treated as a changed path"), (int32)R->GetNumberField(TEXT("changed_entity_count")), 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceDetectChangesRobustnessTest, "Monolith.IndexGuard.Source.DetectChangesRobustness", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceDetectChangesRobustnessTest::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+
+	// Only malformed ranges (start>end, negative) -> sanitized away -> the
+	// path degrades to file-level, never crashes.
+	TMap<FString, TArray<TPair<int32, int32>>> Bad;
+	Bad.Add(TEXT("M.cpp"), { TPair<int32, int32>(9, 2), TPair<int32, int32>(-4, -1) });
+	TSharedPtr<FJsonObject> R = T.Db.DetectChanges({ TEXT("M.cpp") }, 200, TEXT("standard"), Bad);
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	const TSharedPtr<FJsonObject>* In = nullptr;
+	TestTrue(TEXT("input present"), R->TryGetObjectField(TEXT("input"), In) && In);
+	TestEqual(TEXT("malformed ranges -> file-level fallback"), (*In)->GetStringField(TEXT("precision")), FString(TEXT("file")));
+	TestEqual(TEXT("file-level symbol count preserved"), (int32)R->GetNumberField(TEXT("changed_entity_count")), 5);
+	return true;
+}

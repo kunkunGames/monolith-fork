@@ -1311,7 +1311,7 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  risk_score <symbol> [--limit=N] [--min-tier=low|medium|high]\n"
                   << "  review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
                   << "  review_context <symbol> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
-                  << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
+                  << "  detect_changes <path...> [--changed-paths=a,b] [--ranges=path:s-e,...] [--diff-file=PATH] [--diff-stdin] [--max-results=N] [--detail-level=minimal|standard]\n"
                   << "  find_unused [--kind=function|class|struct|all] [--limit=N] [--min-confidence=low|medium|high]\n"
                   << "  pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]\n"
                   << "  snapshot [label] [--label=name] [--execute]\n"
@@ -1331,7 +1331,7 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  risk_score [asset_path] [--limit=N] [--min-tier=low|medium|high]\n"
                   << "  review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
                   << "  review_context <asset_path> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
-                  << "  detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]\n"
+                  << "  detect_changes <path...> [--changed-paths=a,b] [--ranges=path:s-e,...] [--diff-file=PATH] [--diff-stdin] [--max-results=N] [--detail-level=minimal|standard]\n"
                   << "  find_unused [--kind=<asset_class>] [--limit=N] [--min-confidence=low|medium|high]\n"
                   << "  pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]\n"
                   << "  snapshot [label] [--label=name] [--execute]\n"
@@ -1376,6 +1376,102 @@ static std::vector<std::string> collect_changed_paths(const Args& args) {
         }
     }
     return paths;
+}
+
+// RX-1.1: unified-diff parsing (port of code_review_graph/changes.py
+// _parse_unified_diff). Pure text; no VCS shell-out — the caller produces
+// the diff (parent RX-1 contract; CRG incremental.py is the caller's job).
+static std::map<std::string, std::vector<std::pair<int,int>>>
+parse_unified_diff_ranges(const std::string& diff_text) {
+    std::map<std::string, std::vector<std::pair<int,int>>> ranges;
+    std::stringstream ss(diff_text);
+    std::string line, current;
+    bool have_file = false;
+    bool prev_minus_header = false;
+    while (std::getline(ss, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        // Accept git-style ("+++ b/path") and plain ("+++ path") unified-diff
+        // new-file headers so non-git producers (e.g. `p4 -du`) keep RX-1.1
+        // line precision instead of dropping every hunk range. A bare "+++ "
+        // can also be added file content, so a plain header is only honored
+        // when the previous line was the matching "--- " header.
+        const bool git_new = line.rfind("+++ b/", 0) == 0;
+        const bool plain_new = !git_new && line.rfind("+++ ", 0) == 0 && prev_minus_header;
+        if (git_new || plain_new) {
+            current = line.substr(git_new ? 6 : 4);
+            size_t tab = current.find('\t');
+            if (tab != std::string::npos) current = current.substr(0, tab);
+            while (!current.empty() && current.front() == ' ') current.erase(current.begin());
+            while (!current.empty() && (current.back() == ' ' || current.back() == '\r')) current.pop_back();
+            if (current.rfind("b/", 0) == 0) current = current.substr(2);
+            std::replace(current.begin(), current.end(), '\\', '/');
+            if (current == "/dev/null") { current.clear(); have_file = false; prev_minus_header = false; continue; }
+            have_file = !current.empty();
+            prev_minus_header = false;
+            continue;
+        }
+        prev_minus_header = line.rfind("--- ", 0) == 0;
+        if (!have_file || line.rfind("@@ ", 0) != 0) continue;
+        size_t plus = line.find('+');
+        if (plus == std::string::npos || plus + 1 >= line.size()) continue;
+        size_t i = plus + 1;
+        auto read_int = [&]() -> int {
+            int v = 0; bool any = false;
+            while (i < line.size() && line[i] >= '0' && line[i] <= '9') {
+                v = v * 10 + (line[i] - '0'); ++i; any = true;
+            }
+            return any ? v : -1;
+        };
+        int start = read_int();
+        if (start <= 0) continue;
+        int count = 1;
+        if (i < line.size() && line[i] == ',') {
+            ++i;
+            int p = read_int();
+            count = (p >= 0) ? p : 1;
+        }
+        int end = (count == 0) ? start : (start + count - 1);
+        ranges[current].push_back({start, end});
+    }
+    return ranges;
+}
+
+// VCS-agnostic line ranges from --diff-file=PATH, --diff-stdin, and/or
+// --ranges=path:start-end[,path2:s-e]. Read-only, no shell-out.
+static std::map<std::string, std::vector<std::pair<int,int>>>
+collect_changed_ranges(const Args& args) {
+    std::map<std::string, std::vector<std::pair<int,int>>> ranges;
+    std::string diff_text;
+    std::string df = args.opt("diff_file");
+    if (!df.empty()) {
+        std::ifstream f(df, std::ios::binary);
+        if (f) { std::stringstream b; b << f.rdbuf(); diff_text = b.str(); }
+    }
+    if (args.options.count("diff_stdin")) {
+        std::stringstream b; b << std::cin.rdbuf(); diff_text += b.str();
+    }
+    if (!diff_text.empty()) ranges = parse_unified_diff_ranges(diff_text);
+
+    std::string spec = args.opt("ranges");
+    if (!spec.empty()) {
+        std::stringstream ss(spec);
+        std::string token;
+        while (std::getline(ss, token, ',')) {
+            size_t colon = token.rfind(':');
+            if (colon == std::string::npos) continue;
+            std::string path = token.substr(0, colon);
+            std::string span = token.substr(colon + 1);
+            size_t dash = span.find('-');
+            if (dash == std::string::npos) continue;
+            try {
+                int s = std::stoi(span.substr(0, dash));
+                int e = std::stoi(span.substr(dash + 1));
+                std::replace(path.begin(), path.end(), '\\', '/');
+                if (s > 0 && e >= s && !path.empty()) ranges[path].push_back({s, e});
+            } catch (...) {}
+        }
+    }
+    return ranges;
 }
 
 // ============================================================
@@ -2745,17 +2841,47 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
     // --changed-paths=a,b); no P4/git shell-out in this path.
     // ============================================================
     json source_detect_changes_json(const std::vector<std::string>& changed_paths,
-                                    int max_results, const std::string& detail_level) {
+                                    int max_results, const std::string& detail_level,
+                                    const std::map<std::string, std::vector<std::pair<int,int>>>& changed_ranges = {}) {
         int cap = clamp_int(max_results <= 0 ? 200 : max_results, 1, 2000);
         bool minimal = (detail_level != "standard");
+
+        // Normalize/sanitize range keys; a path that only appears in
+        // changed_ranges still counts as a changed path.
+        std::map<std::string, std::vector<std::pair<int,int>>> path_ranges;
+        for (const auto& kv : changed_ranges) {
+            std::string key = kv.first;
+            std::replace(key.begin(), key.end(), '\\', '/');
+            if (key.empty()) continue;
+            auto& out = path_ranges[key];
+            for (const auto& pr : kv.second) {
+                if ((int)out.size() >= 256) break;
+                if (pr.first > 0 && pr.second >= pr.first) out.push_back(pr);
+            }
+            if (out.empty()) path_ranges.erase(key);
+        }
+
+        std::vector<std::string> all_paths;
+        auto add_path = [&](const std::string& p) {
+            std::string n = p;
+            std::replace(n.begin(), n.end(), '\\', '/');
+            if (!n.empty() && std::find(all_paths.begin(), all_paths.end(), n) == all_paths.end())
+                all_paths.push_back(n);
+        };
+        for (const auto& p : changed_paths) add_path(p);
+        for (const auto& kv : path_ranges) add_path(kv.first);
+
+        const bool line_precision = !path_ranges.empty();
         json root = {
-            {"input", {{"changed_paths", changed_paths}, {"detail_level", minimal ? "minimal" : "standard"}}},
+            {"input", {{"changed_paths", all_paths}, {"detail_level", minimal ? "minimal" : "standard"},
+                       {"precision", line_precision ? "line" : "file"},
+                       {"range_paths", path_ranges.size()}}},
             {"limits", {{"max_results", cap}, {"detail_level", minimal ? "minimal" : "standard"}}},
             {"truncated", false},
         };
-        if (changed_paths.empty()) {
+        if (all_paths.empty()) {
             root["status"] = "error";
-            root["summary"] = "detect_changes requires >=1 changed path (positional or --changed-paths=a,b)";
+            root["summary"] = "detect_changes requires >=1 changed path (positional, --changed-paths=a,b, --ranges, or --diff-file/--diff-stdin)";
             root["changed_entities"] = json::array();
             add_next(root, {"source.search_source"});
             return root;
@@ -2763,14 +2889,27 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
         std::set<int64_t> seen;
         json changed = json::array();
         bool truncated = false, any_cache = false;
-        for (const auto& raw : changed_paths) {
-            std::string norm = raw;
-            std::replace(norm.begin(), norm.end(), '\\', '/');
-            auto rows = query(db,
+        for (const auto& norm : all_paths) {
+            auto rit = path_ranges.find(norm);
+            const bool line_mode = (rit != path_ranges.end() && !rit->second.empty());
+            std::string sql =
                 "SELECT s.id,s.name,s.qualified_name,s.kind,s.file_id,s.line_start,s.line_end,s.is_ue_macro "
                 "FROM symbols s JOIN files f ON f.id = s.file_id "
-                "WHERE replace(f.path,'\\','/') LIKE '%' || ? ORDER BY s.id LIMIT " + std::to_string(cap + 1),
-                {norm});
+                "WHERE replace(f.path,'\\','/') LIKE '%' || ? ";
+            if (line_mode) {
+                // CRG changes.py:204 overlap rule: line_start <= end AND line_end >= start.
+                // Non-positive spans are not line-provable (CRG None-skip analog).
+                sql += "AND s.line_start > 0 AND s.line_end > 0 AND (";
+                for (size_t ri = 0; ri < rit->second.size(); ++ri) {
+                    const auto& pr = rit->second[ri];
+                    sql += (ri ? " OR " : "");
+                    sql += "(s.line_start <= " + std::to_string(pr.second)
+                         + " AND s.line_end >= " + std::to_string(pr.first) + ")";
+                }
+                sql += ") ";
+            }
+            sql += "ORDER BY s.id LIMIT " + std::to_string(cap + 1);
+            auto rows = query(db, sql, {norm});
             for (const auto& r : rows) {
                 int64_t sid = r.get_int64("id");
                 if (seen.count(sid)) continue;
@@ -2785,6 +2924,14 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                 item["qualified_name"] = r.get("qualified_name");
                 item["kind"] = r.get("kind");
                 item["file"] = short_path(get_file_path(r.get_int("file_id")));
+                if (line_mode && !minimal) {
+                    int ls = r.get_int("line_start"), le = r.get_int("line_end");
+                    json mr = json::array();
+                    for (const auto& pr : rit->second)
+                        if (ls <= pr.second && le >= pr.first)
+                            mr.push_back({{"start", pr.first}, {"end", pr.second}});
+                    item["matched_ranges"] = mr;
+                }
                 changed.push_back(item);
             }
         }
@@ -2840,7 +2987,8 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
             root["review_priorities"] = topn;
         } else {
             root["summary"] = "changed " + std::to_string(changed.size()) + " symbol(s) across "
-                + std::to_string(changed_paths.size()) + " path(s); risk=" + tier_for(overall)
+                + std::to_string(all_paths.size()) + " path(s); precision="
+                + (line_precision ? "line" : "file") + "; risk=" + tier_for(overall)
                 + " scoring_version=" + sv;
             root["changed_entities"] = changed;
             root["impact"] = {{"depth", 1}, {"impacted_count", impacted.size()}};
@@ -2860,7 +3008,8 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
             while (std::getline(ss, p, ',')) if (!p.empty()) paths.push_back(p);
         }
         print_json(source_detect_changes_json(paths, args.opt_int("max_results", 200),
-                                              args.opt("detail_level", "minimal")));
+                                              args.opt("detail_level", "minimal"),
+                                              collect_changed_ranges(args)));
     }
 
     // ============================================================

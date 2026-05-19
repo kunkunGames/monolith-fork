@@ -63,6 +63,67 @@ namespace
 		AppendPathField(Params, TEXT("paths"), Paths);
 		return Paths;
 	}
+
+	void MergeRangePair(const TSharedPtr<FJsonValue>& Pair, TArray<TPair<int32, int32>>& Out)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Tuple = nullptr;
+		if (!Pair.IsValid() || !Pair->TryGetArray(Tuple) || !Tuple || Tuple->Num() < 2)
+		{
+			return;
+		}
+		const int32 Start = FMath::TruncToInt((*Tuple)[0]->AsNumber());
+		const int32 End = FMath::TruncToInt((*Tuple)[1]->AsNumber());
+		if (Start > 0 && End >= Start)
+		{
+			Out.Add(TPair<int32, int32>(Start, End));
+		}
+	}
+
+	// RX-1.1: VCS-agnostic line ranges from diff_text (parsed, no shell-out)
+	// and/or explicit changed_ranges [{path, ranges:[[s,e]...]}].
+	TMap<FString, TArray<TPair<int32, int32>>> CollectChangedRanges(const TSharedPtr<FJsonObject>& Params)
+	{
+		TMap<FString, TArray<TPair<int32, int32>>> Ranges;
+		if (!Params.IsValid())
+		{
+			return Ranges;
+		}
+
+		FString DiffText;
+		if (Params->TryGetStringField(TEXT("diff_text"), DiffText) && !DiffText.IsEmpty())
+		{
+			Ranges = FMonolithSourceDatabase::ParseUnifiedDiffRanges(DiffText);
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (Params->TryGetArrayField(TEXT("changed_ranges"), Arr) && Arr)
+		{
+			for (const TSharedPtr<FJsonValue>& Entry : *Arr)
+			{
+				const TSharedPtr<FJsonObject>* Obj = nullptr;
+				if (!Entry.IsValid() || !Entry->TryGetObject(Obj) || !Obj || !Obj->IsValid())
+				{
+					continue;
+				}
+				FString Path;
+				if (!(*Obj)->TryGetStringField(TEXT("path"), Path) || Path.IsEmpty())
+				{
+					continue;
+				}
+				const TArray<TSharedPtr<FJsonValue>>* RangeArr = nullptr;
+				if (!(*Obj)->TryGetArrayField(TEXT("ranges"), RangeArr) || !RangeArr)
+				{
+					continue;
+				}
+				TArray<TPair<int32, int32>>& Out = Ranges.FindOrAdd(Path);
+				for (const TSharedPtr<FJsonValue>& Pair : *RangeArr)
+				{
+					MergeRangePair(Pair, Out);
+				}
+			}
+		}
+		return Ranges;
+	}
 }
 
 // ============================================================================
@@ -214,6 +275,8 @@ void FMonolithSourceActions::RegisterAll()
 		FParamSchemaBuilder()
 			.Optional(TEXT("changed_paths"), TEXT("array|string"), TEXT("Changed source paths; also accepts comma-separated string"))
 			.Optional(TEXT("paths"), TEXT("array|string"), TEXT("Alias for changed_paths"))
+			.Optional(TEXT("changed_ranges"), TEXT("array"), TEXT("Line precision: [{path, ranges:[[start,end],...]}] — symbols overlapping a range only (CRG rule)"))
+			.Optional(TEXT("diff_text"), TEXT("string"), TEXT("Unified diff (git/p4 -du); parsed for changed line ranges, no VCS shell-out"))
 			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max changed entities to return"), TEXT("200"))
 			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("minimal|standard"), TEXT("minimal"))
 			.Build());
@@ -404,7 +467,8 @@ FMonolithActionResult FMonolithSourceActions::HandleDetectChanges(const TSharedP
 	return FMonolithActionResult::Success(DB->DetectChanges(
 		CollectChangedPaths(Params),
 		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200),
-		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal"))));
+		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal")),
+		CollectChangedRanges(Params)));
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleFindUnused(const TSharedPtr<FJsonObject>& Params)
