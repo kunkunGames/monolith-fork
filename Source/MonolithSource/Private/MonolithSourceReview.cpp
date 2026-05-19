@@ -393,12 +393,21 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::RiskScore(
 	Items.RemoveAll([&](const TSharedPtr<FJsonValue>& V)
 	{
 		const TSharedPtr<FJsonObject> O = V->AsObject();
-		return O.IsValid() && TierRank(O->GetStringField(TEXT("tier"))) < MinRank;
+		FString Tier;
+		return O.IsValid() && O->TryGetStringField(TEXT("tier"), Tier) && TierRank(Tier) < MinRank;
 	});
 	Items.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B)
 	{
-		const double SA = A->AsObject().IsValid() ? A->AsObject()->GetNumberField(TEXT("score")) : 0.0;
-		const double SB = B->AsObject().IsValid() ? B->AsObject()->GetNumberField(TEXT("score")) : 0.0;
+		double SA = 0.0;
+		if (A->AsObject().IsValid())
+		{
+			A->AsObject()->TryGetNumberField(TEXT("score"), SA);
+		}
+		double SB = 0.0;
+		if (B->AsObject().IsValid())
+		{
+			B->AsObject()->TryGetNumberField(TEXT("score"), SB);
+		}
 		return SA > SB;
 	});
 
@@ -477,7 +486,9 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(
 		}
 		ImpactSummary->SetArrayField(TEXT("top_impacted"), Top);
 	}
-	ImpactSummary->SetBoolField(TEXT("truncated"), Impact->GetBoolField(TEXT("truncated")));
+	bool bImpactTruncated = false;
+	Impact->TryGetBoolField(TEXT("truncated"), bImpactTruncated);
+	ImpactSummary->SetBoolField(TEXT("truncated"), bImpactTruncated);
 	Root->SetObjectField(TEXT("impact"), ImpactSummary);
 
 	TSharedPtr<FJsonObject> SeedObj = MakeShared<FJsonObject>();
@@ -501,12 +512,15 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(
 	Context.Add(MakeShared<FJsonValueObject>(SeedContext));
 	Root->SetArrayField(TEXT("context"), Context);
 
+	FString RiskTier;
+	Risk->TryGetStringField(TEXT("tier"), RiskTier);
+
 	Root->SetStringField(TEXT("status"), TEXT("ok"));
 	Root->SetStringField(TEXT("summary"), FString::Printf(
 		TEXT("%s risk=%s (%s); review impacted symbols and risk reasons"),
-		*Seed.Name, *Risk->GetStringField(TEXT("tier")),
+		*Seed.Name, *RiskTier,
 		bMinimal ? TEXT("minimal") : TEXT("standard")));
-	Root->SetBoolField(TEXT("truncated"), Impact->GetBoolField(TEXT("truncated")));
+	Root->SetBoolField(TEXT("truncated"), bImpactTruncated);
 	AddNext(Root, { TEXT("source.read_source"), TEXT("source.impact_radius"), TEXT("source.get_class_hierarchy") });
 	return Root;
 }

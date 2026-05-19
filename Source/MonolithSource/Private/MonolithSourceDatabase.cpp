@@ -2626,7 +2626,8 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::DetectChanges(
 	for (const TSharedPtr<FJsonValue>& ChangedValue : ChangedEntities)
 	{
 		const TSharedPtr<FJsonObject> Changed = ChangedValue->AsObject();
-		if (!Changed.IsValid() || !Changed->GetStringField(TEXT("kind")).Contains(TEXT("function")))
+		FString Kind;
+		if (!Changed.IsValid() || !Changed->TryGetStringField(TEXT("kind"), Kind) || !Kind.Contains(TEXT("function")))
 		{
 			continue;
 		}
@@ -2642,8 +2643,15 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::DetectChanges(
 		}
 		TSharedPtr<FJsonObject> Gap = MakeShared<FJsonObject>();
 		Gap->SetNumberField(TEXT("id"), static_cast<double>(Id));
-		Gap->SetStringField(TEXT("name"), Changed->GetStringField(TEXT("name")));
-		Gap->SetStringField(TEXT("qualified_name"), Changed->GetStringField(TEXT("qualified_name")));
+
+		FString Name;
+		Changed->TryGetStringField(TEXT("name"), Name);
+		Gap->SetStringField(TEXT("name"), Name);
+
+		FString QualifiedName;
+		Changed->TryGetStringField(TEXT("qualified_name"), QualifiedName);
+		Gap->SetStringField(TEXT("qualified_name"), QualifiedName);
+
 		Gap->SetStringField(TEXT("reason"), TEXT("no indexed inbound test or automation reference"));
 		TestGaps.Add(MakeShared<FJsonValueObject>(Gap));
 	}
