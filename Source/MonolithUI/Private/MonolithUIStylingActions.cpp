@@ -223,7 +223,10 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     const TSharedPtr<FJsonObject>* ImageSizeObj = nullptr;
     if (Params->TryGetObjectField(TEXT("image_size"), ImageSizeObj))
     {
-        Brush->ImageSize = FVector2D((*ImageSizeObj)->GetNumberField(TEXT("x")), (*ImageSizeObj)->GetNumberField(TEXT("y")));
+        double X = 0.0, Y = 0.0;
+        (*ImageSizeObj)->TryGetNumberField(TEXT("x"), X);
+        (*ImageSizeObj)->TryGetNumberField(TEXT("y"), Y);
+        Brush->ImageSize = FVector2D(X, Y);
         PropsSet++;
     }
 
@@ -231,12 +234,12 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     const TSharedPtr<FJsonObject>* MarginObj = nullptr;
     if (Params->TryGetObjectField(TEXT("margin"), MarginObj))
     {
-        Brush->Margin = FMargin(
-            (*MarginObj)->GetNumberField(TEXT("left")),
-            (*MarginObj)->GetNumberField(TEXT("top")),
-            (*MarginObj)->GetNumberField(TEXT("right")),
-            (*MarginObj)->GetNumberField(TEXT("bottom"))
-        );
+        double Left = 0.0, Top = 0.0, Right = 0.0, Bottom = 0.0;
+        (*MarginObj)->TryGetNumberField(TEXT("left"), Left);
+        (*MarginObj)->TryGetNumberField(TEXT("top"), Top);
+        (*MarginObj)->TryGetNumberField(TEXT("right"), Right);
+        (*MarginObj)->TryGetNumberField(TEXT("bottom"), Bottom);
+        Brush->Margin = FMargin(Left, Top, Right, Bottom);
         PropsSet++;
     }
 
@@ -244,12 +247,12 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     const TSharedPtr<FJsonObject>* CornerObj = nullptr;
     if (Params->TryGetObjectField(TEXT("corner_radius"), CornerObj))
     {
-        Brush->OutlineSettings.CornerRadii = FVector4(
-            (*CornerObj)->GetNumberField(TEXT("top_left")),
-            (*CornerObj)->GetNumberField(TEXT("top_right")),
-            (*CornerObj)->GetNumberField(TEXT("bottom_right")),
-            (*CornerObj)->GetNumberField(TEXT("bottom_left"))
-        );
+        double TL = 0.0, TR = 0.0, BR = 0.0, BL = 0.0;
+        (*CornerObj)->TryGetNumberField(TEXT("top_left"), TL);
+        (*CornerObj)->TryGetNumberField(TEXT("top_right"), TR);
+        (*CornerObj)->TryGetNumberField(TEXT("bottom_right"), BR);
+        (*CornerObj)->TryGetNumberField(TEXT("bottom_left"), BL);
+        Brush->OutlineSettings.CornerRadii = FVector4(TL, TR, BR, BL);
         Brush->OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
         PropsSet++;
     }
@@ -834,7 +837,10 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetImage(const TSharedPtr
     const TSharedPtr<FJsonObject>* SizeObj = nullptr;
     if (Params->TryGetObjectField(TEXT("size"), SizeObj))
     {
-        FVector2D DesiredSize((*SizeObj)->GetNumberField(TEXT("x")), (*SizeObj)->GetNumberField(TEXT("y")));
+        double X = 0.0, Y = 0.0;
+        (*SizeObj)->TryGetNumberField(TEXT("x"), X);
+        (*SizeObj)->TryGetNumberField(TEXT("y"), Y);
+        FVector2D DesiredSize(X, Y);
         ImageWidget->SetDesiredSizeOverride(DesiredSize);
         PropsSet++;
     }

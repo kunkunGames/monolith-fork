@@ -111,12 +111,12 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
         const TSharedPtr<FJsonObject>* OffsetObj = nullptr;
         if (Params->TryGetObjectField(TEXT("offsets"), OffsetObj))
         {
-            FMargin Offsets(
-                (*OffsetObj)->GetNumberField(TEXT("left")),
-                (*OffsetObj)->GetNumberField(TEXT("top")),
-                (*OffsetObj)->GetNumberField(TEXT("right")),
-                (*OffsetObj)->GetNumberField(TEXT("bottom"))
-            );
+            double Left = 0.0, Top = 0.0, Right = 0.0, Bottom = 0.0;
+            (*OffsetObj)->TryGetNumberField(TEXT("left"), Left);
+            (*OffsetObj)->TryGetNumberField(TEXT("top"), Top);
+            (*OffsetObj)->TryGetNumberField(TEXT("right"), Right);
+            (*OffsetObj)->TryGetNumberField(TEXT("bottom"), Bottom);
+            FMargin Offsets(Left, Top, Right, Bottom);
             CS->SetOffsets(Offsets);
             PropsSet++;
         }
@@ -124,21 +124,30 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
         const TSharedPtr<FJsonObject>* PosObj = nullptr;
         if (Params->TryGetObjectField(TEXT("position"), PosObj))
         {
-            CS->SetPosition(FVector2D((*PosObj)->GetNumberField(TEXT("x")), (*PosObj)->GetNumberField(TEXT("y"))));
+            double X = 0.0, Y = 0.0;
+            (*PosObj)->TryGetNumberField(TEXT("x"), X);
+            (*PosObj)->TryGetNumberField(TEXT("y"), Y);
+            CS->SetPosition(FVector2D(X, Y));
             PropsSet++;
         }
 
         const TSharedPtr<FJsonObject>* SizeObj = nullptr;
         if (Params->TryGetObjectField(TEXT("size"), SizeObj))
         {
-            CS->SetSize(FVector2D((*SizeObj)->GetNumberField(TEXT("x")), (*SizeObj)->GetNumberField(TEXT("y"))));
+            double X = 0.0, Y = 0.0;
+            (*SizeObj)->TryGetNumberField(TEXT("x"), X);
+            (*SizeObj)->TryGetNumberField(TEXT("y"), Y);
+            CS->SetSize(FVector2D(X, Y));
             PropsSet++;
         }
 
         const TSharedPtr<FJsonObject>* AlignObj = nullptr;
         if (Params->TryGetObjectField(TEXT("alignment"), AlignObj))
         {
-            CS->SetAlignment(FVector2D((*AlignObj)->GetNumberField(TEXT("x")), (*AlignObj)->GetNumberField(TEXT("y"))));
+            double X = 0.0, Y = 0.0;
+            (*AlignObj)->TryGetNumberField(TEXT("x"), X);
+            (*AlignObj)->TryGetNumberField(TEXT("y"), Y);
+            CS->SetAlignment(FVector2D(X, Y));
             PropsSet++;
         }
 
@@ -195,12 +204,12 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
     const TSharedPtr<FJsonObject>* PadObj = nullptr;
     if (Params->TryGetObjectField(TEXT("padding"), PadObj))
     {
-        FMargin Pad(
-            (*PadObj)->GetNumberField(TEXT("left")),
-            (*PadObj)->GetNumberField(TEXT("top")),
-            (*PadObj)->GetNumberField(TEXT("right")),
-            (*PadObj)->GetNumberField(TEXT("bottom"))
-        );
+        double Left = 0.0, Top = 0.0, Right = 0.0, Bottom = 0.0;
+        (*PadObj)->TryGetNumberField(TEXT("left"), Left);
+        (*PadObj)->TryGetNumberField(TEXT("top"), Top);
+        (*PadObj)->TryGetNumberField(TEXT("right"), Right);
+        (*PadObj)->TryGetNumberField(TEXT("bottom"), Bottom);
+        FMargin Pad(Left, Top, Right, Bottom);
         if (UVerticalBoxSlot* VS = Cast<UVerticalBoxSlot>(Slot)) { VS->SetPadding(Pad); PropsSet++; }
         else if (UHorizontalBoxSlot* HS = Cast<UHorizontalBoxSlot>(Slot)) { HS->SetPadding(Pad); PropsSet++; }
         else if (UOverlaySlot* OS = Cast<UOverlaySlot>(Slot)) { OS->SetPadding(Pad); PropsSet++; }

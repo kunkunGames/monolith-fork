@@ -482,6 +482,8 @@ ui::dump_ui_spec({
 
 JSON-RPC error code: `-32602` (invalid-params) for caller-input issues, `-32603` (internal error) for asset-creation / compile failures the caller cannot fix from their input.
 
+Legacy UI action numeric sub-objects (`padding`, `offsets`, `position`, `size`, `alignment`, `image_size`, `margin`, `corner_radius`) are tolerant at the leaf-field level: missing or malformed numeric members default to `0.0` instead of using assert-prone direct JSON getters.
+
 **Sub-builders:**
 
 | Builder | Handles | Notes |

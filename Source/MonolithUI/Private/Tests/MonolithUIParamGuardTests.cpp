@@ -1,10 +1,13 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
 #include "MonolithUISettingsActions.h"
+#include "MonolithUIStylingActions.h"
+#include "Tests/Hoisted/MonolithUITestFixtureUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonReader.h"
+#include "Components/Image.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUIParamGuardScaffoldSaveGame, "Monolith.ParamGuard.MonolithUI.ScaffoldSaveGameRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -33,6 +36,34 @@ bool FMonolithUIParamGuardScaffoldSaveGame::RunTest(const FString& Parameters)
     FMonolithActionResult Result = FMonolithUISettingsActions::HandleScaffoldSaveGame(ParamsObj);
 
     TestTrue(TEXT("scaffold_save_game did not crash and processed the valid prop"), Result.bSuccess);
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUIParamGuardSetImageMissingNumericField, "Monolith.ParamGuard.MonolithUI.SetImageMissingNumericField", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIParamGuardSetImageMissingNumericField::RunTest(const FString& Parameters)
+{
+    const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_ParamGuardSetImageMissingNumericField");
+    FString Error;
+    UWidget* ChildWidget = nullptr;
+    if (!MonolithUI::TestUtils::CreateOrReuseTestWidgetBlueprint(AssetPath, TEXT("PreviewImage"), UImage::StaticClass(), Error, &ChildWidget))
+    {
+        AddError(Error);
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> Size = MakeShared<FJsonObject>();
+    Size->SetNumberField(TEXT("x"), 64.0);
+
+    TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+    Params->SetStringField(TEXT("asset_path"), AssetPath);
+    Params->SetStringField(TEXT("widget_name"), TEXT("PreviewImage"));
+    Params->SetObjectField(TEXT("size"), Size);
+
+    const FMonolithActionResult Result = FMonolithUIStylingActions::HandleSetImage(Params);
+    TestTrue(TEXT("set_image tolerates missing size.y numeric field"), Result.bSuccess);
+    TestEqual(TEXT("set_image applied one property"), Result.Result.IsValid() ? Result.Result->GetIntegerField(TEXT("properties_set")) : 0, 1);
 
     return true;
 }
