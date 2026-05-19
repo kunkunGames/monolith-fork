@@ -31,6 +31,12 @@ public:
 	static FMonolithActionResult ListSavedReplays(const TSharedPtr<FJsonObject>& Params);
 
 	/**
+	 * Inspect one saved replay/demo container or file by the Saved-relative path
+	 * returned from ListSavedReplays. This is metadata-only and read-only.
+	 */
+	static FMonolithActionResult GetSavedReplay(const TSharedPtr<FJsonObject>& Params);
+
+	/**
 	 * List all Level Sequences that have a Director Blueprint, with the
 	 * director's name and total function/variable counts. Optional
 	 * asset_path_filter is a glob (* and ?) matched against ls_path.

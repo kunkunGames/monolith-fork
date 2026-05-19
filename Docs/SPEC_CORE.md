@@ -39,7 +39,7 @@ Monolith.uplugin
   MonolithMaterial      — Material inspection + graph editing + CRUD + function suite + tiling quality + texture preview (63 material actions)
   MonolithPaper2D       — Optional Paper2D AssetRegistry discovery for sprites, flipbooks, tile sets, and tile maps (3 actions)
   MonolithAnimation     — Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP/ControlRig write, layout (125 actions)
-  MonolithLevelSequence — Level Sequence bindings, Director Blueprint/event wiring, saved replay listing, and reflection-only Sequencer Anim Mixer read-side probes (12 actions; no hard dependency on UE 5.8 MovieSceneAnimMixer)
+  MonolithLevelSequence — Level Sequence bindings, Director Blueprint/event wiring, saved replay metadata, and reflection-only Sequencer Anim Mixer read-side probes (13 actions; no hard dependency on UE 5.8 MovieSceneAnimMixer)
   MonolithNiagara       — Niagara particle systems, HLSL module/function creation, DI config, event handlers, sim stages, NPC, effect types, scalability, layout (109 actions)
   MonolithEditor        — Build triggers, live compile, log capture, compile output, crash context, scene capture, texture import, flipbook stitching, asset deletion, viewport info, blank-map factory + module status (Phase J F8), automation test list/run, Python escape-hatch (`run_python`), map swap (`load_level`), selection inspection, crash breadcrumbs, PIE control, console commands (36 actions)
   MonolithConfig        — Config/INI resolution and search (6 actions)
@@ -162,7 +162,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.3 | MonolithMaterial | [specs/SPEC_MonolithMaterial.md](specs/SPEC_MonolithMaterial.md) | Material inspection + graph editing + CRUD + function suite (63 material actions) |
 | 3.4 | MonolithPaper2D | [specs/SPEC_MonolithPaper2D.md](specs/SPEC_MonolithPaper2D.md) | Optional Paper2D AssetRegistry discovery (3 actions, no hard Paper2D dependency) |
 | 3.5 | MonolithAnimation | [specs/SPEC_MonolithAnimation.md](specs/SPEC_MonolithAnimation.md) | Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP write, ControlRig (125 actions) |
-| 3.6 | MonolithLevelSequence | [specs/SPEC_MonolithLevelSequence.md](specs/SPEC_MonolithLevelSequence.md) | Level Sequence bindings, Director Blueprint/event wiring, saved replay listing, optional Sequencer Anim Mixer read-only probes (12 actions) |
+| 3.6 | MonolithLevelSequence | [specs/SPEC_MonolithLevelSequence.md](specs/SPEC_MonolithLevelSequence.md) | Level Sequence bindings, Director Blueprint/event wiring, saved replay metadata, optional Sequencer Anim Mixer read-only probes (13 actions) |
 | 3.7 | MonolithNiagara | [specs/SPEC_MonolithNiagara.md](specs/SPEC_MonolithNiagara.md) | Niagara particle systems, HLSL module/function, DI config, event handlers, sim stages, layout (109 actions) |
 | 3.8 | MonolithEditor | [specs/SPEC_MonolithEditor.md](specs/SPEC_MonolithEditor.md) | Build triggers, live compile, log capture, crash context, scene capture, selection, PIE/console control (36 actions) |
 | 3.9 | MonolithConfig | [specs/SPEC_MonolithConfig.md](specs/SPEC_MonolithConfig.md) | Config/INI resolution and search (6 actions) |

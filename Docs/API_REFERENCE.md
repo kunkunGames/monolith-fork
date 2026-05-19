@@ -22,7 +22,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [paper2d](#paper2d) | 3 | Optional Paper2D AssetRegistry discovery registered by MonolithPaper2D |
 | [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
-| [level_sequence](#level_sequence) | 12 | Level Sequence bindings, Director Blueprint/event wiring, replay saved listing, and optional Sequencer Anim Mixer read-only inspection |
+| [level_sequence](#level_sequence) | 13 | Level Sequence bindings, Director Blueprint/event wiring, saved replay metadata, and optional Sequencer Anim Mixer read-only inspection |
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
 | [editor](#editor) | 57 | Live Coding builds, compile output capture, Live Coding diagnostics, editor logs, scene capture, texture import, map creation, module status, automation test list/run/status/history, selection inspection, PIE/console control |
 | [config](#config) | 10 | INI config, plugin, and cvar inspection/search |
@@ -78,6 +78,7 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `water.*` | **ROUTE CHANGE** | Moved Water discovery from `mesh.get_water_status` / `mesh.list_water_bodies` into the dedicated `MonolithWater` module and `water` namespace. |
 | `ndisplay.*` | **OWNER CHANGE** | Kept the public `ndisplay` action names but moved registration from `MonolithMesh` to `MonolithNDisplay`. |
 | `interchange.*` | **OWNER CHANGE** | Kept the public `interchange` action names but moved registration from `MonolithMesh` to `MonolithInterchange`. |
+| `level_sequence.get_saved_replay` | **NEW** | Returns metadata for one saved replay container or file under the project Saved replay roots. Absolute paths, traversal, and file bytes are rejected. |
 
 The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespaces — same handler, two callable paths. Pick whichever reads better from your client.
 
@@ -415,7 +416,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
 
 ## level_sequence
 
-Level Sequence bindings, Director Blueprint/event wiring, replay saved listing, and optional Sequencer Anim Mixer read-only inspection. **12 actions.**
+Level Sequence bindings, Director Blueprint/event wiring, saved replay metadata, and optional Sequencer Anim Mixer read-only inspection. **13 actions.**
 
 > For full param schemas, call `monolith_discover("level_sequence")` at runtime.
 
@@ -424,7 +425,7 @@ Level Sequence bindings, Director Blueprint/event wiring, replay saved listing, 
 | Category | Actions | Examples |
 |----------|---------|----------|
 | Smoke | 1 | `ping` |
-| Replay read-only | 2 | `get_replay_status`, `list_saved_replays` |
+| Replay read-only | 3 | `get_replay_status`, `list_saved_replays`, `get_saved_replay` |
 | Bindings | 1 | `list_bindings` |
 | Anim Mixer read-only | 2 | `get_anim_mixer_status`, `list_anim_mixer_tracks` |
 | Director discover | 2 | `list_directors`, `get_director_info` |
