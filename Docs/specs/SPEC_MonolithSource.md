@@ -43,7 +43,7 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 | `find_callers` | `symbol`, `limit` | All functions that call the given function |
 | `find_callees` | `symbol`, `limit` | All functions called by the given function |
 | `search_source` | `query`, `scope`, `limit`, `mode`, `module`, `path_filter`, `symbol_kind` | Dual search: symbol FTS + source line FTS |
-| `get_class_hierarchy` | `class_name`, `direction`, `depth` | Inheritance tree (both/ancestors/descendants, max 80 shown) |
+| `get_class_hierarchy` | `symbol`, `direction`, `depth` | Inheritance tree (both/ancestors/descendants, max 80 shown) |
 | `get_module_info` | `module_name` | Module stats: file count, symbol counts, key classes |
 | `get_symbol_context` | `symbol`, `context_lines` | Definition with surrounding context |
 | `read_file` | `file_path`, `start_line`, `end_line` | Read source lines by path (absolute -> DB exact -> DB suffix match) |

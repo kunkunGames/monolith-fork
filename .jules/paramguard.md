@@ -49,3 +49,9 @@
 **Boundary:** JSON parameter parsing (`GetStringField`, `GetNumberField`, `GetBoolField`)
 **Learning:** Legacy `Get*Field` API crashes the engine when the key is missing or not of the expected type, making actions vulnerable to malformed payloads.
 **Prevention:** Always use `TryGetStringField`, `TryGetNumberField`, or `TryGetBoolField` instead. Verify all `Source/MonolithSource` parsing locations use robust extraction with safe fallbacks.
+
+## 2026-05-18 - Harden mesh furnishing parameter parsing
+**Malformed input pattern:** `HasField` checks followed by `GetNumberField` in `ParseFurnitureItemJson` and other furnishing actions in `MonolithMeshFurnishingActions.cpp`.
+**Learning:** `HasField` only confirms a field exists, it does not confirm the type. Calling `GetNumberField` directly causes assertions if the JSON type is incorrect (e.g. a string).
+**Prevention:** Use `TryGetNumberField` to safely validate existence and extract type in a single call.
+**Avoid:** Assuming `HasField` is sufficient for robust optional parameter type safety.

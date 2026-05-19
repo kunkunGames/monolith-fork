@@ -11694,10 +11694,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveEmitterAsTemplate(const
 FMonolithActionResult FMonolithNiagaraActions::HandleCloneModuleOverrides(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = GetAssetPath(Params);
-	FString SrcEmitterId = Params->GetStringField(TEXT("source_emitter"));
-	FString SrcModuleGuid = Params->GetStringField(TEXT("source_module"));
-	FString TgtEmitterId = Params->GetStringField(TEXT("target_emitter"));
-	FString TgtModuleGuid = Params->GetStringField(TEXT("target_module"));
+	FString SrcEmitterId, SrcModuleGuid, TgtEmitterId, TgtModuleGuid;
+	Params->TryGetStringField(TEXT("source_emitter"), SrcEmitterId);
+	Params->TryGetStringField(TEXT("source_module"), SrcModuleGuid);
+	Params->TryGetStringField(TEXT("target_emitter"), TgtEmitterId);
+	Params->TryGetStringField(TEXT("target_module"), TgtModuleGuid);
 
 	if (SrcModuleGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: source_module"));
 	if (TgtModuleGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: target_module"));

@@ -186,7 +186,7 @@ void FMonolithSourceActions::RegisterAll()
 		TEXT("Show the inheritance tree for a class"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleGetClassHierarchy),
 		FParamSchemaBuilder()
-			.Required(TEXT("symbol"), TEXT("string"), TEXT("Class name"))
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("Class name"), { TEXT("class_name") })
 			.Optional(TEXT("direction"), TEXT("string"), TEXT("Direction: up (parents) or down (children)"), TEXT("both"))
 			.Optional(TEXT("depth"), TEXT("integer"), TEXT("Max hierarchy depth"), TEXT("5"))
 			.Build());
