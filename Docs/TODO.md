@@ -456,6 +456,12 @@ The mesh module ships horror defaults (storytelling patterns, room templates, ac
 
 ## Feature Improvements
 
+### MonolithEditor — Runtime Toolset Parity Polish
+
+- [x] **Automation status/history (2026-05-19)** — `editor.run_automation_tests` now records `run_id`, state/progress counters, compact recent history, and last-run summaries. Added `editor.get_automation_run_status`, `editor.stop_automation_tests` structured no-op cancellation contract, and `editor.list_automation_history`.
+- [x] **Live Coding diagnostics (2026-05-19)** — `editor.get_live_coding_diagnostics` returns normalized Live Coding state, availability/enabled flags, fresh compile log excerpts, diagnostic freshness, and explicit no-UBT-scrape metadata.
+- [ ] **Automation async cancellation** — Deferred until Monolith has an async automation runner. Current synchronous runner reports `stop_status="unsupported_cancel"` by design.
+
 ### Platform
 
 - [ ] **Mac/Linux support** — DEFERRED (Windows-only project). All build-related actions are `#if PLATFORM_WINDOWS` guarded. Live Coding is Windows-only. Update system is Windows-only.

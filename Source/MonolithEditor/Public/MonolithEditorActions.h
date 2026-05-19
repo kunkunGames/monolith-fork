@@ -54,6 +54,7 @@ public:
 	static FMonolithActionResult HandleGetBuildSummary(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleSearchBuildOutput(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetCompileOutput(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleGetLiveCodingDiagnostics(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetRecentLogs(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleSearchLogs(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleTailLog(const TSharedPtr<FJsonObject>& Params);
@@ -81,6 +82,9 @@ public:
 	static FMonolithActionResult HandleFindAutomationTests(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetAutomationSummary(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleExportAutomationReport(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleGetAutomationRunStatus(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleStopAutomationTests(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleListAutomationHistory(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Scripting actions (HOFF 7) ---
 	static FMonolithActionResult HandleRunPython(const TSharedPtr<FJsonObject>& Params);
@@ -111,6 +115,9 @@ private:
 	static double LastCompileEndTimestamp;
 	static TSharedPtr<FJsonObject> LastAutomationRun;
 	static double LastAutomationRunTimestamp;
+	static TSharedPtr<FJsonObject> CurrentAutomationRun;
+	static TArray<TSharedPtr<FJsonObject>> AutomationRunHistory;
+	static bool bAutomationRunActive;
 
 	// Capture helpers
 	static bool CaptureNiagaraFrame(

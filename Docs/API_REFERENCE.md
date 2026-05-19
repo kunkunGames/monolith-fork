@@ -23,7 +23,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [paper2d](#paper2d) | 3 | Optional Paper2D AssetRegistry discovery registered by MonolithPaper2D |
 | [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
-| [editor](#editor) | 36 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, selection inspection, PIE/console control |
+| [editor](#editor) | 57 | Live Coding builds, compile output capture, Live Coding diagnostics, editor logs, scene capture, texture import, map creation, module status, automation test list/run/status/history, selection inspection, PIE/console control |
 | [config](#config) | 10 | INI config, plugin, and cvar inspection/search |
 | [dataflow](#dataflow) | 2 | Optional Dataflow AssetRegistry/module-status discovery registered by MonolithDataflow |
 | [gamefeatures](#gamefeatures) | 1 (+4 gated) | Optional Game Feature plugin inventory and GameFeatureData inspection registered by MonolithGameFeatures |
@@ -448,7 +448,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithNiagara.md`.
 
 ## editor
 
-Live Coding builds, compile output capture, editor log capture, scene capture, texture import, asset deletion, viewport info, GIF capture, **map creation** and **module status** (Phase J F8). **26 actions.**
+Live Coding builds, compile output capture, Live Coding diagnostics, editor log capture, scene capture, texture import, asset deletion, viewport info, GIF capture, **map creation**, **module status**, selection/context inspection, crash reporting, automation execution/status/history, scripting, and PIE/console control. **57 actions.**
 
 ### `editor.trigger_build` / `editor.live_compile`
 
@@ -473,6 +473,14 @@ Check compile status: `compiling`, `last_result`, `last_compile_time`, `errors_s
 ### `editor.get_build_summary` · `editor.search_build_output` · `editor.get_compile_output`
 
 Build summary, search-build-log-by-pattern, structured compile report. See `monolith_discover("editor")` for params.
+
+### `editor.get_live_coding_diagnostics`
+
+Read-only diagnostic summary for the most recent Monolith-triggered Live Coding compile. It normalizes result state, reports Live Coding module availability/session flags, counts fresh compile-category errors and warnings, and returns bounded log excerpts from `LogLiveCoding`, `LogCompile`, and `LogLinker`. UBT artifact scraping is out of scope for this editor-session action, so `ubt_diagnostics` is an explicit empty array with `ubt_diagnostic_source="not_checked"`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `max_log_entries` | integer | optional | Maximum fresh compile log rows to return. Default 50, max 200 |
 
 ### `editor.get_recent_logs` · `editor.search_logs` · `editor.tail_log` · `editor.get_log_categories` · `editor.get_log_stats`
 
@@ -578,6 +586,25 @@ Capture a Niagara system as a sequence of PNG frames with optional GIF encoding 
 | `resolution` | integer | optional | Default: `256` |
 | `output_path` | string | optional | Default: `Saved/Screenshots/Monolith/GIF_<timestamp>` |
 | `encoder` | string | optional | `frames_only` (default), `ffmpeg`, or `python` |
+
+### `editor.list_automation_tests` · `editor.find_automation_tests` · `editor.run_automation_tests`
+
+Inspect or run registered automation tests inside the running editor process. `run_automation_tests` is synchronous, records a `run_id`, state/progress counters, result totals, per-test details, and a compact session history entry.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `prefix` | string | **required for run** | Test full-path prefix to run or filter |
+| `query` | string | optional | Case-insensitive substring for `find_automation_tests` |
+| `max_tests` | integer | optional | `run_automation_tests` cap, default 200, hard max 1000 |
+| `max_results` | integer | optional | `find_automation_tests` cap, default 100, hard max 1000 |
+
+### `editor.get_automation_run_status` · `editor.stop_automation_tests` · `editor.list_automation_history`
+
+Runtime automation observability for clients that need UnrealMCP-style status polling. The Monolith runner uses synchronous `StartTestByName + StopTest`, so `stop_automation_tests` is an explicit structured no-op with `stop_status="unsupported_cancel"` and `can_stop=false`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `max_results` | integer | optional | `list_automation_history` count, default 20, capped to in-memory history capacity |
 
 ### `editor.create_empty_map` · NEW in Phase J F8
 

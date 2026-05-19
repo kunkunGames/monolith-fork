@@ -14,12 +14,12 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 36 actions (20 base + capture GIF + 4 crash breadcrumb actions + 3 selection actions + 2 Phase J F8 map actions + 2 v0.14.8 PR #48 automation + 2 v0.14.9 Issue #50 scripting + 3 v0.14.10 PR #54 PIE/console) |
+| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, and registers 57 editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, and module-status toolsets |
 | `FMonolithLogCapture` | FOutputDevice subclass. Ring buffer (10,000 entries max). Thread-safe. Tracks counts by verbosity |
 | `FMonolithEditorActions` | Static handlers for build and log operations. Hooks into `ILiveCodingModule::GetOnPatchCompleteDelegate()` to capture compile results and timestamps |
 | `FMonolithSettingsCustomization` | IDetailCustomization for UMonolithSettings. Adds re-index buttons for project and source databases in Project Settings UI |
 
-### Actions (36 — namespace: "editor")
+### Actions (57 — namespace: "editor")
 
 **Base (22 — v0.14.7 baseline + Phase J F8)**
 
@@ -37,6 +37,7 @@
 | `get_log_categories` | List all active log categories seen in ring buffer |
 | `get_log_stats` | Log stats: total, fatal, error, warning, log, verbose counts |
 | `get_compile_output` | Structured compile report: result, time, log lines from compile categories (LogLiveCoding, LogCompile, LogLinker), error/warning counts, patch status. Time-windowed to last compile |
+| `get_live_coding_diagnostics` | Read-only Live Coding diagnostics summary. Returns availability/enabled/started flags, normalized compile result, diagnostic freshness, bounded compile log excerpts, error/warning counts, and an explicit empty `ubt_diagnostics` array because UBT artifact scraping is not part of this editor-session action. |
 | `get_crash_context` | CrashContext.runtime-xml + Ensures.log + 20 recent errors. Truncated at 4096 chars |
 | `capture_scene_preview` | Capture screenshot of Niagara or material asset in preview scene. Params: `asset_path`, `asset_type`, `seek_time`, `camera`, `resolution`, `output_path` |
 | `capture_sequence_frames` | Multi-frame temporal capture at specified timestamps. Returns array of frame PNGs. Params: `asset_path`, `timestamps[]` (Max: 1000), `camera`, `resolution` |
@@ -60,7 +61,10 @@
 | `get_active_asset_editor` | Get the active or unambiguous open asset editor with explicit fallback source |
 | `capture_system_gif` | Capture a Niagara system as a sequence of PNG frames with optional GIF encoding via ffmpeg or python |
 | `list_automation_tests` | List all registered automation tests, optionally filtered by prefix |
-| `run_automation_tests` | Run automation tests by prefix in the running editor (no PIE, no separate process). `max_tests` limit defaults to 200 (hard max 1000). Returns success/passed/failed counts, per-test errors, and the applied `max_tests`. |
+| `run_automation_tests` | Run automation tests by prefix in the running editor (no PIE, no separate process). `max_tests` limit defaults to 200 (hard max 1000). Returns run id, state, progress, success/passed/failed counts, per-test errors, and the applied `max_tests`. Records compact history for later inspection. |
+| `get_automation_run_status` | Return the current Monolith automation run state when active, last run summary when idle, history count/capacity, and explicit `can_stop=false` / `stop_status="unsupported_cancel"` because this runner executes synchronously. |
+| `stop_automation_tests` | Explicit no-op cancellation endpoint for parity with UnrealMCP clients. Returns `stopped=false`, `can_stop=false`, and `stop_status="unsupported_cancel"` instead of pretending synchronous `StartTestByName + StopTest` runs can be interrupted. |
+| `list_automation_history` | List compact recent Monolith-triggered automation runs newest-first. `max_results` defaults to 20 and is capped to the in-memory history capacity. |
 | `run_python` | Execute a Python command, statement, or file via IPythonScriptPlugin::ExecPythonCommandEx. Returns success, stdout/stderr captured by Python, and (for evaluate_statement mode) the evaluated result. |
 | `load_level` | Close the current persistent level (without saving) and load the specified level by /Game/... asset path. Wraps ULevelEditorSubsystem::LoadLevel. |
 | `start_pie` | Begin a PIE session pinned to in-viewport mode (`EPlaySessionWorldType::PlayInEditor` + first active level viewport via `FLevelEditorModule::GetFirstActiveViewport`). Independent of the user's `LastExecutedPlayModeType` toolbar choice. Returns `started: true, mode: 'in_viewport'`. Refuses to queue duplicates when PIE is already running. |

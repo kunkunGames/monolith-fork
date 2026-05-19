@@ -100,3 +100,98 @@ bool FMonolithEditorRunAutomationTestsClampsLimit::RunTest(const FString& Parame
 
 	return true;
 }
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorAutomationStatusShape, "Monolith.Editor.Automation.StatusShape", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorAutomationStatusShape::RunTest(const FString& Parameters)
+{
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("get_automation_run_status"), MakeShared<FJsonObject>());
+
+	TestTrue(TEXT("get_automation_run_status should succeed"), Result.bSuccess);
+	if (!Result.Result.IsValid())
+	{
+		AddError(TEXT("Status result JSON object is invalid"));
+		return true;
+	}
+
+	TestTrue(TEXT("Status exposes active"), Result.Result->HasField(TEXT("active")));
+	TestTrue(TEXT("Status exposes can_stop"), Result.Result->HasField(TEXT("can_stop")));
+	TestFalse(TEXT("Synchronous runner cannot stop"), Result.Result->GetBoolField(TEXT("can_stop")));
+	TestEqual(TEXT("Stop contract is explicit"), Result.Result->GetStringField(TEXT("stop_status")), FString(TEXT("unsupported_cancel")));
+	TestTrue(TEXT("Status exposes history capacity"), Result.Result->HasField(TEXT("history_capacity")));
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorAutomationStopUnsupported, "Monolith.Editor.Automation.StopUnsupported", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorAutomationStopUnsupported::RunTest(const FString& Parameters)
+{
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("stop_automation_tests"), MakeShared<FJsonObject>());
+
+	TestTrue(TEXT("stop_automation_tests should return a structured success payload"), Result.bSuccess);
+	if (!Result.Result.IsValid())
+	{
+		AddError(TEXT("Stop result JSON object is invalid"));
+		return true;
+	}
+
+	TestFalse(TEXT("No in-flight run is stopped"), Result.Result->GetBoolField(TEXT("stopped")));
+	TestFalse(TEXT("Synchronous runner cannot stop"), Result.Result->GetBoolField(TEXT("can_stop")));
+	TestEqual(TEXT("Stop status reports unsupported_cancel"), Result.Result->GetStringField(TEXT("stop_status")), FString(TEXT("unsupported_cancel")));
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorAutomationHistoryNoMatchRun, "Monolith.Editor.Automation.HistoryNoMatchRun", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorAutomationHistoryNoMatchRun::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> RunParams = MakeShared<FJsonObject>();
+	RunParams->SetStringField(TEXT("prefix"), TEXT("Monolith.Editor.Automation.DoesNotExist"));
+	RunParams->SetNumberField(TEXT("max_tests"), 1.0);
+
+	FMonolithActionResult RunResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("run_automation_tests"), RunParams);
+	TestTrue(TEXT("No-match automation run should return a structured result"), RunResult.bSuccess);
+	if (!RunResult.Result.IsValid())
+	{
+		AddError(TEXT("Run result JSON object is invalid"));
+		return true;
+	}
+
+	const FString RunId = RunResult.Result->GetStringField(TEXT("run_id"));
+	TestFalse(TEXT("Run id should not be empty"), RunId.IsEmpty());
+	TestEqual(TEXT("No-match run state completes"), RunResult.Result->GetStringField(TEXT("state")), FString(TEXT("completed")));
+	TestEqual(TEXT("No-match completion reason is explicit"), RunResult.Result->GetStringField(TEXT("completion_reason")), FString(TEXT("no_matching_tests")));
+	TestEqual(TEXT("No-match run progress is complete"), RunResult.Result->GetNumberField(TEXT("progress")), 1.0);
+
+	TSharedPtr<FJsonObject> HistoryParams = MakeShared<FJsonObject>();
+	HistoryParams->SetNumberField(TEXT("max_results"), 1.0);
+	FMonolithActionResult HistoryResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("list_automation_history"), HistoryParams);
+	TestTrue(TEXT("list_automation_history should succeed"), HistoryResult.bSuccess);
+	if (!HistoryResult.Result.IsValid())
+	{
+		AddError(TEXT("History result JSON object is invalid"));
+		return true;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* Runs = nullptr;
+	if (!HistoryResult.Result->TryGetArrayField(TEXT("runs"), Runs) || Runs->Num() == 0)
+	{
+		AddError(TEXT("History should include the just-recorded no-match run"));
+		return true;
+	}
+
+	const TSharedPtr<FJsonObject> FirstRun = (*Runs)[0]->AsObject();
+	TestTrue(TEXT("History row is an object"), FirstRun.IsValid());
+	if (FirstRun.IsValid())
+	{
+		TestEqual(TEXT("Newest history row matches run id"), FirstRun->GetStringField(TEXT("run_id")), RunId);
+		TestEqual(TEXT("History row is compact completed state"), FirstRun->GetStringField(TEXT("state")), FString(TEXT("completed")));
+	}
+
+	return true;
+}

@@ -9,6 +9,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/App.h"
+#include "Misc/Guid.h"
 #include "Misc/AutomationTest.h"
 #include "MonolithPackagePathValidator.h"
 #include "HAL/FileManager.h"
@@ -74,6 +75,9 @@ bool FMonolithEditorActions::bPatchApplied = false;
 double FMonolithEditorActions::LastCompileEndTimestamp = 0.0;
 TSharedPtr<FJsonObject> FMonolithEditorActions::LastAutomationRun;
 double FMonolithEditorActions::LastAutomationRunTimestamp = 0.0;
+TSharedPtr<FJsonObject> FMonolithEditorActions::CurrentAutomationRun;
+TArray<TSharedPtr<FJsonObject>> FMonolithEditorActions::AutomationRunHistory;
+bool FMonolithEditorActions::bAutomationRunActive = false;
 
 // --- Log capture ---
 
@@ -294,6 +298,32 @@ static FString TimestampToIso(double PlatformSeconds)
 	return EventTime.ToIso8601();
 }
 
+static FString NormalizeLiveCodingCompileResult(const FString& RawResult)
+{
+	if (RawResult.Equals(TEXT("success"), ESearchCase::IgnoreCase) ||
+		RawResult.Equals(TEXT("no_changes"), ESearchCase::IgnoreCase))
+	{
+		return TEXT("success");
+	}
+	if (RawResult.Equals(TEXT("failure"), ESearchCase::IgnoreCase) ||
+		RawResult.Equals(TEXT("failed"), ESearchCase::IgnoreCase))
+	{
+		return TEXT("failed");
+	}
+	if (RawResult.Equals(TEXT("in_progress"), ESearchCase::IgnoreCase) ||
+		RawResult.Equals(TEXT("compile_still_active"), ESearchCase::IgnoreCase))
+	{
+		return TEXT("in_progress");
+	}
+	if (RawResult.Equals(TEXT("cancelled"), ESearchCase::IgnoreCase) ||
+		RawResult.Equals(TEXT("not_started"), ESearchCase::IgnoreCase) ||
+		RawResult.Equals(TEXT("none"), ESearchCase::IgnoreCase))
+	{
+		return RawResult.ToLower();
+	}
+	return TEXT("unknown");
+}
+
 // --- Registration ---
 
 void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
@@ -380,6 +410,13 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		TEXT("Get structured compile report: result, time, log lines from compile categories, error/warning counts, patch status"),
 		FMonolithActionHandler::CreateStatic(&HandleGetCompileOutput),
 		MakeShared<FJsonObject>());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("get_live_coding_diagnostics"),
+		TEXT("Return normalized Live Coding availability, compile result, diagnostic freshness, and bounded compile log excerpts."),
+		FMonolithActionHandler::CreateStatic(&HandleGetLiveCodingDiagnostics),
+		FParamSchemaBuilder()
+			.Optional(TEXT("max_log_entries"), TEXT("integer"), TEXT("Maximum fresh diagnostic log entries to return (default: 50, max: 200)"))
+			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("get_crash_context"),
 		TEXT("Get last crash/ensure context information"),
@@ -530,11 +567,28 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("run_automation_tests"),
-		TEXT("Run automation tests by prefix in the running editor (no PIE, no separate process). Returns success/passed/failed counts and per-test errors."),
+		TEXT("Run automation tests by prefix in the running editor (no PIE, no separate process). Returns run status, progress counters, success/passed/failed counts, and per-test errors."),
 		FMonolithActionHandler::CreateStatic(&HandleRunAutomationTests),
 		FParamSchemaBuilder()
 			.Required(TEXT("prefix"), TEXT("string"), TEXT("Run tests whose full path starts with this prefix (e.g. 'MazeLegends.Bow')"))
 			.Optional(TEXT("max_tests"), TEXT("integer"), TEXT("Hard cap on number of tests to run (default: 200, max: 1000)"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("get_automation_run_status"),
+		TEXT("Return current or last Monolith automation run status plus history capacity. Synchronous runner reports can_stop=false."),
+		FMonolithActionHandler::CreateStatic(&HandleGetAutomationRunStatus),
+		FParamSchemaBuilder().Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("stop_automation_tests"),
+		TEXT("Return the explicit cancellation contract for Monolith automation runs. Current synchronous runner cannot be cancelled."),
+		FMonolithActionHandler::CreateStatic(&HandleStopAutomationTests),
+		FParamSchemaBuilder().Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("list_automation_history"),
+		TEXT("List recent compact Monolith-triggered automation run summaries newest-first."),
+		FMonolithActionHandler::CreateStatic(&HandleListAutomationHistory),
+		FParamSchemaBuilder()
+			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Maximum history rows to return (default: 20, capped to history capacity)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("get_automation_summary"),
@@ -877,6 +931,148 @@ FMonolithActionResult FMonolithEditorActions::HandleGetCompileOutput(const TShar
 	Root->SetNumberField(TEXT("log_line_count"), LogLines.Num());
 	Root->SetArrayField(TEXT("compile_log"), LogLines);
 
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleGetLiveCodingDiagnostics(const TSharedPtr<FJsonObject>& Params)
+{
+	int32 MaxLogEntries = 50;
+	if (Params.IsValid())
+	{
+		double MaxNum = static_cast<double>(MaxLogEntries);
+		if (Params->TryGetNumberField(TEXT("max_log_entries"), MaxNum))
+		{
+			MaxLogEntries = FMath::Clamp(FMath::FloorToInt(MaxNum), 1, 200);
+		}
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+
+	bool bLiveCodingAvailable = false;
+	bool bLiveCodingEnabledForSession = false;
+	bool bLiveCodingEnabledByDefault = false;
+	bool bLiveCodingStarted = false;
+	bool bCurrentlyCompiling = bIsCompiling;
+
+#if PLATFORM_WINDOWS
+	ILiveCodingModule* LiveCoding = FModuleManager::GetModulePtr<ILiveCodingModule>(LIVE_CODING_MODULE_NAME);
+	if (LiveCoding)
+	{
+		bLiveCodingAvailable = true;
+		bLiveCodingEnabledForSession = LiveCoding->IsEnabledForSession();
+		bLiveCodingEnabledByDefault = LiveCoding->IsEnabledByDefault();
+		bLiveCodingStarted = LiveCoding->HasStarted();
+		bCurrentlyCompiling = LiveCoding->IsCompiling();
+
+		if (bIsCompiling && !bCurrentlyCompiling)
+		{
+			bIsCompiling = false;
+			if (LastCompileEndTimestamp < LastCompileTimestamp)
+			{
+				LastCompileEndTimestamp = FPlatformTime::Seconds();
+			}
+			if (LastCompileResult.Equals(TEXT("in_progress"), ESearchCase::IgnoreCase))
+			{
+				LastCompileResult = bPatchApplied ? TEXT("success") : TEXT("unknown");
+			}
+		}
+	}
+#endif
+
+	const FString NormalizedResult = NormalizeLiveCodingCompileResult(LastCompileResult);
+
+	Root->SetStringField(TEXT("last_result"), LastCompileResult);
+	Root->SetStringField(TEXT("compile_result_normalized"), NormalizedResult);
+	Root->SetStringField(TEXT("last_compile_time"), TimestampToIso(LastCompileTimestamp));
+	Root->SetStringField(TEXT("last_compile_end_time"), TimestampToIso(LastCompileEndTimestamp));
+	Root->SetBoolField(TEXT("patch_applied"), bPatchApplied);
+	Root->SetBoolField(TEXT("live_coding_available"), bLiveCodingAvailable);
+	Root->SetBoolField(TEXT("live_coding_enabled_for_session"), bLiveCodingEnabledForSession);
+	Root->SetBoolField(TEXT("live_coding_enabled_by_default"), bLiveCodingEnabledByDefault);
+	Root->SetBoolField(TEXT("live_coding_started"), bLiveCodingStarted);
+	Root->SetBoolField(TEXT("compiling"), bCurrentlyCompiling);
+	Root->SetNumberField(TEXT("max_log_entries"), MaxLogEntries);
+
+	TArray<FName> CompileCategories;
+	CompileCategories.Add(FName(TEXT("LogLiveCoding")));
+	CompileCategories.Add(FName(TEXT("LogCompile")));
+	CompileCategories.Add(FName(TEXT("LogLinker")));
+
+	TArray<TSharedPtr<FJsonValue>> LogEntriesJson;
+	int32 ErrorCount = 0;
+	int32 WarningCount = 0;
+	FString DiagnosticSource = TEXT("none");
+
+	if (CachedLogCapture && LastCompileTimestamp > 0.0)
+	{
+		const TArray<FMonolithLogEntry> Entries = CachedLogCapture->GetEntriesSince(
+			LastCompileTimestamp,
+			CompileCategories,
+			ELogVerbosity::VeryVerbose,
+			MaxLogEntries);
+
+		LogEntriesJson.Reserve(Entries.Num());
+		for (const FMonolithLogEntry& Entry : Entries)
+		{
+			if (DiagnosticSource.Equals(TEXT("none"), ESearchCase::IgnoreCase))
+			{
+				DiagnosticSource = Entry.Category.ToString();
+			}
+			if (Entry.Verbosity <= ELogVerbosity::Error)
+			{
+				++ErrorCount;
+			}
+			else if (Entry.Verbosity == ELogVerbosity::Warning)
+			{
+				++WarningCount;
+			}
+			LogEntriesJson.Add(MakeShared<FJsonValueObject>(LogEntryToJson(Entry)));
+		}
+	}
+
+	const bool bDiagnosticSourceFresh = LogEntriesJson.Num() > 0;
+	TArray<TSharedPtr<FJsonValue>> UbtDiagnosticsJson;
+	Root->SetStringField(TEXT("diagnostic_source"), DiagnosticSource);
+	Root->SetBoolField(TEXT("diagnostic_source_fresh"), bDiagnosticSourceFresh);
+	Root->SetNumberField(TEXT("diagnostic_count"), LogEntriesJson.Num());
+	Root->SetNumberField(TEXT("error_count"), ErrorCount);
+	Root->SetNumberField(TEXT("warning_count"), WarningCount);
+	Root->SetArrayField(TEXT("log_excerpt"), LogEntriesJson);
+	Root->SetArrayField(TEXT("ubt_diagnostics"), UbtDiagnosticsJson);
+	Root->SetStringField(TEXT("ubt_diagnostic_source"), TEXT("not_checked"));
+	Root->SetBoolField(TEXT("ubt_diagnostic_source_fresh"), false);
+
+	FString Message;
+	if (!bLiveCodingAvailable)
+	{
+		Message = TEXT("Live Coding module is not available in this editor session.");
+	}
+	else if (LastCompileTimestamp <= 0.0)
+	{
+		Message = TEXT("No Live Coding compile has been recorded by Monolith in this editor session.");
+	}
+	else if (bCurrentlyCompiling)
+	{
+		Message = TEXT("Live Coding compile is currently in progress.");
+	}
+	else if (NormalizedResult.Equals(TEXT("failed"), ESearchCase::IgnoreCase))
+	{
+		Message = FString::Printf(TEXT("Live Coding compile failed with %d errors and %d warnings in fresh captured diagnostics."), ErrorCount, WarningCount);
+	}
+	else if (NormalizedResult.Equals(TEXT("success"), ESearchCase::IgnoreCase))
+	{
+		Message = FString::Printf(TEXT("Live Coding compile succeeded with %d fresh diagnostic entries."), LogEntriesJson.Num());
+	}
+	else if (!bDiagnosticSourceFresh)
+	{
+		Message = FString::Printf(TEXT("Live Coding result is '%s', but no fresh compile diagnostics were captured."), *NormalizedResult);
+	}
+	else
+	{
+		Message = FString::Printf(TEXT("Live Coding result is '%s' with %d fresh diagnostic entries."), *NormalizedResult, LogEntriesJson.Num());
+	}
+
+	Root->SetStringField(TEXT("message"), Message);
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -3147,6 +3343,79 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 
 namespace MonolithAutomationDetail
 {
+	static constexpr int32 AutomationHistoryCapacity = 20;
+
+	static FString MakeAutomationRunId()
+	{
+		const FString ShortGuid = FGuid::NewGuid().ToString(EGuidFormats::Digits).Left(8);
+		return FString::Printf(TEXT("automation-%s-%s"), *FDateTime::UtcNow().ToString(TEXT("%Y%m%dT%H%M%SZ")), *ShortGuid);
+	}
+
+	static void CopyStringField(const TSharedPtr<FJsonObject>& Source, const TCHAR* FieldName, TSharedPtr<FJsonObject>& Target)
+	{
+		FString Value;
+		if (Source.IsValid() && Source->TryGetStringField(FieldName, Value))
+		{
+			Target->SetStringField(FieldName, Value);
+		}
+	}
+
+	static void CopyNumberField(const TSharedPtr<FJsonObject>& Source, const TCHAR* FieldName, TSharedPtr<FJsonObject>& Target)
+	{
+		double Value = 0.0;
+		if (Source.IsValid() && Source->TryGetNumberField(FieldName, Value))
+		{
+			Target->SetNumberField(FieldName, Value);
+		}
+	}
+
+	static void CopyBoolField(const TSharedPtr<FJsonObject>& Source, const TCHAR* FieldName, TSharedPtr<FJsonObject>& Target)
+	{
+		bool bValue = false;
+		if (Source.IsValid() && Source->TryGetBoolField(FieldName, bValue))
+		{
+			Target->SetBoolField(FieldName, bValue);
+		}
+	}
+
+	static TSharedPtr<FJsonObject> BuildAutomationRunSummary(const TSharedPtr<FJsonObject>& Run)
+	{
+		TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
+		if (!Run.IsValid())
+		{
+			return Summary;
+		}
+
+		CopyStringField(Run, TEXT("run_id"), Summary);
+		CopyStringField(Run, TEXT("prefix"), Summary);
+		CopyStringField(Run, TEXT("state"), Summary);
+		CopyStringField(Run, TEXT("completion_reason"), Summary);
+		CopyStringField(Run, TEXT("started_at"), Summary);
+		CopyStringField(Run, TEXT("completed_at"), Summary);
+		CopyStringField(Run, TEXT("message"), Summary);
+		CopyStringField(Run, TEXT("stop_status"), Summary);
+		CopyBoolField(Run, TEXT("success"), Summary);
+		CopyBoolField(Run, TEXT("can_stop"), Summary);
+		CopyNumberField(Run, TEXT("matched"), Summary);
+		CopyNumberField(Run, TEXT("max_tests"), Summary);
+		CopyNumberField(Run, TEXT("requested_tests"), Summary);
+		CopyNumberField(Run, TEXT("completed_tests"), Summary);
+		CopyNumberField(Run, TEXT("total"), Summary);
+		CopyNumberField(Run, TEXT("passed"), Summary);
+		CopyNumberField(Run, TEXT("failed"), Summary);
+		CopyNumberField(Run, TEXT("skipped"), Summary);
+		CopyNumberField(Run, TEXT("progress"), Summary);
+		CopyNumberField(Run, TEXT("truncated_remaining"), Summary);
+
+		const TArray<TSharedPtr<FJsonValue>>* Results = nullptr;
+		if (Run->TryGetArrayField(TEXT("results"), Results))
+		{
+			Summary->SetNumberField(TEXT("result_count"), Results->Num());
+		}
+
+		return Summary;
+	}
+
 	static FString GetTestFullPath(const FAutomationTestInfo& Info)
 	{
 #if ENGINE_MAJOR_VERSION >= 5
@@ -3386,6 +3655,82 @@ FMonolithActionResult FMonolithEditorActions::HandleFindAutomationTests(const TS
 	return FMonolithActionResult::Success(Result);
 }
 
+FMonolithActionResult FMonolithEditorActions::HandleGetAutomationRunStatus(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	const bool bActive = bAutomationRunActive && CurrentAutomationRun.IsValid();
+
+	Result->SetBoolField(TEXT("active"), bActive);
+	Result->SetBoolField(TEXT("can_stop"), false);
+	Result->SetStringField(TEXT("stop_status"), TEXT("unsupported_cancel"));
+	Result->SetStringField(TEXT("runner_mode"), TEXT("synchronous"));
+	Result->SetNumberField(TEXT("history_count"), AutomationRunHistory.Num());
+	Result->SetNumberField(TEXT("history_capacity"), MonolithAutomationDetail::AutomationHistoryCapacity);
+
+	if (bActive)
+	{
+		Result->SetObjectField(TEXT("current_run"), MonolithAutomationDetail::BuildAutomationRunSummary(CurrentAutomationRun));
+	}
+
+	Result->SetBoolField(TEXT("has_last_run"), LastAutomationRun.IsValid());
+	if (LastAutomationRun.IsValid())
+	{
+		Result->SetStringField(TEXT("last_run_recorded_at"), TimestampToIso(LastAutomationRunTimestamp));
+		Result->SetObjectField(TEXT("last_run"), MonolithAutomationDetail::BuildAutomationRunSummary(LastAutomationRun));
+	}
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleStopAutomationTests(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	const bool bActive = bAutomationRunActive && CurrentAutomationRun.IsValid();
+
+	Result->SetBoolField(TEXT("stopped"), false);
+	Result->SetBoolField(TEXT("can_stop"), false);
+	Result->SetStringField(TEXT("stop_status"), TEXT("unsupported_cancel"));
+	Result->SetStringField(TEXT("runner_mode"), TEXT("synchronous"));
+	Result->SetStringField(TEXT("state"), bActive ? TEXT("running") : TEXT("idle"));
+	Result->SetStringField(TEXT("message"),
+		TEXT("Monolith automation currently runs synchronously with StartTestByName + StopTest; cancellation is not supported for in-flight runs."));
+
+	if (bActive)
+	{
+		Result->SetObjectField(TEXT("current_run"), MonolithAutomationDetail::BuildAutomationRunSummary(CurrentAutomationRun));
+	}
+
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleListAutomationHistory(const TSharedPtr<FJsonObject>& Params)
+{
+	int32 MaxResults = MonolithAutomationDetail::AutomationHistoryCapacity;
+	if (Params.IsValid())
+	{
+		double MaxNum = MaxResults;
+		if (Params->TryGetNumberField(TEXT("max_results"), MaxNum))
+		{
+			MaxResults = FMath::Clamp(FMath::FloorToInt(MaxNum), 1, MonolithAutomationDetail::AutomationHistoryCapacity);
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	const int32 Count = FMath::Min(MaxResults, AutomationRunHistory.Num());
+	Rows.Reserve(Count);
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		Rows.Add(MakeShared<FJsonValueObject>(AutomationRunHistory[Index]));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetNumberField(TEXT("count"), Rows.Num());
+	Result->SetNumberField(TEXT("history_count"), AutomationRunHistory.Num());
+	Result->SetNumberField(TEXT("history_capacity"), MonolithAutomationDetail::AutomationHistoryCapacity);
+	Result->SetArrayField(TEXT("runs"), Rows);
+	return FMonolithActionResult::Success(Result);
+}
+
 FMonolithActionResult FMonolithEditorActions::HandleGetAutomationSummary(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Prefix;
@@ -3401,12 +3746,16 @@ FMonolithActionResult FMonolithEditorActions::HandleGetAutomationSummary(const T
 	Result->SetStringField(TEXT("prefix"), Prefix);
 	Result->SetNumberField(TEXT("discovered_total"), Tests.Num());
 	Result->SetObjectField(TEXT("flag_counts"), MonolithAutomationDetail::BuildFlagSummary(Tests));
+	Result->SetBoolField(TEXT("active"), bAutomationRunActive && CurrentAutomationRun.IsValid());
+	Result->SetNumberField(TEXT("history_count"), AutomationRunHistory.Num());
+	Result->SetNumberField(TEXT("history_capacity"), MonolithAutomationDetail::AutomationHistoryCapacity);
 
 	Result->SetBoolField(TEXT("has_last_run"), LastAutomationRun.IsValid());
 	if (LastAutomationRun.IsValid())
 	{
 		Result->SetStringField(TEXT("last_run_recorded_at"), TimestampToIso(LastAutomationRunTimestamp));
 		Result->SetObjectField(TEXT("last_run"), LastAutomationRun);
+		Result->SetObjectField(TEXT("last_run_status"), MonolithAutomationDetail::BuildAutomationRunSummary(LastAutomationRun));
 	}
 
 	return FMonolithActionResult::Success(Result);
@@ -3479,29 +3828,64 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 	TArray<FAutomationTestInfo> MatchingTests;
 	MonolithAutomationDetail::CollectMatchingTests(Prefix, MatchingTests);
 
-	const FString RunId = FString::Printf(TEXT("automation-%s"), *FDateTime::UtcNow().ToString(TEXT("%Y%m%dT%H%M%SZ")));
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("run_id"), RunId);
+	Result->SetStringField(TEXT("run_id"), MonolithAutomationDetail::MakeAutomationRunId());
 	Result->SetStringField(TEXT("started_at"), FDateTime::UtcNow().ToIso8601());
 	Result->SetStringField(TEXT("prefix"), Prefix);
 	Result->SetNumberField(TEXT("matched"), MatchingTests.Num());
 	Result->SetNumberField(TEXT("max_tests"), MaxTests);
+	Result->SetBoolField(TEXT("can_stop"), false);
+	Result->SetStringField(TEXT("stop_status"), TEXT("unsupported_cancel"));
+	Result->SetStringField(TEXT("runner_mode"), TEXT("synchronous"));
+	Result->SetNumberField(TEXT("history_capacity"), MonolithAutomationDetail::AutomationHistoryCapacity);
+	Result->SetStringField(TEXT("state"), TEXT("pending"));
+	Result->SetNumberField(TEXT("requested_tests"), 0);
+	Result->SetNumberField(TEXT("completed_tests"), 0);
+	Result->SetNumberField(TEXT("progress"), 0.0);
+
+	auto RecordFinishedRun = [Result]()
+	{
+		LastAutomationRun = Result;
+		LastAutomationRunTimestamp = FPlatformTime::Seconds();
+
+		TSharedPtr<FJsonObject> HistoryEntry = MonolithAutomationDetail::BuildAutomationRunSummary(Result);
+		HistoryEntry->SetStringField(TEXT("recorded_at"), TimestampToIso(LastAutomationRunTimestamp));
+		AutomationRunHistory.Insert(HistoryEntry, 0);
+		while (AutomationRunHistory.Num() > MonolithAutomationDetail::AutomationHistoryCapacity)
+		{
+			AutomationRunHistory.RemoveAt(AutomationRunHistory.Num() - 1);
+		}
+
+		CurrentAutomationRun.Reset();
+		bAutomationRunActive = false;
+	};
 
 	if (MatchingTests.Num() == 0)
 	{
+		Result->SetStringField(TEXT("state"), TEXT("completed"));
+		Result->SetStringField(TEXT("completion_reason"), TEXT("no_matching_tests"));
 		Result->SetBoolField(TEXT("success"), false);
 		Result->SetNumberField(TEXT("total"), 0);
 		Result->SetNumberField(TEXT("passed"), 0);
 		Result->SetNumberField(TEXT("failed"), 0);
+		Result->SetNumberField(TEXT("skipped"), 0);
+		Result->SetNumberField(TEXT("progress"), 1.0);
 		Result->SetStringField(TEXT("message"),
 			FString::Printf(TEXT("No tests matching prefix '%s' (call list_automation_tests for available tests)"), *Prefix));
 		Result->SetStringField(TEXT("completed_at"), FDateTime::UtcNow().ToIso8601());
-		LastAutomationRun = Result;
-		LastAutomationRunTimestamp = FPlatformTime::Seconds();
+		RecordFinishedRun();
 		return FMonolithActionResult::Success(Result);
 	}
 
 	const int32 TestsToRun = FMath::Min(MaxTests, MatchingTests.Num());
+	Result->SetStringField(TEXT("state"), TEXT("running"));
+	Result->SetNumberField(TEXT("requested_tests"), TestsToRun);
+	Result->SetNumberField(TEXT("total"), TestsToRun);
+	Result->SetNumberField(TEXT("passed"), 0);
+	Result->SetNumberField(TEXT("failed"), 0);
+	Result->SetNumberField(TEXT("skipped"), 0);
+	CurrentAutomationRun = Result;
+	bAutomationRunActive = true;
 
 	FAutomationTestFramework& Framework = FAutomationTestFramework::Get();
 
@@ -3532,6 +3916,9 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 				FString::Printf(TEXT("ContainsTest('%s') returned false (registry lookup failed)"), *TestKey));
 			Skipped++;
 			ResultsJson.Add(MakeShared<FJsonValueObject>(TestResult));
+			Result->SetNumberField(TEXT("completed_tests"), i + 1);
+			Result->SetNumberField(TEXT("skipped"), Skipped);
+			Result->SetNumberField(TEXT("progress"), static_cast<double>(i + 1) / static_cast<double>(TestsToRun));
 			continue;
 		}
 
@@ -3579,14 +3966,23 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 
 		if (bSuccess) Passed++; else Failed++;
 		ResultsJson.Add(MakeShared<FJsonValueObject>(TestResult));
+		Result->SetNumberField(TEXT("completed_tests"), i + 1);
+		Result->SetNumberField(TEXT("passed"), Passed);
+		Result->SetNumberField(TEXT("failed"), Failed);
+		Result->SetNumberField(TEXT("skipped"), Skipped);
+		Result->SetNumberField(TEXT("progress"), static_cast<double>(i + 1) / static_cast<double>(TestsToRun));
 	}
 
 	Result->SetStringField(TEXT("completed_at"), FDateTime::UtcNow().ToIso8601());
+	Result->SetStringField(TEXT("state"), TEXT("completed"));
+	Result->SetStringField(TEXT("completion_reason"), TEXT("finished"));
 	Result->SetBoolField(TEXT("success"), Failed == 0);
 	Result->SetNumberField(TEXT("total"), TestsToRun);
 	Result->SetNumberField(TEXT("passed"), Passed);
 	Result->SetNumberField(TEXT("failed"), Failed);
 	Result->SetNumberField(TEXT("skipped"), Skipped);
+	Result->SetNumberField(TEXT("completed_tests"), TestsToRun);
+	Result->SetNumberField(TEXT("progress"), 1.0);
 	Result->SetArrayField(TEXT("results"), ResultsJson);
 
 	if (MatchingTests.Num() > TestsToRun)
@@ -3594,8 +3990,7 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 		Result->SetNumberField(TEXT("truncated_remaining"), MatchingTests.Num() - TestsToRun);
 	}
 
-	LastAutomationRun = Result;
-	LastAutomationRunTimestamp = FPlatformTime::Seconds();
+	RecordFinishedRun();
 	return FMonolithActionResult::Success(Result);
 }
 
