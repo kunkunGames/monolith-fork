@@ -356,6 +356,11 @@ public:
 			  ToolTip="Registers level_sequence_query actions for Level Sequence Director Blueprint introspection (director functions, variables, event-track bindings to director functions, cross-sequence reverse lookup of function callers)."))
 	bool bEnableLevelSequence = true;
 
+	UPROPERTY(config, EditAnywhere, Category="Modules|Optional",
+		meta=(DisplayName="Enable WorldConditions Inspection",
+			  ToolTip="Enables read-only world_conditions_query inspection of WorldCondition query definitions. Default off because WorldConditions data can be nested inside optional gameplay systems."))
+	bool bEnableWorldConditionsInspection = false;
+
 	// --- Modules|Mesh ---
 
 	UPROPERTY(config, EditAnywhere, Category="Modules|Mesh",

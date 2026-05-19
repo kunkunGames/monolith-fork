@@ -58,6 +58,7 @@ Monolith.uplugin
   MonolithAudio         — Audio asset creation, inspection, batch management, Sound Cue graph building, MetaSound graph building via Builder API, MetaSound document introspection (read-side), AI Perception sound binding, sine-tone test wave (Phase J F18) (98 actions: 86 baseline + 12 v0.14.10 [Unreleased] MetaSound document introspection by @alakangas). MetaSound features conditional on #if WITH_METASOUND
   MonolithAudioRuntime  — Runtime sub-module (Type: Runtime) holding `UMonolithSoundPerceptionUserData` + `UMonolithAudioPerceptionSubsystem` consumed by `audio::bind_sound_to_perception`. **Editor-only ship caveat** — Monolith does not currently ship to cooked game builds, so the runtime sub-module is not present at runtime in shipped Steam builds. See `COOKED_BUILD_TODO.md`. (0 MCP actions — provides runtime classes only)
   MonolithBABridge      — Optional IModularFeatures bridge for Blueprint Assist integration. Exposes IMonolithGraphFormatter; enables BA-powered auto_layout across blueprint, material, animation, and niagara modules when Blueprint Assist is present (0 MCP actions — integration only)
+  MonolithWorldConditions — Read-only WorldConditions query inspection for SmartObject preconditions (4 actions, disabled by default via bEnableWorldConditionsInspection). Optional WorldConditions/SmartObjects compile guards.
 ```
 
 **Custom sibling plugins (not inside core Monolith; source + per-module specs are private to their respective repos):**
@@ -71,7 +72,7 @@ For the architectural pattern that lets you write your own sibling plugin and re
 
 ### Discovery/Dispatch Pattern
 
-All domain modules register actions with `FMonolithToolRegistry` (central singleton). Each action carries an `execution_policy` object for discovery and audit surfaces. Default `read_only` policies stay on the fast path; explicit mutating policies can opt into central dirty-package tracking, UE transaction wrapping, and post-edit validator hooks. Automatic asset rollback remains future policy work. Each domain exposes a single `{namespace}_query(action, params)` MCP tool. The 4 core tools (`monolith_discover`, `monolith_status`, `monolith_reindex`, `monolith_update`) are standalone. Conditional modules gate registration on compile-time defines: MonolithGAS (`#if WITH_GBA`), MonolithComboGraph (`#if WITH_COMBOGRAPH`), MonolithLogicDriver (`#if WITH_LOGICDRIVER`), MonolithUI CommonUI actions (`#if WITH_COMMONUI`), MonolithAI (`#if WITH_STATETREE` + `#if WITH_SMARTOBJECTS` required; `#if WITH_MASSENTITY` + `#if WITH_ZONEGRAPH` optional), MonolithAudio (MetaSound actions conditional on `#if WITH_METASOUND`).
+All domain modules register actions with `FMonolithToolRegistry` (central singleton). Each action carries an `execution_policy` object for discovery and audit surfaces. Default `read_only` policies stay on the fast path; explicit mutating policies can opt into central dirty-package tracking, UE transaction wrapping, and post-edit validator hooks. Automatic asset rollback remains future policy work. Each domain exposes a single `{namespace}_query(action, params)` MCP tool. The 4 core tools (`monolith_discover`, `monolith_status`, `monolith_reindex`, `monolith_update`) are standalone. Conditional modules gate registration on compile-time defines: MonolithGAS (`#if WITH_GBA`), MonolithComboGraph (`#if WITH_COMBOGRAPH`), MonolithLogicDriver (`#if WITH_LOGICDRIVER`), MonolithUI CommonUI actions (`#if WITH_COMMONUI`), MonolithAI (`#if WITH_STATETREE` + `#if WITH_SMARTOBJECTS` required; `#if WITH_MASSENTITY` + `#if WITH_ZONEGRAPH` optional), MonolithAudio (MetaSound actions conditional on `#if WITH_METASOUND`). MonolithWorldConditions keeps its namespace discoverable but returns explicit disabled/unavailable states unless `bEnableWorldConditionsInspection` and the optional WorldConditions/SmartObjects compile guards are active.
 
 ### MCP Protocol
 
@@ -138,6 +139,7 @@ Modules that probe for optional plugins follow a unified Build.cs convention: 3-
 | MonolithNDisplay | DisplayCluster modules | none; AssetRegistry/module-status-only probe | `MonolithNDisplay.Build.cs` | **v0.14.10** |
 | MonolithPCG | PCG runtime/editor modules | none; AssetRegistry/reflection-only probe | `MonolithPCG.Build.cs` | **v0.14.10** |
 | MonolithPaper2D | Paper2D runtime/editor modules | none; AssetRegistry-only probe | `MonolithPaper2D.Build.cs` | **v0.14.10** |
+| MonolithWorldConditions | WorldConditions, SmartObjects | `WITH_MONOLITH_WORLDCONDITIONS`, `WITH_MONOLITH_WORLDCONDITIONS_SMARTOBJECTS` | `MonolithWorldConditions.Build.cs` | 2026-05-19 |
 
 ---
 
@@ -170,6 +172,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.21 | MonolithLogicDriver | [specs/SPEC_MonolithLogicDriver.md](specs/SPEC_MonolithLogicDriver.md) | Logic Driver Pro integration (66 actions, WITH_LOGICDRIVER) |
 | 3.22 | MonolithAI | [specs/SPEC_MonolithAI.md](specs/SPEC_MonolithAI.md) | Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, Perception, Nav (221 actions, +2 in Phase J F8) |
 | 3.23 | MonolithAudio | [specs/SPEC_MonolithAudio.md](specs/SPEC_MonolithAudio.md) | Sound Cues, MetaSounds (Builder API + v0.14.10 [Unreleased] document introspection), batch audio ops, AI Perception bind (98 actions, MetaSound features WITH_METASOUND) |
+| 3.24 | MonolithWorldConditions | [specs/SPEC_MonolithWorldConditions.md](specs/SPEC_MonolithWorldConditions.md) | Read-only WorldConditions query inspection for SmartObject preconditions (4 actions, disabled by default, optional WorldConditions/SmartObjects) |
 
 ---
 
