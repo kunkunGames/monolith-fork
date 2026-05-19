@@ -1,6 +1,7 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
 #include "MonolithUISettingsActions.h"
+#include "MonolithUISlotActions.h"
 #include "MonolithUIStylingActions.h"
 #include "Tests/Hoisted/MonolithUITestFixtureUtils.h"
 #include "Dom/JsonObject.h"
@@ -36,6 +37,35 @@ bool FMonolithUIParamGuardScaffoldSaveGame::RunTest(const FString& Parameters)
     FMonolithActionResult Result = FMonolithUISettingsActions::HandleScaffoldSaveGame(ParamsObj);
 
     TestTrue(TEXT("scaffold_save_game did not crash and processed the valid prop"), Result.bSuccess);
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUIParamGuardSetSlotPropertyAnchorsMalformed, "Monolith.ParamGuard.MonolithUI.SetSlotPropertyAnchorsMalformed", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIParamGuardSetSlotPropertyAnchorsMalformed::RunTest(const FString& Parameters)
+{
+    const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_ParamGuardSetSlotPropertyAnchorsMalformed");
+    FString Error;
+    UWidget* ChildWidget = nullptr;
+    if (!MonolithUI::TestUtils::CreateOrReuseTestWidgetBlueprint(AssetPath, TEXT("PreviewImage"), UImage::StaticClass(), Error, &ChildWidget))
+    {
+        AddError(Error);
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> Anchors = MakeShared<FJsonObject>();
+    // Missing min_x, max_x, min_y, but has malformed max_y
+    Anchors->SetStringField(TEXT("max_y"), TEXT("not_a_number"));
+
+    TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+    Params->SetStringField(TEXT("asset_path"), AssetPath);
+    Params->SetStringField(TEXT("widget_name"), TEXT("PreviewImage"));
+    Params->SetObjectField(TEXT("anchors"), Anchors);
+
+    const FMonolithActionResult Result = FMonolithUISlotActions::HandleSetSlotProperty(Params);
+    TestFalse(TEXT("set_slot_property fails gracefully on malformed anchors"), Result.bSuccess);
+    TestTrue(TEXT("set_slot_property returns clear error message"), Result.Error.Contains(TEXT("Invalid param")));
 
     return true;
 }

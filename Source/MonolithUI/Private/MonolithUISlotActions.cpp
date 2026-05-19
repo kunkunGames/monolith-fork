@@ -98,12 +98,13 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
         const TSharedPtr<FJsonObject>* AnchorObj = nullptr;
         if (Params->TryGetObjectField(TEXT("anchors"), AnchorObj))
         {
-            FAnchors A(
-                (*AnchorObj)->GetNumberField(TEXT("min_x")),
-                (*AnchorObj)->GetNumberField(TEXT("min_y")),
-                (*AnchorObj)->GetNumberField(TEXT("max_x")),
-                (*AnchorObj)->GetNumberField(TEXT("max_y"))
-            );
+            double MinX = 0.0, MinY = 0.0, MaxX = 0.0, MaxY = 0.0;
+            if ((*AnchorObj)->HasField(TEXT("min_x")) && !(*AnchorObj)->TryGetNumberField(TEXT("min_x"), MinX)) return FMonolithActionResult::Error(TEXT("Invalid param: anchors.min_x must be a number"));
+            if ((*AnchorObj)->HasField(TEXT("min_y")) && !(*AnchorObj)->TryGetNumberField(TEXT("min_y"), MinY)) return FMonolithActionResult::Error(TEXT("Invalid param: anchors.min_y must be a number"));
+            if ((*AnchorObj)->HasField(TEXT("max_x")) && !(*AnchorObj)->TryGetNumberField(TEXT("max_x"), MaxX)) return FMonolithActionResult::Error(TEXT("Invalid param: anchors.max_x must be a number"));
+            if ((*AnchorObj)->HasField(TEXT("max_y")) && !(*AnchorObj)->TryGetNumberField(TEXT("max_y"), MaxY)) return FMonolithActionResult::Error(TEXT("Invalid param: anchors.max_y must be a number"));
+
+            FAnchors A(MinX, MinY, MaxX, MaxY);
             CS->SetAnchors(A);
             PropsSet++;
         }
