@@ -28,3 +28,8 @@
 **Boundary:** `timestamps` array limit in `capture_sequence_frames`.
 **Learning:** An unbounded timestamps array combined with synchronous frame rendering in `capture_sequence_frames` can lock up the editor and use immense memory/disk space if extremely large payloads are supplied.
 **Prevention:** Always use `TryGetArrayField` to parse arrays safely and assert a hard maximum (e.g., 1000) using `Num()` on array size before allocating frame-capture loops.
+2026-05-18 - Bound preview_textures asset_paths array length
+
+Boundary: `preview_textures` parameter `asset_paths` maximum array size
+Learning: Processing massive numbers of textures in a single grid layout operation spikes memory consumption aggressively because it creates large `TArray<uint8>` pixel sheets synchronously. Without an upper bound, a client query matching all project textures could OOM the editor during contact sheet generation.
+Prevention: Operations that allocate uncompressed rendering buffers or composite layouts scaled by input counts must clamp user-provided `asset_paths` to a conservative maximum (e.g. 100 tiles max per contact sheet).

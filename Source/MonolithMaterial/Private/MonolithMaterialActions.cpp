@@ -716,7 +716,7 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Render a contact sheet of multiple textures with metadata"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMaterialActions::PreviewTextures),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_paths"), TEXT("array"), TEXT("Array of texture asset path strings"))
+			.Required(TEXT("asset_paths"), TEXT("array"), TEXT("Array of texture asset path strings (Max: 100)"))
 			.Optional(TEXT("per_texture_size"), TEXT("integer"), TEXT("Size of each texture tile in pixels"), TEXT("128"))
 			.Optional(TEXT("output_path"), TEXT("string"), TEXT("Custom output file path (default: Saved/Monolith/previews/)"))
 			.Build());
@@ -9628,6 +9628,11 @@ FMonolithActionResult FMonolithMaterialActions::PreviewTextures(const TSharedPtr
 	if (!Params->TryGetArrayField(TEXT("asset_paths"), PathsArray) || !PathsArray || PathsArray->Num() == 0)
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or empty 'asset_paths' array"));
+	}
+
+	if (PathsArray->Num() > 100)
+	{
+		return FMonolithActionResult::Error(TEXT("asset_paths array exceeds maximum allowed size (100)"));
 	}
 
 	int32 TileSize = 128;
