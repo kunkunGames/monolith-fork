@@ -16,7 +16,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 
 | Namespace | Actions | Description |
 |-----------|---------|-------------|
-| [monolith](#monolith) | 4 | Core server tools (discover, status, update, reindex) |
+| [monolith](#monolith) | 6 | Core server tools (discover, status, update, reindex) |
 | [blueprint](#blueprint) | 93 | Blueprint read/write, variable/component/graph CRUD, DataTable maintenance, node ops, compile, auto-layout, spawn actors |
 | [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection / Fracture visibility registered by MonolithChaosFracture |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |

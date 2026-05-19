@@ -267,7 +267,7 @@ cp -r Plugins/Monolith/Skills/* ~/.claude/skills/
 
 ```
 Monolith.uplugin
-  MonolithCore          — HTTP server, tool registry, discovery, auto-updater (4 actions)
+  MonolithCore          — HTTP server, tool registry, discovery, auto-updater (6 actions)
   MonolithBlueprint     — Blueprint read/write, variable/component/graph CRUD, node operations, compile, CDO reader (89 actions)
   MonolithMaterial      — Material inspection + graph editing + CRUD + material functions + tiling quality (63 actions)
   MonolithAnimation     — Animation sequences, montages, ABPs, PoseSearch, IKRig, Control Rig (125 actions)
