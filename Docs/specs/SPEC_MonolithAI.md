@@ -9,7 +9,7 @@
 ## MonolithAI
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AIModule, GameplayTasks, NavigationSystem, Json, JsonUtilities
-**Namespace:** `ai` | **Tool:** `ai_query(action, params)` | **Actions:** 221 (Phase J F8: +`add_perception_to_actor`, +`get_bt_graph`)
+**Namespace:** `ai` | **Tool:** `ai_query(action, params)` | **Actions:** 243 (includes 22 Mass/Zone Graph actions)
 **Conditional:** State Trees (`#if WITH_STATETREE`) and Smart Objects (`#if WITH_SMARTOBJECTS`) are required dependencies. Mass Entity (`#if WITH_MASSENTITY`) and Zone Graph (`#if WITH_ZONEGRAPH`) are optional extensions. When required deps are absent, the module compiles to an empty stub (0 actions registered).
 **Settings toggle:** `bEnableAI` (default: True)
 
@@ -17,7 +17,7 @@ MonolithAI provides comprehensive MCP coverage of Unreal Engine's AI framework. 
 
 ### Action Categories
 
-Counts below are the **actual** registrations from `Source/MonolithAI/Private/MonolithAI*Actions.cpp` (verified 2026-04-26 post-Phase-J). Pre-J the spec listed `~N` aspirational figures that summed to 249, exceeding the 219 actually shipped. Audit corrected the table to literal counts.
+Counts below are the **actual** registrations from `Source/MonolithAI/Private/MonolithAI*Actions.cpp` (verified 2026-05-19). Pre-J the spec listed `~N` aspirational figures that summed to 249, exceeding the 219 then shipped. Audit corrected the table to literal counts.
 
 | Category | Actions | Source file | Description |
 |----------|---------|-------------|-------------|
@@ -33,9 +33,10 @@ Counts below are the **actual** registrations from `Source/MonolithAI/Private/Mo
 | Runtime/PIE | 14 | `MonolithAIRuntimeActions.cpp` | Runtime BT/ST inspection, active task queries, blackboard value read/write in PIE |
 | Scaffolding | 23 | `MonolithAIScaffoldActions.cpp` | Pre-built AI patterns: patrol, guard, investigate, flee, horror stalker, search area |
 | Discovery | 11 | `MonolithAIDiscoveryActions.cpp` | AI asset overview, explain, compare, validate, search |
+| Mass Zone Graph | 22 | `MonolithAIMassZoneGraphActions.cpp` | Mass spawner and ZoneShape/ZoneGraph inspection and guarded operations |
 | Advanced | 12 | `MonolithAIAdvancedActions.cpp` | Mass Entity + Zone Graph cross-module integration (conditional `#if WITH_MASSENTITY`, `#if WITH_ZONEGRAPH`) |
 
-**Total:** 32 + 12 + 35 + 20 + 16 + 10 + 11 + 1 + 24 + 14 + 23 + 11 + 12 = **221**.
+**Total:** 32 + 12 + 35 + 20 + 16 + 10 + 11 + 1 + 24 + 14 + 23 + 11 + 22 + 12 = **243**.
 
 ### Phase J fixes touching this module
 
