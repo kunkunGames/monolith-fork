@@ -83,6 +83,7 @@ namespace MonolithCommonUIList
 		int32 PoolSize;
 		if (Params->TryGetNumberField(TEXT("pool_size"), PoolSize))
 		{
+			PoolSize = FMath::Clamp(PoolSize, 0, 100);
 			if (FIntProperty* P = FindFProperty<FIntProperty>(UListView::StaticClass(), TEXT("NumDesignerPreviewEntries")))
 			{
 				P->SetPropertyValue_InContainer(ListView, PoolSize);
@@ -409,7 +410,7 @@ namespace MonolithCommonUIList
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of the list view"))
 				.Required(TEXT("entry_class"), TEXT("string"), TEXT("UUserWidget class path for entries"))
 				.Optional(TEXT("entry_spacing"), TEXT("number"), TEXT("Spacing (px, CommonListView only)"))
-				.Optional(TEXT("pool_size"), TEXT("integer"), TEXT("NumDesignerPreviewEntries"))
+				.Optional(TEXT("pool_size"), TEXT("integer"), TEXT("NumDesignerPreviewEntries (clamped 0..100)"))
 				.Build(),
 			Cat);
 

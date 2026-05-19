@@ -227,7 +227,7 @@ Class-as-data: style creators (`create_common_button_style`, `create_common_text
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `setup_common_list_view` | `asset_path`, `list_view_name`, `entry_widget_path` | Configure a `UCommonListView` with an entry widget class |
+| `setup_common_list_view` | `asset_path`, `list_view_name`, `entry_widget_path`, `pool_size` (clamped 0..100) | Configure a `UCommonListView` with an entry widget class |
 | `create_tab_list_widget` | `save_path` | Scaffold a WBP containing a `UCommonTabListWidgetBase` |
 | `register_tab` | `tab_list_widget`, `tab_id`, `tab_widget` | [RUNTIME] Register a tab with a tab list |
 | `create_button_group` | `group_name` | [RUNTIME] Create a `UCommonButtonGroupBase` for radio-style selection |
