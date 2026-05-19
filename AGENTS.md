@@ -6,7 +6,7 @@ This repository relies on several scheduled Jules tasks (agents) to maintain and
 Agents must use a strict, predictable branch and PR naming convention to make active work easily discoverable:
 - **Branch Format:** `jules/<agent>/<module-or-area>/<short-behavior>` (Note: `<module-or-area>` and `<short-behavior>` are placeholders that must be replaced with descriptive text).
 - **PR Title Format:** `<Emoji> <Agent>: <short description>` (e.g., `⚡ Bolt: [description]`, `🛡️ Sentinel: [description]`).
-- **Avoid:** Non-standard branch prefixes like `bolt-...`, `perf-...`, `sentinel-...`, or raw `jules-<id>-...` branches, generic PR titles without agent prefixes, and using literal strings like `short-topic` or `module-or-area` for placeholders.
+- **Avoid:** Non-standard branch prefixes like `bolt-...`, `perf-...`, `sentinel-...`, or raw `jules-<id>-...` branches, generic PR titles without agent prefixes, using literal strings like `short-topic` or `module-or-area` for placeholders, and appending random numbers, UUIDs, or timestamps to branch names (which defeats duplicate detection).
 
 ## 2. Duplicate / Collision Guard
 Before making any changes, agents must perform a thorough duplicate and collision check. Because agents may run in concurrent VMs, you must avoid race conditions:

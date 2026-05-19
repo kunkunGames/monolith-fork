@@ -100,3 +100,9 @@
 **Learning:** Creating empty or journal-only PRs creates queue noise and defeats the purpose of stopping without a PR.
 **Prevention:** Added a rule to `AGENTS.md` explicitly forbidding the creation of branches or PRs for no-op decisions.
 **Avoid:** Pushing a branch or opening a PR solely to declare a healthy queue or an intentional no-op.
+
+## 2026-05-20 - Forbid appending random identifiers to branch names
+**Coordination issue:** Agents were appending random numbers, UUIDs, or timestamps to the end of their branch names, making duplicate detection tools and human review fail to group related work.
+**Learning:** When branch names end with unique randomized strings, `git branch -r` lists appear noisy, and other agents cannot easily grep or match exact prefixes to detect overlapping intents.
+**Prevention:** Updated `AGENTS.md` to strictly forbid appending random identifiers to branch names. Branch names must be predictable and descriptive.
+**Avoid:** Appending `-1234567890` or similar random/timestamp suffixes to branch names.
