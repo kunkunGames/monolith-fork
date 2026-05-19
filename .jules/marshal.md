@@ -94,3 +94,9 @@
 **Learning:** Without explicit instruction, agents often copy-paste the exact placeholder string provided in their system prompts rather than replacing them with descriptive text.
 **Prevention:** Updated `AGENTS.md` to explicitly forbid using literal strings like `short-topic` or `module-or-area`, requiring them to be replaced with descriptive text.
 **Avoid:** Creating branches containing literal placeholder strings like `short-topic` or `module-or-area`.
+
+## 2026-05-19 - Forbid creating branches or PRs for no-op decisions
+**Coordination issue:** Agents were creating branches and PRs (e.g., `no-op-...`) just to report that they decided not to make changes.
+**Learning:** Creating empty or journal-only PRs creates queue noise and defeats the purpose of stopping without a PR.
+**Prevention:** Added a rule to `AGENTS.md` explicitly forbidding the creation of branches or PRs for no-op decisions.
+**Avoid:** Pushing a branch or opening a PR solely to declare a healthy queue or an intentional no-op.
