@@ -1282,6 +1282,20 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRenameSTState(const TSh
 // 53. move_st_state
 FMonolithActionResult FMonolithAIStateTreeActions::HandleMoveSTState(const TSharedPtr<FJsonObject>& Params)
 {
+	// Validate the cheap, malformation-prone 'index' param before loading the
+	// StateTree asset so an obviously bad request fails fast with an
+	// actionable error instead of a generic "StateTree not found".
+	int32 Index = -1;
+	if (Params->HasField(TEXT("index")))
+	{
+		double TempIndex = 0.0;
+		if (!Params->TryGetNumberField(TEXT("index"), TempIndex))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'index' must be a number"));
+		}
+		Index = static_cast<int32>(TempIndex);
+	}
+
 	FString AssetPath, Error;
 	UStateTree* ST = LoadStateTreeFromParams(Params, AssetPath, Error);
 	if (!ST) return FMonolithActionResult::Error(Error);
@@ -1291,7 +1305,6 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleMoveSTState(const TShar
 
 	FString StateId = Params->GetStringField(TEXT("state_id"));
 	FString NewParentId = Params->GetStringField(TEXT("new_parent_id"));
-	int32 Index = Params->HasField(TEXT("index")) ? static_cast<int32>(Params->GetNumberField(TEXT("index"))) : -1;
 
 	if (StateId.IsEmpty())
 	{
@@ -2006,7 +2019,16 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleGetSTBindableProperties
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
 	FString StateId = Params->GetStringField(TEXT("state_id"));
-	int32 TaskIndex = Params->HasField(TEXT("task_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("task_index"))) : -1;
+	int32 TaskIndex = -1;
+	if (Params->HasField(TEXT("task_index")))
+	{
+		double TempTaskIndex = 0.0;
+		if (!Params->TryGetNumberField(TEXT("task_index"), TempTaskIndex))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'task_index' must be a number"));
+		}
+		TaskIndex = static_cast<int32>(TempTaskIndex);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> PropArr;
 
