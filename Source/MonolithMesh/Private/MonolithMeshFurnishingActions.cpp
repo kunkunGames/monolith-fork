@@ -170,9 +170,10 @@ FMonolithMeshFurnishingActions::FFurnitureItem FMonolithMeshFurnishingActions::P
 	const TSharedPtr<FJsonObject>* DimsObj = nullptr;
 	if (ItemJson->TryGetObjectField(TEXT("dimensions"), DimsObj) && DimsObj && (*DimsObj).IsValid())
 	{
-		if ((*DimsObj)->HasField(TEXT("width")))  Item.Width  = static_cast<float>((*DimsObj)->GetNumberField(TEXT("width")));
-		if ((*DimsObj)->HasField(TEXT("depth")))  Item.Depth  = static_cast<float>((*DimsObj)->GetNumberField(TEXT("depth")));
-		if ((*DimsObj)->HasField(TEXT("height"))) Item.Height = static_cast<float>((*DimsObj)->GetNumberField(TEXT("height")));
+		double TempVal;
+		if ((*DimsObj)->TryGetNumberField(TEXT("width"), TempVal))  Item.Width  = static_cast<float>(TempVal);
+		if ((*DimsObj)->TryGetNumberField(TEXT("depth"), TempVal))  Item.Depth  = static_cast<float>(TempVal);
+		if ((*DimsObj)->TryGetNumberField(TEXT("height"), TempVal)) Item.Height = static_cast<float>(TempVal);
 	}
 
 	// Placement
@@ -208,16 +209,19 @@ FMonolithMeshFurnishingActions::FFurnitureItem FMonolithMeshFurnishingActions::P
 		}
 	}
 
-	if (ItemJson->HasField(TEXT("spacing")))
+	double SpacingVal;
+	if (ItemJson->TryGetNumberField(TEXT("spacing"), SpacingVal))
 	{
-		Item.Spacing = static_cast<float>(ItemJson->GetNumberField(TEXT("spacing")));
+		Item.Spacing = static_cast<float>(SpacingVal);
 	}
 
-	Item.bStretchToWall = ItemJson->HasField(TEXT("stretch_to_wall")) && ItemJson->GetBoolField(TEXT("stretch_to_wall"));
+	bool bStretchVal;
+	Item.bStretchToWall = ItemJson->TryGetBoolField(TEXT("stretch_to_wall"), bStretchVal) && bStretchVal;
 
-	if (ItemJson->HasField(TEXT("material_slot")))
+	double MatSlotVal;
+	if (ItemJson->TryGetNumberField(TEXT("material_slot"), MatSlotVal))
 	{
-		Item.MaterialSlot = static_cast<int32>(ItemJson->GetNumberField(TEXT("material_slot")));
+		Item.MaterialSlot = static_cast<int32>(MatSlotVal);
 	}
 
 	ItemJson->TryGetStringField(TEXT("near"), Item.NearItem);
@@ -772,9 +776,10 @@ FMonolithActionResult FMonolithMeshFurnishingActions::FurnishRoom(const TSharedP
 
 	// --- Parse optional params ---
 	int32 Seed = 0;
-	if (Params->HasField(TEXT("seed")))
+	double SeedVal;
+	if (Params->TryGetNumberField(TEXT("seed"), SeedVal))
 	{
-		Seed = static_cast<int32>(Params->GetNumberField(TEXT("seed")));
+		Seed = static_cast<int32>(SeedVal);
 	}
 	FRandomStream Rng(Seed);
 
@@ -988,9 +993,10 @@ FMonolithActionResult FMonolithMeshFurnishingActions::FurnishBuilding(const TSha
 	Params->TryGetStringField(TEXT("block_id"), BlockId);
 
 	int32 Seed = 0;
-	if (Params->HasField(TEXT("seed")))
+	double SeedVal;
+	if (Params->TryGetNumberField(TEXT("seed"), SeedVal))
 	{
-		Seed = static_cast<int32>(Params->GetNumberField(TEXT("seed")));
+		Seed = static_cast<int32>(SeedVal);
 	}
 
 	FString Density = TEXT("normal");
@@ -1003,9 +1009,10 @@ FMonolithActionResult FMonolithMeshFurnishingActions::FurnishBuilding(const TSha
 	Params->TryGetStringField(TEXT("folder"), Folder);
 
 	float Decay = 0.0f;
-	if (Params->HasField(TEXT("decay")))
+	double DecayVal;
+	if (Params->TryGetNumberField(TEXT("decay"), DecayVal))
 	{
-		Decay = FMath::Clamp(static_cast<float>(Params->GetNumberField(TEXT("decay"))), 0.0f, 1.0f);
+		Decay = FMath::Clamp(static_cast<float>(DecayVal), 0.0f, 1.0f);
 	}
 
 	// Parse skip_room_types
@@ -1118,7 +1125,8 @@ FMonolithActionResult FMonolithMeshFurnishingActions::FurnishBuilding(const TSha
 
 		if (RoomResult.bSuccess && RoomResult.Result.IsValid())
 		{
-			int32 Placed = static_cast<int32>(RoomResult.Result->GetNumberField(TEXT("total_placed")));
+			double PlacedVal;
+			int32 Placed = RoomResult.Result->TryGetNumberField(TEXT("total_placed"), PlacedVal) ? static_cast<int32>(PlacedVal) : 0;
 			TotalItems += Placed;
 			ItemsByRoomType.FindOrAdd(Room->RoomType) += Placed;
 			++RoomsFurnished;

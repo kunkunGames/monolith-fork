@@ -44,3 +44,9 @@
 **Learning:** This crashes or defaults to incorrect values (like 0.0) without throwing a validation error because `HasField` returns true even for wrong types. This allows malformed client input to mutate assets with unintended defaults.
 **Prevention:** Always use `TryGetNumberField`, `TryGetBoolField`, etc. If it fails, explicitly return an invalid-param error instead of silently falling back to defaults.
 **Avoid:** Leaving `HasField` plus `GetNumberField` or `GetBoolField` around optional properties.
+
+## 2026-05-18 - Harden mesh furnishing parameter parsing
+**Malformed input pattern:** `HasField` checks followed by `GetNumberField` in `ParseFurnitureItemJson` and other furnishing actions in `MonolithMeshFurnishingActions.cpp`.
+**Learning:** `HasField` only confirms a field exists, it does not confirm the type. Calling `GetNumberField` directly causes assertions if the JSON type is incorrect (e.g. a string).
+**Prevention:** Use `TryGetNumberField` to safely validate existence and extract type in a single call.
+**Avoid:** Assuming `HasField` is sufficient for robust optional parameter type safety.
