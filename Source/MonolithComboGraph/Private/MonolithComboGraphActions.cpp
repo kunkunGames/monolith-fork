@@ -2020,6 +2020,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontage
 		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	const TArray<TSharedPtr<FJsonValue>>* MontagesArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("montages"), MontagesArr) || !MontagesArr || MontagesArr->Num() == 0)
 	{
