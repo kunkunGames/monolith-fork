@@ -1325,6 +1325,15 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldPatrolInvestigat
 	FString PatrolType = Params->GetStringField(TEXT("patrol_type"));
 	if (PatrolType.IsEmpty()) PatrolType = TEXT("loop");
 
+	if (Params->HasField(TEXT("investigation_radius")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("investigation_radius"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'investigation_radius' must be a number"));
+		}
+	}
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Scaffold Patrol+Investigate AI")));
 
 	TArray<FString> CreatedAssets;
