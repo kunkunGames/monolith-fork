@@ -3,7 +3,7 @@
 	"Version": 2,
 	"VersionName": "0.14.10",
 	"FriendlyName": "Monolith",
-	"Description": "Unified Unreal Engine MCP server — 1551 active actions across 38 in-tree domains (AI 243, Animation 135, Asset 4, Audio 98, Blueprint 96, ChaosFracture 3, Chooser 6, Cloth 2, Collection 13, ComboGraph 13, Config 10, Context 4, Dataflow 2, Editor 53, GameFeatures 1 + 4 gated, GAS 135, Generate 5, HLOD 12, Input 10, Interchange 16, Level 7, LevelInstance 13, LevelSequence 10, Localization 4, LogicDriver 66, Material 63, Paper2D 3, Mesh 236 active + 24 experimental, PCG 4, MetaHuman 2, Monolith 31, nDisplay 2, Niagara 109, Project 7, Source 11, SourceControl 7, UI 121, WorldConditions 4). AI-powered asset creation, inspection, and modification.",
+	"Description": "Unified Unreal Engine MCP server — 1552 active actions across 39 in-tree domains (AI 243, Animation 135, Asset 4, Audio 98, Blueprint 96, ChaosFracture 3, Chooser 6, Cloth 2, Collection 13, ComboGraph 13, Config 10, Context 4, Dataflow 2, Editor 53, GameFeatures 1 + 4 gated, GAS 135, Generate 5, HLOD 12, Input 10, Interchange 16, Level 7, LevelInstance 13, LevelSequence 10, Localization 4, LogicDriver 66, Material 63, Paper2D 3, Mesh 236 active + 24 experimental, PCG 4, MetaHuman 2, Monolith 31, nDisplay 2, Niagara 109, Project 7, Slate 1 + 5 gated, Source 11, SourceControl 7, UI 121, WorldConditions 4). AI-powered asset creation, inspection, and modification.",
 	"Category": "Editor",
 	"CreatedBy": "tumourlove",
 	"CreatedByURL": "https://github.com/tumourlove/monolith",
@@ -212,6 +212,11 @@
 		},
 		{
 			"Name": "MonolithUI",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MonolithSlate",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
 		},

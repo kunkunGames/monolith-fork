@@ -325,6 +325,12 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Modules")
 	bool bEnableUI = true;
 
+	/** Enables detailed read-only Slate inspector actions beyond get_inspector_status. */
+	UPROPERTY(config, EditAnywhere, Category="Modules|Optional",
+		meta=(DisplayName="Enable Slate Inspector Actions",
+			  ToolTip="Registers read-only slate inspection actions beyond get_inspector_status. Default off; restart required."))
+	bool bEnableSlateInspectorActions = false;
+
 	UPROPERTY(config, EditAnywhere, Category="Modules", DisplayName="Enable Mesh Module")
 	bool bEnableMesh = true;
 

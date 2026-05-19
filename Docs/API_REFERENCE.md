@@ -34,6 +34,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [mesh](#mesh) | 236 (+24 gated) | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental — +24 town gen registers only with `bEnableProceduralTownGen=true`) |
 | [ndisplay](#ndisplay) | 2 | Optional nDisplay / DisplayCluster config discovery registered by MonolithNDisplay |
 | [pcg](#pcg) | 4 | Optional PCG AssetRegistry/reflection discovery registered by MonolithPCG |
+| [slate](#slate) | 1 (+5 gated) | Live editor Slate window/widget inspection registered by MonolithSlate |
 | [ui](#ui) | 121 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
@@ -70,6 +71,7 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `dataflow.get_status`, `dataflow.list_assets` | **ROUTE CHANGE** | Moved Dataflow discovery from `mesh.get_dataflow_status` / `mesh.list_dataflow_assets` into the dedicated `MonolithDataflow` module and `dataflow` namespace. |
 | `chaos_fracture.*` | **ROUTE CHANGE** | Moved Geometry Collection / Fracture visibility from `mesh.*` action names into the dedicated `MonolithChaosFracture` module and `chaos_fracture` namespace. |
 | `gamefeatures.*` | **NEW** | Adds `gamefeatures.get_status` plus four opt-in read-only inspection actions in the dedicated `MonolithGameFeatures` module. |
+| `slate.*` | **NEW** | Adds `slate.get_inspector_status` plus five opt-in read-only live Slate window/widget inspection actions in the dedicated `MonolithSlate` module. |
 | `ndisplay.*` | **OWNER CHANGE** | Kept the public `ndisplay` action names but moved registration from `MonolithMesh` to `MonolithNDisplay`. |
 | `interchange.*` | **OWNER CHANGE** | Kept the public `interchange` action names but moved registration from `MonolithMesh` to `MonolithInterchange`. |
 
@@ -979,6 +981,21 @@ Creation is reserved for a later spec. The current module does not register `cre
 
 ---
 
+## slate
+
+Read-only live editor Slate UI inspection registered by `MonolithSlate`. The status action is always available; the five detailed inspection actions are off by default and require `bEnableSlateInspectorActions=true` plus an editor restart. The module does not link UE 5.8 `SlateInspectorToolset`, `ToolsetRegistry`, or UnrealMCP, and it does not register click, keyboard, hover, text input, or widget mutation actions.
+
+| Action | Key params | Gate | Purpose |
+|--------|------------|------|---------|
+| `get_inspector_status` | none | always | Reports Slate initialization, feature-flag state, visible window count, ref generation, TTL, and registered/gated action lists. |
+| `list_windows` | `include_titles` | `bEnableSlateInspectorActions` | Lists visible top-level Slate windows with bounded geometry and redacted titles. |
+| `snapshot_widgets` | `window_index`, `max_depth`, `max_widgets`, `include_hidden` | `bEnableSlateInspectorActions` | Builds a bounded flat tree and returns short-lived opaque widget refs. |
+| `describe_widget` | `ref` | `bEnableSlateInspectorActions` | Resolves a current ref and returns type, state, geometry, text, parent, and capped child summaries. |
+| `capture_widget` | `ref`, `max_bytes` | `bEnableSlateInspectorActions` | Captures a Slate widget or active Slate window with Slate screenshot APIs and returns capped PNG base64. |
+| `wait_for_widget` | `text_contains`, `type`, `visible`, `timeout_ms`, `poll_interval_ms` | `bEnableSlateInspectorActions` | Runs a bounded single-scan read-only search for a matching widget condition without input simulation. |
+
+---
+
 ## mesh
 
 Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript, procedural geometry, lighting, audio, performance, and **experimental** procedural town generation. **241 default-active actions** — plus 24 experimental town gen actions when `bEnableProceduralTownGen=true` (default `false`), for 265 total mesh actions when fully registered.
@@ -1410,6 +1427,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 | MonolithGameFeatures | `bEnableGameFeatureActions` for detailed inspection actions | 1 `gamefeatures.get_status` action always registered; 4 more read-only inspection actions when enabled |
 | MonolithPCG | none (AssetRegistry/reflection-only optional plugin probe) | 4 `pcg` namespace discovery actions |
 | MonolithPaper2D | none (AssetRegistry-only optional plugin probe) | 3 `paper2d` namespace discovery actions |
+| MonolithSlate | `bEnableSlateInspectorActions` for detailed inspection actions | 1 `slate.get_inspector_status` action always registered; 5 more read-only inspection actions when enabled |
 
 ---
 

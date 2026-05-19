@@ -45,6 +45,7 @@ Use `{namespace}_query(action, params)` after discovering the namespace. Common 
 - `paper2d_query` — Paper2D asset inspection
 - `pcg_query` — PCG graph inspection
 - `project_query` — Project-wide asset search
+- `slate_query` — Live editor Slate window/widget inspection
 - `source_control_query` — Source control status and workspace inspection
 - `source_query` — Engine C++ source lookup, class hierarchy, callers/callees
 - `ui_query` — Widget blueprints, templates, styling, accessibility

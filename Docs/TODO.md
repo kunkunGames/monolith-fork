@@ -1,6 +1,6 @@
 # Monolith — TODO
 
-Last updated: 2026-05-19 (GameFeatures read-only inspection accepted)
+Last updated: 2026-05-19 (Slate inspector module accepted)
 
 ---
 
@@ -9,6 +9,14 @@ Last updated: 2026-05-19 (GameFeatures read-only inspection accepted)
 - [x] `MonolithGameFeatures` owns the `gamefeatures` namespace instead of mounting Game Feature inspection from `MonolithIndex` or `MonolithMesh`.
 - [x] `gamefeatures.get_status` is always registered; `list_plugins`, `find_game_feature_data`, `describe_game_feature_data`, and `validate_plugin` register only when `bEnableGameFeatureActions=true`.
 - [x] Creation remains reserved behind `bAllowGameFeaturePluginCreation`; no create, activate, deactivate, overwrite, delete, or descriptor mutation action is registered.
+
+---
+
+### MonolithSlate — Read-Only Inspector COMPLETE (2026-05-19)
+
+- [x] `MonolithSlate` owns the `slate` namespace instead of mounting live Slate window/widget inspection under `MonolithUI`.
+- [x] `slate.get_inspector_status` is always registered; `list_windows`, `snapshot_widgets`, `describe_widget`, `capture_widget`, and `wait_for_widget` register only when `bEnableSlateInspectorActions=true`.
+- [x] Input automation remains deferred; no click, hover, key, text input, or widget mutation action is registered.
 
 ---
 

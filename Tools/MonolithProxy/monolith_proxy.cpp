@@ -127,6 +127,7 @@ static const std::vector<std::string> CORE_QUERY_TOOLS = {
     "paper2d_query",
     "pcg_query",
     "project_query",
+    "slate_query",
     "source_control_query",
     "source_query",
     "ui_query",
