@@ -2,6 +2,7 @@
 #include "Actions/Hoisted/ShadowActions.h"
 
 // Monolith registry
+#include "MonolithPackagePathValidator.h"
 #include "MonolithToolRegistry.h"
 
 // JSON
@@ -401,6 +402,11 @@ FMonolithActionResult MonolithUI::FShadowActions::HandleApplyBoxShadow(const TSh
                 : SavedMIDDestination;
             AssetToolsModule->Get().CreateUniqueAssetName(
                 PerLayerBase, /*Suffix=*/FString(), UniquePackageName, UniqueAssetName);
+
+            if (const FString ValidationError = MonolithCore::ValidatePackagePath(UniquePackageName); !ValidationError.IsEmpty())
+            {
+                return FMonolithActionResult::Error(ValidationError, -32603);
+            }
 
             UPackage* Package = CreatePackage(*UniquePackageName);
             if (!Package)
