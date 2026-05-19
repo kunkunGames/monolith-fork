@@ -400,6 +400,7 @@ namespace
 
 		// Tests
 		TArray<TSharedPtr<FJsonValue>> TestsArr;
+		TestsArr.Reserve(Option->Tests.Num());
 		for (int32 i = 0; i < Option->Tests.Num(); ++i)
 		{
 			TestsArr.Add(MakeShared<FJsonValueObject>(SerializeEQSTest(Option->Tests[i], i)));
@@ -502,6 +503,7 @@ namespace
 		TArray<TSharedPtr<FJsonValue>> Items;
 		TArray<UClass*> DerivedClasses;
 		GetDerivedClasses(BaseClass, DerivedClasses);
+		Items.Reserve(DerivedClasses.Num());
 
 		for (UClass* Cls : DerivedClasses)
 		{
@@ -796,6 +798,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleGetEQSQuery(const TSharedPtr<
 
 	const TArray<UEnvQueryOption*>& Options = Query->GetOptions();
 	TArray<TSharedPtr<FJsonValue>> OptionsArr;
+	OptionsArr.Reserve(Options.Num());
 	for (int32 i = 0; i < Options.Num(); ++i)
 	{
 		OptionsArr.Add(MakeShared<FJsonValueObject>(SerializeEQSOption(Options[i], i)));
@@ -820,6 +823,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleListEQSQueries(const TSharedP
 	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
 
 	TArray<TSharedPtr<FJsonValue>> Items;
+	Items.Reserve(Assets.Num());
 	for (const FAssetData& Asset : Assets)
 	{
 		FString AssetObjPath = Asset.GetObjectPathString();
