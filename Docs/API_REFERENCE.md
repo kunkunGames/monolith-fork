@@ -1139,6 +1139,21 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAI.md` for the deep dive — it's 
 
 ---
 
+## world_conditions
+
+Read-only inspection of Unreal WorldConditions query definitions, focused on SmartObject preconditions. **4 actions.** Disabled by default through `bEnableWorldConditionsInspection`; optional compile guards are `WITH_MONOLITH_WORLDCONDITIONS` and `WITH_MONOLITH_WORLDCONDITIONS_SMARTOBJECTS`.
+
+| Action | Params | Notes |
+|--------|--------|-------|
+| `get_status` | none | Reports feature flag state, compile guards, module availability, and candidate owner count. |
+| `list_query_owners` | `path_filter?`, `limit?` | Lists SmartObjectDefinition assets that can own object/slot WorldCondition preconditions. |
+| `describe_query` | `asset_path`, `query?`, `slot_index?` | Describes object `preconditions` or slot `slot_selection_preconditions` without mutating assets. |
+| `describe_condition_types` | `limit?` | Lists loaded `FWorldConditionBase`-derived struct types and reflected property metadata. |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithWorldConditions.md`.
+
+---
+
 ## logicdriver
 
 Logic Driver Pro state machines: graph CRUD, node configuration, runtime PIE control, scaffolds, dialogue, text graph extraction. **66 actions.** **Conditional on `#if WITH_LOGICDRIVER`** — requires the Logic Driver Pro marketplace plugin. Reflection-only (precompiled marketplace plugin).
@@ -1364,6 +1379,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 | MonolithComboGraph | `WITH_COMBOGRAPH` (ComboGraph marketplace plugin) | 0 |
 | MonolithLogicDriver | `WITH_LOGICDRIVER` (Logic Driver Pro marketplace plugin) | 0 |
 | MonolithAI | `WITH_STATETREE` + `WITH_SMARTOBJECTS` (engine plugins) | 0 |
+| MonolithWorldConditions | `WITH_MONOLITH_WORLDCONDITIONS` + `WITH_MONOLITH_WORLDCONDITIONS_SMARTOBJECTS` for SmartObject query owners | Status-only unavailable responses |
 | MonolithUI CommonUI | `WITH_COMMONUI` | 42 (UMG baseline only) |
 | MonolithAudio MetaSound | `WITH_METASOUND` | Sound Cue + CRUD + batch (no MetaSound graph) |
 | MonolithMesh town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | 236 core `mesh` actions (24 additional town gen actions when enabled) |
