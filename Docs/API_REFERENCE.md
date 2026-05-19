@@ -2,7 +2,7 @@
 
 **Version:** v0.14.10 · **Last updated:** 2026-05-18
 
-**In-tree action total: 1573** active actions across **34 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1597). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1569** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 38.
+**In-tree action total: 1576** active actions across **34 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1600). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1572** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 38.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
@@ -18,7 +18,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 |-----------|---------|-------------|
 | [monolith](#monolith) | 4 | Core server tools (discover, status, update, reindex) |
 | [blueprint](#blueprint) | 93 | Blueprint read/write, variable/component/graph CRUD, DataTable maintenance, node ops, compile, auto-layout, spawn actors |
-| [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
+| [material](#material) | 66 | Material graph editing, inspection, CRUD, material functions, PBR pipeline, optional Paper2D discovery |
 | [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
 | [editor](#editor) | 36 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, selection inspection, PIE/console control |
@@ -35,7 +35,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [ai](#ai) | 221 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD and document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
-| **In-tree subtotal** | **1567** | (default-active; +24 experimental town gen → 1591 when registered) |
+| **In-tree subtotal** | **1570** | (default-active; +24 experimental town gen → 1594 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -61,6 +61,7 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `monolith.discover` / `monolith.describe_domain` action rows | Metadata added | Each action row includes `execution_policy` metadata (`policy_id`, `defaulted`, dirty-package/transaction/validation flags). Explicit mutating policies can now opt into central dirty-package tracking, transaction wrapping, and post-edit validation. |
 | `monolith.set_action_execution_policy` | Placeholder promoted | Developer-only local override for known action execution policies. Supports `read_only`, `track_dirty_packages`, `transaction_optional`, `transaction_required`, and `post_edit_validate`. |
 | `pcg.get_graph_asset` | **NEW** | Adds bounded AssetRegistry metadata inspection for one PCG graph-like asset without loading PCG classes or adding a hard PCG dependency. |
+| `material.get_paper2d_asset` | **NEW** | Returns one Paper2D AssetRegistry row and bounded tags under `/Game` without loading Paper2D assets or depending on Paper2D headers. |
 
 The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespaces — same handler, two callable paths. Pick whichever reads better from your client.
 
@@ -280,7 +281,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithBlueprint.md` for the deep dive.
 
 ## material
 
-Material graph editing, inspection, CRUD, material functions, instances, custom HLSL nodes, PBR pipeline. **63 actions.**
+Material graph editing, inspection, CRUD, material functions, instances, custom HLSL nodes, PBR pipeline, optional Paper2D discovery. **66 actions.**
 
 > For full param schemas, call `monolith_discover("material")` at runtime.
 
@@ -291,12 +292,13 @@ Material graph editing, inspection, CRUD, material functions, instances, custom 
 | Graph inspection | 7 | `get_all_expressions`, `get_expression_details`, `get_full_connection_graph`, `get_expression_pin_info`, `get_expression_connections`, `list_expression_classes`, `get_compilation_stats` |
 | Graph CRUD | 12 | `build_material_graph`, `connect_expressions`, `disconnect_expression`, `delete_expression`, `delete_expressions`, `clear_graph`, `move_expression`, `duplicate_expression`, `replace_expression`, `rename_expression`, `set_expression_property`, `auto_layout` |
 | Material assets | 7 | `create_material`, `create_material_instance`, `duplicate_material`, `save_material`, `set_material_property`, `get_material_properties`, `recompile_material` |
-| Material instances | 6 | `get_material_parameters`, `get_instance_parameters`, `set_instance_parameter`, `set_instance_parameters`, `set_instance_parent`, `clear_instance_parameter`, `list_material_instances` |
+| Material instances | 7 | `get_material_parameters`, `get_instance_parameters`, `set_instance_parameter`, `set_instance_parameters`, `set_instance_parent`, `clear_instance_parameter`, `list_material_instances` |
 | Material functions | 12 | `create_material_function`, `build_function_graph`, `get_function_info`, `export_function_graph`, `set_function_metadata`, `update_material_function`, `delete_function_expression`, `create_function_instance`, `set_function_instance_parameter`, `get_function_instance_info`, `layout_function_expressions`, `rename_function_parameter_group` |
 | Custom HLSL | 2 | `create_custom_hlsl_node`, `update_custom_hlsl_node` |
 | Spec / templates | 3 | `export_material_graph`, `import_material_graph`, `validate_material` |
 | Preview / capture | 2 | `render_preview`, `get_thumbnail` |
-| Textures | 5 | `import_texture`, `create_pbr_material_from_disk`, `get_texture_properties`, `preview_texture`, `preview_textures`, `check_tiling_quality` |
+| Textures | 6 | `import_texture`, `create_pbr_material_from_disk`, `get_texture_properties`, `preview_texture`, `preview_textures`, `check_tiling_quality` |
+| Optional Paper2D visibility | 3 | `get_paper2d_status`, `list_paper2d_assets`, `get_paper2d_asset` |
 | Layers | 1 | `get_layer_info` |
 | Batch | 2 | `batch_set_material_property`, `batch_recompile` |
 | Transactions | 2 | `begin_transaction`, `end_transaction` |

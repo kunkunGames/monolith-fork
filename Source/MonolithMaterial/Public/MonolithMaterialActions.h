@@ -108,6 +108,7 @@ public:
 	// --- Optional Paper2D discovery (texture/atlas-adjacent) ---
 	static FMonolithActionResult GetPaper2DStatus(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ListPaper2DAssets(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GetPaper2DAsset(const TSharedPtr<FJsonObject>& Params);
 
 private:
 	/** Load a UMaterial from an asset path. Returns nullptr on failure. */

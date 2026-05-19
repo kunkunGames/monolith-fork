@@ -45,6 +45,7 @@
 #include "ObjectTools.h"
 #include "ImageUtils.h"
 #include "UObject/SavePackage.h"
+#include "UObject/SoftObjectPath.h"
 #include "AssetToolsModule.h"
 #include "AssetImportTask.h"
 #include "Engine/Texture2D.h"
@@ -100,9 +101,26 @@ static FString NormalizeInputPinName(const FString& PinName)
 
 namespace MonolithMaterialPaper2D
 {
+	struct FTagRow
+	{
+		FString Name;
+		FString Value;
+		bool bValueTruncated = false;
+	};
+
 	static int32 ClampLimit(double LimitValue)
 	{
 		return FMath::Clamp(static_cast<int32>(LimitValue), 1, 500);
+	}
+
+	static int32 ClampTagLimit(double LimitValue)
+	{
+		return FMath::Clamp(static_cast<int32>(LimitValue), 0, 200);
+	}
+
+	static bool IsProjectAssetPath(const FString& AssetPath)
+	{
+		return AssetPath == TEXT("/Game") || AssetPath.StartsWith(TEXT("/Game/"));
 	}
 
 	static bool IsPaper2DAssetClass(const FAssetData& AssetData)
@@ -112,6 +130,107 @@ namespace MonolithMaterialPaper2D
 			|| ClassName == TEXT("PaperFlipbook")
 			|| ClassName == TEXT("PaperTileSet")
 			|| ClassName == TEXT("PaperTileMap");
+	}
+
+	static TSharedPtr<FJsonObject> BuildPaper2DAssetRow(const FAssetData& AssetData)
+	{
+		auto Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("object_path"), AssetData.GetObjectPathString());
+		Row->SetStringField(TEXT("package_name"), AssetData.PackageName.ToString());
+		Row->SetStringField(TEXT("package_path"), AssetData.PackagePath.ToString());
+		Row->SetStringField(TEXT("asset_name"), AssetData.AssetName.ToString());
+		Row->SetStringField(TEXT("asset_class"), AssetData.AssetClassPath.GetAssetName().ToString());
+		Row->SetStringField(TEXT("asset_class_path"), AssetData.AssetClassPath.ToString());
+		Row->SetBoolField(TEXT("loaded"), AssetData.IsAssetLoaded());
+		return Row;
+	}
+
+	static bool ResolvePaper2DAssetData(IAssetRegistry& AssetRegistry, const FString& RawAssetPath, FAssetData& OutAssetData, FString& OutError)
+	{
+		FString AssetPath = RawAssetPath;
+		AssetPath.TrimStartAndEndInline();
+		if (AssetPath.IsEmpty() || !IsProjectAssetPath(AssetPath))
+		{
+			OutError = TEXT("asset_path must be under /Game");
+			return false;
+		}
+
+		FAssetData DirectAsset = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(AssetPath));
+		if (DirectAsset.IsValid())
+		{
+			if (!IsPaper2DAssetClass(DirectAsset))
+			{
+				OutError = FString::Printf(TEXT("asset_path does not identify a Paper2D asset: %s"), *AssetPath);
+				return false;
+			}
+
+			OutAssetData = DirectAsset;
+			return true;
+		}
+
+		FString PackageName = AssetPath;
+		int32 DotIndex = INDEX_NONE;
+		if (PackageName.FindChar(TEXT('.'), DotIndex))
+		{
+			PackageName.LeftInline(DotIndex);
+		}
+
+		TArray<FAssetData> PackageAssets;
+		AssetRegistry.GetAssetsByPackageName(FName(*PackageName), PackageAssets, true);
+		for (const FAssetData& PackageAsset : PackageAssets)
+		{
+			if (IsPaper2DAssetClass(PackageAsset))
+			{
+				OutAssetData = PackageAsset;
+				return true;
+			}
+		}
+
+		OutError = PackageAssets.Num() > 0
+			? FString::Printf(TEXT("asset_path does not identify a Paper2D asset: %s"), *AssetPath)
+			: FString::Printf(TEXT("Paper2D asset not found: %s"), *AssetPath);
+		return false;
+	}
+
+	static TArray<TSharedPtr<FJsonValue>> BuildBoundedPaper2DTagRows(const FAssetData& AssetData, int32 TagLimit, int32& OutTagCount, bool& bOutTagsTruncated)
+	{
+		constexpr int32 MaxTagValueLength = 512;
+
+		TArray<FTagRow> TagRows;
+		AssetData.EnumerateTags([&TagRows](TPair<FName, FAssetTagValueRef> Pair)
+		{
+			FTagRow Row;
+			Row.Name = Pair.Key.ToString();
+			Row.Value = Pair.Value.AsString();
+			if (Row.Value.Len() > MaxTagValueLength)
+			{
+				Row.Value.LeftInline(MaxTagValueLength);
+				Row.bValueTruncated = true;
+			}
+			TagRows.Add(MoveTemp(Row));
+		});
+
+		TagRows.Sort([](const FTagRow& A, const FTagRow& B)
+		{
+			return A.Name < B.Name;
+		});
+
+		OutTagCount = TagRows.Num();
+		const int32 ReturnedCount = FMath::Min(TagLimit, TagRows.Num());
+		bOutTagsTruncated = TagRows.Num() > ReturnedCount;
+
+		TArray<TSharedPtr<FJsonValue>> JsonRows;
+		JsonRows.Reserve(ReturnedCount);
+		for (int32 Index = 0; Index < ReturnedCount; ++Index)
+		{
+			auto Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("name"), TagRows[Index].Name);
+			Row->SetStringField(TEXT("value"), TagRows[Index].Value);
+			Row->SetBoolField(TEXT("value_truncated"), TagRows[Index].bValueTruncated);
+			JsonRows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+
+		return JsonRows;
 	}
 
 	static TSharedPtr<FJsonObject> MakeModuleStatus(const TCHAR* ModuleName)
@@ -767,6 +886,15 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("package_path"), TEXT("string"), TEXT("Content path to scan, under /Game. Default: /Game"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum returned rows, clamped to 1..500. Default: 100."))
 			.Build());
+
+	Registry.RegisterAction(TEXT("material"), TEXT("get_paper2d_asset"),
+		TEXT("Inspect bounded AssetRegistry metadata for one Paper2D asset under /Game. Does not load Paper2D modules or mutate assets."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMaterialActions::GetPaper2DAsset),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Paper2D package or object path under /Game"))
+			.Optional(TEXT("include_tags"), TEXT("boolean"), TEXT("Include bounded AssetRegistry tag rows. Default: true."))
+			.Optional(TEXT("tag_limit"), TEXT("integer"), TEXT("Maximum tag rows to return, clamped to 0..200. Default: 50."))
+			.Build());
 }
 
 // ============================================================================
@@ -1038,6 +1166,7 @@ FMonolithActionResult FMonolithMaterialActions::GetPaper2DStatus(const TSharedPt
 	TArray<TSharedPtr<FJsonValue>> ImplementedActions;
 	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("material.get_paper2d_status")));
 	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("material.list_paper2d_assets")));
+	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("material.get_paper2d_asset")));
 	ResultJson->SetArrayField(TEXT("implemented_actions"), ImplementedActions);
 
 	TArray<TSharedPtr<FJsonValue>> FutureActions;
@@ -1105,15 +1234,7 @@ FMonolithActionResult FMonolithMaterialActions::ListPaper2DAssets(const TSharedP
 			continue;
 		}
 
-		auto Row = MakeShared<FJsonObject>();
-		Row->SetStringField(TEXT("object_path"), AssetData.GetObjectPathString());
-		Row->SetStringField(TEXT("package_name"), AssetData.PackageName.ToString());
-		Row->SetStringField(TEXT("package_path"), AssetData.PackagePath.ToString());
-		Row->SetStringField(TEXT("asset_name"), AssetData.AssetName.ToString());
-		Row->SetStringField(TEXT("asset_class"), ClassName);
-		Row->SetStringField(TEXT("asset_class_path"), AssetData.AssetClassPath.ToString());
-		Row->SetBoolField(TEXT("loaded"), AssetData.IsAssetLoaded());
-		Rows.Add(MakeShared<FJsonValueObject>(Row));
+		Rows.Add(MakeShared<FJsonValueObject>(MonolithMaterialPaper2D::BuildPaper2DAssetRow(AssetData)));
 	}
 
 	auto CountsJson = MakeShared<FJsonObject>();
@@ -1132,6 +1253,60 @@ FMonolithActionResult FMonolithMaterialActions::ListPaper2DAssets(const TSharedP
 	ResultJson->SetBoolField(TEXT("truncated"), MatchedCount > Rows.Num());
 	ResultJson->SetObjectField(TEXT("class_counts"), CountsJson);
 	ResultJson->SetArrayField(TEXT("assets"), Rows);
+	return FMonolithActionResult::Success(ResultJson);
+}
+
+FMonolithActionResult FMonolithMaterialActions::GetPaper2DAsset(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("asset_path is required and must be under /Game"));
+	}
+	AssetPath.TrimStartAndEndInline();
+
+	bool bIncludeTags = true;
+	Params->TryGetBoolField(TEXT("include_tags"), bIncludeTags);
+
+	double TagLimitValue = 50.0;
+	Params->TryGetNumberField(TEXT("tag_limit"), TagLimitValue);
+	const int32 TagLimit = MonolithMaterialPaper2D::ClampTagLimit(TagLimitValue);
+
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	FAssetData AssetData;
+	FString ErrorMessage;
+	if (!MonolithMaterialPaper2D::ResolvePaper2DAssetData(AssetRegistry, AssetPath, AssetData, ErrorMessage))
+	{
+		return FMonolithActionResult::Error(ErrorMessage);
+	}
+
+	int32 TagCount = 0;
+	bool bTagsTruncated = false;
+	TArray<TSharedPtr<FJsonValue>> Tags;
+	if (bIncludeTags)
+	{
+		Tags = MonolithMaterialPaper2D::BuildBoundedPaper2DTagRows(AssetData, TagLimit, TagCount, bTagsTruncated);
+	}
+	else
+	{
+		bool bIgnoredTruncated = false;
+		MonolithMaterialPaper2D::BuildBoundedPaper2DTagRows(AssetData, 0, TagCount, bIgnoredTruncated);
+	}
+
+	auto ResultJson = MakeShared<FJsonObject>();
+	ResultJson->SetStringField(TEXT("namespace"), TEXT("material"));
+	ResultJson->SetStringField(TEXT("domain"), TEXT("paper2d_discovery"));
+	ResultJson->SetStringField(TEXT("requested_path"), AssetPath);
+	ResultJson->SetObjectField(TEXT("asset"), MonolithMaterialPaper2D::BuildPaper2DAssetRow(AssetData));
+	ResultJson->SetBoolField(TEXT("tags_included"), bIncludeTags);
+	ResultJson->SetNumberField(TEXT("tag_count"), TagCount);
+	ResultJson->SetNumberField(TEXT("returned_tag_count"), Tags.Num());
+	ResultJson->SetNumberField(TEXT("tag_limit"), TagLimit);
+	ResultJson->SetBoolField(TEXT("tags_truncated"), bIncludeTags && bTagsTruncated);
+	if (bIncludeTags)
+	{
+		ResultJson->SetArrayField(TEXT("tags"), Tags);
+	}
 	return FMonolithActionResult::Success(ResultJson);
 }
 

@@ -66,3 +66,22 @@ bool FMonolithMaterialConnectExpressionsAcceptsAliasTest::RunTest(const FString&
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithMaterialPaper2DAssetRejectsUnsafePathTest, "Monolith.ParamGuard.MonolithMaterial.Paper2DAssetRejectsUnsafePath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithMaterialPaper2DAssetRejectsUnsafePathTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	FMonolithMaterialActions::RegisterActions(Registry);
+
+	TestTrue(TEXT("material.get_paper2d_asset should be registered"), Registry.HasAction(TEXT("material"), TEXT("get_paper2d_asset")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("D:/OutsideProject/PaperSprite.uasset"));
+
+	const FMonolithActionResult Result = Registry.ExecuteAction(TEXT("material"), TEXT("get_paper2d_asset"), Params);
+	TestFalse(TEXT("Unsafe filesystem paths should be rejected"), Result.bSuccess);
+	TestTrue(TEXT("Error should name the /Game guard"), Result.ErrorMessage.Contains(TEXT("/Game")));
+
+	return true;
+}
