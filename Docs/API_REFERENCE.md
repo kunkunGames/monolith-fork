@@ -2,7 +2,7 @@
 
 **Version:** v0.14.10 · **Last updated:** 2026-05-18
 
-**In-tree action total: 1576** active actions across **34 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1600). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1572** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 38.
+**In-tree action total: 1576** active actions across **35 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1600). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1572** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 39.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
@@ -18,7 +18,8 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 |-----------|---------|-------------|
 | [monolith](#monolith) | 4 | Core server tools (discover, status, update, reindex) |
 | [blueprint](#blueprint) | 93 | Blueprint read/write, variable/component/graph CRUD, DataTable maintenance, node ops, compile, auto-layout, spawn actors |
-| [material](#material) | 66 | Material graph editing, inspection, CRUD, material functions, PBR pipeline, optional Paper2D discovery |
+| [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
+| [paper2d](#paper2d) | 3 | Optional Paper2D AssetRegistry discovery registered by MonolithMaterial |
 | [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
 | [editor](#editor) | 36 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, selection inspection, PIE/console control |
@@ -61,7 +62,7 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `monolith.discover` / `monolith.describe_domain` action rows | Metadata added | Each action row includes `execution_policy` metadata (`policy_id`, `defaulted`, dirty-package/transaction/validation flags). Explicit mutating policies can now opt into central dirty-package tracking, transaction wrapping, and post-edit validation. |
 | `monolith.set_action_execution_policy` | Placeholder promoted | Developer-only local override for known action execution policies. Supports `read_only`, `track_dirty_packages`, `transaction_optional`, `transaction_required`, and `post_edit_validate`. |
 | `pcg.get_graph_asset` | **NEW** | Adds bounded AssetRegistry metadata inspection for one PCG graph-like asset without loading PCG classes or adding a hard PCG dependency. |
-| `material.get_paper2d_asset` | **NEW** | Returns one Paper2D AssetRegistry row and bounded tags under `/Game` without loading Paper2D assets or depending on Paper2D headers. |
+| `paper2d.get_asset` | **NEW** | Returns one Paper2D AssetRegistry row and bounded tags under `/Game` without loading Paper2D assets or depending on Paper2D headers. |
 
 The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespaces — same handler, two callable paths. Pick whichever reads better from your client.
 
@@ -281,7 +282,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithBlueprint.md` for the deep dive.
 
 ## material
 
-Material graph editing, inspection, CRUD, material functions, instances, custom HLSL nodes, PBR pipeline, optional Paper2D discovery. **66 actions.**
+Material graph editing, inspection, CRUD, material functions, instances, custom HLSL nodes, PBR pipeline. **63 actions.**
 
 > For full param schemas, call `monolith_discover("material")` at runtime.
 
@@ -298,7 +299,6 @@ Material graph editing, inspection, CRUD, material functions, instances, custom 
 | Spec / templates | 3 | `export_material_graph`, `import_material_graph`, `validate_material` |
 | Preview / capture | 2 | `render_preview`, `get_thumbnail` |
 | Textures | 6 | `import_texture`, `create_pbr_material_from_disk`, `get_texture_properties`, `preview_texture`, `preview_textures`, `check_tiling_quality` |
-| Optional Paper2D visibility | 3 | `get_paper2d_status`, `list_paper2d_assets`, `get_paper2d_asset` |
 | Layers | 1 | `get_layer_info` |
 | Batch | 2 | `batch_set_material_property`, `batch_recompile` |
 | Transactions | 2 | `begin_transaction`, `end_transaction` |
@@ -312,6 +312,18 @@ This action **requires** the `{ "graph_spec": { ... } }` wrapper, not a bare spe
 ```
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithMaterial.md` for full graph_spec schema and the [§Pipelines](#pipelines) section for the canonical material build flow.
+
+---
+
+## paper2d
+
+Optional Paper2D discovery registered by `MonolithMaterial`. The namespace is read-only and AssetRegistry-only; it does not include Paper2D headers, load Paper2D assets, or require the Paper2D plugin at compile time. **3 actions.**
+
+| Action | Required Params | Notes |
+|--------|-----------------|-------|
+| `get_status` | none | Reports Paper2D/Paper2DEditor module availability and supported asset classes |
+| `list_assets` | none | Lists PaperSprite, PaperFlipbook, PaperTileSet, and PaperTileMap registry rows under `/Game`; optional `package_path`, `limit` |
+| `get_asset` | `asset_path` | Returns one bounded Paper2D registry row; optional `include_tags`, `tag_limit` |
 
 ---
 

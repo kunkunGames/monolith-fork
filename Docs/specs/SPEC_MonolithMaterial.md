@@ -16,10 +16,10 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithMaterialModule` | Registers 66 material actions |
-| `FMonolithMaterialActions` | Static handlers + helpers for loading materials, serializing expressions, and optional Paper2D discovery |
+| `FMonolithMaterialModule` | Registers 63 `material` actions plus 3 optional `paper2d` discovery actions |
+| `FMonolithMaterialActions` | Static handlers + helpers for loading materials, serializing expressions, and optional Paper2D AssetRegistry discovery |
 
-### Actions (66 — namespace: "material")
+### Actions (63 — namespace: "material")
 
 **Read Actions (10)**
 | Action | Description |
@@ -73,12 +73,12 @@
 |--------|--------|
 | `create_material_function` | Added `type` parameter — supports `MaterialLayer` and `MaterialLayerBlend` in addition to standard material functions |
 
-**Optional Paper2D Discovery Actions (3)**
+**Optional Paper2D Discovery Actions (3 — namespace: "paper2d")**
 | Action | Description |
 |--------|-------------|
-| `get_paper2d_status` | Report Paper2D plugin/module availability without requiring Paper2D at compile time. |
-| `list_paper2d_assets` | List PaperSprite, PaperFlipbook, PaperTileSet, and PaperTileMap registry rows under `/Game` without loading assets. |
-| `get_paper2d_asset` | Inspect one Paper2D asset registry row and optional bounded tags under `/Game` without loading or mutating the asset. |
+| `get_status` | Report Paper2D plugin/module availability without requiring Paper2D at compile time. |
+| `list_assets` | List PaperSprite, PaperFlipbook, PaperTileSet, and PaperTileMap registry rows under `/Game` without loading assets. |
+| `get_asset` | Inspect one Paper2D asset registry row and optional bounded tags under `/Game` without loading or mutating the asset. |
 
 See [SPEC_MonolithPaper2DAssetMetadata.md](SPEC_MonolithPaper2DAssetMetadata.md) for the single-asset metadata contract and verification gates.
 

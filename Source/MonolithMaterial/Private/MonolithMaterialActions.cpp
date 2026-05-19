@@ -874,12 +874,12 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Material asset path"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("material"), TEXT("get_paper2d_status"),
+	Registry.RegisterAction(TEXT("paper2d"), TEXT("get_status"),
 		TEXT("Report Paper2D plugin/module availability and the Monolith-native first milestone for texture-atlas adjacent Paper2D discovery. Read-only; no Paper2D hard dependency."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMaterialActions::GetPaper2DStatus),
 		FParamSchemaBuilder().Build());
 
-	Registry.RegisterAction(TEXT("material"), TEXT("list_paper2d_assets"),
+	Registry.RegisterAction(TEXT("paper2d"), TEXT("list_assets"),
 		TEXT("List Paper2D asset metadata under /Game using AssetRegistry only: PaperSprite, PaperFlipbook, PaperTileSet, and PaperTileMap. Does not load or mutate assets."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMaterialActions::ListPaper2DAssets),
 		FParamSchemaBuilder()
@@ -887,7 +887,7 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum returned rows, clamped to 1..500. Default: 100."))
 			.Build());
 
-	Registry.RegisterAction(TEXT("material"), TEXT("get_paper2d_asset"),
+	Registry.RegisterAction(TEXT("paper2d"), TEXT("get_asset"),
 		TEXT("Inspect bounded AssetRegistry metadata for one Paper2D asset under /Game. Does not load Paper2D modules or mutate assets."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMaterialActions::GetPaper2DAsset),
 		FParamSchemaBuilder()
@@ -1146,7 +1146,7 @@ FMonolithActionResult FMonolithMaterialActions::GetAllExpressions(const TSharedP
 FMonolithActionResult FMonolithMaterialActions::GetPaper2DStatus(const TSharedPtr<FJsonObject>& Params)
 {
 	auto ResultJson = MakeShared<FJsonObject>();
-	ResultJson->SetStringField(TEXT("namespace"), TEXT("material"));
+	ResultJson->SetStringField(TEXT("namespace"), TEXT("paper2d"));
 	ResultJson->SetStringField(TEXT("domain"), TEXT("paper2d_discovery"));
 	ResultJson->SetStringField(TEXT("mode"), TEXT("read_only"));
 	ResultJson->SetBoolField(TEXT("hard_dependency"), false);
@@ -1164,9 +1164,9 @@ FMonolithActionResult FMonolithMaterialActions::GetPaper2DStatus(const TSharedPt
 	ResultJson->SetArrayField(TEXT("asset_classes"), AssetClasses);
 
 	TArray<TSharedPtr<FJsonValue>> ImplementedActions;
-	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("material.get_paper2d_status")));
-	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("material.list_paper2d_assets")));
-	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("material.get_paper2d_asset")));
+	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("paper2d.get_status")));
+	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("paper2d.list_assets")));
+	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("paper2d.get_asset")));
 	ResultJson->SetArrayField(TEXT("implemented_actions"), ImplementedActions);
 
 	TArray<TSharedPtr<FJsonValue>> FutureActions;
@@ -1177,7 +1177,7 @@ FMonolithActionResult FMonolithMaterialActions::GetPaper2DStatus(const TSharedPt
 	ResultJson->SetArrayField(TEXT("future_optional_actions"), FutureActions);
 
 	TArray<TSharedPtr<FJsonValue>> Notes;
-	Notes.Add(MakeShared<FJsonValueString>(TEXT("This first milestone lives in the existing material namespace because Paper2D sprite workflows start from texture/atlas assets and the Paper2D module boundary is optional.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("This namespace is registered by MonolithMaterial but exposed as paper2d so clients can route optional Paper2D asset workflows directly.")));
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("No Paper2D classes are included or loaded; AssetRegistry metadata is used for discovery.")));
 	ResultJson->SetArrayField(TEXT("notes"), Notes);
 
@@ -1294,7 +1294,7 @@ FMonolithActionResult FMonolithMaterialActions::GetPaper2DAsset(const TSharedPtr
 	}
 
 	auto ResultJson = MakeShared<FJsonObject>();
-	ResultJson->SetStringField(TEXT("namespace"), TEXT("material"));
+	ResultJson->SetStringField(TEXT("namespace"), TEXT("paper2d"));
 	ResultJson->SetStringField(TEXT("domain"), TEXT("paper2d_discovery"));
 	ResultJson->SetStringField(TEXT("requested_path"), AssetPath);
 	ResultJson->SetObjectField(TEXT("asset"), MonolithMaterialPaper2D::BuildPaper2DAssetRow(AssetData));

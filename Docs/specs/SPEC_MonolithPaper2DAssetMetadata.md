@@ -3,7 +3,7 @@
 **Parent:** [SPEC_MonolithMaterial.md](SPEC_MonolithMaterial.md)
 **Engine:** Unreal Engine 5.7+
 **Version:** 0.14.10
-**Status:** Implemented in `MonolithMaterial`
+**Status:** Implemented in `MonolithMaterial`, exposed through the `paper2d` namespace
 
 ---
 
@@ -17,7 +17,7 @@ Expose a low-risk, high-signal Paper2D inspection action without introducing a h
 
 | Action | Namespace | Mode | Description |
 |--------|-----------|------|-------------|
-| `get_paper2d_asset` | `material` | read-only | Return bounded metadata for one PaperSprite, PaperFlipbook, PaperTileSet, or PaperTileMap asset under `/Game`. |
+| `paper2d.get_asset` | `paper2d` | read-only | Return bounded metadata for one PaperSprite, PaperFlipbook, PaperTileSet, or PaperTileMap asset under `/Game`. |
 
 | Parameter | Type | Required | Default | Contract |
 |-----------|------|----------|---------|----------|
@@ -31,7 +31,7 @@ Expose a low-risk, high-signal Paper2D inspection action without introducing a h
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `namespace` | string | Always `material`. |
+| `namespace` | string | Always `paper2d`. |
 | `domain` | string | Always `paper2d_discovery`. |
 | `asset` | object | AssetRegistry row for the resolved Paper2D asset. |
 | `asset.object_path` | string | Full object path from AssetRegistry. |
@@ -66,4 +66,4 @@ Expose a low-risk, high-signal Paper2D inspection action without introducing a h
 |------|-----------------|
 | Param guard automation | Non-`/Game` paths are rejected before lookup. |
 | UE 5.7 compile | `MonolithMaterial` builds against the resolved project engine root. |
-| Docs sync | `SPEC_MonolithMaterial.md`, `SPEC_CORE.md`, and `API_REFERENCE.md` reflect the new action count and contract. |
+| Docs sync | `SPEC_MonolithMaterial.md`, `SPEC_CORE.md`, and `API_REFERENCE.md` reflect the `paper2d` namespace and contract. |

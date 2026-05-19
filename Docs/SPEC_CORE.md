@@ -36,7 +36,7 @@ Monolith is a unified Unreal Engine editor plugin that consolidates 9 separate M
 Monolith.uplugin
   MonolithCore          — HTTP server (bind retry with port probe, Restart()), tool registry, discovery, policy-gated action execution metadata/transactions/post-edit validators, settings, auto-updater
   MonolithBlueprint     — Blueprint inspection, variable/component/graph CRUD, node operations, compile, spawn (89 actions)
-  MonolithMaterial      — Material inspection + graph editing + CRUD + function suite + tiling quality + texture preview + optional Paper2D discovery (66 actions)
+  MonolithMaterial      — Material inspection + graph editing + CRUD + function suite + tiling quality + texture preview (63 material actions) + optional `paper2d` namespace discovery (3 actions)
   MonolithAnimation     — Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP/ControlRig write, layout (125 actions)
   MonolithNiagara       — Niagara particle systems, HLSL module/function creation, DI config, event handlers, sim stages, NPC, effect types, scalability, layout (109 actions)
   MonolithEditor        — Build triggers, live compile, log capture, compile output, crash context, scene capture, texture import, flipbook stitching, asset deletion, viewport info, blank-map factory + module status (Phase J F8), automation test list/run, Python escape-hatch (`run_python`), map swap (`load_level`), selection inspection, crash breadcrumbs, PIE control, console commands (36 actions)
@@ -139,7 +139,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 |---|--------|------|---------|
 | 3.1 | MonolithCore | [specs/SPEC_MonolithCore.md](specs/SPEC_MonolithCore.md) | HTTP server (bind retry, Restart(), `Monolith.Restart` console cmd), tool registry, discovery, policy-gated action execution metadata/transactions/post-edit validators, settings, auto-updater |
 | 3.2 | MonolithBlueprint | [specs/SPEC_MonolithBlueprint.md](specs/SPEC_MonolithBlueprint.md) | Blueprint inspection, variable/component/graph CRUD, node ops, compile, spawn (89 actions) |
-| 3.3 | MonolithMaterial | [specs/SPEC_MonolithMaterial.md](specs/SPEC_MonolithMaterial.md) | Material inspection + graph editing + CRUD + function suite + optional Paper2D discovery (66 actions) |
+| 3.3 | MonolithMaterial | [specs/SPEC_MonolithMaterial.md](specs/SPEC_MonolithMaterial.md) | Material inspection + graph editing + CRUD + function suite (63 material actions) + optional `paper2d` namespace discovery (3 actions) |
 | 3.4 | MonolithAnimation | [specs/SPEC_MonolithAnimation.md](specs/SPEC_MonolithAnimation.md) | Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP write, ControlRig (125 actions) |
 | 3.5 | MonolithNiagara | [specs/SPEC_MonolithNiagara.md](specs/SPEC_MonolithNiagara.md) | Niagara particle systems, HLSL module/function, DI config, event handlers, sim stages, layout (109 actions) |
 | 3.6 | MonolithEditor | [specs/SPEC_MonolithEditor.md](specs/SPEC_MonolithEditor.md) | Build triggers, live compile, log capture, crash context, scene capture, selection, PIE/console control (36 actions) |
@@ -508,7 +508,7 @@ Counts below were re-verified against the live `monolith_discover()` registry on
 |--------|-----------|---------|------------------------|
 | MonolithCore | monolith | 4 | discover, status, update, reindex |
 | MonolithBlueprint | blueprint | 89 | |
-| MonolithMaterial | material | 66 | Optional Paper2D discovery includes `get_paper2d_status`, `list_paper2d_assets`, and `get_paper2d_asset` without a hard Paper2D dependency. |
+| MonolithMaterial | material, paper2d | 63 + 3 | `paper2d.get_status`, `paper2d.list_assets`, and `paper2d.get_asset` are registered from MonolithMaterial without a hard Paper2D dependency. |
 | MonolithAnimation | animation | 125 | Includes 5 ABP write actions (`add_anim_graph_node`, `connect_anim_graph_pins`, `set_state_animation`, `add_variable_get`, `set_anim_graph_node_property`), 3 ControlRig write, 1 layout, plus 103 baseline (96 + 1 v0.14.9 `copy_bone_pose_between_sequences` — PR #51 by @MaxenceEpitech + 1 v0.14.10 `list_bone_tracks` — PR #54 by @MaxenceEpitech + 2 v0.14.10 PR #55 by @MaxenceEpitech: `get_skeleton_preview_attached_assets`, `get_bone_ref_pose` + 3 v0.14.10 PR #56 by @MaxenceEpitech: `{get,add,remove}_compatible_skeleton`) + 13 PoseSearch |
 | MonolithNiagara | niagara | 109 | 108 baseline + 1 layout (`auto_layout`) |
 | MonolithMesh | mesh | 241 | Town gen registered only when `bEnableProceduralTownGen=true` (default false). |
