@@ -1,27 +1,29 @@
 # Monolith PCG Graph Asset Metadata First Slice
 
-**Parent:** [SPEC_MonolithMesh.md](SPEC_MonolithMesh.md)
+**Parent:** [SPEC_MonolithPCG.md](SPEC_MonolithPCG.md)
 **Engine:** Unreal Engine 5.7+
-**Status:** Accepted for implementation
+**Status:** Implemented in `MonolithPCG`
 
 ---
 
 ## 1. Scope
 
-This slice extends the existing Monolith-native PCG visibility surface without
-adding a `MonolithPCG` module or a hard dependency on the PCG plugin. The new
-action lives in the `mesh` namespace beside `mesh.get_pcg_status`,
-`mesh.list_pcg_graph_assets`, and `mesh.list_pcg_components`.
+This slice extends the Monolith-native PCG visibility surface without adding a
+hard dependency on the PCG plugin. The actions live in the dedicated `pcg`
+namespace and are registered by `FMonolithPCGModule`.
 
 | Action | Purpose |
 |--------|---------|
-| `mesh.get_pcg_graph_asset` | Return bounded AssetRegistry metadata for one PCG graph-like asset under `/Game`. |
+| `pcg.get_status` | Report optional PCG module/type availability and current/future action boundaries. |
+| `pcg.list_graph_assets` | List PCG graph-like AssetRegistry rows under `/Game`. |
+| `pcg.get_graph_asset` | Return bounded AssetRegistry metadata for one PCG graph-like asset under `/Game`. |
+| `pcg.list_components` | List PCG-like components in the current editor world by reflected class identity. |
 
 ---
 
 ## 2. Contract
 
-`mesh.get_pcg_graph_asset` is read-only and AssetRegistry-only. It accepts:
+`pcg.get_graph_asset` is read-only and AssetRegistry-only. It accepts:
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -51,6 +53,6 @@ dump unbounded editor metadata.
 
 | Gate | Evidence |
 |------|----------|
-| Registration | `FMonolithMeshInspectionActions::RegisterActions` registers `mesh.get_pcg_graph_asset`. |
+| Registration | `FMonolithPCGActions::RegisterActions` registers `pcg.get_graph_asset`. |
 | Parameter guard | Automation test rejects an out-of-project asset path. |
-| Build | `MonolithMesh` compiles under Unreal Engine 5.7 with no PCG dependency. |
+| Build | `MonolithPCG` compiles under Unreal Engine 5.7 with no PCG dependency. |
