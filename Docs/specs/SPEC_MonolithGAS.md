@@ -24,7 +24,7 @@ MonolithGAS provides full MCP coverage of the Gameplay Ability System. It covers
 | Effects | 26 | Create/edit gameplay effects, duration policies, modifiers, executions, stacking, conditional application, period, tags granted/removed |
 | ASC | 14 | Inspect/configure Ability System Components, list granted abilities, active effects, attribute values, owned tags, replication mode |
 | Tags | 10 | Query gameplay tag hierarchy, check tag matches, add/remove loose tags, tag containers, tag queries |
-| Cues | 10 | Create/edit gameplay cue notifies (static and actor), cue tags, cue parameters, handler lookup |
+| Cues | 10 | Create/edit gameplay cue notifies (static and actor), cue tags, cue parameters, handler lookup, optional registered-tag coverage audit |
 | Targets | 5 | Target data handles, target actor selection, target data confirmation, custom target data types |
 | Input | 5 | Bind abilities to Enhanced Input actions, input tag mapping, activation on input |
 | Inspect | 7 | Runtime inspection of active abilities, applied effects, attribute snapshots, ability task state, prediction keys, and PIE-safe summary status via `get_runtime_summary` |
@@ -37,6 +37,26 @@ Effect authoring follows the ParamGuard rule: optional scalar fields use default
 when absent. Present wrong-type values, including modifier `value`, stacking limits,
 duration magnitudes, component `chance`, and copy flags, return invalid-param errors
 instead of being silently ignored.
+
+### GameplayCue Coverage Contract
+
+`gas::validate_cue_coverage` is the read-only audit entrypoint for GameplayCue wiring. It scans GameplayEffect Blueprint cue references and GameplayCue Notify Blueprint handlers, then returns `missing_handlers`, `orphaned_cues`, counts, and `fully_covered`.
+
+| Parameter | Type | Default | Contract |
+|-----------|------|---------|----------|
+| `path_filter` | string | empty | Limits the existing GameplayEffect/GameplayCue Notify coverage scan to the package path. When registered-tag audit is enabled, Notify handlers are still compared against the global project handler set to avoid false positives for handlers outside the filtered path. |
+| `include_registered_tags_without_notifies` | boolean | `false` | When true, walks the registered `GameplayCue` tag subtree through `UGameplayTagsManager` and returns registered cue tags that have no matching GameplayCue Notify handler anywhere in the project. The audit is read-only and does not create tags, assets, or compile Blueprints. |
+
+| Response field | Type | Notes |
+|----------------|------|-------|
+| `missing_handlers` | string[] | Cue tags referenced by GameplayEffects but not handled by any GameplayCue Notify asset in scope. |
+| `orphaned_cues` | object[] | GameplayCue Notify handlers whose cue tags are not referenced by any GameplayEffect in scope. |
+| `registered_cue_tag_count` | number | Present only when `include_registered_tags_without_notifies=true`; number of registered child tags under `GameplayCue`. |
+| `registered_notify_handler_scope` | string | Present only when requested; `current_scan` without `path_filter`, `global_project` when a path filter is used. |
+| `registered_tags_without_notifies` | string[] | Present only when requested; sorted registered `GameplayCue.*` tags with no matching Notify handler. |
+| `registered_tags_without_notifies_count` | number | Present only when requested; count of `registered_tags_without_notifies`. |
+
+This closes the UE 5.8 `GASToolsets::FindCueTagsWithoutNotifies` parity gap for UE 5.7 while preserving the existing Monolith action surface and backward-compatible default response.
 
 ### Phase J fixes touching this module
 

@@ -90,10 +90,11 @@ void FMonolithGASCueActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	Registry.RegisterAction(TEXT("gas"), TEXT("validate_cue_coverage"),
-		TEXT("Find GEs with cue tags that lack matching cue handlers, and orphaned cues with no GE trigger"),
+		TEXT("Find GEs with cue tags that lack matching cue handlers, orphaned cues with no GE trigger, and optionally registered GameplayCue tags with no notify"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateCueCoverage),
 		FParamSchemaBuilder()
 			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Restrict scan to assets under this path"))
+			.Optional(TEXT("include_registered_tags_without_notifies"), TEXT("boolean"), TEXT("Also report registered GameplayCue.* tags that have no matching GameplayCue Notify handler. Default: false"), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("gas"), TEXT("batch_create_cues"),
@@ -118,6 +119,31 @@ void FMonolithGASCueActions::RegisterActions(FMonolithToolRegistry& Registry)
 
 namespace
 {
+
+TArray<FString> CollectDescendantGameplayTagNames(const TSharedPtr<FGameplayTagNode>& ParentNode)
+{
+	TArray<FString> TagNames;
+	if (!ParentNode.IsValid())
+	{
+		return TagNames;
+	}
+
+	TArray<TSharedPtr<FGameplayTagNode>> Queue = ParentNode->GetChildTagNodes();
+	while (Queue.Num() > 0)
+	{
+		TSharedPtr<FGameplayTagNode> Node = Queue.Pop(EAllowShrinking::No);
+		if (!Node.IsValid())
+		{
+			continue;
+		}
+
+		TagNames.Add(Node->GetCompleteTagName().ToString());
+		Queue.Append(Node->GetChildTagNodes());
+	}
+
+	TagNames.Sort();
+	return TagNames;
+}
 
 /** Load a GE Blueprint (wraps MonolithGAS::LoadGameplayEffectBP). */
 bool LoadGEForCue(
@@ -179,6 +205,50 @@ FGameplayTagContainer GetCueTagContainer(UGameplayEffect* GE)
 	}
 
 	return Result;
+}
+
+void CollectGameplayCueNotifyHandlers(
+	const TArray<FAssetData>& BlueprintAssets,
+	TSet<FString>& OutCueTagsHandled,
+	TMap<FString, FString>* OutCueHandlerMap)
+{
+	for (const FAssetData& AssetData : BlueprintAssets)
+	{
+		// Pre-filter via AR tags BEFORE loading — prevents crash from loading ControlRig/AnimBP/etc.
+		FAssetTagValueRef GCNParentTag = AssetData.TagsAndValues.FindTag(FName("ParentClass"));
+		FAssetTagValueRef GCNNativeParentTag = AssetData.TagsAndValues.FindTag(FName("NativeParentClass"));
+		FString GCNParentPath = GCNParentTag.IsSet() ? GCNParentTag.GetValue() : (GCNNativeParentTag.IsSet() ? GCNNativeParentTag.GetValue() : TEXT(""));
+		if (!GCNParentPath.Contains(TEXT("GameplayCueNotify")))
+		{
+			continue;
+		}
+
+		UObject* Obj = AssetData.GetAsset();
+		UBlueprint* BP = Cast<UBlueprint>(Obj);
+		if (!BP || !BP->GeneratedClass) continue;
+
+		UObject* CDO = BP->GeneratedClass->GetDefaultObject();
+		if (!CDO) continue;
+
+		bool bIsGCN = CDO->GetClass()->IsChildOf(UGameplayCueNotify_Static::StaticClass())
+			|| CDO->GetClass()->IsChildOf(AGameplayCueNotify_Actor::StaticClass());
+		if (!bIsGCN) continue;
+
+		FProperty* CueTagProp = CDO->GetClass()->FindPropertyByName(TEXT("GameplayCueTag"));
+		if (CueTagProp)
+		{
+			FGameplayTag* TagPtr = CueTagProp->ContainerPtrToValuePtr<FGameplayTag>(CDO);
+			if (TagPtr && TagPtr->IsValid())
+			{
+				const FString CueTag = TagPtr->ToString();
+				OutCueTagsHandled.Add(CueTag);
+				if (OutCueHandlerMap)
+				{
+					OutCueHandlerMap->Add(CueTag, AssetData.GetObjectPathString());
+				}
+			}
+		}
+	}
 }
 
 } // anonymous namespace
@@ -906,6 +976,8 @@ FMonolithActionResult FMonolithGASCueActions::HandleFindCueTriggers(const TShare
 FMonolithActionResult FMonolithGASCueActions::HandleValidateCueCoverage(const TSharedPtr<FJsonObject>& Params)
 {
 	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	bool bIncludeRegisteredTagsWithoutNotifies = false;
+	Params->TryGetBoolField(TEXT("include_registered_tags_without_notifies"), bIncludeRegisteredTagsWithoutNotifies);
 
 	IAssetRegistry& AssetRegistry =
 		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -951,39 +1023,7 @@ FMonolithActionResult FMonolithGASCueActions::HandleValidateCueCoverage(const TS
 	// Pass 2: Collect all cue tags handled by GCN assets
 	TSet<FString> CueTagsHandled;
 	TMap<FString, FString> CueHandlerMap; // tag -> asset path
-	for (const FAssetData& AssetData : AllBPs)
-	{
-		// Pre-filter via AR tags BEFORE loading — prevents crash from loading ControlRig/AnimBP/etc.
-		FAssetTagValueRef GCNParentTag = AssetData.TagsAndValues.FindTag(FName("ParentClass"));
-		FAssetTagValueRef GCNNativeParentTag = AssetData.TagsAndValues.FindTag(FName("NativeParentClass"));
-		FString GCNParentPath = GCNParentTag.IsSet() ? GCNParentTag.GetValue() : (GCNNativeParentTag.IsSet() ? GCNNativeParentTag.GetValue() : TEXT(""));
-		if (!GCNParentPath.Contains(TEXT("GameplayCueNotify")))
-		{
-			continue;
-		}
-
-		UObject* Obj = AssetData.GetAsset();
-		UBlueprint* BP = Cast<UBlueprint>(Obj);
-		if (!BP || !BP->GeneratedClass) continue;
-
-		UObject* CDO = BP->GeneratedClass->GetDefaultObject();
-		if (!CDO) continue;
-
-		bool bIsGCN = CDO->GetClass()->IsChildOf(UGameplayCueNotify_Static::StaticClass())
-			|| CDO->GetClass()->IsChildOf(AGameplayCueNotify_Actor::StaticClass());
-		if (!bIsGCN) continue;
-
-		FProperty* CueTagProp = CDO->GetClass()->FindPropertyByName(TEXT("GameplayCueTag"));
-		if (CueTagProp)
-		{
-			FGameplayTag* TagPtr = CueTagProp->ContainerPtrToValuePtr<FGameplayTag>(CDO);
-			if (TagPtr && TagPtr->IsValid())
-			{
-				CueTagsHandled.Add(TagPtr->ToString());
-				CueHandlerMap.Add(TagPtr->ToString(), AssetData.GetObjectPathString());
-			}
-		}
-	}
+	CollectGameplayCueNotifyHandlers(AllBPs, CueTagsHandled, &CueHandlerMap);
 
 	// Find missing handlers (GE references a cue tag but no GCN handles it)
 	TArray<TSharedPtr<FJsonValue>> MissingHandlers;
@@ -1016,6 +1056,50 @@ FMonolithActionResult FMonolithGASCueActions::HandleValidateCueCoverage(const TS
 	Result->SetArrayField(TEXT("missing_handlers"), MissingHandlers);
 	Result->SetArrayField(TEXT("orphaned_cues"), OrphanedCues);
 	Result->SetBoolField(TEXT("fully_covered"), MissingHandlers.Num() == 0 && OrphanedCues.Num() == 0);
+
+	if (bIncludeRegisteredTagsWithoutNotifies)
+	{
+		TArray<TSharedPtr<FJsonValue>> RegisteredTagsWithoutNotifies;
+		TArray<FString> RegisteredCueTags;
+		TSet<FString> GlobalCueTagsHandled;
+		const TSet<FString>* CueTagsHandledForRegisteredAudit = &CueTagsHandled;
+
+		if (!PathFilter.IsEmpty())
+		{
+			TArray<FAssetData> GlobalBPs;
+			FARFilter GlobalFilter;
+			GlobalFilter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+			GlobalFilter.bRecursiveClasses = true;
+			AssetRegistry.GetAssets(GlobalFilter, GlobalBPs);
+			CollectGameplayCueNotifyHandlers(GlobalBPs, GlobalCueTagsHandled, nullptr);
+			CueTagsHandledForRegisteredAudit = &GlobalCueTagsHandled;
+		}
+
+		UGameplayTagsManager& TagsManager = UGameplayTagsManager::Get();
+		TSharedPtr<FGameplayTagNode> GameplayCueRoot = TagsManager.FindTagNode(FName(TEXT("GameplayCue")));
+		if (GameplayCueRoot.IsValid())
+		{
+			RegisteredCueTags = CollectDescendantGameplayTagNames(GameplayCueRoot);
+			for (const FString& CueTag : RegisteredCueTags)
+			{
+				if (!CueTagsHandledForRegisteredAudit->Contains(CueTag))
+				{
+					RegisteredTagsWithoutNotifies.Add(MakeShared<FJsonValueString>(CueTag));
+				}
+			}
+		}
+
+		Result->SetStringField(TEXT("registered_notify_handler_scope"), PathFilter.IsEmpty() ? TEXT("current_scan") : TEXT("global_project"));
+		Result->SetNumberField(TEXT("registered_cue_tag_count"), RegisteredCueTags.Num());
+		Result->SetNumberField(TEXT("registered_tags_without_notifies_count"), RegisteredTagsWithoutNotifies.Num());
+		Result->SetArrayField(TEXT("registered_tags_without_notifies"), RegisteredTagsWithoutNotifies);
+		Result->SetBoolField(
+			TEXT("fully_covered"),
+			MissingHandlers.Num() == 0
+				&& OrphanedCues.Num() == 0
+				&& RegisteredTagsWithoutNotifies.Num() == 0);
+	}
+
 	if (!PathFilter.IsEmpty())
 	{
 		Result->SetStringField(TEXT("path_filter"), PathFilter);

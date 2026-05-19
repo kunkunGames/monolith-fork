@@ -1187,6 +1187,10 @@ Grant a `UGameplayAbility` to a pawn's `UAbilitySystemComponent` directly withou
 
 Read-only GAS runtime preflight. It returns `pie_active`, ASC counts, aggregate ability/effect/tag/attribute-set totals, and optional actor samples. Unlike actor-specific PIE tools, it succeeds outside PIE with `has_runtime_data=false` so automation clients can decide whether to start PIE before calling deeper snapshot actions.
 
+### `gas.validate_cue_coverage`
+
+Read-only GameplayCue audit. Existing output reports GameplayEffect cue tags with no handler and GameplayCue Notify assets that no GameplayEffect references. Optional param `include_registered_tags_without_notifies=true` also walks the registered `GameplayCue` tag subtree and returns `registered_cue_tag_count`, `registered_notify_handler_scope`, `registered_tags_without_notifies_count`, and sorted `registered_tags_without_notifies` for tags that would execute with no visible Notify. With `path_filter`, the registered-tag comparison still uses global project Notify handlers to avoid false positives for handlers outside the filtered path.
+
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithGAS.md` for the deep dive.
 
 ---
