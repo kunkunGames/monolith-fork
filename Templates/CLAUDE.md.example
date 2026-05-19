@@ -49,6 +49,7 @@ Use `{namespace}_query(action, params)` after discovering the namespace. Common 
 - `source_control_query` — Source control status and workspace inspection
 - `source_query` — Engine C++ source lookup, class hierarchy, callers/callees
 - `ui_query` — Widget blueprints, templates, styling, accessibility
+- `water_query` — Water/Landscape actor discovery
 - `world_conditions_query` — World Conditions schema and asset inspection
 
 ## Workflow

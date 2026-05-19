@@ -1,6 +1,6 @@
 # Monolith — TODO
 
-Last updated: 2026-05-19 (Slate inspector module accepted)
+Last updated: 2026-05-19 (Water discovery module accepted)
 
 ---
 
@@ -17,6 +17,14 @@ Last updated: 2026-05-19 (Slate inspector module accepted)
 - [x] `MonolithSlate` owns the `slate` namespace instead of mounting live Slate window/widget inspection under `MonolithUI`.
 - [x] `slate.get_inspector_status` is always registered; `list_windows`, `snapshot_widgets`, `describe_widget`, `capture_widget`, and `wait_for_widget` register only when `bEnableSlateInspectorActions=true`.
 - [x] Input automation remains deferred; no click, hover, key, text input, or widget mutation action is registered.
+
+---
+
+### MonolithWater — Read-Only Discovery COMPLETE (2026-05-19)
+
+- [x] `MonolithWater` owns the `water` namespace instead of mounting Water discovery from `MonolithMesh`.
+- [x] `water.get_status` and `water.list_bodies` use reflected class names and module-status probes only; there is no hard Water, WaterEditor, Landscape, or LandscapeEditor dependency.
+- [x] Water actor, spline, zone, buoyancy, landscape, and rebuild mutations remain future work; this slice is read-only.
 
 ---
 

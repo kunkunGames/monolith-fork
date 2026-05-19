@@ -131,6 +131,7 @@ static const std::vector<std::string> CORE_QUERY_TOOLS = {
     "source_control_query",
     "source_query",
     "ui_query",
+    "water_query",
     "world_conditions_query",
 };
 

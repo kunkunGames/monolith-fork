@@ -4,7 +4,7 @@
 **Engine:** Unreal Engine 5.7+
 **Version:** 0.14.9 (Beta)
 
-> **Action-count audit (2026-05-19):** source-of-truth count is **236 `mesh` actions + 24 experimental town gen actions when enabled**. PCG discovery is owned by `MonolithPCG`; Dataflow discovery is owned by `MonolithDataflow`; Chaos/Fracture discovery is owned by `MonolithChaosFracture`; nDisplay discovery is owned by `MonolithNDisplay`; Interchange import/export is owned by `MonolithInterchange`. The detailed per-action tables below predate the audit and may sum to slightly different numbers per category — they are accurate per-row but the category subtotals have drifted. A full per-action sweep against `Source/MonolithMesh/Private/Monolith*Actions.cpp` is on the audit backlog.
+> **Action-count audit (2026-05-19):** source-of-truth count is **234 `mesh` actions + 24 experimental town gen actions when enabled**. PCG discovery is owned by `MonolithPCG`; Paper2D discovery is owned by `MonolithPaper2D`; Water discovery is owned by `MonolithWater`; Dataflow discovery is owned by `MonolithDataflow`; Chaos/Fracture discovery is owned by `MonolithChaosFracture`; nDisplay discovery is owned by `MonolithNDisplay`; Interchange import/export is owned by `MonolithInterchange`. The detailed per-action tables below predate the audit and may sum to slightly different numbers per category — they are accurate per-row but the category subtotals have drifted. A full per-action sweep against `Source/MonolithMesh/Private/Monolith*Actions.cpp` is on the audit backlog.
 
 ---
 
@@ -20,7 +20,7 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithMeshModule` | Registers 236 `mesh` actions across 30+ action classes (+ GeometryScript ops conditional). 24 additional experimental town gen actions registered only when `bEnableProceduralTownGen = true` (default: false). |
+| `FMonolithMeshModule` | Registers 234 `mesh` actions across 30+ action classes (+ GeometryScript ops conditional). 24 additional experimental town gen actions registered only when `bEnableProceduralTownGen = true` (default: false). |
 | `FMonolithMeshInspectionActions` | Mesh asset inspection: geometry stats, LODs, UVs, materials, collision, quality analysis, and catalog queries (12 `mesh` actions) |
 | `FMonolithMeshSceneActions` | Scene actor manipulation: spawn, move, duplicate, delete, group, batch execute (8 actions) |
 | `FMonolithMeshSpatialActions` | Spatial queries: raycasts, sweeps, overlaps, nearest, line of sight, navmesh, scene bounds/stats (11 actions) |
@@ -51,12 +51,15 @@ The following optional plugin surfaces are no longer owned by `MonolithMesh`:
 |-----------|---------------|------|
 | `interchange` | `MonolithInterchange` | [SPEC_MonolithInterchange.md](SPEC_MonolithInterchange.md) |
 | `ndisplay` | `MonolithNDisplay` | [SPEC_MonolithNDisplay.md](SPEC_MonolithNDisplay.md) |
+| `paper2d` | `MonolithPaper2D` | [SPEC_MonolithPaper2D.md](SPEC_MonolithPaper2D.md) |
+| `pcg` | `MonolithPCG` | [SPEC_MonolithPCG.md](SPEC_MonolithPCG.md) |
+| `water` | `MonolithWater` | [SPEC_MonolithWater.md](SPEC_MonolithWater.md) |
 | `dataflow` | `MonolithDataflow` | [SPEC_MonolithDataflow.md](SPEC_MonolithDataflow.md) |
 | `chaos_fracture` | `MonolithChaosFracture` | [SPEC_MonolithChaosFracture.md](SPEC_MonolithChaosFracture.md) |
 
 ### Actions (260 — namespace: "mesh")
 
-> **Note:** 236 `mesh` actions (Phases 1-22 + Proc Geo Overhaul) always registered + 24 experimental Procedural Town Generator actions (SP1-SP10 + `validate_building`) registered only when `bEnableProceduralTownGen = true` (default: false). PCG, Dataflow, Chaos/Fracture, nDisplay, and Interchange discovery/import surfaces have moved to dedicated modules. Town gen has known geometry issues (wall misalignment, room separation) — very much a work-in-progress. Unless you're willing to dig in and help improve it, it's best left alone for now. Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain.
+> **Note:** 234 `mesh` actions (Phases 1-22 + Proc Geo Overhaul) always registered + 24 experimental Procedural Town Generator actions (SP1-SP10 + `validate_building`) registered only when `bEnableProceduralTownGen = true` (default: false). PCG, Paper2D, Water, Dataflow, Chaos/Fracture, nDisplay, and Interchange discovery/import surfaces have moved to dedicated modules. Town gen has known geometry issues (wall misalignment, room separation) — very much a work-in-progress. Unless you're willing to dig in and help improve it, it's best left alone for now. Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain.
 
 **Inspection (12)**
 | Action | Params | Description |

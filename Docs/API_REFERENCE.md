@@ -31,10 +31,11 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [interchange](#interchange) | 16 | Normalized import/export validation, guarded import mutation, reimport metadata, reimport, and export actions registered by MonolithInterchange |
 | [project](#project) | 17 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 21 | Unreal Engine C++ source code navigation |
-| [mesh](#mesh) | 236 (+24 gated) | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental — +24 town gen registers only with `bEnableProceduralTownGen=true`) |
+| [mesh](#mesh) | 234 (+24 gated) | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental — +24 town gen registers only with `bEnableProceduralTownGen=true`) |
 | [ndisplay](#ndisplay) | 2 | Optional nDisplay / DisplayCluster config discovery registered by MonolithNDisplay |
 | [pcg](#pcg) | 4 | Optional PCG AssetRegistry/reflection discovery registered by MonolithPCG |
 | [slate](#slate) | 1 (+5 gated) | Live editor Slate window/widget inspection registered by MonolithSlate |
+| [water](#water) | 2 | Optional Water/Landscape actor discovery registered by MonolithWater |
 | [ui](#ui) | 121 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
@@ -72,6 +73,7 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `chaos_fracture.*` | **ROUTE CHANGE** | Moved Geometry Collection / Fracture visibility from `mesh.*` action names into the dedicated `MonolithChaosFracture` module and `chaos_fracture` namespace. |
 | `gamefeatures.*` | **NEW** | Adds `gamefeatures.get_status` plus four opt-in read-only inspection actions in the dedicated `MonolithGameFeatures` module. |
 | `slate.*` | **NEW** | Adds `slate.get_inspector_status` plus five opt-in read-only live Slate window/widget inspection actions in the dedicated `MonolithSlate` module. |
+| `water.*` | **ROUTE CHANGE** | Moved Water discovery from `mesh.get_water_status` / `mesh.list_water_bodies` into the dedicated `MonolithWater` module and `water` namespace. |
 | `ndisplay.*` | **OWNER CHANGE** | Kept the public `ndisplay` action names but moved registration from `MonolithMesh` to `MonolithNDisplay`. |
 | `interchange.*` | **OWNER CHANGE** | Kept the public `interchange` action names but moved registration from `MonolithMesh` to `MonolithInterchange`. |
 
@@ -998,7 +1000,7 @@ Read-only live editor Slate UI inspection registered by `MonolithSlate`. The sta
 
 ## mesh
 
-Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript, procedural geometry, lighting, audio, performance, and **experimental** procedural town generation. **241 default-active actions** — plus 24 experimental town gen actions when `bEnableProceduralTownGen=true` (default `false`), for 265 total mesh actions when fully registered.
+Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript, procedural geometry, lighting, audio, performance, and **experimental** procedural town generation. **234 default-active actions** — plus 24 experimental town gen actions when `bEnableProceduralTownGen=true` (default `false`), for 258 total mesh actions when fully registered.
 
 > For full param schemas, call `monolith_discover("mesh")` at runtime. The action surface is too broad for full enumeration — see categories below.
 
@@ -1039,6 +1041,17 @@ Mesh inspection, scene manipulation, spatial queries, level blockout, GeometrySc
 > **Experimental — town gen has known geometry issues** (wall misalignment, room separation). Fix Plans v2-v5 applied 27+ fixes but fundamental issues remain. Core mesh actions (sweep walls, auto-collision, proc mesh caching, blueprint prefabs) work fine.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the full action catalog.
+
+---
+
+## water
+
+Optional Water/Landscape discovery registered by `MonolithWater`. The namespace is read-only and reflection-only; it does not include Water or Landscape headers, mutate actors/splines/zones/landscapes, or require the Water plugin at compile time. **2 actions.**
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `get_status` | none | Reports Water, WaterEditor, Landscape, and LandscapeEditor module availability plus Water-like actor counts. |
+| `list_bodies` | `limit`?, `actor_name_filter`? | Lists reflected Water-like actors/components in the current editor world. |
 
 ---
 
@@ -1419,7 +1432,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 | MonolithWorldConditions | `WITH_MONOLITH_WORLDCONDITIONS` + `WITH_MONOLITH_WORLDCONDITIONS_SMARTOBJECTS` for SmartObject query owners | Status-only unavailable responses |
 | MonolithUI CommonUI | `WITH_COMMONUI` | 42 (UMG baseline only) |
 | MonolithAudio MetaSound | `WITH_METASOUND` | Sound Cue + CRUD + batch (no MetaSound graph) |
-| MonolithMesh town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | 236 core `mesh` actions (24 additional town gen actions when enabled) |
+| MonolithMesh town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | 234 core `mesh` actions (24 additional town gen actions when enabled) |
 | MonolithDataflow | none (AssetRegistry/module-status-only optional plugin probe) | 2 `dataflow` namespace discovery actions |
 | MonolithChaosFracture | none (AssetRegistry/reflection-only optional plugin probe) | 3 `chaos_fracture` namespace visibility actions |
 | MonolithNDisplay | none (AssetRegistry/module-status-only optional plugin probe) | 2 `ndisplay` namespace discovery actions |
@@ -1428,6 +1441,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 | MonolithPCG | none (AssetRegistry/reflection-only optional plugin probe) | 4 `pcg` namespace discovery actions |
 | MonolithPaper2D | none (AssetRegistry-only optional plugin probe) | 3 `paper2d` namespace discovery actions |
 | MonolithSlate | `bEnableSlateInspectorActions` for detailed inspection actions | 1 `slate.get_inspector_status` action always registered; 5 more read-only inspection actions when enabled |
+| MonolithWater | none (reflection-only optional plugin probe) | 2 `water` namespace discovery actions |
 
 ---
 
