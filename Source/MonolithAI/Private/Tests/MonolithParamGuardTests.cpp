@@ -48,7 +48,7 @@ bool FMonolithAIStateTreeParamGuardTest::RunTest(const FString& Parameters)
     FMonolithActionResult Result = Registry.ExecuteAction(TEXT("ai"), TEXT("move_st_state"), Payload);
 
     TestFalse(TEXT("move_st_state should fail if index is wrong type"), Result.bSuccess);
-    TestTrue(TEXT("move_st_state error should indicate wrong parameter type"), Result.Error.Contains(TEXT("index")));
+    TestTrue(TEXT("move_st_state error should indicate wrong parameter type"), Result.ErrorMessage.Contains(TEXT("index")));
 
     return true;
 }

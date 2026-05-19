@@ -1282,15 +1282,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRenameSTState(const TSh
 // 53. move_st_state
 FMonolithActionResult FMonolithAIStateTreeActions::HandleMoveSTState(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath, Error;
-	UStateTree* ST = LoadStateTreeFromParams(Params, AssetPath, Error);
-	if (!ST) return FMonolithActionResult::Error(Error);
-
-	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
-	if (!EditorData) return FMonolithActionResult::Error(Error);
-
-	FString StateId = Params->GetStringField(TEXT("state_id"));
-	FString NewParentId = Params->GetStringField(TEXT("new_parent_id"));
+	// Validate the cheap, malformation-prone 'index' param before loading the
+	// StateTree asset so an obviously bad request fails fast with an
+	// actionable error instead of a generic "StateTree not found".
 	int32 Index = -1;
 	if (Params->HasField(TEXT("index")))
 	{
@@ -1301,6 +1295,16 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleMoveSTState(const TShar
 		}
 		Index = static_cast<int32>(TempIndex);
 	}
+
+	FString AssetPath, Error;
+	UStateTree* ST = LoadStateTreeFromParams(Params, AssetPath, Error);
+	if (!ST) return FMonolithActionResult::Error(Error);
+
+	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
+	if (!EditorData) return FMonolithActionResult::Error(Error);
+
+	FString StateId = Params->GetStringField(TEXT("state_id"));
+	FString NewParentId = Params->GetStringField(TEXT("new_parent_id"));
 
 	if (StateId.IsEmpty())
 	{
