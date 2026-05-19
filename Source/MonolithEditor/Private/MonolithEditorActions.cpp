@@ -1732,23 +1732,41 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 	float SeekTime = 0.0f;
 	if (Params->HasField(TEXT("seek_time")))
 	{
-		SeekTime = (float)Params->GetNumberField(TEXT("seek_time"));
+		double TempSeekTime = 0.0;
+		if (Params->TryGetNumberField(TEXT("seek_time"), TempSeekTime))
+		{
+			SeekTime = (float)TempSeekTime;
+		}
+		else
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'seek_time' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	FString PreviewMesh = TEXT("plane");
 	if (Params->HasField(TEXT("preview_mesh")))
 	{
-		PreviewMesh = Params->GetStringField(TEXT("preview_mesh"));
+		if (!Params->TryGetStringField(TEXT("preview_mesh"), PreviewMesh))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'preview_mesh' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	int32 ResX = 512, ResY = 512;
 	if (Params->HasField(TEXT("resolution")))
 	{
-		const TArray<TSharedPtr<FJsonValue>>& ResArray = Params->GetArrayField(TEXT("resolution"));
-		if (ResArray.Num() >= 2)
+		const TArray<TSharedPtr<FJsonValue>>* ResArray = nullptr;
+		if (Params->TryGetArrayField(TEXT("resolution"), ResArray) && ResArray)
 		{
-			ResX = (int32)ResArray[0]->AsNumber();
-			ResY = (int32)ResArray[1]->AsNumber();
+			if (ResArray->Num() >= 2)
+			{
+				ResX = (int32)(*ResArray)[0]->AsNumber();
+				ResY = (int32)(*ResArray)[1]->AsNumber();
+			}
+		}
+		else
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'resolution' must be an array"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
 
@@ -1765,11 +1783,18 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 		// Handle both object and string-serialized (Claude Code quirk)
 		if (!Params->TryGetObjectField(TEXT("camera"), CameraObj))
 		{
-			FString CameraStr = Params->GetStringField(TEXT("camera"));
-			if (!CameraStr.IsEmpty())
+			FString CameraStr;
+			if (Params->TryGetStringField(TEXT("camera"), CameraStr))
 			{
-				ParsedCamera = FMonolithJsonUtils::Parse(CameraStr);
-				CameraObj = &ParsedCamera;
+				if (!CameraStr.IsEmpty())
+				{
+					ParsedCamera = FMonolithJsonUtils::Parse(CameraStr);
+					CameraObj = &ParsedCamera;
+				}
+			}
+			else
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'camera' must be an object or JSON string"), FMonolithJsonUtils::ErrInvalidParams);
 			}
 		}
 
@@ -1777,23 +1802,45 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 		{
 			if ((*CameraObj)->HasField(TEXT("location")))
 			{
-				const TArray<TSharedPtr<FJsonValue>>& Loc = (*CameraObj)->GetArrayField(TEXT("location"));
-				if (Loc.Num() >= 3)
+				const TArray<TSharedPtr<FJsonValue>>* Loc = nullptr;
+				if ((*CameraObj)->TryGetArrayField(TEXT("location"), Loc) && Loc)
 				{
-					CameraLocation = FVector(Loc[0]->AsNumber(), Loc[1]->AsNumber(), Loc[2]->AsNumber());
+					if (Loc->Num() >= 3)
+					{
+						CameraLocation = FVector((*Loc)[0]->AsNumber(), (*Loc)[1]->AsNumber(), (*Loc)[2]->AsNumber());
+					}
+				}
+				else
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.location' must be an array"), FMonolithJsonUtils::ErrInvalidParams);
 				}
 			}
 			if ((*CameraObj)->HasField(TEXT("rotation")))
 			{
-				const TArray<TSharedPtr<FJsonValue>>& Rot = (*CameraObj)->GetArrayField(TEXT("rotation"));
-				if (Rot.Num() >= 3)
+				const TArray<TSharedPtr<FJsonValue>>* Rot = nullptr;
+				if ((*CameraObj)->TryGetArrayField(TEXT("rotation"), Rot) && Rot)
 				{
-					CameraRotation = FRotator(Rot[0]->AsNumber(), Rot[1]->AsNumber(), Rot[2]->AsNumber());
+					if (Rot->Num() >= 3)
+					{
+						CameraRotation = FRotator((*Rot)[0]->AsNumber(), (*Rot)[1]->AsNumber(), (*Rot)[2]->AsNumber());
+					}
+				}
+				else
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.rotation' must be an array"), FMonolithJsonUtils::ErrInvalidParams);
 				}
 			}
 			if ((*CameraObj)->HasField(TEXT("fov")))
 			{
-				FOV = (float)(*CameraObj)->GetNumberField(TEXT("fov"));
+				double TempFov = 0.0;
+				if ((*CameraObj)->TryGetNumberField(TEXT("fov"), TempFov))
+				{
+					FOV = (float)TempFov;
+				}
+				else
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.fov' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+				}
 			}
 		}
 	}
@@ -1802,10 +1849,16 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 	FString OutputPath;
 	if (Params->HasField(TEXT("output_path")))
 	{
-		OutputPath = Params->GetStringField(TEXT("output_path"));
-		if (FPaths::IsRelative(OutputPath))
+		if (Params->TryGetStringField(TEXT("output_path"), OutputPath))
 		{
-			OutputPath = FPaths::ProjectDir() / OutputPath;
+			if (FPaths::IsRelative(OutputPath))
+			{
+				OutputPath = FPaths::ProjectDir() / OutputPath;
+			}
+		}
+		else
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'output_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
 	else
@@ -1933,11 +1986,18 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 	int32 ResX = 512, ResY = 512;
 	if (Params->HasField(TEXT("resolution")))
 	{
-		const TArray<TSharedPtr<FJsonValue>>& ResArray = Params->GetArrayField(TEXT("resolution"));
-		if (ResArray.Num() >= 2)
+		const TArray<TSharedPtr<FJsonValue>>* ResArray = nullptr;
+		if (Params->TryGetArrayField(TEXT("resolution"), ResArray) && ResArray)
 		{
-			ResX = (int32)ResArray[0]->AsNumber();
-			ResY = (int32)ResArray[1]->AsNumber();
+			if (ResArray->Num() >= 2)
+			{
+				ResX = (int32)(*ResArray)[0]->AsNumber();
+				ResY = (int32)(*ResArray)[1]->AsNumber();
+			}
+		}
+		else
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'resolution' must be an array"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
 
@@ -1951,28 +2011,57 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 		TSharedPtr<FJsonObject> ParsedCamera;
 		if (!Params->TryGetObjectField(TEXT("camera"), CameraObj))
 		{
-			FString CameraStr = Params->GetStringField(TEXT("camera"));
-			if (!CameraStr.IsEmpty())
+			FString CameraStr;
+			if (Params->TryGetStringField(TEXT("camera"), CameraStr))
 			{
-				ParsedCamera = FMonolithJsonUtils::Parse(CameraStr);
-				CameraObj = &ParsedCamera;
+				if (!CameraStr.IsEmpty())
+				{
+					ParsedCamera = FMonolithJsonUtils::Parse(CameraStr);
+					CameraObj = &ParsedCamera;
+				}
+			}
+			else
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'camera' must be an object or JSON string"), FMonolithJsonUtils::ErrInvalidParams);
 			}
 		}
 		if (CameraObj && (*CameraObj).IsValid())
 		{
 			if ((*CameraObj)->HasField(TEXT("location")))
 			{
-				const TArray<TSharedPtr<FJsonValue>>& Loc = (*CameraObj)->GetArrayField(TEXT("location"));
-				if (Loc.Num() >= 3) CameraLocation = FVector(Loc[0]->AsNumber(), Loc[1]->AsNumber(), Loc[2]->AsNumber());
+				const TArray<TSharedPtr<FJsonValue>>* Loc = nullptr;
+				if ((*CameraObj)->TryGetArrayField(TEXT("location"), Loc) && Loc)
+				{
+					if (Loc->Num() >= 3) CameraLocation = FVector((*Loc)[0]->AsNumber(), (*Loc)[1]->AsNumber(), (*Loc)[2]->AsNumber());
+				}
+				else
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.location' must be an array"), FMonolithJsonUtils::ErrInvalidParams);
+				}
 			}
 			if ((*CameraObj)->HasField(TEXT("rotation")))
 			{
-				const TArray<TSharedPtr<FJsonValue>>& Rot = (*CameraObj)->GetArrayField(TEXT("rotation"));
-				if (Rot.Num() >= 3) CameraRotation = FRotator(Rot[0]->AsNumber(), Rot[1]->AsNumber(), Rot[2]->AsNumber());
+				const TArray<TSharedPtr<FJsonValue>>* Rot = nullptr;
+				if ((*CameraObj)->TryGetArrayField(TEXT("rotation"), Rot) && Rot)
+				{
+					if (Rot->Num() >= 3) CameraRotation = FRotator((*Rot)[0]->AsNumber(), (*Rot)[1]->AsNumber(), (*Rot)[2]->AsNumber());
+				}
+				else
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.rotation' must be an array"), FMonolithJsonUtils::ErrInvalidParams);
+				}
 			}
 			if ((*CameraObj)->HasField(TEXT("fov")))
 			{
-				FOV = (float)(*CameraObj)->GetNumberField(TEXT("fov"));
+				double TempFov = 0.0;
+				if ((*CameraObj)->TryGetNumberField(TEXT("fov"), TempFov))
+				{
+					FOV = (float)TempFov;
+				}
+				else
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.fov' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+				}
 			}
 		}
 	}
@@ -1980,10 +2069,16 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 	FString OutputDir;
 	if (Params->HasField(TEXT("output_dir")))
 	{
-		OutputDir = Params->GetStringField(TEXT("output_dir"));
-		if (FPaths::IsRelative(OutputDir))
+		if (Params->TryGetStringField(TEXT("output_dir"), OutputDir))
 		{
-			OutputDir = FPaths::ProjectDir() / OutputDir;
+			if (FPaths::IsRelative(OutputDir))
+			{
+				OutputDir = FPaths::ProjectDir() / OutputDir;
+			}
+		}
+		else
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'output_dir' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
 	else
@@ -1997,7 +2092,10 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 	FString FilenamePrefix = TEXT("frame");
 	if (Params->HasField(TEXT("filename_prefix")))
 	{
-		FilenamePrefix = Params->GetStringField(TEXT("filename_prefix"));
+		if (!Params->TryGetStringField(TEXT("filename_prefix"), FilenamePrefix))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'filename_prefix' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	// Currently only supports Niagara for multi-frame
