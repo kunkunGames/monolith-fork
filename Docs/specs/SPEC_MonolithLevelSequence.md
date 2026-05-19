@@ -8,25 +8,27 @@
 
 ## MonolithLevelSequence
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, MonolithIndex, SQLiteCore, UnrealEd, MovieScene, MovieSceneTracks, LevelSequence, BlueprintGraph, Kismet, EditorSubsystem, Json, JsonUtilities
-**Namespace:** `level_sequence` | **Tool:** `level_sequence_query(action, params)` | **Actions:** 8 (7 production + `ping` smoke)
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, MonolithIndex, SQLiteCore, UnrealEd, AssetRegistry, Projects, MovieScene, MovieSceneTracks, LevelSequence, BlueprintGraph, Kismet, EditorSubsystem, Json, JsonUtilities
+**Namespace:** `level_sequence` | **Tool:** `level_sequence_query(action, params)` | **Actions:** 12 (11 production + `ping` smoke)
 **Settings toggles:** `bEnableLevelSequence` (registers actions, default True) and `bIndexLevelSequences` (registers indexer, default True) — both under `[/Script/MonolithCore.MonolithSettings]`
 
-MonolithLevelSequence introspects `ULevelSequence` assets end-to-end: their **bindings** (legacy Possessables / Spawnables and the UE 5.7 `UMovieSceneCustomBinding` family — `MovieSceneSpawnableActorBinding`, `MovieSceneReplaceableActorBinding`, etc.), their **event-track wiring** (which sections fire which Director functions), and their **Director Blueprint** when one is present (own functions, variables, synthetic Sequencer entrypoints). It complements `MonolithBlueprint` (which already covers Director Blueprints as ordinary `UBlueprint` assets via `subobject:` paths) by adding the Sequencer-specific binding and event context.
+MonolithLevelSequence introspects `ULevelSequence` assets end-to-end: their **bindings** (legacy Possessables / Spawnables and the UE 5.7 `UMovieSceneCustomBinding` family — `MovieSceneSpawnableActorBinding`, `MovieSceneReplaceableActorBinding`, etc.), their **event-track wiring** (which sections fire which Director functions), their **Director Blueprint** when one is present (own functions, variables, synthetic Sequencer entrypoints), and conditional Sequencer **Anim Mixer** track presence when Epic's UE 5.8 Experimental `MovieSceneAnimMixer` plugin is installed. It complements `MonolithBlueprint` (which already covers Director Blueprints as ordinary `UBlueprint` assets via `subobject:` paths) by adding the Sequencer-specific binding, event, and animation-mixer context.
 
 ### Action Categories
 
-All 7 actions live in `Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp`. Counts below are the literal registrations.
+All 12 actions live in `Source/MonolithLevelSequence/Private/MonolithLevelSequenceActions.cpp`. Counts below are the literal registrations.
 
 | Category | Actions | Description |
 |----------|---------|-------------|
 | Smoke | 1 | `ping` — module liveness check, returns `{status:"ok", module:"MonolithLevelSequence"}` |
+| Replay read-only | 2 | `get_replay_status`, `list_saved_replays` — editor/PIE replay readiness and bounded Saved replay/demo listing |
 | Bindings | 1 | `list_bindings` (every binding inside one LS regardless of event tracks; reports kind, bound class, exact `UMovieSceneCustomBinding` subclass when present, and a `kind_counts` breakdown — works for sequences with no Director) |
+| Anim Mixer read-only | 2 | `get_anim_mixer_status` (reports whether the UE 5.8 Experimental `MovieSceneAnimMixer` plugin/modules/classes are present without hard-linking them), `list_anim_mixer_tracks` (loads a Level Sequence and lists animation mixer tracks/layers via reflection when present) |
 | Director discover | 2 | `list_directors` (all LSes with a Director, optional `asset_path_filter` glob), `get_director_info` (one-LS summary: counts grouped by kind, event-binding totals, sample functions) |
 | Director inspect | 3 | `list_director_functions` (with `kind` filter: `user` / `custom_event` / `sequencer_endpoint` / `event` alias / `all`), `list_director_variables` (name + K2-formatted type, declaration order), `list_event_bindings` (event-tracks grouped by binding GUID, each with sections + resolved Director function) |
 | Reverse-lookup | 1 | `find_director_function_callers` — given a function name, every event-track section across the project that fires it (with binding context) |
 
-**Total:** **8** registered (`ping` + `list_bindings` + `list_directors` + `get_director_info` + `list_director_functions` + `list_director_variables` + `list_event_bindings` + `find_director_function_callers`).
+**Total:** **12** registered (`ping` + `get_replay_status` + `list_saved_replays` + `list_bindings` + `get_anim_mixer_status` + `list_anim_mixer_tracks` + `list_directors` + `get_director_info` + `list_director_functions` + `list_director_variables` + `list_event_bindings` + `find_director_function_callers`; replay actions are counted as production and the text list includes all literal registrations).
 
 ### Indexer
 
@@ -67,5 +69,7 @@ When a `UMovieSceneCustomBinding` is present, `bound_class` is taken from `GetBo
 > **Path format.** All actions that take an `asset_path` expect the full object path (e.g. `/Module/.../File.File`), matching `ULevelSequence::GetPathName()`. A typo or missing path returns a clear error with a hint.
 >
 > **`list_bindings` vs `list_event_bindings`.** `list_bindings` returns the full binding inventory of one LS (every Guid×BindingIndex), useful for understanding scene composition and spotting modern custom bindings. `list_event_bindings` filters to bindings that have event-track sections and joins them to the Director functions they fire — useful for tracing event-driven logic.
+>
+> **Anim Mixer compatibility.** The Anim Mixer actions intentionally do not include or link against `MovieSceneAnimMixer` headers. UE 5.7 builds return `plugin_available=false` / `track_count=0` when the experimental plugin is absent; UE 5.8+ projects with the plugin loaded get reflected track, section, layer, and child-track summaries.
 
 ---

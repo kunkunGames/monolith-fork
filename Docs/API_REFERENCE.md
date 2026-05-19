@@ -22,6 +22,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [paper2d](#paper2d) | 3 | Optional Paper2D AssetRegistry discovery registered by MonolithPaper2D |
 | [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
+| [level_sequence](#level_sequence) | 12 | Level Sequence bindings, Director Blueprint/event wiring, replay saved listing, and optional Sequencer Anim Mixer read-only inspection |
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
 | [editor](#editor) | 57 | Live Coding builds, compile output capture, Live Coding diagnostics, editor logs, scene capture, texture import, map creation, module status, automation test list/run/status/history, selection inspection, PIE/console control |
 | [config](#config) | 10 | INI config, plugin, and cvar inspection/search |
@@ -59,6 +60,7 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `ai.add_perception_to_actor` | **NEW** (Phase J F8) | Direct perception attach without going through `add_perception_component` + manual wiring. |
 | `ai.get_bt_graph` | **NEW** (Phase J F8) | Read-only graph dump distinct from `get_behavior_tree`'s structural inspection. |
 | `audio.create_test_wave` | **NEW** (Phase J F18) | Procedurally synthesizes a 16-bit mono sine `USoundWave` for tests with zero asset deps. |
+| `level_sequence.get_anim_mixer_status` / `level_sequence.list_anim_mixer_tracks` | **NEW** (2026-05-19) | Read-only Sequencer Anim Mixer parity probe. UE 5.7 builds report unavailable safely; UE 5.8+ builds can list reflected mixer tracks/layers without a hard module dependency. |
 | `audio.bind_sound_to_perception` | Param validation tightened (Phase J F11) | `loudness <= 0`, `max_range < 0`, and unknown `sense_class` values now reject up-front instead of writing junk userdata. |
 | `gas.bind_widget_to_attribute` (and 3 aliases) | Param validation tightened (Phase J F2/F3) | Empty `widget_path`, missing `attribute`, or unresolvable ASC now return structured errors before any reflection writes. |
 | `ai` BT actions | Error message standardization (Phase J F15) | All BT-related actions now return `{ "error": "<code>", "detail": "<human>" }` instead of mixed prose. |
@@ -408,6 +410,30 @@ Animation curves, bone tracks, sync markers, root motion, compression, blend spa
 | Layout / batch | 2 | `auto_layout`, `batch_execute` |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
+
+---
+
+## level_sequence
+
+Level Sequence bindings, Director Blueprint/event wiring, replay saved listing, and optional Sequencer Anim Mixer read-only inspection. **12 actions.**
+
+> For full param schemas, call `monolith_discover("level_sequence")` at runtime.
+
+**Action categories:**
+
+| Category | Actions | Examples |
+|----------|---------|----------|
+| Smoke | 1 | `ping` |
+| Replay read-only | 2 | `get_replay_status`, `list_saved_replays` |
+| Bindings | 1 | `list_bindings` |
+| Anim Mixer read-only | 2 | `get_anim_mixer_status`, `list_anim_mixer_tracks` |
+| Director discover | 2 | `list_directors`, `get_director_info` |
+| Director inspect | 3 | `list_director_functions`, `list_director_variables`, `list_event_bindings` |
+| Reverse lookup | 1 | `find_director_function_callers` |
+
+Anim Mixer actions intentionally soft-probe Epic's UE 5.8 Experimental `MovieSceneAnimMixer` plugin by module/class/property names only. UE 5.7 projects without the plugin still compile and return `plugin_available=false` / `track_count=0`; UE 5.8+ projects with the plugin loaded can inspect reflected mixer tracks, layers, sections, and child-track counts.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithLevelSequence.md` for the deep dive.
 
 ---
 

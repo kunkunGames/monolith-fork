@@ -93,4 +93,16 @@ public:
 	 * editor-facing label.
 	 */
 	static FMonolithActionResult ListBindings(const TSharedPtr<FJsonObject>& Params);
+
+	/**
+	 * Report whether Epic's Sequencer Anim Mixer plugin/modules/classes are visible
+	 * to the current editor. Uses reflection only so UE 5.7 builds stay compatible.
+	 */
+	static FMonolithActionResult GetAnimMixerStatus(const TSharedPtr<FJsonObject>& Params);
+
+	/**
+	 * Load one Level Sequence and list reflected Sequencer Anim Mixer tracks/layers
+	 * when the optional UE 5.8 MovieSceneAnimMixer plugin is present.
+	 */
+	static FMonolithActionResult ListAnimMixerTracks(const TSharedPtr<FJsonObject>& Params);
 };

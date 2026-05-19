@@ -1,6 +1,14 @@
 # Monolith — TODO
 
-Last updated: 2026-05-19 (GAS runtime summary accepted)
+Last updated: 2026-05-19 (Level Sequence Anim Mixer read-only probe accepted)
+
+---
+
+### MonolithLevelSequence — Anim Mixer Read-Only Probe (2026-05-19)
+
+- [x] `get_anim_mixer_status` — Reflection-only status probe for Epic's UE 5.8 Experimental `MovieSceneAnimMixer` plugin/modules/classes; UE 5.7 builds keep no hard dependency.
+- [x] `list_anim_mixer_tracks` — Load a Level Sequence and list reflected Anim Mixer tracks/layers/sections/child-track counts when the optional plugin is present.
+- [ ] **UE 5.8 functional sample** — Verify against a real Level Sequence containing `MovieSceneAnimationMixerTrack` once a UE 5.8 project sample is available.
 
 ---
 

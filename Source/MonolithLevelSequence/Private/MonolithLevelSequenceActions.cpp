@@ -9,9 +9,19 @@
 #include "Dom/JsonValue.h"
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
+#include "Interfaces/IPluginManager.h"
+#include "LevelSequence.h"
 #include "Misc/Paths.h"
+#include "Modules/ModuleManager.h"
+#include "MovieScene.h"
+#include "MovieSceneBinding.h"
+#include "MovieScenePossessable.h"
+#include "MovieSceneSection.h"
+#include "MovieSceneSpawnable.h"
+#include "MovieSceneTrack.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonReader.h"
+#include "UObject/UnrealType.h"
 
 namespace
 {
@@ -203,6 +213,251 @@ namespace
 			OutRows.Add(MakeShared<FJsonValueObject>(Row));
 		}
 	}
+
+	bool IsClassOrSuperClassNamed(const UClass* Class, const TCHAR* ExpectedName)
+	{
+		for (const UClass* It = Class; It; It = It->GetSuperClass())
+		{
+			if (It->GetName() == ExpectedName)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	UClass* FindAnimMixerClass(const TCHAR* ClassPath)
+	{
+		return FindObject<UClass>(nullptr, ClassPath);
+	}
+
+	TSharedPtr<FJsonObject> MakeModuleStatusJson(const TCHAR* ModuleName)
+	{
+		const FName ModuleFName(ModuleName);
+		auto Json = MakeShared<FJsonObject>();
+		Json->SetStringField(TEXT("name"), ModuleName);
+		Json->SetBoolField(TEXT("exists"), FModuleManager::Get().ModuleExists(ModuleName));
+		Json->SetBoolField(TEXT("loaded"), FModuleManager::Get().IsModuleLoaded(ModuleFName));
+		return Json;
+	}
+
+	int32 GetReflectedArrayCount(UObject* Object, const TCHAR* PropertyName)
+	{
+		if (!Object)
+		{
+			return -1;
+		}
+
+		FArrayProperty* ArrayProperty = FindFProperty<FArrayProperty>(Object->GetClass(), FName(PropertyName));
+		if (!ArrayProperty)
+		{
+			return -1;
+		}
+
+		FScriptArrayHelper Helper(ArrayProperty, ArrayProperty->ContainerPtrToValuePtr<void>(Object));
+		return Helper.Num();
+	}
+
+	int32 GetReflectedMapCount(UObject* Object, const TCHAR* PropertyName)
+	{
+		if (!Object)
+		{
+			return -1;
+		}
+
+		FMapProperty* MapProperty = FindFProperty<FMapProperty>(Object->GetClass(), FName(PropertyName));
+		if (!MapProperty)
+		{
+			return -1;
+		}
+
+		FScriptMapHelper Helper(MapProperty, MapProperty->ContainerPtrToValuePtr<void>(Object));
+		return Helper.Num();
+	}
+
+	TArray<UObject*> GetReflectedObjectArray(UObject* Object, const TCHAR* PropertyName)
+	{
+		TArray<UObject*> Values;
+		if (!Object)
+		{
+			return Values;
+		}
+
+		FArrayProperty* ArrayProperty = FindFProperty<FArrayProperty>(Object->GetClass(), FName(PropertyName));
+		const FObjectPropertyBase* InnerObjectProperty = ArrayProperty ? CastField<FObjectPropertyBase>(ArrayProperty->Inner) : nullptr;
+		if (!ArrayProperty || !InnerObjectProperty)
+		{
+			return Values;
+		}
+
+		FScriptArrayHelper Helper(ArrayProperty, ArrayProperty->ContainerPtrToValuePtr<void>(Object));
+		Values.Reserve(Helper.Num());
+		for (int32 Index = 0; Index < Helper.Num(); ++Index)
+		{
+			UObject* Value = InnerObjectProperty->GetObjectPropertyValue(Helper.GetRawPtr(Index));
+			if (Value)
+			{
+				Values.Add(Value);
+			}
+		}
+		return Values;
+	}
+
+	UObject* GetReflectedObjectProperty(UObject* Object, const TCHAR* PropertyName)
+	{
+		if (!Object)
+		{
+			return nullptr;
+		}
+
+		FObjectPropertyBase* ObjectProperty = FindFProperty<FObjectPropertyBase>(Object->GetClass(), FName(PropertyName));
+		return ObjectProperty ? ObjectProperty->GetObjectPropertyValue_InContainer(Object) : nullptr;
+	}
+
+	FString GetReflectedTextProperty(UObject* Object, const TCHAR* PropertyName)
+	{
+		if (!Object)
+		{
+			return FString();
+		}
+
+		FTextProperty* TextProperty = FindFProperty<FTextProperty>(Object->GetClass(), FName(PropertyName));
+		if (!TextProperty)
+		{
+			return FString();
+		}
+
+		const FText* TextValue = TextProperty->ContainerPtrToValuePtr<FText>(Object);
+		return TextValue ? TextValue->ToString() : FString();
+	}
+
+	TSharedPtr<FJsonObject> MakeAnimMixerTrackSummary(UMovieSceneTrack* Track)
+	{
+		auto Json = MakeShared<FJsonObject>();
+		Json->SetBoolField(TEXT("available"), Track != nullptr);
+		if (Track)
+		{
+			Json->SetStringField(TEXT("class"), Track->GetClass()->GetName());
+			Json->SetStringField(TEXT("display_name"), Track->GetDisplayName().ToString());
+			Json->SetNumberField(TEXT("section_count"), Track->GetAllSections().Num());
+		}
+		return Json;
+	}
+
+	TSharedPtr<FJsonObject> MakeAnimMixerLayerJson(UObject* Layer, int32 LayerIndex)
+	{
+		auto Json = MakeShared<FJsonObject>();
+		Json->SetNumberField(TEXT("layer_index"), LayerIndex);
+		Json->SetStringField(TEXT("class"), Layer ? Layer->GetClass()->GetName() : TEXT("<null>"));
+
+		const FString DisplayName = GetReflectedTextProperty(Layer, TEXT("DisplayName"));
+		if (DisplayName.IsEmpty())
+		{
+			Json->SetField(TEXT("display_name"), MakeShared<FJsonValueNull>());
+		}
+		else
+		{
+			Json->SetStringField(TEXT("display_name"), DisplayName);
+		}
+
+		const int32 SectionCount = GetReflectedArrayCount(Layer, TEXT("Sections"));
+		if (SectionCount >= 0)
+		{
+			Json->SetNumberField(TEXT("section_count"), SectionCount);
+		}
+		else
+		{
+			Json->SetField(TEXT("section_count"), MakeShared<FJsonValueNull>());
+		}
+
+		UMovieSceneTrack* ChildTrack = Cast<UMovieSceneTrack>(GetReflectedObjectProperty(Layer, TEXT("ChildTrack")));
+		Json->SetBoolField(TEXT("has_child_track"), ChildTrack != nullptr);
+		Json->SetObjectField(TEXT("child_track"), MakeAnimMixerTrackSummary(ChildTrack));
+		return Json;
+	}
+
+	TSharedPtr<FJsonObject> MakeAnimMixerTrackJson(
+		UMovieSceneTrack* Track,
+		const FString& Context,
+		const FString& BindingGuid,
+		const FString& BindingName,
+		bool bIncludeLayers)
+	{
+		auto Json = MakeShared<FJsonObject>();
+		Json->SetStringField(TEXT("context"), Context);
+		if (BindingGuid.IsEmpty())
+		{
+			Json->SetField(TEXT("binding_guid"), MakeShared<FJsonValueNull>());
+		}
+		else
+		{
+			Json->SetStringField(TEXT("binding_guid"), BindingGuid);
+		}
+		if (BindingName.IsEmpty())
+		{
+			Json->SetField(TEXT("binding_name"), MakeShared<FJsonValueNull>());
+		}
+		else
+		{
+			Json->SetStringField(TEXT("binding_name"), BindingName);
+		}
+
+		Json->SetStringField(TEXT("track_class"), Track ? Track->GetClass()->GetName() : TEXT("<null>"));
+		Json->SetStringField(TEXT("display_name"), Track ? Track->GetDisplayName().ToString() : FString());
+		Json->SetNumberField(TEXT("section_count"), Track ? Track->GetAllSections().Num() : 0);
+
+		const TArray<UObject*> Layers = GetReflectedObjectArray(Track, TEXT("Layers"));
+		Json->SetNumberField(TEXT("layer_count"), Layers.Num());
+		const int32 ChildTrackCount = GetReflectedMapCount(Track, TEXT("ChildTracks"));
+		Json->SetNumberField(TEXT("child_track_count"), ChildTrackCount >= 0 ? ChildTrackCount : 0);
+
+		if (bIncludeLayers)
+		{
+			TArray<TSharedPtr<FJsonValue>> LayerRows;
+			LayerRows.Reserve(Layers.Num());
+			for (int32 Index = 0; Index < Layers.Num(); ++Index)
+			{
+				LayerRows.Add(MakeShared<FJsonValueObject>(MakeAnimMixerLayerJson(Layers[Index], Index)));
+			}
+			Json->SetArrayField(TEXT("layers"), LayerRows);
+		}
+		return Json;
+	}
+
+	FString ResolveMovieSceneBindingName(UMovieScene* MovieScene, const FGuid& BindingGuid)
+	{
+		if (!MovieScene)
+		{
+			return FString();
+		}
+
+		if (const FMovieScenePossessable* Possessable = MovieScene->FindPossessable(BindingGuid))
+		{
+			return Possessable->GetName();
+		}
+		if (const FMovieSceneSpawnable* Spawnable = MovieScene->FindSpawnable(BindingGuid))
+		{
+			return Spawnable->GetName();
+		}
+		return FString();
+	}
+
+	void AddAnimMixerTrackIfMatched(
+		UMovieSceneTrack* Track,
+		const FString& Context,
+		const FString& BindingGuid,
+		const FString& BindingName,
+		bool bIncludeLayers,
+		TArray<TSharedPtr<FJsonValue>>& OutTracks)
+	{
+		if (!Track || !IsClassOrSuperClassNamed(Track->GetClass(), TEXT("MovieSceneAnimationMixerTrack")))
+		{
+			return;
+		}
+
+		OutTracks.Add(MakeShared<FJsonValueObject>(
+			MakeAnimMixerTrackJson(Track, Context, BindingGuid, BindingName, bIncludeLayers)));
+	}
 }
 
 // ============================================================================
@@ -280,6 +535,19 @@ void FMonolithLevelSequenceActions::RegisterActions(FMonolithToolRegistry& Regis
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Full Level Sequence asset path"))
 			.Optional(TEXT("kind"), TEXT("string"), TEXT("Filter: possessable | spawnable | replaceable | custom | all (default)"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("level_sequence"), TEXT("get_anim_mixer_status"),
+		TEXT("Report whether Epic's UE 5.8 Experimental MovieSceneAnimMixer plugin/modules/classes are visible. Reflection-only; UE 5.7 builds never hard-link the optional plugin."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelSequenceActions::GetAnimMixerStatus),
+		FParamSchemaBuilder().Build());
+
+	Registry.RegisterAction(TEXT("level_sequence"), TEXT("list_anim_mixer_tracks"),
+		TEXT("Load one Level Sequence and list reflected Sequencer Anim Mixer tracks/layers when the optional MovieSceneAnimMixer plugin is present. Returns track_count=0 safely on UE 5.7 or when no mixer tracks exist."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelSequenceActions::ListAnimMixerTracks),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Full Level Sequence asset path (e.g., \"/Game/Cinematics/LS_Intro.LS_Intro\")"))
+			.Optional(TEXT("include_layers"), TEXT("boolean"), TEXT("Include reflected layer rows with section and child-track summaries. Default: true."))
 			.Build());
 }
 
@@ -1241,5 +1509,122 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListBindings(const TSharedP
 	Result->SetArrayField(TEXT("bindings"), Rows);
 	Result->SetNumberField(TEXT("count"), Rows.Num());
 	Result->SetObjectField(TEXT("kind_counts"), KindBreakdown);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLevelSequenceActions::GetAnimMixerStatus(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("MovieSceneAnimMixer"));
+
+	auto Modules = MakeShared<FJsonObject>();
+	Modules->SetObjectField(TEXT("MovieSceneAnimMixer"), MakeModuleStatusJson(TEXT("MovieSceneAnimMixer")));
+	Modules->SetObjectField(TEXT("MovieSceneAnimMixerEditor"), MakeModuleStatusJson(TEXT("MovieSceneAnimMixerEditor")));
+	Modules->SetObjectField(TEXT("MovieSceneAnimMixerScripting"), MakeModuleStatusJson(TEXT("MovieSceneAnimMixerScripting")));
+
+	UClass* TrackClass = FindAnimMixerClass(TEXT("/Script/MovieSceneAnimMixer.MovieSceneAnimationMixerTrack"));
+	UClass* LayerClass = FindAnimMixerClass(TEXT("/Script/MovieSceneAnimMixer.MovieSceneAnimationMixerLayer"));
+	UClass* SectionClass = FindAnimMixerClass(TEXT("/Script/MovieSceneAnimMixer.MovieSceneAnimMixerSection"));
+	UClass* TransitionClass = FindAnimMixerClass(TEXT("/Script/MovieSceneAnimMixer.MovieSceneAnimMixerTransition"));
+
+	auto Classes = MakeShared<FJsonObject>();
+	Classes->SetBoolField(TEXT("MovieSceneAnimationMixerTrack"), TrackClass != nullptr);
+	Classes->SetBoolField(TEXT("MovieSceneAnimationMixerLayer"), LayerClass != nullptr);
+	Classes->SetBoolField(TEXT("MovieSceneAnimMixerSection"), SectionClass != nullptr);
+	Classes->SetBoolField(TEXT("MovieSceneAnimMixerTransition"), TransitionClass != nullptr);
+
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("level_sequence"));
+	Result->SetStringField(TEXT("mode"), TEXT("read_only"));
+	Result->SetStringField(TEXT("plugin_name"), TEXT("MovieSceneAnimMixer"));
+	Result->SetStringField(TEXT("engine_reference"), TEXT("UE_5.8 Engine/Plugins/Experimental/MovieSceneAnimMixer"));
+	Result->SetBoolField(TEXT("hard_dependency"), false);
+	Result->SetBoolField(TEXT("plugin_available"), Plugin.IsValid());
+	Result->SetBoolField(TEXT("plugin_enabled"), Plugin.IsValid() ? Plugin->IsEnabled() : false);
+	Result->SetObjectField(TEXT("modules"), Modules);
+	Result->SetObjectField(TEXT("classes"), Classes);
+	Result->SetBoolField(TEXT("track_class_loaded"), TrackClass != nullptr);
+	Result->SetBoolField(TEXT("layer_class_loaded"), LayerClass != nullptr);
+	Result->SetStringField(TEXT("message"), TrackClass
+		? TEXT("Sequencer Anim Mixer classes are loaded; list_anim_mixer_tracks can inspect matching Level Sequence tracks.")
+		: TEXT("Sequencer Anim Mixer classes are not loaded; UE 5.7-compatible reflection path will return no mixer tracks."));
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLevelSequenceActions::ListAnimMixerTracks(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+	}
+
+	bool bIncludeLayers = true;
+	Params->TryGetBoolField(TEXT("include_layers"), bIncludeLayers);
+
+	ULevelSequence* Sequence = LoadObject<ULevelSequence>(nullptr, *AssetPath);
+	if (!Sequence)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Failed to load Level Sequence '%s'"), *AssetPath));
+	}
+
+	UMovieScene* MovieScene = Sequence->GetMovieScene();
+	if (!MovieScene)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Level Sequence '%s' has no MovieScene"), *AssetPath));
+	}
+
+	UClass* TrackClass = FindAnimMixerClass(TEXT("/Script/MovieSceneAnimMixer.MovieSceneAnimationMixerTrack"));
+	TArray<TSharedPtr<FJsonValue>> Tracks;
+	const UMovieScene* ConstMovieScene = MovieScene;
+
+	for (UMovieSceneTrack* Track : ConstMovieScene->GetTracks())
+	{
+		AddAnimMixerTrackIfMatched(
+			Track,
+			TEXT("root_track"),
+			FString(),
+			FString(),
+			bIncludeLayers,
+			Tracks);
+	}
+
+	for (const FMovieSceneBinding& Binding : ConstMovieScene->GetBindings())
+	{
+		const FGuid BindingObjectGuid = Binding.GetObjectGuid();
+		const FString BindingGuid = BindingObjectGuid.ToString(EGuidFormats::DigitsWithHyphens);
+		const FString BindingName = ResolveMovieSceneBindingName(MovieScene, BindingObjectGuid);
+		for (UMovieSceneTrack* Track : Binding.GetTracks())
+		{
+			AddAnimMixerTrackIfMatched(
+				Track,
+				TEXT("binding_track"),
+				BindingGuid,
+				BindingName,
+				bIncludeLayers,
+				Tracks);
+		}
+	}
+
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("asset_path"), AssetPath);
+	Result->SetStringField(TEXT("mode"), TEXT("read_only"));
+	Result->SetBoolField(TEXT("include_layers"), bIncludeLayers);
+	Result->SetBoolField(TEXT("anim_mixer_track_class_loaded"), TrackClass != nullptr);
+	Result->SetArrayField(TEXT("tracks"), Tracks);
+	Result->SetNumberField(TEXT("track_count"), Tracks.Num());
+	if (!TrackClass)
+	{
+		Result->SetStringField(TEXT("message"), TEXT("MovieSceneAnimationMixerTrack is not loaded; returning zero reflected tracks on the UE 5.7-compatible path."));
+	}
+	else if (Tracks.IsEmpty())
+	{
+		Result->SetStringField(TEXT("message"), TEXT("No Sequencer Anim Mixer tracks found in this Level Sequence."));
+	}
+	else
+	{
+		Result->SetStringField(TEXT("message"), TEXT("Sequencer Anim Mixer tracks reflected successfully."));
+	}
 	return FMonolithActionResult::Success(Result);
 }
