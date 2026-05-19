@@ -2,7 +2,7 @@
 
 **Version:** v0.14.10 · **Last updated:** 2026-05-18
 
-**In-tree action total: 1576** active actions across **37 in-tree namespaces** (24 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the in-tree registry to 1600). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, so the count of **distinct handlers is 1572** in the default-active configuration. The four `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`) live in their own namespace and bring the dispatcher count to 41.
+Action and dispatcher totals are runtime-discovered. Call `monolith_status()` for live totals and `monolith_discover("<namespace>")` for current action schemas; 24 town-gen actions remain experimental and disabled until `bEnableProceduralTownGen=true`.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
@@ -36,10 +36,10 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [ui](#ui) | 121 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
-| [ai](#ai) | 221 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
+| [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD and document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
-| **In-tree subtotal** | **1570** | (default-active; +24 experimental town gen → 1594 when registered) |
+| **In-tree subtotal** | runtime | Use `monolith_status()` for authoritative totals; +24 town-gen actions register when enabled |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -1109,7 +1109,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithComboGraph.md`.
 
 ## ai
 
-Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass Entity, Zone Graph, runtime PIE inspection, and a deep library of scaffolds. **221 actions** — the largest single conditional namespace.
+Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass Entity, Zone Graph, runtime PIE inspection, and a deep library of scaffolds. **243 actions** — the largest single conditional namespace.
 
 **Conditional on `#if WITH_STATETREE` + `#if WITH_SMARTOBJECTS`** — projects missing either plugin register 0 AI actions.
 
