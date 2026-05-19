@@ -3,6 +3,7 @@
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 #include "MonolithAIControllerActions.h"
+#include "MonolithAIScaffoldActions.h"
 #include "MonolithAIStateTreeActions.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -49,6 +50,30 @@ bool FMonolithAIStateTreeParamGuardTest::RunTest(const FString& Parameters)
 
     TestFalse(TEXT("move_st_state should fail if index is wrong type"), Result.bSuccess);
     TestTrue(TEXT("move_st_state error should indicate wrong parameter type"), Result.ErrorMessage.Contains(TEXT("index")));
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAIScaffoldPatrolInvestigateParamGuardTest, "Monolith.ParamGuard.AI.ScaffoldPatrolInvestigateActions", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAIScaffoldPatrolInvestigateParamGuardTest::RunTest(const FString& Parameters)
+{
+    FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+    if (!Registry.HasAction(TEXT("ai"), TEXT("scaffold_patrol_investigate_ai")))
+    {
+        FMonolithAIScaffoldActions::RegisterActions(Registry);
+    }
+
+    TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+    Payload->SetStringField(TEXT("save_path"), TEXT("/Game/Temp/AI"));
+    Payload->SetStringField(TEXT("name"), TEXT("ParamGuard"));
+    Payload->SetStringField(TEXT("patrol_type"), TEXT("loop"));
+    Payload->SetStringField(TEXT("investigation_radius"), TEXT("500"));
+
+    FMonolithActionResult Result = Registry.ExecuteAction(TEXT("ai"), TEXT("scaffold_patrol_investigate_ai"), Payload);
+
+    TestFalse(TEXT("scaffold_patrol_investigate_ai should fail if investigation_radius is wrong type"), Result.bSuccess);
+    TestTrue(TEXT("scaffold_patrol_investigate_ai error should mention investigation_radius"), Result.ErrorMessage.Contains(TEXT("investigation_radius")));
 
     return true;
 }
