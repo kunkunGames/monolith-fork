@@ -23,12 +23,16 @@ public:
 		}
 
 #if WITH_BLUEPRINT_ASSIST
-		Formatter = MakeUnique<FMonolithBAFormatterImpl>();
-		IModularFeatures::Get().RegisterModularFeature(
-			IMonolithGraphFormatter::GetModularFeatureName(),
-			Formatter.Get());
-		UE_LOG(LogMonolithBABridge, Log,
-			TEXT("MonolithBABridge: Registered BA graph formatter"));
+		if (FModuleManager::Get().IsModuleLoaded(GetBlueprintAssistModuleName()))
+		{
+			RegisterFormatter();
+		}
+		else
+		{
+			ModulesChangedHandle = FModuleManager::Get().OnModulesChanged().AddRaw(
+				this,
+				&FMonolithBABridgeModule::OnModulesChanged);
+		}
 #else
 		UE_LOG(LogMonolithBABridge, Log,
 			TEXT("MonolithBABridge: Blueprint Assist not found at compile time, bridge inactive"));
@@ -38,6 +42,7 @@ public:
 	virtual void ShutdownModule() override
 	{
 #if WITH_BLUEPRINT_ASSIST
+		UnsubscribeFromModuleChanges();
 		if (Formatter.IsValid())
 		{
 			IModularFeatures::Get().UnregisterModularFeature(
@@ -50,7 +55,44 @@ public:
 
 private:
 #if WITH_BLUEPRINT_ASSIST
+	static FName GetBlueprintAssistModuleName()
+	{
+		return TEXT("BlueprintAssist");
+	}
+
+	void OnModulesChanged(FName ModuleName, EModuleChangeReason ReasonForChange)
+	{
+		if (ModuleName == GetBlueprintAssistModuleName() && ReasonForChange == EModuleChangeReason::ModuleLoaded)
+		{
+			RegisterFormatter();
+			UnsubscribeFromModuleChanges();
+		}
+	}
+
+	void UnsubscribeFromModuleChanges()
+	{
+		if (ModulesChangedHandle.IsValid())
+		{
+			FModuleManager::Get().OnModulesChanged().Remove(ModulesChangedHandle);
+			ModulesChangedHandle.Reset();
+		}
+	}
+
+	void RegisterFormatter()
+	{
+		if (!Formatter.IsValid())
+		{
+			Formatter = MakeUnique<FMonolithBAFormatterImpl>();
+			IModularFeatures::Get().RegisterModularFeature(
+				IMonolithGraphFormatter::GetModularFeatureName(),
+				Formatter.Get());
+			UE_LOG(LogMonolithBABridge, Log,
+				TEXT("MonolithBABridge: Registered BA graph formatter"));
+		}
+	}
+
 	TUniquePtr<FMonolithBAFormatterImpl> Formatter;
+	FDelegateHandle ModulesChangedHandle;
 #endif
 };
 
