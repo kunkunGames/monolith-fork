@@ -323,7 +323,7 @@ Setting names below match the actual `UMonolithSettings` UPROPERTY identifiers i
 | Setting | Default | Description |
 |---------|---------|-------------|
 | ServerPort | 9316 | MCP HTTP server port |
-| bAutoUpdateEnabled | True | GitHub Releases auto-check on startup |
+| bAutoUpdateEnabled | False | GitHub Releases auto-check on startup |
 | DatabasePathOverride | (empty) | Override default DB path (Plugins/Monolith/Saved/) |
 | EngineSourceDBPathOverride | (empty) | Override engine source DB path |
 | EngineSourcePath | (empty) | Override engine source directory |
