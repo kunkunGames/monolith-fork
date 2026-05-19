@@ -1409,6 +1409,43 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 	}
 	const TSharedPtr<FJsonObject>& Spec = *SpecPtr;
 
+	// Validate cue-level property types before CreateEmptySoundCue. That helper
+	// creates, registers, dirties, and saves the package, so post-create
+	// malformed-property failures would leave a partial asset at asset_path.
+	{
+		const TSharedPtr<FJsonObject>* PreCueProps = nullptr;
+		if (Spec->TryGetObjectField(TEXT("properties"), PreCueProps) && PreCueProps && PreCueProps->IsValid())
+		{
+			double PreNum;
+			bool PreBool;
+			if ((*PreCueProps)->HasField(TEXT("VolumeMultiplier"))
+				&& !(*PreCueProps)->TryGetNumberField(TEXT("VolumeMultiplier"), PreNum))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: VolumeMultiplier must be a number"));
+			}
+			if ((*PreCueProps)->HasField(TEXT("PitchMultiplier"))
+				&& !(*PreCueProps)->TryGetNumberField(TEXT("PitchMultiplier"), PreNum))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: PitchMultiplier must be a number"));
+			}
+			if ((*PreCueProps)->HasField(TEXT("bOverrideAttenuation"))
+				&& !(*PreCueProps)->TryGetBoolField(TEXT("bOverrideAttenuation"), PreBool))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: bOverrideAttenuation must be a boolean"));
+			}
+			if ((*PreCueProps)->HasField(TEXT("bPrimeOnLoad"))
+				&& !(*PreCueProps)->TryGetBoolField(TEXT("bPrimeOnLoad"), PreBool))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: bPrimeOnLoad must be a boolean"));
+			}
+			if ((*PreCueProps)->HasField(TEXT("bExcludeFromRandomNodeBranchCulling"))
+				&& !(*PreCueProps)->TryGetBoolField(TEXT("bExcludeFromRandomNodeBranchCulling"), PreBool))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: bExcludeFromRandomNodeBranchCulling must be a boolean"));
+			}
+		}
+	}
+
 	// Create the cue
 	FString Error;
 	USoundCue* Cue = CreateEmptySoundCue(AssetPath, Error);
@@ -1555,25 +1592,45 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 	if (Spec->TryGetObjectField(TEXT("properties"), CuePropsObj) && CuePropsObj && CuePropsObj->IsValid())
 	{
 		double Val;
-		if ((*CuePropsObj)->TryGetNumberField(TEXT("VolumeMultiplier"), Val))
+		if ((*CuePropsObj)->HasField(TEXT("VolumeMultiplier")))
 		{
+			if (!(*CuePropsObj)->TryGetNumberField(TEXT("VolumeMultiplier"), Val))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: VolumeMultiplier must be a number"));
+			}
 			Cue->VolumeMultiplier = static_cast<float>(Val);
 		}
-		if ((*CuePropsObj)->TryGetNumberField(TEXT("PitchMultiplier"), Val))
+		if ((*CuePropsObj)->HasField(TEXT("PitchMultiplier")))
 		{
+			if (!(*CuePropsObj)->TryGetNumberField(TEXT("PitchMultiplier"), Val))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: PitchMultiplier must be a number"));
+			}
 			Cue->PitchMultiplier = static_cast<float>(Val);
 		}
 		bool bVal;
-		if ((*CuePropsObj)->TryGetBoolField(TEXT("bOverrideAttenuation"), bVal))
+		if ((*CuePropsObj)->HasField(TEXT("bOverrideAttenuation")))
 		{
+			if (!(*CuePropsObj)->TryGetBoolField(TEXT("bOverrideAttenuation"), bVal))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: bOverrideAttenuation must be a boolean"));
+			}
 			Cue->bOverrideAttenuation = bVal;
 		}
-		if ((*CuePropsObj)->TryGetBoolField(TEXT("bPrimeOnLoad"), bVal))
+		if ((*CuePropsObj)->HasField(TEXT("bPrimeOnLoad")))
 		{
+			if (!(*CuePropsObj)->TryGetBoolField(TEXT("bPrimeOnLoad"), bVal))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: bPrimeOnLoad must be a boolean"));
+			}
 			Cue->bPrimeOnLoad = bVal;
 		}
-		if ((*CuePropsObj)->TryGetBoolField(TEXT("bExcludeFromRandomNodeBranchCulling"), bVal))
+		if ((*CuePropsObj)->HasField(TEXT("bExcludeFromRandomNodeBranchCulling")))
 		{
+			if (!(*CuePropsObj)->TryGetBoolField(TEXT("bExcludeFromRandomNodeBranchCulling"), bVal))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: bExcludeFromRandomNodeBranchCulling must be a boolean"));
+			}
 			Cue->bExcludeFromRandomNodeBranchCulling = bVal;
 		}
 	}
