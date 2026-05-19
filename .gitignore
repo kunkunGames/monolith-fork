@@ -71,3 +71,4 @@ prs.json
 no_op_reason.txt
 scratch.py
 scratch.sh
+.ruff_cache/

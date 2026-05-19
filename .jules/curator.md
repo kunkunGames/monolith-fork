@@ -34,3 +34,8 @@
 **Learning:** These workflow artifacts are not captured by standard Unreal ignores and create noise in git status during orchestration runs.
 **Prevention:** Add explicit ignore rules for known workflow files like pr_body.txt, commit_msg.txt, prs.json, and no_op_reason.txt in .gitignore.
 **Avoid:** Committing or leaving workflow artifacts unstaged, which can cause spurious diffs in CI or subsequent tasks.
+## 2026-05-19 - Ignore Ruff cache directories
+**Hygiene issue:** Ruff linter creates `.ruff_cache/` directories during local execution, which lack explicit ignores and leak into the working directory.
+**Learning:** Python tooling generates cache directories that aren't captured by standard Unreal ignores.
+**Prevention:** Add explicit ignore rules for Python tooling caches like `.ruff_cache/` in `.gitignore`.
+**Avoid:** Committing or leaving linter cache directories unstaged, which can cause spurious diffs.
