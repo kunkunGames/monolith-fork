@@ -38,6 +38,15 @@ void FMonolithGASInspectActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// Phase 4: Runtime Debug (PIE required)
+	Registry.RegisterAction(TEXT("gas"), TEXT("get_runtime_summary"),
+		TEXT("Summarize live GAS runtime availability and ASC counts. Safe outside PIE; returns pie_active=false instead of an error."),
+		FMonolithActionHandler::CreateStatic(&HandleGetRuntimeSummary),
+		FParamSchemaBuilder()
+			.Optional(TEXT("class_filter"), TEXT("string"), TEXT("Only include actors whose class name contains this text"))
+			.Optional(TEXT("include_actor_samples"), TEXT("boolean"), TEXT("Include a bounded actors[] sample array"), TEXT("true"))
+			.Optional(TEXT("max_actors"), TEXT("number"), TEXT("Maximum actor samples to return (0-200, default 20)"), TEXT("20"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("gas"), TEXT("snapshot_gas_state"),
 		TEXT("Full JSON dump of all actors' ASC state in PIE: abilities, effects, attributes, tags"),
 		FMonolithActionHandler::CreateStatic(&HandleSnapshotGASState),
@@ -758,7 +767,126 @@ TSharedPtr<FJsonObject> SerializeActorASCState(AActor* Actor, UAbilitySystemComp
 	return ActorObj;
 }
 
+TSharedPtr<FJsonObject> SummarizeActorASC(AActor* Actor, UAbilitySystemComponent* ASC)
+{
+	TSharedPtr<FJsonObject> ActorObj = MakeShared<FJsonObject>();
+	ActorObj->SetStringField(TEXT("actor_name"), Actor->GetName());
+	ActorObj->SetStringField(TEXT("actor_label"), Actor->GetActorLabel());
+	ActorObj->SetStringField(TEXT("actor_class"), Actor->GetClass()->GetName());
+	ActorObj->SetStringField(TEXT("actor_path"), Actor->GetPathName());
+	ActorObj->SetStringField(TEXT("asc_name"), ASC->GetName());
+	ActorObj->SetStringField(TEXT("asc_class"), ASC->GetClass()->GetName());
+
+	if (AActor* OwnerActor = ASC->GetOwnerActor())
+	{
+		ActorObj->SetStringField(TEXT("asc_owner_actor"), OwnerActor->GetName());
+	}
+	if (AActor* AvatarActor = ASC->GetAvatarActor_Direct())
+	{
+		ActorObj->SetStringField(TEXT("asc_avatar_actor"), AvatarActor->GetName());
+	}
+
+	FGameplayTagContainer OwnedTags;
+	ASC->GetOwnedGameplayTags(OwnedTags);
+
+	ActorObj->SetNumberField(TEXT("ability_count"), ASC->GetActivatableAbilities().Num());
+	ActorObj->SetNumberField(TEXT("active_effect_count"), ASC->GetActiveEffects(FGameplayEffectQuery()).Num());
+	ActorObj->SetNumberField(TEXT("attribute_set_count"), ASC->GetSpawnedAttributes().Num());
+	ActorObj->SetNumberField(TEXT("owned_tag_count"), OwnedTags.Num());
+	return ActorObj;
+}
+
 } // anonymous namespace
+
+// ─────────────────────────────────────────────────────────────────────────────
+// get_runtime_summary
+// ─────────────────────────────────────────────────────────────────────────────
+
+FMonolithActionResult FMonolithGASInspectActions::HandleGetRuntimeSummary(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ClassFilter;
+	Params->TryGetStringField(TEXT("class_filter"), ClassFilter);
+
+	bool bIncludeActorSamples = true;
+	Params->TryGetBoolField(TEXT("include_actor_samples"), bIncludeActorSamples);
+
+	double MaxActorsValue = 20.0;
+	Params->TryGetNumberField(TEXT("max_actors"), MaxActorsValue);
+	const int32 MaxActorSamples = FMath::Clamp(FMath::FloorToInt(MaxActorsValue), 0, 200);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("pie_active"), false);
+	Result->SetBoolField(TEXT("has_runtime_data"), false);
+	Result->SetNumberField(TEXT("asc_count"), 0);
+	Result->SetNumberField(TEXT("sampled_asc_count"), 0);
+	Result->SetNumberField(TEXT("total_ability_count"), 0);
+	Result->SetNumberField(TEXT("total_active_effect_count"), 0);
+	Result->SetNumberField(TEXT("total_attribute_set_count"), 0);
+	Result->SetNumberField(TEXT("total_owned_tag_count"), 0);
+	Result->SetBoolField(TEXT("include_actor_samples"), bIncludeActorSamples);
+	Result->SetNumberField(TEXT("max_actors"), MaxActorSamples);
+	if (!ClassFilter.IsEmpty())
+	{
+		Result->SetStringField(TEXT("class_filter"), ClassFilter);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> ActorSamples;
+	UWorld* World = MonolithGAS::GetPIEWorld();
+	if (!World)
+	{
+		Result->SetArrayField(TEXT("actors"), ActorSamples);
+		Result->SetStringField(TEXT("message"), TEXT("No PIE world found. Start Play-In-Editor before calling actor-specific GAS runtime actions."));
+		return FMonolithActionResult::Success(Result);
+	}
+
+	int32 ASCCount = 0;
+	int32 TotalAbilityCount = 0;
+	int32 TotalActiveEffectCount = 0;
+	int32 TotalAttributeSetCount = 0;
+	int32 TotalOwnedTagCount = 0;
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!Actor) continue;
+
+		if (!ClassFilter.IsEmpty() && !Actor->GetClass()->GetName().Contains(ClassFilter))
+		{
+			continue;
+		}
+
+		UAbilitySystemComponent* ASC = MonolithGAS::GetASCFromActor(Actor);
+		if (!ASC) continue;
+
+		FGameplayTagContainer OwnedTags;
+		ASC->GetOwnedGameplayTags(OwnedTags);
+
+		++ASCCount;
+		TotalAbilityCount += ASC->GetActivatableAbilities().Num();
+		TotalActiveEffectCount += ASC->GetActiveEffects(FGameplayEffectQuery()).Num();
+		TotalAttributeSetCount += ASC->GetSpawnedAttributes().Num();
+		TotalOwnedTagCount += OwnedTags.Num();
+
+		if (bIncludeActorSamples && ActorSamples.Num() < MaxActorSamples)
+		{
+			ActorSamples.Add(MakeShared<FJsonValueObject>(SummarizeActorASC(Actor, ASC)));
+		}
+	}
+
+	Result->SetBoolField(TEXT("pie_active"), true);
+	Result->SetBoolField(TEXT("has_runtime_data"), ASCCount > 0);
+	Result->SetStringField(TEXT("world"), World->GetName());
+	Result->SetNumberField(TEXT("asc_count"), ASCCount);
+	Result->SetNumberField(TEXT("sampled_asc_count"), ActorSamples.Num());
+	Result->SetNumberField(TEXT("total_ability_count"), TotalAbilityCount);
+	Result->SetNumberField(TEXT("total_active_effect_count"), TotalActiveEffectCount);
+	Result->SetNumberField(TEXT("total_attribute_set_count"), TotalAttributeSetCount);
+	Result->SetNumberField(TEXT("total_owned_tag_count"), TotalOwnedTagCount);
+	Result->SetArrayField(TEXT("actors"), ActorSamples);
+	Result->SetStringField(TEXT("message"),
+		FString::Printf(TEXT("Found %d actors with AbilitySystemComponents in PIE world"), ASCCount));
+	return FMonolithActionResult::Success(Result);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // snapshot_gas_state

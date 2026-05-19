@@ -1,6 +1,6 @@
 # Monolith — TODO
 
-Last updated: 2026-05-19 (Water discovery module accepted)
+Last updated: 2026-05-19 (GAS runtime summary accepted)
 
 ---
 
@@ -174,6 +174,7 @@ Last updated: 2026-05-19 (Water discovery module accepted)
 
 #### MonolithGAS — Remaining Work
 
+- [x] **Runtime summary preflight** — `gas.get_runtime_summary` added (2026-05-19). It reports PIE availability, ASC counts, aggregate ability/effect/tag/attribute-set totals, and bounded actor samples without requiring clients to call the heavier snapshot path first.
 - [ ] **Template gaps** — `init_player_stats` and `init_enemy_stats` scaffold templates not yet implemented. Should generate attribute sets + initialization GEs for common game archetypes.
 - [ ] **Helper deduplication** — Several helper functions are duplicated across action classes (tag container utilities, effect spec builders). Consolidate into shared `MonolithGASHelpers`.
 - [ ] **Type-safe reflection** — Attribute set property access uses string-based reflection. Investigate `FGameplayAttribute` direct property pointer for safer access.

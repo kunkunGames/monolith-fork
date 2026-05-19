@@ -9,8 +9,8 @@
 ## MonolithGAS
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, GameplayAbilities, GameplayTags
-**Namespace:** `gas` (135 actions) + 4 cross-namespace aliases into `ui` | **Tool:** `gas_query(action, params)` | **Actions:** 135 (Phase J F8: +`grant_ability_to_pawn`)
-**Conditional:** GBA (Blueprint Attributes) features wrapped in `#if WITH_GBA`. Core GAS engine modules (GameplayAbilities, GameplayTags, GameplayTasks) are always available. When GBA is absent, Blueprint AttributeSet creation is disabled but all 135 actions still register and compile cleanly. When `bEnableGAS` is disabled in settings, 0 actions registered.
+**Namespace:** `gas` (136 actions) + 4 cross-namespace aliases into `ui` | **Tool:** `gas_query(action, params)` | **Actions:** 136 (Phase J F8: +`grant_ability_to_pawn`; 2026-05-19: +`get_runtime_summary`)
+**Conditional:** GBA (Blueprint Attributes) features wrapped in `#if WITH_GBA`. Core GAS engine modules (GameplayAbilities, GameplayTags, GameplayTasks) are always available. When GBA is absent, Blueprint AttributeSet creation is disabled but all 136 actions still register and compile cleanly. When `bEnableGAS` is disabled in settings, 0 actions registered.
 **Settings toggle:** `bEnableGAS` (default: True)
 
 MonolithGAS provides full MCP coverage of the Gameplay Ability System. It covers ability CRUD, attribute set management, gameplay effect authoring, ASC (Ability System Component) inspection and manipulation, gameplay tag operations, gameplay cue management, target data, input binding, runtime inspection, scaffolding of common GAS patterns, and Widget→Attribute binding via class-extension authoring.
@@ -27,11 +27,11 @@ MonolithGAS provides full MCP coverage of the Gameplay Ability System. It covers
 | Cues | 10 | Create/edit gameplay cue notifies (static and actor), cue tags, cue parameters, handler lookup |
 | Targets | 5 | Target data handles, target actor selection, target data confirmation, custom target data types |
 | Input | 5 | Bind abilities to Enhanced Input actions, input tag mapping, activation on input |
-| Inspect | 6 | Runtime inspection of active abilities, applied effects, attribute snapshots, ability task state, prediction keys |
+| Inspect | 7 | Runtime inspection of active abilities, applied effects, attribute snapshots, ability task state, prediction keys, and PIE-safe summary status via `get_runtime_summary` |
 | Scaffold | 7 | Scaffold common GAS setups: init_attribute_set, init_asc_actor, init_ability_set, init_damage_pipeline, init_cooldown_system, init_stacking_effect, **`grant_ability_to_pawn`** (Phase J F8 — author-time append to ASC startup-abilities array via reflection) |
 | UI Binding | 4 | `bind_widget_to_attribute`, `unbind_widget_attribute`, `list_attribute_bindings`, `clear_widget_attribute_bindings`. Authored via `UMonolithGASAttributeBindingClassExtension`. **Also registered as aliases in the `ui` namespace** (so `ui::bind_widget_to_attribute` and `gas::bind_widget_to_attribute` dispatch to the same handler — see `MonolithGASUIBindingActions.cpp:561-577`). The `ui::` aliases are documented in [SPEC_MonolithUI.md](SPEC_MonolithUI.md) "GAS Bridge Aliases" section |
 
-**Total:** 28 + 20 + 26 + 14 + 10 + 10 + 5 + 5 + 6 + 7 + 4 = **135**.
+**Total:** 28 + 20 + 26 + 14 + 10 + 10 + 5 + 5 + 7 + 7 + 4 = **136**.
 
 Effect authoring follows the ParamGuard rule: optional scalar fields use defaults only
 when absent. Present wrong-type values, including modifier `value`, stacking limits,
@@ -46,12 +46,13 @@ instead of being silently ignored.
 - **F6 (2026-04-26)** — J1 spec relaxed to match impl (`warnings` omitted-when-empty, AttributeSet enumeration dropped, full-valid-list replaces Levenshtein "did you mean").
 - **F8 (2026-04-26)** — `gas::grant_ability_to_pawn` added (+1).
 - **F9 logging (2026-04-26)** — Observability adds + `LogMonolithGASUIBinding` / `LogMonolithGASUIBindingExt` retired into parent `LogMonolithGAS` category.
+- **Runtime summary (2026-05-19)** — `gas::get_runtime_summary` added (+1). The action is read-only and PIE-safe: outside PIE it returns `pie_active=false` with zero counts instead of an error, and during PIE it summarizes matching ASCs plus optional actor samples.
 
 See [SPEC_CORE.md §11 Recent Fixes](../SPEC_CORE.md#recent-fixes-phase-j--shipped-in-0147) for the long-form descriptions.
 
 ### Notes
 
-> **Runtime actions (Inspect category) require PIE.** These actions query live game state and return errors if called outside a Play-In-Editor session.
+> **Runtime actions (Inspect category) require PIE for actor-specific state.** `get_runtime_summary` is the lightweight exception: it can be called outside PIE and reports `pie_active=false`; actor-specific actions such as `snapshot_gas_state`, `get_tag_state`, `get_cooldown_state`, and `trace_ability_activation` still return errors without a Play-In-Editor session.
 >
 > **GBA conditional support:** The `WITH_GBA` define is set automatically by the module's `Build.cs` when GameplayAbilities is found. Projects without GAS get zero compile overhead — the entire module compiles to an empty stub.
 >

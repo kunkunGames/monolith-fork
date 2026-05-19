@@ -1132,7 +1132,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithUI.md` for the deep dive including
 
 ## gas
 
-Gameplay Ability System integration. **135 actions** across 11 categories — covers the full GAS authoring pipeline. **Conditional on `#if WITH_GBA`** — projects without the GameplayAbilities plugin register 0 GAS actions.
+Gameplay Ability System integration. **136 actions** across 11 categories — covers the full GAS authoring pipeline. **Conditional on `#if WITH_GBA`** — projects without the GameplayAbilities plugin register 0 GAS actions.
 
 > For full param schemas, call `monolith_discover("gas")` at runtime.
 
@@ -1149,12 +1149,16 @@ Gameplay Ability System integration. **135 actions** across 11 categories — co
 | Cues | 10 | `create_gameplay_cue_notify`, `link_cue_to_effect`, `unlink_cue_from_effect`, `get_cue_info`, `list_gameplay_cues`, `set_cue_parameters`, `find_cue_triggers`, `validate_cue_coverage`, `batch_create_cues`, `scaffold_cue_library` |
 | Targeting | 5 | `create_target_actor`, `configure_target_actor`, `add_targeting_to_ability`, `scaffold_fps_targeting`, `validate_targeting` |
 | Input | 5 | `setup_ability_input_binding`, `bind_ability_to_input`, `batch_bind_abilities`, `get_ability_input_bindings`, `scaffold_input_binding_component` |
-| Inspect (PIE) | 6 | `export_gas_manifest`, `snapshot_gas_state`, `get_tag_state`, `get_cooldown_state`, `trace_ability_activation`, `compare_gas_states` |
+| Inspect (PIE) | 7 | `export_gas_manifest`, `get_runtime_summary`, `snapshot_gas_state`, `get_tag_state`, `get_cooldown_state`, `trace_ability_activation`, `compare_gas_states` |
 | UI bindings | 4 | `bind_widget_to_attribute`, `unbind_widget_attribute`, `list_attribute_bindings`, `clear_widget_attribute_bindings` *(also aliased into `ui` namespace — same handlers)* |
 
 ### `gas.grant_ability_to_pawn` · NEW in Phase J F8
 
 Grant a `UGameplayAbility` to a pawn's `UAbilitySystemComponent` directly without scaffold-side wiring or `apply_effect` ceremony. See `monolith_discover("gas")` for params.
+
+### `gas.get_runtime_summary` · NEW on 2026-05-19
+
+Read-only GAS runtime preflight. It returns `pie_active`, ASC counts, aggregate ability/effect/tag/attribute-set totals, and optional actor samples. Unlike actor-specific PIE tools, it succeeds outside PIE with `has_runtime_data=false` so automation clients can decide whether to start PIE before calling deeper snapshot actions.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithGAS.md` for the deep dive.
 
