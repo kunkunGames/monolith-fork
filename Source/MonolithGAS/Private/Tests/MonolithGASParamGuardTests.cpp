@@ -2,6 +2,7 @@
 #include "Misc/AutomationTest.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "MonolithGASInputAssetActions.h"
 #include "MonolithToolRegistry.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -68,6 +69,30 @@ bool FScaffoldCustomAbilityTaskRejectsMalformedArraysTest::RunTest(const FString
 		TestTrue(TEXT("Malformed parameters item string fields should fail"), !Result.bSuccess);
 		TestTrue(TEXT("Error message should mention parameters item string fields missing or empty"), Result.ErrorMessage.Contains(TEXT("parameters")) && Result.ErrorMessage.Contains(TEXT("name is missing, empty, or not a string")));
 	}
+
+	return true;
+}
+
+#endif // WITH_DEV_AUTOMATION_TESTS
+
+#if WITH_DEV_AUTOMATION_TESTS
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FInputAssetActionsRejectMalformedOptionalParamsTest, "Monolith.ParamGuard.GAS.InputAssetActionsRejectMalformedOptionalParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FInputAssetActionsRejectMalformedOptionalParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("input"), TEXT("create_input_action")))
+	{
+		FMonolithGASInputAssetActions::RegisterActions(Registry);
+	}
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/GAS/Input/IA_ParamGuard"));
+	Params->SetStringField(TEXT("save"), TEXT("true"));
+
+	FMonolithActionResult Result = Registry.ExecuteAction(TEXT("input"), TEXT("create_input_action"), Params);
+	TestTrue(TEXT("Malformed save should fail before creating an InputAction"), !Result.bSuccess);
+	TestTrue(TEXT("Error message should mention save boolean type"), Result.ErrorMessage.Contains(TEXT("save")) && Result.ErrorMessage.Contains(TEXT("boolean")));
 
 	return true;
 }
