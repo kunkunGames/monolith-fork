@@ -552,6 +552,7 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleListBlackboards(const 
 	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 
 	TArray<TSharedPtr<FJsonValue>> Items;
+	Items.Reserve(Assets.Num());
 	for (const FAssetData& Asset : Assets)
 	{
 		FString AssetPath = Asset.GetObjectPathString();

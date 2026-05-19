@@ -205,6 +205,7 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleListMassEntityConfigs(co
 	AR.GetAssetsByClass(UMassEntityConfigAsset::StaticClass()->GetClassPathName(), Assets);
 
 	TArray<TSharedPtr<FJsonValue>> ResultArr;
+	ResultArr.Reserve(Assets.Num());
 	for (const FAssetData& Asset : Assets)
 	{
 		FString AssetPathStr = Asset.GetObjectPathString();
@@ -245,6 +246,7 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleGetMassEntityConfig(cons
 
 	// Traits
 	TArray<TSharedPtr<FJsonValue>> TraitArr;
+	TraitArr.Reserve(EntityConfig.GetTraits().Num());
 	for (const UMassEntityTraitBase* Trait : EntityConfig.GetTraits())
 	{
 		if (Trait)
@@ -744,6 +746,7 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleQueryZoneLanes(const TSh
 	ZGSubsystem->FindOverlappingLanes(QueryBounds, TagFilter, FoundLanes);
 
 	TArray<TSharedPtr<FJsonValue>> LaneArr;
+	LaneArr.Reserve(FoundLanes.Num());
 	for (const FZoneGraphLaneHandle& Handle : FoundLanes)
 	{
 		TSharedPtr<FJsonObject> LaneObj = MakeShared<FJsonObject>();
