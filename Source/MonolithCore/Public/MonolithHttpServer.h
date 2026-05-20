@@ -36,6 +36,9 @@ public:
 	/** Get the port the server is listening on */
 	int32 GetPort() const { return BoundPort; }
 
+	// Validates origin against localhost/loopback allowlist. Exposed for testing.
+	static bool IsAllowedOrigin(const FString& Origin);
+
 private:
 	// --- Route Handlers ---
 	bool HandlePostMcp(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
@@ -56,6 +59,7 @@ private:
 	// --- Helpers ---
 	TUniquePtr<FHttpServerResponse> MakeJsonResponse(const FString& JsonBody, EHttpServerResponseCodes Code = EHttpServerResponseCodes::Ok);
 	TUniquePtr<FHttpServerResponse> MakeSseResponse(const TArray<TSharedPtr<FJsonObject>>& Messages);
+
 	// Echo Origin only when it matches the localhost allowlist. Browsers block
 	// cross-origin reads when ACAO is missing, so omitting the header for
 	// non-allowlisted origins is the defence — see Issue #38.

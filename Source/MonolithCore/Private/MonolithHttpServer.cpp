@@ -1008,20 +1008,21 @@ namespace
 	// Includes IPv6 loopback `[::1]` because some browsers prefer it over
 	// 127.0.0.1 when resolving `localhost`. Anchored with ^ and $ so
 	// subdomain attacks like `http://localhost.evil.com` are rejected.
-	bool IsAllowedOrigin(const FString& Origin)
-	{
-		if (Origin.IsEmpty()) return false;
+}
 
-		// Reject the literal string "null" (sandboxed iframes / file:// origins).
-		if (Origin.Equals(TEXT("null"), ESearchCase::IgnoreCase)) return false;
+bool FMonolithHttpServer::IsAllowedOrigin(const FString& Origin)
+{
+	if (Origin.IsEmpty()) return false;
 
-		// Match: http(s)://localhost[:NNNN], http(s)://127.0.0.1[:NNNN],
-		// http(s)://[::1][:NNNN]. Reject anything else.
-		static const FRegexPattern Pattern(
-			TEXT("^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:\\d+)?$"));
-		FRegexMatcher Matcher(Pattern, Origin);
-		return Matcher.FindNext();
-	}
+	// Reject the literal string "null" (sandboxed iframes / file:// origins).
+	if (Origin.Equals(TEXT("null"), ESearchCase::IgnoreCase)) return false;
+
+	// Match: http(s)://localhost[:NNNN], http(s)://127.0.0.1[:NNNN],
+	// http(s)://[::1][:NNNN]. Reject anything else.
+	static const FRegexPattern Pattern(
+		TEXT("^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:\\d+)?$"));
+	FRegexMatcher Matcher(Pattern, Origin);
+	return Matcher.FindNext();
 }
 
 void FMonolithHttpServer::AddCorsHeaders(FHttpServerResponse& Response, const FHttpServerRequest& Request)

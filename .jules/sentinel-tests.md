@@ -22,3 +22,8 @@
 **Target:** MonolithCore / FMonolithJsonUtils
 **Learning:** Monolith core JSON infrastructure functions like FMonolithJsonUtils `Parse`, `Serialize`, `SuccessResponse`, and `ErrorResponse` form the foundation of Monolith's safety boundaries. Validating them with comprehensive checks (e.g. malformed JSON strings properly returning `nullptr` without crashing) ensures safe MCP communication layers.
 **Prevention:** Future tests targeting static protocol helpers should verify edge cases (null results, malformed strings, exact response schema compliance) instead of just testing valid structures.
+
+## 2024-05-19 - Test CORS Origin Allowlist Helpers
+**Target:** MonolithCore / FMonolithHttpServer / IsAllowedOrigin
+**Learning:** Pure security guardrail helpers (like CORS origin validation) are often locked inside anonymous namespaces or private blocks. Exposing them via a minimal public static test seam (`FMonolithHttpServer::IsAllowedOrigin`) allows for comprehensive security regression testing (subdomain spoofing, `null` origin, invalid protocols) without needing to spin up the entire HTTP server stack.
+**Prevention:** Future Sentinel tasks targeting network or security guardrails should isolate the validation logic into static helpers and add comprehensive edge-case tests instead of relying on integration-level HTTP requests.
