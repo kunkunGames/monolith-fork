@@ -1,8 +1,20 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
+#include "MonolithCoreTools.h"
 #include "MonolithParamSchema.h"
+#include "MonolithTestSupport.h"
+#include "MonolithToolProfileActions.h"
+#include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+
+void RegisterMonolithExecutionGuardActions();
+
+static FMonolithActionResult MonolithFindScoringNoop(const TSharedPtr<FJsonObject>&)
+{
+	return FMonolithActionResult::Success(MakeShared<FJsonObject>());
+}
 
 // FMonolithParamSchema alias rewriting test
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamSchemaAliasesTest,
@@ -149,6 +161,492 @@ bool FMonolithParamSchemaStrictParamsTest::RunTest(const FString& Parameters)
 	FPlatformMisc::SetEnvironmentVar(TEXT("STRICT_PARAMS"), *OriginalVal);
 
 	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamSchemaTypedValidationTest,
+	"Monolith.ParamSchema.TypedValidation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamSchemaTypedValidationTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Schema = FParamSchemaBuilder()
+		.EnableValidation()
+		.Required(TEXT("mode"), TEXT("string"), TEXT(""))
+		.Enum(TEXT("mode"), { TEXT("summary"), TEXT("actions"), TEXT("schema") })
+		.Optional(TEXT("limit"), TEXT("integer"), TEXT(""), TEXT("10"))
+		.Range(TEXT("limit"), 1, 100)
+		.Optional(TEXT("fields"), TEXT("array|string"), TEXT(""))
+		.Build();
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("mode"), TEXT("actions"));
+		Params->SetNumberField(TEXT("limit"), 25);
+		Params->SetStringField(TEXT("fields"), TEXT("name,path"));
+
+		TArray<FString> Errors;
+		TestTrue(TEXT("Valid typed params pass"), FMonolithParamSchema::ValidateTypedParams(Schema, Params, Errors));
+		TestEqual(TEXT("No validation errors"), Errors.Num(), 0);
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("mode"), TEXT("verbose"));
+		Params->SetNumberField(TEXT("limit"), 0);
+
+		TArray<FString> Errors;
+		TestFalse(TEXT("Invalid enum and range fail"), FMonolithParamSchema::ValidateTypedParams(Schema, Params, Errors));
+		TestEqual(TEXT("Two validation errors"), Errors.Num(), 2);
+		const FString JoinedErrors = FString::Join(Errors, TEXT("\n"));
+		TestTrue(TEXT("Enum error includes allowed values"), JoinedErrors.Contains(TEXT("summary")));
+		TestTrue(TEXT("Range error mentions minimum"), JoinedErrors.Contains(TEXT(">= 1")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("mode"), TEXT("summary"));
+		Params->SetNumberField(TEXT("limit"), 1.5);
+
+		TArray<FString> Errors;
+		TestFalse(TEXT("Non-integral integer fails"), FMonolithParamSchema::ValidateTypedParams(Schema, Params, Errors));
+		TestTrue(TEXT("Integer error reports expected type"), Errors.Num() > 0 && Errors[0].Contains(TEXT("integer")));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithFindWeightedScoringTest,
+	"Monolith.Core.FindWeightedScoring",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithFindWeightedScoringTest::RunTest(const FString& Parameters)
+{
+	FMonolithScopedTestNamespace Scope(TEXT("findscore"));
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+
+	FMonolithActionSearchMetadata LayoutMetadata;
+	LayoutMetadata.Keywords = { TEXT("format graph"), TEXT("arrange nodes"), TEXT("niagara graph") };
+	LayoutMetadata.Aliases = { TEXT("formatter"), TEXT("layout"), TEXT("blueprint assist"), TEXT("ba") };
+	LayoutMetadata.Examples = { TEXT("format vfx graph"), TEXT("auto layout particle graph") };
+
+	Registry.RegisterAction(
+		TEXT("findscore"),
+		TEXT("auto_layout"),
+		TEXT("Auto-layout nodes in a Niagara graph using Blueprint Assist fallback."),
+		FMonolithActionHandler::CreateStatic(&MonolithFindScoringNoop),
+		nullptr,
+		TEXT("layout"),
+		FMonolithActionExecutionPolicy::DefaultReadOnly(),
+		LayoutMetadata);
+	Registry.RegisterAction(
+		TEXT("findscore"),
+		TEXT("list_emitters"),
+		TEXT("List Niagara emitter handles and display names."),
+		FMonolithActionHandler::CreateStatic(&MonolithFindScoringNoop),
+		nullptr,
+		TEXT("emitters"));
+	Registry.RegisterAction(
+		TEXT("findscore"),
+		TEXT("preview_system"),
+		TEXT("Capture a preview image of a Niagara system."),
+		FMonolithActionHandler::CreateStatic(&MonolithFindScoringNoop),
+		nullptr,
+		TEXT("preview"));
+
+	TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("query"), TEXT("format vfx graph"));
+	Params->SetStringField(TEXT("namespace"), TEXT("findscore"));
+	Params->SetNumberField(TEXT("limit"), 3.0);
+
+	const FMonolithActionResult Result = FMonolithCoreTools::HandleFind(Params);
+	bool bOk = TestTrue(TEXT("find succeeds"), Result.bSuccess);
+	if (!Result.bSuccess || !Result.Result.IsValid())
+	{
+		return false;
+	}
+
+	bOk &= TestEqual(TEXT("scoring version is reported"), Result.Result->GetStringField(TEXT("scoring_version")), TEXT("weighted_tokens_v3"));
+
+	const TArray<TSharedPtr<FJsonValue>>* Matches = nullptr;
+	bOk &= TestTrue(TEXT("matches array exists"), Result.Result->TryGetArrayField(TEXT("matches"), Matches) && Matches && Matches->Num() > 0);
+	if (!Matches || Matches->Num() == 0)
+	{
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject> First = (*Matches)[0]->AsObject();
+	bOk &= TestTrue(TEXT("first match is an object"), First.IsValid());
+	if (!First.IsValid())
+	{
+		return false;
+	}
+
+	bOk &= TestEqual(TEXT("natural language aliases rank layout first"), First->GetStringField(TEXT("action")), TEXT("auto_layout"));
+	bOk &= TestTrue(TEXT("match exposes available status"), First->GetStringField(TEXT("status")) == TEXT("available"));
+	bOk &= TestTrue(TEXT("match reports useful reason"), First->GetStringField(TEXT("reason")).Contains(TEXT("action_tokens")));
+
+	const TArray<TSharedPtr<FJsonValue>>* MatchedTokens = nullptr;
+	bOk &= TestTrue(TEXT("matched tokens array exists"), First->TryGetArrayField(TEXT("matched_tokens"), MatchedTokens) && MatchedTokens && MatchedTokens->Num() > 0);
+
+	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithFindGoldenQueriesTest,
+	"Monolith.Core.FindGoldenQueries",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithFindGoldenQueriesTest::RunTest(const FString& Parameters)
+{
+	FMonolithScopedTestNamespace Scope(TEXT("findgold"));
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+
+	FMonolithActionSearchMetadata CallerMetadata;
+	CallerMetadata.Keywords = { TEXT("who calls"), TEXT("call sites"), TEXT("incoming calls") };
+	CallerMetadata.Aliases = { TEXT("caller"), TEXT("callers") };
+	CallerMetadata.Examples = { TEXT("who calls UObject"), TEXT("find callers for function") };
+
+	Registry.RegisterAction(
+		TEXT("findgold"),
+		TEXT("find_callers"),
+		TEXT("Find functions and methods that call a C++ symbol."),
+		FMonolithActionHandler::CreateStatic(&MonolithFindScoringNoop),
+		FParamSchemaBuilder()
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("C++ symbol, function, class, or method name"))
+			.Build(),
+		TEXT("source"),
+		FMonolithActionExecutionPolicy::DefaultReadOnly(),
+		CallerMetadata);
+
+	FMonolithActionSearchMetadata ReferenceMetadata;
+	ReferenceMetadata.Keywords = { TEXT("where used"), TEXT("usages"), TEXT("references") };
+	ReferenceMetadata.Aliases = { TEXT("refs"), TEXT("usage") };
+	ReferenceMetadata.Examples = { TEXT("where is UObject used"), TEXT("find references to symbol") };
+
+	Registry.RegisterAction(
+		TEXT("findgold"),
+		TEXT("find_references"),
+		TEXT("Find references and usages of a C++ symbol."),
+		FMonolithActionHandler::CreateStatic(&MonolithFindScoringNoop),
+		FParamSchemaBuilder()
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("C++ symbol, function, class, or method name"))
+			.Build(),
+		TEXT("source"),
+		FMonolithActionExecutionPolicy::DefaultReadOnly(),
+		ReferenceMetadata);
+
+	FMonolithActionSearchMetadata SymbolContextMetadata;
+	SymbolContextMetadata.Keywords = { TEXT("symbol context"), TEXT("definition"), TEXT("surrounding source"), TEXT("c++ code") };
+	SymbolContextMetadata.Examples = { TEXT("show symbol context"), TEXT("read source around function") };
+
+	Registry.RegisterAction(
+		TEXT("findgold"),
+		TEXT("get_symbol_context"),
+		TEXT("Read definition and surrounding source context for a C++ symbol."),
+		FMonolithActionHandler::CreateStatic(&MonolithFindScoringNoop),
+		FParamSchemaBuilder()
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("C++ symbol, function, class, or method name"))
+			.Optional(TEXT("context_lines"), TEXT("integer"), TEXT("Number of source lines around the symbol"))
+			.Build(),
+		TEXT("source"),
+		FMonolithActionExecutionPolicy::DefaultReadOnly(),
+		SymbolContextMetadata);
+
+	FMonolithActionSearchMetadata LayoutMetadata;
+	LayoutMetadata.Keywords = { TEXT("formatter"), TEXT("format graph"), TEXT("niagara graph"), TEXT("vfx graph") };
+	LayoutMetadata.Aliases = { TEXT("arrange nodes"), TEXT("auto layout"), TEXT("blueprint assist") };
+	LayoutMetadata.Examples = { TEXT("format niagara graph"), TEXT("arrange vfx nodes") };
+
+	Registry.RegisterAction(
+		TEXT("findgold"),
+		TEXT("auto_layout"),
+		TEXT("Format and arrange nodes in a Niagara graph."),
+		FMonolithActionHandler::CreateStatic(&MonolithFindScoringNoop),
+		nullptr,
+		TEXT("layout"),
+		FMonolithActionExecutionPolicy::DefaultReadOnly(),
+		LayoutMetadata);
+
+	auto FindFirst = [this](const FString& Query, FString& OutReason) -> FString
+	{
+		TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("query"), Query);
+		Params->SetStringField(TEXT("namespace"), TEXT("findgold"));
+		Params->SetNumberField(TEXT("limit"), 5.0);
+
+		const FMonolithActionResult Result = FMonolithCoreTools::HandleFind(Params);
+		if (!TestTrue(*FString::Printf(TEXT("find succeeds for '%s'"), *Query), Result.bSuccess)
+			|| !Result.Result.IsValid())
+		{
+			return FString();
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Matches = nullptr;
+		if (!TestTrue(*FString::Printf(TEXT("matches exist for '%s'"), *Query),
+			Result.Result->TryGetArrayField(TEXT("matches"), Matches) && Matches && Matches->Num() > 0))
+		{
+			return FString();
+		}
+
+		const TSharedPtr<FJsonObject> First = (*Matches)[0]->AsObject();
+		if (!TestTrue(*FString::Printf(TEXT("first match object for '%s'"), *Query), First.IsValid()))
+		{
+			return FString();
+		}
+
+		First->TryGetStringField(TEXT("reason"), OutReason);
+		return First->GetStringField(TEXT("action"));
+	};
+
+	bool bOk = true;
+	FString Reason;
+	bOk &= TestEqual(TEXT("intent metadata routes who-calls query"), FindFirst(TEXT("who calls UObject"), Reason), TEXT("find_callers"));
+	bOk &= TestTrue(TEXT("who-calls query uses metadata"), Reason.Contains(TEXT("metadata_tokens")));
+
+	bOk &= TestEqual(TEXT("schema and metadata route symbol context query"), FindFirst(TEXT("symbol context c++"), Reason), TEXT("get_symbol_context"));
+	bOk &= TestTrue(TEXT("symbol context query uses schema or metadata"), Reason.Contains(TEXT("schema_tokens")) || Reason.Contains(TEXT("metadata_tokens")));
+
+	bOk &= TestEqual(TEXT("typo-tolerant metadata routes formatter query"), FindFirst(TEXT("formater niagra graph"), Reason), TEXT("auto_layout"));
+	bOk &= TestTrue(TEXT("typo query reports fuzzy metadata match"), Reason.Contains(TEXT("metadata_tokens_fuzzy")));
+
+	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithCoreTypedParamsTest,
+	"Monolith.ParamValidation.MonolithCore.TypedParams",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithCoreTypedParamsTest::RunTest(const FString& Parameters)
+{
+	auto RegisterCoreActions = [](FMonolithToolRegistry&)
+	{
+		FMonolithCoreTools::RegisterAll();
+		RegisterMonolithExecutionGuardActions();
+		FMonolithToolProfileActions::RegisterAll();
+	};
+
+	bool bOk = FMonolithTestSupport::RunRegistryContractCases(
+		*this,
+		TEXT("monolith"),
+		RegisterCoreActions,
+		{
+			{ TEXT("find"), true, TEXT("monolith.find registers") },
+			{ TEXT("discover"), true, TEXT("monolith.discover registers") },
+			{ TEXT("status"), true, TEXT("monolith.status registers") },
+			{ TEXT("update"), true, TEXT("monolith.update registers") },
+			{ TEXT("reindex"), true, TEXT("monolith.reindex registers") },
+			{ TEXT("get_mcp_server_status"), true, TEXT("monolith.get_mcp_server_status registers") },
+			{ TEXT("list_mcp_sessions"), true, TEXT("monolith.list_mcp_sessions registers") },
+			{ TEXT("terminate_mcp_session"), true, TEXT("monolith.terminate_mcp_session registers") },
+			{ TEXT("set_mcp_compatibility_options"), true, TEXT("monolith.set_mcp_compatibility_options registers") },
+			{ TEXT("get_mcp_discovery_state"), true, TEXT("monolith.get_mcp_discovery_state registers") },
+			{ TEXT("get_onboarding_state"), true, TEXT("monolith.get_onboarding_state registers") },
+			{ TEXT("set_onboarding_state"), true, TEXT("monolith.set_onboarding_state registers") },
+			{ TEXT("get_readiness_status"), true, TEXT("monolith.get_readiness_status registers") },
+			{ TEXT("get_readiness_help"), true, TEXT("monolith.get_readiness_help registers") },
+			{ TEXT("get_notification_settings"), true, TEXT("monolith.get_notification_settings registers") },
+			{ TEXT("set_notification_settings"), true, TEXT("monolith.set_notification_settings registers") },
+			{ TEXT("test_notification"), true, TEXT("monolith.test_notification registers") },
+			{ TEXT("get_execution_guard_status"), true, TEXT("monolith.get_execution_guard_status registers") },
+			{ TEXT("list_recent_action_audit"), true, TEXT("monolith.list_recent_action_audit registers") },
+			{ TEXT("get_last_rollback"), true, TEXT("monolith.get_last_rollback registers") },
+			{ TEXT("set_action_execution_policy"), true, TEXT("monolith.set_action_execution_policy registers") },
+			{ TEXT("list_tool_profiles"), true, TEXT("monolith.list_tool_profiles registers") },
+			{ TEXT("get_tool_profile"), true, TEXT("monolith.get_tool_profile registers") },
+			{ TEXT("create_tool_profile"), true, TEXT("monolith.create_tool_profile registers") },
+			{ TEXT("update_tool_profile"), true, TEXT("monolith.update_tool_profile registers") },
+			{ TEXT("delete_tool_profile"), true, TEXT("monolith.delete_tool_profile registers") },
+			{ TEXT("set_active_tool_profile"), true, TEXT("monolith.set_active_tool_profile registers") },
+			{ TEXT("set_action_enabled"), true, TEXT("monolith.set_action_enabled registers") },
+			{ TEXT("set_namespace_enabled"), true, TEXT("monolith.set_namespace_enabled registers") },
+			{ TEXT("set_action_description_override"), true, TEXT("monolith.set_action_description_override registers") },
+			{ TEXT("get_effective_discovery"), true, TEXT("monolith.get_effective_discovery registers") },
+			{ TEXT("validate_tool_profile"), true, TEXT("monolith.validate_tool_profile registers") }
+		});
+
+	bOk &= FMonolithTestSupport::RunParamGuardCases(
+		*this,
+		TEXT("monolith"),
+		RegisterCoreActions,
+		{
+			{
+				TEXT("find"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("query"), TEXT("discover"));
+					Params->SetNumberField(TEXT("limit"), 0.0);
+				},
+				TEXT("limit"),
+				TEXT("monolith.find rejects out-of-range limit")
+			},
+			{
+				TEXT("discover"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetNumberField(TEXT("namespace"), 1.0);
+				},
+				TEXT("namespace"),
+				TEXT("monolith.discover rejects non-string namespace")
+			},
+			{
+				TEXT("update"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("action"), TEXT("upgrade"));
+				},
+				TEXT("action"),
+				TEXT("monolith.update rejects unknown action")
+			},
+			{
+				TEXT("reindex"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("force"), TEXT("yes"));
+				},
+				TEXT("force"),
+				TEXT("monolith.reindex rejects non-bool force")
+			},
+			{
+				TEXT("list_mcp_sessions"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetNumberField(TEXT("limit"), 1001.0);
+				},
+				TEXT("limit"),
+				TEXT("monolith.list_mcp_sessions rejects out-of-range limit")
+			},
+			{
+				TEXT("terminate_mcp_session"),
+				[](TSharedRef<FJsonObject>)
+				{
+				},
+				TEXT("session_id"),
+				TEXT("monolith.terminate_mcp_session rejects missing session_id")
+			},
+			{
+				TEXT("set_mcp_compatibility_options"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("options"), TEXT("loopback_only"));
+				},
+				TEXT("options"),
+				TEXT("monolith.set_mcp_compatibility_options rejects non-object options")
+			},
+			{
+				TEXT("set_onboarding_state"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("action"), TEXT("finish"));
+				},
+				TEXT("action"),
+				TEXT("monolith.set_onboarding_state rejects unknown action")
+			},
+			{
+				TEXT("set_notification_settings"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("settings"), TEXT("enabled"));
+				},
+				TEXT("settings"),
+				TEXT("monolith.set_notification_settings rejects non-object settings")
+			},
+			{
+				TEXT("test_notification"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetNumberField(TEXT("message"), 7.0);
+				},
+				TEXT("message"),
+				TEXT("monolith.test_notification rejects non-string message")
+			},
+			{
+				TEXT("list_recent_action_audit"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetNumberField(TEXT("limit"), 101.0);
+				},
+				TEXT("limit"),
+				TEXT("monolith.list_recent_action_audit rejects out-of-range limit")
+			},
+			{
+				TEXT("set_action_execution_policy"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("action"), TEXT("monolith.status"));
+					Params->SetStringField(TEXT("policy"), TEXT("read_only"));
+				},
+				TEXT("policy"),
+				TEXT("monolith.set_action_execution_policy rejects non-object policy")
+			},
+			{
+				TEXT("get_tool_profile"),
+				[](TSharedRef<FJsonObject>)
+				{
+				},
+				TEXT("profile_id"),
+				TEXT("monolith.get_tool_profile rejects missing profile_id")
+			},
+			{
+				TEXT("create_tool_profile"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("profile_id"), TEXT("test-profile"));
+					Params->SetStringField(TEXT("mode"), TEXT("all"));
+				},
+				TEXT("mode"),
+				TEXT("monolith.create_tool_profile rejects unknown mode")
+			},
+			{
+				TEXT("update_tool_profile"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("profile_id"), TEXT("test-profile"));
+					Params->SetStringField(TEXT("enabled_actions"), TEXT("monolith.status"));
+				},
+				TEXT("enabled_actions"),
+				TEXT("monolith.update_tool_profile rejects non-array enabled_actions")
+			},
+			{
+				TEXT("set_action_enabled"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("action_id"), TEXT("monolith.status"));
+					Params->SetStringField(TEXT("enabled"), TEXT("true"));
+				},
+				TEXT("enabled"),
+				TEXT("monolith.set_action_enabled rejects non-bool enabled")
+			},
+			{
+				TEXT("set_namespace_enabled"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("namespace"), TEXT("source"));
+					Params->SetStringField(TEXT("enabled"), TEXT("false"));
+				},
+				TEXT("enabled"),
+				TEXT("monolith.set_namespace_enabled rejects non-bool enabled")
+			},
+			{
+				TEXT("set_action_description_override"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("action_id"), TEXT("monolith.status"));
+					Params->SetNumberField(TEXT("description_override"), 1.0);
+				},
+				TEXT("description_override"),
+				TEXT("monolith.set_action_description_override rejects non-string override")
+			},
+			{
+				TEXT("get_effective_discovery"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetNumberField(TEXT("namespace"), 1.0);
+				},
+				TEXT("namespace"),
+				TEXT("monolith.get_effective_discovery rejects non-string namespace")
+			}
+		});
+
+	return bOk;
 }
 
 #endif // WITH_DEV_AUTOMATION_TESTS

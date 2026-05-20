@@ -9,7 +9,7 @@
  * rest point spacing, interactive reach validation, and comprehensive reports.
  * P0 priority — this game serves hospice patients.
  */
-class FMonolithMeshAccessibilityActions
+class MONOLITHMESH_API FMonolithMeshAccessibilityActions
 {
 public:
 	/** Register all 6 accessibility actions with the tool registry */

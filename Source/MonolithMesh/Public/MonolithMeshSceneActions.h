@@ -8,7 +8,7 @@
  * Actor CRUD operations - spawn, move, duplicate, delete, query info.
  * Foundation for blockout system.
  */
-class FMonolithMeshSceneActions
+class MONOLITHMESH_API FMonolithMeshSceneActions
 {
 public:
 	/** Register all 8 scene manipulation actions with the tool registry */

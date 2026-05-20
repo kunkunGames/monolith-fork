@@ -25,7 +25,7 @@ static constexpr float GDoorClearance = 100.0f;
 
 void FMonolithMeshFurnishingActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
-	Registry.RegisterAction(TEXT("mesh"), TEXT("furnish_room"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("furnish_room"),
 		TEXT("Furnish a single room with parametric furniture based on room type. "
 			"Places items using create_parametric_mesh via the tool registry. "
 			"Collision-aware: items that would clip walls, doors, or other furniture are skipped."),
@@ -43,7 +43,7 @@ void FMonolithMeshFurnishingActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Optional(TEXT("skip_types"), TEXT("array"), TEXT("Furniture types to skip (e.g. [\"bathtub\"] for small bathrooms)"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("furnish_building"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("furnish_building"),
 		TEXT("Furnish all rooms in a building from the spatial registry. "
 			"Iterates each room, loads the appropriate preset, and delegates to furnish_room."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshFurnishingActions::FurnishBuilding),
@@ -59,7 +59,7 @@ void FMonolithMeshFurnishingActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Optional(TEXT("decay"), TEXT("number"), TEXT("0-1, fraction of items to disturb for horror effect"), TEXT("0"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("list_furniture_presets"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("list_furniture_presets"),
 		TEXT("List available furniture preset configurations. Returns preset names and summaries."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshFurnishingActions::ListFurniturePresets),
 		FParamSchemaBuilder()
@@ -1121,7 +1121,7 @@ FMonolithActionResult FMonolithMeshFurnishingActions::FurnishBuilding(const TSha
 		}
 
 		// Call furnish_room via registry (re-entrant through our own handler)
-		FMonolithActionResult RoomResult = Registry.ExecuteAction(TEXT("mesh"), TEXT("furnish_room"), RoomParams);
+		FMonolithActionResult RoomResult = Registry.ExecuteAction(TEXT("worldgen"), TEXT("furnish_room"), RoomParams);
 
 		if (RoomResult.bSuccess && RoomResult.Result.IsValid())
 		{
@@ -1149,7 +1149,7 @@ FMonolithActionResult FMonolithMeshFurnishingActions::FurnishBuilding(const TSha
 		DisturbanceParams->SetStringField(TEXT("disturbance"), DisturbanceLevel);
 		DisturbanceParams->SetNumberField(TEXT("seed"), Seed + 1234);
 
-		Registry.ExecuteAction(TEXT("mesh"), TEXT("set_room_disturbance"), DisturbanceParams);
+		Registry.ExecuteAction(TEXT("worldgen"), TEXT("set_room_disturbance"), DisturbanceParams);
 	}
 
 	// --- Build result ---

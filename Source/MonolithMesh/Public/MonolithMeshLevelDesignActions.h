@@ -8,7 +8,7 @@
  * Lights, materials, mesh swap, LOD, instancing, component property reflection.
  * High-frequency actions for level design sessions.
  */
-class FMonolithMeshLevelDesignActions
+class MONOLITHMESH_API FMonolithMeshLevelDesignActions
 {
 public:
 	/** Register all 9 level design actions with the tool registry */

@@ -69,6 +69,20 @@ public:
 	}
 
 	/**
+	 * External formatters mutate graph assets outside Monolith's built-in layout path.
+	 * They are allowed only when the action has no built-in Monolith formatter.
+	 */
+	static bool IsExternalMutationFormattingEnabled(bool bHasBuiltInFormatter = true)
+	{
+		return !bHasBuiltInFormatter;
+	}
+
+	static FString GetExternalMutationFormattingDisabledMessage()
+	{
+		return TEXT("Blueprint Assist formatting is disabled for Monolith asset mutation actions that have a built-in formatter.");
+	}
+
+	/**
 	 * Get the registered formatter (check IsAvailable() first!).
 	 * Returns the first registered provider.
 	 */

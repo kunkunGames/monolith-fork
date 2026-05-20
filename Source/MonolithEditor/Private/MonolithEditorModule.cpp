@@ -9,9 +9,79 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
 #include "PropertyEditorModule.h"
+#include "Editor.h"
+#include "Misc/CoreDelegates.h"
 #include "Misc/OutputDeviceRedirector.h"
+#include "UObject/UObjectGlobals.h"
 
 #define LOCTEXT_NAMESPACE "FMonolithEditorModule"
+
+namespace
+{
+class FMonolithPieTransactionBufferGuard
+{
+public:
+	void Register()
+	{
+		if (bRegistered)
+		{
+			return;
+		}
+
+		FEditorDelegates::PreBeginPIE.AddRaw(this, &FMonolithPieTransactionBufferGuard::HandlePreBeginPIE);
+		FEditorDelegates::EndPIE.AddRaw(this, &FMonolithPieTransactionBufferGuard::HandleEndPIE);
+		FCoreUObjectDelegates::PreLoadMap.AddRaw(this, &FMonolithPieTransactionBufferGuard::HandlePreLoadMap);
+		bRegistered = true;
+	}
+
+	void Unregister()
+	{
+		if (!bRegistered)
+		{
+			return;
+		}
+
+		FEditorDelegates::PreBeginPIE.RemoveAll(this);
+		FEditorDelegates::EndPIE.RemoveAll(this);
+		FCoreUObjectDelegates::PreLoadMap.RemoveAll(this);
+		bRegistered = false;
+	}
+
+private:
+	static void ResetTransactionBuffer(const FText& Reason)
+	{
+		if (GEditor)
+		{
+			GEditor->ResetTransaction(Reason);
+		}
+	}
+
+	void HandlePreBeginPIE(bool /*bIsSimulating*/)
+	{
+		ResetTransactionBuffer(
+			NSLOCTEXT("MonolithEditor", "ResetTransactionsBeforePIE", "Reset transactions before PIE"));
+	}
+
+	void HandleEndPIE(bool /*bIsSimulating*/)
+	{
+		ResetTransactionBuffer(
+			NSLOCTEXT("MonolithEditor", "ResetTransactionsAfterPIE", "Reset transactions after PIE"));
+	}
+
+	void HandlePreLoadMap(const FString& /*MapName*/)
+	{
+		if (GEditor && GEditor->IsPlaySessionInProgress())
+		{
+			ResetTransactionBuffer(
+				NSLOCTEXT("MonolithEditor", "ResetTransactionsBeforePIEMapLoad", "Reset transactions before PIE map load"));
+		}
+	}
+
+	bool bRegistered = false;
+};
+
+FMonolithPieTransactionBufferGuard GMonolithPieTransactionBufferGuard;
+}
 
 void FMonolithEditorModule::StartupModule()
 {
@@ -25,6 +95,7 @@ void FMonolithEditorModule::StartupModule()
 	FMonolithEditorSelectionActions::RegisterActions();
 	FMonolithEditorLevelMetadataActions::RegisterActions();
 	FMonolithEditorCrashActions::RegisterActions();  // CrashRecovery: get_last_crash_reason / list_recent_crashes / get_crash_stats
+	GMonolithPieTransactionBufferGuard.Register();
 
 	// Register settings detail customization
 	FPropertyEditorModule& PropModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
@@ -39,8 +110,10 @@ void FMonolithEditorModule::StartupModule()
 
 void FMonolithEditorModule::ShutdownModule()
 {
+	GMonolithPieTransactionBufferGuard.Unregister();
+
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("editor"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("level"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("scene"));
 
 	if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))
 	{

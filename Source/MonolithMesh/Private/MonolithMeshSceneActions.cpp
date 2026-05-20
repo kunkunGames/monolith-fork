@@ -104,14 +104,14 @@ namespace SceneActionHelpers
 
 void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_actor_info"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("get_actor_info"),
 		TEXT("Get comprehensive info for an actor in the editor world (class, transform, mesh, materials, tags, components, bounds)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::GetActorInfo),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor_name"), TEXT("string"), TEXT("Actor name or label"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("spawn_actor"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("spawn_actor"),
 		TEXT("Spawn an actor in the editor world. Path starting with '/' spawns StaticMeshActor with that mesh; otherwise spawns by class name."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::SpawnActor),
 		FParamSchemaBuilder()
@@ -123,7 +123,7 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("folder"), TEXT("string"), TEXT("Actor folder path in the outliner"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("move_actor"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("move_actor"),
 		TEXT("Move/rotate/scale an actor. Set relative=true to offset from current transform."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::MoveActor),
 		FParamSchemaBuilder()
@@ -134,7 +134,7 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("relative"), TEXT("boolean"), TEXT("If true, add to current transform instead of replacing"), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("duplicate_actor"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("duplicate_actor"),
 		TEXT("Duplicate an actor in the editor world with an optional position offset"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::DuplicateActor),
 		FParamSchemaBuilder()
@@ -143,14 +143,14 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("offset"), TEXT("array"), TEXT("Position offset [x, y, z]"), TEXT("[0,0,0]"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("delete_actors"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("delete_actors"),
 		TEXT("Delete one or more actors from the editor world. Validates ALL exist before deleting ANY. Does NOT delete asset files."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::DeleteActors),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor_names"), TEXT("array"), TEXT("Array of actor names or labels to delete"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("group_actors"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("group_actors"),
 		TEXT("Move actors into an outliner folder (creates folder hierarchy automatically)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::GroupActors),
 		FParamSchemaBuilder()
@@ -158,7 +158,7 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("group_name"), TEXT("string"), TEXT("Folder path (e.g. 'Furniture/Kitchen')"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("set_actor_properties"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("set_actor_properties"),
 		TEXT("Set properties on an actor (mobility, physics, collision, shadows, tags, mass)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::SetActorProperties),
 		FParamSchemaBuilder()
@@ -171,14 +171,14 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("mass_kg"), TEXT("number"), TEXT("Mass override in kg"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("batch_execute"),
-		TEXT("Execute multiple mesh actions in a single undo transaction. Max 200 actions. No nested batch_execute allowed."),
+	Registry.RegisterAction(TEXT("scene"), TEXT("batch_execute"),
+		TEXT("Execute multiple scene actions in a single undo transaction. Max 200 actions. No nested batch_execute allowed."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::BatchExecute),
 		FParamSchemaBuilder()
-			.Required(TEXT("actions"), TEXT("array"), TEXT("Array of {action, params} objects"))
+			.Required(TEXT("actions"), TEXT("array"), TEXT("Array of {action, params, namespace?} objects; namespace defaults to scene"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("align_actors"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("align_actors"),
 		TEXT("Align multiple actors along an axis. Modes: min/max (snap to extremes), center (average), distribute (spread evenly between min/max)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::AlignActors),
 		FParamSchemaBuilder()
@@ -187,7 +187,7 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("mode"), TEXT("string"), TEXT("Alignment mode: min, max, center, or distribute"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("snap_to_floor"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("snap_to_floor"),
 		TEXT("Snap actors to the floor by tracing downward. Places the bottom of each actor on the hit surface."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::SnapToFloor),
 		FParamSchemaBuilder()
@@ -195,7 +195,7 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("trace_distance"), TEXT("number"), TEXT("Maximum downward trace distance"), TEXT("10000"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("manage_folders"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("manage_folders"),
 		TEXT("Manage World Outliner folders: list, delete (move actors to root), rename, or move folders."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::ManageFolders),
 		FParamSchemaBuilder()
@@ -890,10 +890,14 @@ FMonolithActionResult FMonolithMeshSceneActions::BatchExecute(const TSharedPtr<F
 			ActionParams = *ParamsObj;
 		}
 
+		FString ActionNamespace = TEXT("scene");
+		(*ActionObj)->TryGetStringField(TEXT("namespace"), ActionNamespace);
+
 		// Dispatch via registry
-		FMonolithActionResult ActionResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), ActionName, ActionParams);
+		FMonolithActionResult ActionResult = FMonolithToolRegistry::Get().ExecuteAction(ActionNamespace, ActionName, ActionParams);
 
 		auto ItemResult = MakeShared<FJsonObject>();
+		ItemResult->SetStringField(TEXT("namespace"), ActionNamespace);
 		ItemResult->SetStringField(TEXT("action"), ActionName);
 		ItemResult->SetBoolField(TEXT("success"), ActionResult.bSuccess);
 		if (!ActionResult.bSuccess)

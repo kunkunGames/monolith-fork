@@ -225,7 +225,7 @@ namespace
 void FMonolithMeshHorrorDesignActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. predict_player_paths
-	Registry.RegisterAction(TEXT("mesh"), TEXT("predict_player_paths"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("predict_player_paths"),
 		TEXT("Generate weighted navmesh paths between two points using multiple strategy heuristics: shortest, safest, curious, cautious. Returns path points, distance, estimated time, and per-strategy scores."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorDesignActions::PredictPlayerPaths),
 		FParamSchemaBuilder()
@@ -242,7 +242,7 @@ void FMonolithMeshHorrorDesignActions::RegisterActions(FMonolithToolRegistry& Re
 			.Build());
 
 	// 2. evaluate_spawn_point
-	Registry.RegisterAction(TEXT("mesh"), TEXT("evaluate_spawn_point"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("evaluate_spawn_point"),
 		TEXT("Composite score for an enemy spawn location. Evaluates visibility delay, lighting, audio cover, escape proximity, and path commitment from player paths."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorDesignActions::EvaluateSpawnPoint),
 		FParamSchemaBuilder()
@@ -253,7 +253,7 @@ void FMonolithMeshHorrorDesignActions::RegisterActions(FMonolithToolRegistry& Re
 			.Build());
 
 	// 3. suggest_scare_positions
-	Registry.RegisterAction(TEXT("mesh"), TEXT("suggest_scare_positions"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("suggest_scare_positions"),
 		TEXT("Find optimal positions for scripted scare events along a player path. Scores anticipation buildup, player visibility, timing, and player agency. Supports hospice mode."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorDesignActions::SuggestScarePositions),
 		FParamSchemaBuilder()
@@ -266,7 +266,7 @@ void FMonolithMeshHorrorDesignActions::RegisterActions(FMonolithToolRegistry& Re
 			.Build());
 
 	// 4. evaluate_encounter_pacing
-	Registry.RegisterAction(TEXT("mesh"), TEXT("evaluate_encounter_pacing"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("evaluate_encounter_pacing"),
 		TEXT("Analyze spacing and intensity of multiple encounter positions along a level path. Flags back-to-back encounters, insufficient rest periods, and intensity curve issues."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorDesignActions::EvaluateEncounterPacing),
 		FParamSchemaBuilder()

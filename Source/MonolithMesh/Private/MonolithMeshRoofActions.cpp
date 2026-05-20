@@ -43,7 +43,7 @@ void FMonolithMeshRoofActions::SetHandlePool(UMonolithMeshHandlePool* InPool)
 
 void FMonolithMeshRoofActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
-	Registry.RegisterAction(TEXT("mesh"), TEXT("generate_roof"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("generate_roof"),
 		TEXT("Generate roof geometry from a building footprint polygon. "
 			"Types: gable, hip, flat (parapet), shed, gambrel. "
 			"Consumes footprint_polygon from the Building Descriptor (SP1). "

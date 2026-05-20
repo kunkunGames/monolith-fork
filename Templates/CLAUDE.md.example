@@ -1,75 +1,88 @@
-# Monolith MCP — Project Instructions
+﻿# Monolith MCP — Project Instructions
 
-This project uses **Monolith** for Unreal Engine MCP integration. Tool and action totals are runtime-discovered; call `monolith_status()` for the current totals and `monolith_discover("namespace")` for live action schemas.
+`Plugins/Monolith` exposes Unreal Engine editor capability to agents via the Monolith MCP server. For project work that touches the editor, Blueprints, assets, C++ source, build logs, crash context, config, source control, or the project graph, route through Monolith instead of hand-rolled editor Python or raw file search.
 
-## Tools
+## Core tools
 
-- `monolith_discover(namespace?)` — List available actions (always call this first)
-- `monolith_status()` — Health check, version, action count
-- `monolith_reindex()` — Trigger full project re-index
+- `monolith_find(query, namespace?)` — find candidate namespaces/actions from a task description.
+- `monolith_discover(namespace?)` — live catalog and schemas; supports compact summary plus `mode=summary|actions|schema`.
+- `monolith_status()` — health check, version, and action count.
+- `monolith_reindex()` — trigger full project re-index.
 
-## Namespace Query Tools
+The action/namespace catalog is runtime-discovered. Call `monolith_find("<task text>")` when the exact action is unclear, then `monolith_discover({"namespace":"<namespace>", "action":"<action>", "mode":"schema"})` for exact params. `monolith_discover("<namespace>")` still returns the legacy namespace schema list, and `monolith_discover()` returns a compact namespace summary. Do not hand-maintain a full per-action catalog in this file; the section below is a routing map only.
 
-Use `{namespace}_query(action, params)` after discovering the namespace. Common in-tree namespaces include:
+## Namespace routing
 
-- `ai_query` — AI: Behavior Trees, State Trees, EQS, Smart Objects, Perception, Navigation
-- `animation_query` — Animation assets, ABP, PoseSearch, montages
-- `asset_query` — Asset registry inspection and asset metadata
-- `audio_query` — Audio asset CRUD, Sound Cue/MetaSound graph building, AI perception binding
-- `blueprint_query` — Blueprint CRUD, compile, nodes, spawn actors
-- `chaos_fracture_query` — Chaos Fracture inspection and read-only utilities
-- `chooser_query` — Chooser table inspection and validation
-- `cloth_query` — Cloth asset inspection and validation
-- `collection_query` — Collection inspection and maintenance
-- `combograph_query` — ComboGraph combo systems
-- `config_query` — Config/INI resolution
-- `context_query` — Runtime/editor context inspection
-- `dataflow_query` — Dataflow graph inspection
-- `editor_query` — Build, logs, compile output, crash context, scene capture
-- `gamefeatures_query` — Game Feature plugin inventory and GameFeatureData inspection
-- `gas_query` — Gameplay Ability System: abilities, attributes, effects, ASC
-- `hlod_query` — HLOD inspection and diagnostics
-- `input_query` — Enhanced Input mapping inspection
-- `interchange_query` — Interchange asset pipeline inspection
-- `level_query` — Level actors, world state, and spatial inspection
-- `level_instance_query` — Level Instance inspection
-- `level_sequence_query` — Level Sequence inspection, bindings, director blueprints
-- `localization_query` — Localization targets and text data
-- `logicdriver_query` — Logic Driver Pro state machines
-- `material_query` — Materials, instances, functions, HLSL, graph
-- `mesh_query` — Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript
-- `metahuman_query` — MetaHuman asset inspection
-- `movie_render_query` — Movie Render Queue management
-- `ndisplay_query` — nDisplay config inspection
-- `niagara_query` — Niagara VFX, dynamic inputs, sim stages
-- `paper2d_query` — Paper2D asset inspection
-- `pcg_query` — PCG graph inspection
-- `project_query` — Project-wide asset search
-- `slate_query` — Live editor Slate window/widget inspection
-- `source_control_query` — Source control status and workspace inspection
-- `source_query` — Engine C++ source lookup, class hierarchy, callers/callees
-- `ui_query` — Widget blueprints, templates, styling, accessibility
-- `water_query` — Water/Landscape actor discovery
-- `world_conditions_query` — World Conditions schema and asset inspection
+Use `{namespace}_query(action, params)` after discovering the namespace. Common Monolith namespaces:
 
-## Workflow
+- Code/project: `source_query` (C++ symbols/refs), `project_query` (asset search), `editor_query` (build/logs/crash), `asset_query`, `config_query`, `context_query`, `source_control_query`.
+- Gameplay: `blueprint_query`, `gas_query`, `ai_query`, `logicdriver_query`, `combograph_query`, `input_query`.
+- Content: `material_query`, `mesh_query`, `animation_query`, `niagara_query`, `audio_query`, `ui_query`, `level_query`, `level_sequence_query`, `paper2d_query`.
+- Discover the rest as needed: `chaos_fracture`, `cloth`, `chooser`, `collection`, `dataflow`, `gamefeatures`, `hlod`, `interchange`, `level_instance`, `localization`, `metahuman`, `movie_render`, `ndisplay`, `pcg`, `slate`, `water`, `world_conditions`.
 
-1. Call `monolith_discover("namespace")` to see actions before guessing names
-2. Use `project_query("search", {"query": "..."})` to find assets
-3. Use `source_query("search_source", {"query": "..."})` to look up UE C++ APIs
-4. Use domain tools to inspect/modify assets
-5. After C++ changes: `editor_query("get_build_errors")` to check results
+## Standard workflow
 
-## Asset Paths
+1. Call `monolith_find("task text")` if the correct namespace/action is unclear.
+2. Call `monolith_discover({"namespace":"...", "action":"...", "mode":"schema"})` for exact params, or `monolith_discover("namespace")` for the legacy namespace schema list.
+3. Use `project_query("search", {"query": "..."})` to find assets.
+4. Use `source_query("search_source", {"query": "..."})` to look up UE/project C++ APIs.
+5. Use `source_query("risk_score" | "review_context" | "impact_radius", ...)` for code-review impact/risk context before making review claims.
+6. Use domain tools to inspect or modify assets.
+7. After C++ changes, use `editor_query("get_build_errors")` and the project build command to verify results when the editor/build tools are available.
+8. After project or source indexing completes, expect the matching CRG projection/cache to be rebuilt automatically; run `project.health` or `source.health` if parity looks stale.
+9. After a successful C++ build/hot reload, the editor hook should refresh EngineSource.db through incremental project source indexing; if it did not fire, run `source.trigger_project_reindex`.
 
-All paths use `/Game/Path/To/Asset` format (no `.uasset`):
+## Source and CRG navigation
+
+Monolith owns the source graph. Prefer `source_query` and the offline `monolith_query.exe` source-action fallback over raw file search whenever `Plugins\Monolith\Saved\EngineSource.db` exists.
+
+- `source_query("search_source", {...})` — symbol/text search across engine + project C++.
+- `source_query("find_references" | "find_callers" | "find_callees", {...})`.
+- `source_query("get_symbol_context" | "get_class_hierarchy" | "read_source", {...})`.
+- `source_query("risk_score" | "review_context" | "impact_radius", {...})` before code-review risk claims.
+
+No MCP or editor running: use the offline CLI as the MCP-free equivalent of `source_query`; it provides the same `source` actions and reads `EngineSource.db` without UE runtime:
+
+```powershell
+Plugins\Monolith\Binaries\monolith_query.exe source search_source UObject --limit=5
+Plugins\Monolith\Binaries\monolith_query.exe source risk_score UObject --limit=5
+Plugins\Monolith\Binaries\monolith_query.exe source review_context UObject --detail-level=minimal
+```
+
+For the CRG-compatible `graph.db`, Monolith builds and searches it natively from `Saved\EngineSource.db`:
+
+```powershell
+Plugins\Monolith\Binaries\monolith_query.exe source repair_crg_cache --execute
+Plugins\Monolith\Binaries\monolith_query.exe source build_crg_graph --execute
+Plugins\Monolith\Binaries\monolith_query.exe source search_crg_graph UObject --limit=5
+```
+
+`source search_crg_graph` uses `Saved\graph.db`'s `nodes_fts` FTS5 table first and falls back to LIKE search only when FTS has no result. Use `source search_source` for general symbol/source-line lookup, `source search_crg_graph` for CRG node search, and `source review_context` or `source risk_score` before making code-review claims.
+
+## Project asset navigation
+
+The project index is pre-built. Use `project_query("search", {...})` for broad asset searches, then `project_query("impact_radius" | "risk_score" | "review_context", {...})` for dependency impact and review context.
+
+Project asset CRG is stored inside `Plugins\Monolith\Saved\ProjectIndex.db` as derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, and `crg_meta` rows over `assets` and `dependencies`. Rebuild it after asset index changes or stale health warnings:
+
+```powershell
+Plugins\Monolith\Binaries\monolith_query.exe project repair_crg_cache --execute
+Plugins\Monolith\Binaries\monolith_query.exe project risk_score /Game/Path/Asset --limit=5
+Plugins\Monolith\Binaries\monolith_query.exe project review_context /Game/Path/Asset --detail-level=minimal
+```
+
+Asset paths use Unreal object paths, not `.uasset` filenames:
+
 - Project Content: `/Game/Path/To/Asset`
 - Project Plugins: `/PluginName/PluginName/Path/To/Asset`
 - Engine plugins: `/PluginName/Path/To/Asset`
 
-## Rules
+## Hard rules
 
-- Always discover before calling — action names change between versions
-- Never guess `#include` paths or UE API signatures — use `source_query` to verify
-- The project index is pre-built — use `project_query` for broad searches
-- For material work: `create_material` → `build_material_graph` → `connect_expressions` → `recompile_material`
+- Always route through the live catalog before calling actions; action names can change between versions.
+- Find C++ through the source index, never by raw file walk while `source_query` or the offline source-action CLI is available.
+- Raw file walk is only acceptable when both MCP and the offline DB are unavailable (`Plugins\Monolith\Binaries\monolith_query.exe source health`).
+- Never guess `#include` paths or UE API signatures; verify them with `source_query` or the offline source-action CLI.
+- Index/reindex completion should rebuild CRG projection/cache automatically; use `project repair_crg_cache --execute` or `source repair_crg_cache --execute` only when health reports stale CRG parity or manual repair is required.
+- If a task needs an editor capability and no Monolith action covers it, extend or add the Monolith action in the owning `Source/Monolith*` module (handler + param schema + tests + spec/docs sync). Do **not** substitute `editor_query("run_python")` or ad-hoc editor scripting for a missing action; `run_python` is one-off diagnostics only.
+- For material work, use the durable Monolith flow: `create_material` -> `build_material_graph` -> `connect_expressions` -> `recompile_material`.

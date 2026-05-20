@@ -18,7 +18,7 @@
 void FMonolithMeshLightingActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. sample_light_levels
-	Registry.RegisterAction(TEXT("mesh"), TEXT("sample_light_levels"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("sample_light_levels"),
 		TEXT("Sample light levels at specified points. Modes: capture (scene capture w/ Lumen GI), analytic (inverse-square from light actors), both. Returns luminance, dominant light, color temperature, shadow state per point. Hard cap 50 points."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLightingActions::SampleLightLevels),
 		FParamSchemaBuilder()
@@ -27,7 +27,7 @@ void FMonolithMeshLightingActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 2. find_dark_corners
-	Registry.RegisterAction(TEXT("mesh"), TEXT("find_dark_corners"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("find_dark_corners"),
 		TEXT("Find contiguous dark regions in a volume. Uses orthographic scene capture + flood-fill. Returns dark zones with area and average luminance."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLightingActions::FindDarkCorners),
 		FParamSchemaBuilder()
@@ -39,7 +39,7 @@ void FMonolithMeshLightingActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 3. analyze_light_transitions
-	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_light_transitions"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("analyze_light_transitions"),
 		TEXT("Sample light levels along a path and flag harsh bright-to-dark transitions (>4:1 ratio over <200cm). Critical for hospice: harsh transitions cause discomfort for light-sensitive patients."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLightingActions::AnalyzeLightTransitions),
 		FParamSchemaBuilder()
@@ -50,7 +50,7 @@ void FMonolithMeshLightingActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 4. get_light_coverage
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_light_coverage"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("get_light_coverage"),
 		TEXT("Room-level lighting audit. Orthographic capture for floor coverage percentages (lit/shadow/dark). Light inventory with type, intensity, color, shadow-casting flag."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLightingActions::GetLightCoverage),
 		FParamSchemaBuilder()
@@ -61,7 +61,7 @@ void FMonolithMeshLightingActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 5. suggest_light_placement
-	Registry.RegisterAction(TEXT("mesh"), TEXT("suggest_light_placement"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("suggest_light_placement"),
 		TEXT("Suggest light placements for a mood. Analytic only: target luminance per mood, inverse-square backward-solve, avoids existing light overlap. Moods: horror_dim, safe_room, clinical, ambient."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLightingActions::SuggestLightPlacement),
 		FParamSchemaBuilder()

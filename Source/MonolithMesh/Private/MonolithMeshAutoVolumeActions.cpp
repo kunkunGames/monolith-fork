@@ -52,7 +52,7 @@ namespace AutoVolumeHelpers
 void FMonolithMeshAutoVolumeActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. auto_volumes_for_building
-	Registry.RegisterAction(TEXT("mesh"), TEXT("auto_volumes_for_building"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("auto_volumes_for_building"),
 		TEXT("Auto-spawn NavMesh, Audio, Trigger volumes and NavLinkProxies for a building in the spatial registry. "
 			"Reads room/door/floor data from SP6, delegates to spawn_volume for each volume type."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAutoVolumeActions::AutoVolumesForBuilding),
@@ -74,7 +74,7 @@ void FMonolithMeshAutoVolumeActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Build());
 
 	// 2. auto_volumes_for_block
-	Registry.RegisterAction(TEXT("mesh"), TEXT("auto_volumes_for_block"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("auto_volumes_for_block"),
 		TEXT("Auto-spawn volumes for ALL buildings in a block, plus a block-level NavMeshBoundsVolume. "
 			"Iterates buildings in the spatial registry block and calls auto_volumes_for_building for each."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAutoVolumeActions::AutoVolumesForBlock),
@@ -95,7 +95,7 @@ void FMonolithMeshAutoVolumeActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Build());
 
 	// 3. spawn_nav_link
-	Registry.RegisterAction(TEXT("mesh"), TEXT("spawn_nav_link"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("spawn_nav_link"),
 		TEXT("Spawn a NavLinkProxy between two world points for AI navigation across disconnected navmesh regions (doors, stairwells, gaps)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAutoVolumeActions::SpawnNavLink),
 		FParamSchemaBuilder()
@@ -436,7 +436,7 @@ FMonolithActionResult FMonolithMeshAutoVolumeActions::AutoVolumesForBuilding(con
 				AudioProps->SetNumberField(TEXT("priority"), 1.0);
 				AudioParams->SetObjectField(TEXT("properties"), AudioProps);
 
-				FMonolithActionResult AudioResult = Registry.ExecuteAction(TEXT("mesh"), TEXT("spawn_volume"), AudioParams);
+				FMonolithActionResult AudioResult = Registry.ExecuteAction(TEXT("scene"), TEXT("spawn_volume"), AudioParams);
 				if (AudioResult.bSuccess)
 				{
 					AudioCount++;
@@ -491,7 +491,7 @@ FMonolithActionResult FMonolithMeshAutoVolumeActions::AutoVolumesForBuilding(con
 			TrigParams->SetStringField(TEXT("folder"),
 				FString::Printf(TEXT("%s/Triggers"), *BaseFolder));
 
-			FMonolithActionResult TrigResult = Registry.ExecuteAction(TEXT("mesh"), TEXT("spawn_volume"), TrigParams);
+			FMonolithActionResult TrigResult = Registry.ExecuteAction(TEXT("scene"), TEXT("spawn_volume"), TrigParams);
 			if (TrigResult.bSuccess)
 			{
 				TriggerCount++;
@@ -571,7 +571,7 @@ FMonolithActionResult FMonolithMeshAutoVolumeActions::AutoVolumesForBuilding(con
 	{
 		auto BuildParams = MakeShared<FJsonObject>();
 		BuildParams->SetStringField(TEXT("mode"), TEXT("full"));
-		Registry.ExecuteAction(TEXT("mesh"), TEXT("build_navmesh"), BuildParams);
+		Registry.ExecuteAction(TEXT("scene"), TEXT("build_navmesh"), BuildParams);
 	}
 
 	// ---- Build result ----
@@ -717,7 +717,7 @@ FMonolithActionResult FMonolithMeshAutoVolumeActions::AutoVolumesForBlock(const 
 		BuildingParams->SetStringField(TEXT("reverb_preset_corridor"), CorridorPreset);
 		BuildingParams->SetStringField(TEXT("trigger_tag"), TriggerTag);
 
-		FMonolithActionResult BuildingResult = Registry.ExecuteAction(TEXT("mesh"), TEXT("auto_volumes_for_building"), BuildingParams);
+		FMonolithActionResult BuildingResult = Registry.ExecuteAction(TEXT("scene"), TEXT("auto_volumes_for_building"), BuildingParams);
 
 		if (BuildingResult.bSuccess && BuildingResult.Result.IsValid())
 		{
@@ -753,7 +753,7 @@ FMonolithActionResult FMonolithMeshAutoVolumeActions::AutoVolumesForBlock(const 
 	{
 		auto BuildParams = MakeShared<FJsonObject>();
 		BuildParams->SetStringField(TEXT("mode"), TEXT("full"));
-		Registry.ExecuteAction(TEXT("mesh"), TEXT("build_navmesh"), BuildParams);
+		Registry.ExecuteAction(TEXT("scene"), TEXT("build_navmesh"), BuildParams);
 	}
 
 	// ---- Build result ----

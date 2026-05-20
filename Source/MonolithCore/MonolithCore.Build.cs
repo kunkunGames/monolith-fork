@@ -26,5 +26,10 @@ public class MonolithCore : ModuleRules
 			"Networking",    // Socket address utilities
 			"SQLiteCore"     // SQLite database headers
 		});
+
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"SourceControl"
+		});
 	}
 }

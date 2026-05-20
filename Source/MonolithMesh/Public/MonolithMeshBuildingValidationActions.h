@@ -17,7 +17,7 @@
  * 1 action:
  *   validate_building  -- Full playability validation with per-check breakdown and score
  */
-class FMonolithMeshBuildingValidationActions
+class MONOLITHMESH_API FMonolithMeshBuildingValidationActions
 {
 public:
 	/** Register all building validation actions with the tool registry */

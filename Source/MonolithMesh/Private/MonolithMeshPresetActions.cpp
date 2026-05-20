@@ -393,7 +393,7 @@ bool FMonolithMeshPresetActions::ValidateGenrePresetJson(const TSharedPtr<FJsonO
 void FMonolithMeshPresetActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. list_storytelling_patterns
-	Registry.RegisterAction(TEXT("mesh"), TEXT("list_storytelling_patterns"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("list_storytelling_patterns"),
 		TEXT("List all available storytelling patterns: built-in horror defaults + user-created patterns from Saved/Monolith/Patterns/. Returns name, description, element count, and source (built-in vs user)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshPresetActions::ListStorytellingPatterns),
 		FParamSchemaBuilder()
@@ -401,7 +401,7 @@ void FMonolithMeshPresetActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 2. create_storytelling_pattern
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_storytelling_pattern"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_storytelling_pattern"),
 		TEXT("Author a new storytelling pattern JSON. Defines element types (decal/prop), radial distribution, size ranges, spawn counts, rotation/scale variance. Saved to Saved/Monolith/Patterns/."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshPresetActions::CreateStorytellingPattern),
 		FParamSchemaBuilder()
@@ -412,7 +412,7 @@ void FMonolithMeshPresetActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 3. list_acoustic_profiles
-	Registry.RegisterAction(TEXT("mesh"), TEXT("list_acoustic_profiles"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("list_acoustic_profiles"),
 		TEXT("List all acoustic profiles: built-in horror defaults (12 surfaces from MonolithMeshAcoustics) + user-created profiles from Saved/Monolith/AcousticProfiles/. Returns profile name, genre, surface count, and source."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshPresetActions::ListAcousticProfiles),
 		FParamSchemaBuilder()
@@ -420,7 +420,7 @@ void FMonolithMeshPresetActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 4. create_acoustic_profile
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_acoustic_profile"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_acoustic_profile"),
 		TEXT("Author an acoustic property set for a genre. Each surface defines absorption (0-1), transmission_loss_db, and footstep_loudness. Saved to Saved/Monolith/AcousticProfiles/."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshPresetActions::CreateAcousticProfile),
 		FParamSchemaBuilder()
@@ -432,7 +432,7 @@ void FMonolithMeshPresetActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 5. create_tension_profile
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_tension_profile"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_tension_profile"),
 		TEXT("Define tension scoring weights for a genre. Override how sightline_length, ceiling_height, room_volume, exit_count, lighting_level, and audio_reverb contribute to the tension score. Saved to Saved/Monolith/TensionProfiles/."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshPresetActions::CreateTensionProfile),
 		FParamSchemaBuilder()
@@ -445,13 +445,13 @@ void FMonolithMeshPresetActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 6. list_genre_presets
-	Registry.RegisterAction(TEXT("mesh"), TEXT("list_genre_presets"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("list_genre_presets"),
 		TEXT("List all available genre preset packs from Saved/Monolith/Presets/. Shows name, genre, version, and content summary (pattern count, profile count, etc.)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshPresetActions::ListGenrePresets),
 		FParamSchemaBuilder().Build());
 
 	// 7. export_genre_preset
-	Registry.RegisterAction(TEXT("mesh"), TEXT("export_genre_preset"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("export_genre_preset"),
 		TEXT("Bundle all user-created templates + patterns + acoustic profiles + tension profiles + prop kits into a single JSON preset file. Optionally filter by name lists."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshPresetActions::ExportGenrePreset),
 		FParamSchemaBuilder()
@@ -467,7 +467,7 @@ void FMonolithMeshPresetActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 8. import_genre_preset
-	Registry.RegisterAction(TEXT("mesh"), TEXT("import_genre_preset"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("import_genre_preset"),
 		TEXT("Load a genre preset pack JSON. Extracts all sub-presets (patterns, acoustic profiles, tension profiles, templates, prop kits) into their respective directories."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshPresetActions::ImportGenrePreset),
 		FParamSchemaBuilder()

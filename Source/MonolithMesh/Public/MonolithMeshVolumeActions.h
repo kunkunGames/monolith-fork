@@ -14,7 +14,7 @@
  * snap_to_surface       — Directional trace with surface normal alignment
  * set_collision_preset  — Set collision profile on actor's root primitive component
  */
-class FMonolithMeshVolumeActions
+class MONOLITHMESH_API FMonolithMeshVolumeActions
 {
 public:
 	/** Register all 7 level design core actions with the tool registry */

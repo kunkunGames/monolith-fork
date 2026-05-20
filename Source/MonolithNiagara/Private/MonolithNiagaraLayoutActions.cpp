@@ -1,4 +1,4 @@
-#include "MonolithNiagaraLayoutActions.h"
+﻿#include "MonolithNiagaraLayoutActions.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
@@ -34,8 +34,8 @@ void FMonolithNiagaraLayoutActions::RegisterActions(FMonolithToolRegistry& Regis
 					"System spawn/update share one graph; emitter spawn/update/particle spawn/update share another per emitter. "
 					"Defaults to all graphs."))
 			.Optional(TEXT("formatter"), TEXT("string"),
-				TEXT("Formatter: 'auto' (default, uses BA if available), 'blueprint_assist' (BA or error), "
-					"'monolith' (not supported for Niagara — returns error)"),
+				TEXT("Formatter: 'auto' uses Blueprint Assist because no built-in Monolith formatter exists; "
+					"'blueprint_assist' forces Blueprint Assist; 'monolith' is not supported for Niagara"),
 				TEXT("auto"))
 			.Build());
 }
@@ -236,8 +236,7 @@ FMonolithActionResult FMonolithNiagaraLayoutActions::HandleAutoLayout(const TSha
 	if (Formatter == TEXT("monolith"))
 	{
 		return FMonolithActionResult::Error(
-			TEXT("No built-in Monolith formatter exists for Niagara graphs. "
-				"Use formatter='auto' or install Blueprint Assist."));
+			TEXT("No built-in Monolith formatter exists for Niagara graphs. Use formatter='auto' or formatter='blueprint_assist' with Blueprint Assist installed."));
 	}
 
 	if (Formatter != TEXT("auto") && Formatter != TEXT("blueprint_assist"))
@@ -245,7 +244,6 @@ FMonolithActionResult FMonolithNiagaraLayoutActions::HandleAutoLayout(const TSha
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Unknown formatter '%s'. Valid options: 'auto', 'blueprint_assist', 'monolith'"), *Formatter));
 	}
-
 	// --- Parse script_usage filter ---
 	FGraphSlot Slot;
 	if (!ResolveScriptUsageFilter(ScriptUsageStr, Slot))
@@ -265,6 +263,12 @@ FMonolithActionResult FMonolithNiagaraLayoutActions::HandleAutoLayout(const TSha
 
 	// --- Check formatter availability ---
 	bool bExplicitBA = (Formatter == TEXT("blueprint_assist"));
+	constexpr bool bHasBuiltInFormatter = false;
+	if (!IMonolithGraphFormatter::IsExternalMutationFormattingEnabled(bHasBuiltInFormatter))
+	{
+		return FMonolithActionResult::Error(IMonolithGraphFormatter::GetExternalMutationFormattingDisabledMessage());
+	}
+
 	bool bBAAvailable = IMonolithGraphFormatter::IsAvailable();
 
 	if (!bBAAvailable)

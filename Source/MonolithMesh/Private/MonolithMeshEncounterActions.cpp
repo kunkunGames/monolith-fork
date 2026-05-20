@@ -403,7 +403,7 @@ namespace
 void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. design_encounter
-	Registry.RegisterAction(TEXT("mesh"), TEXT("design_encounter"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("design_encounter"),
 		TEXT("Capstone: compose spawn points, patrol routes, player entry/exit, sightline breaks, and audio zones into a scored encounter specification. Returns a complete encounter blueprint JSON."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::DesignEncounter),
 		FParamSchemaBuilder()
@@ -416,7 +416,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 2. suggest_patrol_route
-	Registry.RegisterAction(TEXT("mesh"), TEXT("suggest_patrol_route"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("suggest_patrol_route"),
 		TEXT("Generate navmesh patrol routes per AI archetype. Stalker: stay in earshot but out of sight. Patrol: regular loop hitting checkpoints. Ambusher: concealed wait position with surprise angle."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::SuggestPatrolRoute),
 		FParamSchemaBuilder()
@@ -429,7 +429,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 3. analyze_ai_territory
-	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_ai_territory"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_ai_territory"),
 		TEXT("Score a region as AI territory: hiding spot density, patrol route coverage, sightline control, ambush potential, escape routes for AI disengagement."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::AnalyzeAiTerritory),
 		FParamSchemaBuilder()
@@ -439,7 +439,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 4. evaluate_safe_room
-	Registry.RegisterAction(TEXT("mesh"), TEXT("evaluate_safe_room"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("evaluate_safe_room"),
 		TEXT("Score a room as a safe room: entrance count, defensibility, lighting quality, sound isolation, size, hospice accessibility. Detects doors via actor tags/class."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::EvaluateSafeRoom),
 		FParamSchemaBuilder()
@@ -447,7 +447,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 5. analyze_level_pacing_structure
-	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_level_pacing_structure"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_level_pacing_structure"),
 		TEXT("Macro-level tension-to-release rhythm across an entire level path. Identifies encounter zones, safe rooms, exploration areas. Compares to ideal pacing curves."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::AnalyzeLevelPacingStructure),
 		FParamSchemaBuilder()
@@ -458,7 +458,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 6. generate_scare_sequence
-	Registry.RegisterAction(TEXT("mesh"), TEXT("generate_scare_sequence"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("generate_scare_sequence"),
 		TEXT("Procedurally generate a sequence of scare events with variety, escalation, and pacing. Output is a specification, not placed actors."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::GenerateScareSequence),
 		FParamSchemaBuilder()
@@ -470,7 +470,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 7. validate_horror_intensity
-	Registry.RegisterAction(TEXT("mesh"), TEXT("validate_horror_intensity"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("validate_horror_intensity"),
 		TEXT("Audit horror intensity for hospice compliance. Checks max tension never exceeds profile ceiling. Verifies generous escape windows. Flags jump scares."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::ValidateHorrorIntensity),
 		FParamSchemaBuilder()
@@ -483,7 +483,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 8. generate_hospice_report
-	Registry.RegisterAction(TEXT("mesh"), TEXT("generate_hospice_report"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("generate_hospice_report"),
 		TEXT("Full level audit for hospice patients: intensity caps, rest spacing (every 2-3 min), cognitive load, input demands, one-handed playability, audio alternatives for visual scares. Profiles: motor_impaired, vision_impaired, cognitive_fatigue."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::GenerateHospiceReport),
 		FParamSchemaBuilder()

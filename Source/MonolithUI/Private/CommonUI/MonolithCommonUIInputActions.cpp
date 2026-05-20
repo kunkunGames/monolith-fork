@@ -404,7 +404,7 @@ namespace MonolithCommonUIInput
 			TEXT("ui"), TEXT("get_active_input_type"),
 			TEXT("[RUNTIME] Get current ECommonInputType + per-method active flags from PIE LocalPlayer's CommonInputSubsystem"),
 			FMonolithActionHandler::CreateStatic(&HandleGetActiveInputType),
-			nullptr,
+			FParamSchemaBuilder().Build(),
 			Cat);
 
 		Registry.RegisterAction(
@@ -420,7 +420,7 @@ namespace MonolithCommonUIInput
 			TEXT("ui"), TEXT("list_platform_input_tables"),
 			TEXT("List registered UCommonInputBaseControllerData entries from CommonInputSettings.ControllerData"),
 			FMonolithActionHandler::CreateStatic(&HandleListPlatformInputTables),
-			nullptr,
+			FParamSchemaBuilder().Build(),
 			Cat);
 	}
 }

@@ -15,7 +15,7 @@
  * load_camera_bookmark     — Restore editor viewport camera from JSON
  * capture_building_views   — Multi-angle diagnostic captures (floor plan + 4 elevations + perspective)
  */
-class FMonolithMeshDebugViewActions
+class MONOLITHMESH_API FMonolithMeshDebugViewActions
 {
 public:
 	/** Register all 7 debug view actions */

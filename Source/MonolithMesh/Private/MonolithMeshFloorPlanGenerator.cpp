@@ -20,7 +20,7 @@ DEFINE_LOG_CATEGORY(LogMonolithFloorPlan);
 
 void FMonolithMeshFloorPlanGenerator::RegisterActions(FMonolithToolRegistry& Registry)
 {
-	Registry.RegisterAction(TEXT("mesh"), TEXT("generate_floor_plan"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("generate_floor_plan"),
 		TEXT("Generate a complete floor plan from a building archetype. Returns grid, rooms, and doors "
 			"in the exact format consumed by create_building_from_grid. "
 			"Algorithm: archetype loading -> room resolution -> squarified treemap layout -> "
@@ -48,13 +48,13 @@ void FMonolithMeshFloorPlanGenerator::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("genre"), TEXT("string"), TEXT("Game genre hint. When 'horror', overrides template_category to 'horror'."))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("list_building_archetypes"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("list_building_archetypes"),
 		TEXT("List all available building archetype JSON files in the archetypes directory."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshFloorPlanGenerator::ListBuildingArchetypes),
 		FParamSchemaBuilder()
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_building_archetype"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("get_building_archetype"),
 		TEXT("Return the full JSON definition of a specific building archetype."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshFloorPlanGenerator::GetBuildingArchetype),
 		FParamSchemaBuilder()

@@ -53,17 +53,22 @@ public:
 		FString TransactionStatus;
 		FString PostEditValidationStatus;
 		FString PostEditValidationMessage;
+		FString SourceControlPrepareStatus;
 		FString RollbackStatus;
+		TArray<FString> SourceControlTargetPathsBefore;
+		TSharedPtr<FJsonObject> SourceControlPrepareBefore;
+		TSharedPtr<FJsonObject> SourceControlPrepareAfter;
 		int32 JsonRpcErrorCode = 0;
 		int32 ResultChars = 0;
 		bool bResultTruncated = false;
 		bool bDirtyPackageTrackingActive = false;
+		bool bSourceControlPrepareActive = false;
 		bool bActive = false;
 	};
 
 	static FMonolithActionExecutionGuard& Get();
 
-	FExecutionScope BeginAction(const FString& Namespace, const FString& Action);
+	FExecutionScope BeginAction(const FString& Namespace, const FString& Action, const TSharedPtr<FJsonObject>& Params = nullptr);
 	bool RegisterPostEditValidator(const FString& Namespace, const FString& Action, const FMonolithPostEditValidator& Validator, FString& OutError);
 	FMonolithPostEditValidationResult RunPostEditValidation(FExecutionScope& Scope, const TSharedPtr<FJsonObject>& Params, const TSharedPtr<FJsonObject>& ResultObject);
 	void SetActionOutcome(FExecutionScope& Scope, bool bSuccess, int32 ErrorCode, const TSharedPtr<FJsonObject>& ResultObject, const FString& ErrorMessage);
@@ -105,6 +110,7 @@ private:
 		FString TransactionStatus;
 		FString PostEditValidationStatus;
 		FString PostEditValidationMessage;
+		FString SourceControlPrepareStatus;
 		FString Reason;
 		int32 JsonRpcErrorCode = 0;
 		int32 ResultChars = 0;
@@ -115,7 +121,14 @@ private:
 	static bool IsAdvancedToolCallRecordsEnabled();
 	static FString MakeActionKey(const FString& Namespace, const FString& Action);
 	static FMonolithPostEditValidationResult RunDefaultPostEditValidation(const FMonolithPostEditValidationContext& Context);
+	static bool IsAutomaticSourceControlPrepareNamespace(const FString& Namespace);
+	static bool IsAutomaticSourceControlPrepareAction(const FString& Action);
 	static TSet<FString> SnapshotDirtyPackages();
+	static TArray<FString> CollectChangedDirtyPackages(const FExecutionScope& Scope);
+	static TArray<FString> CollectSourceControlTargetPaths(const TSharedPtr<FJsonObject>& Object);
+	static void AppendUniqueSourceControlTargets(TArray<FString>& InOutTargets, const TArray<FString>& NewTargets);
+	static TSharedPtr<FJsonObject> PrepareSourceControlTargets(const TArray<FString>& Targets, bool bAddMissingFiles);
+	static FString SummarizeSourceControlPrepare(const TSharedPtr<FJsonObject>& Result);
 	static TArray<TSharedPtr<FJsonValue>> StringsToJson(const TArray<FString>& Values, int32 Limit = MAX_int32);
 	static TSharedPtr<FJsonObject> AuditRowToJson(const FAuditRow& Row);
 	static TSharedPtr<FJsonObject> ToolCallRecordToJson(const FAuditRow& Row);

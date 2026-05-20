@@ -16,7 +16,7 @@
  *   auto_volumes_for_block     — Volumes for all buildings in a block + block-level navmesh
  *   spawn_nav_link             — Spawn a NavLinkProxy between two points
  */
-class FMonolithMeshAutoVolumeActions
+class MONOLITHMESH_API FMonolithMeshAutoVolumeActions
 {
 public:
 	/** Register all 3 auto-volume actions with the tool registry */

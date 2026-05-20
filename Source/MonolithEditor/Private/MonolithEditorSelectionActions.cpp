@@ -194,7 +194,7 @@ void FMonolithEditorSelectionActions::RegisterActions()
 	Registry.RegisterAction(TEXT("editor"), TEXT("list_context_entrypoints"),
 		TEXT("Report Monolith editor context entrypoints, supported object types, and action-level implementation status"),
 		FMonolithActionHandler::CreateStatic(&HandleListContextEntrypoints),
-		nullptr,
+		FParamSchemaBuilder().Build(),
 		TEXT("Context"));
 }
 

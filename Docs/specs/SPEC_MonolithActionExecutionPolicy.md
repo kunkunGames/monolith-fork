@@ -4,7 +4,7 @@
 **Engine:** Unreal Engine 5.7+
 **Status:** Accepted third slice
 **Owner module:** MonolithCore
-**Scope:** Add registry-level execution policy metadata plus opt-in dirty-package tracking, transaction wrapping, developer policy overrides, and post-edit validator hooks without claiming automatic rollback.
+**Scope:** Add registry-level execution policy metadata plus opt-in dirty-package tracking, transaction wrapping, best-effort source-control prepare, developer policy overrides, and post-edit validator hooks without claiming automatic rollback.
 
 ---
 
@@ -16,6 +16,7 @@
 | Execution policy metadata | Implemented in the registry contract. | High: lets agents and guard code distinguish default fast-path behavior from explicit mutating policies. | Prior slice |
 | Policy-driven dirty tracking and transaction wrapping | Metadata exists, but dispatch still treats every action the same. | High: removes package-scan overhead from read-only actions and gives mutating actions a central transaction boundary. | This slice |
 | Developer policy override | `monolith.set_action_execution_policy` exists as an unavailable placeholder. | High: allows focused local testing and staged per-domain cleanup without touching every registration at once. | This slice |
+| Automatic source-control prepare | Implemented by `FMonolithActionExecutionGuard` using `FMonolithSourceControlUtils`. | High: read-only Perforce assets are checked out before mutation and newly saved assets are marked for add after mutation. | This slice |
 | Post-edit validation hooks | Not implemented. | High: catches broken Blueprint/widget graph mutations at dispatch time instead of leaving silent dirty assets. | This slice |
 | Automatic rollback reports | Not implemented. | High but requires validated per-domain undo semantics beyond UE transaction recording. | Later |
 
@@ -23,7 +24,7 @@
 
 ## 2. Problem
 
-Monolith already routes every action through a central registry and audit guard, and the registry can now describe each action's execution policy. Dirty-package tracking, transaction wrapping, and local policy overrides are wired. The remaining high-ROI gap is post-edit validation: mutating Blueprint and widget actions can finish with a dirty or compiler-error asset, but the central dispatch layer cannot yet run a validation hook or convert that failure into a structured action error.
+Monolith already routes every action through a central registry and audit guard, and the registry can now describe each action's execution policy. Dirty-package tracking, transaction wrapping, local policy overrides, and best-effort source-control prepare are wired. Source-control prepare uses the active Unreal `ISourceControlProvider`: existing project asset files are checked out before mutation, and newly saved project package files are marked for add after mutation. The automatic path is limited to asset-mutation namespaces/actions and skips index/source/collection/system namespaces. The remaining high-ROI gap is post-edit validation: mutating Blueprint and widget actions can finish with a dirty or compiler-error asset, but the central dispatch layer cannot yet run a validation hook or convert that failure into a structured action error.
 
 ---
 
@@ -100,12 +101,15 @@ Legacy boolean aliases such as `policy.post_edit_validate` are rejected instead 
 |-------|---------|
 | `dirty_package_tracking_status` | `skipped_by_policy` or `tracked_by_policy`. |
 | `transaction_status` | `not_requested`, `wrapped_by_policy`, or an error-oriented status if transaction setup cannot run. |
+| `source_control_prepare_status` | `skipped_by_policy`, `no_targets`, `skipped_provider_unavailable`, `prepared_checkout_N_add_N`, or `prepare_failed_checkout_N_add_N`. |
 | `post_edit_validation_status` | `not_requested`, `requested_by_policy`, `passed_by_validator`, `failed_by_validator`, `skipped_handler_error`, or a target/validator failure status. |
 | `rollback_status` | Still explicit unavailable metadata; no automatic rollback is claimed. |
 
 Unknown or rejected actions use the same default metadata and keep their existing error behavior.
 
 When validation succeeds, successful handler result objects receive a `post_edit_validation` object. When validation fails, the action returns a normal Monolith error with structured `error.data.post_edit_validation`; raw params and raw result payloads are not copied into audit rows.
+
+When an asset-mutation action succeeds, successful handler result objects may receive a `source_control_prepare` object. `before_action` reports pre-handler checkout/add decisions for target-like params such as `asset_path`, `blueprint_path`, `widget_blueprint`, `wbp_path`, `save_path`, `new_path`, `dest_path`, and `new_asset_path`. `after_action` reports decisions for result asset paths and newly dirtied `/Game` packages. Automatic target collection only accepts `.uasset`/`.umap` files that resolve under the project directory, so `/Script`, engine package paths, and external files are ignored. Provider disabled/unavailable states are non-fatal for automatic prepare and are reported as skipped. `source_control`, `project`, `source`, `context`, `collection`, `asset`, and `monolith` namespaces are excluded from this automatic prepare path to avoid recursive or read-only index/source calls.
 
 Built-in validation covers Blueprint-derived assets returned or addressed by common fields (`asset_path`, `blueprint_path`, `widget_blueprint`, `wbp_path`, `save_path`, `new_path`). Blueprint and widget targets are compiled once with UE's editor compiler and fail validation when the post-compile status is not `BS_UpToDate` or `BS_UpToDateWithWarnings`. Domain modules can also register explicit validators for specific `namespace.action` pairs.
 
@@ -132,5 +136,6 @@ Built-in validation covers Blueprint-derived assets returned or addressed by com
 | Read-only fast path | Default `read_only` audit rows skip dirty-package scans and transaction wrapping. |
 | Runtime override | `monolith.set_action_execution_policy` updates a known action and accepts compatible `post_edit_validate` requests. |
 | Transaction metadata | Transaction policies record `transaction_status` without claiming rollback. |
+| Source-control prepare | Mutating asset actions report checkout/add decisions in `source_control_prepare` and audit `source_control_prepare_status`; unavailable providers are non-fatal skips. |
 | Validator hook | `post_edit_validate` actions run a post-handler validator and report `post_edit_validation_status`. |
 | Validation failure | Validator failure converts the action result to a structured error without raw payload logging or rollback claims. |

@@ -1,4 +1,4 @@
-#include "MonolithAIBehaviorTreeActions.h"
+﻿#include "MonolithAIBehaviorTreeActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
 
@@ -1789,11 +1789,11 @@ void FMonolithAIBehaviorTreeActions::RegisterActions(FMonolithToolRegistry& Regi
 
 	// 36. auto_arrange_bt
 	Registry.RegisterAction(TEXT("ai"), TEXT("auto_arrange_bt"),
-		TEXT("Auto-layout a Behavior Tree graph. Uses Blueprint Assist formatter if available, else depth/breadth positioning."),
+		TEXT("Auto-layout a Behavior Tree graph using built-in depth/breadth positioning. Blueprint Assist is disabled for asset mutation."),
 		FMonolithActionHandler::CreateStatic(&HandleAutoArrangeBT),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Behavior Tree asset path"))
-			.Optional(TEXT("formatter"), TEXT("string"), TEXT("Formatter: default, blueprint_assist, builtin (default tries BA then builtin)"))
+			.Optional(TEXT("formatter"), TEXT("string"), TEXT("Formatter: default or builtin use the built-in layout. blueprint_assist is disabled for asset mutation."))
 			.Build());
 
 	// 38. compare_behavior_trees
@@ -4352,13 +4352,20 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAutoArrangeBT(const 
 
 	Params->TryGetStringField(TEXT("formatter"), FormatterPref);
 	if (FormatterPref.IsEmpty()) FormatterPref = TEXT("default");
+	FormatterPref = FormatterPref.ToLower();
 
 	bool bUsedBA = false;
 	int32 NodesFormatted = 0;
 	FString FormatterError;
+	constexpr bool bHasBuiltInFormatter = true;
+	const bool bMayUseExternalFormatter = IMonolithGraphFormatter::IsExternalMutationFormattingEnabled(bHasBuiltInFormatter);
 
-	// Try external formatter (Blueprint Assist) first unless explicitly asking for builtin
-	if (FormatterPref != TEXT("builtin"))
+	// Behavior Tree has a built-in formatter; BA is used only for domains with no built-in formatter.
+	if (FormatterPref == TEXT("blueprint_assist") && !bMayUseExternalFormatter)
+	{
+		return FMonolithActionResult::Error(IMonolithGraphFormatter::GetExternalMutationFormattingDisabledMessage());
+	}
+	if (FormatterPref != TEXT("builtin") && bMayUseExternalFormatter)
 	{
 		if (IMonolithGraphFormatter::IsAvailable())
 		{

@@ -1,4 +1,4 @@
-# Monolith — MonolithNiagara Module
+﻿# Monolith — MonolithNiagara Module
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
@@ -16,7 +16,7 @@
 |-------|---------------|
 | `FMonolithNiagaraModule` | Registers 109 Niagara actions (108 baseline in `MonolithNiagaraActions.cpp` + 1 layout in `MonolithNiagaraLayoutActions.cpp`) |
 | `FMonolithNiagaraActions` | Static handlers + extensive private helpers |
-| `FMonolithNiagaraLayoutActions` | `auto_layout` Blueprint Assist bridge for Niagara graphs |
+| `FMonolithNiagaraLayoutActions` | `auto_layout` formatter fallback for Niagara graphs; uses Blueprint Assist when no built-in Monolith formatter exists and the bridge is available |
 | `MonolithNiagaraHelpers` | 6 reimplemented NiagaraEditor functions (non-exported APIs) |
 
 ### Reimplemented NiagaraEditor Helpers
@@ -212,7 +212,7 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 | `diff_systems` | Compare two Niagara systems and return structural differences |
 | `save_emitter_as_template` | Save an emitter as a reusable template asset |
 | `clone_module_overrides` | Clone input overrides from one module to another |
-| `auto_layout` | Auto-arrange nodes in a Niagara module script graph. `formatter`: `"auto"` (default) — uses Blueprint Assist if available, falls back to built-in layout; `"blueprint_assist"` — requires BA; `"builtin"` — built-in only |
+| `auto_layout` | Niagara graph auto-layout has no built-in formatter. `formatter="auto"` falls back to Blueprint Assist when the bridge is available, `"blueprint_assist"` forces that fallback, and `"monolith"` is unsupported. |
 
 ### UE 5.7 Compatibility Fixes (6 sites)
 

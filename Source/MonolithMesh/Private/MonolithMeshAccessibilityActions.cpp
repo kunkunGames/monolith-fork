@@ -23,7 +23,7 @@
 void FMonolithMeshAccessibilityActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. validate_path_width
-	Registry.RegisterAction(TEXT("mesh"), TEXT("validate_path_width"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("validate_path_width"),
 		TEXT("Validate path width for wheelchair accessibility (default 120cm min). Returns pinch points with exact obstruction actors."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAccessibilityActions::ValidatePathWidth),
 		FParamSchemaBuilder()
@@ -33,7 +33,7 @@ void FMonolithMeshAccessibilityActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 2. validate_navigation_complexity
-	Registry.RegisterAction(TEXT("mesh"), TEXT("validate_navigation_complexity"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("validate_navigation_complexity"),
 		TEXT("Score cognitive difficulty of navigation between two points: turn count, sharp corners, backtracking, elevation changes."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAccessibilityActions::ValidateNavigationComplexity),
 		FParamSchemaBuilder()
@@ -42,7 +42,7 @@ void FMonolithMeshAccessibilityActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 3. analyze_visual_contrast
-	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_visual_contrast"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_visual_contrast"),
 		TEXT("Analyze visual contrast of interactable actors against their backgrounds using scene capture. WCAG-inspired thresholds."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAccessibilityActions::AnalyzeVisualContrast),
 		FParamSchemaBuilder()
@@ -53,7 +53,7 @@ void FMonolithMeshAccessibilityActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 4. find_rest_points
-	Registry.RegisterAction(TEXT("mesh"), TEXT("find_rest_points"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_rest_points"),
 		TEXT("Walk a path and inventory safe rooms/calm zones. Flag gaps exceeding max_gap (default 30m). Hospice patients need frequent rest opportunities."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAccessibilityActions::FindRestPoints),
 		FParamSchemaBuilder()
@@ -63,7 +63,7 @@ void FMonolithMeshAccessibilityActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 5. validate_interactive_reach
-	Registry.RegisterAction(TEXT("mesh"), TEXT("validate_interactive_reach"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("validate_interactive_reach"),
 		TEXT("Check interactable actors for height, navmesh distance, and obstructions. Flag items requiring jumping or precision movement."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAccessibilityActions::ValidateInteractiveReach),
 		FParamSchemaBuilder()
@@ -73,7 +73,7 @@ void FMonolithMeshAccessibilityActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 6. generate_accessibility_report
-	Registry.RegisterAction(TEXT("mesh"), TEXT("generate_accessibility_report"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("generate_accessibility_report"),
 		TEXT("Comprehensive accessibility report combining path width, navigation complexity, visual contrast, rest points, and interactive reach. Profile-specific thresholds."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAccessibilityActions::GenerateAccessibilityReport),
 		FParamSchemaBuilder()

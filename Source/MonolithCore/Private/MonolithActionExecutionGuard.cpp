@@ -3,12 +3,15 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
+#include "MonolithSourceControlUtils.h"
 #include "MonolithToolProfileManager.h"
 #include "MonolithToolRegistry.h"
 #include "Engine/Blueprint.h"
 #include "Kismet2/CompilerResultsLog.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/App.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectIterator.h"
 
@@ -42,6 +45,234 @@ namespace
 			return true;
 		}
 		return false;
+	}
+
+	bool IsSourceControlTargetStringField(const FString& FieldName)
+	{
+		static const TSet<FString> FieldNames =
+		{
+			TEXT("asset_path"),
+			TEXT("actor_path"),
+			TEXT("ability_path"),
+			TEXT("blueprint_path"),
+			TEXT("context_path"),
+			TEXT("dest_path"),
+			TEXT("destination"),
+			TEXT("destination_path"),
+			TEXT("effect_path"),
+			TEXT("family_asset_path"),
+			TEXT("hlod_layer_path"),
+			TEXT("merged_mesh_path"),
+			TEXT("new_asset_path"),
+			TEXT("widget_blueprint"),
+			TEXT("wbp_path"),
+			TEXT("save_path"),
+			TEXT("new_path"),
+			TEXT("output_path"),
+			TEXT("target_asset_path"),
+			TEXT("target_path"),
+			TEXT("created_asset_path"),
+			TEXT("output_asset_path"),
+			TEXT("result_asset_path")
+		};
+		return FieldNames.Contains(FieldName);
+	}
+
+	bool IsSourceControlTargetArrayField(const FString& FieldName)
+	{
+		static const TSet<FString> FieldNames =
+		{
+			TEXT("asset_paths"),
+			TEXT("blueprint_paths"),
+			TEXT("widget_blueprints"),
+			TEXT("wbp_paths"),
+			TEXT("save_paths"),
+			TEXT("new_paths"),
+			TEXT("new_asset_paths"),
+			TEXT("face_asset_paths"),
+			TEXT("created_assets"),
+			TEXT("created_asset_paths"),
+			TEXT("updated_assets"),
+			TEXT("updated_asset_paths"),
+			TEXT("output_asset_paths"),
+			TEXT("result_asset_paths")
+		};
+		return FieldNames.Contains(FieldName);
+	}
+
+	bool IsProjectSourceControlFile(FString File)
+	{
+		if (File.IsEmpty())
+		{
+			return false;
+		}
+
+		File = FPaths::ConvertRelativePathToFull(File);
+		FPaths::NormalizeFilename(File);
+
+		FString ProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		FPaths::NormalizeDirectoryName(ProjectDir);
+		return FPaths::IsUnderDirectory(File, ProjectDir);
+	}
+
+	bool TryResolveProjectPackageFile(const FString& PackageName, FString& OutFile)
+	{
+		if (!FPackageName::IsValidLongPackageName(PackageName, false))
+		{
+			return false;
+		}
+
+		if (FPackageName::DoesPackageExist(PackageName, &OutFile))
+		{
+			return IsProjectSourceControlFile(OutFile);
+		}
+
+		if (FPackageName::TryConvertLongPackageNameToFilename(
+			PackageName,
+			OutFile,
+			FPackageName::GetAssetPackageExtension())
+			&& IsProjectSourceControlFile(OutFile))
+		{
+			return true;
+		}
+
+		if (FPackageName::TryConvertLongPackageNameToFilename(
+			PackageName,
+			OutFile,
+			FPackageName::GetMapPackageExtension())
+			&& IsProjectSourceControlFile(OutFile))
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+	bool LooksLikeSourceControlTarget(const FString& Value)
+	{
+		FString Path = Value.TrimStartAndEnd();
+		if (Path.IsEmpty())
+		{
+			return false;
+		}
+
+		Path.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (Path.EndsWith(TEXT("'")))
+		{
+			Path = FPackageName::ExportTextPathToObjectPath(Path);
+		}
+
+		if (Path.StartsWith(TEXT("/")))
+		{
+			const FString PackageName = Path.Contains(TEXT("."))
+				? FPackageName::ObjectPathToPackageName(Path)
+				: Path;
+
+			FString File;
+			return TryResolveProjectPackageFile(PackageName, File);
+		}
+
+		const FString Extension = FPaths::GetExtension(Path, true).ToLower();
+		if (Extension != TEXT(".uasset") && Extension != TEXT(".umap"))
+		{
+			return false;
+		}
+
+		if (FPaths::IsRelative(Path))
+		{
+			Path = FPaths::Combine(FPaths::ProjectDir(), Path);
+		}
+
+		return IsProjectSourceControlFile(Path);
+	}
+
+	void AppendIfSourceControlTarget(TArray<FString>& OutTargets, const FString& Value)
+	{
+		if (LooksLikeSourceControlTarget(Value))
+		{
+			OutTargets.AddUnique(Value);
+		}
+	}
+
+	void CollectSourceControlTargetPathsFromObject(const TSharedPtr<FJsonObject>& Object, TArray<FString>& OutTargets);
+
+	void CollectSourceControlTargetPathsFromArray(
+		const FString& FieldName,
+		const TArray<TSharedPtr<FJsonValue>>& Values,
+		TArray<FString>& OutTargets)
+	{
+		const bool bStringArrayAllowed = IsSourceControlTargetArrayField(FieldName);
+		for (const TSharedPtr<FJsonValue>& Value : Values)
+		{
+			if (!Value.IsValid())
+			{
+				continue;
+			}
+
+			if (bStringArrayAllowed)
+			{
+				FString StringValue;
+				if (Value->TryGetString(StringValue))
+				{
+					AppendIfSourceControlTarget(OutTargets, StringValue);
+					continue;
+				}
+			}
+
+			const TSharedPtr<FJsonObject>* NestedObject = nullptr;
+			if (Value->TryGetObject(NestedObject) && NestedObject && NestedObject->IsValid())
+			{
+				CollectSourceControlTargetPathsFromObject(*NestedObject, OutTargets);
+				continue;
+			}
+
+			const TArray<TSharedPtr<FJsonValue>>* NestedArray = nullptr;
+			if (Value->TryGetArray(NestedArray) && NestedArray)
+			{
+				CollectSourceControlTargetPathsFromArray(FieldName, *NestedArray, OutTargets);
+			}
+		}
+	}
+
+	void CollectSourceControlTargetPathsFromObject(const TSharedPtr<FJsonObject>& Object, TArray<FString>& OutTargets)
+	{
+		if (!Object.IsValid())
+		{
+			return;
+		}
+
+		for (const auto& Pair : Object->Values)
+		{
+			const FString& FieldName = Pair.Key;
+			const TSharedPtr<FJsonValue>& Value = Pair.Value;
+			if (!Value.IsValid())
+			{
+				continue;
+			}
+
+			if (IsSourceControlTargetStringField(FieldName))
+			{
+				FString StringValue;
+				if (Value->TryGetString(StringValue))
+				{
+					AppendIfSourceControlTarget(OutTargets, StringValue);
+					continue;
+				}
+			}
+
+			const TSharedPtr<FJsonObject>* NestedObject = nullptr;
+			if (Value->TryGetObject(NestedObject) && NestedObject && NestedObject->IsValid())
+			{
+				CollectSourceControlTargetPathsFromObject(*NestedObject, OutTargets);
+				continue;
+			}
+
+			const TArray<TSharedPtr<FJsonValue>>* ArrayValue = nullptr;
+			if (Value->TryGetArray(ArrayValue) && ArrayValue)
+			{
+				CollectSourceControlTargetPathsFromArray(FieldName, *ArrayValue, OutTargets);
+			}
+		}
 	}
 
 	FString FindPostEditValidationTargetPath(
@@ -141,7 +372,8 @@ FMonolithActionExecutionGuard& FMonolithActionExecutionGuard::Get()
 
 FMonolithActionExecutionGuard::FExecutionScope FMonolithActionExecutionGuard::BeginAction(
 	const FString& Namespace,
-	const FString& Action)
+	const FString& Action,
+	const TSharedPtr<FJsonObject>& Params)
 {
 	FExecutionScope Scope;
 	Scope.Id = FGuid::NewGuid();
@@ -153,6 +385,9 @@ FMonolithActionExecutionGuard::FExecutionScope FMonolithActionExecutionGuard::Be
 	Scope.ResultKind = TEXT("unknown");
 	Scope.ExecutionPolicy = FMonolithToolRegistry::Get().GetActionExecutionPolicy(Namespace, Action);
 	Scope.bDirtyPackageTrackingActive = Scope.ExecutionPolicy.bDirtyPackageTracking;
+	Scope.bSourceControlPrepareActive = Scope.bDirtyPackageTrackingActive
+		&& IsAutomaticSourceControlPrepareNamespace(Namespace)
+		&& IsAutomaticSourceControlPrepareAction(Action);
 	Scope.DirtyPackageTrackingStatus = Scope.bDirtyPackageTrackingActive
 		? TEXT("tracked_by_policy")
 		: TEXT("skipped_by_policy");
@@ -162,12 +397,30 @@ FMonolithActionExecutionGuard::FExecutionScope FMonolithActionExecutionGuard::Be
 	Scope.PostEditValidationStatus = Scope.ExecutionPolicy.bPostEditValidation
 		? TEXT("requested_by_policy")
 		: TEXT("not_requested");
+	if (Scope.bSourceControlPrepareActive)
+	{
+		Scope.SourceControlPrepareStatus = TEXT("no_pre_action_targets");
+	}
+	else if (Scope.bDirtyPackageTrackingActive)
+	{
+		Scope.SourceControlPrepareStatus = TEXT("skipped_by_namespace_or_action");
+	}
+	else
+	{
+		Scope.SourceControlPrepareStatus = TEXT("skipped_by_policy");
+	}
 	Scope.RollbackStatus = Scope.ExecutionPolicy.bTransactionWrapping
 		? TEXT("not_available_without_rollback_policy")
 		: TEXT("not_available_without_policy");
 	if (Scope.bDirtyPackageTrackingActive)
 	{
 		Scope.DirtyPackagesBefore = SnapshotDirtyPackages();
+	}
+	if (Scope.bSourceControlPrepareActive)
+	{
+		Scope.SourceControlTargetPathsBefore = CollectSourceControlTargetPaths(Params);
+		Scope.SourceControlPrepareBefore = PrepareSourceControlTargets(Scope.SourceControlTargetPathsBefore, false);
+		Scope.SourceControlPrepareStatus = SummarizeSourceControlPrepare(Scope.SourceControlPrepareBefore);
 	}
 	Scope.bActive = true;
 	return Scope;
@@ -260,6 +513,33 @@ void FMonolithActionExecutionGuard::SetActionOutcome(
 	Scope.JsonRpcErrorCode = bSuccess ? 0 : ErrorCode;
 	Scope.ResultKind = bSuccess ? TEXT("json_object") : TEXT("error_text");
 
+	if (bSuccess
+		&& ResultObject.IsValid()
+		&& Scope.bSourceControlPrepareActive)
+	{
+		TArray<FString> Targets = Scope.SourceControlTargetPathsBefore;
+		AppendUniqueSourceControlTargets(Targets, CollectSourceControlTargetPaths(ResultObject));
+		AppendUniqueSourceControlTargets(Targets, CollectChangedDirtyPackages(Scope));
+
+		Scope.SourceControlPrepareAfter = PrepareSourceControlTargets(Targets, false);
+		Scope.SourceControlPrepareStatus = SummarizeSourceControlPrepare(Scope.SourceControlPrepareAfter);
+
+		if (Scope.SourceControlPrepareBefore.IsValid() || Scope.SourceControlPrepareAfter.IsValid())
+		{
+			TSharedPtr<FJsonObject> PrepareObject = MakeShared<FJsonObject>();
+			if (Scope.SourceControlPrepareBefore.IsValid())
+			{
+				PrepareObject->SetObjectField(TEXT("before_action"), Scope.SourceControlPrepareBefore);
+			}
+			if (Scope.SourceControlPrepareAfter.IsValid())
+			{
+				PrepareObject->SetObjectField(TEXT("after_action"), Scope.SourceControlPrepareAfter);
+			}
+			PrepareObject->SetStringField(TEXT("status"), Scope.SourceControlPrepareStatus);
+			ResultObject->SetObjectField(TEXT("source_control_prepare"), PrepareObject);
+		}
+	}
+
 	if (!IsAdvancedToolCallRecordsEnabled())
 	{
 		Scope.ResultChars = 0;
@@ -285,19 +565,7 @@ void FMonolithActionExecutionGuard::EndAction(FExecutionScope& Scope)
 		return;
 	}
 
-	TArray<FString> ChangedPackages;
-	if (Scope.bDirtyPackageTrackingActive)
-	{
-		const TSet<FString> DirtyPackagesAfter = SnapshotDirtyPackages();
-		for (const FString& PackageName : DirtyPackagesAfter)
-		{
-			if (!Scope.DirtyPackagesBefore.Contains(PackageName))
-			{
-				ChangedPackages.Add(PackageName);
-			}
-		}
-	}
-	ChangedPackages.Sort();
+	TArray<FString> ChangedPackages = CollectChangedDirtyPackages(Scope);
 
 	FAuditRow Row;
 	Row.Id = Scope.Id;
@@ -330,6 +598,9 @@ void FMonolithActionExecutionGuard::EndAction(FExecutionScope& Scope)
 		? TEXT("not_requested")
 		: Scope.PostEditValidationStatus;
 	Row.PostEditValidationMessage = Scope.PostEditValidationMessage;
+	Row.SourceControlPrepareStatus = Scope.SourceControlPrepareStatus.IsEmpty()
+		? TEXT("not_requested")
+		: Scope.SourceControlPrepareStatus;
 	Row.ResultChars = Scope.ResultChars;
 	Row.bResultTruncated = Scope.bResultTruncated;
 	Row.RollbackStatus = Scope.RollbackStatus.IsEmpty()
@@ -374,6 +645,7 @@ void FMonolithActionExecutionGuard::RecordRejectedToolCall(
 	Row.DirtyPackageTrackingStatus = TEXT("skipped_by_policy");
 	Row.TransactionStatus = TEXT("not_requested");
 	Row.PostEditValidationStatus = TEXT("not_requested");
+	Row.SourceControlPrepareStatus = TEXT("not_requested");
 	Row.ResultChars = Reason.Len();
 	Row.bResultTruncated = false;
 	Row.RollbackStatus = TEXT("not_available_without_policy");
@@ -410,6 +682,8 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Result->SetBoolField(TEXT("automatic_rollback"), false);
 	Result->SetBoolField(TEXT("post_edit_validation"), true);
 	Result->SetStringField(TEXT("post_edit_validation_mode"), TEXT("policy_gated"));
+	Result->SetBoolField(TEXT("automatic_source_control_prepare"), true);
+	Result->SetStringField(TEXT("source_control_prepare_mode"), TEXT("asset_mutation_policy_gated"));
 	Result->SetBoolField(TEXT("execution_policy_metadata"), true);
 	{
 		FScopeLock Lock(&GuardLock);
@@ -425,6 +699,7 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("policy-gated dirty package tracking")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("policy-gated transaction wrapping")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("post-edit validator hooks")));
+	Implemented.Add(MakeShared<FJsonValueString>(TEXT("best-effort source-control prepare for mutating asset actions")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.set_action_execution_policy")));
 	// Advanced ToolCall actions are only registered during RegisterMonolithExecutionGuardActions
 	// when the setting was true at startup. Gate the advertised list on actual registry state
@@ -449,8 +724,9 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 
 	TArray<TSharedPtr<FJsonValue>> Notes;
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Audit capture is wired through the existing central crash-breadcrumb execution scope, so it applies to action dispatch without changing each domain action.")));
-	Notes.Add(MakeShared<FJsonValueString>(TEXT("Default read_only policies skip package scans, transactions, and post-edit validation; explicit mutating policies can opt into each central guard feature.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Default read_only policies skip package scans, transactions, source-control prepare, and post-edit validation; mutating policies opt into each central guard feature.")));
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Post-edit validation failure returns a structured action error, but automatic asset rollback remains unavailable.")));
+	Notes.Add(MakeShared<FJsonValueString>(TEXT("Automatic source-control prepare uses the active Unreal SourceControl provider; unavailable providers are reported as non-fatal skips.")));
 	Result->SetArrayField(TEXT("notes"), Notes);
 
 	return Result;
@@ -746,6 +1022,65 @@ FMonolithPostEditValidationResult FMonolithActionExecutionGuard::RunDefaultPostE
 	return Passed;
 }
 
+bool FMonolithActionExecutionGuard::IsAutomaticSourceControlPrepareNamespace(const FString& Namespace)
+{
+	static const TSet<FString> ExcludedNamespaces =
+	{
+		TEXT("asset"),
+		TEXT("collection"),
+		TEXT("context"),
+		TEXT("monolith"),
+		TEXT("project"),
+		TEXT("source"),
+		TEXT("source_control")
+	};
+	return !ExcludedNamespaces.Contains(Namespace);
+}
+
+bool FMonolithActionExecutionGuard::IsAutomaticSourceControlPrepareAction(const FString& Action)
+{
+	static const TArray<FString> ReadLikeOrNonAssetWriteVerbs =
+	{
+		TEXT("get"),
+		TEXT("list"),
+		TEXT("find"),
+		TEXT("search"),
+		TEXT("read"),
+		TEXT("validate"),
+		TEXT("preview"),
+		TEXT("can"),
+		TEXT("describe"),
+		TEXT("detect"),
+		TEXT("analyze"),
+		TEXT("compare"),
+		TEXT("check"),
+		TEXT("health"),
+		TEXT("status"),
+		TEXT("diff"),
+		TEXT("review"),
+		TEXT("inspect"),
+		TEXT("estimate"),
+		TEXT("explain"),
+		TEXT("query"),
+		TEXT("resolve"),
+		TEXT("is"),
+		TEXT("has"),
+		TEXT("risk"),
+		TEXT("impact"),
+		TEXT("snapshot"),
+		TEXT("export")
+	};
+
+	for (const FString& Verb : ReadLikeOrNonAssetWriteVerbs)
+	{
+		if (Action == Verb || Action.StartsWith(Verb + TEXT("_"), ESearchCase::IgnoreCase))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 TSet<FString> FMonolithActionExecutionGuard::SnapshotDirtyPackages()
 {
 	TSet<FString> DirtyPackages;
@@ -764,6 +1099,99 @@ TSet<FString> FMonolithActionExecutionGuard::SnapshotDirtyPackages()
 		DirtyPackages.Add(PackageName);
 	}
 	return DirtyPackages;
+}
+
+TArray<FString> FMonolithActionExecutionGuard::CollectChangedDirtyPackages(const FExecutionScope& Scope)
+{
+	TArray<FString> ChangedPackages;
+	if (!Scope.bDirtyPackageTrackingActive)
+	{
+		return ChangedPackages;
+	}
+
+	const TSet<FString> DirtyPackagesAfter = SnapshotDirtyPackages();
+	for (const FString& PackageName : DirtyPackagesAfter)
+	{
+		if (!Scope.DirtyPackagesBefore.Contains(PackageName))
+		{
+			ChangedPackages.Add(PackageName);
+		}
+	}
+	ChangedPackages.Sort();
+	return ChangedPackages;
+}
+
+TArray<FString> FMonolithActionExecutionGuard::CollectSourceControlTargetPaths(const TSharedPtr<FJsonObject>& Object)
+{
+	TArray<FString> Targets;
+	CollectSourceControlTargetPathsFromObject(Object, Targets);
+	Targets.Sort();
+	return Targets;
+}
+
+void FMonolithActionExecutionGuard::AppendUniqueSourceControlTargets(
+	TArray<FString>& InOutTargets,
+	const TArray<FString>& NewTargets)
+{
+	for (const FString& Target : NewTargets)
+	{
+		if (!Target.IsEmpty())
+		{
+			InOutTargets.AddUnique(Target);
+		}
+	}
+	InOutTargets.Sort();
+}
+
+TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::PrepareSourceControlTargets(
+	const TArray<FString>& Targets,
+	bool bAddMissingFiles)
+{
+	if (Targets.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	FMonolithSourceControlPrepareOptions Options;
+	Options.bDryRun = false;
+	Options.bUnavailableIsSuccess = true;
+	Options.bAddMissingFiles = bAddMissingFiles;
+	return FMonolithSourceControlUtils::CheckoutOrAddFiles(Targets, Options);
+}
+
+FString FMonolithActionExecutionGuard::SummarizeSourceControlPrepare(const TSharedPtr<FJsonObject>& Result)
+{
+	if (!Result.IsValid())
+	{
+		return TEXT("no_targets");
+	}
+
+	bool bAvailable = false;
+	if (Result->TryGetBoolField(TEXT("available"), bAvailable) && !bAvailable)
+	{
+		return TEXT("skipped_provider_unavailable");
+	}
+
+	bool bOk = true;
+	Result->TryGetBoolField(TEXT("ok"), bOk);
+
+	double CheckoutCount = 0.0;
+	double AddCount = 0.0;
+	Result->TryGetNumberField(TEXT("checkout_count"), CheckoutCount);
+	Result->TryGetNumberField(TEXT("add_count"), AddCount);
+
+	if (!bOk)
+	{
+		return FString::Printf(
+			TEXT("prepare_failed_checkout_%d_add_%d"),
+			static_cast<int32>(CheckoutCount),
+			static_cast<int32>(AddCount));
+	}
+
+	return FString::Printf(
+		TEXT("prepared_checkout_%d_add_%d"),
+		static_cast<int32>(CheckoutCount),
+		static_cast<int32>(AddCount));
 }
 
 TArray<TSharedPtr<FJsonValue>> FMonolithActionExecutionGuard::StringsToJson(const TArray<FString>& Values, int32 Limit)
@@ -797,6 +1225,7 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::AuditRowToJson(const FAud
 	{
 		Obj->SetStringField(TEXT("post_edit_validation_message"), Row.PostEditValidationMessage);
 	}
+	Obj->SetStringField(TEXT("source_control_prepare_status"), Row.SourceControlPrepareStatus.IsEmpty() ? TEXT("not_requested") : Row.SourceControlPrepareStatus);
 	Obj->SetStringField(TEXT("rollback_status"), Row.RollbackStatus);
 	return Obj;
 }
@@ -831,6 +1260,7 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::ToolCallRecordToJson(cons
 	{
 		Obj->SetStringField(TEXT("post_edit_validation_message"), Row.PostEditValidationMessage);
 	}
+	Obj->SetStringField(TEXT("source_control_prepare_status"), Row.SourceControlPrepareStatus.IsEmpty() ? TEXT("not_requested") : Row.SourceControlPrepareStatus);
 	Obj->SetBoolField(TEXT("raw_payload_logging"), false);
 	Obj->SetNumberField(TEXT("redaction_version"), 1);
 	Obj->SetStringField(TEXT("rollback_status"), Row.RollbackStatus);

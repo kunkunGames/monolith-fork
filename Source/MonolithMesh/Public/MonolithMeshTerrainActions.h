@@ -19,7 +19,7 @@ class UDynamicMesh;
  *
  * Hospice mode: ADA-compliant ramp generation (1:12 slope, 76cm max rise per run, landings, handrails).
  */
-class FMonolithMeshTerrainActions
+class MONOLITHMESH_API FMonolithMeshTerrainActions
 {
 public:
 	static void RegisterActions(FMonolithToolRegistry& Registry);

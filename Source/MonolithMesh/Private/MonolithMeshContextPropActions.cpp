@@ -271,7 +271,7 @@ TArray<AActor*> FMonolithMeshContextPropActions::FindActorsWithOwnerTag(UWorld* 
 void FMonolithMeshContextPropActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. scatter_on_surface
-	Registry.RegisterAction(TEXT("mesh"), TEXT("scatter_on_surface"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("scatter_on_surface"),
 		TEXT("Place props ON a specific surface actor (shelf top, table top, cabinet interior). Detects surface top via bounds + downward trace. Poisson disk spacing."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshContextPropActions::ScatterOnSurface),
 		FParamSchemaBuilder()
@@ -287,7 +287,7 @@ void FMonolithMeshContextPropActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Build());
 
 	// 2. set_room_disturbance
-	Registry.RegisterAction(TEXT("mesh"), TEXT("set_room_disturbance"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("set_room_disturbance"),
 		TEXT("Apply disturbance level to placed props in a volume: orderly (aligned), slightly_messy (small offsets), ransacked (large offsets, tipped), abandoned (pushed to edges). Single undo transaction."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshContextPropActions::SetRoomDisturbance),
 		FParamSchemaBuilder()
@@ -299,7 +299,7 @@ void FMonolithMeshContextPropActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Build());
 
 	// 3. configure_physics_props
-	Registry.RegisterAction(TEXT("mesh"), TEXT("configure_physics_props"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("configure_physics_props"),
 		TEXT("Batch-configure SimulatePhysics and sleep state on actors. Auto-sets Mobility to Movable. Optionally set mass and collision profile."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshContextPropActions::ConfigurePhysicsProps),
 		FParamSchemaBuilder()
@@ -312,7 +312,7 @@ void FMonolithMeshContextPropActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Build());
 
 	// 4. settle_props
-	Registry.RegisterAction(TEXT("mesh"), TEXT("settle_props"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("settle_props"),
 		TEXT("Trace-based gravity settle: for each prop, traces downward and snaps to hit surface with small random tilt. No PIE required. Single undo transaction."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshContextPropActions::SettleProps),
 		FParamSchemaBuilder()
@@ -323,7 +323,7 @@ void FMonolithMeshContextPropActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Build());
 
 	// 5. create_prop_kit
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_prop_kit"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_prop_kit"),
 		TEXT("Author a prop kit JSON file: items with relative positions, rotation, scale, spawn chances. Saved to Saved/Monolith/PropKits/."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshContextPropActions::CreatePropKit),
 		FParamSchemaBuilder()
@@ -334,7 +334,7 @@ void FMonolithMeshContextPropActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Build());
 
 	// 6. place_prop_kit
-	Registry.RegisterAction(TEXT("mesh"), TEXT("place_prop_kit"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("place_prop_kit"),
 		TEXT("Spawn a prop kit at a world location. Random item selection based on spawn_chance. Single undo transaction."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshContextPropActions::PlacePropKit),
 		FParamSchemaBuilder()
@@ -347,7 +347,7 @@ void FMonolithMeshContextPropActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Build());
 
 	// 7. scatter_on_walls
-	Registry.RegisterAction(TEXT("mesh"), TEXT("scatter_on_walls"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("scatter_on_walls"),
 		TEXT("Horizontal traces outward from volume center to find walls. Places props at hit points aligned to wall normal. For paintings, clocks, signs, sconces."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshContextPropActions::ScatterOnWalls),
 		FParamSchemaBuilder()
@@ -362,7 +362,7 @@ void FMonolithMeshContextPropActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Build());
 
 	// 8. scatter_on_ceiling
-	Registry.RegisterAction(TEXT("mesh"), TEXT("scatter_on_ceiling"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("scatter_on_ceiling"),
 		TEXT("Upward traces to find ceiling. Places props hanging from hit points. For chains, cables, lights, pipes."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshContextPropActions::ScatterOnCeiling),
 		FParamSchemaBuilder()

@@ -94,7 +94,7 @@ struct FSpatialBlock
 // Action Class
 // ============================================================================
 
-class FMonolithMeshSpatialRegistry
+class MONOLITHMESH_API FMonolithMeshSpatialRegistry
 {
 public:
 	/** Register all 10 spatial registry actions */

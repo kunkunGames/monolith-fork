@@ -4,7 +4,7 @@
 |-------|-------|
 | Date | 2026-05-18 |
 | Topic | RX-1.1: `source.detect_changes` line-range overlap precision (editor + offline) |
-| Spec | `CRG/spec/monolith-crg-detect-changes-line-precision-spec.md` |
+| Spec | `Docs/specs/SPEC_MonolithSource.md` |
 | Branch | `feat/source-detect-changes-line-precision` (base `origin/master` `2ddad76`) |
 | Scope | `Source/MonolithSource/**`, `Tools/MonolithQuery/monolith_query.cpp`, docs |
 

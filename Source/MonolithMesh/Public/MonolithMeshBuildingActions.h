@@ -14,7 +14,7 @@ class UDynamicMesh;
  * Takes a 2D grid of room IDs + door edge positions → generates geometry AND a Building Descriptor JSON.
  * The descriptor is the interface contract for all downstream sub-projects (SP2-SP10).
  */
-class FMonolithMeshBuildingActions
+class MONOLITHMESH_API FMonolithMeshBuildingActions
 {
 public:
 	static void RegisterActions(FMonolithToolRegistry& Registry);

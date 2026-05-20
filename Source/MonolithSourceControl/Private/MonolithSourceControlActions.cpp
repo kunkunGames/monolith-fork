@@ -1,6 +1,7 @@
 #include "MonolithSourceControlActions.h"
 
 #include "MonolithParamSchema.h"
+#include "MonolithSourceControlUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
@@ -51,55 +52,7 @@ namespace
 
 	bool NormalizeSourceControlPath(const FString& Input, FString& OutFile, FString& OutError)
 	{
-		FString Path = Input.TrimStartAndEnd();
-		if (Path.IsEmpty())
-		{
-			OutError = TEXT("empty path");
-			return false;
-		}
-
-		if (Path.StartsWith(TEXT("/")))
-		{
-			FString PackageName = Path.Contains(TEXT("."))
-				? FPackageName::ObjectPathToPackageName(Path)
-				: Path;
-
-			if (FPackageName::IsValidLongPackageName(PackageName, false))
-			{
-				if (FPackageName::DoesPackageExist(PackageName, &OutFile))
-				{
-					OutFile = FPaths::ConvertRelativePathToFull(OutFile);
-					FPaths::NormalizeFilename(OutFile);
-					return true;
-				}
-
-				if (FPackageName::TryConvertLongPackageNameToFilename(
-					PackageName,
-					OutFile,
-					FPackageName::GetAssetPackageExtension()))
-				{
-					OutFile = FPaths::ConvertRelativePathToFull(OutFile);
-					FPaths::NormalizeFilename(OutFile);
-					return true;
-				}
-
-				OutError = FString::Printf(TEXT("could not resolve package path: %s"), *Input);
-				return false;
-			}
-
-			OutFile = FPaths::ConvertRelativePathToFull(Path);
-			FPaths::NormalizeFilename(OutFile);
-			return true;
-		}
-
-		if (FPaths::IsRelative(Path))
-		{
-			Path = FPaths::Combine(FPaths::ProjectDir(), Path);
-		}
-
-		OutFile = FPaths::ConvertRelativePathToFull(Path);
-		FPaths::NormalizeFilename(OutFile);
-		return true;
+		return FMonolithSourceControlUtils::NormalizePathForSourceControl(Input, OutFile, OutError);
 	}
 
 	bool ReadPathArray(const TSharedPtr<FJsonObject>& Params, TArray<FString>& OutInputs, TArray<FString>& OutFiles, TArray<TSharedPtr<FJsonValue>>& OutRows, FString& OutError)
@@ -436,79 +389,16 @@ FMonolithActionResult FMonolithSourceControlActions::HandleCheckoutOrAdd(const T
 		Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
 	}
 
-	ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
-	if (!Provider.IsEnabled() || !Provider.IsAvailable())
+	FMonolithSourceControlPrepareOptions Options;
+	Options.bDryRun = bDryRun;
+	Options.bUnavailableIsSuccess = false;
+	Options.bAddMissingFiles = true;
+
+	TSharedPtr<FJsonObject> Result = FMonolithSourceControlUtils::CheckoutOrAddFiles(Inputs, Options);
+	if (Result.IsValid())
 	{
-		return FMonolithActionResult::Success(MakeUnavailableResult(
-			Provider,
-			TEXT("Source control provider is disabled or unavailable.")));
+		Result->SetArrayField(TEXT("paths"), PathRows);
 	}
-
-	TArray<FString> FilesToCheckout;
-	TArray<FString> FilesToAdd;
-	TArray<TSharedPtr<FJsonValue>> Decisions;
-	for (const FString& File : Files)
-	{
-		FSourceControlStatePtr State = Provider.GetState(File, EStateCacheUsage::ForceUpdate);
-		TSharedPtr<FJsonObject> Decision = StateToJson(File, State);
-
-		if (State.IsValid() && (State->IsCheckedOut() || State->IsAdded()))
-		{
-			Decision->SetStringField(TEXT("planned_action"), TEXT("skip"));
-			Decision->SetStringField(TEXT("reason"), TEXT("already checked out or added"));
-		}
-		else if (!State.IsValid() || (!State->IsSourceControlled() && State->CanAdd()))
-		{
-			Decision->SetStringField(TEXT("planned_action"), TEXT("add"));
-			FilesToAdd.Add(File);
-		}
-		else if (State->CanCheckout())
-		{
-			Decision->SetStringField(TEXT("planned_action"), TEXT("checkout"));
-			FilesToCheckout.Add(File);
-		}
-		else
-		{
-			Decision->SetStringField(TEXT("planned_action"), TEXT("skip"));
-			Decision->SetStringField(TEXT("reason"), TEXT("provider state cannot be added or checked out"));
-		}
-
-		Decisions.Add(MakeShared<FJsonValueObject>(Decision));
-	}
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("operation"), TEXT("checkout_or_add"));
-	Result->SetBoolField(TEXT("dry_run"), bDryRun);
-	Result->SetObjectField(TEXT("provider"), ProviderToJson(Provider));
-	Result->SetArrayField(TEXT("paths"), PathRows);
-	Result->SetArrayField(TEXT("decisions"), Decisions);
-	Result->SetNumberField(TEXT("checkout_count"), FilesToCheckout.Num());
-	Result->SetNumberField(TEXT("add_count"), FilesToAdd.Num());
-
-	if (bDryRun)
-	{
-		Result->SetBoolField(TEXT("ok"), true);
-		return FMonolithActionResult::Success(Result);
-	}
-
-	bool bOk = true;
-	if (FilesToCheckout.Num() > 0)
-	{
-		FSourceControlOperationRef Operation = ISourceControlOperation::Create<FCheckOut>();
-		const ECommandResult::Type CommandResult = Provider.Execute(Operation, FilesToCheckout, EConcurrency::Synchronous);
-		Result->SetStringField(TEXT("checkout_result"), CommandResultToString(CommandResult));
-		bOk = bOk && CommandResult == ECommandResult::Succeeded;
-	}
-	if (FilesToAdd.Num() > 0)
-	{
-		FSourceControlOperationRef Operation = ISourceControlOperation::Create<FMarkForAdd>();
-		const ECommandResult::Type CommandResult = Provider.Execute(Operation, FilesToAdd, EConcurrency::Synchronous);
-		Result->SetStringField(TEXT("add_result"), CommandResultToString(CommandResult));
-		bOk = bOk && CommandResult == ECommandResult::Succeeded;
-	}
-
-	Result->SetBoolField(TEXT("ok"), bOk);
-	Result->SetArrayField(TEXT("states"), GetStateRows(Provider, Files));
 	return FMonolithActionResult::Success(Result);
 }
 

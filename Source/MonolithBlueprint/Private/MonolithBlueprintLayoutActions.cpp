@@ -33,7 +33,7 @@ void FMonolithBlueprintLayoutActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("vertical_spacing"), TEXT("integer"), TEXT("Vertical spacing between nodes in pixels"), TEXT("80"))
 			.Optional(TEXT("layout_mode"), TEXT("string"), TEXT("Layout mode: 'all' (default), 'new_only' (only nodes at 0,0 or overlapping), 'selected' (only node_ids)"), TEXT("all"))
 			.Optional(TEXT("node_ids"), TEXT("array"), TEXT("Array of node IDs to layout (for 'selected' mode)"))
-			.Optional(TEXT("formatter"), TEXT("string"), TEXT("Formatter: 'auto' (default, prefers Blueprint Assist if available), 'blueprint_assist' (BA only, fails if unavailable), or 'monolith' (built-in Sugiyama)"), TEXT("auto"))
+			.Optional(TEXT("formatter"), TEXT("string"), TEXT("Formatter: 'auto' or 'monolith' use the built-in Sugiyama formatter. 'blueprint_assist' is disabled for asset mutation."), TEXT("auto"))
 			.Build());
 }
 
@@ -293,6 +293,11 @@ FMonolithActionResult FMonolithBlueprintLayoutActions::HandleAutoLayout(const TS
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Unknown formatter '%s'. Valid: 'auto', 'blueprint_assist', 'monolith'"), *Formatter));
 	}
+	constexpr bool bHasBuiltInFormatter = true;
+	if (Formatter == TEXT("blueprint_assist") && !IMonolithGraphFormatter::IsExternalMutationFormattingEnabled(bHasBuiltInFormatter))
+	{
+		return FMonolithActionResult::Error(IMonolithGraphFormatter::GetExternalMutationFormattingDisabledMessage());
+	}
 
 	// Validate layout_mode
 	if (LayoutMode != TEXT("all") && LayoutMode != TEXT("new_only") && LayoutMode != TEXT("selected"))
@@ -328,55 +333,6 @@ FMonolithActionResult FMonolithBlueprintLayoutActions::HandleAutoLayout(const TS
 			TEXT("Graph '%s' not found in Blueprint '%s'."), *GraphName, *AssetPath));
 	}
 
-	// --- Formatter dispatch ---
-	if (Formatter == TEXT("auto") || Formatter == TEXT("blueprint_assist"))
-	{
-		bool bExplicitBA = (Formatter == TEXT("blueprint_assist"));
-		bool bBAAvailable = IMonolithGraphFormatter::IsAvailable()
-			&& IMonolithGraphFormatter::Get().SupportsGraph(Graph);
-
-		if (bBAAvailable)
-		{
-			int32 NodesFormatted = 0;
-			FString ErrorMessage;
-			if (IMonolithGraphFormatter::Get().FormatGraph(Graph, NodesFormatted, ErrorMessage))
-			{
-				auto Result = MakeShared<FJsonObject>();
-				Result->SetStringField(TEXT("formatter_used"), TEXT("blueprint_assist"));
-				Result->SetNumberField(TEXT("nodes_formatted"), NodesFormatted);
-
-				FMonolithFormatterInfo Info = IMonolithGraphFormatter::Get().GetFormatterInfo(Graph);
-				Result->SetStringField(TEXT("formatter_type"), Info.FormatterType);
-				Result->SetStringField(TEXT("graph_class"), Info.GraphClassName);
-
-				// Warn if BA-incompatible params were set
-				if (LayoutMode != TEXT("all") || SelectedNodeIds.Num() > 0)
-				{
-					Result->SetStringField(TEXT("warning"),
-						TEXT("layout_mode and node_ids are ignored by Blueprint Assist formatter"));
-				}
-
-				return FMonolithActionResult::Success(Result);
-			}
-
-			if (bExplicitBA)
-			{
-				return FMonolithActionResult::Error(FString::Printf(
-					TEXT("Blueprint Assist formatter failed: %s"), *ErrorMessage));
-			}
-
-			// "auto" mode: BA failed, fall through to built-in with warning
-			UE_LOG(LogMonolith, Warning,
-				TEXT("BA formatter failed (%s), falling back to built-in"), *ErrorMessage);
-		}
-		else if (bExplicitBA)
-		{
-			return FMonolithActionResult::Error(
-				TEXT("Blueprint Assist formatter is not available. "
-					"Install Blueprint Assist (paid marketplace plugin) and restart the editor."));
-		}
-		// else: "auto" mode, BA not available -- fall through silently to built-in
-	}
 	// --- Built-in Sugiyama formatter continues below ---
 
 	// ========================================================================

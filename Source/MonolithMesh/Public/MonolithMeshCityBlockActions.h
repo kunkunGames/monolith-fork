@@ -20,7 +20,7 @@ class UDynamicMesh;
  * All downstream SP calls go through FMonolithToolRegistry::ExecuteAction so SP5 stays
  * decoupled from SP1/SP2/SP3/SP4/SP6 — graceful skip when actions don't exist.
  */
-class FMonolithMeshCityBlockActions
+class MONOLITHMESH_API FMonolithMeshCityBlockActions
 {
 public:
 	static void RegisterActions(FMonolithToolRegistry& Registry);

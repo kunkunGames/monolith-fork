@@ -15,6 +15,9 @@ public:
 
 	// --- Action Handlers ---
 
+	/** monolith_find — Fuzzy task-to-action search across the live registry */
+	static FMonolithActionResult HandleFind(const TSharedPtr<FJsonObject>& Params);
+
 	/** monolith_discover — List available namespaces and their actions */
 	static FMonolithActionResult HandleDiscover(const TSharedPtr<FJsonObject>& Params);
 

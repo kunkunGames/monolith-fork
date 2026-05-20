@@ -87,6 +87,19 @@ struct MONOLITHCORE_API FMonolithActionExecutionPolicy
 	TSharedPtr<FJsonObject> ToJson() const;
 };
 
+/** Optional search metadata used by monolith.find ranking. */
+struct MONOLITHCORE_API FMonolithActionSearchMetadata
+{
+	TArray<FString> Keywords;
+	TArray<FString> Aliases;
+	TArray<FString> Examples;
+
+	bool IsEmpty() const
+	{
+		return Keywords.Num() == 0 && Aliases.Num() == 0 && Examples.Num() == 0;
+	}
+};
+
 /** Metadata describing a registered action */
 struct FMonolithActionInfo
 {
@@ -95,6 +108,7 @@ struct FMonolithActionInfo
 	FString Description;
 	FString Category;                     // Optional sub-grouping within a namespace (e.g. "CommonUI" inside "ui"). Empty = uncategorized.
 	FMonolithActionExecutionPolicy ExecutionPolicy;
+	FMonolithActionSearchMetadata SearchMetadata;
 	TSharedPtr<FJsonObject> ParamSchema;  // JSON Schema for parameter validation
 };
 
@@ -122,7 +136,8 @@ public:
 		const FMonolithActionHandler& Handler,
 		const TSharedPtr<FJsonObject>& ParamSchema = nullptr,
 		const FString& Category = FString(),  // Optional sub-group within namespace — defaults to uncategorized
-		const FMonolithActionExecutionPolicy& ExecutionPolicy = FMonolithActionExecutionPolicy::DefaultReadOnly()
+		const FMonolithActionExecutionPolicy& ExecutionPolicy = FMonolithActionExecutionPolicy::DefaultReadOnly(),
+		const FMonolithActionSearchMetadata& SearchMetadata = FMonolithActionSearchMetadata()
 	);
 
 	/** Unregister all actions in a namespace (called during module shutdown) */

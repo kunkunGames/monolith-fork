@@ -10,7 +10,7 @@
  * Template actions: list_room_templates, get_room_template, apply_room_template, create_room_template
  * Validation actions: validate_game_ready, suggest_lod_strategy, batch_validate, compare_lod_chain
  */
-class FMonolithMeshTemplateActions
+class MONOLITHMESH_API FMonolithMeshTemplateActions
 {
 public:
 	/** Register all 8 template + validation actions with the tool registry */

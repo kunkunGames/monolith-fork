@@ -1,4 +1,4 @@
-#include "MonolithSourceSubsystem.h"
+﻿#include "MonolithSourceSubsystem.h"
 #include "MonolithSourceIndexer.h"
 #include "MonolithSettings.h"
 #include "Misc/Paths.h"
@@ -8,6 +8,36 @@
 #include "Interfaces/IPluginManager.h"
 #include "UObject/UObjectGlobals.h" // F17: FCoreUObjectDelegates::ReloadCompleteDelegate
 #include "UObject/Object.h"
+
+namespace
+{
+	void RebuildSourceCrgCacheAfterIndexing(FMonolithSourceDatabase* Database, const TCHAR* Context)
+	{
+		if (!Database || !Database->IsOpen())
+		{
+			UE_LOG(LogMonolithSource, Warning, TEXT("%s complete but EngineSource DB is not open; skipped source CRG projection/cache rebuild"), Context);
+			return;
+		}
+
+		TSharedPtr<FJsonObject> CrgResult = Database->RepairCrgCache(true);
+		FString Status;
+		FString Summary;
+		if (CrgResult.IsValid())
+		{
+			CrgResult->TryGetStringField(TEXT("status"), Status);
+			CrgResult->TryGetStringField(TEXT("summary"), Summary);
+		}
+
+		if (Status == TEXT("ok"))
+		{
+			UE_LOG(LogMonolithSource, Log, TEXT("%s complete; source CRG projection/cache rebuilt: %s"), Context, *Summary);
+		}
+		else
+		{
+			UE_LOG(LogMonolithSource, Warning, TEXT("%s complete but source CRG projection/cache rebuild did not complete cleanly: %s"), Context, *Summary);
+		}
+	}
+}
 
 UMonolithSourceSubsystem::~UMonolithSourceSubsystem()
 {
@@ -175,6 +205,7 @@ void UMonolithSourceSubsystem::TriggerReindex()
 			bIsIndexing = false;
 			UE_LOG(LogMonolithSource, Log, TEXT("C++ source indexing complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
 			ReopenDatabase(DbPath);
+			RebuildSourceCrgCacheAfterIndexing(Database.Get(), TEXT("Full source indexing"));
 		});
 	});
 
@@ -226,6 +257,7 @@ void UMonolithSourceSubsystem::TriggerProjectReindex()
 			bIsIndexing = false;
 			UE_LOG(LogMonolithSource, Log, TEXT("Project source indexing complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
 			ReopenDatabase(DbPath);
+			RebuildSourceCrgCacheAfterIndexing(Database.Get(), TEXT("Project source indexing"));
 		});
 	});
 

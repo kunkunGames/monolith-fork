@@ -12,7 +12,7 @@ class UMaterialInstanceDynamic;
  * layout export/import, volume scanning, and prop scattering.
  * The core value proposition of the mesh module.
  */
-class FMonolithMeshBlockoutActions
+class MONOLITHMESH_API FMonolithMeshBlockoutActions
 {
 public:
 	/** Register all 15 blockout actions with the tool registry */

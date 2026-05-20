@@ -11,7 +11,7 @@ class ADecalActor;
  * Surface-aligned decal spawning, Catmull-Rom path interpolation,
  * prop density analysis, and parameterized horror scene generation.
  */
-class FMonolithMeshDecalActions
+class MONOLITHMESH_API FMonolithMeshDecalActions
 {
 public:
 	/** Register all 4 decal/detail actions with the tool registry */

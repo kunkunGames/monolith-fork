@@ -195,7 +195,7 @@ namespace LevelDesignHelpers
 
 void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
-	Registry.RegisterAction(TEXT("mesh"), TEXT("place_light"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("place_light"),
 		TEXT("Spawn a light actor (point/spot/rect/directional) with full property configuration"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::PlaceLight),
 		FParamSchemaBuilder()
@@ -218,7 +218,7 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("mobility"), TEXT("string"), TEXT("Mobility: Static, Stationary, Movable"), TEXT("Stationary"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("set_light_properties"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("set_light_properties"),
 		TEXT("Modify properties on an existing light actor (intensity, color, shadows, temperature, cone angles, etc.)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::SetLightProperties),
 		FParamSchemaBuilder()
@@ -237,7 +237,7 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("mobility"), TEXT("string"), TEXT("Mobility: Static, Stationary, Movable"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("set_actor_material"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("set_actor_material"),
 		TEXT("Assign a material to an actor's mesh component by slot index or slot name. SetMaterial creates override array — setting slot 2 without 0-1 fills them with defaults."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::SetActorMaterial),
 		FParamSchemaBuilder()
@@ -248,7 +248,7 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("component_name"), TEXT("string"), TEXT("Specific component name (if actor has multiple mesh components)"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("swap_material_in_level"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("swap_material_in_level"),
 		TEXT("Replace all instances of material X with material Y across actors or entire level"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::SwapMaterialInLevel),
 		FParamSchemaBuilder()
@@ -258,7 +258,7 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("preview"), TEXT("boolean"), TEXT("If true, report what would change without modifying"), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("find_replace_mesh"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_replace_mesh"),
 		TEXT("Swap all instances of static mesh X with mesh Y. Essential for blockout-to-art pass."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::FindReplaceMesh),
 		FParamSchemaBuilder()
@@ -269,7 +269,7 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("preview"), TEXT("boolean"), TEXT("If true, report without modifying"), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("set_lod_screen_sizes"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("set_lod_screen_sizes"),
 		TEXT("Set per-LOD screen size thresholds on a static mesh asset. Sizes must be monotonically decreasing."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::SetLodScreenSizes),
 		FParamSchemaBuilder()
@@ -277,7 +277,7 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Required(TEXT("screen_sizes"), TEXT("array"), TEXT("Array of screen size floats per LOD (e.g. [1.0, 0.4, 0.15])"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("find_instancing_candidates"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_instancing_candidates"),
 		TEXT("Identify meshes used many times that could benefit from HISM conversion. Groups by mesh and material set."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::FindInstancingCandidates),
 		FParamSchemaBuilder()
@@ -287,7 +287,7 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("include_materials"), TEXT("boolean"), TEXT("Include material override info in grouping"), TEXT("true"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("convert_to_hism"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("convert_to_hism"),
 		TEXT("Convert grouped StaticMeshActors into a single HISM actor. Deletes originals. Single undo transaction."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::ConvertToHism),
 		FParamSchemaBuilder()
@@ -298,7 +298,7 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("preserve_materials"), TEXT("boolean"), TEXT("Copy material overrides from first actor"), TEXT("true"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_actor_component_properties"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("get_actor_component_properties"),
 		TEXT("Read arbitrary component properties via FProperty reflection. Returns typed values for any UPROPERTY."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::GetActorComponentProperties),
 		FParamSchemaBuilder()

@@ -338,7 +338,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 		"and emits wall_openings in the result.");
 
 	// ---- create_balcony ----
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_balcony"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_balcony"),
 		TEXT("Generate a balcony: floor slab + railing extending from an upper floor wall face. "
 			"Styles: simple (posts + top rail), bars (vertical balusters), solid (solid panel). "
 			"With building_context: auto-orients to wall normal and emits wall_openings (french_door)."),
@@ -364,7 +364,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Build());
 
 	// ---- create_porch ----
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_porch"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_porch"),
 		TEXT("Generate a covered porch: floor platform, support columns, roof slab, and optional entry steps with railings. "
 			"Configurable column count, step geometry, roof overhang. "
 			"With building_context: auto-orients, aligns porch floor to building floor, emits wall_openings (door)."),
@@ -396,7 +396,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Build());
 
 	// ---- create_fire_escape ----
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_fire_escape"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_fire_escape"),
 		TEXT("Generate a multi-story fire escape: zigzag exterior stairs between floor landings. "
 			"Each floor gets a landing platform. Stairs alternate left/right. Optional roof ladder. "
 			"With building_context: auto-orients to wall, aligns landings to floor heights, emits wall_openings (windows)."),
@@ -423,7 +423,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Build());
 
 	// ---- create_ramp_connector ----
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_ramp_connector"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_ramp_connector"),
 		TEXT("Generate an ADA-compliant ramp between two heights. Auto-computes run length from rise and slope ratio. "
 			"Adds intermediate switchback landings if rise exceeds max_rise_per_run. "
 			"With building_context: auto-orients to wall and emits wall_openings (door at top)."),
@@ -449,7 +449,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Build());
 
 	// ---- create_railing ----
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_railing"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_railing"),
 		TEXT("Generate a railing along an arbitrary path defined by 3D points. "
 			"Styles: simple (posts + top rail), bars (+ vertical balusters), solid (+ panel infill). "
 			"With building_context: auto-orients to wall normal for placement."),

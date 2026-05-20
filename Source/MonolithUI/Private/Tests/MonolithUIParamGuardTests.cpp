@@ -65,7 +65,7 @@ bool FMonolithUIParamGuardSetSlotPropertyAnchorsMalformed::RunTest(const FString
 
     const FMonolithActionResult Result = FMonolithUISlotActions::HandleSetSlotProperty(Params);
     TestFalse(TEXT("set_slot_property fails gracefully on malformed anchors"), Result.bSuccess);
-    TestTrue(TEXT("set_slot_property returns clear error message"), Result.Error.Contains(TEXT("Invalid param")));
+    TestTrue(TEXT("set_slot_property returns clear error message"), Result.ErrorMessage.Contains(TEXT("Invalid param")));
 
     return true;
 }

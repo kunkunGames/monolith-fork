@@ -197,7 +197,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// === Read-Only (7) ===
 
 	// 1. get_audio_volumes
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_audio_volumes"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("get_audio_volumes"),
 		TEXT("Enumerate all AAudioVolume actors. Returns reverb/interior settings, priority, bounds. Flags uncovered regions."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::GetAudioVolumes),
 		FParamSchemaBuilder()
@@ -205,7 +205,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	// 2. get_surface_materials
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_surface_materials"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("get_surface_materials"),
 		TEXT("Cast rays in all directions to catalog physical materials in a volume or region. Returns material breakdown with acoustic properties."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::GetSurfaceMaterials),
 		FParamSchemaBuilder()
@@ -216,7 +216,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	// 3. estimate_footstep_sound
-	Registry.RegisterAction(TEXT("mesh"), TEXT("estimate_footstep_sound"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("estimate_footstep_sound"),
 		TEXT("Downward trace at a location to determine floor surface type and footstep loudness factor."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::EstimateFootstepSound),
 		FParamSchemaBuilder()
@@ -224,7 +224,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	// 4. analyze_room_acoustics
-	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_room_acoustics"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_room_acoustics"),
 		TEXT("Sample surfaces via raycasts in a volume, compute area-weighted absorption. Sabine RT60: 0.161 * Volume_m3 / TotalAbsorption. Classify: dead/dry/live/echo."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::AnalyzeRoomAcoustics),
 		FParamSchemaBuilder()
@@ -233,7 +233,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	// 5. analyze_sound_propagation
-	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_sound_propagation"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_sound_propagation"),
 		TEXT("Analyzes sound propagation between two points. Direct trace (wall occlusion) + indirect navmesh path (doorway propagation). Returns whichever path has better audibility."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::AnalyzeSoundPropagation),
 		FParamSchemaBuilder()
@@ -243,7 +243,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	// 6. find_loud_surfaces
-	Registry.RegisterAction(TEXT("mesh"), TEXT("find_loud_surfaces"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_loud_surfaces"),
 		TEXT("Find surfaces with high footstep loudness (metal, glass, gravel) in a volume or region. Returns locations, areas, detection radii."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::FindLoudSurfaces),
 		FParamSchemaBuilder()
@@ -254,7 +254,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	// 7. find_sound_paths
-	Registry.RegisterAction(TEXT("mesh"), TEXT("find_sound_paths"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_sound_paths"),
 		TEXT("Multi-method sound path finder: direct trace, first-bounce reflections (image-source), and navmesh indirect path (doorway propagation). Returns all viable paths sorted by attenuation."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::FindSoundPaths),
 		FParamSchemaBuilder()
@@ -267,7 +267,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// === Horror AI (4) ===
 
 	// 8. can_ai_hear_from
-	Registry.RegisterAction(TEXT("mesh"), TEXT("can_ai_hear_from"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("can_ai_hear_from"),
 		TEXT("Can AI hear the player? Direct trace (wall occlusion) + indirect navmesh path (doorway propagation). Uses best path. Returns yes/faintly/no + detection radius."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::CanAiHearFrom),
 		FParamSchemaBuilder()
@@ -278,7 +278,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	// 9. get_stealth_map
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_stealth_map"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("get_stealth_map"),
 		TEXT("Grid-sample a volume: per-cell footstep loudness + AI detection radius. Returns heatmap data."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::GetStealthMap),
 		FParamSchemaBuilder()
@@ -288,7 +288,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	// 10. find_quiet_path
-	Registry.RegisterAction(TEXT("mesh"), TEXT("find_quiet_path"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_quiet_path"),
 		TEXT("Sample candidate navmesh paths between two points, score by surface loudness along path. Returns lowest-loudness route."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::FindQuietPath),
 		FParamSchemaBuilder()
@@ -298,7 +298,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	// 11. suggest_audio_volumes
-	Registry.RegisterAction(TEXT("mesh"), TEXT("suggest_audio_volumes"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("suggest_audio_volumes"),
 		TEXT("Given room geometry + surface materials, suggest AAudioVolume reverb settings based on RT60 + material classification."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::SuggestAudioVolumes),
 		FParamSchemaBuilder()
@@ -308,7 +308,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// === Write (3) ===
 
 	// 12. create_audio_volume
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_audio_volume"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("create_audio_volume"),
 		TEXT("Spawn an AAudioVolume matching a blocking volume's shape. Set reverb/interior settings. Undo transaction."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::CreateAudioVolume),
 		FParamSchemaBuilder()
@@ -319,7 +319,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	// 13. set_surface_type
-	Registry.RegisterAction(TEXT("mesh"), TEXT("set_surface_type"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("set_surface_type"),
 		TEXT("Set physical material surface type override on a mesh actor's component. Undo transaction."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::SetSurfaceType),
 		FParamSchemaBuilder()
@@ -328,7 +328,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 
 	// 14. create_surface_datatable
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_surface_datatable"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("create_surface_datatable"),
 		TEXT("Bootstrap the acoustic system: create a DataTable with surface properties and register surface types via UPhysicsSettings CDO."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::CreateSurfaceDataTable),
 		FParamSchemaBuilder()

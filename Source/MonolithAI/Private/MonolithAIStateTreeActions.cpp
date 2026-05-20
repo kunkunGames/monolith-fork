@@ -1,4 +1,4 @@
-#include "MonolithAIStateTreeActions.h"
+﻿#include "MonolithAIStateTreeActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithPackagePathValidator.h"
@@ -750,11 +750,11 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 
 	// 76b. auto_arrange_st
 	Registry.RegisterAction(TEXT("ai"), TEXT("auto_arrange_st"),
-		TEXT("Auto-layout a StateTree graph via IMonolithGraphFormatter or built-in fallback"),
+		TEXT("Auto-layout a StateTree graph using built-in state processing. Blueprint Assist is disabled because this action has a built-in formatter."),
 		FMonolithActionHandler::CreateStatic(&HandleAutoArrangeST),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
-			.Optional(TEXT("formatter"), TEXT("string"), TEXT("Formatter to use: 'blueprint_assist' or 'builtin' (default: auto-detect)"))
+			.Optional(TEXT("formatter"), TEXT("string"), TEXT("Formatter to use: 'builtin'. 'blueprint_assist' is disabled for asset mutation."))
 			.Build());
 
 #endif // WITH_STATETREE
@@ -3479,6 +3479,12 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAutoArrangeST(const TSh
 	if (!ST) return FMonolithActionResult::Error(Error);
 
 	FString FormatterPref = Params->GetStringField(TEXT("formatter")).ToLower();
+	constexpr bool bHasBuiltInFormatter = true;
+	const bool bMayUseExternalFormatter = IMonolithGraphFormatter::IsExternalMutationFormattingEnabled(bHasBuiltInFormatter);
+	if (FormatterPref == TEXT("blueprint_assist") && !bMayUseExternalFormatter)
+	{
+		return FMonolithActionResult::Error(IMonolithGraphFormatter::GetExternalMutationFormattingDisabledMessage());
+	}
 
 	// State Trees use UEdGraph for their editor representation
 	// Try to find the editor graph
@@ -3487,10 +3493,12 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAutoArrangeST(const TSh
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
 	// StateTree editor doesn't use a traditional UEdGraph in the same way as Blueprints.
-	// Check if external formatter supports it first.
+	// The external branch is policy-gated; StateTree currently has a built-in processing path.
 	bool bUsedExternalFormatter = false;
 
-	if (FormatterPref != TEXT("builtin") && IMonolithGraphFormatter::IsAvailable())
+	if (FormatterPref != TEXT("builtin")
+		&& bMayUseExternalFormatter
+		&& IMonolithGraphFormatter::IsAvailable())
 	{
 		// StateTree uses a custom editor UI, not standard UEdGraph nodes.
 		// The external formatter (Blueprint Assist) may not support it.

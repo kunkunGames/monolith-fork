@@ -46,7 +46,7 @@ void FMonolithMeshBuildingActions::SetHandlePool(UMonolithMeshHandlePool* InPool
 
 void FMonolithMeshBuildingActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_building_from_grid"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_building_from_grid"),
 		TEXT("Generate a multi-room building from a 2D grid of room IDs. Walls placed only at room-ID boundaries (no shared-wall duplication). "
 			"Doors as boolean subtracts at grid edges. Returns the Building Descriptor JSON consumed by all downstream SPs (facades, roofs, furnishing, etc)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBuildingActions::CreateBuildingFromGrid),
@@ -73,7 +73,7 @@ void FMonolithMeshBuildingActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Allow overwriting existing asset at save_path"), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_grid_from_rooms"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_grid_from_rooms"),
 		TEXT("Helper: takes a list of room rectangles and generates a 2D grid + room definitions. "
 			"Output feeds directly into create_building_from_grid."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBuildingActions::CreateGridFromRooms),

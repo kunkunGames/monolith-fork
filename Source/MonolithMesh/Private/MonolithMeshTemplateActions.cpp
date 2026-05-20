@@ -90,7 +90,7 @@ bool FMonolithMeshTemplateActions::ParseJsonArrayToVector(const TArray<TSharedPt
 void FMonolithMeshTemplateActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. list_room_templates
-	Registry.RegisterAction(TEXT("mesh"), TEXT("list_room_templates"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("list_room_templates"),
 		TEXT("List available room templates from the templates directory. Optionally filter by category."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTemplateActions::ListRoomTemplates),
 		FParamSchemaBuilder()
@@ -98,7 +98,7 @@ void FMonolithMeshTemplateActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 2. get_room_template
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_room_template"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("get_room_template"),
 		TEXT("Load the full JSON definition of a room template by name."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTemplateActions::GetRoomTemplate),
 		FParamSchemaBuilder()
@@ -106,7 +106,7 @@ void FMonolithMeshTemplateActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 3. apply_room_template
-	Registry.RegisterAction(TEXT("mesh"), TEXT("apply_room_template"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("apply_room_template"),
 		TEXT("Apply a room template to a blockout volume. Scales furniture positions to fit, creates blockout primitives. Single undo transaction."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTemplateActions::ApplyRoomTemplate),
 		FParamSchemaBuilder()
@@ -117,7 +117,7 @@ void FMonolithMeshTemplateActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 4. create_room_template
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_room_template"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_room_template"),
 		TEXT("Save the current blockout layout of a volume as a reusable JSON template."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTemplateActions::CreateRoomTemplate),
 		FParamSchemaBuilder()
@@ -130,7 +130,7 @@ void FMonolithMeshTemplateActions::RegisterActions(FMonolithToolRegistry& Regist
 	// --- Validation actions ---
 
 	// 5. validate_game_ready
-	Registry.RegisterAction(TEXT("mesh"), TEXT("validate_game_ready"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("validate_game_ready"),
 		TEXT("Run a game-readiness checklist on a StaticMesh: collision, LODs, lightmap UV, degenerate geo, material count, pivot, scale. Returns pass/fail per check with severity."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTemplateActions::ValidateGameReady),
 		FParamSchemaBuilder()
@@ -138,7 +138,7 @@ void FMonolithMeshTemplateActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 6. suggest_lod_strategy
-	Registry.RegisterAction(TEXT("mesh"), TEXT("suggest_lod_strategy"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("suggest_lod_strategy"),
 		TEXT("Suggest LOD strategy based on triangle count. Returns ready-to-execute params for generate_lods."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTemplateActions::SuggestLodStrategy),
 		FParamSchemaBuilder()
@@ -146,7 +146,7 @@ void FMonolithMeshTemplateActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 7. batch_validate
-	Registry.RegisterAction(TEXT("mesh"), TEXT("batch_validate"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("batch_validate"),
 		TEXT("Batch validate meshes: fast SQL pre-filter from mesh_catalog, then deep asset-load on flagged assets. Sorted by severity."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTemplateActions::BatchValidate),
 		FParamSchemaBuilder()
@@ -156,7 +156,7 @@ void FMonolithMeshTemplateActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 8. compare_lod_chain
-	Registry.RegisterAction(TEXT("mesh"), TEXT("compare_lod_chain"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("compare_lod_chain"),
 		TEXT("Compare LOD chain quality: per-step reduction ratio, screen size gaps, section mismatches. Flags unhealthy transitions."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTemplateActions::CompareLodChain),
 		FParamSchemaBuilder()

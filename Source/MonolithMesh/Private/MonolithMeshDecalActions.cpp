@@ -239,7 +239,7 @@ TArray<FVector> FMonolithMeshDecalActions::SampleSplinePath(const TArray<FVector
 
 void FMonolithMeshDecalActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
-	Registry.RegisterAction(TEXT("mesh"), TEXT("place_decals"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("place_decals"),
 		TEXT("Place decal actors aligned to surfaces. Provide explicit locations OR a region+count for Poisson-disk scattered placement. Validates material has DeferredDecal domain."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshDecalActions::PlaceDecals),
 		FParamSchemaBuilder()
@@ -254,7 +254,7 @@ void FMonolithMeshDecalActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder for spawned decals"), TEXT("Decals"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("place_along_path"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("place_along_path"),
 		TEXT("Place decals or props along a smooth path using Catmull-Rom interpolation. Built-in patterns: blood_drips (30-80cm spacing), footprints (60cm alternating L/R), drag_marks (10-20cm dense)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshDecalActions::PlaceAlongPath),
 		FParamSchemaBuilder()
@@ -267,7 +267,7 @@ void FMonolithMeshDecalActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder"), TEXT("PathDecals"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_prop_density"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("analyze_prop_density"),
 		TEXT("Analyze prop/actor density within a volume using a grid. Returns per-cell counts, identifies sparse/dense areas, and scores against a target density."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshDecalActions::AnalyzePropDensity),
 		FParamSchemaBuilder()
@@ -277,7 +277,7 @@ void FMonolithMeshDecalActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("summary_only"), TEXT("boolean"), TEXT("If true, return only aggregate stats (reduces token count)"), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("place_storytelling_scene"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("place_storytelling_scene"),
 		TEXT("Place a parameterized horror storytelling scene. Patterns: violence (radial blood splatter), abandoned_in_haste (scattered items), dragged (linear trail), medical_emergency (triage scene), corruption (organic growth). Intensity 0-1 scales density and radius. Returns placed actor names for manual material assignment."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshDecalActions::PlaceStorytellingScene),
 		FParamSchemaBuilder()

@@ -13,6 +13,37 @@ public:
 		return *this;
 	}
 
+	FParamSchemaBuilder& EnableValidation()
+	{
+		Schema->SetBoolField(TEXT("_validate_types"), true);
+		return *this;
+	}
+
+	FParamSchemaBuilder& Enum(const FString& Name, std::initializer_list<const TCHAR*> Values)
+	{
+		if (TSharedPtr<FJsonObject>* Param = ParamsByName.Find(Name))
+		{
+			TArray<TSharedPtr<FJsonValue>> EnumValues;
+			EnumValues.Reserve(Values.size());
+			for (const TCHAR* Value : Values)
+			{
+				EnumValues.Add(MakeShared<FJsonValueString>(FString(Value)));
+			}
+			(*Param)->SetArrayField(TEXT("enum"), EnumValues);
+		}
+		return *this;
+	}
+
+	FParamSchemaBuilder& Range(const FString& Name, double MinValue, double MaxValue)
+	{
+		if (TSharedPtr<FJsonObject>* Param = ParamsByName.Find(Name))
+		{
+			(*Param)->SetNumberField(TEXT("minimum"), MinValue);
+			(*Param)->SetNumberField(TEXT("maximum"), MaxValue);
+		}
+		return *this;
+	}
+
 	// --- Required (with aliases) ---
 	FParamSchemaBuilder& Required(const FString& Name, const FString& Type, const FString& Desc,
 		std::initializer_list<const TCHAR*> Aliases)
@@ -52,6 +83,7 @@ public:
 
 private:
 	TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
+	TMap<FString, TSharedPtr<FJsonObject>> ParamsByName;
 
 	void AddParam(const FString& Name, const FString& Type, const FString& Desc, bool bRequired,
 		const FString& Default, bool bHasDefault, std::initializer_list<const TCHAR*> Aliases)
@@ -75,6 +107,7 @@ private:
 			Param->SetArrayField(TEXT("aliases"), AliasArr);
 		}
 		Schema->SetObjectField(Name, Param);
+		ParamsByName.Add(Name, Param);
 	}
 };
 
@@ -92,5 +125,6 @@ class MONOLITHCORE_API FMonolithParamSchema
 public:
 	static bool ApplyAliases(const TSharedPtr<FJsonObject>& Schema, const TSharedPtr<FJsonObject>& Params, FString& OutCollision);
 	static TArray<FString> FindUnknownKeys(const TSharedPtr<FJsonObject>& Schema, const TSharedPtr<FJsonObject>& Params);
+	static bool ValidateTypedParams(const TSharedPtr<FJsonObject>& Schema, const TSharedPtr<FJsonObject>& Params, TArray<FString>& OutErrors);
 	static bool IsStrictParamsEnabled();
 };

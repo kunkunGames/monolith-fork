@@ -135,8 +135,8 @@ idea is adopted only as a derived SQLite projection/cache (`crg_*` tables), whil
 `assets` and `dependencies` remain authoritative. There is no Python runtime or
 generic parser replacement (monolith-native: asset-domain, lexical/local). Logic lives in
 `FMonolithIndexReview` (`Private/MonolithIndexReview.{h,cpp}`) using only the public
-`FMonolithIndexDatabase` surface; the DB impl file is unchanged (REQ-009). Spec source:
-`Plugins/Monolith/CRG/spec/monolith-crg-index-navigation-{prd,spec}.md`. Tests:
+`FMonolithIndexDatabase` surface; the DB impl file is unchanged (REQ-009). Source-of-truth
+specification now lives in this file and `Docs/API_REFERENCE.md`. Tests:
 `Monolith.IndexGuard.Project.*` in `Private/Tests/MonolithIndexQueryTests.cpp`,
 including cycle/truncation guards, orphan-dependency health warnings, repair dry-run/execute,
 CRG cache rebuild/cache-hit coverage, sensitivity scoring, review-hotspot ranking,

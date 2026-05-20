@@ -14,7 +14,7 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, and registers 57 editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, and module-status toolsets |
+| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 57 editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, and module-status toolsets, and owns editor PIE transaction-buffer cleanup |
 | `FMonolithLogCapture` | FOutputDevice subclass. Ring buffer (10,000 entries max). Thread-safe. Tracks counts by verbosity |
 | `FMonolithEditorActions` | Static handlers for build and log operations. Hooks into `ILiveCodingModule::GetOnPatchCompleteDelegate()` to capture compile results and timestamps |
 | `FMonolithSettingsCustomization` | IDetailCustomization for UMonolithSettings. Adds re-index buttons for project and source databases in Project Settings UI |
@@ -76,3 +76,9 @@
 ### Visual Capture Fallback Contract
 
 `capture_asset_thumbnail` is the implemented fallback for PRD 34 visual verification when an actual asset-editor viewport cannot be identified. The caller must pass `thumbnail_fallback=true`; otherwise the action errors so clients do not mistake thumbnail output for viewport output. Supported `output_path` extensions (`png`, `jpg`/`jpeg`, `bmp`, `exr`, `tga`, `hdr`) select the image encoder; unknown or missing extensions are normalized to `.png`, and the response `output_path` and `format` fields report the normalized file path and actual encoder used. Asset-editor and widget-designer viewport captures remain explicit `unavailable` responses until Monolith can name the captured viewport source.
+
+---
+
+### PIE Transaction Buffer Cleanup
+
+`FMonolithEditorModule` registers a private PIE transaction-buffer guard when the editor module starts and unregisters it on module shutdown. The guard calls `GEditor->ResetTransaction()` before PIE starts, after PIE ends, and before map loads while a PIE session is active. This keeps stale undo-buffer references from retaining old PIE worlds during garbage collection after Blueprint or asset mutation workflows.

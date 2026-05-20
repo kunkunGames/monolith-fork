@@ -1,5 +1,6 @@
-#include "MonolithIndexSubsystem.h"
+﻿#include "MonolithIndexSubsystem.h"
 #include "MonolithIndexDatabase.h"
+#include "MonolithIndexReview.h"
 #include "MonolithSettings.h"
 #include "MonolithMemoryHelper.h"
 #include "MonolithCompilerSafeDispatch.h"
@@ -1110,6 +1111,27 @@ void UMonolithIndexSubsystem::OnIndexingFinished(bool bSuccess)
 			FText::FromString(bSuccess ? TEXT("Project indexing complete") : TEXT("Project indexing failed")),
 			bSuccess);
 		TaskNotification.Reset();
+	}
+
+	if (bSuccess && Database.IsValid() && Database->IsOpen())
+	{
+		TSharedPtr<FJsonObject> CrgResult = FMonolithIndexReview::RepairCrgCache(*Database, true);
+		FString Status;
+		FString Summary;
+		if (CrgResult.IsValid())
+		{
+			CrgResult->TryGetStringField(TEXT("status"), Status);
+			CrgResult->TryGetStringField(TEXT("summary"), Summary);
+		}
+
+		if (Status == TEXT("ok"))
+		{
+			UE_LOG(LogMonolithIndex, Log, TEXT("Project CRG projection/cache rebuilt after indexing: %s"), *Summary);
+		}
+		else
+		{
+			UE_LOG(LogMonolithIndex, Warning, TEXT("Project CRG projection/cache rebuild after indexing did not complete cleanly: %s"), *Summary);
+		}
 	}
 
 	OnComplete.Broadcast(bSuccess);

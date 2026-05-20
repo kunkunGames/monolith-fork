@@ -3,6 +3,7 @@
 
 // Monolith registry
 #include "MonolithPackagePathValidator.h"
+#include "MonolithParamSchema.h"
 #include "MonolithToolRegistry.h"
 
 // Core / JSON
@@ -421,5 +422,13 @@ void MonolithUI::FFontIngestActions::Register(FMonolithToolRegistry& Registry)
              "save (bool, optional, default true). "
              "Per-face errors don't abort the batch -- if at least one face imports, the composite UFont is still created; "
              "failed faces appear in the warnings array. Returns { family_asset_path, face_asset_paths[], faces_imported, faces_requested, warnings? }."),
-        FMonolithActionHandler::CreateStatic(&MonolithUI::FFontIngestActions::HandleImportFontFamily));
+        FMonolithActionHandler::CreateStatic(&MonolithUI::FFontIngestActions::HandleImportFontFamily),
+        FParamSchemaBuilder()
+            .Required(TEXT("destination"), TEXT("string"), TEXT("Output directory, e.g. /Game/UI/Fonts"))
+            .Required(TEXT("family_name"), TEXT("string"), TEXT("Composite UFont asset name"))
+            .Required(TEXT("faces"), TEXT("array"), TEXT("Typeface specs with typeface and absolute source_path"))
+            .Optional(TEXT("loading_policy"), TEXT("string"), TEXT("LazyLoad, Stream, or Inline"), TEXT("LazyLoad"))
+            .Optional(TEXT("hinting"), TEXT("string"), TEXT("Default, Auto, AutoLight, Monochrome, or None"), TEXT("Default"))
+            .Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported font assets"), TEXT("true"))
+            .Build());
 }

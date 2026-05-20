@@ -47,7 +47,7 @@ void FMonolithMeshCityBlockActions::SetHandlePool(UMonolithMeshHandlePool* InPoo
 void FMonolithMeshCityBlockActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. create_city_block — top-level orchestrator
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_city_block"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_city_block"),
 		TEXT("Generate a complete city block: subdivide into lots, build each building (floor plan + walls + facades + roofs), "
 			"create streets with sidewalks and curbs, place street furniture, apply horror decay, and register everything in the spatial registry. "
 			"Each step is also available as a standalone action for finer control."),
@@ -79,7 +79,7 @@ void FMonolithMeshCityBlockActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 2. create_lot_layout — standalone subdivision
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_lot_layout"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_lot_layout"),
 		TEXT("Subdivide a rectangular block into building lots using OBB recursive, grid, or organic subdivision. "
 			"Returns lot positions and generated street segments. Does NOT generate buildings — use create_city_block for full pipeline."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshCityBlockActions::CreateLotLayout),
@@ -93,7 +93,7 @@ void FMonolithMeshCityBlockActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 3. create_street — street geometry
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_street"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_street"),
 		TEXT("Generate street geometry: road surface, sidewalks, and curbs as a single static mesh. "
 			"Curbs are 15cm raised edges. Sidewalks are flat raised surfaces on each side."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshCityBlockActions::CreateStreet),
@@ -111,7 +111,7 @@ void FMonolithMeshCityBlockActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 4. place_street_furniture — lamps, hydrants, benches etc.
-	Registry.RegisterAction(TEXT("mesh"), TEXT("place_street_furniture"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("place_street_furniture"),
 		TEXT("Place street furniture (lamps, hydrants, benches, mailboxes, trash cans) along a street segment. "
 			"Items are spawned via create_parametric_mesh through the tool registry."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshCityBlockActions::PlaceStreetFurniture),
@@ -133,11 +133,27 @@ void FMonolithMeshCityBlockActions::RegisterActions(FMonolithToolRegistry& Regis
 // Helper: TryExecuteAction — call a downstream SP action via registry
 // ============================================================================
 
+namespace
+{
+	const TCHAR* ResolveCityBlockActionNamespace(const FString& Action)
+	{
+		if (Action == TEXT("create_parametric_mesh"))
+		{
+			return TEXT("mesh");
+		}
+		if (Action == TEXT("register_building") || Action == TEXT("auto_volumes_for_building"))
+		{
+			return TEXT("scene");
+		}
+		return TEXT("worldgen");
+	}
+}
+
 bool FMonolithMeshCityBlockActions::TryExecuteAction(const FString& Action,
 	const TSharedPtr<FJsonObject>& Params, TSharedPtr<FJsonObject>& OutResult, FString& OutError)
 {
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
-	FMonolithActionResult Result = Registry.ExecuteAction(TEXT("mesh"), Action, Params);
+	FMonolithActionResult Result = Registry.ExecuteAction(ResolveCityBlockActionNamespace(Action), Action, Params);
 	if (Result.bSuccess)
 	{
 		OutResult = Result.Result;

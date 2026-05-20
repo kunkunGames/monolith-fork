@@ -175,7 +175,7 @@ bool FMonolithMeshVolumeActions::ImportPropertyValue(FProperty* Prop, void* Cont
 void FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. spawn_volume
-	Registry.RegisterAction(TEXT("mesh"), TEXT("spawn_volume"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("spawn_volume"),
 		TEXT("Spawn a volume actor (trigger, blocking, kill, pain, nav_modifier, audio, post_process) with proper brush geometry."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshVolumeActions::SpawnVolume),
 		FParamSchemaBuilder()
@@ -189,7 +189,7 @@ void FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 2. get_actor_properties
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_actor_properties"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("get_actor_properties"),
 		TEXT("Read arbitrary UPROPERTY values from an actor or its components via FProperty reflection. Returns string-serialized values."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshVolumeActions::GetActorProperties),
 		FParamSchemaBuilder()
@@ -200,7 +200,7 @@ void FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 3. copy_actor_properties
-	Registry.RegisterAction(TEXT("mesh"), TEXT("copy_actor_properties"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("copy_actor_properties"),
 		TEXT("Copy UPROPERTY values from a source actor to one or more target actors. Optionally filter to specific properties."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshVolumeActions::CopyActorProperties),
 		FParamSchemaBuilder()
@@ -211,7 +211,7 @@ void FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 4. build_navmesh
-	Registry.RegisterAction(TEXT("mesh"), TEXT("build_navmesh"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("build_navmesh"),
 		TEXT("Trigger navigation mesh rebuild. Synchronous — blocks the game thread. Can take seconds on large maps."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshVolumeActions::BuildNavmesh),
 		FParamSchemaBuilder()
@@ -219,7 +219,7 @@ void FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 5. select_actors
-	Registry.RegisterAction(TEXT("mesh"), TEXT("select_actors"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("select_actors"),
 		TEXT("Control editor actor selection. Select, deselect, clear selection, get current selection, or focus camera on actors."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshVolumeActions::SelectActors),
 		FParamSchemaBuilder()
@@ -231,7 +231,7 @@ void FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 6. snap_to_surface
-	Registry.RegisterAction(TEXT("mesh"), TEXT("snap_to_surface"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("snap_to_surface"),
 		TEXT("Drop actors onto geometry via directional trace. Unlike snap_to_floor, supports any direction and surface normal alignment."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshVolumeActions::SnapToSurface),
 		FParamSchemaBuilder()
@@ -244,7 +244,7 @@ void FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 7. set_collision_preset
-	Registry.RegisterAction(TEXT("mesh"), TEXT("set_collision_preset"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("set_collision_preset"),
 		TEXT("Set the collision profile on an actor's root primitive component (or a named component)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshVolumeActions::SetCollisionPreset),
 		FParamSchemaBuilder()

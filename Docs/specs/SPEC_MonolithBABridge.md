@@ -1,4 +1,4 @@
-# Monolith — MonolithBABridge Module
+﻿# Monolith — MonolithBABridge Module
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
@@ -10,7 +10,7 @@
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore (optional — loads only when both Monolith and Blueprint Assist are present)
 
-MonolithBABridge is an **optional** editor module that bridges Blueprint Assist's graph formatter into Monolith's `auto_layout` actions. It registers no MCP actions of its own. Its sole job is to expose BA's layout logic via `IModularFeatures` so that blueprint, material, animation, and niagara modules can consume it without a hard dependency on Blueprint Assist.
+MonolithBABridge is an **optional** editor module that bridges Blueprint Assist's graph formatter into Monolith's graph formatting interface. It registers no MCP actions of its own. The bridge remains available for diagnostics and as a fallback formatter for asset mutation actions only when the target domain has no built-in Monolith formatter.
 
 ### Classes
 
@@ -62,6 +62,11 @@ public:
         return IModularFeatures::Get().IsModularFeatureAvailable(GetModularFeatureName());
     }
 
+    static bool IsExternalMutationFormattingEnabled(bool bHasBuiltInFormatter = true)
+    {
+        return !bHasBuiltInFormatter;
+    }
+
     /**
      * Get the registered formatter (check IsAvailable() first!).
      * Returns the first registered provider.
@@ -74,11 +79,12 @@ public:
 };
 ```
 
-Consumer pattern used by `auto_layout` actions in each domain module:
+External formatter calls must be gated when an action mutates an asset. Pass `false` only for domains that do not have a built-in Monolith formatter:
 
 ```cpp
 // Check at call time — BA may not be loaded
-if (IMonolithGraphFormatter::IsAvailable())
+if (IMonolithGraphFormatter::IsExternalMutationFormattingEnabled(/*bHasBuiltInFormatter=*/false)
+    && IMonolithGraphFormatter::IsAvailable())
 {
     int32 NodesFormatted = 0;
     FString ErrorMsg;
@@ -88,13 +94,13 @@ if (IMonolithGraphFormatter::IsAvailable())
 
 ### `formatter` Parameter (three-mode behavior)
 
-All four `auto_layout` actions accept an optional `formatter` param:
+Asset-mutating `auto_layout` actions accept an optional `formatter` param. Blueprint Assist is disabled when a built-in Monolith formatter exists and allowed only as fallback where no built-in formatter exists:
 
 | Value | Behavior |
 |-------|----------|
-| `"auto"` (default) | Uses Blueprint Assist formatter if `IMonolithGraphFormatter` is registered; otherwise falls back to built-in hierarchical layout. Never errors |
-| `"blueprint_assist"` | Forces BA formatter. Returns an error if MonolithBABridge is not loaded or BA is not present |
-| `"builtin"` | Forces built-in layout regardless of BA presence |
+| `"auto"` (default) | Uses built-in layout when the domain has one; otherwise uses Blueprint Assist when the bridge is available and the graph type is supported. |
+| `"blueprint_assist"` | Allowed only for domains with no built-in formatter; domains with a built-in formatter return an explicit disabled error. |
+| `"builtin"` / `"monolith"` | Forces built-in layout when supported; returns unsupported when the domain has no built-in formatter. |
 
 ### `bEnableBlueprintAssist` Setting
 
@@ -102,6 +108,6 @@ All four `auto_layout` actions accept an optional `formatter` param:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `bEnableBlueprintAssist` | True | When false, MonolithBABridge skips `IModularFeatures` registration even if Blueprint Assist is present. `formatter: "auto"` will fall back to built-in; `formatter: "blueprint_assist"` will error |
+| `bEnableBlueprintAssist` | True | When false, MonolithBABridge skips `IModularFeatures` registration even if Blueprint Assist is present. Asset mutation actions use built-in formatters when available and may call BA only for domains with no built-in formatter. |
 
 **Config key:** `bEnableBlueprintAssist` in `[/Script/MonolithCore.MonolithSettings]`

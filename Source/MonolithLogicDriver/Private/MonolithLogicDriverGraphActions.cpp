@@ -1,4 +1,4 @@
-#include "MonolithLogicDriverGraphActions.h"
+﻿#include "MonolithLogicDriverGraphActions.h"
 #include "MonolithParamSchema.h"
 
 #if WITH_LOGICDRIVER
@@ -194,11 +194,11 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 			.Build());
 
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("auto_arrange_graph"),
-		TEXT("Auto-arrange all nodes in a state machine graph. Uses Blueprint Assist formatter if available, otherwise built-in BFS layout"),
+		TEXT("Auto-arrange all nodes in a state machine graph using built-in BFS layout. Blueprint Assist is disabled for asset mutation."),
 		FMonolithActionHandler::CreateStatic(&HandleAutoArrangeGraph),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
-			.Optional(TEXT("formatter"), TEXT("string"), TEXT("Formatter to use: default, blueprint_assist, builtin"), TEXT("default"))
+			.Optional(TEXT("formatter"), TEXT("string"), TEXT("Formatter to use: default or builtin. blueprint_assist is disabled for asset mutation."), TEXT("default"))
 			.Build());
 
 	UE_LOG(LogMonolithLDGraph, Log, TEXT("MonolithLogicDriver Graph: registered 20 actions (6 read + 13 write + compile)"));
@@ -1350,6 +1350,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAutoArrangeGraph(c
 		}
 		FormatterMode = TmpStr.ToLower();
 	}
+	constexpr bool bHasBuiltInFormatter = true;
+	const bool bMayUseExternalFormatter = IMonolithGraphFormatter::IsExternalMutationFormattingEnabled(bHasBuiltInFormatter);
+	if (FormatterMode == TEXT("blueprint_assist") && !bMayUseExternalFormatter)
+	{
+		return FMonolithActionResult::Error(IMonolithGraphFormatter::GetExternalMutationFormattingDisabledMessage());
+	}
 
 	FString LoadError;
 	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
@@ -1359,7 +1365,7 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAutoArrangeGraph(c
 	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
 
 	// Try IMonolithGraphFormatter if not explicitly requesting builtin
-	if (FormatterMode != TEXT("builtin"))
+	if (FormatterMode != TEXT("builtin") && bMayUseExternalFormatter)
 	{
 		if (IMonolithGraphFormatter::IsAvailable())
 		{

@@ -50,7 +50,7 @@ void FMonolithMeshFacadeActions::SetHandlePool(UMonolithMeshHandlePool* InPool)
 
 void FMonolithMeshFacadeActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
-	Registry.RegisterAction(TEXT("mesh"), TEXT("generate_facade"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("generate_facade"),
 		TEXT("Generate a building facade with windows, doors, trim, and cornices from a Building Descriptor's exterior faces. "
 			"CGA-style vertical split (base/shaft/cap) with even window placement. Returns facade mesh + element metadata."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshFacadeActions::GenerateFacade),
@@ -70,12 +70,12 @@ void FMonolithMeshFacadeActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Allow overwriting existing asset at save_path"), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("list_facade_styles"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("list_facade_styles"),
 		TEXT("List available facade style JSON presets from the FacadeStyles/ directory."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshFacadeActions::ListFacadeStyles),
 		FParamSchemaBuilder().Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("apply_horror_damage"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("apply_horror_damage"),
 		TEXT("Apply procedural horror damage to a building facade: boarded windows, broken glass, cracks. "
 			"Operates on an existing facade actor by generating damage overlay geometry."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshFacadeActions::ApplyHorrorDamage),

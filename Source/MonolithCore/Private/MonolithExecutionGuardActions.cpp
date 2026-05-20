@@ -260,27 +260,34 @@ void RegisterMonolithExecutionGuardActions()
 		TEXT("monolith"), TEXT("get_execution_guard_status"),
 		TEXT("Return central execution guard/audit status. This milestone tracks action duration and dirty package deltas, without automatic rollback."),
 		FMonolithActionHandler::CreateStatic(&HandleGetExecutionGuardStatus),
-		FParamSchemaBuilder().Build());
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Build());
 
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("list_recent_action_audit"),
 		TEXT("Return recent central action audit rows: action, status, duration, changed package count, and rollback status. Raw payloads are never logged."),
 		FMonolithActionHandler::CreateStatic(&HandleListRecentActionAudit),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum rows to return, clamped to 1..100"), TEXT("25"))
+			.Range(TEXT("limit"), 1, 100)
 			.Build());
 
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("get_last_rollback"),
 		TEXT("Return the last rollback report when registry policy rollback is available; current milestone reports unavailable rather than inventing rollback."),
 		FMonolithActionHandler::CreateStatic(&HandleGetLastRollback),
-		FParamSchemaBuilder().Build());
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Build());
 
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("set_action_execution_policy"),
 		TEXT("Developer-only process-local override for a known action execution policy. Supports read_only, track_dirty_packages, transaction_optional, transaction_required, and post_edit_validate."),
 		FMonolithActionHandler::CreateStatic(&HandleSetActionExecutionPolicy),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("action"), TEXT("string"), TEXT("Fully qualified action name such as blueprint.add_node"))
 			.Optional(TEXT("policy"), TEXT("object"), TEXT("Policy object; omit to reset to read_only"))
 			.Build());
@@ -293,8 +300,11 @@ void RegisterMonolithExecutionGuardActions()
 			TEXT("Return recent redacted ToolCall records with optional status/action filters. Raw params and payloads are never stored."),
 			FMonolithActionHandler::CreateStatic(&HandleListToolCallRecords),
 			FParamSchemaBuilder()
+				.EnableValidation()
 				.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum records to return, clamped to 1..100"), TEXT("25"))
+				.Range(TEXT("limit"), 1, 100)
 				.Optional(TEXT("status"), TEXT("string"), TEXT("Optional status filter: success, error, profile_blocked, malformed_dispatch"))
+				.Enum(TEXT("status"), { TEXT("success"), TEXT("error"), TEXT("profile_blocked"), TEXT("malformed_dispatch") })
 				.Optional(TEXT("action"), TEXT("string"), TEXT("Optional action filter such as blueprint.compile_blueprint or compile_blueprint"))
 				.Build());
 
@@ -303,6 +313,7 @@ void RegisterMonolithExecutionGuardActions()
 			TEXT("Return one redacted ToolCall record by id. Raw params and payloads are never stored."),
 			FMonolithActionHandler::CreateStatic(&HandleGetToolCallRecord),
 			FParamSchemaBuilder()
+				.EnableValidation()
 				.Required(TEXT("id"), TEXT("string"), TEXT("ToolCall record id from list_tool_call_records"))
 				.Build());
 
@@ -311,7 +322,9 @@ void RegisterMonolithExecutionGuardActions()
 			TEXT("Summarize recent ToolCall records: slow calls, repeated failures, profile blocks, mutation-heavy calls, and top error statuses."),
 			FMonolithActionHandler::CreateStatic(&HandleAnalyzeToolCallRecords),
 			FParamSchemaBuilder()
+				.EnableValidation()
 				.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum recent records to analyze, clamped to 1..100"), TEXT("100"))
+				.Range(TEXT("limit"), 1, 100)
 				.Build());
 	}
 }

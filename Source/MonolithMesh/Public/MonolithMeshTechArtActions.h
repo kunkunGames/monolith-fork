@@ -6,15 +6,18 @@
 class UMonolithMeshHandlePool;
 
 /**
- * Phase 16: Tech Art Pipeline (7 actions)
+ * Phase 16: Tech Art Pipeline (7 mesh actions + modelgen action surface)
  * Import, quality fix, LOD generation, texel density, material cost,
  * collision setup, and lightmap density analysis.
  */
-class FMonolithMeshTechArtActions
+class MONOLITHMESH_API FMonolithMeshTechArtActions
 {
 public:
 	/** Register all 7 tech art actions with the tool registry */
 	static void RegisterActions(FMonolithToolRegistry& Registry);
+
+	/** Register generated-model provider/job/import/provenance actions with the modelgen namespace */
+	static void RegisterModelGenActions(FMonolithToolRegistry& Registry);
 
 #if WITH_GEOMETRYSCRIPT
 	/** Set the handle pool instance (called during module startup) */

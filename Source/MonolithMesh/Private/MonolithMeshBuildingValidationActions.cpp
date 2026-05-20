@@ -17,7 +17,7 @@
 
 void FMonolithMeshBuildingValidationActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
-	Registry.RegisterAction(TEXT("mesh"), TEXT("validate_building"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("validate_building"),
 		TEXT("Post-generation validation of a procedural building. Checks door passability (capsule sweeps), "
 			"room connectivity (BFS from entrance), window openings (raycasts), and stair angles. "
 			"Returns a per-check breakdown with an overall playability score."),

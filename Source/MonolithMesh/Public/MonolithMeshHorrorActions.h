@@ -9,7 +9,7 @@
  * sightlines, hiding spots, ambush points, choke points,
  * escape routes, tension classification, pacing curves, dead ends.
  */
-class FMonolithMeshHorrorActions
+class MONOLITHMESH_API FMonolithMeshHorrorActions
 {
 public:
 	/** Register all 8 horror analysis actions with the tool registry */

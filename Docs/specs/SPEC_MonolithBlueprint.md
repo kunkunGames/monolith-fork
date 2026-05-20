@@ -1,4 +1,4 @@
-# Monolith — MonolithBlueprint Module
+﻿# Monolith — MonolithBlueprint Module
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
@@ -116,7 +116,7 @@
 **Layout (1)**
 | Action | Params | Description |
 |--------|--------|-------------|
-| `auto_layout` | `asset_path`, `graph_name`?, `formatter`? | Auto-arrange nodes in a Blueprint graph. `formatter`: `"auto"` (default) — uses Blueprint Assist if available, falls back to built-in hierarchical layout; `"blueprint_assist"` — requires BA, errors if not present; `"builtin"` — built-in layout only |
+| `auto_layout` | `asset_path`, `graph_name`?, `formatter`? | Auto-arrange nodes in a Blueprint graph. `formatter`: `"auto"` (default) and `"monolith"` use the built-in hierarchical layout. `"blueprint_assist"` returns an explicit disabled-for-asset-mutation error. |
 
 **Spawn (2)**
 | Action | Params | Description |

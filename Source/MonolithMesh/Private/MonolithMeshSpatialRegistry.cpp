@@ -763,7 +763,7 @@ TArray<FString> FMonolithMeshSpatialRegistry::BFS(const FSpatialBlock& Block,
 void FMonolithMeshSpatialRegistry::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. register_building
-	Registry.RegisterAction(TEXT("mesh"), TEXT("register_building"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("register_building"),
 		TEXT("Register a building from its Building Descriptor JSON in the spatial registry. "
 			"Extracts all rooms, doors, stairwells and builds the adjacency graph."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialRegistry::RegisterBuilding),
@@ -773,7 +773,7 @@ void FMonolithMeshSpatialRegistry::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 2. register_room
-	Registry.RegisterAction(TEXT("mesh"), TEXT("register_room"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("register_room"),
 		TEXT("Register a single room in the spatial registry (for manual/incremental registration)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialRegistry::RegisterRoom),
 		FParamSchemaBuilder()
@@ -788,7 +788,7 @@ void FMonolithMeshSpatialRegistry::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 3. register_street_furniture
-	Registry.RegisterAction(TEXT("mesh"), TEXT("register_street_furniture"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("register_street_furniture"),
 		TEXT("Register street furniture items (lamps, hydrants, benches, etc.) in the spatial registry."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialRegistry::RegisterStreetFurniture),
 		FParamSchemaBuilder()
@@ -800,7 +800,7 @@ void FMonolithMeshSpatialRegistry::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 4. query_room_at
-	Registry.RegisterAction(TEXT("mesh"), TEXT("query_room_at"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("query_room_at"),
 		TEXT("Find which room contains a given world position (point-in-AABB test)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialRegistry::QueryRoomAt),
 		FParamSchemaBuilder()
@@ -809,7 +809,7 @@ void FMonolithMeshSpatialRegistry::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 5. query_adjacent_rooms
-	Registry.RegisterAction(TEXT("mesh"), TEXT("query_adjacent_rooms"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("query_adjacent_rooms"),
 		TEXT("Get all rooms connected to a given room via doors or stairwells."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialRegistry::QueryAdjacentRooms),
 		FParamSchemaBuilder()
@@ -819,7 +819,7 @@ void FMonolithMeshSpatialRegistry::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 6. query_rooms_by_filter
-	Registry.RegisterAction(TEXT("mesh"), TEXT("query_rooms_by_filter"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("query_rooms_by_filter"),
 		TEXT("Query rooms by type, floor, building, tags, or area range."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialRegistry::QueryRoomsByFilter),
 		FParamSchemaBuilder()
@@ -833,7 +833,7 @@ void FMonolithMeshSpatialRegistry::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 7. query_building_exits
-	Registry.RegisterAction(TEXT("mesh"), TEXT("query_building_exits"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("query_building_exits"),
 		TEXT("Get all exterior doors of a building."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialRegistry::QueryBuildingExits),
 		FParamSchemaBuilder()
@@ -842,7 +842,7 @@ void FMonolithMeshSpatialRegistry::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 8. path_between_rooms
-	Registry.RegisterAction(TEXT("mesh"), TEXT("path_between_rooms"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("path_between_rooms"),
 		TEXT("BFS shortest path between two rooms through the door/stairwell adjacency graph."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialRegistry::PathBetweenRooms),
 		FParamSchemaBuilder()
@@ -853,7 +853,7 @@ void FMonolithMeshSpatialRegistry::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 9. save_block_descriptor
-	Registry.RegisterAction(TEXT("mesh"), TEXT("save_block_descriptor"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("save_block_descriptor"),
 		TEXT("Save the spatial registry for a block to a JSON file on disk."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialRegistry::SaveBlockDescriptor),
 		FParamSchemaBuilder()
@@ -862,7 +862,7 @@ void FMonolithMeshSpatialRegistry::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 10. load_block_descriptor
-	Registry.RegisterAction(TEXT("mesh"), TEXT("load_block_descriptor"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("load_block_descriptor"),
 		TEXT("Load a previously saved spatial registry from a JSON file."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialRegistry::LoadBlockDescriptor),
 		FParamSchemaBuilder()

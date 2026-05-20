@@ -103,7 +103,7 @@ TSharedPtr<FJsonObject> FMonolithMeshSpatialActions::HitResultToJson(const FHitR
 void FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. query_raycast
-	Registry.RegisterAction(TEXT("mesh"), TEXT("query_raycast"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("query_raycast"),
 		TEXT("Fire a single raycast in the editor world. Returns hit data including actor, location, normal, distance, and physical material."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialActions::QueryRaycast),
 		FParamSchemaBuilder()
@@ -114,7 +114,7 @@ void FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// 2. query_multi_raycast
-	Registry.RegisterAction(TEXT("mesh"), TEXT("query_multi_raycast"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("query_multi_raycast"),
 		TEXT("Fire a multi-hit raycast. Returns all hits sorted by distance."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialActions::QueryMultiRaycast),
 		FParamSchemaBuilder()
@@ -125,7 +125,7 @@ void FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// 3. query_radial_sweep
-	Registry.RegisterAction(TEXT("mesh"), TEXT("query_radial_sweep"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("query_radial_sweep"),
 		TEXT("Fire rays in a radial pattern from origin. Returns summary by compass direction. Hard cap: ray_count * vertical_angles <= 512."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialActions::QueryRadialSweep),
 		FParamSchemaBuilder()
@@ -137,7 +137,7 @@ void FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// 4. query_overlap
-	Registry.RegisterAction(TEXT("mesh"), TEXT("query_overlap"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("query_overlap"),
 		TEXT("Perform a shape overlap test (box, sphere, or capsule) at a location. Returns overlapping actors."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialActions::QueryOverlap),
 		FParamSchemaBuilder()
@@ -148,7 +148,7 @@ void FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// 5. query_nearest
-	Registry.RegisterAction(TEXT("mesh"), TEXT("query_nearest"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("query_nearest"),
 		TEXT("Find nearest actors using physics broadphase (OverlapMultiByObjectType). Filter by class and/or tag, sorted by distance."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialActions::QueryNearest),
 		FParamSchemaBuilder()
@@ -160,7 +160,7 @@ void FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// 6. query_line_of_sight
-	Registry.RegisterAction(TEXT("mesh"), TEXT("query_line_of_sight"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("query_line_of_sight"),
 		TEXT("Check line of sight between two points. Returns visibility status and blocking info."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialActions::QueryLineOfSight),
 		FParamSchemaBuilder()
@@ -170,7 +170,7 @@ void FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// 7. get_actors_in_volume
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_actors_in_volume"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("get_actors_in_volume"),
 		TEXT("Get all actors inside a named BlockingVolume. Checks Monolith.Owner tags and spatial containment."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialActions::GetActorsInVolume),
 		FParamSchemaBuilder()
@@ -178,7 +178,7 @@ void FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// 8. get_scene_bounds
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_scene_bounds"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("get_scene_bounds"),
 		TEXT("Compute the enclosing axis-aligned bounding box for all actors (or filtered by class)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialActions::GetSceneBounds),
 		FParamSchemaBuilder()
@@ -186,7 +186,7 @@ void FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// 9. get_scene_statistics
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_scene_statistics"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("get_scene_statistics"),
 		TEXT("Get scene statistics: actor counts by class, total triangles, light count, volume count, navmesh status. Optional region filter."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialActions::GetSceneStatistics),
 		FParamSchemaBuilder()
@@ -195,7 +195,7 @@ void FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// 10. get_spatial_relationships
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_spatial_relationships"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("get_spatial_relationships"),
 		TEXT("Analyze spatial relationships between an actor and its neighbors (on_top_of, inside, adjacent, above, below, etc). Thresholds scale with actor bounds."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialActions::GetSpatialRelationships),
 		FParamSchemaBuilder()
@@ -205,7 +205,7 @@ void FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// 11. query_navmesh
-	Registry.RegisterAction(TEXT("mesh"), TEXT("query_navmesh"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("query_navmesh"),
 		TEXT("Find a navigation path between two points. Returns path points and total distance. Errors if navmesh not built."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSpatialActions::QueryNavmesh),
 		FParamSchemaBuilder()

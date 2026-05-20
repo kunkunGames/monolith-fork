@@ -71,7 +71,7 @@ FMonolithMeshTerrainActions::EFoundationStrategy FMonolithMeshTerrainActions::St
 void FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// ---- sample_terrain_grid ----
-	Registry.RegisterAction(TEXT("mesh"), TEXT("sample_terrain_grid"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("sample_terrain_grid"),
 		TEXT("Sample an NxM grid of terrain heights via downward line traces. "
 			"Returns a 2D height grid, min/max/avg Z, slope analysis, and roughness. "
 			"Output feeds into analyze_building_site and create_foundation."),
@@ -86,7 +86,7 @@ void FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// ---- analyze_building_site ----
-	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_building_site"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("analyze_building_site"),
 		TEXT("Given a building footprint polygon and terrain samples, determine the optimal foundation strategy "
 			"(flat, cut_and_fill, stepped, piers, walkout_basement). Returns strategy, slope, pad Z, and ramp specs if hospice mode."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTerrainActions::AnalyzeBuildingSite),
@@ -98,7 +98,7 @@ void FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// ---- create_foundation ----
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_foundation"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_foundation"),
 		TEXT("Generate foundation geometry for a building on terrain. Supports flat pad, cut-and-fill, stepped, "
 			"pier, and walkout basement strategies. Saves to StaticMesh and optionally places in scene."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTerrainActions::CreateFoundation),
@@ -120,7 +120,7 @@ void FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// ---- create_retaining_wall ----
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_retaining_wall"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_retaining_wall"),
 		TEXT("Generate a retaining wall along a terrain cut edge. Wall height varies along its length "
 			"based on terrain samples. Tapered profile (thicker at base)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTerrainActions::CreateRetainingWall),
@@ -138,7 +138,7 @@ void FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 	// ---- place_building_on_terrain ----
-	Registry.RegisterAction(TEXT("mesh"), TEXT("place_building_on_terrain"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("place_building_on_terrain"),
 		TEXT("Full pipeline: sample terrain under building footprint, analyze site, generate foundation, "
 			"and adjust building Z. Optionally creates retaining walls and ADA ramps (hospice mode)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTerrainActions::PlaceBuildingOnTerrain),

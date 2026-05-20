@@ -1,4 +1,4 @@
-# Monolith — MonolithAnimation Module
+﻿# Monolith — MonolithAnimation Module
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
@@ -176,6 +176,6 @@ Wraps `USkeleton::CompatibleSkeletons` — the canonical UE5 mechanism that lets
 **Layout (1)**
 | Action | Description |
 |--------|-------------|
-| `auto_layout` | Auto-arrange nodes in an Animation Blueprint graph. `formatter`: `"auto"` (default) — uses Blueprint Assist if available, falls back to built-in hierarchical layout; `"blueprint_assist"` — requires BA; `"builtin"` — built-in only. Optional `graph_name` to target a specific graph |
+| `auto_layout` | Animation Blueprint graph auto-layout has no built-in formatter. `formatter="auto"` falls back to Blueprint Assist when the bridge is available, `"blueprint_assist"` forces that fallback, and `"monolith"` is unsupported. Optional `graph_name` targets a specific graph. |
 
 ---

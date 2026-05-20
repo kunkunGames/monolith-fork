@@ -9,7 +9,7 @@
  * Measures actual illumination including Lumen GI via scene capture,
  * with analytic fallback for light attribution (which light dominates a point).
  */
-class FMonolithMeshLightingActions
+class MONOLITHMESH_API FMonolithMeshLightingActions
 {
 public:
 	/** Register all 5 lighting analysis actions with the tool registry */

@@ -2,13 +2,13 @@
 
 **Version:** v0.14.10 · **Last updated:** 2026-05-19
 
-Action and dispatcher totals are runtime-discovered. Call `monolith_status()` for live totals and `monolith_discover("<namespace>")` for current action schemas; 24 town-gen actions remain experimental and disabled until `bEnableProceduralTownGen=true`.
+Action and dispatcher totals are runtime-discovered. Call `monolith_status()` for live totals, `monolith_find("task text")` when the exact action is unclear, and `monolith_discover("<namespace>")` or `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` for current action schemas; 24 town-gen actions remain experimental and disabled until `bEnableProceduralTownGen=true`.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
 > Auto-generated and hand-curated. Each action is dispatched via HTTP POST to `http://localhost:<port>` with JSON body `{ "namespace": "<ns>", "action": "<action>", "params": { ... } }`, or via the MCP `tools/list` surface that AI clients see at session start.
 >
-> For the most current param schemas, call `monolith_discover("<namespace>")` at runtime — it returns live schemas straight out of the plugin. This document is a curated reference, not a source-of-truth substitute.
+> For the most current param schemas, call `monolith_discover` at runtime — it returns live schemas straight out of the plugin. Use `monolith_find` first for fuzzy task-to-action routing. This document is a curated reference, not a source-of-truth substitute.
 
 ---
 
@@ -16,7 +16,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 
 | Namespace | Actions | Description |
 |-----------|---------|-------------|
-| [monolith](#monolith) | 6 | Core server tools (discover, status, update, reindex) |
+| [monolith](#monolith) | 5 primary + management/profile/audit helpers | Core server tools (find, discover, status, update, reindex), MCP/session diagnostics, readiness/onboarding/notification settings, execution audit/policy, and tool profile management |
 | [blueprint](#blueprint) | 93 | Blueprint read/write, variable/component/graph CRUD, DataTable maintenance, node ops, compile, auto-layout, spawn actors |
 | [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection / Fracture visibility registered by MonolithChaosFracture |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
@@ -68,6 +68,8 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `blueprint` DataTable maintenance | **NEW** | Adds schema inspection, guarded row update/remove, and guarded CSV export for `UDataTable` assets. |
 | `localization` StringTable actions | **NEW** | Adds guarded StringTable create/edit/remove/metadata plus CSV import/export with `dry_run`/`confirm` write gates. |
 | `monolith.discover` / `monolith.describe_domain` action rows | Metadata added | Each action row includes `execution_policy` metadata (`policy_id`, `defaulted`, dirty-package/transaction/validation flags). Explicit mutating policies can now opt into central dirty-package tracking, transaction wrapping, and post-edit validation. |
+| `monolith.find` / `monolith.discover` | **EXPANDED** | Adds fuzzy task-to-action search plus projection-aware discovery (`mode=summary|actions|schema`, `query`, `action`, `fields`, `limit`, `cursor`). Domain `{namespace}_query` tools stay stable; `tools/list` descriptions no longer inline every action name. Settings-dependent deferred catalog actions remain available for diagnostics but are not the agent-facing catalog route. |
+| Core monolith + Source/index schemas | Param validation tightened | Opted-in schemas now reject wrong JSON types, unsupported enum strings, and out-of-range numeric controls before handler dispatch. Current Core coverage includes routing/discovery/status, update/reindex, MCP/session compatibility, onboarding/readiness/notification settings, execution audit/policy, and tool profile management. Source coverage includes all live `source` and `index` actions. |
 | `monolith.set_action_execution_policy` | Placeholder promoted | Developer-only local override for known action execution policies. Supports `read_only`, `track_dirty_packages`, `transaction_optional`, `transaction_required`, and `post_edit_validate`. |
 | `pcg.get_graph_asset` | **NEW** | Adds bounded AssetRegistry metadata inspection for one PCG graph-like asset without loading PCG classes or adding a hard PCG dependency. |
 | `paper2d.get_asset` | **NEW** | Returns one Paper2D AssetRegistry row and bounded tags under `/Game` without loading Paper2D assets or depending on Paper2D headers. |
@@ -88,6 +90,8 @@ The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespa
 
 Core server management and introspection.
 
+Core-owned production `monolith` action schemas opt into registry-level top-level validation. Wrong JSON types, unsupported enum strings, and out-of-range limits are rejected with JSON-RPC `-32602` before the handler runs for routing/discovery, status/readiness, update/reindex, MCP/session compatibility, onboarding/notification settings, execution audit/policy, and tool profile management actions.
+
 When `bEnableMcpResources=true`, MonolithCore also exposes MCP `resources/list` and `resources/read` through `FMonolithResourceRegistry`. Default docs are registered only after their backing markdown is readable and non-empty. `resources/list` returns a string `nextCursor` only when another page exists; the exhausted page omits `nextCursor`.
 
 When `bEnableAdvancedToolCallRecords=true`, MonolithCore registers `monolith.list_tool_call_records`, `monolith.get_tool_call_record`, and `monolith.analyze_tool_call_records`. These actions expose bounded, redacted, in-memory ToolCall records for local diagnostics; raw params, result payloads, auth headers, cookies, bearer tokens, and API keys are not stored.
@@ -98,16 +102,38 @@ When `bEnableMcpSessionMode=true`, MonolithCore observes `MCP-Session-Id` and `M
 
 `monolith.set_mcp_compatibility_options` supports `options.browser_access` values of `"loopback_only"` and `"disabled"`. `"loopback_only"` preserves the localhost/127.0.0.1/[::1] browser CORS allowlist; `"disabled"` omits `Access-Control-Allow-Origin` for browser origins while keeping non-browser MCP clients working. Legacy SSE/message routes, wildcard CORS, and arbitrary origin allowlists are not supported.
 
+### `monolith.find`
+
+Find profile-allowed Monolith actions by task text, namespace, category, action name, description, registered search metadata, or param schema text. This is the fast routing entrypoint when the exact namespace/action is unclear. Scoring uses `weighted_tokens_v3`: weighted phrase/token matching, curated routing aliases such as `vfx -> niagara`, `bp -> blueprint`, and `layout/format/arrange`, derived intent hints for common action names, and low-weight typo-tolerant token matches for longer terms.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | **required** | Task or action text to search for, for example `"find caller graph action"` |
+| `namespace` | string | optional | Optional namespace filter such as `source`, `blueprint`, `ui`, or `monolith` |
+| `limit` | integer | optional | Maximum matches to return. Default `8`, max `50` |
+| `include_schema` | boolean | optional | Include matched action schemas. Default `false` |
+
+**Returns:** `{ status, query, scoring_version, count, truncated, matches, next_actions }`. Each match includes `action_id`, `namespace`, `action`, `description`, `mcp_tool`, `score`, `reason`, `status`, `matched_tokens`, and optional `params` when `include_schema=true`. `reason` can include `metadata_tokens`, `schema_tokens`, and `*_fuzzy` entries when search metadata, param schema text, or typo-tolerant token matches contributed.
+
+---
+
 ### `monolith.discover`
 
-List available tool namespaces and their actions. Pass `namespace` to filter; pass `category` to narrow further (e.g. `"CommonUI"` inside `ui`).
+Canonical live catalog. The global default is compact namespace summary; namespace calls preserve the old detailed action/schema behavior unless `mode` is explicitly set.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `namespace` | string | optional | Filter to a specific namespace |
+| `action` | string | optional | Filter to one action name or `namespace.action` id. Implies schema mode when `mode` is omitted |
+| `query` | string | optional | Text filter over namespace, action, category, and description |
 | `category` | string | optional | Filter actions within the namespace by category |
+| `mode` | string | optional | `summary`, `actions`, or `schema` |
+| `fields` | array/string | optional | Allowlist of row fields; accepts an array of strings or comma-separated string |
+| `limit` | integer | optional | Maximum namespace/action rows. Default `100`, max `500` |
+| `cursor` | string | optional | Continuation cursor returned by a previous response |
+| `include_optional` | boolean | optional | Include known optional namespaces that are disabled or not installed. Default `true` |
 
-**Returns:** Per-action param schemas and `execution_policy` metadata for every registered action. Default `read_only` policies avoid package scans, transaction wrapping, and post-edit validation; explicit mutating policies can request central dirty-package tracking, UE transaction wrapping, and validator hooks. AI clients also receive schemas in `tools/list` at session start, so most callers never need to call `discover` explicitly.
+**Returns:** `status`, `mode`, `snapshot_mode=live_registry`, `active_profile_id`, `profile_filtered`, row counts, `truncated`, optional `next_cursor`, plus `namespaces` or `actions`. `schema` mode returns one action row at the top level. Action rows carry `execution_policy` metadata and optional `search_metadata`; `inputSchema` / `params` are included for schema mode and legacy namespace-detail calls.
 
 ---
 
@@ -234,6 +260,8 @@ Optional nDisplay / DisplayCluster config discovery registered by `MonolithNDisp
 Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, DataTables, and spawn-time actor placement. **93 actions.**
 
 > For full param schemas, call `monolith_discover("blueprint")` at runtime. The action surface is too broad to enumerate here without bloat — high-traffic actions are documented below; the rest are listed and discoverable.
+>
+> Layout note: `blueprint.auto_layout` no longer invokes Blueprint Assist on asset mutation paths. `formatter="auto"` uses the built-in formatter; `formatter="blueprint_assist"` returns an explicit disabled error.
 
 **Action categories:**
 
@@ -343,6 +371,8 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithBlueprint.md` for the deep dive.
 Material graph editing, inspection, CRUD, material functions, instances, custom HLSL nodes, PBR pipeline. **63 actions.**
 
 > For full param schemas, call `monolith_discover("material")` at runtime.
+>
+> Layout note: `material.auto_layout` no longer invokes Blueprint Assist on asset mutation paths. `formatter="auto"` uses UE built-in layout; `formatter="blueprint_assist"` returns an explicit disabled error.
 
 **Action categories:**
 
@@ -451,6 +481,8 @@ Niagara VFX system editing — emitters, modules, params, renderers, HLSL, dynam
 > For full param schemas, call `monolith_discover("niagara")` at runtime.
 >
 > Emitter selector parameters accept GUID, exact or case-insensitive display name, unique instance name, or a `list_emitters` numeric index string such as `"0"`. `auto_layout` follows the same selector contract as the core Niagara emitter actions.
+>
+> Layout note: Niagara has no built-in graph formatter. `niagara.auto_layout` uses Blueprint Assist as a fallback when the bridge is available; `formatter="monolith"` returns an explicit unsupported error.
 
 `list_systems`, `list_module_scripts`, and `search_dynamic_inputs` accept a numeric
 `limit`. Missing values keep their existing defaults (`50`, `50`, and `20`
@@ -853,7 +885,7 @@ CRG-inspired navigation/review (additive, over the existing `dependencies` graph
 | `project.impact_radius` | `asset_path`*, `direction`=both, `max_depth`=2, `max_results`=200, `dependency_type` | Cycle-safe bounded BFS; returns `impacted_assets[]`, `edges[]`, `truncated` |
 | `project.health` | `include_counts`=true | Read-only: v2 schema, 6 triggers, FTS row parity, orphan deps, CRG projection table/index/parity checks, journal mode; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
 | `project.repair_fts` | `target`=all\|assets\|nodes, `execute`=false | Rebuild `fts_assets`/`fts_nodes`. `execute=true` is the sole write gate; refused while indexing |
-| `project.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `assets` and `dependencies`. Dry-run unless `execute=true`; refused while indexing |
+| `project.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `assets` and `dependencies`. Dry-run unless `execute=true`; refused while indexing; ProjectIndex completion also runs this rebuild automatically |
 | `project.risk_score` | `asset_path`/`seed`, `limit`=20, `min_tier`=low | `{score,tier,reasons[],raw_counts,cache}` from `crg_node_metrics` when available; query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
 | `project.detect_changes` | `changed_paths` or `paths`, `max_results`=200, `detail_level`=minimal | Changed `.uasset`/`.umap` path/name mapping to indexed assets, risk, depth-1 dependency impact, and review priorities; no P4/git shell-out |
 | `project.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory orphan-asset candidates with `confidence` + `reasons[]`; excludes World/Level/PrimaryAssetLabel roots and never mutates |
@@ -940,7 +972,7 @@ CRG-inspired navigation/review (additive, over the existing `"references"` + `in
 | `source.impact_radius` | `symbol`*, `edge_kinds`=call\|type\|inheritance, `direction`=both, `max_depth`=2, `max_results`=200 | Cycle-safe bounded BFS; call/type filters are exact, `include` returns a warning until path resolution is supported. Returns `impacted_symbols[]`, `edges[]`, `warnings[]`, `truncated` |
 | `source.health` | `include_counts`=true | Read-only: v1 schema, `symbols_ai/ad` triggers, `symbols_fts` parity, orphan refs, CRG projection table/index/parity checks; `source_fts` info-only; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
 | `source.repair_fts` | `target`=all\|symbols\|source, `execute`=false | Rebuild `symbols_fts`. `target=source` → reindex guidance (plain fts5). Refused while indexing |
-| `source.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `symbols`, `"references"`, and `inheritance`. Dry-run unless `execute=true`; refused while indexing |
+| `source.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `symbols`, `"references"`, and `inheritance`. Dry-run unless `execute=true`; refused while indexing; source indexing completion also runs this rebuild automatically |
 | `source.risk_score` | `symbol`*, `limit`=10, `min_tier`=low | `{score,tier,reasons[],raw_counts,cache}` from `crg_node_metrics` when available; query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
 | `source.detect_changes` | `changed_paths` or `paths`, `changed_ranges`, `diff_text`, `max_results`=200, `detail_level`=minimal | Changed source path suffix mapping to symbols, risk, depth-1 caller impact, heuristic test gaps, and review priorities. RX-1.1: optional `changed_ranges`/`diff_text` restrict matches to symbols overlapping changed line ranges (CRG overlap rule); `input.precision` ∈ `{file,line}`; no P4/git shell-out (caller supplies the diff). Offline CLI adds `--diff-file`, `--diff-stdin`, `--ranges=path:s-e` |
 | `source.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory function/class/struct dead-symbol candidates with `confidence` + `reasons[]`; excludes UE reflection/automation/entry markers and never mutates |
@@ -1010,7 +1042,7 @@ CRG-inspired navigation/review (additive, over the existing `"references"` + `in
 
 ### `source.trigger_reindex` · `source.trigger_project_reindex`
 
-`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*.
+`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*. Successful source indexing reopens `EngineSource.db` and rebuilds the source CRG projection/cache automatically. In the editor, Live Coding / hot-reload completion kicks `trigger_project_reindex` so post-build C++ symbols become available to `source_query` without a manual refresh.
 
 ---
 

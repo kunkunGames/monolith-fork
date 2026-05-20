@@ -9,7 +9,7 @@
  * Enables AI spatial reasoning about the scene.
  * All queries work in editor without a play session.
  */
-class FMonolithMeshSpatialActions
+class MONOLITHMESH_API FMonolithMeshSpatialActions
 {
 public:
 	/** Register all 11 spatial query actions with the tool registry */

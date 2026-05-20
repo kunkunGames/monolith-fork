@@ -20,7 +20,7 @@ class UDynamicMesh;
  * Public static utilities are shared with FMonolithMeshBuildingActions for integrated
  * facade generation (v3 single-pass architecture).
  */
-class FMonolithMeshFacadeActions
+class MONOLITHMESH_API FMonolithMeshFacadeActions
 {
 public:
 	static void RegisterActions(FMonolithToolRegistry& Registry);

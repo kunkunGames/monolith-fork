@@ -56,7 +56,7 @@ static TMap<FString, TWeakObjectPtr<AActor>> HighlightActors;
 void FMonolithMeshDebugViewActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. toggle_section_view
-	Registry.RegisterAction(TEXT("mesh"), TEXT("toggle_section_view"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("toggle_section_view"),
 		TEXT("Section-cut debug view: hide all actors above a Z height to reveal building interiors. "
 			"Tracks hidden actors for clean restoration. Can resolve clip_height from building_id + floor_index."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshDebugViewActions::ToggleSectionView),
@@ -69,7 +69,7 @@ void FMonolithMeshDebugViewActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 2. toggle_ceiling_visibility
-	Registry.RegisterAction(TEXT("mesh"), TEXT("toggle_ceiling_visibility"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("toggle_ceiling_visibility"),
 		TEXT("Show or hide actors tagged with BuildingCeiling and BuildingRoof. "
 			"Useful for top-down inspection of procedural buildings without section clipping."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshDebugViewActions::ToggleCeilingVisibility),
@@ -81,7 +81,7 @@ void FMonolithMeshDebugViewActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 3. capture_floor_plan
-	Registry.RegisterAction(TEXT("mesh"), TEXT("capture_floor_plan"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("capture_floor_plan"),
 		TEXT("Orthographic top-down scene capture of a building floor, saved as PNG. "
 			"Auto-hides ceilings/roofs before capture and restores afterward. Uses spatial registry for building bounds."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshDebugViewActions::CaptureFloorPlan),
@@ -97,7 +97,7 @@ void FMonolithMeshDebugViewActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 4. highlight_room
-	Registry.RegisterAction(TEXT("mesh"), TEXT("highlight_room"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("highlight_room"),
 		TEXT("Spawn a translucent overlay box at a room's world bounds for visual debugging. "
 			"Tracked by room_id for cleanup. Use clear=true to remove a specific highlight."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshDebugViewActions::HighlightRoom),
@@ -110,7 +110,7 @@ void FMonolithMeshDebugViewActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 5. save_camera_bookmark
-	Registry.RegisterAction(TEXT("mesh"), TEXT("save_camera_bookmark"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("save_camera_bookmark"),
 		TEXT("Save the current editor viewport camera position and rotation as a named bookmark. "
 			"Stored as JSON in Saved/Monolith/CameraBookmarks/."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshDebugViewActions::SaveCameraBookmark),
@@ -120,7 +120,7 @@ void FMonolithMeshDebugViewActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 6. load_camera_bookmark
-	Registry.RegisterAction(TEXT("mesh"), TEXT("load_camera_bookmark"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("load_camera_bookmark"),
 		TEXT("Restore the editor viewport camera to a previously saved bookmark position."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshDebugViewActions::LoadCameraBookmark),
 		FParamSchemaBuilder()
@@ -128,7 +128,7 @@ void FMonolithMeshDebugViewActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	// 7. capture_building_views
-	Registry.RegisterAction(TEXT("mesh"), TEXT("capture_building_views"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("capture_building_views"),
 		TEXT("Multi-angle diagnostic capture of a building for quality review. "
 			"Produces 6 views: floor_plan (orthographic top-down), north/south/east/west (orthographic elevations), "
 			"and perspective (45-degree corner view). All saved as PNGs. Uses spatial registry for building bounds."),

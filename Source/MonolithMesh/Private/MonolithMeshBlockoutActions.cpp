@@ -391,14 +391,14 @@ namespace BlockoutHelpers
 void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. get_blockout_volumes
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_blockout_volumes"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("get_blockout_volumes"),
 		TEXT("Find all actors with Monolith.Blockout tag. Warns about misconfigured actors with partial Monolith tags."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::GetBlockoutVolumes),
 		FParamSchemaBuilder()
 			.Build());
 
 	// 2. get_blockout_volume_info
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_blockout_volume_info"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("get_blockout_volume_info"),
 		TEXT("Get detailed info for a blockout volume: parsed tags, blockout primitives, and other actors."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::GetBlockoutVolumeInfo),
 		FParamSchemaBuilder()
@@ -406,7 +406,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 3. setup_blockout_volume
-	Registry.RegisterAction(TEXT("mesh"), TEXT("setup_blockout_volume"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("setup_blockout_volume"),
 		TEXT("Apply Monolith blockout tags to a BlockingVolume. Clears existing Monolith tags first."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::SetupBlockoutVolume),
 		FParamSchemaBuilder()
@@ -419,7 +419,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 4. create_blockout_primitive
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_blockout_primitive"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_blockout_primitive"),
 		TEXT("Spawn a scaled BasicShape as a blockout primitive with category-colored material and owner tags."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::CreateBlockoutPrimitive),
 		FParamSchemaBuilder()
@@ -433,7 +433,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 5. create_blockout_primitives_batch
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_blockout_primitives_batch"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_blockout_primitives_batch"),
 		TEXT("Create multiple blockout primitives in a single undo transaction. Max 200 primitives. Warns if outside volume bounds."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::CreateBlockoutPrimitivesBatch),
 		FParamSchemaBuilder()
@@ -442,7 +442,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 6. create_blockout_grid
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_blockout_grid"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_blockout_grid"),
 		TEXT("Create a floor grid of box primitives filling a blockout volume."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::CreateBlockoutGrid),
 		FParamSchemaBuilder()
@@ -452,7 +452,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 7. match_asset_to_blockout
-	Registry.RegisterAction(TEXT("mesh"), TEXT("match_asset_to_blockout"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("match_asset_to_blockout"),
 		TEXT("Find mesh catalog assets that match a blockout primitive's size. Axis-sorted matching with weighted scoring."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::MatchAssetToBlockout),
 		FParamSchemaBuilder()
@@ -463,7 +463,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 8. match_all_in_volume
-	Registry.RegisterAction(TEXT("mesh"), TEXT("match_all_in_volume"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("match_all_in_volume"),
 		TEXT("Batch match all blockout primitives in a volume against mesh catalog. Returns replacement plan."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::MatchAllInVolume),
 		FParamSchemaBuilder()
@@ -473,7 +473,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 9. apply_replacement
-	Registry.RegisterAction(TEXT("mesh"), TEXT("apply_replacement"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("apply_replacement"),
 		TEXT("ATOMIC: Replace blockout primitives with real mesh assets. Validates ALL assets first, single undo, pivot adjustment in local space."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::ApplyReplacement),
 		FParamSchemaBuilder()
@@ -482,7 +482,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 10. set_actor_tags
-	Registry.RegisterAction(TEXT("mesh"), TEXT("set_actor_tags"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("set_actor_tags"),
 		TEXT("Batch apply tags to multiple actors in a single undo transaction."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::SetActorTags),
 		FParamSchemaBuilder()
@@ -490,7 +490,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 11. clear_blockout
-	Registry.RegisterAction(TEXT("mesh"), TEXT("clear_blockout"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("clear_blockout"),
 		TEXT("Delete blockout primitives by Monolith.Owner tag. Respects keep_tagged to preserve replaced actors."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::ClearBlockout),
 		FParamSchemaBuilder()
@@ -499,7 +499,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 12. export_blockout_layout
-	Registry.RegisterAction(TEXT("mesh"), TEXT("export_blockout_layout"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("export_blockout_layout"),
 		TEXT("Export blockout layout as JSON. Positions normalized 0-1 relative to volume, sizes absolute."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::ExportBlockoutLayout),
 		FParamSchemaBuilder()
@@ -507,7 +507,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 13. import_blockout_layout
-	Registry.RegisterAction(TEXT("mesh"), TEXT("import_blockout_layout"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("import_blockout_layout"),
 		TEXT("Import a blockout layout into a volume. Scales POSITIONS to fit, keeps SIZES unchanged. Flags overflow."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::ImportBlockoutLayout),
 		FParamSchemaBuilder()
@@ -516,7 +516,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 14. scan_volume
-	Registry.RegisterAction(TEXT("mesh"), TEXT("scan_volume"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("scan_volume"),
 		TEXT("Multi-origin radial sweep of a volume. Detects walls, floor, ceiling, openings. Semantic JSON output."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::ScanVolume),
 		FParamSchemaBuilder()
@@ -526,7 +526,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 15. scatter_props
-	Registry.RegisterAction(TEXT("mesh"), TEXT("scatter_props"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("scatter_props"),
 		TEXT("Poisson disk scatter props within a volume. Floor trace, overlap check, random rotation, reproducible seed."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::ScatterProps),
 		FParamSchemaBuilder()
@@ -542,7 +542,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 
 	// 16. create_blockout_blueprint
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_blockout_blueprint"),
+	Registry.RegisterAction(TEXT("worldgen"), TEXT("create_blockout_blueprint"),
 		TEXT("Create the BP_MonolithBlockoutVolume Blueprint asset in the project. One-time setup — creates /Game/Monolith/Blockout/BP_MonolithBlockoutVolume with editable RoomType, BlockoutTags, Density, physics, wall/ceiling properties. Drag into levels for blockout volumes with proper Details panel UX."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::CreateBlockoutBlueprint),
 		FParamSchemaBuilder()

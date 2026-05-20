@@ -77,6 +77,409 @@ static TArray<TSharedPtr<FJsonValue>> StringArrayToJson(const TArray<FString>& V
 	return Result;
 }
 
+static bool IsFindTokenChar(TCHAR Ch)
+{
+	return FChar::IsAlnum(Ch);
+}
+
+static bool IsIgnoredFindToken(const FString& Token)
+{
+	static const TSet<FString> IgnoredTokens = {
+		TEXT("a"), TEXT("an"), TEXT("and"), TEXT("for"), TEXT("from"), TEXT("in"), TEXT("of"),
+		TEXT("on"), TEXT("or"), TEXT("the"), TEXT("to"), TEXT("with"), TEXT("using"), TEXT("use")
+	};
+	return IgnoredTokens.Contains(Token);
+}
+
+static FString NormalizeFindText(FString Text)
+{
+	Text.ToLowerInline();
+	Text.ReplaceInline(TEXT("c++"), TEXT(" cpp "));
+	Text.ReplaceInline(TEXT("c#"), TEXT(" csharp "));
+	Text.ReplaceInline(TEXT("blueprintassist"), TEXT(" blueprint assist "));
+
+	for (int32 Index = 0; Index < Text.Len(); ++Index)
+	{
+		if (!IsFindTokenChar(Text[Index]))
+		{
+			Text[Index] = TEXT(' ');
+		}
+	}
+
+	TArray<FString> Tokens;
+	Text.ParseIntoArrayWS(Tokens);
+	return FString::Join(Tokens, TEXT(" "));
+}
+
+static void AddUniqueFindToken(TArray<FString>& Tokens, TSet<FString>& Seen, const FString& Token)
+{
+	if (Token.Len() < 2 || IsIgnoredFindToken(Token) || Seen.Contains(Token))
+	{
+		return;
+	}
+	Seen.Add(Token);
+	Tokens.Add(Token);
+}
+
+static void AddFindAlias(TArray<FString>& Tokens, TSet<FString>& Seen, const FString& Alias)
+{
+	AddUniqueFindToken(Tokens, Seen, Alias);
+}
+
+static TArray<FString> TokenizeFindText(const FString& Text, bool bExpandAliases)
+{
+	TArray<FString> RawTokens;
+	NormalizeFindText(Text).ParseIntoArrayWS(RawTokens);
+
+	TArray<FString> Tokens;
+	TSet<FString> Seen;
+	for (const FString& Token : RawTokens)
+	{
+		AddUniqueFindToken(Tokens, Seen, Token);
+	}
+
+	if (bExpandAliases)
+	{
+		const TArray<FString> Snapshot = Tokens;
+		for (const FString& Token : Snapshot)
+		{
+			if (Token == TEXT("bp"))
+			{
+				AddFindAlias(Tokens, Seen, TEXT("blueprint"));
+			}
+			else if (Token == TEXT("abp") || Token == TEXT("anim"))
+			{
+				AddFindAlias(Tokens, Seen, TEXT("animation"));
+				AddFindAlias(Tokens, Seen, TEXT("blueprint"));
+			}
+			else if (Token == TEXT("cpp") || Token == TEXT("cplusplus") || Token == TEXT("code"))
+			{
+				AddFindAlias(Tokens, Seen, TEXT("source"));
+				AddFindAlias(Tokens, Seen, TEXT("symbol"));
+			}
+			else if (Token == TEXT("vfx") || Token == TEXT("particle") || Token == TEXT("particles") || Token == TEXT("effect"))
+			{
+				AddFindAlias(Tokens, Seen, TEXT("niagara"));
+			}
+			else if (Token == TEXT("mat") || Token == TEXT("shader"))
+			{
+				AddFindAlias(Tokens, Seen, TEXT("material"));
+			}
+			else if (Token == TEXT("format") || Token == TEXT("formatter") || Token == TEXT("layout"))
+			{
+				AddFindAlias(Tokens, Seen, TEXT("arrange"));
+				AddFindAlias(Tokens, Seen, TEXT("auto"));
+			}
+			else if (Token == TEXT("arrange"))
+			{
+				AddFindAlias(Tokens, Seen, TEXT("layout"));
+				AddFindAlias(Tokens, Seen, TEXT("format"));
+			}
+			else if (Token == TEXT("ref") || Token == TEXT("refs"))
+			{
+				AddFindAlias(Tokens, Seen, TEXT("reference"));
+				AddFindAlias(Tokens, Seen, TEXT("references"));
+			}
+			else if (Token == TEXT("caller"))
+			{
+				AddFindAlias(Tokens, Seen, TEXT("callers"));
+			}
+			else if (Token == TEXT("callee"))
+			{
+				AddFindAlias(Tokens, Seen, TEXT("callees"));
+			}
+		}
+	}
+
+	return Tokens;
+}
+
+static int32 FindTokenEditDistanceBounded(const FString& A, const FString& B, int32 MaxDistance)
+{
+	const int32 La = A.Len();
+	const int32 Lb = B.Len();
+	if (FMath::Abs(La - Lb) > MaxDistance)
+	{
+		return MaxDistance + 1;
+	}
+	if (La == 0)
+	{
+		return Lb;
+	}
+	if (Lb == 0)
+	{
+		return La;
+	}
+
+	TArray<int32> Prev;
+	TArray<int32> Curr;
+	Prev.SetNumUninitialized(Lb + 1);
+	Curr.SetNumUninitialized(Lb + 1);
+	for (int32 J = 0; J <= Lb; ++J)
+	{
+		Prev[J] = J;
+	}
+
+	for (int32 I = 1; I <= La; ++I)
+	{
+		Curr[0] = I;
+		int32 RowMin = Curr[0];
+		const TCHAR Ca = A[I - 1];
+		for (int32 J = 1; J <= Lb; ++J)
+		{
+			const TCHAR Cb = B[J - 1];
+			const int32 Cost = (Ca == Cb) ? 0 : 1;
+			Curr[J] = FMath::Min3(
+				Prev[J] + 1,
+				Curr[J - 1] + 1,
+				Prev[J - 1] + Cost);
+			RowMin = FMath::Min(RowMin, Curr[J]);
+		}
+		if (RowMin > MaxDistance)
+		{
+			return MaxDistance + 1;
+		}
+		Swap(Prev, Curr);
+	}
+
+	return Prev[Lb];
+}
+
+static bool IsFindTypoMatch(const FString& QueryToken, const FString& FieldToken)
+{
+	if (QueryToken.Len() < 4 || FieldToken.Len() < 4)
+	{
+		return false;
+	}
+	if (QueryToken[0] != FieldToken[0])
+	{
+		return false;
+	}
+
+	const int32 MaxDistance = FMath::Max(QueryToken.Len(), FieldToken.Len()) >= 7 ? 2 : 1;
+	return FindTokenEditDistanceBounded(QueryToken, FieldToken, MaxDistance) <= MaxDistance;
+}
+
+static int32 ScoreFindTokens(
+	const TArray<FString>& QueryTokens,
+	const TArray<FString>& FieldTokens,
+	const FString& FieldText,
+	int32 ExactWeight,
+	int32 PrefixWeight,
+	int32 ContainsWeight,
+	int32 FuzzyWeight,
+	const TCHAR* Reason,
+	TArray<FString>& OutReasons,
+	TSet<FString>& OutMatchedTokens)
+{
+	int32 Score = 0;
+	bool bAnyMatch = false;
+	bool bAnyFuzzyMatch = false;
+
+	for (const FString& Token : QueryTokens)
+	{
+		bool bMatched = false;
+		if (FieldTokens.Contains(Token))
+		{
+			Score += ExactWeight;
+			bMatched = true;
+		}
+		else
+		{
+			for (const FString& FieldToken : FieldTokens)
+			{
+				if (FieldToken.StartsWith(Token))
+				{
+					Score += PrefixWeight;
+					bMatched = true;
+					break;
+				}
+			}
+		}
+
+		if (!bMatched && FieldText.Contains(Token))
+		{
+			Score += ContainsWeight;
+			bMatched = true;
+		}
+
+		if (!bMatched && FuzzyWeight > 0)
+		{
+			for (const FString& FieldToken : FieldTokens)
+			{
+				if (IsFindTypoMatch(Token, FieldToken))
+				{
+					Score += FuzzyWeight;
+					bMatched = true;
+					bAnyFuzzyMatch = true;
+					break;
+				}
+			}
+		}
+
+		if (bMatched)
+		{
+			bAnyMatch = true;
+			OutMatchedTokens.Add(Token);
+		}
+	}
+
+	if (bAnyMatch)
+	{
+		OutReasons.Add(Reason);
+	}
+	if (bAnyFuzzyMatch)
+	{
+		OutReasons.Add(FString::Printf(TEXT("%s_fuzzy"), Reason));
+	}
+	return Score;
+}
+
+static FString BuildFindSchemaText(const TSharedPtr<FJsonObject>& Schema)
+{
+	if (!Schema.IsValid())
+	{
+		return FString();
+	}
+
+	TArray<FString> Parts;
+	for (const auto& Pair : Schema->Values)
+	{
+		Parts.Add(Pair.Key);
+
+		const TSharedPtr<FJsonObject>* ParamDef = nullptr;
+		if (!Pair.Value.IsValid() || !Pair.Value->TryGetObject(ParamDef) || !ParamDef || !ParamDef->IsValid())
+		{
+			continue;
+		}
+
+		FString Description;
+		if ((*ParamDef)->TryGetStringField(TEXT("description"), Description))
+		{
+			Parts.Add(Description);
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Aliases = nullptr;
+		if ((*ParamDef)->TryGetArrayField(TEXT("aliases"), Aliases) && Aliases)
+		{
+			for (const TSharedPtr<FJsonValue>& AliasValue : *Aliases)
+			{
+				FString Alias;
+				if (AliasValue.IsValid() && AliasValue->TryGetString(Alias))
+				{
+					Parts.Add(Alias);
+				}
+			}
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* EnumValues = nullptr;
+		if ((*ParamDef)->TryGetArrayField(TEXT("enum"), EnumValues) && EnumValues)
+		{
+			for (const TSharedPtr<FJsonValue>& EnumValue : *EnumValues)
+			{
+				FString Value;
+				if (EnumValue.IsValid() && EnumValue->TryGetString(Value))
+				{
+					Parts.Add(Value);
+				}
+			}
+		}
+	}
+	return FString::Join(Parts, TEXT(" "));
+}
+
+static void AppendDerivedFindMetadata(const FMonolithActionInfo& Info, TArray<FString>& Parts)
+{
+	const FString Action = NormalizeFindText(Info.Action);
+	const FString Namespace = NormalizeFindText(Info.Namespace);
+	const FString ActionId = Namespace + TEXT(".") + Action;
+
+	if (Action.Contains(TEXT("auto layout")) || Action.Contains(TEXT("layout")))
+	{
+		Parts.Add(TEXT("format formatter arrange organize graph nodes node layout auto layout"));
+	}
+	if (Action.Contains(TEXT("find callers")) || Action.Contains(TEXT("caller")))
+	{
+		Parts.Add(TEXT("who calls call sites incoming calls callers"));
+	}
+	if (Action.Contains(TEXT("find callees")) || Action.Contains(TEXT("callee")))
+	{
+		Parts.Add(TEXT("what does this call outgoing calls callees"));
+	}
+	if (Action.Contains(TEXT("find references")) || Action.Contains(TEXT("references")))
+	{
+		Parts.Add(TEXT("where used usages refs references"));
+	}
+	if (Action.Contains(TEXT("risk score")))
+	{
+		Parts.Add(TEXT("risk blast radius dangerous fragile review priority"));
+	}
+	if (Action.Contains(TEXT("review context")))
+	{
+		Parts.Add(TEXT("review summary context code review asset review"));
+	}
+	if (Action.Contains(TEXT("impact radius")))
+	{
+		Parts.Add(TEXT("impact dependency dependencies affected blast radius callers references"));
+	}
+	if (Action.Contains(TEXT("search")) || Action.Contains(TEXT("find")))
+	{
+		Parts.Add(TEXT("lookup locate query discover"));
+	}
+	if (Action.Contains(TEXT("create")) || Action.Contains(TEXT("spawn")) || Action.Contains(TEXT("place")))
+	{
+		Parts.Add(TEXT("make add new generate"));
+	}
+
+	if (Namespace == TEXT("source"))
+	{
+		Parts.Add(TEXT("c++ cpp code symbol source function class struct include caller callee reference"));
+	}
+	else if (Namespace == TEXT("project"))
+	{
+		Parts.Add(TEXT("asset content dependency dependencies reference uasset path"));
+	}
+	else if (Namespace == TEXT("blueprint"))
+	{
+		Parts.Add(TEXT("bp blueprint graph node pin variable function event"));
+	}
+	else if (Namespace == TEXT("niagara"))
+	{
+		Parts.Add(TEXT("vfx particle particles niagara emitter system module"));
+	}
+	else if (Namespace == TEXT("material"))
+	{
+		Parts.Add(TEXT("shader material graph expression texture pbr"));
+	}
+	else if (Namespace == TEXT("animation"))
+	{
+		Parts.Add(TEXT("anim animation montage sequence notify skeleton abp animation blueprint"));
+	}
+
+	if (ActionId == TEXT("source.search source"))
+	{
+		Parts.Add(TEXT("search c++ source text symbol"));
+	}
+	else if (ActionId == TEXT("source.get symbol context"))
+	{
+		Parts.Add(TEXT("read symbol context definition surrounding source"));
+	}
+	else if (ActionId == TEXT("project.search"))
+	{
+		Parts.Add(TEXT("find asset search project content"));
+	}
+}
+
+static FString BuildFindSearchMetadataText(const FMonolithActionInfo& Info)
+{
+	TArray<FString> Parts;
+	Parts.Append(Info.SearchMetadata.Keywords);
+	Parts.Append(Info.SearchMetadata.Aliases);
+	Parts.Append(Info.SearchMetadata.Examples);
+	AppendDerivedFindMetadata(Info, Parts);
+	return FString::Join(Parts, TEXT(" "));
+}
+
 static FString GetBrowserAccessMode(const UMonolithSettings* Settings)
 {
 	return (!Settings || Settings->bEnableBrowserLoopbackCors) ? TEXT("loopback_only") : TEXT("disabled");
@@ -373,24 +776,34 @@ void FMonolithCoreTools::RegisterAll()
 {
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
+	// monolith_find
+	{
+		Registry.RegisterAction(
+			TEXT("monolith"), TEXT("find"),
+			TEXT("Find profile-allowed Monolith actions by task, namespace, category, action name, or description. Use this before monolith_discover when the exact action is unclear."),
+			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleFind),
+			FParamSchemaBuilder()
+				.EnableValidation()
+				.Required(TEXT("query"), TEXT("string"), TEXT("Task or action text to search for, for example 'find caller graph action'."))
+				.Optional(TEXT("namespace"), TEXT("string"), TEXT("Optional namespace filter such as source, blueprint, ui, or monolith."))
+				.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum matches to return."), TEXT("8"))
+				.Range(TEXT("limit"), 1, 50)
+				.Optional(TEXT("include_schema"), TEXT("boolean"), TEXT("When true, include schemas for matched actions."), TEXT("false"))
+				.Build()
+		);
+	}
+
 	// monolith_discover
 	{
-		TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
-		TSharedPtr<FJsonObject> NsProp = MakeShared<FJsonObject>();
-		NsProp->SetStringField(TEXT("type"), TEXT("string"));
-		NsProp->SetStringField(TEXT("description"), TEXT("Optional: filter to a specific namespace"));
-		Schema->SetObjectField(TEXT("namespace"), NsProp);
-
-		TSharedPtr<FJsonObject> CatProp = MakeShared<FJsonObject>();
-		CatProp->SetStringField(TEXT("type"), TEXT("string"));
-		CatProp->SetStringField(TEXT("description"), TEXT("Optional: filter actions within the namespace by category (e.g. 'CommonUI' inside 'ui')"));
-		Schema->SetObjectField(TEXT("category"), CatProp);
-
 		Registry.RegisterAction(
 			TEXT("monolith"), TEXT("discover"),
 			TEXT("List available tool namespaces and their actions. Pass namespace (and optional category) to filter."),
 			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleDiscover),
-			Schema
+			FParamSchemaBuilder()
+				.EnableValidation()
+				.Optional(TEXT("namespace"), TEXT("string"), TEXT("Optional: filter to a specific namespace"))
+				.Optional(TEXT("category"), TEXT("string"), TEXT("Optional: filter actions within the namespace by category (e.g. 'CommonUI' inside 'ui')"))
+				.Build()
 		);
 	}
 
@@ -399,24 +812,24 @@ void FMonolithCoreTools::RegisterAll()
 		Registry.RegisterAction(
 			TEXT("monolith"), TEXT("status"),
 			TEXT("Get Monolith server health: version, uptime, port, registered action count, module status."),
-			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleStatus)
+			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleStatus),
+			FParamSchemaBuilder()
+				.EnableValidation()
+				.Build()
 		);
 	}
 
 	// monolith_update
 	{
-		TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
-		TSharedPtr<FJsonObject> ActionProp = MakeShared<FJsonObject>();
-		ActionProp->SetStringField(TEXT("type"), TEXT("string"));
-		ActionProp->SetStringField(TEXT("description"), TEXT("'check' to compare versions, 'install' to download and stage update"));
-		ActionProp->SetStringField(TEXT("default"), TEXT("check"));
-		Schema->SetObjectField(TEXT("action"), ActionProp);
-
 		Registry.RegisterAction(
 			TEXT("monolith"), TEXT("update"),
 			TEXT("Check for or install Monolith updates from GitHub Releases."),
 			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleUpdate),
-			Schema
+			FParamSchemaBuilder()
+				.EnableValidation()
+				.Optional(TEXT("action"), TEXT("string"), TEXT("'check' to compare versions, 'install' to download and stage update"), TEXT("check"))
+				.Enum(TEXT("action"), { TEXT("check"), TEXT("install") })
+				.Build()
 		);
 	}
 
@@ -427,6 +840,7 @@ void FMonolithCoreTools::RegisterAll()
 			TEXT("Re-index the Monolith project database. Incremental by default (delta only). Pass force=true for full wipe+rebuild."),
 			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleReindex),
 			FParamSchemaBuilder()
+				.EnableValidation()
 				.Optional(TEXT("force"), TEXT("boolean"), TEXT("If true, performs a full wipe and rebuild instead of an incremental delta update."), TEXT("false"))
 				.Build()
 		);
@@ -435,7 +849,10 @@ void FMonolithCoreTools::RegisterAll()
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("get_mcp_server_status"),
 		TEXT("Return Monolith MCP transport status, CORS/header policy, protocol support, route state, and request limits."),
-		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetMcpServerStatus)
+		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetMcpServerStatus),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Build()
 	);
 
 	Registry.RegisterAction(
@@ -443,7 +860,9 @@ void FMonolithCoreTools::RegisterAll()
 		TEXT("Report MCP session tracking availability. Current Monolith streamable HTTP mode does not persist per-client sessions."),
 		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleListMcpSessions),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum session rows to return when session tracking is available"), TEXT("100"))
+			.Range(TEXT("limit"), 1, 1000)
 			.Build()
 	);
 
@@ -452,6 +871,7 @@ void FMonolithCoreTools::RegisterAll()
 		TEXT("Report MCP session termination availability without inventing session state."),
 		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleTerminateMcpSession),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("session_id"), TEXT("string"), TEXT("MCP session id to terminate when session tracking is available"))
 			.Build()
 	);
@@ -461,6 +881,7 @@ void FMonolithCoreTools::RegisterAll()
 		TEXT("Set safe MCP compatibility options. Supports browser_access=loopback_only|disabled; legacy routes remain unsupported."),
 		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleSetMcpCompatibilityOptions),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("options"), TEXT("object"), TEXT("Compatibility options. Supported: browser_access = loopback_only or disabled."))
 			.Build()
 	);
@@ -468,7 +889,10 @@ void FMonolithCoreTools::RegisterAll()
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("get_mcp_discovery_state"),
 		TEXT("Return the current live registry discovery snapshot and refresh semantics."),
-		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetMcpDiscoveryState)
+		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetMcpDiscoveryState),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Build()
 	);
 
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
@@ -479,6 +903,7 @@ void FMonolithCoreTools::RegisterAll()
 			TEXT("Return cheap profile-filtered Monolith domain metadata without per-action schemas."),
 			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleListDomains),
 			FParamSchemaBuilder()
+				.EnableValidation()
 				.Optional(TEXT("include_optional"), TEXT("boolean"), TEXT("Include known optional domains that are not currently registered"), TEXT("true"))
 				.Build()
 		);
@@ -488,6 +913,7 @@ void FMonolithCoreTools::RegisterAll()
 			TEXT("Return one Monolith domain's profile-filtered actions and schemas without changing tools/list."),
 			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleDescribeDomain),
 			FParamSchemaBuilder()
+				.EnableValidation()
 				.Required(TEXT("namespace"), TEXT("string"), TEXT("Domain namespace to describe"))
 				.Build()
 		);
@@ -497,6 +923,7 @@ void FMonolithCoreTools::RegisterAll()
 			TEXT("Mark a Monolith domain loaded for discovery scope without exposing additional tools by default."),
 			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleLoadDomain),
 			FParamSchemaBuilder()
+				.EnableValidation()
 				.Required(TEXT("namespace"), TEXT("string"), TEXT("Domain namespace to mark loaded"))
 				.Build()
 		);
@@ -504,14 +931,20 @@ void FMonolithCoreTools::RegisterAll()
 		Registry.RegisterAction(
 			TEXT("monolith"), TEXT("get_loaded_domains"),
 			TEXT("Return process/profile-scoped loaded domain state for the deferred domain catalog."),
-			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetLoadedDomains)
+			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetLoadedDomains),
+			FParamSchemaBuilder()
+				.EnableValidation()
+				.Build()
 		);
 	}
 
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("get_onboarding_state"),
 		TEXT("Return local Monolith onboarding progress, skipped steps, and next recommended setup step."),
-		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetOnboardingState)
+		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetOnboardingState),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Build()
 	);
 
 	Registry.RegisterAction(
@@ -519,7 +952,9 @@ void FMonolithCoreTools::RegisterAll()
 		TEXT("Mark a Monolith onboarding step completed, skipped, reopened, or reset."),
 		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleSetOnboardingState),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("action"), TEXT("string"), TEXT("complete, skip, reopen, or reset"), TEXT("complete"))
+			.Enum(TEXT("action"), { TEXT("complete"), TEXT("skip"), TEXT("reopen"), TEXT("reset") })
 			.Optional(TEXT("step"), TEXT("string"), TEXT("Onboarding step id to update"))
 			.Build()
 	);
@@ -527,7 +962,10 @@ void FMonolithCoreTools::RegisterAll()
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("get_readiness_status"),
 		TEXT("Run read-only Monolith readiness checks for server, registry, index, optional modules, and settings gates."),
-		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetReadinessStatus)
+		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetReadinessStatus),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Build()
 	);
 
 	Registry.RegisterAction(
@@ -535,6 +973,7 @@ void FMonolithCoreTools::RegisterAll()
 		TEXT("Return safe help text for Monolith readiness check failures without running installers."),
 		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetReadinessHelp),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("component"), TEXT("string"), TEXT("Optional readiness component id to filter help"))
 			.Build()
 	);
@@ -542,7 +981,10 @@ void FMonolithCoreTools::RegisterAll()
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("get_notification_settings"),
 		TEXT("Return local Monolith notification preferences."),
-		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetNotificationSettings)
+		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetNotificationSettings),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Build()
 	);
 
 	Registry.RegisterAction(
@@ -550,6 +992,7 @@ void FMonolithCoreTools::RegisterAll()
 		TEXT("Persist local Monolith notification preferences with boolean validation."),
 		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleSetNotificationSettings),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("settings"), TEXT("object"), TEXT("Object of notification preference booleans to update"))
 			.Build()
 	);
@@ -559,9 +1002,209 @@ void FMonolithCoreTools::RegisterAll()
 		TEXT("Trigger a harmless local Monolith notification test when editor toasts are enabled."),
 		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleTestNotification),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("message"), TEXT("string"), TEXT("Optional notification text"), TEXT("Monolith notification test"))
 			.Build()
 	);
+}
+
+FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Query;
+	FString NamespaceFilter;
+	double LimitValue = 8.0;
+	bool bIncludeSchema = false;
+
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("query"), Query) || Query.TrimStartAndEnd().IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'query'."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (Params->HasField(TEXT("namespace")) && !Params->TryGetStringField(TEXT("namespace"), NamespaceFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'namespace' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'limit' must be an integer"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (Params->HasField(TEXT("include_schema")) && !Params->TryGetBoolField(TEXT("include_schema"), bIncludeSchema))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'include_schema' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	const int32 Limit = FMath::Clamp(static_cast<int32>(LimitValue), 1, 50);
+	const FString QueryNormalized = NormalizeFindText(Query);
+	const TArray<FString> QueryTokens = TokenizeFindText(Query, true);
+	const TArray<FString> OriginalQueryTokens = TokenizeFindText(Query, false);
+
+	struct FFindMatch
+	{
+		FMonolithActionInfo Info;
+		int32 Score = 0;
+		FString Reason;
+		TArray<FString> MatchedTokens;
+	};
+
+	TArray<FFindMatch> Matches;
+	const TArray<FMonolithActionInfo> Actions = NamespaceFilter.IsEmpty()
+		? FMonolithToolRegistry::Get().GetAllActions()
+		: FMonolithToolRegistry::Get().GetActions(NamespaceFilter);
+
+	for (const FMonolithActionInfo& Info : Actions)
+	{
+		const FString ActionId = Info.Namespace + TEXT(".") + Info.Action;
+		const FString ActionIdNormalized = NormalizeFindText(ActionId);
+		const FString ActionNormalized = NormalizeFindText(Info.Action);
+		const FString NamespaceNormalized = NormalizeFindText(Info.Namespace);
+		const FString CategoryNormalized = NormalizeFindText(Info.Category);
+		const FString DescriptionNormalized = NormalizeFindText(Info.Description);
+		const FString MetadataNormalized = NormalizeFindText(BuildFindSearchMetadataText(Info));
+		const FString SchemaNormalized = NormalizeFindText(BuildFindSchemaText(Info.ParamSchema));
+		const FString SearchText = FString::Printf(
+			TEXT("%s %s %s %s %s"),
+			*ActionIdNormalized,
+			*CategoryNormalized,
+			*DescriptionNormalized,
+			*MetadataNormalized,
+			*SchemaNormalized);
+		const TArray<FString> ActionTokens = TokenizeFindText(Info.Action, false);
+		const TArray<FString> NamespaceTokens = TokenizeFindText(Info.Namespace, false);
+		const TArray<FString> CategoryTokens = TokenizeFindText(Info.Category, false);
+		const TArray<FString> DescriptionTokens = TokenizeFindText(Info.Description, false);
+		const TArray<FString> MetadataTokens = TokenizeFindText(MetadataNormalized, false);
+		const TArray<FString> SchemaTokens = TokenizeFindText(SchemaNormalized, false);
+
+		int32 Score = 0;
+		TArray<FString> Reasons;
+		TSet<FString> MatchedTokens;
+
+		if (!QueryNormalized.IsEmpty())
+		{
+			if (ActionIdNormalized == QueryNormalized)
+			{
+				Score += 220;
+				Reasons.Add(TEXT("action_id_exact"));
+			}
+			else if (ActionIdNormalized.Contains(QueryNormalized))
+			{
+				Score += 150;
+				Reasons.Add(TEXT("action_id_phrase"));
+			}
+
+			if (ActionNormalized == QueryNormalized)
+			{
+				Score += 180;
+				Reasons.Add(TEXT("action_exact"));
+			}
+			else if (ActionNormalized.Contains(QueryNormalized))
+			{
+				Score += 120;
+				Reasons.Add(TEXT("action_phrase"));
+			}
+
+			if (NamespaceNormalized == QueryNormalized)
+			{
+				Score += 90;
+				Reasons.Add(TEXT("namespace_exact"));
+			}
+
+			if (!CategoryNormalized.IsEmpty() && CategoryNormalized.Contains(QueryNormalized))
+			{
+				Score += 55;
+				Reasons.Add(TEXT("category_phrase"));
+			}
+		}
+
+		Score += ScoreFindTokens(QueryTokens, NamespaceTokens, NamespaceNormalized, 35, 22, 10, 6, TEXT("namespace_tokens"), Reasons, MatchedTokens);
+		Score += ScoreFindTokens(QueryTokens, ActionTokens, ActionNormalized, 45, 30, 16, 8, TEXT("action_tokens"), Reasons, MatchedTokens);
+		Score += ScoreFindTokens(QueryTokens, CategoryTokens, CategoryNormalized, 25, 16, 8, 4, TEXT("category_tokens"), Reasons, MatchedTokens);
+		Score += ScoreFindTokens(QueryTokens, DescriptionTokens, DescriptionNormalized, 10, 6, 4, 3, TEXT("description_tokens"), Reasons, MatchedTokens);
+		Score += ScoreFindTokens(QueryTokens, MetadataTokens, MetadataNormalized, 38, 24, 10, 8, TEXT("metadata_tokens"), Reasons, MatchedTokens);
+		Score += ScoreFindTokens(QueryTokens, SchemaTokens, SchemaNormalized, 16, 10, 4, 3, TEXT("schema_tokens"), Reasons, MatchedTokens);
+
+		const int32 OriginalTokenCount = OriginalQueryTokens.Num();
+		int32 MatchedOriginalTokenCount = 0;
+		for (const FString& Token : OriginalQueryTokens)
+		{
+			if (SearchText.Contains(Token))
+			{
+				++MatchedOriginalTokenCount;
+			}
+		}
+		if (OriginalTokenCount > 0 && MatchedOriginalTokenCount == OriginalTokenCount)
+		{
+			Score += 40 + (OriginalTokenCount * 8);
+			Reasons.Add(TEXT("all_query_tokens"));
+		}
+		else if (MatchedOriginalTokenCount > 1)
+		{
+			Score += MatchedOriginalTokenCount * 6;
+			Reasons.Add(TEXT("partial_query_tokens"));
+		}
+
+		if (Score > 0)
+		{
+			FFindMatch Match;
+			Match.Info = Info;
+			Match.Score = Score;
+			Match.Reason = Reasons.Num() > 0 ? FString::Join(Reasons, TEXT(",")) : TEXT("matched");
+			Match.MatchedTokens = MatchedTokens.Array();
+			Match.MatchedTokens.Sort();
+			Matches.Add(MoveTemp(Match));
+		}
+	}
+
+	Matches.Sort([](const FFindMatch& A, const FFindMatch& B)
+	{
+		if (A.Score != B.Score)
+		{
+			return A.Score > B.Score;
+		}
+		return (A.Info.Namespace + TEXT(".") + A.Info.Action) < (B.Info.Namespace + TEXT(".") + B.Info.Action);
+	});
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	const int32 Count = FMath::Min(Limit, Matches.Num());
+	Rows.Reserve(Count);
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		const FFindMatch& Match = Matches[Index];
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("action_id"), Match.Info.Namespace + TEXT(".") + Match.Info.Action);
+		Row->SetStringField(TEXT("namespace"), Match.Info.Namespace);
+		Row->SetStringField(TEXT("action"), Match.Info.Action);
+		Row->SetStringField(TEXT("description"), Match.Info.Description);
+		Row->SetStringField(TEXT("mcp_tool"), Match.Info.Namespace == TEXT("monolith") ? FString::Printf(TEXT("monolith_%s"), *Match.Info.Action) : Match.Info.Namespace + TEXT("_query"));
+		Row->SetNumberField(TEXT("score"), Match.Score);
+		Row->SetStringField(TEXT("reason"), Match.Reason);
+		Row->SetStringField(TEXT("status"), TEXT("available"));
+		Row->SetArrayField(TEXT("matched_tokens"), StringArrayToJson(Match.MatchedTokens));
+		if (!Match.Info.Category.IsEmpty())
+		{
+			Row->SetStringField(TEXT("category"), Match.Info.Category);
+		}
+		if (bIncludeSchema && Match.Info.ParamSchema.IsValid())
+		{
+			Row->SetObjectField(TEXT("params"), Match.Info.ParamSchema);
+		}
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("status"), TEXT("ok"));
+	Result->SetStringField(TEXT("query"), Query);
+	Result->SetStringField(TEXT("scoring_version"), TEXT("weighted_tokens_v3"));
+	if (!NamespaceFilter.IsEmpty())
+	{
+		Result->SetStringField(TEXT("namespace"), NamespaceFilter);
+	}
+	Result->SetNumberField(TEXT("count"), Rows.Num());
+	Result->SetBoolField(TEXT("truncated"), Matches.Num() > Rows.Num());
+	Result->SetArrayField(TEXT("matches"), Rows);
+	TArray<TSharedPtr<FJsonValue>> NextActions;
+	NextActions.Add(MakeShared<FJsonValueString>(TEXT("monolith.discover")));
+	Result->SetArrayField(TEXT("next_actions"), NextActions);
+	return FMonolithActionResult::Success(Result);
 }
 
 FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonObject>& Params)
@@ -669,6 +1312,23 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			if (!ActionInfo.Category.IsEmpty())
 			{
 				ActionObj->SetStringField(TEXT("category"), ActionInfo.Category);
+			}
+			if (!ActionInfo.SearchMetadata.IsEmpty())
+			{
+				TSharedPtr<FJsonObject> SearchObj = MakeShared<FJsonObject>();
+				if (ActionInfo.SearchMetadata.Keywords.Num() > 0)
+				{
+					SearchObj->SetArrayField(TEXT("keywords"), StringArrayToJson(ActionInfo.SearchMetadata.Keywords));
+				}
+				if (ActionInfo.SearchMetadata.Aliases.Num() > 0)
+				{
+					SearchObj->SetArrayField(TEXT("aliases"), StringArrayToJson(ActionInfo.SearchMetadata.Aliases));
+				}
+				if (ActionInfo.SearchMetadata.Examples.Num() > 0)
+				{
+					SearchObj->SetArrayField(TEXT("examples"), StringArrayToJson(ActionInfo.SearchMetadata.Examples));
+				}
+				ActionObj->SetObjectField(TEXT("search_metadata"), SearchObj);
 			}
 			if (ActionInfo.ParamSchema.IsValid())
 			{

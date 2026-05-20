@@ -2,6 +2,7 @@
 #include "Actions/MonolithUIEffectActions.h"
 
 // Monolith registry.
+#include "MonolithParamSchema.h"
 #include "MonolithToolRegistry.h"
 
 // JSON.
@@ -1716,7 +1717,14 @@ void MonolithUI::FEffectSurfaceActions::Register(FMonolithToolRegistry& Registry
              "JSON paths Effect.Shape.CornerRadii / Effect.Shape.Smoothness; ORs RoundedCorners into "
              "Effect.FeatureFlags. Params: asset_path, widget_name, corner_radii=[TL,TR,BR,BL], "
              "smoothness?, compile?."),
-        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetCorners));
+        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetCorners),
+        FParamSchemaBuilder()
+            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("EffectSurface widget name"))
+            .Required(TEXT("corner_radii"), TEXT("array"), TEXT("Corner radii [TL,TR,BR,BL]"))
+            .Optional(TEXT("smoothness"), TEXT("number"), TEXT("Corner smoothing amount"))
+            .Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile after applying changes"), TEXT("true"))
+            .Build());
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("set_effect_surface_fill"),
@@ -1724,48 +1732,103 @@ void MonolithUI::FEffectSurfaceActions::Register(FMonolithToolRegistry& Registry
              "fill-mode bit into Effect.FeatureFlags. Params: asset_path, widget_name, mode (solid|linear|"
              "radial), color?, stops? (array of {position,color}), angle?, radial_center? ([x,y] or "
              "{x,y}), compile?."),
-        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetFill));
+        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetFill),
+        FParamSchemaBuilder()
+            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("EffectSurface widget name"))
+            .Required(TEXT("mode"), TEXT("string"), TEXT("Fill mode: solid, linear, or radial"))
+            .Optional(TEXT("color"), TEXT("string"), TEXT("Solid fill color"))
+            .Optional(TEXT("stops"), TEXT("array"), TEXT("Gradient stops with position and color"))
+            .Optional(TEXT("angle"), TEXT("number"), TEXT("Linear gradient angle"))
+            .Optional(TEXT("radial_center"), TEXT("array"), TEXT("Radial center [x,y] or object"))
+            .Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile after applying changes"), TEXT("true"))
+            .Build());
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("set_effect_surface_border"),
         TEXT("Set EffectSurface border (width + colour + offset + optional glow halo). ORs Border into "
              "Effect.FeatureFlags. Params: asset_path, widget_name, width, color?, offset?, glow?, "
              "glow_color?, compile?."),
-        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetBorder));
+        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetBorder),
+        FParamSchemaBuilder()
+            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("EffectSurface widget name"))
+            .Required(TEXT("width"), TEXT("number"), TEXT("Border width"))
+            .Optional(TEXT("color"), TEXT("string"), TEXT("Border color"))
+            .Optional(TEXT("offset"), TEXT("number"), TEXT("Border offset"))
+            .Optional(TEXT("glow"), TEXT("number"), TEXT("Glow halo amount"))
+            .Optional(TEXT("glow_color"), TEXT("string"), TEXT("Glow color"))
+            .Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile after applying changes"), TEXT("true"))
+            .Build());
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("set_effect_surface_dropShadow"),
         TEXT("Set EffectSurface drop-shadow stack (CSS-style layered list, capped at 4). ORs DropShadow "
              "into Effect.FeatureFlags only when the layer list is non-empty. Params: asset_path, "
              "widget_name, layers=[{offset:[x,y], blur, spread, color}, ...], compile?."),
-        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetDropShadow));
+        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetDropShadow),
+        FParamSchemaBuilder()
+            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("EffectSurface widget name"))
+            .Required(TEXT("layers"), TEXT("array"), TEXT("Drop-shadow layers with offset, blur, spread, and color"))
+            .Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile after applying changes"), TEXT("true"))
+            .Build());
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("set_effect_surface_innerShadow"),
         TEXT("Set EffectSurface inner-shadow stack (CSS-style layered list, capped at 4). ORs InnerShadow "
              "into Effect.FeatureFlags only when the layer list is non-empty. Params: asset_path, "
              "widget_name, layers=[{offset:[x,y], blur, spread, color}, ...], compile?."),
-        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetInnerShadow));
+        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetInnerShadow),
+        FParamSchemaBuilder()
+            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("EffectSurface widget name"))
+            .Required(TEXT("layers"), TEXT("array"), TEXT("Inner-shadow layers with offset, blur, spread, and color"))
+            .Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile after applying changes"), TEXT("true"))
+            .Build());
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("set_effect_surface_glow"),
         TEXT("Set EffectSurface standalone glow halo. ORs Glow into Effect.FeatureFlags. Params: "
              "asset_path, widget_name, radius, color?, intensity?, inner_outer_mix?, compile?."),
-        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetGlow));
+        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetGlow),
+        FParamSchemaBuilder()
+            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("EffectSurface widget name"))
+            .Required(TEXT("radius"), TEXT("number"), TEXT("Glow radius"))
+            .Optional(TEXT("color"), TEXT("string"), TEXT("Glow color"))
+            .Optional(TEXT("intensity"), TEXT("number"), TEXT("Glow intensity"))
+            .Optional(TEXT("inner_outer_mix"), TEXT("number"), TEXT("Inner/outer glow mix"))
+            .Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile after applying changes"), TEXT("true"))
+            .Build());
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("set_effect_surface_filter"),
         TEXT("Set EffectSurface CSS-style filter (saturation/brightness/contrast; identity = 1.0). At "
              "least one field required. ORs Filter into Effect.FeatureFlags. Params: asset_path, "
              "widget_name, saturation?, brightness?, contrast?, compile?."),
-        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetFilter));
+        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetFilter),
+        FParamSchemaBuilder()
+            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("EffectSurface widget name"))
+            .Optional(TEXT("saturation"), TEXT("number"), TEXT("Filter saturation"))
+            .Optional(TEXT("brightness"), TEXT("number"), TEXT("Filter brightness"))
+            .Optional(TEXT("contrast"), TEXT("number"), TEXT("Filter contrast"))
+            .Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile after applying changes"), TEXT("true"))
+            .Build());
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("set_effect_surface_backdropBlur"),
         TEXT("Set EffectSurface backdrop-blur strength (slate units). 0 disables (skips bit-flip). When "
              "strength > 0 the widget wraps its tree in SBackgroundBlur on next RebuildWidget. Params: "
              "asset_path, widget_name, strength, compile?."),
-        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetBackdropBlur));
+        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetBackdropBlur),
+        FParamSchemaBuilder()
+            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("EffectSurface widget name"))
+            .Required(TEXT("strength"), TEXT("number"), TEXT("Backdrop blur strength"))
+            .Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile after applying changes"), TEXT("true"))
+            .Build());
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("set_effect_surface_insetHighlight"),
@@ -1773,7 +1836,17 @@ void MonolithUI::FEffectSurfaceActions::Register(FMonolithToolRegistry& Registry
              "InsetHighlight into Effect.FeatureFlags. Params: asset_path, widget_name, offset?, blur?, "
              "color?, intensity?, edge_mask? (EEffectInsetEdge bitfield: Top=1, Right=2, Bottom=4, "
              "Left=8), compile?."),
-        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetInsetHighlight));
+        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleSetInsetHighlight),
+        FParamSchemaBuilder()
+            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("EffectSurface widget name"))
+            .Optional(TEXT("offset"), TEXT("number"), TEXT("Inset highlight offset"))
+            .Optional(TEXT("blur"), TEXT("number"), TEXT("Inset highlight blur"))
+            .Optional(TEXT("color"), TEXT("string"), TEXT("Inset highlight color"))
+            .Optional(TEXT("intensity"), TEXT("number"), TEXT("Inset highlight intensity"))
+            .Optional(TEXT("edge_mask"), TEXT("integer"), TEXT("EEffectInsetEdge bitfield"))
+            .Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile after applying changes"), TEXT("true"))
+            .Build());
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("apply_effect_surface_preset"),
@@ -1782,5 +1855,12 @@ void MonolithUI::FEffectSurfaceActions::Register(FMonolithToolRegistry& Registry
              "FIRST so the MID is recreated against the preset's intended shader. Recognised preset "
              "names: rounded-rect, pill, circle, glass, glowing-button, neon. Params: asset_path, "
              "widget_name, preset_name, parent_material? (asset path), compile?."),
-        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleApplyPreset));
+        FMonolithActionHandler::CreateStatic(&FEffectSurfaceActions::HandleApplyPreset),
+        FParamSchemaBuilder()
+            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("EffectSurface widget name"))
+            .Required(TEXT("preset_name"), TEXT("string"), TEXT("Preset name"))
+            .Optional(TEXT("parent_material"), TEXT("string"), TEXT("Optional parent material asset path"))
+            .Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile after applying changes"), TEXT("true"))
+            .Build());
 }

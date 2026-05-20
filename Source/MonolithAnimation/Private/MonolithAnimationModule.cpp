@@ -22,6 +22,8 @@ void FMonolithAnimationModule::StartupModule()
 void FMonolithAnimationModule::ShutdownModule()
 {
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("animation"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("cloth"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("metahuman"));
 }
 
 #undef LOCTEXT_NAMESPACE

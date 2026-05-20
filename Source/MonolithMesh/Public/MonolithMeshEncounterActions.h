@@ -12,7 +12,7 @@
  * Dependencies: Phase 6 (horror analysis), Phase 15 (horror design),
  *               Phase 7 (lighting), Phase 8 (acoustics), Phase 9 (accessibility)
  */
-class FMonolithMeshEncounterActions
+class MONOLITHMESH_API FMonolithMeshEncounterActions
 {
 public:
 	/** Register all 8 encounter/horror-advanced actions with the tool registry */

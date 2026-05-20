@@ -2,6 +2,7 @@
 #include "Actions/Hoisted/RoundedCornerActions.h"
 
 // Monolith registry
+#include "MonolithParamSchema.h"
 #include "MonolithToolRegistry.h"
 
 // JSON
@@ -341,5 +342,14 @@ void MonolithUI::FRoundedCornerActions::Register(FMonolithToolRegistry& Registry
              "corner_radii (array [TL,TR,BR,BL], optional), outline_color (hex or 'R,G,B[,A]', optional), "
              "outline_width (number, optional), fill_color (hex or 'R,G,B[,A]', optional), "
              "compile (bool, optional, default true). At least one optional field is required."),
-        FMonolithActionHandler::CreateStatic(&MonolithUI::FRoundedCornerActions::HandleSetRoundedCorners));
+        FMonolithActionHandler::CreateStatic(&MonolithUI::FRoundedCornerActions::HandleSetRoundedCorners),
+        FParamSchemaBuilder()
+            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("Target widget name"))
+            .Optional(TEXT("corner_radii"), TEXT("array"), TEXT("Corner radii [TL,TR,BR,BL]"))
+            .Optional(TEXT("outline_color"), TEXT("string"), TEXT("Outline color as hex or R,G,B[,A]"))
+            .Optional(TEXT("outline_width"), TEXT("number"), TEXT("Outline width"))
+            .Optional(TEXT("fill_color"), TEXT("string"), TEXT("Fill color as hex or R,G,B[,A]"))
+            .Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile after applying changes"), TEXT("true"))
+            .Build());
 }

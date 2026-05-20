@@ -11,7 +11,6 @@
 #include "MonolithSettings.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
-#include "MonolithParamSchema.h"   // Phase G: dump_style_cache_stats schema
 #include "MonolithUICommon.h"
 #include "Editor.h"
 #include "Misc/CoreDelegates.h"
@@ -42,6 +41,7 @@
 
 #if WITH_COMMONUI
 #include "CommonUI/MonolithCommonUIActions.h"
+#include "Style/MonolithUIStyleDiagnosticsActions.h"
 #include "Style/MonolithUIStyleService.h"   // Phase G: cache stats + shutdown
 #endif
 
@@ -94,35 +94,7 @@ void FMonolithUIModule::StartupModule()
 
 #if WITH_COMMONUI
     FMonolithCommonUIActions::RegisterAll(Registry);
-
-    // Phase G — diagnostic action that exposes the style service cache state.
-    // Lives here (in the module file) rather than in a per-feature actions
-    // file because it has zero dependencies beyond the service singleton, and
-    // a one-action module-level register keeps Phase G's footprint minimal.
-    Registry.RegisterAction(
-        TEXT("ui"), TEXT("dump_style_cache_stats"),
-        TEXT("Return live FMonolithUIStyleService cache stats: cache_size, hits, misses, evictions, "
-             "and per-type counts (Button/Text/Border). Diagnostic for the Phase G dedup work."),
-        FMonolithActionHandler::CreateLambda([](const TSharedPtr<FJsonObject>& /*Params*/) -> FMonolithActionResult
-        {
-            const FUIStyleCacheStats Stats = FMonolithUIStyleService::Get().GetStats();
-
-            TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-            Result->SetNumberField(TEXT("cache_size"),  Stats.CacheSize);
-            Result->SetNumberField(TEXT("hits"),        static_cast<double>(Stats.Hits));
-            Result->SetNumberField(TEXT("misses"),      static_cast<double>(Stats.Misses));
-            Result->SetNumberField(TEXT("evictions"),   static_cast<double>(Stats.Evictions));
-
-            TSharedPtr<FJsonObject> ByType = MakeShared<FJsonObject>();
-            ByType->SetNumberField(TEXT("Button"), Stats.ButtonCount);
-            ByType->SetNumberField(TEXT("Text"),   Stats.TextCount);
-            ByType->SetNumberField(TEXT("Border"), Stats.BorderCount);
-            Result->SetObjectField(TEXT("by_type"), ByType);
-
-            return FMonolithActionResult::Success(Result);
-        }),
-        FParamSchemaBuilder().Build(),
-        TEXT("Diagnostics"));
+    MonolithUI::FStyleDiagnosticsActions::Register(Registry);
 #endif
 
     // OnPostEngineInit re-scan: editor subsystems initialise AFTER OnPostEngineInit
@@ -163,7 +135,7 @@ void FMonolithUIModule::ShutdownModule()
     }
 
     FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("ui"));
-    FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("generate"));
+    FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("imagegen"));
 
 #if WITH_COMMONUI
     // Phase G — release cached UClass strong-refs before the module DLL

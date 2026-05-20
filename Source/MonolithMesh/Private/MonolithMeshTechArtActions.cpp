@@ -377,65 +377,6 @@ void FMonolithMeshTechArtActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Optional(TEXT("material_import"), TEXT("string"), TEXT("Material import: create_new, find_existing, skip"), TEXT("create_new"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("mesh"), TEXT("list_model_generation_providers"),
-		TEXT("List Monolith-native generated-model provider boundaries. Remote generation is caller-owned; Monolith imports local artifacts."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::ListModelGenerationProviders),
-		FParamSchemaBuilder().Build());
-
-	Registry.RegisterAction(TEXT("mesh"), TEXT("submit_generated_model_job"),
-		TEXT("Submit a local deterministic text-to-StaticMesh placeholder job. Writes a completed OBJ job under Project/Saved/Monolith/GeneratedModels."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::SubmitGeneratedModelJob),
-		FParamSchemaBuilder()
-			.Required(TEXT("prompt"), TEXT("string"), TEXT("Text prompt. Stored only as prompt_hash in job/provenance data."))
-			.Optional(TEXT("provider"), TEXT("string"), TEXT("Only local_deterministic is supported."), TEXT("local_deterministic"))
-			.Optional(TEXT("model"), TEXT("string"), TEXT("Only monolith/local-obj-v1 is supported."), TEXT("monolith/local-obj-v1"))
-			.Optional(TEXT("asset_name"), TEXT("string"), TEXT("Optional suggested mesh asset name for later import."))
-			.Build());
-
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_generated_model_job"),
-		TEXT("Read a generated model job manifest by job_id."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::GetGeneratedModelJob),
-		FParamSchemaBuilder()
-			.Required(TEXT("job_id"), TEXT("string"), TEXT("Generated model job id"))
-			.Build());
-
-	Registry.RegisterAction(TEXT("mesh"), TEXT("cancel_generated_model_job"),
-		TEXT("Cancel a generated model job if it has not already completed. Local deterministic jobs complete immediately."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::CancelGeneratedModelJob),
-		FParamSchemaBuilder()
-			.Required(TEXT("job_id"), TEXT("string"), TEXT("Generated model job id"))
-			.Build());
-
-	Registry.RegisterAction(TEXT("mesh"), TEXT("download_generated_model_result"),
-		TEXT("Resolve the local artifact path for a completed generated model job. No network download is performed."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::DownloadGeneratedModelResult),
-		FParamSchemaBuilder()
-			.Required(TEXT("job_id"), TEXT("string"), TEXT("Generated model job id"))
-			.Build());
-
-	Registry.RegisterAction(TEXT("mesh"), TEXT("import_generated_model"),
-		TEXT("Import a completed generated model job or caller-supplied FBX/OBJ/GLB/GLTF file as StaticMesh assets and attach redacted provenance."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::ImportGeneratedModel),
-		FParamSchemaBuilder()
-			.Optional(TEXT("job_id"), TEXT("string"), TEXT("Completed local generated model job id"))
-			.Optional(TEXT("file_path"), TEXT("string"), TEXT("Caller-supplied local FBX/OBJ/GLB/GLTF file. Used when job_id is absent."))
-			.Required(TEXT("destination"), TEXT("string"), TEXT("Destination content folder, e.g. /Game/GeneratedModels"))
-			.Optional(TEXT("provider"), TEXT("string"), TEXT("Provider id for caller-supplied files."), TEXT("external"))
-			.Optional(TEXT("model"), TEXT("string"), TEXT("Model id for caller-supplied files."), TEXT("unknown"))
-			.Optional(TEXT("prompt"), TEXT("string"), TEXT("Prompt for caller-supplied files. Stored only as hash."))
-			.Optional(TEXT("source_image_hash"), TEXT("string"), TEXT("Hash of external reference image input, if any."))
-			.Optional(TEXT("replace_existing"), TEXT("bool"), TEXT("Forwarded to mesh.import_mesh"), TEXT("false"))
-			.Optional(TEXT("material_import"), TEXT("string"), TEXT("create_new, find_existing, or skip"), TEXT("create_new"))
-			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported StaticMesh packages after provenance is written"), TEXT("true"))
-			.Build());
-
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_generated_model_provenance"),
-		TEXT("Read Monolith generation provenance metadata from a StaticMesh asset."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::GetGeneratedModelProvenance),
-		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StaticMesh package path or object path"))
-			.Build());
-
 	// 16.1b export_mesh
 	Registry.RegisterAction(TEXT("mesh"), TEXT("export_mesh"),
 		TEXT("Export a UStaticMesh or USkeletalMesh asset to FBX on disk via UAssetExportTask + the engine's built-in FBX exporter."),
@@ -511,6 +452,68 @@ void FMonolithMeshTechArtActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Optional(TEXT("region_min"), TEXT("array"), TEXT("Region min corner [x, y, z]"))
 			.Optional(TEXT("region_max"), TEXT("array"), TEXT("Region max corner [x, y, z]"))
 			.Optional(TEXT("target_density"), TEXT("number"), TEXT("Target lightmap texels/cm"), TEXT("4.0"))
+			.Build());
+}
+
+void FMonolithMeshTechArtActions::RegisterModelGenActions(FMonolithToolRegistry& Registry)
+{
+	Registry.RegisterAction(TEXT("modelgen"), TEXT("list_model_generation_providers"),
+		TEXT("List Monolith-native generated-model provider boundaries. Remote generation is caller-owned; Monolith imports local artifacts."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::ListModelGenerationProviders),
+		FParamSchemaBuilder().Build());
+
+	Registry.RegisterAction(TEXT("modelgen"), TEXT("submit_generated_model_job"),
+		TEXT("Submit a local deterministic text-to-StaticMesh placeholder job. Writes a completed OBJ job under Project/Saved/Monolith/GeneratedModels."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::SubmitGeneratedModelJob),
+		FParamSchemaBuilder()
+			.Required(TEXT("prompt"), TEXT("string"), TEXT("Text prompt. Stored only as prompt_hash in job/provenance data."))
+			.Optional(TEXT("provider"), TEXT("string"), TEXT("Only local_deterministic is supported."), TEXT("local_deterministic"))
+			.Optional(TEXT("model"), TEXT("string"), TEXT("Only monolith/local-obj-v1 is supported."), TEXT("monolith/local-obj-v1"))
+			.Optional(TEXT("asset_name"), TEXT("string"), TEXT("Optional suggested mesh asset name for later import."))
+			.Build());
+
+	Registry.RegisterAction(TEXT("modelgen"), TEXT("get_generated_model_job"),
+		TEXT("Read a generated model job manifest by job_id."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::GetGeneratedModelJob),
+		FParamSchemaBuilder()
+			.Required(TEXT("job_id"), TEXT("string"), TEXT("Generated model job id"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("modelgen"), TEXT("cancel_generated_model_job"),
+		TEXT("Cancel a generated model job if it has not already completed. Local deterministic jobs complete immediately."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::CancelGeneratedModelJob),
+		FParamSchemaBuilder()
+			.Required(TEXT("job_id"), TEXT("string"), TEXT("Generated model job id"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("modelgen"), TEXT("download_generated_model_result"),
+		TEXT("Resolve the local artifact path for a completed generated model job. No network download is performed."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::DownloadGeneratedModelResult),
+		FParamSchemaBuilder()
+			.Required(TEXT("job_id"), TEXT("string"), TEXT("Generated model job id"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("modelgen"), TEXT("import_generated_model"),
+		TEXT("Import a completed generated model job or caller-supplied FBX/OBJ/GLB/GLTF file as StaticMesh assets and attach redacted provenance."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::ImportGeneratedModel),
+		FParamSchemaBuilder()
+			.Optional(TEXT("job_id"), TEXT("string"), TEXT("Completed local generated model job id"))
+			.Optional(TEXT("file_path"), TEXT("string"), TEXT("Caller-supplied local FBX/OBJ/GLB/GLTF file. Used when job_id is absent."))
+			.Required(TEXT("destination"), TEXT("string"), TEXT("Destination content folder, e.g. /Game/GeneratedModels"))
+			.Optional(TEXT("provider"), TEXT("string"), TEXT("Provider id for caller-supplied files."), TEXT("external"))
+			.Optional(TEXT("model"), TEXT("string"), TEXT("Model id for caller-supplied files."), TEXT("unknown"))
+			.Optional(TEXT("prompt"), TEXT("string"), TEXT("Prompt for caller-supplied files. Stored only as hash."))
+			.Optional(TEXT("source_image_hash"), TEXT("string"), TEXT("Hash of external reference image input, if any."))
+			.Optional(TEXT("replace_existing"), TEXT("bool"), TEXT("Forwarded to mesh.import_mesh"), TEXT("false"))
+			.Optional(TEXT("material_import"), TEXT("string"), TEXT("create_new, find_existing, or skip"), TEXT("create_new"))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported StaticMesh packages after provenance is written"), TEXT("true"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("modelgen"), TEXT("get_generated_model_provenance"),
+		TEXT("Read Monolith generation provenance metadata from a StaticMesh asset."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::GetGeneratedModelProvenance),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StaticMesh package path or object path"))
 			.Build());
 }
 
@@ -666,7 +669,7 @@ FMonolithActionResult FMonolithMeshTechArtActions::ListModelGenerationProviders(
 	External->SetStringField(TEXT("model"), TEXT("caller_supplied"));
 	External->SetBoolField(TEXT("available"), true);
 	External->SetBoolField(TEXT("network_required"), false);
-	External->SetStringField(TEXT("boundary_action"), TEXT("mesh.import_generated_model"));
+	External->SetStringField(TEXT("boundary_action"), TEXT("modelgen.import_generated_model"));
 	External->SetStringField(TEXT("secret_policy"), TEXT("Monolith does not read or store provider credentials for generated model imports."));
 	MonolithMeshGeneratedModel::AddStringArray(External, TEXT("formats"), { TEXT("fbx"), TEXT("obj"), TEXT("glb"), TEXT("gltf") });
 	Providers.Add(MakeShared<FJsonValueObject>(External));
@@ -705,7 +708,7 @@ FMonolithActionResult FMonolithMeshTechArtActions::SubmitGeneratedModelJob(const
 	if (Provider != TEXT("local_deterministic") || Model != TEXT("monolith/local-obj-v1"))
 	{
 		return FMonolithActionResult::Error(
-			TEXT("Only provider='local_deterministic' and model='monolith/local-obj-v1' are supported for Monolith-native job submission. Use mesh.import_generated_model for external artifacts."),
+			TEXT("Only provider='local_deterministic' and model='monolith/local-obj-v1' are supported for Monolith-native job submission. Use modelgen.import_generated_model for external artifacts."),
 			-32602);
 	}
 

@@ -89,6 +89,60 @@ namespace
 		return StartsWithAnyActionVerb(Action, ReadVerbs);
 	}
 
+	bool JsonValueMatchesSchemaType(const TSharedPtr<FJsonValue>& Value, const FString& Type)
+	{
+		if (!Value.IsValid())
+		{
+			return false;
+		}
+
+		if (Type == TEXT("string"))
+		{
+			return Value->Type == EJson::String;
+		}
+		if (Type == TEXT("number"))
+		{
+			return Value->Type == EJson::Number;
+		}
+		if (Type == TEXT("integer"))
+		{
+			double Number = 0.0;
+			return Value->Type == EJson::Number
+				&& Value->TryGetNumber(Number)
+				&& FMath::IsNearlyEqual(Number, FMath::RoundToDouble(Number));
+		}
+		if (Type == TEXT("boolean") || Type == TEXT("bool"))
+		{
+			return Value->Type == EJson::Boolean;
+		}
+		if (Type == TEXT("object"))
+		{
+			return Value->Type == EJson::Object;
+		}
+		if (Type == TEXT("array"))
+		{
+			return Value->Type == EJson::Array;
+		}
+
+		return true;
+	}
+
+	bool JsonValueMatchesSchemaTypes(const TSharedPtr<FJsonValue>& Value, const FString& TypeSpec)
+	{
+		TArray<FString> Types;
+		TypeSpec.ParseIntoArray(Types, TEXT("|"), true);
+		for (FString Type : Types)
+		{
+			Type.TrimStartAndEndInline();
+			Type.ToLowerInline();
+			if (JsonValueMatchesSchemaType(Value, Type))
+			{
+				return true;
+			}
+		}
+		return Types.Num() == 0;
+	}
+
 	FMonolithActionExecutionPolicy MakeInferredMutationPolicy()
 	{
 		FMonolithActionExecutionPolicy Policy;
@@ -218,6 +272,101 @@ TArray<FString> FMonolithParamSchema::FindUnknownKeys(
 	return Unknown;
 }
 
+bool FMonolithParamSchema::ValidateTypedParams(
+	const TSharedPtr<FJsonObject>& Schema,
+	const TSharedPtr<FJsonObject>& Params,
+	TArray<FString>& OutErrors)
+{
+	OutErrors.Reset();
+	if (!Schema.IsValid() || !Params.IsValid())
+	{
+		return true;
+	}
+
+	bool bValidateTypes = false;
+	if (!Schema->TryGetBoolField(TEXT("_validate_types"), bValidateTypes) || !bValidateTypes)
+	{
+		return true;
+	}
+
+	for (const auto& Pair : Schema->Values)
+	{
+		if (Pair.Key.StartsWith(TEXT("_")))
+		{
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject>* ParamDef = nullptr;
+		if (!Pair.Value->TryGetObject(ParamDef) || !ParamDef)
+		{
+			continue;
+		}
+
+		TSharedPtr<FJsonValue> ParamValue = Params->TryGetField(Pair.Key);
+		if (!ParamValue.IsValid())
+		{
+			continue;
+		}
+
+		FString TypeSpec;
+		if ((*ParamDef)->TryGetStringField(TEXT("type"), TypeSpec)
+			&& !JsonValueMatchesSchemaTypes(ParamValue, TypeSpec))
+		{
+			OutErrors.Add(FString::Printf(TEXT("Invalid param '%s': expected %s."), *Pair.Key, *TypeSpec));
+			continue;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* EnumValues = nullptr;
+		if ((*ParamDef)->TryGetArrayField(TEXT("enum"), EnumValues) && EnumValues)
+		{
+			FString ActualValue;
+			if (ParamValue->TryGetString(ActualValue))
+			{
+				TArray<FString> AllowedValues;
+				for (const TSharedPtr<FJsonValue>& EnumValue : *EnumValues)
+				{
+					FString Allowed;
+					if (EnumValue.IsValid() && EnumValue->TryGetString(Allowed))
+					{
+						AllowedValues.Add(Allowed);
+					}
+				}
+
+				if (AllowedValues.Num() > 0 && !AllowedValues.Contains(ActualValue))
+				{
+					OutErrors.Add(FString::Printf(
+						TEXT("Invalid param '%s': value '%s' must be one of [%s]."),
+						*Pair.Key,
+						*ActualValue,
+						*FString::Join(AllowedValues, TEXT(", "))));
+				}
+			}
+		}
+
+		double NumberValue = 0.0;
+		const bool bHasNumber = ParamValue->TryGetNumber(NumberValue);
+		double MinValue = 0.0;
+		if (bHasNumber && (*ParamDef)->TryGetNumberField(TEXT("minimum"), MinValue) && NumberValue < MinValue)
+		{
+			OutErrors.Add(FString::Printf(
+				TEXT("Invalid param '%s': value must be >= %s."),
+				*Pair.Key,
+				*FString::SanitizeFloat(MinValue)));
+		}
+
+		double MaxValue = 0.0;
+		if (bHasNumber && (*ParamDef)->TryGetNumberField(TEXT("maximum"), MaxValue) && NumberValue > MaxValue)
+		{
+			OutErrors.Add(FString::Printf(
+				TEXT("Invalid param '%s': value must be <= %s."),
+				*Pair.Key,
+				*FString::SanitizeFloat(MaxValue)));
+		}
+	}
+
+	return OutErrors.Num() == 0;
+}
+
 bool FMonolithParamSchema::IsStrictParamsEnabled()
 {
 	const FString Val = FPlatformMisc::GetEnvironmentVariable(TEXT("STRICT_PARAMS"));
@@ -296,7 +445,8 @@ void FMonolithToolRegistry::RegisterAction(
 	const FMonolithActionHandler& Handler,
 	const TSharedPtr<FJsonObject>& ParamSchema,
 	const FString& Category,
-	const FMonolithActionExecutionPolicy& ExecutionPolicy)
+	const FMonolithActionExecutionPolicy& ExecutionPolicy,
+	const FMonolithActionSearchMetadata& SearchMetadata)
 {
 	FScopeLock Lock(&RegistryLock);
 
@@ -313,6 +463,7 @@ void FMonolithToolRegistry::RegisterAction(
 	RegAction.Info.Description = Description;
 	RegAction.Info.Category = Category;
 	RegAction.Info.ExecutionPolicy = InferExecutionPolicy(Namespace, Action, ExecutionPolicy);
+	RegAction.Info.SearchMetadata = SearchMetadata;
 	RegAction.Info.ParamSchema = ParamSchema;
 	RegAction.Handler = Handler;
 
@@ -540,6 +691,29 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 					R.ErrorMessage);
 				return R;
 			}
+		}
+	}
+
+	// Typed/range/enum validation is opt-in per schema via _validate_types.
+	if (ActionInfo.ParamSchema.IsValid())
+	{
+		TArray<FString> ValidationErrors;
+		if (!FMonolithParamSchema::ValidateTypedParams(ActionInfo.ParamSchema, EffectiveParams, ValidationErrors))
+		{
+			FMonolithActionResult R = FMonolithActionResult::Error(
+				FString::Printf(TEXT("Invalid param(s) for action '%s:%s': %s"),
+					*Namespace,
+					*Action,
+					*FString::Join(ValidationErrors, TEXT("; "))),
+				FMonolithJsonUtils::ErrInvalidParams);
+			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+				TEXT(""),
+				Namespace,
+				Action,
+				TEXT("malformed_dispatch"),
+				R.ErrorCode,
+				R.ErrorMessage);
+			return R;
 		}
 	}
 

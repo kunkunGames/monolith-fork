@@ -24,7 +24,7 @@
  *   export_genre_preset           — Bundle everything into single JSON
  *   import_genre_preset           — Load a genre preset pack with merge modes
  */
-class FMonolithMeshPresetActions
+class MONOLITHMESH_API FMonolithMeshPresetActions
 {
 public:
 	/** Register all 8 preset actions with the tool registry */

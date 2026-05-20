@@ -264,12 +264,12 @@ void FMonolithEditorMapActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("module_names"), TEXT("array"), TEXT("Optional array of module name strings. Omit to query all Monolith modules."))
 			.Build());
 
-	Registry.RegisterAction(TEXT("level"), TEXT("get_world_context"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("get_world_context"),
 		TEXT("Read the active editor world, persistent level, partitioning, actor count, and classic streaming capability."),
 		FMonolithActionHandler::CreateStatic(&HandleGetWorldContext),
 		FParamSchemaBuilder().Build());
 
-	Registry.RegisterAction(TEXT("level"), TEXT("list_layers"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("list_layers"),
 		TEXT("List actor layer names in the active editor world, with optional capped actor membership rows."),
 		FMonolithActionHandler::CreateStatic(&HandleListLayers),
 		FParamSchemaBuilder()
@@ -277,7 +277,7 @@ void FMonolithEditorMapActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("actor_limit"), TEXT("integer"), TEXT("Maximum actor rows per layer when include_actors=true."), TEXT("20"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("level"), TEXT("list_streaming_levels"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("list_streaming_levels"),
 		TEXT("List classic streaming levels for the active editor world and report World Partition capability context."),
 		FMonolithActionHandler::CreateStatic(&HandleListStreamingLevels),
 		FParamSchemaBuilder()

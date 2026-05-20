@@ -3,6 +3,7 @@
 
 // Monolith registry
 #include "MonolithPackagePathValidator.h"
+#include "MonolithParamSchema.h"
 #include "MonolithToolRegistry.h"
 
 // JSON
@@ -612,5 +613,14 @@ void MonolithUI::FShadowActions::Register(FMonolithToolRegistry& Registry)
              "shadow_mid_destination (string, optional -- if set, saves a UMaterialInstanceConstant per layer at /Game/... instead of transient MID), "
              "compile (bool, optional, default true). "
              "Fails with -32602 on malformed params or incompatible parent material; -32603 on tree/asset errors."),
-        FMonolithActionHandler::CreateStatic(&MonolithUI::FShadowActions::HandleApplyBoxShadow));
+        FMonolithActionHandler::CreateStatic(&MonolithUI::FShadowActions::HandleApplyBoxShadow),
+        FParamSchemaBuilder()
+            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("Target widget name"))
+            .Required(TEXT("shadow_material_path"), TEXT("string"), TEXT("Parent shadow material asset path"))
+            .Optional(TEXT("shadow"), TEXT("object"), TEXT("Single shadow layer {x,y,blur,spread,color,inset}"))
+            .Optional(TEXT("shadows"), TEXT("array"), TEXT("Shadow layer array, capped at 2"))
+            .Optional(TEXT("shadow_mid_destination"), TEXT("string"), TEXT("Optional saved MID destination path"))
+            .Optional(TEXT("compile"), TEXT("bool"), TEXT("Compile after applying changes"), TEXT("true"))
+            .Build());
 }

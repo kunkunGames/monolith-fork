@@ -8,7 +8,7 @@
  * Higher-order horror design composition that builds on Phase 6 horror analysis:
  * player path prediction, spawn evaluation, scare positioning, encounter pacing.
  */
-class FMonolithMeshHorrorDesignActions
+class MONOLITHMESH_API FMonolithMeshHorrorDesignActions
 {
 public:
 	/** Register all 4 horror intelligence actions with the tool registry */

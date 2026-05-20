@@ -121,21 +121,29 @@ void FMonolithToolProfileActions::RegisterAll()
 
 	Registry.RegisterAction(TEXT("monolith"), TEXT("list_tool_profiles"),
 		TEXT("List local Monolith tool-surface profiles. No provider credentials are included."),
-		FMonolithActionHandler::CreateStatic(&FMonolithToolProfileActions::HandleListToolProfiles));
+		FMonolithActionHandler::CreateStatic(&FMonolithToolProfileActions::HandleListToolProfiles),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Build());
 
 	Registry.RegisterAction(TEXT("monolith"), TEXT("get_tool_profile"),
 		TEXT("Get a Monolith tool profile definition."),
 		FMonolithActionHandler::CreateStatic(&FMonolithToolProfileActions::HandleGetToolProfile),
-		FParamSchemaBuilder().Required(TEXT("profile_id"), TEXT("string"), TEXT("Tool profile id")).Build());
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("profile_id"), TEXT("string"), TEXT("Tool profile id"))
+			.Build());
 
 	Registry.RegisterAction(TEXT("monolith"), TEXT("create_tool_profile"),
 		TEXT("Create a local Monolith tool profile without provider credentials."),
 		FMonolithActionHandler::CreateStatic(&FMonolithToolProfileActions::HandleCreateToolProfile),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("profile_id"), TEXT("string"), TEXT("New profile id"))
 			.Optional(TEXT("display_name"), TEXT("string"), TEXT("Display name"))
 			.Optional(TEXT("description"), TEXT("string"), TEXT("Profile description"))
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("denylist or allowlist"), TEXT("denylist"))
+			.Enum(TEXT("mode"), { TEXT("denylist"), TEXT("allowlist") })
 			.Optional(TEXT("custom_instructions"), TEXT("string"), TEXT("Optional profile guidance"))
 			.Optional(TEXT("enabled_namespaces"), TEXT("array"), TEXT("Allowlist namespace ids"))
 			.Optional(TEXT("enabled_actions"), TEXT("array"), TEXT("Allowlist action ids namespace.action"))
@@ -148,10 +156,12 @@ void FMonolithToolProfileActions::RegisterAll()
 		TEXT("Replace a local Monolith tool profile definition."),
 		FMonolithActionHandler::CreateStatic(&FMonolithToolProfileActions::HandleUpdateToolProfile),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("profile_id"), TEXT("string"), TEXT("Profile id"))
 			.Optional(TEXT("display_name"), TEXT("string"), TEXT("Display name"))
 			.Optional(TEXT("description"), TEXT("string"), TEXT("Profile description"))
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("denylist or allowlist"), TEXT("denylist"))
+			.Enum(TEXT("mode"), { TEXT("denylist"), TEXT("allowlist") })
 			.Optional(TEXT("custom_instructions"), TEXT("string"), TEXT("Optional profile guidance"))
 			.Optional(TEXT("enabled_namespaces"), TEXT("array"), TEXT("Allowlist namespace ids"))
 			.Optional(TEXT("enabled_actions"), TEXT("array"), TEXT("Allowlist action ids namespace.action"))
@@ -163,35 +173,44 @@ void FMonolithToolProfileActions::RegisterAll()
 	Registry.RegisterAction(TEXT("monolith"), TEXT("delete_tool_profile"),
 		TEXT("Delete a non-built-in, inactive Monolith tool profile."),
 		FMonolithActionHandler::CreateStatic(&FMonolithToolProfileActions::HandleDeleteToolProfile),
-		FParamSchemaBuilder().Required(TEXT("profile_id"), TEXT("string"), TEXT("Profile id")).Build());
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("profile_id"), TEXT("string"), TEXT("Profile id"))
+			.Build());
 
 	Registry.RegisterAction(TEXT("monolith"), TEXT("set_active_tool_profile"),
 		TEXT("Set the active Monolith tool profile for discovery and execution filtering."),
 		FMonolithActionHandler::CreateStatic(&FMonolithToolProfileActions::HandleSetActiveToolProfile),
-		FParamSchemaBuilder().Required(TEXT("profile_id"), TEXT("string"), TEXT("Profile id")).Build());
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("profile_id"), TEXT("string"), TEXT("Profile id"))
+			.Build());
 
 	Registry.RegisterAction(TEXT("monolith"), TEXT("set_action_enabled"),
 		TEXT("Enable or disable one action in a Monolith tool profile."),
 		FMonolithActionHandler::CreateStatic(&FMonolithToolProfileActions::HandleSetActionEnabled),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("profile_id"), TEXT("string"), TEXT("Profile id; defaults to active profile"))
 			.Required(TEXT("action_id"), TEXT("string"), TEXT("Action id formatted as namespace.action"))
-			.Optional(TEXT("enabled"), TEXT("bool"), TEXT("Whether the action should be enabled"), TEXT("true"))
+			.Optional(TEXT("enabled"), TEXT("boolean"), TEXT("Whether the action should be enabled"), TEXT("true"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("monolith"), TEXT("set_namespace_enabled"),
 		TEXT("Enable or disable one namespace in a Monolith tool profile."),
 		FMonolithActionHandler::CreateStatic(&FMonolithToolProfileActions::HandleSetNamespaceEnabled),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("profile_id"), TEXT("string"), TEXT("Profile id; defaults to active profile"))
 			.Required(TEXT("namespace"), TEXT("string"), TEXT("Namespace id"))
-			.Optional(TEXT("enabled"), TEXT("bool"), TEXT("Whether the namespace should be enabled"), TEXT("true"))
+			.Optional(TEXT("enabled"), TEXT("boolean"), TEXT("Whether the namespace should be enabled"), TEXT("true"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("monolith"), TEXT("set_action_description_override"),
 		TEXT("Set or clear a profile-specific action description override."),
 		FMonolithActionHandler::CreateStatic(&FMonolithToolProfileActions::HandleSetActionDescriptionOverride),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("profile_id"), TEXT("string"), TEXT("Profile id; defaults to active profile"))
 			.Required(TEXT("action_id"), TEXT("string"), TEXT("Action id formatted as namespace.action"))
 			.Optional(TEXT("description_override"), TEXT("string"), TEXT("Override text; empty clears it"))
@@ -201,6 +220,7 @@ void FMonolithToolProfileActions::RegisterAll()
 		TEXT("Return discovery after applying the active Monolith tool profile."),
 		FMonolithActionHandler::CreateStatic(&FMonolithToolProfileActions::HandleGetEffectiveDiscovery),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("namespace"), TEXT("string"), TEXT("Optional namespace filter"))
 			.Optional(TEXT("category"), TEXT("string"), TEXT("Optional category filter"))
 			.Build());
@@ -209,6 +229,7 @@ void FMonolithToolProfileActions::RegisterAll()
 		TEXT("Validate profile namespace/action ids against the registered Monolith action surface."),
 		FMonolithActionHandler::CreateStatic(&FMonolithToolProfileActions::HandleValidateToolProfile),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Optional(TEXT("profile_id"), TEXT("string"), TEXT("Profile id; defaults to active profile"))
 			.Build());
 }

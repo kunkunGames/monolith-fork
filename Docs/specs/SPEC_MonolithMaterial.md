@@ -1,4 +1,4 @@
-# Monolith — MonolithMaterial Module
+﻿# Monolith — MonolithMaterial Module
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
@@ -68,7 +68,7 @@
 | `get_function_instance_info` | Read MFI parent chain and all parameter overrides (11 types: scalar, vector, texture, font, static switch, static component mask, and more) |
 | `layout_function_expressions` | Auto-arrange material function graph layout |
 | `rename_function_parameter_group` | Rename a parameter group across all parameters in a material function |
-| `auto_layout` | Auto-arrange expression nodes in a material graph. `formatter`: `"auto"` (default) — uses Blueprint Assist if available, falls back to built-in layout; `"blueprint_assist"` — requires BA; `"builtin"` — built-in only |
+| `auto_layout` | Auto-arrange expression nodes in a material graph. `formatter`: `"auto"` (default) and `"monolith"` use UE built-in layout; `"blueprint_assist"` returns an explicit disabled-for-asset-mutation error. |
 
 **Extended Actions (1)**
 | Action | Change |

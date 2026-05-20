@@ -153,7 +153,7 @@ namespace AdvancedLevelHelpers
 void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. manage_sublevel
-	Registry.RegisterAction(TEXT("mesh"), TEXT("manage_sublevel"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("manage_sublevel"),
 		TEXT("Create/load/unload streaming sublevels or move actors between levels. sub_action: create, add, remove, move_actors."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::ManageSublevel),
 		FParamSchemaBuilder()
@@ -165,7 +165,7 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 2. place_blueprint_actor
-	Registry.RegisterAction(TEXT("mesh"), TEXT("place_blueprint_actor"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("place_blueprint_actor"),
 		TEXT("Spawn a Blueprint actor in the world with optional property configuration via reflection."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::PlaceBlueprintActor),
 		FParamSchemaBuilder()
@@ -179,7 +179,7 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 3. place_spline
-	Registry.RegisterAction(TEXT("mesh"), TEXT("place_spline"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("place_spline"),
 		TEXT("Spawn an actor with a spline component. Optionally places mesh segments along the spline (pipes, cables, railings)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::PlaceSpline),
 		FParamSchemaBuilder()
@@ -194,7 +194,7 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 4. create_prefab
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_prefab"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("create_prefab"),
 		TEXT("Create a Level Instance (prefab) from existing actors. WARNING: Source actors are MOVED into the new level. "
 			 "NOTE: This action triggers a Save As dialog which blocks MCP calls. For dialog-free prefab creation, use create_blueprint_prefab instead."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::CreatePrefab),
@@ -205,7 +205,7 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 4b. create_blueprint_prefab (dialog-free alternative)
-	Registry.RegisterAction(TEXT("mesh"), TEXT("create_blueprint_prefab"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("create_blueprint_prefab"),
 		TEXT("Create a Blueprint prefab from existing world actors. Harvests all components into a new Actor Blueprint's SCS. "
 			 "Dialog-free — safe for MCP/automation. Use place_blueprint_actor to spawn instances."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::CreateBlueprintPrefab),
@@ -217,7 +217,7 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 5. spawn_prefab
-	Registry.RegisterAction(TEXT("mesh"), TEXT("spawn_prefab"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("spawn_prefab"),
 		TEXT("Spawn a Level Instance (prefab) at a location."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::SpawnPrefab),
 		FParamSchemaBuilder()
@@ -229,7 +229,7 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 6. randomize_transforms
-	Registry.RegisterAction(TEXT("mesh"), TEXT("randomize_transforms"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("randomize_transforms"),
 		TEXT("Apply random offset/rotation/scale variation to actors for an organic feel. Deterministic with seed."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::RandomizeTransforms),
 		FParamSchemaBuilder()
@@ -243,7 +243,7 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 7. get_level_actors
-	Registry.RegisterAction(TEXT("mesh"), TEXT("get_level_actors"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("get_level_actors"),
 		TEXT("Enumerate actors in the editor world with multi-filter AND logic. Returns name, class, location, mesh, sublevel, tags."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::GetLevelActors),
 		FParamSchemaBuilder()
@@ -259,7 +259,7 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 8. measure_distance
-	Registry.RegisterAction(TEXT("mesh"), TEXT("measure_distance"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("measure_distance"),
 		TEXT("Measure distance between two actors or world points. Returns euclidean, horizontal, height difference, and optional navmesh path distance."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::MeasureDistance),
 		FParamSchemaBuilder()

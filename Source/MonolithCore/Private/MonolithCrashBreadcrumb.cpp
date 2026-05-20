@@ -221,7 +221,7 @@ FMonolithCrashBreadcrumb::FScopedCapture::FScopedCapture(
 	B.CurrentPayloadJson = BuildPayloadJson(
 		Namespace, Action, ParamsSerialized, B.SessionId, Now);
 
-	ExecutionScope = FMonolithActionExecutionGuard::Get().BeginAction(Namespace, Action);
+	ExecutionScope = FMonolithActionExecutionGuard::Get().BeginAction(Namespace, Action, Params);
 	if (ExecutionScope.ExecutionPolicy.bTransactionWrapping)
 	{
 		const FText TransactionName = FText::FromString(

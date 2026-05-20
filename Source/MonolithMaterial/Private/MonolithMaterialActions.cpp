@@ -358,8 +358,7 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Material or material function asset path"))
 			.Optional(TEXT("formatter"), TEXT("string"),
-				TEXT("Formatter: 'auto' (default, prefers Blueprint Assist if available), "
-					 "'blueprint_assist' (requires asset open in editor), or 'monolith' (UE built-in layout)"),
+				TEXT("Formatter: 'auto' or 'monolith' use the UE built-in layout. 'blueprint_assist' is disabled for asset mutation."),
 				TEXT("auto"))
 			.Build());
 
@@ -3895,57 +3894,10 @@ FMonolithActionResult FMonolithMaterialActions::AutoLayout(const TSharedPtr<FJso
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Unknown formatter '%s'. Valid: 'auto', 'blueprint_assist', 'monolith'"), *Formatter));
 	}
-
-	// --- BA formatter path (UMaterial only — MaterialFunctions have no MaterialGraph) ---
-	if (Formatter == TEXT("auto") || Formatter == TEXT("blueprint_assist"))
+	constexpr bool bHasBuiltInFormatter = true;
+	if (Formatter == TEXT("blueprint_assist") && !IMonolithGraphFormatter::IsExternalMutationFormattingEnabled(bHasBuiltInFormatter))
 	{
-		bool bExplicitBA = (Formatter == TEXT("blueprint_assist"));
-
-		UMaterial* Mat = Cast<UMaterial>(LoadedAsset);
-		UEdGraph* MaterialGraph = (Mat && Mat->MaterialGraph) ? Mat->MaterialGraph : nullptr;
-
-		bool bBAAvailable = MaterialGraph
-			&& IMonolithGraphFormatter::IsAvailable()
-			&& IMonolithGraphFormatter::Get().SupportsGraph(MaterialGraph);
-
-		if (bBAAvailable)
-		{
-			int32 NodesFormatted = 0;
-			FString ErrorMessage;
-			if (IMonolithGraphFormatter::Get().FormatGraph(MaterialGraph, NodesFormatted, ErrorMessage))
-			{
-				auto Result = MakeShared<FJsonObject>();
-				Result->SetStringField(TEXT("asset_path"), AssetPath);
-				Result->SetStringField(TEXT("type"), TEXT("Material"));
-				Result->SetStringField(TEXT("formatter_used"), TEXT("blueprint_assist"));
-				Result->SetNumberField(TEXT("nodes_formatted"), NodesFormatted);
-				Result->SetBoolField(TEXT("positions_changed"), true);
-
-				FMonolithFormatterInfo Info = IMonolithGraphFormatter::Get().GetFormatterInfo(MaterialGraph);
-				Result->SetStringField(TEXT("formatter_type"), Info.FormatterType);
-				Result->SetStringField(TEXT("graph_class"), Info.GraphClassName);
-				return FMonolithActionResult::Success(Result);
-			}
-
-			if (bExplicitBA)
-			{
-				return FMonolithActionResult::Error(FString::Printf(
-					TEXT("Blueprint Assist formatter failed: %s"), *ErrorMessage));
-			}
-			// auto mode: fall through to built-in
-		}
-		else if (bExplicitBA)
-		{
-			if (!MaterialGraph)
-			{
-				return FMonolithActionResult::Error(
-					TEXT("Blueprint Assist formatting is only supported for UMaterial assets (not MaterialFunctions). "
-						 "Use formatter='monolith' for MaterialFunction layout."));
-			}
-			return FMonolithActionResult::Error(
-				TEXT("Blueprint Assist formatter is not available. "
-					 "Install Blueprint Assist and restart the editor, or ensure the material is open in an editor tab."));
-		}
+		return FMonolithActionResult::Error(IMonolithGraphFormatter::GetExternalMutationFormattingDisabledMessage());
 	}
 
 	// --- Built-in UMaterialEditingLibrary path ---

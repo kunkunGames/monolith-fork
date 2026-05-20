@@ -29,7 +29,7 @@ void FMonolithAnimLayoutActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Optional(TEXT("graph_name"), TEXT("string"),
 				TEXT("Graph to layout: 'AnimGraph' (default), state machine name, or 'all' for every graph"), TEXT("AnimGraph"))
 			.Optional(TEXT("formatter"), TEXT("string"),
-				TEXT("Formatter: 'auto' (default, uses BA if available), 'blueprint_assist' (BA or error), 'monolith' (not supported for animation)"),
+				TEXT("Formatter: 'auto' uses Blueprint Assist because no built-in Monolith formatter exists; 'blueprint_assist' forces Blueprint Assist; 'monolith' is not supported for animation"),
 				TEXT("auto"))
 			.Build());
 
@@ -161,6 +161,13 @@ UEdGraph* FindSMGraphByTitle(UAnimBlueprint* ABP, const FString& MachineName)
 /** Format a single graph via IMonolithGraphFormatter. Returns a JSON object with results. */
 TSharedPtr<FJsonObject> FormatSingleGraph(const FString& GraphLabel, UEdGraph* Graph, bool bExplicitBA, FString& OutError)
 {
+	constexpr bool bHasBuiltInFormatter = false;
+	if (!IMonolithGraphFormatter::IsExternalMutationFormattingEnabled(bHasBuiltInFormatter))
+	{
+		OutError = IMonolithGraphFormatter::GetExternalMutationFormattingDisabledMessage();
+		return nullptr;
+	}
+
 	bool bBAAvailable = IMonolithGraphFormatter::IsAvailable()
 		&& IMonolithGraphFormatter::Get().SupportsGraph(Graph);
 
@@ -219,12 +226,11 @@ FMonolithActionResult FMonolithAnimLayoutActions::HandleAutoLayout(const TShared
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Unknown formatter '%s'. Supported: 'auto', 'blueprint_assist', 'monolith'"), *Formatter));
 	}
-
 	// Monolith has no built-in animation graph formatter
 	if (Formatter == TEXT("monolith"))
 	{
 		return FMonolithActionResult::Error(
-			TEXT("No built-in Monolith formatter exists for animation graphs. Use formatter='auto' or install Blueprint Assist."));
+			TEXT("No built-in Monolith formatter exists for animation graphs. Use formatter='auto' or formatter='blueprint_assist' with Blueprint Assist installed."));
 	}
 
 	// Load the AnimBlueprint

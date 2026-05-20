@@ -281,14 +281,14 @@ namespace MonolithCommonUIAudit
 			TEXT("ui"), TEXT("hot_reload_styles"),
 			TEXT("[RUNTIME, EXPERIMENTAL] Re-apply current style class to all UCommonButtonBase in PIE (after iterating on style asset)"),
 			FMonolithActionHandler::CreateStatic(&HandleHotReloadStyles),
-			nullptr,
+			FParamSchemaBuilder().Build(),
 			Cat);
 
 		Registry.RegisterAction(
 			TEXT("ui"), TEXT("dump_action_router_state"),
 			TEXT("[RUNTIME, EXPERIMENTAL] Dump current input type + activatable container states for debugging UI input routing"),
 			FMonolithActionHandler::CreateStatic(&HandleDumpActionRouterState),
-			nullptr,
+			FParamSchemaBuilder().Build(),
 			Cat);
 	}
 }

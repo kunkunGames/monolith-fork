@@ -32,7 +32,7 @@
  *
  * No GeometryScript dependency -- this is pure layout math that outputs data for SP1.
  */
-class FMonolithMeshFloorPlanGenerator
+class MONOLITHMESH_API FMonolithMeshFloorPlanGenerator
 {
 public:
 	static void RegisterActions(FMonolithToolRegistry& Registry);

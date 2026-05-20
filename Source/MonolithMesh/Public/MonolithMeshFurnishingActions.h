@@ -15,7 +15,7 @@
  * Reads room data from SP6 spatial registry (FMonolithMeshSpatialRegistry).
  * Furniture presets loaded from JSON files in Saved/Monolith/FurniturePresets/.
  */
-class FMonolithMeshFurnishingActions
+class MONOLITHMESH_API FMonolithMeshFurnishingActions
 {
 public:
 	/** Register all 3 furnishing actions with the tool registry */

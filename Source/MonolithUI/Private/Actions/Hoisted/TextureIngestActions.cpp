@@ -3,6 +3,7 @@
 
 // Monolith registry
 #include "MonolithPackagePathValidator.h"
+#include "MonolithParamSchema.h"
 #include "MonolithToolRegistry.h"
 
 // Core / JSON
@@ -387,5 +388,12 @@ void MonolithUI::FTextureIngestActions::Register(FMonolithToolRegistry& Registry
              "format_hint (string, required, one of png|jpg|jpeg|bmp|exr|tga|hdr|tif|tiff|dds), "
              "settings (object, optional: compression_settings, srgb, mip_gen_settings, lod_group), "
              "save (bool, optional, default true)."),
-        FMonolithActionHandler::CreateStatic(&MonolithUI::FTextureIngestActions::HandleImportTextureFromBytes));
+        FMonolithActionHandler::CreateStatic(&MonolithUI::FTextureIngestActions::HandleImportTextureFromBytes),
+        FParamSchemaBuilder()
+            .Required(TEXT("destination"), TEXT("string"), TEXT("Output texture path without .uasset"))
+            .Required(TEXT("bytes_b64"), TEXT("string"), TEXT("Base64-encoded image bytes"))
+            .Required(TEXT("format_hint"), TEXT("string"), TEXT("png, jpg, jpeg, bmp, exr, tga, hdr, tif, tiff, or dds"))
+            .Optional(TEXT("settings"), TEXT("object"), TEXT("Texture settings such as compression_settings, srgb, mip_gen_settings, lod_group"))
+            .Optional(TEXT("save"), TEXT("bool"), TEXT("Save the texture asset"), TEXT("true"))
+            .Build());
 }

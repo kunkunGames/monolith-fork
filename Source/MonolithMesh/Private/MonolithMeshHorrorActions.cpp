@@ -22,7 +22,7 @@
 void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. analyze_sightlines
-	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_sightlines"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_sightlines"),
 		TEXT("Fan-of-rays sightline analysis from a location. Returns claustrophobia score 0-100, blocked percentages at distance thresholds, longest clear sightline."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::AnalyzeSightlines),
 		FParamSchemaBuilder()
@@ -34,7 +34,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 2. find_hiding_spots
-	Registry.RegisterAction(TEXT("mesh"), TEXT("find_hiding_spots"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_hiding_spots"),
 		TEXT("Grid-sample a region and score each point for concealment from given viewpoints. Returns spots sorted by quality."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::FindHidingSpots),
 		FParamSchemaBuilder()
@@ -46,7 +46,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 3. find_ambush_points
-	Registry.RegisterAction(TEXT("mesh"), TEXT("find_ambush_points"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_ambush_points"),
 		TEXT("Find ambush positions lateral to a path. Scores concealment + surprise angle (180 degrees from player forward = perfect ambush)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::FindAmbushPoints),
 		FParamSchemaBuilder()
@@ -56,7 +56,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 4. analyze_choke_points
-	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_choke_points"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_choke_points"),
 		TEXT("Find narrow passages along a navmesh path. Returns choke points with width, flank possibility, and bypass routes."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::AnalyzeChokePoints),
 		FParamSchemaBuilder()
@@ -66,7 +66,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 5. analyze_escape_routes
-	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_escape_routes"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_escape_routes"),
 		TEXT("Find and score escape routes from a location to tagged exit actors. Critical for hospice: ensures no inescapable encounters."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::AnalyzeEscapeRoutes),
 		FParamSchemaBuilder()
@@ -76,7 +76,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 6. classify_zone_tension
-	Registry.RegisterAction(TEXT("mesh"), TEXT("classify_zone_tension"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("classify_zone_tension"),
 		TEXT("Composite tension analysis: sightline distance + ceiling height + room volume + exit count. Returns calm/uneasy/tense/dread/panic."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::ClassifyZoneTension),
 		FParamSchemaBuilder()
@@ -85,7 +85,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 7. analyze_pacing_curve
-	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_pacing_curve"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_pacing_curve"),
 		TEXT("Sample tension at intervals along a path. Identifies monotonous stretches, optimal scare placement, and false-calm opportunities."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::AnalyzePacingCurve),
 		FParamSchemaBuilder()
@@ -94,7 +94,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	// 8. find_dead_ends
-	Registry.RegisterAction(TEXT("mesh"), TEXT("find_dead_ends"),
+	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_dead_ends"),
 		TEXT("Navmesh flood-fill to find single-exit (dead-end) regions. Returns depth, width, exit direction for each."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::FindDeadEnds),
 		FParamSchemaBuilder()

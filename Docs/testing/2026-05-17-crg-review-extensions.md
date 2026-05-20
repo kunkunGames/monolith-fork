@@ -4,7 +4,7 @@
 |---|---|
 | Date | 2026-05-17 |
 | Branch | `feat/crg-index-navigation-p0` (PR #447) |
-| Spec | `Plugins/Monolith/CRG/spec/monolith-crg-review-extensions-spec.md` |
+| Spec | `Docs/specs/SPEC_MonolithSource.md`, `Docs/specs/SPEC_MonolithIndex.md` |
 | Scope | RX-2 (offline CRG cache read parity), RX-1 (offline `detect_changes`), RX-3 (offline `find_unused`), RX-7 (scoring v3 sensitivity), RX-8 (`review_hotspots`) |
 
 ---

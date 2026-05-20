@@ -1,4 +1,4 @@
-# IModularFeatures Bridge Pattern
+﻿# IModularFeatures Bridge Pattern
 
 **Plugin:** Monolith | **Engine:** UE 5.7 | **Validated:** MonolithBABridge (2026-03-27)
 
@@ -116,8 +116,9 @@ The bridge module also uses `#if WITH_BLUEPRINT_ASSIST` (set by its `Build.cs` v
 ### Consumer Pattern
 
 ```cpp
-// MonolithBlueprintLayoutActions.cpp — zero BA dependency
-bool bBAAvailable = IMonolithGraphFormatter::IsAvailable()
+// No-built-in formatter domains, such as Animation/Niagara — zero BA dependency
+bool bBAAvailable = IMonolithGraphFormatter::IsExternalMutationFormattingEnabled(/*bHasBuiltInFormatter=*/false)
+    && IMonolithGraphFormatter::IsAvailable()
     && IMonolithGraphFormatter::Get().SupportsGraph(Graph);
 
 if (bBAAvailable)
@@ -131,7 +132,7 @@ if (bBAAvailable)
 }
 ```
 
-Always call `IsAvailable()` before `Get()`. `Get()` asserts if nothing is registered.
+Always call `IsAvailable()` before `Get()`. `Get()` asserts if nothing is registered. Asset mutation actions must also check `IsExternalMutationFormattingEnabled()`: pass `true` or omit the argument when the action has a built-in formatter, and pass `false` only for domains with no built-in Monolith formatter.
 
 ---
 
@@ -247,7 +248,7 @@ MonolithBABridge
 
 MonolithBlueprint
   ├── depends on: MonolithCore only
-  └── calls: IMonolithGraphFormatter::IsAvailable() / Get()
+  └── calls: IMonolithGraphFormatter only behind IsExternalMutationFormattingEnabled() when mutation is involved
 ```
 
 The bridge module is the only node that knows about both sides. Core modules stay clean.
@@ -258,6 +259,7 @@ The bridge module is the only node that knows about both sides. Core modules sta
 
 - **Never** include third-party headers in the interface file (`IMonolithYourFeature.h`)
 - **Always** check `IsAvailable()` before `Get()` — `Get()` will assert on failure
+- **Never** call external formatters from asset mutation actions unless `IsExternalMutationFormattingEnabled()` explicitly allows it; built-in formatter domains should use the default disabled policy.
 - **Always** unregister in `ShutdownModule()` — leaked registrations cause stale pointers
 - **Use `TUniquePtr`** for the implementation instance in the bridge module (see bridge pattern above)
 - The feature name string (`TEXT("MonolithGraphFormatter")`) must match exactly between

@@ -14,7 +14,7 @@ class UDynamicMesh;
  * Supports: gable, hip, flat/parapet, shed, gambrel.
  * Consumes FootprintPolygon from the Building Descriptor (SP1).
  */
-class FMonolithMeshRoofActions
+class MONOLITHMESH_API FMonolithMeshRoofActions
 {
 public:
 	static void RegisterActions(FMonolithToolRegistry& Registry);

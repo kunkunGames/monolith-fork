@@ -333,7 +333,7 @@ namespace MonolithCommonUINavigation
 			TEXT("ui"), TEXT("get_focus_path"),
 			TEXT("[RUNTIME] Return the Slate focus chain leaf→root for diagnosing 'why is input eaten' bugs"),
 			FMonolithActionHandler::CreateStatic(&HandleGetFocusPath),
-			nullptr,
+			FParamSchemaBuilder().Build(),
 			Cat);
 
 		Registry.RegisterAction(

@@ -18,7 +18,7 @@ class UDynamicMesh;
  * Supports optional `building_context` parameter for auto-orientation to a building wall face.
  * When provided, features auto-orient to the wall normal and emit wall_openings in the result JSON.
  */
-class FMonolithMeshArchFeatureActions
+class MONOLITHMESH_API FMonolithMeshArchFeatureActions
 {
 public:
 	static void RegisterActions(FMonolithToolRegistry& Registry);

@@ -19,7 +19,7 @@
  *   scatter_on_walls      — Horizontal traces to find walls, place aligned props
  *   scatter_on_ceiling    — Upward traces to find ceiling, place hanging props
  */
-class FMonolithMeshContextPropActions
+class MONOLITHMESH_API FMonolithMeshContextPropActions
 {
 public:
 	/** Register all 8 context-aware prop actions with the tool registry */
