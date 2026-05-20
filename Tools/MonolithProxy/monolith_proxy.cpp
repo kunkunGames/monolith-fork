@@ -303,6 +303,15 @@ static std::string hash_text(const std::string& text)
     return out.str();
 }
 
+static std::string log_id(const std::string& prefix, const std::string& seed)
+{
+    std::string digest = hash_text(seed);
+    size_t pos = digest.find(':');
+    if (pos != std::string::npos) digest = digest.substr(pos + 1);
+    if (digest.size() > 32) digest.resize(32);
+    return prefix + "-" + digest;
+}
+
 static bool is_sensitive_key(const std::string& key)
 {
     std::string lower = key;
@@ -366,13 +375,98 @@ static json bounded_json(const json& value, bool& truncated, size_t& original_by
     };
 }
 
+static void prune_empty_json(json& value);
+
+static bool is_empty_log_value(const json& value)
+{
+    return value.is_null()
+        || (value.is_string() && value.get<std::string>().empty())
+        || (value.is_array() && value.empty())
+        || (value.is_object() && value.empty());
+}
+
+static void prune_empty_json(json& value)
+{
+    if (value.is_object())
+    {
+        for (auto it = value.begin(); it != value.end();)
+        {
+            prune_empty_json(it.value());
+            if (is_empty_log_value(it.value()))
+                it = value.erase(it);
+            else
+                ++it;
+        }
+    }
+    else if (value.is_array())
+    {
+        for (auto& item : value) prune_empty_json(item);
+        value.erase(std::remove_if(value.begin(), value.end(), is_empty_log_value), value.end());
+    }
+}
+
+static json summarize_response(const json& response_json, size_t result_bytes, bool truncated)
+{
+    json summary = {
+        {"result_bytes", result_bytes},
+        {"truncated", truncated}
+    };
+    if (response_json.is_object())
+    {
+        json top_keys = json::array();
+        for (auto it = response_json.begin(); it != response_json.end(); ++it) top_keys.push_back(it.key());
+        summary["response_top_keys"] = top_keys;
+
+        if (response_json.contains("error"))
+        {
+            const json& err = response_json["error"];
+            if (err.is_object())
+            {
+                if (err.contains("code")) summary["jsonrpc_error_code"] = err["code"];
+                summary["jsonrpc_error_message"] = err.value("message", "").substr(0, 240);
+            }
+            else
+            {
+                summary["jsonrpc_error_message"] = err.dump().substr(0, 240);
+            }
+        }
+
+        if (response_json.contains("result"))
+        {
+            const json& result = response_json["result"];
+            if (result.is_object())
+            {
+                json result_keys = json::array();
+                for (auto it = result.begin(); it != result.end(); ++it) result_keys.push_back(it.key());
+                summary["result_top_keys"] = result_keys;
+                if (result.contains("isError")) summary["is_error"] = result.value("isError", false);
+                if (result.contains("content") && result["content"].is_array()) summary["content_count"] = result["content"].size();
+                if (result.contains("tools") && result["tools"].is_array()) summary["tools_count"] = result["tools"].size();
+                if (result.contains("resources") && result["resources"].is_array()) summary["resources_count"] = result["resources"].size();
+            }
+            else
+            {
+                summary["result_type"] = result.type_name();
+            }
+        }
+    }
+    else
+    {
+        summary["response_type"] = response_json.type_name();
+    }
+    prune_empty_json(summary);
+    return summary;
+}
+
 static void append_proxy_log(const json& record)
 {
     if (!tool_log_enabled()) return;
     try
     {
         std::lock_guard<std::mutex> guard(g_tool_log_lock);
-        fs::path path = proxy_log_root() / (yyyymmdd_local() + "_proxy.log");
+        json cleaned = record;
+        prune_empty_json(cleaned);
+        fs::path path = proxy_log_root() / yyyymmdd_local() / "proxy.jsonl";
         fs::create_directories(path.parent_path());
 #ifdef _WIN32
         const fs::path lock_path = path.string() + ".lock";
@@ -395,7 +489,7 @@ static void append_proxy_log(const json& record)
         try
         {
             std::ofstream out(path, std::ios::app | std::ios::binary);
-            out << record.dump() << "\n";
+            out << cleaned.dump() << "\n";
             if (!out) throw std::runtime_error("could not append daily log");
         }
         catch (...)
@@ -408,7 +502,7 @@ static void append_proxy_log(const json& record)
         CloseHandle(lock_handle);
 #else
         std::ofstream out(path, std::ios::app | std::ios::binary);
-        out << record.dump() << "\n";
+        out << cleaned.dump() << "\n";
         if (!out) throw std::runtime_error("could not append daily log");
 #endif
     }
@@ -435,7 +529,9 @@ static void log_proxy_tools_call(
     const std::string& start_time,
     const std::chrono::steady_clock::time_point& start_clock,
     bool repeated,
-    const std::string& retry_signature)
+    const std::string& retry_signature,
+    const std::string& trace_id,
+    const std::string& span_id)
 {
     if (!tool_log_enabled()) return;
 
@@ -508,6 +604,30 @@ static void log_proxy_tools_call(
     if (repeated) tags.push_back("repeated_call");
     if (duration_ms > 5000.0) tags.push_back("slow_action");
     if (args_truncated || response_truncated) tags.push_back("large_result");
+    json return_summary = summarize_response(response_json, result_bytes, args_truncated || response_truncated);
+
+    json redaction = {
+        {"argument_bytes", arg_bytes},
+        {"result_bytes", result_bytes}
+    };
+    if (args_truncated || response_truncated) redaction["truncated"] = true;
+    if (!arg_hash.empty()) redaction["argument_sha256"] = arg_hash;
+    if (!result_hash.empty()) redaction["result_sha256"] = result_hash;
+
+    json agent_signal = {
+        {"outcome", outcome},
+        {"hints_returned", 0}
+    };
+    if (error_code != 0) agent_signal["error_code"] = error_code;
+    if (!error_class.empty()) agent_signal["error_class"] = error_class;
+    if (repeated) agent_signal["repeat_within_window"] = true;
+    if (!tags.empty()) agent_signal["improvement_tags"] = tags;
+
+    json return_record = {
+        {"response", bounded_response}
+    };
+    json response_id = response_json.is_object() ? response_json.value("id", json(nullptr)) : json(nullptr);
+    if (response_id != msg.value("id", json(nullptr))) return_record["jsonrpc_id"] = response_id;
 
     uint64_t sequence = 0;
     {
@@ -516,9 +636,11 @@ static void log_proxy_tools_call(
     }
 
     json record = {
-        {"format_version", 1},
+        {"format_version", 2},
         {"surface", "proxy"},
         {"sequence", sequence},
+        {"trace_id", trace_id},
+        {"span_id", span_id},
         {"start_time", start_time},
         {"end_time", iso_local_now()},
         {"duration_ms", duration_ms},
@@ -526,9 +648,6 @@ static void log_proxy_tools_call(
         {"thread_id", "main"},
         {"status", outcome == "success" ? "success" : "error"},
         {"client", {
-            {"name", "unknown"},
-            {"version", ""},
-            {"protocol_version", ""},
             {"proxy_runtime", "cpp"},
             {"proxy_version", PROXY_VERSION}
         }},
@@ -539,31 +658,10 @@ static void log_proxy_tools_call(
             {"arguments", bounded_args},
             {"retry_signature", retry_signature}
         }},
-        {"return", {
-            {"jsonrpc_id", response_json.is_object() ? response_json.value("id", json(nullptr)) : json(nullptr)},
-            {"response", bounded_response},
-            {"result_bytes", result_bytes}
-        }},
-        {"redaction", {
-            {"applied", true},
-            {"truncated", args_truncated || response_truncated},
-            {"argument_bytes", arg_bytes},
-            {"result_bytes", result_bytes},
-            {"argument_sha256", arg_hash.empty() ? json(nullptr) : json(arg_hash)},
-            {"result_sha256", result_hash.empty() ? json(nullptr) : json(result_hash)}
-        }},
-        {"agent_signal", {
-            {"outcome", outcome},
-            {"error_code", error_code == 0 ? json(nullptr) : json(error_code)},
-            {"error_class", error_class},
-            {"hints_returned", 0},
-            {"discovery_context", "unknown"},
-            {"retry_signature", retry_signature},
-            {"repeat_within_window", repeated},
-            {"argument_bytes", arg_bytes},
-            {"result_bytes", result_bytes},
-            {"improvement_tags", tags}
-        }}
+        {"return", return_record},
+        {"return_summary", return_summary},
+        {"redaction", redaction},
+        {"agent_signal", agent_signal}
     };
     append_proxy_log(record);
 }
@@ -1180,6 +1278,8 @@ static std::string handle_tools_call(const json& msg)
     json args = params.value("arguments", json::object());
     if (args.is_null()) args = json::object();
     const std::string retry_signature = retry_signature_for(tool_name, args);
+    const std::string trace_id = log_id("trace", log_start_time + ":" + std::to_string(GetCurrentProcessId()) + ":main:" + retry_signature);
+    const std::string span_id = log_id("span", trace_id + ":proxy:" + id.dump() + ":" + log_start_time);
     bool repeated_for_log = false;
     auto finish = [&](const std::string& response) -> std::string
     {
@@ -1192,7 +1292,9 @@ static std::string handle_tools_call(const json& msg)
             log_start_time,
             log_start_clock,
             repeated_for_log,
-            retry_signature);
+            retry_signature,
+            trace_id,
+            span_id);
         return response;
     };
 
@@ -1268,6 +1370,7 @@ static std::string handle_tools_call(const json& msg)
     // Build the message we'll actually forward (with possibly rewritten params)
     json forwarded_msg = msg;
     forwarded_msg["params"] = params;
+    forwarded_msg["_monolith_trace_id"] = trace_id;
 
     if (is_repeated_tool_call(forwarded_msg))
     {

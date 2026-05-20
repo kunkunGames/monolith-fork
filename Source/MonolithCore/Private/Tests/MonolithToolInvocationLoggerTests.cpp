@@ -49,7 +49,7 @@ bool FMonolithToolInvocationLoggerDailyLogTest::RunTest(const FString& Parameter
 	IFileManager::Get().MakeDirectory(*TempLogDir, true);
 	FPlatformMisc::SetEnvironmentVar(TEXT("MONOLITH_TOOL_LOG_DIR"), *TempLogDir);
 
-	const FString DailyActionLogPath = FPaths::Combine(TempLogDir, FDateTime::Now().ToString(TEXT("%Y%m%d_action.log")));
+	const FString DailyActionLogPath = FPaths::Combine(TempLogDir, FDateTime::Now().ToString(TEXT("%Y%m%d")), TEXT("action.jsonl"));
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 	Params->SetStringField(TEXT("token"), TEXT("super-secret-token"));
 	Params->SetStringField(TEXT("query"), TEXT("UObject"));
@@ -90,12 +90,19 @@ bool FMonolithToolInvocationLoggerDailyLogTest::RunTest(const FString& Parameter
 	{
 		if (Record.IsValid())
 		{
+			TestEqual(TEXT("Format version is v2"), static_cast<int32>(Record->GetNumberField(TEXT("format_version"))), 2);
 			TestEqual(TEXT("Surface is action"), Record->GetStringField(TEXT("surface")), TEXT("action"));
+			TestFalse(TEXT("Trace id is present"), Record->GetStringField(TEXT("trace_id")).IsEmpty());
+			TestFalse(TEXT("Span id is present"), Record->GetStringField(TEXT("span_id")).IsEmpty());
+			const TSharedPtr<FJsonObject>* ReturnSummary = nullptr;
+			TestTrue(TEXT("return_summary exists"), Record->TryGetObjectField(TEXT("return_summary"), ReturnSummary));
 			const TSharedPtr<FJsonObject>* AgentSignal = nullptr;
 			TestTrue(TEXT("agent_signal exists"), Record->TryGetObjectField(TEXT("agent_signal"), AgentSignal));
 			if (AgentSignal && AgentSignal->IsValid())
 			{
 				TestEqual(TEXT("Outcome is success"), (*AgentSignal)->GetStringField(TEXT("outcome")), TEXT("success"));
+				TestFalse(TEXT("Agent signal does not duplicate retry signature"), (*AgentSignal)->HasField(TEXT("retry_signature")));
+				TestFalse(TEXT("Agent signal does not duplicate result bytes"), (*AgentSignal)->HasField(TEXT("result_bytes")));
 			}
 		}
 	}
@@ -127,6 +134,11 @@ bool FMonolithToolInvocationLoggerDailyLogTest::RunTest(const FString& Parameter
 				TestTrue(TEXT("Large record is marked truncated"), (*Redaction)->GetBoolField(TEXT("truncated")));
 				TestTrue(TEXT("Large record has argument SHA-256"), (*Redaction)->GetStringField(TEXT("argument_sha256")).StartsWith(TEXT("sha256:")));
 				TestTrue(TEXT("Large record has result SHA-256"), (*Redaction)->GetStringField(TEXT("result_sha256")).StartsWith(TEXT("sha256:")));
+			}
+			const TSharedPtr<FJsonObject>* ReturnSummary = nullptr;
+			if (TestTrue(TEXT("Large record return_summary exists"), LargeRecord->TryGetObjectField(TEXT("return_summary"), ReturnSummary)) && ReturnSummary && ReturnSummary->IsValid())
+			{
+				TestTrue(TEXT("Large return summary is marked truncated"), (*ReturnSummary)->GetBoolField(TEXT("truncated")));
 			}
 
 			const TSharedPtr<FJsonObject>* Call = nullptr;
@@ -181,7 +193,7 @@ bool FMonolithToolInvocationLoggerLookupFailureTest::RunTest(const FString& Para
 		Params);
 	TestFalse(TEXT("Missing action returns an error"), Result.bSuccess);
 
-	const FString DailyActionLogPath = FPaths::Combine(TempLogDir, FDateTime::Now().ToString(TEXT("%Y%m%d_action.log")));
+	const FString DailyActionLogPath = FPaths::Combine(TempLogDir, FDateTime::Now().ToString(TEXT("%Y%m%d")), TEXT("action.jsonl"));
 	TestTrue(TEXT("Lookup failure action log exists"), FPaths::FileExists(DailyActionLogPath));
 
 	FString Contents;
@@ -191,6 +203,8 @@ bool FMonolithToolInvocationLoggerLookupFailureTest::RunTest(const FString& Para
 		if (TestTrue(TEXT("Lookup failure log line parses as JSON"), ParseLastJsonLine(Contents, Record)) && Record.IsValid())
 		{
 			TestEqual(TEXT("Lookup failure status"), Record->GetStringField(TEXT("status")), TEXT("error"));
+			TestEqual(TEXT("Lookup failure format version is v2"), static_cast<int32>(Record->GetNumberField(TEXT("format_version"))), 2);
+			TestFalse(TEXT("Lookup failure trace id is present"), Record->GetStringField(TEXT("trace_id")).IsEmpty());
 
 			const TSharedPtr<FJsonObject>* Call = nullptr;
 			if (TestTrue(TEXT("Lookup failure call object exists"), Record->TryGetObjectField(TEXT("call"), Call)) && Call && Call->IsValid())
@@ -241,18 +255,23 @@ bool FMonolithToolInvocationLoggerDualSurfaceTest::RunTest(const FString& Parame
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 	FMonolithToolRegistry::Get().ExecuteAction(TEXT("source"), TEXT("crg_graph_health"), Params);
 
-	const FString ActionLogPath = FPaths::Combine(TempLogDir, FDateTime::Now().ToString(TEXT("%Y%m%d_action.log")));
-	const FString QueryLogPath = FPaths::Combine(TempLogDir, FDateTime::Now().ToString(TEXT("%Y%m%d_query.log")));
+	const FString DailyFolder = FPaths::Combine(TempLogDir, FDateTime::Now().ToString(TEXT("%Y%m%d")));
+	const FString ActionLogPath = FPaths::Combine(DailyFolder, TEXT("action.jsonl"));
+	const FString QueryLogPath = FPaths::Combine(DailyFolder, TEXT("query.jsonl"));
 	TestTrue(TEXT("Live source action emits action log"), FPaths::FileExists(ActionLogPath));
 	TestTrue(TEXT("Live source action child monolith_query emits query log"), FPaths::FileExists(QueryLogPath));
 
 	FString ActionContents;
+	FString ActionTraceId;
 	if (TestTrue(TEXT("Action log can be read"), FFileHelper::LoadFileToString(ActionContents, *ActionLogPath)))
 	{
 		TSharedPtr<FJsonObject> ActionRecord;
 		if (TestTrue(TEXT("Action log has valid JSONL"), ParseLastJsonLine(ActionContents, ActionRecord)) && ActionRecord.IsValid())
 		{
 			TestEqual(TEXT("Action surface"), ActionRecord->GetStringField(TEXT("surface")), TEXT("action"));
+			TestEqual(TEXT("Action format version is v2"), static_cast<int32>(ActionRecord->GetNumberField(TEXT("format_version"))), 2);
+			ActionTraceId = ActionRecord->GetStringField(TEXT("trace_id"));
+			TestFalse(TEXT("Action trace id is present"), ActionTraceId.IsEmpty());
 			const TSharedPtr<FJsonObject>* Call = nullptr;
 			if (TestTrue(TEXT("Action call object exists"), ActionRecord->TryGetObjectField(TEXT("call"), Call)) && Call && Call->IsValid())
 			{
@@ -269,6 +288,11 @@ bool FMonolithToolInvocationLoggerDualSurfaceTest::RunTest(const FString& Parame
 		if (TestTrue(TEXT("Query log has valid JSONL"), ParseLastJsonLine(QueryContents, QueryRecord)) && QueryRecord.IsValid())
 		{
 			TestEqual(TEXT("Query surface"), QueryRecord->GetStringField(TEXT("surface")), TEXT("query"));
+			TestEqual(TEXT("Query format version is v2"), static_cast<int32>(QueryRecord->GetNumberField(TEXT("format_version"))), 2);
+			TestEqual(TEXT("Query inherits action trace id"), QueryRecord->GetStringField(TEXT("trace_id")), ActionTraceId);
+			TestFalse(TEXT("Query span id is present"), QueryRecord->GetStringField(TEXT("span_id")).IsEmpty());
+			const TSharedPtr<FJsonObject>* ReturnSummary = nullptr;
+			TestTrue(TEXT("Query return_summary exists"), QueryRecord->TryGetObjectField(TEXT("return_summary"), ReturnSummary));
 			const TSharedPtr<FJsonObject>* Call = nullptr;
 			if (TestTrue(TEXT("Query call object exists"), QueryRecord->TryGetObjectField(TEXT("call"), Call)) && Call && Call->IsValid())
 			{

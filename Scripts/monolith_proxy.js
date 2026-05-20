@@ -85,7 +85,7 @@ function findLogRoot() {
 function dailyLogPath() {
   const now = new Date();
   const day = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-  return path.join(findLogRoot(), `${day}_proxy.log`);
+  return path.join(findLogRoot(), day, "proxy.jsonl");
 }
 
 function localIsoNow() {
@@ -159,6 +159,28 @@ function retrySignature(toolName, args) {
   return sha256Text(stableJson({ tool: toolName, arguments: redact(args) }));
 }
 
+function makeLogId(prefix, payload) {
+  return `${prefix}-${crypto.createHash("sha256").update(payload).digest("hex").slice(0, 32)}`;
+}
+
+function withTrace(message, traceId) {
+  return { ...message, _monolith_trace_id: traceId };
+}
+
+function dropEmpty(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => dropEmpty(item))
+      .filter((item) => item !== null && item !== "" && !(Array.isArray(item) && item.length === 0) && !(item && typeof item === "object" && !Array.isArray(item) && Object.keys(item).length === 0));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value)
+      .map(([key, item]) => [key, dropEmpty(item)])
+      .filter(([_key, item]) => item !== null && item !== "" && !(Array.isArray(item) && item.length === 0) && !(item && typeof item === "object" && !Array.isArray(item) && Object.keys(item).length === 0)));
+  }
+  return value;
+}
+
 function parseResponse(response) {
   try {
     return JSON.parse(response);
@@ -213,6 +235,38 @@ function classifyResponse(responseObj, repeated, durationMs, argBytes, resultByt
   return { outcome, errorClass, errorCode, tags: [...new Set(tags)].sort() };
 }
 
+function summarizeResponse(responseObj, resultBytes, truncated) {
+  const summary = {
+    result_bytes: resultBytes,
+    truncated,
+  };
+  if (responseObj && typeof responseObj === "object") {
+    summary.response_top_keys = Object.keys(responseObj).sort().slice(0, 20);
+    if (Object.prototype.hasOwnProperty.call(responseObj, "error")) {
+      const error = responseObj.error || {};
+      if (error && typeof error === "object") {
+        summary.jsonrpc_error_code = error.code;
+        summary.jsonrpc_error_message = String(error.message || "").slice(0, 240);
+      } else {
+        summary.jsonrpc_error_message = String(error).slice(0, 240);
+      }
+    }
+    const result = responseObj.result;
+    if (result && typeof result === "object") {
+      summary.result_top_keys = Object.keys(result).sort().slice(0, 20);
+      if (Object.prototype.hasOwnProperty.call(result, "isError")) summary.is_error = Boolean(result.isError);
+      if (Array.isArray(result.content)) summary.content_count = result.content.length;
+      if (Array.isArray(result.tools)) summary.tools_count = result.tools.length;
+      if (Array.isArray(result.resources)) summary.resources_count = result.resources.length;
+    } else if (result !== undefined) {
+      summary.result_type = typeof result;
+    }
+  } else {
+    summary.response_type = typeof responseObj;
+  }
+  return dropEmpty(summary);
+}
+
 function appendToolLog(record) {
   if (!toolLogEnabled()) return;
   try {
@@ -238,7 +292,7 @@ function appendToolLog(record) {
       }
     }
     try {
-      fs.appendFileSync(file, `${JSON.stringify(record)}\n`, { encoding: "utf8" });
+      fs.appendFileSync(file, `${JSON.stringify(dropEmpty(record))}\n`, { encoding: "utf8" });
     } finally {
       if (lockFd !== null) fs.closeSync(lockFd);
       try {
@@ -252,7 +306,7 @@ function appendToolLog(record) {
   }
 }
 
-function logToolsCall(message, startTime, startHr, response, repeated, signature) {
+function logToolsCall(message, startTime, startHr, response, repeated, signature, traceId, spanId) {
   if (!toolLogEnabled()) return;
 
   const diff = process.hrtime.bigint() - startHr;
@@ -264,12 +318,38 @@ function logToolsCall(message, startTime, startHr, response, repeated, signature
   const boundedArgs = bounded(redact(args));
   const boundedResponse = bounded(redact(responseObj));
   const classification = classifyResponse(responseObj, repeated, durationMs, boundedArgs.bytes, boundedResponse.bytes);
+  const returnSummary = summarizeResponse(responseObj, boundedResponse.bytes, boundedArgs.truncated || boundedResponse.truncated);
+
+  const redaction = {
+    argument_bytes: boundedArgs.bytes,
+    result_bytes: boundedResponse.bytes,
+  };
+  if (boundedArgs.truncated || boundedResponse.truncated) redaction.truncated = true;
+  if (boundedArgs.hash) redaction.argument_sha256 = boundedArgs.hash;
+  if (boundedResponse.hash) redaction.result_sha256 = boundedResponse.hash;
+
+  const agentSignal = {
+    outcome: classification.outcome,
+    hints_returned: 0,
+  };
+  if (classification.errorCode !== null && classification.errorCode !== undefined) agentSignal.error_code = classification.errorCode;
+  if (classification.errorClass) agentSignal.error_class = classification.errorClass;
+  if (repeated) agentSignal.repeat_within_window = true;
+  if (classification.tags.length) agentSignal.improvement_tags = classification.tags;
+
+  const returnRecord = {
+    response: boundedResponse.value,
+  };
+  const responseId = responseObj && typeof responseObj === "object" ? responseObj.id : null;
+  if (responseId !== message.id) returnRecord.jsonrpc_id = responseId;
 
   toolLogSequence += 1;
   appendToolLog({
-    format_version: 1,
+    format_version: 2,
     surface: "proxy",
     sequence: toolLogSequence,
+    trace_id: traceId,
+    span_id: spanId,
     start_time: startTime,
     end_time: localIsoNow(),
     duration_ms: Math.round(durationMs * 1000) / 1000,
@@ -277,9 +357,6 @@ function logToolsCall(message, startTime, startHr, response, repeated, signature
     thread_id: "main",
     status: classification.outcome === "success" ? "success" : "error",
     client: {
-      name: "unknown",
-      version: "",
-      protocol_version: "",
       proxy_runtime: "node",
       proxy_version: PROXY_VERSION,
     },
@@ -290,31 +367,10 @@ function logToolsCall(message, startTime, startHr, response, repeated, signature
       arguments: boundedArgs.value,
       retry_signature: signature,
     },
-    return: {
-      jsonrpc_id: responseObj && typeof responseObj === "object" ? responseObj.id : null,
-      response: boundedResponse.value,
-      result_bytes: boundedResponse.bytes,
-    },
-    redaction: {
-      applied: true,
-      truncated: boundedArgs.truncated || boundedResponse.truncated,
-      argument_bytes: boundedArgs.bytes,
-      result_bytes: boundedResponse.bytes,
-      argument_sha256: boundedArgs.hash,
-      result_sha256: boundedResponse.hash,
-    },
-    agent_signal: {
-      outcome: classification.outcome,
-      error_code: classification.errorCode,
-      error_class: classification.errorClass,
-      hints_returned: 0,
-      discovery_context: "unknown",
-      retry_signature: signature,
-      repeat_within_window: repeated,
-      argument_bytes: boundedArgs.bytes,
-      result_bytes: boundedResponse.bytes,
-      improvement_tags: classification.tags,
-    },
+    return: returnRecord,
+    return_summary: returnSummary,
+    redaction,
+    agent_signal: agentSignal,
   });
 }
 
@@ -525,8 +581,11 @@ async function handleToolsCall(message) {
   const now = Date.now();
   const previous = recentToolLogSignatures.get(signature);
   const repeated = Boolean(previous && now - previous.at <= REPEAT_LOG_WINDOW_MS);
+  const traceId = makeLogId("trace", `${startTime}:${process.pid}:main:${signature}`);
+  const spanId = makeLogId("span", `${traceId}:proxy:${message.id}:${startTime}`);
+  const forwardedMessage = withTrace(message, traceId);
 
-  const response = await postMonolith(JSON.stringify(message));
+  const response = await postMonolith(JSON.stringify(forwardedMessage));
   if (response) {
     const responseObj = parseResponse(response);
     const failed = Boolean(responseObj && typeof responseObj === "object" && (
@@ -534,7 +593,7 @@ async function handleToolsCall(message) {
       (responseObj.result && responseObj.result.isError)
     ));
     recentToolLogSignatures.set(signature, { at: now, failed });
-    logToolsCall(message, startTime, startHr, response, repeated, signature);
+    logToolsCall(message, startTime, startHr, response, repeated, signature, traceId, spanId);
     return response;
   }
 
@@ -543,7 +602,7 @@ async function handleToolsCall(message) {
     `Monolith MCP is not available (Unreal Editor not running). Tool '${toolName}' cannot execute. Start the editor and try again.`,
   );
   recentToolLogSignatures.set(signature, { at: now, failed: true });
-  logToolsCall(message, startTime, startHr, fallback, repeated, signature);
+  logToolsCall(message, startTime, startHr, fallback, repeated, signature, traceId, spanId);
   return fallback;
 }
 

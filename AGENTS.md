@@ -73,9 +73,10 @@ Binaries\monolith_query.exe bridge search_asset_symbols --symbol=UObject --limit
 
 The daily invocation log contract is documented in `Docs/specs/SPEC_MonolithToolInvocationLogs.md`. When a checkout includes the implementation, the files are local diagnostics only and must not be treated as canonical tool output.
 
-- Proxy calls append JSONL records to `Logs/yyyyMMdd_proxy.log`.
-- Offline query calls append JSONL records to `Logs/yyyyMMdd_query.log`.
-- Editor action dispatch appends JSONL records to `Logs/yyyyMMdd_action.log` when `UMonolithSettings::bEnableDailyLog=true`; this checkout opts in through `Config\DefaultMonolith.ini`.
+- Proxy calls append JSONL records to `Logs/yyyyMMdd/proxy.jsonl`.
+- Offline query calls append JSONL records to `Logs/yyyyMMdd/query.jsonl`.
+- Editor action dispatch appends JSONL records to `Logs/yyyyMMdd/action.jsonl` when `UMonolithSettings::bEnableDailyLog=true`; this checkout opts in through `Config\DefaultMonolith.ini`.
+- Current records use format v2 with `trace_id`, per-record `span_id`, compact `return_summary`, redaction metadata, and no empty optional fields. Proxy calls forward trace metadata to editor actions, and action-spawned `monolith_query.exe` calls inherit it.
 - Proxy/query logging is enabled by default; unset or `MONOLITH_TOOL_LOG_ENABLED=1` enables it, and `MONOLITH_TOOL_LOG_ENABLED=0` disables it before launching the process.
 - For proxy/query smoke tests or temporary diagnostics, set `MONOLITH_TOOL_LOG_DIR` before launching the process to isolate logs outside `Logs/`.
 - Use the logs to aggregate repeated missing-action, schema-confusing, retry, large-result, editor-unavailable, and escape-hatch patterns before changing namespace placement or action contracts.

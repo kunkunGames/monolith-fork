@@ -16,6 +16,20 @@ Plan spec: [specs/SPEC_MonolithHeadlessMcpLaunch.md](specs/SPEC_MonolithHeadless
 
 ---
 
+### Tool Invocation Log Data Collection — PLAN (2026-05-20)
+
+Plan spec: [specs/SPEC_MonolithToolInvocationLogs.md](specs/SPEC_MonolithToolInvocationLogs.md#52-analysis-data-collection-contract). Analyzer implementation is deferred; this plan is only about collecting enough structured data for future analysis of what agents call, why they likely call it, how they continue, and where latency accumulates.
+
+- [ ] **P1 correlation upgrade** — Add `record_id`, `parent_span_id`, `session_key`, `process_instance_id`, `call_index`, `previous_record_id`, and `time_since_previous_ms` while preserving v2 compatibility.
+- [ ] **P2 routing context** — Add `routing_context` with `decision_source`, `namespace_source`, recent find/discover trace links, hint-following flags, and coarse `inferred_intent`.
+- [ ] **P3 workflow context** — Add `workflow.step`, retry/recovery/discovery links, and leave continuation outcomes analyzer-derived.
+- [ ] **P4 phase timing** — Add measured proxy/action/query `phase_timing` fields and child-process timing for editor actions that shell out to `monolith_query.exe`.
+- [ ] **P5 richer summaries** — Extend `return_summary` with result shape, recognized item/asset/symbol/reference counts, warning/error counts, truncation fields, and affected-path counts.
+- [ ] **P6 environment context** — Add low-cardinality version/headless/profile/index-health context without logging secrets or raw session ids.
+- [ ] **P7 verification** — Add schema tests and smoke logs proving proxy -> action -> child query records can reconstruct a timeline and identify bottleneck phases.
+
+---
+
 ### Routing, Action Contract, Cohesion & Code-Find Refactor — PLAN (2026-05-19)
 
 Plan spec: [specs/SPEC_MonolithRoutingCohesionRefactor.md](specs/SPEC_MonolithRoutingCohesionRefactor.md). Additive and compatibility-preserving: public `{namespace}_query` tools and action names remain stable while routing, projection, and reuse contracts are tightened.

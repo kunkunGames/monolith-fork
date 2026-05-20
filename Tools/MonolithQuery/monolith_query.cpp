@@ -161,6 +161,14 @@ static std::string hash_text(const std::string& text) {
     return out.str();
 }
 
+static std::string log_id(const std::string& prefix, const std::string& seed) {
+    std::string digest = hash_text(seed);
+    size_t pos = digest.find(':');
+    if (pos != std::string::npos) digest = digest.substr(pos + 1);
+    if (digest.size() > 32) digest.resize(32);
+    return prefix + "-" + digest;
+}
+
 static bool is_sensitive_key(const std::string& key) {
     std::string lower = key;
     std::transform(lower.begin(), lower.end(), lower.begin(),
@@ -219,6 +227,66 @@ static json bounded_json(const json& value, bool& truncated, size_t& original_by
     };
 }
 
+static void prune_empty_json(json& value);
+
+static bool is_empty_log_value(const json& value) {
+    return value.is_null()
+        || (value.is_string() && value.get<std::string>().empty())
+        || (value.is_array() && value.empty())
+        || (value.is_object() && value.empty());
+}
+
+static void prune_empty_json(json& value) {
+    if (value.is_object()) {
+        for (auto it = value.begin(); it != value.end();) {
+            prune_empty_json(it.value());
+            if (is_empty_log_value(it.value())) it = value.erase(it);
+            else ++it;
+        }
+    } else if (value.is_array()) {
+        for (auto& item : value) prune_empty_json(item);
+        value.erase(std::remove_if(value.begin(), value.end(), is_empty_log_value), value.end());
+    }
+}
+
+static json summarize_query_return(
+    const json& stdout_value,
+    const json& stderr_value,
+    int exit_code,
+    size_t stdout_bytes,
+    size_t stderr_bytes,
+    bool truncated,
+    const std::string& fatal_error) {
+    json summary = {
+        {"exit_code", exit_code},
+        {"stdout_bytes", stdout_bytes},
+        {"stderr_bytes", stderr_bytes},
+        {"result_bytes", stdout_bytes + stderr_bytes},
+        {"truncated", truncated}
+    };
+    if (!fatal_error.empty()) summary["fatal_error"] = fatal_error.substr(0, 240);
+    if (stdout_value.is_object()) {
+        json top_keys = json::array();
+        for (auto it = stdout_value.begin(); it != stdout_value.end(); ++it) top_keys.push_back(it.key());
+        summary["stdout_top_keys"] = top_keys;
+        if (stdout_value.contains("status")) summary["stdout_status"] = stdout_value["status"];
+        if (stdout_value.contains("summary")) summary["summary"] = stdout_value["summary"];
+        if (stdout_value.contains("results") && stdout_value["results"].is_array()) summary["results_count"] = stdout_value["results"].size();
+        if (stdout_value.contains("items") && stdout_value["items"].is_array()) summary["items_count"] = stdout_value["items"].size();
+        if (stdout_value.contains("warnings") && stdout_value["warnings"].is_array()) summary["warnings_count"] = stdout_value["warnings"].size();
+        if (stdout_value.contains("errors") && stdout_value["errors"].is_array()) summary["errors_count"] = stdout_value["errors"].size();
+    } else if (!stdout_value.is_null()) {
+        summary["stdout_type"] = stdout_value.type_name();
+    }
+    if (stderr_value.is_string() && !stderr_value.get<std::string>().empty()) {
+        summary["stderr_preview"] = stderr_value.get<std::string>().substr(0, 240);
+    } else if (!stderr_value.is_null()) {
+        summary["stderr_type"] = stderr_value.type_name();
+    }
+    prune_empty_json(summary);
+    return summary;
+}
+
 static fs::path executable_dir_for_logs() {
 #ifdef _WIN32
     char buf[MAX_PATH];
@@ -245,7 +313,9 @@ static void append_query_log(const json& record) {
     static std::mutex log_mutex;
     try {
         std::lock_guard<std::mutex> guard(log_mutex);
-        fs::path path = query_log_root() / (yyyymmdd_local() + "_query.log");
+        json cleaned = record;
+        prune_empty_json(cleaned);
+        fs::path path = query_log_root() / yyyymmdd_local() / "query.jsonl";
         fs::create_directories(path.parent_path());
 #ifdef _WIN32
         const fs::path lock_path = path.string() + ".lock";
@@ -267,7 +337,7 @@ static void append_query_log(const json& record) {
         }
         try {
             std::ofstream out(path, std::ios::app | std::ios::binary);
-            out << record.dump() << "\n";
+            out << cleaned.dump() << "\n";
             if (!out) throw std::runtime_error("could not append daily log");
         } catch (...) {
             UnlockFileEx(lock_handle, 0, 1, 0, &overlapped);
@@ -278,7 +348,7 @@ static void append_query_log(const json& record) {
         CloseHandle(lock_handle);
 #else
         std::ofstream out(path, std::ios::app | std::ios::binary);
-        out << record.dump() << "\n";
+        out << cleaned.dump() << "\n";
         if (!out) throw std::runtime_error("could not append daily log");
 #endif
     } catch (const std::exception& e) {
@@ -5521,6 +5591,13 @@ int main(int argc, char* argv[]) {
             tags.push_back("slow_action");
         }
 
+        std::string trace_id = getenv_str("MONOLITH_TRACE_ID");
+        if (trace_id.empty()) {
+            trace_id = log_id("trace", start_time + ":query:" + argv_json(argc, argv).dump());
+        }
+        const std::string span_id = log_id("span", trace_id + ":query:" + start_time + ":" + argv_json(argc, argv).dump());
+        const bool truncated = stdout_truncated || stderr_truncated;
+
         json call = {
             {"argv", argv_json(argc, argv)},
             {"namespace", parsed_args ? args.ns : ""},
@@ -5531,10 +5608,28 @@ int main(int argc, char* argv[]) {
             {"retry_signature", hash_text((parsed_args ? args.ns + ":" + args.action : "usage") + argv_json(argc, argv).dump())}
         };
 
+        json redaction = {
+            {"stdout_bytes", stdout_bytes},
+            {"stderr_bytes", stderr_bytes}
+        };
+        if (truncated) redaction["truncated"] = true;
+        if (!stdout_hash.empty()) redaction["stdout_sha256"] = stdout_hash;
+        if (!stderr_hash.empty()) redaction["stderr_sha256"] = stderr_hash;
+
+        json agent_signal = {
+            {"outcome", outcome},
+            {"hints_returned", 0}
+        };
+        if (exit_code != 0) agent_signal["error_code"] = exit_code;
+        if (!error_class.empty()) agent_signal["error_class"] = error_class;
+        if (!tags.empty()) agent_signal["improvement_tags"] = tags;
+
         json record = {
-            {"format_version", 1},
+            {"format_version", 2},
             {"surface", "query"},
             {"sequence", 1},
+            {"trace_id", trace_id},
+            {"span_id", span_id},
             {"start_time", start_time},
             {"end_time", iso_local_now()},
             {"duration_ms", duration_ms},
@@ -5546,40 +5641,25 @@ int main(int argc, char* argv[]) {
             {"thread_id", "main"},
             {"status", exit_code == 0 ? "success" : "error"},
             {"client", {
-                {"name", "monolith_query"},
-                {"version", ""},
-                {"protocol_version", ""},
-                {"proxy_runtime", "none"},
-                {"proxy_version", ""}
+                {"name", "monolith_query"}
             }},
             {"call", call},
             {"return", {
                 {"exit_code", exit_code},
                 {"stdout", bounded_stdout},
                 {"stderr", bounded_stderr},
-                {"fatal_error", fatal_error},
-                {"result_bytes", stdout_bytes + stderr_bytes}
+                {"fatal_error", fatal_error}
             }},
-            {"redaction", {
-                {"applied", true},
-                {"truncated", stdout_truncated || stderr_truncated},
-                {"stdout_bytes", stdout_bytes},
-                {"stderr_bytes", stderr_bytes},
-                {"stdout_sha256", stdout_hash.empty() ? json(nullptr) : json(stdout_hash)},
-                {"stderr_sha256", stderr_hash.empty() ? json(nullptr) : json(stderr_hash)}
-            }},
-            {"agent_signal", {
-                {"outcome", outcome},
-                {"error_code", exit_code == 0 ? json(nullptr) : json(exit_code)},
-                {"error_class", error_class},
-                {"hints_returned", 0},
-                {"discovery_context", "unknown"},
-                {"retry_signature", call["retry_signature"]},
-                {"repeat_within_window", false},
-                {"argument_bytes", call.dump().size()},
-                {"result_bytes", stdout_bytes + stderr_bytes},
-                {"improvement_tags", tags}
-            }}
+            {"return_summary", summarize_query_return(
+                bounded_stdout,
+                bounded_stderr,
+                exit_code,
+                stdout_bytes,
+                stderr_bytes,
+                truncated,
+                fatal_error)},
+            {"redaction", redaction},
+            {"agent_signal", agent_signal}
         };
         append_query_log(record);
     }

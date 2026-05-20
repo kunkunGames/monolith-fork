@@ -25,9 +25,10 @@ The action/namespace catalog is runtime-discovered. Call `monolith_find("<task t
 
 When the checkout has Monolith tool invocation daily logs available, treat them as local diagnostics only. They do not replace the tool return shown to the agent, and their absence in an older checkout is not by itself a tool failure.
 
-- Proxy calls append to `Plugins/Monolith/Logs/yyyyMMdd_proxy.log`.
-- Offline `monolith_query.exe` calls append to `Plugins/Monolith/Logs/yyyyMMdd_query.log`.
-- Editor action dispatch appends to `Plugins/Monolith/Logs/yyyyMMdd_action.log` only when editor setting `bEnableDailyLog=true`; project configs may opt in for headless agent workflows.
+- Proxy calls append to `Plugins/Monolith/Logs/yyyyMMdd/proxy.jsonl`.
+- Offline `monolith_query.exe` calls append to `Plugins/Monolith/Logs/yyyyMMdd/query.jsonl`.
+- Editor action dispatch appends to `Plugins/Monolith/Logs/yyyyMMdd/action.jsonl` only when editor setting `bEnableDailyLog=true`; project configs may opt in for headless agent workflows.
+- Current records use format v2 with `trace_id`, per-record `span_id`, compact `return_summary`, redaction metadata, and omitted empty optional fields. Use `trace_id` to connect proxy -> action -> child query calls.
 - Proxy/query logging is enabled by default; unset or `MONOLITH_TOOL_LOG_ENABLED=1` enables it, and `MONOLITH_TOOL_LOG_ENABLED=0` disables it before launching the proxy/query process.
 - For proxy/query smoke tests or temporary diagnostics, set `MONOLITH_TOOL_LOG_DIR` before launching the process to isolate logs outside `Plugins/Monolith/Logs`.
 - Logs are JSONL with redaction/truncation. Use aggregate patterns to spot repeated failures, missing actions, confusing schemas, large results, and escape-hatch use before changing Monolith actions.

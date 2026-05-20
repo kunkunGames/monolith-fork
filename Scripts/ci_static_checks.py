@@ -522,7 +522,7 @@ def check_proxy_smoke(ctx: CheckContext) -> None:
             )
         if responses[3].get("result", {}).get("isError") is not True:
             ctx.block("proxy-smoke", "offline tools/call did not return graceful tool error", script)
-        log_files = list(Path(log_tmp.name).glob("*_proxy.log"))
+        log_files = list(Path(log_tmp.name).glob("*/proxy.jsonl"))
         if not log_files:
             ctx.block("proxy-smoke", "proxy daily log was not created with MONOLITH_TOOL_LOG_ENABLED unset", script)
         else:
@@ -538,8 +538,16 @@ def check_proxy_smoke(ctx: CheckContext) -> None:
                 record = matching[-1]
                 if record.get("client", {}).get("proxy_runtime") != "python":
                     ctx.block("proxy-smoke", "proxy daily log did not identify the Python proxy runtime", log_files[0])
+                if record.get("format_version") != 2:
+                    ctx.block("proxy-smoke", "proxy daily log did not use format_version 2", log_files[0])
+                if not record.get("trace_id") or not record.get("span_id"):
+                    ctx.block("proxy-smoke", "proxy daily log did not include trace_id/span_id", log_files[0])
+                if not isinstance(record.get("return_summary"), dict):
+                    ctx.block("proxy-smoke", "proxy daily log did not include return_summary", log_files[0])
                 if record.get("agent_signal", {}).get("outcome") != "editor_unavailable":
                     ctx.block("proxy-smoke", "proxy daily log did not classify offline call as editor_unavailable", log_files[0])
+                if "retry_signature" in record.get("agent_signal", {}):
+                    ctx.block("proxy-smoke", "proxy daily log duplicated retry_signature in agent_signal", log_files[0])
 
         disabled_tmp = tempfile.TemporaryDirectory()
         disabled_env = env.copy()
@@ -561,7 +569,7 @@ def check_proxy_smoke(ctx: CheckContext) -> None:
                 "method": "tools/call",
                 "params": {"name": "ci_static_disabled_smoke", "arguments": {}},
             }) + "\n", timeout=timeout)
-            if list(Path(disabled_tmp.name).glob("*_proxy.log")):
+            if list(Path(disabled_tmp.name).glob("*/proxy.jsonl")):
                 ctx.block("proxy-smoke", "proxy daily log was created despite MONOLITH_TOOL_LOG_ENABLED=0", script)
         except subprocess.TimeoutExpired:
             ctx.block("proxy-smoke", "disabled proxy daily log smoke timed out", script)

@@ -5,6 +5,7 @@
 #include "MonolithMcpSessionTracker.h"
 #include "MonolithResourceRegistry.h"
 #include "MonolithToolRegistry.h"
+#include "MonolithToolInvocationLogger.h"
 #include "MonolithToolResultUtils.h"
 #include "MonolithSettings.h"
 #include "HttpServerModule.h"
@@ -367,9 +368,20 @@ bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const
 	// Process each request
 	const FString HeaderSessionId = FirstHeaderValue(Request, TEXT("MCP-Session-Id"));
 	const FString HeaderProtocolVersion = FirstHeaderValue(Request, TEXT("MCP-Protocol-Version"));
+	const FString HeaderTraceId = FirstHeaderValue(Request, TEXT("X-Monolith-Trace-Id"));
 	Responses.Reserve(Requests.Num());
 	for (const TSharedPtr<FJsonObject>& Req : Requests)
 	{
+		FString TraceId = HeaderTraceId;
+		if (Req.IsValid())
+		{
+			FString BodyTraceId;
+			if (Req->TryGetStringField(TEXT("_monolith_trace_id"), BodyTraceId) && !BodyTraceId.IsEmpty())
+			{
+				TraceId = BodyTraceId;
+			}
+		}
+		FMonolithToolInvocationLogger::FScopedTrace TraceScope(TraceId);
 		ObserveMcpSessionIfEnabled(Req, HeaderSessionId, HeaderProtocolVersion);
 		TSharedPtr<FJsonObject> Resp = ProcessJsonRpcRequest(Req);
 		if (Resp.IsValid())

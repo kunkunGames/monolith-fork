@@ -24,6 +24,7 @@ namespace
 {
 	FCriticalSection GDailyLogLock;
 	uint64 GDailyLogSequence = 0;
+	thread_local FString GCurrentTraceId;
 	constexpr int32 MaxFieldBytes = 256 * 1024;
 
 	bool IsSensitiveKey(const FString& Key)
@@ -174,6 +175,17 @@ namespace
 		return TEXT("hash:") + FMD5::HashAnsiString(*Text);
 	}
 
+	FString MakeLogId(const FString& Prefix, const FString& Seed)
+	{
+		FString Hash = Sha256Text(Seed);
+		int32 Separator = INDEX_NONE;
+		if (Hash.FindChar(TEXT(':'), Separator))
+		{
+			Hash = Hash.Mid(Separator + 1);
+		}
+		return Prefix + TEXT("-") + Hash.Left(32);
+	}
+
 	TSharedPtr<FJsonObject> BoundObject(
 		const TSharedPtr<FJsonObject>& Obj,
 		bool& bTruncated,
@@ -215,7 +227,7 @@ namespace
 
 	FString DailyLogPath()
 	{
-		return FPaths::Combine(LogRoot(), FDateTime::Now().ToString(TEXT("%Y%m%d_action.log")));
+		return FPaths::Combine(LogRoot(), FDateTime::Now().ToString(TEXT("%Y%m%d")), TEXT("action.jsonl"));
 	}
 
 	bool AppendLineToFileLocked(const FString& Path, const FString& Line)
@@ -275,6 +287,126 @@ namespace
 		Obj->SetArrayField(Field, Arr);
 	}
 
+	void SetStringArrayIfNotEmpty(TSharedPtr<FJsonObject> Obj, const FString& Field, const TArray<FString>& Values)
+	{
+		if (Values.Num() > 0)
+		{
+			SetStringArray(Obj, Field, Values);
+		}
+	}
+
+	bool IsEmptyLogValue(const TSharedPtr<FJsonValue>& Value)
+	{
+		if (!Value.IsValid() || Value->IsNull())
+		{
+			return true;
+		}
+		if (Value->Type == EJson::String)
+		{
+			FString Text;
+			return Value->TryGetString(Text) && Text.IsEmpty();
+		}
+		if (Value->Type == EJson::Array)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+			return Value->TryGetArray(Arr) && Arr && Arr->Num() == 0;
+		}
+		if (Value->Type == EJson::Object)
+		{
+			const TSharedPtr<FJsonObject>* Obj = nullptr;
+			return Value->TryGetObject(Obj) && Obj && (*Obj)->Values.Num() == 0;
+		}
+		return false;
+	}
+
+	void PruneEmptyFields(const TSharedPtr<FJsonObject>& Obj)
+	{
+		if (!Obj.IsValid())
+		{
+			return;
+		}
+
+		TArray<FString> RemoveKeys;
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Obj->Values)
+		{
+			if (Pair.Value.IsValid() && Pair.Value->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject>* Child = nullptr;
+				if (Pair.Value->TryGetObject(Child) && Child)
+				{
+					PruneEmptyFields(*Child);
+				}
+			}
+			if (IsEmptyLogValue(Pair.Value))
+			{
+				RemoveKeys.Add(Pair.Key);
+			}
+		}
+		for (const FString& Key : RemoveKeys)
+		{
+			Obj->RemoveField(Key);
+		}
+	}
+
+	void SetObjectKeyArray(TSharedPtr<FJsonObject> Obj, const FString& Field, const TSharedPtr<FJsonObject>& Source)
+	{
+		if (!Obj.IsValid() || !Source.IsValid() || Source->Values.Num() == 0)
+		{
+			return;
+		}
+		TArray<FString> Keys;
+		Source->Values.GetKeys(Keys);
+		Keys.Sort();
+		if (Keys.Num() > 20)
+		{
+			Keys.SetNum(20);
+		}
+		SetStringArray(Obj, Field, Keys);
+	}
+
+	TSharedPtr<FJsonObject> MakeReturnSummary(
+		const FMonolithActionResult& Result,
+		int64 ArgBytes,
+		int64 ResultBytes,
+		bool bTruncated)
+	{
+		TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
+		Summary->SetBoolField(TEXT("success"), Result.bSuccess);
+		Summary->SetNumberField(TEXT("argument_bytes"), static_cast<double>(ArgBytes));
+		Summary->SetNumberField(TEXT("result_bytes"), static_cast<double>(ResultBytes));
+		if (bTruncated)
+		{
+			Summary->SetBoolField(TEXT("truncated"), true);
+		}
+		if (!Result.bSuccess)
+		{
+			Summary->SetNumberField(TEXT("error_code"), Result.ErrorCode);
+			Summary->SetStringField(TEXT("error_message"), Result.ErrorMessage.Left(240));
+		}
+		if (Result.Hints.Num() > 0)
+		{
+			Summary->SetNumberField(TEXT("hints_count"), Result.Hints.Num());
+		}
+		if (Result.RelatedActions.Num() > 0)
+		{
+			Summary->SetNumberField(TEXT("related_actions_count"), Result.RelatedActions.Num());
+		}
+		SetObjectKeyArray(Summary, TEXT("result_top_keys"), Result.Result);
+
+		const TArray<TSharedPtr<FJsonValue>>* Warnings = nullptr;
+		if (Result.Result.IsValid() && Result.Result->TryGetArrayField(TEXT("warnings"), Warnings) && Warnings)
+		{
+			Summary->SetNumberField(TEXT("warnings_count"), Warnings->Num());
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Errors = nullptr;
+		if (Result.Result.IsValid() && Result.Result->TryGetArrayField(TEXT("errors"), Errors) && Errors)
+		{
+			Summary->SetNumberField(TEXT("errors_count"), Errors->Num());
+		}
+		PruneEmptyFields(Summary);
+		return Summary;
+	}
+
 	void AppendTag(TArray<TSharedPtr<FJsonValue>>& Tags, const FString& Tag)
 	{
 		for (const TSharedPtr<FJsonValue>& Existing : Tags)
@@ -293,6 +425,30 @@ bool FMonolithToolInvocationLogger::IsEnabled()
 {
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
 	return Settings && Settings->bEnableDailyLog;
+}
+
+FMonolithToolInvocationLogger::FScopedTrace::FScopedTrace(const FString& TraceId)
+	: PreviousTraceId(GCurrentTraceId)
+{
+	if (!TraceId.IsEmpty())
+	{
+		GCurrentTraceId = TraceId;
+	}
+}
+
+FMonolithToolInvocationLogger::FScopedTrace::~FScopedTrace()
+{
+	GCurrentTraceId = PreviousTraceId;
+}
+
+FString FMonolithToolInvocationLogger::GenerateTraceId(const FString& Seed)
+{
+	return MakeLogId(TEXT("trace"), Seed);
+}
+
+FString FMonolithToolInvocationLogger::GetCurrentTraceId()
+{
+	return GCurrentTraceId;
 }
 
 FString FMonolithToolInvocationLogger::NowIso8601WithOffset()
@@ -347,11 +503,17 @@ void FMonolithToolInvocationLogger::RecordAction(
 
 		TSharedPtr<FJsonObject> ReturnObj = MakeShared<FJsonObject>();
 		ReturnObj->SetBoolField(TEXT("success"), Result.bSuccess);
-		ReturnObj->SetNumberField(TEXT("error_code"), Result.ErrorCode);
-		ReturnObj->SetStringField(TEXT("error_message"), Result.ErrorMessage);
+		if (!Result.bSuccess)
+		{
+			ReturnObj->SetNumberField(TEXT("error_code"), Result.ErrorCode);
+		}
+		if (!Result.ErrorMessage.IsEmpty())
+		{
+			ReturnObj->SetStringField(TEXT("error_message"), Result.ErrorMessage);
+		}
 		ReturnObj->SetObjectField(TEXT("result"), RedactObject(Result.Result));
-		SetStringArray(ReturnObj, TEXT("hints"), Result.Hints);
-		SetStringArray(ReturnObj, TEXT("related_actions"), Result.RelatedActions);
+		SetStringArrayIfNotEmpty(ReturnObj, TEXT("hints"), Result.Hints);
+		SetStringArrayIfNotEmpty(ReturnObj, TEXT("related_actions"), Result.RelatedActions);
 		if (Result.ErrorData.IsValid())
 		{
 			ReturnObj->SetObjectField(TEXT("error_data"), RedactObject(Result.ErrorData));
@@ -415,39 +577,41 @@ void FMonolithToolInvocationLogger::RecordAction(
 		Call->SetStringField(TEXT("validation_phase"), ValidationPhase);
 		Call->SetStringField(TEXT("retry_signature"), RetrySignature);
 
-		TSharedPtr<FJsonObject> Client = MakeShared<FJsonObject>();
-		Client->SetStringField(TEXT("name"), TEXT("unknown"));
-		Client->SetStringField(TEXT("version"), TEXT(""));
-		Client->SetStringField(TEXT("protocol_version"), TEXT(""));
-		Client->SetStringField(TEXT("proxy_runtime"), TEXT("none"));
-		Client->SetStringField(TEXT("proxy_version"), TEXT(""));
-
 		TSharedPtr<FJsonObject> Redaction = MakeShared<FJsonObject>();
-		Redaction->SetBoolField(TEXT("applied"), true);
-		Redaction->SetBoolField(TEXT("truncated"), bArgsTruncated || bResultTruncated);
 		Redaction->SetNumberField(TEXT("argument_bytes"), static_cast<double>(ArgBytes));
 		Redaction->SetNumberField(TEXT("result_bytes"), static_cast<double>(ResultBytes));
-		Redaction->SetStringField(TEXT("argument_sha256"), ArgHash);
-		Redaction->SetStringField(TEXT("result_sha256"), ResultHash);
+		if (bArgsTruncated || bResultTruncated)
+		{
+			Redaction->SetBoolField(TEXT("truncated"), true);
+		}
+		if (!ArgHash.IsEmpty())
+		{
+			Redaction->SetStringField(TEXT("argument_sha256"), ArgHash);
+		}
+		if (!ResultHash.IsEmpty())
+		{
+			Redaction->SetStringField(TEXT("result_sha256"), ResultHash);
+		}
 
 		TSharedPtr<FJsonObject> AgentSignal = MakeShared<FJsonObject>();
 		AgentSignal->SetStringField(TEXT("outcome"), Outcome);
-		if (Result.bSuccess)
-		{
-			AgentSignal->SetField(TEXT("error_code"), MakeShared<FJsonValueNull>());
-		}
-		else
+		if (!Result.bSuccess)
 		{
 			AgentSignal->SetNumberField(TEXT("error_code"), Result.ErrorCode);
 		}
-		AgentSignal->SetStringField(TEXT("error_class"), ErrorClass);
-		AgentSignal->SetNumberField(TEXT("hints_returned"), Result.Hints.Num() + Result.RelatedActions.Num());
-		AgentSignal->SetStringField(TEXT("discovery_context"), TEXT("unknown"));
-		AgentSignal->SetStringField(TEXT("retry_signature"), RetrySignature);
-		AgentSignal->SetBoolField(TEXT("repeat_within_window"), false);
-		AgentSignal->SetNumberField(TEXT("argument_bytes"), static_cast<double>(ArgBytes));
-		AgentSignal->SetNumberField(TEXT("result_bytes"), static_cast<double>(ResultBytes));
-		AgentSignal->SetArrayField(TEXT("improvement_tags"), Tags);
+		if (!ErrorClass.IsEmpty())
+		{
+			AgentSignal->SetStringField(TEXT("error_class"), ErrorClass);
+		}
+		const int32 HintsReturned = Result.Hints.Num() + Result.RelatedActions.Num();
+		if (HintsReturned > 0)
+		{
+			AgentSignal->SetNumberField(TEXT("hints_returned"), HintsReturned);
+		}
+		if (Tags.Num() > 0)
+		{
+			AgentSignal->SetArrayField(TEXT("improvement_tags"), Tags);
+		}
 
 		uint64 Sequence = 0;
 		{
@@ -456,20 +620,28 @@ void FMonolithToolInvocationLogger::RecordAction(
 		}
 
 		TSharedPtr<FJsonObject> Record = MakeShared<FJsonObject>();
-		Record->SetNumberField(TEXT("format_version"), 1);
+		const FString TraceId = GetCurrentTraceId().IsEmpty()
+			? GenerateTraceId(Namespace + TEXT(":") + Action + TEXT(":") + StartTime)
+			: GetCurrentTraceId();
+		const FString SpanId = MakeLogId(TEXT("span"), TraceId + TEXT(":action:") + Namespace + TEXT(":") + Action + TEXT(":") + StartTime);
+
+		Record->SetNumberField(TEXT("format_version"), 2);
 		Record->SetStringField(TEXT("surface"), TEXT("action"));
 		Record->SetNumberField(TEXT("sequence"), static_cast<double>(Sequence));
+		Record->SetStringField(TEXT("trace_id"), TraceId);
+		Record->SetStringField(TEXT("span_id"), SpanId);
 		Record->SetStringField(TEXT("start_time"), StartTime);
 		Record->SetStringField(TEXT("end_time"), NowIso8601WithOffset());
 		Record->SetNumberField(TEXT("duration_ms"), DurationMs);
 		Record->SetNumberField(TEXT("pid"), static_cast<double>(FPlatformProcess::GetCurrentProcessId()));
 		Record->SetNumberField(TEXT("thread_id"), static_cast<double>(FPlatformTLS::GetCurrentThreadId()));
 		Record->SetStringField(TEXT("status"), Result.bSuccess ? TEXT("success") : TEXT("error"));
-		Record->SetObjectField(TEXT("client"), Client);
 		Record->SetObjectField(TEXT("call"), Call);
 		Record->SetObjectField(TEXT("return"), BoundedReturn);
+		Record->SetObjectField(TEXT("return_summary"), MakeReturnSummary(Result, ArgBytes, ResultBytes, bArgsTruncated || bResultTruncated));
 		Record->SetObjectField(TEXT("redaction"), Redaction);
 		Record->SetObjectField(TEXT("agent_signal"), AgentSignal);
+		PruneEmptyFields(Record);
 
 		FString Line = JsonObjectToString(Record);
 		Line.AppendChar(TEXT('\n'));

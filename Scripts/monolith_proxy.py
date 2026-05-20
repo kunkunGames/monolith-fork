@@ -105,7 +105,7 @@ def _find_plugin_root() -> Path:
 
 def _daily_log_path() -> Path:
     day = datetime.now().strftime("%Y%m%d")
-    return _find_plugin_root() / f"{day}_proxy.log"
+    return _find_plugin_root() / day / "proxy.jsonl"
 
 
 def _now_iso() -> str:
@@ -156,6 +156,31 @@ def _bounded(value, max_bytes: int = _MAX_LOG_FIELD_BYTES):
 def _retry_signature(tool_name: str, arguments) -> str:
     payload = {"tool": tool_name, "arguments": _redact(arguments)}
     return "sha256:" + hashlib.sha256(_json_bytes(payload)).hexdigest()
+
+
+def _make_log_id(prefix: str, payload: str) -> str:
+    digest = hashlib.sha256(payload.encode("utf-8", errors="replace")).hexdigest()
+    return f"{prefix}-{digest[:32]}"
+
+
+def _with_trace(msg: dict, trace_id: str) -> dict:
+    forwarded = dict(msg)
+    forwarded["_monolith_trace_id"] = trace_id
+    return forwarded
+
+
+def _drop_empty(value):
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            cleaned_item = _drop_empty(item)
+            if cleaned_item is None or cleaned_item == "" or cleaned_item == [] or cleaned_item == {}:
+                continue
+            cleaned[key] = cleaned_item
+        return cleaned
+    if isinstance(value, list):
+        return [_drop_empty(item) for item in value if _drop_empty(item) not in (None, "", [], {})]
+    return value
 
 
 def _extract_response(response: str):
@@ -217,13 +242,48 @@ def _classify_response(response_obj, repeated: bool, duration_ms: float, arg_byt
     return outcome, error_class, error_code, sorted(set(tags))
 
 
+def _summarize_response(response_obj, result_bytes: int, truncated: bool) -> dict:
+    summary = {
+        "result_bytes": result_bytes,
+        "truncated": truncated,
+    }
+    if isinstance(response_obj, dict):
+        summary["response_top_keys"] = sorted(response_obj.keys())[:20]
+        if "error" in response_obj:
+            error = response_obj.get("error") or {}
+            if isinstance(error, dict):
+                summary["jsonrpc_error_code"] = error.get("code")
+                summary["jsonrpc_error_message"] = str(error.get("message", ""))[:240]
+            else:
+                summary["jsonrpc_error_message"] = str(error)[:240]
+        result = response_obj.get("result")
+        if isinstance(result, dict):
+            summary["result_top_keys"] = sorted(result.keys())[:20]
+            if "isError" in result:
+                summary["is_error"] = bool(result.get("isError"))
+            content = result.get("content")
+            if isinstance(content, list):
+                summary["content_count"] = len(content)
+            tools = result.get("tools")
+            if isinstance(tools, list):
+                summary["tools_count"] = len(tools)
+            resources = result.get("resources")
+            if isinstance(resources, list):
+                summary["resources_count"] = len(resources)
+        elif result is not None:
+            summary["result_type"] = type(result).__name__
+    else:
+        summary["response_type"] = type(response_obj).__name__
+    return _drop_empty(summary)
+
+
 def _append_tool_log(record: dict) -> None:
     if not _tool_log_enabled():
         return
 
     try:
         path = _daily_log_path()
-        line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+        line = json.dumps(_drop_empty(record), ensure_ascii=False, separators=(",", ":")) + "\n"
         with _tool_log_lock:
             path.parent.mkdir(parents=True, exist_ok=True)
             lock_path = path.with_suffix(path.suffix + ".lock")
@@ -256,7 +316,16 @@ def _append_tool_log(record: dict) -> None:
         _log(f"Tool daily log failed: {e}")
 
 
-def _log_tools_call(msg: dict, start_time: str, start_perf: float, response: str, repeated: bool, retry_signature: str) -> None:
+def _log_tools_call(
+    msg: dict,
+    start_time: str,
+    start_perf: float,
+    response: str,
+    repeated: bool,
+    retry_signature: str,
+    trace_id: str,
+    span_id: str,
+) -> None:
     if not _tool_log_enabled():
         return
 
@@ -278,10 +347,45 @@ def _log_tools_call(msg: dict, start_time: str, start_perf: float, response: str
         _tool_log_sequence += 1
         sequence = _tool_log_sequence
 
+    return_summary = _summarize_response(response_obj, result_bytes, args_truncated or response_truncated)
+
+    redaction = {
+        "argument_bytes": arg_bytes,
+        "result_bytes": result_bytes,
+    }
+    if args_truncated or response_truncated:
+        redaction["truncated"] = True
+    if arg_hash:
+        redaction["argument_sha256"] = arg_hash
+    if result_hash:
+        redaction["result_sha256"] = result_hash
+
+    agent_signal = {
+        "outcome": outcome,
+        "hints_returned": 0,
+    }
+    if error_code is not None:
+        agent_signal["error_code"] = error_code
+    if error_class:
+        agent_signal["error_class"] = error_class
+    if repeated:
+        agent_signal["repeat_within_window"] = True
+    if tags:
+        agent_signal["improvement_tags"] = tags
+
+    return_record = {
+        "response": bounded_response,
+    }
+    response_id = response_obj.get("id") if isinstance(response_obj, dict) else None
+    if response_id != msg.get("id"):
+        return_record["jsonrpc_id"] = response_id
+
     record = {
-        "format_version": 1,
+        "format_version": 2,
         "surface": "proxy",
         "sequence": sequence,
+        "trace_id": trace_id,
+        "span_id": span_id,
         "start_time": start_time,
         "end_time": end_time,
         "duration_ms": round(duration_ms, 3),
@@ -289,9 +393,6 @@ def _log_tools_call(msg: dict, start_time: str, start_perf: float, response: str
         "thread_id": threading.get_ident(),
         "status": "success" if outcome == "success" else "error",
         "client": {
-            "name": "unknown",
-            "version": "",
-            "protocol_version": "",
             "proxy_runtime": "python",
             "proxy_version": PROXY_VERSION,
         },
@@ -302,31 +403,10 @@ def _log_tools_call(msg: dict, start_time: str, start_perf: float, response: str
             "arguments": bounded_args,
             "retry_signature": retry_signature,
         },
-        "return": {
-            "jsonrpc_id": response_obj.get("id") if isinstance(response_obj, dict) else None,
-            "response": bounded_response,
-            "result_bytes": result_bytes,
-        },
-        "redaction": {
-            "applied": True,
-            "truncated": args_truncated or response_truncated,
-            "argument_bytes": arg_bytes,
-            "result_bytes": result_bytes,
-            "argument_sha256": arg_hash,
-            "result_sha256": result_hash,
-        },
-        "agent_signal": {
-            "outcome": outcome,
-            "error_code": error_code,
-            "error_class": error_class or "",
-            "hints_returned": 0,
-            "discovery_context": "unknown",
-            "retry_signature": retry_signature,
-            "repeat_within_window": repeated,
-            "argument_bytes": arg_bytes,
-            "result_bytes": result_bytes,
-            "improvement_tags": tags,
-        },
+        "return": return_record,
+        "return_summary": return_summary,
+        "redaction": redaction,
+        "agent_signal": agent_signal,
     }
     _append_tool_log(record)
 
@@ -594,15 +674,18 @@ def handle_tools_call(msg: dict) -> str:
     now = time.monotonic()
     previous = _recent_tool_log_signatures.get(retry_signature)
     repeated = bool(previous and now - previous[0] <= _REPEAT_LOG_WINDOW_SECONDS)
+    trace_id = _make_log_id("trace", f"{start_time}:{os.getpid()}:{threading.get_ident()}:{retry_signature}")
+    span_id = _make_log_id("span", f"{trace_id}:proxy:{msg.get('id')}:{start_time}")
+    forwarded_msg = _with_trace(msg, trace_id)
 
-    resp = _post_monolith(json.dumps(msg))
+    resp = _post_monolith(json.dumps(forwarded_msg))
     if resp:
         try:
             response_obj = _extract_response(resp)
             failed = isinstance(response_obj, dict) and (
                 "error" in response_obj or response_obj.get("result", {}).get("isError"))
             _recent_tool_log_signatures[retry_signature] = (now, failed)
-            _log_tools_call(msg, start_time, start_perf, resp, repeated, retry_signature)
+            _log_tools_call(msg, start_time, start_perf, resp, repeated, retry_signature, trace_id, span_id)
         except Exception as e:
             _log(f"Tool daily log wrapper failed: {e}")
         return resp
@@ -613,7 +696,7 @@ def handle_tools_call(msg: dict) -> str:
         f"Tool '{tool_name}' cannot execute. Start the editor and try again.",
     )
     _recent_tool_log_signatures[retry_signature] = (now, True)
-    _log_tools_call(msg, start_time, start_perf, response, repeated, retry_signature)
+    _log_tools_call(msg, start_time, start_perf, response, repeated, retry_signature, trace_id, span_id)
     return response
 
 

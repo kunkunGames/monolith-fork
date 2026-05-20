@@ -2,7 +2,7 @@
 
 Date: 2026-05-20
 Module: MonolithCore, MonolithProxy, MonolithQuery
-Result: P0 verified with one unrelated project build blocker
+Result: P0 verified; format v2 proxy/query follow-up verified, editor action relink blocked by a running editor process
 
 ---
 
@@ -12,9 +12,9 @@ Verified the P0 daily invocation log contract for:
 
 | Surface | Expected file |
 |---|---|
-| MCP stdio proxy | `Plugins/Monolith/Logs/yyyyMMdd_proxy.log` |
-| Offline query CLI | `Plugins/Monolith/Logs/yyyyMMdd_query.log` |
-| Editor action dispatch | `Plugins/Monolith/Logs/yyyyMMdd_action.log` |
+| MCP stdio proxy | `Plugins/Monolith/Logs/yyyyMMdd/proxy.jsonl` |
+| Offline query CLI | `Plugins/Monolith/Logs/yyyyMMdd/query.jsonl` |
+| Editor action dispatch | `Plugins/Monolith/Logs/yyyyMMdd/action.jsonl` |
 
 ## 2. Commands And Results
 
@@ -34,6 +34,28 @@ Verified the P0 daily invocation log contract for:
 | Proxy-to-action headless path | Python proxy calls to `monolith_status` and `source_query` against headless editor | Passed; 3 proxy records and 3 action records appended |
 | Final integrated append | Headless editor with config-enabled daily logging, proxy `monolith_status`, query `source health`, action calls | Passed; records appended to all three daily log files |
 
+## 2.1 Format V2 Follow-Up
+
+After the initial P0 implementation, the log schema was compacted to format v2:
+
+- `trace_id` and `span_id` are required on new proxy/query/action records.
+- Proxy calls forward `_monolith_trace_id` into editor JSON-RPC requests.
+- Editor actions export `MONOLITH_TRACE_ID` while handlers run so child `monolith_query.exe` records inherit the action trace.
+- `return_summary` provides compact analyzer-friendly result metadata.
+- Empty optional fields and duplicate `agent_signal.retry_signature` / byte fields are omitted.
+
+| Gate | Command | Result |
+|---|---|---|
+| Node proxy syntax | `node --check Scripts\monolith_proxy.js` | Passed |
+| Python proxy/static syntax | `uv run python -m py_compile Scripts\monolith_proxy.py Scripts\ci_static_checks.py` | Passed |
+| Static CI | `uv run python Scripts\ci_static_checks.py check` | Passed, 0 blocking findings |
+| Query build | `cmd /c Tools\MonolithQuery\build.bat` | Passed; copied `Binaries\monolith_query.exe`; C4819 warnings only |
+| Proxy build | `cmd /c Tools\MonolithProxy\build.bat` | Passed; copied `Binaries\monolith_proxy.exe`; C4819 warning only |
+| Proxy/query v2 smoke | C++ proxy offline call, Python proxy offline call, Node proxy offline call, and `Binaries\monolith_query.exe source health` with `MONOLITH_TRACE_ID=trace-smoke-shared` under isolated `MONOLITH_TOOL_LOG_DIR` paths | Passed; proxy/query records had `format_version=2`, `trace_id`, `span_id`, `return_summary`, and no duplicate `agent_signal.retry_signature`; query inherited `trace-smoke-shared` |
+| MonolithCore module compile | UBT `-Module=MonolithCore -NoUBTMakefiles -ForceRulesCompile` | Compile actions passed for `MonolithToolInvocationLogger.cpp`, `MonolithToolRegistry.cpp`, `MonolithHttpServer.cpp`, and tests; DLL link was blocked because a running `UnrealEditor.exe` held `Binaries\Win64\UnrealEditor-MonolithCore.dll` |
+
+Action automation for format v2 should be rerun after the editor process using `UnrealEditor-MonolithCore.dll` is closed.
+
 ## 3. Automation Details
 
 `Saved\Logs\GO.log` recorded:
@@ -50,9 +72,9 @@ Final integrated verification appended records under `D:\P4\game\Plugins\Monolit
 
 | File | Appended | Last call | Outcome |
 |---|---:|---|---|
-| `20260520_proxy.log` | 3 | `source_query search_source` | `tool_error` for missing param |
-| `20260520_query.log` | 1 | `source.health` | `success` |
-| `20260520_action.log` | 12 | `monolith.discover` | `success` |
+| `20260520/proxy.jsonl` | 3 | `source_query search_source` | `tool_error` for missing param |
+| `20260520/query.jsonl` | 1 | `source.health` | `success` |
+| `20260520/action.jsonl` | 12 | `monolith.discover` | `success` |
 
 All appended records parsed as compact JSONL. The action matrix included:
 

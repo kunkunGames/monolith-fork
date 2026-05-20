@@ -11,6 +11,26 @@
 // =============================================================================
 namespace
 {
+	class FScopedEnvironmentVar
+	{
+	public:
+		FScopedEnvironmentVar(const TCHAR* InName, const FString& InValue)
+			: Name(InName)
+			, PreviousValue(FPlatformMisc::GetEnvironmentVariable(InName))
+		{
+			FPlatformMisc::SetEnvironmentVar(*Name, *InValue);
+		}
+
+		~FScopedEnvironmentVar()
+		{
+			FPlatformMisc::SetEnvironmentVar(*Name, *PreviousValue);
+		}
+
+	private:
+		FString Name;
+		FString PreviousValue;
+	};
+
 	// Iterative Levenshtein distance. Both inputs are short (action names, ~20 chars),
 	// so a fixed-size stack buffer is plenty. Returns INT32_MAX on overflow.
 	int32 LevenshteinDistance(const FString& A, const FString& B)
@@ -590,6 +610,11 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 {
 	const FString LogStartTime = FMonolithToolInvocationLogger::NowIso8601WithOffset();
 	const double LogStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
+	const FString ExistingTraceId = FMonolithToolInvocationLogger::GetCurrentTraceId();
+	const FString ActionTraceId = ExistingTraceId.IsEmpty()
+		? FMonolithToolInvocationLogger::GenerateTraceId(Namespace + TEXT(":") + Action + TEXT(":") + LogStartTime)
+		: ExistingTraceId;
+	FMonolithToolInvocationLogger::FScopedTrace ActionTraceScope(ActionTraceId);
 	auto RecordAndReturn = [&](const FMonolithActionResult& Result, const FString& ValidationPhase, const TSharedPtr<FJsonObject>& LogParams) -> FMonolithActionResult
 	{
 		FMonolithToolInvocationLogger::RecordAction(
@@ -842,6 +867,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	// if the editor crashes during the handler. RAII clears the slot on exit.
 	FMonolithCrashBreadcrumb::FScopedCapture CrashCapture(Namespace, Action, EffectiveParams);
 
+	FScopedEnvironmentVar TraceEnv(TEXT("MONOLITH_TRACE_ID"), ActionTraceId);
 	FMonolithActionResult ActionResult = HandlerCopy.Execute(EffectiveParams);
 
 	// On success, append `warnings` array for unknown params (K3 soft-warn mode).
