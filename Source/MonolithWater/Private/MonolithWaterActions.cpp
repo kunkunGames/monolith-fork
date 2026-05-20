@@ -110,6 +110,7 @@ FMonolithActionResult FMonolithWaterActions::GetStatus(const TSharedPtr<FJsonObj
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Modules;
+	Modules.Reserve(4);
 	Modules.Add(MakeShared<FJsonValueObject>(MonolithWater::MakeModuleStatus(TEXT("Water"))));
 	Modules.Add(MakeShared<FJsonValueObject>(MonolithWater::MakeModuleStatus(TEXT("WaterEditor"))));
 	Modules.Add(MakeShared<FJsonValueObject>(MonolithWater::MakeModuleStatus(TEXT("Landscape"))));
@@ -130,11 +131,13 @@ FMonolithActionResult FMonolithWaterActions::GetStatus(const TSharedPtr<FJsonObj
 	Result->SetNumberField(TEXT("water_like_actor_count"), WaterLikeActorCount);
 
 	TArray<TSharedPtr<FJsonValue>> ImplementedActions;
+	ImplementedActions.Reserve(2);
 	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("water.get_status")));
 	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("water.list_bodies")));
 	Result->SetArrayField(TEXT("implemented_actions"), ImplementedActions);
 
 	TArray<TSharedPtr<FJsonValue>> FutureActions;
+	FutureActions.Reserve(4);
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("water.query_surface")));
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("water.spawn_body")));
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("water.configure_body")));
@@ -142,6 +145,7 @@ FMonolithActionResult FMonolithWaterActions::GetStatus(const TSharedPtr<FJsonObj
 	Result->SetArrayField(TEXT("future_optional_actions"), FutureActions);
 
 	TArray<TSharedPtr<FJsonValue>> Notes;
+	Notes.Reserve(2);
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("This first milestone uses reflected class names only; it does not add Water, WaterEditor, Landscape, or LandscapeEditor link dependencies.")));
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Actor, spline, zone, landscape, buoyancy, and rebuild mutations remain future work for the water namespace.")));
 	Result->SetArrayField(TEXT("notes"), Notes);
@@ -197,6 +201,7 @@ FMonolithActionResult FMonolithWaterActions::ListBodies(const TSharedPtr<FJsonOb
 		TArray<UActorComponent*> Components;
 		Actor->GetComponents(Components);
 		TArray<TSharedPtr<FJsonValue>> WaterComponents;
+		WaterComponents.Reserve(Components.Num());
 		for (const UActorComponent* Component : Components)
 		{
 			if (!Component || !MonolithWater::IsWaterLikeClass(Component->GetClass()))
@@ -228,6 +233,7 @@ FMonolithActionResult FMonolithWaterActions::ListBodies(const TSharedPtr<FJsonOb
 		Row->SetArrayField(TEXT("water_components"), WaterComponents);
 
 		TArray<TSharedPtr<FJsonValue>> Tags;
+		Tags.Reserve(Actor->Tags.Num());
 		for (const FName& Tag : Actor->Tags)
 		{
 			Tags.Add(MakeShared<FJsonValueString>(Tag.ToString()));
