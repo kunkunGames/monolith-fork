@@ -147,6 +147,11 @@
 		{
 			"Name": "PythonScriptPlugin",
 			"Enabled": true
+		},
+		{
+			"Name": "Dataflow",
+			"Enabled": true,
+			"Optional": true
 		}
 	],
 	"Modules": [

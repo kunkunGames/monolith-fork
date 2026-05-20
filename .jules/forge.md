@@ -44,3 +44,9 @@ Avoid: Using short or generic wildcards like `Gameplaya*` when the plugin name i
 **Learning:** For optional Engine plugins that are conditionally linked, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file can cause the Engine to refuse to load the plugin entirely, rendering the conditional fallback logic useless.
 **Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have `"Optional": true` defined in `Monolith.uplugin`.
 **Avoid:** Do not omit optional plugins from `.uplugin` when they are explicitly queried in `Build.cs`.
+
+## 2026-05-17 - [Add missing Dataflow optional plugin dependency]
+**Build pattern:** The `Dataflow` plugin was conditionally linked in `MonolithDataflow.Build.cs` via engine path checks but was missing from the `Monolith.uplugin` configuration list of Plugins.
+**Learning:** For optional Engine plugins that are conditionally queried and linked in a module's Build.cs, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file can cause the Engine to refuse to load the plugin entirely or fail dependency resolution when the optional dependency is enabled.
+**Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have a corresponding `"Optional": true` entry defined in `Monolith.uplugin`.
+**Avoid:** Linking optional plugins in `Build.cs` without adding them to `.uplugin`.
