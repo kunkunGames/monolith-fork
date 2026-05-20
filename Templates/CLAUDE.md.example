@@ -49,15 +49,15 @@ Plugins\Monolith\Binaries\monolith_query.exe source risk_score UObject --limit=5
 Plugins\Monolith\Binaries\monolith_query.exe source review_context UObject --detail-level=minimal
 ```
 
-For the CRG-compatible `graph.db`, Monolith builds and searches it natively from `Saved\EngineSource.db`:
+For CRG/review navigation, Monolith stores derived projection/cache rows inside the default namespace databases: `source` uses `Saved\EngineSource.db`, and `project` uses `Saved\ProjectIndex.db`. Normal offline CLI calls follow those defaults without DB override arguments:
 
 ```powershell
 Plugins\Monolith\Binaries\monolith_query.exe source repair_crg_cache --execute
-Plugins\Monolith\Binaries\monolith_query.exe source build_crg_graph --execute
-Plugins\Monolith\Binaries\monolith_query.exe source search_crg_graph UObject --limit=5
+Plugins\Monolith\Binaries\monolith_query.exe source risk_score UObject --limit=5
+Plugins\Monolith\Binaries\monolith_query.exe source review_context UObject --detail-level=minimal
 ```
 
-`source search_crg_graph` uses `Saved\graph.db`'s `nodes_fts` FTS5 table first and falls back to LIKE search only when FTS has no result. Use `source search_source` for general symbol/source-line lookup, `source search_crg_graph` for CRG node search, and `source review_context` or `source risk_score` before making code-review claims.
+Use `source search_source` for general symbol/source-line lookup, and use `source review_context` or `source risk_score` before making code-review claims. The offline CLI no longer needs a separate `graph.db` path for normal CRG/review workflows.
 
 ## Project asset navigation
 
