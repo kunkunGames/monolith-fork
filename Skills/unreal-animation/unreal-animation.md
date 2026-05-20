@@ -5,7 +5,7 @@ description: Use when inspecting or editing Unreal animation assets via Monolith
 
 # Unreal Animation Workflows
 
-**125 animation actions** via `animation_query()`. Discover with `monolith_discover({ namespace: "animation" })`.
+**135 animation actions** via `animation_query()`. Discover with `monolith_discover({ namespace: "animation" })`.
 
 ## Key Parameters
 

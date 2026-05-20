@@ -426,7 +426,7 @@ Optional Paper2D discovery registered by `MonolithPaper2D`. The namespace is rea
 
 ## animation
 
-Animation curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig. **125 actions** total — 103 baseline + 13 PoseSearch + 5 ABP write + 3 Control Rig write + 1 layout.
+Animation curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig. 135 actions total — 104 baseline + 13 PoseSearch + 5 ABP write + 12 Control Rig write + 1 layout.
 
 > For full param schemas, call `monolith_discover("animation")` at runtime.
 
