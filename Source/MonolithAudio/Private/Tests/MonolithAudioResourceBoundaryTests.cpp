@@ -414,4 +414,38 @@ bool FMonolithAudioListAvailableMetaSoundNodesLimitTest::RunTest(const FString& 
 	return true;
 }
 
+
+namespace
+{
+FMonolithActionResult ExecuteCreateRandomSoundCue(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry::Get());
+	return FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("create_random_sound_cue"), Params);
+}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioCreateWavePlayerNodesLimitTest, "Monolith.LimitGuard.Audio.CreateWavePlayerNodesClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAudioCreateWavePlayerNodesLimitTest::RunTest(const FString& Parameters)
+{
+	// Test oversized array is rejected
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/TestLimitCue"));
+
+		TArray<TSharedPtr<FJsonValue>> OversizedWavesArray;
+		for (int32 i = 0; i < 101; ++i)
+		{
+			OversizedWavesArray.Add(MakeShared<FJsonValueString>(TEXT("/Game/Temp/SomeWave")));
+		}
+		Params->SetArrayField(TEXT("sound_waves"), OversizedWavesArray);
+
+		FMonolithActionResult Result = ExecuteCreateRandomSoundCue(Params);
+
+		TestFalse(TEXT("Oversized wave array should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention maximum allowed"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed")));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
