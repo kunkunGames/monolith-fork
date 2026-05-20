@@ -259,7 +259,7 @@ Two options for offline access (no full editor session required):
 
 Standalone C++ executable. No UE runtime, no Python, instant startup. Queries `EngineSource.db` and `ProjectIndex.db` directly. Replaces the previous `MonolithQueryCommandlet` (removed) and supersedes `monolith_offline.py` as the primary offline access path.
 
-The default DB paths are inferred from the executable location. For normal plugin checkouts, do not pass DB override arguments: `source` opens `Saved/EngineSource.db`, `project` opens `Saved/ProjectIndex.db`, `bridge` opens both, and source CRG graph actions use `Saved/graph.db`. `--db`, `--source-db`, `--project-db`, and `--graph-db` are override-only options for copied DBs, temporary smoke tests, or non-standard layouts.
+The default DB paths are inferred from the executable location. Normal plugin checkouts use this default resolution: `source` opens `Saved/EngineSource.db`, `project` opens `Saved/ProjectIndex.db`, `bridge` opens both, and source CRG graph actions use `Saved/graph.db`. `--db`, `--source-db`, `--project-db`, and `--graph-db` remain override options for copied DBs, temporary smoke tests, or non-standard layouts.
 
 ### 5.2 monolith_offline.py (legacy)
 

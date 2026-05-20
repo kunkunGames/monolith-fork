@@ -35,4 +35,4 @@
 
 ## 3. Notes
 
-Default-path agent calls use the built-in DB resolution without DB override arguments. `--db`, `--source-db`, `--project-db`, and `--graph-db` remain available for copied DBs, temporary smoke tests, or non-standard layouts.
+Default-path agent calls use the built-in DB resolution. `--db`, `--source-db`, `--project-db`, and `--graph-db` remain available for copied DBs, temporary smoke tests, or non-standard layouts.
