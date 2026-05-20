@@ -151,6 +151,7 @@ namespace MonolithPCG
 
 		OutTagCount = Pairs.Num();
 		TArray<TSharedPtr<FJsonValue>> Rows;
+		Rows.Reserve(FMath::Min(Pairs.Num(), TagLimit));
 		for (int32 Index = 0; Index < Pairs.Num() && Rows.Num() < TagLimit; ++Index)
 		{
 			const TPair<FString, FString>& Pair = Pairs[Index];
@@ -236,10 +237,12 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 	Result->SetStringField(TEXT("sample_utc"), FDateTime::UtcNow().ToIso8601());
 	Result->SetBoolField(TEXT("pcg_namespace_registered"), FMonolithToolRegistry::Get().HasNamespace(TEXT("pcg")));
 
+	const TArray<FString> PcgModuleNames = MonolithPCG::GetPcgModuleNames();
 	TArray<TSharedPtr<FJsonValue>> ModuleRows;
+	ModuleRows.Reserve(PcgModuleNames.Num());
 	bool bAnyModuleExists = false;
 	bool bAnyModuleLoaded = false;
-	for (const FString& ModuleName : MonolithPCG::GetPcgModuleNames())
+	for (const FString& ModuleName : PcgModuleNames)
 	{
 		TSharedPtr<FJsonObject> Row = MonolithPCG::BuildModuleStatusRow(ModuleName);
 		bAnyModuleExists |= Row->GetBoolField(TEXT("exists"));
@@ -259,6 +262,7 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 		TEXT("/Script/PCG.PCGSettings"),
 		TEXT("/Script/PCG.PCGVolume")
 	};
+	ReflectedTypes.Reserve(UE_ARRAY_COUNT(TypePaths));
 	for (const TCHAR* TypePath : TypePaths)
 	{
 		ReflectedTypes.Add(MakeShared<FJsonValueObject>(MonolithPCG::BuildReflectedTypeRow(TypePath)));
@@ -266,6 +270,7 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 	Result->SetArrayField(TEXT("reflected_types"), ReflectedTypes);
 
 	TArray<TSharedPtr<FJsonValue>> CurrentActions;
+	CurrentActions.Reserve(4);
 	CurrentActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.get_status")));
 	CurrentActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.list_graph_assets")));
 	CurrentActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.get_graph_asset")));
@@ -273,6 +278,7 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 	Result->SetArrayField(TEXT("current_actions"), CurrentActions);
 
 	TArray<TSharedPtr<FJsonValue>> FutureActions;
+	FutureActions.Reserve(4);
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.get_capabilities")));
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.list_pcg_node_types")));
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("pcg.validate_pcg_graph")));
@@ -280,6 +286,7 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 	Result->SetArrayField(TEXT("future_actions"), FutureActions);
 
 	TArray<TSharedPtr<FJsonValue>> Notes;
+	Notes.Reserve(2);
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("MonolithPCG owns the pcg namespace while keeping this first milestone AssetRegistry/reflection-only.")));
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Graph mutation, execution, and node parameter editing remain future work.")));
 	Result->SetArrayField(TEXT("notes"), Notes);
@@ -314,6 +321,7 @@ FMonolithActionResult FMonolithPCGActions::ListGraphAssets(const TSharedPtr<FJso
 	AssetRegistry.GetAssets(Filter, Assets);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(FMath::Min(Assets.Num(), Limit));
 	int32 MatchedCount = 0;
 	for (const FAssetData& Asset : Assets)
 	{
@@ -398,6 +406,10 @@ FMonolithActionResult FMonolithPCGActions::ListComponents(const TSharedPtr<FJson
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	if (Limit > 0 && Limit < 1000000)
+	{
+		Rows.Reserve(Limit);
+	}
 	int32 MatchedCount = 0;
 	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
 	{
