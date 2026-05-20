@@ -11,17 +11,20 @@ void FMonolithMaterialModule::StartupModule()
 {
 	if (!GetDefault<UMonolithSettings>()->bEnableMaterial) return;
 
-	FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry::Get());
-	FMonolithSpecializedAssetActions::RegisterActions(FMonolithToolRegistry::Get());
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	Registry.RegisterOwnedActions(TEXT("MonolithMaterial"), [](FMonolithToolRegistry& OwnedRegistry)
+	{
+		FMonolithMaterialActions::RegisterActions(OwnedRegistry);
+		FMonolithSpecializedAssetActions::RegisterActions(OwnedRegistry);
+	});
 	UE_LOG(LogMonolith, Log, TEXT("Monolith - Material module loaded (%d material actions, %d asset actions)"),
-		FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("material")),
-		FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("asset")));
+		Registry.GetNamespaceActionCount(TEXT("material")),
+		Registry.GetNamespaceActionCount(TEXT("asset")));
 }
 
 void FMonolithMaterialModule::ShutdownModule()
 {
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("material"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("asset"));
+	FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithMaterial"));
 }
 
 #undef LOCTEXT_NAMESPACE

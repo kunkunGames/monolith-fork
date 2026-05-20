@@ -90,11 +90,15 @@ void FMonolithEditorModule::StartupModule()
 	LogCapture = new FMonolithLogCapture();
 	GLog->AddOutputDevice(LogCapture);
 
-	FMonolithEditorActions::RegisterActions(LogCapture);
-	FMonolithEditorMapActions::RegisterActions(FMonolithToolRegistry::Get());  // F8: create_empty_map + get_module_status
-	FMonolithEditorSelectionActions::RegisterActions();
-	FMonolithEditorLevelMetadataActions::RegisterActions();
-	FMonolithEditorCrashActions::RegisterActions();  // CrashRecovery: get_last_crash_reason / list_recent_crashes / get_crash_stats
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	Registry.RegisterOwnedActions(TEXT("MonolithEditor"), [this](FMonolithToolRegistry& OwnedRegistry)
+	{
+		FMonolithEditorActions::RegisterActions(LogCapture);
+		FMonolithEditorMapActions::RegisterActions(OwnedRegistry);  // F8: create_empty_map + get_module_status
+		FMonolithEditorSelectionActions::RegisterActions();
+		FMonolithEditorLevelMetadataActions::RegisterActions();
+		FMonolithEditorCrashActions::RegisterActions();  // CrashRecovery: get_last_crash_reason / list_recent_crashes / get_crash_stats
+	});
 	GMonolithPieTransactionBufferGuard.Register();
 
 	// Register settings detail customization
@@ -104,7 +108,7 @@ void FMonolithEditorModule::StartupModule()
 		FOnGetDetailCustomizationInstance::CreateStatic(&FMonolithSettingsCustomization::MakeInstance)
 	);
 
-	const int32 EditorActionCount = FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("editor"));
+	const int32 EditorActionCount = Registry.GetNamespaceActionCount(TEXT("editor"));
 	UE_LOG(LogMonolith, Log, TEXT("Monolith — Editor module loaded (%d editor actions)"), EditorActionCount);
 }
 
@@ -112,8 +116,7 @@ void FMonolithEditorModule::ShutdownModule()
 {
 	GMonolithPieTransactionBufferGuard.Unregister();
 
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("editor"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("scene"));
+	FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithEditor"));
 
 	if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))
 	{

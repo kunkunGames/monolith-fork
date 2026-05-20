@@ -2,8 +2,8 @@
 
 **Parent:** [../SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Status:** Partially implemented (P0-P5 complete; P6 Core/Source high-traffic slice complete; R6 readiness/freshness complete; P7 partial with module/build-rule/test-support helper slices, first Index/UI decohesion slices, Core monolith management schema-validation coverage, expanded Mesh/AI/GAS/UI/Animation/Blueprint/ComboGraph/Interchange/LevelSequence/SourceControl/Config/Localization/LogicDriver/Index domain schema-validation slices, and small optional/read-only namespace validation slices)
-**Audit date:** 2026-05-19
+**Status:** Partially implemented (P0-P5 complete; P6 Core/Source high-traffic slice complete; R6 readiness/freshness complete; P7 partial with module/build-rule/test-support helper slices, first Index/UI decohesion slices, Core monolith management schema-validation coverage, expanded Mesh/AI/GAS/UI/Animation/Blueprint/ComboGraph/Interchange/LevelSequence/SourceControl/Config/Localization/LogicDriver/Index domain schema-validation slices, small optional/read-only namespace validation slices, and P8 shared namespace owner-scoped registration plus mesh routing cleanup complete)
+**Audit date:** 2026-05-20
 **Owner modules:** `MonolithCore`, `MonolithSource`, `MonolithIndex`, all `Source/Monolith*` domain modules
 **Scope:** `Source/Monolith*`, MCP `tools/list` / `tools/call` surfaces, `monolith.*` discovery actions, action result payload conventions, agent guideline docs, per-module specs and tests
 
@@ -22,6 +22,7 @@
 | P6 | Complete for Core/Source high-traffic slice | `FParamSchemaBuilder` supports validation opt-in plus enum/range metadata; `FMonolithToolRegistry` enforces typed params for opted-in schemas. Core routing actions and high-traffic Source lookup/read actions now advertise and enforce ranges/enums/types. |
 | R6 | Complete | `FMonolithIndexFreshnessUtils` centralizes ProjectIndex/EngineSource DB path and file freshness reporting; `monolith.status`, `get_readiness_status`, and live `index.get_index_status` expose index mtime/size/age. Readiness summarizes `source.health` and `project.health` including CRG warning counts. |
 | P7 | Partial | Review-result helper reuse, simple module registration helper, shared Build.cs optional dependency probe helpers, expanded `MonolithTestSupport` param-guard migration for Core/Source/Mesh/AI/GAS/UI/Animation/Blueprint/ComboGraph/Interchange/LevelSequence/SourceControl/Config/Localization/LogicDriver/Index and small optional/read-only namespaces, first Index action-registration split, first UI module-file decohesion slice, Core monolith management schema-validation coverage, and expanded Mesh/AI/GAS/UI/Animation/Blueprint/ComboGraph/Interchange/LevelSequence plus Water/NDisplay/Paper2D/PCG/ChaosFracture/WorldConditions/Dataflow/GameFeatures/Slate/SourceControl/Config/Localization/LogicDriver/Index schema-validation slices are in place; broader cross-module test migration, additional Mesh/UI decohesion, and wider domain schema validation remain follow-up work. |
+| P8 | Complete | `FMonolithToolRegistry` now records action owners via `RegisterOwnedActions`, supports `UnregisterAction` and `UnregisterOwner`, and shared namespaces shut down by owner instead of by whole namespace. Mesh-domain spillover moved from `mesh` into `asset`, `leveldesign`, `worldgen`, `modelgen`, and `scene`; `mesh.integration_hooks_stub` was removed. |
 
 ---
 

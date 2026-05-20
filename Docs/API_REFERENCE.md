@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.14.10 · **Last updated:** 2026-05-19
+**Version:** v0.14.10 · **Last updated:** 2026-05-20
 
 Action and dispatcher totals are runtime-discovered. Call `monolith_status()` for live totals, `monolith_find("task text")` when the exact action is unclear, and `monolith_discover("<namespace>")` or `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` for current action schemas; 24 town-gen actions remain experimental and disabled until `bEnableProceduralTownGen=true`.
 
@@ -32,7 +32,12 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [interchange](#interchange) | 16 | Normalized import/export validation, guarded import mutation, reimport metadata, reimport, and export actions registered by MonolithInterchange |
 | [project](#project) | 17 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 21 | Unreal Engine C++ source code navigation |
-| [mesh](#mesh) | 234 (+24 gated) | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, town gen (experimental — +24 town gen registers only with `bEnableProceduralTownGen=true`) |
+| [asset](#asset) | 6 | Specialized asset enrichment plus naming and rename hygiene |
+| [mesh](#mesh) | 66 | Static mesh inspection/operations/validation/performance/tech-art workflows |
+| [scene](#scene) | 65 | Editor-world actor CRUD, spatial queries, lighting, audio, decals, scatter, metadata |
+| [leveldesign](#leveldesign) | 61 | Horror/encounter/accessibility analysis, framing, monster reveal, co-op balance |
+| [worldgen](#worldgen) | 63 | Blockout, replacement, procedural structures/terrain, optional town-generation workflows |
+| [modelgen](#modelgen) | 7 | Generated-model provider, job, import, and provenance workflows |
 | [ndisplay](#ndisplay) | 2 | Optional nDisplay / DisplayCluster config discovery registered by MonolithNDisplay |
 | [pcg](#pcg) | 4 | Optional PCG AssetRegistry/reflection discovery registered by MonolithPCG |
 | [slate](#slate) | 1 (+5 gated) | Live editor Slate window/widget inspection registered by MonolithSlate |
@@ -947,23 +952,23 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 
 ---
 
-## context
+## bridge
 
-Local context discovery backed by ProjectIndex and EngineSource. **5 actions.**
+Local bridge discovery backed by ProjectIndex and EngineSource. **5 actions.**
 
 | Action | Key params | Purpose |
 |--------|-----------|---------|
-| `context.get_index_status` | `include_stats`=false | Report local project/source index readiness for mention search and bridge lookups |
-| `context.start_indexing` | `scope`=all\|assets\|source, `full`=false | Start project asset and/or source indexing from one context entry point |
-| `context.search_items` | `query`*, `limit`=24, `include_assets`=true, `include_source`=true | Search indexed assets, source symbols, and source lines for prompt context |
-| `context.build_attachment` | `item_id`*, `context_lines`=12, `max_chars`=12000 | Materialize a `context.search_items` item into a bounded text attachment |
-| `context.bridge_asset_symbols` | `asset_path` or `symbol`, `limit`=20, `detail_level`=minimal | RX-6 read-only asset<->source bridge. Requires exactly one non-empty string seed and rejects wrong-typed seeds with `-32602`. Returns bounded heuristic `links[]` with `confidence`, `reasons[]`, `asset`, `symbol`, `warnings[]`, `truncated`, and `next_actions`; never mutates indexes or shells out. Offline parity uses `monolith_query context bridge_asset_symbols` over `ProjectIndex.db` + `EngineSource.db` |
+| `bridge.get_index_status` | `include_stats`=false | Report local project/source index readiness for mention search and bridge lookups |
+| `bridge.start_indexing` | `scope`=all\|assets\|source, `full`=false | Start project asset and/or source indexing from one bridge entry point |
+| `bridge.search_items` | `query`*, `limit`=24, `include_assets`=true, `include_source`=true | Search indexed assets, source symbols, and source lines for prompt context |
+| `bridge.build_attachment` | `item_id`*, `context_lines`=12, `max_chars`=12000 | Materialize a `bridge.search_items` item into a bounded text attachment |
+| `bridge.search_asset_symbols` | `asset_path` or `symbol`, `limit`=20, `detail_level`=minimal | RX-6 read-only asset<->source bridge. Requires exactly one non-empty string seed and rejects wrong-typed seeds with `-32602`. Returns bounded heuristic `links[]` with `confidence`, `reasons[]`, `asset`, `symbol`, `warnings[]`, `truncated`, and `next_actions`; never mutates indexes or shells out. Offline parity uses `monolith_query bridge search_asset_symbols` over `ProjectIndex.db` + `EngineSource.db` |
 
 ---
 
 ## source
 
-Unreal Engine C++ source code navigation. 1M+ symbols indexed. **23 actions.**
+Unreal Engine C++ source code navigation. 1M+ symbols indexed. **27 actions.**
 
 CRG-inspired navigation/review (additive, over the existing `"references"` + `inheritance` graph plus rebuildable derived `crg_*` projection/cache tables):
 
@@ -973,6 +978,10 @@ CRG-inspired navigation/review (additive, over the existing `"references"` + `in
 | `source.health` | `include_counts`=true | Read-only: v1 schema, `symbols_ai/ad` triggers, `symbols_fts` parity, orphan refs, CRG projection table/index/parity checks; `source_fts` info-only; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
 | `source.repair_fts` | `target`=all\|symbols\|source, `execute`=false | Rebuild `symbols_fts`. `target=source` → reindex guidance (plain fts5). Refused while indexing |
 | `source.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `symbols`, `"references"`, and `inheritance`. Dry-run unless `execute=true`; refused while indexing; source indexing completion also runs this rebuild automatically |
+| `source.build_crg_graph` | `execute`=false, `graph_db` optional | Build or dry-run a CRG-compatible `Saved/graph.db` from `Saved/EngineSource.db` files, symbols, references, and inheritance. Uses the default graph DB path unless `graph_db` points to a copied/non-standard location |
+| `source.rebuild_crg_graph` | `execute`=false, `graph_db` optional | Alias of `source.build_crg_graph` for explicit rebuild workflows |
+| `source.search_crg_graph` | `query`*, `kind` optional, `limit`=20, `graph_db` optional | Search `Saved/graph.db` graph nodes through `nodes_fts` first, with LIKE fallback when FTS returns no rows |
+| `source.crg_graph_health` | `graph_db` optional | Validate `Saved/graph.db` schema version, node counts, FTS parity, and graph availability |
 | `source.risk_score` | `symbol`*, `limit`=10, `min_tier`=low | `{score,tier,reasons[],raw_counts,cache}` from `crg_node_metrics` when available; query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
 | `source.detect_changes` | `changed_paths` or `paths`, `changed_ranges`, `diff_text`, `max_results`=200, `detail_level`=minimal | Changed source path suffix mapping to symbols, risk, depth-1 caller impact, heuristic test gaps, and review priorities. RX-1.1: optional `changed_ranges`/`diff_text` restrict matches to symbols overlapping changed line ranges (CRG overlap rule); `input.precision` ∈ `{file,line}`; no P4/git shell-out (caller supplies the diff). Offline CLI adds `--diff-file`, `--diff-stdin`, `--ranges=path:s-e` |
 | `source.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory function/class/struct dead-symbol candidates with `confidence` + `reasons[]`; excludes UE reflection/automation/entry markers and never mutates |
@@ -980,7 +989,7 @@ CRG-inspired navigation/review (additive, over the existing `"references"` + `in
 | `source.snapshot` | `label`, `execute`=false | Dry-run by default; `execute=true` stores current CRG projection node/edge manifest in derived `crg_snapshots` |
 | `source.diff_snapshots` | `before`*, `after`=current, `limit`=100 | Read-only diff between stored/current CRG manifests; returns `summary_counts` and capped new/removed node/edge samples |
 | `source.review_hotspots` | `kind`=all, `limit`=50, `min_lines`=100, `include_questions`=true | Global review queue ranked by fan-in/fan-out/risk/large symbol signals with optional advisory questions |
-| `source.review_context` | `symbol`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`. Distinct from single-item `context.build_attachment` |
+| `source.review_context` | `symbol`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`. Distinct from single-item `bridge.build_attachment` |
 
 ### `source.read_source`
 
@@ -1090,49 +1099,75 @@ Read-only live editor Slate UI inspection registered by `MonolithSlate`. The sta
 
 ---
 
+## asset
+
+Specialized asset enrichment plus asset hygiene. **6 actions.** `MonolithMaterial` registers specialized material/asset enrichment actions; `MonolithMesh` registers `validate_naming_conventions` and `batch_rename_assets` into `asset`.
+
+> For full param schemas, call `monolith_discover("asset")` at runtime.
+
+---
+
 ## mesh
 
-Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript, procedural geometry, lighting, audio, performance, and **experimental** procedural town generation. **234 default-active actions** — plus 24 experimental town gen actions when `bEnableProceduralTownGen=true` (default `false`), for 258 total mesh actions when fully registered.
+Static mesh inspection, mesh comparison, GeometryScript operations, mesh validation, mesh performance budgeting, proxy/HLOD helpers, cache/handle utilities, prefab/prop-kit helpers, and tech-art mesh workflows. **66 actions.**
 
-> For full param schemas, call `monolith_discover("mesh")` at runtime. The action surface is too broad for full enumeration — see categories below.
+> For full param schemas, call `monolith_discover("mesh")` at runtime.
 
-**Action categories (core, always registered):**
+**Action categories:**
 
 | Category | Examples |
 |----------|----------|
 | Mesh inspection | `get_mesh_info`, `get_mesh_bounds`, `get_mesh_materials`, `get_mesh_lods`, `get_mesh_collision`, `get_mesh_uvs`, `analyze_skeletal_mesh`, `analyze_mesh_quality`, `compare_meshes`, `get_vertex_data`, `search_meshes_by_size`, `get_mesh_catalog_stats` |
-| Scene actors | `get_actor_info`, `spawn_actor`, `move_actor`, `duplicate_actor`, `delete_actors`, `group_actors`, `set_actor_properties`, `align_actors`, `snap_to_floor`, `manage_folders`, `set_actor_tags` |
-| Spatial queries | `query_raycast`, `query_multi_raycast`, `query_radial_sweep`, `query_overlap`, `query_nearest`, `query_line_of_sight`, `get_actors_in_volume`, `get_scene_bounds`, `get_scene_statistics`, `get_spatial_relationships`, `query_navmesh` |
-| Blockout | `get_blockout_volumes`, `setup_blockout_volume`, `create_blockout_primitive`, `create_blockout_primitives_batch`, `create_blockout_grid`, `match_asset_to_blockout`, `match_all_in_volume`, `apply_replacement`, `clear_blockout`, `export_blockout_layout`, `import_blockout_layout`, `scan_volume`, `scatter_props`, `create_blockout_blueprint` |
-| Level analysis | `analyze_sightlines`, `find_hiding_spots`, `find_ambush_points`, `analyze_choke_points`, `analyze_escape_routes`, `classify_zone_tension`, `analyze_pacing_curve`, `find_dead_ends`, `validate_path_width`, `validate_navigation_complexity`, `analyze_visual_contrast`, `find_rest_points`, `validate_interactive_reach`, `generate_accessibility_report` |
-| Performance | `get_region_performance`, `estimate_placement_cost`, `find_overdraw_hotspots`, `analyze_shadow_cost`, `get_triangle_budget`, `analyze_texel_density`, `analyze_material_cost_in_region`, `analyze_lightmap_density`, `find_instancing_candidates`, `convert_to_hism`, `setup_hlod`, `analyze_texture_budget`, `generate_proxy_mesh` |
-| Lighting | `place_light`, `set_light_properties`, `sample_light_levels`, `find_dark_corners`, `analyze_light_transitions`, `get_light_coverage`, `suggest_light_placement` |
-| Audio | `get_audio_volumes`, `get_surface_materials`, `estimate_footstep_sound`, `analyze_room_acoustics`, `analyze_sound_propagation`, `find_loud_surfaces`, `find_sound_paths`, `can_ai_hear_from`, `get_stealth_map`, `find_quiet_path`, `suggest_audio_volumes`, `create_audio_volume`, `set_surface_type` |
-| Decals / scatter | `place_decals`, `place_along_path`, `analyze_prop_density`, `place_storytelling_scene`, `scatter_on_surface`, `scatter_on_walls`, `scatter_on_ceiling`, `randomize_transforms` |
-| Encounter design | `analyze_ai_territory`, `evaluate_safe_room`, `predict_player_paths`, `evaluate_spawn_point`, `suggest_scare_positions`, `evaluate_encounter_pacing`, `design_encounter`, `suggest_patrol_route`, `analyze_level_pacing_structure`, `generate_scare_sequence`, `validate_horror_intensity`, `evaluate_monster_reveal`, `analyze_co_op_balance` |
-| Templates / presets | `list_room_templates`, `get_room_template`, `apply_room_template`, `create_room_template`, `list_storytelling_patterns`, `create_storytelling_pattern`, `list_acoustic_profiles`, `create_acoustic_profile`, `create_tension_profile`, `list_genre_presets`, `export_genre_preset`, `import_genre_preset` |
-| Validation | `validate_game_ready`, `suggest_lod_strategy`, `batch_validate`, `compare_lod_chain`, `validate_naming_conventions`, `batch_rename_assets` |
+| Performance | `get_triangle_budget`, `analyze_texel_density`, `find_instancing_candidates`, `convert_to_hism`, `setup_hlod`, `analyze_texture_budget`, `generate_proxy_mesh` |
+| Validation | `validate_game_ready`, `suggest_lod_strategy`, `batch_validate`, `compare_lod_chain` |
 | GeometryScript | `mesh_boolean`, `mesh_simplify`, `mesh_remesh`, `generate_collision`, `generate_lods`, `fill_holes`, `compute_uvs`, `mirror_mesh` |
 | Procedural meshes | `create_parametric_mesh`, `create_horror_prop`, `create_structure`, `create_building_shell`, `create_maze`, `create_pipe_network`, `create_fragments`, `create_terrain_patch` |
-| Cache | `list_cached_meshes`, `clear_cache`, `validate_cache`, `get_cache_stats` |
-| Handles | `create_handle`, `release_handle`, `list_handles`, `save_handle` |
-| Prefabs | `create_prefab`, `create_blueprint_prefab`, `spawn_prefab`, `place_blueprint_actor`, `place_spline`, `create_prop_kit`, `place_prop_kit` |
-| Hospice / accessibility | `generate_hospice_report`, `analyze_framing` |
+| Cache and handles | `list_cached_meshes`, `clear_cache`, `validate_cache`, `get_cache_stats`, `create_handle`, `release_handle`, `list_handles`, `save_handle` |
+| Prefabs and placement helpers | `create_prefab`, `create_blueprint_prefab`, `spawn_prefab`, `place_blueprint_actor`, `place_spline`, `create_prop_kit`, `place_prop_kit` |
 
-**Action categories (experimental town gen, OFF by default):**
+Moved domains:
 
-| Category | Examples |
-|----------|----------|
-| Floor plans | `generate_floor_plan`, `create_building_from_grid` |
-| Facades / roofs | `generate_facade`, `generate_roof`, `generate_arch_features` |
-| City blocks | `create_city_block`, `register_building`, `query_spatial_registry` |
-| Auto volumes | `create_auto_volumes`, `adapt_terrain` |
-| Furnishing | `furnish_room`, `validate_building` |
-| Debug | Debug views and diagnostics |
+| Namespace | Former mesh-domain examples |
+|-----------|-----------------------------|
+| `scene` | actor CRUD, spatial queries, lighting, audio, decals, scatter, scene metadata/statistics |
+| `leveldesign` | sightlines, hiding spots, accessibility, encounter pacing, `analyze_framing`, `evaluate_monster_reveal`, `analyze_co_op_balance` |
+| `worldgen` | blockout volumes, replacement workflows, procedural world/building/town generation |
+| `modelgen` | generated-model provider/job/import/provenance workflows |
+| `asset` | `validate_naming_conventions`, `batch_rename_assets` |
 
-> **Experimental — town gen has known geometry issues** (wall misalignment, room separation). Fix Plans v2-v5 applied 27+ fixes but fundamental issues remain. Core mesh actions (sweep walls, auto-collision, proc mesh caching, blueprint prefabs) work fine.
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the mesh namespace contract.
 
-See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the full action catalog.
+---
+
+## scene
+
+Editor-world actor CRUD, spatial queries, lighting/audio/decal/scatter helpers, and scene metadata/statistics. **65 actions.** `scene` is a shared namespace owned by `MonolithScene` and `MonolithEditor`; owner-scoped registration prevents either module from unregistering the other's actions.
+
+> For full param schemas, call `monolith_discover("scene")` at runtime.
+
+---
+
+## leveldesign
+
+Horror/encounter/accessibility analysis, room/acoustic/genre presets, framing, monster reveal, and co-op spatial balance. **61 actions.**
+
+> For full param schemas, call `monolith_discover("leveldesign")` at runtime.
+
+---
+
+## worldgen
+
+Blockout, replacement workflows, procedural structures/terrain, and optional town-generation workflows. **63 actions.**
+
+> For full param schemas, call `monolith_discover("worldgen")` at runtime.
+
+---
+
+## modelgen
+
+Generated-model provider, job, import, and provenance workflows. **7 actions.**
+
+> For full param schemas, call `monolith_discover("modelgen")` at runtime.
 
 ---
 
@@ -1498,14 +1533,15 @@ Before writing any client code:
 
 When the editor is closed but you still need to query Monolith:
 
-- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool. It mirrors the live `project` / `source` query actions, including CRG navigation/review (`impact_radius`, `health`, `repair_fts`, `repair_crg_cache`, `risk_score`, `detect_changes`, `find_unused`, `snapshot`, `diff_snapshots`, `review_context`, `review_hotspots`, `pre_merge_check`) and the read-only context bridge (`context bridge_asset_symbols`). It stays read-only by default; `repair_fts`, `repair_crg_cache`, and `snapshot` write only with explicit `--execute`. Default DB paths are resolved from the executable location, so the primary command form has no DB override: `source` uses `Saved/EngineSource.db`, `project` uses `Saved/ProjectIndex.db`, and `context` opens both.
+- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool. It mirrors the live `project` / `source` query actions, including CRG navigation/review (`impact_radius`, `health`, `repair_fts`, `repair_crg_cache`, `build_crg_graph`, `rebuild_crg_graph`, `search_crg_graph`, `crg_graph_health`, `risk_score`, `detect_changes`, `find_unused`, `snapshot`, `diff_snapshots`, `review_context`, `review_hotspots`, `pre_merge_check`) and the read-only bridge (`bridge search_asset_symbols`). It stays read-only by default; `repair_fts`, `repair_crg_cache`, `snapshot`, and `build_crg_graph` write only with explicit `--execute`. Default DB paths are resolved from the executable location, so the primary command form has no DB override: `source` uses `Saved/EngineSource.db`, `project` uses `Saved/ProjectIndex.db`, `bridge` opens both, and source graph actions use `Saved/graph.db`.
   - **RX-2/RX-7 (CRG cache parity + scoring v3):** offline `risk_score` reads `crg_node_metrics` when the projection cache is present (rebuilt caches report `scoring_version=3`, per-item `cache.status=hit`) and falls back to query-time scoring v3 otherwise, matching the editor. Offline `health` emits the same `crg:*` checks the editor `ComputeHealth`/`Health` produce (table/index/parity/orphan/cache_version/scoring_version); a missing cache is `info`, never a regression. Offline `repair_crg_cache` is execute-gated and rebuilds only the derived `crg_*` cache rows from existing indexed source/project tables, purging stale/orphan metrics before inserting rebuilt metrics.
   - **RX-1 (`detect_changes`):** live `source.detect_changes` / `project.detect_changes` and offline `monolith_query <source|project> detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]`. Maps a Perforce changelist / changed paths to indexed symbols (source: `files.path` suffix match) or assets (project: `package_path`/`asset_name`), escaping SQL `LIKE` wildcards so `_` and `%` in filenames are matched literally. Reuses the RX-2 cached risk (or query-time fallback), adds a bounded depth-1 impact set, advisory heuristic test-gaps (source only; EngineSource has no `TESTED_BY` edge), and risk-ordered `review_priorities`. `changed_paths` is the VCS-agnostic primary input; no P4/git shell-out.
   - **RX-3 (`find_unused`):** live `source.find_unused` / `project.find_unused` and offline `monolith_query <source|project> find_unused [--kind=...] [--limit=N] [--min-confidence=low|medium|high]`. Advisory dead-symbol (source: 0 inbound `"references"`, not an inheritance parent, `is_ue_macro=0`, no UFUNCTION/automation/entry markers) / orphan-asset (project: never a `dependencies.target_asset_id`, not a World/Level/PrimaryAssetLabel root) detection. Each item has `confidence` + `reasons[]`; recall-first (default `min-confidence=low`) since UE reflection/delegate/Blueprint/soft-path edges are not in the graph — never reports `high`, never mutates.
   - **RX-5 (`pre_merge_check`):** live `source.pre_merge_check` / `project.pre_merge_check` and offline `monolith_query <source|project> pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]` compose `health`, `detect_changes`, and optional `find_unused` into an advisory `decision` (`pass`/`warn`/`fail`), `checks[]`, and `findings[]`. The offline action remains read-only and VCS-agnostic; it never shells out to P4/git.
   - **RX-4 (`snapshot` / `diff_snapshots`):** live `source.snapshot` / `project.snapshot` and offline `monolith_query <source|project> snapshot [label] [--label=name] [--execute]` store derived CRG projection manifests in `crg_snapshots`; live `source.diff_snapshots` / `project.diff_snapshots` and offline `monolith_query <source|project> diff_snapshots <before> [after] [--before=label-or-id] [--after=label-or-id|current] [--limit=N]` compare stored/current manifests. Snapshot writes are explicit (`execute=true` / `--execute`); auto labels use high-resolution ticks when callers omit labels; dry-runs and diffs are read-only. Diffs against `current` fail with `status=error` if the CRG projection query cannot be read.
   - **RX-8 (`review_hotspots`):** `monolith_query <source|project> review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]`. Read-only global triage over cached/native fan, risk, and size signals; outputs capped `hotspots[]`, optional `questions[]`, and `next_actions[]`.
-  - **RX-6 (`context bridge_asset_symbols`):** `monolith_query context bridge_asset_symbols [--asset-path=/Game/...] [--symbol=Name] [--limit=N] [--detail-level=minimal|standard]`. Requires exactly one of `asset_path`/`symbol`, opens `ProjectIndex.db` and `EngineSource.db` read-only from the default `Saved` directory, and returns the editor-compatible `links[]` shape with `confidence`, `reasons[]`, `asset`, `symbol`, `warnings[]`, `count`, `truncated`, and `lexical_only=true`. Use `--db`, `--source-db`, or `--project-db` only for copied or non-standard DB locations.
+  - **Source graph (`build_crg_graph` / `search_crg_graph`):** `monolith_query source build_crg_graph --execute` rebuilds `Saved/graph.db` from `Saved/EngineSource.db` files, symbols, references, and inheritance. `monolith_query source search_crg_graph UObject --limit=5` searches `nodes_fts` first and falls back to LIKE search when FTS has no rows. Use `--graph-db` only for copied or non-standard graph DB locations.
+  - **RX-6 (`bridge search_asset_symbols`):** `monolith_query bridge search_asset_symbols [--asset-path=/Game/...] [--symbol=Name] [--limit=N] [--detail-level=minimal|standard]`. Requires exactly one of `asset_path`/`symbol`, opens `ProjectIndex.db` and `EngineSource.db` read-only from the default `Saved` directory, and returns the editor-compatible `links[]` shape with `confidence`, `reasons[]`, `asset`, `symbol`, `warnings[]`, `count`, `truncated`, and `lexical_only=true`. Use `--db`, `--source-db`, or `--project-db` only for copied or non-standard DB locations.
 - **`python Plugins/Monolith/Saved/monolith_offline.py`** — same actions, stdlib-only.
 
 Both invoke the same SQLite indexes the live MCP uses.
@@ -1532,7 +1568,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 | MonolithWorldConditions | `WITH_MONOLITH_WORLDCONDITIONS` + `WITH_MONOLITH_WORLDCONDITIONS_SMARTOBJECTS` for SmartObject query owners | Status-only unavailable responses |
 | MonolithUI CommonUI | `WITH_COMMONUI` | 42 (UMG baseline only) |
 | MonolithAudio MetaSound | `WITH_METASOUND` | Sound Cue + CRUD + batch (no MetaSound graph) |
-| MonolithMesh town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | 234 core `mesh` actions (24 additional town gen actions when enabled) |
+| MonolithWorldGen town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | Optional town-generation actions register under `worldgen`; the `mesh` namespace remains mesh-only. |
 | MonolithDataflow | none (AssetRegistry/module-status-only optional plugin probe) | 2 `dataflow` namespace discovery actions |
 | MonolithChaosFracture | none (AssetRegistry/reflection-only optional plugin probe) | 3 `chaos_fracture` namespace visibility actions |
 | MonolithNDisplay | none (AssetRegistry/module-status-only optional plugin probe) | 2 `ndisplay` namespace discovery actions |

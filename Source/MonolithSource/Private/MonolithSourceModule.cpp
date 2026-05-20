@@ -13,13 +13,13 @@ void FMonolithSourceModule::StartupModule()
 
 	FMonolithSourceActions::RegisterAll();
 	FMonolithSourceContextActions::RegisterAll();
-	UE_LOG(LogMonolith, Log, TEXT("Monolith - Source module loaded (source + context actions)"));
+	UE_LOG(LogMonolith, Log, TEXT("Monolith - Source module loaded (source + bridge actions)"));
 }
 
 void FMonolithSourceModule::ShutdownModule()
 {
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("source"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("context"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("bridge"));
 }
 
 #undef LOCTEXT_NAMESPACE

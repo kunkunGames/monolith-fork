@@ -15,7 +15,7 @@
 
 ## 2. Namespace ownership
 
-Thin registration shim — handlers live with the rest of the tech-art pipeline in MonolithMesh DLL (``FMonolithMeshTechArtActions``), but registration is owned by MonolithModelGen via the dedicated ``FMonolithMeshTechArtActions::RegisterModelGenActions`` static method. ``MonolithModelGen::ShutdownModule`` unregisters the ``modelgen`` namespace.
+Action implementations now live in `Source/MonolithModelGen` and export through `MONOLITHMODELGEN_API`. `FMonolithModelGenActions` owns model-generation provider/job/import/provenance registration; imports reuse the exported `FMonolithMeshTechArtActions::ImportMesh` helper for the final StaticMesh import path. ``MonolithModelGen::ShutdownModule`` unregisters the ``modelgen`` namespace.
 
 ## 3. Registered actions
 
@@ -30,11 +30,11 @@ Thin registration shim — handlers live with the rest of the tech-art pipeline 
 ## 4. Build.cs dependencies
 
 Public: `Core`, `CoreUObject`, `Engine`
-Private: `MonolithCore`, `MonolithMesh` (for shared mesh-family helpers and `MONOLITHMESH_API`-decorated action classes), `MonolithIndex`, `SQLiteCore`, `UnrealEd`, `EditorSubsystem`, `MeshDescription`, `StaticMeshDescription`, `MeshConversion`, `PhysicsCore`, `NavigationSystem`, `RenderCore`, `RHI`, `EditorScriptingUtilities`, `Json`, `JsonUtilities`, `Slate`, `SlateCore`, `AssetRegistry`, `AssetTools`, `MeshReductionInterface`, `MeshMergeUtilities`, `LevelInstanceEditor`, `ImageCore`.
+Private: `MonolithCore`, `MonolithMesh` (for exported mesh import helper and shared mesh-family utilities), `MonolithIndex`, `SQLiteCore`, `UnrealEd`, `EditorSubsystem`, `MeshDescription`, `StaticMeshDescription`, `MeshConversion`, `PhysicsCore`, `NavigationSystem`, `RenderCore`, `RHI`, `EditorScriptingUtilities`, `Json`, `JsonUtilities`, `Slate`, `SlateCore`, `AssetRegistry`, `AssetTools`, `MeshReductionInterface`, `MeshMergeUtilities`, `LevelInstanceEditor`, `ImageCore`.
 
 ## 5. Notes
 
-Remote generation is caller-owned; Monolith imports local artifacts only.
+Remote generation is caller-owned; Monolith imports local artifacts only. The public `modelgen` namespace remains stable even though the implementation moved out of `MonolithMesh`.
 
 ## 6. Per-action reference
 

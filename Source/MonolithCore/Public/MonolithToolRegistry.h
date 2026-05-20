@@ -140,6 +140,18 @@ public:
 		const FMonolithActionSearchMetadata& SearchMetadata = FMonolithActionSearchMetadata()
 	);
 
+	/**
+	 * Register a batch of actions as owned by a module or action bundle.
+	 * Owner tags allow module shutdown to remove only its own actions from shared namespaces.
+	 */
+	void RegisterOwnedActions(const FString& Owner, TFunctionRef<void(FMonolithToolRegistry&)> Register);
+
+	/** Unregister one action. Returns true when an action was removed. */
+	bool UnregisterAction(const FString& Namespace, const FString& Action);
+
+	/** Unregister all actions owned by Owner. Returns the number of removed actions. */
+	int32 UnregisterOwner(const FString& Owner);
+
 	/** Unregister all actions in a namespace (called during module shutdown) */
 	void UnregisterNamespace(const FString& Namespace);
 
@@ -193,6 +205,7 @@ private:
 	{
 		FMonolithActionInfo Info;
 		FMonolithActionHandler Handler;
+		FString Owner;
 	};
 
 	/** Map of "namespace.action" → registered action */
@@ -200,6 +213,11 @@ private:
 
 	/** Map of namespace → list of action keys */
 	TMap<FString, TArray<FString>> NamespaceActions;
+
+	/** Stack of module/action-bundle owners active during registration. */
+	TArray<FString> RegistrationOwnerStack;
+
+	bool UnregisterActionByKey_NoLock(const FString& Key);
 
 	static FString MakeKey(const FString& Namespace, const FString& Action)
 	{

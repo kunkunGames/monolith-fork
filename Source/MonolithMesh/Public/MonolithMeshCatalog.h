@@ -11,7 +11,7 @@ class FSQLiteDatabase;
  * The mesh_catalog table is created and populated by MeshCatalogIndexer;
  * this class provides query wrappers used by inspection actions.
  */
-class FMonolithMeshCatalog
+class MONOLITHMESH_API FMonolithMeshCatalog
 {
 public:
 	/** Ensure the mesh_catalog table and indices exist */

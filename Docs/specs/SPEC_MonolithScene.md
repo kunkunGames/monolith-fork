@@ -11,11 +11,11 @@
 
 ## 1. Scope
 
-``MonolithScene`` owns the ``scene`` namespace — actor/scene manipulation, spatial queries, volumes, lighting, decals, and editor debug views. Split out of the former monolithic ``mesh`` namespace on 2026-05-20 along with ``worldgen``, ``leveldesign``, and ``modelgen``.
+``MonolithScene`` owns the ``scene`` namespace — actor/scene manipulation, spatial queries, volumes, lighting, decals, lighting-capture helpers, storytelling patterns, and editor debug views. Split out of the former monolithic ``mesh`` namespace on 2026-05-20 along with ``worldgen``, ``leveldesign``, and ``modelgen``.
 
 ## 2. Namespace ownership
 
-The module is a thin registration shim: action class implementations live in MonolithMesh DLL (decorated with ``MONOLITHMESH_API``), and ``MonolithScene::StartupModule`` calls their ``RegisterActions`` cross-DLL. ``MonolithScene::ShutdownModule`` unregisters the ``scene`` namespace. The shim pattern keeps the .cpp files where their MonolithMesh helper dependencies live while giving the namespace its own MCP-discoverable module.
+Action implementations now live in `Source/MonolithScene` and export through `MONOLITHSCENE_API`. `MonolithScene::StartupModule` registers the scene-owned action families and `MonolithScene::ShutdownModule` unregisters only actions owned by `MonolithScene`, preserving other owner-scoped registrations in shared namespaces. The module still depends on exported `MonolithMesh` helpers for shared mesh-family utility code, but it no longer relies on `MonolithMesh` action classes.
 
 ## 3. Registered actions
 
@@ -34,11 +34,11 @@ Gated by `bEnableProceduralTownGen`:
 ## 4. Build.cs dependencies
 
 Public: `Core`, `CoreUObject`, `Engine`
-Private: `MonolithCore`, `MonolithMesh` (for shared mesh-family helpers and `MONOLITHMESH_API`-decorated action classes), `MonolithIndex`, `SQLiteCore`, `UnrealEd`, `EditorSubsystem`, `MeshDescription`, `StaticMeshDescription`, `MeshConversion`, `PhysicsCore`, `NavigationSystem`, `RenderCore`, `RHI`, `EditorScriptingUtilities`, `Json`, `JsonUtilities`, `Slate`, `SlateCore`, `AssetRegistry`, `AssetTools`, `MeshReductionInterface`, `MeshMergeUtilities`, `LevelInstanceEditor`, `ImageCore`.
+Private: `MonolithCore`, `MonolithMesh` (for exported shared mesh-family helpers), `MonolithIndex`, `SQLiteCore`, `UnrealEd`, `EditorSubsystem`, `MeshDescription`, `StaticMeshDescription`, `MeshConversion`, `PhysicsCore`, `NavigationSystem`, `RenderCore`, `RHI`, `EditorScriptingUtilities`, `Json`, `JsonUtilities`, `Slate`, `SlateCore`, `AssetRegistry`, `AssetTools`, `MeshReductionInterface`, `MeshMergeUtilities`, `LevelInstanceEditor`, `ImageCore`.
 
 ## 5. Notes
 
-``scene.batch_execute`` reads an optional per-item ``namespace`` JSON field (defaults to ``scene``) so an agent can dispatch across mesh-family namespaces in a single batch. ``FMonolithMeshCityBlockActions::TryExecuteAction`` takes a positional ``Namespace`` argument from internal callers. No implicit cross-namespace resolution and no registry-level legacy alias.
+``scene.batch_execute`` reads an optional per-item ``namespace`` JSON field (defaults to ``scene``) so an agent can dispatch across mesh-family namespaces in a single batch. Cross-namespace execution still goes through the registry; there is no implicit cross-namespace resolution and no registry-level legacy alias.
 
 ## 6. Per-action reference
 

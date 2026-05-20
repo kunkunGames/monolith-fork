@@ -22,17 +22,23 @@ void FMonolithSceneModule::StartupModule()
 	}
 
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
-	FMonolithMeshSceneActions::RegisterActions(Registry);
-	FMonolithMeshSpatialActions::RegisterActions(Registry);
-	FMonolithMeshVolumeActions::RegisterActions(Registry);
-	FMonolithMeshLightingActions::RegisterActions(Registry);
-	FMonolithMeshDecalActions::RegisterActions(Registry);
+	Registry.RegisterOwnedActions(TEXT("MonolithScene"), [](FMonolithToolRegistry& OwnedRegistry)
+	{
+		FMonolithMeshSceneActions::RegisterActions(OwnedRegistry);
+		FMonolithMeshSpatialActions::RegisterActions(OwnedRegistry);
+		FMonolithMeshVolumeActions::RegisterActions(OwnedRegistry);
+		FMonolithMeshLightingActions::RegisterActions(OwnedRegistry);
+		FMonolithMeshDecalActions::RegisterActions(OwnedRegistry);
+	});
 
 	if (GetDefault<UMonolithSettings>()->bEnableProceduralTownGen)
 	{
-		FMonolithMeshSpatialRegistry::RegisterActions(Registry);
-		FMonolithMeshAutoVolumeActions::RegisterActions(Registry);
-		FMonolithMeshDebugViewActions::RegisterActions(Registry);
+		Registry.RegisterOwnedActions(TEXT("MonolithScene"), [](FMonolithToolRegistry& OwnedRegistry)
+		{
+			FMonolithMeshSpatialRegistry::RegisterActions(OwnedRegistry);
+			FMonolithMeshAutoVolumeActions::RegisterActions(OwnedRegistry);
+			FMonolithMeshDebugViewActions::RegisterActions(OwnedRegistry);
+		});
 	}
 	UE_LOG(LogMonolithScene, Log, TEXT("Monolith — MonolithScene module loaded (%d scene actions)"),
 		Registry.GetNamespaceActionCount(TEXT("scene")));
@@ -40,7 +46,7 @@ void FMonolithSceneModule::StartupModule()
 
 void FMonolithSceneModule::ShutdownModule()
 {
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("scene"));
+	FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithScene"));
 }
 
 IMPLEMENT_MODULE(FMonolithSceneModule, MonolithScene)

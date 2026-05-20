@@ -15,7 +15,7 @@
 
 ## 2. Namespace ownership
 
-``worldgen`` is **co-registered** by two modules: ``MonolithWorldGen`` (always-on Blockout/Template/Preset/ContextProp + gated FloorPlan/Furnishing/BuildingValidation) and ``MonolithMesh`` (gated Building/Facade/Roof/CityBlock/Terrain/ArchFeature — these stay in MonolithMesh because they require the ``WITH_GEOMETRYSCRIPT`` HandlePool owned by MonolithMesh). ``MonolithWorldGen::ShutdownModule`` is the sole unregisterer of the ``worldgen`` namespace; MonolithMesh does not touch it on shutdown. Same dual-module pattern as ``ui`` (MonolithUI + 4 MonolithGAS UI-binding aliases).
+`worldgen` is registered by `MonolithWorldGen`. The former MonolithMesh-owned town-generation classes (Building/Facade/Roof/CityBlock/Terrain/ArchFeature) moved into `Source/MonolithWorldGen`, and `MonolithWorldGen` now owns the `WITH_GEOMETRYSCRIPT` handle-pool lifecycle for those actions. `MonolithWorldGen::ShutdownModule` unregisters only actions owned by `MonolithWorldGen`, with no cross-module co-registration required for the `worldgen` namespace.
 
 ## 3. Registered actions
 
@@ -30,18 +30,18 @@ Owned by `MonolithWorldGen` (gated by `bEnableProceduralTownGen`):
 - `FMonolithMeshFurnishingActions` — room/building furnishing.
 - `FMonolithMeshBuildingValidationActions` — building validation.
 
-Co-registered by `MonolithMesh` (gated by `WITH_GEOMETRYSCRIPT && bEnableProceduralTownGen`, HandlePool dependent):
+Owned by `MonolithWorldGen` (gated by `WITH_GEOMETRYSCRIPT && bEnableProceduralTownGen`, WorldGen-owned HandlePool dependent):
 - `FMonolithMeshBuildingActions` / `FacadeActions` / `RoofActions` / `CityBlockActions` / `TerrainActions` / `ArchFeatureActions`.
 
 ## 4. Build.cs dependencies
 
 Public: `Core`, `CoreUObject`, `Engine`
-Private: `MonolithCore`, `MonolithMesh` (for shared mesh-family helpers and `MONOLITHMESH_API`-decorated action classes), `MonolithIndex`, `SQLiteCore`, `UnrealEd`, `EditorSubsystem`, `MeshDescription`, `StaticMeshDescription`, `MeshConversion`, `PhysicsCore`, `NavigationSystem`, `RenderCore`, `RHI`, `EditorScriptingUtilities`, `Json`, `JsonUtilities`, `Slate`, `SlateCore`, `AssetRegistry`, `AssetTools`, `MeshReductionInterface`, `MeshMergeUtilities`, `LevelInstanceEditor`, `ImageCore`.
+Private: `MonolithCore`, `MonolithMesh` (for exported shared mesh-family helpers and `UMonolithMeshHandlePool`), `MonolithScene` (storytelling/spatial helper types), `MonolithLevelDesign` (acoustic helper types), `MonolithIndex`, `SQLiteCore`, `UnrealEd`, `EditorSubsystem`, `MeshDescription`, `StaticMeshDescription`, `MeshConversion`, `PhysicsCore`, `NavigationSystem`, `RenderCore`, `RHI`, `EditorScriptingUtilities`, `Json`, `JsonUtilities`, `Slate`, `SlateCore`, `AssetRegistry`, `AssetTools`, `MeshReductionInterface`, `MeshMergeUtilities`, `LevelInstanceEditor`, `ImageCore`.
 
 ## 5. Notes
 
-MonolithWorldGen.Build.cs probes for the GeometryScripting plugin and sets ``WITH_GEOMETRYSCRIPT`` accordingly. The probe is implemented locally in the Build.cs so UBT rule compilation does not depend on a shared helper class being present in the rules assembly.
+MonolithWorldGen.Build.cs probes for the GeometryScripting plugin and sets ``WITH_GEOMETRYSCRIPT`` accordingly. The probe is implemented locally in the Build.cs so UBT rule compilation does not depend on a shared helper class being present in the rules assembly. When both `WITH_GEOMETRYSCRIPT` and `bEnableProceduralTownGen` are true, the module creates and roots its own `UMonolithMeshHandlePool`, wires it into the town-generation action families, and cleans it up on pre-exit.
 
 ## 6. Per-action reference
 
-See the namespace section in [SPEC_MonolithMesh.md](SPEC_MonolithMesh.md) for the per-action params/descriptions (the split table at the top of that spec is authoritative for namespace attribution; row params/descriptions remain in-place pending the per-action re-tabulation backlog item in [../TODO.md](../TODO.md)).
+See the namespace section in [SPEC_MonolithMesh.md](SPEC_MonolithMesh.md) for the legacy per-action params/descriptions that have not yet been retabulated into this spec. The source-of-truth ownership is this module spec plus the live `monolith_discover({ "namespace": "worldgen", "mode": "actions" })` registry.

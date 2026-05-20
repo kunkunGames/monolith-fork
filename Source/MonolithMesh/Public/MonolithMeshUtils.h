@@ -13,22 +13,22 @@ class UWorld;
 namespace MonolithMeshUtils
 {
 	/** Load and validate a StaticMesh from asset path */
-	UStaticMesh* LoadStaticMesh(const FString& Path, FString& OutError);
+	MONOLITHMESH_API UStaticMesh* LoadStaticMesh(const FString& Path, FString& OutError);
 
 	/** Load and validate a SkeletalMesh from asset path */
-	USkeletalMesh* LoadSkeletalMesh(const FString& Path, FString& OutError);
+	MONOLITHMESH_API USkeletalMesh* LoadSkeletalMesh(const FString& Path, FString& OutError);
 
 	/** Parse a location vector from JSON params (array of 3 floats or {x,y,z} object) */
-	bool ParseVector(const TSharedPtr<FJsonObject>& Params, const FString& Key, FVector& Out);
+	MONOLITHMESH_API bool ParseVector(const TSharedPtr<FJsonObject>& Params, const FString& Key, FVector& Out);
 
 	/** Parse a rotator from JSON params (array of 3 floats or {pitch,yaw,roll} object) */
-	bool ParseRotator(const TSharedPtr<FJsonObject>& Params, const FString& Key, FRotator& Out);
+	MONOLITHMESH_API bool ParseRotator(const TSharedPtr<FJsonObject>& Params, const FString& Key, FRotator& Out);
 
 	/** Find an actor by name in the current editor world (checks label first, then internal name) */
-	AActor* FindActorByName(const FString& Name, FString& OutError);
+	MONOLITHMESH_API AActor* FindActorByName(const FString& Name, FString& OutError);
 
 	/** Get the current editor world */
-	UWorld* GetEditorWorld();
+	MONOLITHMESH_API UWorld* GetEditorWorld();
 
 	/** Parsed blockout tags from an actor's tag array */
 	struct FBlockoutTags
@@ -43,16 +43,16 @@ namespace MonolithMeshUtils
 	};
 
 	/** Parse blockout tags from an actor's tag array */
-	FBlockoutTags ParseBlockoutTags(const AActor* Actor);
+	MONOLITHMESH_API FBlockoutTags ParseBlockoutTags(const AActor* Actor);
 
 	/** Build a JSON object from FBoxSphereBounds */
-	TSharedPtr<FJsonObject> BoundsToJson(const FBoxSphereBounds& Bounds);
+	MONOLITHMESH_API TSharedPtr<FJsonObject> BoundsToJson(const FBoxSphereBounds& Bounds);
 
 	/** Build a JSON object from an FTransform */
-	TSharedPtr<FJsonObject> TransformToJson(const FTransform& Transform);
+	MONOLITHMESH_API TSharedPtr<FJsonObject> TransformToJson(const FTransform& Transform);
 
 	/** Case-insensitive FName tag matching (handles FName case folding) */
-	bool MatchTag(const FName& A, const FName& B);
+	MONOLITHMESH_API bool MatchTag(const FName& A, const FName& B);
 
 	// ========================================================================
 	// Collision Validation Utilities (for scatter/prop placement)
@@ -81,7 +81,7 @@ namespace MonolithMeshUtils
 	 * @param MaxPushOutDistance   Maximum total push distance in cm before rejecting (default 50)
 	 * @return FPropPlacementResult with bValid, FinalLocation, and any warnings/reject reason
 	 */
-	FPropPlacementResult ValidatePropPlacement(
+	MONOLITHMESH_API FPropPlacementResult ValidatePropPlacement(
 		UWorld* World,
 		const FVector& CandidateLocation,
 		const FQuat& CandidateRotation,
@@ -103,7 +103,7 @@ namespace MonolithMeshUtils
 	 * @param MaxIterations     Maximum push-out iterations (default 3)
 	 * @return true if the prop was successfully pushed clear of all overlaps
 	 */
-	bool TryPushOutProp(
+	MONOLITHMESH_API bool TryPushOutProp(
 		UWorld* World,
 		FVector& InOutLocation,
 		const FQuat& Rotation,
@@ -120,5 +120,5 @@ namespace MonolithMeshUtils
 	 * @param Scale  World scale to apply to mesh extents
 	 * @return FCollisionShape box suitable for overlap/sweep queries
 	 */
-	FCollisionShape MakeCollisionShapeFromMesh(UStaticMesh* Mesh, const FVector& Scale);
+	MONOLITHMESH_API FCollisionShape MakeCollisionShapeFromMesh(UStaticMesh* Mesh, const FVector& Scale);
 }

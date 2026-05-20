@@ -4,7 +4,7 @@
 #include "MonolithToolRegistry.h"
 
 /**
- * Monolith-native context mention surface backed by the existing project/source
+ * Monolith-native bridge surface backed by the existing project/source
  * indexes. This intentionally stays lexical/local; external embedding providers
  * belong outside the default tool surface.
  */
@@ -18,5 +18,5 @@ private:
 	static FMonolithActionResult HandleStartIndexing(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleSearchItems(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleBuildAttachment(const TSharedPtr<FJsonObject>& Params);
-	static FMonolithActionResult HandleBridgeAssetSymbols(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSearchAssetSymbols(const TSharedPtr<FJsonObject>& Params);
 };

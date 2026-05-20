@@ -27,7 +27,7 @@ Water discovery moved from the broad `MonolithMesh` scene action surface into a 
 | Plugin descriptor JSON | `uv run python -m json.tool Monolith.uplugin` | PASS |
 | Static CI parity | `uv run python Scripts\ci_static_checks.py --config .github\monolith-static-ci.json --github check` | PASS: 0 blocking findings; existing `.claude/agents` external-prerequisite advisory only. |
 | Source route cleanup | `rg -F "get_water_status" Source` and `rg -F "list_water_bodies" Source` | PASS: no source matches. |
-| Registration grouping | Source registration scan | PASS: `MonolithMesh, mesh` has 258 total registrations, and `MonolithWater, water` has 2 registrations. |
+| Registration grouping | Source registration scan | PASS: `MonolithWater, water` has 2 registrations. Follow-up routing cleanup on 2026-05-20 reduced the live `mesh` namespace to 62 registrations by moving scene, level-design, worldgen, modelgen, and asset-hygiene actions to their own namespaces. |
 | UE 5.7 plugin build | `UnrealBuildTool.exe UnrealEditor Win64 Development -Plugin="<worktree>\Monolith.uplugin" -WaitMutex -NoHotReloadFromIDE -NoUBTMakefiles` using the engine root resolved from `D:\P4\game\GO.uproject`. | PASS: `Result: Succeeded`; `UnrealEditor-MonolithWater.dll` built. |
 
 ---

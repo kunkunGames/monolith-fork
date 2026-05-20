@@ -22,7 +22,7 @@ namespace MonolithMeshAnalysis
 	 * Fires rays from the test point toward each viewpoint.
 	 * @return 0.0 (fully visible) to 1.0 (fully concealed)
 	 */
-	float ComputeConcealment(UWorld* World, const FVector& TestPoint, const TArray<FVector>& Viewpoints);
+	MONOLITHMESH_API float ComputeConcealment(UWorld* World, const FVector& TestPoint, const TArray<FVector>& Viewpoints);
 
 	// ========================================================================
 	// Path Clearance
@@ -44,7 +44,7 @@ namespace MonolithMeshAnalysis
 	 * Fires rays perpendicular to the path direction at each point.
 	 * @param MaxWidth  Maximum distance to trace on each side (cm)
 	 */
-	TArray<FPathClearance> MeasurePathClearance(UWorld* World, const TArray<FVector>& PathPoints, float MaxWidth = 500.0f);
+	MONOLITHMESH_API TArray<FPathClearance> MeasurePathClearance(UWorld* World, const TArray<FVector>& PathPoints, float MaxWidth = 500.0f);
 
 	// ========================================================================
 	// Tension Scoring
@@ -70,29 +70,29 @@ namespace MonolithMeshAnalysis
 	};
 
 	/** Get string name for tension level */
-	const TCHAR* TensionLevelToString(ETensionLevel Level);
+	MONOLITHMESH_API const TCHAR* TensionLevelToString(ETensionLevel Level);
 
 	/**
 	 * Compute a tension score 0-100 from spatial inputs.
 	 * Low sightlines + low ceiling + small volume + few exits = high tension.
 	 */
-	float ComputeTensionScore(const FTensionInputs& Inputs);
+	MONOLITHMESH_API float ComputeTensionScore(const FTensionInputs& Inputs);
 
 	/** Map a 0-100 tension score to a tension level */
-	ETensionLevel ClassifyTension(float Score);
+	MONOLITHMESH_API ETensionLevel ClassifyTension(float Score);
 
 	// ========================================================================
 	// Spatial Measurements
 	// ========================================================================
 
 	/** Measure ceiling height above a point via upward ray */
-	float MeasureCeilingHeight(UWorld* World, const FVector& Location, float MaxHeight = 2000.0f);
+	MONOLITHMESH_API float MeasureCeilingHeight(UWorld* World, const FVector& Location, float MaxHeight = 2000.0f);
 
 	/** Approximate room volume from radial sweep distances */
-	float ApproximateRoomVolume(UWorld* World, const FVector& Location, float MaxRadius = 5000.0f, int32 RayCount = 16);
+	MONOLITHMESH_API float ApproximateRoomVolume(UWorld* World, const FVector& Location, float MaxRadius = 5000.0f, int32 RayCount = 16);
 
 	/** Count exit directions from a point (navmesh reachable directions that lead far away) */
-	int32 CountExits(UWorld* World, const FVector& Location, float TestRadius = 2000.0f, int32 Directions = 8);
+	MONOLITHMESH_API int32 CountExits(UWorld* World, const FVector& Location, float TestRadius = 2000.0f, int32 Directions = 8);
 
 	// ========================================================================
 	// Navmesh Flood Fill
@@ -114,18 +114,18 @@ namespace MonolithMeshAnalysis
 	 * Samples a grid on the navmesh, builds connectivity, identifies nodes with
 	 * only one exit path.
 	 */
-	TArray<FDeadEnd> FloodFillDeadEnds(UWorld* World, const FBox& Region, float GridSize = 200.0f);
+	MONOLITHMESH_API TArray<FDeadEnd> FloodFillDeadEnds(UWorld* World, const FBox& Region, float GridSize = 200.0f);
 
 	// ========================================================================
 	// Navigation Helpers
 	// ========================================================================
 
 	/** Get navmesh system + data, returning false with error if unavailable */
-	bool GetNavSystem(UWorld* World, UNavigationSystemV1*& OutNavSys, ANavigationData*& OutNavData, FString& OutError);
+	MONOLITHMESH_API bool GetNavSystem(UWorld* World, UNavigationSystemV1*& OutNavSys, ANavigationData*& OutNavData, FString& OutError);
 
 	/** Find a navmesh path and return the path points + total distance. Returns false if no path. */
-	bool FindNavPath(UWorld* World, const FVector& Start, const FVector& End, TArray<FVector>& OutPoints, float& OutDistance, float AgentRadius = 42.0f);
+	MONOLITHMESH_API bool FindNavPath(UWorld* World, const FVector& Start, const FVector& End, TArray<FVector>& OutPoints, float& OutDistance, float AgentRadius = 42.0f);
 
 	/** JSON array from FVector */
-	TArray<TSharedPtr<FJsonValue>> VectorToJsonArray(const FVector& V);
+	MONOLITHMESH_API TArray<TSharedPtr<FJsonValue>> VectorToJsonArray(const FVector& V);
 }

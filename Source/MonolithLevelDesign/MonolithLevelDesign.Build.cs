@@ -17,6 +17,7 @@ public class MonolithLevelDesign : ModuleRules
 		{
 			"MonolithCore",
 			"MonolithMesh",
+			"MonolithScene",
 			"MonolithIndex",
 			"SQLiteCore",
 			"UnrealEd",

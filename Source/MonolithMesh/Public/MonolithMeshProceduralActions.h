@@ -17,7 +17,7 @@ class UDynamicMesh;
  * 8 actions total: create_parametric_mesh, create_horror_prop, create_structure,
  *   create_building_shell, create_maze, create_pipe_network, create_fragments, create_terrain_patch
  */
-class FMonolithMeshProceduralActions
+class MONOLITHMESH_API FMonolithMeshProceduralActions
 {
 public:
 	/** Register all procedural geometry actions with the tool registry */

@@ -497,22 +497,22 @@ void FMonolithSourceContextActions::RegisterAll()
 {
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
-	Registry.RegisterAction(TEXT("context"), TEXT("get_index_status"),
-		TEXT("Report local project/source index readiness for Monolith context mentions"),
+	Registry.RegisterAction(TEXT("bridge"), TEXT("get_index_status"),
+		TEXT("Report local project/source index readiness for Monolith bridge searches"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceContextActions::HandleGetIndexStatus),
 		FParamSchemaBuilder()
 			.Optional(TEXT("include_stats"), TEXT("bool"), TEXT("Include project index stats when available"), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("context"), TEXT("start_indexing"),
-		TEXT("Start local project asset and/or source indexing for context search"),
+	Registry.RegisterAction(TEXT("bridge"), TEXT("start_indexing"),
+		TEXT("Start local project asset and/or source indexing for bridge search"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceContextActions::HandleStartIndexing),
 		FParamSchemaBuilder()
 			.Optional(TEXT("scope"), TEXT("string"), TEXT("Index scope: assets, source, or all"), TEXT("all"))
 			.Optional(TEXT("full"), TEXT("bool"), TEXT("Use full reindex instead of incremental/project-only indexing"), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("context"), TEXT("search_items"),
+	Registry.RegisterAction(TEXT("bridge"), TEXT("search_items"),
 		TEXT("Search local indexed assets and source entries for mention-style prompt context"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceContextActions::HandleSearchItems),
 		FParamSchemaBuilder()
@@ -522,18 +522,18 @@ void FMonolithSourceContextActions::RegisterAll()
 			.Optional(TEXT("include_source"), TEXT("bool"), TEXT("Include Monolith source index symbol and file results"), TEXT("true"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("context"), TEXT("build_attachment"),
-		TEXT("Materialize a context.search_items result into a bounded prompt attachment"),
+	Registry.RegisterAction(TEXT("bridge"), TEXT("build_attachment"),
+		TEXT("Materialize a bridge.search_items result into a bounded prompt attachment"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceContextActions::HandleBuildAttachment),
 		FParamSchemaBuilder()
-			.Required(TEXT("item_id"), TEXT("string"), TEXT("Context item id returned by context.search_items"))
+			.Required(TEXT("item_id"), TEXT("string"), TEXT("Bridge item id returned by bridge.search_items"))
 			.Optional(TEXT("context_lines"), TEXT("integer"), TEXT("Source lines before/after source hits"), TEXT("12"))
 			.Optional(TEXT("max_chars"), TEXT("integer"), TEXT("Maximum attachment text length"), TEXT("12000"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("context"), TEXT("bridge_asset_symbols"),
+	Registry.RegisterAction(TEXT("bridge"), TEXT("search_asset_symbols"),
 		TEXT("Read-only RX-6 bridge between ProjectIndex assets and EngineSource symbols"),
-		FMonolithActionHandler::CreateStatic(&FMonolithSourceContextActions::HandleBridgeAssetSymbols),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceContextActions::HandleSearchAssetSymbols),
 		FParamSchemaBuilder()
 			.Optional(TEXT("asset_path"), TEXT("string"), TEXT("Project asset package path seed"))
 			.Optional(TEXT("symbol"), TEXT("string"), TEXT("Source symbol seed"))
@@ -838,7 +838,7 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBuildAttachment(const
 	return FMonolithActionResult::Error(TEXT("'item_id' must start with asset:, source_symbol:, or source_file:"), -32602);
 }
 
-FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithSourceContextActions::HandleSearchAssetSymbols(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
 	FString SymbolSeed;
@@ -993,12 +993,12 @@ FMonolithActionResult FMonolithSourceContextActions::HandleBridgeAssetSymbols(co
 	Limits->SetStringField(TEXT("detail_level"), DetailLevel);
 
 	TArray<FString> NextActions = {
-		TEXT("Use context.build_attachment on matching asset/source_symbol items for prompt materialization."),
+		TEXT("Use bridge.build_attachment on matching asset/source_symbol items for prompt materialization."),
 		TEXT("Use source.review_context or project.review_context on high-confidence matches before code review.")
 	};
 	if (WarningStrings.Num() > 0)
 	{
-		NextActions.Add(TEXT("Run context.get_index_status or context.start_indexing if an index is unavailable or stale."));
+		NextActions.Add(TEXT("Run bridge.get_index_status or bridge.start_indexing if an index is unavailable or stale."));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();

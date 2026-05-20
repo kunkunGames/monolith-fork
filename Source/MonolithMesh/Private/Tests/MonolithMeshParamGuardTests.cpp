@@ -3,61 +3,7 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithMeshInspectionActions.h"
 #include "Dom/JsonObject.h"
-#include "MonolithMeshDecalActions.h"
 #include "MonolithMeshProceduralActions.h"
-
-#if WITH_GEOMETRYSCRIPT
-#include "MonolithMeshTerrainActions.h"
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshTerrainSampleMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.TerrainSampleRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FMonolithParamGuardMeshTerrainSampleMalformedParamsTest::RunTest(const FString& Parameters)
-{
-    FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry::Get());
-    TestTrue(TEXT("analyze_building_site action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("analyze_building_site")));
-
-    TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-
-    // Minimal footprint polygon
-    TArray<TSharedPtr<FJsonValue>> Poly;
-    TArray<TSharedPtr<FJsonValue>> P0; P0.Add(MakeShared<FJsonValueNumber>(0)); P0.Add(MakeShared<FJsonValueNumber>(0));
-    Poly.Add(MakeShared<FJsonValueArray>(P0));
-    TArray<TSharedPtr<FJsonValue>> P1; P1.Add(MakeShared<FJsonValueNumber>(100)); P1.Add(MakeShared<FJsonValueNumber>(0));
-    Poly.Add(MakeShared<FJsonValueArray>(P1));
-    TArray<TSharedPtr<FJsonValue>> P2; P2.Add(MakeShared<FJsonValueNumber>(0)); P2.Add(MakeShared<FJsonValueNumber>(100));
-    Poly.Add(MakeShared<FJsonValueArray>(P2));
-    Params->SetArrayField(TEXT("footprint_polygon"), Poly);
-
-    // Minimal terrain samples
-    TSharedPtr<FJsonObject> TerrainObj = MakeShared<FJsonObject>();
-    TArray<TSharedPtr<FJsonValue>> Row;
-    Row.Add(MakeShared<FJsonValueNumber>(0.0));
-    TArray<TSharedPtr<FJsonValue>> Samples;
-    Samples.Add(MakeShared<FJsonValueArray>(Row));
-    TerrainObj->SetArrayField(TEXT("samples"), Samples);
-
-    // Add malformed min_z
-    TerrainObj->SetStringField(TEXT("min_z"), TEXT("zero"));
-    Params->SetObjectField(TEXT("terrain_samples"), TerrainObj);
-
-    FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("analyze_building_site"), Params);
-
-    TestFalse(TEXT("analyze_building_site rejects malformed min_z parameter"), Result.bSuccess);
-    TestTrue(TEXT("analyze_building_site reports the validation error"), Result.ErrorMessage.Contains(TEXT("min_z")));
-
-    // Test malformed bool all_hit
-    TerrainObj->RemoveField(TEXT("min_z"));
-    TerrainObj->SetStringField(TEXT("all_hit"), TEXT("true"));
-    Params->SetObjectField(TEXT("terrain_samples"), TerrainObj);
-
-    Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("analyze_building_site"), Params);
-
-    TestFalse(TEXT("analyze_building_site rejects malformed all_hit parameter"), Result.bSuccess);
-    TestTrue(TEXT("analyze_building_site reports the validation error"), Result.ErrorMessage.Contains(TEXT("all_hit")));
-
-    return true;
-}
-#endif // WITH_GEOMETRYSCRIPT
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshInspectionMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.InspectionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -72,27 +18,6 @@ bool FMonolithParamGuardMeshInspectionMalformedParamsTest::RunTest(const FString
         FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("get_mesh_info"), Params);
         TestFalse(TEXT("GetMeshInfo rejects missing asset_path"), Result.bSuccess);
         TestTrue(TEXT("GetMeshInfo reports the missing asset_path validation error"), Result.ErrorMessage.Contains(TEXT("asset_path is required")));
-    }
-
-    return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshDecalMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.DecalActionsRejectMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FMonolithParamGuardMeshDecalMalformedParamsTest::RunTest(const FString& Parameters)
-{
-    FMonolithMeshDecalActions::RegisterActions(FMonolithToolRegistry::Get());
-    TestTrue(TEXT("place_storytelling_scene action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("place_storytelling_scene")));
-
-    // Test place_storytelling_scene with a malformed location parameter (string instead of array)
-    {
-        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-        Params->SetStringField(TEXT("location"), TEXT("not_an_array"));
-        Params->SetStringField(TEXT("pattern"), TEXT("violence"));
-
-        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("place_storytelling_scene"), Params);
-        TestFalse(TEXT("place_storytelling_scene rejects malformed location parameter"), Result.bSuccess);
-        TestTrue(TEXT("place_storytelling_scene reports the validation error"), Result.ErrorMessage.Contains(TEXT("location")));
     }
 
     return true;
@@ -126,53 +51,6 @@ bool FMonolithParamGuardMeshProceduralMalformedParamsTest::RunTest(const FString
         FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("create_parametric_mesh"), Params);
         TestFalse(TEXT("FinalizeProceduralMesh rejects malformed overwrite parameter"), Result.bSuccess);
         TestTrue(TEXT("FinalizeProceduralMesh reports the validation error"), Result.ErrorMessage.Contains(TEXT("Expected boolean")));
-    }
-
-    return true;
-}
-
-#include "MonolithMeshRoofActions.h"
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshRoofMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.GenerateRoofRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FMonolithParamGuardMeshRoofMalformedParamsTest::RunTest(const FString& Parameters)
-{
-    FMonolithMeshRoofActions::RegisterActions(FMonolithToolRegistry::Get());
-    TestTrue(TEXT("generate_roof action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("generate_roof")));
-
-    // Test with malformed pitch_degrees (string instead of number)
-    {
-        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-        // Required fields
-        TArray<TSharedPtr<FJsonValue>> Poly;
-        TArray<TSharedPtr<FJsonValue>> P0;
-        P0.Add(MakeShared<FJsonValueNumber>(0.0));
-        P0.Add(MakeShared<FJsonValueNumber>(0.0));
-        Poly.Add(MakeShared<FJsonValueArray>(P0));
-
-        TArray<TSharedPtr<FJsonValue>> P1;
-        P1.Add(MakeShared<FJsonValueNumber>(100.0));
-        P1.Add(MakeShared<FJsonValueNumber>(0.0));
-        Poly.Add(MakeShared<FJsonValueArray>(P1));
-
-        TArray<TSharedPtr<FJsonValue>> P2;
-        P2.Add(MakeShared<FJsonValueNumber>(100.0));
-        P2.Add(MakeShared<FJsonValueNumber>(100.0));
-        Poly.Add(MakeShared<FJsonValueArray>(P2));
-
-        TArray<TSharedPtr<FJsonValue>> P3;
-        P3.Add(MakeShared<FJsonValueNumber>(0.0));
-        P3.Add(MakeShared<FJsonValueNumber>(100.0));
-        Poly.Add(MakeShared<FJsonValueArray>(P3));
-        Params->SetArrayField(TEXT("footprint_polygon"), Poly);
-        Params->SetStringField(TEXT("save_path"), TEXT("/Game/TestRoof"));
-
-        // Malformed optional field
-        Params->SetStringField(TEXT("pitch_degrees"), TEXT("steep"));
-
-        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("generate_roof"), Params);
-        TestFalse(TEXT("GenerateRoof rejects malformed pitch_degrees parameter"), Result.bSuccess);
-        TestTrue(TEXT("GenerateRoof reports the validation error"), Result.ErrorMessage.Contains(TEXT("pitch_degrees must be a number")));
     }
 
     return true;

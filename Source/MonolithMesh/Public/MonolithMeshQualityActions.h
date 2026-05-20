@@ -4,16 +4,18 @@
 #include "MonolithToolRegistry.h"
 
 /**
- * Phase 22: Polish & Remaining (9 actions)
- * Quality-of-life, naming validation, proxy mesh generation, HLOD setup,
- * texture budget analysis, framing/composition scoring, monster reveal evaluation,
- * co-op balance placeholder, and integration hook stubs.
+ * Phase 22: Polish & Remaining
+ * Quality-of-life, asset hygiene, proxy mesh generation, HLOD setup,
+ * and texture budget analysis.
  */
-class FMonolithMeshQualityActions
+class MONOLITHMESH_API FMonolithMeshQualityActions
 {
 public:
-	/** Register all 9 quality/polish actions with the tool registry */
+	/** Register mesh quality/polish actions with the tool registry. */
 	static void RegisterActions(FMonolithToolRegistry& Registry);
+
+	/** Register asset hygiene actions with the asset namespace. */
+	static void RegisterAssetActions(FMonolithToolRegistry& Registry);
 
 private:
 	// --- Naming & Organization ---
@@ -26,14 +28,6 @@ private:
 
 	// --- Texture Budget ---
 	static FMonolithActionResult AnalyzeTextureBudget(const TSharedPtr<FJsonObject>& Params);
-
-	// --- Composition & Horror ---
-	static FMonolithActionResult AnalyzeFraming(const TSharedPtr<FJsonObject>& Params);
-	static FMonolithActionResult EvaluateMonsterReveal(const TSharedPtr<FJsonObject>& Params);
-
-	// --- Co-op & Integration Stubs ---
-	static FMonolithActionResult AnalyzeCoOpBalance(const TSharedPtr<FJsonObject>& Params);
-	static FMonolithActionResult IntegrationHooksStub(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Helpers ---
 	static TArray<TSharedPtr<FJsonValue>> VectorToJsonArray(const FVector& V);

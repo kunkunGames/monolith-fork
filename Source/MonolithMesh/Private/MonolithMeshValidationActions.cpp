@@ -1,4 +1,4 @@
-#include "MonolithMeshTemplateActions.h"
+#include "MonolithMeshValidationActions.h"
 #include "MonolithMeshUtils.h"
 #include "MonolithMeshCatalog.h"
 #include "MonolithToolRegistry.h"
@@ -18,16 +18,8 @@
 #include "Editor.h"
 
 // ============================================================================
-// Validation action registration (called from RegisterActions in header's class)
-// Split into separate .cpp but uses same class: FMonolithMeshTemplateActions
-// We register the 4 validation actions from the template actions' RegisterActions
-// by calling this helper from MonolithMeshTemplateActions.cpp.
-// Actually — since RegisterActions is in the other .cpp, we add an internal
-// registration function and call it from there.
+// Validation action registration
 // ============================================================================
-
-// Forward: we need a way to register these from the main RegisterActions.
-// Solution: we add a static helper and call it.
 
 namespace MeshValidationHelpers
 {
@@ -54,11 +46,44 @@ namespace MeshValidationHelpers
 	}
 }
 
+void FMonolithMeshValidationActions::RegisterActions(FMonolithToolRegistry& Registry)
+{
+	Registry.RegisterAction(TEXT("mesh"), TEXT("validate_game_ready"),
+		TEXT("Run a game-readiness checklist on a StaticMesh: collision, LODs, lightmap UV, degenerate geo, material count, pivot, scale. Returns pass/fail per check with severity."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshValidationActions::ValidateGameReady),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the StaticMesh to validate"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("mesh"), TEXT("suggest_lod_strategy"),
+		TEXT("Suggest LOD strategy based on triangle count. Returns ready-to-execute params for generate_lods."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshValidationActions::SuggestLodStrategy),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the StaticMesh"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("mesh"), TEXT("batch_validate"),
+		TEXT("Batch validate meshes: fast SQL pre-filter from mesh_catalog, then deep asset-load on flagged assets. Sorted by severity."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshValidationActions::BatchValidate),
+		FParamSchemaBuilder()
+			.Optional(TEXT("class"), TEXT("string"), TEXT("Asset class to validate"), TEXT("StaticMesh"))
+			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Path substring filter (e.g. '/Game/Environment/')"))
+			.Optional(TEXT("severity_min"), TEXT("string"), TEXT("Minimum severity to report: CRITICAL, HIGH, MEDIUM, LOW"), TEXT("HIGH"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("mesh"), TEXT("compare_lod_chain"),
+		TEXT("Compare LOD chain quality: per-step reduction ratio, screen size gaps, section mismatches. Flags unhealthy transitions."),
+		FMonolithActionHandler::CreateStatic(&FMonolithMeshValidationActions::CompareLodChain),
+		FParamSchemaBuilder()
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the StaticMesh"))
+			.Build());
+}
+
 // ============================================================================
 // 5. validate_game_ready
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshTemplateActions::ValidateGameReady(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithMeshValidationActions::ValidateGameReady(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
@@ -316,7 +341,7 @@ FMonolithActionResult FMonolithMeshTemplateActions::ValidateGameReady(const TSha
 // 6. suggest_lod_strategy
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshTemplateActions::SuggestLodStrategy(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithMeshValidationActions::SuggestLodStrategy(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
@@ -420,7 +445,7 @@ FMonolithActionResult FMonolithMeshTemplateActions::SuggestLodStrategy(const TSh
 // 7. batch_validate
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshTemplateActions::BatchValidate(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithMeshValidationActions::BatchValidate(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetClass = TEXT("StaticMesh");
 	Params->TryGetStringField(TEXT("class"), AssetClass);
@@ -619,7 +644,7 @@ FMonolithActionResult FMonolithMeshTemplateActions::BatchValidate(const TSharedP
 // 8. compare_lod_chain
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshTemplateActions::CompareLodChain(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithMeshValidationActions::CompareLodChain(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())

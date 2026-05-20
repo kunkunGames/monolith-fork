@@ -23,7 +23,7 @@ class FJsonObject;
  * WITH_GEOMETRYSCRIPT=0.
  */
 UCLASS()
-class UMonolithMeshHandlePool : public UObject
+class MONOLITHMESH_API UMonolithMeshHandlePool : public UObject
 {
 	GENERATED_BODY()
 

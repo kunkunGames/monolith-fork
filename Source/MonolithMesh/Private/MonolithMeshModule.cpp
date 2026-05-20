@@ -3,6 +3,7 @@
 #include "MonolithMeshPerformanceActions.h"
 #include "MonolithMeshTechArtActions.h"
 #include "MonolithMeshQualityActions.h"
+#include "MonolithMeshValidationActions.h"
 #include "MonolithLevelInstanceActions.h"
 #include "MonolithHlodActions.h"
 #include "MonolithActorMergeActions.h"
@@ -14,12 +15,6 @@
 #if WITH_GEOMETRYSCRIPT
 #include "MonolithMeshOperationActions.h"
 #include "MonolithMeshProceduralActions.h"
-#include "MonolithMeshBuildingActions.h"
-#include "MonolithMeshFacadeActions.h"
-#include "MonolithMeshRoofActions.h"
-#include "MonolithMeshCityBlockActions.h"
-#include "MonolithMeshTerrainActions.h"
-#include "MonolithMeshArchFeatureActions.h"
 #include "MonolithMeshHandlePool.h"
 #endif
 
@@ -33,39 +28,31 @@ void FMonolithMeshModule::StartupModule()
 		return;
 	}
 
-	FMonolithMeshInspectionActions::RegisterActions(FMonolithToolRegistry::Get());
-	FMonolithMeshPerformanceActions::RegisterActions(FMonolithToolRegistry::Get());
-	FMonolithMeshTechArtActions::RegisterActions(FMonolithToolRegistry::Get());
-	FMonolithMeshQualityActions::RegisterActions(FMonolithToolRegistry::Get());
-	FMonolithLevelInstanceActions::RegisterActions(FMonolithToolRegistry::Get());
-	FMonolithHlodActions::RegisterActions(FMonolithToolRegistry::Get());
-	FMonolithActorMergeActions::RegisterActions(FMonolithToolRegistry::Get());
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	Registry.RegisterOwnedActions(TEXT("MonolithMesh"), [](FMonolithToolRegistry& OwnedRegistry)
+	{
+		FMonolithMeshInspectionActions::RegisterActions(OwnedRegistry);
+		FMonolithMeshPerformanceActions::RegisterActions(OwnedRegistry);
+		FMonolithMeshTechArtActions::RegisterActions(OwnedRegistry);
+		FMonolithMeshQualityActions::RegisterActions(OwnedRegistry);
+		FMonolithMeshQualityActions::RegisterAssetActions(OwnedRegistry);
+		FMonolithMeshValidationActions::RegisterActions(OwnedRegistry);
+		FMonolithLevelInstanceActions::RegisterActions(OwnedRegistry);
+		FMonolithHlodActions::RegisterActions(OwnedRegistry);
+		FMonolithActorMergeActions::RegisterActions(OwnedRegistry);
+	});
 
 #if WITH_GEOMETRYSCRIPT
 	HandlePool = NewObject<UMonolithMeshHandlePool>();
 	HandlePool->AddToRoot();
 	HandlePool->Initialize();
 	FMonolithMeshOperationActions::SetHandlePool(HandlePool);
-	FMonolithMeshOperationActions::RegisterActions(FMonolithToolRegistry::Get());
 	FMonolithMeshProceduralActions::SetHandlePool(HandlePool);
-	FMonolithMeshProceduralActions::RegisterActions(FMonolithToolRegistry::Get());
-
-	// --- Town gen GeometryScript actions (experimental, off by default) ---
-	if (GetDefault<UMonolithSettings>()->bEnableProceduralTownGen)
+	Registry.RegisterOwnedActions(TEXT("MonolithMesh"), [](FMonolithToolRegistry& OwnedRegistry)
 	{
-		FMonolithMeshBuildingActions::SetHandlePool(HandlePool);
-		FMonolithMeshBuildingActions::RegisterActions(FMonolithToolRegistry::Get());
-		FMonolithMeshFacadeActions::SetHandlePool(HandlePool);
-		FMonolithMeshFacadeActions::RegisterActions(FMonolithToolRegistry::Get());
-		FMonolithMeshRoofActions::SetHandlePool(HandlePool);
-		FMonolithMeshRoofActions::RegisterActions(FMonolithToolRegistry::Get());
-		FMonolithMeshCityBlockActions::SetHandlePool(HandlePool);
-		FMonolithMeshCityBlockActions::RegisterActions(FMonolithToolRegistry::Get());
-		FMonolithMeshTerrainActions::SetHandlePool(HandlePool);
-		FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry::Get());
-		FMonolithMeshArchFeatureActions::SetHandlePool(HandlePool);
-		FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry::Get());
-	}
+		FMonolithMeshOperationActions::RegisterActions(OwnedRegistry);
+		FMonolithMeshProceduralActions::RegisterActions(OwnedRegistry);
+	});
 
 	FMonolithMeshTechArtActions::SetHandlePool(HandlePool);
 
@@ -79,12 +66,6 @@ void FMonolithMeshModule::StartupModule()
 			HandlePool->RemoveFromRoot();
 			FMonolithMeshOperationActions::SetHandlePool(nullptr);
 			FMonolithMeshProceduralActions::SetHandlePool(nullptr);
-			FMonolithMeshBuildingActions::SetHandlePool(nullptr);
-			FMonolithMeshFacadeActions::SetHandlePool(nullptr);
-			FMonolithMeshRoofActions::SetHandlePool(nullptr);
-			FMonolithMeshCityBlockActions::SetHandlePool(nullptr);
-			FMonolithMeshTerrainActions::SetHandlePool(nullptr);
-			FMonolithMeshArchFeatureActions::SetHandlePool(nullptr);
 			FMonolithMeshTechArtActions::SetHandlePool(nullptr);
 			HandlePool = nullptr;
 		}
@@ -106,13 +87,7 @@ void FMonolithMeshModule::ShutdownModule()
 	HandlePool = nullptr;
 #endif
 
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("mesh"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("scene"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("leveldesign"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("worldgen"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("modelgen"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("level_instance"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("hlod"));
+	FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithMesh"));
 }
 
 #undef LOCTEXT_NAMESPACE

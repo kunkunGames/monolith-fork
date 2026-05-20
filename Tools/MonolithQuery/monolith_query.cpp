@@ -5,7 +5,7 @@
 // Usage:
 //   monolith_query.exe source <action> [params...] [--options]
 //   monolith_query.exe project <action> [params...] [--options]
-//   monolith_query.exe context <action> [params...] [--options]
+//   monolith_query.exe bridge <action> [params...] [--options]
 
 #include <cstdio>
 #include <cstdlib>
@@ -105,6 +105,19 @@ public:
             exec("PRAGMA query_only=ON;");
         else
             exec("PRAGMA journal_mode=DELETE;");
+    }
+
+    void open_or_create(const std::string& path) {
+        fs::path parent = fs::path(path).parent_path();
+        if (!parent.empty())
+            fs::create_directories(parent);
+
+        int rc = sqlite3_open_v2(path.c_str(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
+        if (rc != SQLITE_OK)
+            die("Failed to open database: " + path + " — " + sqlite3_errmsg(db));
+
+        exec("PRAGMA journal_mode=DELETE;");
+        exec("PRAGMA synchronous=NORMAL;");
     }
 
     void exec(const char* sql) {
@@ -256,6 +269,12 @@ static std::string lower_copy(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
+}
+
+static std::string sql_quote(std::string value) {
+    for (size_t pos = 0; (pos = value.find('\'', pos)) != std::string::npos; pos += 2)
+        value.replace(pos, 1, "''");
+    return "'" + value + "'";
 }
 
 static std::string trim_copy(std::string value) {
@@ -515,6 +534,343 @@ static bool has_crg_projection_tables(Database& db) {
         && object_exists(db, "table", "crg_edges")
         && object_exists(db, "table", "crg_node_metrics")
         && object_exists(db, "table", "crg_meta");
+}
+
+static const char* kCrgGraphDdl[] = {
+    "CREATE TABLE IF NOT EXISTS nodes ("
+    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "kind TEXT NOT NULL,"
+    "name TEXT NOT NULL,"
+    "qualified_name TEXT NOT NULL UNIQUE,"
+    "file_path TEXT NOT NULL,"
+    "line_start INTEGER,"
+    "line_end INTEGER,"
+    "language TEXT,"
+    "parent_name TEXT,"
+    "params TEXT,"
+    "return_type TEXT,"
+    "modifiers TEXT,"
+    "is_test INTEGER DEFAULT 0,"
+    "file_hash TEXT,"
+    "extra TEXT DEFAULT '{}',"
+    "signature TEXT,"
+    "community_id INTEGER,"
+    "updated_at REAL NOT NULL"
+    ");",
+    "CREATE TABLE IF NOT EXISTS edges ("
+    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "kind TEXT NOT NULL,"
+    "source_qualified TEXT NOT NULL,"
+    "target_qualified TEXT NOT NULL,"
+    "file_path TEXT NOT NULL,"
+    "line INTEGER DEFAULT 0,"
+    "extra TEXT DEFAULT '{}',"
+    "confidence REAL DEFAULT 1.0,"
+    "confidence_tier TEXT DEFAULT 'EXTRACTED',"
+    "updated_at REAL NOT NULL"
+    ");",
+    "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL);",
+    "CREATE TABLE IF NOT EXISTS flows ("
+    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "name TEXT NOT NULL,"
+    "entry_point_id INTEGER NOT NULL,"
+    "depth INTEGER NOT NULL,"
+    "node_count INTEGER NOT NULL,"
+    "file_count INTEGER NOT NULL,"
+    "criticality REAL NOT NULL DEFAULT 0.0,"
+    "path_json TEXT NOT NULL,"
+    "created_at TEXT NOT NULL DEFAULT (datetime('now')),"
+    "updated_at TEXT NOT NULL DEFAULT (datetime('now'))"
+    ");",
+    "CREATE TABLE IF NOT EXISTS flow_memberships ("
+    "flow_id INTEGER NOT NULL,"
+    "node_id INTEGER NOT NULL,"
+    "position INTEGER NOT NULL,"
+    "PRIMARY KEY (flow_id, node_id)"
+    ");",
+    "CREATE TABLE IF NOT EXISTS communities ("
+    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "name TEXT NOT NULL,"
+    "level INTEGER NOT NULL DEFAULT 0,"
+    "parent_id INTEGER,"
+    "cohesion REAL NOT NULL DEFAULT 0.0,"
+    "size INTEGER NOT NULL DEFAULT 0,"
+    "dominant_language TEXT,"
+    "description TEXT,"
+    "created_at TEXT NOT NULL DEFAULT (datetime('now'))"
+    ");",
+    "CREATE TABLE IF NOT EXISTS community_summaries ("
+    "community_id INTEGER PRIMARY KEY,"
+    "name TEXT NOT NULL,"
+    "purpose TEXT DEFAULT '',"
+    "key_symbols TEXT DEFAULT '[]',"
+    "risk TEXT DEFAULT 'unknown',"
+    "size INTEGER DEFAULT 0,"
+    "dominant_language TEXT DEFAULT ''"
+    ");",
+    "CREATE TABLE IF NOT EXISTS flow_snapshots ("
+    "flow_id INTEGER PRIMARY KEY,"
+    "name TEXT NOT NULL,"
+    "entry_point TEXT NOT NULL,"
+    "critical_path TEXT DEFAULT '[]',"
+    "criticality REAL DEFAULT 0.0,"
+    "node_count INTEGER DEFAULT 0,"
+    "file_count INTEGER DEFAULT 0"
+    ");",
+    "CREATE TABLE IF NOT EXISTS risk_index ("
+    "node_id INTEGER PRIMARY KEY,"
+    "qualified_name TEXT NOT NULL,"
+    "risk_score REAL DEFAULT 0.0,"
+    "caller_count INTEGER DEFAULT 0,"
+    "test_coverage TEXT DEFAULT 'unknown',"
+    "security_relevant INTEGER DEFAULT 0,"
+    "last_computed TEXT DEFAULT ''"
+    ");",
+    "CREATE INDEX IF NOT EXISTS idx_nodes_file ON nodes(file_path);",
+    "CREATE INDEX IF NOT EXISTS idx_nodes_kind ON nodes(kind);",
+    "CREATE INDEX IF NOT EXISTS idx_nodes_qualified ON nodes(qualified_name);",
+    "CREATE INDEX IF NOT EXISTS idx_nodes_community ON nodes(community_id);",
+    "CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_qualified);",
+    "CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_qualified);",
+    "CREATE INDEX IF NOT EXISTS idx_edges_kind ON edges(kind);",
+    "CREATE INDEX IF NOT EXISTS idx_edges_target_kind ON edges(target_qualified, kind);",
+    "CREATE INDEX IF NOT EXISTS idx_edges_source_kind ON edges(source_qualified, kind);",
+    "CREATE INDEX IF NOT EXISTS idx_edges_file ON edges(file_path);",
+    "CREATE INDEX IF NOT EXISTS idx_edges_composite ON edges(kind, source_qualified, target_qualified, file_path, line);",
+    "CREATE INDEX IF NOT EXISTS idx_flows_criticality ON flows(criticality DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_flows_entry ON flows(entry_point_id);",
+    "CREATE INDEX IF NOT EXISTS idx_flow_memberships_node ON flow_memberships(node_id);",
+    "CREATE INDEX IF NOT EXISTS idx_communities_parent ON communities(parent_id);",
+    "CREATE INDEX IF NOT EXISTS idx_communities_cohesion ON communities(cohesion DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_risk_index_score ON risk_index(risk_score DESC);",
+    "CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5("
+    "name, qualified_name, file_path, signature,"
+    "content='nodes', content_rowid='id', tokenize='porter unicode61'"
+    ");",
+};
+
+static bool ensure_crg_graph_tables(Database& db, std::string& error) {
+    for (const char* sql : kCrgGraphDdl) {
+        if (!exec_sql_ok(db, sql, error)) return false;
+    }
+    return true;
+}
+
+static bool has_crg_graph_tables(Database& db) {
+    return object_exists(db, "table", "nodes")
+        && object_exists(db, "table", "edges")
+        && object_exists(db, "table", "metadata")
+        && object_exists(db, "table", "nodes_fts");
+}
+
+static json crg_graph_counts(Database& db) {
+    json counts = json::object();
+    counts["nodes"] = object_exists(db, "table", "nodes") ? count_rows(db, "SELECT COUNT(*) FROM nodes;") : -1;
+    counts["edges"] = object_exists(db, "table", "edges") ? count_rows(db, "SELECT COUNT(*) FROM edges;") : -1;
+    counts["files"] = object_exists(db, "table", "nodes") ? count_rows(db, "SELECT COUNT(*) FROM nodes WHERE kind = 'File';") : -1;
+    counts["symbols"] = object_exists(db, "table", "nodes") ? count_rows(db, "SELECT COUNT(*) FROM nodes WHERE kind != 'File';") : -1;
+    counts["fts_rows"] = object_exists(db, "table", "nodes_fts") ? count_rows(db, "SELECT COUNT(*) FROM nodes_fts;") : -1;
+    return counts;
+}
+
+static json crg_graph_health_json(const std::string& graph_db_path) {
+    json checks = json::array();
+    json warnings = json::array();
+    json root = {
+        {"input", {{"graph_db", graph_db_path}}},
+        {"graph_db", graph_db_path},
+        {"checks", checks},
+        {"warnings", warnings},
+    };
+
+    if (!fs::exists(graph_db_path)) {
+        root["status"] = "warning";
+        root["summary"] = "CRG graph database is missing";
+        root["counts"] = json::object();
+        root["next_actions"] = json::array({"source.build_crg_graph --execute"});
+        root["checks"].push_back({{"check", "graph_db_exists"}, {"result", "warning"}, {"detail", "missing: " + graph_db_path}});
+        root["warnings"].push_back("Saved/graph.db is missing; run source.build_crg_graph --execute");
+        return root;
+    }
+
+    Database graph;
+    graph.open(graph_db_path, true);
+    auto add_check = [&](const std::string& name, bool ok, const std::string& detail) {
+        root["checks"].push_back({{"check", name}, {"result", ok ? "ok" : "warning"}, {"detail", detail}});
+        if (!ok) root["warnings"].push_back(detail);
+    };
+
+    add_check("table:nodes", object_exists(graph, "table", "nodes"), "table nodes present");
+    add_check("table:edges", object_exists(graph, "table", "edges"), "table edges present");
+    add_check("table:metadata", object_exists(graph, "table", "metadata"), "table metadata present");
+    add_check("fts:nodes_fts", object_exists(graph, "table", "nodes_fts"), "FTS table nodes_fts present");
+    json counts = crg_graph_counts(graph);
+    if (counts["nodes"].get<int64_t>() >= 0 && counts["fts_rows"].get<int64_t>() >= 0) {
+        add_check("fts:row_parity", counts["nodes"] == counts["fts_rows"],
+                  "nodes=" + std::to_string(counts["nodes"].get<int64_t>()) +
+                  " nodes_fts=" + std::to_string(counts["fts_rows"].get<int64_t>()));
+    }
+
+    std::string schema_version = scalar_str(graph, "SELECT value FROM metadata WHERE key = 'schema_version';");
+    add_check("metadata:schema_version", schema_version == "9",
+              schema_version.empty() ? "metadata.schema_version missing" : "schema_version=" + schema_version + " (expected 9)");
+    root["counts"] = counts;
+    root["status"] = root["warnings"].empty() ? "ok" : "warning";
+    root["summary"] = root["warnings"].empty()
+        ? "CRG graph database schema, FTS, and metadata OK"
+        : std::to_string(root["warnings"].size()) + " CRG graph warning(s)";
+    root["next_actions"] = root["warnings"].empty()
+        ? json::array({"source.search_crg_graph", "source.review_context"})
+        : json::array({"source.build_crg_graph --execute", "source.crg_graph_health"});
+    return root;
+}
+
+static json source_graph_build_counts(Database& source_db) {
+    json counts = json::object();
+    counts["files"] = count_rows(source_db, "SELECT COUNT(*) FROM files;");
+    counts["symbols"] = count_rows(source_db, "SELECT COUNT(*) FROM symbols;");
+    counts["valid_references"] = count_rows(source_db,
+        "SELECT COUNT(*) FROM \"references\" r "
+        "JOIN symbols fs ON fs.id = r.from_symbol_id "
+        "JOIN symbols ts ON ts.id = r.to_symbol_id;");
+    counts["inheritance"] = count_rows(source_db,
+        "SELECT COUNT(*) FROM inheritance i "
+        "JOIN symbols cs ON cs.id = i.child_id "
+        "JOIN symbols ps ON ps.id = i.parent_id;");
+    return counts;
+}
+
+static std::vector<std::pair<std::string, std::string>> crg_graph_build_sql(const std::string& source_db_path) {
+    return {
+        {"clear risk index", "DELETE FROM risk_index;"},
+        {"clear flow memberships", "DELETE FROM flow_memberships;"},
+        {"clear flows", "DELETE FROM flows;"},
+        {"clear community summaries", "DELETE FROM community_summaries;"},
+        {"clear communities", "DELETE FROM communities;"},
+        {"clear flow snapshots", "DELETE FROM flow_snapshots;"},
+        {"clear edges", "DELETE FROM edges;"},
+        {"clear nodes", "DELETE FROM nodes;"},
+        {"clear metadata", "DELETE FROM metadata;"},
+        {"recreate fts", "CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5("
+            "name, qualified_name, file_path, signature,"
+            "content='nodes', content_rowid='id', tokenize='porter unicode61'"
+            ");"},
+        {"file nodes", R"SQL(
+INSERT INTO nodes(id,kind,name,qualified_name,file_path,line_start,line_end,language,parent_name,params,return_type,modifiers,is_test,file_hash,extra,signature,community_id,updated_at)
+SELECT -f.id,
+       'File',
+       COALESCE(NULLIF(f.path,''), 'file#' || f.id),
+       COALESCE(NULLIF(f.path,''), 'file#' || f.id),
+       COALESCE(f.path,''),
+       1,
+       COALESCE(f.line_count,0),
+       CASE
+         WHEN lower(COALESCE(f.file_type,'')) IN ('header','hpp','h') THEN 'cpp'
+         WHEN lower(COALESCE(f.file_type,'')) IN ('cpp','cc','cxx') THEN 'cpp'
+         WHEN lower(COALESCE(f.file_type,'')) LIKE '%shader%' THEN 'shader'
+         ELSE COALESCE(NULLIF(f.file_type,''),'cpp')
+       END,
+       NULL,NULL,NULL,NULL,0,'',
+       printf('{"source":"monolith","file_id":%lld,"module":"%s"}', f.id, replace(COALESCE(m.name,''), '"', '')),
+       NULL,NULL,CAST(strftime('%s','now') AS REAL)
+FROM src.files f
+LEFT JOIN src.modules m ON m.id = f.module_id;
+)SQL"},
+        {"symbol nodes", R"SQL(
+INSERT INTO nodes(id,kind,name,qualified_name,file_path,line_start,line_end,language,parent_name,params,return_type,modifiers,is_test,file_hash,extra,signature,community_id,updated_at)
+SELECT s.id,
+       CASE
+         WHEN lower(COALESCE(s.kind,'')) IN ('class','struct','interface') THEN 'Class'
+         WHEN lower(COALESCE(s.kind,'')) IN ('function','method','constructor','destructor') THEN
+           CASE WHEN lower(COALESCE(s.name,'') || ' ' || COALESCE(f.path,'')) LIKE '%test%' THEN 'Test' ELSE 'Function' END
+         WHEN lower(COALESCE(s.kind,'')) IN ('enum','typedef','type','delegate') THEN 'Type'
+         ELSE COALESCE(NULLIF(s.kind,''),'Symbol')
+       END,
+       COALESCE(NULLIF(s.name,''), 'symbol#' || s.id),
+       COALESCE(NULLIF(s.qualified_name,''), COALESCE(f.path,'') || '::' || COALESCE(s.name,'symbol')) || '#' || s.id,
+       COALESCE(f.path,''),
+       COALESCE(s.line_start,0),
+       COALESCE(s.line_end,0),
+       CASE
+         WHEN lower(COALESCE(f.file_type,'')) LIKE '%shader%' THEN 'shader'
+         ELSE 'cpp'
+       END,
+       p.name,
+       NULL,
+       NULL,
+       s.access,
+       CASE WHEN lower(COALESCE(s.name,'') || ' ' || COALESCE(f.path,'')) LIKE '%test%' THEN 1 ELSE 0 END,
+       '',
+       printf('{"source":"monolith","symbol_id":%lld,"kind":"%s","module":"%s","is_ue_macro":%d}',
+              s.id, replace(COALESCE(s.kind,''), '"', ''), replace(COALESCE(m.name,''), '"', ''), COALESCE(s.is_ue_macro,0)),
+       s.signature,
+       NULL,
+       CAST(strftime('%s','now') AS REAL)
+FROM src.symbols s
+LEFT JOIN src.files f ON f.id = s.file_id
+LEFT JOIN src.modules m ON m.id = f.module_id
+LEFT JOIN src.symbols p ON p.id = s.parent_symbol_id;
+)SQL"},
+        {"contains edges", R"SQL(
+INSERT INTO edges(kind,source_qualified,target_qualified,file_path,line,extra,confidence,confidence_tier,updated_at)
+SELECT 'CONTAINS',
+       COALESCE(f.path,''),
+       COALESCE(NULLIF(s.qualified_name,''), COALESCE(f.path,'') || '::' || COALESCE(s.name,'symbol')) || '#' || s.id,
+       COALESCE(f.path,''),
+       COALESCE(s.line_start,0),
+       printf('{"source":"monolith","file_id":%lld,"symbol_id":%lld}', f.id, s.id),
+       1.0,
+       'EXTRACTED',
+       CAST(strftime('%s','now') AS REAL)
+FROM src.symbols s
+JOIN src.files f ON f.id = s.file_id;
+)SQL"},
+        {"reference edges", R"SQL(
+INSERT INTO edges(kind,source_qualified,target_qualified,file_path,line,extra,confidence,confidence_tier,updated_at)
+SELECT CASE
+         WHEN lower(COALESCE(r.ref_kind,'')) IN ('call','calls','function_call') THEN 'CALLS'
+         WHEN lower(COALESCE(r.ref_kind,'')) IN ('type','type_ref','reference') THEN 'REFERENCES'
+         ELSE upper(COALESCE(NULLIF(r.ref_kind,''),'REFERENCES'))
+       END,
+       COALESCE(NULLIF(fs.qualified_name,''), COALESCE(ff.path,'') || '::' || COALESCE(fs.name,'symbol')) || '#' || fs.id,
+       COALESCE(NULLIF(ts.qualified_name,''), COALESCE(tf.path,'') || '::' || COALESCE(ts.name,'symbol')) || '#' || ts.id,
+       COALESCE(rf.path, ff.path, ''),
+       COALESCE(r.line,0),
+       printf('{"source":"monolith","reference_id":%lld,"ref_kind":"%s"}', r.id, replace(COALESCE(r.ref_kind,''), '"', '')),
+       1.0,
+       'EXTRACTED',
+       CAST(strftime('%s','now') AS REAL)
+FROM src."references" r
+JOIN src.symbols fs ON fs.id = r.from_symbol_id
+JOIN src.symbols ts ON ts.id = r.to_symbol_id
+LEFT JOIN src.files ff ON ff.id = fs.file_id
+LEFT JOIN src.files tf ON tf.id = ts.file_id
+LEFT JOIN src.files rf ON rf.id = r.file_id;
+)SQL"},
+        {"inheritance edges", R"SQL(
+INSERT INTO edges(kind,source_qualified,target_qualified,file_path,line,extra,confidence,confidence_tier,updated_at)
+SELECT 'INHERITS',
+       COALESCE(NULLIF(cs.qualified_name,''), COALESCE(cf.path,'') || '::' || COALESCE(cs.name,'symbol')) || '#' || cs.id,
+       COALESCE(NULLIF(ps.qualified_name,''), COALESCE(pf.path,'') || '::' || COALESCE(ps.name,'symbol')) || '#' || ps.id,
+       COALESCE(cf.path,''),
+       COALESCE(cs.line_start,0),
+       printf('{"source":"monolith","inheritance_id":%lld}', i.id),
+       1.0,
+       'EXTRACTED',
+       CAST(strftime('%s','now') AS REAL)
+FROM src.inheritance i
+JOIN src.symbols cs ON cs.id = i.child_id
+JOIN src.symbols ps ON ps.id = i.parent_id
+LEFT JOIN src.files cf ON cf.id = cs.file_id
+LEFT JOIN src.files pf ON pf.id = ps.file_id;
+)SQL"},
+        {"metadata schema", "INSERT OR REPLACE INTO metadata(key,value) VALUES('schema_version','9');"},
+        {"metadata source", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source','monolith');"},
+        {"metadata source db", "INSERT OR REPLACE INTO metadata(key,value) VALUES('monolith_source_db'," + sql_quote(source_db_path) + ");"},
+        {"metadata built_at", "INSERT OR REPLACE INTO metadata(key,value) VALUES('built_at',datetime('now'));"},
+        {"metadata builder", "INSERT OR REPLACE INTO metadata(key,value) VALUES('builder','monolith_query source build_crg_graph');"},
+        {"rebuild fts", "INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild');"},
+    };
 }
 
 static json crg_repair_counts(Database& db, const std::string& domain) {
@@ -1294,7 +1650,7 @@ struct Args {
 static Args parse_args(int argc, char* argv[]) {
     Args args;
     if (argc < 3) {
-        std::cerr << "Usage: monolith_query <source|project|context> <action> [params...] [--options]\n\n"
+        std::cerr << "Usage: monolith_query <source|project|bridge> <action> [params...] [--options]\n\n"
                   << "Source actions:\n"
                   << "  search_source <query> [--scope=all|cpp|shaders] [--limit=N] [--module=M] [--kind=K]\n"
                   << "  read_source <symbol> [--max-lines=N] [--no-header] [--members-only]\n"
@@ -1309,6 +1665,10 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  health [--include-counts=false]\n"
                   << "  repair_fts [--target=all|symbols|source] [--execute]\n"
                   << "  repair_crg_cache [--scope=all] [--execute]\n"
+                  << "  build_crg_graph [--execute] [--graph-db=PATH]\n"
+                  << "  rebuild_crg_graph [--execute] [--graph-db=PATH]\n"
+                  << "  search_crg_graph <query> [--kind=K] [--limit=N] [--graph-db=PATH]\n"
+                  << "  crg_graph_health [--graph-db=PATH]\n"
                   << "  risk_score <symbol> [--limit=N] [--min-tier=low|medium|high]\n"
                   << "  review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
                   << "  review_context <symbol> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
@@ -1317,8 +1677,8 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]\n"
                   << "  snapshot [label] [--label=name] [--execute]\n"
                   << "  diff_snapshots <before> [after] [--before=label-or-id] [--after=label-or-id|current] [--limit=N]\n"
-                  << "\nContext actions:\n"
-                  << "  bridge_asset_symbols [--asset-path=/Game/...] [--symbol=Name] [--limit=N] [--detail-level=minimal|standard]\n"
+                  << "\nBridge actions:\n"
+                  << "  search_asset_symbols [--asset-path=/Game/...] [--symbol=Name] [--limit=N] [--detail-level=minimal|standard]\n"
                   << "\nProject actions:\n"
                   << "  search <query> [--limit=N]\n"
                   << "  find_by_type <asset_class> [--limit=N] [--offset=N]\n"
@@ -1338,10 +1698,11 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  snapshot [label] [--label=name] [--execute]\n"
                   << "  diff_snapshots <before> [after] [--before=label-or-id] [--after=label-or-id|current] [--limit=N]\n"
                   << "\nDB options (rare):\n"
-                  << "  The default DBs are resolved from the executable location: Saved/EngineSource.db for source\n"
-                  << "  and Saved/ProjectIndex.db for project. Default project lookup commands use those paths with no DB override.\n"
+                  << "  The default DBs are resolved from the executable location: Saved/EngineSource.db for source,\n"
+                  << "  Saved/ProjectIndex.db for project, and both DBs for bridge. Default lookup commands use those paths with no DB override.\n"
                   << "  Overrides accept --db=<SavedDir>, --db <SavedDir>, or a concrete .db file path.\n"
-                  << "  Namespace-specific overrides are --source-db=<path> and --project-db=<path>.\n";
+                  << "  Namespace-specific overrides are --source-db=<path> and --project-db=<path>.\n"
+                  << "  source CRG graph overrides are --graph-db=<path>; the default is Saved/graph.db.\n";
         std::exit(1);
     }
 
@@ -1362,7 +1723,8 @@ static Args parse_args(int argc, char* argv[]) {
                 // use either "--db=PATH" or "--db PATH". This avoids treating
                 // a default DB override path as a positional query seed.
                 if ((key == "db" || key == "source-db" || key == "source_db" ||
-                     key == "project-db" || key == "project_db") &&
+                     key == "project-db" || key == "project_db" ||
+                     key == "graph-db" || key == "graph_db") &&
                     i + 1 < argc && std::string(argv[i + 1]).rfind("--", 0) != 0) {
                     val = argv[++i];
                 } else {
@@ -1535,7 +1897,7 @@ static std::string read_file_lines(const std::string& file_path, int start, int 
 }
 
 // ============================================================
-// Context bridge utilities
+// Bridge utilities
 // ============================================================
 
 static bool iequals(const std::string& a, const std::string& b) {
@@ -1860,9 +2222,22 @@ static void bridge_add_asset_matches_for_symbol(Database& project_db,
 
 class SourceActions {
     Database db;
+    std::string source_db_path;
 
 public:
-    void open(const std::string& path, bool query_only = true) { db.open(path, query_only); }
+    void open(const std::string& path, bool query_only = true) {
+        source_db_path = path;
+        db.open(path, query_only);
+    }
+
+    std::string graph_db_path(const Args& args) const {
+        std::string explicit_graph = args.opt("graph_db");
+        if (!explicit_graph.empty()) return explicit_graph;
+        fs::path source_path(source_db_path);
+        fs::path dir = source_path.parent_path();
+        if (dir.empty()) dir = ".";
+        return (dir / "graph.db").string();
+    }
 
     std::string get_file_path(int file_id) {
         auto rows = query(db, "SELECT path FROM files WHERE id = ?", {std::to_string(file_id)});
@@ -2475,6 +2850,188 @@ public:
 
     void repair_crg_cache(const Args& args) {
         print_json(crg_repair_cache_json(db, "source", args.opt("scope", "all"), args.opt_bool("execute", false)));
+    }
+
+    json build_crg_graph_json(const Args& args) {
+        const std::string graph_path = graph_db_path(args);
+        const bool execute = args.opt_bool("execute", false);
+        json root = {
+            {"input", {{"execute", execute}, {"source_db", source_db_path}, {"graph_db", graph_path}}},
+            {"limits", {{"execute", execute}}},
+            {"graph_db", graph_path},
+            {"source_db", source_db_path},
+            {"plan", json::array({
+                "CREATE IF MISSING CRG-compatible nodes/edges/metadata/FTS schema in Saved/graph.db",
+                "REPLACE graph nodes from EngineSource files + symbols",
+                "REPLACE graph edges from file containment, references and inheritance",
+                "REBUILD nodes_fts from nodes",
+                "WRITE schema_version=9 and Monolith build metadata"
+            })},
+            {"source_counts", source_graph_build_counts(db)},
+            {"warnings", json::array()},
+            {"truncated", false},
+        };
+
+        if (!execute) {
+            if (fs::exists(graph_path)) {
+                Database graph;
+                graph.open(graph_path, true);
+                root["before"] = crg_graph_counts(graph);
+            } else {
+                root["before"] = json::object();
+                root["warnings"].push_back("graph database does not exist yet");
+            }
+            root["after"] = json::object();
+            root["status"] = "ok";
+            root["summary"] = "Dry-run: Saved/graph.db would be rebuilt from EngineSource.db. Pass --execute to apply.";
+            root["next_actions"] = json::array({"source.build_crg_graph --execute", "source.crg_graph_health"});
+            return root;
+        }
+
+        bool ok = true;
+        std::string error;
+        Database graph;
+        graph.open_or_create(graph_path);
+        root["before"] = crg_graph_counts(graph);
+
+        auto fail = [&](const std::string& label, const std::string& err) {
+            ok = false;
+            root["warnings"].push_back("CRG graph rebuild failed at " + label + (err.empty() ? "" : ": " + err));
+        };
+
+        if (!exec_sql_ok(graph, "PRAGMA foreign_keys=OFF;", error)) fail("pragma foreign_keys", error);
+        if (ok && !exec_sql_ok(graph, "ATTACH DATABASE " + sql_quote(source_db_path) + " AS src;", error)) fail("attach source", error);
+        if (ok && !exec_sql_ok(graph, "DROP TABLE IF EXISTS nodes_fts;", error)) fail("drop stale nodes_fts", error);
+        if (ok && !ensure_crg_graph_tables(graph, error)) fail("create schema", error);
+        if (ok && !exec_sql_ok(graph, "BEGIN;", error)) fail("begin transaction", error);
+        if (ok) {
+            for (const auto& step : crg_graph_build_sql(source_db_path)) {
+                if (!exec_sql_ok(graph, step.second, error)) {
+                    fail(step.first, error);
+                    break;
+                }
+            }
+        }
+        if (ok) {
+            if (!exec_sql_ok(graph, "COMMIT;", error)) fail("commit", error);
+        } else {
+            std::string rollback_error;
+            exec_sql_ok(graph, "ROLLBACK;", rollback_error);
+        }
+        std::string detach_error;
+        exec_sql_ok(graph, "DETACH DATABASE src;", detach_error);
+
+        root["after"] = crg_graph_counts(graph);
+        root["status"] = ok ? "ok" : "error";
+        root["summary"] = ok
+            ? "Rebuilt Saved/graph.db from EngineSource files, symbols, references and inheritance"
+            : "Saved/graph.db rebuild failed; rolled back";
+        root["next_actions"] = ok
+            ? json::array({"source.search_crg_graph", "source.crg_graph_health", "source.review_context"})
+            : json::array({"source.crg_graph_health", "source.health"});
+        return root;
+    }
+
+    void build_crg_graph(const Args& args) {
+        print_json(build_crg_graph_json(args));
+    }
+
+    void rebuild_crg_graph(const Args& args) {
+        print_json(build_crg_graph_json(args));
+    }
+
+    void crg_graph_health(const Args& args) {
+        print_json(crg_graph_health_json(graph_db_path(args)));
+    }
+
+    void search_crg_graph(const Args& args) {
+        if (args.positional.empty()) die("search_crg_graph requires a query argument");
+        std::string q = args.positional[0];
+        int cap = clamp_int(args.opt_int("limit", 20), 1, 200);
+        std::string kind = args.opt("kind");
+        std::string graph_path = graph_db_path(args);
+
+        json root = {
+            {"input", {{"query", q}, {"kind", kind}, {"graph_db", graph_path}}},
+            {"limits", {{"limit", cap}}},
+            {"graph_db", graph_path},
+            {"results", json::array()},
+            {"warnings", json::array()},
+            {"truncated", false},
+        };
+
+        if (!fs::exists(graph_path)) {
+            root["status"] = "warning";
+            root["summary"] = "CRG graph database is missing";
+            root["warnings"].push_back("Saved/graph.db is missing; run source.build_crg_graph --execute");
+            root["next_actions"] = json::array({"source.build_crg_graph --execute"});
+            print_json(root);
+            return;
+        }
+
+        Database graph;
+        graph.open(graph_path, true);
+        bool used_fts = false;
+        Rows rows;
+        if (object_exists(graph, "table", "nodes_fts")) {
+            std::string sql =
+                "SELECT n.id,n.kind,n.name,n.qualified_name,n.file_path,n.line_start,n.line_end,"
+                "n.language,n.signature,bm25(nodes_fts) AS rank "
+                "FROM nodes_fts f JOIN nodes n ON n.id = f.rowid "
+                "WHERE nodes_fts MATCH ?";
+            std::vector<std::string> params = {escape_fts(q)};
+            if (!kind.empty()) {
+                sql += " AND lower(n.kind) = lower(?)";
+                params.push_back(kind);
+            }
+            sql += " ORDER BY rank LIMIT " + std::to_string(cap + 1);
+            rows = query(graph, sql, params);
+            used_fts = !rows.empty();
+        }
+
+        if (rows.empty()) {
+            std::string sql =
+                "SELECT id,kind,name,qualified_name,file_path,line_start,line_end,language,signature,0 AS rank "
+                "FROM nodes WHERE (lower(name) LIKE ? OR lower(qualified_name) LIKE ? OR lower(file_path) LIKE ?)";
+            std::vector<std::string> params = {"%" + lower_copy(q) + "%", "%" + lower_copy(q) + "%", "%" + lower_copy(q) + "%"};
+            if (!kind.empty()) {
+                sql += " AND lower(kind) = lower(?)";
+                params.push_back(kind);
+            }
+            sql += " ORDER BY CASE WHEN lower(name)=lower(?) THEN 0 WHEN lower(name) LIKE lower(?) THEN 1 ELSE 2 END, name LIMIT " + std::to_string(cap + 1);
+            params.push_back(q);
+            params.push_back(q + "%");
+            rows = query(graph, sql, params);
+        }
+
+        bool truncated = (int)rows.size() > cap;
+        if (truncated) rows.pop_back();
+
+        json results = json::array();
+        for (const auto& row : rows) {
+            double rank = row.get_double("rank", 0.0);
+            results.push_back({
+                {"id", row.get_int64("id")},
+                {"kind", row.get("kind")},
+                {"name", row.get("name")},
+                {"qualified_name", row.get("qualified_name")},
+                {"file_path", short_path(row.get("file_path"))},
+                {"line_start", row.get_int("line_start")},
+                {"line_end", row.get_int("line_end")},
+                {"language", row.get("language")},
+                {"signature", row.get("signature")},
+                {"score", used_fts ? std::round((-rank) * 1000000.0) / 1000000.0 : 0.0},
+            });
+        }
+
+        root["status"] = "ok";
+        root["summary"] = std::to_string(results.size()) + " CRG graph node match(es)";
+        root["results"] = results;
+        root["count"] = results.size();
+        root["used_fts"] = used_fts;
+        root["truncated"] = truncated;
+        root["next_actions"] = json::array({"source.review_context", "source.impact_radius", "source.crg_graph_health"});
+        print_json(root);
     }
 
     json score_symbol(const Row& sym) {
@@ -4303,10 +4860,10 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
 };
 
 // ============================================================
-// Context actions
+// Bridge actions
 // ============================================================
 
-class ContextActions {
+class BridgeActions {
     Database project_db;
     Database source_db;
     bool project_open = false;
@@ -4329,7 +4886,7 @@ public:
         }
     }
 
-    void bridge_asset_symbols(const Args& args) {
+    void search_asset_symbols(const Args& args) {
         std::string asset_path = args.opt("asset_path");
         std::string symbol_seed = args.opt("symbol");
         if (asset_path.empty() && args.positional.size() == 1 && symbol_seed.empty())
@@ -4340,7 +4897,7 @@ public:
         bool has_asset = !asset_path.empty();
         bool has_symbol = !symbol_seed.empty();
         if (has_asset == has_symbol)
-            die("bridge_asset_symbols requires exactly one of --asset-path or --symbol");
+            die("search_asset_symbols requires exactly one of --asset-path or --symbol");
 
         int limit = clamp_int(args.opt_int("limit", 20), 1, 100);
         std::string detail_level = args.opt("detail_level", "minimal");
@@ -4423,11 +4980,11 @@ public:
         else input["symbol"] = symbol_seed;
 
         json next_actions = json::array({
-            "Use context.build_attachment on matching asset/source_symbol items for prompt materialization.",
+            "Use bridge.build_attachment on matching asset/source_symbol items for prompt materialization.",
             "Use source.review_context or project.review_context on high-confidence matches before code review.",
         });
         if (!warnings.empty())
-            next_actions.push_back("Run context.get_index_status or context.start_indexing if an index is unavailable or stale.");
+            next_actions.push_back("Run bridge.get_index_status or bridge.start_indexing if an index is unavailable or stale.");
 
         json root = {
             {"status", warnings.empty() ? "ok" : "warning"},
@@ -4514,10 +5071,10 @@ static std::string resolve_namespace_db_path(const std::string& explicit_db,
     return (fs::path(db_dir) / default_filename).string();
 }
 
-static std::string resolve_context_db_path(const std::string& explicit_db,
-                                           const std::string& db_arg,
-                                           const std::string& db_dir,
-                                           const std::string& default_filename) {
+static std::string resolve_bridge_db_path(const std::string& explicit_db,
+                                          const std::string& db_arg,
+                                          const std::string& db_dir,
+                                          const std::string& default_filename) {
     if (!explicit_db.empty()) return explicit_db;
 
     if (!db_arg.empty()) {
@@ -4562,6 +5119,11 @@ int main(int argc, char* argv[]) {
             {"health",              [](SourceActions& s, const Args& a) { s.health(a); }},
             {"repair_fts",          [](SourceActions& s, const Args& a) { s.repair_fts(a); }},
             {"repair_crg_cache",    [](SourceActions& s, const Args& a) { s.repair_crg_cache(a); }},
+            {"build_crg_graph",     [](SourceActions& s, const Args& a) { s.build_crg_graph(a); }},
+            {"rebuild_crg_graph",   [](SourceActions& s, const Args& a) { s.rebuild_crg_graph(a); }},
+            {"repair_crg_graph",    [](SourceActions& s, const Args& a) { s.rebuild_crg_graph(a); }},
+            {"search_crg_graph",    [](SourceActions& s, const Args& a) { s.search_crg_graph(a); }},
+            {"crg_graph_health",    [](SourceActions& s, const Args& a) { s.crg_graph_health(a); }},
             {"risk_score",          [](SourceActions& s, const Args& a) { s.risk_score(a); }},
             {"review_hotspots",     [](SourceActions& s, const Args& a) { s.review_hotspots(a); }},
             {"review_context",      [](SourceActions& s, const Args& a) { s.review_context(a); }},
@@ -4576,22 +5138,22 @@ int main(int argc, char* argv[]) {
         if (it == actions.end()) die("Unknown source action: " + args.action);
         it->second(sa, args);
 
-    } else if (args.ns == "context") {
-        std::string project_db = resolve_context_db_path(
+    } else if (args.ns == "bridge") {
+        std::string project_db = resolve_bridge_db_path(
             args.opt("project_db"), db_arg, db_dir, "ProjectIndex.db");
-        std::string source_db = resolve_context_db_path(
+        std::string source_db = resolve_bridge_db_path(
             args.opt("source_db"), db_arg, db_dir, "EngineSource.db");
 
-        ContextActions ca;
-        ca.open(project_db, source_db);
+        BridgeActions ba;
+        ba.open(project_db, source_db);
 
-        static const std::map<std::string, std::function<void(ContextActions&, const Args&)>> actions = {
-            {"bridge_asset_symbols", [](ContextActions& c, const Args& a) { c.bridge_asset_symbols(a); }},
+        static const std::map<std::string, std::function<void(BridgeActions&, const Args&)>> actions = {
+            {"search_asset_symbols", [](BridgeActions& b, const Args& a) { b.search_asset_symbols(a); }},
         };
 
         auto it = actions.find(args.action);
-        if (it == actions.end()) die("Unknown context action: " + args.action);
-        it->second(ca, args);
+        if (it == actions.end()) die("Unknown bridge action: " + args.action);
+        it->second(ba, args);
 
     } else if (args.ns == "project") {
         std::string db_path = resolve_namespace_db_path(
@@ -4627,7 +5189,7 @@ int main(int argc, char* argv[]) {
         it->second(pa, args);
 
     } else {
-        die("Unknown namespace: " + args.ns + " (expected 'source', 'project', or 'context')");
+        die("Unknown namespace: " + args.ns + " (expected 'source', 'project', or 'bridge')");
     }
 
     return 0;

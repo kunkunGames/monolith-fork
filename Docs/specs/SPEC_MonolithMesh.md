@@ -4,7 +4,7 @@
 **Engine:** Unreal Engine 5.7+
 **Version:** 0.14.9 (Beta)
 
-> **Action-count audit (2026-05-19):** source-of-truth count is **234 `mesh` actions + 24 experimental town gen actions when enabled**. PCG discovery is owned by `MonolithPCG`; Paper2D discovery is owned by `MonolithPaper2D`; Water discovery is owned by `MonolithWater`; Dataflow discovery is owned by `MonolithDataflow`; Chaos/Fracture discovery is owned by `MonolithChaosFracture`; nDisplay discovery is owned by `MonolithNDisplay`; Interchange import/export is owned by `MonolithInterchange`. The detailed per-action tables below predate the audit and may sum to slightly different numbers per category — they are accurate per-row but the category subtotals have drifted. A full per-action sweep against `Source/MonolithMesh/Private/Monolith*Actions.cpp` is on the audit backlog.
+> **Action-count audit (2026-05-20):** static registration audit reports **66 `mesh` actions** after the routing cleanup and source-domain split. Mesh validation (`validate_game_ready`, `suggest_lod_strategy`, `batch_validate`, `compare_lod_chain`) stays in `mesh`; asset hygiene (`validate_naming_conventions`, `batch_rename_assets`) registers under `asset`; composition/encounter review (`analyze_framing`, `evaluate_monster_reveal`, `analyze_co_op_balance`) registers under `leveldesign`; procedural town/building actions register under `worldgen`; generated-model actions register under `modelgen`. PCG discovery is owned by `MonolithPCG`; Paper2D discovery is owned by `MonolithPaper2D`; Water discovery is owned by `MonolithWater`; Dataflow discovery is owned by `MonolithDataflow`; Chaos/Fracture discovery is owned by `MonolithChaosFracture`; nDisplay discovery is owned by `MonolithNDisplay`; Interchange import/export is owned by `MonolithInterchange`. Runtime action tables below retain legacy class/action names for cross-spec reference where the public action contract predates the physical source split; actual `.h/.cpp` files for `scene`, `leveldesign`, `worldgen`, and `modelgen` now live under their owning modules.
 
 ---
 
@@ -20,28 +20,22 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithMeshModule` | Registers 234 `mesh` actions across 30+ action classes (+ GeometryScript ops conditional). 24 additional experimental town gen actions registered only when `bEnableProceduralTownGen = true` (default: false). |
+| `FMonolithMeshModule` | Registers mesh-owned actions, mesh validation, and asset-hygiene helpers through owner-scoped registry registration. Shutdown removes only `MonolithMesh`-owned actions, not shared namespaces such as `asset`, `scene`, `leveldesign`, `worldgen`, or `modelgen`. |
 | `FMonolithMeshInspectionActions` | Mesh asset inspection: geometry stats, LODs, UVs, materials, collision, quality analysis, and catalog queries (12 `mesh` actions) |
-| `FMonolithMeshSceneActions` | Scene actor manipulation: spawn, move, duplicate, delete, group, batch execute (8 actions) |
-| `FMonolithMeshSpatialActions` | Spatial queries: raycasts, sweeps, overlaps, nearest, line of sight, navmesh, scene bounds/stats (11 actions) |
-| `FMonolithMeshBlockoutActions` | Level blockout: volumes, primitives, grids, asset matching, replacement, layout import/export, prop scatter (15 actions) |
+| `FMonolithMeshValidationActions` | Mesh readiness and LOD validation (`validate_game_ready`, `suggest_lod_strategy`, `batch_validate`, `compare_lod_chain`) |
+| `FMonolithMeshOperationActions` | GeometryScript mesh operations and handle lifecycle actions |
+| `FMonolithMeshPerformanceActions` | Region cost, placement cost, overdraw, shadow, and triangle budget analysis |
 | `FMonolithMeshProceduralActions` | Procedural geometry: parametric furniture, structures, mazes, pipes, terrain, horror props, sweep-based walls, auto-collision, human-scale defaults, door/window trim frames (8 actions) |
-| `FMonolithMeshCacheActions` | Procedural mesh caching: hash-based manifest, list/clear/validate/stats (4 actions) |
-| `FMonolithMeshPrefabActions` | Blueprint prefabs: dialog-free HarvestBlueprintFromActors (1 action) |
-| `FMonolithMeshBuildingActions` | Grid-based building construction: grid → geometry + Building Descriptor (2 actions) |
-| `FMonolithMeshFloorPlanGenerator` | Automatic floor plan generation: treemap layout, archetype loading, corridor insertion (3 actions) |
-| `FMonolithMeshFacadeActions` | Facade & window generation: window placement, trim profiles, horror damage (3 actions) |
-| `FMonolithMeshRoofActions` | Roof generation: gable, hip, flat/parapet, shed, gambrel (1 action) |
-| `FMonolithMeshCityBlockActions` | City block layout: lot subdivision, street geometry, orchestration (4 actions) |
-| `FMonolithMeshSpatialRegistry` | Spatial registry: hierarchical JSON descriptor, adjacency graph, BFS pathfinding (10 actions) |
-| `FMonolithMeshAutoVolumeActions` | Auto-volume generation: NavMesh, blocking, audio, trigger volumes (3 actions) |
-| `FMonolithMeshTerrainActions` | Terrain adaptation: height sampling, foundations, retaining walls (5 actions) |
-| `FMonolithMeshArchFeatureActions` | Architectural features: balconies, porches, fire escapes, railings (5 actions) |
-| `FMonolithMeshDebugViewActions` | Daredevil debug view: section clip, floor plan capture, camera bookmarks (6 actions) |
-| `FMonolithMeshFurnishingActions` | Room furnishing: room-type furniture mapping, placement rules (3 actions) |
-| `FMonolithMeshBuildingTypes` | Shared structs: FBuildingGrid, FRoomDef, FDoorDef, FStairwellDef, FBuildingDescriptor |
-| `FMonolithMeshCatalog` | Mesh catalog database for search_meshes_by_size and get_mesh_catalog_stats |
-| `FMonolithMeshUtils` | Shared helpers for mesh loading, bounds calculation, actor queries |
+| `FMonolithMeshQualityActions` | Mesh proxy/HLOD/texture-budget actions retained in `mesh` |
+| `FMonolithMeshTechArtActions` | Mesh import/export, quality repair, auto LODs, texel/lightmap density, collision, and material-cost analysis |
+| `FMonolithActorMergeActions` | Actor merge/proxy/instancing/material bake helpers exposed through `mesh` |
+| `FMonolithHlodActions` | HLOD setup and related mesh optimization helpers exposed through `mesh` |
+| `FMonolithLevelInstanceActions` | Level-instance helpers exposed through `mesh` where they support mesh/prefab workflows |
+| `FMonolithMeshProceduralActions` cache handlers | Procedural mesh caching: hash-based manifest, list/clear/validate/stats (4 actions) |
+| `FMonolithMeshCatalog` | Exported mesh catalog database for `search_meshes_by_size` and `get_mesh_catalog_stats` |
+| `FMonolithMeshUtils` / `FMonolithMeshAnalysis` | Exported shared helpers for mesh loading, bounds calculation, actor queries, path clearance, tension scoring, and other cross-domain read utilities |
+| `FMonolithMeshProceduralCache` | Hash-based cache manifest and file cache utilities for procedural mesh actions |
+| `UMonolithMeshHandlePool` | Exported transient handle pool used by mesh operations and by `MonolithWorldGen` town-generation geometry actions |
 
 ### Moved Optional Namespaces
 
@@ -57,9 +51,9 @@ The following optional plugin surfaces are no longer owned by `MonolithMesh`:
 | `dataflow` | `MonolithDataflow` | [SPEC_MonolithDataflow.md](SPEC_MonolithDataflow.md) |
 | `chaos_fracture` | `MonolithChaosFracture` | [SPEC_MonolithChaosFracture.md](SPEC_MonolithChaosFracture.md) |
 
-### Actions (260 — namespace: "mesh")
+### Runtime Action Families
 
-> **Note:** 234 `mesh` actions (Phases 1-22 + Proc Geo Overhaul) always registered + 24 experimental Procedural Town Generator actions (SP1-SP10 + `validate_building`) registered only when `bEnableProceduralTownGen = true` (default: false). PCG, Paper2D, Water, Dataflow, Chaos/Fracture, nDisplay, and Interchange discovery/import surfaces have moved to dedicated modules. Town gen has known geometry issues (wall misalignment, room separation) — very much a work-in-progress. Unless you're willing to dig in and help improve it, it's best left alone for now. Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain.
+> **Note:** `mesh` now contains mesh asset inspection, mesh validation, mesh operations, mesh performance/tech-art, proxy/HLOD, actor-merge, and procedural mesh helpers. Actor/scene actions register under `scene`, blockout/town/building actions under `worldgen`, generated-model actions under `modelgen`, asset hygiene under `asset`, and composition/encounter review under `leveldesign`.
 
 **Inspection (12)**
 | Action | Params | Description |
@@ -77,7 +71,15 @@ The following optional plugin surfaces are no longer owned by `MonolithMesh`:
 | `search_meshes_by_size` | `min_size`, `max_size`, `limit` | Search indexed meshes by bounding box size range |
 | `get_mesh_catalog_stats` | none | Mesh catalog database statistics |
 
-**Scene Manipulation (8)**
+**Validation (4)**
+| Action | Params | Description |
+|--------|--------|-------------|
+| `validate_game_ready` | `asset_path`, `platform`?, `checks`? | Validate a mesh for game-ready use, including geometry, collision, UV, LOD, and budget checks |
+| `suggest_lod_strategy` | `asset_path`, `target_platform`?, `budget_profile`? | Recommend LOD settings and reduction targets for a mesh |
+| `batch_validate` | `asset_paths`, `platform`?, `checks`? | Run mesh validation across multiple assets with per-asset result rows |
+| `compare_lod_chain` | `asset_path`, `expected_profile`? | Inspect the LOD chain for gaps, excessive reductions, or budget drift |
+
+**Moved to `scene`: Scene Manipulation**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `get_actor_info` | `actor_name` | Full actor details: class, transform, components, tags |
@@ -89,7 +91,7 @@ The following optional plugin surfaces are no longer owned by `MonolithMesh`:
 | `set_actor_properties` | `actor_name`, `properties` | Set properties on an actor via reflection |
 | `batch_execute` | `operations` | Execute multiple scene operations in a single transaction |
 
-**Spatial Queries (11)**
+**Moved to `scene`: Spatial Queries**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `query_raycast` | `start`, `end`, `channel` | Single-hit raycast with collision response |
@@ -104,7 +106,7 @@ The following optional plugin surfaces are no longer owned by `MonolithMesh`:
 | `get_spatial_relationships` | `actor_name`, `radius` | Get nearby actors and their spatial relationships |
 | `query_navmesh` | `start`, `end` | Query navigation mesh for path between two points |
 
-**Level Blockout (15)**
+**Moved to `worldgen`: Level Blockout**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `get_blockout_volumes` | none | List all blockout volumes in the level |
@@ -138,9 +140,9 @@ The following optional plugin surfaces are no longer owned by `MonolithMesh`:
 
 > **Procedural Geometry Overhaul (2026-03-28):** The proc gen actions (`create_parametric_mesh`, `create_structure`, `create_horror_prop`, etc.) now feature sweep-based thin walls (`wall_mode: "sweep"` default), auto snap-to-floor (`snap_to_floor` param), auto-collision on all saved meshes (`collision: auto/box/convex/complex_as_simple/none`), human-scale defaults (stairs 90/28/18cm, doors 90cm, floor 3cm), door/window/vent trim frames (`add_trim` param), and vent openings via `create_structure`. Collision-aware prop placement uses `collision_mode: none/warn/reject/adjust` on scatter actions with SweepSingle box traces for floor finding. All proc gen actions support `use_cache` and `auto_save` params for the caching system.
 
-### Procedural Town Generator (24 gated actions — 11 sub-projects) — WORK-IN-PROGRESS
+### Procedural Town Generator (`worldgen`/`scene` actions) — WORK-IN-PROGRESS
 
-> **Status:** Work-in-progress, disabled by default (`bEnableProceduralTownGen = false`). The current registration audit counts 24 gated town-gen actions; the historical per-subproject catalog below remains on the per-row audit backlog. Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain (wall misalignment, room separation). Very much a WIP — unless you're willing to dig in and help improve it, it's best left alone.
+> **Status:** Work-in-progress, disabled by default (`bEnableProceduralTownGen = false`). Town/building generation now routes through `worldgen` for generation actions and `scene` for spatial registry, auto-volume, and debug-view actions. Fix Plans v2-v5 addressed 27+ issues but fundamental geometry problems remain (wall misalignment, room separation). Very much a WIP — unless you're willing to dig in and help improve it, it's best left alone.
 
 Procedural city block generation from a single MCP call. 11 sub-projects composing into a pipeline: grid-based buildings with connected rooms, roofs, facades, furniture, lighting, horror dressing, navmesh, and volumes, all adaptive to terrain. The critical interface is the **Building Descriptor** — a JSON contract that SP1 outputs and SP2-SP10 consume. All building specs are generated server-side (not sent over MCP wire).
 
@@ -180,7 +182,7 @@ SP1's `create_building_from_grid` returns a JSON descriptor consumed by all down
 |--------|--------|-------------|
 | `generate_roof` | `building_descriptor`, `roof_type`?, `overhang`? | Footprint polygon → roof geometry (gable, hip, flat/parapet, shed, gambrel). Separate MaterialID for roof surface |
 
-**SP5: City Block Layout (4 actions)**
+**SP5: City Block Layout (`worldgen`)**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `create_city_block` | `buildings`, `genre`?, `seed`?, `block_size`?, `decay`? | Top-level orchestrator. Subdivides block → generates buildings → facades → roofs → streets → horror decay. Graceful degradation if SPs unavailable |
@@ -188,7 +190,7 @@ SP1's `create_building_from_grid` returns a JSON descriptor consumed by all down
 | `create_street` | `block_bounds`, `lot_positions` | Generate street geometry: sidewalks, curbs, road surface |
 | `place_street_furniture` | `street_bounds`, `density`?, `seed`? | Place lamps, hydrants, benches, trash cans along streets |
 
-**SP6: Spatial Registry (10 actions)**
+**SP6: Spatial Registry (`scene`)**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `register_building` | `building_descriptor` | Register a building in the spatial registry |
@@ -202,14 +204,14 @@ SP1's `create_building_from_grid` returns a JSON descriptor consumed by all down
 | `save_block_descriptor` | `block_id`, `save_path`? | Persist block descriptor to JSON |
 | `load_block_descriptor` | `file_path` | Load a persisted block descriptor |
 
-**SP7: Auto-Volume Generation (3 actions)**
+**SP7: Auto-Volume Generation (`scene`)**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `auto_volumes_for_building` | `building_descriptor` | Auto-spawn NavMeshBounds, BlockingVolume, AudioVolume (reverb by room size), TriggerVolume for a building |
 | `auto_volumes_for_block` | `block_id` | Auto-volumes for all buildings in a block + navmesh build |
 | `spawn_nav_link` | `location`, `left_point`, `right_point` | Spawn a NavLinkProxy between two points |
 
-**SP8a: Terrain + Foundations (5 actions)**
+**SP8a: Terrain + Foundations (`worldgen`)**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `sample_terrain_grid` | `origin`, `extent`, `resolution` | Sample NxM height grid via downward traces |
@@ -218,7 +220,7 @@ SP1's `create_building_from_grid` returns a JSON descriptor consumed by all down
 | `create_retaining_wall` | `path`, `height`, `material`? | Generate retaining wall geometry along a path |
 | `place_building_on_terrain` | `building_descriptor`, `terrain_grid` | Adapt a building to uneven terrain with auto-selected foundation |
 
-**SP8b: Architectural Features (5 actions)**
+**SP8b: Architectural Features (`worldgen`)**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `create_balcony` | `building_descriptor`, `floor`, `face`, `width`?, `depth`?, `building_context`? | Floor slab + railing extending from upper floor exterior. `building_context` enables collision checks against existing geometry. Returns `wall_openings` for facade integration |
@@ -227,7 +229,7 @@ SP1's `create_building_from_grid` returns a JSON descriptor consumed by all down
 | `create_ramp_connector` | `start`, `end`, `width`?, `slope`?, `building_context`? | ADA-compliant ramp between two heights with switchback support. Returns `wall_openings` for facade integration |
 | `create_railing` | `path`, `height`?, `style`? | Swept profile railing along edge path |
 
-**SP9: Daredevil Debug View (6 actions)**
+**SP9: Daredevil Debug View (`scene`)**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `toggle_section_view` | `z_height`?, `enabled`? | MPC-based section clip — hide everything above a Z height |
@@ -237,14 +239,14 @@ SP1's `create_building_from_grid` returns a JSON descriptor consumed by all down
 | `save_camera_bookmark` | `name`, `location`?, `rotation`? | Save current or specified camera viewpoint |
 | `load_camera_bookmark` | `name` | Restore a saved camera viewpoint |
 
-**SP10: Room Furnishing Pipeline (3 actions)**
+**SP10: Room Furnishing Pipeline (`worldgen`)**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `furnish_room` | `building_descriptor`, `room_id`, `preset`?, `disturbance`? | Place appropriate furniture per room type. Horror dressing via optional disturbance level (orderly/slightly_messy/ransacked/abandoned) |
 | `furnish_building` | `building_descriptor`, `decay`? | Furnish all rooms in a building, applying horror decay per room |
 | `list_furniture_presets` | `room_type`? | List available furniture preset configurations per room type |
 
-**Validation (1 action)**
+**Validation (`worldgen`)**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `validate_building` | `building_descriptor` | Post-generation validation: checks room connectivity, door reachability, stair angle limits, wall thickness, exterior entrance existence, floor slab coverage. Returns `valid` bool + `issues[]` with severity, location, and description per problem found |

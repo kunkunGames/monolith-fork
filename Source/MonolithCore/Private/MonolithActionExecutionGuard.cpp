@@ -1027,6 +1027,7 @@ bool FMonolithActionExecutionGuard::IsAutomaticSourceControlPrepareNamespace(con
 	static const TSet<FString> ExcludedNamespaces =
 	{
 		TEXT("asset"),
+		TEXT("bridge"),
 		TEXT("collection"),
 		TEXT("context"),
 		TEXT("monolith"),

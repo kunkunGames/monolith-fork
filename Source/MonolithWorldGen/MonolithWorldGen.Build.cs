@@ -18,6 +18,8 @@ public class MonolithWorldGen : ModuleRules
 		{
 			"MonolithCore",
 			"MonolithMesh",
+			"MonolithScene",
+			"MonolithLevelDesign",
 			"MonolithIndex",
 			"SQLiteCore",
 			"UnrealEd",

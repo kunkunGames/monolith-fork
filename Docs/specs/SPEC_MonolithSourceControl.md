@@ -42,7 +42,7 @@
 | `source_control.revert` | `paths`, `dry_run`?, `confirm`? | Reverts files. Requires `confirm=true` unless `dry_run=true`. |
 | `source_control.revert_unchanged` | `paths`, `dry_run`?, `confirm`? | Reverts unchanged files. Requires `confirm=true` unless `dry_run=true`. |
 
-`source_control.checkout_or_add` and the central action execution guard both use `FMonolithSourceControlUtils::CheckoutOrAddFiles`. Existing source-controlled files are checked out; local files are marked for add; already checked-out or added files are skipped. Explicit `source_control.checkout_or_add` allows add planning for missing package filenames to preserve its manual prepare behavior. Automatic asset mutation prepare skips missing files before the handler runs, then retries after the handler succeeds so newly saved `.uasset` and `.umap` files can be marked for add. Automatic prepare is scoped to asset-mutation namespaces/actions and project-owned package files; read-only project/source/context/catalog calls are excluded even if legacy policy inference marks them as mutating.
+`source_control.checkout_or_add` and the central action execution guard both use `FMonolithSourceControlUtils::CheckoutOrAddFiles`. Existing source-controlled files are checked out; local files are marked for add; already checked-out or added files are skipped. Explicit `source_control.checkout_or_add` allows add planning for missing package filenames to preserve its manual prepare behavior. Automatic asset mutation prepare skips missing files before the handler runs, then retries after the handler succeeds so newly saved `.uasset` and `.umap` files can be marked for add. Automatic prepare is scoped to asset-mutation namespaces/actions and project-owned package files; read-only project/source/bridge/context/catalog calls are excluded even if legacy policy inference marks them as mutating.
 
 ---
 
@@ -72,7 +72,7 @@ Focused coverage: `FMonolithSourceControlTypedParamsTest`.
 | Path boundary | Handlers normalize filesystem and `/Game` package/object paths before provider calls and report invalid entries per row. |
 | Mutation preview | `checkout`, `add`, `checkout_or_add`, `revert`, and `revert_unchanged` support `dry_run=true`; revert operations require either `confirm=true` or dry-run. |
 | Result shape | Actions return provider metadata, normalized path rows, operation booleans/results, messages/errors, and state rows only; no file contents or credential material are returned. |
-| Automatic mutation prepare | Asset-mutation actions route through `FMonolithActionExecutionGuard`, which calls the same helper before and after handlers when dirty-package tracking is active. Provider unavailable/disabled is a non-fatal skip for this automatic path. Project/source/context/collection/system namespaces and non-project paths are ignored. |
+| Automatic mutation prepare | Asset-mutation actions route through `FMonolithActionExecutionGuard`, which calls the same helper before and after handlers when dirty-package tracking is active. Provider unavailable/disabled is a non-fatal skip for this automatic path. Project/source/bridge/context/collection/system namespaces and non-project paths are ignored. |
 
 ---
 

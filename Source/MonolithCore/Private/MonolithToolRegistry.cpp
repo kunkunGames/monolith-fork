@@ -466,11 +466,105 @@ void FMonolithToolRegistry::RegisterAction(
 	RegAction.Info.SearchMetadata = SearchMetadata;
 	RegAction.Info.ParamSchema = ParamSchema;
 	RegAction.Handler = Handler;
+	if (RegistrationOwnerStack.Num() > 0)
+	{
+		RegAction.Owner = RegistrationOwnerStack.Last();
+	}
 
 	Actions.Add(Key, MoveTemp(RegAction));
 	NamespaceActions.FindOrAdd(Namespace).AddUnique(Key);
 
 	UE_LOG(LogMonolith, Verbose, TEXT("Registered action: %s — %s"), *Key, *Description);
+}
+
+void FMonolithToolRegistry::RegisterOwnedActions(const FString& Owner, TFunctionRef<void(FMonolithToolRegistry&)> Register)
+{
+	if (Owner.IsEmpty())
+	{
+		Register(*this);
+		return;
+	}
+
+	{
+		FScopeLock Lock(&RegistryLock);
+		RegistrationOwnerStack.Add(Owner);
+	}
+
+	Register(*this);
+
+	{
+		FScopeLock Lock(&RegistryLock);
+		if (RegistrationOwnerStack.Num() > 0 && RegistrationOwnerStack.Last() == Owner)
+		{
+			RegistrationOwnerStack.RemoveAt(RegistrationOwnerStack.Num() - 1, 1, EAllowShrinking::No);
+		}
+		else
+		{
+			RegistrationOwnerStack.RemoveSingle(Owner);
+		}
+	}
+}
+
+bool FMonolithToolRegistry::UnregisterActionByKey_NoLock(const FString& Key)
+{
+	FRegisteredAction RemovedAction;
+	if (!Actions.RemoveAndCopyValue(Key, RemovedAction))
+	{
+		return false;
+	}
+
+	if (TArray<FString>* Keys = NamespaceActions.Find(RemovedAction.Info.Namespace))
+	{
+		Keys->Remove(Key);
+		if (Keys->Num() == 0)
+		{
+			NamespaceActions.Remove(RemovedAction.Info.Namespace);
+		}
+	}
+
+	return true;
+}
+
+bool FMonolithToolRegistry::UnregisterAction(const FString& Namespace, const FString& Action)
+{
+	FScopeLock Lock(&RegistryLock);
+	const FString Key = MakeKey(Namespace, Action);
+	const bool bRemoved = UnregisterActionByKey_NoLock(Key);
+	if (bRemoved)
+	{
+		UE_LOG(LogMonolith, Verbose, TEXT("Unregistered action: %s"), *Key);
+	}
+	return bRemoved;
+}
+
+int32 FMonolithToolRegistry::UnregisterOwner(const FString& Owner)
+{
+	if (Owner.IsEmpty())
+	{
+		return 0;
+	}
+
+	FScopeLock Lock(&RegistryLock);
+
+	TArray<FString> KeysToRemove;
+	for (const auto& Pair : Actions)
+	{
+		if (Pair.Value.Owner == Owner)
+		{
+			KeysToRemove.Add(Pair.Key);
+		}
+	}
+
+	for (const FString& Key : KeysToRemove)
+	{
+		UnregisterActionByKey_NoLock(Key);
+	}
+
+	if (KeysToRemove.Num() > 0)
+	{
+		UE_LOG(LogMonolith, Log, TEXT("Unregistered owner: %s (%d actions)"), *Owner, KeysToRemove.Num());
+	}
+	return KeysToRemove.Num();
 }
 
 void FMonolithToolRegistry::UnregisterNamespace(const FString& Namespace)

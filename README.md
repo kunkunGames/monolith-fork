@@ -40,7 +40,7 @@ Most MCP integrations register every action as a separate tool, which floods the
 
 **Project (7 actions)** — SQLite FTS5 full-text search across every indexed asset in your project. Find assets by name, type, path, or content. Trace references between assets. Search gameplay tags. Get detailed asset metadata. The index updates live as assets change and covers marketplace/Fab plugin content too — 18 deep indexers registered including DataAsset subclasses and MetaSounds.
 
-**Mesh (244 default-active actions; 268 with town gen enabled)** — The biggest module by far. 244 core actions across 22 capability tiers, plus 24 procedural town generation actions (work-in-progress -- disabled by default, and unless you're willing to dig in and help improve it, best left alone for now). Mesh inspection and comparison. Full actor CRUD with scene manipulation. Physics-based spatial queries (raycasts, sweeps, overlaps) that work in-editor without PIE. Level blockout workflow with auto-matching and atomic replacement. GeometryScript mesh operations (boolean, simplify, remesh, LOD gen, UV projection). Horror spatial analysis — sightlines, hiding spots, ambush points, zone tension, pacing curves (WIP). Accessibility validation with A-F grading. Lighting analysis (WIP), audio/acoustics with Sabine RT60 and stealth maps (WIP), performance budgeting (WIP). Decal placement with storytelling presets. Level design tools for lights, volumes, sublevels, prefabs, HISM instancing. Tech art pipeline for mesh import, LOD gen, texel density, collision authoring. Context-aware prop scatter on any surface. Procedural geometry — parametric furniture (15 types), horror props (7 types), architectural structures, mazes, pipes, terrain. Genre preset system for any game type. Encounter design with patrol routes, safe room evaluation, and scare sequence generation. Full accessibility reporting.
+**Mesh (66 actions)** — Static mesh inspection, mesh comparison, GeometryScript mesh operations, mesh validation, mesh performance budgeting, proxy/HLOD helpers, mesh cache/handle utilities, prefab/prop-kit helpers, and mesh tech-art workflows. Actor/scene operations route through `scene`, encounter and framing review through `leveldesign`, procedural world/blockout generation through `worldgen`, generated-model provider workflows through `modelgen`, and naming/rename hygiene through `asset`.
 
 **GAS (135 actions)** — Complete Gameplay Ability System integration. 131 GAS-namespace actions plus 4 widget attribute-binding actions also aliased into the `ui` namespace. Create and manage Gameplay Abilities with activation policies, cooldowns, costs, and tags. Full AttributeSet CRUD — both C++ and Blueprint-based (via optional GBA plugin). Ships with `ULeviathanVitalsSet` AttributeSet template (Phase J F4) so projects without GBA still get a working starter set. Gameplay Effect authoring with modifiers, duration policies, stacking, period, and conditional application. Ability System Component (ASC) management — grant/revoke abilities, apply/remove effects, query active abilities and effects. Gameplay Tag utilities. Gameplay Cue management — create, trigger, inspect cues for audio/visual feedback. Target data generation and targeting tasks. Input binding for ability activation. Runtime inspection and debugging tools. Scaffolding actions that generate complete GAS setups from templates. Accessibility-focused infinite-duration GEs for reduced difficulty modes.
 
@@ -60,7 +60,7 @@ Most MCP integrations register every action as a separate tool, which floods the
 - **Material authoring (63 actions)** — Programmatic PBR graph building, custom HLSL, material functions, texture import, batch operations, preview rendering, compilation stats, tiling quality analysis, texture preview
 - **Animation (125 actions)** — Sequences, montages, blend spaces, Animation Blueprint graph writing (add states, transitions, rules, wire nodes), PoseSearch, Control Rig, Physics Assets, IK Rigs, Retargeters, skeleton management
 - **Niagara VFX (109 actions)** — System/emitter lifecycle, dynamic inputs, event handlers, sim stages, Parameter Collections, Effect Types, scalability settings, renderer presets, data interfaces, system diffing, batch execute
-- **Mesh (244 default-active actions; 268 with town gen enabled)** — 22 capability tiers: mesh inspection, scene manipulation, spatial queries, blockout-to-production, GeometryScript ops, horror spatial analysis (WIP), accessibility validation (A-F grading), lighting (WIP), audio/acoustics (WIP), performance budgeting (WIP), decals, level design, tech art pipeline, context-aware props, procedural geometry (furniture, horror props, structures, mazes, terrain), genre presets, encounter design, accessibility reports. +24 town gen actions (work-in-progress, disabled by default)
+- **Mesh (66 actions)** — Static mesh inspection/comparison, GeometryScript ops, validation, mesh performance budgeting, proxy/HLOD helpers, cache/handle utilities, prefab/prop-kit helpers, and tech-art mesh workflows. Scene, level-design, world-generation, generated-model, and asset-hygiene actions are routed to their own namespaces.
 - **AI (243 actions)** — Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, AI Controllers, Perception, Navigation, runtime debugging, scaffolding, Mass/Zone Graph inspection. Crown jewels: `build_behavior_tree_from_spec` and `build_state_tree_from_spec`. Gated on `WITH_STATETREE` + `WITH_SMARTOBJECTS` (Phase J F22)
 - **GAS (135 actions)** — Full Gameplay Ability System: abilities, AttributeSets (C++ + `ULeviathanVitalsSet` template; Blueprint sets via optional GBA), Gameplay Effects, ASC management, tags, cues, targeting, input binding, runtime inspection, scaffolding templates, accessibility-focused infinite-duration GEs. 4 attribute-binding actions surface in the `ui` namespace as aliases
 - **Logic Driver (66 actions)** — Logic Driver Pro state machines: SM CRUD, graph read/write, node config, runtime/PIE, `build_sm_from_spec`, JSON spec, scaffolding (door, health, AI patrol, dialogue, elevator, puzzle, inventory), component management
@@ -272,7 +272,11 @@ Monolith.uplugin
   MonolithMaterial      — Material inspection + graph editing + CRUD + material functions + tiling quality (63 actions)
   MonolithAnimation     — Animation sequences, montages, ABPs, PoseSearch, IKRig, Control Rig (125 actions)
   MonolithNiagara       — Niagara particle systems, dynamic inputs, event handlers, sim stages, NPC, scalability (109 actions)
-  MonolithMesh          — Mesh inspection, scene manipulation, spatial queries, blockout, procedural geometry, horror/accessibility (244 core actions + 24 experimental town gen)
+  MonolithMesh          — Static mesh inspection, GeometryScript operations, validation, mesh performance, proxy/HLOD, cache/handle, prefab/prop-kit, and tech-art mesh workflows (66 actions)
+  MonolithScene         — Editor-world actor CRUD, spatial queries, lighting/audio/decal/metadata helpers (65 actions)
+  MonolithLevelDesign   — Horror/encounter/accessibility analysis, room/acoustic/genre presets, framing, co-op balance (61 actions)
+  MonolithWorldGen      — Blockout, procedural structures/terrain, replacement workflows, and optional town-generation workflows (63 actions)
+  MonolithModelGen      — Generated-model provider, job, import, and provenance workflows (7 actions)
   MonolithAI            — Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, Controllers, Perception, Navigation (243 actions)
   MonolithEditor        — Build triggers, log capture, compile output, crash context, GIF capture, blank map factory, module status, automation test list/run, PIE/console control (36 actions)
   MonolithConfig        — Config/INI resolution and search (6 actions)
@@ -292,7 +296,7 @@ Standalone Tools (in Binaries/)
   monolith_query.exe    — Offline DB query tool (zero UE dependency, sqlite3 amalgamation)
 ```
 
-**Action and dispatcher totals are runtime-discovered.** Call `monolith_status()` for live totals and `monolith_discover("<namespace>")` for authoritative namespace schemas. 24 town-gen experimental actions are disabled by default (`bEnableProceduralTownGen=false`) and register only when enabled. Live editors with sibling plugins loaded report higher counts (sibling plugins are documented in their own repos).
+**Action and dispatcher totals are runtime-discovered.** Call `monolith_status()` for live totals and `monolith_discover("<namespace>")` for authoritative namespace schemas. Live editors with sibling plugins loaded report higher counts (sibling plugins are documented in their own repos).
 
 ### Tool Reference
 
@@ -306,7 +310,12 @@ Standalone Tools (in Binaries/)
 | `material` | `material_query` | 63 | Inspection, editing, graph building, material functions, previews, validation, tiling quality, texture preview, CRUD |
 | `animation` | `animation_query` | 125 | Montages, blend spaces, ABPs, skeletons, bone tracks, PoseSearch, IKRig, Control Rig, ABP/ControlRig writes |
 | `niagara` | `niagara_query` | 109 | Systems, emitters, modules, parameters, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types, scalability |
-| `mesh` | `mesh_query` | 244 (+24 gated) | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, horror analysis, lighting, audio, performance, procedural geometry, encounter design. Town gen 24 actions registered only when `bEnableProceduralTownGen=true` |
+| `asset` | `asset_query` | 6 | Specialized asset enrichment plus naming and rename hygiene actions. |
+| `mesh` | `mesh_query` | 66 | Static mesh inspection/comparison, GeometryScript operations, validation, mesh performance, proxy/HLOD helpers, cache/handle utilities, prefab/prop-kit helpers, and tech-art mesh workflows. |
+| `scene` | `scene_query` | 65 | Editor-world actor CRUD, spatial queries, lighting, audio, decals, scatter, metadata, and scene statistics. |
+| `leveldesign` | `leveldesign_query` | 61 | Horror/encounter/accessibility analysis, room/acoustic/genre presets, framing, monster reveal, and co-op spatial balance. |
+| `worldgen` | `worldgen_query` | 63 | Blockout, replacement, procedural structures/terrain, and optional town-generation workflows. |
+| `modelgen` | `modelgen_query` | 7 | Generated-model providers, jobs, imports, and provenance. |
 | `ai` | `ai_query` | 243 | BT, BB, State Trees, EQS, Smart Objects, Controllers, Perception, Navigation, runtime debugging, scaffolding, Mass/Zone Graph. Conditional on `WITH_STATETREE` + `WITH_SMARTOBJECTS` |
 | `gas` | `gas_query` | 135 | Gameplay Ability System — abilities, effects, attributes (incl. `ULeviathanVitalsSet`), ASC, tags, cues, targeting, input, inspect, scaffold. Conditional on `WITH_GBA` for Blueprint AttributeSets |
 | `logicdriver` | `logicdriver_query` | 66 | Logic Driver Pro state machines — SM CRUD, graph read/write, JSON spec, scaffolding, components. Conditional on `WITH_LOGICDRIVER` |
@@ -356,7 +365,7 @@ A stdio-to-HTTP proxy that keeps Claude Code MCP sessions alive across editor re
 
 A standalone database query tool that replaces both `monolith_offline.py` and the old `MonolithQueryCommandlet`. Instant startup (no 6+ second UE engine load), queries `EngineSource.db` and `ProjectIndex.db` directly.
 
-**14 actions:** 9 source (search_source, read_source, find_callers, find_callees, find_references, get_class_hierarchy, get_module_info, get_symbol_context, read_file) + 5 project (search, find_by_type, find_references, get_stats, get_asset_details)
+Includes source navigation, source CRG/review graph actions, project asset queries, and the read-only bridge namespace.
 
 **Usage:**
 
@@ -366,13 +375,17 @@ Plugins/Monolith/Binaries/monolith_query.exe source search_source FCharacterMove
 Plugins/Monolith/Binaries/monolith_query.exe source read_source ACharacter --max-lines=50
 Plugins/Monolith/Binaries/monolith_query.exe source get_class_hierarchy ACharacter --depth=3 --direction=down
 
+# Source CRG graph queries
+Plugins/Monolith/Binaries/monolith_query.exe source build_crg_graph --execute
+Plugins/Monolith/Binaries/monolith_query.exe source search_crg_graph UObject --limit=5
+
 # Project asset queries (JSON output)
 Plugins/Monolith/Binaries/monolith_query.exe project search damage --limit=10
 Plugins/Monolith/Binaries/monolith_query.exe project find_by_type Blueprint --limit=20
 Plugins/Monolith/Binaries/monolith_query.exe project get_stats
 ```
 
-Auto-detects database paths relative to exe location. No configuration needed: `source` opens `Saved/EngineSource.db`, `project` opens `Saved/ProjectIndex.db`, and `context` opens both. Default plugin checkout commands can use those paths without `--db`; reserve DB overrides for copied databases or non-standard layouts.
+Auto-detects database paths relative to exe location. No configuration needed: `source` opens `Saved/EngineSource.db`, `project` opens `Saved/ProjectIndex.db`, `bridge` opens both, and source CRG graph actions use `Saved/graph.db`. Default plugin checkout commands can use those paths without DB override arguments; reserve overrides for copied databases or non-standard layouts.
 
 **Source:** `Tools/MonolithQuery/monolith_query.cpp` (1080 lines)
 
@@ -453,7 +466,7 @@ Settings live at **Editor Preferences > Plugins > Monolith**:
 | Index Marketplace Plugins | `On` | Index content from installed marketplace/Fab plugins |
 | Index Data Assets | `On` | Deep-index DataAsset subclasses (14 indexers) |
 | Additional Content Paths | `[]` | Extra content paths to include in the project index |
-| Enable Procedural Town Gen | `Off` | **Work-in-progress** — 24 additional mesh actions for procedural building/town generation. Very much a WIP; unless you're willing to dig in and help improve it, best left alone for now |
+| Enable Procedural Town Gen | `Off` | **Work-in-progress** — optional `worldgen` actions for procedural building/town generation. Very much a WIP; unless you're willing to dig in and help improve it, best left alone for now |
 | Enable GAS | `On` | Gameplay Ability System integration (135 actions, requires GameplayAbilities plugin) |
 | Enable Logic Driver | `On` | Logic Driver Pro state machine integration (66 actions, requires Logic Driver Pro marketplace plugin) |
 | Enable ComboGraph | `On` | ComboGraph combo tree integration (13 actions, requires ComboGraph marketplace plugin) |

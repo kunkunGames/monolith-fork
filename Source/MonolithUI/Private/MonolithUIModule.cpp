@@ -64,38 +64,40 @@ void FMonolithUIModule::StartupModule()
     if (!GetDefault<UMonolithSettings>()->bEnableUI) return;
 
     FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
-    FMonolithUIActions::RegisterActions(Registry);
-    FMonolithUISlotActions::RegisterActions(Registry);
-    FMonolithUITemplateActions::RegisterActions(Registry);
-    FMonolithUIStylingActions::RegisterActions(Registry);
-    FMonolithUIAnimationActions::RegisterActions(Registry);
-    FMonolithUIBindingActions::RegisterActions(Registry);
-    FMonolithUISettingsActions::RegisterActions(Registry);
-    FMonolithUIAccessibilityActions::RegisterActions(Registry);
-    FMonolithUIRegistryActions::RegisterActions(Registry);
+    Registry.RegisterOwnedActions(TEXT("MonolithUI"), [](FMonolithToolRegistry& OwnedRegistry)
+    {
+        FMonolithUIActions::RegisterActions(OwnedRegistry);
+        FMonolithUISlotActions::RegisterActions(OwnedRegistry);
+        FMonolithUITemplateActions::RegisterActions(OwnedRegistry);
+        FMonolithUIStylingActions::RegisterActions(OwnedRegistry);
+        FMonolithUIAnimationActions::RegisterActions(OwnedRegistry);
+        FMonolithUIBindingActions::RegisterActions(OwnedRegistry);
+        FMonolithUISettingsActions::RegisterActions(OwnedRegistry);
+        FMonolithUIAccessibilityActions::RegisterActions(OwnedRegistry);
+        FMonolithUIRegistryActions::RegisterActions(OwnedRegistry);
 
-    // Hoisted action set -- generic verbs registered under the ui:: namespace.
-    MonolithUI::FTextureIngestActions::Register(Registry);
-    MonolithUI::FImageGenerationActions::Register(Registry);
-    MonolithUI::FFontIngestActions::Register(Registry);
-    MonolithUI::FAnimationCoreActions::Register(Registry);
-    MonolithUI::FAnimationEventActions::Register(Registry);
-    MonolithUI::FRoundedCornerActions::Register(Registry);
-    MonolithUI::FShadowActions::Register(Registry);
-    MonolithUI::FGradientActions::Register(Registry);
+        // Hoisted action set -- generic verbs registered under the ui:: namespace.
+        MonolithUI::FTextureIngestActions::Register(OwnedRegistry);
+        MonolithUI::FImageGenerationActions::Register(OwnedRegistry);
+        MonolithUI::FFontIngestActions::Register(OwnedRegistry);
+        MonolithUI::FAnimationCoreActions::Register(OwnedRegistry);
+        MonolithUI::FAnimationEventActions::Register(OwnedRegistry);
+        MonolithUI::FRoundedCornerActions::Register(OwnedRegistry);
+        MonolithUI::FShadowActions::Register(OwnedRegistry);
+        MonolithUI::FGradientActions::Register(OwnedRegistry);
 
-    // Phase F (2026-04-26) -- EffectSurface sub-bag setters + preset.
-    // 10 actions total in ui::set_effect_surface_* + ui::apply_effect_surface_preset.
-    MonolithUI::FEffectSurfaceActions::Register(Registry);
+        // Phase F (2026-04-26) -- EffectSurface sub-bag setters + preset.
+        // 10 actions total in ui::set_effect_surface_* + ui::apply_effect_surface_preset.
+        MonolithUI::FEffectSurfaceActions::Register(OwnedRegistry);
 
-    // Phase H (2026-04-26) -- transactional spec builder + schema dump.
-    // 2 actions: ui::build_ui_from_spec (the centerpiece) + ui::dump_ui_spec_schema.
-    MonolithUI::FSpecActions::Register(Registry);
-
+        // Phase H (2026-04-26) -- transactional spec builder + schema dump.
+        // 2 actions: ui::build_ui_from_spec (the centerpiece) + ui::dump_ui_spec_schema.
+        MonolithUI::FSpecActions::Register(OwnedRegistry);
 #if WITH_COMMONUI
-    FMonolithCommonUIActions::RegisterAll(Registry);
-    MonolithUI::FStyleDiagnosticsActions::Register(Registry);
+        FMonolithCommonUIActions::RegisterAll(OwnedRegistry);
+        MonolithUI::FStyleDiagnosticsActions::Register(OwnedRegistry);
 #endif
+    });
 
     // OnPostEngineInit re-scan: editor subsystems initialise AFTER OnPostEngineInit
     // has fired, so the SUBSYSTEM's own Initialize cannot listen to it. The
@@ -134,8 +136,7 @@ void FMonolithUIModule::ShutdownModule()
         GMonolithUIPostEngineInitHandle.Reset();
     }
 
-    FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("ui"));
-    FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("imagegen"));
+    FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithUI"));
 
 #if WITH_COMMONUI
     // Phase G — release cached UClass strong-refs before the module DLL

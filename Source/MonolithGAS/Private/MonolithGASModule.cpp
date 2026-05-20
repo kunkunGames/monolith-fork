@@ -19,7 +19,10 @@ DEFINE_LOG_CATEGORY(LogMonolithGAS);
 void FMonolithGASModule::StartupModule()
 {
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
-	FMonolithGASInputAssetActions::RegisterActions(Registry);
+	Registry.RegisterOwnedActions(TEXT("MonolithGAS"), [](FMonolithToolRegistry& OwnedRegistry)
+	{
+		FMonolithGASInputAssetActions::RegisterActions(OwnedRegistry);
+	});
 
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
 	if (!Settings || !Settings->bEnableGAS)
@@ -29,17 +32,20 @@ void FMonolithGASModule::StartupModule()
 		return;
 	}
 
-	FMonolithGASAbilityActions::RegisterActions(Registry);
-	FMonolithGASAttributeActions::RegisterActions(Registry);
-	FMonolithGASEffectActions::RegisterActions(Registry);
-	FMonolithGASASCActions::RegisterActions(Registry);
-	FMonolithGASTagActions::RegisterActions(Registry);
-	FMonolithGASCueActions::RegisterActions(Registry);
-	FMonolithGASTargetActions::RegisterActions(Registry);
-	FMonolithGASInputActions::RegisterActions(Registry);
-	FMonolithGASInspectActions::RegisterActions(Registry);
-	FMonolithGASScaffoldActions::RegisterActions(Registry);
-	FMonolithGASUIBindingActions::RegisterActions(Registry);
+	Registry.RegisterOwnedActions(TEXT("MonolithGAS"), [](FMonolithToolRegistry& OwnedRegistry)
+	{
+		FMonolithGASAbilityActions::RegisterActions(OwnedRegistry);
+		FMonolithGASAttributeActions::RegisterActions(OwnedRegistry);
+		FMonolithGASEffectActions::RegisterActions(OwnedRegistry);
+		FMonolithGASASCActions::RegisterActions(OwnedRegistry);
+		FMonolithGASTagActions::RegisterActions(OwnedRegistry);
+		FMonolithGASCueActions::RegisterActions(OwnedRegistry);
+		FMonolithGASTargetActions::RegisterActions(OwnedRegistry);
+		FMonolithGASInputActions::RegisterActions(OwnedRegistry);
+		FMonolithGASInspectActions::RegisterActions(OwnedRegistry);
+		FMonolithGASScaffoldActions::RegisterActions(OwnedRegistry);
+		FMonolithGASUIBindingActions::RegisterActions(OwnedRegistry);
+	});
 
 	int32 ActionCount = Registry.GetNamespaceActionCount(TEXT("gas"));
 	const TCHAR* GbaStatus =
@@ -53,8 +59,7 @@ void FMonolithGASModule::StartupModule()
 
 void FMonolithGASModule::ShutdownModule()
 {
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("gas"));
-	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("input"));
+	FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithGAS"));
 }
 
 IMPLEMENT_MODULE(FMonolithGASModule, MonolithGAS)
