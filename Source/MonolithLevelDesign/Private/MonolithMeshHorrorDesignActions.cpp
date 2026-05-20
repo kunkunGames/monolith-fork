@@ -69,7 +69,7 @@ namespace
 	}
 
 	/** Resample a polyline at regular intervals. Returns at least start and end. */
-	TArray<FVector> ResamplePath(const TArray<FVector>& PathPoints, float Interval)
+	TArray<FVector> HD_ResamplePath(const TArray<FVector>& PathPoints, float Interval)
 	{
 		TArray<FVector> Result;
 		if (PathPoints.Num() < 2)
@@ -116,7 +116,7 @@ namespace
 	}
 
 	/** Compute total polyline distance */
-	float PathLength(const TArray<FVector>& Points)
+	float HD_PathLength(const TArray<FVector>& Points)
 	{
 		float Dist = 0.0f;
 		for (int32 i = 1; i < Points.Num(); ++i)
@@ -127,7 +127,7 @@ namespace
 	}
 
 	/** Quick 8-direction average sightline distance at a point (eye height offset) */
-	float QuickAvgSightlineDistance(UWorld* World, const FVector& Location)
+	float HD_QuickAvgSightlineDistance(UWorld* World, const FVector& Location)
 	{
 		FCollisionQueryParams QP(SCENE_QUERY_STAT(MonolithHorrorDesign), true);
 		FVector Origin = Location + FVector(0, 0, 170.0f);
@@ -145,10 +145,10 @@ namespace
 	}
 
 	/** Quick tension score at a point (lightweight — sightlines + ceiling only, skip volume/exits for speed) */
-	float QuickTensionScore(UWorld* World, const FVector& Location)
+	float HD_QuickTensionScore(UWorld* World, const FVector& Location)
 	{
 		MonolithMeshAnalysis::FTensionInputs Inputs;
-		Inputs.AverageSightlineDistance = QuickAvgSightlineDistance(World, Location);
+		Inputs.AverageSightlineDistance = HD_QuickAvgSightlineDistance(World, Location);
 		Inputs.CeilingHeight = MonolithMeshAnalysis::MeasureCeilingHeight(World, Location);
 		Inputs.RoomVolume = 0.0f; // Neutral
 		Inputs.ExitCount = 2;     // Neutral
@@ -187,7 +187,7 @@ namespace
 	}
 
 	/** Minimum distance from a point to the nearest wall (any horizontal direction) */
-	float MinWallDistance(UWorld* World, const FVector& Location)
+	float HD_MinWallDistance(UWorld* World, const FVector& Location)
 	{
 		FCollisionQueryParams QP(SCENE_QUERY_STAT(MonolithHorrorDesignWall), true);
 		FVector TestPt = Location + FVector(0, 0, 50.0f);
@@ -400,7 +400,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::PredictPlayerPaths(const
 			Cell.Location = NavLoc.Location;
 
 			// Safety score: sightline distance (higher = safer) + clearance (wider = safer)
-			float AvgSightline = QuickAvgSightlineDistance(World, Cell.Location);
+			float AvgSightline = HD_QuickAvgSightlineDistance(World, Cell.Location);
 			float NormSightline = FMath::Clamp(AvgSightline / 5000.0f, 0.0f, 1.0f);
 
 			FVector DirToEnd = (End - Cell.Location).GetSafeNormal();
@@ -415,7 +415,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::PredictPlayerPaths(const
 				+ FMath::Clamp(1.0f - NormClearance, 0.0f, 1.0f) * 0.3f;
 
 			// Caution score: prefer positions near walls (min wall distance small) + wide clearance ahead
-			float WallDist = MinWallDistance(World, Cell.Location);
+			float WallDist = HD_MinWallDistance(World, Cell.Location);
 			float NormWallProximity = FMath::Clamp(1.0f - (WallDist / 200.0f), 0.0f, 1.0f); // Close to wall = high
 			Cell.CautionScore = NormWallProximity * 0.5f + NormSightline * 0.3f + NormClearance * 0.2f;
 
@@ -482,7 +482,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::PredictPlayerPaths(const
 
 		for (int32 i = 0; i < SP.Points.Num(); i += Step)
 		{
-			float Sightline = QuickAvgSightlineDistance(World, SP.Points[i]);
+			float Sightline = HD_QuickAvgSightlineDistance(World, SP.Points[i]);
 			SafetySum += FMath::Clamp(Sightline / 5000.0f, 0.0f, 1.0f);
 			// Visibility = how exposed the point is (inverse of concealment from center)
 			VisibilitySum += FMath::Clamp(Sightline / 3000.0f, 0.0f, 1.0f);
@@ -523,7 +523,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::PredictPlayerPaths(const
 				int32 Counted = 0;
 				for (int32 i = 0; i < SP.Points.Num(); i += Step)
 				{
-					float S = QuickAvgSightlineDistance(World, SP.Points[i]);
+					float S = HD_QuickAvgSightlineDistance(World, SP.Points[i]);
 					SafetySum += FMath::Clamp(S / 5000.0f, 0.0f, 1.0f);
 					VisSum += FMath::Clamp(S / 3000.0f, 0.0f, 1.0f);
 					++Counted;
@@ -808,7 +808,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::EvaluateSpawnPoint(const
 	else
 	{
 		// No player path — use sightline analysis from spawn point
-		float AvgSightline = QuickAvgSightlineDistance(World, Location);
+		float AvgSightline = HD_QuickAvgSightlineDistance(World, Location);
 		VisibilityDelayScore = FMath::Clamp(1.0f - (AvgSightline / 3000.0f), 0.0f, 1.0f);
 	}
 
@@ -998,7 +998,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::SuggestScarePositions(co
 	// Resample path at a reasonable interval for evaluation
 	float EvalInterval = static_cast<float>(MinSpacing) * 0.25f;
 	EvalInterval = FMath::Clamp(EvalInterval, 100.0f, 500.0f);
-	TArray<FVector> SamplePoints = ResamplePath(PathPoints, EvalInterval);
+	TArray<FVector> SamplePoints = HD_ResamplePath(PathPoints, EvalInterval);
 
 	// Cap sample count
 	if (SamplePoints.Num() > 300)
@@ -1026,7 +1026,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::SuggestScarePositions(co
 
 	TArray<FScareCandidate> Candidates;
 	float CumulativeDist = 0.0f;
-	float TotalPathLen = PathLength(SamplePoints);
+	float TotalPathLen = HD_PathLength(SamplePoints);
 
 	// Gather lights once for reuse
 	TArray<MonolithLightingCapture::FLightInfo> Lights = MonolithLightingCapture::GatherLights(World);
@@ -1043,7 +1043,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::SuggestScarePositions(co
 		Cand.DistanceAlongPath = CumulativeDist;
 
 		// Tension context (0-100)
-		Cand.TensionContext = QuickTensionScore(World, SamplePoints[i]);
+		Cand.TensionContext = HD_QuickTensionScore(World, SamplePoints[i]);
 
 		// Visibility from nearby path — lower visibility = better scare potential
 		FVector Forward = FVector::ForwardVector;
@@ -1296,7 +1296,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::EvaluateEncounterPacing(
 	}
 
 	// Compute distance along path for each encounter (project to nearest path point)
-	float TotalPathLen = PathLength(PathPoints);
+	float TotalPathLen = HD_PathLength(PathPoints);
 
 	for (FEncounter& Enc : Encounters)
 	{
@@ -1414,7 +1414,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::EvaluateEncounterPacing(
 	// Build tension curve (sample environmental tension between encounters)
 	TArray<TSharedPtr<FJsonValue>> TensionCurveArr;
 	{
-		TArray<FVector> ResampledPath = ResamplePath(PathPoints, 300.0f);
+		TArray<FVector> ResampledPath = HD_ResamplePath(PathPoints, 300.0f);
 		if (ResampledPath.Num() > 100)
 		{
 			int32 Step = (ResampledPath.Num() + 99) / 100;
@@ -1428,7 +1428,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::EvaluateEncounterPacing(
 		{
 			if (i > 0) Accum += FVector::Dist(ResampledPath[i - 1], ResampledPath[i]);
 
-			float EnvTension = QuickTensionScore(World, ResampledPath[i]);
+			float EnvTension = HD_QuickTensionScore(World, ResampledPath[i]);
 
 			// Add encounter-sourced tension (proximity boost)
 			float EncounterBoost = 0.0f;
