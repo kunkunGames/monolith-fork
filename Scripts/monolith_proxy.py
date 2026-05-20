@@ -18,6 +18,7 @@ Requirements: Python 3.8+ (stdlib only, no pip install needed)
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import sys
 import threading
@@ -25,6 +26,7 @@ import time
 import tempfile
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from io import TextIOWrapper
 from pathlib import Path
 
@@ -39,6 +41,25 @@ POLL_START_DELAY = 3.0
 # Track Monolith availability for list_changed notifications
 _monolith_was_up = None
 _stdout_lock = threading.Lock()
+_tool_log_lock = threading.Lock()
+_tool_log_sequence = 0
+_recent_tool_log_signatures: dict[str, tuple[float, bool]] = {}
+
+_SENSITIVE_KEY_FRAGMENTS = (
+    "authorization",
+    "bearer",
+    "token",
+    "api_key",
+    "apikey",
+    "password",
+    "passwd",
+    "secret",
+    "cookie",
+    "private_key",
+    "session_id",
+)
+_MAX_LOG_FIELD_BYTES = 256 * 1024
+_REPEAT_LOG_WINDOW_SECONDS = 15.0
 
 CORE_QUERY_TOOLS = [
     "blueprint_query",
@@ -64,6 +85,250 @@ CORE_QUERY_TOOLS = [
 def _log(msg: str) -> None:
     """Log to stderr (visible in Claude Code debug mode, never interferes with stdio)."""
     print(f"[monolith-proxy] {msg}", file=sys.stderr, flush=True)
+
+
+def _tool_log_enabled() -> bool:
+    return os.environ.get("MONOLITH_TOOL_LOG_ENABLED", "1") != "0"
+
+
+def _find_plugin_root() -> Path:
+    override = os.environ.get("MONOLITH_TOOL_LOG_DIR")
+    if override:
+        return Path(override)
+
+    here = Path(__file__).resolve()
+    for parent in [here.parent, *here.parents]:
+        if (parent / "Monolith.uplugin").exists():
+            return parent / "Logs"
+    return Path.cwd() / "Logs"
+
+
+def _daily_log_path() -> Path:
+    day = datetime.now().strftime("%Y%m%d")
+    return _find_plugin_root() / f"{day}_proxy.log"
+
+
+def _now_iso() -> str:
+    return datetime.now().astimezone().isoformat(timespec="milliseconds")
+
+
+def _redact(value):
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            key_text = str(key)
+            if any(fragment in key_text.lower() for fragment in _SENSITIVE_KEY_FRAGMENTS):
+                out[key_text] = "[REDACTED]"
+            else:
+                out[key_text] = _redact(item)
+        return out
+    if isinstance(value, list):
+        return [_redact(item) for item in value]
+    if isinstance(value, str):
+        stripped = value.strip()
+        if (stripped.startswith("{") and stripped.endswith("}")) or (stripped.startswith("[") and stripped.endswith("]")):
+            try:
+                return _redact(json.loads(stripped))
+            except Exception:
+                return value
+    return value
+
+
+def _json_bytes(value) -> bytes:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8", errors="replace")
+
+
+def _bounded(value, max_bytes: int = _MAX_LOG_FIELD_BYTES):
+    data = _json_bytes(value)
+    if len(data) <= max_bytes:
+        return value, False, len(data), None
+
+    digest = hashlib.sha256(data).hexdigest()
+    preview = data[:max_bytes].decode("utf-8", errors="replace")
+    return {
+        "truncated": True,
+        "original_bytes": len(data),
+        "sha256": f"sha256:{digest}",
+        "preview": preview,
+    }, True, len(data), f"sha256:{digest}"
+
+
+def _retry_signature(tool_name: str, arguments) -> str:
+    payload = {"tool": tool_name, "arguments": _redact(arguments)}
+    return "sha256:" + hashlib.sha256(_json_bytes(payload)).hexdigest()
+
+
+def _extract_response(response: str):
+    try:
+        return json.loads(response)
+    except Exception:
+        return response
+
+
+def _classify_response(response_obj, repeated: bool, duration_ms: float, arg_bytes: int, result_bytes: int) -> tuple[str, str | None, int | None, list[str]]:
+    outcome = "unknown"
+    error_class = None
+    error_code = None
+    tags: list[str] = []
+
+    if isinstance(response_obj, dict) and "error" in response_obj:
+        outcome = "jsonrpc_error"
+        error = response_obj.get("error") or {}
+        if isinstance(error, dict):
+            error_code = error.get("code")
+            message = str(error.get("message", ""))
+        else:
+            message = str(error)
+        lower = message.lower()
+        if "unknown action" in lower or "method not found" in lower:
+            error_class = "unknown_action"
+            tags.append("missing_action")
+        elif "missing required" in lower or "invalid param" in lower:
+            error_class = "missing_param"
+            tags.append("schema_confusing")
+        else:
+            error_class = "jsonrpc_error"
+    elif isinstance(response_obj, dict) and response_obj.get("result", {}).get("isError"):
+        outcome = "tool_error"
+        content = response_obj.get("result", {}).get("content", [])
+        message = json.dumps(content, ensure_ascii=False)
+        lower = message.lower()
+        if "not available" in lower or "not running" in lower or "unreachable" in lower:
+            outcome = "editor_unavailable"
+            error_class = "editor_unavailable"
+            tags.append("editor_unavailable")
+        elif "blocked" in lower:
+            error_class = "profile_blocked"
+            tags.append("profile_blocked")
+        else:
+            error_class = "tool_error"
+    else:
+        outcome = "success"
+
+    if repeated:
+        tags.append("repeated_call")
+    if duration_ms > 5000:
+        tags.append("slow_action")
+    if result_bytes > _MAX_LOG_FIELD_BYTES:
+        tags.append("large_result")
+    if arg_bytes > _MAX_LOG_FIELD_BYTES:
+        tags.append("large_result")
+
+    return outcome, error_class, error_code, sorted(set(tags))
+
+
+def _append_tool_log(record: dict) -> None:
+    if not _tool_log_enabled():
+        return
+
+    try:
+        path = _daily_log_path()
+        line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+        with _tool_log_lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            lock_path = path.with_suffix(path.suffix + ".lock")
+            with open(lock_path, "a+", encoding="utf-8") as lock_file:
+                if os.name == "nt":
+                    import msvcrt
+
+                    lock_file.seek(0)
+                    if not lock_file.read(1):
+                        lock_file.write("0")
+                        lock_file.flush()
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                    try:
+                        with open(path, "a", encoding="utf-8", newline="\n") as log_file:
+                            log_file.write(line)
+                    finally:
+                        lock_file.seek(0)
+                        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                    try:
+                        with open(path, "a", encoding="utf-8", newline="\n") as log_file:
+                            log_file.write(line)
+                    finally:
+                        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    except Exception as e:
+        _log(f"Tool daily log failed: {e}")
+
+
+def _log_tools_call(msg: dict, start_time: str, start_perf: float, response: str, repeated: bool, retry_signature: str) -> None:
+    if not _tool_log_enabled():
+        return
+
+    global _tool_log_sequence
+    end_time = _now_iso()
+    duration_ms = (time.perf_counter() - start_perf) * 1000.0
+    params = msg.get("params", {}) if isinstance(msg.get("params"), dict) else {}
+    tool_name = params.get("name", "unknown")
+    arguments = params.get("arguments", {})
+    redacted_args = _redact(arguments)
+    response_obj = _extract_response(response)
+    redacted_response = _redact(response_obj)
+    bounded_args, args_truncated, arg_bytes, arg_hash = _bounded(redacted_args)
+    bounded_response, response_truncated, result_bytes, result_hash = _bounded(redacted_response)
+    outcome, error_class, error_code, tags = _classify_response(
+        response_obj, repeated, duration_ms, arg_bytes, result_bytes)
+
+    with _tool_log_lock:
+        _tool_log_sequence += 1
+        sequence = _tool_log_sequence
+
+    record = {
+        "format_version": 1,
+        "surface": "proxy",
+        "sequence": sequence,
+        "start_time": start_time,
+        "end_time": end_time,
+        "duration_ms": round(duration_ms, 3),
+        "pid": os.getpid(),
+        "thread_id": threading.get_ident(),
+        "status": "success" if outcome == "success" else "error",
+        "client": {
+            "name": "unknown",
+            "version": "",
+            "protocol_version": "",
+            "proxy_runtime": "python",
+            "proxy_version": PROXY_VERSION,
+        },
+        "call": {
+            "jsonrpc_id": msg.get("id"),
+            "tool_name_original": tool_name,
+            "tool_name_forwarded": tool_name,
+            "arguments": bounded_args,
+            "retry_signature": retry_signature,
+        },
+        "return": {
+            "jsonrpc_id": response_obj.get("id") if isinstance(response_obj, dict) else None,
+            "response": bounded_response,
+            "result_bytes": result_bytes,
+        },
+        "redaction": {
+            "applied": True,
+            "truncated": args_truncated or response_truncated,
+            "argument_bytes": arg_bytes,
+            "result_bytes": result_bytes,
+            "argument_sha256": arg_hash,
+            "result_sha256": result_hash,
+        },
+        "agent_signal": {
+            "outcome": outcome,
+            "error_code": error_code,
+            "error_class": error_class or "",
+            "hints_returned": 0,
+            "discovery_context": "unknown",
+            "retry_signature": retry_signature,
+            "repeat_within_window": repeated,
+            "argument_bytes": arg_bytes,
+            "result_bytes": result_bytes,
+            "improvement_tags": tags,
+        },
+    }
+    _append_tool_log(record)
 
 
 def _post_monolith(body: str, timeout: float = TIMEOUT) -> str | None:
@@ -320,15 +585,36 @@ def handle_tools_list(msg: dict) -> str:
 
 def handle_tools_call(msg: dict) -> str:
     """Forward tools/call to Monolith. Graceful error if down."""
+    start_time = _now_iso()
+    start_perf = time.perf_counter()
+    params = msg.get("params", {}) if isinstance(msg.get("params"), dict) else {}
+    tool_name = params.get("name", "unknown")
+    arguments = params.get("arguments", {})
+    retry_signature = _retry_signature(tool_name, arguments)
+    now = time.monotonic()
+    previous = _recent_tool_log_signatures.get(retry_signature)
+    repeated = bool(previous and now - previous[0] <= _REPEAT_LOG_WINDOW_SECONDS)
+
     resp = _post_monolith(json.dumps(msg))
     if resp:
+        try:
+            response_obj = _extract_response(resp)
+            failed = isinstance(response_obj, dict) and (
+                "error" in response_obj or response_obj.get("result", {}).get("isError"))
+            _recent_tool_log_signatures[retry_signature] = (now, failed)
+            _log_tools_call(msg, start_time, start_perf, resp, repeated, retry_signature)
+        except Exception as e:
+            _log(f"Tool daily log wrapper failed: {e}")
         return resp
-    tool_name = msg.get("params", {}).get("name", "unknown")
-    return _tool_error(
+
+    response = _tool_error(
         msg.get("id"),
         f"Monolith MCP is not available (Unreal Editor not running). "
         f"Tool '{tool_name}' cannot execute. Start the editor and try again.",
     )
+    _recent_tool_log_signatures[retry_signature] = (now, True)
+    _log_tools_call(msg, start_time, start_perf, response, repeated, retry_signature)
+    return response
 
 
 def main() -> None:

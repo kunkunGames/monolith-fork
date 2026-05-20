@@ -68,3 +68,15 @@ Binaries\monolith_query.exe bridge search_asset_symbols --symbol=UObject --limit
 ```
 
 `source search_crg_graph` reads `Saved/graph.db` and uses `nodes_fts` before falling back to LIKE. `bridge search_asset_symbols` is read-only, opens `Saved/ProjectIndex.db` and `Saved/EngineSource.db`, and returns heuristic links with `confidence`, `reasons`, `asset`, `symbol`, `warnings`, `count`, `truncated`, and `lexical_only`.
+
+## 13. Tool Invocation Daily Logs
+
+The daily invocation log contract is documented in `Docs/specs/SPEC_MonolithToolInvocationLogs.md`. When a checkout includes the implementation, the files are local diagnostics only and must not be treated as canonical tool output.
+
+- Proxy calls append JSONL records to `Logs/yyyyMMdd_proxy.log`.
+- Offline query calls append JSONL records to `Logs/yyyyMMdd_query.log`.
+- Editor action dispatch appends JSONL records to `Logs/yyyyMMdd_action.log` when `UMonolithSettings::bEnableDailyLog=true`; this checkout opts in through `Config\DefaultMonolith.ini`.
+- Proxy/query logging is enabled by default; unset or `MONOLITH_TOOL_LOG_ENABLED=1` enables it, and `MONOLITH_TOOL_LOG_ENABLED=0` disables it before launching the process.
+- For proxy/query smoke tests or temporary diagnostics, set `MONOLITH_TOOL_LOG_DIR` before launching the process to isolate logs outside `Logs/`.
+- Use the logs to aggregate repeated missing-action, schema-confusing, retry, large-result, editor-unavailable, and escape-hatch patterns before changing namespace placement or action contracts.
+- Do not commit `Logs/*`; logs can contain project/source context even after redaction and truncation.

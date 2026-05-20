@@ -75,7 +75,7 @@ Most MCP integrations register every action as a separate tool, which floods the
 - **Auto-updater** — Off by default as of v0.14.6. When enabled, checks GitHub Releases on editor startup, verifies SHA256 against the release notes marker, downloads and stages updates, auto-swaps on exit
 - **MCP auto-reconnect proxy** — stdio-to-HTTP proxy keeps Claude Code sessions alive across editor restarts. Available as native exe (zero dependencies) or Python script (fallback)
 - **Optional module system** — Extend Monolith with new MCP namespaces for third-party plugins (GeometryScripting, BlueprintAssist, GBA, ComboGraph, Logic Driver, MetaSound) without breaking the build for users who don't own them. The sibling-plugin pattern lets you ship your own integration plugin alongside Monolith — see `Docs/SIBLING_PLUGIN_GUIDE.md`
-- **Claude Code skills** — 16 domain-specific workflow guides bundled with the plugin
+- **Agent skills** — 46 domain-specific workflow guides (one per MCP namespace) bundled in `Skills/`, loadable by Claude Code and Codex
 - **Pure C++** — Direct UE API access, embedded HTTP MCP server, zero external dependencies
 
 ---
@@ -253,12 +253,29 @@ curl -X POST http://localhost:9316/mcp \
 
 You'll get a JSON response listing all Monolith tools. If you get "connection refused", the editor isn't running or something went sideways — check the Output Log for `LogMonolith` errors.
 
-### (Optional) Install Claude Code skills
+### (Optional) Install agent skills (Claude Code + Codex)
 
-Monolith ships domain-specific workflow skills for Claude Code:
+Monolith ships 46 workflow skills in `Skills/` (one per MCP namespace) in the
+[Agent Skills](https://agentskills.io) format that both Claude Code and Codex load as
+`<name>/SKILL.md`. The source files are `Skills/<name>/<name>.md`, so install them **renamed to
+`SKILL.md`** into each tool's skills directory (a plain `cp -r` does not rename and will not load):
 
 ```bash
-cp -r Plugins/Monolith/Skills/* ~/.claude/skills/
+for d in Plugins/Monolith/Skills/*/; do n=$(basename "$d"); [ -f "$d$n.md" ] || continue
+  for base in ~/.claude/skills ~/.codex/skills; do
+    mkdir -p "$base/$n"; cp "$d$n.md" "$base/$n/SKILL.md"
+  done
+done
+```
+
+```powershell
+Get-ChildItem Plugins\Monolith\Skills -Directory | ForEach-Object {
+  $n = $_.Name; $src = Join-Path $_.FullName "$n.md"; if (-not (Test-Path $src)) { return }
+  foreach ($base in "$env:USERPROFILE\.claude\skills", "$env:USERPROFILE\.codex\skills") {
+    $dst = Join-Path $base $n; New-Item -ItemType Directory -Force $dst | Out-Null
+    Copy-Item $src (Join-Path $dst 'SKILL.md') -Force
+  }
+}
 ```
 
 ---
@@ -476,26 +493,20 @@ Settings live at **Editor Preferences > Plugins > Monolith**:
 
 ## Skills
 
-Monolith bundles 16 Claude Code skills in `Skills/` — domain-specific workflow guides that give your AI the right mental model for each area:
+Monolith bundles **46 agent skills** in `Skills/` — one per MCP namespace, in the
+[Agent Skills](https://agentskills.io) format that Claude Code and Codex both load as `<name>/SKILL.md`.
+Each gives your AI the right mental model plus a verified action reference (generated from the live
+`RegisterAction` registry) for one domain.
 
-| Skill | Description |
-|-------|-------------|
-| `unreal-blueprints` | Full Blueprint CRUD — read, create, edit variables/components/functions/nodes, compile |
-| `unreal-materials` | PBR setup, graph building, validation |
-| `unreal-animation` | Montages, ABP state machines, blend spaces |
-| `unreal-niagara` | Particle system creation, HLSL modules, scalability |
-| `unreal-audio` | Sound Cue + MetaSound graph building, audio asset CRUD, batch ops, templates |
-| `unreal-mesh` | Mesh inspection, spatial queries, blockout, procedural geometry, horror/accessibility |
-| `unreal-ui` | Widget Blueprint CRUD, templates, styling, accessibility |
-| `unreal-gas` | Gameplay Ability System — abilities, effects, attributes, ASC, tags, cues |
-| `unreal-logicdriver` | Logic Driver Pro state machines — SM CRUD, graph editing, JSON spec, scaffolding |
-| `unreal-combograph` | ComboGraph combo trees — graph CRUD, nodes, edges, effects, ability scaffolding |
-| `unreal-level-sequences` | Level Sequence inspection — full binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
-| `unreal-debugging` | Build errors, log search, crash context |
-| `unreal-performance` | Config auditing, shader stats, INI tuning |
-| `unreal-project-search` | FTS5 search syntax, reference tracing |
-| `unreal-cpp` | API lookup, include paths, Build.cs gotchas |
-| `unreal-build` | Smart build decision-making, Live Coding vs full rebuild |
+See **[Skills/README.md](Skills/README.md)** for the full namespace → skill index. Highlights:
+
+- **Gameplay** — `unreal-ai` (Behavior Tree / StateTree / EQS / navigation / Mass), `unreal-gas`, `unreal-blueprints`, `unreal-logicdriver`, `unreal-combograph`, `unreal-input`
+- **Spatial / level** — `unreal-scene` (live actors + spatial queries), `unreal-worldgen` (blockout + procedural town), `unreal-leveldesign` (horror / accessibility / audio analysis), `unreal-mesh`, `unreal-level-instance`, `unreal-hlod`
+- **Content** — `unreal-materials`, `unreal-niagara`, `unreal-animation`, `unreal-audio`, `unreal-ui`, plus `unreal-chaos-fracture`, `unreal-paper2d`, `unreal-water`, and more
+- **Code / project** — `unreal-cpp`, `unreal-project-search`, `unreal-bridge`, `unreal-build`, `unreal-debugging`, `unreal-performance`, `unreal-config`, `unreal-source-control`
+- **Discovery / meta** — `monolith-mcp` (find / discover / status / reindex + admin surface)
+
+See the install snippet above to load them into Claude Code and Codex.
 
 ---
 

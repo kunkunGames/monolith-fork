@@ -1,0 +1,288 @@
+#if WITH_DEV_AUTOMATION_TESTS
+
+#include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "HAL/PlatformMisc.h"
+#include "MonolithSettings.h"
+#include "MonolithToolInvocationLogger.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+
+namespace
+{
+	bool ParseLastJsonLine(const FString& Contents, TSharedPtr<FJsonObject>& OutRecord)
+	{
+		TArray<FString> Lines;
+		Contents.ParseIntoArrayLines(Lines, false);
+		for (int32 Index = Lines.Num() - 1; Index >= 0; --Index)
+		{
+			const FString Trimmed = Lines[Index].TrimStartAndEnd();
+			if (Trimmed.IsEmpty())
+			{
+				continue;
+			}
+			const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Trimmed);
+			return FJsonSerializer::Deserialize(Reader, OutRecord) && OutRecord.IsValid();
+		}
+		return false;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithToolInvocationLoggerDailyLogTest,
+	"Monolith.Core.ToolInvocationLogger.DailyLogOptInRedaction",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithToolInvocationLoggerDailyLogTest::RunTest(const FString& Parameters)
+{
+	UMonolithSettings* Settings = GetMutableDefault<UMonolithSettings>();
+	TestNotNull(TEXT("Monolith settings are available"), Settings);
+	if (!Settings)
+	{
+		return false;
+	}
+
+	const bool bOriginalDailyLog = Settings->bEnableDailyLog;
+	const FString OriginalLogDir = FPlatformMisc::GetEnvironmentVariable(TEXT("MONOLITH_TOOL_LOG_DIR"));
+	const FString TempLogDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("MonolithToolInvocationLoggerTest"));
+	IFileManager::Get().DeleteDirectory(*TempLogDir, false, true);
+	IFileManager::Get().MakeDirectory(*TempLogDir, true);
+	FPlatformMisc::SetEnvironmentVar(TEXT("MONOLITH_TOOL_LOG_DIR"), *TempLogDir);
+
+	const FString DailyActionLogPath = FPaths::Combine(TempLogDir, FDateTime::Now().ToString(TEXT("%Y%m%d_action.log")));
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("token"), TEXT("super-secret-token"));
+	Params->SetStringField(TEXT("query"), TEXT("UObject"));
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetStringField(TEXT("status"), TEXT("ok"));
+	FMonolithActionResult Result = FMonolithActionResult::Success(ResultObj);
+
+	Settings->bEnableDailyLog = false;
+	FMonolithToolInvocationLogger::RecordAction(
+		TEXT("source"),
+		TEXT("search_source"),
+		Params,
+		Result,
+		TEXT("dispatch"),
+		FMonolithToolInvocationLogger::NowIso8601WithOffset(),
+		FMonolithToolInvocationLogger::NowSeconds());
+	TestFalse(TEXT("Disabled daily action log does not create a file"), FPaths::FileExists(DailyActionLogPath));
+
+	Settings->bEnableDailyLog = true;
+	FMonolithToolInvocationLogger::RecordAction(
+		TEXT("source"),
+		TEXT("search_source"),
+		Params,
+		Result,
+		TEXT("dispatch"),
+		FMonolithToolInvocationLogger::NowIso8601WithOffset(),
+		FMonolithToolInvocationLogger::NowSeconds());
+	TestTrue(TEXT("Enabled daily action log creates a file"), FPaths::FileExists(DailyActionLogPath));
+
+	FString Contents;
+	TestTrue(TEXT("Daily action log can be read"), FFileHelper::LoadFileToString(Contents, *DailyActionLogPath));
+	TestFalse(TEXT("Sensitive value is redacted"), Contents.Contains(TEXT("super-secret-token")));
+	TestTrue(TEXT("Redacted marker is present"), Contents.Contains(TEXT("[REDACTED]")));
+
+	TSharedPtr<FJsonObject> Record;
+	if (TestTrue(TEXT("Daily log line parses as JSON"), ParseLastJsonLine(Contents, Record)))
+	{
+		if (Record.IsValid())
+		{
+			TestEqual(TEXT("Surface is action"), Record->GetStringField(TEXT("surface")), TEXT("action"));
+			const TSharedPtr<FJsonObject>* AgentSignal = nullptr;
+			TestTrue(TEXT("agent_signal exists"), Record->TryGetObjectField(TEXT("agent_signal"), AgentSignal));
+			if (AgentSignal && AgentSignal->IsValid())
+			{
+				TestEqual(TEXT("Outcome is success"), (*AgentSignal)->GetStringField(TEXT("outcome")), TEXT("success"));
+			}
+		}
+	}
+
+	TSharedPtr<FJsonObject> LargeParams = MakeShared<FJsonObject>();
+	LargeParams->SetStringField(TEXT("query"), FString::ChrN(300000, TCHAR('x')));
+
+	TSharedPtr<FJsonObject> LargeResultObj = MakeShared<FJsonObject>();
+	LargeResultObj->SetStringField(TEXT("payload"), FString::ChrN(300000, TCHAR('y')));
+	const FMonolithActionResult LargeResult = FMonolithActionResult::Success(LargeResultObj);
+
+	FMonolithToolInvocationLogger::RecordAction(
+		TEXT("source"),
+		TEXT("large_payload_test"),
+		LargeParams,
+		LargeResult,
+		TEXT("dispatch"),
+		FMonolithToolInvocationLogger::NowIso8601WithOffset(),
+		FMonolithToolInvocationLogger::NowSeconds());
+
+	if (TestTrue(TEXT("Daily action log with large payload can be read"), FFileHelper::LoadFileToString(Contents, *DailyActionLogPath)))
+	{
+		TSharedPtr<FJsonObject> LargeRecord;
+		if (TestTrue(TEXT("Large daily log line parses as JSON"), ParseLastJsonLine(Contents, LargeRecord)) && LargeRecord.IsValid())
+		{
+			const TSharedPtr<FJsonObject>* Redaction = nullptr;
+			if (TestTrue(TEXT("Large record redaction object exists"), LargeRecord->TryGetObjectField(TEXT("redaction"), Redaction)) && Redaction && Redaction->IsValid())
+			{
+				TestTrue(TEXT("Large record is marked truncated"), (*Redaction)->GetBoolField(TEXT("truncated")));
+				TestTrue(TEXT("Large record has argument SHA-256"), (*Redaction)->GetStringField(TEXT("argument_sha256")).StartsWith(TEXT("sha256:")));
+				TestTrue(TEXT("Large record has result SHA-256"), (*Redaction)->GetStringField(TEXT("result_sha256")).StartsWith(TEXT("sha256:")));
+			}
+
+			const TSharedPtr<FJsonObject>* Call = nullptr;
+			if (TestTrue(TEXT("Large record call object exists"), LargeRecord->TryGetObjectField(TEXT("call"), Call)) && Call && Call->IsValid())
+			{
+				const TSharedPtr<FJsonObject>* Arguments = nullptr;
+				if (TestTrue(TEXT("Large record bounded arguments exist"), (*Call)->TryGetObjectField(TEXT("arguments"), Arguments)) && Arguments && Arguments->IsValid())
+				{
+					TestTrue(TEXT("Large arguments are replaced by bounded envelope"), (*Arguments)->GetBoolField(TEXT("truncated")));
+				}
+			}
+
+			const TSharedPtr<FJsonObject>* Return = nullptr;
+			if (TestTrue(TEXT("Large record bounded return exists"), LargeRecord->TryGetObjectField(TEXT("return"), Return)) && Return && Return->IsValid())
+			{
+				TestTrue(TEXT("Large return is replaced by bounded envelope"), (*Return)->GetBoolField(TEXT("truncated")));
+			}
+		}
+	}
+
+	Settings->bEnableDailyLog = bOriginalDailyLog;
+	FPlatformMisc::SetEnvironmentVar(TEXT("MONOLITH_TOOL_LOG_DIR"), *OriginalLogDir);
+	IFileManager::Get().DeleteDirectory(*TempLogDir, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithToolInvocationLoggerLookupFailureTest,
+	"Monolith.Core.ToolInvocationLogger.PreDispatchFailureLogged",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithToolInvocationLoggerLookupFailureTest::RunTest(const FString& Parameters)
+{
+	UMonolithSettings* Settings = GetMutableDefault<UMonolithSettings>();
+	TestNotNull(TEXT("Monolith settings are available"), Settings);
+	if (!Settings)
+	{
+		return false;
+	}
+
+	const bool bOriginalDailyLog = Settings->bEnableDailyLog;
+	const FString OriginalLogDir = FPlatformMisc::GetEnvironmentVariable(TEXT("MONOLITH_TOOL_LOG_DIR"));
+	const FString TempLogDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("MonolithToolInvocationLookupFailureTest"));
+	IFileManager::Get().DeleteDirectory(*TempLogDir, false, true);
+	IFileManager::Get().MakeDirectory(*TempLogDir, true);
+	FPlatformMisc::SetEnvironmentVar(TEXT("MONOLITH_TOOL_LOG_DIR"), *TempLogDir);
+	Settings->bEnableDailyLog = true;
+
+	const TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
+		TEXT("missing_namespace_for_log_test"),
+		TEXT("missing_action_for_log_test"),
+		Params);
+	TestFalse(TEXT("Missing action returns an error"), Result.bSuccess);
+
+	const FString DailyActionLogPath = FPaths::Combine(TempLogDir, FDateTime::Now().ToString(TEXT("%Y%m%d_action.log")));
+	TestTrue(TEXT("Lookup failure action log exists"), FPaths::FileExists(DailyActionLogPath));
+
+	FString Contents;
+	if (TestTrue(TEXT("Lookup failure action log can be read"), FFileHelper::LoadFileToString(Contents, *DailyActionLogPath)))
+	{
+		TSharedPtr<FJsonObject> Record;
+		if (TestTrue(TEXT("Lookup failure log line parses as JSON"), ParseLastJsonLine(Contents, Record)) && Record.IsValid())
+		{
+			TestEqual(TEXT("Lookup failure status"), Record->GetStringField(TEXT("status")), TEXT("error"));
+
+			const TSharedPtr<FJsonObject>* Call = nullptr;
+			if (TestTrue(TEXT("Lookup failure call object exists"), Record->TryGetObjectField(TEXT("call"), Call)) && Call && Call->IsValid())
+			{
+				TestEqual(TEXT("Lookup failure namespace"), (*Call)->GetStringField(TEXT("namespace")), TEXT("missing_namespace_for_log_test"));
+				TestEqual(TEXT("Lookup failure action"), (*Call)->GetStringField(TEXT("action")), TEXT("missing_action_for_log_test"));
+				TestEqual(TEXT("Lookup failure validation phase"), (*Call)->GetStringField(TEXT("validation_phase")), TEXT("lookup"));
+			}
+
+			const TSharedPtr<FJsonObject>* AgentSignal = nullptr;
+			if (TestTrue(TEXT("Lookup failure agent signal exists"), Record->TryGetObjectField(TEXT("agent_signal"), AgentSignal)) && AgentSignal && AgentSignal->IsValid())
+			{
+				TestEqual(TEXT("Lookup failure outcome"), (*AgentSignal)->GetStringField(TEXT("outcome")), TEXT("tool_error"));
+				TestEqual(TEXT("Lookup failure error class"), (*AgentSignal)->GetStringField(TEXT("error_class")), TEXT("unknown_action"));
+			}
+		}
+	}
+
+	Settings->bEnableDailyLog = bOriginalDailyLog;
+	FPlatformMisc::SetEnvironmentVar(TEXT("MONOLITH_TOOL_LOG_DIR"), *OriginalLogDir);
+	IFileManager::Get().DeleteDirectory(*TempLogDir, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithToolInvocationLoggerDualSurfaceTest,
+	"Monolith.Core.ToolInvocationLogger.SourceChildQueryDualSurface",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithToolInvocationLoggerDualSurfaceTest::RunTest(const FString& Parameters)
+{
+	UMonolithSettings* Settings = GetMutableDefault<UMonolithSettings>();
+	TestNotNull(TEXT("Monolith settings are available"), Settings);
+	if (!Settings)
+	{
+		return false;
+	}
+
+	const bool bOriginalDailyLog = Settings->bEnableDailyLog;
+	const FString OriginalLogDir = FPlatformMisc::GetEnvironmentVariable(TEXT("MONOLITH_TOOL_LOG_DIR"));
+	const FString OriginalToolLogEnabled = FPlatformMisc::GetEnvironmentVariable(TEXT("MONOLITH_TOOL_LOG_ENABLED"));
+	const FString TempLogDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("MonolithToolInvocationDualSurfaceTest"));
+	IFileManager::Get().DeleteDirectory(*TempLogDir, false, true);
+	IFileManager::Get().MakeDirectory(*TempLogDir, true);
+	FPlatformMisc::SetEnvironmentVar(TEXT("MONOLITH_TOOL_LOG_DIR"), *TempLogDir);
+	FPlatformMisc::SetEnvironmentVar(TEXT("MONOLITH_TOOL_LOG_ENABLED"), TEXT("1"));
+	Settings->bEnableDailyLog = true;
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	FMonolithToolRegistry::Get().ExecuteAction(TEXT("source"), TEXT("crg_graph_health"), Params);
+
+	const FString ActionLogPath = FPaths::Combine(TempLogDir, FDateTime::Now().ToString(TEXT("%Y%m%d_action.log")));
+	const FString QueryLogPath = FPaths::Combine(TempLogDir, FDateTime::Now().ToString(TEXT("%Y%m%d_query.log")));
+	TestTrue(TEXT("Live source action emits action log"), FPaths::FileExists(ActionLogPath));
+	TestTrue(TEXT("Live source action child monolith_query emits query log"), FPaths::FileExists(QueryLogPath));
+
+	FString ActionContents;
+	if (TestTrue(TEXT("Action log can be read"), FFileHelper::LoadFileToString(ActionContents, *ActionLogPath)))
+	{
+		TSharedPtr<FJsonObject> ActionRecord;
+		if (TestTrue(TEXT("Action log has valid JSONL"), ParseLastJsonLine(ActionContents, ActionRecord)) && ActionRecord.IsValid())
+		{
+			TestEqual(TEXT("Action surface"), ActionRecord->GetStringField(TEXT("surface")), TEXT("action"));
+			const TSharedPtr<FJsonObject>* Call = nullptr;
+			if (TestTrue(TEXT("Action call object exists"), ActionRecord->TryGetObjectField(TEXT("call"), Call)) && Call && Call->IsValid())
+			{
+				TestEqual(TEXT("Action namespace"), (*Call)->GetStringField(TEXT("namespace")), TEXT("source"));
+				TestEqual(TEXT("Action name"), (*Call)->GetStringField(TEXT("action")), TEXT("crg_graph_health"));
+			}
+		}
+	}
+
+	FString QueryContents;
+	if (TestTrue(TEXT("Query log can be read"), FFileHelper::LoadFileToString(QueryContents, *QueryLogPath)))
+	{
+		TSharedPtr<FJsonObject> QueryRecord;
+		if (TestTrue(TEXT("Query log has valid JSONL"), ParseLastJsonLine(QueryContents, QueryRecord)) && QueryRecord.IsValid())
+		{
+			TestEqual(TEXT("Query surface"), QueryRecord->GetStringField(TEXT("surface")), TEXT("query"));
+			const TSharedPtr<FJsonObject>* Call = nullptr;
+			if (TestTrue(TEXT("Query call object exists"), QueryRecord->TryGetObjectField(TEXT("call"), Call)) && Call && Call->IsValid())
+			{
+				TestEqual(TEXT("Query namespace"), (*Call)->GetStringField(TEXT("namespace")), TEXT("source"));
+				TestEqual(TEXT("Query action"), (*Call)->GetStringField(TEXT("action")), TEXT("crg_graph_health"));
+			}
+		}
+	}
+
+	Settings->bEnableDailyLog = bOriginalDailyLog;
+	FPlatformMisc::SetEnvironmentVar(TEXT("MONOLITH_TOOL_LOG_DIR"), *OriginalLogDir);
+	FPlatformMisc::SetEnvironmentVar(TEXT("MONOLITH_TOOL_LOG_ENABLED"), *OriginalToolLogEnabled);
+	IFileManager::Get().DeleteDirectory(*TempLogDir, false, true);
+	return true;
+}
+
+#endif // WITH_DEV_AUTOMATION_TESTS

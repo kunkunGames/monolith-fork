@@ -24,11 +24,16 @@
 #include <ctime>
 #include <chrono>
 #include <cctype>
+#include <iomanip>
+#include <mutex>
+#include <stdexcept>
 
 #ifdef _WIN32
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <bcrypt.h>
+#pragma comment(lib, "bcrypt.lib")
 #endif
 
 #include "sqlite3.h"
@@ -41,9 +46,250 @@ using json = nlohmann::json;
 // Utility
 // ============================================================
 
+struct QueryFatal : public std::runtime_error {
+    int code = 1;
+    bool already_printed = false;
+
+    QueryFatal(const std::string& msg, int exit_code = 1, bool printed = false)
+        : std::runtime_error(msg), code(exit_code), already_printed(printed) {}
+};
+
 static void die(const std::string& msg) {
-    std::cerr << "ERROR: " << msg << std::endl;
-    std::exit(1);
+    throw QueryFatal(msg);
+}
+
+static std::string getenv_str(const char* name, const char* def = "") {
+    const char* value = std::getenv(name);
+    return value ? std::string(value) : std::string(def);
+}
+
+static bool tool_log_enabled() {
+    return getenv_str("MONOLITH_TOOL_LOG_ENABLED", "1") != "0";
+}
+
+static std::string iso_local_now() {
+    auto now = std::chrono::system_clock::now();
+    auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()) % 1000;
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm local_tm{};
+#ifdef _WIN32
+    localtime_s(&local_tm, &t);
+#else
+    localtime_r(&t, &local_tm);
+#endif
+    std::ostringstream out;
+    out << std::put_time(&local_tm, "%Y-%m-%dT%H:%M:%S")
+        << "." << std::setw(3) << std::setfill('0') << millis.count();
+#ifdef _WIN32
+    long bias_minutes = 0;
+    TIME_ZONE_INFORMATION tzi;
+    DWORD tz_result = GetTimeZoneInformation(&tzi);
+    bias_minutes = tzi.Bias;
+    if (tz_result == TIME_ZONE_ID_DAYLIGHT) bias_minutes += tzi.DaylightBias;
+    else if (tz_result == TIME_ZONE_ID_STANDARD) bias_minutes += tzi.StandardBias;
+    long offset = -bias_minutes;
+    char sign = offset >= 0 ? '+' : '-';
+    offset = std::labs(offset);
+    out << sign << std::setw(2) << std::setfill('0') << (offset / 60)
+        << ":" << std::setw(2) << std::setfill('0') << (offset % 60);
+#endif
+    return out.str();
+}
+
+static std::string yyyymmdd_local() {
+    std::time_t t = std::time(nullptr);
+    std::tm local_tm{};
+#ifdef _WIN32
+    localtime_s(&local_tm, &t);
+#else
+    localtime_r(&t, &local_tm);
+#endif
+    std::ostringstream out;
+    out << std::put_time(&local_tm, "%Y%m%d");
+    return out.str();
+}
+
+static std::string hash_text(const std::string& text) {
+#ifdef _WIN32
+    auto to_hex = [](const std::vector<unsigned char>& bytes) {
+        std::ostringstream out;
+        out << std::hex << std::setfill('0');
+        for (unsigned char byte : bytes) {
+            out << std::setw(2) << static_cast<int>(byte);
+        }
+        return out.str();
+    };
+
+    BCRYPT_ALG_HANDLE alg = nullptr;
+    BCRYPT_HASH_HANDLE hash = nullptr;
+    DWORD bytes_written = 0;
+    DWORD hash_len = 0;
+    std::vector<unsigned char> digest;
+
+    NTSTATUS status = BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
+    if (status >= 0) {
+        status = BCryptGetProperty(alg, BCRYPT_HASH_LENGTH,
+            reinterpret_cast<PUCHAR>(&hash_len), sizeof(hash_len), &bytes_written, 0);
+    }
+    if (status >= 0) {
+        digest.resize(hash_len);
+        status = BCryptCreateHash(alg, &hash, nullptr, 0, nullptr, 0, 0);
+    }
+    if (status >= 0 && !text.empty()) {
+        status = BCryptHashData(hash,
+            reinterpret_cast<PUCHAR>(const_cast<char*>(text.data())),
+            static_cast<ULONG>(text.size()), 0);
+    }
+    if (status >= 0) {
+        status = BCryptFinishHash(hash, digest.data(), hash_len, 0);
+    }
+    if (hash) BCryptDestroyHash(hash);
+    if (alg) BCryptCloseAlgorithmProvider(alg, 0);
+    if (status >= 0) {
+        return "sha256:" + to_hex(digest);
+    }
+#endif
+
+    // Non-Windows fallback keeps grouping deterministic if BCrypt is unavailable.
+    std::hash<std::string> hasher;
+    uint64_t a = hasher(text);
+    uint64_t b = hasher("monolith:" + text);
+    std::ostringstream out;
+    out << "hash:" << std::hex << std::setw(16) << std::setfill('0') << a
+        << std::setw(16) << std::setfill('0') << b;
+    return out.str();
+}
+
+static bool is_sensitive_key(const std::string& key) {
+    std::string lower = key;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+    static const std::vector<std::string> fragments = {
+        "authorization", "bearer", "token", "api_key", "apikey",
+        "password", "passwd", "secret", "cookie", "private_key", "session_id"
+    };
+    for (const auto& fragment : fragments) {
+        if (lower.find(fragment) != std::string::npos) return true;
+    }
+    return false;
+}
+
+static json redact_json(const json& value) {
+    if (value.is_object()) {
+        json out = json::object();
+        for (auto it = value.begin(); it != value.end(); ++it) {
+            out[it.key()] = is_sensitive_key(it.key()) ? json("[REDACTED]") : redact_json(it.value());
+        }
+        return out;
+    }
+    if (value.is_array()) {
+        json out = json::array();
+        for (const auto& item : value) out.push_back(redact_json(item));
+        return out;
+    }
+    if (value.is_string()) {
+        const std::string text = value.get<std::string>();
+        if (!text.empty() && (text.front() == '{' || text.front() == '[')) {
+            try {
+                return redact_json(json::parse(text));
+            } catch (...) {
+            }
+        }
+    }
+    return value;
+}
+
+static json bounded_json(const json& value, bool& truncated, size_t& original_bytes, std::string& hash) {
+    constexpr size_t MaxBytes = 256 * 1024;
+    const std::string text = value.dump();
+    original_bytes = text.size();
+    if (text.size() <= MaxBytes) {
+        truncated = false;
+        hash.clear();
+        return value;
+    }
+    truncated = true;
+    hash = hash_text(text);
+    return json{
+        {"truncated", true},
+        {"original_bytes", original_bytes},
+        {"sha256", hash},
+        {"preview", text.substr(0, MaxBytes)}
+    };
+}
+
+static fs::path executable_dir_for_logs() {
+#ifdef _WIN32
+    char buf[MAX_PATH];
+    DWORD len = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    if (len > 0 && len < MAX_PATH) return fs::path(buf).parent_path();
+#endif
+    return fs::current_path();
+}
+
+static fs::path query_log_root() {
+    std::string override_dir = getenv_str("MONOLITH_TOOL_LOG_DIR");
+    if (!override_dir.empty()) return fs::path(override_dir);
+
+    fs::path cur = executable_dir_for_logs();
+    for (int i = 0; i < 8 && !cur.empty(); ++i) {
+        if (fs::exists(cur / "Monolith.uplugin")) return cur / "Logs";
+        cur = cur.parent_path();
+    }
+    return fs::current_path() / "Logs";
+}
+
+static void append_query_log(const json& record) {
+    if (!tool_log_enabled()) return;
+    static std::mutex log_mutex;
+    try {
+        std::lock_guard<std::mutex> guard(log_mutex);
+        fs::path path = query_log_root() / (yyyymmdd_local() + "_query.log");
+        fs::create_directories(path.parent_path());
+#ifdef _WIN32
+        const fs::path lock_path = path.string() + ".lock";
+        HANDLE lock_handle = CreateFileA(
+            lock_path.string().c_str(),
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr,
+            OPEN_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr);
+        if (lock_handle == INVALID_HANDLE_VALUE) {
+            throw std::runtime_error("could not open log lock file");
+        }
+        OVERLAPPED overlapped{};
+        if (!LockFileEx(lock_handle, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &overlapped)) {
+            CloseHandle(lock_handle);
+            throw std::runtime_error("could not acquire log lock");
+        }
+        try {
+            std::ofstream out(path, std::ios::app | std::ios::binary);
+            out << record.dump() << "\n";
+            if (!out) throw std::runtime_error("could not append daily log");
+        } catch (...) {
+            UnlockFileEx(lock_handle, 0, 1, 0, &overlapped);
+            CloseHandle(lock_handle);
+            throw;
+        }
+        UnlockFileEx(lock_handle, 0, 1, 0, &overlapped);
+        CloseHandle(lock_handle);
+#else
+        std::ofstream out(path, std::ios::app | std::ios::binary);
+        out << record.dump() << "\n";
+        if (!out) throw std::runtime_error("could not append daily log");
+#endif
+    } catch (const std::exception& e) {
+        std::cerr << "[monolith-query] daily log failed: " << e.what() << std::endl;
+    }
+}
+
+static json argv_json(int argc, char* argv[]) {
+    json out = json::array();
+    for (int i = 1; i < argc; ++i) out.push_back(argv[i] ? argv[i] : "");
+    return redact_json(out);
 }
 
 // FTS5 query escaping — mirrors Python escape_fts() and C++ EscapeFTS()
@@ -1703,7 +1949,7 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  Overrides accept --db=<SavedDir>, --db <SavedDir>, or a concrete .db file path.\n"
                   << "  Namespace-specific overrides are --source-db=<path> and --project-db=<path>.\n"
                   << "  source CRG graph overrides are --graph-db=<path>; the default is Saved/graph.db.\n";
-        std::exit(1);
+        throw QueryFatal("", 1, true);
     }
 
     args.ns = argv[1];
@@ -5091,106 +5337,252 @@ static std::string resolve_bridge_db_path(const std::string& explicit_db,
 // ============================================================
 
 int main(int argc, char* argv[]) {
-    Args args = parse_args(argc, argv);
+    const std::string start_time = iso_local_now();
+    const auto start_clock = std::chrono::steady_clock::now();
+    Args args;
+    bool parsed_args = false;
+    int exit_code = 0;
+    std::string fatal_error;
+    json db_paths = json::array();
 
-    const std::string db_arg = args.opt("db");
-    const std::string db_dir = resolve_db_dir_from_arg(db_arg);
+    std::ostringstream captured_stdout;
+    std::ostringstream captured_stderr;
+    std::streambuf* old_stdout = std::cout.rdbuf(captured_stdout.rdbuf());
+    std::streambuf* old_stderr = std::cerr.rdbuf(captured_stderr.rdbuf());
 
-    if (args.ns == "source") {
-        std::string db_path = resolve_namespace_db_path(
-            args.opt("source_db"), db_arg, db_dir, "EngineSource.db");
+    try {
+        args = parse_args(argc, argv);
+        parsed_args = true;
 
-        bool write_action = args.opt_bool("execute", false)
-            && (args.action == "repair_fts" || args.action == "snapshot" || args.action == "repair_crg_cache");
-        SourceActions sa;
-        sa.open(db_path, !write_action);
+        const std::string db_arg = args.opt("db");
+        const std::string db_dir = resolve_db_dir_from_arg(db_arg);
 
-        static const std::map<std::string, std::function<void(SourceActions&, const Args&)>> actions = {
-            {"search_source",       [](SourceActions& s, const Args& a) { s.search_source(a); }},
-            {"read_source",         [](SourceActions& s, const Args& a) { s.read_source(a); }},
-            {"find_references",     [](SourceActions& s, const Args& a) { s.find_references(a); }},
-            {"find_callers",        [](SourceActions& s, const Args& a) { s.find_callers(a); }},
-            {"find_callees",        [](SourceActions& s, const Args& a) { s.find_callees(a); }},
-            {"get_class_hierarchy", [](SourceActions& s, const Args& a) { s.get_class_hierarchy(a); }},
-            {"get_module_info",     [](SourceActions& s, const Args& a) { s.get_module_info(a); }},
-            {"get_symbol_context",  [](SourceActions& s, const Args& a) { s.get_symbol_context(a); }},
-            {"read_file",           [](SourceActions& s, const Args& a) { s.read_file(a); }},
-            {"impact_radius",       [](SourceActions& s, const Args& a) { s.impact_radius(a); }},
-            {"health",              [](SourceActions& s, const Args& a) { s.health(a); }},
-            {"repair_fts",          [](SourceActions& s, const Args& a) { s.repair_fts(a); }},
-            {"repair_crg_cache",    [](SourceActions& s, const Args& a) { s.repair_crg_cache(a); }},
-            {"build_crg_graph",     [](SourceActions& s, const Args& a) { s.build_crg_graph(a); }},
-            {"rebuild_crg_graph",   [](SourceActions& s, const Args& a) { s.rebuild_crg_graph(a); }},
-            {"repair_crg_graph",    [](SourceActions& s, const Args& a) { s.rebuild_crg_graph(a); }},
-            {"search_crg_graph",    [](SourceActions& s, const Args& a) { s.search_crg_graph(a); }},
-            {"crg_graph_health",    [](SourceActions& s, const Args& a) { s.crg_graph_health(a); }},
-            {"risk_score",          [](SourceActions& s, const Args& a) { s.risk_score(a); }},
-            {"review_hotspots",     [](SourceActions& s, const Args& a) { s.review_hotspots(a); }},
-            {"review_context",      [](SourceActions& s, const Args& a) { s.review_context(a); }},
-            {"detect_changes",      [](SourceActions& s, const Args& a) { s.detect_changes(a); }},
-            {"find_unused",         [](SourceActions& s, const Args& a) { s.find_unused(a); }},
-            {"pre_merge_check",     [](SourceActions& s, const Args& a) { s.pre_merge_check(a); }},
-            {"snapshot",            [](SourceActions& s, const Args& a) { s.snapshot(a); }},
-            {"diff_snapshots",      [](SourceActions& s, const Args& a) { s.diff_snapshots(a); }},
-        };
+        if (args.ns == "source") {
+            std::string db_path = resolve_namespace_db_path(
+                args.opt("source_db"), db_arg, db_dir, "EngineSource.db");
+            db_paths.push_back(db_path);
 
-        auto it = actions.find(args.action);
-        if (it == actions.end()) die("Unknown source action: " + args.action);
-        it->second(sa, args);
+            bool write_action = args.opt_bool("execute", false)
+                && (args.action == "repair_fts" || args.action == "snapshot" || args.action == "repair_crg_cache");
+            SourceActions sa;
+            sa.open(db_path, !write_action);
 
-    } else if (args.ns == "bridge") {
-        std::string project_db = resolve_bridge_db_path(
-            args.opt("project_db"), db_arg, db_dir, "ProjectIndex.db");
-        std::string source_db = resolve_bridge_db_path(
-            args.opt("source_db"), db_arg, db_dir, "EngineSource.db");
+            static const std::map<std::string, std::function<void(SourceActions&, const Args&)>> actions = {
+                {"search_source",       [](SourceActions& s, const Args& a) { s.search_source(a); }},
+                {"read_source",         [](SourceActions& s, const Args& a) { s.read_source(a); }},
+                {"find_references",     [](SourceActions& s, const Args& a) { s.find_references(a); }},
+                {"find_callers",        [](SourceActions& s, const Args& a) { s.find_callers(a); }},
+                {"find_callees",        [](SourceActions& s, const Args& a) { s.find_callees(a); }},
+                {"get_class_hierarchy", [](SourceActions& s, const Args& a) { s.get_class_hierarchy(a); }},
+                {"get_module_info",     [](SourceActions& s, const Args& a) { s.get_module_info(a); }},
+                {"get_symbol_context",  [](SourceActions& s, const Args& a) { s.get_symbol_context(a); }},
+                {"read_file",           [](SourceActions& s, const Args& a) { s.read_file(a); }},
+                {"impact_radius",       [](SourceActions& s, const Args& a) { s.impact_radius(a); }},
+                {"health",              [](SourceActions& s, const Args& a) { s.health(a); }},
+                {"repair_fts",          [](SourceActions& s, const Args& a) { s.repair_fts(a); }},
+                {"repair_crg_cache",    [](SourceActions& s, const Args& a) { s.repair_crg_cache(a); }},
+                {"build_crg_graph",     [](SourceActions& s, const Args& a) { s.build_crg_graph(a); }},
+                {"rebuild_crg_graph",   [](SourceActions& s, const Args& a) { s.rebuild_crg_graph(a); }},
+                {"repair_crg_graph",    [](SourceActions& s, const Args& a) { s.rebuild_crg_graph(a); }},
+                {"search_crg_graph",    [](SourceActions& s, const Args& a) { s.search_crg_graph(a); }},
+                {"crg_graph_health",    [](SourceActions& s, const Args& a) { s.crg_graph_health(a); }},
+                {"risk_score",          [](SourceActions& s, const Args& a) { s.risk_score(a); }},
+                {"review_hotspots",     [](SourceActions& s, const Args& a) { s.review_hotspots(a); }},
+                {"review_context",      [](SourceActions& s, const Args& a) { s.review_context(a); }},
+                {"detect_changes",      [](SourceActions& s, const Args& a) { s.detect_changes(a); }},
+                {"find_unused",         [](SourceActions& s, const Args& a) { s.find_unused(a); }},
+                {"pre_merge_check",     [](SourceActions& s, const Args& a) { s.pre_merge_check(a); }},
+                {"snapshot",            [](SourceActions& s, const Args& a) { s.snapshot(a); }},
+                {"diff_snapshots",      [](SourceActions& s, const Args& a) { s.diff_snapshots(a); }},
+            };
 
-        BridgeActions ba;
-        ba.open(project_db, source_db);
+            auto it = actions.find(args.action);
+            if (it == actions.end()) die("Unknown source action: " + args.action);
+            it->second(sa, args);
 
-        static const std::map<std::string, std::function<void(BridgeActions&, const Args&)>> actions = {
-            {"search_asset_symbols", [](BridgeActions& b, const Args& a) { b.search_asset_symbols(a); }},
-        };
+        } else if (args.ns == "bridge") {
+            std::string project_db = resolve_bridge_db_path(
+                args.opt("project_db"), db_arg, db_dir, "ProjectIndex.db");
+            std::string source_db = resolve_bridge_db_path(
+                args.opt("source_db"), db_arg, db_dir, "EngineSource.db");
+            db_paths.push_back(project_db);
+            db_paths.push_back(source_db);
 
-        auto it = actions.find(args.action);
-        if (it == actions.end()) die("Unknown bridge action: " + args.action);
-        it->second(ba, args);
+            BridgeActions ba;
+            ba.open(project_db, source_db);
 
-    } else if (args.ns == "project") {
-        std::string db_path = resolve_namespace_db_path(
-            args.opt("project_db"), db_arg, db_dir, "ProjectIndex.db");
+            static const std::map<std::string, std::function<void(BridgeActions&, const Args&)>> actions = {
+                {"search_asset_symbols", [](BridgeActions& b, const Args& a) { b.search_asset_symbols(a); }},
+            };
 
-        bool write_action = args.opt_bool("execute", false)
-            && (args.action == "repair_fts" || args.action == "snapshot" || args.action == "repair_crg_cache");
-        ProjectActions pa;
-        pa.open(db_path, !write_action);
+            auto it = actions.find(args.action);
+            if (it == actions.end()) die("Unknown bridge action: " + args.action);
+            it->second(ba, args);
 
-        static const std::map<std::string, std::function<void(ProjectActions&, const Args&)>> actions = {
-            {"search",            [](ProjectActions& p, const Args& a) { p.search(a); }},
-            {"find_by_type",      [](ProjectActions& p, const Args& a) { p.find_by_type(a); }},
-            {"find_references",   [](ProjectActions& p, const Args& a) { p.find_references(a); }},
-            {"get_stats",         [](ProjectActions& p, const Args& a) { p.get_stats(a); }},
-            {"get_asset_details", [](ProjectActions& p, const Args& a) { p.get_asset_details(a); }},
-            {"impact_radius",     [](ProjectActions& p, const Args& a) { p.impact_radius(a); }},
-            {"health",            [](ProjectActions& p, const Args& a) { p.health(a); }},
-            {"repair_fts",        [](ProjectActions& p, const Args& a) { p.repair_fts(a); }},
-            {"repair_crg_cache",  [](ProjectActions& p, const Args& a) { p.repair_crg_cache(a); }},
-            {"risk_score",        [](ProjectActions& p, const Args& a) { p.risk_score(a); }},
-            {"review_hotspots",   [](ProjectActions& p, const Args& a) { p.review_hotspots(a); }},
-            {"review_context",    [](ProjectActions& p, const Args& a) { p.review_context(a); }},
-            {"detect_changes",    [](ProjectActions& p, const Args& a) { p.detect_changes(a); }},
-            {"find_unused",       [](ProjectActions& p, const Args& a) { p.find_unused(a); }},
-            {"pre_merge_check",   [](ProjectActions& p, const Args& a) { p.pre_merge_check(a); }},
-            {"snapshot",          [](ProjectActions& p, const Args& a) { p.snapshot(a); }},
-            {"diff_snapshots",    [](ProjectActions& p, const Args& a) { p.diff_snapshots(a); }},
-        };
+        } else if (args.ns == "project") {
+            std::string db_path = resolve_namespace_db_path(
+                args.opt("project_db"), db_arg, db_dir, "ProjectIndex.db");
+            db_paths.push_back(db_path);
 
-        auto it = actions.find(args.action);
-        if (it == actions.end()) die("Unknown project action: " + args.action);
-        it->second(pa, args);
+            bool write_action = args.opt_bool("execute", false)
+                && (args.action == "repair_fts" || args.action == "snapshot" || args.action == "repair_crg_cache");
+            ProjectActions pa;
+            pa.open(db_path, !write_action);
 
-    } else {
-        die("Unknown namespace: " + args.ns + " (expected 'source', 'project', or 'bridge')");
+            static const std::map<std::string, std::function<void(ProjectActions&, const Args&)>> actions = {
+                {"search",            [](ProjectActions& p, const Args& a) { p.search(a); }},
+                {"find_by_type",      [](ProjectActions& p, const Args& a) { p.find_by_type(a); }},
+                {"find_references",   [](ProjectActions& p, const Args& a) { p.find_references(a); }},
+                {"get_stats",         [](ProjectActions& p, const Args& a) { p.get_stats(a); }},
+                {"get_asset_details", [](ProjectActions& p, const Args& a) { p.get_asset_details(a); }},
+                {"impact_radius",     [](ProjectActions& p, const Args& a) { p.impact_radius(a); }},
+                {"health",            [](ProjectActions& p, const Args& a) { p.health(a); }},
+                {"repair_fts",        [](ProjectActions& p, const Args& a) { p.repair_fts(a); }},
+                {"repair_crg_cache",  [](ProjectActions& p, const Args& a) { p.repair_crg_cache(a); }},
+                {"risk_score",        [](ProjectActions& p, const Args& a) { p.risk_score(a); }},
+                {"review_hotspots",   [](ProjectActions& p, const Args& a) { p.review_hotspots(a); }},
+                {"review_context",    [](ProjectActions& p, const Args& a) { p.review_context(a); }},
+                {"detect_changes",    [](ProjectActions& p, const Args& a) { p.detect_changes(a); }},
+                {"find_unused",       [](ProjectActions& p, const Args& a) { p.find_unused(a); }},
+                {"pre_merge_check",   [](ProjectActions& p, const Args& a) { p.pre_merge_check(a); }},
+                {"snapshot",          [](ProjectActions& p, const Args& a) { p.snapshot(a); }},
+                {"diff_snapshots",    [](ProjectActions& p, const Args& a) { p.diff_snapshots(a); }},
+            };
+
+            auto it = actions.find(args.action);
+            if (it == actions.end()) die("Unknown project action: " + args.action);
+            it->second(pa, args);
+
+        } else {
+            die("Unknown namespace: " + args.ns + " (expected 'source', 'project', or 'bridge')");
+        }
+    } catch (const QueryFatal& e) {
+        exit_code = e.code;
+        fatal_error = e.what();
+        if (!e.already_printed && !fatal_error.empty()) {
+            std::cerr << "ERROR: " << fatal_error << std::endl;
+        }
+    } catch (const std::exception& e) {
+        exit_code = 1;
+        fatal_error = e.what();
+        std::cerr << "ERROR: " << fatal_error << std::endl;
     }
 
-    return 0;
+    std::cout.rdbuf(old_stdout);
+    std::cerr.rdbuf(old_stderr);
+
+    const std::string stdout_text = captured_stdout.str();
+    const std::string stderr_text = captured_stderr.str();
+    std::cout << stdout_text;
+    std::cerr << stderr_text;
+
+    if (tool_log_enabled()) {
+        const auto end_clock = std::chrono::steady_clock::now();
+        const double duration_ms = std::chrono::duration<double, std::milli>(end_clock - start_clock).count();
+
+        json options = json::object();
+        json positional = json::array();
+        if (parsed_args) {
+            for (const auto& pair : args.options) options[pair.first] = pair.second;
+            for (const auto& value : args.positional) positional.push_back(value);
+        }
+
+        bool stdout_truncated = false;
+        bool stderr_truncated = false;
+        size_t stdout_bytes = 0;
+        size_t stderr_bytes = 0;
+        std::string stdout_hash;
+        std::string stderr_hash;
+        json bounded_stdout = bounded_json(redact_json(stdout_text), stdout_truncated, stdout_bytes, stdout_hash);
+        json bounded_stderr = bounded_json(redact_json(stderr_text), stderr_truncated, stderr_bytes, stderr_hash);
+
+        const std::string signal_text = fatal_error.empty() ? stderr_text : fatal_error;
+        std::string outcome = exit_code == 0 ? "success" : "tool_error";
+        std::string error_class;
+        json tags = json::array();
+        std::string lower = signal_text;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+        if (exit_code != 0) {
+            if (lower.find("unknown") != std::string::npos && lower.find("action") != std::string::npos) {
+                error_class = "unknown_action";
+                tags.push_back("missing_action");
+            } else if (lower.find("requires") != std::string::npos || lower.find("invalid") != std::string::npos) {
+                error_class = "missing_param";
+                tags.push_back("schema_confusing");
+            } else {
+                error_class = "tool_error";
+            }
+        }
+        if (stdout_bytes > 256 * 1024 || stderr_bytes > 256 * 1024) {
+            tags.push_back("large_result");
+        }
+        if (duration_ms > 5000.0) {
+            tags.push_back("slow_action");
+        }
+
+        json call = {
+            {"argv", argv_json(argc, argv)},
+            {"namespace", parsed_args ? args.ns : ""},
+            {"action", parsed_args ? args.action : ""},
+            {"options", redact_json(options)},
+            {"positional", redact_json(positional)},
+            {"db_path", db_paths},
+            {"retry_signature", hash_text((parsed_args ? args.ns + ":" + args.action : "usage") + argv_json(argc, argv).dump())}
+        };
+
+        json record = {
+            {"format_version", 1},
+            {"surface", "query"},
+            {"sequence", 1},
+            {"start_time", start_time},
+            {"end_time", iso_local_now()},
+            {"duration_ms", duration_ms},
+#ifdef _WIN32
+            {"pid", static_cast<int>(GetCurrentProcessId())},
+#else
+            {"pid", 0},
+#endif
+            {"thread_id", "main"},
+            {"status", exit_code == 0 ? "success" : "error"},
+            {"client", {
+                {"name", "monolith_query"},
+                {"version", ""},
+                {"protocol_version", ""},
+                {"proxy_runtime", "none"},
+                {"proxy_version", ""}
+            }},
+            {"call", call},
+            {"return", {
+                {"exit_code", exit_code},
+                {"stdout", bounded_stdout},
+                {"stderr", bounded_stderr},
+                {"fatal_error", fatal_error},
+                {"result_bytes", stdout_bytes + stderr_bytes}
+            }},
+            {"redaction", {
+                {"applied", true},
+                {"truncated", stdout_truncated || stderr_truncated},
+                {"stdout_bytes", stdout_bytes},
+                {"stderr_bytes", stderr_bytes},
+                {"stdout_sha256", stdout_hash.empty() ? json(nullptr) : json(stdout_hash)},
+                {"stderr_sha256", stderr_hash.empty() ? json(nullptr) : json(stderr_hash)}
+            }},
+            {"agent_signal", {
+                {"outcome", outcome},
+                {"error_code", exit_code == 0 ? json(nullptr) : json(exit_code)},
+                {"error_class", error_class},
+                {"hints_returned", 0},
+                {"discovery_context", "unknown"},
+                {"retry_signature", call["retry_signature"]},
+                {"repeat_within_window", false},
+                {"argument_bytes", call.dump().size()},
+                {"result_bytes", stdout_bytes + stderr_bytes},
+                {"improvement_tags", tags}
+            }}
+        };
+        append_query_log(record);
+    }
+
+    return exit_code;
 }

@@ -34,7 +34,7 @@ Monolith is a unified Unreal Engine editor plugin that consolidates 9 separate M
 
 ```
 Monolith.uplugin
-  MonolithCore          — HTTP server (bind retry with port probe, Restart()), tool registry, discovery, policy-gated action execution metadata/transactions/post-edit validators, settings, auto-updater
+  MonolithCore          — HTTP server (bind retry with port probe, Restart()), tool registry, discovery, policy-gated action execution metadata/transactions/post-edit validators, local tool invocation daily logs, settings, auto-updater
   MonolithBlueprint     — Blueprint inspection, variable/component/graph CRUD, node operations, compile, spawn (100 actions)
   MonolithMaterial      — Material inspection + graph editing + CRUD + function suite + tiling quality + texture preview (63 material actions)
   MonolithPaper2D       — Optional Paper2D AssetRegistry discovery for sprites, flipbooks, tile sets, and tile maps (3 actions)
@@ -95,6 +95,12 @@ All domain modules register actions with `FMonolithToolRegistry` (central single
 #### Headless MCP Launch
 
 Planned headless workflow is specified in [specs/SPEC_MonolithHeadlessMcpLaunch.md](specs/SPEC_MonolithHeadlessMcpLaunch.md). The contract is intentionally **not** commandlet-based: the project batch wrapper starts a full editor process with editor modules loaded and rendering disabled by default (`-NullRHI`), while MCP client configuration stays on the existing Monolith stdio proxy. The wrapper does not pass Monolith-specific editor arguments and keeps P4 enabled. Viewport, Slate, PIE, and screenshot capabilities must report explicit unavailable states when the process is launched with no display or `-NullRHI`.
+
+#### Tool Invocation Daily Logs
+
+Implemented local invocation logging is specified in [specs/SPEC_MonolithToolInvocationLogs.md](specs/SPEC_MonolithToolInvocationLogs.md). The contract covers three surfaces: MCP stdio proxy (`yyyyMMdd_proxy.log`), offline `monolith_query.exe` (`yyyyMMdd_query.log`), and editor action dispatch (`yyyyMMdd_action.log`). Logs are local JSONL files under `Plugins/Monolith/Logs/` by default, with redaction, truncation, and best-effort agent improvement signals.
+
+Proxy/query logging is default-on unless `MONOLITH_TOOL_LOG_ENABLED=0`; `MONOLITH_TOOL_LOG_DIR` isolates proxy/query logs for smoke tests and temporary diagnostics. Editor action logging is guarded by `UMonolithSettings::bEnableDailyLog`; the C++ property fallback is false, while this checkout opts in through `Config\DefaultMonolith.ini` so headless editor MCP sessions write `action.log` without extra Monolith launch arguments. This intentionally differs from `bEnableAdvancedToolCallRecords`: advanced ToolCall records are bounded in-memory diagnostics, while daily logs are durable append-only files intended to show aggregate agent behavior across proxy/query/action surfaces.
 
 #### JSON-RPC error catalogue
 
@@ -379,6 +385,8 @@ Setting names below match the actual `UMonolithSettings` UPROPERTY identifiers i
 | LogVerbosity | 3 (Log) | 0=Silent, 1=Error, 2=Warning, 3=Log, 4=Verbose |
 
 **Note:** Module enable toggles are functional — each module checks its toggle at registration time and skips action registration if disabled.
+
+**Setting:** `bEnableDailyLog` gates editor action JSONL daily logs under `Plugins/Monolith/Logs`. The C++ fallback is false, and this project opts in with `Config\DefaultMonolith.ini` / Monolith plugin config `bEnableDailyLog=True`. Proxy/query daily logs use `MONOLITH_TOOL_LOG_ENABLED` instead: unset or `1` means enabled, `0` means disabled; `MONOLITH_TOOL_LOG_DIR` overrides the proxy/query log root for isolated smoke tests. The logs are diagnostic improvement signals and must not be treated as the canonical tool return. P0 parity covers script proxy, C++ proxy, offline query, and editor action dispatch. See [specs/SPEC_MonolithToolInvocationLogs.md](specs/SPEC_MonolithToolInvocationLogs.md).
 
 ---
 

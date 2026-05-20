@@ -2,6 +2,7 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithCrashBreadcrumb.h"
+#include "MonolithToolInvocationLogger.h"
 #include "MonolithToolProfileManager.h"
 #include "HAL/PlatformMisc.h"
 
@@ -587,6 +588,21 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	const FString& Action,
 	const TSharedPtr<FJsonObject>& Params)
 {
+	const FString LogStartTime = FMonolithToolInvocationLogger::NowIso8601WithOffset();
+	const double LogStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
+	auto RecordAndReturn = [&](const FMonolithActionResult& Result, const FString& ValidationPhase, const TSharedPtr<FJsonObject>& LogParams) -> FMonolithActionResult
+	{
+		FMonolithToolInvocationLogger::RecordAction(
+			Namespace,
+			Action,
+			LogParams.IsValid() ? LogParams : MakeShared<FJsonObject>(),
+			Result,
+			ValidationPhase,
+			LogStartTime,
+			LogStartSeconds);
+		return Result;
+	};
+
 	FScopeLock Lock(&RegistryLock);
 
 	FString Key = MakeKey(Namespace, Action);
@@ -619,7 +635,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 			TEXT("malformed_dispatch"),
 			R.ErrorCode,
 			R.ErrorMessage);
-		return R;
+		return RecordAndReturn(R, TEXT("lookup"), Params);
 	}
 
 	if (!FMonolithToolProfileManager::Get().IsActionAllowed(Namespace, Action))
@@ -637,7 +653,8 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 			TEXT("profile_blocked"),
 			R.ErrorCode,
 			R.ErrorMessage);
-		return R;
+		Lock.Unlock();
+		return RecordAndReturn(R, TEXT("profile"), Params);
 	}
 
 	if (!RegAction->Handler.IsBound())
@@ -653,7 +670,8 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 			TEXT("error"),
 			R.ErrorCode,
 			R.ErrorMessage);
-		return R;
+		Lock.Unlock();
+		return RecordAndReturn(R, TEXT("lookup"), Params);
 	}
 
 	const FMonolithActionInfo& ActionInfo = RegAction->Info;
@@ -673,7 +691,8 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 				TEXT("malformed_dispatch"),
 				R.ErrorCode,
 				R.ErrorMessage);
-			return R;
+			Lock.Unlock();
+			return RecordAndReturn(R, TEXT("schema"), EffectiveParams);
 		}
 	}
 
@@ -751,7 +770,8 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 				TEXT("malformed_dispatch"),
 				R.ErrorCode,
 				R.ErrorMessage);
-			return R;
+			Lock.Unlock();
+			return RecordAndReturn(R, TEXT("schema"), EffectiveParams);
 		}
 	}
 
@@ -783,7 +803,8 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 					TEXT("malformed_dispatch"),
 					R.ErrorCode,
 					R.ErrorMessage);
-				return R;
+				Lock.Unlock();
+				return RecordAndReturn(R, TEXT("schema"), EffectiveParams);
 			}
 		}
 	}
@@ -807,7 +828,8 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 				TEXT("malformed_dispatch"),
 				R.ErrorCode,
 				R.ErrorMessage);
-			return R;
+			Lock.Unlock();
+			return RecordAndReturn(R, TEXT("schema"), EffectiveParams);
 		}
 	}
 
@@ -841,7 +863,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 
 	CrashCapture.ApplyPostEditValidation(ActionResult, EffectiveParams);
 	CrashCapture.SetOutcome(ActionResult.bSuccess, ActionResult.ErrorCode, ActionResult.Result, ActionResult.ErrorMessage);
-	return ActionResult;
+	return RecordAndReturn(ActionResult, TEXT("dispatch"), EffectiveParams);
 }
 
 TArray<FString> FMonolithToolRegistry::GetNamespaces() const

@@ -18,8 +18,10 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <winhttp.h>
+#include <bcrypt.h>
 #include <io.h>
 #include <fcntl.h>
+#pragma comment(lib, "bcrypt.lib")
 
 #include <iostream>
 #include <string>
@@ -35,10 +37,14 @@
 #include <cstdlib>
 #include <fstream>
 #include <vector>
+#include <filesystem>
+#include <iomanip>
+#include <stdexcept>
 
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
+namespace fs = std::filesystem;
 
 // ============================================================================
 // Constants
@@ -176,6 +182,390 @@ static std::set<std::string> parse_csv_env(const char* name)
             result.insert(std::move(trimmed));
     }
     return result;
+}
+
+// ============================================================================
+// Tool invocation daily log
+// ============================================================================
+
+static std::mutex g_tool_log_lock;
+static uint64_t g_tool_log_sequence = 0;
+
+static bool tool_log_enabled()
+{
+    return get_env("MONOLITH_TOOL_LOG_ENABLED", "1") != "0";
+}
+
+static std::string iso_local_now()
+{
+    auto now = std::chrono::system_clock::now();
+    auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()) % 1000;
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm local_tm{};
+    localtime_s(&local_tm, &t);
+
+    TIME_ZONE_INFORMATION tzi;
+    DWORD tz_result = GetTimeZoneInformation(&tzi);
+    long bias_minutes = tzi.Bias;
+    if (tz_result == TIME_ZONE_ID_DAYLIGHT) bias_minutes += tzi.DaylightBias;
+    else if (tz_result == TIME_ZONE_ID_STANDARD) bias_minutes += tzi.StandardBias;
+    long offset = -bias_minutes;
+    char sign = offset >= 0 ? '+' : '-';
+    offset = std::labs(offset);
+
+    std::ostringstream out;
+    out << std::put_time(&local_tm, "%Y-%m-%dT%H:%M:%S")
+        << "." << std::setw(3) << std::setfill('0') << millis.count()
+        << sign << std::setw(2) << std::setfill('0') << (offset / 60)
+        << ":" << std::setw(2) << std::setfill('0') << (offset % 60);
+    return out.str();
+}
+
+static std::string yyyymmdd_local()
+{
+    std::time_t t = std::time(nullptr);
+    std::tm local_tm{};
+    localtime_s(&local_tm, &t);
+    std::ostringstream out;
+    out << std::put_time(&local_tm, "%Y%m%d");
+    return out.str();
+}
+
+static fs::path executable_dir()
+{
+    char buf[MAX_PATH];
+    DWORD len = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    if (len > 0 && len < MAX_PATH)
+        return fs::path(buf).parent_path();
+    return fs::current_path();
+}
+
+static fs::path proxy_log_root()
+{
+    std::string override_dir = get_env("MONOLITH_TOOL_LOG_DIR");
+    if (!override_dir.empty()) return fs::path(override_dir);
+
+    fs::path cur = executable_dir();
+    for (int i = 0; i < 8 && !cur.empty(); ++i)
+    {
+        if (fs::exists(cur / "Monolith.uplugin")) return cur / "Logs";
+        cur = cur.parent_path();
+    }
+    return fs::current_path() / "Logs";
+}
+
+static std::string hash_text(const std::string& text)
+{
+#ifdef _WIN32
+    auto to_hex = [](const std::vector<unsigned char>& bytes)
+    {
+        std::ostringstream out;
+        out << std::hex << std::setfill('0');
+        for (unsigned char byte : bytes)
+            out << std::setw(2) << static_cast<int>(byte);
+        return out.str();
+    };
+
+    BCRYPT_ALG_HANDLE alg = nullptr;
+    BCRYPT_HASH_HANDLE hash = nullptr;
+    DWORD bytes_written = 0;
+    DWORD hash_len = 0;
+    std::vector<unsigned char> digest;
+
+    NTSTATUS status = BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
+    if (status >= 0)
+        status = BCryptGetProperty(alg, BCRYPT_HASH_LENGTH,
+            reinterpret_cast<PUCHAR>(&hash_len), sizeof(hash_len), &bytes_written, 0);
+    if (status >= 0)
+    {
+        digest.resize(hash_len);
+        status = BCryptCreateHash(alg, &hash, nullptr, 0, nullptr, 0, 0);
+    }
+    if (status >= 0 && !text.empty())
+        status = BCryptHashData(hash,
+            reinterpret_cast<PUCHAR>(const_cast<char*>(text.data())),
+            static_cast<ULONG>(text.size()), 0);
+    if (status >= 0)
+        status = BCryptFinishHash(hash, digest.data(), hash_len, 0);
+    if (hash) BCryptDestroyHash(hash);
+    if (alg) BCryptCloseAlgorithmProvider(alg, 0);
+    if (status >= 0)
+        return "sha256:" + to_hex(digest);
+#endif
+
+    std::hash<std::string> hasher;
+    uint64_t a = hasher(text);
+    uint64_t b = hasher("monolith:" + text);
+    std::ostringstream out;
+    out << "hash:" << std::hex << std::setw(16) << std::setfill('0') << a
+        << std::setw(16) << std::setfill('0') << b;
+    return out.str();
+}
+
+static bool is_sensitive_key(const std::string& key)
+{
+    std::string lower = key;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c){ return (char)std::tolower(c); });
+    static const std::vector<std::string> fragments = {
+        "authorization", "bearer", "token", "api_key", "apikey",
+        "password", "passwd", "secret", "cookie", "private_key", "session_id"
+    };
+    for (const auto& fragment : fragments)
+    {
+        if (lower.find(fragment) != std::string::npos) return true;
+    }
+    return false;
+}
+
+static json redact_json(const json& value)
+{
+    if (value.is_object())
+    {
+        json out = json::object();
+        for (auto it = value.begin(); it != value.end(); ++it)
+            out[it.key()] = is_sensitive_key(it.key()) ? json("[REDACTED]") : redact_json(it.value());
+        return out;
+    }
+    if (value.is_array())
+    {
+        json out = json::array();
+        for (const auto& item : value) out.push_back(redact_json(item));
+        return out;
+    }
+    if (value.is_string())
+    {
+        std::string text = value.get<std::string>();
+        if (!text.empty() && (text.front() == '{' || text.front() == '['))
+        {
+            try { return redact_json(json::parse(text)); } catch (...) {}
+        }
+    }
+    return value;
+}
+
+static json bounded_json(const json& value, bool& truncated, size_t& original_bytes, std::string& hash)
+{
+    constexpr size_t MaxBytes = 256 * 1024;
+    std::string text = value.dump();
+    original_bytes = text.size();
+    if (text.size() <= MaxBytes)
+    {
+        truncated = false;
+        hash.clear();
+        return value;
+    }
+    truncated = true;
+    hash = hash_text(text);
+    return json{
+        {"truncated", true},
+        {"original_bytes", original_bytes},
+        {"sha256", hash},
+        {"preview", text.substr(0, MaxBytes)}
+    };
+}
+
+static void append_proxy_log(const json& record)
+{
+    if (!tool_log_enabled()) return;
+    try
+    {
+        std::lock_guard<std::mutex> guard(g_tool_log_lock);
+        fs::path path = proxy_log_root() / (yyyymmdd_local() + "_proxy.log");
+        fs::create_directories(path.parent_path());
+#ifdef _WIN32
+        const fs::path lock_path = path.string() + ".lock";
+        HANDLE lock_handle = CreateFileA(
+            lock_path.string().c_str(),
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr,
+            OPEN_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr);
+        if (lock_handle == INVALID_HANDLE_VALUE)
+            throw std::runtime_error("could not open log lock file");
+        OVERLAPPED overlapped{};
+        if (!LockFileEx(lock_handle, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &overlapped))
+        {
+            CloseHandle(lock_handle);
+            throw std::runtime_error("could not acquire log lock");
+        }
+        try
+        {
+            std::ofstream out(path, std::ios::app | std::ios::binary);
+            out << record.dump() << "\n";
+            if (!out) throw std::runtime_error("could not append daily log");
+        }
+        catch (...)
+        {
+            UnlockFileEx(lock_handle, 0, 1, 0, &overlapped);
+            CloseHandle(lock_handle);
+            throw;
+        }
+        UnlockFileEx(lock_handle, 0, 1, 0, &overlapped);
+        CloseHandle(lock_handle);
+#else
+        std::ofstream out(path, std::ios::app | std::ios::binary);
+        out << record.dump() << "\n";
+        if (!out) throw std::runtime_error("could not append daily log");
+#endif
+    }
+    catch (const std::exception& e)
+    {
+        log_msg(std::string("Tool daily log failed: ") + e.what());
+    }
+}
+
+static std::string retry_signature_for(const std::string& tool_name, const json& args)
+{
+    json payload;
+    payload["tool"] = tool_name;
+    payload["arguments"] = redact_json(args);
+    return hash_text(payload.dump());
+}
+
+static void log_proxy_tools_call(
+    const json& msg,
+    const std::string& tool_name,
+    const std::string& forwarded_name,
+    const json& args,
+    const std::string& response,
+    const std::string& start_time,
+    const std::chrono::steady_clock::time_point& start_clock,
+    bool repeated,
+    const std::string& retry_signature)
+{
+    if (!tool_log_enabled()) return;
+
+    const auto end_clock = std::chrono::steady_clock::now();
+    const double duration_ms = std::chrono::duration<double, std::milli>(end_clock - start_clock).count();
+    json response_json = response;
+    try { response_json = json::parse(response); } catch (...) {}
+
+    bool args_truncated = false;
+    bool response_truncated = false;
+    size_t arg_bytes = 0;
+    size_t result_bytes = 0;
+    std::string arg_hash;
+    std::string result_hash;
+    json bounded_args = bounded_json(redact_json(args), args_truncated, arg_bytes, arg_hash);
+    json bounded_response = bounded_json(redact_json(response_json), response_truncated, result_bytes, result_hash);
+
+    std::string outcome = "success";
+    std::string error_class;
+    json tags = json::array();
+    int error_code = 0;
+    if (response_json.is_object() && response_json.contains("error"))
+    {
+        outcome = "jsonrpc_error";
+        const json& err = response_json["error"];
+        if (err.is_object() && err.contains("code") && err["code"].is_number_integer())
+            error_code = err["code"].get<int>();
+        std::string message = err.is_object() ? err.value("message", "") : err.dump();
+        std::string lower = message;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c){ return (char)std::tolower(c); });
+        if (lower.find("unknown action") != std::string::npos || lower.find("method not found") != std::string::npos)
+        {
+            error_class = "unknown_action";
+            tags.push_back("missing_action");
+        }
+        else if (lower.find("missing required") != std::string::npos || lower.find("invalid param") != std::string::npos)
+        {
+            error_class = "missing_param";
+            tags.push_back("schema_confusing");
+        }
+        else
+        {
+            error_class = "jsonrpc_error";
+        }
+    }
+    else if (response_json.is_object() && response_json.contains("result") && response_json["result"].value("isError", false))
+    {
+        outcome = "tool_error";
+        std::string lower = response_json["result"].dump();
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c){ return (char)std::tolower(c); });
+        if (lower.find("not available") != std::string::npos || lower.find("not running") != std::string::npos)
+        {
+            outcome = "editor_unavailable";
+            error_class = "editor_unavailable";
+            tags.push_back("editor_unavailable");
+        }
+        else if (lower.find("blocked") != std::string::npos)
+        {
+            error_class = "profile_blocked";
+            tags.push_back("profile_blocked");
+        }
+        else
+        {
+            error_class = "tool_error";
+        }
+    }
+
+    if (repeated) tags.push_back("repeated_call");
+    if (duration_ms > 5000.0) tags.push_back("slow_action");
+    if (args_truncated || response_truncated) tags.push_back("large_result");
+
+    uint64_t sequence = 0;
+    {
+        std::lock_guard<std::mutex> guard(g_tool_log_lock);
+        sequence = ++g_tool_log_sequence;
+    }
+
+    json record = {
+        {"format_version", 1},
+        {"surface", "proxy"},
+        {"sequence", sequence},
+        {"start_time", start_time},
+        {"end_time", iso_local_now()},
+        {"duration_ms", duration_ms},
+        {"pid", static_cast<int>(GetCurrentProcessId())},
+        {"thread_id", "main"},
+        {"status", outcome == "success" ? "success" : "error"},
+        {"client", {
+            {"name", "unknown"},
+            {"version", ""},
+            {"protocol_version", ""},
+            {"proxy_runtime", "cpp"},
+            {"proxy_version", PROXY_VERSION}
+        }},
+        {"call", {
+            {"jsonrpc_id", msg.value("id", json(nullptr))},
+            {"tool_name_original", tool_name},
+            {"tool_name_forwarded", forwarded_name},
+            {"arguments", bounded_args},
+            {"retry_signature", retry_signature}
+        }},
+        {"return", {
+            {"jsonrpc_id", response_json.is_object() ? response_json.value("id", json(nullptr)) : json(nullptr)},
+            {"response", bounded_response},
+            {"result_bytes", result_bytes}
+        }},
+        {"redaction", {
+            {"applied", true},
+            {"truncated", args_truncated || response_truncated},
+            {"argument_bytes", arg_bytes},
+            {"result_bytes", result_bytes},
+            {"argument_sha256", arg_hash.empty() ? json(nullptr) : json(arg_hash)},
+            {"result_sha256", result_hash.empty() ? json(nullptr) : json(result_hash)}
+        }},
+        {"agent_signal", {
+            {"outcome", outcome},
+            {"error_code", error_code == 0 ? json(nullptr) : json(error_code)},
+            {"error_class", error_class},
+            {"hints_returned", 0},
+            {"discovery_context", "unknown"},
+            {"retry_signature", retry_signature},
+            {"repeat_within_window", repeated},
+            {"argument_bytes", arg_bytes},
+            {"result_bytes", result_bytes},
+            {"improvement_tags", tags}
+        }}
+    };
+    append_proxy_log(record);
 }
 
 // ============================================================================
@@ -779,6 +1169,8 @@ static std::string handle_tools_list(const json& msg)
 
 static std::string handle_tools_call(const json& msg)
 {
+    const std::string log_start_time = iso_local_now();
+    const auto log_start_clock = std::chrono::steady_clock::now();
     json id = msg.value("id", json());
 
     // Extract params (copy so we can modify)
@@ -787,6 +1179,22 @@ static std::string handle_tools_call(const json& msg)
     std::string forwarded_name = tool_name;
     json args = params.value("arguments", json::object());
     if (args.is_null()) args = json::object();
+    const std::string retry_signature = retry_signature_for(tool_name, args);
+    bool repeated_for_log = false;
+    auto finish = [&](const std::string& response) -> std::string
+    {
+        log_proxy_tools_call(
+            msg,
+            tool_name,
+            forwarded_name,
+            args,
+            response,
+            log_start_time,
+            log_start_clock,
+            repeated_for_log,
+            retry_signature);
+        return response;
+    };
 
     // --- Split editor_query handling ---
     if (tool_name == "editor_read_query" || tool_name == "editor_build_query")
@@ -796,8 +1204,8 @@ static std::string handle_tools_call(const json& msg)
         auto action_it = args.find("action");
         if (action_it == args.end() || !action_it->is_string() || action_it->get<std::string>().empty())
         {
-            return make_tool_error(id,
-                "Tool '" + tool_name + "' requires an 'action' string argument.");
+            return finish(make_tool_error(id,
+                "Tool '" + tool_name + "' requires an 'action' string argument."));
         }
         action = action_it->get<std::string>();
 
@@ -813,8 +1221,8 @@ static std::string handle_tools_call(const json& msg)
 
         if (tool_name == "editor_read_query" && EDITOR_BUILD_ACTIONS.count(normalized))
         {
-            return make_tool_error(id,
-                "Tool '" + tool_name + "' is read-only. Use the build-capable editor-open preset if you intentionally want '" + action + "'.");
+            return finish(make_tool_error(id,
+                "Tool '" + tool_name + "' is read-only. Use the build-capable editor-open preset if you intentionally want '" + action + "'."));
         }
         if (tool_name == "editor_build_query" && !EDITOR_BUILD_ACTIONS.count(normalized))
         {
@@ -825,9 +1233,9 @@ static std::string handle_tools_call(const json& msg)
                 if (!actions_str.empty()) actions_str += ", ";
                 actions_str += *it;
             }
-            return make_tool_error(id,
+            return finish(make_tool_error(id,
                 "Tool '" + tool_name + "' only supports build actions (" + actions_str + "). "
-                "Use 'editor_read_query' for diagnostics and logs.");
+                "Use 'editor_read_query' for diagnostics and logs."));
         }
 
         // Remap to editor_query for forwarding
@@ -849,9 +1257,9 @@ static std::string handle_tools_call(const json& msg)
 
             if (g_split_editor_query && EDITOR_BUILD_ACTIONS.count(normalized))
             {
-                return make_tool_error(id,
+                return finish(make_tool_error(id,
                     "Generic 'editor_query' is not available in split-editor mode for build actions. "
-                    "Use 'editor_build_query' from the build-capable preset for '" + action + "'.");
+                    "Use 'editor_build_query' from the build-capable preset for '" + action + "'."));
             }
         }
     }
@@ -863,9 +1271,10 @@ static std::string handle_tools_call(const json& msg)
 
     if (is_repeated_tool_call(forwarded_msg))
     {
-        return make_tool_error(id,
+        repeated_for_log = true;
+        return finish(make_tool_error(id,
             "Tool '" + tool_name + "' with the same arguments was just called. "
-            "Reuse the previous result and answer the user instead of repeating the same call.");
+            "Reuse the previous result and answer the user instead of repeating the same call."));
     }
 
     // --- Allowlist/denylist check ---
@@ -884,15 +1293,15 @@ static std::string handle_tools_call(const json& msg)
 
             if (!g_editor_action_allowlist.empty() && !g_editor_action_allowlist.count(normalized))
             {
-                return make_tool_error(id,
+                return finish(make_tool_error(id,
                     "Monolith editor action '" + action + "' is blocked by this preset. "
-                    "Switch to the build-capable editor-open preset if you want mutating editor actions.");
+                    "Switch to the build-capable editor-open preset if you want mutating editor actions."));
             }
             if (g_editor_action_denylist.count(normalized))
             {
-                return make_tool_error(id,
+                return finish(make_tool_error(id,
                     "Monolith editor action '" + action + "' is blocked by this preset. "
-                    "Use the build-capable editor-open preset when you intentionally want compile or build actions.");
+                    "Use the build-capable editor-open preset when you intentionally want compile or build actions."));
             }
         }
     }
@@ -902,11 +1311,11 @@ static std::string handle_tools_call(const json& msg)
 
     std::string resp = post_monolith(forwarded_msg.dump());
     if (!resp.empty())
-        return resp;
+        return finish(resp);
 
-    return make_tool_error(id,
+    return finish(make_tool_error(id,
         "Monolith MCP is not available (Unreal Editor not running). "
-        "Tool '" + tool_name + "' cannot execute. Start the editor and try again.");
+        "Tool '" + tool_name + "' cannot execute. Start the editor and try again."));
 }
 
 // ============================================================================

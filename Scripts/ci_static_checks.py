@@ -456,6 +456,9 @@ def check_proxy_smoke(ctx: CheckContext) -> None:
     env = os.environ.copy()
     env[str(config.get("url_env", "MONOLITH_URL"))] = str(config.get("offline_url", "http://127.0.0.1:9/mcp"))
     timeout = float(config.get("timeout_seconds", 5))
+    log_tmp = tempfile.TemporaryDirectory()
+    env["MONOLITH_TOOL_LOG_DIR"] = log_tmp.name
+    env.pop("MONOLITH_TOOL_LOG_ENABLED", None)
     proc = subprocess.Popen(
         [sys.executable, str(script)],
         cwd=ctx.root,
@@ -519,6 +522,56 @@ def check_proxy_smoke(ctx: CheckContext) -> None:
             )
         if responses[3].get("result", {}).get("isError") is not True:
             ctx.block("proxy-smoke", "offline tools/call did not return graceful tool error", script)
+        log_files = list(Path(log_tmp.name).glob("*_proxy.log"))
+        if not log_files:
+            ctx.block("proxy-smoke", "proxy daily log was not created with MONOLITH_TOOL_LOG_ENABLED unset", script)
+        else:
+            records = [json.loads(line) for line in log_files[0].read_text(encoding="utf-8").splitlines() if line.strip()]
+            matching = [
+                record for record in records
+                if record.get("surface") == "proxy"
+                and record.get("call", {}).get("tool_name_original") == "ci_static_smoke"
+            ]
+            if not matching:
+                ctx.block("proxy-smoke", "proxy daily log did not include the smoke tools/call record", log_files[0])
+            else:
+                record = matching[-1]
+                if record.get("client", {}).get("proxy_runtime") != "python":
+                    ctx.block("proxy-smoke", "proxy daily log did not identify the Python proxy runtime", log_files[0])
+                if record.get("agent_signal", {}).get("outcome") != "editor_unavailable":
+                    ctx.block("proxy-smoke", "proxy daily log did not classify offline call as editor_unavailable", log_files[0])
+
+        disabled_tmp = tempfile.TemporaryDirectory()
+        disabled_env = env.copy()
+        disabled_env["MONOLITH_TOOL_LOG_DIR"] = disabled_tmp.name
+        disabled_env["MONOLITH_TOOL_LOG_ENABLED"] = "0"
+        disabled_proc = subprocess.Popen(
+            [sys.executable, str(script)],
+            cwd=ctx.root,
+            env=disabled_env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            disabled_proc.communicate(input=json.dumps({
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": {"name": "ci_static_disabled_smoke", "arguments": {}},
+            }) + "\n", timeout=timeout)
+            if list(Path(disabled_tmp.name).glob("*_proxy.log")):
+                ctx.block("proxy-smoke", "proxy daily log was created despite MONOLITH_TOOL_LOG_ENABLED=0", script)
+        except subprocess.TimeoutExpired:
+            ctx.block("proxy-smoke", "disabled proxy daily log smoke timed out", script)
+        finally:
+            disabled_proc.kill()
+            try:
+                disabled_proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                disabled_proc.terminate()
+            disabled_tmp.cleanup()
     except Exception as exc:  # noqa: BLE001 - convert smoke failure to CI finding.
         ctx.block("proxy-smoke", f"Offline JSON-RPC smoke failed: {exc}", script)
     finally:
@@ -527,6 +580,7 @@ def check_proxy_smoke(ctx: CheckContext) -> None:
             proc.wait(timeout=1)
         except subprocess.TimeoutExpired:
             proc.terminate()
+        log_tmp.cleanup()
 
 
 def run_checks(ctx: CheckContext) -> list[Finding]:

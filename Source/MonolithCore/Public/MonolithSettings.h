@@ -87,6 +87,14 @@ public:
 			  ToolTip="Reserved feature flag for redacted ToolCall records and analysis. Raw payload logging remains disabled."))
 	bool bEnableAdvancedToolCallRecords = false;
 
+	/** Enables local append-only JSONL action invocation logs under
+	 *  Plugins/Monolith/Logs. Default off; proxy/query daily logs are
+	 *  controlled by MONOLITH_TOOL_LOG_ENABLED outside the editor. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Audit",
+		meta=(DisplayName="Enable Daily Action Log",
+			  ToolTip="Append bounded/redacted editor action call and return records to Plugins/Monolith/Logs/yyyyMMdd_action.log. Default off."))
+	bool bEnableDailyLog = false;
+
 	/** Enables read-only GameFeatures inspection actions beyond get_status. */
 	UPROPERTY(config, EditAnywhere, Category="Project|GameFeatures",
 		meta=(DisplayName="Enable GameFeature Inspection Actions",

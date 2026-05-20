@@ -52,6 +52,14 @@
 
 The implementation stays local and bounded, does not persist raw params or result payloads, and preserves the current `monolith.list_recent_action_audit` response shape for compatibility.
 
+### Tool Invocation Daily Logs
+
+Implemented persistent daily invocation logs are documented in [SPEC_MonolithToolInvocationLogs.md](SPEC_MonolithToolInvocationLogs.md). They are separate from `bEnableAdvancedToolCallRecords`: the ledger is bounded, redacted, in-memory diagnostic state, while daily logs are append-only JSONL files intended to show how agents use proxy/query/action surfaces over time.
+
+The editor-side helper is `FMonolithToolInvocationLogger`. Editor action daily logging is gated by `UMonolithSettings::bEnableDailyLog`; the C++ property fallback remains false, while this Go checkout opts in via `Config\DefaultMonolith.ini` so `BatchFiles\RunHeadlessEditor.bat` sessions write `action.log` without Monolith-specific command-line overrides. Proxy/query daily logging is controlled outside the editor by `MONOLITH_TOOL_LOG_ENABLED`, where unset or `1` means enabled and `0` means disabled; `MONOLITH_TOOL_LOG_DIR` isolates proxy/query logs for smoke tests and temporary diagnostics. Action logging wraps `FMonolithToolRegistry::ExecuteAction`, includes pre-dispatch validation failures, and avoids file I/O while the registry lock is held.
+
+Daily logs exist to improve Monolith, not to replace MCP responses or action audit. Analysis should aggregate repeated patterns such as missing actions, schema rejections, repeated failures, large results, editor-unavailable calls, and escape-hatch use before changing namespace placement or action design. The P0 implementation covers the active script proxy path, native proxy parity, `monolith_query.exe` stdout/stderr preservation, and editor pre-dispatch failure logging.
+
 ### Action Execution Policy Metadata
 
 Action registration stores an execution policy object and exposes it through `monolith.discover`, deferred domain descriptions, recent audit rows, and advanced ToolCall records. Legacy registrations without explicit policies are classified by conservative action-name inference: read-like names keep `read_only`, while every other implicit default legacy action falls forward to `transaction_optional`. The guard now enforces the low-risk parts of mutating policies: dirty-package tracking is skipped for `read_only` actions, enabled when the policy requests it, transaction policies open a central UE transaction scope around the handler, and `post_edit_validate` runs a post-handler validator before returning success. `monolith.set_action_execution_policy` can update a known action's policy for local developer testing. Automatic asset rollback still reports unavailable; validator failure returns a structured action error and can cancel the central transaction record without claiming a revert.

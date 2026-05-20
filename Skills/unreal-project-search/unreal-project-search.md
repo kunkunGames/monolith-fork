@@ -27,6 +27,8 @@ All asset paths follow UE content browser format (no .uasset extension):
 
 ## Action Reference
 
+### Search & inspect
+
 | Action | Params | Purpose |
 |--------|--------|---------|
 | `search` | `query` (string) | Full-text search across all indexed assets, nodes, variables, parameters |
@@ -34,6 +36,38 @@ All asset paths follow UE content browser format (no .uasset extension):
 | `find_by_type` | `asset_type` (string), `module`? (string) | List all assets of a specific type, optionally filtered by plugin/module |
 | `get_asset_details` | `asset_path` (string) | Detailed metadata for a specific asset |
 | `get_stats` | _(none)_ | Index statistics — asset counts by type, module_breakdown by plugin, index freshness |
+| `impact_radius` | `asset_path`, `direction`?, `max_depth`?, `dependency_type`? | Dependency blast radius (in/out/both) for an asset |
+
+### Gameplay tags
+
+| Action | Params | Purpose |
+|--------|--------|---------|
+| `list_gameplay_tags` | `prefix`? | List project GameplayTags, optionally filtered by prefix |
+| `search_gameplay_tags` | `query` | Search GameplayTags by substring |
+
+### Review & risk (use before code/asset-review claims)
+
+| Action | Params | Purpose |
+|--------|--------|---------|
+| `risk_score` | `asset_path`, `limit`? | Change-risk score for an asset and its dependents |
+| `review_context` | `asset_path`, `direction`?, `detail_level`? | Reviewer context bundle for an asset |
+| `review_hotspots` | `kind`?, `limit`? | Project-wide review hotspots (fan-in/out, risk, large) |
+| `find_unused` | `kind`?, `limit`?, `min_confidence`? | Candidate unused assets |
+| `detect_changes` | `changed_paths`/`diff_*` | Impact of a set of changed assets |
+| `pre_merge_check` | `changed_paths`?, `max_results`? | Pre-merge impact + unused summary |
+
+### Snapshots & maintenance
+
+| Action | Params | Purpose |
+|--------|--------|---------|
+| `snapshot` | `label`?, `execute`? | Capture an index snapshot for later diffing |
+| `diff_snapshots` | `before`, `after`? | Diff two index snapshots |
+| `health` | `include_counts`? | Index health/parity check |
+| `repair_fts` | `target`?, `execute`? | Rebuild FTS index when search looks stale |
+| `repair_crg_cache` | `scope`?, `execute`? | Rebuild project CRG projection/cache |
+
+> Asset **Collections** moved to their own namespace — see `unreal-collection`.
+> The same `risk_score` / `review_context` / `impact_radius` review surface exists for C++ in `unreal-cpp` (`source` namespace).
 
 ## FTS5 Search Syntax
 

@@ -5,7 +5,7 @@ description: Use when writing or debugging Unreal Engine C++ code via Monolith M
 
 # Unreal C++ Development Workflows
 
-**11 source actions** via `source_query()`, **6 config actions** via `config_query()`.
+**27 source actions** via `source_query()`, **6 config actions** via `config_query()` (see `unreal-config`).
 
 ```
 monolith_discover({ namespace: "source" })
@@ -27,6 +27,30 @@ monolith_discover({ namespace: "config" })
 | `read_file` | `file_path` | Raw engine source file |
 | `trigger_reindex` | -- | Full engine source re-index |
 | `trigger_project_reindex` | -- | Incremental project-only re-index |
+
+## Code Review & Risk (use BEFORE making review claims)
+
+| Action | Key Params | Purpose |
+|--------|-----------|---------|
+| `risk_score` | `symbol`, `min_tier`? | Change-risk tier for a symbol + its dependents |
+| `review_context` | `symbol`, `direction`?, `detail_level`? | Reviewer context bundle (callers/callees/types) |
+| `review_hotspots` | `kind`?, `min_lines`? | Project-wide hotspots: fan_in/fan_out/risk/large |
+| `impact_radius` | `symbol`, `edge_kinds`?, `direction`?, `max_depth`? | Blast radius across call/type/inheritance edges |
+| `find_unused` | `kind`?, `min_confidence`? | Candidate unused functions/classes/structs |
+| `detect_changes` | `changed_paths`/`diff_file`/`diff_stdin` | Symbols impacted by a diff |
+| `pre_merge_check` | `changed_paths`?, `include_unused`? | Combined impact + unused pre-merge summary |
+| `snapshot` / `diff_snapshots` | `label` / `before`,`after` | Capture and diff source-graph snapshots |
+
+## CRG graph & index maintenance
+
+| Action | Key Params | Purpose |
+|--------|-----------|---------|
+| `search_crg_graph` | `query`, `kind`? | Search the CRG node graph (FTS5, LIKE fallback) |
+| `build_crg_graph` / `rebuild_crg_graph` | `execute` | Build/rebuild `Saved\graph.db` from `EngineSource.db` |
+| `crg_graph_health` | -- | CRG graph parity/health |
+| `health` | `include_counts`? | Source index health |
+| `repair_fts` | `target`?, `execute` | Rebuild FTS when search looks stale |
+| `repair_crg_cache` | `scope`?, `execute` | Rebuild CRG projection/cache |
 
 ## Common Workflows
 

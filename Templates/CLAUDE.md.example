@@ -21,6 +21,18 @@ Keep the MCP client configuration on the existing Monolith proxy command. This b
 
 The action/namespace catalog is runtime-discovered. Call `monolith_find("<task text>")` when the exact action is unclear, then `monolith_discover({"namespace":"<namespace>", "action":"<action>", "mode":"schema"})` for exact params. `monolith_discover("<namespace>")` still returns the legacy namespace schema list, and `monolith_discover()` returns a compact namespace summary. Do not hand-maintain a full per-action catalog in this file; the section below is a routing map only.
 
+## Invocation diagnostic logs
+
+When the checkout has Monolith tool invocation daily logs available, treat them as local diagnostics only. They do not replace the tool return shown to the agent, and their absence in an older checkout is not by itself a tool failure.
+
+- Proxy calls append to `Plugins/Monolith/Logs/yyyyMMdd_proxy.log`.
+- Offline `monolith_query.exe` calls append to `Plugins/Monolith/Logs/yyyyMMdd_query.log`.
+- Editor action dispatch appends to `Plugins/Monolith/Logs/yyyyMMdd_action.log` only when editor setting `bEnableDailyLog=true`; project configs may opt in for headless agent workflows.
+- Proxy/query logging is enabled by default; unset or `MONOLITH_TOOL_LOG_ENABLED=1` enables it, and `MONOLITH_TOOL_LOG_ENABLED=0` disables it before launching the proxy/query process.
+- For proxy/query smoke tests or temporary diagnostics, set `MONOLITH_TOOL_LOG_DIR` before launching the process to isolate logs outside `Plugins/Monolith/Logs`.
+- Logs are JSONL with redaction/truncation. Use aggregate patterns to spot repeated failures, missing actions, confusing schemas, large results, and escape-hatch use before changing Monolith actions.
+- Do not commit `Plugins/Monolith/Logs/*`; logs can contain project/source context even after redaction.
+
 ## Namespace routing
 
 Use `{namespace}_query(action, params)` after discovering the namespace. Common Monolith namespaces:

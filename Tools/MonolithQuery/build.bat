@@ -1,6 +1,9 @@
 @echo off
-REM Build monolith_query.exe — standalone SQLite query tool
-REM Run from VS Developer Command Prompt, or let it find cl.exe via vswhere
+setlocal
+REM Build monolith_query.exe - standalone SQLite query tool.
+REM Run from a VS Developer Command Prompt, or let this script find vcvars64.bat.
+
+cd /d "%~dp0"
 
 where cl >nul 2>&1
 if %ERRORLEVEL% equ 0 goto :build
@@ -10,30 +13,46 @@ set "VCVARS="
 for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
   set "VCVARS=%%i\VC\Auxiliary\Build\vcvars64.bat"
 )
-if exist "%VCVARS%" (
-    call "%VCVARS%"
-) else (
-    echo FAILED: vswhere.exe could not locate vcvars64.bat
-    exit /b 1
+if not exist "%VCVARS%" (
+  echo FAILED: vswhere.exe could not locate vcvars64.bat
+  exit /b 1
+)
+call "%VCVARS%"
+if %ERRORLEVEL% neq 0 (
+  echo FAILED: vcvars64.bat failed
+  exit /b 1
 )
 
 :build
-
 where cl >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    echo Building with cl.exe...
-    cl /EHsc /std:c++17 /O2 /MT /I ThirdParty /I ..\MonolithProxy\ThirdParty /DSQLITE_ENABLE_FTS5 monolith_query.cpp ThirdParty\sqlite3.c /Fe:monolith_query.exe
-    if %ERRORLEVEL% equ 0 goto :copy
-    echo Build failed.
-    exit /b 1
+if %ERRORLEVEL% neq 0 (
+  echo cl.exe not found in PATH and vcvars64.bat failed to set it up.
+  exit /b 1
 )
 
-echo cl.exe not found in PATH and vcvars64.bat failed to set it up.
-echo Run from a Visual Studio Developer Command Prompt.
-exit /b 1
+set "BUILD_DIR=%CD%\build"
+set "OUT_EXE=%BUILD_DIR%\monolith_query.exe"
+if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
+if exist "%OUT_EXE%" del /F /Q "%OUT_EXE%"
 
-:copy
-if not exist ..\..\Binaries mkdir ..\..\Binaries
-copy /Y monolith_query.exe ..\..\Binaries\monolith_query.exe
+echo Building with cl.exe...
+cl /EHsc /std:c++17 /O2 /MT /I ThirdParty /I ..\MonolithProxy\ThirdParty /DSQLITE_ENABLE_FTS5 monolith_query.cpp ThirdParty\sqlite3.c /Fe:"%OUT_EXE%"
+if %ERRORLEVEL% neq 0 (
+  echo FAILED: monolith_query.exe build failed
+  exit /b 1
+)
+if not exist "%OUT_EXE%" (
+  echo FAILED: compiler did not create "%OUT_EXE%"
+  exit /b 1
+)
+
+if not exist "..\..\Binaries" mkdir "..\..\Binaries"
+copy /Y "%OUT_EXE%" "..\..\Binaries\monolith_query.exe"
+if %ERRORLEVEL% neq 0 (
+  echo FAILED: could not copy monolith_query.exe to Plugins\Monolith\Binaries
+  exit /b 1
+)
+
 echo.
 echo Built: Plugins\Monolith\Binaries\monolith_query.exe
+exit /b 0
