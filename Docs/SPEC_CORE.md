@@ -92,6 +92,10 @@ All domain modules register actions with `FMonolithToolRegistry` (central single
 - **Session management:** None — server is fully stateless (session tracking removed; no per-session state was ever stored)
 - **CORS:** `Access-Control-Allow-Origin: *`
 
+#### Headless MCP Launch
+
+Planned headless workflow is specified in [specs/SPEC_MonolithHeadlessMcpLaunch.md](specs/SPEC_MonolithHeadlessMcpLaunch.md). The contract is intentionally **not** commandlet-based: the project batch wrapper starts a full editor process with editor modules loaded and rendering disabled by default (`-NullRHI`), while MCP client configuration stays on the existing Monolith stdio proxy. The wrapper does not pass Monolith-specific editor arguments and keeps P4 enabled. Viewport, Slate, PIE, and screenshot capabilities must report explicit unavailable states when the process is launched with no display or `-NullRHI`.
+
 #### JSON-RPC error catalogue
 
 Standard codes mirror the JSON-RPC 2.0 spec. Monolith server-defined codes live in the `-32000..-32099` range. Constants: `Plugins/Monolith/Source/MonolithCore/Public/MonolithJsonUtils.h`.

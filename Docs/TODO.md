@@ -4,6 +4,18 @@ Last updated: 2026-05-20 (Routing/discovery + projection + source result + readi
 
 ---
 
+### Headless MCP Launch — PLAN (2026-05-20)
+
+Plan spec: [specs/SPEC_MonolithHeadlessMcpLaunch.md](specs/SPEC_MonolithHeadlessMcpLaunch.md). The feature uses a project-owned batch wrapper to start a full editor process with rendering disabled by default (`-NullRHI`) while MCP client configuration remains on the existing proxy/HTTP MCP path. It is not commandlet-based, does not pass Monolith-specific editor args, keeps P4 enabled, and does not replace offline `monolith_query.exe`.
+
+- [x] **P1 project batch wrapper** — `D:\P4\game\BatchFiles\RunHeadlessEditor.bat` resolves the engine from `.uproject`, spawns the full editor with rendering disabled by default (`-NullRHI`), does not pass `-NoP4`, does not pass Monolith-specific editor args, and leaves MCP proxy ownership to the existing MCP client configuration.
+- [ ] **P2 runtime diagnostics** — Add `monolith.get_runtime_environment` and expose headless/null-RHI capability profile without breaking existing `monolith.status` consumers.
+- [ ] **P3 lifecycle helpers** — Add read-only instance/log diagnostics; defer guarded shutdown until there is a reliable process marker.
+- [ ] **P4 capability-safe action behavior** — Audit viewport, Slate, PIE, and capture actions so headless/null-RHI sessions return explicit `unavailable_*` errors instead of silent empty results.
+- [ ] **P5 verification** — Add parser/unit tests and a Windows headless MCP smoke run against `GO.uproject`.
+
+---
+
 ### Routing, Action Contract, Cohesion & Code-Find Refactor — PLAN (2026-05-19)
 
 Plan spec: [specs/SPEC_MonolithRoutingCohesionRefactor.md](specs/SPEC_MonolithRoutingCohesionRefactor.md). Additive and compatibility-preserving: public `{namespace}_query` tools and action names remain stable while routing, projection, and reuse contracts are tightened.

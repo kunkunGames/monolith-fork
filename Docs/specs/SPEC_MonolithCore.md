@@ -91,3 +91,7 @@ The implementation stays process-local and redacted: it observes session headers
 `monolith.set_mcp_compatibility_options` supports the implemented safe compatibility slice documented in [SPEC_MonolithMcpCompatibilityOptions.md](SPEC_MonolithMcpCompatibilityOptions.md).
 
 The implementation exposes only a safe browser CORS toggle between `loopback_only` and `disabled`. Legacy SSE/message routes, wildcard CORS, and arbitrary origin allowlists remain out of scope.
+
+### Headless MCP Launch
+
+Headless editor launch and MCP attach is planned in [SPEC_MonolithHeadlessMcpLaunch.md](SPEC_MonolithHeadlessMcpLaunch.md). The design keeps Monolith MCP serving inside a full editor process rather than a commandlet, then uses a project batch wrapper to start that editor with rendering disabled by default (`-NullRHI`) while MCP client configuration stays on the existing Monolith stdio proxy. The wrapper does not pass Monolith-specific editor args and keeps P4 enabled. Runtime diagnostics must distinguish `interactive`, `headless`, `headless_nullrhi`, and `commandlet` modes so viewport-dependent actions can fail explicitly instead of pretending unavailable editor surfaces exist.
