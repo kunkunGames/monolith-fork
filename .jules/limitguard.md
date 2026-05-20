@@ -33,3 +33,7 @@
 Boundary: `preview_textures` parameter `asset_paths` maximum array size
 Learning: Processing massive numbers of textures in a single grid layout operation spikes memory consumption aggressively because it creates large `TArray<uint8>` pixel sheets synchronously. Without an upper bound, a client query matching all project textures could OOM the editor during contact sheet generation.
 Prevention: Operations that allocate uncompressed rendering buffers or composite layouts scaled by input counts must clamp user-provided `asset_paths` to a conservative maximum (e.g. 100 tiles max per contact sheet).
+## 2026-05-19 - 🧱 LimitGuard: Bound audio/create_random_sound_cue wave generation
+**Boundary:** `sound_waves` array length in `CreateWavePlayerNodes` helper inside `MonolithAudioSoundCueActions.cpp`.
+**Learning:** `CreateWavePlayerNodes` constructs `USoundNodeWavePlayer` instances directly using the size of the unvalidated `sound_waves` array parameter. Since this helper is shared by multiple cue creation actions (like `create_random_sound_cue`, `create_switch_sound_cue`, etc.), an unbound array could maliciously or accidentally exhaust memory via massive loop iterations and internal allocations if the client supplies an extraordinarily large list of asset paths.
+**Prevention:** Bound collection sizes before allocating sound nodes. Add an immediate `if (WavePaths.Num() > 100)` check in the helper (or the corresponding `TryGetArrayField` extraction phase) to enforce a sane local limit, protecting against resource exhaustion.

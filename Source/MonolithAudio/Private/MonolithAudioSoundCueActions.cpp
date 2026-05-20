@@ -579,6 +579,12 @@ USoundCue* FMonolithAudioSoundCueActions::CreateEmptySoundCue(const FString& Ass
 TArray<USoundNode*> FMonolithAudioSoundCueActions::CreateWavePlayerNodes(USoundCue* Cue, const TArray<FString>& WavePaths, FString& OutError)
 {
 	TArray<USoundNode*> Nodes;
+	if (WavePaths.Num() > 100)
+	{
+		OutError = FString::Printf(TEXT("Requested %d wave players, which exceeds the maximum allowed (100)"), WavePaths.Num());
+		return Nodes;
+	}
+
 	for (const FString& WavePath : WavePaths)
 	{
 		USoundWave* Wave = FMonolithAssetUtils::LoadAssetByPath<USoundWave>(WavePath);
