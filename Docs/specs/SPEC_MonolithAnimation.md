@@ -14,15 +14,15 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithAnimationModule` | Registers 125 animation actions across `MonolithAnimationActions.cpp` (103), `MonolithPoseSearchActions.cpp` (13), `MonolithAbpWriteActions.cpp` (5), `MonolithControlRigWriteActions.cpp` (3), `MonolithAnimLayoutActions.cpp` (1) |
+| `FMonolithAnimationModule` | Registers 135 animation actions across `MonolithAnimationActions.cpp` (104), `MonolithPoseSearchActions.cpp` (13), `MonolithAbpWriteActions.cpp` (5), `MonolithControlRigWriteActions.cpp` (12), `MonolithAnimLayoutActions.cpp` (1) |
 | `FMonolithAnimationActions` | Static handlers organized in 15 groups (the original action handlers) |
 | `FMonolithAbpWriteActions` | ABP graph write actions (Phase v0.14.3 PR #34): `add_anim_graph_node` (TwoBoneIK / ModifyBone / LocalToComponentSpace / ComponentToLocalSpace + auto-pin exposure), `connect_anim_graph_pins`, `set_state_animation`, `add_variable_get`, `set_anim_graph_node_property` |
 | `FMonolithControlRigWriteActions` | ControlRig write actions: 3 actions (graph node creation, pin configuration, variable management) |
 | `FMonolithAnimLayoutActions` | `auto_layout` for AnimBP graphs |
 
-### Actions (125 — namespace: "animation")
+### Actions (135 — namespace: "animation")
 
-**Note (2026-04-26 audit):** The detailed per-category tables below cover the 103 baseline actions. The remaining **22 actions** (5 ABP write + 13 PoseSearch + 3 ControlRig + 1 layout) are documented in their own sections at the bottom of this spec. The ABP write actions landed in v0.14.3 (PR #34 by @MaxenceEpitech). No Phase J changes touched this module. v0.14.9 added `copy_bone_pose_between_sequences` (PR #51 by @MaxenceEpitech). v0.14.10 added `list_bone_tracks` (PR #54 by @MaxenceEpitech) and rewrote `get_bone_track_keys` to use the non-deprecated `IsValidBoneTrackName` + `GetBoneTrackTransforms` API path. v0.14.10 also added `get_skeleton_preview_attached_assets` + `get_bone_ref_pose` (PR #55 by @MaxenceEpitech) and the three `CompatibleSkeletons` actions (`get_compatible_skeletons` / `add_compatible_skeleton` / `remove_compatible_skeleton` — PR #56 by @MaxenceEpitech), bringing the module total to 125 (103 baseline + 22 wave-actions).
+**Note (2026-04-26 audit):** The detailed per-category tables below cover the 104 baseline actions. The remaining **31 actions** (5 ABP write + 13 PoseSearch + 12 ControlRig + 1 layout) are documented in their own sections at the bottom of this spec. The ABP write actions landed in v0.14.3 (PR #34 by @MaxenceEpitech). No Phase J changes touched this module. v0.14.9 added `copy_bone_pose_between_sequences` (PR #51 by @MaxenceEpitech). v0.14.10 added `list_bone_tracks` (PR #54 by @MaxenceEpitech) and rewrote `get_bone_track_keys` to use the non-deprecated `IsValidBoneTrackName` + `GetBoneTrackTransforms` API path. v0.14.10 also added `get_skeleton_preview_attached_assets` + `get_bone_ref_pose` (PR #55 by @MaxenceEpitech) and the three `CompatibleSkeletons` actions (`get_compatible_skeletons` / `add_compatible_skeleton` / `remove_compatible_skeleton` — PR #56 by @MaxenceEpitech), bringing the module total to 135 (104 baseline + 31 wave-actions).
 
 **Sequence Info (5) — read-only**
 | Action | Description |

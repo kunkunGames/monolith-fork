@@ -5,7 +5,7 @@ description: Use when working with Unreal Engine Gameplay Ability System (GAS) v
 
 # Unreal GAS Workflows
 
-**130 GAS actions** across 10 categories via `gas_query()`. Discover first: `monolith_discover({ namespace: "gas" })`
+**136 GAS actions** across 10 categories via `gas_query()`. Discover first: `monolith_discover({ namespace: "gas" })`
 
 ## Key Parameters
 
