@@ -1084,6 +1084,27 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectorFunctions(const
 			TEXT("Unknown kind '%s'. Valid: user, custom_event, sequencer_endpoint, event, all"), *KindFilter));
 	}
 
+	// Probe the director exists so we can distinguish "no Director / wrong path"
+	// from "Director with no functions", and get the function count for Reserve().
+	bool bDirectorKnown = false;
+	int64 FunctionCount = 0;
+	{
+		FSQLitePreparedStatement Probe;
+		Probe.Create(*RawDB, TEXT("SELECT function_count FROM level_sequence_directors WHERE ls_path = ?"));
+		Probe.SetBindingValueByIndex(1, AssetPath);
+		if (Probe.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			bDirectorKnown = true;
+			Probe.GetColumnValueByIndex(0, FunctionCount);
+		}
+		Probe.Destroy();
+	}
+	if (!bDirectorKnown)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("No Level Sequence Director indexed for path '%s'"), *AssetPath));
+	}
+
 	// JOIN against directors so we can resolve by ls_path in one go.
 	const FString SQL = FString::Printf(
 		TEXT("SELECT f.name, f.kind, f.signature_json "
@@ -1105,6 +1126,10 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectorFunctions(const
 	Stmt.SetBindingValueByIndex(1, AssetPath);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	if (WhereKind.IsEmpty() && FunctionCount > 0)
+	{
+		Rows.Reserve(static_cast<int32>(FunctionCount));
+	}
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FString Name, Kind, SigRaw;
@@ -1131,22 +1156,6 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectorFunctions(const
 		Rows.Add(MakeShared<FJsonValueObject>(Obj));
 	}
 	Stmt.Destroy();
-
-	if (Rows.Num() == 0)
-	{
-		// Distinguish "no functions match this kind" from "no director at this path".
-		FSQLitePreparedStatement Probe;
-		Probe.Create(*RawDB, TEXT("SELECT 1 FROM level_sequence_directors WHERE ls_path = ?"));
-		Probe.SetBindingValueByIndex(1, AssetPath);
-		const bool bDirectorExists = (Probe.Step() == ESQLitePreparedStatementStepResult::Row);
-		Probe.Destroy();
-		if (!bDirectorExists)
-		{
-			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("No Level Sequence Director indexed for path '%s'"), *AssetPath));
-		}
-		// else: director exists but no functions match — empty array is the right answer.
-	}
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("ls_path"), AssetPath);
