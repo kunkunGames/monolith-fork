@@ -522,8 +522,15 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleExportSMSpec(const 
 	TArray<TSharedPtr<FJsonValue>> NestedSMsArr;
 	TArray<TSharedPtr<FJsonValue>> TransitionsArr;
 
+	const int32 NumNodes = RootGraph->Nodes.Num();
+	StatesArr.Reserve(NumNodes);
+	ConduitsArr.Reserve(NumNodes);
+	NestedSMsArr.Reserve(NumNodes);
+	TransitionsArr.Reserve(NumNodes);
+
 	// Map GUID -> name for transition lookup
 	TMap<FString, FString> GuidToName;
+	GuidToName.Reserve(NumNodes);
 
 	for (UEdGraphNode* RawNode : RootGraph->Nodes)
 	{
@@ -724,6 +731,9 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleCompareStateMachine
 
 	// Diff states
 	TArray<TSharedPtr<FJsonValue>> StatesOnlyInA, StatesOnlyInB;
+	StatesOnlyInA.Reserve(InfoA.StateNames.Num());
+	StatesOnlyInB.Reserve(InfoB.StateNames.Num());
+
 	for (const FString& S : InfoA.StateNames)
 	{
 		if (!InfoB.StateNames.Contains(S))
@@ -741,6 +751,9 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleCompareStateMachine
 
 	// Diff transitions (compare as "from->to" strings)
 	TSet<FString> TransSetA, TransSetB;
+	TransSetA.Reserve(InfoA.Transitions.Num());
+	TransSetB.Reserve(InfoB.Transitions.Num());
+
 	for (const auto& T : InfoA.Transitions)
 	{
 		TransSetA.Add(FString::Printf(TEXT("%s -> %s"), *T.Key, *T.Value));
@@ -751,6 +764,9 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleCompareStateMachine
 	}
 
 	TArray<TSharedPtr<FJsonValue>> TransOnlyInA, TransOnlyInB;
+	TransOnlyInA.Reserve(TransSetA.Num());
+	TransOnlyInB.Reserve(TransSetB.Num());
+
 	for (const FString& T : TransSetA)
 	{
 		if (!TransSetB.Contains(T))
