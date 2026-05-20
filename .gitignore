@@ -2,16 +2,36 @@ Binaries/
 Intermediate/
 Saved/
 DerivedDataCache/
+Zen/
+logs/
 *.pdb
+*.exp
+*.obj
+*.sarif
+*.rsp
+*.idx
+*.old
+*.target
+*.vsconfig
+*.DotSettings.user
 *.patch_*
 __pycache__/
 *.pyc
+*.log
+*.bak
+*.tmp
+*.swp
+*.swo
+*~
+temp_*
+.tmp_p4reconcile.txt
 Docs/plans/
 Docs/TESTING.md
 Docs/TODO.md
 Docs/TODO_VFX_Issues.md
 Plans/
 PRD/
+CRG/
 
 # Private training actions — never ship in public releases
 Source/MonolithEditor/Private/MonolithTrainingActions.cpp
@@ -48,6 +68,8 @@ TrainingMemory/
 # Generated databases
 EngineSource.db
 ProjectIndex.db
+.code-review-graph/
+compile_commands.json
 
 # Release artifacts
 Monolith-*-Linux.zip
@@ -58,7 +80,16 @@ Monolith-*-macOS.zip
 .vs/
 .idea/
 .vscode/
+.cache/
+.clangd/
 *.sln
+*.suo
+*.user
+*.userprefs
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
 
 # Build and CI artifacts
 _stage/
@@ -72,3 +103,17 @@ no_op_reason.txt
 scratch.py
 scratch.sh
 .ruff_cache/
+.jules/logic-driver-keeper.md
+build-verify-batch.ps1
+build-verify-list.json
+build-verify-results.txt
+merge-chain.ps1
+merge-chain-results.txt
+merge-independent.ps1
+merge-independent-results.txt
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
