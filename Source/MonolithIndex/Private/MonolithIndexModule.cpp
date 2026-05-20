@@ -7,13 +7,15 @@
 
 void FMonolithIndexModule::StartupModule()
 {
-	UE_LOG(LogMonolithIndex, Verbose, TEXT("Monolith -- Index module loaded (19 actions, SQLite+FTS5)"));
-
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 	Registry.RegisterOwnedActions(TEXT("MonolithIndex"), [](FMonolithToolRegistry& OwnedRegistry)
 	{
 		MonolithIndex::FProjectActionRegistration::Register(OwnedRegistry);
 	});
+
+	UE_LOG(LogMonolithIndex, Verbose, TEXT("Monolith -- Index module loaded (%d project actions, %d collection actions, SQLite+FTS5)"),
+		Registry.GetNamespaceActionCount(TEXT("project")),
+		Registry.GetNamespaceActionCount(TEXT("collection")));
 }
 
 void FMonolithIndexModule::ShutdownModule()

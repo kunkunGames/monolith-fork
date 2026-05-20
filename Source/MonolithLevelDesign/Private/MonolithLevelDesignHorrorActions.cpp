@@ -1,4 +1,4 @@
-#include "MonolithMeshHorrorActions.h"
+#include "MonolithLevelDesignHorrorActions.h"
 #include "MonolithMeshUtils.h"
 #include "MonolithMeshAnalysis.h"
 #include "MonolithToolRegistry.h"
@@ -19,12 +19,12 @@
 // Registration
 // ============================================================================
 
-void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry)
+void FMonolithLevelDesignHorrorActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. analyze_sightlines
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_sightlines"),
 		TEXT("Fan-of-rays sightline analysis from a location. Returns claustrophobia score 0-100, blocked percentages at distance thresholds, longest clear sightline."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::AnalyzeSightlines),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignHorrorActions::AnalyzeSightlines),
 		FParamSchemaBuilder()
 			.Required(TEXT("location"), TEXT("array"), TEXT("Origin position [x, y, z]"))
 			.Optional(TEXT("forward"), TEXT("array"), TEXT("Player facing direction [x, y, z] (default: +X)"), TEXT(""))
@@ -36,7 +36,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 	// 2. find_hiding_spots
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_hiding_spots"),
 		TEXT("Grid-sample a region and score each point for concealment from given viewpoints. Returns spots sorted by quality."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::FindHidingSpots),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignHorrorActions::FindHidingSpots),
 		FParamSchemaBuilder()
 			.Required(TEXT("region_min"), TEXT("array"), TEXT("Min corner of search region [x, y, z]"))
 			.Required(TEXT("region_max"), TEXT("array"), TEXT("Max corner of search region [x, y, z]"))
@@ -48,7 +48,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 	// 3. find_ambush_points
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_ambush_points"),
 		TEXT("Find ambush positions lateral to a path. Scores concealment + surprise angle (180 degrees from player forward = perfect ambush)."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::FindAmbushPoints),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignHorrorActions::FindAmbushPoints),
 		FParamSchemaBuilder()
 			.Required(TEXT("path_points"), TEXT("array"), TEXT("Array of path positions [[x,y,z], ...]"))
 			.Optional(TEXT("lateral_range"), TEXT("number"), TEXT("Max lateral distance to sample in cm"), TEXT("500"))
@@ -58,7 +58,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 	// 4. analyze_choke_points
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_choke_points"),
 		TEXT("Find narrow passages along a navmesh path. Returns choke points with width, flank possibility, and bypass routes."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::AnalyzeChokePoints),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignHorrorActions::AnalyzeChokePoints),
 		FParamSchemaBuilder()
 			.Required(TEXT("start"), TEXT("array"), TEXT("Start position [x, y, z]"))
 			.Required(TEXT("end"), TEXT("array"), TEXT("End position [x, y, z]"))
@@ -68,7 +68,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 	// 5. analyze_escape_routes
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_escape_routes"),
 		TEXT("Find and score escape routes from a location to tagged exit actors. Critical for hospice: ensures no inescapable encounters."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::AnalyzeEscapeRoutes),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignHorrorActions::AnalyzeEscapeRoutes),
 		FParamSchemaBuilder()
 			.Required(TEXT("location"), TEXT("array"), TEXT("Player position [x, y, z]"))
 			.Optional(TEXT("exit_tags"), TEXT("array"), TEXT("Actor tags to search for as exits"), TEXT(""))
@@ -78,7 +78,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 	// 6. classify_zone_tension
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("classify_zone_tension"),
 		TEXT("Composite tension analysis: sightline distance + ceiling height + room volume + exit count. Returns calm/uneasy/tense/dread/panic."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::ClassifyZoneTension),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignHorrorActions::ClassifyZoneTension),
 		FParamSchemaBuilder()
 			.Required(TEXT("location"), TEXT("array"), TEXT("Center of zone to analyze [x, y, z]"))
 			.Optional(TEXT("radius"), TEXT("number"), TEXT("Analysis radius in cm"), TEXT("500"))
@@ -87,7 +87,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 	// 7. analyze_pacing_curve
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_pacing_curve"),
 		TEXT("Sample tension at intervals along a path. Identifies monotonous stretches, optimal scare placement, and false-calm opportunities."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::AnalyzePacingCurve),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignHorrorActions::AnalyzePacingCurve),
 		FParamSchemaBuilder()
 			.Required(TEXT("path_points"), TEXT("array"), TEXT("Array of path positions [[x,y,z], ...]"))
 			.Optional(TEXT("sample_interval"), TEXT("number"), TEXT("Distance between samples in cm"), TEXT("200"))
@@ -96,7 +96,7 @@ void FMonolithMeshHorrorActions::RegisterActions(FMonolithToolRegistry& Registry
 	// 8. find_dead_ends
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_dead_ends"),
 		TEXT("Navmesh flood-fill to find single-exit (dead-end) regions. Returns depth, width, exit direction for each."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorActions::FindDeadEnds),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignHorrorActions::FindDeadEnds),
 		FParamSchemaBuilder()
 			.Optional(TEXT("region_min"), TEXT("array"), TEXT("Min corner [x, y, z] (default: whole navmesh)"), TEXT(""))
 			.Optional(TEXT("region_max"), TEXT("array"), TEXT("Max corner [x, y, z] (default: whole navmesh)"), TEXT(""))
@@ -145,7 +145,7 @@ namespace
 // 1. analyze_sightlines
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshHorrorActions::AnalyzeSightlines(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignHorrorActions::AnalyzeSightlines(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Location;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("location"), Location))
@@ -258,7 +258,7 @@ FMonolithActionResult FMonolithMeshHorrorActions::AnalyzeSightlines(const TShare
 // 2. find_hiding_spots
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshHorrorActions::FindHidingSpots(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignHorrorActions::FindHidingSpots(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector RegionMin, RegionMax;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("region_min"), RegionMin))
@@ -375,7 +375,7 @@ FMonolithActionResult FMonolithMeshHorrorActions::FindHidingSpots(const TSharedP
 // 3. find_ambush_points
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshHorrorActions::FindAmbushPoints(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignHorrorActions::FindAmbushPoints(const TSharedPtr<FJsonObject>& Params)
 {
 	TArray<FVector> PathPoints;
 	if (!MHorror_ParseVectorArray(Params, TEXT("path_points"), PathPoints) || PathPoints.Num() < 2)
@@ -484,7 +484,7 @@ FMonolithActionResult FMonolithMeshHorrorActions::FindAmbushPoints(const TShared
 // 4. analyze_choke_points
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshHorrorActions::AnalyzeChokePoints(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignHorrorActions::AnalyzeChokePoints(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Start, End;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("start"), Start))
@@ -622,7 +622,7 @@ FMonolithActionResult FMonolithMeshHorrorActions::AnalyzeChokePoints(const TShar
 // 5. analyze_escape_routes
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshHorrorActions::AnalyzeEscapeRoutes(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignHorrorActions::AnalyzeEscapeRoutes(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Location;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("location"), Location))
@@ -825,7 +825,7 @@ FMonolithActionResult FMonolithMeshHorrorActions::AnalyzeEscapeRoutes(const TSha
 // 6. classify_zone_tension
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshHorrorActions::ClassifyZoneTension(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignHorrorActions::ClassifyZoneTension(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Location;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("location"), Location))
@@ -888,7 +888,7 @@ FMonolithActionResult FMonolithMeshHorrorActions::ClassifyZoneTension(const TSha
 // 7. analyze_pacing_curve
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshHorrorActions::AnalyzePacingCurve(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignHorrorActions::AnalyzePacingCurve(const TSharedPtr<FJsonObject>& Params)
 {
 	TArray<FVector> PathPoints;
 	if (!MHorror_ParseVectorArray(Params, TEXT("path_points"), PathPoints) || PathPoints.Num() < 2)
@@ -1094,7 +1094,7 @@ FMonolithActionResult FMonolithMeshHorrorActions::AnalyzePacingCurve(const TShar
 // 8. find_dead_ends
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshHorrorActions::FindDeadEnds(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignHorrorActions::FindDeadEnds(const TSharedPtr<FJsonObject>& Params)
 {
 	UWorld* World = MonolithMeshUtils::GetEditorWorld();
 	if (!World)

@@ -10,7 +10,7 @@
  *
  * set_collision_preset already exists in Phase 14 (VolumeActions) -- skipped here.
  */
-class MONOLITHLEVELDESIGN_API FMonolithMeshAdvancedLevelActions
+class MONOLITHLEVELDESIGN_API FMonolithLevelDesignPlacementActions
 {
 public:
 	/** Register all advanced level design actions with the tool registry */

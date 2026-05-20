@@ -1,4 +1,4 @@
-#include "MonolithMeshAccessibilityActions.h"
+#include "MonolithLevelDesignAccessibilityActions.h"
 #include "MonolithMeshUtils.h"
 #include "MonolithMeshAnalysis.h"
 #include "MonolithToolRegistry.h"
@@ -20,12 +20,12 @@
 // Registration
 // ============================================================================
 
-void FMonolithMeshAccessibilityActions::RegisterActions(FMonolithToolRegistry& Registry)
+void FMonolithLevelDesignAccessibilityActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. validate_path_width
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("validate_path_width"),
 		TEXT("Validate path width for wheelchair accessibility (default 120cm min). Returns pinch points with exact obstruction actors."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAccessibilityActions::ValidatePathWidth),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAccessibilityActions::ValidatePathWidth),
 		FParamSchemaBuilder()
 			.Required(TEXT("start"), TEXT("array"), TEXT("Start position [x, y, z]"))
 			.Required(TEXT("end"), TEXT("array"), TEXT("End position [x, y, z]"))
@@ -35,7 +35,7 @@ void FMonolithMeshAccessibilityActions::RegisterActions(FMonolithToolRegistry& R
 	// 2. validate_navigation_complexity
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("validate_navigation_complexity"),
 		TEXT("Score cognitive difficulty of navigation between two points: turn count, sharp corners, backtracking, elevation changes."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAccessibilityActions::ValidateNavigationComplexity),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAccessibilityActions::ValidateNavigationComplexity),
 		FParamSchemaBuilder()
 			.Required(TEXT("start"), TEXT("array"), TEXT("Start position [x, y, z]"))
 			.Required(TEXT("end"), TEXT("array"), TEXT("End position [x, y, z]"))
@@ -44,7 +44,7 @@ void FMonolithMeshAccessibilityActions::RegisterActions(FMonolithToolRegistry& R
 	// 3. analyze_visual_contrast
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_visual_contrast"),
 		TEXT("Analyze visual contrast of interactable actors against their backgrounds using scene capture. WCAG-inspired thresholds."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAccessibilityActions::AnalyzeVisualContrast),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAccessibilityActions::AnalyzeVisualContrast),
 		FParamSchemaBuilder()
 			.Required(TEXT("location"), TEXT("array"), TEXT("Camera position [x, y, z]"))
 			.Optional(TEXT("forward"), TEXT("array"), TEXT("Camera facing direction [x, y, z]"), TEXT(""))
@@ -55,7 +55,7 @@ void FMonolithMeshAccessibilityActions::RegisterActions(FMonolithToolRegistry& R
 	// 4. find_rest_points
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_rest_points"),
 		TEXT("Walk a path and inventory safe rooms/calm zones. Flag gaps exceeding max_gap (default 30m). Hospice patients need frequent rest opportunities."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAccessibilityActions::FindRestPoints),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAccessibilityActions::FindRestPoints),
 		FParamSchemaBuilder()
 			.Required(TEXT("start"), TEXT("array"), TEXT("Start position [x, y, z]"))
 			.Required(TEXT("end"), TEXT("array"), TEXT("End position [x, y, z]"))
@@ -65,7 +65,7 @@ void FMonolithMeshAccessibilityActions::RegisterActions(FMonolithToolRegistry& R
 	// 5. validate_interactive_reach
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("validate_interactive_reach"),
 		TEXT("Check interactable actors for height, navmesh distance, and obstructions. Flag items requiring jumping or precision movement."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAccessibilityActions::ValidateInteractiveReach),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAccessibilityActions::ValidateInteractiveReach),
 		FParamSchemaBuilder()
 			.Optional(TEXT("region_min"), TEXT("array"), TEXT("Min corner of search region [x, y, z]"), TEXT(""))
 			.Optional(TEXT("region_max"), TEXT("array"), TEXT("Max corner of search region [x, y, z]"), TEXT(""))
@@ -75,7 +75,7 @@ void FMonolithMeshAccessibilityActions::RegisterActions(FMonolithToolRegistry& R
 	// 6. generate_accessibility_report
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("generate_accessibility_report"),
 		TEXT("Comprehensive accessibility report combining path width, navigation complexity, visual contrast, rest points, and interactive reach. Profile-specific thresholds."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAccessibilityActions::GenerateAccessibilityReport),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAccessibilityActions::GenerateAccessibilityReport),
 		FParamSchemaBuilder()
 			.Required(TEXT("start"), TEXT("array"), TEXT("Start position [x, y, z]"))
 			.Required(TEXT("end"), TEXT("array"), TEXT("End position [x, y, z]"))
@@ -99,7 +99,7 @@ namespace
 // 1. validate_path_width
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAccessibilityActions::ValidatePathWidth(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAccessibilityActions::ValidatePathWidth(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Start, End;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("start"), Start))
@@ -233,7 +233,7 @@ FMonolithActionResult FMonolithMeshAccessibilityActions::ValidatePathWidth(const
 // 2. validate_navigation_complexity
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAccessibilityActions::ValidateNavigationComplexity(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAccessibilityActions::ValidateNavigationComplexity(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Start, End;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("start"), Start))
@@ -360,7 +360,7 @@ FMonolithActionResult FMonolithMeshAccessibilityActions::ValidateNavigationCompl
 // 3. analyze_visual_contrast
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAccessibilityActions::AnalyzeVisualContrast(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAccessibilityActions::AnalyzeVisualContrast(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Location;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("location"), Location))
@@ -584,7 +584,7 @@ FMonolithActionResult FMonolithMeshAccessibilityActions::AnalyzeVisualContrast(c
 // 4. find_rest_points
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAccessibilityActions::FindRestPoints(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAccessibilityActions::FindRestPoints(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Start, End;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("start"), Start))
@@ -816,7 +816,7 @@ FMonolithActionResult FMonolithMeshAccessibilityActions::FindRestPoints(const TS
 // 5. validate_interactive_reach
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAccessibilityActions::ValidateInteractiveReach(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAccessibilityActions::ValidateInteractiveReach(const TSharedPtr<FJsonObject>& Params)
 {
 	UWorld* World = MonolithMeshUtils::GetEditorWorld();
 	if (!World)
@@ -1007,7 +1007,7 @@ FMonolithActionResult FMonolithMeshAccessibilityActions::ValidateInteractiveReac
 // 6. generate_accessibility_report
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAccessibilityActions::GenerateAccessibilityReport(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAccessibilityActions::GenerateAccessibilityReport(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Start, End;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("start"), Start))

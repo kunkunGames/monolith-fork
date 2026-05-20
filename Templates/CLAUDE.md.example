@@ -1,4 +1,4 @@
-﻿# Monolith MCP — Project Instructions
+# Monolith MCP — Project Instructions
 
 `Plugins/Monolith` exposes Unreal Engine editor capability to agents via the Monolith MCP server. For project work that touches the editor, Blueprints, assets, C++ source, build logs, crash context, config, source control, or the project graph, route through Monolith instead of hand-rolled editor Python or raw file search.
 
@@ -17,7 +17,7 @@ Use `{namespace}_query(action, params)` after discovering the namespace. Common 
 
 - Code/project: `source_query` (C++ symbols/refs), `project_query` (asset search), `editor_query` (build/logs/crash), `asset_query`, `config_query`, `bridge_query`, `source_control_query`.
 - Gameplay: `blueprint_query`, `gas_query`, `ai_query`, `logicdriver_query`, `combograph_query`, `input_query`.
-- Content: `material_query`, `mesh_query`, `animation_query`, `niagara_query`, `audio_query`, `ui_query`, `level_query`, `level_sequence_query`, `paper2d_query`.
+- Content/spatial: `material_query`, `mesh_query`, `scene_query`, `leveldesign_query`, `animation_query`, `niagara_query`, `audio_query`, `ui_query`, `level_sequence_query`, `paper2d_query`.
 - Discover the rest as needed: `chaos_fracture`, `cloth`, `chooser`, `collection`, `dataflow`, `gamefeatures`, `hlod`, `interchange`, `level_instance`, `localization`, `metahuman`, `movie_render`, `ndisplay`, `pcg`, `slate`, `water`, `world_conditions`.
 
 ## Standard workflow

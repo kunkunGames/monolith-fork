@@ -1,6 +1,6 @@
 #include "MonolithMeshPresetActions.h"
 #include "MonolithMeshStorytellingPatterns.h"
-#include "MonolithMeshAcoustics.h"
+#include "MonolithLevelDesignAcoustics.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"
@@ -413,7 +413,7 @@ void FMonolithMeshPresetActions::RegisterActions(FMonolithToolRegistry& Registry
 
 	// 3. list_acoustic_profiles
 	Registry.RegisterAction(TEXT("worldgen"), TEXT("list_acoustic_profiles"),
-		TEXT("List all acoustic profiles: built-in horror defaults (12 surfaces from MonolithMeshAcoustics) + user-created profiles from Saved/Monolith/AcousticProfiles/. Returns profile name, genre, surface count, and source."),
+		TEXT("List all acoustic profiles: built-in horror defaults (12 surfaces from MonolithLevelDesignAcoustics) + user-created profiles from Saved/Monolith/AcousticProfiles/. Returns profile name, genre, surface count, and source."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshPresetActions::ListAcousticProfiles),
 		FParamSchemaBuilder()
 			.Optional(TEXT("source_filter"), TEXT("string"), TEXT("Filter by source: 'built-in', 'user', or omit for all"))
@@ -735,7 +735,7 @@ FMonolithActionResult FMonolithMeshPresetActions::ListAcousticProfiles(const TSh
 	// Built-in: expose the hardcoded defaults as a single "horror_default" profile
 	if (SourceFilter.IsEmpty() || SourceFilter.Equals(TEXT("built-in"), ESearchCase::IgnoreCase))
 	{
-		TMap<FString, MonolithMeshAcoustics::FAcousticProperties> Defaults = MonolithMeshAcoustics::GetHardcodedDefaults();
+		TMap<FString, MonolithLevelDesignAcoustics::FAcousticProperties> Defaults = MonolithLevelDesignAcoustics::GetHardcodedDefaults();
 
 		auto Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("name"), TEXT("horror_default"));

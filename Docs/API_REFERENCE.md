@@ -17,11 +17,11 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | Namespace | Actions | Description |
 |-----------|---------|-------------|
 | [monolith](#monolith) | 5 primary + management/profile/audit helpers | Core server tools (find, discover, status, update, reindex), MCP/session diagnostics, readiness/onboarding/notification settings, execution audit/policy, and tool profile management |
-| [blueprint](#blueprint) | 93 | Blueprint read/write, variable/component/graph CRUD, DataTable maintenance, node ops, compile, auto-layout, spawn actors |
+| [blueprint](#blueprint) | 100 | Blueprint read/write, variable/component/graph CRUD, DataTable maintenance, node ops, compile, auto-layout, spawn actors |
 | [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection / Fracture visibility registered by MonolithChaosFracture |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [paper2d](#paper2d) | 3 | Optional Paper2D AssetRegistry discovery registered by MonolithPaper2D |
-| [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
+| [animation](#animation) | 135 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [level_sequence](#level_sequence) | 13 | Level Sequence bindings, Director Blueprint/event wiring, saved replay metadata, and optional Sequencer Anim Mixer read-only inspection |
 | [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
 | [editor](#editor) | 57 | Live Coding builds, compile output capture, Live Coding diagnostics, editor logs, scene capture, texture import, map creation, module status, automation test list/run/status/history, selection inspection, PIE/console control |
@@ -30,12 +30,14 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [gamefeatures](#gamefeatures) | 1 (+4 gated) | Optional Game Feature plugin inventory and GameFeatureData inspection registered by MonolithGameFeatures |
 | [localization](#localization) | 10 | Culture inspection and guarded StringTable CRUD/import/export |
 | [interchange](#interchange) | 16 | Normalized import/export validation, guarded import mutation, reimport metadata, reimport, and export actions registered by MonolithInterchange |
-| [project](#project) | 17 | Project-wide asset index (SQLite + FTS5) |
-| [source](#source) | 21 | Unreal Engine C++ source code navigation |
+| [project](#project) | 19 | Project-wide asset index (SQLite + FTS5) |
+| [collection](#collection) | 13 | Content Browser static/dynamic collection management |
+| [source](#source) | 27 | Unreal Engine C++ source code navigation |
 | [asset](#asset) | 6 | Specialized asset enrichment plus naming and rename hygiene |
-| [mesh](#mesh) | 66 | Static mesh inspection/operations/validation/performance/tech-art workflows |
-| [scene](#scene) | 65 | Editor-world actor CRUD, spatial queries, lighting, audio, decals, scatter, metadata |
-| [leveldesign](#leveldesign) | 61 | Horror/encounter/accessibility analysis, framing, monster reveal, co-op balance |
+| [mesh](#mesh) | 70 | Static mesh inspection/operations/validation/performance/tech-art workflows |
+| [scene](#scene) | 76 | Editor-world actor CRUD, spatial queries, lighting, audio, decals, scatter, metadata |
+| [level_instance](#level_instance) | 16 | Level Instance and prefab workflows |
+| [leveldesign](#leveldesign) | 43 | Horror/encounter/accessibility analysis, framing, monster reveal, co-op balance |
 | [worldgen](#worldgen) | 63 | Blockout, replacement, procedural structures/terrain, optional town-generation workflows |
 | [modelgen](#modelgen) | 7 | Generated-model provider, job, import, and provenance workflows |
 | [ndisplay](#ndisplay) | 2 | Optional nDisplay / DisplayCluster config discovery registered by MonolithNDisplay |
@@ -43,7 +45,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [slate](#slate) | 1 (+5 gated) | Live editor Slate window/widget inspection registered by MonolithSlate |
 | [water](#water) | 2 | Optional Water/Landscape actor discovery registered by MonolithWater |
 | [ui](#ui) | 121 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
-| [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
+| [gas](#gas) | 136 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
@@ -952,6 +954,16 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 
 ---
 
+## collection
+
+Content Browser collection management. **13 actions.** `MonolithIndex` registers this namespace alongside `project`; shutdown is owner-scoped so collection actions do not clear other namespaces.
+
+> For full param schemas, call `monolith_discover("collection")` at runtime.
+
+Common actions: `list_collections`, `get_collection`, `create_collection`, `delete_collection`, `add_assets`, `remove_assets`, `list_assets`, `contains_asset`, `set_dynamic_query`, `get_dynamic_query`, `set_collection_color`, `validate_collection_name`, `create_unique_collection_name`.
+
+---
+
 ## bridge
 
 Local bridge discovery backed by ProjectIndex and EngineSource. **5 actions.**
@@ -1109,7 +1121,7 @@ Specialized asset enrichment plus asset hygiene. **6 actions.** `MonolithMateria
 
 ## mesh
 
-Static mesh inspection, mesh comparison, GeometryScript operations, mesh validation, mesh performance budgeting, proxy/HLOD helpers, cache/handle utilities, prefab/prop-kit helpers, and tech-art mesh workflows. **66 actions.**
+Static mesh inspection, mesh comparison, GeometryScript operations, mesh validation, mesh performance budgeting, proxy/HLOD helpers, cache/handle utilities, prop-kit helpers, tech-art mesh workflows, and level-context mesh optimization helpers. **70 actions.**
 
 > For full param schemas, call `monolith_discover("mesh")` at runtime.
 
@@ -1118,12 +1130,12 @@ Static mesh inspection, mesh comparison, GeometryScript operations, mesh validat
 | Category | Examples |
 |----------|----------|
 | Mesh inspection | `get_mesh_info`, `get_mesh_bounds`, `get_mesh_materials`, `get_mesh_lods`, `get_mesh_collision`, `get_mesh_uvs`, `analyze_skeletal_mesh`, `analyze_mesh_quality`, `compare_meshes`, `get_vertex_data`, `search_meshes_by_size`, `get_mesh_catalog_stats` |
-| Performance | `get_triangle_budget`, `analyze_texel_density`, `find_instancing_candidates`, `convert_to_hism`, `setup_hlod`, `analyze_texture_budget`, `generate_proxy_mesh` |
+| Performance | `get_triangle_budget`, `analyze_texel_density`, `find_instancing_candidates`, `convert_to_hism`, `set_lod_screen_sizes`, `setup_hlod`, `analyze_texture_budget`, `generate_proxy_mesh` |
 | Validation | `validate_game_ready`, `suggest_lod_strategy`, `batch_validate`, `compare_lod_chain` |
 | GeometryScript | `mesh_boolean`, `mesh_simplify`, `mesh_remesh`, `generate_collision`, `generate_lods`, `fill_holes`, `compute_uvs`, `mirror_mesh` |
 | Procedural meshes | `create_parametric_mesh`, `create_horror_prop`, `create_structure`, `create_building_shell`, `create_maze`, `create_pipe_network`, `create_fragments`, `create_terrain_patch` |
 | Cache and handles | `list_cached_meshes`, `clear_cache`, `validate_cache`, `get_cache_stats`, `create_handle`, `release_handle`, `list_handles`, `save_handle` |
-| Prefabs and placement helpers | `create_prefab`, `create_blueprint_prefab`, `spawn_prefab`, `place_blueprint_actor`, `place_spline`, `create_prop_kit`, `place_prop_kit` |
+| Level-context mesh optimization | `find_replace_mesh`, `set_lod_screen_sizes`, `find_instancing_candidates`, `convert_to_hism` |
 
 Moved domains:
 
@@ -1141,7 +1153,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the mesh namespace co
 
 ## scene
 
-Editor-world actor CRUD, spatial queries, lighting/audio/decal/scatter helpers, and scene metadata/statistics. **65 actions.** `scene` is a shared namespace owned by `MonolithScene` and `MonolithEditor`; owner-scoped registration prevents either module from unregistering the other's actions.
+Editor-world actor CRUD, spatial queries, lighting/audio/decal/scatter helpers, and scene metadata/statistics. **76 actions.** `scene` is a shared namespace owned by `MonolithScene`, `MonolithEditor`, and `MonolithLevelDesign`; owner-scoped registration prevents one module from unregistering another module's actions.
 
 > For full param schemas, call `monolith_discover("scene")` at runtime.
 
@@ -1149,9 +1161,17 @@ Editor-world actor CRUD, spatial queries, lighting/audio/decal/scatter helpers, 
 
 ## leveldesign
 
-Horror/encounter/accessibility analysis, room/acoustic/genre presets, framing, monster reveal, and co-op spatial balance. **61 actions.**
+Horror/encounter/accessibility analysis, room/acoustic/genre presets, framing, monster reveal, and co-op spatial balance. **43 actions.** Broad editor-world placement, mesh optimization, and prefab actions route through `scene`, `mesh`, and `level_instance` instead of this namespace.
 
 > For full param schemas, call `monolith_discover("leveldesign")` at runtime.
+
+---
+
+## level_instance
+
+Level Instance and prefab workflows. **16 actions.** `MonolithMesh` registers the core Level Instance surface; `MonolithLevelDesign` contributes `create_prefab`, `create_blueprint_prefab`, and `spawn_prefab` because those actions are prefab workflows, not level-design analysis.
+
+> For full param schemas, call `monolith_discover("level_instance")` at runtime.
 
 ---
 

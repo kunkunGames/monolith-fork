@@ -1,5 +1,5 @@
-#include "MonolithMeshAudioActions.h"
-#include "MonolithMeshAcoustics.h"
+#include "MonolithLevelDesignAudioActions.h"
+#include "MonolithLevelDesignAcoustics.h"
 #include "MonolithMeshUtils.h"
 #include "MonolithMeshAnalysis.h"
 #include "MonolithToolRegistry.h"
@@ -177,7 +177,7 @@ namespace
 	}
 
 	/** Acoustic properties as JSON object */
-	TSharedPtr<FJsonObject> AcousticPropsToJson(const MonolithMeshAcoustics::FAcousticProperties& Props)
+	TSharedPtr<FJsonObject> AcousticPropsToJson(const MonolithLevelDesignAcoustics::FAcousticProperties& Props)
 	{
 		auto Obj = MakeShared<FJsonObject>();
 		Obj->SetStringField(TEXT("surface"), Props.SurfaceName);
@@ -192,14 +192,14 @@ namespace
 // Registration
 // ============================================================================
 
-void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
+void FMonolithLevelDesignAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// === Read-Only (7) ===
 
 	// 1. get_audio_volumes
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("get_audio_volumes"),
 		TEXT("Enumerate all AAudioVolume actors. Returns reverb/interior settings, priority, bounds. Flags uncovered regions."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::GetAudioVolumes),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::GetAudioVolumes),
 		FParamSchemaBuilder()
 			.Optional(TEXT("include_details"), TEXT("boolean"), TEXT("Include full reverb/interior settings"), TEXT("true"))
 			.Build());
@@ -207,7 +207,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 2. get_surface_materials
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("get_surface_materials"),
 		TEXT("Cast rays in all directions to catalog physical materials in a volume or region. Returns material breakdown with acoustic properties."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::GetSurfaceMaterials),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::GetSurfaceMaterials),
 		FParamSchemaBuilder()
 			.Optional(TEXT("volume_name"), TEXT("string"), TEXT("Name of a volume to scan"))
 			.Optional(TEXT("region_min"), TEXT("array"), TEXT("Min corner of region [x, y, z]"))
@@ -218,7 +218,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 3. estimate_footstep_sound
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("estimate_footstep_sound"),
 		TEXT("Downward trace at a location to determine floor surface type and footstep loudness factor."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::EstimateFootstepSound),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::EstimateFootstepSound),
 		FParamSchemaBuilder()
 			.Required(TEXT("location"), TEXT("array"), TEXT("World position [x, y, z]"))
 			.Build());
@@ -226,7 +226,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 4. analyze_room_acoustics
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_room_acoustics"),
 		TEXT("Sample surfaces via raycasts in a volume, compute area-weighted absorption. Sabine RT60: 0.161 * Volume_m3 / TotalAbsorption. Classify: dead/dry/live/echo."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::AnalyzeRoomAcoustics),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::AnalyzeRoomAcoustics),
 		FParamSchemaBuilder()
 			.Required(TEXT("volume_name"), TEXT("string"), TEXT("Name of the volume to analyze"))
 			.Optional(TEXT("ray_count"), TEXT("integer"), TEXT("Number of surface sample rays"), TEXT("128"))
@@ -235,7 +235,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 5. analyze_sound_propagation
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_sound_propagation"),
 		TEXT("Analyzes sound propagation between two points. Direct trace (wall occlusion) + indirect navmesh path (doorway propagation). Returns whichever path has better audibility."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::AnalyzeSoundPropagation),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::AnalyzeSoundPropagation),
 		FParamSchemaBuilder()
 			.Required(TEXT("from"), TEXT("array"), TEXT("Source position [x, y, z]"))
 			.Required(TEXT("to"), TEXT("array"), TEXT("Listener position [x, y, z]"))
@@ -245,7 +245,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 6. find_loud_surfaces
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_loud_surfaces"),
 		TEXT("Find surfaces with high footstep loudness (metal, glass, gravel) in a volume or region. Returns locations, areas, detection radii."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::FindLoudSurfaces),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::FindLoudSurfaces),
 		FParamSchemaBuilder()
 			.Optional(TEXT("volume_name"), TEXT("string"), TEXT("Volume to search"))
 			.Optional(TEXT("region_min"), TEXT("array"), TEXT("Min corner [x, y, z]"))
@@ -256,7 +256,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 7. find_sound_paths
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_sound_paths"),
 		TEXT("Multi-method sound path finder: direct trace, first-bounce reflections (image-source), and navmesh indirect path (doorway propagation). Returns all viable paths sorted by attenuation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::FindSoundPaths),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::FindSoundPaths),
 		FParamSchemaBuilder()
 			.Required(TEXT("from"), TEXT("array"), TEXT("Sound source position [x, y, z]"))
 			.Required(TEXT("to"), TEXT("array"), TEXT("Listener position [x, y, z]"))
@@ -269,7 +269,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 8. can_ai_hear_from
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("can_ai_hear_from"),
 		TEXT("Can AI hear the player? Direct trace (wall occlusion) + indirect navmesh path (doorway propagation). Uses best path. Returns yes/faintly/no + detection radius."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::CanAiHearFrom),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::CanAiHearFrom),
 		FParamSchemaBuilder()
 			.Required(TEXT("ai_location"), TEXT("array"), TEXT("AI position [x, y, z]"))
 			.Required(TEXT("player_location"), TEXT("array"), TEXT("Player position [x, y, z]"))
@@ -280,7 +280,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 9. get_stealth_map
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("get_stealth_map"),
 		TEXT("Grid-sample a volume: per-cell footstep loudness + AI detection radius. Returns heatmap data."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::GetStealthMap),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::GetStealthMap),
 		FParamSchemaBuilder()
 			.Required(TEXT("volume_name"), TEXT("string"), TEXT("Volume to grid-sample"))
 			.Optional(TEXT("grid_size"), TEXT("number"), TEXT("Grid cell size in cm"), TEXT("100"))
@@ -290,7 +290,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 10. find_quiet_path
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_quiet_path"),
 		TEXT("Sample candidate navmesh paths between two points, score by surface loudness along path. Returns lowest-loudness route."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::FindQuietPath),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::FindQuietPath),
 		FParamSchemaBuilder()
 			.Required(TEXT("start"), TEXT("array"), TEXT("Start position [x, y, z]"))
 			.Required(TEXT("end"), TEXT("array"), TEXT("End position [x, y, z]"))
@@ -300,7 +300,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 11. suggest_audio_volumes
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("suggest_audio_volumes"),
 		TEXT("Given room geometry + surface materials, suggest AAudioVolume reverb settings based on RT60 + material classification."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::SuggestAudioVolumes),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::SuggestAudioVolumes),
 		FParamSchemaBuilder()
 			.Required(TEXT("volume_name"), TEXT("string"), TEXT("Volume to analyze"))
 			.Build());
@@ -310,7 +310,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 12. create_audio_volume
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("create_audio_volume"),
 		TEXT("Spawn an AAudioVolume matching a blocking volume's shape. Set reverb/interior settings. Undo transaction."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::CreateAudioVolume),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::CreateAudioVolume),
 		FParamSchemaBuilder()
 			.Required(TEXT("volume_name"), TEXT("string"), TEXT("Name of the blocking volume to match shape from"))
 			.Optional(TEXT("reverb_preset"), TEXT("string"), TEXT("Reverb preset name"))
@@ -321,7 +321,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 13. set_surface_type
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("set_surface_type"),
 		TEXT("Set physical material surface type override on a mesh actor's component. Undo transaction."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::SetSurfaceType),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::SetSurfaceType),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor_name"), TEXT("string"), TEXT("Actor to modify"))
 			.Required(TEXT("surface_type"), TEXT("string"), TEXT("Physical surface type name (e.g. Metal, Carpet, Wood)"))
@@ -330,7 +330,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 	// 14. create_surface_datatable
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("create_surface_datatable"),
 		TEXT("Bootstrap the acoustic system: create a DataTable with surface properties and register surface types via UPhysicsSettings CDO."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAudioActions::CreateSurfaceDataTable),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignAudioActions::CreateSurfaceDataTable),
 		FParamSchemaBuilder()
 			.Optional(TEXT("template"), TEXT("string"), TEXT("Template to use: 'horror_default'"), TEXT("horror_default"))
 			.Optional(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the DataTable (default from settings)"))
@@ -341,7 +341,7 @@ void FMonolithMeshAudioActions::RegisterActions(FMonolithToolRegistry& Registry)
 // 1. get_audio_volumes
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::GetAudioVolumes(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::GetAudioVolumes(const TSharedPtr<FJsonObject>& Params)
 {
 	UWorld* World = MonolithMeshUtils::GetEditorWorld();
 	if (!World)
@@ -409,7 +409,7 @@ FMonolithActionResult FMonolithMeshAudioActions::GetAudioVolumes(const TSharedPt
 // 2. get_surface_materials
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::GetSurfaceMaterials(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::GetSurfaceMaterials(const TSharedPtr<FJsonObject>& Params)
 {
 	UWorld* World = MonolithMeshUtils::GetEditorWorld();
 	if (!World)
@@ -459,7 +459,7 @@ FMonolithActionResult FMonolithMeshAudioActions::GetSurfaceMaterials(const TShar
 
 	// Sample from multiple origins within the volume
 	TMap<FString, int32> MaterialCounts;
-	TMap<FString, MonolithMeshAcoustics::FAcousticProperties> MaterialProps;
+	TMap<FString, MonolithLevelDesignAcoustics::FAcousticProperties> MaterialProps;
 	int32 TotalHits = 0;
 
 	// 5 sample origins: center + 4 quadrants
@@ -495,7 +495,7 @@ FMonolithActionResult FMonolithMeshAudioActions::GetSurfaceMaterials(const TShar
 					Surface = Hit.PhysMaterial->SurfaceType;
 				}
 
-				auto Props = MonolithMeshAcoustics::GetPropertiesForSurface(Surface);
+				auto Props = MonolithLevelDesignAcoustics::GetPropertiesForSurface(Surface);
 				MaterialCounts.FindOrAdd(Props.SurfaceName)++;
 				MaterialProps.FindOrAdd(Props.SurfaceName) = Props;
 				TotalHits++;
@@ -538,7 +538,7 @@ FMonolithActionResult FMonolithMeshAudioActions::GetSurfaceMaterials(const TShar
 // 3. estimate_footstep_sound
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::EstimateFootstepSound(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::EstimateFootstepSound(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Location;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("location"), Location))
@@ -554,7 +554,7 @@ FMonolithActionResult FMonolithMeshAudioActions::EstimateFootstepSound(const TSh
 
 	FHitResult Hit;
 	EPhysicalSurface Surface = TraceFloorSurface(World, Location, Hit);
-	auto Props = MonolithMeshAcoustics::GetPropertiesForSurface(Surface);
+	auto Props = MonolithLevelDesignAcoustics::GetPropertiesForSurface(Surface);
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("surface_type"), Props.SurfaceName);
@@ -590,7 +590,7 @@ FMonolithActionResult FMonolithMeshAudioActions::EstimateFootstepSound(const TSh
 // 4. analyze_room_acoustics
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::AnalyzeRoomAcoustics(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::AnalyzeRoomAcoustics(const TSharedPtr<FJsonObject>& Params)
 {
 	FString VolumeName;
 	if (!Params->TryGetStringField(TEXT("volume_name"), VolumeName))
@@ -661,7 +661,7 @@ FMonolithActionResult FMonolithMeshAudioActions::AnalyzeRoomAcoustics(const TSha
 				Surface = Hit.PhysMaterial->SurfaceType;
 			}
 
-			auto Props = MonolithMeshAcoustics::GetPropertiesForSurface(Surface);
+			auto Props = MonolithLevelDesignAcoustics::GetPropertiesForSurface(Surface);
 			MaterialHits.FindOrAdd(Props.SurfaceName)++;
 			HitCount++;
 		}
@@ -675,13 +675,13 @@ FMonolithActionResult FMonolithMeshAudioActions::AnalyzeRoomAcoustics(const TSha
 		MaterialAreaM2.Add(Pair.Key, AreaM2);
 		TotalSurfaceAreaM2 += AreaM2;
 
-		auto Props = MonolithMeshAcoustics::GetPropertiesForName(Pair.Key);
+		auto Props = MonolithLevelDesignAcoustics::GetPropertiesForName(Pair.Key);
 		TotalAbsorption += AreaM2 * Props.Absorption;
 	}
 
 	// Sabine RT60
-	float RT60 = MonolithMeshAcoustics::ComputeSabineRT60(VolumeM3, TotalAbsorption);
-	auto AcousticType = MonolithMeshAcoustics::ClassifyRT60(RT60);
+	float RT60 = MonolithLevelDesignAcoustics::ComputeSabineRT60(VolumeM3, TotalAbsorption);
+	auto AcousticType = MonolithLevelDesignAcoustics::ClassifyRT60(RT60);
 
 	// Average absorption coefficient
 	float AvgAbsorption = TotalSurfaceAreaM2 > 0 ? TotalAbsorption / TotalSurfaceAreaM2 : 0.02f;
@@ -689,7 +689,7 @@ FMonolithActionResult FMonolithMeshAudioActions::AnalyzeRoomAcoustics(const TSha
 	// Build result
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetNumberField(TEXT("rt60_seconds"), RT60);
-	Result->SetStringField(TEXT("classification"), MonolithMeshAcoustics::AcousticTypeToString(AcousticType));
+	Result->SetStringField(TEXT("classification"), MonolithLevelDesignAcoustics::AcousticTypeToString(AcousticType));
 	Result->SetNumberField(TEXT("volume_m3"), VolumeM3);
 	Result->SetNumberField(TEXT("surface_area_m2"), TotalSurfaceAreaM2);
 	Result->SetNumberField(TEXT("total_absorption_sabins"), TotalAbsorption);
@@ -708,7 +708,7 @@ FMonolithActionResult FMonolithMeshAudioActions::AnalyzeRoomAcoustics(const TSha
 		MatObj->SetNumberField(TEXT("fraction"), Fraction);
 		MatObj->SetNumberField(TEXT("area_m2"), MaterialAreaM2.FindRef(Pair.Key));
 
-		auto Props = MonolithMeshAcoustics::GetPropertiesForName(Pair.Key);
+		auto Props = MonolithLevelDesignAcoustics::GetPropertiesForName(Pair.Key);
 		MatObj->SetNumberField(TEXT("absorption"), Props.Absorption);
 
 		MaterialsArr.Add(MakeShared<FJsonValueObject>(MatObj));
@@ -716,7 +716,7 @@ FMonolithActionResult FMonolithMeshAudioActions::AnalyzeRoomAcoustics(const TSha
 	Result->SetArrayField(TEXT("materials"), MaterialsArr);
 
 	// Reverb suggestion
-	auto Suggestion = MonolithMeshAcoustics::SuggestReverbSettings(RT60, MaterialFractions);
+	auto Suggestion = MonolithLevelDesignAcoustics::SuggestReverbSettings(RT60, MaterialFractions);
 	auto SugObj = MakeShared<FJsonObject>();
 	SugObj->SetNumberField(TEXT("reverb_volume"), Suggestion.Volume);
 	SugObj->SetNumberField(TEXT("decay_time"), Suggestion.DecayTime);
@@ -733,7 +733,7 @@ FMonolithActionResult FMonolithMeshAudioActions::AnalyzeRoomAcoustics(const TSha
 // 5. analyze_sound_propagation
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::AnalyzeSoundPropagation(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::AnalyzeSoundPropagation(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector From, To;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("from"), From))
@@ -755,7 +755,7 @@ FMonolithActionResult FMonolithMeshAudioActions::AnalyzeSoundPropagation(const T
 	Params->TryGetBoolField(TEXT("include_occlusion"), bIncludeOcclusion);
 
 	float Distance = FVector::Dist(From, To);
-	float DistAtten = MonolithMeshAcoustics::ComputeDistanceAttenuation(Distance);
+	float DistAtten = MonolithLevelDesignAcoustics::ComputeDistanceAttenuation(Distance);
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetNumberField(TEXT("distance_cm"), Distance);
@@ -765,7 +765,7 @@ FMonolithActionResult FMonolithMeshAudioActions::AnalyzeSoundPropagation(const T
 	{
 		int32 WallCount;
 		float TotalLossdB;
-		float OcclusionFactor = MonolithMeshAcoustics::TraceOcclusion(World, From, To, WallCount, TotalLossdB);
+		float OcclusionFactor = MonolithLevelDesignAcoustics::TraceOcclusion(World, From, To, WallCount, TotalLossdB);
 
 		float DirectCombinedFactor = DistAtten * OcclusionFactor;
 
@@ -804,7 +804,7 @@ FMonolithActionResult FMonolithMeshAudioActions::AnalyzeSoundPropagation(const T
 		FString BestPath = TEXT("direct");
 		FString BestAudibility = DirectAudibility;
 
-		auto IndirectResult = MonolithMeshAcoustics::FindIndirectNavmeshPath(World, From, To);
+		auto IndirectResult = MonolithLevelDesignAcoustics::FindIndirectNavmeshPath(World, From, To);
 
 		if (IndirectResult.bFound)
 		{
@@ -871,7 +871,7 @@ FMonolithActionResult FMonolithMeshAudioActions::AnalyzeSoundPropagation(const T
 // 6. find_loud_surfaces
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::FindLoudSurfaces(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::FindLoudSurfaces(const TSharedPtr<FJsonObject>& Params)
 {
 	UWorld* World = MonolithMeshUtils::GetEditorWorld();
 	if (!World)
@@ -944,7 +944,7 @@ FMonolithActionResult FMonolithMeshAudioActions::FindLoudSurfaces(const TSharedP
 					Surface = Hit.PhysMaterial->SurfaceType;
 				}
 
-				auto Props = MonolithMeshAcoustics::GetPropertiesForSurface(Surface);
+				auto Props = MonolithLevelDesignAcoustics::GetPropertiesForSurface(Surface);
 				if (Props.FootstepLoudness >= LoudnessThreshold)
 				{
 					FLoudSpot Spot;
@@ -982,7 +982,7 @@ FMonolithActionResult FMonolithMeshAudioActions::FindLoudSurfaces(const TSharedP
 // 7. find_sound_paths
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::FindSoundPaths(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::FindSoundPaths(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector From, To;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("from"), From))
@@ -1006,7 +1006,7 @@ FMonolithActionResult FMonolithMeshAudioActions::FindSoundPaths(const TSharedPtr
 	int32 CandidateSurfaces = 16;
 	TryGetInt(Params, TEXT("candidate_surfaces"), CandidateSurfaces);
 
-	auto SoundPaths = MonolithMeshAcoustics::FindSoundPaths(World, From, To, MaxBounces, CandidateSurfaces);
+	auto SoundPaths = MonolithLevelDesignAcoustics::FindSoundPaths(World, From, To, MaxBounces, CandidateSurfaces);
 
 	TArray<TSharedPtr<FJsonValue>> PathsArr;
 	for (const auto& Path : SoundPaths)
@@ -1038,7 +1038,7 @@ FMonolithActionResult FMonolithMeshAudioActions::FindSoundPaths(const TSharedPtr
 	}
 
 	// === Navmesh indirect path (doorway propagation) ===
-	auto IndirectResult = MonolithMeshAcoustics::FindIndirectNavmeshPath(World, From, To);
+	auto IndirectResult = MonolithLevelDesignAcoustics::FindIndirectNavmeshPath(World, From, To);
 	if (IndirectResult.bFound)
 	{
 		auto IndirectObj = MakeShared<FJsonObject>();
@@ -1094,7 +1094,7 @@ FMonolithActionResult FMonolithMeshAudioActions::FindSoundPaths(const TSharedPtr
 // 8. can_ai_hear_from
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::CanAiHearFrom(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::CanAiHearFrom(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector AiLocation, PlayerLocation;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("ai_location"), AiLocation))
@@ -1117,17 +1117,17 @@ FMonolithActionResult FMonolithMeshAudioActions::CanAiHearFrom(const TSharedPtr<
 
 	// Determine floor surface at player position
 	FString SurfaceOverride;
-	MonolithMeshAcoustics::FAcousticProperties FloorProps;
+	MonolithLevelDesignAcoustics::FAcousticProperties FloorProps;
 
 	if (Params->TryGetStringField(TEXT("surface_type"), SurfaceOverride) && !SurfaceOverride.IsEmpty())
 	{
-		FloorProps = MonolithMeshAcoustics::GetPropertiesForName(SurfaceOverride);
+		FloorProps = MonolithLevelDesignAcoustics::GetPropertiesForName(SurfaceOverride);
 	}
 	else
 	{
 		FHitResult Hit;
 		EPhysicalSurface Surface = TraceFloorSurface(World, PlayerLocation, Hit);
-		FloorProps = MonolithMeshAcoustics::GetPropertiesForSurface(Surface);
+		FloorProps = MonolithLevelDesignAcoustics::GetPropertiesForSurface(Surface);
 	}
 
 	// Compute detection
@@ -1139,7 +1139,7 @@ FMonolithActionResult FMonolithMeshAudioActions::CanAiHearFrom(const TSharedPtr<
 	// === Direct path: wall occlusion ===
 	int32 WallCount;
 	float TotalLossdB;
-	float OcclusionFactor = MonolithMeshAcoustics::TraceOcclusion(World, PlayerLocation, AiLocation, WallCount, TotalLossdB);
+	float OcclusionFactor = MonolithLevelDesignAcoustics::TraceOcclusion(World, PlayerLocation, AiLocation, WallCount, TotalLossdB);
 
 	float DirectEffectiveRadius = EffectiveRadius * OcclusionFactor;
 
@@ -1164,7 +1164,7 @@ FMonolithActionResult FMonolithMeshAudioActions::CanAiHearFrom(const TSharedPtr<
 	bool bIndirectFound = false;
 	FString IndirectNote;
 
-	auto IndirectResult = MonolithMeshAcoustics::FindIndirectNavmeshPath(World, PlayerLocation, AiLocation);
+	auto IndirectResult = MonolithLevelDesignAcoustics::FindIndirectNavmeshPath(World, PlayerLocation, AiLocation);
 	if (IndirectResult.bFound)
 	{
 		bIndirectFound = true;
@@ -1259,7 +1259,7 @@ FMonolithActionResult FMonolithMeshAudioActions::CanAiHearFrom(const TSharedPtr<
 // 9. get_stealth_map
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::GetStealthMap(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::GetStealthMap(const TSharedPtr<FJsonObject>& Params)
 {
 	FString VolumeName;
 	if (!Params->TryGetStringField(TEXT("volume_name"), VolumeName))
@@ -1325,7 +1325,7 @@ FMonolithActionResult FMonolithMeshAudioActions::GetStealthMap(const TSharedPtr<
 					Surface = Hit.PhysMaterial->SurfaceType;
 				}
 
-				auto Props = MonolithMeshAcoustics::GetPropertiesForSurface(Surface);
+				auto Props = MonolithLevelDesignAcoustics::GetPropertiesForSurface(Surface);
 				float DetectionRadius = AiHearingRange * Props.FootstepLoudness;
 
 				auto CellObj = MakeShared<FJsonObject>();
@@ -1353,7 +1353,7 @@ FMonolithActionResult FMonolithMeshAudioActions::GetStealthMap(const TSharedPtr<
 // 10. find_quiet_path
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::FindQuietPath(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::FindQuietPath(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Start, End;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("start"), Start))
@@ -1407,7 +1407,7 @@ FMonolithActionResult FMonolithMeshAudioActions::FindQuietPath(const TSharedPtr<
 				{
 					Surface = Hit.PhysMaterial->SurfaceType;
 				}
-				auto Props = MonolithMeshAcoustics::GetPropertiesForSurface(Surface);
+				auto Props = MonolithLevelDesignAcoustics::GetPropertiesForSurface(Surface);
 				TotalLoudness += Props.FootstepLoudness;
 				Samples++;
 			}
@@ -1435,7 +1435,7 @@ FMonolithActionResult FMonolithMeshAudioActions::FindQuietPath(const TSharedPtr<
 			{
 				Surface = Hit.PhysMaterial->SurfaceType;
 			}
-			auto Props = MonolithMeshAcoustics::GetPropertiesForSurface(Surface);
+			auto Props = MonolithLevelDesignAcoustics::GetPropertiesForSurface(Surface);
 			PtObj->SetStringField(TEXT("surface"), Props.SurfaceName);
 			PtObj->SetNumberField(TEXT("loudness"), Props.FootstepLoudness);
 		}
@@ -1464,7 +1464,7 @@ FMonolithActionResult FMonolithMeshAudioActions::FindQuietPath(const TSharedPtr<
 // 11. suggest_audio_volumes
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::SuggestAudioVolumes(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::SuggestAudioVolumes(const TSharedPtr<FJsonObject>& Params)
 {
 	FString VolumeName;
 	if (!Params->TryGetStringField(TEXT("volume_name"), VolumeName))
@@ -1524,7 +1524,7 @@ FMonolithActionResult FMonolithMeshAudioActions::SuggestAudioVolumes(const TShar
 			{
 				Surface = Hit.PhysMaterial->SurfaceType;
 			}
-			auto Props = MonolithMeshAcoustics::GetPropertiesForSurface(Surface);
+			auto Props = MonolithLevelDesignAcoustics::GetPropertiesForSurface(Surface);
 			MaterialHits.FindOrAdd(Props.SurfaceName)++;
 			HitCount++;
 		}
@@ -1538,12 +1538,12 @@ FMonolithActionResult FMonolithMeshAudioActions::SuggestAudioVolumes(const TShar
 		float Fraction = (float)Pair.Value / FMath::Max(HitCount, 1);
 		MaterialFractions.Add(Pair.Key, Fraction);
 		float AreaM2 = BoxSurfaceAreaM2 * Fraction;
-		auto Props = MonolithMeshAcoustics::GetPropertiesForName(Pair.Key);
+		auto Props = MonolithLevelDesignAcoustics::GetPropertiesForName(Pair.Key);
 		TotalAbsorption += AreaM2 * Props.Absorption;
 	}
 
-	float RT60 = MonolithMeshAcoustics::ComputeSabineRT60(VolumeM3, TotalAbsorption);
-	auto Suggestion = MonolithMeshAcoustics::SuggestReverbSettings(RT60, MaterialFractions);
+	float RT60 = MonolithLevelDesignAcoustics::ComputeSabineRT60(VolumeM3, TotalAbsorption);
+	auto Suggestion = MonolithLevelDesignAcoustics::SuggestReverbSettings(RT60, MaterialFractions);
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("volume_name"), VolumeName);
@@ -1584,7 +1584,7 @@ FMonolithActionResult FMonolithMeshAudioActions::SuggestAudioVolumes(const TShar
 // 12. create_audio_volume
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::CreateAudioVolume(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::CreateAudioVolume(const TSharedPtr<FJsonObject>& Params)
 {
 	FString VolumeName;
 	if (!Params->TryGetStringField(TEXT("volume_name"), VolumeName))
@@ -1657,7 +1657,7 @@ FMonolithActionResult FMonolithMeshAudioActions::CreateAudioVolume(const TShared
 // 13. set_surface_type
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::SetSurfaceType(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::SetSurfaceType(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ActorName;
 	if (!Params->TryGetStringField(TEXT("actor_name"), ActorName))
@@ -1738,7 +1738,7 @@ FMonolithActionResult FMonolithMeshAudioActions::SetSurfaceType(const TSharedPtr
 // 14. create_surface_datatable
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAudioActions::CreateSurfaceDataTable(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignAudioActions::CreateSurfaceDataTable(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Template = TEXT("horror_default");
 	Params->TryGetStringField(TEXT("template"), Template);
@@ -1782,7 +1782,7 @@ FMonolithActionResult FMonolithMeshAudioActions::CreateSurfaceDataTable(const TS
 	UPhysicsSettings* PhysSettingsMutable = GetMutableDefault<UPhysicsSettings>();
 	PhysSettingsMutable->Modify();
 
-	auto Defaults = MonolithMeshAcoustics::GetHardcodedDefaults();
+	auto Defaults = MonolithLevelDesignAcoustics::GetHardcodedDefaults();
 	int32 SurfacesRegistered = 0;
 
 	// Map of surface names to their intended EPhysicalSurface values

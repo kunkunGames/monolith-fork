@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
-#include "MonolithMeshAcoustics.generated.h"
+#include "MonolithLevelDesignAcoustics.generated.h"
 
 /**
  * Row struct for the surface acoustics DataTable.
@@ -39,7 +39,7 @@ struct FAcousticSurfaceRow : public FTableRowBase
  * Falls back to hardcoded defaults if no table exists.
  * Coefficients calibrated from Steam Audio reference data (not a runtime dependency).
  */
-namespace MonolithMeshAcoustics
+namespace MonolithLevelDesignAcoustics
 {
 	// ========================================================================
 	// Acoustic Surface Properties

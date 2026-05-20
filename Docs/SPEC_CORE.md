@@ -35,21 +35,21 @@ Monolith is a unified Unreal Engine editor plugin that consolidates 9 separate M
 ```
 Monolith.uplugin
   MonolithCore          — HTTP server (bind retry with port probe, Restart()), tool registry, discovery, policy-gated action execution metadata/transactions/post-edit validators, settings, auto-updater
-  MonolithBlueprint     — Blueprint inspection, variable/component/graph CRUD, node operations, compile, spawn (89 actions)
+  MonolithBlueprint     — Blueprint inspection, variable/component/graph CRUD, node operations, compile, spawn (100 actions)
   MonolithMaterial      — Material inspection + graph editing + CRUD + function suite + tiling quality + texture preview (63 material actions)
   MonolithPaper2D       — Optional Paper2D AssetRegistry discovery for sprites, flipbooks, tile sets, and tile maps (3 actions)
-  MonolithAnimation     — Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP/ControlRig write, layout (125 actions)
+  MonolithAnimation     — Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP/ControlRig write, layout (135 actions)
   MonolithLevelSequence — Level Sequence bindings, Director Blueprint/event wiring, saved replay metadata, and reflection-only Sequencer Anim Mixer read-side probes (13 actions; no hard dependency on UE 5.8 MovieSceneAnimMixer)
   MonolithNiagara       — Niagara particle systems, HLSL module/function creation, DI config, event handlers, sim stages, NPC, effect types, scalability, layout (109 actions)
-  MonolithEditor        — Build triggers, live compile, log capture, compile output, crash context, scene capture, texture import, flipbook stitching, asset deletion, viewport info, blank-map factory + module status (Phase J F8), automation test list/run, Python escape-hatch (`run_python`), map swap (`load_level`), selection inspection, crash breadcrumbs, PIE control, console commands (36 actions)
-  MonolithConfig        — Config/INI resolution and search (6 actions)
-  MonolithIndex         — SQLite FTS5 deep project indexer, 18 internal indexers (incl. v0.14.10 [Unreleased] `FMetaSoundIndexer` from PR #18 by @alakangas — conditional on `WITH_METASOUND`) (7 MCP actions)
-  MonolithSource        — Engine source + API lookup, auto-reindex on hot-reload (Phase J F17) (11 actions)
+  MonolithEditor        — Build triggers, live compile, log capture, compile output, crash context, scene capture, texture import, flipbook stitching, asset deletion, viewport info, blank-map factory + module status (Phase J F8), automation test list/run, Python escape-hatch (`run_python`), map swap (`load_level`), selection inspection, crash breadcrumbs, PIE control, console commands (57 actions)
+  MonolithConfig        — Config/INI resolution and localization/StringTable workflows (20 actions: 10 `config`, 10 `localization`)
+  MonolithIndex         — SQLite FTS5 deep project indexer, 18 internal indexers (incl. v0.14.10 [Unreleased] `FMetaSoundIndexer` from PR #18 by @alakangas — conditional on `WITH_METASOUND`) (32 actions: 19 `project`, 13 `collection`)
+  MonolithSource        — Engine source + API lookup, bridge helpers, auto-reindex on hot-reload (Phase J F17) (32 actions: 27 `source`, 5 `bridge`)
   MonolithUI            — Widget blueprint CRUD + slot/template/styling, animation v1 (deprecated) + v2 (hoisted), settings scaffolding, accessibility, UISpec build/dump/schema, EffectSurface sub-bag actions (reflective optional-provider probe, decoupled 2026-04-27), CommonUI categories A–I, Type Registry diagnostic, Style Service diagnostic. (66 always-on + 51 CommonUI = 117 module-owned + 4 GAS UI binding aliases registered cross-namespace). CommonUI actions conditional on #if WITH_COMMONUI. EffectSurface actions return -32010 ErrOptionalDepUnavailable when the optional EffectSurface provider is absent (see specs/SPEC_MonolithUI.md § "Error Contract"). Architecture expansion Phase A–L landed 2026-04-26 (Spec Builder, Type Registry, EffectSurface, Style Service, hoisted Design Import verbs)
   MonolithSlate         — Live editor Slate window/widget inspection under `slate` (1 always-on status + 5 opt-in read-only inspection actions, no SlateInspectorToolset dependency)
-  MonolithMesh          — Static mesh inspection, GeometryScript ops, validation, mesh performance, proxy/HLOD, cache/handle, prefab/prop-kit, tech-art mesh workflows (66 actions)
-  MonolithScene         — Editor-world actor CRUD, spatial queries, lighting/audio/decal/metadata helpers (65 actions)
-  MonolithLevelDesign   — Horror/encounter/accessibility analysis, room/acoustic/genre presets, framing, co-op balance (61 actions)
+  MonolithMesh          — Static mesh inspection, GeometryScript ops, validation, mesh performance, proxy/HLOD, cache/handle, prop-kit, tech-art mesh workflows (70 actions)
+  MonolithScene         — Editor-world actor CRUD, spatial queries, lighting/audio/decal/metadata helpers (76 actions)
+  MonolithLevelDesign   — Horror/encounter/accessibility analysis, room/acoustic/genre presets, framing, co-op balance (43 actions)
   MonolithWorldGen      — Blockout, procedural structures/terrain, replacement workflows, optional town-generation workflows (63 actions)
   MonolithModelGen      — Generated-model provider, job, import, and provenance workflows (7 actions)
   MonolithInterchange   — Normalized import/export validation, guarded import mutation, reimport metadata, reimport, and export workflows under `interchange` (16 actions)
@@ -59,9 +59,9 @@ Monolith.uplugin
   MonolithGameFeatures  — Optional Game Feature plugin inventory and GameFeatureData inspection under `gamefeatures` (1 always-on status + 4 opt-in inspection actions, no hard ToolsetRegistry dependency)
   MonolithPCG           — Optional PCG AssetRegistry/reflection discovery under the `pcg` namespace (4 actions, no hard PCG dependency)
   MonolithWater         — Optional Water/Landscape actor discovery under the `water` namespace (2 actions, no hard Water or Landscape dependency)
-  MonolithGAS           — Gameplay Ability System integration: abilities, attributes, effects, ASC, tags, cues, targets, input, inspection, scaffolding, UI attribute binding (135 actions: 131 GAS-namespace + 4 also aliased into `ui` namespace). Conditional on #if WITH_GBA
+  MonolithGAS           — Gameplay Ability System integration: abilities, attributes, effects, ASC, tags, cues, targets, input, inspection, scaffolding, UI attribute binding (136 actions: 132 GAS/input registrations + 4 also aliased into `ui` namespace). Conditional on #if WITH_GBA
   MonolithComboGraph    — ComboGraph plugin integration: combo graph CRUD, node/edge management, effects, cues, ability scaffolding (13 actions). Conditional on #if WITH_COMBOGRAPH
-  MonolithAI            — AI asset manipulation: Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, AI Controllers, Perception, Navigation, Runtime/PIE, Scaffolds, Discovery, Advanced (221 actions, +2 from Phase J F8). Conditional on #if WITH_STATETREE, #if WITH_SMARTOBJECTS (required); #if WITH_MASSENTITY, #if WITH_ZONEGRAPH (optional)
+  MonolithAI            — AI asset manipulation: Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, AI Controllers, Perception, Navigation, Runtime/PIE, Scaffolds, Discovery, Advanced, Chooser (243 actions). Conditional on #if WITH_STATETREE, #if WITH_SMARTOBJECTS (required); #if WITH_MASSENTITY, #if WITH_ZONEGRAPH (optional)
   MonolithLogicDriver   — Logic Driver Pro integration: SM CRUD, graph read/write, node config, runtime/PIE, JSON spec, scaffolding, discovery, components, text graph (66 actions). Conditional on #if WITH_LOGICDRIVER
   MonolithAudio         — Audio asset creation, inspection, batch management, Sound Cue graph building, MetaSound graph building via Builder API, MetaSound document introspection (read-side), AI Perception sound binding, sine-tone test wave (Phase J F18) (98 actions: 86 baseline + 12 v0.14.10 [Unreleased] MetaSound document introspection by @alakangas). MetaSound features conditional on #if WITH_METASOUND
   MonolithAudioRuntime  — Runtime sub-module (Type: Runtime) holding `UMonolithSoundPerceptionUserData` + `UMonolithAudioPerceptionSubsystem` consumed by `audio::bind_sound_to_perception`. **Editor-only ship caveat** — Monolith does not currently ship to cooked game builds, so the runtime sub-module is not present at runtime in shipped Steam builds. See `COOKED_BUILD_TODO.md`. (0 MCP actions — provides runtime classes only)
@@ -165,18 +165,18 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.2 | MonolithBlueprint | [specs/SPEC_MonolithBlueprint.md](specs/SPEC_MonolithBlueprint.md) | Blueprint inspection, variable/component/graph CRUD, node ops, compile, spawn (89 actions) |
 | 3.3 | MonolithMaterial | [specs/SPEC_MonolithMaterial.md](specs/SPEC_MonolithMaterial.md) | Material inspection + graph editing + CRUD + function suite (63 material actions) |
 | 3.4 | MonolithPaper2D | [specs/SPEC_MonolithPaper2D.md](specs/SPEC_MonolithPaper2D.md) | Optional Paper2D AssetRegistry discovery (3 actions, no hard Paper2D dependency) |
-| 3.5 | MonolithAnimation | [specs/SPEC_MonolithAnimation.md](specs/SPEC_MonolithAnimation.md) | Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP write, ControlRig (125 actions) |
+| 3.5 | MonolithAnimation | [specs/SPEC_MonolithAnimation.md](specs/SPEC_MonolithAnimation.md) | Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP write, ControlRig (135 actions) |
 | 3.6 | MonolithLevelSequence | [specs/SPEC_MonolithLevelSequence.md](specs/SPEC_MonolithLevelSequence.md) | Level Sequence bindings, Director Blueprint/event wiring, saved replay metadata, optional Sequencer Anim Mixer read-only probes (13 actions) |
 | 3.7 | MonolithNiagara | [specs/SPEC_MonolithNiagara.md](specs/SPEC_MonolithNiagara.md) | Niagara particle systems, HLSL module/function, DI config, event handlers, sim stages, layout (109 actions) |
-| 3.8 | MonolithEditor | [specs/SPEC_MonolithEditor.md](specs/SPEC_MonolithEditor.md) | Build triggers, live compile, log capture, crash context, scene capture, selection, PIE/console control (36 actions) |
-| 3.9 | MonolithConfig | [specs/SPEC_MonolithConfig.md](specs/SPEC_MonolithConfig.md) | Config/INI resolution and search (6 actions) |
-| 3.10 | MonolithIndex | [specs/SPEC_MonolithIndex.md](specs/SPEC_MonolithIndex.md) | SQLite FTS5 deep project indexer (7 MCP actions, 18 internal indexers incl. v0.14.10 [Unreleased] `FMetaSoundIndexer` from PR #18 by @alakangas) |
+| 3.8 | MonolithEditor | [specs/SPEC_MonolithEditor.md](specs/SPEC_MonolithEditor.md) | Build triggers, live compile, log capture, crash context, scene capture, selection, PIE/console control (57 actions) |
+| 3.9 | MonolithConfig | [specs/SPEC_MonolithConfig.md](specs/SPEC_MonolithConfig.md) | Config/INI resolution plus localization/StringTable workflows (20 actions) |
+| 3.10 | MonolithIndex | [specs/SPEC_MonolithIndex.md](specs/SPEC_MonolithIndex.md) | SQLite FTS5 deep project indexer (32 actions: 19 project, 13 collection; 18 internal indexers incl. v0.14.10 [Unreleased] `FMetaSoundIndexer` from PR #18 by @alakangas) |
 | 3.11 | MonolithSource | [specs/SPEC_MonolithSource.md](specs/SPEC_MonolithSource.md) | Engine source + API lookup, CRG graph/review actions, bridge helpers (32 actions) |
 | 3.12 | MonolithUI | [specs/SPEC_MonolithUI.md](specs/SPEC_MonolithUI.md) | Widget blueprint CRUD, slot/template/styling, animation v1+v2, bindings, settings/accessibility scaffolds, **Spec Builder + Type Registry + EffectSurface + Style Service** (Phase A–L expansion 2026-04-26), CommonUI categories A–I. **117 module-owned actions** (66 always-on + 51 CommonUI under `WITH_COMMONUI`) + 4 GAS UI binding aliases |
 | 3.13 | MonolithSlate | [specs/SPEC_MonolithSlate.md](specs/SPEC_MonolithSlate.md) | Live editor Slate window/widget inspection (1 always-on status + 5 opt-in read-only inspection actions, no SlateInspectorToolset dependency) |
-| 3.14 | MonolithMesh | [specs/SPEC_MonolithMesh.md](specs/SPEC_MonolithMesh.md) | Static mesh inspection/operations/validation/performance/tech-art workflows (66 actions) |
-| 3.14a | MonolithScene | [specs/SPEC_MonolithScene.md](specs/SPEC_MonolithScene.md) | Editor-world actor CRUD, spatial queries, lighting/audio/decal/metadata helpers (65 actions) |
-| 3.14b | MonolithLevelDesign | [specs/SPEC_MonolithLevelDesign.md](specs/SPEC_MonolithLevelDesign.md) | Horror/encounter/accessibility analysis, framing, monster reveal, co-op balance (61 actions) |
+| 3.14 | MonolithMesh | [specs/SPEC_MonolithMesh.md](specs/SPEC_MonolithMesh.md) | Static mesh inspection/operations/validation/performance/tech-art workflows (70 actions) |
+| 3.14a | MonolithScene | [specs/SPEC_MonolithScene.md](specs/SPEC_MonolithScene.md) | Editor-world actor CRUD, spatial queries, lighting/audio/decal/metadata helpers (76 actions) |
+| 3.14b | MonolithLevelDesign | [specs/SPEC_MonolithLevelDesign.md](specs/SPEC_MonolithLevelDesign.md) | Horror/encounter/accessibility analysis, framing, monster reveal, co-op balance (43 actions) |
 | 3.14c | MonolithWorldGen | [specs/SPEC_MonolithWorldGen.md](specs/SPEC_MonolithWorldGen.md) | Blockout, procedural structures/terrain, replacement, optional town-generation workflows (63 actions) |
 | 3.14d | MonolithModelGen | [specs/SPEC_MonolithModelGen.md](specs/SPEC_MonolithModelGen.md) | Generated-model provider, job, import, and provenance workflows (7 actions) |
 | 3.15 | MonolithInterchange | [specs/SPEC_MonolithInterchange.md](specs/SPEC_MonolithInterchange.md) | Normalized import/export validation and guarded import/reimport/export workflows (16 actions) |
@@ -187,7 +187,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.20 | MonolithPCG | [specs/SPEC_MonolithPCG.md](specs/SPEC_MonolithPCG.md) | Optional PCG AssetRegistry/reflection discovery (4 actions, no hard PCG dependency) |
 | 3.21 | MonolithWater | [specs/SPEC_MonolithWater.md](specs/SPEC_MonolithWater.md) | Optional Water/Landscape actor discovery (2 actions, no hard Water or Landscape dependency) |
 | 3.22 | MonolithBABridge | [specs/SPEC_MonolithBABridge.md](specs/SPEC_MonolithBABridge.md) | IModularFeatures bridge for Blueprint Assist (0 MCP actions, integration only) |
-| 3.23 | MonolithGAS | [specs/SPEC_MonolithGAS.md](specs/SPEC_MonolithGAS.md) | Gameplay Ability System integration (135 actions: 131 GAS + 4 UI binding aliased into `ui::`, WITH_GBA) |
+| 3.23 | MonolithGAS | [specs/SPEC_MonolithGAS.md](specs/SPEC_MonolithGAS.md) | Gameplay Ability System integration (136 actions including 4 UI binding aliases, WITH_GBA) |
 | 3.24 | MonolithComboGraph | [specs/SPEC_MonolithComboGraph.md](specs/SPEC_MonolithComboGraph.md) | ComboGraph integration (13 actions, WITH_COMBOGRAPH) |
 | 3.25 | MonolithLogicDriver | [specs/SPEC_MonolithLogicDriver.md](specs/SPEC_MonolithLogicDriver.md) | Logic Driver Pro integration (66 actions, WITH_LOGICDRIVER) |
 | 3.26 | MonolithAI | [specs/SPEC_MonolithAI.md](specs/SPEC_MonolithAI.md) | Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, Perception, Nav (221 actions, +2 in Phase J F8) |

@@ -13,7 +13,7 @@
  * Horror AI (4): can_ai_hear_from, get_stealth_map, find_quiet_path, suggest_audio_volumes
  * Write (3): create_audio_volume, set_surface_type, create_surface_datatable
  */
-class MONOLITHLEVELDESIGN_API FMonolithMeshAudioActions
+class MONOLITHLEVELDESIGN_API FMonolithLevelDesignAudioActions
 {
 public:
 	/** Register all 14 audio actions with the tool registry */

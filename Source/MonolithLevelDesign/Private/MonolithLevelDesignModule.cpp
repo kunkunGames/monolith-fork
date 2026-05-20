@@ -2,13 +2,13 @@
 
 #include "MonolithToolRegistry.h"
 #include "MonolithSettings.h"
-#include "MonolithMeshHorrorActions.h"
-#include "MonolithMeshHorrorDesignActions.h"
-#include "MonolithMeshEncounterActions.h"
-#include "MonolithMeshLevelDesignActions.h"
-#include "MonolithMeshAdvancedLevelActions.h"
-#include "MonolithMeshAccessibilityActions.h"
-#include "MonolithMeshAudioActions.h"
+#include "MonolithLevelDesignHorrorActions.h"
+#include "MonolithLevelDesignHorrorDesignActions.h"
+#include "MonolithLevelDesignEncounterActions.h"
+#include "MonolithLevelDesignEditingActions.h"
+#include "MonolithLevelDesignPlacementActions.h"
+#include "MonolithLevelDesignAccessibilityActions.h"
+#include "MonolithLevelDesignAudioActions.h"
 #include "MonolithLevelDesignQualityActions.h"
 
 
@@ -25,18 +25,21 @@ void FMonolithLevelDesignModule::StartupModule()
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 	Registry.RegisterOwnedActions(TEXT("MonolithLevelDesign"), [](FMonolithToolRegistry& OwnedRegistry)
 	{
-		FMonolithMeshHorrorActions::RegisterActions(OwnedRegistry);
-		FMonolithMeshHorrorDesignActions::RegisterActions(OwnedRegistry);
-		FMonolithMeshEncounterActions::RegisterActions(OwnedRegistry);
-		FMonolithMeshLevelDesignActions::RegisterActions(OwnedRegistry);
-		FMonolithMeshAdvancedLevelActions::RegisterActions(OwnedRegistry);
-		FMonolithMeshAccessibilityActions::RegisterActions(OwnedRegistry);
-		FMonolithMeshAudioActions::RegisterActions(OwnedRegistry);
+		FMonolithLevelDesignHorrorActions::RegisterActions(OwnedRegistry);
+		FMonolithLevelDesignHorrorDesignActions::RegisterActions(OwnedRegistry);
+		FMonolithLevelDesignEncounterActions::RegisterActions(OwnedRegistry);
+		FMonolithLevelDesignEditingActions::RegisterActions(OwnedRegistry);
+		FMonolithLevelDesignPlacementActions::RegisterActions(OwnedRegistry);
+		FMonolithLevelDesignAccessibilityActions::RegisterActions(OwnedRegistry);
+		FMonolithLevelDesignAudioActions::RegisterActions(OwnedRegistry);
 		FMonolithLevelDesignQualityActions::RegisterActions(OwnedRegistry);
 	});
 
-	UE_LOG(LogMonolithLevelDesign, Log, TEXT("Monolith — MonolithLevelDesign module loaded (%d leveldesign actions)"),
-		Registry.GetNamespaceActionCount(TEXT("leveldesign")));
+	UE_LOG(LogMonolithLevelDesign, Log, TEXT("Monolith — MonolithLevelDesign module loaded (namespace totals: %d leveldesign, %d scene, %d mesh, %d level_instance actions)"),
+		Registry.GetNamespaceActionCount(TEXT("leveldesign")),
+		Registry.GetNamespaceActionCount(TEXT("scene")),
+		Registry.GetNamespaceActionCount(TEXT("mesh")),
+		Registry.GetNamespaceActionCount(TEXT("level_instance")));
 }
 
 void FMonolithLevelDesignModule::ShutdownModule()

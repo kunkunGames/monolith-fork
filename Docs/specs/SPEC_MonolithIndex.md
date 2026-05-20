@@ -16,7 +16,7 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithIndexModule` | Registers 19 project actions |
+| `FMonolithIndexModule` | Registers 19 `project` actions and 13 `collection` actions through owner-scoped registration |
 | `FMonolithIndexDatabase` | RAII SQLite wrapper. 13 tables + 2 FTS5 + 6 triggers + 1 meta. DELETE journal mode, 64MB cache. Schema v2: `saved_hash` column (Blake3 `FIoHash` hex), `schema_version` meta key |
 | `FMonolithIndexReview` | CRG-inspired navigation/review over the existing `dependencies` graph plus rebuildable CRG projection/cache tables. Provides bounded BFS impact radius, read-only health, execute-gated FTS/CRG repair, cached/query-time risk scoring, changed-path impact detection, advisory unused-asset discovery, pre-merge gate aggregation, CRG snapshot/diff comparison, review-hotspot ranking, and review-context packaging. Uses only the public `FMonolithIndexDatabase` surface — the DB impl file is untouched (additive, REQ-009) |
 | `UMonolithIndexSubsystem` | UEditorSubsystem. 3-layer indexing (startup delta, live AR callbacks, full fallback). Hash-based startup catch-up. Live batched AR delegates on 2s timer. Deep asset indexing with game-thread batching. Batches every 100 assets. Progress notifications |
@@ -57,6 +57,24 @@
 | `diff_snapshots` | `before` (label/id), `after` (label/id or current), `limit` (100) | Read-only CRG projection diff. Accepts positional refs and `--before`/`--after` refs, including mixed `--before=<ref> <after-ref>` calls. Returns new/removed node and edge samples plus `summary_counts`; no cache rebuild or VCS shell-out |
 | `review_hotspots` | `kind` (all), `limit` (50), `min_lines` (100), `include_questions` (true) | Global review queue over fan-in/fan-out/risk/large asset graph signals with optional advisory questions |
 | `review_context` | `asset_path` (required), `direction` (both), `max_depth` (2), `max_results` (200), `detail_level` (minimal) | Token-efficient package: seed + impact + risk reasons + next actions; `minimal` omits full asset details |
+
+### Collection Actions (13 — namespace: "collection")
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `list_collections` | `scope`, `type`, `limit`, `offset` | List Content Browser collections |
+| `get_collection` | `name`, `scope` | Get collection metadata |
+| `create_collection` | `name`, `scope`, `type`, `query`, `color`, `confirm` | Create a static or dynamic collection |
+| `delete_collection` | `name`, `scope`, `force`, `confirm` | Delete a collection; non-empty collections require `force=true` |
+| `add_assets` | `name`, `scope`, `asset_paths`, `confirm` | Add assets to a static collection |
+| `remove_assets` | `name`, `scope`, `asset_paths`, `confirm` | Remove assets from a static collection |
+| `list_assets` | `name`, `scope`, `limit`, `offset` | List collection asset paths |
+| `contains_asset` | `name`, `scope`, `asset_path` | Check whether a collection contains an asset |
+| `set_dynamic_query` | `name`, `scope`, `query`, `confirm` | Set query text for a dynamic collection |
+| `get_dynamic_query` | `name`, `scope` | Read query text from a dynamic collection |
+| `set_collection_color` | `name`, `scope`, `color`, `confirm` | Set collection color |
+| `validate_collection_name` | `name`, `scope` | Validate a collection name |
+| `create_unique_collection_name` | `base_name`, `scope` | Create an available collection name |
 
 ### Database Schema
 

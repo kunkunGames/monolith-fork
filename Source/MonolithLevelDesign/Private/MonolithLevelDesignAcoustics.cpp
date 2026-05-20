@@ -1,4 +1,4 @@
-#include "MonolithMeshAcoustics.h"
+#include "MonolithLevelDesignAcoustics.h"
 #include "MonolithSettings.h"
 
 #include "Engine/World.h"
@@ -57,7 +57,7 @@ namespace
 	}
 
 	/** Lookup by row name in the DataTable */
-	bool TryGetFromTable(const FString& RowName, MonolithMeshAcoustics::FAcousticProperties& Out)
+	bool TryGetFromTable(const FString& RowName, MonolithLevelDesignAcoustics::FAcousticProperties& Out)
 	{
 		UDataTable* Table = TryLoadAcousticsTable();
 		if (!Table)
@@ -108,7 +108,7 @@ namespace
 // Surface property lookup
 // ============================================================================
 
-MonolithMeshAcoustics::FAcousticProperties MonolithMeshAcoustics::GetPropertiesForSurface(EPhysicalSurface SurfaceType)
+MonolithLevelDesignAcoustics::FAcousticProperties MonolithLevelDesignAcoustics::GetPropertiesForSurface(EPhysicalSurface SurfaceType)
 {
 	// Step 1: Get the name for this surface type
 	FString Name = GetSurfaceTypeName(SurfaceType);
@@ -137,7 +137,7 @@ MonolithMeshAcoustics::FAcousticProperties MonolithMeshAcoustics::GetPropertiesF
 	return GetDefaultProperties();
 }
 
-MonolithMeshAcoustics::FAcousticProperties MonolithMeshAcoustics::GetPropertiesForName(const FString& SurfaceName)
+MonolithLevelDesignAcoustics::FAcousticProperties MonolithLevelDesignAcoustics::GetPropertiesForName(const FString& SurfaceName)
 {
 	// Try DataTable first
 	FAcousticProperties Props;
@@ -162,7 +162,7 @@ MonolithMeshAcoustics::FAcousticProperties MonolithMeshAcoustics::GetPropertiesF
 	return GetDefaultProperties();
 }
 
-MonolithMeshAcoustics::FAcousticProperties MonolithMeshAcoustics::GetDefaultProperties()
+MonolithLevelDesignAcoustics::FAcousticProperties MonolithLevelDesignAcoustics::GetDefaultProperties()
 {
 	FAcousticProperties Props;
 	Props.Absorption = 0.02f;
@@ -172,7 +172,7 @@ MonolithMeshAcoustics::FAcousticProperties MonolithMeshAcoustics::GetDefaultProp
 	return Props;
 }
 
-TMap<FString, MonolithMeshAcoustics::FAcousticProperties> MonolithMeshAcoustics::GetHardcodedDefaults()
+TMap<FString, MonolithLevelDesignAcoustics::FAcousticProperties> MonolithLevelDesignAcoustics::GetHardcodedDefaults()
 {
 	TMap<FString, FAcousticProperties> Out;
 	for (int32 i = 0; i < GNumDefaultSurfaces; ++i)
@@ -191,7 +191,7 @@ TMap<FString, MonolithMeshAcoustics::FAcousticProperties> MonolithMeshAcoustics:
 // Sabine RT60
 // ============================================================================
 
-const TCHAR* MonolithMeshAcoustics::AcousticTypeToString(ERoomAcousticType Type)
+const TCHAR* MonolithLevelDesignAcoustics::AcousticTypeToString(ERoomAcousticType Type)
 {
 	switch (Type)
 	{
@@ -203,7 +203,7 @@ const TCHAR* MonolithMeshAcoustics::AcousticTypeToString(ERoomAcousticType Type)
 	}
 }
 
-float MonolithMeshAcoustics::ComputeSabineRT60(float VolumeM3, float TotalAbsorption)
+float MonolithLevelDesignAcoustics::ComputeSabineRT60(float VolumeM3, float TotalAbsorption)
 {
 	if (TotalAbsorption <= SMALL_NUMBER)
 	{
@@ -212,7 +212,7 @@ float MonolithMeshAcoustics::ComputeSabineRT60(float VolumeM3, float TotalAbsorp
 	return 0.161f * VolumeM3 / TotalAbsorption;
 }
 
-MonolithMeshAcoustics::ERoomAcousticType MonolithMeshAcoustics::ClassifyRT60(float RT60Seconds)
+MonolithLevelDesignAcoustics::ERoomAcousticType MonolithLevelDesignAcoustics::ClassifyRT60(float RT60Seconds)
 {
 	if (RT60Seconds < 0.3f)  return ERoomAcousticType::Dead;
 	if (RT60Seconds < 0.6f)  return ERoomAcousticType::Dry;
@@ -224,7 +224,7 @@ MonolithMeshAcoustics::ERoomAcousticType MonolithMeshAcoustics::ClassifyRT60(flo
 // Attenuation & Propagation
 // ============================================================================
 
-float MonolithMeshAcoustics::ComputeDistanceAttenuation(float Distance, float RefDist)
+float MonolithLevelDesignAcoustics::ComputeDistanceAttenuation(float Distance, float RefDist)
 {
 	if (Distance <= RefDist)
 	{
@@ -234,13 +234,13 @@ float MonolithMeshAcoustics::ComputeDistanceAttenuation(float Distance, float Re
 	return FMath::Clamp((RefDist * RefDist) / (Distance * Distance), 0.0f, 1.0f);
 }
 
-float MonolithMeshAcoustics::DbToLinear(float dB)
+float MonolithLevelDesignAcoustics::DbToLinear(float dB)
 {
 	// factor = 10^(-dB/20)
 	return FMath::Pow(10.0f, -dB / 20.0f);
 }
 
-float MonolithMeshAcoustics::TraceOcclusion(UWorld* World, const FVector& From, const FVector& To,
+float MonolithLevelDesignAcoustics::TraceOcclusion(UWorld* World, const FVector& From, const FVector& To,
 	int32& OutWallCount, float& OutTotalLossdB)
 {
 	OutWallCount = 0;
@@ -282,7 +282,7 @@ float MonolithMeshAcoustics::TraceOcclusion(UWorld* World, const FVector& From, 
 // Image-Source Reflection
 // ============================================================================
 
-TArray<MonolithMeshAcoustics::FSoundPath> MonolithMeshAcoustics::FindSoundPaths(
+TArray<MonolithLevelDesignAcoustics::FSoundPath> MonolithLevelDesignAcoustics::FindSoundPaths(
 	UWorld* World, const FVector& From, const FVector& To,
 	int32 MaxBounces, int32 CandidateSurfaces)
 {
@@ -431,7 +431,7 @@ TArray<MonolithMeshAcoustics::FSoundPath> MonolithMeshAcoustics::FindSoundPaths(
 // Reverb Suggestion
 // ============================================================================
 
-MonolithMeshAcoustics::FReverbSuggestion MonolithMeshAcoustics::SuggestReverbSettings(
+MonolithLevelDesignAcoustics::FReverbSuggestion MonolithLevelDesignAcoustics::SuggestReverbSettings(
 	float RT60, const TMap<FString, float>& MaterialAreaFractions)
 {
 	FReverbSuggestion Suggestion;
@@ -511,7 +511,7 @@ MonolithMeshAcoustics::FReverbSuggestion MonolithMeshAcoustics::SuggestReverbSet
 // Navmesh Indirect Path (doorway propagation)
 // ============================================================================
 
-MonolithMeshAcoustics::FIndirectPathResult MonolithMeshAcoustics::FindIndirectNavmeshPath(
+MonolithLevelDesignAcoustics::FIndirectPathResult MonolithLevelDesignAcoustics::FindIndirectNavmeshPath(
 	UWorld* World, const FVector& From, const FVector& To)
 {
 	FIndirectPathResult Result;

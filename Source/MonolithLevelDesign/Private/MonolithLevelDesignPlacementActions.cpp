@@ -1,4 +1,4 @@
-﻿#include "MonolithMeshAdvancedLevelActions.h"
+#include "MonolithLevelDesignPlacementActions.h"
 #include "MonolithMeshUtils.h"
 #include "MonolithMeshAnalysis.h"
 #include "MonolithToolRegistry.h"
@@ -42,11 +42,11 @@
 namespace AdvancedLevelHelpers
 {
 	/** Scoped undo transaction */
-	struct FScopedMeshTransaction
+	struct FScopedLevelDesignTransaction
 	{
 		bool bOwnsTransaction;
 
-		FScopedMeshTransaction(const FText& Description)
+		FScopedLevelDesignTransaction(const FText& Description)
 			: bOwnsTransaction(true)
 		{
 			if (GEditor)
@@ -55,7 +55,7 @@ namespace AdvancedLevelHelpers
 			}
 		}
 
-		~FScopedMeshTransaction()
+		~FScopedLevelDesignTransaction()
 		{
 			if (bOwnsTransaction && GEditor)
 			{
@@ -150,12 +150,12 @@ namespace AdvancedLevelHelpers
 // Registration
 // ============================================================================
 
-void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& Registry)
+void FMonolithLevelDesignPlacementActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. manage_sublevel
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("manage_sublevel"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("manage_sublevel"),
 		TEXT("Create/load/unload streaming sublevels or move actors between levels. sub_action: create, add, remove, move_actors."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::ManageSublevel),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::ManageSublevel),
 		FParamSchemaBuilder()
 			.Required(TEXT("sub_action"), TEXT("string"), TEXT("Action: create, add, remove, move_actors"))
 			.Optional(TEXT("level_path"), TEXT("string"), TEXT("Level asset path (e.g. /Game/Maps/Sublevel_Basement). Required for create/add/remove."))
@@ -165,9 +165,9 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 2. place_blueprint_actor
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("place_blueprint_actor"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("place_blueprint_actor"),
 		TEXT("Spawn a Blueprint actor in the world with optional property configuration via reflection."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::PlaceBlueprintActor),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::PlaceBlueprintActor),
 		FParamSchemaBuilder()
 			.Required(TEXT("blueprint"), TEXT("string"), TEXT("Blueprint asset path (e.g. /Game/Blueprints/BP_Door)"))
 			.Required(TEXT("location"), TEXT("array"), TEXT("World location [x, y, z]"))
@@ -179,9 +179,9 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 3. place_spline
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("place_spline"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("place_spline"),
 		TEXT("Spawn an actor with a spline component. Optionally places mesh segments along the spline (pipes, cables, railings)."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::PlaceSpline),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::PlaceSpline),
 		FParamSchemaBuilder()
 			.Required(TEXT("points"), TEXT("array"), TEXT("Array of [x,y,z] spline points (minimum 2)"))
 			.Optional(TEXT("mesh_path"), TEXT("string"), TEXT("Static mesh path for spline mesh segments"))
@@ -194,10 +194,10 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 4. create_prefab
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("create_prefab"),
+	Registry.RegisterAction(TEXT("level_instance"), TEXT("create_prefab"),
 		TEXT("Create a Level Instance (prefab) from existing actors. WARNING: Source actors are MOVED into the new level. "
 			 "NOTE: This action triggers a Save As dialog which blocks MCP calls. For dialog-free prefab creation, use create_blueprint_prefab instead."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::CreatePrefab),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::CreatePrefab),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor_names"), TEXT("array"), TEXT("Actor names to include in the prefab"))
 			.Required(TEXT("save_path"), TEXT("string"), TEXT("Save path for the level (e.g. /Game/Prefabs/PF_DoorFrame)"))
@@ -205,10 +205,10 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 4b. create_blueprint_prefab (dialog-free alternative)
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("create_blueprint_prefab"),
+	Registry.RegisterAction(TEXT("level_instance"), TEXT("create_blueprint_prefab"),
 		TEXT("Create a Blueprint prefab from existing world actors. Harvests all components into a new Actor Blueprint's SCS. "
 			 "Dialog-free — safe for MCP/automation. Use place_blueprint_actor to spawn instances."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::CreateBlueprintPrefab),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::CreateBlueprintPrefab),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor_names"), TEXT("array"), TEXT("Actor names to include in the prefab"))
 			.Required(TEXT("save_path"), TEXT("string"), TEXT("Blueprint save path (e.g. /Game/Prefabs/BP_FurnitureSet)"))
@@ -217,9 +217,9 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 5. spawn_prefab
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("spawn_prefab"),
+	Registry.RegisterAction(TEXT("level_instance"), TEXT("spawn_prefab"),
 		TEXT("Spawn a Level Instance (prefab) at a location."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::SpawnPrefab),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::SpawnPrefab),
 		FParamSchemaBuilder()
 			.Required(TEXT("prefab_path"), TEXT("string"), TEXT("Level asset path (e.g. /Game/Prefabs/PF_DoorFrame)"))
 			.Required(TEXT("location"), TEXT("array"), TEXT("World location [x, y, z]"))
@@ -229,9 +229,9 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 6. randomize_transforms
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("randomize_transforms"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("randomize_transforms"),
 		TEXT("Apply random offset/rotation/scale variation to actors for an organic feel. Deterministic with seed."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::RandomizeTransforms),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::RandomizeTransforms),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor_names"), TEXT("array"), TEXT("Actor names to randomize"))
 			.Optional(TEXT("offset_range"), TEXT("array"), TEXT("Min/max offset in cm [min, max]"), TEXT("[0,0]"))
@@ -243,9 +243,9 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 7. get_level_actors
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("get_level_actors"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("get_level_actors"),
 		TEXT("Enumerate actors in the editor world with multi-filter AND logic. Returns name, class, location, mesh, sublevel, tags."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::GetLevelActors),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::GetLevelActors),
 		FParamSchemaBuilder()
 			.Optional(TEXT("class_filter"), TEXT("string"), TEXT("Filter by class name (e.g. StaticMeshActor)"))
 			.Optional(TEXT("tag_filter"), TEXT("string"), TEXT("Filter by actor tag"))
@@ -259,9 +259,9 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 			.Build());
 
 	// 8. measure_distance
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("measure_distance"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("measure_distance"),
 		TEXT("Measure distance between two actors or world points. Returns euclidean, horizontal, height difference, and optional navmesh path distance."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshAdvancedLevelActions::MeasureDistance),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::MeasureDistance),
 		FParamSchemaBuilder()
 			.Required(TEXT("from"), TEXT("any"), TEXT("Start: actor name (string) or [x,y,z] array"))
 			.Required(TEXT("to"), TEXT("any"), TEXT("End: actor name (string) or [x,y,z] array"))
@@ -274,7 +274,7 @@ void FMonolithMeshAdvancedLevelActions::RegisterActions(FMonolithToolRegistry& R
 // 1. manage_sublevel
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAdvancedLevelActions::ManageSublevel(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignPlacementActions::ManageSublevel(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SubAction;
 	if (!Params->TryGetStringField(TEXT("sub_action"), SubAction))
@@ -307,7 +307,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::ManageSublevel(const TS
 			StreamingClass = ULevelStreaming::StaticClass();
 		}
 
-		AdvancedLevelHelpers::FScopedMeshTransaction Transaction(NSLOCTEXT("Monolith", "CreateSublevel", "Monolith: Create Sublevel"));
+		AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(NSLOCTEXT("Monolith", "CreateSublevel", "Monolith: Create Sublevel"));
 
 		ULevelStreaming* NewLevel = UEditorLevelUtils::CreateNewStreamingLevelForWorld(
 			*World, StreamingClass, LevelPath, /*bMoveSelectedActorsIntoNewLevel=*/false);
@@ -335,7 +335,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::ManageSublevel(const TS
 			return FMonolithActionResult::Error(TEXT("Missing required param: level_path (for add)"));
 		}
 
-		AdvancedLevelHelpers::FScopedMeshTransaction Transaction(NSLOCTEXT("Monolith", "AddSublevel", "Monolith: Add Sublevel"));
+		AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(NSLOCTEXT("Monolith", "AddSublevel", "Monolith: Add Sublevel"));
 
 		TSubclassOf<ULevelStreaming> AddStreamingClass = ULevelStreamingDynamic::StaticClass();
 		ULevelStreaming* AddedLevel = UEditorLevelUtils::AddLevelToWorld(
@@ -385,7 +385,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::ManageSublevel(const TS
 			return FMonolithActionResult::Error(TEXT("Cannot remove the persistent level"));
 		}
 
-		AdvancedLevelHelpers::FScopedMeshTransaction Transaction(NSLOCTEXT("Monolith", "RemoveSublevel", "Monolith: Remove Sublevel"));
+		AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(NSLOCTEXT("Monolith", "RemoveSublevel", "Monolith: Remove Sublevel"));
 
 		UEditorLevelUtils::RemoveLevelFromWorld(FoundLevel->GetLoadedLevel());
 
@@ -443,7 +443,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::ManageSublevel(const TS
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Destination level not found: %s"), *DestLevel));
 		}
 
-		AdvancedLevelHelpers::FScopedMeshTransaction Transaction(NSLOCTEXT("Monolith", "MoveActorsToLevel", "Monolith: Move Actors to Level"));
+		AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(NSLOCTEXT("Monolith", "MoveActorsToLevel", "Monolith: Move Actors to Level"));
 
 		int32 MovedCount = UEditorLevelUtils::MoveActorsToLevel(Actors, DestLevelPtr);
 
@@ -463,7 +463,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::ManageSublevel(const TS
 // 2. place_blueprint_actor
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAdvancedLevelActions::PlaceBlueprintActor(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignPlacementActions::PlaceBlueprintActor(const TSharedPtr<FJsonObject>& Params)
 {
 	FString BlueprintPath;
 	if (!Params->TryGetStringField(TEXT("blueprint"), BlueprintPath))
@@ -515,7 +515,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::PlaceBlueprintActor(con
 		return FMonolithActionResult::Error(TEXT("No editor world available"));
 	}
 
-	AdvancedLevelHelpers::FScopedMeshTransaction Transaction(NSLOCTEXT("Monolith", "PlaceBPActor", "Monolith: Place Blueprint Actor"));
+	AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(NSLOCTEXT("Monolith", "PlaceBPActor", "Monolith: Place Blueprint Actor"));
 
 	FTransform SpawnTransform(Rotation.Quaternion(), Location);
 	AActor* NewActor = GEditor->AddActor(World->PersistentLevel, BPClass, SpawnTransform);
@@ -642,7 +642,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::PlaceBlueprintActor(con
 // 3. place_spline
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAdvancedLevelActions::PlaceSpline(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignPlacementActions::PlaceSpline(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* PointsJson = nullptr;
 	if (!Params->TryGetArrayField(TEXT("points"), PointsJson) || !PointsJson || PointsJson->Num() < 2)
@@ -724,7 +724,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::PlaceSpline(const TShar
 		return FMonolithActionResult::Error(TEXT("No editor world available"));
 	}
 
-	AdvancedLevelHelpers::FScopedMeshTransaction Transaction(NSLOCTEXT("Monolith", "PlaceSpline", "Monolith: Place Spline"));
+	AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(NSLOCTEXT("Monolith", "PlaceSpline", "Monolith: Place Spline"));
 
 	// Spawn a plain AActor
 	FActorSpawnParameters SpawnParams;
@@ -834,7 +834,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::PlaceSpline(const TShar
 // 4. create_prefab
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAdvancedLevelActions::CreatePrefab(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignPlacementActions::CreatePrefab(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* ActorNamesJson = nullptr;
 	if (!Params->TryGetArrayField(TEXT("actor_names"), ActorNamesJson) || !ActorNamesJson || ActorNamesJson->Num() == 0)
@@ -871,7 +871,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::CreatePrefab(const TSha
 		return FMonolithActionResult::Error(ResolveError);
 	}
 
-	AdvancedLevelHelpers::FScopedMeshTransaction Transaction(NSLOCTEXT("Monolith", "CreatePrefab", "Monolith: Create Prefab"));
+	AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(NSLOCTEXT("Monolith", "CreatePrefab", "Monolith: Create Prefab"));
 
 	// Determine type
 	ELevelInstanceCreationType CreationType = ELevelInstanceCreationType::LevelInstance;
@@ -926,7 +926,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::CreatePrefab(const TSha
 // 5. spawn_prefab
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAdvancedLevelActions::SpawnPrefab(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignPlacementActions::SpawnPrefab(const TSharedPtr<FJsonObject>& Params)
 {
 	FString PrefabPath;
 	if (!Params->TryGetStringField(TEXT("prefab_path"), PrefabPath))
@@ -962,7 +962,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::SpawnPrefab(const TShar
 		LongPackageName = PrefabPath; // Already a package path
 	}
 
-	AdvancedLevelHelpers::FScopedMeshTransaction Transaction(NSLOCTEXT("Monolith", "SpawnPrefab", "Monolith: Spawn Prefab"));
+	AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(NSLOCTEXT("Monolith", "SpawnPrefab", "Monolith: Spawn Prefab"));
 
 	// Spawn a LevelInstance actor via GEditor->AddActor
 	UClass* LIClass = ALevelInstance::StaticClass();
@@ -1007,7 +1007,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::SpawnPrefab(const TShar
 // 6. randomize_transforms
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAdvancedLevelActions::RandomizeTransforms(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignPlacementActions::RandomizeTransforms(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* ActorNamesJson = nullptr;
 	if (!Params->TryGetArrayField(TEXT("actor_names"), ActorNamesJson) || !ActorNamesJson || ActorNamesJson->Num() == 0)
@@ -1060,7 +1060,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::RandomizeTransforms(con
 		return FMonolithActionResult::Error(ResolveError);
 	}
 
-	AdvancedLevelHelpers::FScopedMeshTransaction Transaction(NSLOCTEXT("Monolith", "RandomizeTransforms", "Monolith: Randomize Transforms"));
+	AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(NSLOCTEXT("Monolith", "RandomizeTransforms", "Monolith: Randomize Transforms"));
 
 	FRandomStream Rng(Seed);
 	TArray<TSharedPtr<FJsonValue>> ActorResults;
@@ -1121,7 +1121,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::RandomizeTransforms(con
 // 7. get_level_actors
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAdvancedLevelActions::GetLevelActors(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignPlacementActions::GetLevelActors(const TSharedPtr<FJsonObject>& Params)
 {
 	UWorld* World = MonolithMeshUtils::GetEditorWorld();
 	if (!World)
@@ -1310,7 +1310,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::GetLevelActors(const TS
 // 8. measure_distance
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAdvancedLevelActions::MeasureDistance(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignPlacementActions::MeasureDistance(const TSharedPtr<FJsonObject>& Params)
 {
 	FString FromError, ToError;
 	FVector FromPoint, ToPoint;
@@ -1372,7 +1372,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::MeasureDistance(const T
 // 9. create_blueprint_prefab (dialog-free)
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshAdvancedLevelActions::CreateBlueprintPrefab(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignPlacementActions::CreateBlueprintPrefab(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* ActorNamesJson = nullptr;
 	if (!Params->TryGetArrayField(TEXT("actor_names"), ActorNamesJson) || !ActorNamesJson || ActorNamesJson->Num() == 0)
@@ -1411,7 +1411,7 @@ FMonolithActionResult FMonolithMeshAdvancedLevelActions::CreateBlueprintPrefab(c
 		return FMonolithActionResult::Error(TEXT("No valid actors resolved from actor_names"));
 	}
 
-	AdvancedLevelHelpers::FScopedMeshTransaction Transaction(
+	AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(
 		NSLOCTEXT("Monolith", "CreateBlueprintPrefab", "Monolith: Create Blueprint Prefab"));
 
 	// Create package (no dialog)

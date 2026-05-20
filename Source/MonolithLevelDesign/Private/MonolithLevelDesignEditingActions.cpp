@@ -1,4 +1,4 @@
-#include "MonolithMeshLevelDesignActions.h"
+#include "MonolithLevelDesignEditingActions.h"
 #include "MonolithMeshUtils.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
@@ -32,11 +32,11 @@
 namespace LevelDesignHelpers
 {
 	/** Scoped undo transaction */
-	struct FScopedMeshTransaction
+	struct FScopedLevelDesignTransaction
 	{
 		bool bOwnsTransaction;
 
-		FScopedMeshTransaction(const FText& Description)
+		FScopedLevelDesignTransaction(const FText& Description)
 			: bOwnsTransaction(true)
 		{
 			if (GEditor)
@@ -45,7 +45,7 @@ namespace LevelDesignHelpers
 			}
 		}
 
-		~FScopedMeshTransaction()
+		~FScopedLevelDesignTransaction()
 		{
 			if (bOwnsTransaction && GEditor)
 			{
@@ -193,11 +193,11 @@ namespace LevelDesignHelpers
 // Registration
 // ============================================================================
 
-void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Registry)
+void FMonolithLevelDesignEditingActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("place_light"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("place_light"),
 		TEXT("Spawn a light actor (point/spot/rect/directional) with full property configuration"),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::PlaceLight),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEditingActions::PlaceLight),
 		FParamSchemaBuilder()
 			.Required(TEXT("type"), TEXT("string"), TEXT("Light type: point, spot, rect, directional"))
 			.Required(TEXT("location"), TEXT("array"), TEXT("World location [x, y, z]"))
@@ -218,9 +218,9 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("mobility"), TEXT("string"), TEXT("Mobility: Static, Stationary, Movable"), TEXT("Stationary"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("set_light_properties"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("set_light_properties"),
 		TEXT("Modify properties on an existing light actor (intensity, color, shadows, temperature, cone angles, etc.)"),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::SetLightProperties),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEditingActions::SetLightProperties),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor_name"), TEXT("string"), TEXT("Light actor name or label"))
 			.Optional(TEXT("intensity"), TEXT("number"), TEXT("Light intensity"))
@@ -237,9 +237,9 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("mobility"), TEXT("string"), TEXT("Mobility: Static, Stationary, Movable"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("set_actor_material"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("set_actor_material"),
 		TEXT("Assign a material to an actor's mesh component by slot index or slot name. SetMaterial creates override array — setting slot 2 without 0-1 fills them with defaults."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::SetActorMaterial),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEditingActions::SetActorMaterial),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor_name"), TEXT("string"), TEXT("Actor name or label"))
 			.Required(TEXT("material"), TEXT("string"), TEXT("Material asset path (e.g. /Game/Materials/MI_Concrete)"))
@@ -248,9 +248,9 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("component_name"), TEXT("string"), TEXT("Specific component name (if actor has multiple mesh components)"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("swap_material_in_level"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("swap_material_in_level"),
 		TEXT("Replace all instances of material X with material Y across actors or entire level"),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::SwapMaterialInLevel),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEditingActions::SwapMaterialInLevel),
 		FParamSchemaBuilder()
 			.Required(TEXT("source_material"), TEXT("string"), TEXT("Source material asset path to find"))
 			.Required(TEXT("target_material"), TEXT("string"), TEXT("Target material asset path to replace with"))
@@ -258,9 +258,9 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("preview"), TEXT("boolean"), TEXT("If true, report what would change without modifying"), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_replace_mesh"),
+	Registry.RegisterAction(TEXT("mesh"), TEXT("find_replace_mesh"),
 		TEXT("Swap all instances of static mesh X with mesh Y. Essential for blockout-to-art pass."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::FindReplaceMesh),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEditingActions::FindReplaceMesh),
 		FParamSchemaBuilder()
 			.Required(TEXT("source_mesh"), TEXT("string"), TEXT("Source mesh asset path"))
 			.Required(TEXT("target_mesh"), TEXT("string"), TEXT("Target mesh asset path"))
@@ -269,17 +269,17 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("preview"), TEXT("boolean"), TEXT("If true, report without modifying"), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("set_lod_screen_sizes"),
+	Registry.RegisterAction(TEXT("mesh"), TEXT("set_lod_screen_sizes"),
 		TEXT("Set per-LOD screen size thresholds on a static mesh asset. Sizes must be monotonically decreasing."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::SetLodScreenSizes),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEditingActions::SetLodScreenSizes),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Static mesh asset path"))
 			.Required(TEXT("screen_sizes"), TEXT("array"), TEXT("Array of screen size floats per LOD (e.g. [1.0, 0.4, 0.15])"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("find_instancing_candidates"),
+	Registry.RegisterAction(TEXT("mesh"), TEXT("find_instancing_candidates"),
 		TEXT("Identify meshes used many times that could benefit from HISM conversion. Groups by mesh and material set."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::FindInstancingCandidates),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEditingActions::FindInstancingCandidates),
 		FParamSchemaBuilder()
 			.Optional(TEXT("min_count"), TEXT("integer"), TEXT("Minimum instance count to report"), TEXT("5"))
 			.Optional(TEXT("region_min"), TEXT("array"), TEXT("Region AABB minimum [x, y, z]"))
@@ -287,9 +287,9 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("include_materials"), TEXT("boolean"), TEXT("Include material override info in grouping"), TEXT("true"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("convert_to_hism"),
+	Registry.RegisterAction(TEXT("mesh"), TEXT("convert_to_hism"),
 		TEXT("Convert grouped StaticMeshActors into a single HISM actor. Deletes originals. Single undo transaction."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::ConvertToHism),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEditingActions::ConvertToHism),
 		FParamSchemaBuilder()
 			.Required(TEXT("mesh"), TEXT("string"), TEXT("Static mesh asset path for the HISM"))
 			.Required(TEXT("actors"), TEXT("array"), TEXT("Array of actor names to convert"))
@@ -298,9 +298,9 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("preserve_materials"), TEXT("boolean"), TEXT("Copy material overrides from first actor"), TEXT("true"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("leveldesign"), TEXT("get_actor_component_properties"),
+	Registry.RegisterAction(TEXT("scene"), TEXT("get_actor_component_properties"),
 		TEXT("Read arbitrary component properties via FProperty reflection. Returns typed values for any UPROPERTY."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshLevelDesignActions::GetActorComponentProperties),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEditingActions::GetActorComponentProperties),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor_name"), TEXT("string"), TEXT("Actor name or label"))
 			.Optional(TEXT("component_name"), TEXT("string"), TEXT("Specific component name (default: root component)"))
@@ -313,7 +313,7 @@ void FMonolithMeshLevelDesignActions::RegisterActions(FMonolithToolRegistry& Reg
 // Helper: Apply light properties from JSON
 // ============================================================================
 
-TArray<FString> FMonolithMeshLevelDesignActions::ApplyLightProperties(ULightComponent* LightComp, const TSharedPtr<FJsonObject>& Params)
+TArray<FString> FMonolithLevelDesignEditingActions::ApplyLightProperties(ULightComponent* LightComp, const TSharedPtr<FJsonObject>& Params)
 {
 	TArray<FString> PropsSet;
 
@@ -443,7 +443,7 @@ TArray<FString> FMonolithMeshLevelDesignActions::ApplyLightProperties(ULightComp
 // 1. place_light
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshLevelDesignActions::PlaceLight(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEditingActions::PlaceLight(const TSharedPtr<FJsonObject>& Params)
 {
 	FString TypeStr;
 	if (!Params->TryGetStringField(TEXT("type"), TypeStr))
@@ -495,7 +495,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::PlaceLight(const TSharedP
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid light type: '%s'. Use point, spot, rect, or directional."), *TypeStr));
 	}
 
-	LevelDesignHelpers::FScopedMeshTransaction Transaction(FText::FromString(TEXT("Monolith: Place Light")));
+	LevelDesignHelpers::FScopedLevelDesignTransaction Transaction(FText::FromString(TEXT("Monolith: Place Light")));
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -555,7 +555,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::PlaceLight(const TSharedP
 // 2. set_light_properties
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshLevelDesignActions::SetLightProperties(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEditingActions::SetLightProperties(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ActorName;
 	if (!Params->TryGetStringField(TEXT("actor_name"), ActorName))
@@ -576,7 +576,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::SetLightProperties(const 
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Actor '%s' has no ULightComponent"), *ActorName));
 	}
 
-	LevelDesignHelpers::FScopedMeshTransaction Transaction(FText::FromString(TEXT("Monolith: Set Light Properties")));
+	LevelDesignHelpers::FScopedLevelDesignTransaction Transaction(FText::FromString(TEXT("Monolith: Set Light Properties")));
 
 	TArray<FString> PropsSet = ApplyLightProperties(LightComp, Params);
 
@@ -604,7 +604,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::SetLightProperties(const 
 // 3. set_actor_material
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshLevelDesignActions::SetActorMaterial(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEditingActions::SetActorMaterial(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ActorName;
 	if (!Params->TryGetStringField(TEXT("actor_name"), ActorName))
@@ -723,7 +723,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::SetActorMaterial(const TS
 		OldMaterialPath = OldMat->GetPathName();
 	}
 
-	LevelDesignHelpers::FScopedMeshTransaction Transaction(FText::FromString(TEXT("Monolith: Set Actor Material")));
+	LevelDesignHelpers::FScopedLevelDesignTransaction Transaction(FText::FromString(TEXT("Monolith: Set Actor Material")));
 
 	MeshComp->Modify();
 	MeshComp->SetMaterial(SlotIndex, Material);
@@ -742,7 +742,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::SetActorMaterial(const TS
 // 4. swap_material_in_level
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshLevelDesignActions::SwapMaterialInLevel(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEditingActions::SwapMaterialInLevel(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SourcePath, TargetPath;
 	if (!Params->TryGetStringField(TEXT("source_material"), SourcePath))
@@ -790,10 +790,10 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::SwapMaterialInLevel(const
 		}
 	}
 
-	TSharedPtr<LevelDesignHelpers::FScopedMeshTransaction> Transaction;
+	TSharedPtr<LevelDesignHelpers::FScopedLevelDesignTransaction> Transaction;
 	if (!bPreview)
 	{
-		Transaction = MakeShared<LevelDesignHelpers::FScopedMeshTransaction>(FText::FromString(TEXT("Monolith: Swap Material In Level")));
+		Transaction = MakeShared<LevelDesignHelpers::FScopedLevelDesignTransaction>(FText::FromString(TEXT("Monolith: Swap Material In Level")));
 	}
 
 	int32 ActorsModified = 0;
@@ -860,7 +860,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::SwapMaterialInLevel(const
 // 5. find_replace_mesh
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshLevelDesignActions::FindReplaceMesh(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEditingActions::FindReplaceMesh(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SourcePath, TargetPath;
 	if (!Params->TryGetStringField(TEXT("source_mesh"), SourcePath))
@@ -914,10 +914,10 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::FindReplaceMesh(const TSh
 	bool bContains = MatchMode.Equals(TEXT("contains"), ESearchCase::IgnoreCase);
 	FString SourceMeshPath = SourceMesh->GetPathName();
 
-	TSharedPtr<LevelDesignHelpers::FScopedMeshTransaction> Transaction;
+	TSharedPtr<LevelDesignHelpers::FScopedLevelDesignTransaction> Transaction;
 	if (!bPreview)
 	{
-		Transaction = MakeShared<LevelDesignHelpers::FScopedMeshTransaction>(FText::FromString(TEXT("Monolith: Find Replace Mesh")));
+		Transaction = MakeShared<LevelDesignHelpers::FScopedLevelDesignTransaction>(FText::FromString(TEXT("Monolith: Find Replace Mesh")));
 	}
 
 	int32 ReplacedCount = 0;
@@ -1005,7 +1005,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::FindReplaceMesh(const TSh
 // 6. set_lod_screen_sizes
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshLevelDesignActions::SetLodScreenSizes(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEditingActions::SetLodScreenSizes(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
@@ -1050,7 +1050,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::SetLodScreenSizes(const T
 		PrevSizesArr.Add(MakeShared<FJsonValueNumber>(SM->GetSourceModel(i).ScreenSize.Default));
 	}
 
-	LevelDesignHelpers::FScopedMeshTransaction Transaction(FText::FromString(TEXT("Monolith: Set LOD Screen Sizes")));
+	LevelDesignHelpers::FScopedLevelDesignTransaction Transaction(FText::FromString(TEXT("Monolith: Set LOD Screen Sizes")));
 
 	SM->Modify();
 	for (int32 i = 0; i < NewSizes.Num(); ++i)
@@ -1082,7 +1082,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::SetLodScreenSizes(const T
 // 7. find_instancing_candidates
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshLevelDesignActions::FindInstancingCandidates(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEditingActions::FindInstancingCandidates(const TSharedPtr<FJsonObject>& Params)
 {
 	int32 MinCount = 5;
 	double MinCountVal;
@@ -1225,7 +1225,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::FindInstancingCandidates(
 // 8. convert_to_hism
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshLevelDesignActions::ConvertToHism(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEditingActions::ConvertToHism(const TSharedPtr<FJsonObject>& Params)
 {
 	FString MeshPath;
 	if (!Params->TryGetStringField(TEXT("mesh"), MeshPath))
@@ -1277,7 +1277,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::ConvertToHism(const TShar
 	}
 
 	// Single undo transaction wrapping create + destroy
-	LevelDesignHelpers::FScopedMeshTransaction Transaction(FText::FromString(TEXT("Monolith: Convert to HISM")));
+	LevelDesignHelpers::FScopedLevelDesignTransaction Transaction(FText::FromString(TEXT("Monolith: Convert to HISM")));
 
 	// Spawn a plain actor to host the HISM component
 	FActorSpawnParameters SpawnParams;
@@ -1380,7 +1380,7 @@ FMonolithActionResult FMonolithMeshLevelDesignActions::ConvertToHism(const TShar
 // 9. get_actor_component_properties
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshLevelDesignActions::GetActorComponentProperties(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEditingActions::GetActorComponentProperties(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ActorName;
 	if (!Params->TryGetStringField(TEXT("actor_name"), ActorName))

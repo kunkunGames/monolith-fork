@@ -1,8 +1,8 @@
-#include "MonolithMeshHorrorDesignActions.h"
+#include "MonolithLevelDesignHorrorDesignActions.h"
 #include "MonolithMeshUtils.h"
 #include "MonolithMeshAnalysis.h"
 #include "MonolithMeshLightingCapture.h"
-#include "MonolithMeshAcoustics.h"
+#include "MonolithLevelDesignAcoustics.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 
@@ -222,12 +222,12 @@ namespace
 // Registration
 // ============================================================================
 
-void FMonolithMeshHorrorDesignActions::RegisterActions(FMonolithToolRegistry& Registry)
+void FMonolithLevelDesignHorrorDesignActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. predict_player_paths
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("predict_player_paths"),
 		TEXT("Generate weighted navmesh paths between two points using multiple strategy heuristics: shortest, safest, curious, cautious. Returns path points, distance, estimated time, and per-strategy scores."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorDesignActions::PredictPlayerPaths),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignHorrorDesignActions::PredictPlayerPaths),
 		FParamSchemaBuilder()
 			.Required(TEXT("start"), TEXT("array"), TEXT("Start position [x, y, z]"))
 			.Required(TEXT("end"), TEXT("array"), TEXT("End position [x, y, z]"))
@@ -244,7 +244,7 @@ void FMonolithMeshHorrorDesignActions::RegisterActions(FMonolithToolRegistry& Re
 	// 2. evaluate_spawn_point
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("evaluate_spawn_point"),
 		TEXT("Composite score for an enemy spawn location. Evaluates visibility delay, lighting, audio cover, escape proximity, and path commitment from player paths."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorDesignActions::EvaluateSpawnPoint),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignHorrorDesignActions::EvaluateSpawnPoint),
 		FParamSchemaBuilder()
 			.Required(TEXT("location"), TEXT("array"), TEXT("Spawn point position [x, y, z]"))
 			.Optional(TEXT("player_paths"), TEXT("array"), TEXT("Array of player path positions [[x,y,z], ...] to evaluate against"), TEXT(""))
@@ -255,7 +255,7 @@ void FMonolithMeshHorrorDesignActions::RegisterActions(FMonolithToolRegistry& Re
 	// 3. suggest_scare_positions
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("suggest_scare_positions"),
 		TEXT("Find optimal positions for scripted scare events along a player path. Scores anticipation buildup, player visibility, timing, and player agency. Supports hospice mode."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorDesignActions::SuggestScarePositions),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignHorrorDesignActions::SuggestScarePositions),
 		FParamSchemaBuilder()
 			.Required(TEXT("path_points"), TEXT("array"), TEXT("Player path positions [[x,y,z], ...]"))
 			.Optional(TEXT("scare_type"), TEXT("string"), TEXT("Type: audio, visual, entity_spawn, environmental"), TEXT("visual"))
@@ -268,7 +268,7 @@ void FMonolithMeshHorrorDesignActions::RegisterActions(FMonolithToolRegistry& Re
 	// 4. evaluate_encounter_pacing
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("evaluate_encounter_pacing"),
 		TEXT("Analyze spacing and intensity of multiple encounter positions along a level path. Flags back-to-back encounters, insufficient rest periods, and intensity curve issues."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshHorrorDesignActions::EvaluateEncounterPacing),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignHorrorDesignActions::EvaluateEncounterPacing),
 		FParamSchemaBuilder()
 			.Required(TEXT("path_points"), TEXT("array"), TEXT("Level path positions [[x,y,z], ...]"))
 			.Required(TEXT("encounters"), TEXT("array"), TEXT("Array of encounter objects: [{ location: [x,y,z], type: string, intensity: 0-1, duration_s: float }]"))
@@ -281,7 +281,7 @@ void FMonolithMeshHorrorDesignActions::RegisterActions(FMonolithToolRegistry& Re
 // 1. predict_player_paths
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshHorrorDesignActions::PredictPlayerPaths(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignHorrorDesignActions::PredictPlayerPaths(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Start, End;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("start"), Start))
@@ -749,7 +749,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::PredictPlayerPaths(const
 // 2. evaluate_spawn_point
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshHorrorDesignActions::EvaluateSpawnPoint(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignHorrorDesignActions::EvaluateSpawnPoint(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Location;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("location"), Location))
@@ -842,7 +842,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::EvaluateSpawnPoint(const
 
 		int32 WallCount = 0;
 		float TotalLossdB = 0.0f;
-		float OcclusionFactor = MonolithMeshAcoustics::TraceOcclusion(World, Location, NearestPlayerPt, WallCount, TotalLossdB);
+		float OcclusionFactor = MonolithLevelDesignAcoustics::TraceOcclusion(World, Location, NearestPlayerPt, WallCount, TotalLossdB);
 		// More occlusion = better audio cover for spawn
 		AudioCoverScore = FMath::Clamp(1.0f - OcclusionFactor, 0.0f, 1.0f);
 	}
@@ -952,7 +952,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::EvaluateSpawnPoint(const
 // 3. suggest_scare_positions
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshHorrorDesignActions::SuggestScarePositions(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignHorrorDesignActions::SuggestScarePositions(const TSharedPtr<FJsonObject>& Params)
 {
 	TArray<FVector> PathPoints;
 	if (!MHd_ParseVectorArray(Params, TEXT("path_points"), PathPoints) || PathPoints.Num() < 2)
@@ -1196,7 +1196,7 @@ FMonolithActionResult FMonolithMeshHorrorDesignActions::SuggestScarePositions(co
 // 4. evaluate_encounter_pacing
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshHorrorDesignActions::EvaluateEncounterPacing(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignHorrorDesignActions::EvaluateEncounterPacing(const TSharedPtr<FJsonObject>& Params)
 {
 	TArray<FVector> PathPoints;
 	if (!MHd_ParseVectorArray(Params, TEXT("path_points"), PathPoints) || PathPoints.Num() < 2)

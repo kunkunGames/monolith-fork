@@ -1,8 +1,8 @@
-#include "MonolithMeshEncounterActions.h"
+#include "MonolithLevelDesignEncounterActions.h"
 #include "MonolithMeshUtils.h"
 #include "MonolithMeshAnalysis.h"
 #include "MonolithMeshLightingCapture.h"
-#include "MonolithMeshAcoustics.h"
+#include "MonolithLevelDesignAcoustics.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 
@@ -400,12 +400,12 @@ namespace
 // Registration
 // ============================================================================
 
-void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Registry)
+void FMonolithLevelDesignEncounterActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// 1. design_encounter
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("design_encounter"),
 		TEXT("Capstone: compose spawn points, patrol routes, player entry/exit, sightline breaks, and audio zones into a scored encounter specification. Returns a complete encounter blueprint JSON."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::DesignEncounter),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEncounterActions::DesignEncounter),
 		FParamSchemaBuilder()
 			.Required(TEXT("region"), TEXT("object"), TEXT("{ \"center\": [x,y,z], \"radius\": 2000 }"))
 			.Optional(TEXT("archetype"), TEXT("string"), TEXT("AI archetype: stalker, patrol, ambusher, swarm"), TEXT("stalker"))
@@ -418,7 +418,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 	// 2. suggest_patrol_route
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("suggest_patrol_route"),
 		TEXT("Generate navmesh patrol routes per AI archetype. Stalker: stay in earshot but out of sight. Patrol: regular loop hitting checkpoints. Ambusher: concealed wait position with surprise angle."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::SuggestPatrolRoute),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEncounterActions::SuggestPatrolRoute),
 		FParamSchemaBuilder()
 			.Required(TEXT("region"), TEXT("object"), TEXT("{ \"center\": [x,y,z], \"radius\": 2000 }"))
 			.Optional(TEXT("archetype"), TEXT("string"), TEXT("AI archetype: stalker, patrol, ambusher"), TEXT("patrol"))
@@ -431,7 +431,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 	// 3. analyze_ai_territory
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_ai_territory"),
 		TEXT("Score a region as AI territory: hiding spot density, patrol route coverage, sightline control, ambush potential, escape routes for AI disengagement."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::AnalyzeAiTerritory),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEncounterActions::AnalyzeAiTerritory),
 		FParamSchemaBuilder()
 			.Required(TEXT("region"), TEXT("object"), TEXT("{ \"center\": [x,y,z], \"radius\": 2000 }"))
 			.Optional(TEXT("archetype"), TEXT("string"), TEXT("AI archetype for scoring bias: stalker, patrol, ambusher"), TEXT("stalker"))
@@ -441,7 +441,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 	// 4. evaluate_safe_room
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("evaluate_safe_room"),
 		TEXT("Score a room as a safe room: entrance count, defensibility, lighting quality, sound isolation, size, hospice accessibility. Detects doors via actor tags/class."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::EvaluateSafeRoom),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEncounterActions::EvaluateSafeRoom),
 		FParamSchemaBuilder()
 			.Required(TEXT("region"), TEXT("object"), TEXT("{ \"center\": [x,y,z], \"radius\": 500 }"))
 			.Build());
@@ -449,7 +449,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 	// 5. analyze_level_pacing_structure
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("analyze_level_pacing_structure"),
 		TEXT("Macro-level tension-to-release rhythm across an entire level path. Identifies encounter zones, safe rooms, exploration areas. Compares to ideal pacing curves."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::AnalyzeLevelPacingStructure),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEncounterActions::AnalyzeLevelPacingStructure),
 		FParamSchemaBuilder()
 			.Required(TEXT("start"), TEXT("array"), TEXT("Start position [x, y, z]"))
 			.Required(TEXT("end"), TEXT("array"), TEXT("End position [x, y, z]"))
@@ -460,7 +460,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 	// 6. generate_scare_sequence
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("generate_scare_sequence"),
 		TEXT("Procedurally generate a sequence of scare events with variety, escalation, and pacing. Output is a specification, not placed actors."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::GenerateScareSequence),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEncounterActions::GenerateScareSequence),
 		FParamSchemaBuilder()
 			.Required(TEXT("path_points"), TEXT("array"), TEXT("Player path positions [[x,y,z], ...]"))
 			.Optional(TEXT("style"), TEXT("string"), TEXT("Pacing style: slow_burn, escalating, relentless, single_peak"), TEXT("escalating"))
@@ -472,7 +472,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 	// 7. validate_horror_intensity
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("validate_horror_intensity"),
 		TEXT("Audit horror intensity for hospice compliance. Checks max tension never exceeds profile ceiling. Verifies generous escape windows. Flags jump scares."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::ValidateHorrorIntensity),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEncounterActions::ValidateHorrorIntensity),
 		FParamSchemaBuilder()
 			.Required(TEXT("start"), TEXT("array"), TEXT("Start position [x, y, z]"))
 			.Required(TEXT("end"), TEXT("array"), TEXT("End position [x, y, z]"))
@@ -485,7 +485,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 	// 8. generate_hospice_report
 	Registry.RegisterAction(TEXT("leveldesign"), TEXT("generate_hospice_report"),
 		TEXT("Full level audit for hospice patients: intensity caps, rest spacing (every 2-3 min), cognitive load, input demands, one-handed playability, audio alternatives for visual scares. Profiles: motor_impaired, vision_impaired, cognitive_fatigue."),
-		FMonolithActionHandler::CreateStatic(&FMonolithMeshEncounterActions::GenerateHospiceReport),
+		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEncounterActions::GenerateHospiceReport),
 		FParamSchemaBuilder()
 			.Required(TEXT("start"), TEXT("array"), TEXT("Start position [x, y, z]"))
 			.Required(TEXT("end"), TEXT("array"), TEXT("End position [x, y, z]"))
@@ -498,7 +498,7 @@ void FMonolithMeshEncounterActions::RegisterActions(FMonolithToolRegistry& Regis
 // 1. design_encounter
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshEncounterActions::DesignEncounter(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEncounterActions::DesignEncounter(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Center;
 	float Radius;
@@ -805,7 +805,7 @@ FMonolithActionResult FMonolithMeshEncounterActions::DesignEncounter(const TShar
 // 2. suggest_patrol_route
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshEncounterActions::SuggestPatrolRoute(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEncounterActions::SuggestPatrolRoute(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Center;
 	float Radius;
@@ -1079,7 +1079,7 @@ FMonolithActionResult FMonolithMeshEncounterActions::SuggestPatrolRoute(const TS
 // 3. analyze_ai_territory
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshEncounterActions::AnalyzeAiTerritory(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEncounterActions::AnalyzeAiTerritory(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Center;
 	float Radius;
@@ -1248,7 +1248,7 @@ FMonolithActionResult FMonolithMeshEncounterActions::AnalyzeAiTerritory(const TS
 // 4. evaluate_safe_room
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshEncounterActions::EvaluateSafeRoom(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEncounterActions::EvaluateSafeRoom(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Center;
 	float Radius;
@@ -1294,7 +1294,7 @@ FMonolithActionResult FMonolithMeshEncounterActions::EvaluateSafeRoom(const TSha
 			FVector Outside = Ent.Location + Ent.Direction * 300.0f;
 			int32 WallCount = 0;
 			float LossdB = 0.0f;
-			float Occlusion = MonolithMeshAcoustics::TraceOcclusion(World, Outside, Center, WallCount, LossdB);
+			float Occlusion = MonolithLevelDesignAcoustics::TraceOcclusion(World, Outside, Center, WallCount, LossdB);
 			// For doors: non-entrance directions should be occluded
 			TotalOcclusion += (1.0f - Occlusion); // Higher occlusion = more isolated
 			++Tested;
@@ -1307,7 +1307,7 @@ FMonolithActionResult FMonolithMeshEncounterActions::EvaluateSafeRoom(const TSha
 			FVector TestPt = Center + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0f) * (Radius + 500.0f);
 			int32 WC;
 			float LdB;
-			float Occ = MonolithMeshAcoustics::TraceOcclusion(World, TestPt, Center, WC, LdB);
+			float Occ = MonolithLevelDesignAcoustics::TraceOcclusion(World, TestPt, Center, WC, LdB);
 			TotalOcclusion += (1.0f - Occ);
 			++Tested;
 		}
@@ -1472,7 +1472,7 @@ FMonolithActionResult FMonolithMeshEncounterActions::EvaluateSafeRoom(const TSha
 // 5. analyze_level_pacing_structure
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshEncounterActions::AnalyzeLevelPacingStructure(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEncounterActions::AnalyzeLevelPacingStructure(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Start, End;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("start"), Start))
@@ -1737,7 +1737,7 @@ FMonolithActionResult FMonolithMeshEncounterActions::AnalyzeLevelPacingStructure
 // 6. generate_scare_sequence
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshEncounterActions::GenerateScareSequence(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEncounterActions::GenerateScareSequence(const TSharedPtr<FJsonObject>& Params)
 {
 	TArray<FVector> PathPoints;
 	if (!MEnc_ParseVectorArray(Params, TEXT("path_points"), PathPoints) || PathPoints.Num() < 2)
@@ -2004,7 +2004,7 @@ FMonolithActionResult FMonolithMeshEncounterActions::GenerateScareSequence(const
 // 7. validate_horror_intensity
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshEncounterActions::ValidateHorrorIntensity(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEncounterActions::ValidateHorrorIntensity(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Start, End;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("start"), Start))
@@ -2274,7 +2274,7 @@ FMonolithActionResult FMonolithMeshEncounterActions::ValidateHorrorIntensity(con
 // 8. generate_hospice_report
 // ============================================================================
 
-FMonolithActionResult FMonolithMeshEncounterActions::GenerateHospiceReport(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithLevelDesignEncounterActions::GenerateHospiceReport(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Start, End;
 	if (!MonolithMeshUtils::ParseVector(Params, TEXT("start"), Start))
