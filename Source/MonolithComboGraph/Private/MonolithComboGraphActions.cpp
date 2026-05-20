@@ -181,6 +181,7 @@ namespace
 		if (!AllNodesProp) return Nodes;
 
 		FScriptArrayHelper ArrayHelper(AllNodesProp, AllNodesProp->ContainerPtrToValuePtr<void>(Graph));
+		Nodes.Reserve(ArrayHelper.Num());
 		for (int32 i = 0; i < ArrayHelper.Num(); i++)
 		{
 			void* ElemPtr = ArrayHelper.GetRawPtr(i);
@@ -222,6 +223,7 @@ namespace
 		FScriptArrayHelper ArrayHelper(EdgesProp, EdgesProp->ContainerPtrToValuePtr<void>(Node));
 		FObjectProperty* InnerProp = CastField<FObjectProperty>(EdgesProp->Inner);
 		if (!InnerProp) return Edges;
+		Edges.Reserve(ArrayHelper.Num());
 
 		for (int32 i = 0; i < ArrayHelper.Num(); i++)
 		{
