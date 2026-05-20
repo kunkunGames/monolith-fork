@@ -372,7 +372,7 @@ Plugins/Monolith/Binaries/monolith_query.exe project find_by_type Blueprint --li
 Plugins/Monolith/Binaries/monolith_query.exe project get_stats
 ```
 
-Auto-detects database paths relative to exe location. No configuration needed.
+Auto-detects database paths relative to exe location. No configuration needed: `source` opens `Saved/EngineSource.db`, `project` opens `Saved/ProjectIndex.db`, and `context` opens both. Default plugin checkout commands can use those paths without `--db`; reserve DB overrides for copied databases or non-standard layouts.
 
 **Source:** `Tools/MonolithQuery/monolith_query.cpp` (1080 lines)
 
@@ -434,7 +434,7 @@ See [SECURITY.md](SECURITY.md) for the full threat model and disclosure policy.
 | **Tools fail on first try** | Restart Claude Code to refresh the MCP connection. Known quirk with initial connection timing. |
 | **Port 9316 already in use** | Change the port in Editor Preferences > Plugins > Monolith, then update `.mcp.json` to match. |
 | **Proxy says "Python 3 not found"** | On Windows, switch to the C++ proxy (`monolith_proxy.exe`) — no Python needed. On macOS/Linux, install Python 3.8+ and ensure `python3` is on your PATH. |
-| **monolith_query.exe returns no results** | The exe looks for databases relative to its own location. Make sure `Saved/Monolith/EngineSource.db` and `Saved/Monolith/ProjectIndex.db` exist (created on first editor launch). |
+| **monolith_query.exe returns no results** | The exe looks for databases relative to its own location. Make sure `Saved/EngineSource.db` and `Saved/ProjectIndex.db` exist (created on first editor launch). |
 | **macOS: `monolith_proxy.sh` permission denied** | Make sure the script is executable: `chmod +x Plugins/Monolith/Scripts/monolith_proxy.sh`. |
 | **macOS/Linux: native C++ proxy not available** | The prebuilt `monolith_proxy.exe` is Windows-only for now. Use the Python proxy (`monolith_proxy.sh`) — same protocol, same features. |
 

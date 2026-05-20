@@ -41,7 +41,7 @@ Monolith owns the source graph. Prefer `source_query` and the offline `monolith_
 - `source_query("get_symbol_context" | "get_class_hierarchy" | "read_source", {...})`.
 - `source_query("risk_score" | "review_context" | "impact_radius", {...})` before code-review risk claims.
 
-No MCP or editor running: use the offline CLI as the MCP-free equivalent of `source_query`; it provides the same `source` actions and reads `EngineSource.db` without UE runtime:
+No MCP or editor running: use the offline CLI as the MCP-free equivalent of `source_query`; it provides the same `source` actions and reads `EngineSource.db` without UE runtime. With the default local checkout, write calls without DB override arguments: `source` resolves `Plugins\Monolith\Saved\EngineSource.db`, `project` resolves `Plugins\Monolith\Saved\ProjectIndex.db`, and `context` resolves both from the executable location.
 
 ```powershell
 Plugins\Monolith\Binaries\monolith_query.exe source search_source UObject --limit=5
@@ -63,7 +63,7 @@ Plugins\Monolith\Binaries\monolith_query.exe source search_crg_graph UObject --l
 
 The project index is pre-built. Use `project_query("search", {...})` for broad asset searches, then `project_query("impact_radius" | "risk_score" | "review_context", {...})` for dependency impact and review context.
 
-Project asset CRG is stored inside `Plugins\Monolith\Saved\ProjectIndex.db` as derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, and `crg_meta` rows over `assets` and `dependencies`. Rebuild it after asset index changes or stale health warnings:
+Project asset CRG is stored inside `Plugins\Monolith\Saved\ProjectIndex.db` as derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, and `crg_meta` rows over `assets` and `dependencies`. Rebuild it after asset index changes or stale health warnings. Normal project queries use the built-in DB path; reserve DB overrides for temporary copied databases or non-standard locations:
 
 ```powershell
 Plugins\Monolith\Binaries\monolith_query.exe project repair_crg_cache --execute
@@ -83,6 +83,7 @@ Asset paths use Unreal object paths, not `.uasset` filenames:
 - Find C++ through the source index, never by raw file walk while `source_query` or the offline source-action CLI is available.
 - Raw file walk is only acceptable when both MCP and the offline DB are unavailable (`Plugins\Monolith\Binaries\monolith_query.exe source health`).
 - Never guess `#include` paths or UE API signatures; verify them with `source_query` or the offline source-action CLI.
+- Default offline CLI examples should rely on built-in DB resolution: `source` uses `EngineSource.db`, `project` uses `ProjectIndex.db`, and only copied or non-standard DBs need override arguments.
 - Index/reindex completion should rebuild CRG projection/cache automatically; use `project repair_crg_cache --execute` or `source repair_crg_cache --execute` only when health reports stale CRG parity or manual repair is required.
 - If a task needs an editor capability and no Monolith action covers it, extend or add the Monolith action in the owning `Source/Monolith*` module (handler + param schema + tests + spec/docs sync). Do **not** substitute `editor_query("run_python")` or ad-hoc editor scripting for a missing action; `run_python` is one-off diagnostics only.
 - For material work, use the durable Monolith flow: `create_material` -> `build_material_graph` -> `connect_expressions` -> `recompile_material`.

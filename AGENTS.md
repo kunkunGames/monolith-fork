@@ -52,3 +52,5 @@ If a GitHub Actions CI check fails with a billing-related error (e.g., "recent a
 Project and source indexing must keep their CRG projection/cache data in sync. Successful ProjectIndex and EngineSource indexing completion rebuilds the matching CRG projection/cache automatically; if `project.health` or `source.health` reports stale CRG parity, run the matching `repair_crg_cache` action with execute enabled.
 
 After a successful C++ build, Live Coding, or hot reload, EngineSource.db should refresh through incremental project source indexing. If the post-build reload hook did not fire or the editor was unavailable, run `source.trigger_project_reindex` once the existing EngineSource.db bootstrap is present.
+
+Offline `monolith_query.exe` calls that use the default checkout should follow the built-in DB defaults without extra DB arguments. `source` resolves `Saved/EngineSource.db`, `project` resolves `Saved/ProjectIndex.db`, and `context` resolves both from the executable location. Use `--db`, `--source-db`, or `--project-db` only for copied or non-standard databases.

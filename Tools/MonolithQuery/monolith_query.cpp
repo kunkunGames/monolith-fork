@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <ctime>
 #include <chrono>
+#include <cctype>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -1293,7 +1294,7 @@ struct Args {
 static Args parse_args(int argc, char* argv[]) {
     Args args;
     if (argc < 3) {
-        std::cerr << "Usage: monolith_query <source|project> <action> [params...] [--options]\n\n"
+        std::cerr << "Usage: monolith_query <source|project|context> <action> [params...] [--options]\n\n"
                   << "Source actions:\n"
                   << "  search_source <query> [--scope=all|cpp|shaders] [--limit=N] [--module=M] [--kind=K]\n"
                   << "  read_source <symbol> [--max-lines=N] [--no-header] [--members-only]\n"
@@ -1335,7 +1336,12 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  find_unused [--kind=<asset_class>] [--limit=N] [--min-confidence=low|medium|high]\n"
                   << "  pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]\n"
                   << "  snapshot [label] [--label=name] [--execute]\n"
-                  << "  diff_snapshots <before> [after] [--before=label-or-id] [--after=label-or-id|current] [--limit=N]\n";
+                  << "  diff_snapshots <before> [after] [--before=label-or-id] [--after=label-or-id|current] [--limit=N]\n"
+                  << "\nDB options (rare):\n"
+                  << "  The default DBs are resolved from the executable location: Saved/EngineSource.db for source\n"
+                  << "  and Saved/ProjectIndex.db for project. Default project lookup commands use those paths with no DB override.\n"
+                  << "  Overrides accept --db=<SavedDir>, --db <SavedDir>, or a concrete .db file path.\n"
+                  << "  Namespace-specific overrides are --source-db=<path> and --project-db=<path>.\n";
         std::exit(1);
     }
 
@@ -1352,7 +1358,16 @@ static Args parse_args(int argc, char* argv[]) {
                 val = a.substr(eq + 1);
             } else {
                 key = a.substr(2);
-                val = "";  // flag-style
+                // Keep legacy flag-style parsing, but allow DB path options to
+                // use either "--db=PATH" or "--db PATH". This avoids treating
+                // a default DB override path as a positional query seed.
+                if ((key == "db" || key == "source-db" || key == "source_db" ||
+                     key == "project-db" || key == "project_db") &&
+                    i + 1 < argc && std::string(argv[i + 1]).rfind("--", 0) != 0) {
+                    val = argv[++i];
+                } else {
+                    val = "";  // flag-style
+                }
             }
             // Normalize hyphens to underscores for consistency
             std::replace(key.begin(), key.end(), '-', '_');
@@ -4468,6 +4483,52 @@ static std::string resolve_db_dir() {
     return exe_dir.string();
 }
 
+static bool is_db_file_path(const fs::path& path) {
+    return lower_copy(path.extension().string()) == ".db";
+}
+
+static std::string parent_dir_or_dot(const fs::path& path) {
+    fs::path parent = path.parent_path();
+    return parent.empty() ? std::string(".") : parent.string();
+}
+
+static std::string resolve_db_dir_from_arg(const std::string& db_arg) {
+    if (db_arg.empty()) return resolve_db_dir();
+
+    fs::path db_path(db_arg);
+    if (is_db_file_path(db_path)) return parent_dir_or_dot(db_path);
+    return db_path.string();
+}
+
+static std::string resolve_namespace_db_path(const std::string& explicit_db,
+                                             const std::string& db_arg,
+                                             const std::string& db_dir,
+                                             const std::string& default_filename) {
+    if (!explicit_db.empty()) return explicit_db;
+
+    if (!db_arg.empty()) {
+        fs::path db_path(db_arg);
+        if (is_db_file_path(db_path)) return db_path.string();
+    }
+
+    return (fs::path(db_dir) / default_filename).string();
+}
+
+static std::string resolve_context_db_path(const std::string& explicit_db,
+                                           const std::string& db_arg,
+                                           const std::string& db_dir,
+                                           const std::string& default_filename) {
+    if (!explicit_db.empty()) return explicit_db;
+
+    if (!db_arg.empty()) {
+        fs::path db_path(db_arg);
+        if (lower_copy(db_path.filename().string()) == lower_copy(default_filename))
+            return db_path.string();
+    }
+
+    return (fs::path(db_dir) / default_filename).string();
+}
+
 // ============================================================
 // Main
 // ============================================================
@@ -4475,12 +4536,12 @@ static std::string resolve_db_dir() {
 int main(int argc, char* argv[]) {
     Args args = parse_args(argc, argv);
 
-    std::string db_dir = args.opt("db");
-    if (db_dir.empty()) db_dir = resolve_db_dir();
+    const std::string db_arg = args.opt("db");
+    const std::string db_dir = resolve_db_dir_from_arg(db_arg);
 
     if (args.ns == "source") {
-        std::string db_path = args.opt("source_db");
-        if (db_path.empty()) db_path = (fs::path(db_dir) / "EngineSource.db").string();
+        std::string db_path = resolve_namespace_db_path(
+            args.opt("source_db"), db_arg, db_dir, "EngineSource.db");
 
         bool write_action = args.opt_bool("execute", false)
             && (args.action == "repair_fts" || args.action == "snapshot" || args.action == "repair_crg_cache");
@@ -4516,10 +4577,10 @@ int main(int argc, char* argv[]) {
         it->second(sa, args);
 
     } else if (args.ns == "context") {
-        std::string project_db = args.opt("project_db");
-        if (project_db.empty()) project_db = (fs::path(db_dir) / "ProjectIndex.db").string();
-        std::string source_db = args.opt("source_db");
-        if (source_db.empty()) source_db = (fs::path(db_dir) / "EngineSource.db").string();
+        std::string project_db = resolve_context_db_path(
+            args.opt("project_db"), db_arg, db_dir, "ProjectIndex.db");
+        std::string source_db = resolve_context_db_path(
+            args.opt("source_db"), db_arg, db_dir, "EngineSource.db");
 
         ContextActions ca;
         ca.open(project_db, source_db);
@@ -4533,8 +4594,8 @@ int main(int argc, char* argv[]) {
         it->second(ca, args);
 
     } else if (args.ns == "project") {
-        std::string db_path = args.opt("project_db");
-        if (db_path.empty()) db_path = (fs::path(db_dir) / "ProjectIndex.db").string();
+        std::string db_path = resolve_namespace_db_path(
+            args.opt("project_db"), db_arg, db_dir, "ProjectIndex.db");
 
         bool write_action = args.opt_bool("execute", false)
             && (args.action == "repair_fts" || args.action == "snapshot" || args.action == "repair_crg_cache");

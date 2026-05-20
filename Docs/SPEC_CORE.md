@@ -251,6 +251,8 @@ Two options for offline access (no full editor session required):
 
 Standalone C++ executable. No UE runtime, no Python, instant startup. Queries `EngineSource.db` and `ProjectIndex.db` directly. Replaces the previous `MonolithQueryCommandlet` (removed) and supersedes `monolith_offline.py` as the primary offline access path.
 
+The default DB paths are inferred from the executable location. For normal plugin checkouts, do not pass `--db`: `source` opens `Saved/EngineSource.db`, `project` opens `Saved/ProjectIndex.db`, and `context` opens both. `--db`, `--source-db`, and `--project-db` are override-only options for copied DBs, temporary smoke tests, or non-standard layouts.
+
 ### 5.2 monolith_offline.py (legacy)
 
 > **LEGACY:** `monolith_offline.py` is superseded by `monolith_query.exe`. It remains functional as a zero-dependency fallback requiring only Python stdlib and no UE installation.
