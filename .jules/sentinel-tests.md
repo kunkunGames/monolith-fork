@@ -27,3 +27,8 @@
 **Target:** MonolithCore / FMonolithHttpServer / IsAllowedOrigin
 **Learning:** Pure security guardrail helpers (like CORS origin validation) are often locked inside anonymous namespaces or private blocks. Exposing them via a minimal public static test seam (`FMonolithHttpServer::IsAllowedOrigin`) allows for comprehensive security regression testing (subdomain spoofing, `null` origin, invalid protocols) without needing to spin up the entire HTTP server stack.
 **Prevention:** Future Sentinel tasks targeting network or security guardrails should isolate the validation logic into static helpers and add comprehensive edge-case tests instead of relying on integration-level HTTP requests.
+
+2026-05-20 - Expose pure helpers for malformed validation
+Target: MonolithCore/MonolithUpdateSubsystem/ParseSha256FromReleaseNotes
+Learning: Regex boundary tests `(?![0-9a-fA-F])` for 64-hex string hashes are difficult to test while deeply embedded in an HTTP response handler.
+Prevention: Extract targeted logic into public static helper functions so they can be unit-tested without needing mock HTTP requests.

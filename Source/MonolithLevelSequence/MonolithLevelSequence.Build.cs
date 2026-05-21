@@ -43,7 +43,8 @@ public class MonolithLevelSequence : ModuleRules
 				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
 				if (Directory.Exists(ProjectPluginsDir))
 				{
-					bHasMovieRenderPipeline = Directory.Exists(Path.Combine(ProjectPluginsDir, "MovieRenderPipeline"));
+					bHasMovieRenderPipeline = Directory.Exists(Path.Combine(ProjectPluginsDir, "MovieRenderPipeline"))
+						|| Directory.GetDirectories(ProjectPluginsDir, "MovieRenderPipeline_*", SearchOption.TopDirectoryOnly).Length > 0;
 				}
 			}
 
@@ -56,6 +57,7 @@ public class MonolithLevelSequence : ModuleRules
 				bHasMovieRenderPipeline =
 					Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "MovieRenderPipeline"))
 					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace", "MovieRenderPipeline"))
+					|| (Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace")) && Directory.GetDirectories(Path.Combine(EnginePluginsDir, "Marketplace"), "MovieRenderPipeline_*", SearchOption.TopDirectoryOnly).Length > 0)
 					|| Directory.Exists(Path.Combine(EnginePluginsDir, "MovieScene", "MovieRenderPipeline"))
 					|| Directory.Exists(Path.Combine(EnginePluginsDir, "MovieRenderPipeline"));
 			}

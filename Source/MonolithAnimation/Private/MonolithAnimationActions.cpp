@@ -6087,7 +6087,13 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddSyncMarker(const TShar
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString MarkerName = Params->GetStringField(TEXT("marker_name"));
 	float Time = static_cast<float>(Params->GetNumberField(TEXT("time")));
-	int32 TrackIndex = Params->HasField(TEXT("track_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("track_index"))) : 0;
+	int32 TrackIndex = 0;
+	if (Params->HasField(TEXT("track_index")))
+	{
+		double TempTrackIndex;
+		if (!Params->TryGetNumberField(TEXT("track_index"), TempTrackIndex)) return FMonolithActionResult::Error(TEXT("Parameter 'track_index' must be a number"));
+		TrackIndex = static_cast<int32>(TempTrackIndex);
+	}
 
 	UAnimSequence* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
@@ -6512,7 +6518,13 @@ FMonolithActionResult FMonolithAnimationActions::HandleCloneNotifySetup(const TS
 {
 	FString SourcePath = Params->GetStringField(TEXT("source_path"));
 	FString TargetPath = Params->GetStringField(TEXT("target_path"));
-	float TimeScale = Params->HasField(TEXT("time_scale")) ? static_cast<float>(Params->GetNumberField(TEXT("time_scale"))) : 1.0f;
+	float TimeScale = 1.0f;
+	if (Params->HasField(TEXT("time_scale")))
+	{
+		double TempTimeScale;
+		if (!Params->TryGetNumberField(TEXT("time_scale"), TempTimeScale)) return FMonolithActionResult::Error(TEXT("Parameter 'time_scale' must be a number"));
+		TimeScale = static_cast<float>(TempTimeScale);
+	}
 	bool bAutoScale = false;
 	Params->TryGetBoolField(TEXT("auto_scale"), bAutoScale);
 	bool bReplaceExisting = false;
@@ -7015,7 +7027,13 @@ FMonolithActionResult FMonolithAnimationActions::HandleBuildSequenceFromPoses(co
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString SkeletonPath = Params->GetStringField(TEXT("skeleton_path"));
-	int32 FrameRate = Params->HasField(TEXT("frame_rate")) ? static_cast<int32>(Params->GetNumberField(TEXT("frame_rate"))) : 30;
+	int32 FrameRate = 30;
+	if (Params->HasField(TEXT("frame_rate")))
+	{
+		double TempFrameRate;
+		if (!Params->TryGetNumberField(TEXT("frame_rate"), TempFrameRate)) return FMonolithActionResult::Error(TEXT("Parameter 'frame_rate' must be a number"));
+		FrameRate = static_cast<int32>(TempFrameRate);
+	}
 
 	if (FrameRate <= 0) FrameRate = 30;
 

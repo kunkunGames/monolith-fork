@@ -47,6 +47,9 @@ public:
 	/** Compare two semver strings. Returns >0 if Remote is newer, 0 if equal, <0 if Current is newer. */
 	static int32 CompareVersions(const FString& Current, const FString& Remote);
 
+	/** Parse the SHA256 marker from GitHub release notes. Extracted for testing. */
+	static FString ParseSha256FromReleaseNotes(const FString& ReleaseNotes);
+
 private:
 	/** Bind to FCoreDelegates::OnPreExit so we can swap files after the editor shuts down. */
 	void RegisterPreExitSwap();

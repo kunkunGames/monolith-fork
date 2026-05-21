@@ -49,6 +49,7 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 
 	auto Result = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> ResultsArr;
+	ResultsArr.Reserve(SearchResults.Num());
 	for (const FSearchResult& SR : SearchResults)
 	{
 		auto Entry = MakeShared<FJsonObject>();

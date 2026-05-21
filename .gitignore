@@ -4,6 +4,7 @@ Saved/
 DerivedDataCache/
 Zen/
 logs/
+Logs/
 *.pdb
 *.exp
 *.obj

@@ -1,4 +1,5 @@
-## 2024-05-10 - Harden Source DB query limit contract
-**Query contract:** Unbounded limit parameter in `SearchSymbolsFTS`, `GetReferencesTo`, `GetReferencesFrom`, and `GetSymbolsInModule` methods within `MonolithSourceDatabase`.
-**Learning:** Untrusted limit parameters can be passed directly to the SQLite query, potentially causing resource exhaustion or unbounded queries.
-**Prevention:** Always explicitly clamp user-provided limit parameters using `FMath::Clamp(Limit, 1, 1000)` before calling `SetBindingValueByIndex` in SQLite prepared statements.
+2026-05-14 - Add Regression Test for Empty Search Query
+
+Query contract: ProjectSearchAction handling of empty query parameters.
+Learning: Ensure boundary cases such as an empty string `query` parameter are safely and explicitly rejected before passing to the backend indexing search system.
+Prevention: Future actions must explicitly validate query constraints, e.g., using `!Query.IsEmpty()`, and we should add test coverage in `MonolithIndexQueryTests.cpp` for such malformed input.

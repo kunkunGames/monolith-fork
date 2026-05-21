@@ -25,8 +25,26 @@ bool FMonolithBlueprintSecurityPathTest::RunTest(const FString& Parameters)
 	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("create_user_defined_struct"), Payload);
 
 	// Verify it failed gracefully and returned the validation error
-	TestFalse(TEXT("Action should fail on malformed path"), Result.bSuccess);
-	TestTrue(TEXT("Error should complain about invalid package path"), Result.ErrorMessage.Contains(TEXT("Invalid package path")));
+	TestFalse(TEXT("create_user_defined_struct should fail on malformed path"), Result.bSuccess);
+	TestTrue(TEXT("create_user_defined_struct error should complain about invalid package path"), Result.ErrorMessage.Contains(TEXT("Invalid package path")));
+
+	// Test create_data_asset
+	TSharedPtr<FJsonObject> DataAssetPayload = MakeShared<FJsonObject>();
+	DataAssetPayload->SetStringField(TEXT("save_path"), TEXT("//Game/MalformedPath/DA_TestAsset"));
+	DataAssetPayload->SetStringField(TEXT("class_name"), TEXT("PrimaryDataAsset"));
+
+	FMonolithActionResult DataAssetResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("create_data_asset"), DataAssetPayload);
+	TestFalse(TEXT("create_data_asset should fail on malformed path"), DataAssetResult.bSuccess);
+	TestTrue(TEXT("create_data_asset error should complain about invalid package path"), DataAssetResult.ErrorMessage.Contains(TEXT("Invalid package path")));
+
+	// Test create_blueprint
+	TSharedPtr<FJsonObject> BlueprintPayload = MakeShared<FJsonObject>();
+	BlueprintPayload->SetStringField(TEXT("save_path"), TEXT("//Game/MalformedPath/BP_TestClass"));
+	BlueprintPayload->SetStringField(TEXT("parent_class"), TEXT("Actor"));
+
+	FMonolithActionResult BlueprintResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("create_blueprint"), BlueprintPayload);
+	TestFalse(TEXT("create_blueprint should fail on malformed path"), BlueprintResult.bSuccess);
+	TestTrue(TEXT("create_blueprint error should complain about invalid package path"), BlueprintResult.ErrorMessage.Contains(TEXT("Invalid package path")));
 
 	return true;
 }

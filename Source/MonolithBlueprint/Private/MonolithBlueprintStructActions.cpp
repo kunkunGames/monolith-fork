@@ -480,12 +480,7 @@ struct FDataTableMutationOptions
 
 static bool ReadRequiredStringParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, FString& OutValue, FString& OutError)
 {
-	if (!Params.IsValid() || !Params->HasField(FieldName))
-	{
-		OutError = FString::Printf(TEXT("Missing required parameter: %s"), FieldName);
-		return false;
-	}
-	if (!Params->TryGetStringField(FieldName, OutValue) || OutValue.TrimStartAndEnd().IsEmpty())
+	if (!Params.IsValid() || !Params->TryGetStringField(FieldName, OutValue) || OutValue.TrimStartAndEnd().IsEmpty())
 	{
 		OutError = FString::Printf(TEXT("Missing required parameter: %s"), FieldName);
 		return false;
@@ -495,7 +490,12 @@ static bool ReadRequiredStringParam(const TSharedPtr<FJsonObject>& Params, const
 
 static bool ReadOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, bool& OutValue, FString& OutError)
 {
-	if (!Params.IsValid() || !Params->HasField(FieldName))
+	if (!Params.IsValid())
+	{
+		return true;
+	}
+	const TSharedPtr<FJsonValue> FieldValue = Params->TryGetField(FieldName);
+	if (!FieldValue.IsValid() || FieldValue->IsNull())
 	{
 		return true;
 	}

@@ -1106,7 +1106,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 			// Merge default params — only if the caller didn't already set them (1A)
 			for (const auto& KV : Alias->DefaultParams)
 			{
-				if (!Params->HasField(KV.Key))
+				const TSharedPtr<FJsonValue> FieldValue = Params->TryGetField(KV.Key);
+				if (!FieldValue.IsValid() || FieldValue->IsNull())
 				{
 					Params->SetStringField(KV.Key, KV.Value);
 				}
@@ -2456,7 +2457,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 			// Merge default params for resolve_node too (e.g., function_name for IsValid alias)
 			for (const auto& KV : Alias->DefaultParams)
 			{
-				if (!Params->HasField(KV.Key))
+				const TSharedPtr<FJsonValue> FieldValue = Params->TryGetField(KV.Key);
+				if (!FieldValue.IsValid() || FieldValue->IsNull())
 				{
 					Params->SetStringField(KV.Key, KV.Value);
 				}
