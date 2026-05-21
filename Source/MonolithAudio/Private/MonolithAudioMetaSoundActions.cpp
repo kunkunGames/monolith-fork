@@ -2781,6 +2781,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateInteractiveMetaSound
 		return FMonolithActionResult::Error(TEXT("sound_waves is required and must contain at least 2 entries"));
 	}
 
+	if (WavesArray->Num() > 100)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("sound_waves array contains %d entries, which exceeds the maximum allowed (100)"), WavesArray->Num()));
+	}
+
 	FString ParamName = TEXT("BlendAmount");
 	Params->TryGetStringField(TEXT("parameter_name"), ParamName);
 
