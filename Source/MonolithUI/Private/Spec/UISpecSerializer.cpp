@@ -623,11 +623,12 @@ namespace MonolithUI::SpecSerializerInternal
             const TSharedPtr<FJsonObject> Obj = Tmp->AsObject();
             if (Obj.IsValid())
             {
-                OutEffect.CornerRadii = FVector4(
-                    Obj->GetNumberField(TEXT("x")),
-                    Obj->GetNumberField(TEXT("y")),
-                    Obj->GetNumberField(TEXT("z")),
-                    Obj->GetNumberField(TEXT("w")));
+                double X = 0.0, Y = 0.0, Z = 0.0, W = 0.0;
+                Obj->TryGetNumberField(TEXT("x"), X);
+                Obj->TryGetNumberField(TEXT("y"), Y);
+                Obj->TryGetNumberField(TEXT("z"), Z);
+                Obj->TryGetNumberField(TEXT("w"), W);
+                OutEffect.CornerRadii = FVector4(X, Y, Z, W);
             }
         }
 
@@ -645,11 +646,12 @@ namespace MonolithUI::SpecSerializerInternal
             const TSharedPtr<FJsonObject> Obj = Tmp->AsObject();
             if (Obj.IsValid())
             {
-                OutEffect.SolidColor = FLinearColor(
-                    Obj->GetNumberField(TEXT("r")),
-                    Obj->GetNumberField(TEXT("g")),
-                    Obj->GetNumberField(TEXT("b")),
-                    Obj->GetNumberField(TEXT("a")));
+                double R = 0.0, G = 0.0, B = 0.0, A = 1.0;
+                Obj->TryGetNumberField(TEXT("r"), R);
+                Obj->TryGetNumberField(TEXT("g"), G);
+                Obj->TryGetNumberField(TEXT("b"), B);
+                Obj->TryGetNumberField(TEXT("a"), A);
+                OutEffect.SolidColor = FLinearColor(R, G, B, A);
             }
         }
 

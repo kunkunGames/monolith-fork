@@ -223,11 +223,11 @@ namespace MonolithUI::SpecActionsInternal
                 if ((*SObj)->TryGetObjectField(TEXT("offset"), OffObj) && OffObj)
                 {
                     S.Offset = FVector2D(
-                        (*OffObj)->GetNumberField(TEXT("x")),
-                        (*OffObj)->GetNumberField(TEXT("y")));
+                        GetNumberField(*OffObj, TEXT("x")),
+                        GetNumberField(*OffObj, TEXT("y")));
                 }
-                S.Blur   = (float)(*SObj)->GetNumberField(TEXT("blur"));
-                S.Spread = (float)(*SObj)->GetNumberField(TEXT("spread"));
+                S.Blur   = (float)GetNumberField(*SObj, TEXT("blur"));
+                S.Spread = (float)GetNumberField(*SObj, TEXT("spread"));
                 S.bInset = bDefaultInset;
                 (*SObj)->TryGetBoolField(TEXT("inset"), S.bInset);
                 FString HexColor;
