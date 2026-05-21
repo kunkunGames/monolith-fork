@@ -18,6 +18,7 @@ public class MonolithImageGen : ModuleRules
 		{
 			"MonolithAsset",
 			"UnrealEd",
+			"HTTP",
 			"Json",
 			"JsonUtilities"
 		});
