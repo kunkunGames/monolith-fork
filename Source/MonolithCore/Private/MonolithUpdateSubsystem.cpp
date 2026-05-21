@@ -240,29 +240,12 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 					// 65+ char strings that would otherwise silently truncate to 64
 					// and produce a confusing "hash mismatch" instead of "malformed
 					// marker". Stashed on the subsystem; consumed by OnDownloadComplete.
-					Self->PendingExpectedSha256.Empty();
+					Self->PendingExpectedSha256 = UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(ReleaseNotes);
+					if (Self->PendingExpectedSha256.IsEmpty())
 					{
-#if PLATFORM_MAC
-						static const FRegexPattern HashPattern(
-							TEXT("Monolith-macOS-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
-#elif PLATFORM_LINUX
-						static const FRegexPattern HashPattern(
-							TEXT("Monolith-Linux-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
-#else
-						static const FRegexPattern HashPattern(
-							TEXT("Monolith-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
-#endif
-						FRegexMatcher Matcher(HashPattern, ReleaseNotes);
-						if (Matcher.FindNext())
-						{
-							Self->PendingExpectedSha256 = Matcher.GetCaptureGroup(1).ToLower();
-						}
-						else
-						{
 							UE_LOG(LogMonolith, Warning,
 								TEXT("Release %s notes do not include a Monolith-SHA256 marker — install will proceed without integrity check."),
 								*RemoteVersion);
-						}
 					}
 
 					Self->ShowUpdateNotification(RemoteVersion, ZipUrl, ReleaseNotes);
@@ -312,6 +295,26 @@ int32 UMonolithUpdateSubsystem::CompareVersions(const FString& Current, const FS
 	if (RMajor != CMajor) return RMajor - CMajor;
 	if (RMinor != CMinor) return RMinor - CMinor;
 	return RPatch - CPatch;
+}
+
+FString UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(const FString& ReleaseNotes)
+{
+#if PLATFORM_MAC
+	static const FRegexPattern HashPattern(
+		TEXT("Monolith-macOS-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
+#elif PLATFORM_LINUX
+	static const FRegexPattern HashPattern(
+		TEXT("Monolith-Linux-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
+#else
+	static const FRegexPattern HashPattern(
+		TEXT("Monolith-SHA256:\\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])"));
+#endif
+	FRegexMatcher Matcher(HashPattern, ReleaseNotes);
+	if (Matcher.FindNext())
+	{
+		return Matcher.GetCaptureGroup(1).ToLower();
+	}
+	return TEXT("");
 }
 
 void UMonolithUpdateSubsystem::ShowUpdateNotification(const FString& NewVersion, const FString& ZipUrl, const FString& ReleaseNotes)

@@ -43,4 +43,40 @@ bool FMonolithCompareVersionsTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParseSha256Test,
+	"Monolith.Core.Update.ParseSha256FromReleaseNotes",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParseSha256Test::RunTest(const FString& Parameters)
+{
+	const FString ValidHash = TEXT("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+
+	// Basic valid markers per platform
+#if PLATFORM_MAC
+	const FString ExpectedPrefix = TEXT("Monolith-macOS-SHA256: ");
+#elif PLATFORM_LINUX
+	const FString ExpectedPrefix = TEXT("Monolith-Linux-SHA256: ");
+#else
+	const FString ExpectedPrefix = TEXT("Monolith-SHA256: ");
+#endif
+
+	TestEqual(TEXT("Parses valid hash"), UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(ExpectedPrefix + ValidHash), ValidHash);
+	TestEqual(TEXT("Parses valid hash with surrounding text"), UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(TEXT("Some notes\n") + ExpectedPrefix + ValidHash + TEXT("\nMore notes")), ValidHash);
+	TestEqual(TEXT("Parses case-insensitive hash and returns lower"), UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(ExpectedPrefix + ValidHash.ToUpper()), ValidHash.ToLower());
+
+	// Missing/Invalid
+	TestEqual(TEXT("Returns empty for missing marker"), UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(TEXT("Some random release notes")), TEXT(""));
+
+	// Too short
+	const FString ShortHash = ValidHash.Left(63);
+	TestEqual(TEXT("Rejects short hash"), UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(ExpectedPrefix + ShortHash), TEXT(""));
+
+	// Too long (tests the negative lookahead boundary)
+	const FString LongHash = ValidHash + TEXT("a");
+	TestEqual(TEXT("Rejects overly long hash"), UMonolithUpdateSubsystem::ParseSha256FromReleaseNotes(ExpectedPrefix + LongHash), TEXT(""));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
