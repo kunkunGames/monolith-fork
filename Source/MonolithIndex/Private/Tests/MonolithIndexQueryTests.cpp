@@ -8,6 +8,24 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
+
+#include "Actions/ProjectSearchAction.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSearchHandlesEmptyQueryTest, "Monolith.IndexGuard.Project.SearchHandlesEmptyQuery", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectSearchHandlesEmptyQueryTest::RunTest(const FString& Parameters)
+{
+	auto Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("query"), TEXT(""));
+
+	FMonolithActionResult Result = FProjectSearchAction::Execute(Params);
+
+	TestFalse(TEXT("Search action should reject empty query"), Result.bSuccess);
+	TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectFindByTypeClampsLimitTest, "Monolith.IndexGuard.Project.FindByTypeClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FProjectFindByTypeClampsLimitTest::RunTest(const FString& Parameters)
