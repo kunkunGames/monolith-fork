@@ -205,6 +205,7 @@ void FAnimationIndexer::IndexAnimSequence(UAnimSequence* AnimSeq, FMonolithIndex
 	{
 		const FReferenceSkeleton& RefSkeleton = Skeleton->GetReferenceSkeleton();
 		const int32 NumBones = RefSkeleton.GetNum();
+		TracksArr.Reserve(NumBones);
 		for (int32 BoneIdx = 0; BoneIdx < NumBones; ++BoneIdx)
 		{
 			TracksArr.Add(MakeShared<FJsonValueString>(RefSkeleton.GetBoneName(BoneIdx).ToString()));
@@ -215,6 +216,7 @@ void FAnimationIndexer::IndexAnimSequence(UAnimSequence* AnimSeq, FMonolithIndex
 	// Curves
 	TArray<TSharedPtr<FJsonValue>> CurvesArr;
 	const FRawCurveTracks& RawCurves = AnimSeq->GetCurveData();
+	CurvesArr.Reserve(RawCurves.FloatCurves.Num());
 	for (const FFloatCurve& Curve : RawCurves.FloatCurves)
 	{
 		auto CurveObj = MakeShared<FJsonObject>();
@@ -252,6 +254,7 @@ void FAnimationIndexer::IndexAnimMontage(UAnimMontage* Montage, FMonolithIndexDa
 
 	// Sections
 	TArray<TSharedPtr<FJsonValue>> SectionsArr;
+	SectionsArr.Reserve(Montage->CompositeSections.Num());
 	for (const FCompositeSection& Section : Montage->CompositeSections)
 	{
 		auto SectionObj = MakeShared<FJsonObject>();
@@ -264,6 +267,7 @@ void FAnimationIndexer::IndexAnimMontage(UAnimMontage* Montage, FMonolithIndexDa
 
 	// Slots
 	TArray<TSharedPtr<FJsonValue>> SlotsArr;
+	SlotsArr.Reserve(Montage->SlotAnimTracks.Num());
 	for (const FSlotAnimationTrack& Slot : Montage->SlotAnimTracks)
 	{
 		auto SlotObj = MakeShared<FJsonObject>();
@@ -318,6 +322,7 @@ void FAnimationIndexer::IndexBlendSpace(UBlendSpace* BlendSpace, FMonolithIndexD
 	// Sample points
 	TArray<TSharedPtr<FJsonValue>> SamplesArr;
 	const TArray<FBlendSample>& Samples = BlendSpace->GetBlendSamples();
+	SamplesArr.Reserve(Samples.Num());
 	for (const FBlendSample& Sample : Samples)
 	{
 		auto SampleObj = MakeShared<FJsonObject>();
@@ -366,6 +371,7 @@ void FAnimationIndexer::IndexPoseAsset(UPoseAsset* PoseAsset, FMonolithIndexData
 	// Pose names (using GetPoseFNames — GetPoseNames is deprecated since 5.3)
 	const TArray<FName>& PoseNames = PoseAsset->GetPoseFNames();
 	TArray<TSharedPtr<FJsonValue>> PoseNameArray;
+	PoseNameArray.Reserve(PoseNames.Num());
 	for (const FName& Name : PoseNames)
 	{
 		PoseNameArray.Add(MakeShared<FJsonValueString>(Name.ToString()));
@@ -388,6 +394,7 @@ void FAnimationIndexer::IndexPoseAsset(UPoseAsset* PoseAsset, FMonolithIndexData
 FString FAnimationIndexer::NotifiesToJson(const TArray<FAnimNotifyEvent>& Notifies)
 {
 	TArray<TSharedPtr<FJsonValue>> NotifyArr;
+	NotifyArr.Reserve(Notifies.Num());
 	for (const FAnimNotifyEvent& Notify : Notifies)
 	{
 		auto NotifyObj = MakeShared<FJsonObject>();

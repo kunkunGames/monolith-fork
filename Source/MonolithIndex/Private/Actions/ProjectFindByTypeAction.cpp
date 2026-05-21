@@ -78,6 +78,7 @@ FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonOb
 
 	auto Result = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> AssetsArr;
+	AssetsArr.Reserve(Assets.Num());
 	for (const FIndexedAsset& Asset : Assets)
 	{
 		auto Entry = MakeShared<FJsonObject>();
