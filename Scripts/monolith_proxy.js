@@ -21,6 +21,12 @@ let monolithWasUp = null;
 let pendingRequests = 0;
 let stdinClosed = false;
 let toolLogSequence = 0;
+let processInstanceId = null;
+let lastRecordId = null;
+let lastRecordStartMs = null;
+let lastErrorRecordId = null;
+let recentFind = null;
+let recentDiscover = null;
 const recentToolLogSignatures = new Map();
 
 const SENSITIVE_KEY_FRAGMENTS = [
@@ -36,7 +42,7 @@ const SENSITIVE_KEY_FRAGMENTS = [
   "private_key",
   "session_id",
 ];
-const MAX_LOG_FIELD_BYTES = 256 * 1024;
+const DEFAULT_MAX_LOG_FIELD_BYTES = 256 * 1024;
 const REPEAT_LOG_WINDOW_MS = 15000;
 
 const CORE_QUERY_TOOLS = [
@@ -65,6 +71,14 @@ function log(message) {
 
 function toolLogEnabled() {
   return process.env.MONOLITH_TOOL_LOG_ENABLED !== "0";
+}
+
+function maxLogFieldBytes() {
+  const raw = process.env.MONOLITH_TOOL_LOG_MAX_FIELD_BYTES;
+  if (!raw) return DEFAULT_MAX_LOG_FIELD_BYTES;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_MAX_LOG_FIELD_BYTES;
+  return Math.max(1024, Math.min(parsed, 16 * 1024 * 1024));
 }
 
 function findLogRoot() {
@@ -138,7 +152,8 @@ function sha256Text(text) {
   return `sha256:${crypto.createHash("sha256").update(text).digest("hex")}`;
 }
 
-function bounded(value, maxBytes = MAX_LOG_FIELD_BYTES) {
+function bounded(value, maxBytes = null) {
+  if (maxBytes === null) maxBytes = maxLogFieldBytes();
   const text = stableJson(value);
   const bytes = Buffer.byteLength(text);
   if (bytes <= maxBytes) return { value, truncated: false, bytes, hash: null };
@@ -163,8 +178,108 @@ function makeLogId(prefix, payload) {
   return `${prefix}-${crypto.createHash("sha256").update(payload).digest("hex").slice(0, 32)}`;
 }
 
-function withTrace(message, traceId) {
-  return { ...message, _monolith_trace_id: traceId };
+function getProcessInstanceId() {
+  if (!processInstanceId) processInstanceId = makeLogId("proc", `proxy-node:${process.pid}:${localIsoNow()}`);
+  return processInstanceId;
+}
+
+function toolNamespaceAction(toolName, args) {
+  const payload = args && typeof args === "object" ? args : {};
+  if (toolName.startsWith("monolith_")) return ["monolith", toolName.slice("monolith_".length)];
+  if (toolName.endsWith("_query")) return [toolName.slice(0, -"_query".length), String(payload.action || "")];
+  return ["", ""];
+}
+
+function namespaceSource(toolName) {
+  if (toolName.startsWith("monolith_")) return "core_tool";
+  if (toolName.endsWith("_query")) return "domain_query";
+  return "unknown";
+}
+
+function inferIntent(namespace, action, outcome) {
+  const ns = namespace.toLowerCase();
+  const act = action.toLowerCase();
+  if (ns === "monolith" && ["find", "discover"].includes(act)) return ["schema_discovery", "high"];
+  if (["health", "status", "check", "validate", "test"].some((token) => act.includes(token))) return ["verification", "medium"];
+  if (ns === "source" || ["source", "symbol", "reference", "caller", "callee"].some((token) => act.includes(token))) return ["source_lookup", "medium"];
+  if (ns === "project" || ns === "asset" || act.includes("asset")) return ["asset_search", "medium"];
+  if (ns === "editor" && ["build", "compile", "log", "crash"].some((token) => act.includes(token))) return ["build_diagnostics", "medium"];
+  if (["repair", "reindex", "rebuild", "snapshot"].some((token) => act.includes(token))) return ["maintenance", "medium"];
+  if (outcome !== "success") return ["error_recovery", "low"];
+  if (["create", "set", "add", "remove", "delete", "import", "build"].some((prefix) => act.startsWith(prefix))) return ["mutation", "medium"];
+  return ["unknown", "low"];
+}
+
+function workflowStep(intent, outcome) {
+  if (outcome !== "success") return "recover";
+  if (intent === "schema_discovery") return "discover";
+  if (intent === "verification") return "verify";
+  if (intent === "maintenance") return "maintenance";
+  if (intent === "mutation") return "execute";
+  if (["source_lookup", "asset_search", "build_diagnostics"].includes(intent)) return "inspect";
+  return "unknown";
+}
+
+function buildRoutingContext(toolName, args, signature, repeated, outcome, namespace, action, intent, confidence) {
+  let decisionSource = "direct";
+  let discoveryRootRecordId = null;
+  let matchedDiscoveredAction = false;
+  if (repeated) {
+    const previous = recentToolLogSignatures.get(signature);
+    decisionSource = previous && previous.failed ? "retry_after_error" : "fallback";
+  } else if (recentDiscover) {
+    if (recentDiscover.namespace && recentDiscover.namespace === namespace && (!recentDiscover.action || recentDiscover.action === action)) {
+      decisionSource = "after_discover";
+      matchedDiscoveredAction = true;
+      discoveryRootRecordId = recentDiscover.record_id;
+    }
+  } else if (recentFind && toolName !== "monolith_find" && toolName !== "monolith_discover") {
+    decisionSource = "after_find";
+    discoveryRootRecordId = recentFind.record_id;
+  }
+  return dropEmpty({
+    decision_source: decisionSource,
+    namespace_source: namespaceSource(toolName),
+    recent_find_trace_id: recentFind ? recentFind.trace_id : null,
+    recent_discover_trace_id: recentDiscover ? recentDiscover.trace_id : null,
+    matched_discovered_action: matchedDiscoveredAction,
+    inferred_intent: intent,
+    intent_confidence: confidence,
+    discovery_root_record_id: discoveryRootRecordId,
+  });
+}
+
+function rememberToolOutcome(toolName, args, traceId, recordId, signature, now, failed) {
+  if (!recordId) return;
+  const [namespace, action] = toolNamespaceAction(toolName, args);
+  recentToolLogSignatures.set(signature, { at: now, failed, record_id: recordId });
+  if (failed) lastErrorRecordId = recordId;
+  else if (lastErrorRecordId) lastErrorRecordId = null;
+
+  if (toolName === "monolith_find") {
+    recentFind = { trace_id: traceId, record_id: recordId };
+  } else if (toolName === "monolith_discover") {
+    recentDiscover = {
+      trace_id: traceId,
+      record_id: recordId,
+      namespace: String((args && args.namespace) || ""),
+      action: String((args && args.action) || ""),
+    };
+  } else if (namespace && action && recentDiscover) {
+    if (recentDiscover.namespace === namespace && (!recentDiscover.action || recentDiscover.action === action)) {
+      recentDiscover = null;
+    }
+  }
+}
+
+function withTrace(message, traceId, parentSpanId, routingContext, sessionKey) {
+  return {
+    ...message,
+    _monolith_trace_id: traceId,
+    _monolith_parent_span_id: parentSpanId,
+    _monolith_session_key: sessionKey,
+    _monolith_routing_context: routingContext,
+  };
 }
 
 function dropEmpty(value) {
@@ -230,7 +345,8 @@ function classifyResponse(responseObj, repeated, durationMs, argBytes, resultByt
 
   if (repeated) tags.push("repeated_call");
   if (durationMs > 5000) tags.push("slow_action");
-  if (argBytes > MAX_LOG_FIELD_BYTES || resultBytes > MAX_LOG_FIELD_BYTES) tags.push("large_result");
+  const maxFieldBytes = maxLogFieldBytes();
+  if (argBytes > maxFieldBytes || resultBytes > maxFieldBytes) tags.push("large_result");
 
   return { outcome, errorClass, errorCode, tags: [...new Set(tags)].sort() };
 }
@@ -241,6 +357,12 @@ function summarizeResponse(responseObj, resultBytes, truncated) {
     truncated,
   };
   if (responseObj && typeof responseObj === "object") {
+    if (Object.prototype.hasOwnProperty.call(responseObj, "error")) summary.result_shape = "error";
+    else if (responseObj.result && typeof responseObj.result === "object" && Array.isArray(responseObj.result.content)) summary.result_shape = "mcp_content";
+    else if (responseObj.result && typeof responseObj.result === "object") summary.result_shape = "object";
+    else if (Array.isArray(responseObj.result)) summary.result_shape = "list";
+    else if (responseObj.result === undefined || responseObj.result === null) summary.result_shape = "empty";
+    else summary.result_shape = "text";
     summary.response_top_keys = Object.keys(responseObj).sort().slice(0, 20);
     if (Object.prototype.hasOwnProperty.call(responseObj, "error")) {
       const error = responseObj.error || {};
@@ -306,9 +428,10 @@ function appendToolLog(record) {
   }
 }
 
-function logToolsCall(message, startTime, startHr, response, repeated, signature, traceId, spanId) {
-  if (!toolLogEnabled()) return;
+function logToolsCall(message, startTime, startHr, response, repeated, signature, traceId, spanId, phaseInput = {}) {
+  if (!toolLogEnabled()) return null;
 
+  const logPrepareStart = process.hrtime.bigint();
   const diff = process.hrtime.bigint() - startHr;
   const durationMs = Number(diff) / 1e6;
   const params = message.params && typeof message.params === "object" ? message.params : {};
@@ -318,6 +441,8 @@ function logToolsCall(message, startTime, startHr, response, repeated, signature
   const boundedArgs = bounded(redact(args));
   const boundedResponse = bounded(redact(responseObj));
   const classification = classifyResponse(responseObj, repeated, durationMs, boundedArgs.bytes, boundedResponse.bytes);
+  const [namespace, action] = toolNamespaceAction(toolName, args);
+  const [intent, confidence] = inferIntent(namespace, action, classification.outcome);
   const returnSummary = summarizeResponse(responseObj, boundedResponse.bytes, boundedArgs.truncated || boundedResponse.truncated);
 
   const redaction = {
@@ -337,6 +462,15 @@ function logToolsCall(message, startTime, startHr, response, repeated, signature
   if (repeated) agentSignal.repeat_within_window = true;
   if (classification.tags.length) agentSignal.improvement_tags = classification.tags;
 
+  const routingContext = buildRoutingContext(toolName, args, signature, repeated, classification.outcome, namespace, action, intent, confidence);
+  const workflow = {
+    step: workflowStep(intent, classification.outcome),
+  };
+  const previousSignature = recentToolLogSignatures.get(signature);
+  if (previousSignature && previousSignature.record_id && repeated) workflow.retry_of_record_id = previousSignature.record_id;
+  if (lastErrorRecordId && classification.outcome === "success") workflow.recovery_from_record_id = lastErrorRecordId;
+  if (routingContext.discovery_root_record_id) workflow.discovery_root_record_id = routingContext.discovery_root_record_id;
+
   const returnRecord = {
     response: boundedResponse.value,
   };
@@ -344,12 +478,32 @@ function logToolsCall(message, startTime, startHr, response, repeated, signature
   if (responseId !== message.id) returnRecord.jsonrpc_id = responseId;
 
   toolLogSequence += 1;
+  const procId = getProcessInstanceId();
+  const recordId = makeLogId("rec", `${procId}:proxy:${toolLogSequence}:${traceId}:${spanId}:${startTime}`);
+  const previousRecordId = lastRecordId;
+  const timeSincePreviousMs = lastRecordStartMs !== null ? Number(startHr - lastRecordStartMs) / 1e6 : null;
+  lastRecordId = recordId;
+  lastRecordStartMs = startHr;
+  const phaseTiming = dropEmpty({
+    parse_ms: phaseInput.parseMs,
+    rewrite_ms: phaseInput.rewriteMs,
+    dedup_ms: phaseInput.dedupMs,
+    http_roundtrip_ms: phaseInput.httpRoundtripMs,
+    fallback_ms: phaseInput.fallbackMs,
+    log_prepare_ms: Number(process.hrtime.bigint() - logPrepareStart) / 1e6,
+  });
   appendToolLog({
-    format_version: 2,
+    format_version: 3,
     surface: "proxy",
+    record_id: recordId,
     sequence: toolLogSequence,
     trace_id: traceId,
     span_id: spanId,
+    session_key: "stateless",
+    process_instance_id: procId,
+    call_index: toolLogSequence,
+    previous_record_id: previousRecordId,
+    time_since_previous_ms: timeSincePreviousMs,
     start_time: startTime,
     end_time: localIsoNow(),
     duration_ms: Math.round(durationMs * 1000) / 1000,
@@ -360,6 +514,9 @@ function logToolsCall(message, startTime, startHr, response, repeated, signature
       proxy_runtime: "node",
       proxy_version: PROXY_VERSION,
     },
+    routing_context: routingContext,
+    workflow,
+    phase_timing: phaseTiming,
     call: {
       jsonrpc_id: message.id,
       tool_name_original: toolName,
@@ -372,6 +529,7 @@ function logToolsCall(message, startTime, startHr, response, repeated, signature
     redaction,
     agent_signal: agentSignal,
   });
+  return recordId;
 }
 
 function write(message) {
@@ -574,35 +732,49 @@ async function handleToolsList(message) {
 async function handleToolsCall(message) {
   const startTime = localIsoNow();
   const startHr = process.hrtime.bigint();
+  const parseStart = process.hrtime.bigint();
   const params = message.params && typeof message.params === "object" ? message.params : {};
   const toolName = params.name || "unknown";
   const args = params.arguments || {};
+  const parseMs = Number(process.hrtime.bigint() - parseStart) / 1e6;
+  const dedupStart = process.hrtime.bigint();
   const signature = retrySignature(toolName, args);
   const now = Date.now();
   const previous = recentToolLogSignatures.get(signature);
   const repeated = Boolean(previous && now - previous.at <= REPEAT_LOG_WINDOW_MS);
+  const dedupMs = Number(process.hrtime.bigint() - dedupStart) / 1e6;
+  const rewriteStart = process.hrtime.bigint();
   const traceId = makeLogId("trace", `${startTime}:${process.pid}:main:${signature}`);
   const spanId = makeLogId("span", `${traceId}:proxy:${message.id}:${startTime}`);
-  const forwardedMessage = withTrace(message, traceId);
+  const [namespace, action] = toolNamespaceAction(toolName, args);
+  const [intent, confidence] = inferIntent(namespace, action, "unknown");
+  const routingContext = buildRoutingContext(toolName, args, signature, repeated, "unknown", namespace, action, intent, confidence);
+  const forwardedMessage = withTrace(message, traceId, spanId, routingContext, "stateless");
+  const rewriteMs = Number(process.hrtime.bigint() - rewriteStart) / 1e6;
 
+  const httpStart = process.hrtime.bigint();
   const response = await postMonolith(JSON.stringify(forwardedMessage));
+  const httpRoundtripMs = Number(process.hrtime.bigint() - httpStart) / 1e6;
+  const phaseInput = { parseMs, dedupMs, rewriteMs, httpRoundtripMs };
   if (response) {
     const responseObj = parseResponse(response);
     const failed = Boolean(responseObj && typeof responseObj === "object" && (
       Object.prototype.hasOwnProperty.call(responseObj, "error") ||
       (responseObj.result && responseObj.result.isError)
     ));
-    recentToolLogSignatures.set(signature, { at: now, failed });
-    logToolsCall(message, startTime, startHr, response, repeated, signature, traceId, spanId);
+    const recordId = logToolsCall(message, startTime, startHr, response, repeated, signature, traceId, spanId, phaseInput);
+    rememberToolOutcome(toolName, args, traceId, recordId, signature, now, failed);
     return response;
   }
 
+  const fallbackStart = process.hrtime.bigint();
   const fallback = toolError(
     message.id,
     `Monolith MCP is not available (Unreal Editor not running). Tool '${toolName}' cannot execute. Start the editor and try again.`,
   );
-  recentToolLogSignatures.set(signature, { at: now, failed: true });
-  logToolsCall(message, startTime, startHr, fallback, repeated, signature, traceId, spanId);
+  phaseInput.fallbackMs = Number(process.hrtime.bigint() - fallbackStart) / 1e6;
+  const recordId = logToolsCall(message, startTime, startHr, fallback, repeated, signature, traceId, spanId, phaseInput);
+  rememberToolOutcome(toolName, args, traceId, recordId, signature, now, true);
   return fallback;
 }
 

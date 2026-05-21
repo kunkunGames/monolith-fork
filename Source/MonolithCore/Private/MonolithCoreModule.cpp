@@ -22,6 +22,10 @@ static FAutoConsoleCommand GMonolithRestartCmd(
 
 void RegisterMonolithExecutionGuardActions();
 
+FMonolithCoreModule::~FMonolithCoreModule()
+{
+}
+
 void FMonolithCoreModule::StartupModule()
 {
 	UE_LOG(LogMonolith, Log, TEXT("Monolith %s — Core module initializing"), MONOLITH_VERSION);

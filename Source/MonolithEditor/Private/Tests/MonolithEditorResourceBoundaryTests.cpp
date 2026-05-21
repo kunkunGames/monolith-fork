@@ -3,9 +3,9 @@
 #include "Dom/JsonObject.h"
 #include "MonolithToolRegistry.h"
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorDeleteAssetsRejectsOversizedArray, "Monolith.LimitGuard.MonolithEditor.DeleteAssetsRejectsOversizedArray", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAssetDeleteAssetsRejectsOversizedArray, "Monolith.LimitGuard.MonolithAsset.DeleteAssetsRejectsOversizedArray", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FMonolithEditorDeleteAssetsRejectsOversizedArray::RunTest(const FString& Parameters)
+bool FMonolithAssetDeleteAssetsRejectsOversizedArray::RunTest(const FString& Parameters)
 {
 	// Create params with > 200 items
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
@@ -17,7 +17,7 @@ bool FMonolithEditorDeleteAssetsRejectsOversizedArray::RunTest(const FString& Pa
 	Params->SetArrayField(TEXT("asset_paths"), AssetPaths);
 
 	// Dispatch
-	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("delete_assets"), Params);
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("asset"), TEXT("delete_assets"), Params);
 
 	TestFalse(TEXT("Should fail on oversized array"), Result.bSuccess);
 	TestTrue(TEXT("Should complain about exceeding maximum allowed size"), Result.ErrorMessage.Contains(TEXT("exceeds maximum allowed size")));

@@ -21,12 +21,10 @@ public class MonolithUI : ModuleRules
             "MonolithCore", "UnrealEd", "UMG", "UMGEditor",
             "Slate", "SlateCore", "Json", "JsonUtilities",
             "KismetCompiler", "MovieScene", "MovieSceneTracks",
-            // Hoisted action requirements (Phase D — texture/font ingest, gradient MID factory):
-            //   ImageWrapper / ImageCore        -- import_texture_from_bytes (PNG/JPG/etc decode)
+            // Hoisted action requirements (Phase D — design effects and gradient MID factory):
             //   AssetTools                      -- CreateUniqueAssetName for new assets on disk
             //   Kismet                          -- FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified
             //   MaterialEditor                  -- UMaterialEditingLibrary::UpdateMaterialInstance
-            "ImageWrapper", "ImageCore",
             "AssetTools",
             "Kismet",
             "MaterialEditor",

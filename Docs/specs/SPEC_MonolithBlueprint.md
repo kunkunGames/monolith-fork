@@ -14,11 +14,11 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithBlueprintModule` | Registers 93 blueprint actions |
+| `FMonolithBlueprintModule` | Registers 99 blueprint actions |
 | `FMonolithBlueprintActions` | Static handlers. Uses `FMonolithAssetUtils::LoadAssetByPath<UBlueprint>` |
 | `MonolithBlueprintInternal` | Helpers: AddGraphArray, FindGraphByName, PinTypeToString, SerializePin/Node, TraceExecFlow, FindEntryNode |
 
-### Actions (93 — namespace: "blueprint")
+### Actions (99 — namespace: "blueprint")
 
 **Read Actions (14)**
 | Action | Params | Description |
@@ -72,10 +72,11 @@
 | `remove_interface` | `asset_path`, `interface_class` | Remove an interface from the Blueprint |
 | `reparent_blueprint` | `asset_path`, `new_parent_class` | Change the Blueprint's parent class |
 
-**Node & Pin Operations (6)**
+**Node & Pin Operations (7)**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `add_node` | `asset_path`, `graph_name`, `node_class`, `position` | Add a node to a graph. Accepts common aliases (e.g. `CallFunction`, `VariableGet`, `ComponentBoundEvent`, `AddDelegate`, `RemoveDelegate`, `ClearDelegate`, `CallDelegate`) and tries `K2_` prefix fallback for function calls |
+| `add_event_node` | `asset_path`, `event_name`, `graph_name`, `position` | Add a parent-class or implemented-interface override event when `event_name` matches a BlueprintEvent function; otherwise add a custom event. Custom events can use `replication` and `reliable`. |
 | `remove_node` | `asset_path`, `graph_name`, `node_id` | Remove a node by ID |
 | `connect_pins` | `asset_path`, `graph_name`, `source_node`, `source_pin`, `target_node`, `target_pin` | Connect two pins |
 | `disconnect_pins` | `asset_path`, `graph_name`, `source_node`, `source_pin`, `target_node`, `target_pin` | Disconnect two pins |
@@ -90,6 +91,8 @@
 | `create_blueprint` | `save_path`, `parent_class` | Create a new Blueprint asset |
 | `duplicate_blueprint` | `asset_path`, `new_path` | Duplicate a Blueprint asset to a new path |
 | `get_dependencies` | `asset_path` | List all hard and soft asset dependencies |
+
+Generic package save is registered under `asset.save_asset`. Blueprint batch-edit internals still use the shared `MonolithAsset` save helper when an operation entry requests `save_asset`.
 
 **DataTable Maintenance (7)**
 | Action | Params | Description |

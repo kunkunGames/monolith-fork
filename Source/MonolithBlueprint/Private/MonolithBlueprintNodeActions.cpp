@@ -555,11 +555,11 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("add_event_node"),
-		TEXT("Add a native override event node (BeginPlay, Tick, EndPlay, etc.) or custom event to a Blueprint event graph. Alias table: BeginPlay->ReceiveBeginPlay, Tick->ReceiveTick, EndPlay->ReceiveEndPlay, BeginOverlap->ReceiveActorBeginOverlap, EndOverlap->ReceiveActorEndOverlap, Hit->ReceiveHit, Destroyed->ReceiveDestroyed, AnyDamage->ReceiveAnyDamage, PointDamage->ReceivePointDamage, RadialDamage->ReceiveRadialDamage."),
+		TEXT("Add a native parent or implemented-interface override event node (BeginPlay, Tick, interface BlueprintEvent, etc.) or custom event to a Blueprint event graph. Alias table: BeginPlay->ReceiveBeginPlay, Tick->ReceiveTick, EndPlay->ReceiveEndPlay, BeginOverlap->ReceiveActorBeginOverlap, EndOverlap->ReceiveActorEndOverlap, Hit->ReceiveHit, Destroyed->ReceiveDestroyed, AnyDamage->ReceiveAnyDamage, PointDamage->ReceivePointDamage, RadialDamage->ReceiveRadialDamage."),
 		FMonolithActionHandler::CreateStatic(&HandleAddEventNode),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"),  TEXT("string"), TEXT("Blueprint asset path"))
-			.Required(TEXT("event_name"),  TEXT("string"), TEXT("Event name: BeginPlay, Tick, EndPlay, BeginOverlap, EndOverlap, Hit, Destroyed, AnyDamage, PointDamage, RadialDamage, or a custom event name"))
+			.Required(TEXT("event_name"),  TEXT("string"), TEXT("Event name: BeginPlay, Tick, EndPlay, BeginOverlap, EndOverlap, Hit, Destroyed, AnyDamage, PointDamage, RadialDamage, an implemented interface BlueprintEvent, or a custom event name"))
 			.Optional(TEXT("graph_name"),  TEXT("string"), TEXT("Event graph name (defaults to EventGraph)"))
 			.Optional(TEXT("position"),    TEXT("array"),  TEXT("Node position as [x, y] (default: [0, 0])"))
 			.Optional(TEXT("replication"), TEXT("string"), TEXT("Replication mode for custom events: none, multicast, server, client (default: none). Ignored for native override events."))
@@ -3517,6 +3517,32 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddEventNode(const TS
 				EventFName = OriginalFName;
 				// Keep walking up — match the resolved-name walk's topmost-declarer contract
 			}
+		}
+	}
+
+	// Interface events are not declared on the Blueprint parent class chain. If
+	// the Blueprint implements a C++ or Blueprint interface with a matching
+	// BlueprintEvent function, create a proper override event node instead of
+	// silently falling back to a custom event with the same name.
+	if (!EventFunc)
+	{
+		for (const FBPInterfaceDescription& InterfaceDesc : BP->ImplementedInterfaces)
+		{
+			UClass* InterfaceClass = InterfaceDesc.Interface;
+			if (!InterfaceClass)
+			{
+				continue;
+			}
+
+			UFunction* InterfaceFunc = InterfaceClass->FindFunctionByName(EventFName, EIncludeSuperFlag::ExcludeSuper);
+			if (!InterfaceFunc || !InterfaceFunc->HasAnyFunctionFlags(FUNC_BlueprintEvent))
+			{
+				continue;
+			}
+
+			DeclaringClass = InterfaceClass;
+			EventFunc = InterfaceFunc;
+			break;
 		}
 	}
 

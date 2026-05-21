@@ -9,6 +9,8 @@ class FMonolithHttpServer;
 class MONOLITHCORE_API FMonolithCoreModule : public IModuleInterface
 {
 public:
+	virtual ~FMonolithCoreModule() override;
+
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
 

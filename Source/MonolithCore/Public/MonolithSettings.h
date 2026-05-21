@@ -333,6 +333,12 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Modules")
 	bool bEnableUI = true;
 
+	UPROPERTY(config, EditAnywhere, Category="Modules", DisplayName="Enable Asset Module")
+	bool bEnableAsset = true;
+
+	UPROPERTY(config, EditAnywhere, Category="Modules", DisplayName="Enable ImageGen Module")
+	bool bEnableImageGen = true;
+
 	/** Enables detailed read-only Slate inspector actions beyond get_inspector_status. */
 	UPROPERTY(config, EditAnywhere, Category="Modules|Optional",
 		meta=(DisplayName="Enable Slate Inspector Actions",

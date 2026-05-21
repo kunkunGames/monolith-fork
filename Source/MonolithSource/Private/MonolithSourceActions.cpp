@@ -2,6 +2,7 @@
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceReview.h"
 #include "MonolithSourceSubsystem.h"
+#include "MonolithToolInvocationLogger.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "Dom/JsonObject.h"
@@ -157,12 +158,22 @@ namespace
 		int32 ReturnCode = 0;
 		FString StdOut;
 		FString StdErr;
+		const double ExecStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
 		const bool bStarted = FPlatformProcess::ExecProcess(
 			*ExePath,
 			*Args,
 			&ReturnCode,
 			&StdOut,
 			&StdErr);
+		const double ExecProcessMs = (FMonolithToolInvocationLogger::NowSeconds() - ExecStartSeconds) * 1000.0;
+		FMonolithToolInvocationLogger::RecordChildProcess(
+			ExePath,
+			Args.Left(500),
+			ExecProcessMs,
+			bStarted ? ReturnCode : -1,
+			FTCHARToUTF8(*StdOut).Length(),
+			FTCHARToUTF8(*StdErr).Length(),
+			FMonolithToolInvocationLogger::GetCurrentTraceId());
 		if (!bStarted || ReturnCode != 0)
 		{
 			const FString Detail = !StdErr.IsEmpty() ? StdErr : StdOut;

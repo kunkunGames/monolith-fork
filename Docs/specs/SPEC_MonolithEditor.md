@@ -14,12 +14,12 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 57 editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, and module-status toolsets, and owns editor PIE transaction-buffer cleanup |
+| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 55 editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, and module-status toolsets, and owns editor PIE transaction-buffer cleanup |
 | `FMonolithLogCapture` | FOutputDevice subclass. Ring buffer (10,000 entries max). Thread-safe. Tracks counts by verbosity |
 | `FMonolithEditorActions` | Static handlers for build and log operations. Hooks into `ILiveCodingModule::GetOnPatchCompleteDelegate()` to capture compile results and timestamps |
 | `FMonolithSettingsCustomization` | IDetailCustomization for UMonolithSettings. Adds re-index buttons for project and source databases in Project Settings UI |
 
-### Actions (57 — namespace: "editor")
+### Actions (55 — namespace: "editor")
 
 **Base (22 — v0.14.7 baseline + Phase J F8)**
 
@@ -41,9 +41,7 @@
 | `get_crash_context` | CrashContext.runtime-xml + Ensures.log + 20 recent errors. Truncated at 4096 chars |
 | `capture_scene_preview` | Capture screenshot of Niagara or material asset in preview scene. Params: `asset_path`, `asset_type`, `seek_time`, `camera`, `resolution`, `output_path` |
 | `capture_sequence_frames` | Multi-frame temporal capture at specified timestamps. Returns array of frame PNGs. Params: `asset_path`, `timestamps[]` (Max: 1000), `camera`, `resolution` |
-| `import_texture` | Import external image (PNG/TGA/EXR/HDR) as UTexture2D with settings (compression, sRGB, tiling, LOD group). Params: `source_path`, `destination`, `settings` |
 | `stitch_flipbook` | Stitch multiple texture assets into a flipbook atlas. Params: `frames[]`, `columns`, `save_path` |
-| `delete_assets` | Delete one or more assets by path. Params: `asset_paths[]` (Max: 200), `force` |
 | `get_viewport_info` | Get active editor viewport camera location, rotation, FOV, resolution, realtime state |
 | `list_open_viewports` | List level editor viewport capture sources and report visual-capture availability for asset-editor, widget-designer, and thumbnail paths. |
 | `capture_level_viewport` | Capture a named level editor viewport to a PNG. Errors when the requested viewport is unavailable instead of silently falling back. |
@@ -76,6 +74,8 @@
 ### Visual Capture Fallback Contract
 
 `capture_asset_thumbnail` is the implemented fallback for PRD 34 visual verification when an actual asset-editor viewport cannot be identified. The caller must pass `thumbnail_fallback=true`; otherwise the action errors so clients do not mistake thumbnail output for viewport output. Supported `output_path` extensions (`png`, `jpg`/`jpeg`, `bmp`, `exr`, `tga`, `hdr`) select the image encoder; unknown or missing extensions are normalized to `.png`, and the response `output_path` and `format` fields report the normalized file path and actual encoder used. Asset-editor and widget-designer viewport captures remain explicit `unavailable` responses until Monolith can name the captured viewport source.
+
+Generic asset lifecycle operations are owned by `MonolithAsset`: use `asset.import_texture_from_file`, `asset.save_asset`, and `asset.delete_assets` instead of editor-owned generic asset mutation verbs.
 
 ---
 

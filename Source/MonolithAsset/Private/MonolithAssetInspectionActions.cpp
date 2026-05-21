@@ -1,4 +1,4 @@
-#include "MonolithSpecializedAssetActions.h"
+#include "MonolithAssetInspectionActions.h"
 
 #include "MonolithAssetUtils.h"
 #include "MonolithParamSchema.h"
@@ -549,16 +549,16 @@ namespace
 	}
 }
 
-void FMonolithSpecializedAssetActions::RegisterActions(FMonolithToolRegistry& Registry)
+void FMonolithAssetInspectionActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	Registry.RegisterAction(TEXT("asset"), TEXT("list_supported_asset_enrichers"),
 		TEXT("List read-only specialized asset enrichers supported by Monolith."),
-		FMonolithActionHandler::CreateStatic(&FMonolithSpecializedAssetActions::ListSupportedAssetEnrichers),
+		FMonolithActionHandler::CreateStatic(&FMonolithAssetInspectionActions::ListSupportedAssetEnrichers),
 		FParamSchemaBuilder().Build());
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("inspect_asset"),
 		TEXT("Inspect an asset with specialized read-only enrichment when supported."),
-		FMonolithActionHandler::CreateStatic(&FMonolithSpecializedAssetActions::InspectAsset),
+		FMonolithActionHandler::CreateStatic(&FMonolithAssetInspectionActions::InspectAsset),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to inspect"))
 			.Optional(TEXT("include_references"), TEXT("boolean"), TEXT("Include reflected object references"), TEXT("true"))
@@ -567,7 +567,7 @@ void FMonolithSpecializedAssetActions::RegisterActions(FMonolithToolRegistry& Re
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("inspect_assets_batch"),
 		TEXT("Inspect multiple assets with per-row success/error results."),
-		FMonolithActionHandler::CreateStatic(&FMonolithSpecializedAssetActions::InspectAssetsBatch),
+		FMonolithActionHandler::CreateStatic(&FMonolithAssetInspectionActions::InspectAssetsBatch),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_paths"), TEXT("array"), TEXT("Asset paths to inspect"))
 			.Optional(TEXT("include_references"), TEXT("boolean"), TEXT("Include reflected object references"), TEXT("false"))
@@ -576,14 +576,14 @@ void FMonolithSpecializedAssetActions::RegisterActions(FMonolithToolRegistry& Re
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("validate_specialized_asset"),
 		TEXT("Validate a specialized asset and report warnings without mutation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithSpecializedAssetActions::ValidateSpecializedAsset),
+		FMonolithActionHandler::CreateStatic(&FMonolithAssetInspectionActions::ValidateSpecializedAsset),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to validate"))
 			.Optional(TEXT("array_limit"), TEXT("number"), TEXT("Array cap used when evaluating large payload warnings"), TEXT("32"))
 			.Build());
 }
 
-FMonolithActionResult FMonolithSpecializedAssetActions::ListSupportedAssetEnrichers(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithAssetInspectionActions::ListSupportedAssetEnrichers(const TSharedPtr<FJsonObject>& Params)
 {
 	TArray<TSharedPtr<FJsonValue>> Items;
 	for (const FAssetEnricherDef& Def : GetSupportedEnrichers())
@@ -609,7 +609,7 @@ FMonolithActionResult FMonolithSpecializedAssetActions::ListSupportedAssetEnrich
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithSpecializedAssetActions::InspectAsset(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithAssetInspectionActions::InspectAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath, Error;
 	UObject* Asset = LoadAssetFromParams(Params, AssetPath, Error);
@@ -628,7 +628,7 @@ FMonolithActionResult FMonolithSpecializedAssetActions::InspectAsset(const TShar
 	return FMonolithActionResult::Success(InspectLoadedAsset(Asset, AssetPath, bIncludeReferences, ArrayLimit));
 }
 
-FMonolithActionResult FMonolithSpecializedAssetActions::InspectAssetsBatch(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithAssetInspectionActions::InspectAssetsBatch(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* AssetPathValues = nullptr;
 	if (!Params->TryGetArrayField(TEXT("asset_paths"), AssetPathValues) || !AssetPathValues)
@@ -680,7 +680,7 @@ FMonolithActionResult FMonolithSpecializedAssetActions::InspectAssetsBatch(const
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithSpecializedAssetActions::ValidateSpecializedAsset(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithAssetInspectionActions::ValidateSpecializedAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath, Error;
 	UObject* Asset = LoadAssetFromParams(Params, AssetPath, Error);

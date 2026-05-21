@@ -69,7 +69,17 @@ Binaries\monolith_query.exe bridge search_asset_symbols --symbol=UObject --limit
 
 `source search_crg_graph` reads `Saved/graph.db` and uses `nodes_fts` before falling back to LIKE. `bridge search_asset_symbols` is read-only, opens `Saved/ProjectIndex.db` and `Saved/EngineSource.db`, and returns heuristic links with `confidence`, `reasons`, `asset`, `symbol`, `warnings`, `count`, `truncated`, and `lexical_only`.
 
-## 13. Tool Invocation Daily Logs
+## 13. MCP Connection Recovery in Go Checkout
+
+For Go checkout work that needs editor-backed Monolith actions, use the configured MCP client connection to `http://localhost:9316/mcp` and confirm it with `monolith_status()` or the active MCP client's health check before calling editor actions. If the MCP endpoint is unreachable or the transport fails, start the project headless editor wrapper and reconnect the existing Monolith proxy/client instead of bypassing Monolith:
+
+```powershell
+D:\P4\game\BatchFiles\RunHeadlessEditor.bat
+```
+
+Wait for `localhost:9316` to listen, reconnect to `http://localhost:9316/mcp`, then re-run `monolith_status()` before using `monolith_find`, `monolith_discover`, or namespace actions. If the endpoint still cannot connect after the editor starts, inspect `D:\P4\game\Saved\HeadlessMcp\Logs\HeadlessEditor-*.log` and the Monolith proxy/editor invocation logs, report the concrete blocker, and limit fallback work to read-only `Binaries\monolith_query.exe` source/project/bridge queries while editor-only actions remain blocked.
+
+## 14. Tool Invocation Daily Logs
 
 The daily invocation log contract is documented in `Docs/specs/SPEC_MonolithToolInvocationLogs.md`. When a checkout includes the implementation, the files are local diagnostics only and must not be treated as canonical tool output.
 

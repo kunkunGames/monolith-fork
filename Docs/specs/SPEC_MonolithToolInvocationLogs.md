@@ -1,10 +1,10 @@
 # Monolith — Tool Invocation Daily Logs
 
 **Parent:** [../SPEC_CORE.md](../SPEC_CORE.md)
-**Status:** P0 writer implemented; proxy/query v2 verified; action v2 fresh-process verification pending; analysis-readiness fields pending
+**Status:** Writer implemented through format v3; proxy/query/action v3 verified; analyzer implementation deferred
 **Scope:** Proxy, offline query, and editor action invocation diagnostics
 **Created:** 2026-05-20
-**Doc reconciled with code:** 2026-05-20 (field-level pass: per-surface emitted vs. reserved enums/tags audited against writer source)
+**Doc reconciled with code:** 2026-05-21 (format v3 field pass: proxy/query/action correlation, routing, workflow, timing, and child-process records)
 
 ---
 
@@ -12,9 +12,9 @@
 
 Monolith needs local, append-only daily logs that show how agents call Monolith through the MCP proxy, offline query CLI, and live editor action registry. The logs are for local diagnostics and Monolith improvement signals. They are not remote telemetry, not a replacement for returned tool output, and not a replacement for the existing in-memory ToolCall ledger.
 
-This document is the implementation contract and current P0 verification record. Format v2 adds explicit `trace_id` / `span_id` correlation and compact `return_summary` fields. Daily files are append-only, so a date partition can contain older `format_version` 1 rows from long-running proxy/editor processes alongside newer v2 rows. Readers must treat `format_version` as a per-record schema discriminator, not as a file-level property.
+This document is the implementation contract and current writer verification record. Format v3 adds explicit row identity, parent/previous linkage, routing context, workflow phase, phase timing, environment context, result shape, and child-process timing on top of the v2 `trace_id` / `span_id` / `return_summary` contract. Daily files are append-only, so a date partition can contain older `format_version` 1 or 2 rows from long-running proxy/editor processes alongside newer v3 rows. Readers must treat `format_version` as a per-record schema discriminator, not as a file-level property.
 
-The current logs are useful for basic usage/error/size review, but the target analysis goal is broader: infer what tool an agent called, why it likely chose that route, how it continued after each result, and where time accumulated. The writer-side fields required for reliable timeline, intent, and bottleneck analysis are specified in section 5.2 and should be implemented before building production analyzers.
+The current logs collect enough writer-side evidence to start a local analyzer for the target goal: infer what tool an agent called, why it likely chose that route, how it continued after each result, and where time accumulated. Analysis logic itself is still deferred; section 5.2 is now the v3 collection contract that analyzers should consume, not a future writer backlog.
 
 The desired daily files live under `Plugins/Monolith/Logs/yyyyMMdd/` by default:
 
@@ -35,20 +35,20 @@ The 2026-05-20 source review found the feature practical to implement, but only 
 | Proxy | `Scripts/monolith_proxy.bat` can select Python or Node before any native proxy path. | P0 must implement script proxy logging parity; C++ proxy parity alone is not enough. |
 | Query | `monolith_query.exe` writes directly to stdout/stderr and fatal paths can exit early. | Capture/replay streams without changing observed output or exit code, and make fatal dispatch paths loggable. |
 | Action | `FMonolithToolRegistry::ExecuteAction` can reject calls before handler dispatch. | Log unknown action, profile block, schema rejection, missing params, strict-param failures, and handler results when action logging is enabled. |
-| Locking | Registry locks and log file locks solve different problems. | Do not perform file I/O under the registry lock; use process-local and cross-process append guards for log writes. |
+| Locking | Registry locks and log file locks solve different problems. | Do not perform file I/O under the registry lock; use process-local guards plus a shared exclusive `.lock` file create/delete protocol for cross-runtime proxy/query appends. |
 | Existing diagnostics | Action audit and `bEnableAdvancedToolCallRecords` are useful but not durable proxy/query/action records. | Keep daily JSONL logging independent and do not change audit or MCP response shapes. |
 | Analysis | `agent_signal` fields are inferred hints. | Use them for aggregate Monolith improvements, not as a single-record verdict. |
 
-P0 completion requires all three surfaces plus docs/template sync and the verification gates in section 9. The current source implements the P0 writer contract, but existing append-only date folders may still contain mixed v1/v2 rows until all long-running proxy/editor processes are restarted. Fresh-process v2 append checks are part of the verification gates below.
+Writer completion requires all three surfaces plus docs/template sync and the verification gates in section 9. The current source implements the format v3 writer contract, but existing append-only date folders may still contain mixed v1/v2/v3 rows until all long-running proxy/editor processes are restarted. Fresh-process v3 append checks are part of the verification gates below.
 
 ## 2. Current Code Facts
 
 | Surface | Current entrypoint | Current behavior |
 |---|---|---|
-| C++ proxy | `Tools/MonolithProxy/monolith_proxy.cpp` | `handle_tools_call` validates, deduplicates via `record_tool_call`, injects `_monolith_trace_id`, forwards requests to the editor HTTP MCP server, and persists `proxy.jsonl`. |
-| Script proxy | `Scripts/monolith_proxy.bat`, `Scripts/monolith_proxy.py`, `Scripts/monolith_proxy.js` | The Windows launcher probes Python, `python3`, Node, then `py`; Python and Node emit schema-compatible `proxy.jsonl` records and inject `_monolith_trace_id`. |
-| Offline query | `Tools/MonolithQuery/monolith_query.cpp` | `main` captures/replays stdout/stderr, logs namespace/action dispatch and fatal paths, and inherits `MONOLITH_TRACE_ID` when an editor action launches it. |
-| Editor action | `Source/MonolithCore/Private/MonolithToolRegistry.cpp` | `FMonolithToolRegistry::ExecuteAction` validates lookup/profile/schema, releases the registry lock, sets action trace context, exports `MONOLITH_TRACE_ID` during handler execution, and logs `action.jsonl`. |
+| C++ proxy | `Tools/MonolithProxy/monolith_proxy.cpp` | `handle_tools_call` validates, deduplicates via `record_tool_call`, injects `_monolith_trace_id` and `_monolith_parent_span_id`, forwards requests to the editor HTTP MCP server, and persists `proxy.jsonl`. |
+| Script proxy | `Scripts/monolith_proxy.bat`, `Scripts/monolith_proxy.py`, `Scripts/monolith_proxy.js` | The Windows launcher probes Python, `python3`, Node, then `py`; Python and Node emit schema-compatible `proxy.jsonl` records and inject `_monolith_trace_id` plus `_monolith_parent_span_id`. |
+| Offline query | `Tools/MonolithQuery/monolith_query.cpp` | `main` captures/replays stdout/stderr, logs namespace/action dispatch and fatal paths, and inherits `MONOLITH_TRACE_ID` plus `MONOLITH_PARENT_SPAN_ID` when an editor action launches it. |
+| Editor action | `Source/MonolithCore/Private/MonolithToolRegistry.cpp` | `FMonolithToolRegistry::ExecuteAction` validates lookup/profile/schema, releases the registry lock, sets action trace context, exports `MONOLITH_TRACE_ID` and `MONOLITH_PARENT_SPAN_ID` during handler execution, and logs `action.jsonl`. |
 | Live source actions | `Source/MonolithSource/Private/MonolithSourceActions.cpp` | Some `source` actions shell out to `Binaries/monolith_query.exe`, so one live `source_query` can legitimately produce both `action.jsonl` and `query.jsonl`. |
 
 ## 3. Configuration
@@ -58,7 +58,7 @@ P0 completion requires all three surfaces plus docs/template sync and the verifi
 | `UMonolithSettings::bEnableDailyLog` | `false` | Editor action | `action.jsonl` is opt-in. Disabled mode must not create `action.jsonl`. |
 | `MONOLITH_TOOL_LOG_ENABLED` | enabled when unset | Proxy/query | `0` disables proxy/query logs. Unset or `1` enables them. |
 | `MONOLITH_TOOL_LOG_DIR` | unset | Proxy/query/action | Overrides the log root for smoke tests, CI, and temporary diagnostics. The editor action logger also honors it (`LogRoot()` reads it before falling back to the plugin `Logs/` dir). |
-| `MONOLITH_TOOL_LOG_MAX_FIELD_BYTES` | unset | reserved (no surface reads it) | Intended per-field truncation override. Today all four writers hardcode the 256 KiB bound; this variable is a no-op until wired. |
+| `MONOLITH_TOOL_LOG_MAX_FIELD_BYTES` | unset | Proxy/query/action | Optional per-field truncation override. Unset keeps the default 256 KiB bound; invalid values fall back to the default; valid values are clamped to 1 KiB through 16 MiB. |
 
 P0 editor action logging follows only `bEnableDailyLog`. Proxy/query logging intentionally defaults on so agent behavior can be observed in no-editor and proxy-only workflows. Documentation must show `MONOLITH_TOOL_LOG_ENABLED=0` as the explicit disable path.
 
@@ -68,17 +68,32 @@ Proxy/query default-on is intentionally separate from editor action logging. Edi
 
 `MONOLITH_TOOL_LOG_DIR` is part of the P0 proxy/query contract because tests and headless agent workflows need an isolated log root. It is the root under which the daily folder is created, so a proxy smoke on 2026-05-20 writes `<override>/20260520/proxy.jsonl`. It does not change enable semantics: if `MONOLITH_TOOL_LOG_ENABLED=0`, no proxy/query log should be written even when a log directory override is present.
 
+## 3.1 Implementation Summary
+
+The document now reduces the implementation decision to three points:
+
+1. **Collect v3 data now:** proxy, query, and action writers emit v3 records with correlation, routing, workflow, timing, environment, and summary fields.
+2. **Analyze later:** analyzer/report code is deferred, but it should consume v3 first and gracefully degrade for v1/v2 rows in append-only date folders.
+3. **Keep controls split:** proxy/query remain default-on through `MONOLITH_TOOL_LOG_ENABLED`; editor action logging remains controlled by `bEnableDailyLog`.
+
 ## 4. Record Contract
 
 Top-level fields (required unless a per-surface note says otherwise):
 
 | Field | Type | Notes |
 |---|---|---|
-| `format_version` | integer | Current writer schema is `2`; append-only files can contain v1 and v2 rows together. |
+| `format_version` | integer | Current writer schema is `3`; append-only files can contain v1, v2, and v3 rows together. |
 | `surface` | string | `proxy`, `query`, or `action`. |
 | `sequence` | integer | Per-process monotonic sequence. |
+| `record_id` | string | Stable unique id per JSONL row; preferred row handle for parent/previous/retry links. |
 | `trace_id` | string | Cross-surface correlation id. Proxy generates it and forwards `_monolith_trace_id`; action propagates it to child query via `MONOLITH_TRACE_ID`. |
 | `span_id` | string | Per-record span id for ordering and deduping within a trace. |
+| `parent_span_id` | string | Parent span when known. Proxy-to-action uses `_monolith_parent_span_id`; action-to-query uses `MONOLITH_PARENT_SPAN_ID`. |
+| `session_key` | string | Redacted/stable session grouping when available; use `stateless` when no MCP session id exists. |
+| `process_instance_id` | string | Stable id for the current proxy/query/editor process lifetime. |
+| `call_index` | integer | Per-process/session monotonic call index where available. |
+| `previous_record_id` | string | Previous row in the same process/session when known. |
+| `time_since_previous_ms` | number | Gap from the previous row in the same process/session when known. |
 | `start_time` / `end_time` | string | Local ISO 8601 timestamp with offset. |
 | `duration_ms` | number | Wall-clock duration. |
 | `pid` | integer | Process id. |
@@ -88,6 +103,11 @@ Top-level fields (required unless a per-surface note says otherwise):
 | `call` | object | Tool, namespace/action, argv, and redacted arguments. |
 | `return` | object | Redacted/truncated response, result, stdout/stderr, or error. |
 | `return_summary` | object | Compact analyzer-friendly summary of result/error counts, top-level keys, bytes, and truncation state. |
+| `routing_context` | object | Stable routing evidence for likely intent and namespace/action selection path. |
+| `workflow` | object | Coarse workflow step and retry/recovery/discovery links. |
+| `phase_timing` | object | Measured per-surface phase timings. Missing subfields mean "not measured", not zero. |
+| `environment` | object | Low-cardinality plugin/editor/index/headless context when known. |
+| `child_process` | object | Action-side summary for synchronous child `monolith_query.exe` calls when present. |
 | `redaction` | object | Redaction/truncation metadata. |
 | `agent_signal` | object | Best-effort improvement signals. |
 
@@ -98,7 +118,7 @@ Recommended context fields inside `client`, `call`, `return_summary`, or `agent_
 | `plugin_version` / `server_version` | Version string when available; useful when comparing behavior across Monolith updates. |
 | `engine_version` / `project_name` | Editor-side environment identity when available. |
 | `jsonrpc_id` | JSON-RPC correlation when present; omit duplicate return ids when they match the call id. |
-| `namespace_source` | Whether namespace/action came from a split tool, direct namespace tool, alias rewrite, or offline CLI. Not emitted yet; its canonical future home is `routing_context.namespace_source` (section 5.2.2), not a free-standing `call`/`client` field. |
+| `namespace_source` | Whether namespace/action came from a split tool, direct namespace tool, alias rewrite, offline CLI, or child process. Emitted as `routing_context.namespace_source`, not as a free-standing `call`/`client` field. |
 | `profile` / `policy` | Active tool profile and action execution policy summary when already known. |
 | `validation_phase` | `lookup`, `profile`, `schema`, or `dispatch`. (`post_edit` is reserved for future use and is not currently emitted.) |
 | `db_path` / `db_health` | Query-side database path and lightweight health/staleness signal when already computed. |
@@ -106,7 +126,7 @@ Recommended context fields inside `client`, `call`, `return_summary`, or `agent_
 Example:
 
 ```json
-{"format_version":2,"surface":"action","sequence":42,"trace_id":"trace-...","span_id":"span-...","start_time":"2026-05-20T14:52:11.120+09:00","end_time":"2026-05-20T14:52:11.138+09:00","duration_ms":18.0,"pid":12345,"thread_id":123,"status":"success","call":{"tool_name":"source_query","namespace":"source","action":"search_source","arguments":{"query":"UObject","limit":5},"validation_phase":"dispatch","retry_signature":"sha256:..."},"return":{"success":true,"result":{"items":[]}},"return_summary":{"success":true,"argument_bytes":29,"result_bytes":38,"result_top_keys":["items"]},"redaction":{"argument_bytes":29,"result_bytes":38},"agent_signal":{"outcome":"success"}}
+{"format_version":3,"surface":"action","record_id":"rec-...","sequence":42,"trace_id":"trace-...","span_id":"span-...","parent_span_id":"span-...","process_instance_id":"proc-...","call_index":42,"start_time":"2026-05-20T14:52:11.120+09:00","end_time":"2026-05-20T14:52:11.138+09:00","duration_ms":18.0,"pid":12345,"thread_id":123,"status":"success","routing_context":{"decision_source":"direct","namespace_source":"domain_query","inferred_intent":"source_lookup","intent_confidence":"medium"},"workflow":{"step":"inspect"},"phase_timing":{"lookup_ms":0.1,"schema_ms":0.4,"handler_ms":15.9,"log_prepare_ms":0.8},"call":{"tool_name":"source_query","namespace":"source","action":"search_source","arguments":{"query":"UObject","limit":5},"validation_phase":"dispatch","retry_signature":"sha256:..."},"return_summary":{"success":true,"result_shape":"object","argument_bytes":29,"result_bytes":38,"result_top_keys":["items"]},"redaction":{"argument_bytes":29,"result_bytes":38},"agent_signal":{"outcome":"success"}}
 ```
 
 ## 4.1 Schema Compatibility
@@ -117,12 +137,13 @@ Readers and analyzers must be lenient because the logs are append-only diagnosti
 |---|---|
 | Mixed `format_version` rows in one date folder | Parse each line independently and dispatch by row version. Do not reject an entire file because one row is old. |
 | `format_version` 1 | Treat as legacy. `trace_id`, `span_id`, and `return_summary` may be absent; `agent_signal` may contain duplicated byte fields or `retry_signature`. Derive what is possible from `call`, `return`, `redaction`, and timestamps. |
-| `format_version` 2 | Expect `trace_id`, `span_id`, and `return_summary` on fresh writer output. Empty optional fields are intentionally omitted. |
+| `format_version` 2 | Treat as legacy compact output. Expect `trace_id`, `span_id`, and `return_summary` on fresh v2 writer output, but do not expect v3 correlation/routing/timing fields. |
+| `format_version` 3 | Current writer output. Expect `record_id`, `trace_id`, `span_id`, `process_instance_id`, `routing_context`, `workflow`, `phase_timing`, `environment`, and `return_summary` where the surface can derive them. Empty optional fields are intentionally omitted. |
 | Unknown future version | Keep the raw row, extract shared fields (`surface`, `start_time`, `duration_ms`, `call`, `status`, `agent_signal`) when possible, and mark unsupported fields as unknown. |
 | Missing optional fields | Treat as unknown, not false. For example, missing `repeat_within_window` means "not emitted", not "definitely not repeated". |
 | Unknown extra fields | Preserve or ignore; never fail parsing solely because a writer added fields. |
 
-Analyzer reports should include a per-file schema mix summary (`v1_count`, `v2_count`, `unknown_count`) so stale long-running processes are visible.
+Analyzer reports should include a per-file schema mix summary (`v1_count`, `v2_count`, `v3_count`, `unknown_count`) so stale long-running processes are visible.
 
 ## 5. Agent Signal Fields
 
@@ -140,27 +161,27 @@ Analyzer reports should include a per-file schema mix summary (`v1_count`, `v2_c
 
 Tags currently emitted: `missing_action`, `schema_confusing`, `repeated_call` (proxy only), `editor_unavailable` (proxy only), `slow_action`, `large_result`, `escape_hatch` (action `editor.run_python` only), `profile_blocked`.
 
-Tags reserved but not yet emitted by any surface: `discovery_gap`, `repeated_failure`. The proxy already records each retry signature's previous-failure flag in its dedup ring but never reads it back, so `repeated_failure` needs that stored flag wired into classification before any analyzer can rely on it; `discovery_gap` needs the routing context in section 5.2.2.
+Tags reserved but not yet emitted by any surface: `discovery_gap`, `repeated_failure`. The proxy records routing context and retry signatures, but analyzers should derive discovery gaps and repeated-failure patterns from multiple rows before treating them as improvement findings.
 
 ## 5.1 Analysis Usage Contract
 
 ### Current vs target analysis capability
 
-These daily logs exist to answer four questions: **what** tool an agent called, **why** it likely called it, **how** it continued, and **where** time accumulated. Against the **current `format_version` 2** records, only the first is fully answerable; the rest depend on the fields in section 5.2 and are not collected yet. Against legacy `format_version` 1 rows, even the `what` answer may need best-effort normalization because `trace_id`, `span_id`, and `return_summary` are absent.
+These daily logs exist to answer four questions: **what** tool an agent called, **why** it likely called it, **how** it continued, and **where** time accumulated. Against current `format_version` 3 records, all four are answerable enough to build the first local analyzer, with the caveats below. Against legacy `format_version` 1 or 2 rows, analyzers must fall back to the older fields each row actually contains.
 
-| Goal | Now (v2) | Mechanism today | Gap (needs section 5.2) |
+| Goal | Now (v3) | Mechanism today | Remaining caveat |
 |---|---|---|---|
-| **What** was called | Full | `call.namespace`/`action`/`tool_name`, `surface` | — |
-| **Why** it was called | Minimal | `agent_signal.improvement_tags`, `call.retry_signature`, proxy `repeat_within_window` | `routing_context.decision_source` / `inferred_intent`, recent find/discover linkage (5.2.2) |
-| **How** the agent continued | Weak | `trace_id` groups one call's proxy→action→child query; identical retries cluster by `retry_signature` | `record_id`, `previous_record_id`, `parent_span_id`, `session_key` / `process_instance_id`, `workflow.*` (5.2.1, 5.2.3) |
-| **Where** time accumulated | Coarse | per-surface `duration_ms`; `trace_id` gives a proxy/action/query 3-level split | `phase_timing.*`, `child_process.exec_process_ms` (5.2.4) |
+| **What** was called | Full | `call.namespace`/`action`/`tool_name`, `surface`, `return_summary.result_shape` | Legacy rows need normalization. |
+| **Why** it was called | Improved | `routing_context.decision_source`, `namespace_source`, `matched_discovered_action`, `inferred_intent`, `agent_signal.improvement_tags` | This remains inference from routing/result metadata, not private agent reasoning. |
+| **How** the agent continued | Improved | `record_id`, `previous_record_id`, `time_since_previous_ms`, `process_instance_id`, `parent_span_id`, `workflow.*` | True multi-turn grouping depends on process/session continuity; stateless calls still require timestamp/process fallback. |
+| **Where** time accumulated | Improved | `phase_timing.*`, `duration_ms`, `child_process.exec_process_ms`, cross-surface spans | `log_write_ms` is optional/usually absent because a row cannot include a post-append measurement from the same write. |
 
-Correctness caveats for any analyzer built on v2 today:
+Correctness caveats for analyzers:
 
-- **Child-query double counting (the #1 bottleneck blocker):** a live `source` action runs `monolith_query.exe` synchronously, so the action record's `duration_ms` already includes the child query's `duration_ms`. Until `child_process.exec_process_ms` (5.2.4) lands, every `*_query` action duration is uninterpretable for the **Where** question — it blends editor handler time and child-process time and cannot be split. Do not sum per-surface durations within a trace without subtracting the child query.
-- **No session/timeline key yet:** `trace_id` groups a single tool call and its downstream work, not a whole agent session. Cross-call ordering currently relies on timestamps plus `pid`; robust timeline reconstruction needs `session_key` / `process_instance_id` / `previous_record_id` (5.2.1). The cheapest first win here is proxy-side: the proxy is a single long-lived process that all of an agent's MCP calls flow through and it already keeps a per-process `sequence`, so emitting `previous_record_id` + `time_since_previous_ms` on the proxy alone reconstructs the call order and separates agent think-time (gap before a call) from tool time (`duration_ms`) — serving both **How** and **Where** at once.
+- **Child-query double counting is now identifiable:** a live `source` action can run `monolith_query.exe` synchronously, so the action record's `duration_ms` includes child query time. Use `child_process.exec_process_ms` and the child query row's `parent_span_id` to separate editor handler time from child-process time before building bottleneck totals.
+- **Session/timeline grouping is best effort:** `trace_id` groups one tool call and downstream work. `process_instance_id`, `session_key`, `previous_record_id`, and `time_since_previous_ms` reconstruct per-process or per-session timelines, but stateless proxy/editor paths still cannot prove all rows belong to one human/agent turn.
 - **Catalog fetches are invisible:** the proxy logs only `tools/call`. `tools/list` (catalog refresh), `initialize`, and `ping` are not logged, so an analyzer cannot see when an agent (re)pulled the tool list — a routing signal for the **Why** question. `monolith_find` / `monolith_discover` are themselves `tools/call`, so those discovery steps do remain visible.
-- **`return_summary` shape differs per surface:** action emits `result_top_keys` + counts, proxy emits `response_top_keys` / `result_top_keys` + `content_count` / `tools_count`, query emits `stdout_top_keys` + `results_count` / `items_count` and splits stdout/stderr bytes. A cross-surface analyzer must normalize three summary shapes today; the `result_shape` enum in 5.2.5 is the intended unifier but no surface emits it yet.
+- **`return_summary` remains surface-shaped:** `result_shape` gives a common enum, but action/proxy/query still expose different top-key and count fields. A cross-surface analyzer must normalize those shapes before comparing result size or item count.
 
 Daily logs are meant to answer questions such as:
 
@@ -176,47 +197,47 @@ Initial metrics worth deriving from JSONL:
 
 | Metric | Availability | Use |
 |---|---|---|
-| Calls by namespace/action/surface | v2 | Find high-traffic tools and underused or misplaced namespaces. |
-| Error class by action | v2 | Prioritize schema fixes, missing actions, and bad diagnostics. |
-| Repeated call/failure clusters | v2 partial (identical retries via `retry_signature` + proxy `repeat_within_window`); causal recovery needs 5.2.3 | Detect confusing workflows and retry loops. |
-| Discover-to-action proximity | needs 5.2.2 (routing + recent find/discover) | Estimate whether `monolith_find` / `monolith_discover` is helping agents route correctly. |
-| Large result/truncation rate | v2 | Identify actions that need pagination, summaries, or narrower defaults. |
-| Source/query dual-surface count | v2 (shared `trace_id`) | Confirm expected child query usage without treating it as duplicate telemetry. |
-| Per-phase / cross-surface time breakdown | needs 5.2.4 (`phase_timing`, `child_process`) | Locate bottlenecks within a surface and across proxy/action/query. |
+| Calls by namespace/action/surface | v2+ | Find high-traffic tools and underused or misplaced namespaces. |
+| Error class by action | v2+ | Prioritize schema fixes, missing actions, and bad diagnostics. |
+| Repeated call/failure clusters | v3 preferred (`previous_record_id`, `time_since_previous_ms`, `retry_signature`) | Detect confusing workflows and retry loops. |
+| Discover-to-action proximity | v3 (`routing_context` + recent find/discover fields where available) | Estimate whether `monolith_find` / `monolith_discover` is helping agents route correctly. |
+| Large result/truncation rate | v2+ | Identify actions that need pagination, summaries, or narrower defaults. |
+| Source/query dual-surface count | v3 preferred (`trace_id` + `parent_span_id` + `child_process`) | Confirm expected child query usage without treating it as duplicate telemetry. |
+| Per-phase / cross-surface time breakdown | v3 (`phase_timing`, `child_process`) | Locate bottlenecks within a surface and across proxy/action/query. |
 
 ## 5.2 Analysis Data Collection Contract
 
-Analysis implementation is deferred. Before building production analyzers, the log writers should collect enough structured context to reconstruct agent work as a timeline:
+Analysis implementation is deferred. The format v3 log writers collect enough structured context to reconstruct agent work as a timeline:
 
 1. What tool did the agent call?
 2. Why did the agent likely call it?
 3. How did the agent continue after success, failure, discovery, or fallback?
 4. Where did time accumulate across proxy, editor action, child query, DB work, and log I/O?
 
-This section defines the data collection target. It is intentionally additive: missing fields must not break readers, and v1/v2 records remain valid historical input. However, timeline, intent, and bottleneck analysis should not be considered reliable until the relevant fields below are emitted by fresh proxy/query/action processes.
+This section defines the data collection contract. It is intentionally additive: missing fields must not break readers, and v1/v2 records remain valid historical input. Timeline, intent, and bottleneck analysis should prefer fresh v3 proxy/query/action records and degrade gracefully for older rows.
 
 ### 5.2.1 Correlation Fields
 
 | Field | Surface | Requirement | Notes |
 |---|---|---|---|
-| `record_id` | all | Add in next schema revision. | Stable unique id per JSONL row; use for parent/previous/retry links. |
-| `trace_id` | all | Already required in v2. | Groups one MCP tool call and its downstream editor/query work. |
-| `span_id` | all | Already required in v2. | Unique span for this row. |
-| `parent_span_id` | action/query | Add when known. | Action parent is the proxy span; child query parent is the action span. Requires forwarding the caller's span across process boundaries (see transport note below) — `trace_id` alone is not sufficient. |
-| `session_key` | proxy/action | Add when available. | Redacted MCP session key, never raw `MCP-Session-Id`. Use `stateless` when absent. |
-| `process_instance_id` | all | Add at process start. | Distinguishes sequence reuse after process restart. |
-| `call_index` | proxy/action | Add monotonic per session/process. | Supports ordering even when clocks are close. |
-| `previous_record_id` | proxy/action/query | Best effort. | Previous log row in the same process/session, for timeline reconstruction. |
-| `time_since_previous_ms` | proxy/action/query | Best effort. | Helps detect agent think time vs tool execution time. |
+| `record_id` | all | Emitted in v3. | Stable unique id per JSONL row; use for parent/previous/retry links. |
+| `trace_id` | all | Emitted in v2+. | Groups one MCP tool call and its downstream editor/query work. |
+| `span_id` | all | Emitted in v2+. | Unique span for this row. |
+| `parent_span_id` | action/query | Emitted in v3 when known. | Action parent is the proxy span; child query parent is the action span. |
+| `session_key` | proxy/action | Emitted in v3 when available. | Redacted MCP session key, never raw `MCP-Session-Id`. Use `stateless` when absent. |
+| `process_instance_id` | all | Emitted in v3 at process start. | Distinguishes sequence reuse after process restart. |
+| `call_index` | proxy/action | Emitted in v3. | Supports ordering even when clocks are close. |
+| `previous_record_id` | proxy/action/query | Emitted in v3 best effort. | Previous log row in the same process/session, for timeline reconstruction. |
+| `time_since_previous_ms` | proxy/action/query | Emitted in v3 best effort. | Helps detect agent think time vs tool execution time. |
 
 `sequence` remains process-local compatibility data. New analyzers should prefer `record_id`, `trace_id`, `span_id`, and timestamps.
 
-**Cross-process span transport (required for `parent_span_id`).** Today only `trace_id` crosses process boundaries: the proxy injects `_monolith_trace_id` into the forwarded JSON-RPC, the HTTP server adopts it, and the action exports `MONOLITH_TRACE_ID` to the child query. Span linkage needs the same path to also carry the caller's span id, otherwise `parent_span_id` cannot be populated even after the rest of section 5.2 lands:
+**Cross-process span transport.** Format v3 transports both trace and parent span across the live call path:
 
 - Proxy → action: inject `_monolith_parent_span_id` (the proxy span) alongside `_monolith_trace_id`; the HTTP server adopts it as the action record's `parent_span_id`.
 - Action → child query: export `MONOLITH_PARENT_SPAN_ID` (the action span) alongside `MONOLITH_TRACE_ID`; `monolith_query.exe` records it as the query record's `parent_span_id`.
 
-These two additions are the prerequisite for end-to-end timeline reconstruction and for attributing time across proxy, action, and child query.
+These additions are the prerequisite for end-to-end timeline reconstruction and for attributing time across proxy, action, and child query.
 
 ### 5.2.2 Routing And Intent Context
 
@@ -233,11 +254,11 @@ Logs cannot know the agent's private reasoning. They can still collect routing e
 | `routing_context.inferred_intent` | proxy/action/query | stable enum | Coarse classification such as `schema_discovery`, `source_lookup`, `asset_search`, `build_diagnostics`, `error_recovery`, `mutation`, `verification`. |
 | `routing_context.intent_confidence` | proxy/action/query | `low`, `medium`, `high` | Confidence of automatic classification. |
 
-Implementation guidance:
+Implementation notes:
 
-- Proxy should maintain a small in-memory per-session/process ring of recent `monolith_find`, `monolith_discover`, errors, hints, and related actions.
-- Action should log the normalized namespace/action and validation phase; proxy can provide the routing context, action can supplement it.
-- Query should mark `namespace_source=child_process` when `MONOLITH_TRACE_ID` or future parent span environment variables are present.
+- Script proxies maintain a small in-memory per-session/process ring of recent `monolith_find`, `monolith_discover`, errors, hints, and related actions. The native C++ proxy emits a compatible basic routing context.
+- Action logs the normalized namespace/action and validation phase; proxy context is transported through the HTTP request when available, and action supplements context from registry metadata.
+- Query marks `namespace_source=child_process` when `MONOLITH_TRACE_ID` or `MONOLITH_PARENT_SPAN_ID` is present.
 - Do not record free-form agent thoughts. Use stable enums and trace links.
 
 ### 5.2.3 Workflow Step Context
@@ -268,7 +289,7 @@ Proxy phases:
 | `phase_timing.http_roundtrip_ms` | POST to editor MCP endpoint, including editor processing. |
 | `phase_timing.fallback_ms` | Local offline/error fallback generation. |
 | `phase_timing.log_prepare_ms` | Redaction, bounding, summary construction. |
-| `phase_timing.log_write_ms` | File lock and append time. |
+| `phase_timing.log_write_ms` | Optional. Only emit if the surface can measure append time without lying in the same row. |
 
 Action phases:
 
@@ -281,7 +302,7 @@ Action phases:
 | `phase_timing.handler_ms` | Handler execution. |
 | `phase_timing.post_edit_ms` | Post-edit validation and guard bookkeeping. |
 | `phase_timing.log_prepare_ms` | Redaction, bounding, summary construction. |
-| `phase_timing.log_write_ms` | File lock and append time. |
+| `phase_timing.log_write_ms` | Optional. Only emit if the surface can measure append time without lying in the same row. |
 
 Query phases:
 
@@ -293,7 +314,7 @@ Query phases:
 | `phase_timing.action_exec_ms` | Namespace action execution. |
 | `phase_timing.stdout_capture_ms` | Capture/replay overhead. |
 | `phase_timing.log_prepare_ms` | Redaction, bounding, summary construction. |
-| `phase_timing.log_write_ms` | File lock and append time. |
+| `phase_timing.log_write_ms` | Optional. Only emit if the surface can measure append time without lying in the same row. |
 
 Child-process wrappers such as live `source` actions that call `monolith_query.exe` should additionally record:
 
@@ -360,39 +381,39 @@ Add low-cardinality context that helps compare runs without exposing secrets.
 - Treat Windows paths, asset paths, and source file paths as project context. They may be logged when needed for local diagnostics, but analyzers should not require full paths when a hash/count/extension/category is enough.
 - `reason` and `inferred_intent` fields must be generated from tool routing/result metadata, not from hidden agent chain-of-thought.
 
-### 5.2.8 Example Future Record
+### 5.2.8 Example v3 Record
 
 ```json
 {"format_version":3,"surface":"action","record_id":"rec-...","trace_id":"trace-...","span_id":"span-...","parent_span_id":"span-...","session_key":"md5:...","process_instance_id":"proc-...","call_index":17,"previous_record_id":"rec-...","time_since_previous_ms":420.5,"start_time":"2026-05-20T14:52:11.120+09:00","end_time":"2026-05-20T14:52:11.138+09:00","duration_ms":18.0,"pid":12345,"thread_id":123,"status":"success","routing_context":{"decision_source":"after_discover","namespace_source":"domain_query","matched_discovered_action":true,"inferred_intent":"source_lookup","intent_confidence":"medium"},"workflow":{"step":"inspect","discovery_root_record_id":"rec-..."},"phase_timing":{"lookup_ms":0.1,"profile_ms":0.1,"schema_ms":0.4,"handler_ms":15.9,"log_prepare_ms":0.8,"log_write_ms":0.7},"call":{"tool_name":"source_query","namespace":"source","action":"search_source","arguments":{"query":"UObject","limit":5},"validation_phase":"dispatch","retry_signature":"sha256:..."},"return_summary":{"success":true,"result_shape":"object","items_count":5,"symbols_count":5,"argument_bytes":29,"result_bytes":2048,"result_top_keys":["items","count"]},"redaction":{"argument_bytes":29,"result_bytes":2048},"agent_signal":{"outcome":"success"}}
 ```
 
-### 5.2.9 Implementation Priority Before Analysis
+### 5.2.9 Analyzer Input Priority
 
-When section 5.2 is implemented, sequence the fields by the goal they unlock so each increment is independently useful. The first two groups are prerequisites for a reliable first analyzer; the third unlocks better intent inference.
+When building the first analyzer, consume v3 fields in the order of the question they unlock:
 
-1. **How the agent continued (timeline):** `process_instance_id`, `session_key`, `previous_record_id`, `time_since_previous_ms`, then `parent_span_id` (gated on the cross-process span transport in 5.2.1). Without these, analyzers can only build timestamp-based approximations.
-2. **Where time accumulates (bottlenecks):** `phase_timing.*` per surface, then `child_process.exec_process_ms` to separate editor handler time from synchronous child query time. Without these, analyzers can flag slow calls but cannot attribute the delay.
+1. **How the agent continued (timeline):** `process_instance_id`, `session_key`, `previous_record_id`, `time_since_previous_ms`, then `parent_span_id`.
+2. **Where time accumulates (bottlenecks):** `phase_timing.*` per surface, then `child_process.exec_process_ms` to separate editor handler time from synchronous child query time.
 3. **Why the agent called (intent):** `routing_context.decision_source`, `recent_find_trace_id` / `recent_discover_trace_id`, then `inferred_intent`.
 
-The **What** goal is already satisfied by `format_version` 2; no new fields are required for it.
+The **What** goal is satisfied by v2+ rows; v3 adds stronger linkage and summaries for analysis quality.
 
 ## 6. Surface Contracts
 
 ### 6.1 Proxy
 
-Proxy logs wrap MCP `tools/call` handling. They record JSON-RPC id, original tool name, forwarded tool name, redacted arguments, response/error, proxy runtime (`cpp`, `python`, or `node`), and a generated `trace_id`. In the script proxies (`python`, `node`) — the P0 path — `tool_name_original` and `tool_name_forwarded` are always identical because they forward the tool name unchanged; only the native `cpp` proxy rewrites some names (for example to `editor_query`), so the distinction is currently meaningful only there. An analyzer must not assume a forwarded-name rewrite was observable on the path an agent actually used. The forwarded JSON-RPC object carries `_monolith_trace_id` so action logs can share the same trace without changing the MCP-visible tool schema. A future revision should also inject `_monolith_parent_span_id` (the proxy span) so action records can set `parent_span_id` (see section 5.2.1).
+Proxy logs wrap MCP `tools/call` handling. They record JSON-RPC id, original tool name, forwarded tool name, redacted arguments, response/error, proxy runtime (`cpp`, `python`, or `node`), a generated `trace_id`, and a proxy `span_id`. In the script proxies (`python`, `node`) — the P0 path — `tool_name_original` and `tool_name_forwarded` are always identical because they forward the tool name unchanged; only the native `cpp` proxy rewrites some names (for example to `editor_query`), so the distinction is currently meaningful only there. An analyzer must not assume a forwarded-name rewrite was observable on the path an agent actually used. The forwarded JSON-RPC object carries `_monolith_trace_id` and `_monolith_parent_span_id` so action logs can share the same trace and link back to the proxy span without changing the MCP-visible tool schema.
 
 P0 must cover the active script proxy path selected by `Scripts/monolith_proxy.bat`; implementing only `monolith_proxy.exe` is not sufficient for the current checkout.
 
 ### 6.2 Query
 
-Query logs wrap `monolith_query.exe <namespace> <action> ...`. They record argv, parsed namespace/action/options, effective DB path, stdout, stderr, fatal error, exit code, and `return_summary`. When launched from an editor action, they inherit the action trace through `MONOLITH_TRACE_ID`; direct CLI calls generate their own trace. A future revision should also read `MONOLITH_PARENT_SPAN_ID` (the action span) to set the query record `parent_span_id` (see section 5.2.1).
+Query logs wrap `monolith_query.exe <namespace> <action> ...`. They record argv, parsed namespace/action/options, effective DB path, stdout, stderr, fatal error, exit code, and `return_summary`. When launched from an editor action, they inherit the action trace through `MONOLITH_TRACE_ID` and link to the action span through `MONOLITH_PARENT_SPAN_ID`; direct CLI calls generate their own trace.
 
 The CLI compatibility contract is strict: stdout, stderr, and exit code observed by callers must remain unchanged. Fatal paths such as `die()` must become loggable without changing command semantics.
 
 ### 6.3 Action
 
-Action logs wrap editor-side `FMonolithToolRegistry::ExecuteAction`. They record normalized namespace/action, effective params after alias handling, validation phase (`lookup`/`profile`/`schema`/`dispatch`), result/error/hints/warnings, and the active trace context. Post-edit validation outcome is not yet captured in the record.
+Action logs wrap editor-side `FMonolithToolRegistry::ExecuteAction`. They record normalized namespace/action, effective params after alias handling, validation phase (`lookup`/`profile`/`schema`/`dispatch`), result/error/hints/warnings, routing/workflow context, phase timing, child-query process summaries, and the active trace/span context. Post-edit validation outcome is not yet captured in the record.
 
 File I/O must not run while the registry lock is held. Pre-dispatch failures such as unknown action, profile block, missing param, and strict param rejection must still emit `action.jsonl` when `bEnableDailyLog=true`.
 
@@ -436,10 +457,10 @@ When truncating, preserve `truncated=true`, `original_bytes`, `sha256` of the or
 | Script proxy parity | The active script proxy path emits the same schema and env semantics as the C++ proxy. |
 | Query output preservation | `monolith_query.exe` stdout/stderr/exit code are unchanged by logging. |
 | Source dual-surface | A live `source_query` that shells out to `monolith_query.exe` emits both valid action and query records. |
-| Trace continuity | Proxy-to-action records share `trace_id`; action-spawned query records inherit the action `trace_id`. |
-| Schema compactness | New format v2 records include `return_summary` and omit empty optional fields and duplicate `agent_signal.retry_signature` / byte fields. |
-| Fresh-process v2 append | After restarting proxy/editor/query processes, new proxy, query, and action calls append `format_version=2` rows to the current date folder. Existing v1 rows may remain earlier in the same file. |
-| Mixed-schema reader tolerance | A reader/analyzer test covers a date folder containing v1 and v2 rows and reports schema counts without dropping valid records. (Pending: no reader/analyzer exists yet — see §11 Open Decisions. This gate cannot pass until the first reader lands.) |
+| Trace continuity | Proxy-to-action records share `trace_id`; action records link to proxy `span_id`; action-spawned query records inherit the action `trace_id` and `span_id` as `parent_span_id`. |
+| Schema compactness | New format v3 records include `return_summary`, `routing_context`, `workflow`, `phase_timing`, and analyzer-friendly ids while omitting empty optional fields and duplicate `agent_signal.retry_signature` / byte fields. |
+| Fresh-process v3 append | After restarting proxy/editor/query processes, new proxy, query, and action calls append `format_version=3` rows to the current date folder. Existing v1/v2 rows may remain earlier in the same file. |
+| Mixed-schema reader tolerance | A reader/analyzer test covers a date folder containing v1, v2, and v3 rows and reports schema counts without dropping valid records. (Pending: no reader/analyzer exists yet — see §11 Open Decisions. This gate cannot pass until the first reader lands.) |
 | Redaction/truncation | Sensitive values are absent and large payloads stay bounded with metadata. |
 | Failure paths | Unknown action, bad params, and editor unavailable preserve existing failure semantics and emit diagnostic records when enabled. |
 
@@ -462,7 +483,7 @@ Daily invocation logs are the durable, date-partitioned JSONL layer. They intent
 | Retention | P0 keeps logs manually managed. A later setting should cap by age, total bytes, or both. |
 | Reader/analyzer | Decide whether the first reader is editor action `monolith.analyze_invocation_logs`, offline `monolith_query logs analyze`, or both. |
 | Shared enable config | Decide how editor `bEnableDailyLog` should mirror to proxy/query without requiring environment variables. |
-| Analyzer schema | Decide the first analyzer action/CLI shape for reading mixed v1/v2 logs, grouping by `trace_id` when present, and falling back to timestamp/pid ordering when not. |
+| Analyzer schema | Decide the first analyzer action/CLI shape for reading mixed v1/v2/v3 logs, grouping by `trace_id` / `parent_span_id` / `previous_record_id` when present, and falling back to timestamp/pid ordering when not. |
 | Privacy policy | Decide whether source snippets, asset paths, and user/project identifiers should be logged as raw text, redacted, or hash-only. |
 
 ## 12. Verification Record
@@ -490,4 +511,19 @@ Daily invocation logs are the durable, date-partitioned JSONL layer. They intent
 | Static checks | `node --check Scripts\monolith_proxy.js`, Python py_compile, and `Scripts\ci_static_checks.py check` passed with 0 blocking findings. |
 | Native proxy/query builds | `Tools\MonolithProxy\build.bat` and `Tools\MonolithQuery\build.bat` succeeded and copied binaries to `Binaries\`; only C4819 codepage warnings were emitted. |
 | Proxy/query v2 smoke | C++ proxy, Python proxy, Node proxy, and direct query calls under isolated `MONOLITH_TOOL_LOG_DIR` emitted format v2 records with `trace_id`, `span_id`, `return_summary`, and no duplicate `agent_signal.retry_signature`; query inherited `MONOLITH_TRACE_ID=trace-smoke-shared`. |
-| MonolithCore compile | UBT compiled `MonolithToolInvocationLogger.cpp`, `MonolithToolRegistry.cpp`, `MonolithHttpServer.cpp`, and tests, then failed only at DLL link because a running `UnrealEditor.exe` held `Binaries\Win64\UnrealEditor-MonolithCore.dll`. Action automation for v2 should be rerun after that editor is closed. |
+| MonolithCore compile | UBT compiled `MonolithToolInvocationLogger.cpp`, `MonolithToolRegistry.cpp`, `MonolithHttpServer.cpp`, and tests, then failed only at DLL link because a running `UnrealEditor.exe` held `Binaries\Win64\UnrealEditor-MonolithCore.dll`. Superseded by the 2026-05-21 v3 verification below. |
+
+2026-05-21 format v3 follow-up:
+
+| Gate | Result |
+|---|---|
+| Static checks | `node --check Scripts\monolith_proxy.js`, `uv run --python 3.11 python -m py_compile Scripts\monolith_proxy.py Scripts\ci_static_checks.py`, and `uv run --python 3.11 python Scripts\ci_static_checks.py check` passed with 0 blocking findings. |
+| Native proxy/query builds | `Tools\MonolithProxy\build.bat` and `Tools\MonolithQuery\build.bat` succeeded and copied updated binaries to `Binaries\`; only C4819 codepage warnings were emitted. |
+| Query v3 smoke | Direct `Binaries\monolith_query.exe source health` under isolated `MONOLITH_TOOL_LOG_DIR` emitted `format_version=3` with `record_id`, `process_instance_id`, `routing_context`, `workflow`, `phase_timing`, `environment`, `return_summary.result_shape`, and inherited `MONOLITH_PARENT_SPAN_ID`. |
+| Proxy v3 smoke | C++ proxy, Python proxy, and Node proxy offline smokes emitted `format_version=3` proxy records with routing/workflow/timing summaries and `editor_unavailable` outcome. |
+| Cross-runtime log lock | Python proxy, Node proxy, C++ proxy, and C++ query use the same exclusive `.lock` file create/delete protocol; a regression smoke wrote Python, Node, and C++ proxy records sequentially into the same `proxy.jsonl` without timeout. |
+| Query default-on/disable/output preservation | Direct query calls under isolated log roots verified unset `MONOLITH_TOOL_LOG_ENABLED` creates v3 `query.jsonl`, `MONOLITH_TOOL_LOG_ENABLED=0` creates no log, and stdout/stderr are identical between enabled and disabled modes. |
+| Proxy disable | C++ proxy, Python proxy, and Node proxy calls with `MONOLITH_TOOL_LOG_ENABLED=0` created no `proxy.jsonl` under the override log root. |
+| MonolithCore build | GoGameEditor UBT build completed after closing the editor process that held the previous DLL. |
+| Headless action and child query | `BatchFiles\RunHeadlessEditor.bat` launched a `-NullRHI` editor; a live proxy `source_query(crg_graph_health)` produced correlated v3 `proxy.jsonl`, `action.jsonl`, and `query.jsonl` rows with shared `trace_id`, parent span linkage, action `child_process.exec_process_ms`, action/query `inferred_intent=verification`, and query `namespace_source=child_process`. |
+| Automation tests | `Monolith.Core.ToolInvocationLogger.DailyLogOptInRedaction`, `Monolith.Core.ToolInvocationLogger.PreDispatchFailureLogged`, and `Monolith.Core.ToolInvocationLogger.SourceChildQueryDualSurface` passed. |

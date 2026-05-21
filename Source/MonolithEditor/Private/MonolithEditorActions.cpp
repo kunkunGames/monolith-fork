@@ -31,9 +31,6 @@
 #include "IImageWrapperModule.h"
 #include "IImageWrapper.h"
 #include "ImageUtils.h"
-#include "AssetToolsModule.h"
-#include "IAssetTools.h"
-#include "AutomatedAssetImportData.h"
 #include "Engine/Texture2D.h"
 #include "RenderingThread.h"
 #include "ShaderCompiler.h"
@@ -469,15 +466,6 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Optional(TEXT("persistent"), TEXT("bool"), TEXT("Use persistent component (preserves ribbons/accumulation). Default: false (per-frame recreate)."))
 			.Build());
 
-	Registry.RegisterAction(TEXT("editor"), TEXT("import_texture"),
-		TEXT("Import an external image as a UTexture2D with configurable settings"),
-		FMonolithActionHandler::CreateStatic(&HandleImportTexture),
-		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Absolute path to source image (PNG, TGA, EXR, HDR)"))
-			.Required(TEXT("destination"), TEXT("string"), TEXT("UE asset path for imported texture"))
-			.Optional(TEXT("settings"), TEXT("object"), TEXT("{compression, srgb, tiling, max_size, lod_group}"))
-			.Build());
-
 	Registry.RegisterAction(TEXT("editor"), TEXT("stitch_flipbook"),
 		TEXT("Stitch individual frame images into a flipbook atlas texture and import as UTexture2D"),
 		FMonolithActionHandler::CreateStatic(&HandleStitchFlipbook),
@@ -489,14 +477,6 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Optional(TEXT("no_mipmaps"), TEXT("bool"), TEXT("Disable mipmap generation to prevent atlas bleed"), TEXT("true"))
 			.Optional(TEXT("delete_sources"), TEXT("bool"), TEXT("Delete source PNG files after successful stitch"), TEXT("true"))
 			.Optional(TEXT("lod_group"), TEXT("string"), TEXT("Texture LOD group"), TEXT("TEXTUREGROUP_Effects"))
-			.Build());
-
-	Registry.RegisterAction(TEXT("editor"), TEXT("delete_assets"),
-		TEXT("Delete UE assets by path. Optional safety: restrict to allowed path prefixes"),
-		FMonolithActionHandler::CreateStatic(&HandleDeleteAssets),
-		FParamSchemaBuilder()
-			.Required(TEXT("asset_paths"), TEXT("array"), TEXT("Array of UE asset paths to delete"))
-			.Optional(TEXT("allowed_prefixes"), TEXT("array"), TEXT("If set, only paths starting with one of these prefixes can be deleted (e.g. [\"/Game/AgentTraining/\"])"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("get_viewport_info"),
@@ -2267,140 +2247,6 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithEditorActions::HandleImportTexture(
-	const TSharedPtr<FJsonObject>& Params)
-{
-	FString SourcePath = Params->GetStringField(TEXT("source_path"));
-	FString Destination = Params->GetStringField(TEXT("destination"));
-
-	if (SourcePath.IsEmpty() || Destination.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("source_path and destination are required"));
-	}
-
-	// Verify source file exists
-	if (!FPaths::FileExists(SourcePath))
-	{
-		return FMonolithActionResult::Error(
-			FString::Printf(TEXT("Source file not found: %s"), *SourcePath));
-	}
-
-	// Import using AssetTools
-	UAutomatedAssetImportData* ImportData = NewObject<UAutomatedAssetImportData>();
-	ImportData->Filenames.Add(SourcePath);
-	ImportData->DestinationPath = FPackageName::GetLongPackagePath(Destination);
-	ImportData->bReplaceExisting = true;
-
-	FAssetToolsModule& AssetToolsModule =
-		FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools");
-	TArray<UObject*> ImportedAssets = AssetToolsModule.Get().ImportAssetsAutomated(ImportData);
-
-	if (ImportedAssets.Num() == 0)
-	{
-		return FMonolithActionResult::Error(TEXT("Import failed — no assets imported"));
-	}
-
-	UTexture2D* Texture = Cast<UTexture2D>(ImportedAssets[0]);
-	if (!Texture)
-	{
-		return FMonolithActionResult::Error(TEXT("Imported asset is not a Texture2D"));
-	}
-
-	// Apply optional settings
-	if (Params->HasField(TEXT("settings")))
-	{
-		const TSharedPtr<FJsonObject>* SettingsObj;
-		// Handle string-serialized params (Claude Code quirk)
-		TSharedPtr<FJsonObject> ParsedSettings;
-		if (Params->TryGetObjectField(TEXT("settings"), SettingsObj))
-		{
-			ParsedSettings = *SettingsObj;
-		}
-		else
-		{
-			FString SettingsStr = Params->GetStringField(TEXT("settings"));
-			if (!SettingsStr.IsEmpty())
-			{
-				ParsedSettings = FMonolithJsonUtils::Parse(SettingsStr);
-			}
-		}
-
-		if (ParsedSettings.IsValid())
-		{
-			// Compression
-			FString Comp;
-			if (ParsedSettings->TryGetStringField(TEXT("compression"), Comp))
-			{
-				if (Comp == TEXT("TC_Normalmap")) Texture->CompressionSettings = TC_Normalmap;
-				else if (Comp == TEXT("TC_Masks")) Texture->CompressionSettings = TC_Masks;
-				else if (Comp == TEXT("TC_HDR")) Texture->CompressionSettings = TC_HDR;
-				else if (Comp == TEXT("TC_VectorDisplacementmap")) Texture->CompressionSettings = TC_VectorDisplacementmap;
-				else Texture->CompressionSettings = TC_Default;
-			}
-
-			// sRGB
-			bool bSRGB = false;
-			if (ParsedSettings->TryGetBoolField(TEXT("srgb"), bSRGB))
-			{
-				Texture->SRGB = bSRGB;
-			}
-
-			// Tiling
-			bool bTiling = false;
-			if (ParsedSettings->TryGetBoolField(TEXT("tiling"), bTiling))
-			{
-				if (bTiling)
-				{
-					Texture->AddressX = TA_Wrap;
-					Texture->AddressY = TA_Wrap;
-				}
-			}
-
-			// Max size
-			double MaxSizeNum;
-			if (ParsedSettings->TryGetNumberField(TEXT("max_size"), MaxSizeNum))
-			{
-				int32 MaxSize = (int32)MaxSizeNum;
-				if (MaxSize > 0)
-				{
-					Texture->MaxTextureSize = MaxSize;
-				}
-			}
-
-			// LOD group
-			FString LODGroup;
-			if (ParsedSettings->TryGetStringField(TEXT("lod_group"), LODGroup))
-			{
-				if (LODGroup == TEXT("TEXTUREGROUP_WorldNormalMap")) Texture->LODGroup = TEXTUREGROUP_WorldNormalMap;
-				else if (LODGroup == TEXT("TEXTUREGROUP_Effects")) Texture->LODGroup = TEXTUREGROUP_Effects;
-				else if (LODGroup == TEXT("TEXTUREGROUP_EffectsNotFiltered")) Texture->LODGroup = TEXTUREGROUP_EffectsNotFiltered;
-				// Default: TEXTUREGROUP_World (already default)
-			}
-		}
-	}
-
-	Texture->UpdateResource();
-	Texture->PostEditChange();
-	Texture->MarkPackageDirty();
-
-	// Save the package
-	UPackage* Package = Texture->GetOutermost();
-	FString PackageFilename = FPackageName::LongPackageNameToFilename(
-		Package->GetName(), FPackageName::GetAssetPackageExtension());
-	FSavePackageArgs SaveArgs;
-	UPackage::SavePackage(Package, Texture, *PackageFilename, SaveArgs);
-
-	// Return result
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("success"), true);
-	Result->SetStringField(TEXT("asset_path"), Destination);
-	Result->SetNumberField(TEXT("size_x"), Texture->GetSizeX());
-	Result->SetNumberField(TEXT("size_y"), Texture->GetSizeY());
-	Result->SetStringField(TEXT("format"), GPixelFormats[Texture->GetPixelFormat()].Name);
-
-	return FMonolithActionResult::Success(Result);
-}
-
 FMonolithActionResult FMonolithEditorActions::HandleStitchFlipbook(
 	const TSharedPtr<FJsonObject>& Params)
 {
@@ -3121,114 +2967,6 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAssetThumbnail(const 
 	Result->SetNumberField(TEXT("height"), Height);
 	Result->SetBoolField(TEXT("fallback_used"), true);
 	Result->SetBoolField(TEXT("thumbnail_fallback"), true);
-	return FMonolithActionResult::Success(Result);
-}
-
-FMonolithActionResult FMonolithEditorActions::HandleDeleteAssets(
-	const TSharedPtr<FJsonObject>& Params)
-{
-	const TArray<TSharedPtr<FJsonValue>>* AssetPathsArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("asset_paths"), AssetPathsArray) || !AssetPathsArray || AssetPathsArray->Num() == 0)
-	{
-		return FMonolithActionResult::Error(TEXT("asset_paths array is required and must not be empty"));
-	}
-
-	if (AssetPathsArray->Num() > 200)
-	{
-		return FMonolithActionResult::Error(TEXT("asset_paths array exceeds maximum allowed size (200)"));
-	}
-
-	TArray<FString> AssetPaths;
-	for (const auto& Val : *AssetPathsArray)
-	{
-		FString Path;
-		if (Val->TryGetString(Path) && !Path.IsEmpty())
-		{
-			AssetPaths.Add(Path);
-		}
-	}
-
-	if (AssetPaths.Num() == 0)
-	{
-		return FMonolithActionResult::Error(TEXT("No valid paths in asset_paths"));
-	}
-
-	// Optional safety: restrict deletion to allowed prefixes
-	TArray<FString> AllowedPrefixes;
-	const TArray<TSharedPtr<FJsonValue>>* PrefixArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("allowed_prefixes"), PrefixArray) && PrefixArray)
-	{
-		for (const auto& PVal : *PrefixArray)
-		{
-			FString Prefix;
-			if (PVal->TryGetString(Prefix) && !Prefix.IsEmpty())
-			{
-				AllowedPrefixes.Add(Prefix);
-			}
-		}
-	}
-
-	if (AllowedPrefixes.Num() > 0)
-	{
-		for (const FString& Path : AssetPaths)
-		{
-			bool bAllowed = false;
-			for (const FString& Prefix : AllowedPrefixes)
-			{
-				if (Path.StartsWith(Prefix))
-				{
-					bAllowed = true;
-					break;
-				}
-			}
-			if (!bAllowed)
-			{
-				return FMonolithActionResult::Error(FString::Printf(
-					TEXT("Refusing to delete '%s' — not under any allowed prefix. Allowed: %s"),
-					*Path, *FString::Join(AllowedPrefixes, TEXT(", "))));
-			}
-		}
-	}
-
-	// Load and delete each asset
-	TArray<UObject*> ObjectsToDelete;
-	TArray<FString> NotFound;
-
-	for (const FString& Path : AssetPaths)
-	{
-		UObject* Asset = UEditorAssetLibrary::LoadAsset(Path);
-		if (Asset)
-		{
-			ObjectsToDelete.Add(Asset);
-		}
-		else
-		{
-			NotFound.Add(Path);
-		}
-	}
-
-	int32 NumDeleted = 0;
-	if (ObjectsToDelete.Num() > 0)
-	{
-		NumDeleted = ObjectTools::DeleteObjects(ObjectsToDelete, /*bShowConfirmation=*/false);
-	}
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("success"), NumDeleted == ObjectsToDelete.Num() && NotFound.Num() == 0);
-	Result->SetNumberField(TEXT("deleted"), NumDeleted);
-	Result->SetNumberField(TEXT("requested"), AssetPaths.Num());
-	Result->SetNumberField(TEXT("found"), ObjectsToDelete.Num());
-
-	if (NotFound.Num() > 0)
-	{
-		TArray<TSharedPtr<FJsonValue>> NotFoundArr;
-		for (const FString& P : NotFound)
-		{
-			NotFoundArr.Add(MakeShared<FJsonValueString>(P));
-		}
-		Result->SetArrayField(TEXT("not_found"), NotFoundArr);
-	}
-
 	return FMonolithActionResult::Success(Result);
 }
 

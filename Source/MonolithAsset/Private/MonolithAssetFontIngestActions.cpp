@@ -1,5 +1,5 @@
 // Copyright tumourlove. All Rights Reserved.
-#include "Actions/Hoisted/FontIngestActions.h"
+#include "MonolithAssetFontIngestActions.h"
 
 // Monolith registry
 #include "MonolithPackagePathValidator.h"
@@ -28,7 +28,7 @@
 #include "IAssetTools.h"                        // IAssetTools::CreateUniqueAssetName
 #include "Modules/ModuleManager.h"              // FModuleManager::LoadModuleChecked
 
-namespace MonolithUI::FontIngestInternal
+namespace MonolithAsset::FontIngestInternal
 {
     /**
      * Map a loading-policy string to the enum. Unrecognised strings fall back to
@@ -73,11 +73,11 @@ namespace MonolithUI::FontIngestInternal
         FString    AssetPath;   // Long package name, e.g. /Game/UI/Fonts/Example/F_Regular
         FString    Typeface;    // Passed through for typeface-entry construction
     };
-} // namespace MonolithUI::FontIngestInternal
+} // namespace MonolithAsset::FontIngestInternal
 
-FMonolithActionResult MonolithUI::FFontIngestActions::HandleImportFontFamily(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(const TSharedPtr<FJsonObject>& Params)
 {
-    using namespace MonolithUI::FontIngestInternal;
+    using namespace MonolithAsset::FontIngestInternal;
 
     if (!Params.IsValid())
     {
@@ -408,10 +408,10 @@ FMonolithActionResult MonolithUI::FFontIngestActions::HandleImportFontFamily(con
     return FMonolithActionResult::Success(Result);
 }
 
-void MonolithUI::FFontIngestActions::Register(FMonolithToolRegistry& Registry)
+void MonolithAsset::FFontIngestActions::Register(FMonolithToolRegistry& Registry)
 {
     Registry.RegisterAction(
-        TEXT("ui"),
+        TEXT("asset"),
         TEXT("import_font_family"),
         TEXT("Import a font family (one-or-more TTF files) as a UFont composite asset plus one UFontFace per typeface entry. "
              "Params: destination (string, required, /Game/... output directory), "
@@ -422,7 +422,7 @@ void MonolithUI::FFontIngestActions::Register(FMonolithToolRegistry& Registry)
              "save (bool, optional, default true). "
              "Per-face errors don't abort the batch -- if at least one face imports, the composite UFont is still created; "
              "failed faces appear in the warnings array. Returns { family_asset_path, face_asset_paths[], faces_imported, faces_requested, warnings? }."),
-        FMonolithActionHandler::CreateStatic(&MonolithUI::FFontIngestActions::HandleImportFontFamily),
+        FMonolithActionHandler::CreateStatic(&MonolithAsset::FFontIngestActions::HandleImportFontFamily),
         FParamSchemaBuilder()
             .Required(TEXT("destination"), TEXT("string"), TEXT("Output directory, e.g. /Game/UI/Fonts"))
             .Required(TEXT("family_name"), TEXT("string"), TEXT("Composite UFont asset name"))

@@ -3039,7 +3039,7 @@ FMonolithActionResult FMonolithMeshBlockoutActions::CreateBlockoutBlueprint(cons
 		auto P = MakeShared<FJsonObject>();
 		P->SetStringField(TEXT("asset_path"), SavePath);
 		Registry.ExecuteAction(TEXT("blueprint"), TEXT("compile_blueprint"), P);
-		Registry.ExecuteAction(TEXT("blueprint"), TEXT("save_asset"), P);
+		Registry.ExecuteAction(TEXT("asset"), TEXT("save_asset"), P);
 	}
 
 	auto Result = MakeShared<FJsonObject>();

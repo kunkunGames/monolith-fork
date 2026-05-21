@@ -16,12 +16,9 @@
 #include "Misc/CoreDelegates.h"
 #include "Registry/MonolithUIRegistrySubsystem.h"
 
-// Hoisted action handlers (texture/font ingest, animation v2, eased segment,
-// spring bake, animation event tracks + delegate bindings, rounded corners,
+// Hoisted action handlers (animation v2, eased segment, spring bake,
+// animation event tracks + delegate bindings, rounded corners,
 // box shadow compositor, gradient MID factory).
-#include "Actions/Hoisted/TextureIngestActions.h"
-#include "Actions/Hoisted/ImageGenerationActions.h"
-#include "Actions/Hoisted/FontIngestActions.h"
 #include "Actions/Hoisted/AnimationCoreActions.h"
 #include "Actions/Hoisted/AnimationEventActions.h"
 #include "Actions/Hoisted/RoundedCornerActions.h"
@@ -77,9 +74,6 @@ void FMonolithUIModule::StartupModule()
         FMonolithUIRegistryActions::RegisterActions(OwnedRegistry);
 
         // Hoisted action set -- generic verbs registered under the ui:: namespace.
-        MonolithUI::FTextureIngestActions::Register(OwnedRegistry);
-        MonolithUI::FImageGenerationActions::Register(OwnedRegistry);
-        MonolithUI::FFontIngestActions::Register(OwnedRegistry);
         MonolithUI::FAnimationCoreActions::Register(OwnedRegistry);
         MonolithUI::FAnimationEventActions::Register(OwnedRegistry);
         MonolithUI::FRoundedCornerActions::Register(OwnedRegistry);

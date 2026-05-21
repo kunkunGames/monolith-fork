@@ -130,7 +130,7 @@ Also works on: Level Blueprints (map path or `$current`), Widget Blueprints.
 | `CallDelegate` | `delegate_property_name`, `target_class`? | "Call ..." — broadcasts a BP-resident multicast delegate to all listeners. Spawned node has one input pin per delegate signature parameter |
 | *(any UK2Node_ class)* | — | Generic fallback |
 
-### Compile & Create (6)
+### Compile & Create (5)
 
 | Action | Key Params | Purpose |
 |--------|-----------|---------|
@@ -139,7 +139,8 @@ Also works on: Level Blueprints (map path or `$current`), Widget Blueprints.
 | `create_blueprint` | `save_path`, `parent_class`, `blueprint_type`? | Create new BP |
 | `duplicate_blueprint` | `asset_path`, `new_path` | Duplicate |
 | `get_dependencies` | `asset_path`, `direction`? | Asset deps |
-| `save_asset` | `asset_path` | Save to disk |
+
+Use `asset.save_asset` for generic package saves; `blueprint.save_asset` is not registered as a public compatibility alias.
 
 ### Timeline (4)
 
@@ -185,7 +186,7 @@ Nodes use spec IDs (e.g., `"id": "evt"`) mapped to real IDs in connections/pin_d
 | `list_templates` | — | Available templates |
 | `apply_template` | `template_name`, `asset_path`, `params`? | Apply template |
 | `auto_layout` | `asset_path`, `graph_name`?, `layout_mode`?, `formatter`? | Auto-arrange. Modes: `all`/`new_only`/`selected`. Formatter: `monolith`/`blueprint_assist` |
-| `add_event_node` | `asset_path`, `event_name`, `replication`?, `reliable`? | Override/custom event with RPC |
+| `add_event_node` | `asset_path`, `event_name`, `replication`?, `reliable`? | Parent or implemented-interface override; otherwise custom event with RPC |
 | `add_comment_node` | `asset_path`, `text`, `node_ids`?, `color`? | Comment box |
 | `batch_execute` | `asset_path`, `operations`, `compile_on_complete`? | Multiple ops, one round-trip |
 | `add_nodes_bulk` | `asset_path`, `nodes` (with `temp_id`) | Place multiple, returns ID map |

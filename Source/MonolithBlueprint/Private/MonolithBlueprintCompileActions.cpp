@@ -1,4 +1,5 @@
 #include "MonolithBlueprintCompileActions.h"
+#include "MonolithAssetLifecycleActions.h"
 #include "MonolithBlueprintInternal.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithJsonUtils.h"
@@ -66,12 +67,6 @@ void FMonolithBlueprintCompileActions::RegisterActions(FMonolithToolRegistry& Re
 			.Optional(TEXT("direction"),  TEXT("string"), TEXT("depends_on, referenced_by, or both (default: both)"), TEXT("both"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("blueprint"), TEXT("save_asset"),
-		TEXT("Save a loaded asset to disk. Works on any asset type, not just Blueprints."),
-		FMonolithActionHandler::CreateStatic(&HandleSaveAsset),
-		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to save"))
-			.Build());
 }
 
 // ============================================================
@@ -627,30 +622,5 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleGetDependencies(co
 
 FMonolithActionResult FMonolithBlueprintCompileActions::HandleSaveAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
-	}
-
-	UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
-	if (!Asset)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
-	}
-
-	bool bWasDirty = Asset->GetOutermost()->IsDirty();
-	bool bSaved = UEditorAssetLibrary::SaveLoadedAsset(Asset, false);
-
-	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
-	Root->SetStringField(TEXT("asset_path"), AssetPath);
-	Root->SetBoolField(TEXT("saved"), bSaved);
-	Root->SetBoolField(TEXT("was_dirty"), bWasDirty);
-
-	if (!bSaved)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save asset: %s"), *AssetPath));
-	}
-	return FMonolithActionResult::Success(Root);
+	return FMonolithAssetLifecycleActions::SaveAsset(Params);
 }

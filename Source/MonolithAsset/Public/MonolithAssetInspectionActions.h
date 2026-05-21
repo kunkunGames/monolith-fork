@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "MonolithToolRegistry.h"
 
-class FMonolithSpecializedAssetActions
+class MONOLITHASSET_API FMonolithAssetInspectionActions
 {
 public:
 	static void RegisterActions(FMonolithToolRegistry& Registry);

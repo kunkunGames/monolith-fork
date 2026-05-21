@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.14.10 · **Last updated:** 2026-05-20
+**Version:** v0.14.10 · **Last updated:** 2026-05-21
 
 Action and dispatcher totals are runtime-discovered. Call `monolith_status()` for live totals, `monolith_find("task text")` when the exact action is unclear, and `monolith_discover("<namespace>")` or `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` for current action schemas; 24 town-gen actions remain experimental and disabled until `bEnableProceduralTownGen=true`.
 
@@ -33,7 +33,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [project](#project) | 19 | Project-wide asset index (SQLite + FTS5) |
 | [collection](#collection) | 13 | Content Browser static/dynamic collection management |
 | [source](#source) | 27 | Unreal Engine C++ source code navigation |
-| [asset](#asset) | 6 | Specialized asset enrichment plus naming and rename hygiene |
+| [asset](#asset) | 8 | Asset ingest, specialized asset enrichment, naming, and rename hygiene |
 | [mesh](#mesh) | 70 | Static mesh inspection/operations/validation/performance/tech-art workflows |
 | [scene](#scene) | 76 | Editor-world actor CRUD, spatial queries, lighting, audio, decals, scatter, metadata |
 | [level_instance](#level_instance) | 16 | Level Instance and prefab workflows |
@@ -44,7 +44,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [pcg](#pcg) | 4 | Optional PCG AssetRegistry/reflection discovery registered by MonolithPCG |
 | [slate](#slate) | 1 (+5 gated) | Live editor Slate window/widget inspection registered by MonolithSlate |
 | [water](#water) | 2 | Optional Water/Landscape actor discovery registered by MonolithWater |
-| [ui](#ui) | 121 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
+| [ui](#ui) | 119 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 136 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
@@ -73,6 +73,7 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `ai` BT actions | Error message standardization (Phase J F15) | All BT-related actions now return `{ "error": "<code>", "detail": "<human>" }` instead of mixed prose. |
 | `gas` UI binding response | Shape change (Phase J F5) | Returns `{ bindings: [...], count: N }` instead of a bare array. Wrap your client parsers. |
 | `blueprint` DataTable maintenance | **NEW** | Adds schema inspection, guarded row update/remove, and guarded CSV export for `UDataTable` assets. |
+| `blueprint.add_event_node` | Interface override support | When `event_name` matches a BlueprintEvent function from an implemented interface, the action now creates a real `K2Node_Event` override instead of falling back to a same-named `K2Node_CustomEvent`. Parent-class override and custom-event behavior is unchanged. |
 | `localization` StringTable actions | **NEW** | Adds guarded StringTable create/edit/remove/metadata plus CSV import/export with `dry_run`/`confirm` write gates. |
 | `monolith.discover` / `monolith.describe_domain` action rows | Metadata added | Each action row includes `execution_policy` metadata (`policy_id`, `defaulted`, dirty-package/transaction/validation flags). Explicit mutating policies can now opt into central dirty-package tracking, transaction wrapping, and post-edit validation. |
 | `monolith.find` / `monolith.discover` | **EXPANDED** | Adds fuzzy task-to-action search plus projection-aware discovery (`mode=summary|actions|schema`, `query`, `action`, `fields`, `limit`, `cursor`). Domain `{namespace}_query` tools stay stable; `tools/list` descriptions no longer inline every action name. Settings-dependent deferred catalog actions remain available for diagnostics but are not the agent-facing catalog route. |
@@ -283,13 +284,15 @@ Full read/write access to Blueprint graphs, variables, components, functions, no
 | Bulk / batch | 4 | `batch_execute`, `add_nodes_bulk`, `connect_pins_bulk`, `set_pin_defaults_bulk` |
 | Timelines | 4 | `add_timeline`, `add_timeline_track`, `set_timeline_keys`, `get_timeline_data` |
 | Compile / validate | 3 | `compile_blueprint`, `validate_blueprint`, `get_dependencies` |
-| Asset CRUD | 13 | `create_blueprint`, `duplicate_blueprint`, `save_asset`, `create_user_defined_struct`, `create_user_defined_enum`, `create_data_table`, `add_data_table_row`, `get_data_table_rows`, `get_data_table_schema`, `update_data_table_row`, `remove_data_table_row`, `export_data_table_csv`, `create_data_asset` |
+| Asset CRUD | 12 | `create_blueprint`, `duplicate_blueprint`, `create_user_defined_struct`, `create_user_defined_enum`, `create_data_table`, `add_data_table_row`, `get_data_table_rows`, `get_data_table_schema`, `update_data_table_row`, `remove_data_table_row`, `export_data_table_csv`, `create_data_asset` |
 | CDO | 2 | `get_cdo_properties`, `set_cdo_property` |
 | Templates / spec | 4 | `build_blueprint_from_spec`, `apply_template`, `list_templates`, `compare_blueprints` |
 | Layout | 2 | `auto_layout`, `export_graph` |
 | Spawn | 2 | `spawn_blueprint_actor`, `batch_spawn_blueprint_actors` |
 
 **Header set most callers reach for first:**
+
+`blueprint.add_event_node` resolves parent-class overrides first, then implemented-interface BlueprintEvent functions, and only creates a `K2Node_CustomEvent` when no override target exists. Use it for C++/Blueprint interface events such as interactable callbacks before falling back to manual custom events.
 
 ### `blueprint.list_graphs`
 
@@ -520,7 +523,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithNiagara.md`.
 
 ## editor
 
-Live Coding builds, compile output capture, Live Coding diagnostics, editor log capture, scene capture, texture import, asset deletion, viewport info, GIF capture, **map creation**, **module status**, selection/context inspection, crash reporting, automation execution/status/history, scripting, and PIE/console control. **57 actions.**
+Live Coding builds, compile output capture, Live Coding diagnostics, editor log capture, scene capture, viewport info, GIF capture, **map creation**, **module status**, selection/context inspection, crash reporting, automation execution/status/history, scripting, and PIE/console control. **55 actions.** Generic file texture import and asset save/delete live under `asset`.
 
 ### `editor.trigger_build` / `editor.live_compile`
 
@@ -580,14 +583,6 @@ Render a Niagara system or material in a preview scene and screenshot it.
 
 Capture multiple frames at specified timestamps. Same params as `capture_scene_preview` plus `timestamps[]` (Max: 1000), `output_dir`, `filename_prefix`, `persistent`.
 
-### `editor.import_texture`
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `source_path` | string | **required** | Absolute path to source image (PNG, TGA, EXR, HDR) |
-| `destination` | string | **required** | UE asset path |
-| `settings` | object | optional | `{compression, srgb, tiling, max_size, lod_group}` |
-
 ### `editor.stitch_flipbook`
 
 Stitch frame PNGs into a flipbook atlas. Used by the VFX training harness.
@@ -603,15 +598,6 @@ Stitch frame PNGs into a flipbook atlas. Used by the VFX training harness.
 | `lod_group` | string | optional | Default: `TEXTUREGROUP_Effects` |
 
 > **Experimental flag.** Designed for the VFX training harness. Treat as best-effort.
-
-### `editor.delete_assets`
-
-Delete UE assets by path. **Experimental.** Use the `allowed_prefixes` safety guard.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_paths` | array | **required** | UE asset paths to delete (Max: 200) |
-| `allowed_prefixes` | array | optional | Restrict to paths starting with one of these (e.g. `["/Game/AgentTraining/"]`) |
 
 ### `editor.get_viewport_info`
 
@@ -1113,9 +1099,23 @@ Read-only live editor Slate UI inspection registered by `MonolithSlate`. The sta
 
 ## asset
 
-Specialized asset enrichment plus asset hygiene. **6 actions.** `MonolithMaterial` registers specialized material/asset enrichment actions; `MonolithMesh` registers `validate_naming_conventions` and `batch_rename_assets` into `asset`.
+Asset ingest, generic lifecycle operations, specialized asset enrichment, and asset hygiene. **11 actions.** `MonolithAsset` owns the namespace.
 
 > For full param schemas, call `monolith_discover("asset")` at runtime.
+
+| Action | Summary |
+|--------|---------|
+| `import_texture_from_bytes` | Decode base64 compressed image bytes and create a `UTexture2D` asset. |
+| `import_font_family` | Import one or more TTF files as a composite `UFont` plus `UFontFace` assets. |
+| `import_texture_from_file` | Import an external image file as a `UTexture2D` asset with optional texture settings. |
+| `save_asset` | Save any loaded asset package to disk. |
+| `delete_assets` | Delete assets by path with optional `allowed_prefixes` and `dry_run`. |
+| `validate_naming_conventions` | Scan assets by path and report prefix-rule violations. |
+| `list_supported_asset_enrichers` | List specialized read-only asset enrichers. |
+| `inspect_asset` | Inspect one asset with specialized read-only enrichment. |
+| `inspect_assets_batch` | Inspect multiple assets with per-row success/error results. |
+| `validate_specialized_asset` | Validate a specialized asset and report warnings without mutation. |
+| `batch_rename_assets` | Preview or apply batch asset renames through `IAssetTools::RenameAssets`. |
 
 ---
 
@@ -1145,7 +1145,7 @@ Moved domains:
 | `leveldesign` | sightlines, hiding spots, accessibility, encounter pacing, `analyze_framing`, `evaluate_monster_reveal`, `analyze_co_op_balance` |
 | `worldgen` | blockout volumes, replacement workflows, procedural world/building/town generation |
 | `modelgen` | generated-model provider/job/import/provenance workflows |
-| `asset` | `validate_naming_conventions`, `batch_rename_assets` |
+| `asset` | `import_texture_from_file`, `save_asset`, `delete_assets`, `validate_naming_conventions`, `batch_rename_assets` |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the mesh namespace contract.
 
@@ -1204,7 +1204,7 @@ Optional Water/Landscape discovery registered by `MonolithWater`. The namespace 
 
 ## ui
 
-UMG widget Blueprint CRUD, templates, styling, animation, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. **96 actions** = 42 UMG baseline + 50 CommonUI + 4 GAS UI binding aliases.
+UMG widget Blueprint CRUD, templates, styling, animation, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. **119 actions** = 115 module-owned UI actions (64 always-on + 51 CommonUI) + 4 GAS UI binding aliases.
 
 > For full param schemas, call `monolith_discover("ui")` at runtime.
 
@@ -1213,12 +1213,16 @@ UMG widget Blueprint CRUD, templates, styling, animation, settings scaffolding, 
 | Category | Actions | Examples |
 |----------|---------|----------|
 | Widget CRUD | 7 | `create_widget_blueprint`, `get_widget_tree`, `add_widget`, `remove_widget`, `set_widget_property`, `compile_widget`, `list_widget_types` |
-| Slot / layout | 4 | `set_slot_property`, `set_anchor_preset`, `move_widget`, `set_brush` |
+| Slot / layout | 3 | `set_slot_property`, `set_anchor_preset`, `move_widget` |
 | Styling | 6 | `set_font`, `set_color_scheme`, `batch_style`, `set_text`, `set_image`, `setup_list_view` |
-| Templates / scaffolds | 13 | `create_hud_element`, `create_menu`, `create_settings_panel`, `create_dialog`, `create_notification_toast`, `create_loading_screen`, `create_inventory_grid`, `create_save_slot_list`, `scaffold_game_user_settings`, `scaffold_save_game`, `scaffold_save_subsystem`, `scaffold_audio_settings`, `scaffold_input_remapping` |
-| Animation | 5 | `list_animations`, `get_animation_details`, `create_animation`, `add_animation_keyframe`, `remove_animation` |
-| Inspection | 3 | `list_widget_events`, `list_widget_properties`, `get_widget_bindings` |
-| Accessibility | 5 | `scaffold_accessibility_subsystem`, `audit_accessibility`, `set_colorblind_mode`, `set_text_scale`, `apply_high_contrast_variant` |
+| Templates | 8 | `create_hud_element`, `create_menu`, `create_settings_panel`, `create_dialog`, `create_notification_toast`, `create_loading_screen`, `create_inventory_grid`, `create_save_slot_list` |
+| Animation v1 | 5 | `list_animations`, `get_animation_details`, `create_animation`, `add_animation_keyframe`, `remove_animation` |
+| Animation v2 | 5 | `create_animation_v2`, `add_bezier_eased_segment`, `bake_spring_animation`, `add_animation_event_track`, `bind_animation_to_event` |
+| Bindings / inspection | 4 | `list_widget_events`, `list_widget_properties`, `setup_list_view`, `get_widget_bindings` |
+| Settings scaffolds | 5 | `scaffold_game_user_settings`, `scaffold_save_game`, `scaffold_save_subsystem`, `scaffold_audio_settings`, `scaffold_input_remapping` |
+| Accessibility | 4 | `scaffold_accessibility_subsystem`, `audit_accessibility`, `set_colorblind_mode`, `set_text_scale` |
+| Design effects | 3 | `set_rounded_corners`, `apply_box_shadow`, `create_gradient_mid_from_spec` |
+| EffectSurface / Spec / Type Registry | 14 | `set_effect_surface_*`, `apply_effect_surface_preset`, `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec`, `dump_property_allowlist` |
 
 **Action categories (CommonUI, registered when `WITH_COMMONUI=1`):**
 

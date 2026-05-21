@@ -1,7 +1,7 @@
 // Copyright tumourlove. All Rights Reserved.
-#include "Actions/Hoisted/ImageGenerationActions.h"
+#include "MonolithImageGenActions.h"
 
-#include "Actions/Hoisted/TextureIngestActions.h"
+#include "MonolithAssetTextureIngestActions.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
 
@@ -17,7 +17,7 @@
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 
-namespace MonolithUI::ImageGenerationInternal
+namespace MonolithImageGen::ImageGenerationInternal
 {
 	static constexpr int32 DefaultMaxCompressedBytes = 25 * 1024 * 1024;
 
@@ -397,7 +397,7 @@ namespace MonolithUI::ImageGenerationInternal
 			ImportParams->SetObjectField(TEXT("settings"), DefaultTextureSettings());
 		}
 
-		FMonolithActionResult ImportResult = FTextureIngestActions::HandleImportTextureFromBytes(ImportParams);
+		FMonolithActionResult ImportResult = MonolithAsset::FTextureIngestActions::HandleImportTextureFromBytes(ImportParams);
 		if (!ImportResult.bSuccess)
 		{
 			return ImportResult;
@@ -423,7 +423,9 @@ namespace MonolithUI::ImageGenerationInternal
 	}
 }
 
-void MonolithUI::FImageGenerationActions::Register(FMonolithToolRegistry& Registry)
+namespace ImageGenerationInternal = MonolithImageGen::ImageGenerationInternal;
+
+void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	Registry.RegisterAction(
 		TEXT("imagegen"), TEXT("list_image_models"),
@@ -452,7 +454,7 @@ void MonolithUI::FImageGenerationActions::Register(FMonolithToolRegistry& Regist
 			.Optional(TEXT("asset_name"), TEXT("string"), TEXT("Optional texture asset name. T_ prefix is added when absent."))
 			.Optional(TEXT("destination"), TEXT("string"), TEXT("Full /Game/... package path. Overrides asset_path + asset_name."))
 			.Optional(TEXT("overwrite_policy"), TEXT("string"), TEXT("unique or fail"), TEXT("unique"))
-			.Optional(TEXT("settings"), TEXT("object"), TEXT("Texture import settings compatible with ui.import_texture_from_bytes."))
+			.Optional(TEXT("settings"), TEXT("object"), TEXT("Texture import settings compatible with asset.import_texture_from_bytes."))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported texture package"), TEXT("true"))
 			.Build(),
 		TEXT("Image"));
@@ -473,7 +475,7 @@ void MonolithUI::FImageGenerationActions::Register(FMonolithToolRegistry& Regist
 			.Optional(TEXT("destination"), TEXT("string"), TEXT("Full /Game/... package path. Overrides asset_path + asset_name."))
 			.Optional(TEXT("overwrite_policy"), TEXT("string"), TEXT("unique or fail"), TEXT("unique"))
 			.Optional(TEXT("max_bytes"), TEXT("integer"), TEXT("Maximum compressed payload bytes"), FString::FromInt(ImageGenerationInternal::DefaultMaxCompressedBytes))
-			.Optional(TEXT("settings"), TEXT("object"), TEXT("Texture import settings compatible with ui.import_texture_from_bytes."))
+			.Optional(TEXT("settings"), TEXT("object"), TEXT("Texture import settings compatible with asset.import_texture_from_bytes."))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported texture package"), TEXT("true"))
 			.Build(),
 		TEXT("Image"));
@@ -488,7 +490,7 @@ void MonolithUI::FImageGenerationActions::Register(FMonolithToolRegistry& Regist
 		TEXT("Image"));
 }
 
-FMonolithActionResult MonolithUI::FImageGenerationActions::HandleListImageModels(const TSharedPtr<FJsonObject>&)
+FMonolithActionResult FMonolithImageGenActions::HandleListImageModels(const TSharedPtr<FJsonObject>&)
 {
 	TArray<TSharedPtr<FJsonValue>> Models;
 
@@ -517,7 +519,7 @@ FMonolithActionResult MonolithUI::FImageGenerationActions::HandleListImageModels
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult MonolithUI::FImageGenerationActions::HandleGetImageGenerationDefaults(const TSharedPtr<FJsonObject>&)
+FMonolithActionResult FMonolithImageGenActions::HandleGetImageGenerationDefaults(const TSharedPtr<FJsonObject>&)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("provider"), TEXT("local_deterministic"));
@@ -532,7 +534,7 @@ FMonolithActionResult MonolithUI::FImageGenerationActions::HandleGetImageGenerat
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult MonolithUI::FImageGenerationActions::HandleGenerateImage(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithImageGenActions::HandleGenerateImage(const TSharedPtr<FJsonObject>& Params)
 {
 	if (!Params.IsValid())
 	{
@@ -584,7 +586,7 @@ FMonolithActionResult MonolithUI::FImageGenerationActions::HandleGenerateImage(c
 		Params, BytesB64, TEXT("bmp"), ImageGenerationInternal::PromptToAssetName(Prompt), Provenance);
 }
 
-FMonolithActionResult MonolithUI::FImageGenerationActions::HandleImportGeneratedImage(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithImageGenActions::HandleImportGeneratedImage(const TSharedPtr<FJsonObject>& Params)
 {
 	if (!Params.IsValid())
 	{
@@ -657,7 +659,7 @@ FMonolithActionResult MonolithUI::FImageGenerationActions::HandleImportGenerated
 	return ImageGenerationInternal::ImportGeneratedBytes(Params, BytesB64, FormatHint, FallbackName, Provenance);
 }
 
-FMonolithActionResult MonolithUI::FImageGenerationActions::HandleGetGeneratedAssetProvenance(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithImageGenActions::HandleGetGeneratedAssetProvenance(const TSharedPtr<FJsonObject>& Params)
 {
 	if (!Params.IsValid())
 	{

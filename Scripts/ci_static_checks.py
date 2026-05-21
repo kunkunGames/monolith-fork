@@ -538,12 +538,22 @@ def check_proxy_smoke(ctx: CheckContext) -> None:
                 record = matching[-1]
                 if record.get("client", {}).get("proxy_runtime") != "python":
                     ctx.block("proxy-smoke", "proxy daily log did not identify the Python proxy runtime", log_files[0])
-                if record.get("format_version") != 2:
-                    ctx.block("proxy-smoke", "proxy daily log did not use format_version 2", log_files[0])
-                if not record.get("trace_id") or not record.get("span_id"):
-                    ctx.block("proxy-smoke", "proxy daily log did not include trace_id/span_id", log_files[0])
+                if record.get("format_version") != 3:
+                    ctx.block("proxy-smoke", "proxy daily log did not use format_version 3", log_files[0])
+                if not record.get("record_id") or not record.get("trace_id") or not record.get("span_id"):
+                    ctx.block("proxy-smoke", "proxy daily log did not include record_id/trace_id/span_id", log_files[0])
+                if not record.get("process_instance_id") or "call_index" not in record:
+                    ctx.block("proxy-smoke", "proxy daily log did not include process timeline fields", log_files[0])
+                if not isinstance(record.get("routing_context"), dict):
+                    ctx.block("proxy-smoke", "proxy daily log did not include routing_context", log_files[0])
+                if not isinstance(record.get("workflow"), dict):
+                    ctx.block("proxy-smoke", "proxy daily log did not include workflow", log_files[0])
+                if not isinstance(record.get("phase_timing"), dict):
+                    ctx.block("proxy-smoke", "proxy daily log did not include phase_timing", log_files[0])
                 if not isinstance(record.get("return_summary"), dict):
                     ctx.block("proxy-smoke", "proxy daily log did not include return_summary", log_files[0])
+                elif not record.get("return_summary", {}).get("result_shape"):
+                    ctx.block("proxy-smoke", "proxy daily log return_summary did not include result_shape", log_files[0])
                 if record.get("agent_signal", {}).get("outcome") != "editor_unavailable":
                     ctx.block("proxy-smoke", "proxy daily log did not classify offline call as editor_unavailable", log_files[0])
                 if "retry_signature" in record.get("agent_signal", {}):

@@ -16,6 +16,7 @@ public class MonolithBlueprint : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"MonolithCore",
+			"MonolithAsset",
 			"UnrealEd",
 			"BlueprintGraph",
 			"BlueprintEditorLibrary",

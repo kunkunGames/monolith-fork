@@ -20,9 +20,9 @@
 #include "UObject/UObjectGlobals.h"
 
 /**
- * MonolithUI.ImportFontFamily.Basic
+ * MonolithAsset.ImportFontFamily.Basic
  *
- * Dispatches `ui.import_font_family` with a single-face spec sourced from the
+ * Dispatches `asset.import_font_family` with a single-face spec sourced from the
  * project's bundled Atkinson Hyperlegible TTF (SIL OFL). Asserts:
  *  - Action succeeds
  *  - family_asset_path / face_asset_paths / faces_imported returned
@@ -32,14 +32,14 @@
  *
  * Uses save=false -- assets stay in transient in-memory packages.
  *
- * Test-asset convention: /Game/Tests/Monolith/UI/Fonts/TestFamily/
+ * Test-asset convention: /Game/Tests/Monolith/Asset/Fonts/TestFamily/
  */
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-    FMonolithUIImportFontFamilyBasicTest,
-    "MonolithUI.ImportFontFamily.Basic",
+    FMonolithAssetImportFontFamilyBasicTest,
+    "MonolithAsset.ImportFontFamily.Basic",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FMonolithUIImportFontFamilyBasicTest::RunTest(const FString& Parameters)
+bool FMonolithAssetImportFontFamilyBasicTest::RunTest(const FString& Parameters)
 {
     // Primary fixture: project-bundled Atkinson at Content/UI/Fonts/Atkinson/.
     const FString ProjectContentFixture =
@@ -58,7 +58,7 @@ bool FMonolithUIImportFontFamilyBasicTest::RunTest(const FString& Parameters)
         return true;
     }
 
-    const FString Destination = TEXT("/Game/Tests/Monolith/UI/Fonts/TestFamily");
+    const FString Destination = TEXT("/Game/Tests/Monolith/Asset/Fonts/TestFamily");
     const FString FamilyName  = TEXT("TestFamily");
 
     TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
@@ -77,7 +77,7 @@ bool FMonolithUIImportFontFamilyBasicTest::RunTest(const FString& Parameters)
     Params->SetBoolField(TEXT("save"), false);
 
     const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
-        TEXT("ui"), TEXT("import_font_family"), Params);
+        TEXT("asset"), TEXT("import_font_family"), Params);
 
     TestTrue(TEXT("import_font_family bSuccess"), Result.bSuccess);
     if (!Result.bSuccess)
@@ -163,21 +163,21 @@ bool FMonolithUIImportFontFamilyBasicTest::RunTest(const FString& Parameters)
 }
 
 /**
- * MonolithUI.ImportFontFamily.InvalidParams
+ * MonolithAsset.ImportFontFamily.InvalidParams
  *
  * Negative-path coverage -- does NOT require any on-disk TTF.
  */
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-    FMonolithUIImportFontFamilyInvalidParamsTest,
-    "MonolithUI.ImportFontFamily.InvalidParams",
+    FMonolithAssetImportFontFamilyInvalidParamsTest,
+    "MonolithAsset.ImportFontFamily.InvalidParams",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FMonolithUIImportFontFamilyInvalidParamsTest::RunTest(const FString& Parameters)
+bool FMonolithAssetImportFontFamilyInvalidParamsTest::RunTest(const FString& Parameters)
 {
     {
         TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
         const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
-            TEXT("ui"), TEXT("import_font_family"), P);
+            TEXT("asset"), TEXT("import_font_family"), P);
         TestFalse(TEXT("empty params -> failure"), R.bSuccess);
         TestEqual(TEXT("empty params -> -32602"), R.ErrorCode, -32602);
     }
@@ -186,7 +186,7 @@ bool FMonolithUIImportFontFamilyInvalidParamsTest::RunTest(const FString& Parame
         TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
         P->SetStringField(TEXT("destination"), TEXT("/Game/Foo/Bar"));
         const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
-            TEXT("ui"), TEXT("import_font_family"), P);
+            TEXT("asset"), TEXT("import_font_family"), P);
         TestFalse(TEXT("missing family_name -> failure"), R.bSuccess);
         TestEqual(TEXT("missing family_name -> -32602"), R.ErrorCode, -32602);
     }
@@ -196,7 +196,7 @@ bool FMonolithUIImportFontFamilyInvalidParamsTest::RunTest(const FString& Parame
         P->SetStringField(TEXT("destination"), TEXT("/Game/Foo/Bar"));
         P->SetStringField(TEXT("family_name"), TEXT("Fam"));
         const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
-            TEXT("ui"), TEXT("import_font_family"), P);
+            TEXT("asset"), TEXT("import_font_family"), P);
         TestFalse(TEXT("missing faces -> failure"), R.bSuccess);
         TestEqual(TEXT("missing faces -> -32602"), R.ErrorCode, -32602);
     }
@@ -208,7 +208,7 @@ bool FMonolithUIImportFontFamilyInvalidParamsTest::RunTest(const FString& Parame
         TArray<TSharedPtr<FJsonValue>> Empty;
         P->SetArrayField(TEXT("faces"), Empty);
         const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
-            TEXT("ui"), TEXT("import_font_family"), P);
+            TEXT("asset"), TEXT("import_font_family"), P);
         TestFalse(TEXT("empty faces -> failure"), R.bSuccess);
         TestEqual(TEXT("empty faces -> -32602"), R.ErrorCode, -32602);
     }
@@ -223,7 +223,7 @@ bool FMonolithUIImportFontFamilyInvalidParamsTest::RunTest(const FString& Parame
         Faces.Add(MakeShared<FJsonValueObject>(F));
         P->SetArrayField(TEXT("faces"), Faces);
         const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
-            TEXT("ui"), TEXT("import_font_family"), P);
+            TEXT("asset"), TEXT("import_font_family"), P);
         TestFalse(TEXT("face missing source_path -> failure"), R.bSuccess);
         TestEqual(TEXT("face missing source_path -> -32602"), R.ErrorCode, -32602);
     }
@@ -242,7 +242,7 @@ bool FMonolithUIImportFontFamilyInvalidParamsTest::RunTest(const FString& Parame
         }
         P->SetArrayField(TEXT("faces"), Faces);
         const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
-            TEXT("ui"), TEXT("import_font_family"), P);
+            TEXT("asset"), TEXT("import_font_family"), P);
         TestFalse(TEXT("duplicate typeface -> failure"), R.bSuccess);
         TestEqual(TEXT("duplicate typeface -> -32602"), R.ErrorCode, -32602);
     }
@@ -250,7 +250,7 @@ bool FMonolithUIImportFontFamilyInvalidParamsTest::RunTest(const FString& Parame
     {
         TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
         P->SetStringField(TEXT("destination"),
-            TEXT("/Game/Tests/Monolith/UI/Fonts/AllFailTest"));
+            TEXT("/Game/Tests/Monolith/Asset/Fonts/AllFailTest"));
         P->SetStringField(TEXT("family_name"), TEXT("AllFail"));
         TArray<TSharedPtr<FJsonValue>> Faces;
         TSharedPtr<FJsonObject> F = MakeShared<FJsonObject>();
@@ -260,7 +260,7 @@ bool FMonolithUIImportFontFamilyInvalidParamsTest::RunTest(const FString& Parame
         P->SetArrayField(TEXT("faces"), Faces);
         P->SetBoolField(TEXT("save"), false);
         const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
-            TEXT("ui"), TEXT("import_font_family"), P);
+            TEXT("asset"), TEXT("import_font_family"), P);
         TestFalse(TEXT("all faces missing -> failure"), R.bSuccess);
         TestEqual(TEXT("all faces missing -> -32603"), R.ErrorCode, -32603);
     }

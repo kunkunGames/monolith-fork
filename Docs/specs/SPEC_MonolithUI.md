@@ -8,10 +8,10 @@
 
 ## MonolithUI
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, UMGEditor, UMG, Slate, SlateCore, Json, JsonUtilities, KismetCompiler, MovieScene, MovieSceneTracks, DeveloperSettings, AssetTools, ImageWrapper, ImageCore, Kismet, MaterialEditor, EditorSubsystem (Public — `UMonolithUIRegistrySubsystem` is exported), CommonUI (optional — `#if WITH_COMMONUI`)
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, UMGEditor, UMG, Slate, SlateCore, Json, JsonUtilities, KismetCompiler, MovieScene, MovieSceneTracks, DeveloperSettings, AssetTools, Kismet, MaterialEditor, EditorSubsystem (Public — `UMonolithUIRegistrySubsystem` is exported), CommonUI (optional — `#if WITH_COMMONUI`)
 
 **The optional EffectSurface provider is NOT a build-system dependency** (decoupled 2026-04-27). EffectSurface support is delivered via UClass-by-name reflection through `MonolithUI::GetEffectSurfaceClass()` — see § "Optional Dep Probe API" and § "Error Contract — Optional EffectSurface Provider Absence (-32010)". External providers may depend on MonolithUI for registry/spec structs, but MonolithUI must not depend on them.
-**Total actions in `ui::` namespace:** **117** when `WITH_COMMONUI=1` (66 always-on owned by this module + 50 CommonUI owned by this module conditional on `WITH_COMMONUI` + 1 inline diagnostic `dump_style_cache_stats` registered from `MonolithUIModule.cpp` under the same gate) + **4 GAS UI binding aliases owned by `MonolithGAS`** (also registered into `ui::`, conditional on `WITH_GBA`). Without `WITH_COMMONUI`, the namespace registers **66** actions; without `WITH_GBA` the four bridge aliases are absent.
+**Total actions in `ui::` namespace:** **115** when `WITH_COMMONUI=1` (64 always-on owned by this module + 50 CommonUI owned by this module conditional on `WITH_COMMONUI` + 1 inline diagnostic `dump_style_cache_stats` registered from `MonolithUIModule.cpp` under the same gate) + **4 GAS UI binding aliases owned by `MonolithGAS`** (also registered into `ui::`, conditional on `WITH_GBA`). Without `WITH_COMMONUI`, the namespace registers **64** actions; without `WITH_GBA` the four bridge aliases are absent.
 **Settings toggle:** `bEnableUI` (default: True)
 **MCP tool:** `ui_query`
 **Namespace:** `ui`
@@ -30,11 +30,11 @@
 | Bindings | 4 | `MonolithUIBindingActions.cpp` | always |
 | Settings scaffolds | 5 | `MonolithUISettingsActions.cpp` | always |
 | Accessibility (non-CommonUI) | 4 | `MonolithUIAccessibilityActions.cpp` | always |
-| Hoisted Design Import | 5 | `Actions/Hoisted/{TextureIngest,FontIngest,RoundedCorner,Shadow,Gradient}Actions.cpp` | always — `import_texture_from_bytes`, `import_font_family`, `set_rounded_corners`, `apply_box_shadow`, `create_gradient_mid_from_spec` |
+| Hoisted Design Import | 3 | `Actions/Hoisted/{RoundedCorner,Shadow,Gradient}Actions.cpp` | always — `set_rounded_corners`, `apply_box_shadow`, `create_gradient_mid_from_spec` |
 | Effect Surface Actions | 10 | `Actions/MonolithUIEffectActions.cpp` | always |
 | Spec Builder + Serializer | 3 | `Actions/MonolithUISpecActions.cpp` | always — `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec` |
 | Type Registry diagnostic | 1 | `MonolithUIRegistryActions.cpp` | always — `dump_property_allowlist` |
-| **Always-on subtotal** | **66** | | |
+| **Always-on subtotal** | **64** | | |
 | CommonUI Activatables | 8 | `CommonUI/MonolithCommonUIActivatableActions.cpp` | `WITH_COMMONUI` |
 | CommonUI Buttons + Styling | 9 | `CommonUI/MonolithCommonUIButtonActions.cpp` | `WITH_COMMONUI` |
 | CommonUI Input | 7 | `CommonUI/MonolithCommonUIInputActions.cpp` | `WITH_COMMONUI` |
@@ -46,16 +46,16 @@
 | CommonUI Accessibility | 4 | `CommonUI/MonolithCommonUIAccessibilityActions.cpp` | `WITH_COMMONUI` |
 | Style Service Diagnostics | 1 | inline lambda in `MonolithUIModule.cpp` | `WITH_COMMONUI` — `dump_style_cache_stats` |
 | **CommonUI subtotal** | **51** | | conditional |
-| **MonolithUI total** | **117** | | full configuration |
+| **MonolithUI total** | **115** | | full configuration |
 | GAS UI binding aliases | 4 | `MonolithGAS/Private/MonolithGASUIBindingActions.cpp` | `WITH_GBA` — registered cross-namespace into `ui::` |
 
-Counts re-verified against `RegisterAction(TEXT("ui"), ...)` call sites on 2026-04-26 (Phase L). Production registration sites only — Tests/ excluded.
+Counts re-verified against `RegisterAction(TEXT("ui"), ...)` call sites on 2026-05-21 after texture/font ingest moved to `MonolithAsset`. Production registration sites only — Tests/ excluded.
 
 ### Classes
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithUIModule` | Registers the 66 always-on actions owned by this module + 51 CommonUI actions when `WITH_COMMONUI`. Logs the live `ui` namespace action count at startup. Owns the `OnPostEngineInit` re-scan delegate that catches late-loading marketplace widget UClasses |
+| `FMonolithUIModule` | Registers the 64 always-on actions owned by this module + 51 CommonUI actions when `WITH_COMMONUI`. Logs the live `ui` namespace action count at startup. Owns the `OnPostEngineInit` re-scan delegate that catches late-loading marketplace widget UClasses |
 | `FMonolithUIActions` | Widget blueprint CRUD: create, inspect, add/remove widgets, property writes, compile |
 | `FMonolithUISlotActions` | Layout slot operations: slot properties, anchor presets, widget movement |
 | `FMonolithUITemplateActions` | High-level HUD/menu/panel scaffold templates (8 templates) |
@@ -65,7 +65,7 @@ Counts re-verified against `RegisterAction(TEXT("ui"), ...)` call sites on 2026-
 | `FMonolithUISettingsActions` | Settings/save/audio/input remapping subsystem scaffolding (5 scaffolds) |
 | `FMonolithUIAccessibilityActions` | Accessibility subsystem scaffold, audit, colorblind mode, text scale |
 | `FMonolithUIRegistryActions` | Registers `dump_property_allowlist` (Phase B diagnostic) |
-| `MonolithUI::FTextureIngestActions` / `FFontIngestActions` / `FAnimationCoreActions` / `FAnimationEventActions` / `FRoundedCornerActions` / `FShadowActions` / `FGradientActions` | Hoisted Design Import + Animation v2 verbs (Phase D, 2026-04-26) |
+| `MonolithUI::FAnimationCoreActions` / `FAnimationEventActions` / `FRoundedCornerActions` / `FShadowActions` / `FGradientActions` | Animation v2 + visual Design Import verbs (Phase D, 2026-04-26). Texture/font ingest moved to `MonolithAsset` on 2026-05-21 |
 | `MonolithUI::FEffectSurfaceActions` | EffectSurface sub-bag setters + preset (Phase F, 2026-04-26) |
 | `MonolithUI::FSpecActions` | `build_ui_from_spec` + `dump_ui_spec_schema` + `dump_ui_spec` (Phases H + J, 2026-04-26) |
 | `UMonolithUIRegistrySubsystem` (UEditorSubsystem) | Live type registry + per-type property allowlist (Phase B) |
@@ -580,9 +580,9 @@ Downstream emitters can promote Border/RoundedBorder nodes that combine 3+ of {r
 
 ### Action count refresh (closed, Phase L — 2026-04-26)
 
-The Phase A foundation added zero MCP actions. Phase B added the diagnostic `dump_property_allowlist`. Phase D hoisted 10 generic UI-design verbs into `ui::` (5 are direct registrations under `ui::`; the other 5 are the AnimationCore + AnimationEvent surface — `create_animation_v2`, `add_bezier_eased_segment`, `bake_spring_animation`, `add_animation_event_track`, `bind_animation_to_event`). Phase F added 10 EffectSurface actions. Phase G added 1 inline `dump_style_cache_stats` (`#if WITH_COMMONUI`). Phase H added 2 (`build_ui_from_spec`, `dump_ui_spec_schema`). Phase J added 1 (`dump_ui_spec`).
+The Phase A foundation added zero MCP actions. Phase B added the diagnostic `dump_property_allowlist`. Phase D hoisted generic UI-design verbs into `ui::`; after the 2026-05-21 asset split, UI keeps 3 direct visual registrations (`set_rounded_corners`, `apply_box_shadow`, `create_gradient_mid_from_spec`) plus the 5 AnimationCore + AnimationEvent actions (`create_animation_v2`, `add_bezier_eased_segment`, `bake_spring_animation`, `add_animation_event_track`, `bind_animation_to_event`). Phase F added 10 EffectSurface actions. Phase G added 1 inline `dump_style_cache_stats` (`#if WITH_COMMONUI`). Phase H added 2 (`build_ui_from_spec`, `dump_ui_spec_schema`). Phase J added 1 (`dump_ui_spec`).
 
-Live total against the registration sites in `Plugins/Monolith/Source/MonolithUI/Private/`: **117** when `WITH_COMMONUI=1`, **66** without. The **42** baseline that prior revisions of this document quoted is the pre-expansion figure and is no longer accurate — see the action category roll-up at the top of this file for the current category breakdown.
+Live total against the registration sites in `Plugins/Monolith/Source/MonolithUI/Private/`: **115** when `WITH_COMMONUI=1`, **64** without. The **42** baseline that prior revisions of this document quoted is the pre-expansion figure and is no longer accurate — see the action category roll-up at the top of this file for the current category breakdown.
 
 ---
 
@@ -849,14 +849,12 @@ The probe / error-code / handler / serializer / test / builder sextuple is the c
 
 **Status:** Phase D shipped 2026-04-26.
 
-The 10 generic verbs below were hoisted into MonolithUI under the `ui::` namespace from an earlier private bridge implementation. Legacy sibling namespaces may keep deprecated alias entries for one release; those aliases should re-dispatch into `ui::` and tag the response with `{ "deprecated": true, "use_action": "ui::<Name>" }`. Removal is scheduled for Phase L.
+The remaining generic UI verbs below were hoisted into MonolithUI under the `ui::` namespace from an earlier private bridge implementation. Texture and font ingest moved to `MonolithAsset` on 2026-05-21 as `asset.import_texture_from_bytes` and `asset.import_font_family`; no `ui::` compatibility aliases are registered.
 
-The actions are generic UE-UI verbs: ingesting an image as a UTexture2D, importing a font family as a UFont composite, authoring weighted-tangent UMG animations, baking a damped spring into linear keyframes, attaching a master event track to a UWidgetAnimation, wiring a widget interaction event to play an animation, writing reflection-based rounded-corner properties, compositing sibling box-shadow widgets, and producing a UMaterialInstanceConstant from a parametrised gradient spec. None of them carries caller-specific bridge semantics; the parent material / asset paths flow in via params.
+The actions are generic UE-UI verbs: authoring weighted-tangent UMG animations, baking a damped spring into linear keyframes, attaching a master event track to a UWidgetAnimation, wiring a widget interaction event to play an animation, writing reflection-based rounded-corner properties, compositing sibling box-shadow widgets, and producing a UMaterialInstanceConstant from a parametrised gradient spec. None of them carries caller-specific bridge semantics; the parent material / asset paths flow in via params.
 
 | Action | Params (summary) | Description |
 |--------|------------------|-------------|
-| `import_texture_from_bytes` | `destination`, `bytes_b64`, `format_hint`, `settings?`, `save?` | Decode a base64-encoded image (PNG / JPEG / BMP / EXR / TGA / HDR / TIFF / DDS) and import as a UTexture2D at `/Game/...`. Source data captured for editor save-to-disk; `bytes_b64` MUST be base64-encoded compressed bytes (NOT raw pixels). Returns `{asset_path, width, height, size_bytes}`. |
-| `import_font_family` | `destination`, `family_name`, `faces[]`, `loading_policy?`, `hinting?`, `save?` | Import a font family as a UFont composite + one UFontFace per typeface entry. Per-face errors don't abort the batch — failed faces appear in the `warnings` array. Uses `UFont::GetMutableInternalCompositeFont()` (UE 5.7 deprecation-safe accessor for the composite-font field). |
 | `create_animation_v2` | `asset_path`, `animation_name`, `duration_sec`, `tracks[]`, `compile_once?` | Authors a UWidgetAnimation with multi-track, multi-key data. Cubic / linear / constant interpolation; cubic supports tangent weights for CSS bezier easing reproduction. Idempotent — re-runs against the same `(asset_path, animation_name)` reset existing channel keys. |
 | `add_bezier_eased_segment` | `asset_path`, `animation_name`, `widget_name`, `property`, `from_value`, `to_value`, `start_time`, `end_time`, `bezier[4]` | Convenience wrapper that converts a CSS `cubic-bezier(x1,y1,x2,y2)` control-point pair into UE weighted tangents and inserts a 2-key segment. Returns `{tangent_info: {key0_leave_*, key1_arrive_*}}` for diagnostics. |
 | `bake_spring_animation` | `asset_path`, `animation_name`, `widget_name`, `property`, `from_value`, `to_value`, `stiffness`, `damping`, `mass`, `fps?`, `duration?`, `compile_once?` | Bakes a damped harmonic spring into dense linear keyframes via semi-implicit Euler integration with convergence early-out. `early_settled` is true when the simulation converged before `duration`. |
@@ -870,8 +868,6 @@ The actions are generic UE-UI verbs: ingesting an image as a UTexture2D, importi
 
 | Path | Contents |
 |------|----------|
-| `Source/MonolithUI/Private/Actions/Hoisted/TextureIngestActions.{h,cpp}` | `MonolithUI::FTextureIngestActions` |
-| `Source/MonolithUI/Private/Actions/Hoisted/FontIngestActions.{h,cpp}` | `MonolithUI::FFontIngestActions` |
 | `Source/MonolithUI/Private/Actions/Hoisted/AnimationCoreActions.{h,cpp}` | `MonolithUI::FAnimationCoreActions` (3 actions) |
 | `Source/MonolithUI/Private/Actions/Hoisted/AnimationEventActions.{h,cpp}` | `MonolithUI::FAnimationEventActions` (2 actions) |
 | `Source/MonolithUI/Private/Actions/Hoisted/RoundedCornerActions.{h,cpp}` | `MonolithUI::FRoundedCornerActions` |
@@ -882,11 +878,11 @@ The actions are generic UE-UI verbs: ingesting an image as a UTexture2D, importi
 
 ### Build.cs deps added by Phase D
 
-`ImageWrapper`, `ImageCore` (texture decode), `AssetTools` (`CreateUniqueAssetName`), `Kismet` (`MarkBlueprintAsStructurallyModified`), `MaterialEditor` (`UMaterialEditingLibrary::UpdateMaterialInstance`).
+`AssetTools` (`CreateUniqueAssetName`), `Kismet` (`MarkBlueprintAsStructurallyModified`), `MaterialEditor` (`UMaterialEditingLibrary::UpdateMaterialInstance`).
 
 ### Backwards-compatibility window
 
-Legacy sibling UI aliases re-dispatch into the canonical `ui::<NAME>` action via `FMonolithToolRegistry::Get().ExecuteAction("ui", ...)` (NOT a direct static-handler call — the registry path is the single validated dispatch site). Their response payload is tagged `{ "deprecated": true, "use_action": "ui::<NAME>" }`. A future cleanup will remove those aliases from their owning sibling plugin.
+No compatibility aliases are registered for the texture/font ingest move. Callers must use the canonical `asset::` actions.
 
 ---
 

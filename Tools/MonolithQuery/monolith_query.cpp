@@ -169,6 +169,82 @@ static std::string log_id(const std::string& prefix, const std::string& seed) {
     return prefix + "-" + digest;
 }
 
+static void prune_empty_json(json& value);
+
+static std::string process_instance_id() {
+    static const std::string id = log_id("proc", "query:" + std::to_string(
+#ifdef _WIN32
+        static_cast<int>(GetCurrentProcessId())
+#else
+        0
+#endif
+    ) + ":" + iso_local_now());
+    return id;
+}
+
+static std::string infer_intent(const std::string& ns, const std::string& action, int exit_code) {
+    std::string act = action;
+    std::transform(act.begin(), act.end(), act.begin(),
+                   [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+    if (act.find("health") != std::string::npos || act.find("status") != std::string::npos
+        || act.find("check") != std::string::npos || act.find("validate") != std::string::npos) {
+        return "verification";
+    }
+    if (ns == "source" || act.find("source") != std::string::npos || act.find("symbol") != std::string::npos
+        || act.find("reference") != std::string::npos || act.find("caller") != std::string::npos || act.find("callee") != std::string::npos) {
+        return "source_lookup";
+    }
+    if (ns == "project" || act.find("asset") != std::string::npos || act.find("reference") != std::string::npos) {
+        return "asset_search";
+    }
+    if (act.find("repair") != std::string::npos || act.find("rebuild") != std::string::npos
+        || act.find("build") != std::string::npos || act.find("snapshot") != std::string::npos) {
+        return "maintenance";
+    }
+    if (exit_code != 0) {
+        return "error_recovery";
+    }
+    return "unknown";
+}
+
+static std::string workflow_step_for_intent(const std::string& intent, int exit_code) {
+    if (exit_code != 0) return "recover";
+    if (intent == "verification") return "verify";
+    if (intent == "maintenance") return "maintenance";
+    if (intent == "source_lookup" || intent == "asset_search") return "inspect";
+    return "unknown";
+}
+
+static std::string result_shape_for_query(const json& stdout_value, const json& stderr_value, int exit_code) {
+    if (exit_code != 0) return "error";
+    if (stdout_value.is_null() && stderr_value.is_null()) return "empty";
+    if (stdout_value.is_object()) return "object";
+    if (stdout_value.is_array()) return "list";
+    if (stdout_value.is_string()) return stdout_value.get<std::string>().empty() ? "empty" : "text";
+    return "mixed";
+}
+
+static json make_query_environment(const std::string& ns, const json& db_paths) {
+    json env = json::object();
+    std::string version = getenv_str("MONOLITH_VERSION");
+    if (!version.empty()) env["plugin_version"] = version;
+    if (!db_paths.empty()) env["project_name_hash"] = hash_text(db_paths.dump());
+    std::string index_health = "unknown";
+    if ((ns == "source" || ns == "project" || ns == "bridge") && db_paths.is_array()) {
+        bool all_exist = !db_paths.empty();
+        for (const auto& path_value : db_paths) {
+            if (!path_value.is_string() || !fs::exists(path_value.get<std::string>())) {
+                all_exist = false;
+                break;
+            }
+        }
+        index_health = all_exist ? "ok" : "missing";
+    }
+    env["index_health"] = index_health;
+    prune_empty_json(env);
+    return env;
+}
+
 static bool is_sensitive_key(const std::string& key) {
     std::string lower = key;
     std::transform(lower.begin(), lower.end(), lower.begin(),
@@ -208,8 +284,19 @@ static json redact_json(const json& value) {
     return value;
 }
 
+static size_t max_log_field_bytes() {
+    const std::string raw = getenv_str("MONOLITH_TOOL_LOG_MAX_FIELD_BYTES");
+    if (raw.empty()) return 256 * 1024;
+    try {
+        const size_t parsed = static_cast<size_t>(std::stoull(raw));
+        return std::max<size_t>(1024, std::min<size_t>(parsed, 16 * 1024 * 1024));
+    } catch (...) {
+        return 256 * 1024;
+    }
+}
+
 static json bounded_json(const json& value, bool& truncated, size_t& original_bytes, std::string& hash) {
-    constexpr size_t MaxBytes = 256 * 1024;
+    const size_t MaxBytes = max_log_field_bytes();
     const std::string text = value.dump();
     original_bytes = text.size();
     if (text.size() <= MaxBytes) {
@@ -259,6 +346,7 @@ static json summarize_query_return(
     const std::string& fatal_error) {
     json summary = {
         {"exit_code", exit_code},
+        {"result_shape", result_shape_for_query(stdout_value, stderr_value, exit_code)},
         {"stdout_bytes", stdout_bytes},
         {"stderr_bytes", stderr_bytes},
         {"result_bytes", stdout_bytes + stderr_bytes},
@@ -308,6 +396,54 @@ static fs::path query_log_root() {
     return fs::current_path() / "Logs";
 }
 
+#ifdef _WIN32
+static HANDLE acquire_log_lock_file(const fs::path& lock_path) {
+    const auto start = std::chrono::steady_clock::now();
+    for (;;) {
+        HANDLE lock_handle = CreateFileA(
+            lock_path.string().c_str(),
+            GENERIC_WRITE,
+            0,
+            nullptr,
+            CREATE_NEW,
+            FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE,
+            nullptr);
+        if (lock_handle != INVALID_HANDLE_VALUE) {
+            return lock_handle;
+        }
+
+        const DWORD error = GetLastError();
+        if (error != ERROR_FILE_EXISTS && error != ERROR_ALREADY_EXISTS
+            && error != ERROR_SHARING_VIOLATION && error != ERROR_ACCESS_DENIED) {
+            throw std::runtime_error("could not create log lock file");
+        }
+
+        WIN32_FILE_ATTRIBUTE_DATA attr{};
+        if (GetFileAttributesExA(lock_path.string().c_str(), GetFileExInfoStandard, &attr)) {
+            FILETIME now_ft{};
+            GetSystemTimeAsFileTime(&now_ft);
+            ULARGE_INTEGER now{};
+            now.LowPart = now_ft.dwLowDateTime;
+            now.HighPart = now_ft.dwHighDateTime;
+            ULARGE_INTEGER modified{};
+            modified.LowPart = attr.ftLastWriteTime.dwLowDateTime;
+            modified.HighPart = attr.ftLastWriteTime.dwHighDateTime;
+            if (now.QuadPart > modified.QuadPart
+                && now.QuadPart - modified.QuadPart > 30ULL * 1000ULL * 1000ULL * 10ULL) {
+                DeleteFileA(lock_path.string().c_str());
+            }
+        } else if (GetLastError() == ERROR_FILE_NOT_FOUND) {
+            continue;
+        }
+
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count() > 5000) {
+            throw std::runtime_error("timed out acquiring tool log lock");
+        }
+        Sleep(25);
+    }
+}
+#endif
+
 static void append_query_log(const json& record) {
     if (!tool_log_enabled()) return;
     static std::mutex log_mutex;
@@ -319,32 +455,15 @@ static void append_query_log(const json& record) {
         fs::create_directories(path.parent_path());
 #ifdef _WIN32
         const fs::path lock_path = path.string() + ".lock";
-        HANDLE lock_handle = CreateFileA(
-            lock_path.string().c_str(),
-            GENERIC_READ | GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            nullptr,
-            OPEN_ALWAYS,
-            FILE_ATTRIBUTE_NORMAL,
-            nullptr);
-        if (lock_handle == INVALID_HANDLE_VALUE) {
-            throw std::runtime_error("could not open log lock file");
-        }
-        OVERLAPPED overlapped{};
-        if (!LockFileEx(lock_handle, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &overlapped)) {
-            CloseHandle(lock_handle);
-            throw std::runtime_error("could not acquire log lock");
-        }
+        HANDLE lock_handle = acquire_log_lock_file(lock_path);
         try {
             std::ofstream out(path, std::ios::app | std::ios::binary);
             out << cleaned.dump() << "\n";
             if (!out) throw std::runtime_error("could not append daily log");
         } catch (...) {
-            UnlockFileEx(lock_handle, 0, 1, 0, &overlapped);
             CloseHandle(lock_handle);
             throw;
         }
-        UnlockFileEx(lock_handle, 0, 1, 0, &overlapped);
         CloseHandle(lock_handle);
 #else
         std::ofstream out(path, std::ios::app | std::ios::binary);
@@ -5414,6 +5533,10 @@ int main(int argc, char* argv[]) {
     int exit_code = 0;
     std::string fatal_error;
     json db_paths = json::array();
+    double parse_args_ms = 0.0;
+    double db_resolve_ms = 0.0;
+    double db_open_ms = 0.0;
+    double action_exec_ms = 0.0;
 
     std::ostringstream captured_stdout;
     std::ostringstream captured_stderr;
@@ -5421,21 +5544,29 @@ int main(int argc, char* argv[]) {
     std::streambuf* old_stderr = std::cerr.rdbuf(captured_stderr.rdbuf());
 
     try {
+        auto phase_start = std::chrono::steady_clock::now();
         args = parse_args(argc, argv);
         parsed_args = true;
+        parse_args_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
+        phase_start = std::chrono::steady_clock::now();
         const std::string db_arg = args.opt("db");
         const std::string db_dir = resolve_db_dir_from_arg(db_arg);
+        db_resolve_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
         if (args.ns == "source") {
+            phase_start = std::chrono::steady_clock::now();
             std::string db_path = resolve_namespace_db_path(
                 args.opt("source_db"), db_arg, db_dir, "EngineSource.db");
             db_paths.push_back(db_path);
+            db_resolve_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
             bool write_action = args.opt_bool("execute", false)
                 && (args.action == "repair_fts" || args.action == "snapshot" || args.action == "repair_crg_cache");
             SourceActions sa;
+            phase_start = std::chrono::steady_clock::now();
             sa.open(db_path, !write_action);
+            db_open_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
             static const std::map<std::string, std::function<void(SourceActions&, const Args&)>> actions = {
                 {"search_source",       [](SourceActions& s, const Args& a) { s.search_source(a); }},
@@ -5468,18 +5599,24 @@ int main(int argc, char* argv[]) {
 
             auto it = actions.find(args.action);
             if (it == actions.end()) die("Unknown source action: " + args.action);
+            phase_start = std::chrono::steady_clock::now();
             it->second(sa, args);
+            action_exec_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
         } else if (args.ns == "bridge") {
+            phase_start = std::chrono::steady_clock::now();
             std::string project_db = resolve_bridge_db_path(
                 args.opt("project_db"), db_arg, db_dir, "ProjectIndex.db");
             std::string source_db = resolve_bridge_db_path(
                 args.opt("source_db"), db_arg, db_dir, "EngineSource.db");
             db_paths.push_back(project_db);
             db_paths.push_back(source_db);
+            db_resolve_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
             BridgeActions ba;
+            phase_start = std::chrono::steady_clock::now();
             ba.open(project_db, source_db);
+            db_open_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
             static const std::map<std::string, std::function<void(BridgeActions&, const Args&)>> actions = {
                 {"search_asset_symbols", [](BridgeActions& b, const Args& a) { b.search_asset_symbols(a); }},
@@ -5487,17 +5624,23 @@ int main(int argc, char* argv[]) {
 
             auto it = actions.find(args.action);
             if (it == actions.end()) die("Unknown bridge action: " + args.action);
+            phase_start = std::chrono::steady_clock::now();
             it->second(ba, args);
+            action_exec_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
         } else if (args.ns == "project") {
+            phase_start = std::chrono::steady_clock::now();
             std::string db_path = resolve_namespace_db_path(
                 args.opt("project_db"), db_arg, db_dir, "ProjectIndex.db");
             db_paths.push_back(db_path);
+            db_resolve_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
             bool write_action = args.opt_bool("execute", false)
                 && (args.action == "repair_fts" || args.action == "snapshot" || args.action == "repair_crg_cache");
             ProjectActions pa;
+            phase_start = std::chrono::steady_clock::now();
             pa.open(db_path, !write_action);
+            db_open_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
             static const std::map<std::string, std::function<void(ProjectActions&, const Args&)>> actions = {
                 {"search",            [](ProjectActions& p, const Args& a) { p.search(a); }},
@@ -5521,7 +5664,9 @@ int main(int argc, char* argv[]) {
 
             auto it = actions.find(args.action);
             if (it == actions.end()) die("Unknown project action: " + args.action);
+            phase_start = std::chrono::steady_clock::now();
             it->second(pa, args);
+            action_exec_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
         } else {
             die("Unknown namespace: " + args.ns + " (expected 'source', 'project', or 'bridge')");
@@ -5538,15 +5683,17 @@ int main(int argc, char* argv[]) {
         std::cerr << "ERROR: " << fatal_error << std::endl;
     }
 
+    const auto stdout_capture_start = std::chrono::steady_clock::now();
     std::cout.rdbuf(old_stdout);
     std::cerr.rdbuf(old_stderr);
-
     const std::string stdout_text = captured_stdout.str();
     const std::string stderr_text = captured_stderr.str();
     std::cout << stdout_text;
     std::cerr << stderr_text;
+    const double stdout_capture_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - stdout_capture_start).count();
 
     if (tool_log_enabled()) {
+        const auto log_prepare_start = std::chrono::steady_clock::now();
         const auto end_clock = std::chrono::steady_clock::now();
         const double duration_ms = std::chrono::duration<double, std::milli>(end_clock - start_clock).count();
 
@@ -5563,8 +5710,10 @@ int main(int argc, char* argv[]) {
         size_t stderr_bytes = 0;
         std::string stdout_hash;
         std::string stderr_hash;
-        json bounded_stdout = bounded_json(redact_json(stdout_text), stdout_truncated, stdout_bytes, stdout_hash);
-        json bounded_stderr = bounded_json(redact_json(stderr_text), stderr_truncated, stderr_bytes, stderr_hash);
+        json raw_stdout = redact_json(stdout_text);
+        json raw_stderr = redact_json(stderr_text);
+        json bounded_stdout = bounded_json(raw_stdout, stdout_truncated, stdout_bytes, stdout_hash);
+        json bounded_stderr = bounded_json(raw_stderr, stderr_truncated, stderr_bytes, stderr_hash);
 
         const std::string signal_text = fatal_error.empty() ? stderr_text : fatal_error;
         std::string outcome = exit_code == 0 ? "success" : "tool_error";
@@ -5584,7 +5733,7 @@ int main(int argc, char* argv[]) {
                 error_class = "tool_error";
             }
         }
-        if (stdout_bytes > 256 * 1024 || stderr_bytes > 256 * 1024) {
+        if (stdout_bytes > max_log_field_bytes() || stderr_bytes > max_log_field_bytes()) {
             tags.push_back("large_result");
         }
         if (duration_ms > 5000.0) {
@@ -5595,7 +5744,10 @@ int main(int argc, char* argv[]) {
         if (trace_id.empty()) {
             trace_id = log_id("trace", start_time + ":query:" + argv_json(argc, argv).dump());
         }
+        const std::string parent_span_id = getenv_str("MONOLITH_PARENT_SPAN_ID");
         const std::string span_id = log_id("span", trace_id + ":query:" + start_time + ":" + argv_json(argc, argv).dump());
+        const std::string proc_instance_id = process_instance_id();
+        const std::string record_id = log_id("rec", proc_instance_id + ":query:1:" + trace_id + ":" + span_id + ":" + start_time);
         const bool truncated = stdout_truncated || stderr_truncated;
 
         json call = {
@@ -5624,12 +5776,35 @@ int main(int argc, char* argv[]) {
         if (!error_class.empty()) agent_signal["error_class"] = error_class;
         if (!tags.empty()) agent_signal["improvement_tags"] = tags;
 
+        const std::string ns_for_context = parsed_args ? args.ns : "";
+        const std::string action_for_context = parsed_args ? args.action : "";
+        const std::string intent = infer_intent(ns_for_context, action_for_context, exit_code);
+        json routing_context = {
+            {"decision_source", parent_span_id.empty() ? "direct" : "child_query"},
+            {"namespace_source", parent_span_id.empty() && getenv_str("MONOLITH_TRACE_ID").empty() ? "offline_cli" : "child_process"},
+            {"inferred_intent", intent},
+            {"intent_confidence", intent == "unknown" ? "low" : "medium"}
+        };
+        json workflow = {
+            {"step", workflow_step_for_intent(intent, exit_code)}
+        };
+        json phase_timing = json::object();
+        if (parse_args_ms > 0.0) phase_timing["parse_args_ms"] = parse_args_ms;
+        if (db_resolve_ms > 0.0) phase_timing["db_resolve_ms"] = db_resolve_ms;
+        if (db_open_ms > 0.0) phase_timing["db_open_ms"] = db_open_ms;
+        if (action_exec_ms > 0.0) phase_timing["action_exec_ms"] = action_exec_ms;
+        if (stdout_capture_ms > 0.0) phase_timing["stdout_capture_ms"] = stdout_capture_ms;
+        phase_timing["log_prepare_ms"] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - log_prepare_start).count();
+
         json record = {
-            {"format_version", 2},
+            {"format_version", 3},
             {"surface", "query"},
+            {"record_id", record_id},
             {"sequence", 1},
             {"trace_id", trace_id},
             {"span_id", span_id},
+            {"parent_span_id", parent_span_id},
+            {"process_instance_id", proc_instance_id},
             {"start_time", start_time},
             {"end_time", iso_local_now()},
             {"duration_ms", duration_ms},
@@ -5643,6 +5818,9 @@ int main(int argc, char* argv[]) {
             {"client", {
                 {"name", "monolith_query"}
             }},
+            {"routing_context", routing_context},
+            {"workflow", workflow},
+            {"phase_timing", phase_timing},
             {"call", call},
             {"return", {
                 {"exit_code", exit_code},
@@ -5651,15 +5829,16 @@ int main(int argc, char* argv[]) {
                 {"fatal_error", fatal_error}
             }},
             {"return_summary", summarize_query_return(
-                bounded_stdout,
-                bounded_stderr,
+                raw_stdout,
+                raw_stderr,
                 exit_code,
                 stdout_bytes,
                 stderr_bytes,
                 truncated,
                 fatal_error)},
             {"redaction", redaction},
-            {"agent_signal", agent_signal}
+            {"agent_signal", agent_signal},
+            {"environment", make_query_environment(ns_for_context, db_paths)}
         };
         append_query_log(record);
     }

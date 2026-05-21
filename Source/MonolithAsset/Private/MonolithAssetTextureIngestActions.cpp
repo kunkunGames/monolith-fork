@@ -1,5 +1,5 @@
 // Copyright tumourlove. All Rights Reserved.
-#include "Actions/Hoisted/TextureIngestActions.h"
+#include "MonolithAssetTextureIngestActions.h"
 
 // Monolith registry
 #include "MonolithPackagePathValidator.h"
@@ -33,7 +33,7 @@
 #include "AssetToolsModule.h"                   // FAssetToolsModule
 #include "IAssetTools.h"                        // IAssetTools::CreateUniqueAssetName
 
-namespace MonolithUI::TextureIngestInternal
+namespace MonolithAsset::TextureIngestInternal
 {
     // Map a "png" / "jpg" / "jpeg" / "bmp" / "exr" / "tga" hint to an EImageFormat.
     // NOTE: UE 5.7 EImageFormat has NO WebP member (checked against IImageWrapper.h:26-69).
@@ -127,11 +127,11 @@ namespace MonolithUI::TextureIngestInternal
         if (S == TEXT("TEXTUREGROUP_Shadowmap"))            { return TEXTUREGROUP_Shadowmap;            }
         return TEXTUREGROUP_UI;
     }
-} // namespace MonolithUI::TextureIngestInternal
+} // namespace MonolithAsset::TextureIngestInternal
 
-FMonolithActionResult MonolithUI::FTextureIngestActions::HandleImportTextureFromBytes(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureFromBytes(const TSharedPtr<FJsonObject>& Params)
 {
-    using namespace MonolithUI::TextureIngestInternal;
+    using namespace MonolithAsset::TextureIngestInternal;
 
     if (!Params.IsValid())
     {
@@ -377,10 +377,10 @@ FMonolithActionResult MonolithUI::FTextureIngestActions::HandleImportTextureFrom
     return FMonolithActionResult::Success(ResultObj);
 }
 
-void MonolithUI::FTextureIngestActions::Register(FMonolithToolRegistry& Registry)
+void MonolithAsset::FTextureIngestActions::Register(FMonolithToolRegistry& Registry)
 {
     Registry.RegisterAction(
-        TEXT("ui"),
+        TEXT("asset"),
         TEXT("import_texture_from_bytes"),
         TEXT("Decode a base64-encoded image (PNG / JPEG / BMP / EXR / TGA / HDR / TIFF / DDS) and import it as a UTexture2D asset. "
              "Params: destination (string, required, /Game/... path without .uasset), "
@@ -388,7 +388,7 @@ void MonolithUI::FTextureIngestActions::Register(FMonolithToolRegistry& Registry
              "format_hint (string, required, one of png|jpg|jpeg|bmp|exr|tga|hdr|tif|tiff|dds), "
              "settings (object, optional: compression_settings, srgb, mip_gen_settings, lod_group), "
              "save (bool, optional, default true)."),
-        FMonolithActionHandler::CreateStatic(&MonolithUI::FTextureIngestActions::HandleImportTextureFromBytes),
+        FMonolithActionHandler::CreateStatic(&MonolithAsset::FTextureIngestActions::HandleImportTextureFromBytes),
         FParamSchemaBuilder()
             .Required(TEXT("destination"), TEXT("string"), TEXT("Output texture path without .uasset"))
             .Required(TEXT("bytes_b64"), TEXT("string"), TEXT("Base64-encoded image bytes"))

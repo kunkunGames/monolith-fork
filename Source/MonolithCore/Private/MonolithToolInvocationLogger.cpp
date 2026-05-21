@@ -5,11 +5,17 @@
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTLS.h"
 #include "Interfaces/IPluginManager.h"
+#include "ISourceControlModule.h"
+#include "ISourceControlProvider.h"
+#include "Misc/App.h"
+#include "Misc/CommandLine.h"
+#include "Misc/EngineVersion.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/SecureHash.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
+#include "MonolithToolProfileManager.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
@@ -24,8 +30,18 @@ namespace
 {
 	FCriticalSection GDailyLogLock;
 	uint64 GDailyLogSequence = 0;
+	FString GProcessInstanceId;
+	FString GPreviousRecordId;
+	double GPreviousRecordStartSeconds = 0.0;
 	thread_local FString GCurrentTraceId;
-	constexpr int32 MaxFieldBytes = 256 * 1024;
+	thread_local FString GCurrentParentSpanId;
+	thread_local FString GCurrentSpanId;
+	thread_local FString GCurrentSessionKey;
+	thread_local TSharedPtr<FJsonObject> GCurrentRoutingContext;
+	thread_local TSharedPtr<FJsonObject> GCurrentChildProcess;
+	constexpr int32 DefaultMaxFieldBytes = 256 * 1024;
+
+	void PruneEmptyFields(const TSharedPtr<FJsonObject>& Obj);
 
 	bool IsSensitiveKey(const FString& Key)
 	{
@@ -186,6 +202,209 @@ namespace
 		return Prefix + TEXT("-") + Hash.Left(32);
 	}
 
+	FString ProcessInstanceId()
+	{
+		FScopeLock Lock(&GDailyLogLock);
+		if (GProcessInstanceId.IsEmpty())
+		{
+			GProcessInstanceId = MakeLogId(
+				TEXT("proc"),
+				FString::Printf(TEXT("action:%u:%s"), FPlatformProcess::GetCurrentProcessId(), *FMonolithToolInvocationLogger::NowIso8601WithOffset()));
+		}
+		return GProcessInstanceId;
+	}
+
+	TSharedPtr<FJsonObject> CloneObject(const TSharedPtr<FJsonObject>& Source)
+	{
+		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+		if (Source.IsValid())
+		{
+			Out->Values = Source->Values;
+		}
+		return Out;
+	}
+
+	void SetStringIfMissing(const TSharedPtr<FJsonObject>& Obj, const FString& Field, const FString& Value)
+	{
+		if (!Obj.IsValid() || Value.IsEmpty())
+		{
+			return;
+		}
+		FString Existing;
+		if (!Obj->TryGetStringField(Field, Existing) || Existing.IsEmpty())
+		{
+			Obj->SetStringField(Field, Value);
+		}
+	}
+
+	FString ClassifyIntent(const FString& Namespace, const FString& Action, bool bSuccess)
+	{
+		const FString Ns = Namespace.ToLower();
+		const FString Act = Action.ToLower();
+		if (Ns == TEXT("monolith") && (Act == TEXT("find") || Act == TEXT("discover")))
+		{
+			return TEXT("schema_discovery");
+		}
+		if (Act.Contains(TEXT("health")) || Act.Contains(TEXT("status")) || Act.Contains(TEXT("validate")) || Act.Contains(TEXT("check")) || Act.Contains(TEXT("test")))
+		{
+			return TEXT("verification");
+		}
+		if (Ns == TEXT("source") || Act.Contains(TEXT("source")) || Act.Contains(TEXT("symbol")) || Act.Contains(TEXT("reference")) || Act.Contains(TEXT("caller")) || Act.Contains(TEXT("callee")))
+		{
+			return TEXT("source_lookup");
+		}
+		if (Ns == TEXT("project") || Ns == TEXT("asset") || Act.Contains(TEXT("asset")) || Act.Contains(TEXT("reference")))
+		{
+			return TEXT("asset_search");
+		}
+		if (Ns == TEXT("editor") && (Act.Contains(TEXT("build")) || Act.Contains(TEXT("compile")) || Act.Contains(TEXT("log")) || Act.Contains(TEXT("crash"))))
+		{
+			return TEXT("build_diagnostics");
+		}
+		if (Act.Contains(TEXT("repair")) || Act.Contains(TEXT("reindex")) || Act.Contains(TEXT("rebuild")) || Act.Contains(TEXT("snapshot")))
+		{
+			return TEXT("maintenance");
+		}
+		if (!bSuccess)
+		{
+			return TEXT("error_recovery");
+		}
+		if (Act.StartsWith(TEXT("create")) || Act.StartsWith(TEXT("set")) || Act.StartsWith(TEXT("add")) || Act.StartsWith(TEXT("remove")) || Act.StartsWith(TEXT("delete")) || Act.StartsWith(TEXT("import")) || Act.StartsWith(TEXT("build")))
+		{
+			return TEXT("mutation");
+		}
+		return TEXT("unknown");
+	}
+
+	FString WorkflowStepForIntent(const FString& Intent, const FString& Action, bool bSuccess)
+	{
+		const FString Act = Action.ToLower();
+		if (!bSuccess)
+		{
+			return TEXT("recover");
+		}
+		if (Intent == TEXT("schema_discovery"))
+		{
+			return TEXT("discover");
+		}
+		if (Intent == TEXT("verification"))
+		{
+			return TEXT("verify");
+		}
+		if (Intent == TEXT("maintenance"))
+		{
+			return TEXT("maintenance");
+		}
+		if (Intent == TEXT("mutation") || Act.StartsWith(TEXT("create")) || Act.StartsWith(TEXT("set")) || Act.StartsWith(TEXT("delete")))
+		{
+			return TEXT("execute");
+		}
+		if (Intent == TEXT("source_lookup") || Intent == TEXT("asset_search") || Intent == TEXT("build_diagnostics"))
+		{
+			return TEXT("inspect");
+		}
+		return TEXT("unknown");
+	}
+
+	TSharedPtr<FJsonObject> MakeRoutingContext(const FString& Namespace, const FString& Action, bool bSuccess)
+	{
+		TSharedPtr<FJsonObject> Routing = CloneObject(GCurrentRoutingContext);
+		SetStringIfMissing(Routing, TEXT("decision_source"), GCurrentParentSpanId.IsEmpty() ? TEXT("direct") : TEXT("unknown"));
+		SetStringIfMissing(Routing, TEXT("namespace_source"), Namespace == TEXT("monolith") ? TEXT("core_tool") : TEXT("domain_query"));
+		const FString Intent = ClassifyIntent(Namespace, Action, bSuccess);
+		SetStringIfMissing(Routing, TEXT("inferred_intent"), Intent);
+		SetStringIfMissing(Routing, TEXT("intent_confidence"), Intent == TEXT("unknown") ? TEXT("low") : TEXT("medium"));
+		PruneEmptyFields(Routing);
+		return Routing;
+	}
+
+	TSharedPtr<FJsonObject> MakeWorkflow(const FString& Namespace, const FString& Action, bool bSuccess, const TSharedPtr<FJsonObject>& Routing)
+	{
+		TSharedPtr<FJsonObject> Workflow = MakeShared<FJsonObject>();
+		FString Intent;
+		if (Routing.IsValid())
+		{
+			Routing->TryGetStringField(TEXT("inferred_intent"), Intent);
+			FString DiscoveryRecordId;
+			if (Routing->TryGetStringField(TEXT("discovery_root_record_id"), DiscoveryRecordId) && !DiscoveryRecordId.IsEmpty())
+			{
+				Workflow->SetStringField(TEXT("discovery_root_record_id"), DiscoveryRecordId);
+			}
+		}
+		Workflow->SetStringField(TEXT("step"), WorkflowStepForIntent(Intent, Action, bSuccess));
+		PruneEmptyFields(Workflow);
+		return Workflow;
+	}
+
+	FString ResultShape(const FMonolithActionResult& Result)
+	{
+		if (!Result.bSuccess)
+		{
+			return TEXT("error");
+		}
+		if (!Result.Result.IsValid() || Result.Result->Values.Num() == 0)
+		{
+			return TEXT("empty");
+		}
+		return TEXT("object");
+	}
+
+	FString IndexHealthForAction(const FString& Namespace)
+	{
+		if (Namespace != TEXT("source") && Namespace != TEXT("project") && Namespace != TEXT("bridge"))
+		{
+			return TEXT("unknown");
+		}
+		TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Monolith"));
+		const FString BaseDir = Plugin.IsValid()
+			? Plugin->GetBaseDir()
+			: FPaths::ProjectPluginsDir() / TEXT("Monolith");
+		const FString SavedDir = FPaths::Combine(BaseDir, TEXT("Saved"));
+		if (Namespace == TEXT("source"))
+		{
+			return FPaths::FileExists(FPaths::Combine(SavedDir, TEXT("EngineSource.db"))) ? TEXT("ok") : TEXT("missing");
+		}
+		if (Namespace == TEXT("project"))
+		{
+			return FPaths::FileExists(FPaths::Combine(SavedDir, TEXT("ProjectIndex.db"))) ? TEXT("ok") : TEXT("missing");
+		}
+		const bool bSource = FPaths::FileExists(FPaths::Combine(SavedDir, TEXT("EngineSource.db")));
+		const bool bProject = FPaths::FileExists(FPaths::Combine(SavedDir, TEXT("ProjectIndex.db")));
+		return (bSource && bProject) ? TEXT("ok") : TEXT("missing");
+	}
+
+	TSharedPtr<FJsonObject> MakeEnvironment(const FString& Namespace)
+	{
+		TSharedPtr<FJsonObject> Environment = MakeShared<FJsonObject>();
+		if (const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Monolith")))
+		{
+			Environment->SetStringField(TEXT("plugin_version"), Plugin->GetDescriptor().VersionName);
+		}
+		Environment->SetStringField(TEXT("engine_version"), FEngineVersion::Current().ToString());
+		Environment->SetStringField(TEXT("project_name_hash"), Sha256Text(FApp::GetProjectName()));
+		Environment->SetBoolField(TEXT("headless"), IsRunningCommandlet() || FApp::IsUnattended() || FParse::Param(FCommandLine::Get(), TEXT("NullRHI")));
+		Environment->SetBoolField(TEXT("p4_enabled"), ISourceControlModule::Get().IsEnabled() && ISourceControlModule::Get().GetProvider().IsAvailable());
+		Environment->SetStringField(TEXT("index_health"), IndexHealthForAction(Namespace));
+		Environment->SetStringField(TEXT("active_profile_id"), FMonolithToolProfileManager::Get().GetActiveProfileId());
+		PruneEmptyFields(Environment);
+		return Environment;
+	}
+
+	int32 MaxLogFieldBytes()
+	{
+		const FString Raw = FPlatformMisc::GetEnvironmentVariable(TEXT("MONOLITH_TOOL_LOG_MAX_FIELD_BYTES"));
+		if (Raw.IsEmpty())
+		{
+			return DefaultMaxFieldBytes;
+		}
+		const int64 Parsed = FCString::Atoi64(*Raw);
+		if (Parsed <= 0)
+		{
+			return DefaultMaxFieldBytes;
+		}
+		return static_cast<int32>(FMath::Clamp<int64>(Parsed, 1024, 16 * 1024 * 1024));
+	}
+
 	TSharedPtr<FJsonObject> BoundObject(
 		const TSharedPtr<FJsonObject>& Obj,
 		bool& bTruncated,
@@ -193,8 +412,9 @@ namespace
 		FString& Hash)
 	{
 		const FString Text = JsonObjectToString(Obj);
+		const int32 MaxBytes = MaxLogFieldBytes();
 		OriginalBytes = FTCHARToUTF8(*Text).Length();
-		if (OriginalBytes <= MaxFieldBytes)
+		if (OriginalBytes <= MaxBytes)
 		{
 			bTruncated = false;
 			Hash.Reset();
@@ -207,7 +427,7 @@ namespace
 		Out->SetBoolField(TEXT("truncated"), true);
 		Out->SetNumberField(TEXT("original_bytes"), static_cast<double>(OriginalBytes));
 		Out->SetStringField(TEXT("sha256"), Hash);
-		Out->SetStringField(TEXT("preview"), Text.Left(MaxFieldBytes));
+		Out->SetStringField(TEXT("preview"), Text.Left(MaxBytes));
 		return Out;
 	}
 
@@ -372,6 +592,7 @@ namespace
 	{
 		TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
 		Summary->SetBoolField(TEXT("success"), Result.bSuccess);
+		Summary->SetStringField(TEXT("result_shape"), ResultShape(Result));
 		Summary->SetNumberField(TEXT("argument_bytes"), static_cast<double>(ArgBytes));
 		Summary->SetNumberField(TEXT("result_bytes"), static_cast<double>(ResultBytes));
 		if (bTruncated)
@@ -427,18 +648,44 @@ bool FMonolithToolInvocationLogger::IsEnabled()
 	return Settings && Settings->bEnableDailyLog;
 }
 
-FMonolithToolInvocationLogger::FScopedTrace::FScopedTrace(const FString& TraceId)
+FMonolithToolInvocationLogger::FScopedTrace::FScopedTrace(
+	const FString& TraceId,
+	const FString& ParentSpanId,
+	const FString& SpanId,
+	const FString& SessionKey,
+	const TSharedPtr<FJsonObject>& RoutingContext)
 	: PreviousTraceId(GCurrentTraceId)
+	, PreviousParentSpanId(GCurrentParentSpanId)
+	, PreviousSpanId(GCurrentSpanId)
+	, PreviousSessionKey(GCurrentSessionKey)
+	, PreviousRoutingContext(GCurrentRoutingContext)
 {
 	if (!TraceId.IsEmpty())
 	{
 		GCurrentTraceId = TraceId;
+	}
+	GCurrentParentSpanId = ParentSpanId;
+	if (!SpanId.IsEmpty())
+	{
+		GCurrentSpanId = SpanId;
+	}
+	if (!SessionKey.IsEmpty())
+	{
+		GCurrentSessionKey = SessionKey;
+	}
+	if (RoutingContext.IsValid())
+	{
+		GCurrentRoutingContext = CloneObject(RoutingContext);
 	}
 }
 
 FMonolithToolInvocationLogger::FScopedTrace::~FScopedTrace()
 {
 	GCurrentTraceId = PreviousTraceId;
+	GCurrentParentSpanId = PreviousParentSpanId;
+	GCurrentSpanId = PreviousSpanId;
+	GCurrentSessionKey = PreviousSessionKey;
+	GCurrentRoutingContext = PreviousRoutingContext;
 }
 
 FString FMonolithToolInvocationLogger::GenerateTraceId(const FString& Seed)
@@ -446,9 +693,68 @@ FString FMonolithToolInvocationLogger::GenerateTraceId(const FString& Seed)
 	return MakeLogId(TEXT("trace"), Seed);
 }
 
+FString FMonolithToolInvocationLogger::GenerateSpanId(const FString& Seed)
+{
+	return MakeLogId(TEXT("span"), Seed);
+}
+
 FString FMonolithToolInvocationLogger::GetCurrentTraceId()
 {
 	return GCurrentTraceId;
+}
+
+FString FMonolithToolInvocationLogger::GetCurrentParentSpanId()
+{
+	return GCurrentParentSpanId;
+}
+
+FString FMonolithToolInvocationLogger::GetCurrentSpanId()
+{
+	return GCurrentSpanId;
+}
+
+FString FMonolithToolInvocationLogger::GetCurrentSessionKey()
+{
+	return GCurrentSessionKey;
+}
+
+TSharedPtr<FJsonObject> FMonolithToolInvocationLogger::GetCurrentRoutingContext()
+{
+	return CloneObject(GCurrentRoutingContext);
+}
+
+void FMonolithToolInvocationLogger::ClearCurrentChildProcess()
+{
+	GCurrentChildProcess.Reset();
+}
+
+void FMonolithToolInvocationLogger::RecordChildProcess(
+	const FString& Executable,
+	const FString& ArgvSummary,
+	double ExecProcessMs,
+	int32 ExitCode,
+	int64 StdoutBytes,
+	int64 StderrBytes,
+	const FString& TraceId,
+	const FString& SpanId)
+{
+	TSharedPtr<FJsonObject> Child = MakeShared<FJsonObject>();
+	Child->SetStringField(TEXT("executable"), FPaths::GetCleanFilename(Executable));
+	Child->SetStringField(TEXT("argv_summary"), ArgvSummary);
+	Child->SetNumberField(TEXT("exec_process_ms"), ExecProcessMs);
+	Child->SetNumberField(TEXT("exit_code"), ExitCode);
+	Child->SetNumberField(TEXT("stdout_bytes"), static_cast<double>(StdoutBytes));
+	Child->SetNumberField(TEXT("stderr_bytes"), static_cast<double>(StderrBytes));
+	if (!TraceId.IsEmpty())
+	{
+		Child->SetStringField(TEXT("trace_id"), TraceId);
+	}
+	if (!SpanId.IsEmpty())
+	{
+		Child->SetStringField(TEXT("span_id"), SpanId);
+	}
+	PruneEmptyFields(Child);
+	GCurrentChildProcess = Child;
 }
 
 FString FMonolithToolInvocationLogger::NowIso8601WithOffset()
@@ -485,7 +791,8 @@ void FMonolithToolInvocationLogger::RecordAction(
 	const FMonolithActionResult& Result,
 	const FString& ValidationPhase,
 	const FString& StartTime,
-	double StartSeconds)
+	double StartSeconds,
+	const TSharedPtr<FJsonObject>& PhaseTiming)
 {
 	if (!IsEnabled())
 	{
@@ -494,7 +801,17 @@ void FMonolithToolInvocationLogger::RecordAction(
 
 	try
 	{
+		const double LogPrepareStartSeconds = FPlatformTime::Seconds();
 		const double DurationMs = (FPlatformTime::Seconds() - StartSeconds) * 1000.0;
+		const FString TraceId = GetCurrentTraceId().IsEmpty()
+			? GenerateTraceId(Namespace + TEXT(":") + Action + TEXT(":") + StartTime)
+			: GetCurrentTraceId();
+		const FString SpanId = GetCurrentSpanId().IsEmpty()
+			? MakeLogId(TEXT("span"), TraceId + TEXT(":action:") + Namespace + TEXT(":") + Action + TEXT(":") + StartTime)
+			: GetCurrentSpanId();
+		const FString ParentSpanId = GetCurrentParentSpanId();
+		const FString SessionKey = GetCurrentSessionKey().IsEmpty() ? TEXT("stateless") : GetCurrentSessionKey();
+		const FString ProcInstanceId = ProcessInstanceId();
 		const TSharedPtr<FJsonObject> RedactedParams = RedactObject(Params);
 		bool bArgsTruncated = false;
 		int64 ArgBytes = 0;
@@ -614,33 +931,67 @@ void FMonolithToolInvocationLogger::RecordAction(
 		}
 
 		uint64 Sequence = 0;
+		FString RecordId;
+		FString PreviousRecordId;
+		double TimeSincePreviousMs = 0.0;
+		bool bHasPreviousRecord = false;
 		{
 			FScopeLock Lock(&GDailyLogLock);
 			Sequence = ++GDailyLogSequence;
+			RecordId = MakeLogId(TEXT("rec"), ProcInstanceId + TEXT(":action:") + FString::Printf(TEXT("%llu"), Sequence) + TEXT(":") + TraceId + TEXT(":") + SpanId + TEXT(":") + StartTime);
+			PreviousRecordId = GPreviousRecordId;
+			bHasPreviousRecord = !PreviousRecordId.IsEmpty() && GPreviousRecordStartSeconds > 0.0;
+			if (bHasPreviousRecord)
+			{
+				TimeSincePreviousMs = (StartSeconds - GPreviousRecordStartSeconds) * 1000.0;
+			}
+			GPreviousRecordId = RecordId;
+			GPreviousRecordStartSeconds = StartSeconds;
 		}
 
-		TSharedPtr<FJsonObject> Record = MakeShared<FJsonObject>();
-		const FString TraceId = GetCurrentTraceId().IsEmpty()
-			? GenerateTraceId(Namespace + TEXT(":") + Action + TEXT(":") + StartTime)
-			: GetCurrentTraceId();
-		const FString SpanId = MakeLogId(TEXT("span"), TraceId + TEXT(":action:") + Namespace + TEXT(":") + Action + TEXT(":") + StartTime);
+		TSharedPtr<FJsonObject> RoutingContext = MakeRoutingContext(Namespace, Action, Result.bSuccess);
+		TSharedPtr<FJsonObject> Workflow = MakeWorkflow(Namespace, Action, Result.bSuccess, RoutingContext);
+		TSharedPtr<FJsonObject> Phase = CloneObject(PhaseTiming);
+		Phase->SetNumberField(TEXT("log_prepare_ms"), (FPlatformTime::Seconds() - LogPrepareStartSeconds) * 1000.0);
 
-		Record->SetNumberField(TEXT("format_version"), 2);
+		TSharedPtr<FJsonObject> Record = MakeShared<FJsonObject>();
+		Record->SetNumberField(TEXT("format_version"), 3);
 		Record->SetStringField(TEXT("surface"), TEXT("action"));
+		Record->SetStringField(TEXT("record_id"), RecordId);
 		Record->SetNumberField(TEXT("sequence"), static_cast<double>(Sequence));
 		Record->SetStringField(TEXT("trace_id"), TraceId);
 		Record->SetStringField(TEXT("span_id"), SpanId);
+		if (!ParentSpanId.IsEmpty())
+		{
+			Record->SetStringField(TEXT("parent_span_id"), ParentSpanId);
+		}
+		Record->SetStringField(TEXT("session_key"), SessionKey);
+		Record->SetStringField(TEXT("process_instance_id"), ProcInstanceId);
+		Record->SetNumberField(TEXT("call_index"), static_cast<double>(Sequence));
+		if (bHasPreviousRecord)
+		{
+			Record->SetStringField(TEXT("previous_record_id"), PreviousRecordId);
+			Record->SetNumberField(TEXT("time_since_previous_ms"), TimeSincePreviousMs);
+		}
 		Record->SetStringField(TEXT("start_time"), StartTime);
 		Record->SetStringField(TEXT("end_time"), NowIso8601WithOffset());
 		Record->SetNumberField(TEXT("duration_ms"), DurationMs);
 		Record->SetNumberField(TEXT("pid"), static_cast<double>(FPlatformProcess::GetCurrentProcessId()));
 		Record->SetNumberField(TEXT("thread_id"), static_cast<double>(FPlatformTLS::GetCurrentThreadId()));
 		Record->SetStringField(TEXT("status"), Result.bSuccess ? TEXT("success") : TEXT("error"));
+		Record->SetObjectField(TEXT("routing_context"), RoutingContext);
+		Record->SetObjectField(TEXT("workflow"), Workflow);
+		Record->SetObjectField(TEXT("phase_timing"), Phase);
 		Record->SetObjectField(TEXT("call"), Call);
 		Record->SetObjectField(TEXT("return"), BoundedReturn);
 		Record->SetObjectField(TEXT("return_summary"), MakeReturnSummary(Result, ArgBytes, ResultBytes, bArgsTruncated || bResultTruncated));
 		Record->SetObjectField(TEXT("redaction"), Redaction);
 		Record->SetObjectField(TEXT("agent_signal"), AgentSignal);
+		if (GCurrentChildProcess.IsValid())
+		{
+			Record->SetObjectField(TEXT("child_process"), CloneObject(GCurrentChildProcess));
+		}
+		Record->SetObjectField(TEXT("environment"), MakeEnvironment(Namespace));
 		PruneEmptyFields(Record);
 
 		FString Line = JsonObjectToString(Record);
@@ -652,6 +1003,7 @@ void FMonolithToolInvocationLogger::RecordAction(
 		{
 			UE_LOG(LogMonolith, Warning, TEXT("Failed to append Monolith action daily log: %s"), *Path);
 		}
+		ClearCurrentChildProcess();
 	}
 	catch (...)
 	{

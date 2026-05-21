@@ -5,19 +5,19 @@
 #include "MonolithToolRegistry.h"
 
 /**
- * MonolithUI -- texture ingest action.
+ * MonolithAsset -- texture ingest action.
  *
  * Decodes a base64-encoded compressed image (PNG / JPEG / BMP / EXR / TGA /
  * HDR / TIFF / DDS) and imports it as a UTexture2D asset at a /Game/... path.
- * Mirrors the editor-import flow used elsewhere in MonolithUI: NewObject +
+ * Mirrors the editor-import flow used elsewhere in Monolith: NewObject +
  * AssetRegistry::AssetCreated + SavePackage with CreateUniqueAssetName for
  * collision-safe naming.
  *
  * Editor-only -- FTextureSource is WITH_EDITOR-gated.
  */
-namespace MonolithUI
+namespace MonolithAsset
 {
-    struct FTextureIngestActions
+    struct MONOLITHASSET_API FTextureIngestActions
     {
         static void Register(FMonolithToolRegistry& Registry);
 

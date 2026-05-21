@@ -15,9 +15,9 @@
 #include "UObject/UObjectGlobals.h"
 
 /**
- * MonolithUI.ImportTextureFromBytes.BasicPNG
+ * MonolithAsset.ImportTextureFromBytes.BasicPNG
  *
- * Dispatches `ui.import_texture_from_bytes` through the Monolith registry with
+ * Dispatches `asset.import_texture_from_bytes` through the Monolith registry with
  * a 2x2 red PNG (base64). Asserts:
  *  - Action succeeds
  *  - Result payload exposes asset_path / width / height
@@ -26,14 +26,14 @@
  *
  * Uses save=false so the test does not pollute /Content/ on disk.
  *
- * Test fixture path: /Game/Tests/Monolith/UI/Textures/T_ImportBytesTest
+ * Test fixture path: /Game/Tests/Monolith/Asset/Textures/T_ImportBytesTest
  */
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-    FMonolithUIImportTextureFromBytesBasicTest,
-    "MonolithUI.ImportTextureFromBytes.BasicPNG",
+    FMonolithAssetImportTextureFromBytesBasicTest,
+    "MonolithAsset.ImportTextureFromBytes.BasicPNG",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FMonolithUIImportTextureFromBytesBasicTest::RunTest(const FString& Parameters)
+bool FMonolithAssetImportTextureFromBytesBasicTest::RunTest(const FString& Parameters)
 {
     // 2x2 red PNG, base64-encoded.
     const FString RedPngB64 = TEXT(
@@ -42,13 +42,13 @@ bool FMonolithUIImportTextureFromBytesBasicTest::RunTest(const FString& Paramete
 
     TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
     Params->SetStringField(TEXT("destination"),
-        TEXT("/Game/Tests/Monolith/UI/Textures/T_ImportBytesTest"));
+        TEXT("/Game/Tests/Monolith/Asset/Textures/T_ImportBytesTest"));
     Params->SetStringField(TEXT("bytes_b64"), RedPngB64);
     Params->SetStringField(TEXT("format_hint"), TEXT("png"));
     Params->SetBoolField(TEXT("save"), false);
 
     const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
-        TEXT("ui"), TEXT("import_texture_from_bytes"), Params);
+        TEXT("asset"), TEXT("import_texture_from_bytes"), Params);
 
     TestTrue(TEXT("import_texture_from_bytes bSuccess"), Result.bSuccess);
     if (!Result.bSuccess)

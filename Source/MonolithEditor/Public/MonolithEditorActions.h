@@ -66,7 +66,6 @@ public:
 	static FMonolithActionResult HandleCaptureScenePreview(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCaptureSequenceFrames(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCaptureSystemGif(const TSharedPtr<FJsonObject>& Params);
-	static FMonolithActionResult HandleImportTexture(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetViewportInfo(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleListOpenViewports(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCaptureLevelViewport(const TSharedPtr<FJsonObject>& Params);
@@ -74,7 +73,6 @@ public:
 	static FMonolithActionResult HandleCaptureWidgetDesigner(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCaptureAssetThumbnail(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleStitchFlipbook(const TSharedPtr<FJsonObject>& Params);
-	static FMonolithActionResult HandleDeleteAssets(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Automation tests ---
 	static FMonolithActionResult HandleRunAutomationTests(const TSharedPtr<FJsonObject>& Params);

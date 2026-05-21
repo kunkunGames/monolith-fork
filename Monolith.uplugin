@@ -3,7 +3,7 @@
 	"Version": 2,
 	"VersionName": "0.14.10",
 	"FriendlyName": "Monolith",
-	"Description": "Unified Unreal Engine MCP server with runtime-discovered namespaced action surfaces for source, project, editor, asset, gameplay, content, scene, level design, world generation, and model generation workflows.",
+	"Description": "Unified Unreal Engine MCP server with runtime-discovered namespaced action surfaces for source, project, editor, asset, gameplay, content, scene, level design, world generation, model generation, and image generation workflows.",
 	"Category": "Editor",
 	"CreatedBy": "tumourlove",
 	"CreatedByURL": "https://github.com/tumourlove/monolith",
@@ -221,6 +221,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "MonolithAsset",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "MonolithSlate",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
@@ -247,6 +252,11 @@
 		},
 		{
 			"Name": "MonolithModelGen",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MonolithImageGen",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
 		},

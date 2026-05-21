@@ -43,7 +43,13 @@ _monolith_was_up = None
 _stdout_lock = threading.Lock()
 _tool_log_lock = threading.Lock()
 _tool_log_sequence = 0
-_recent_tool_log_signatures: dict[str, tuple[float, bool]] = {}
+_process_instance_id: str | None = None
+_last_record_id: str | None = None
+_last_record_start_perf: float | None = None
+_last_error_record_id: str | None = None
+_recent_find: dict | None = None
+_recent_discover: dict | None = None
+_recent_tool_log_signatures: dict[str, dict] = {}
 
 _SENSITIVE_KEY_FRAGMENTS = (
     "authorization",
@@ -58,7 +64,7 @@ _SENSITIVE_KEY_FRAGMENTS = (
     "private_key",
     "session_id",
 )
-_MAX_LOG_FIELD_BYTES = 256 * 1024
+_DEFAULT_MAX_LOG_FIELD_BYTES = 256 * 1024
 _REPEAT_LOG_WINDOW_SECONDS = 15.0
 
 CORE_QUERY_TOOLS = [
@@ -89,6 +95,16 @@ def _log(msg: str) -> None:
 
 def _tool_log_enabled() -> bool:
     return os.environ.get("MONOLITH_TOOL_LOG_ENABLED", "1") != "0"
+
+
+def _max_log_field_bytes() -> int:
+    raw = os.environ.get("MONOLITH_TOOL_LOG_MAX_FIELD_BYTES")
+    if not raw:
+        return _DEFAULT_MAX_LOG_FIELD_BYTES
+    try:
+        return max(1024, min(int(raw), 16 * 1024 * 1024))
+    except ValueError:
+        return _DEFAULT_MAX_LOG_FIELD_BYTES
 
 
 def _find_plugin_root() -> Path:
@@ -138,7 +154,9 @@ def _json_bytes(value) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8", errors="replace")
 
 
-def _bounded(value, max_bytes: int = _MAX_LOG_FIELD_BYTES):
+def _bounded(value, max_bytes: int | None = None):
+    if max_bytes is None:
+        max_bytes = _max_log_field_bytes()
     data = _json_bytes(value)
     if len(data) <= max_bytes:
         return value, False, len(data), None
@@ -163,9 +181,74 @@ def _make_log_id(prefix: str, payload: str) -> str:
     return f"{prefix}-{digest[:32]}"
 
 
-def _with_trace(msg: dict, trace_id: str) -> dict:
+def _get_process_instance_id() -> str:
+    global _process_instance_id
+    if _process_instance_id is None:
+        _process_instance_id = _make_log_id("proc", f"proxy-python:{os.getpid()}:{_now_iso()}")
+    return _process_instance_id
+
+
+def _tool_namespace_action(tool_name: str, arguments) -> tuple[str, str]:
+    args = arguments if isinstance(arguments, dict) else {}
+    if tool_name.startswith("monolith_"):
+        return "monolith", tool_name[len("monolith_"):]
+    if tool_name.endswith("_query"):
+        return tool_name[:-len("_query")], str(args.get("action") or "")
+    return "", ""
+
+
+def _namespace_source(tool_name: str) -> str:
+    if tool_name.startswith("monolith_"):
+        return "core_tool"
+    if tool_name.endswith("_query"):
+        return "domain_query"
+    return "unknown"
+
+
+def _infer_intent(namespace: str, action: str, outcome: str) -> tuple[str, str]:
+    ns = namespace.lower()
+    act = action.lower()
+    if ns == "monolith" and act in ("find", "discover"):
+        return "schema_discovery", "high"
+    if any(token in act for token in ("health", "status", "check", "validate", "test")):
+        return "verification", "medium"
+    if ns == "source" or any(token in act for token in ("source", "symbol", "reference", "caller", "callee")):
+        return "source_lookup", "medium"
+    if ns in ("project", "asset") or "asset" in act:
+        return "asset_search", "medium"
+    if ns == "editor" and any(token in act for token in ("build", "compile", "log", "crash")):
+        return "build_diagnostics", "medium"
+    if any(token in act for token in ("repair", "reindex", "rebuild", "snapshot")):
+        return "maintenance", "medium"
+    if outcome != "success":
+        return "error_recovery", "low"
+    if act.startswith(("create", "set", "add", "remove", "delete", "import", "build")):
+        return "mutation", "medium"
+    return "unknown", "low"
+
+
+def _workflow_step(intent: str, outcome: str) -> str:
+    if outcome != "success":
+        return "recover"
+    if intent == "schema_discovery":
+        return "discover"
+    if intent == "verification":
+        return "verify"
+    if intent == "maintenance":
+        return "maintenance"
+    if intent == "mutation":
+        return "execute"
+    if intent in ("source_lookup", "asset_search", "build_diagnostics"):
+        return "inspect"
+    return "unknown"
+
+
+def _with_trace(msg: dict, trace_id: str, parent_span_id: str, routing_context: dict, session_key: str) -> dict:
     forwarded = dict(msg)
     forwarded["_monolith_trace_id"] = trace_id
+    forwarded["_monolith_parent_span_id"] = parent_span_id
+    forwarded["_monolith_session_key"] = session_key
+    forwarded["_monolith_routing_context"] = routing_context
     return forwarded
 
 
@@ -234,9 +317,10 @@ def _classify_response(response_obj, repeated: bool, duration_ms: float, arg_byt
         tags.append("repeated_call")
     if duration_ms > 5000:
         tags.append("slow_action")
-    if result_bytes > _MAX_LOG_FIELD_BYTES:
+    max_field_bytes = _max_log_field_bytes()
+    if result_bytes > max_field_bytes:
         tags.append("large_result")
-    if arg_bytes > _MAX_LOG_FIELD_BYTES:
+    if arg_bytes > max_field_bytes:
         tags.append("large_result")
 
     return outcome, error_class, error_code, sorted(set(tags))
@@ -248,6 +332,18 @@ def _summarize_response(response_obj, result_bytes: int, truncated: bool) -> dic
         "truncated": truncated,
     }
     if isinstance(response_obj, dict):
+        if "error" in response_obj:
+            summary["result_shape"] = "error"
+        elif isinstance(response_obj.get("result"), dict) and isinstance(response_obj.get("result", {}).get("content"), list):
+            summary["result_shape"] = "mcp_content"
+        elif isinstance(response_obj.get("result"), dict):
+            summary["result_shape"] = "object"
+        elif isinstance(response_obj.get("result"), list):
+            summary["result_shape"] = "list"
+        elif response_obj.get("result") is None:
+            summary["result_shape"] = "empty"
+        else:
+            summary["result_shape"] = "text"
         summary["response_top_keys"] = sorted(response_obj.keys())[:20]
         if "error" in response_obj:
             error = response_obj.get("error") or {}
@@ -277,43 +373,125 @@ def _summarize_response(response_obj, result_bytes: int, truncated: bool) -> dic
     return _drop_empty(summary)
 
 
-def _append_tool_log(record: dict) -> None:
-    if not _tool_log_enabled():
+def _build_routing_context(
+    tool_name: str,
+    arguments,
+    retry_signature: str,
+    repeated: bool,
+    outcome: str,
+    namespace: str,
+    action: str,
+    intent: str,
+    confidence: str,
+) -> dict:
+    decision_source = "direct"
+    discovery_root_record_id = None
+    matched_discovered_action = False
+    if repeated:
+        previous = _recent_tool_log_signatures.get(retry_signature)
+        if previous and previous.get("failed"):
+            decision_source = "retry_after_error"
+        else:
+            decision_source = "fallback"
+    elif _recent_discover:
+        discovered_namespace = _recent_discover.get("namespace")
+        discovered_action = _recent_discover.get("action")
+        if discovered_namespace and discovered_namespace == namespace and (not discovered_action or discovered_action == action):
+            decision_source = "after_discover"
+            matched_discovered_action = True
+            discovery_root_record_id = _recent_discover.get("record_id")
+    elif _recent_find and tool_name not in ("monolith_find", "monolith_discover"):
+        decision_source = "after_find"
+        discovery_root_record_id = _recent_find.get("record_id")
+
+    routing = {
+        "decision_source": decision_source,
+        "namespace_source": _namespace_source(tool_name),
+        "recent_find_trace_id": _recent_find.get("trace_id") if _recent_find else None,
+        "recent_discover_trace_id": _recent_discover.get("trace_id") if _recent_discover else None,
+        "matched_discovered_action": matched_discovered_action,
+        "inferred_intent": intent,
+        "intent_confidence": confidence,
+        "discovery_root_record_id": discovery_root_record_id,
+    }
+    return _drop_empty(routing)
+
+
+def _remember_tool_outcome(tool_name: str, arguments, trace_id: str, record_id: str | None, retry_signature: str, now: float, failed: bool) -> None:
+    global _recent_find
+    global _recent_discover
+    global _last_error_record_id
+    if not record_id:
         return
 
+    args = arguments if isinstance(arguments, dict) else {}
+    namespace, action = _tool_namespace_action(tool_name, args)
+    _recent_tool_log_signatures[retry_signature] = {
+        "at": now,
+        "failed": failed,
+        "record_id": record_id,
+    }
+    if failed:
+        _last_error_record_id = record_id
+    elif _last_error_record_id:
+        _last_error_record_id = None
+
+    if tool_name == "monolith_find":
+        _recent_find = {"trace_id": trace_id, "record_id": record_id}
+    elif tool_name == "monolith_discover":
+        _recent_discover = {
+            "trace_id": trace_id,
+            "record_id": record_id,
+            "namespace": str(args.get("namespace") or ""),
+            "action": str(args.get("action") or ""),
+        }
+    elif namespace and action and _recent_discover:
+        discovered_namespace = _recent_discover.get("namespace")
+        discovered_action = _recent_discover.get("action")
+        if discovered_namespace == namespace and (not discovered_action or discovered_action == action):
+            _recent_discover = None
+
+
+def _append_tool_log(record: dict) -> float | None:
+    if not _tool_log_enabled():
+        return None
+
+    write_start = time.perf_counter()
     try:
         path = _daily_log_path()
         line = json.dumps(_drop_empty(record), ensure_ascii=False, separators=(",", ":")) + "\n"
         with _tool_log_lock:
             path.parent.mkdir(parents=True, exist_ok=True)
             lock_path = path.with_suffix(path.suffix + ".lock")
-            with open(lock_path, "a+", encoding="utf-8") as lock_file:
-                if os.name == "nt":
-                    import msvcrt
-
-                    lock_file.seek(0)
-                    if not lock_file.read(1):
-                        lock_file.write("0")
-                        lock_file.flush()
-                    lock_file.seek(0)
-                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+            lock_fd = None
+            lock_start = time.time()
+            while lock_fd is None:
+                try:
+                    lock_fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    os.write(lock_fd, b"0")
+                except FileExistsError:
                     try:
-                        with open(path, "a", encoding="utf-8", newline="\n") as log_file:
-                            log_file.write(line)
-                    finally:
-                        lock_file.seek(0)
-                        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-                    try:
-                        with open(path, "a", encoding="utf-8", newline="\n") as log_file:
-                            log_file.write(line)
-                    finally:
-                        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                        if time.time() - lock_path.stat().st_mtime > 30:
+                            lock_path.unlink()
+                    except FileNotFoundError:
+                        pass
+                    if time.time() - lock_start > 5:
+                        raise TimeoutError("timed out acquiring tool log lock")
+                    time.sleep(0.025)
+            try:
+                with open(path, "a", encoding="utf-8", newline="\n") as log_file:
+                    log_file.write(line)
+            finally:
+                if lock_fd is not None:
+                    os.close(lock_fd)
+                try:
+                    lock_path.unlink()
+                except FileNotFoundError:
+                    pass
     except Exception as e:
         _log(f"Tool daily log failed: {e}")
+        return None
+    return (time.perf_counter() - write_start) * 1000.0
 
 
 def _log_tools_call(
@@ -325,11 +503,14 @@ def _log_tools_call(
     retry_signature: str,
     trace_id: str,
     span_id: str,
-) -> None:
+) -> str | None:
     if not _tool_log_enabled():
-        return
+        return None
 
+    log_prepare_start = time.perf_counter()
     global _tool_log_sequence
+    global _last_record_id
+    global _last_record_start_perf
     end_time = _now_iso()
     duration_ms = (time.perf_counter() - start_perf) * 1000.0
     params = msg.get("params", {}) if isinstance(msg.get("params"), dict) else {}
@@ -342,10 +523,18 @@ def _log_tools_call(
     bounded_response, response_truncated, result_bytes, result_hash = _bounded(redacted_response)
     outcome, error_class, error_code, tags = _classify_response(
         response_obj, repeated, duration_ms, arg_bytes, result_bytes)
+    namespace, action = _tool_namespace_action(tool_name, arguments)
+    intent, confidence = _infer_intent(namespace, action, outcome)
 
     with _tool_log_lock:
         _tool_log_sequence += 1
         sequence = _tool_log_sequence
+        process_id = _get_process_instance_id()
+        record_id = _make_log_id("rec", f"{process_id}:proxy:{sequence}:{trace_id}:{span_id}:{start_time}")
+        previous_record_id = _last_record_id
+        previous_start_perf = _last_record_start_perf
+        _last_record_id = record_id
+        _last_record_start_perf = start_perf
 
     return_summary = _summarize_response(response_obj, result_bytes, args_truncated or response_truncated)
 
@@ -373,6 +562,31 @@ def _log_tools_call(
     if tags:
         agent_signal["improvement_tags"] = tags
 
+    routing_context = _build_routing_context(tool_name, arguments, retry_signature, repeated, outcome, namespace, action, intent, confidence)
+    workflow = {
+        "step": _workflow_step(intent, outcome),
+    }
+    previous_signature = _recent_tool_log_signatures.get(retry_signature)
+    if previous_signature and previous_signature.get("record_id") and repeated:
+        workflow["retry_of_record_id"] = previous_signature["record_id"]
+    if _last_error_record_id and outcome == "success":
+        workflow["recovery_from_record_id"] = _last_error_record_id
+    if routing_context.get("discovery_root_record_id"):
+        workflow["discovery_root_record_id"] = routing_context["discovery_root_record_id"]
+
+    phase_timing = _drop_empty({
+        "parse_ms": msg.get("_monolith_parse_ms"),
+        "rewrite_ms": msg.get("_monolith_rewrite_ms"),
+        "dedup_ms": msg.get("_monolith_dedup_ms"),
+        "http_roundtrip_ms": msg.get("_monolith_http_roundtrip_ms"),
+        "fallback_ms": msg.get("_monolith_fallback_ms"),
+    })
+    phase_timing["log_prepare_ms"] = (time.perf_counter() - log_prepare_start) * 1000.0
+    if previous_record_id and previous_start_perf is not None:
+        time_since_previous_ms = (start_perf - previous_start_perf) * 1000.0
+    else:
+        time_since_previous_ms = None
+
     return_record = {
         "response": bounded_response,
     }
@@ -381,11 +595,17 @@ def _log_tools_call(
         return_record["jsonrpc_id"] = response_id
 
     record = {
-        "format_version": 2,
+        "format_version": 3,
         "surface": "proxy",
+        "record_id": record_id,
         "sequence": sequence,
         "trace_id": trace_id,
         "span_id": span_id,
+        "session_key": "stateless",
+        "process_instance_id": process_id,
+        "call_index": sequence,
+        "previous_record_id": previous_record_id,
+        "time_since_previous_ms": time_since_previous_ms,
         "start_time": start_time,
         "end_time": end_time,
         "duration_ms": round(duration_ms, 3),
@@ -396,6 +616,9 @@ def _log_tools_call(
             "proxy_runtime": "python",
             "proxy_version": PROXY_VERSION,
         },
+        "routing_context": routing_context,
+        "workflow": workflow,
+        "phase_timing": phase_timing,
         "call": {
             "jsonrpc_id": msg.get("id"),
             "tool_name_original": tool_name,
@@ -408,7 +631,12 @@ def _log_tools_call(
         "redaction": redaction,
         "agent_signal": agent_signal,
     }
-    _append_tool_log(record)
+    write_ms = _append_tool_log(record)
+    if write_ms is not None:
+        # `log_write_ms` is intentionally not patched into the already-written row;
+        # tests and analyzers should treat it as optional for script proxies.
+        pass
+    return record_id
 
 
 def _post_monolith(body: str, timeout: float = TIMEOUT) -> str | None:
@@ -667,36 +895,54 @@ def handle_tools_call(msg: dict) -> str:
     """Forward tools/call to Monolith. Graceful error if down."""
     start_time = _now_iso()
     start_perf = time.perf_counter()
+    parse_start = time.perf_counter()
     params = msg.get("params", {}) if isinstance(msg.get("params"), dict) else {}
     tool_name = params.get("name", "unknown")
     arguments = params.get("arguments", {})
+    parse_ms = (time.perf_counter() - parse_start) * 1000.0
+    dedup_start = time.perf_counter()
     retry_signature = _retry_signature(tool_name, arguments)
     now = time.monotonic()
     previous = _recent_tool_log_signatures.get(retry_signature)
-    repeated = bool(previous and now - previous[0] <= _REPEAT_LOG_WINDOW_SECONDS)
+    repeated = bool(previous and now - previous.get("at", 0.0) <= _REPEAT_LOG_WINDOW_SECONDS)
+    dedup_ms = (time.perf_counter() - dedup_start) * 1000.0
+    rewrite_start = time.perf_counter()
     trace_id = _make_log_id("trace", f"{start_time}:{os.getpid()}:{threading.get_ident()}:{retry_signature}")
     span_id = _make_log_id("span", f"{trace_id}:proxy:{msg.get('id')}:{start_time}")
-    forwarded_msg = _with_trace(msg, trace_id)
+    namespace, action = _tool_namespace_action(tool_name, arguments)
+    intent, confidence = _infer_intent(namespace, action, "unknown")
+    routing_context = _build_routing_context(tool_name, arguments, retry_signature, repeated, "unknown", namespace, action, intent, confidence)
+    forwarded_msg = _with_trace(msg, trace_id, span_id, routing_context, "stateless")
+    rewrite_ms = (time.perf_counter() - rewrite_start) * 1000.0
 
+    http_start = time.perf_counter()
     resp = _post_monolith(json.dumps(forwarded_msg))
+    http_roundtrip_ms = (time.perf_counter() - http_start) * 1000.0
+    log_msg_context = dict(msg)
+    log_msg_context["_monolith_parse_ms"] = parse_ms
+    log_msg_context["_monolith_rewrite_ms"] = rewrite_ms
+    log_msg_context["_monolith_dedup_ms"] = dedup_ms
+    log_msg_context["_monolith_http_roundtrip_ms"] = http_roundtrip_ms
     if resp:
         try:
             response_obj = _extract_response(resp)
             failed = isinstance(response_obj, dict) and (
                 "error" in response_obj or response_obj.get("result", {}).get("isError"))
-            _recent_tool_log_signatures[retry_signature] = (now, failed)
-            _log_tools_call(msg, start_time, start_perf, resp, repeated, retry_signature, trace_id, span_id)
+            record_id = _log_tools_call(log_msg_context, start_time, start_perf, resp, repeated, retry_signature, trace_id, span_id)
+            _remember_tool_outcome(tool_name, arguments, trace_id, record_id, retry_signature, now, failed)
         except Exception as e:
             _log(f"Tool daily log wrapper failed: {e}")
         return resp
 
+    fallback_start = time.perf_counter()
     response = _tool_error(
         msg.get("id"),
         f"Monolith MCP is not available (Unreal Editor not running). "
         f"Tool '{tool_name}' cannot execute. Start the editor and try again.",
     )
-    _recent_tool_log_signatures[retry_signature] = (now, True)
-    _log_tools_call(msg, start_time, start_perf, response, repeated, retry_signature, trace_id, span_id)
+    log_msg_context["_monolith_fallback_ms"] = (time.perf_counter() - fallback_start) * 1000.0
+    record_id = _log_tools_call(log_msg_context, start_time, start_perf, response, repeated, retry_signature, trace_id, span_id)
+    _remember_tool_outcome(tool_name, arguments, trace_id, record_id, retry_signature, now, True)
     return response
 
 

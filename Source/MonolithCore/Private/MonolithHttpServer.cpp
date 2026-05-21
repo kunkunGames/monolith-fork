@@ -13,6 +13,7 @@
 #include "HttpServerResponse.h"
 #include "GenericPlatform/GenericPlatformProcess.h"
 #include "Internationalization/Regex.h"
+#include "Misc/SecureHash.h"
 #include "SocketSubsystem.h"
 #include "Sockets.h"
 #include "IPAddress.h"
@@ -83,6 +84,19 @@ namespace
 			Params->TryGetStringField(TEXT("protocolVersion"), ProtocolVersion);
 		}
 		return ProtocolVersion;
+	}
+
+	FString RedactedSessionKey(const FString& RawSessionId)
+	{
+		if (RawSessionId.IsEmpty())
+		{
+			return TEXT("stateless");
+		}
+		if (RawSessionId == TEXT("stateless") || RawSessionId.StartsWith(TEXT("md5:")))
+		{
+			return RawSessionId;
+		}
+		return TEXT("md5:") + FMD5::HashAnsiString(*RawSessionId);
 	}
 
 	void ObserveMcpSessionIfEnabled(
@@ -373,6 +387,9 @@ bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const
 	for (const TSharedPtr<FJsonObject>& Req : Requests)
 	{
 		FString TraceId = HeaderTraceId;
+		FString ParentSpanId;
+		FString SessionKey = RedactedSessionKey(HeaderSessionId);
+		TSharedPtr<FJsonObject> RoutingContext;
 		if (Req.IsValid())
 		{
 			FString BodyTraceId;
@@ -380,8 +397,19 @@ bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const
 			{
 				TraceId = BodyTraceId;
 			}
+			Req->TryGetStringField(TEXT("_monolith_parent_span_id"), ParentSpanId);
+			FString BodySessionKey;
+			if (Req->TryGetStringField(TEXT("_monolith_session_key"), BodySessionKey) && !BodySessionKey.IsEmpty())
+			{
+				SessionKey = RedactedSessionKey(BodySessionKey);
+			}
+			const TSharedPtr<FJsonObject>* RoutingObj = nullptr;
+			if (Req->TryGetObjectField(TEXT("_monolith_routing_context"), RoutingObj) && RoutingObj)
+			{
+				RoutingContext = *RoutingObj;
+			}
 		}
-		FMonolithToolInvocationLogger::FScopedTrace TraceScope(TraceId);
+		FMonolithToolInvocationLogger::FScopedTrace TraceScope(TraceId, ParentSpanId, FString(), SessionKey, RoutingContext);
 		ObserveMcpSessionIfEnabled(Req, HeaderSessionId, HeaderProtocolVersion);
 		TSharedPtr<FJsonObject> Resp = ProcessJsonRpcRequest(Req);
 		if (Resp.IsValid())

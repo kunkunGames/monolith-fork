@@ -1,6 +1,6 @@
 ﻿# Monolith — TODO
 
-Last updated: 2026-05-20 (Routing/discovery + projection + source result + readiness freshness slices implemented; P7 Core/Mesh/AI/GAS/UI/Animation/Blueprint/ComboGraph/Interchange/LevelSequence/SourceControl/Config/Localization/LogicDriver/Index and small optional/read-only namespace validation slices in progress)
+Last updated: 2026-05-21 (Tool invocation log v3 data collection implemented and verified; analyzer implementation remains deferred)
 
 ---
 
@@ -20,13 +20,13 @@ Plan spec: [specs/SPEC_MonolithHeadlessMcpLaunch.md](specs/SPEC_MonolithHeadless
 
 Plan spec: [specs/SPEC_MonolithToolInvocationLogs.md](specs/SPEC_MonolithToolInvocationLogs.md#52-analysis-data-collection-contract). Analyzer implementation is deferred; this plan is only about collecting enough structured data for future analysis of what agents call, why they likely call it, how they continue, and where latency accumulates.
 
-- [ ] **P1 correlation upgrade** — Add `record_id`, `parent_span_id`, `session_key`, `process_instance_id`, `call_index`, `previous_record_id`, and `time_since_previous_ms` while preserving v2 compatibility.
-- [ ] **P2 routing context** — Add `routing_context` with `decision_source`, `namespace_source`, recent find/discover trace links, hint-following flags, and coarse `inferred_intent`.
-- [ ] **P3 workflow context** — Add `workflow.step`, retry/recovery/discovery links, and leave continuation outcomes analyzer-derived.
-- [ ] **P4 phase timing** — Add measured proxy/action/query `phase_timing` fields and child-process timing for editor actions that shell out to `monolith_query.exe`.
-- [ ] **P5 richer summaries** — Extend `return_summary` with result shape, recognized item/asset/symbol/reference counts, warning/error counts, truncation fields, and affected-path counts.
-- [ ] **P6 environment context** — Add low-cardinality version/headless/profile/index-health context without logging secrets or raw session ids.
-- [ ] **P7 verification** — Add schema tests and smoke logs proving proxy -> action -> child query records can reconstruct a timeline and identify bottleneck phases.
+- [x] **P1 correlation upgrade** — Added `record_id`, `parent_span_id`, `session_key`, `process_instance_id`, `call_index`, `previous_record_id`, and `time_since_previous_ms` while preserving v1/v2 reader compatibility.
+- [x] **P2 routing context** — Added `routing_context` with `decision_source`, `namespace_source`, recent find/discover trace links where available, discovery matching, and coarse `inferred_intent`.
+- [x] **P3 workflow context** — Added `workflow.step`, retry/recovery/discovery links, and left continuation outcomes analyzer-derived.
+- [x] **P4 phase timing** — Added measured proxy/action/query `phase_timing` fields and child-process timing for editor actions that shell out to `monolith_query.exe`.
+- [x] **P5 richer summaries** — Extended `return_summary` with result shape, recognized counts where derivable, warning/error counts, truncation fields, and payload byte counts.
+- [x] **P6 environment context** — Added low-cardinality version/headless/profile/index-health context without logging secrets or raw session ids.
+- [x] **P7 verification** — Added schema tests and smoke logs proving proxy -> action -> child query records can reconstruct a timeline and identify bottleneck phases.
 
 ---
 

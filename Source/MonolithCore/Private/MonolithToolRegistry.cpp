@@ -614,7 +614,24 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	const FString ActionTraceId = ExistingTraceId.IsEmpty()
 		? FMonolithToolInvocationLogger::GenerateTraceId(Namespace + TEXT(":") + Action + TEXT(":") + LogStartTime)
 		: ExistingTraceId;
-	FMonolithToolInvocationLogger::FScopedTrace ActionTraceScope(ActionTraceId);
+	const FString ExistingParentSpanId = FMonolithToolInvocationLogger::GetCurrentParentSpanId();
+	const FString ActionSpanId = FMonolithToolInvocationLogger::GenerateSpanId(ActionTraceId + TEXT(":action:") + Namespace + TEXT(":") + Action + TEXT(":") + LogStartTime);
+	FMonolithToolInvocationLogger::FScopedTrace ActionTraceScope(
+		ActionTraceId,
+		ExistingParentSpanId,
+		ActionSpanId,
+		FMonolithToolInvocationLogger::GetCurrentSessionKey(),
+		FMonolithToolInvocationLogger::GetCurrentRoutingContext());
+	FMonolithToolInvocationLogger::ClearCurrentChildProcess();
+	TSharedPtr<FJsonObject> PhaseTiming = MakeShared<FJsonObject>();
+	auto SetPhaseMs = [PhaseTiming](const TCHAR* Field, double PhaseStartSeconds)
+	{
+		if (PhaseTiming.IsValid())
+		{
+			PhaseTiming->SetNumberField(Field, (FMonolithToolInvocationLogger::NowSeconds() - PhaseStartSeconds) * 1000.0);
+		}
+	};
+	const double LookupStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
 	auto RecordAndReturn = [&](const FMonolithActionResult& Result, const FString& ValidationPhase, const TSharedPtr<FJsonObject>& LogParams) -> FMonolithActionResult
 	{
 		FMonolithToolInvocationLogger::RecordAction(
@@ -624,7 +641,8 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 			Result,
 			ValidationPhase,
 			LogStartTime,
-			LogStartSeconds);
+			LogStartSeconds,
+			PhaseTiming);
 		return Result;
 	};
 
@@ -641,6 +659,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		Lock.Unlock();
 
 		TArray<FString> Similar = FindSimilarActions(Namespace, Action, /*MaxResults=*/5);
+		SetPhaseMs(TEXT("lookup_ms"), LookupStartSeconds);
 
 		FMonolithActionResult R = FMonolithActionResult::Error(
 			FString::Printf(TEXT("Unknown action: %s.%s"), *Namespace, *Action),
@@ -663,8 +682,11 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		return RecordAndReturn(R, TEXT("lookup"), Params);
 	}
 
+	SetPhaseMs(TEXT("lookup_ms"), LookupStartSeconds);
+	const double ProfileStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
 	if (!FMonolithToolProfileManager::Get().IsActionAllowed(Namespace, Action))
 	{
+		SetPhaseMs(TEXT("profile_ms"), ProfileStartSeconds);
 		FMonolithActionResult R = FMonolithActionResult::Error(
 			FString::Printf(TEXT("Action '%s.%s' is disabled by the active Monolith tool profile '%s'."),
 				*Namespace,
@@ -681,6 +703,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		Lock.Unlock();
 		return RecordAndReturn(R, TEXT("profile"), Params);
 	}
+	SetPhaseMs(TEXT("profile_ms"), ProfileStartSeconds);
 
 	if (!RegAction->Handler.IsBound())
 	{
@@ -703,11 +726,13 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	TSharedPtr<FJsonObject> EffectiveParams = Params.IsValid() ? Params : MakeShared<FJsonObject>();
 
 	// K2 — alias rewriting BEFORE the required-param check.
+	const double AliasStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
 	if (ActionInfo.ParamSchema.IsValid())
 	{
 		FString Collision;
 		if (!FMonolithParamSchema::ApplyAliases(ActionInfo.ParamSchema, EffectiveParams, Collision))
 		{
+			SetPhaseMs(TEXT("alias_ms"), AliasStartSeconds);
 			FMonolithActionResult R = FMonolithActionResult::Error(Collision, FMonolithJsonUtils::ErrInvalidParams);
 			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
 				TEXT(""),
@@ -720,10 +745,15 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 			return RecordAndReturn(R, TEXT("schema"), EffectiveParams);
 		}
 	}
+	if (ActionInfo.ParamSchema.IsValid())
+	{
+		SetPhaseMs(TEXT("alias_ms"), AliasStartSeconds);
+	}
 
 	// Validate required params from schema before dispatching.
 	// Skip asset_path — GetAssetPath() accepts both asset_path and system_path aliases
 	// and produces a clear error message itself.
+	const double SchemaStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
 	if (ActionInfo.ParamSchema.IsValid())
 	{
 		TArray<FString> Missing;
@@ -748,6 +778,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		}
 		if (Missing.Num() > 0)
 		{
+			SetPhaseMs(TEXT("schema_ms"), SchemaStartSeconds);
 			TArray<FString> Provided;
 			Provided.Reserve(EffectiveParams->Values.Num());
 			for (const auto& P : EffectiveParams->Values) Provided.Add(P.Key);
@@ -817,6 +848,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 
 			if (FMonolithParamSchema::IsStrictParamsEnabled())
 			{
+				SetPhaseMs(TEXT("schema_ms"), SchemaStartSeconds);
 				FMonolithActionResult R = FMonolithActionResult::Error(
 					FString::Printf(TEXT("STRICT_PARAMS=1: rejected action '%s:%s' due to unknown params: [%s]"),
 						*Namespace, *Action, *FString::Join(Unknown, TEXT(", "))),
@@ -840,6 +872,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		TArray<FString> ValidationErrors;
 		if (!FMonolithParamSchema::ValidateTypedParams(ActionInfo.ParamSchema, EffectiveParams, ValidationErrors))
 		{
+			SetPhaseMs(TEXT("schema_ms"), SchemaStartSeconds);
 			FMonolithActionResult R = FMonolithActionResult::Error(
 				FString::Printf(TEXT("Invalid param(s) for action '%s:%s': %s"),
 					*Namespace,
@@ -857,6 +890,10 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 			return RecordAndReturn(R, TEXT("schema"), EffectiveParams);
 		}
 	}
+	if (ActionInfo.ParamSchema.IsValid())
+	{
+		SetPhaseMs(TEXT("schema_ms"), SchemaStartSeconds);
+	}
 
 	// Release lock before executing handler (handlers may take time)
 	FMonolithActionHandler HandlerCopy = RegAction->Handler;
@@ -867,8 +904,11 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	// if the editor crashes during the handler. RAII clears the slot on exit.
 	FMonolithCrashBreadcrumb::FScopedCapture CrashCapture(Namespace, Action, EffectiveParams);
 
+	const double HandlerStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
 	FScopedEnvironmentVar TraceEnv(TEXT("MONOLITH_TRACE_ID"), ActionTraceId);
+	FScopedEnvironmentVar ParentSpanEnv(TEXT("MONOLITH_PARENT_SPAN_ID"), ActionSpanId);
 	FMonolithActionResult ActionResult = HandlerCopy.Execute(EffectiveParams);
+	SetPhaseMs(TEXT("handler_ms"), HandlerStartSeconds);
 
 	// On success, append `warnings` array for unknown params (K3 soft-warn mode).
 	if (ActionResult.bSuccess && Unknown.Num() > 0 && ActionResult.Result.IsValid())
@@ -887,7 +927,9 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		ActionResult.Result->SetArrayField(TEXT("warnings"), Existing);
 	}
 
+	const double PostEditStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
 	CrashCapture.ApplyPostEditValidation(ActionResult, EffectiveParams);
+	SetPhaseMs(TEXT("post_edit_ms"), PostEditStartSeconds);
 	CrashCapture.SetOutcome(ActionResult.bSuccess, ActionResult.ErrorCode, ActionResult.Result, ActionResult.ErrorMessage);
 	return RecordAndReturn(ActionResult, TEXT("dispatch"), EffectiveParams);
 }

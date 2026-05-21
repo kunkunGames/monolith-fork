@@ -5,7 +5,7 @@ description: Use when creating, editing, or inspecting Unreal Engine materials v
 
 # Unreal Material Workflows
 
-**63 material actions** via `material_query()`. Discover first: `monolith_discover({ namespace: "material" })`
+**63 material actions** via `material_query()`. Generic `asset` namespace workflows have **11 actions** via `asset_query()` for texture/font ingest, file texture import, asset save/delete, specialized asset inspection, naming validation, and batch rename hygiene. Discover first: `monolith_discover({ namespace: "material" })` or `monolith_discover({ namespace: "asset" })`.
 
 ## Key Parameters
 

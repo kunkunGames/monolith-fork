@@ -64,11 +64,11 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 ### Content
 | Skill | Namespace | ~Actions | Use for |
 |-------|-----------|---------:|---------|
-| `unreal-ui` | `ui` | 121 | UMG widgets, bindings, slots, styling, templates, accessibility |
+| `unreal-ui` | `ui` | 119 | UMG widgets, bindings, slots, styling, templates, accessibility |
 | `unreal-niagara` | `niagara` | 109 | Niagara VFX systems, emitters, modules |
 | `unreal-animation` | `animation` | 135 | AnimBP, montages, sequences, blendspaces, layout |
 | `unreal-audio` | `audio` | 98 | Sound assets, cues, MetaSounds, attenuation, mixing |
-| `unreal-materials` | `material`/`asset` | 63 / 6 | Material graphs, instances, functions; asset inspect/validate |
+| `unreal-materials` | `material`/`asset` | 63 / 8 | Material graphs, instances, functions; asset ingest/inspect/validate |
 | `unreal-metahuman` | `metahuman` | 2 | MetaHuman setup & layout |
 | `unreal-slate` | `slate` | 6 | Editor Slate / Editor Utility Widgets |
 | `unreal-paper2d` | `paper2d` | 3 | Sprites, flipbooks, tile maps |

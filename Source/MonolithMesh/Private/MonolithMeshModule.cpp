@@ -35,7 +35,6 @@ void FMonolithMeshModule::StartupModule()
 		FMonolithMeshPerformanceActions::RegisterActions(OwnedRegistry);
 		FMonolithMeshTechArtActions::RegisterActions(OwnedRegistry);
 		FMonolithMeshQualityActions::RegisterActions(OwnedRegistry);
-		FMonolithMeshQualityActions::RegisterAssetActions(OwnedRegistry);
 		FMonolithMeshValidationActions::RegisterActions(OwnedRegistry);
 		FMonolithLevelInstanceActions::RegisterActions(OwnedRegistry);
 		FMonolithHlodActions::RegisterActions(OwnedRegistry);

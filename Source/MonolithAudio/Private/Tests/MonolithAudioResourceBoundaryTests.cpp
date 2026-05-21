@@ -1,6 +1,7 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithAudioQueryActions.h"
 #include "MonolithAudioMetaSoundActions.h"
+#include "MonolithAudioSoundCueActions.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 

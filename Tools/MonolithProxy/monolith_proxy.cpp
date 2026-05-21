@@ -190,6 +190,9 @@ static std::set<std::string> parse_csv_env(const char* name)
 
 static std::mutex g_tool_log_lock;
 static uint64_t g_tool_log_sequence = 0;
+static std::string g_process_instance_id;
+static std::string g_previous_record_id;
+static std::chrono::steady_clock::time_point g_previous_record_start;
 
 static bool tool_log_enabled()
 {
@@ -312,6 +315,69 @@ static std::string log_id(const std::string& prefix, const std::string& seed)
     return prefix + "-" + digest;
 }
 
+static std::string process_instance_id()
+{
+    if (g_process_instance_id.empty())
+        g_process_instance_id = log_id("proc", "proxy-cpp:" + std::to_string(GetCurrentProcessId()) + ":" + iso_local_now());
+    return g_process_instance_id;
+}
+
+static std::pair<std::string, std::string> tool_namespace_action(const std::string& tool_name, const json& args)
+{
+    const std::string core_prefix = "monolith_";
+    const std::string query_suffix = "_query";
+    if (tool_name.rfind(core_prefix, 0) == 0)
+        return {"monolith", tool_name.substr(core_prefix.size())};
+    if (tool_name.size() > query_suffix.size() &&
+        tool_name.compare(tool_name.size() - query_suffix.size(), query_suffix.size(), query_suffix) == 0)
+        return {tool_name.substr(0, tool_name.size() - query_suffix.size()), args.value("action", "")};
+    return {"", ""};
+}
+
+static std::string namespace_source_for_tool(const std::string& tool_name, const std::string& forwarded_name)
+{
+    if (tool_name != forwarded_name) return "alias_rewrite";
+    if (tool_name.rfind("monolith_", 0) == 0) return "core_tool";
+    if (tool_name.size() > 6 && tool_name.compare(tool_name.size() - 6, 6, "_query") == 0) return "domain_query";
+    return "unknown";
+}
+
+static std::pair<std::string, std::string> infer_intent_for_tool(const std::string& ns, const std::string& action, const std::string& outcome)
+{
+    std::string act = action;
+    std::transform(act.begin(), act.end(), act.begin(), [](unsigned char c){ return (char)std::tolower(c); });
+    if (ns == "monolith" && (act == "find" || act == "discover")) return {"schema_discovery", "high"};
+    if (act.find("health") != std::string::npos || act.find("status") != std::string::npos ||
+        act.find("check") != std::string::npos || act.find("validate") != std::string::npos || act.find("test") != std::string::npos)
+        return {"verification", "medium"};
+    if (ns == "source" || act.find("source") != std::string::npos || act.find("symbol") != std::string::npos ||
+        act.find("reference") != std::string::npos || act.find("caller") != std::string::npos || act.find("callee") != std::string::npos)
+        return {"source_lookup", "medium"};
+    if (ns == "project" || ns == "asset" || act.find("asset") != std::string::npos) return {"asset_search", "medium"};
+    if (ns == "editor" && (act.find("build") != std::string::npos || act.find("compile") != std::string::npos ||
+        act.find("log") != std::string::npos || act.find("crash") != std::string::npos))
+        return {"build_diagnostics", "medium"};
+    if (act.find("repair") != std::string::npos || act.find("reindex") != std::string::npos ||
+        act.find("rebuild") != std::string::npos || act.find("snapshot") != std::string::npos)
+        return {"maintenance", "medium"};
+    if (outcome != "success") return {"error_recovery", "low"};
+    if (act.rfind("create", 0) == 0 || act.rfind("set", 0) == 0 || act.rfind("add", 0) == 0 ||
+        act.rfind("remove", 0) == 0 || act.rfind("delete", 0) == 0 || act.rfind("import", 0) == 0)
+        return {"mutation", "medium"};
+    return {"unknown", "low"};
+}
+
+static std::string workflow_step_for_intent(const std::string& intent, const std::string& outcome)
+{
+    if (outcome != "success") return "recover";
+    if (intent == "schema_discovery") return "discover";
+    if (intent == "verification") return "verify";
+    if (intent == "maintenance") return "maintenance";
+    if (intent == "mutation") return "execute";
+    if (intent == "source_lookup" || intent == "asset_search" || intent == "build_diagnostics") return "inspect";
+    return "unknown";
+}
+
 static bool is_sensitive_key(const std::string& key)
 {
     std::string lower = key;
@@ -354,9 +420,24 @@ static json redact_json(const json& value)
     return value;
 }
 
+static size_t max_log_field_bytes()
+{
+    const std::string raw = get_env("MONOLITH_TOOL_LOG_MAX_FIELD_BYTES");
+    if (raw.empty()) return 256 * 1024;
+    try
+    {
+        const size_t parsed = static_cast<size_t>(std::stoull(raw));
+        return std::max<size_t>(1024, std::min<size_t>(parsed, 16 * 1024 * 1024));
+    }
+    catch (...)
+    {
+        return 256 * 1024;
+    }
+}
+
 static json bounded_json(const json& value, bool& truncated, size_t& original_bytes, std::string& hash)
 {
-    constexpr size_t MaxBytes = 256 * 1024;
+    const size_t MaxBytes = max_log_field_bytes();
     std::string text = value.dump();
     original_bytes = text.size();
     if (text.size() <= MaxBytes)
@@ -413,6 +494,19 @@ static json summarize_response(const json& response_json, size_t result_bytes, b
     };
     if (response_json.is_object())
     {
+        if (response_json.contains("error"))
+            summary["result_shape"] = "error";
+        else if (response_json.contains("result") && response_json["result"].is_object() && response_json["result"].contains("content") && response_json["result"]["content"].is_array())
+            summary["result_shape"] = "mcp_content";
+        else if (response_json.contains("result") && response_json["result"].is_object())
+            summary["result_shape"] = "object";
+        else if (response_json.contains("result") && response_json["result"].is_array())
+            summary["result_shape"] = "list";
+        else if (!response_json.contains("result") || response_json["result"].is_null())
+            summary["result_shape"] = "empty";
+        else
+            summary["result_shape"] = "text";
+
         json top_keys = json::array();
         for (auto it = response_json.begin(); it != response_json.end(); ++it) top_keys.push_back(it.key());
         summary["response_top_keys"] = top_keys;
@@ -458,6 +552,53 @@ static json summarize_response(const json& response_json, size_t result_bytes, b
     return summary;
 }
 
+#ifdef _WIN32
+static HANDLE acquire_log_lock_file(const fs::path& lock_path)
+{
+    const auto start = std::chrono::steady_clock::now();
+    for (;;)
+    {
+        HANDLE lock_handle = CreateFileA(
+            lock_path.string().c_str(),
+            GENERIC_WRITE,
+            0,
+            nullptr,
+            CREATE_NEW,
+            FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE,
+            nullptr);
+        if (lock_handle != INVALID_HANDLE_VALUE)
+            return lock_handle;
+
+        const DWORD error = GetLastError();
+        if (error != ERROR_FILE_EXISTS && error != ERROR_ALREADY_EXISTS && error != ERROR_SHARING_VIOLATION && error != ERROR_ACCESS_DENIED)
+            throw std::runtime_error("could not create log lock file");
+
+        WIN32_FILE_ATTRIBUTE_DATA attr{};
+        if (GetFileAttributesExA(lock_path.string().c_str(), GetFileExInfoStandard, &attr))
+        {
+            FILETIME now_ft{};
+            GetSystemTimeAsFileTime(&now_ft);
+            ULARGE_INTEGER now{};
+            now.LowPart = now_ft.dwLowDateTime;
+            now.HighPart = now_ft.dwHighDateTime;
+            ULARGE_INTEGER modified{};
+            modified.LowPart = attr.ftLastWriteTime.dwLowDateTime;
+            modified.HighPart = attr.ftLastWriteTime.dwHighDateTime;
+            if (now.QuadPart > modified.QuadPart && now.QuadPart - modified.QuadPart > 30ULL * 1000ULL * 1000ULL * 10ULL)
+                DeleteFileA(lock_path.string().c_str());
+        }
+        else if (GetLastError() == ERROR_FILE_NOT_FOUND)
+        {
+            continue;
+        }
+
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count() > 5000)
+            throw std::runtime_error("timed out acquiring tool log lock");
+        Sleep(25);
+    }
+}
+#endif
+
 static void append_proxy_log(const json& record)
 {
     if (!tool_log_enabled()) return;
@@ -470,22 +611,7 @@ static void append_proxy_log(const json& record)
         fs::create_directories(path.parent_path());
 #ifdef _WIN32
         const fs::path lock_path = path.string() + ".lock";
-        HANDLE lock_handle = CreateFileA(
-            lock_path.string().c_str(),
-            GENERIC_READ | GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            nullptr,
-            OPEN_ALWAYS,
-            FILE_ATTRIBUTE_NORMAL,
-            nullptr);
-        if (lock_handle == INVALID_HANDLE_VALUE)
-            throw std::runtime_error("could not open log lock file");
-        OVERLAPPED overlapped{};
-        if (!LockFileEx(lock_handle, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &overlapped))
-        {
-            CloseHandle(lock_handle);
-            throw std::runtime_error("could not acquire log lock");
-        }
+        HANDLE lock_handle = acquire_log_lock_file(lock_path);
         try
         {
             std::ofstream out(path, std::ios::app | std::ios::binary);
@@ -494,11 +620,9 @@ static void append_proxy_log(const json& record)
         }
         catch (...)
         {
-            UnlockFileEx(lock_handle, 0, 1, 0, &overlapped);
             CloseHandle(lock_handle);
             throw;
         }
-        UnlockFileEx(lock_handle, 0, 1, 0, &overlapped);
         CloseHandle(lock_handle);
 #else
         std::ofstream out(path, std::ios::app | std::ios::binary);
@@ -531,10 +655,12 @@ static void log_proxy_tools_call(
     bool repeated,
     const std::string& retry_signature,
     const std::string& trace_id,
-    const std::string& span_id)
+    const std::string& span_id,
+    const json& phase_timing_input)
 {
     if (!tool_log_enabled()) return;
 
+    const auto log_prepare_start = std::chrono::steady_clock::now();
     const auto end_clock = std::chrono::steady_clock::now();
     const double duration_ms = std::chrono::duration<double, std::milli>(end_clock - start_clock).count();
     json response_json = response;
@@ -623,6 +749,18 @@ static void log_proxy_tools_call(
     if (repeated) agent_signal["repeat_within_window"] = true;
     if (!tags.empty()) agent_signal["improvement_tags"] = tags;
 
+    auto [context_namespace, context_action] = tool_namespace_action(forwarded_name, args);
+    auto [intent, confidence] = infer_intent_for_tool(context_namespace, context_action, outcome);
+    json routing_context = {
+        {"decision_source", repeated ? "fallback" : "direct"},
+        {"namespace_source", namespace_source_for_tool(tool_name, forwarded_name)},
+        {"inferred_intent", intent},
+        {"intent_confidence", confidence}
+    };
+    json workflow = {
+        {"step", workflow_step_for_intent(intent, outcome)}
+    };
+
     json return_record = {
         {"response", bounded_response}
     };
@@ -630,17 +768,37 @@ static void log_proxy_tools_call(
     if (response_id != msg.value("id", json(nullptr))) return_record["jsonrpc_id"] = response_id;
 
     uint64_t sequence = 0;
+    std::string record_id;
+    std::string previous_record_id;
+    double time_since_previous_ms = 0.0;
+    bool has_previous_record = false;
+    const std::string proc_instance_id = process_instance_id();
     {
         std::lock_guard<std::mutex> guard(g_tool_log_lock);
         sequence = ++g_tool_log_sequence;
+        record_id = log_id("rec", proc_instance_id + ":proxy:" + std::to_string(sequence) + ":" + trace_id + ":" + span_id + ":" + start_time);
+        previous_record_id = g_previous_record_id;
+        has_previous_record = !previous_record_id.empty();
+        if (has_previous_record)
+            time_since_previous_ms = std::chrono::duration<double, std::milli>(start_clock - g_previous_record_start).count();
+        g_previous_record_id = record_id;
+        g_previous_record_start = start_clock;
     }
+    json phase_timing = phase_timing_input.is_object() ? phase_timing_input : json::object();
+    phase_timing["log_prepare_ms"] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - log_prepare_start).count();
 
     json record = {
-        {"format_version", 2},
+        {"format_version", 3},
         {"surface", "proxy"},
+        {"record_id", record_id},
         {"sequence", sequence},
         {"trace_id", trace_id},
         {"span_id", span_id},
+        {"session_key", "stateless"},
+        {"process_instance_id", proc_instance_id},
+        {"call_index", sequence},
+        {"previous_record_id", previous_record_id},
+        {"time_since_previous_ms", has_previous_record ? json(time_since_previous_ms) : json(nullptr)},
         {"start_time", start_time},
         {"end_time", iso_local_now()},
         {"duration_ms", duration_ms},
@@ -651,6 +809,9 @@ static void log_proxy_tools_call(
             {"proxy_runtime", "cpp"},
             {"proxy_version", PROXY_VERSION}
         }},
+        {"routing_context", routing_context},
+        {"workflow", workflow},
+        {"phase_timing", phase_timing},
         {"call", {
             {"jsonrpc_id", msg.value("id", json(nullptr))},
             {"tool_name_original", tool_name},
@@ -1269,6 +1430,7 @@ static std::string handle_tools_call(const json& msg)
 {
     const std::string log_start_time = iso_local_now();
     const auto log_start_clock = std::chrono::steady_clock::now();
+    const auto parse_start_clock = std::chrono::steady_clock::now();
     json id = msg.value("id", json());
 
     // Extract params (copy so we can modify)
@@ -1277,9 +1439,16 @@ static std::string handle_tools_call(const json& msg)
     std::string forwarded_name = tool_name;
     json args = params.value("arguments", json::object());
     if (args.is_null()) args = json::object();
+    const double parse_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - parse_start_clock).count();
+    const auto dedup_start_clock = std::chrono::steady_clock::now();
     const std::string retry_signature = retry_signature_for(tool_name, args);
     const std::string trace_id = log_id("trace", log_start_time + ":" + std::to_string(GetCurrentProcessId()) + ":main:" + retry_signature);
     const std::string span_id = log_id("span", trace_id + ":proxy:" + id.dump() + ":" + log_start_time);
+    const double dedup_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - dedup_start_clock).count();
+    json phase_timing = {
+        {"parse_ms", parse_ms},
+        {"dedup_ms", dedup_ms}
+    };
     bool repeated_for_log = false;
     auto finish = [&](const std::string& response) -> std::string
     {
@@ -1294,7 +1463,8 @@ static std::string handle_tools_call(const json& msg)
             repeated_for_log,
             retry_signature,
             trace_id,
-            span_id);
+            span_id,
+            phase_timing);
         return response;
     };
 
@@ -1368,9 +1538,21 @@ static std::string handle_tools_call(const json& msg)
 
     // --- Dedup check ---
     // Build the message we'll actually forward (with possibly rewritten params)
+    const auto rewrite_start_clock = std::chrono::steady_clock::now();
     json forwarded_msg = msg;
     forwarded_msg["params"] = params;
     forwarded_msg["_monolith_trace_id"] = trace_id;
+    forwarded_msg["_monolith_parent_span_id"] = span_id;
+    forwarded_msg["_monolith_session_key"] = "stateless";
+    auto [context_namespace, context_action] = tool_namespace_action(forwarded_name, args);
+    auto [intent, confidence] = infer_intent_for_tool(context_namespace, context_action, "unknown");
+    forwarded_msg["_monolith_routing_context"] = {
+        {"decision_source", "direct"},
+        {"namespace_source", namespace_source_for_tool(tool_name, forwarded_name)},
+        {"inferred_intent", intent},
+        {"intent_confidence", confidence}
+    };
+    phase_timing["rewrite_ms"] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - rewrite_start_clock).count();
 
     if (is_repeated_tool_call(forwarded_msg))
     {
@@ -1412,13 +1594,18 @@ static std::string handle_tools_call(const json& msg)
     // --- Record and forward ---
     record_tool_call(forwarded_msg);
 
+    const auto http_start_clock = std::chrono::steady_clock::now();
     std::string resp = post_monolith(forwarded_msg.dump());
+    phase_timing["http_roundtrip_ms"] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - http_start_clock).count();
     if (!resp.empty())
         return finish(resp);
 
-    return finish(make_tool_error(id,
+    const auto fallback_start_clock = std::chrono::steady_clock::now();
+    std::string unavailable = make_tool_error(id,
         "Monolith MCP is not available (Unreal Editor not running). "
-        "Tool '" + tool_name + "' cannot execute. Start the editor and try again."));
+        "Tool '" + tool_name + "' cannot execute. Start the editor and try again.");
+    phase_timing["fallback_ms"] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - fallback_start_clock).count();
+    return finish(unavailable);
 }
 
 // ============================================================================
