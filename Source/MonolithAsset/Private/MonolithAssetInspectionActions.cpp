@@ -7,7 +7,10 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/Blueprint.h"
+#include "Engine/Texture2D.h"
+#include "Engine/TextureDefines.h"
 #include "Modules/ModuleManager.h"
+#include "UObject/MetaData.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/SoftObjectPtr.h"
 #include "UObject/UnrealType.h"
@@ -30,6 +33,7 @@ namespace
 			{ TEXT("foliage_type"), TEXT("Foliage Type"), { TEXT("FoliageType"), TEXT("FoliageType_InstancedStaticMesh"), TEXT("FoliageType_Actor") }, true },
 			{ TEXT("landscape_grass_type"), TEXT("Landscape Grass Type"), { TEXT("LandscapeGrassType") }, true },
 			{ TEXT("runtime_virtual_texture"), TEXT("Runtime Virtual Texture"), { TEXT("RuntimeVirtualTexture") }, false },
+			{ TEXT("texture2d"), TEXT("Texture2D"), { TEXT("Texture2D") }, false },
 			{ TEXT("physical_material"), TEXT("Physical Material"), { TEXT("PhysicalMaterial") }, false },
 			{ TEXT("physics_asset"), TEXT("Physics Asset"), { TEXT("PhysicsAsset") }, true },
 			{ TEXT("curve"), TEXT("Curve"), { TEXT("CurveFloat"), TEXT("CurveVector"), TEXT("CurveLinearColor"), TEXT("CurveBase") }, true },
@@ -410,6 +414,56 @@ namespace
 		return Details;
 	}
 
+	FString EnumValueName(const UEnum* Enum, int64 Value)
+	{
+		return Enum ? Enum->GetNameStringByValue(Value) : FString::FromInt(static_cast<int32>(Value));
+	}
+
+	FString GetGeneratedTextureRole(const UTexture2D* Texture)
+	{
+		if (!Texture)
+		{
+			return FString();
+		}
+#if WITH_METADATA
+		FMetaData& MetaData = Texture->GetOutermost()->GetMetaData();
+		if (const FString* Role = MetaData.FindValue(Texture, TEXT("Monolith.Generated.texture_role")))
+		{
+			return *Role;
+		}
+#endif
+		return FString();
+	}
+
+	TSharedPtr<FJsonObject> BuildTextureDetails(const UTexture2D* Texture)
+	{
+		TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+		if (!Texture)
+		{
+			return Details;
+		}
+
+		Details->SetNumberField(TEXT("width"), Texture->GetSizeX());
+		Details->SetNumberField(TEXT("height"), Texture->GetSizeY());
+#if WITH_EDITOR
+		Details->SetNumberField(TEXT("source_width"), Texture->Source.GetSizeX());
+		Details->SetNumberField(TEXT("source_height"), Texture->Source.GetSizeY());
+		Details->SetNumberField(TEXT("source_mips"), Texture->Source.GetNumMips());
+#endif
+		Details->SetBoolField(TEXT("srgb"), Texture->SRGB != 0);
+		Details->SetStringField(TEXT("compression_settings"), EnumValueName(StaticEnum<TextureCompressionSettings>(), Texture->CompressionSettings));
+		Details->SetStringField(TEXT("mip_gen_settings"), EnumValueName(StaticEnum<TextureMipGenSettings>(), Texture->MipGenSettings));
+		Details->SetStringField(TEXT("lod_group"), EnumValueName(StaticEnum<TextureGroup>(), Texture->LODGroup));
+		Details->SetStringField(TEXT("address_x"), EnumValueName(StaticEnum<TextureAddress>(), Texture->AddressX));
+		Details->SetStringField(TEXT("address_y"), EnumValueName(StaticEnum<TextureAddress>(), Texture->AddressY));
+		const FString GeneratedRole = GetGeneratedTextureRole(Texture);
+		if (!GeneratedRole.IsEmpty())
+		{
+			Details->SetStringField(TEXT("generated_texture_role"), GeneratedRole);
+		}
+		return Details;
+	}
+
 	TArray<TSharedPtr<FJsonValue>> BuildValidationWarnings(
 		const UObject* Asset,
 		const FAssetEnricherDef* Def,
@@ -462,6 +516,47 @@ namespace
 				FString Path;
 				(*RefObject)->TryGetStringField(TEXT("path"), Path);
 				AddWarning(TEXT("unresolved_soft_reference"), FString::Printf(TEXT("Soft reference does not resolve: %s"), *Path));
+			}
+		}
+
+		if (const UTexture2D* Texture = Cast<UTexture2D>(Asset))
+		{
+			const FString Role = GetGeneratedTextureRole(Texture).ToLower();
+			if (Role == TEXT("normal"))
+			{
+				if (Texture->SRGB)
+				{
+					AddWarning(TEXT("normal_srgb_enabled"), TEXT("Generated normal-map textures should have sRGB disabled."));
+				}
+				if (Texture->CompressionSettings != TC_Normalmap)
+				{
+					AddWarning(TEXT("normal_wrong_compression"), TEXT("Generated normal-map textures should use TC_Normalmap compression."));
+				}
+			}
+			else if (Role == TEXT("orm_mask") || Role == TEXT("height"))
+			{
+				if (Texture->SRGB)
+				{
+					AddWarning(TEXT("data_texture_srgb_enabled"), TEXT("Generated mask/height textures should have sRGB disabled."));
+				}
+				if (Role == TEXT("orm_mask") && Texture->CompressionSettings != TC_Masks)
+				{
+					AddWarning(TEXT("mask_wrong_compression"), TEXT("Generated ORM/mask textures should use TC_Masks compression."));
+				}
+			}
+			else if (Role == TEXT("world_tile"))
+			{
+				if (Texture->AddressX != TA_Wrap || Texture->AddressY != TA_Wrap)
+				{
+					AddWarning(TEXT("tile_not_wrapped"), TEXT("Generated world_tile textures should use wrap addressing."));
+				}
+			}
+			else if (Role == TEXT("ui_icon") || Role == TEXT("sprite"))
+			{
+				if (Texture->MipGenSettings != TMGS_NoMipmaps)
+				{
+					AddWarning(TEXT("ui_mips_enabled"), TEXT("Generated UI/sprite textures should normally disable mipmaps."));
+				}
 			}
 		}
 
@@ -532,6 +627,10 @@ namespace
 				MatchedClasses.Add(ClassName);
 			}
 			Details->SetArrayField(TEXT("supported_class_names"), StringArrayToJson(MatchedClasses));
+		}
+		if (UTexture2D* Texture = Cast<UTexture2D>(Asset))
+		{
+			Details->SetObjectField(TEXT("texture"), BuildTextureDetails(Texture));
 		}
 		Result->SetObjectField(TEXT("details"), Details);
 

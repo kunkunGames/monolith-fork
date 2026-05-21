@@ -16,6 +16,7 @@ private:
 	static FMonolithActionResult HandleListImageModels(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetImageGenerationDefaults(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGenerateImage(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleGenerateImageViaIma2(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleImportGeneratedImage(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetGeneratedAssetProvenance(const TSharedPtr<FJsonObject>& Params);
 };

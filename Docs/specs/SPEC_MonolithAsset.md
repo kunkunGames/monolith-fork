@@ -27,7 +27,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 
 | Action | Owner class | Purpose |
 |--------|-------------|---------|
-| `import_texture_from_bytes` | `MonolithAsset::FTextureIngestActions` | Decode base64 compressed image bytes and create a `UTexture2D` under `/Game/...`. |
+| `import_texture_from_bytes` | `MonolithAsset::FTextureIngestActions` | Decode base64 compressed image bytes and create a `UTexture2D` under `/Game/...`; optional `texture_role` applies Unreal texture-role import presets, lightweight post-processing, and validation metadata. |
 | `import_font_family` | `MonolithAsset::FFontIngestActions` | Import one or more TTF files as a composite `UFont` plus `UFontFace` assets. |
 | `import_texture_from_file` | `FMonolithAssetLifecycleActions` | Import an external image file as a `UTexture2D` with optional compression, sRGB, tiling, max-size, and LOD-group settings. |
 | `save_asset` | `FMonolithAssetLifecycleActions` | Save any loaded asset package to disk. |
@@ -56,13 +56,30 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 
 | Group | Files | Notes |
 |-------|-------|-------|
-| Texture ingest | `Public/MonolithAssetTextureIngestActions.h`, `Private/MonolithAssetTextureIngestActions.cpp` | Public helper reused by `MonolithImageGen`; supports PNG, JPEG, BMP, EXR, TGA, HDR, TIFF, and DDS through `IImageWrapper`. |
+| Texture ingest | `Public/MonolithAssetTextureIngestActions.h`, `Private/MonolithAssetTextureIngestActions.cpp` | Public helper reused by `MonolithImageGen`; supports PNG, JPEG, BMP, EXR, TGA, HDR, TIFF, and DDS through `IImageWrapper`. Optional `texture_role` values are `ui_icon`, `sprite`, `decal`, `basecolor`, `world_tile`, `normal`, `orm_mask`, `height`, and `emissive`. |
 | Font ingest | `Public/MonolithAssetFontIngestActions.h`, `Private/MonolithAssetFontIngestActions.cpp` | Uses UE 5.7-safe `UFont::GetMutableInternalCompositeFont()` for composite-font writes. |
 | Lifecycle | `Public/MonolithAssetLifecycleActions.h`, `Private/MonolithAssetLifecycleActions.cpp` | Owns generic file texture import, asset save, and guarded delete operations previously scattered under editor/blueprint. |
 | Hygiene | `Public/MonolithAssetHygieneActions.h`, `Private/MonolithAssetHygieneActions.cpp` | Owns naming convention validation and batch rename fixup. |
 | Inspection | `Public/MonolithAssetInspectionActions.h`, `Private/MonolithAssetInspectionActions.cpp` | Former specialized asset inspection surface, now independent from `MonolithMaterial`. |
 
-## 7. Verification
+## 7. Texture Role Pipeline
+
+`asset.import_texture_from_bytes` accepts `texture_role` (or `role`) for Unreal-specific import behavior. Role presets apply before explicit `settings`; caller-provided `settings` fields remain the final override.
+
+| Role | Import / post-processing contract |
+|------|-----------------------------------|
+| `ui_icon`, `sprite` | `sRGB=true`, `TEXTUREGROUP_UI`, `TMGS_NoMipmaps`, clamp addressing, transparent-pixel RGB alpha bleed. |
+| `decal` | `sRGB=true`, `TEXTUREGROUP_Effects`, group mips, clamp addressing, alpha bleed, power-of-two warning. |
+| `basecolor` | `sRGB=true`, `TC_Default`, `TEXTUREGROUP_World`, group mips, wrap addressing. |
+| `world_tile` | Base-color world settings plus wrap addressing, power-of-two check, and opposite-edge seam validation. |
+| `normal` | `sRGB=false`, `TC_Normalmap`, `TEXTUREGROUP_WorldNormalMap`, wrap addressing, power-of-two and tangent-space normal plausibility validation. |
+| `orm_mask` | `sRGB=false`, `TC_Masks`, `TEXTUREGROUP_WorldSpecular`, wrap addressing, channel-range validation. |
+| `height` | `sRGB=false`, `TC_Grayscale`, `TEXTUREGROUP_World`, wrap addressing, channel-range validation. |
+| `emissive` | `sRGB=true`, `TEXTUREGROUP_Effects`, group mips, clamp addressing. |
+
+The action result includes `texture_role`, `settings_applied`, and `validation`. Validation is non-destructive and returns warnings instead of failing the import unless normal parameter validation fails. `asset.inspect_asset` and `asset.validate_specialized_asset` recognize `Texture2D` assets and report generated texture-role settings from `Monolith.Generated.texture_role` metadata.
+
+## 8. Verification
 
 | Gate | Requirement |
 |------|-------------|

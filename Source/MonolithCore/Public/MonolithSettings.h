@@ -339,6 +339,22 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Modules", DisplayName="Enable ImageGen Module")
 	bool bEnableImageGen = true;
 
+	UPROPERTY(config, EditAnywhere, Category="Modules|ImageGen", DisplayName="ImageGen Bridge Server URL",
+		meta=(ToolTip="Base URL for an external imag2-gen/ima2 server. Monolith sends generation requests here without provider credentials."))
+	FString ImageGenBridgeServerUrl = TEXT("http://192.168.0.10:3333");
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|ImageGen", DisplayName="ImageGen Bridge Provider",
+		meta=(ToolTip="imag2-gen provider to request: oauth, api, or auto. The default OAuth path uses the imag2-gen host's Codex OAuth session."))
+	FString ImageGenBridgeProvider = TEXT("oauth");
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|ImageGen", DisplayName="ImageGen Bridge Default Model",
+		meta=(ToolTip="Default image model forwarded to imag2-gen when a request omits model."))
+	FString ImageGenBridgeDefaultModel = TEXT("gpt-5.5");
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|ImageGen", DisplayName="ImageGen Bridge Timeout Seconds",
+		meta=(ClampMin="1.0", ToolTip="HTTP timeout for imag2-gen generation requests. Long OAuth image generations can take several minutes."))
+	float ImageGenBridgeTimeoutSeconds = 420.0f;
+
 	/** Enables detailed read-only Slate inspector actions beyond get_inspector_status. */
 	UPROPERTY(config, EditAnywhere, Category="Modules|Optional",
 		meta=(DisplayName="Enable Slate Inspector Actions",

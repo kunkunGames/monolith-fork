@@ -4,15 +4,27 @@
 #include "MonolithAssetTextureIngestActions.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
+#include "MonolithSettings.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/Texture2D.h"
+#include "HAL/FileManager.h"
+#include "HttpModule.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
+#include "Interfaces/IHttpRequest.h"
+#include "Interfaces/IHttpResponse.h"
 #include "HAL/PlatformFileManager.h"
 #include "Misc/Base64.h"
+#include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "Misc/SecureHash.h"
+#include "Modules/ModuleManager.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include "UObject/MetaData.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -20,6 +32,69 @@
 namespace MonolithImageGen::ImageGenerationInternal
 {
 	static constexpr int32 DefaultMaxCompressedBytes = 25 * 1024 * 1024;
+	static constexpr float DefaultIma2TimeoutSeconds = 420.0f;
+	static constexpr int32 MaxReferenceImages = 5;
+	static constexpr int32 MinResolutionEdge = 16;
+	static constexpr int32 MaxResolutionEdge = 3840;
+	static constexpr int64 MaxResolutionPixels = 8294400;
+	static constexpr const TCHAR* DefaultGeneratedAssetPath = TEXT("/Game/GeneratedImages");
+	static constexpr const TCHAR* DefaultIma2Model = TEXT("gpt-5.5");
+	static constexpr const TCHAR* ReferenceImageDirectoryName = TEXT("GeneratedImages");
+
+	struct FCompressedImagePayload
+	{
+		FString BytesB64;
+		FString FormatHint;
+		int32 CompressedBytes = 0;
+	};
+
+	struct FReferenceImageResult
+	{
+		FString BytesB64;
+		FString Source;
+		FString SavedPngPath;
+		FString Hash;
+		int32 PngBytes = 0;
+	};
+
+	struct FIma2GenerateResponse
+	{
+		FString ImageData;
+		FString Provider;
+		FString Model;
+		FString Quality;
+		FString Size;
+		FString Background;
+		FString Moderation;
+		FString RequestId;
+		FString Filename;
+		FString RevisedPrompt;
+		FString Elapsed;
+	};
+
+	static FString ResolveDefaultIma2ServerUrl()
+	{
+		if (const UMonolithSettings* Settings = UMonolithSettings::Get())
+		{
+			if (!Settings->ImageGenBridgeServerUrl.IsEmpty())
+			{
+				return Settings->ImageGenBridgeServerUrl;
+			}
+		}
+		return TEXT("http://192.168.0.10:3333");
+	}
+
+	static FString ResolveDefaultIma2Model()
+	{
+		if (const UMonolithSettings* Settings = UMonolithSettings::Get())
+		{
+			if (!Settings->ImageGenBridgeDefaultModel.IsEmpty())
+			{
+				return Settings->ImageGenBridgeDefaultModel;
+			}
+		}
+		return DefaultIma2Model;
+	}
 
 	static FString SanitizeAssetName(const FString& Input)
 	{
@@ -105,7 +180,7 @@ namespace MonolithImageGen::ImageGenerationInternal
 		FString AssetPath;
 		if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 		{
-			AssetPath = TEXT("/Game/GeneratedImages");
+			AssetPath = DefaultGeneratedAssetPath;
 		}
 		if (AssetPath.EndsWith(TEXT("/")))
 		{
@@ -201,6 +276,232 @@ namespace MonolithImageGen::ImageGenerationInternal
 		return FMath::Max<int64>(0, ((EncodedLength + 3) / 4) * 3 - Padding);
 	}
 
+	static FString HashBytes(const TArray<uint8>& Bytes)
+	{
+		FMD5 Md5;
+		if (Bytes.Num() > 0)
+		{
+			Md5.Update(Bytes.GetData(), Bytes.Num());
+		}
+		uint8 Digest[16];
+		Md5.Final(Digest);
+		return BytesToHex(Digest, UE_ARRAY_COUNT(Digest)).ToLower();
+	}
+
+	static EImageFormat ParseImageFormatHint(const FString& Hint)
+	{
+		const FString Lower = Hint.ToLower();
+		if (Lower == TEXT("png"))                          { return EImageFormat::PNG; }
+		if (Lower == TEXT("jpg") || Lower == TEXT("jpeg")) { return EImageFormat::JPEG; }
+		if (Lower == TEXT("bmp"))                          { return EImageFormat::BMP; }
+		if (Lower == TEXT("exr"))                          { return EImageFormat::EXR; }
+		if (Lower == TEXT("tga"))                          { return EImageFormat::TGA; }
+		if (Lower == TEXT("hdr"))                          { return EImageFormat::HDR; }
+		if (Lower == TEXT("tif") || Lower == TEXT("tiff")) { return EImageFormat::TIFF; }
+		if (Lower == TEXT("dds"))                          { return EImageFormat::DDS; }
+		return EImageFormat::Invalid;
+	}
+
+	static FString DetectImageFormatHint(const TArray<uint8>& Bytes)
+	{
+		if (Bytes.Num() >= 4 && Bytes[0] == 0x89 && Bytes[1] == 0x50 && Bytes[2] == 0x4e && Bytes[3] == 0x47)
+		{
+			return TEXT("png");
+		}
+		if (Bytes.Num() >= 3 && Bytes[0] == 0xff && Bytes[1] == 0xd8 && Bytes[2] == 0xff)
+		{
+			return TEXT("jpg");
+		}
+		if (Bytes.Num() >= 2 && Bytes[0] == 'B' && Bytes[1] == 'M')
+		{
+			return TEXT("bmp");
+		}
+		if (Bytes.Num() >= 4 && Bytes[0] == 0x76 && Bytes[1] == 0x2f && Bytes[2] == 0x31 && Bytes[3] == 0x01)
+		{
+			return TEXT("exr");
+		}
+		return TEXT("");
+	}
+
+	static bool ValidateResolution(int32 Width, int32 Height, FString& OutError)
+	{
+		if (Width < MinResolutionEdge || Height < MinResolutionEdge)
+		{
+			OutError = FString::Printf(TEXT("resolution must be at least %dx%d"), MinResolutionEdge, MinResolutionEdge);
+			return false;
+		}
+		if (Width > MaxResolutionEdge || Height > MaxResolutionEdge)
+		{
+			OutError = FString::Printf(TEXT("resolution edge may not exceed %d pixels"), MaxResolutionEdge);
+			return false;
+		}
+		if (static_cast<int64>(Width) * static_cast<int64>(Height) > MaxResolutionPixels)
+		{
+			OutError = FString::Printf(TEXT("resolution may not exceed %lld total pixels"), MaxResolutionPixels);
+			return false;
+		}
+		return true;
+	}
+
+	static bool ParseResolutionString(const FString& Raw, int32& OutWidth, int32& OutHeight)
+	{
+		FString Clean = Raw.TrimStartAndEnd().ToLower();
+		Clean.ReplaceInline(TEXT(" "), TEXT(""));
+		Clean.ReplaceInline(TEXT("*"), TEXT("x"));
+		int32 XIndex = INDEX_NONE;
+		if (Clean.FindChar(TCHAR('x'), XIndex))
+		{
+			const FString W = Clean.Left(XIndex);
+			const FString H = Clean.Mid(XIndex + 1);
+			return LexTryParseString(OutWidth, *W) && LexTryParseString(OutHeight, *H);
+		}
+
+		int32 Square = 0;
+		if (LexTryParseString(Square, *Clean))
+		{
+			OutWidth = Square;
+			OutHeight = Square;
+			return true;
+		}
+		return false;
+	}
+
+	static bool JsonValueToInt(const TSharedPtr<FJsonValue>& Value, int32& OutValue)
+	{
+		if (!Value.IsValid())
+		{
+			return false;
+		}
+		if (Value->Type == EJson::Number)
+		{
+			OutValue = FMath::RoundToInt(Value->AsNumber());
+			return true;
+		}
+		if (Value->Type == EJson::String)
+		{
+			return LexTryParseString(OutValue, *Value->AsString());
+		}
+		return false;
+	}
+
+	static bool ResolveResolutionParam(
+		const TSharedPtr<FJsonObject>& Params,
+		bool& bOutHasResolution,
+		int32& OutWidth,
+		int32& OutHeight,
+		FString& OutSize,
+		FString& OutError)
+	{
+		bOutHasResolution = false;
+		if (!Params.IsValid() || !Params->HasField(TEXT("resolution")))
+		{
+			return true;
+		}
+
+		const TSharedPtr<FJsonValue> ResolutionValue = Params->TryGetField(TEXT("resolution"));
+		if (!ResolutionValue.IsValid() || ResolutionValue->IsNull())
+		{
+			return true;
+		}
+
+		bool bParsed = false;
+		if (ResolutionValue->Type == EJson::Number)
+		{
+			OutWidth = FMath::RoundToInt(ResolutionValue->AsNumber());
+			OutHeight = OutWidth;
+			bParsed = true;
+		}
+		else if (ResolutionValue->Type == EJson::String)
+		{
+			bParsed = ParseResolutionString(ResolutionValue->AsString(), OutWidth, OutHeight);
+		}
+		else if (ResolutionValue->Type == EJson::Array)
+		{
+			const TArray<TSharedPtr<FJsonValue>>& Values = ResolutionValue->AsArray();
+			if (Values.Num() >= 2)
+			{
+				bParsed = JsonValueToInt(Values[0], OutWidth) && JsonValueToInt(Values[1], OutHeight);
+			}
+		}
+		else if (ResolutionValue->Type == EJson::Object)
+		{
+			const TSharedPtr<FJsonObject> Obj = ResolutionValue->AsObject();
+			double WidthD = 0.0;
+			double HeightD = 0.0;
+			if (Obj.IsValid() && Obj->TryGetNumberField(TEXT("width"), WidthD) && Obj->TryGetNumberField(TEXT("height"), HeightD))
+			{
+				OutWidth = FMath::RoundToInt(WidthD);
+				OutHeight = FMath::RoundToInt(HeightD);
+				bParsed = true;
+			}
+		}
+
+		if (!bParsed)
+		{
+			OutError = TEXT("resolution must be a number, a 'WIDTHxHEIGHT' string, [width, height], or {width,height}");
+			return false;
+		}
+		if (!ValidateResolution(OutWidth, OutHeight, OutError))
+		{
+			return false;
+		}
+
+		OutSize = FString::Printf(TEXT("%dx%d"), OutWidth, OutHeight);
+		bOutHasResolution = true;
+		return true;
+	}
+
+	static bool PrepareCompressedImagePayload(
+		const TSharedPtr<FJsonObject>& Params,
+		const FString& RawBytesB64,
+		const FString& RawFormatHint,
+		FCompressedImagePayload& OutPayload,
+		FString& OutError)
+	{
+		FString FormatHint = RawFormatHint;
+		FString BytesB64 = StripDataUrlPrefix(RawBytesB64, FormatHint);
+		BytesB64 = CompactBase64Payload(BytesB64);
+		if (FormatHint.IsEmpty())
+		{
+			FormatHint = TEXT("png");
+		}
+
+		double MaxBytesDouble = DefaultMaxCompressedBytes;
+		if (Params.IsValid())
+		{
+			Params->TryGetNumberField(TEXT("max_bytes"), MaxBytesDouble);
+		}
+		const int32 MaxBytes = FMath::Max(1, static_cast<int32>(MaxBytesDouble));
+		const int64 EstimatedDecodedBytes = EstimateBase64DecodedBytes(BytesB64);
+		if (EstimatedDecodedBytes > MaxBytes)
+		{
+			OutError = FString::Printf(
+				TEXT("Compressed image payload is estimated at %lld bytes, above max_bytes %d"),
+				EstimatedDecodedBytes, MaxBytes);
+			return false;
+		}
+
+		TArray<uint8> DecodedBytes;
+		if (!FBase64::Decode(BytesB64, DecodedBytes) || DecodedBytes.Num() == 0)
+		{
+			OutError = TEXT("Base64 decode of bytes_b64 failed or produced empty buffer");
+			return false;
+		}
+
+		if (DecodedBytes.Num() > MaxBytes)
+		{
+			OutError = FString::Printf(
+				TEXT("Compressed image payload is %d bytes, above max_bytes %d"),
+				DecodedBytes.Num(), MaxBytes);
+			return false;
+		}
+
+		OutPayload.BytesB64 = MoveTemp(BytesB64);
+		OutPayload.FormatHint = MoveTemp(FormatHint);
+		OutPayload.CompressedBytes = DecodedBytes.Num();
+		return true;
+	}
+
 	static void AppendLe32(TArray<uint8>& Bytes, uint32 Value)
 	{
 		Bytes.Add(static_cast<uint8>(Value & 0xff));
@@ -269,6 +570,36 @@ namespace MonolithImageGen::ImageGenerationInternal
 		return Settings;
 	}
 
+	static TArray<FString> SupportedTextureRoles()
+	{
+		return {
+			TEXT("ui_icon"),
+			TEXT("sprite"),
+			TEXT("decal"),
+			TEXT("basecolor"),
+			TEXT("world_tile"),
+			TEXT("normal"),
+			TEXT("orm_mask"),
+			TEXT("height"),
+			TEXT("emissive")
+		};
+	}
+
+	static TSharedPtr<FJsonObject> TextureRolePresetSummary()
+	{
+		TSharedPtr<FJsonObject> Presets = MakeShared<FJsonObject>();
+		Presets->SetStringField(TEXT("ui_icon"), TEXT("sRGB on, UI LOD group, no mips, clamp addressing, alpha bleed"));
+		Presets->SetStringField(TEXT("sprite"), TEXT("sRGB on, UI LOD group, no mips, clamp addressing, alpha bleed"));
+		Presets->SetStringField(TEXT("decal"), TEXT("sRGB on, Effects LOD group, mips from group, clamp addressing, alpha bleed"));
+		Presets->SetStringField(TEXT("basecolor"), TEXT("sRGB on, World LOD group, mips from group, wrap addressing"));
+		Presets->SetStringField(TEXT("world_tile"), TEXT("sRGB on, World LOD group, mips from group, wrap addressing, tile seam validation"));
+		Presets->SetStringField(TEXT("normal"), TEXT("sRGB off, normal compression, WorldNormalMap LOD group, wrap addressing, normal-vector validation"));
+		Presets->SetStringField(TEXT("orm_mask"), TEXT("sRGB off, mask compression, WorldSpecular LOD group, wrap addressing, channel validation"));
+		Presets->SetStringField(TEXT("height"), TEXT("sRGB off, grayscale compression, World LOD group, wrap addressing, channel validation"));
+		Presets->SetStringField(TEXT("emissive"), TEXT("sRGB on, Effects LOD group, mips from group, clamp addressing"));
+		return Presets;
+	}
+
 	static void AddStringArray(TSharedPtr<FJsonObject> Obj, const FString& Field, const TArray<FString>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> JsonValues;
@@ -278,6 +609,487 @@ namespace MonolithImageGen::ImageGenerationInternal
 			JsonValues.Add(MakeShared<FJsonValueString>(Value));
 		}
 		Obj->SetArrayField(Field, JsonValues);
+	}
+
+	static FString ResolveReferenceImageDirectory()
+	{
+		return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), ReferenceImageDirectoryName));
+	}
+
+	static bool TryResolveLocalFilePath(const FString& RawPath, FString& OutFilePath)
+	{
+		FString Candidate = RawPath.TrimStartAndEnd();
+		if (Candidate.IsEmpty() || Candidate.StartsWith(TEXT("data:"), ESearchCase::IgnoreCase))
+		{
+			return false;
+		}
+
+		Candidate.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (FPaths::FileExists(Candidate))
+		{
+			OutFilePath = FPaths::ConvertRelativePathToFull(Candidate);
+			return true;
+		}
+
+		if (FPaths::IsRelative(Candidate))
+		{
+			const FString ProjectRelative = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), Candidate));
+			if (FPaths::FileExists(ProjectRelative))
+			{
+				OutFilePath = ProjectRelative;
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	static bool ResolveReferenceCompressedBytes(
+		const FString& Input,
+		const FString& FormatHintOverride,
+		TArray<uint8>& OutBytes,
+		FString& OutFormatHint,
+		FString& OutSource,
+		FString& OutError)
+	{
+		FString LocalPath;
+		if (TryResolveLocalFilePath(Input, LocalPath))
+		{
+			if (!FFileHelper::LoadFileToArray(OutBytes, *LocalPath) || OutBytes.Num() == 0)
+			{
+				OutError = FString::Printf(TEXT("Failed to read reference image file '%s'"), *LocalPath);
+				return false;
+			}
+			OutFormatHint = FormatHintOverride.IsEmpty() ? FPaths::GetExtension(LocalPath).ToLower() : FormatHintOverride.ToLower();
+			if (OutFormatHint == TEXT("jpeg"))
+			{
+				OutFormatHint = TEXT("jpg");
+			}
+			OutSource = LocalPath;
+		}
+		else
+		{
+			FString FormatHint = FormatHintOverride;
+			FString BytesB64 = StripDataUrlPrefix(Input, FormatHint);
+			BytesB64 = CompactBase64Payload(BytesB64);
+			if (!FBase64::Decode(BytesB64, OutBytes) || OutBytes.Num() == 0)
+			{
+				OutError = TEXT("Reference image must be an existing local file path, data URL, or base64 image payload");
+				return false;
+			}
+			OutFormatHint = FormatHint.ToLower();
+			OutSource = TEXT("inline");
+		}
+
+		if (OutFormatHint.IsEmpty())
+		{
+			OutFormatHint = DetectImageFormatHint(OutBytes);
+		}
+		if (OutFormatHint == TEXT("jpeg"))
+		{
+			OutFormatHint = TEXT("jpg");
+		}
+		return true;
+	}
+
+	static bool SaveReferenceAsPng(
+		const TArray<uint8>& CompressedBytes,
+		const FString& FormatHint,
+		const FString& Source,
+		int32 ReferenceIndex,
+		FReferenceImageResult& OutReference,
+		FString& OutError)
+	{
+		const EImageFormat InputFormat = ParseImageFormatHint(FormatHint);
+		if (InputFormat == EImageFormat::Invalid)
+		{
+			OutError = FString::Printf(TEXT("Unsupported reference image format '%s'. Use PNG, JPEG, BMP, EXR, TGA, HDR, TIFF, or DDS."), *FormatHint);
+			return false;
+		}
+
+		IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+		TSharedPtr<IImageWrapper> InputWrapper = ImageWrapperModule.CreateImageWrapper(InputFormat);
+		if (!InputWrapper.IsValid() || !InputWrapper->SetCompressed(CompressedBytes.GetData(), CompressedBytes.Num()))
+		{
+			OutError = FString::Printf(TEXT("Failed to decode reference image '%s' as %s"), *Source, *FormatHint);
+			return false;
+		}
+
+		TArray<uint8> RawBgra;
+		if (!InputWrapper->GetRaw(ERGBFormat::BGRA, 8, RawBgra) || RawBgra.Num() == 0)
+		{
+			OutError = FString::Printf(TEXT("Failed to extract BGRA pixels from reference image '%s'"), *Source);
+			return false;
+		}
+
+		const int32 Width = InputWrapper->GetWidth();
+		const int32 Height = InputWrapper->GetHeight();
+		if (Width <= 0 || Height <= 0)
+		{
+			OutError = FString::Printf(TEXT("Reference image '%s' has invalid dimensions %dx%d"), *Source, Width, Height);
+			return false;
+		}
+
+		TSharedPtr<IImageWrapper> PngWrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+		if (!PngWrapper.IsValid() || !PngWrapper->SetRaw(RawBgra.GetData(), RawBgra.Num(), Width, Height, ERGBFormat::BGRA, 8))
+		{
+			OutError = FString::Printf(TEXT("Failed to encode reference image '%s' as PNG"), *Source);
+			return false;
+		}
+
+		const TArray64<uint8> PngBytes64 = PngWrapper->GetCompressed(100);
+		if (PngBytes64.Num() == 0)
+		{
+			OutError = FString::Printf(TEXT("PNG encoding produced no data for reference image '%s'"), *Source);
+			return false;
+		}
+
+		TArray<uint8> PngBytes;
+		PngBytes.Append(PngBytes64.GetData(), PngBytes64.Num());
+		const FString Hash = HashBytes(PngBytes);
+		const FString OutputDir = ResolveReferenceImageDirectory();
+		if (!IFileManager::Get().MakeDirectory(*OutputDir, true))
+		{
+			OutError = FString::Printf(TEXT("Failed to create reference image directory '%s'"), *OutputDir);
+			return false;
+		}
+
+		const FString Timestamp = FDateTime::UtcNow().ToString(TEXT("%Y%m%d_%H%M%S"));
+		const FString Filename = FString::Printf(TEXT("Ref_%s_%02d_%s.png"), *Timestamp, ReferenceIndex, *Hash.Left(8));
+		const FString OutputPath = FPaths::Combine(OutputDir, Filename);
+		if (!FFileHelper::SaveArrayToFile(PngBytes, *OutputPath))
+		{
+			OutError = FString::Printf(TEXT("Failed to save reference image PNG '%s'"), *OutputPath);
+			return false;
+		}
+
+		OutReference.BytesB64 = FBase64::Encode(PngBytes);
+		OutReference.Source = Source;
+		OutReference.SavedPngPath = OutputPath;
+		OutReference.Hash = Hash;
+		OutReference.PngBytes = PngBytes.Num();
+		return true;
+	}
+
+	static bool ResolveReferenceFromObject(
+		const TSharedPtr<FJsonObject>& Obj,
+		TArray<uint8>& OutBytes,
+		FString& OutFormatHint,
+		FString& OutSource,
+		FString& OutError)
+	{
+		if (!Obj.IsValid())
+		{
+			OutError = TEXT("Reference object is invalid");
+			return false;
+		}
+
+		FString FormatHint;
+		Obj->TryGetStringField(TEXT("format_hint"), FormatHint);
+		FString Input;
+		if (Obj->TryGetStringField(TEXT("path"), Input) && !Input.IsEmpty())
+		{
+			return ResolveReferenceCompressedBytes(Input, FormatHint, OutBytes, OutFormatHint, OutSource, OutError);
+		}
+		if (Obj->TryGetStringField(TEXT("file_path"), Input) && !Input.IsEmpty())
+		{
+			return ResolveReferenceCompressedBytes(Input, FormatHint, OutBytes, OutFormatHint, OutSource, OutError);
+		}
+		if (Obj->TryGetStringField(TEXT("bytes_b64"), Input) && !Input.IsEmpty())
+		{
+			return ResolveReferenceCompressedBytes(Input, FormatHint, OutBytes, OutFormatHint, OutSource, OutError);
+		}
+		if (Obj->TryGetStringField(TEXT("data_url"), Input) && !Input.IsEmpty())
+		{
+			return ResolveReferenceCompressedBytes(Input, FormatHint, OutBytes, OutFormatHint, OutSource, OutError);
+		}
+
+		OutError = TEXT("Reference object must include path, file_path, bytes_b64, or data_url");
+		return false;
+	}
+
+	static bool AppendReferenceValue(
+		const TSharedPtr<FJsonValue>& Value,
+		int32 ReferenceIndex,
+		TArray<TSharedPtr<FJsonValue>>& OutPayloadReferences,
+		TArray<FReferenceImageResult>& OutReferenceFiles,
+		FString& OutError)
+	{
+		if (!Value.IsValid())
+		{
+			OutError = FString::Printf(TEXT("references[%d] is invalid"), ReferenceIndex);
+			return false;
+		}
+
+		TArray<uint8> CompressedBytes;
+		FString FormatHint;
+		FString Source;
+		if (Value->Type == EJson::String)
+		{
+			if (!ResolveReferenceCompressedBytes(Value->AsString(), TEXT(""), CompressedBytes, FormatHint, Source, OutError))
+			{
+				return false;
+			}
+		}
+		else if (Value->Type == EJson::Object)
+		{
+			if (!ResolveReferenceFromObject(Value->AsObject(), CompressedBytes, FormatHint, Source, OutError))
+			{
+				return false;
+			}
+		}
+		else
+		{
+			OutError = FString::Printf(TEXT("references[%d] must be a string or object"), ReferenceIndex);
+			return false;
+		}
+
+		FReferenceImageResult Reference;
+		if (!SaveReferenceAsPng(CompressedBytes, FormatHint, Source, ReferenceIndex, Reference, OutError))
+		{
+			return false;
+		}
+
+		OutPayloadReferences.Add(MakeShared<FJsonValueString>(Reference.BytesB64));
+		OutReferenceFiles.Add(MoveTemp(Reference));
+		return true;
+	}
+
+	static bool AppendReferenceArray(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* FieldName,
+		TArray<TSharedPtr<FJsonValue>>& OutPayloadReferences,
+		TArray<FReferenceImageResult>& OutReferenceFiles,
+		FString& OutError)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Params->TryGetArrayField(FieldName, Values) || !Values)
+		{
+			return true;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			if (OutPayloadReferences.Num() >= MaxReferenceImages)
+			{
+				OutError = FString::Printf(TEXT("Reference images may not exceed %d items"), MaxReferenceImages);
+				return false;
+			}
+			if (!AppendReferenceValue(Value, OutPayloadReferences.Num(), OutPayloadReferences, OutReferenceFiles, OutError))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	static bool BuildIma2ReferencePayload(
+		const TSharedPtr<FJsonObject>& Params,
+		TArray<TSharedPtr<FJsonValue>>& OutPayloadReferences,
+		TArray<FReferenceImageResult>& OutReferenceFiles,
+		FString& OutError)
+	{
+		if (!AppendReferenceArray(Params, TEXT("references"), OutPayloadReferences, OutReferenceFiles, OutError))
+		{
+			return false;
+		}
+		if (!AppendReferenceArray(Params, TEXT("reference_images"), OutPayloadReferences, OutReferenceFiles, OutError))
+		{
+			return false;
+		}
+		if (!AppendReferenceArray(Params, TEXT("reference_image_paths"), OutPayloadReferences, OutReferenceFiles, OutError))
+		{
+			return false;
+		}
+		return true;
+	}
+
+	static TArray<TSharedPtr<FJsonValue>> ReferenceFilesToJson(const TArray<FReferenceImageResult>& ReferenceFiles)
+	{
+		TArray<TSharedPtr<FJsonValue>> JsonValues;
+		JsonValues.Reserve(ReferenceFiles.Num());
+		for (int32 Index = 0; Index < ReferenceFiles.Num(); ++Index)
+		{
+			const FReferenceImageResult& Reference = ReferenceFiles[Index];
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetNumberField(TEXT("index"), Index);
+			Entry->SetStringField(TEXT("source"), Reference.Source);
+			Entry->SetStringField(TEXT("png_path"), Reference.SavedPngPath);
+			Entry->SetStringField(TEXT("hash"), Reference.Hash);
+			Entry->SetNumberField(TEXT("png_bytes"), Reference.PngBytes);
+			JsonValues.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		return JsonValues;
+	}
+
+	static FString JsonObjectToString(const TSharedRef<FJsonObject>& Object)
+	{
+		FString Output;
+		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
+		FJsonSerializer::Serialize(Object, Writer);
+		return Output;
+	}
+
+	static bool ParseJsonObject(const FString& Body, TSharedPtr<FJsonObject>& OutObject, FString& OutError)
+	{
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Body);
+		if (!FJsonSerializer::Deserialize(Reader, OutObject) || !OutObject.IsValid())
+		{
+			OutError = TEXT("Response body was not valid JSON");
+			return false;
+		}
+		return true;
+	}
+
+	static FString TruncateForError(const FString& Text, int32 MaxChars = 1024)
+	{
+		if (Text.Len() <= MaxChars)
+		{
+			return Text;
+		}
+		return Text.Left(MaxChars) + TEXT("...");
+	}
+
+	static bool NormalizeIma2ServerUrl(FString ServerUrl, FString& OutServerUrl, FString& OutError)
+	{
+		ServerUrl.TrimStartAndEndInline();
+		if (ServerUrl.IsEmpty())
+		{
+			OutError = TEXT("server_url is empty");
+			return false;
+		}
+		while (ServerUrl.EndsWith(TEXT("/")))
+		{
+			ServerUrl.LeftChopInline(1);
+		}
+
+		const bool bHttp = ServerUrl.StartsWith(TEXT("http://"), ESearchCase::IgnoreCase);
+		const bool bHttps = ServerUrl.StartsWith(TEXT("https://"), ESearchCase::IgnoreCase);
+		if (!bHttp && !bHttps)
+		{
+			OutError = TEXT("server_url must start with http:// or https://");
+			return false;
+		}
+
+		const int32 SchemeLength = bHttps ? 8 : 7;
+		const FString AuthorityAndPath = ServerUrl.Mid(SchemeLength);
+		int32 SlashIndex = INDEX_NONE;
+		const FString Authority = AuthorityAndPath.FindChar(TEXT('/'), SlashIndex)
+			? AuthorityAndPath.Left(SlashIndex)
+			: AuthorityAndPath;
+		if (Authority.IsEmpty())
+		{
+			OutError = TEXT("server_url is missing a host");
+			return false;
+		}
+		if (Authority.Contains(TEXT("@")))
+		{
+			OutError = TEXT("server_url must not include credentials");
+			return false;
+		}
+
+		OutServerUrl = MoveTemp(ServerUrl);
+		return true;
+	}
+
+	static bool IsValidIma2Provider(const FString& Provider)
+	{
+		return Provider == TEXT("oauth") || Provider == TEXT("api") || Provider == TEXT("auto");
+	}
+
+	static bool IsValidIma2Background(const FString& Background)
+	{
+		return Background == TEXT("transparent") || Background == TEXT("opaque") || Background == TEXT("auto");
+	}
+
+	static bool IsTransparentCompatibleFormat(const FString& Format)
+	{
+		const FString Lower = Format.ToLower();
+		return Lower == TEXT("png") || Lower == TEXT("webp");
+	}
+
+	static FString ResolveIma2Provider(const TSharedPtr<FJsonObject>& Params)
+	{
+		FString Provider;
+		Params->TryGetStringField(TEXT("provider"), Provider);
+		if (Provider.IsEmpty())
+		{
+			if (const UMonolithSettings* Settings = UMonolithSettings::Get())
+			{
+				Provider = Settings->ImageGenBridgeProvider;
+			}
+		}
+		if (Provider.IsEmpty())
+		{
+			Provider = TEXT("oauth");
+		}
+		return Provider.ToLower();
+	}
+
+	static void CopyOptionalString(
+		const TSharedPtr<FJsonObject>& From,
+		const TSharedPtr<FJsonObject>& To,
+		const TCHAR* FromField,
+		const TCHAR* ToField)
+	{
+		FString Value;
+		if (From->TryGetStringField(FromField, Value) && !Value.IsEmpty())
+		{
+			To->SetStringField(ToField, Value);
+		}
+	}
+
+	static void CopyOptionalBool(
+		const TSharedPtr<FJsonObject>& From,
+		const TSharedPtr<FJsonObject>& To,
+		const TCHAR* FromField,
+		const TCHAR* ToField)
+	{
+		bool bValue = false;
+		if (From->TryGetBoolField(FromField, bValue))
+		{
+			To->SetBoolField(ToField, bValue);
+		}
+	}
+
+	static bool ExtractIma2ImageResponse(const TSharedPtr<FJsonObject>& Json, FIma2GenerateResponse& OutResponse)
+	{
+		Json->TryGetStringField(TEXT("image"), OutResponse.ImageData);
+		if (OutResponse.ImageData.IsEmpty())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Images = nullptr;
+			if (Json->TryGetArrayField(TEXT("images"), Images))
+			{
+				for (const TSharedPtr<FJsonValue>& ImageValue : *Images)
+				{
+					const TSharedPtr<FJsonObject> ImageObj = ImageValue.IsValid() ? ImageValue->AsObject() : nullptr;
+					if (ImageObj.IsValid() && ImageObj->TryGetStringField(TEXT("image"), OutResponse.ImageData) && !OutResponse.ImageData.IsEmpty())
+					{
+						ImageObj->TryGetStringField(TEXT("filename"), OutResponse.Filename);
+						ImageObj->TryGetStringField(TEXT("revisedPrompt"), OutResponse.RevisedPrompt);
+						break;
+					}
+				}
+			}
+		}
+
+		Json->TryGetStringField(TEXT("provider"), OutResponse.Provider);
+		Json->TryGetStringField(TEXT("model"), OutResponse.Model);
+		Json->TryGetStringField(TEXT("quality"), OutResponse.Quality);
+		Json->TryGetStringField(TEXT("size"), OutResponse.Size);
+		Json->TryGetStringField(TEXT("background"), OutResponse.Background);
+		Json->TryGetStringField(TEXT("moderation"), OutResponse.Moderation);
+		Json->TryGetStringField(TEXT("requestId"), OutResponse.RequestId);
+		if (OutResponse.Filename.IsEmpty())
+		{
+			Json->TryGetStringField(TEXT("filename"), OutResponse.Filename);
+		}
+		if (OutResponse.RevisedPrompt.IsEmpty())
+		{
+			Json->TryGetStringField(TEXT("revisedPrompt"), OutResponse.RevisedPrompt);
+		}
+		Json->TryGetStringField(TEXT("elapsed"), OutResponse.Elapsed);
+		return !OutResponse.ImageData.IsEmpty();
 	}
 
 	static bool ApplyProvenance(const FString& AssetPackagePath, const TSharedPtr<FJsonObject>& Provenance, bool bSave, FString& OutError)
@@ -388,13 +1200,25 @@ namespace MonolithImageGen::ImageGenerationInternal
 		ImportParams->SetBoolField(TEXT("save"), bSave);
 
 		const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
-		if (Params->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj && SettingsObj->IsValid())
+		const bool bHasSettings = Params->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj && SettingsObj->IsValid();
+		FString TextureRole;
+		Params->TryGetStringField(TEXT("texture_role"), TextureRole);
+		if (TextureRole.IsEmpty())
+		{
+			Params->TryGetStringField(TEXT("role"), TextureRole);
+		}
+		if (TextureRole.IsEmpty() && bHasSettings)
+		{
+			(*SettingsObj)->TryGetStringField(TEXT("texture_role"), TextureRole);
+		}
+		if (TextureRole.IsEmpty())
+		{
+			TextureRole = TEXT("basecolor");
+		}
+		ImportParams->SetStringField(TEXT("texture_role"), TextureRole);
+		if (bHasSettings)
 		{
 			ImportParams->SetObjectField(TEXT("settings"), *SettingsObj);
-		}
-		else
-		{
-			ImportParams->SetObjectField(TEXT("settings"), DefaultTextureSettings());
 		}
 
 		FMonolithActionResult ImportResult = MonolithAsset::FTextureIngestActions::HandleImportTextureFromBytes(ImportParams);
@@ -404,6 +1228,11 @@ namespace MonolithImageGen::ImageGenerationInternal
 		}
 
 		const FString AssetPackagePath = ImportResult.Result->GetStringField(TEXT("asset_path"));
+		FString ImportedTextureRole;
+		if (ImportResult.Result->TryGetStringField(TEXT("texture_role"), ImportedTextureRole) && !ImportedTextureRole.IsEmpty())
+		{
+			Provenance->SetStringField(TEXT("texture_role"), ImportedTextureRole);
+		}
 		FString ProvenanceError;
 		if (!ApplyProvenance(AssetPackagePath, Provenance, bSave, ProvenanceError))
 		{
@@ -419,7 +1248,94 @@ namespace MonolithImageGen::ImageGenerationInternal
 		Result->SetStringField(TEXT("overwrite_policy"), OverwritePolicy);
 		Result->SetBoolField(TEXT("saved"), bSave);
 		Result->SetObjectField(TEXT("provenance"), Provenance);
+		if (!ImportedTextureRole.IsEmpty())
+		{
+			Result->SetStringField(TEXT("texture_role"), ImportedTextureRole);
+		}
+		const TSharedPtr<FJsonObject>* AppliedSettings = nullptr;
+		if (ImportResult.Result->TryGetObjectField(TEXT("settings_applied"), AppliedSettings) && AppliedSettings && AppliedSettings->IsValid())
+		{
+			Result->SetObjectField(TEXT("settings_applied"), *AppliedSettings);
+		}
+		const TSharedPtr<FJsonObject>* Validation = nullptr;
+		if (ImportResult.Result->TryGetObjectField(TEXT("validation"), Validation) && Validation && Validation->IsValid())
+		{
+			Result->SetObjectField(TEXT("validation"), *Validation);
+		}
 		return FMonolithActionResult::Success(Result);
+	}
+
+	static FMonolithActionResult CallIma2Generate(
+		const FString& ServerUrl,
+		float TimeoutSeconds,
+		const TSharedRef<FJsonObject>& Payload,
+		FIma2GenerateResponse& OutResponse)
+	{
+		const FString RequestBody = JsonObjectToString(Payload);
+		const FString Url = ServerUrl + TEXT("/api/generate");
+
+		TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+		Request->SetURL(Url);
+		Request->SetVerb(TEXT("POST"));
+		Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+		Request->SetHeader(TEXT("Accept"), TEXT("application/json"));
+		Request->SetHeader(TEXT("X-Ima2-Client"), TEXT("monolith-imagegen"));
+		Request->SetTimeout(TimeoutSeconds);
+		Request->SetActivityTimeout(TimeoutSeconds);
+		Request->SetContentAsString(RequestBody);
+		Request->ProcessRequestUntilComplete();
+
+		const FHttpResponsePtr Response = Request->GetResponse();
+		if (!Response.IsValid())
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("imag2-gen request failed before an HTTP response was received: %s"), *Url),
+				-32603);
+		}
+
+		const int32 ResponseCode = Response->GetResponseCode();
+		const FString ResponseBody = Response->GetContentAsString();
+		TSharedPtr<FJsonObject> ResponseJson;
+		FString ParseError;
+		if (!ParseJsonObject(ResponseBody, ResponseJson, ParseError))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("imag2-gen returned HTTP %d with non-JSON body: %s"), ResponseCode, *TruncateForError(ResponseBody)),
+				-32603);
+		}
+
+		if (ResponseCode < 200 || ResponseCode >= 300)
+		{
+			FString ErrorMessage;
+			ResponseJson->TryGetStringField(TEXT("error"), ErrorMessage);
+			if (ErrorMessage.IsEmpty())
+			{
+				ErrorMessage = FString::Printf(TEXT("imag2-gen returned HTTP %d"), ResponseCode);
+			}
+			FString ErrorCode;
+			ResponseJson->TryGetStringField(TEXT("code"), ErrorCode);
+
+			TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+			ErrorData->SetNumberField(TEXT("http_status"), ResponseCode);
+			if (!ErrorCode.IsEmpty())
+			{
+				ErrorData->SetStringField(TEXT("code"), ErrorCode);
+			}
+			FMonolithActionResult Error = FMonolithActionResult::Error(ErrorMessage, -32603);
+			Error.WithErrorData(ErrorData);
+			if (ErrorCode == TEXT("API_KEY_REQUIRED"))
+			{
+				Error.WithHint(TEXT("Use provider='oauth' for the API-key-free Codex OAuth path, or configure OPENAI_API_KEY on the ima2/imag2-gen server when provider='api'."));
+			}
+			return Error;
+		}
+
+		if (!ExtractIma2ImageResponse(ResponseJson, OutResponse))
+		{
+			return FMonolithActionResult::Error(TEXT("imag2-gen response did not contain an image field"), -32603);
+		}
+
+		return FMonolithActionResult::Success(MakeShared<FJsonObject>());
 	}
 }
 
@@ -450,10 +1366,49 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("provider"), TEXT("string"), TEXT("Only 'local_deterministic' is supported in Monolith-native mode."), TEXT("local_deterministic"))
 			.Optional(TEXT("model"), TEXT("string"), TEXT("Only 'monolith/local-gradient-bmp-v1' is supported."), TEXT("monolith/local-gradient-bmp-v1"))
 			.Optional(TEXT("aspect_ratio"), TEXT("string"), TEXT("1:1, 16:9, 9:16, 4:3, 3:4, or 21:9"), TEXT("1:1"))
-			.Optional(TEXT("asset_path"), TEXT("string"), TEXT("Destination folder under /Game"), TEXT("/Game/GeneratedImages"))
+			.Optional(TEXT("resolution"), TEXT("array|string|object|number"), TEXT("Optional explicit resolution: [width,height], '1024x1024', 1024, or {width,height}. Overrides aspect_ratio."))
+			.Optional(TEXT("asset_path"), TEXT("string"), TEXT("Destination folder under /Game"), ImageGenerationInternal::DefaultGeneratedAssetPath)
 			.Optional(TEXT("asset_name"), TEXT("string"), TEXT("Optional texture asset name. T_ prefix is added when absent."))
 			.Optional(TEXT("destination"), TEXT("string"), TEXT("Full /Game/... package path. Overrides asset_path + asset_name."))
 			.Optional(TEXT("overwrite_policy"), TEXT("string"), TEXT("unique or fail"), TEXT("unique"))
+			.Optional(TEXT("texture_role"), TEXT("string"), TEXT("Unreal texture role preset forwarded to asset.import_texture_from_bytes: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, or emissive."), TEXT("basecolor"))
+			.Optional(TEXT("settings"), TEXT("object"), TEXT("Texture import settings compatible with asset.import_texture_from_bytes."))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported texture package"), TEXT("true"))
+			.Build(),
+		TEXT("Image"));
+
+	Registry.RegisterAction(
+		TEXT("imagegen"), TEXT("generate_image_via_ima2"),
+		TEXT("Call an external ima2/imag2-gen HTTP server, import the first generated image as a Texture2D, and attach redacted provenance. Monolith does not read provider API keys."),
+		FMonolithActionHandler::CreateStatic(&HandleGenerateImageViaIma2),
+		FParamSchemaBuilder()
+			.Required(TEXT("prompt"), TEXT("string"), TEXT("Image prompt. Sent to the configured ima2/imag2-gen server; stored locally only as a hash."))
+			.Optional(TEXT("server_url"), TEXT("string"), TEXT("ima2/imag2-gen base URL. Defaults to Monolith ImageGenBridgeServerUrl."), TEXT("http://192.168.0.10:3333"))
+			.Optional(TEXT("provider"), TEXT("string"), TEXT("oauth, api, or auto. oauth uses the ima2 server host's Codex OAuth session."), TEXT("oauth"))
+			.Optional(TEXT("model"), TEXT("string"), TEXT("ima2 image model forwarded to /api/generate."), ImageGenerationInternal::DefaultIma2Model)
+			.Optional(TEXT("reasoning_effort"), TEXT("string"), TEXT("Optional API-provider reasoning effort forwarded as reasoningEffort."))
+			.Optional(TEXT("quality"), TEXT("string"), TEXT("low, medium, or high"), TEXT("high"))
+			.Optional(TEXT("size"), TEXT("string"), TEXT("ima2 image size, for example 1024x1024"), TEXT("1024x1024"))
+			.Optional(TEXT("resolution"), TEXT("array|string|object|number"), TEXT("Optional explicit resolution. Accepts [width,height], '1024x1024', 1024, or {width,height}; overrides size."))
+			.Optional(TEXT("format"), TEXT("string"), TEXT("Requested output format forwarded to ima2."), TEXT("png"))
+			.Optional(TEXT("background"), TEXT("string"), TEXT("Image-generation background forwarded to ima2/OpenAI: transparent, opaque, or auto."), TEXT("auto"))
+			.Optional(TEXT("moderation"), TEXT("string"), TEXT("auto or low"), TEXT("low"))
+			.Optional(TEXT("mode"), TEXT("string"), TEXT("ima2 prompt mode."), TEXT("auto"))
+			.Optional(TEXT("web_search_enabled"), TEXT("bool"), TEXT("Forward as webSearchEnabled when set."))
+			.Optional(TEXT("references"), TEXT("array"), TEXT("Optional reference image array. Each item may be a data URL/base64 string or a local image file path."))
+			.Optional(TEXT("reference_images"), TEXT("array"), TEXT("Optional reference image objects/paths. Objects accept path, file_path, bytes_b64, data_url, and format_hint."))
+			.Optional(TEXT("reference_image_paths"), TEXT("array"), TEXT("Optional local reference image path array."))
+			.Optional(TEXT("request_id"), TEXT("string"), TEXT("Optional request ID forwarded as requestId."))
+			.Optional(TEXT("session_id"), TEXT("string"), TEXT("Optional ima2 session ID forwarded as sessionId."))
+			.Optional(TEXT("client_node_id"), TEXT("string"), TEXT("Optional ima2 client node ID forwarded as clientNodeId."))
+			.Optional(TEXT("timeout_seconds"), TEXT("number"), TEXT("HTTP timeout in seconds."), FString::SanitizeFloat(ImageGenerationInternal::DefaultIma2TimeoutSeconds))
+			.Optional(TEXT("aspect_ratio"), TEXT("string"), TEXT("Aspect ratio for Monolith provenance."))
+			.Optional(TEXT("asset_path"), TEXT("string"), TEXT("Destination folder under /Game"), ImageGenerationInternal::DefaultGeneratedAssetPath)
+			.Optional(TEXT("asset_name"), TEXT("string"), TEXT("Optional texture asset name. T_ prefix is added when absent."))
+			.Optional(TEXT("destination"), TEXT("string"), TEXT("Full /Game/... package path. Overrides asset_path + asset_name."))
+			.Optional(TEXT("overwrite_policy"), TEXT("string"), TEXT("unique or fail"), TEXT("unique"))
+			.Optional(TEXT("max_bytes"), TEXT("integer"), TEXT("Maximum compressed payload bytes"), FString::FromInt(ImageGenerationInternal::DefaultMaxCompressedBytes))
+			.Optional(TEXT("texture_role"), TEXT("string"), TEXT("Unreal texture role preset forwarded to asset.import_texture_from_bytes: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, or emissive."), TEXT("basecolor"))
 			.Optional(TEXT("settings"), TEXT("object"), TEXT("Texture import settings compatible with asset.import_texture_from_bytes."))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported texture package"), TEXT("true"))
 			.Build(),
@@ -470,11 +1425,12 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("provider"), TEXT("string"), TEXT("External provider id for provenance."), TEXT("external"))
 			.Optional(TEXT("model"), TEXT("string"), TEXT("External model id for provenance."), TEXT("unknown"))
 			.Optional(TEXT("aspect_ratio"), TEXT("string"), TEXT("Aspect ratio for provenance."))
-			.Optional(TEXT("asset_path"), TEXT("string"), TEXT("Destination folder under /Game"), TEXT("/Game/GeneratedImages"))
+			.Optional(TEXT("asset_path"), TEXT("string"), TEXT("Destination folder under /Game"), ImageGenerationInternal::DefaultGeneratedAssetPath)
 			.Optional(TEXT("asset_name"), TEXT("string"), TEXT("Optional texture asset name. T_ prefix is added when absent."))
 			.Optional(TEXT("destination"), TEXT("string"), TEXT("Full /Game/... package path. Overrides asset_path + asset_name."))
 			.Optional(TEXT("overwrite_policy"), TEXT("string"), TEXT("unique or fail"), TEXT("unique"))
 			.Optional(TEXT("max_bytes"), TEXT("integer"), TEXT("Maximum compressed payload bytes"), FString::FromInt(ImageGenerationInternal::DefaultMaxCompressedBytes))
+			.Optional(TEXT("texture_role"), TEXT("string"), TEXT("Unreal texture role preset forwarded to asset.import_texture_from_bytes: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, or emissive."), TEXT("basecolor"))
 			.Optional(TEXT("settings"), TEXT("object"), TEXT("Texture import settings compatible with asset.import_texture_from_bytes."))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported texture package"), TEXT("true"))
 			.Build(),
@@ -493,6 +1449,9 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 FMonolithActionResult FMonolithImageGenActions::HandleListImageModels(const TSharedPtr<FJsonObject>&)
 {
 	TArray<TSharedPtr<FJsonValue>> Models;
+	const FString BridgeServerUrl = ImageGenerationInternal::ResolveDefaultIma2ServerUrl();
+	const FString BridgeProvider = ImageGenerationInternal::ResolveIma2Provider(MakeShared<FJsonObject>());
+	const FString BridgeModel = ImageGenerationInternal::ResolveDefaultIma2Model();
 
 	TSharedPtr<FJsonObject> Local = MakeShared<FJsonObject>();
 	Local->SetStringField(TEXT("provider"), TEXT("local_deterministic"));
@@ -501,6 +1460,7 @@ FMonolithActionResult FMonolithImageGenActions::HandleListImageModels(const TSha
 	Local->SetBoolField(TEXT("network_required"), false);
 	Local->SetStringField(TEXT("output_format"), TEXT("bmp"));
 	ImageGenerationInternal::AddStringArray(Local, TEXT("aspect_ratios"), { TEXT("1:1"), TEXT("16:9"), TEXT("9:16"), TEXT("4:3"), TEXT("3:4"), TEXT("21:9") });
+	ImageGenerationInternal::AddStringArray(Local, TEXT("texture_roles"), ImageGenerationInternal::SupportedTextureRoles());
 	Models.Add(MakeShared<FJsonValueObject>(Local));
 
 	TSharedPtr<FJsonObject> External = MakeShared<FJsonObject>();
@@ -510,27 +1470,66 @@ FMonolithActionResult FMonolithImageGenActions::HandleListImageModels(const TSha
 	External->SetBoolField(TEXT("network_required"), false);
 	External->SetStringField(TEXT("boundary_action"), TEXT("imagegen.import_generated_image"));
 	External->SetStringField(TEXT("secret_policy"), TEXT("Monolith does not read or store provider credentials for this path."));
+	ImageGenerationInternal::AddStringArray(External, TEXT("texture_roles"), ImageGenerationInternal::SupportedTextureRoles());
 	Models.Add(MakeShared<FJsonValueObject>(External));
+
+	TSharedPtr<FJsonObject> Ima2 = MakeShared<FJsonObject>();
+	Ima2->SetStringField(TEXT("provider"), TEXT("ima2-gen"));
+	Ima2->SetStringField(TEXT("model"), BridgeModel);
+	Ima2->SetBoolField(TEXT("available"), true);
+	Ima2->SetBoolField(TEXT("network_required"), true);
+	Ima2->SetStringField(TEXT("boundary_action"), TEXT("imagegen.generate_image_via_ima2"));
+	Ima2->SetStringField(TEXT("server_url"), BridgeServerUrl);
+	Ima2->SetStringField(TEXT("provider_default"), BridgeProvider);
+	Ima2->SetStringField(TEXT("secret_policy"), TEXT("Monolith sends no provider credentials; OAuth/API-key auth is owned by the ima2/imag2-gen server."));
+	ImageGenerationInternal::AddStringArray(Ima2, TEXT("quality"), { TEXT("low"), TEXT("medium"), TEXT("high") });
+	ImageGenerationInternal::AddStringArray(Ima2, TEXT("background"), { TEXT("transparent"), TEXT("opaque"), TEXT("auto") });
+	ImageGenerationInternal::AddStringArray(Ima2, TEXT("moderation"), { TEXT("auto"), TEXT("low") });
+	ImageGenerationInternal::AddStringArray(Ima2, TEXT("texture_roles"), ImageGenerationInternal::SupportedTextureRoles());
+	Models.Add(MakeShared<FJsonValueObject>(Ima2));
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetArrayField(TEXT("models"), Models);
-	Result->SetStringField(TEXT("default_provider"), TEXT("local_deterministic"));
-	Result->SetStringField(TEXT("default_model"), TEXT("monolith/local-gradient-bmp-v1"));
+	Result->SetStringField(TEXT("default_provider"), TEXT("ima2-gen"));
+	Result->SetStringField(TEXT("default_model"), BridgeModel);
+	Result->SetStringField(TEXT("default_asset_path"), ImageGenerationInternal::DefaultGeneratedAssetPath);
+	Result->SetStringField(TEXT("default_external_provider"), TEXT("ima2-gen"));
+	Result->SetStringField(TEXT("default_external_action"), TEXT("imagegen.generate_image_via_ima2"));
+	Result->SetStringField(TEXT("default_reference_png_dir"), ImageGenerationInternal::ResolveReferenceImageDirectory());
 	return FMonolithActionResult::Success(Result);
 }
 
 FMonolithActionResult FMonolithImageGenActions::HandleGetImageGenerationDefaults(const TSharedPtr<FJsonObject>&)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("provider"), TEXT("local_deterministic"));
-	Result->SetStringField(TEXT("model"), TEXT("monolith/local-gradient-bmp-v1"));
-	Result->SetStringField(TEXT("asset_path"), TEXT("/Game/GeneratedImages"));
+	Result->SetStringField(TEXT("provider"), TEXT("ima2-gen"));
+	Result->SetStringField(TEXT("action"), TEXT("imagegen.generate_image_via_ima2"));
+	Result->SetStringField(TEXT("model"), ImageGenerationInternal::ResolveDefaultIma2Model());
+	Result->SetStringField(TEXT("asset_path"), ImageGenerationInternal::DefaultGeneratedAssetPath);
 	Result->SetStringField(TEXT("aspect_ratio"), TEXT("1:1"));
 	Result->SetStringField(TEXT("overwrite_policy"), TEXT("unique"));
 	Result->SetNumberField(TEXT("max_bytes"), ImageGenerationInternal::DefaultMaxCompressedBytes);
 	Result->SetObjectField(TEXT("texture_settings"), ImageGenerationInternal::DefaultTextureSettings());
+	Result->SetStringField(TEXT("texture_role"), TEXT("basecolor"));
+	Result->SetObjectField(TEXT("texture_role_presets"), ImageGenerationInternal::TextureRolePresetSummary());
 	Result->SetStringField(TEXT("prompt_policy"), TEXT("redacted: provenance stores prompt_hash only"));
+	Result->SetStringField(TEXT("ima2_server_url"), ImageGenerationInternal::ResolveDefaultIma2ServerUrl());
+	Result->SetStringField(TEXT("ima2_provider"), ImageGenerationInternal::ResolveIma2Provider(MakeShared<FJsonObject>()));
+	Result->SetNumberField(TEXT("ima2_timeout_seconds"), ImageGenerationInternal::DefaultIma2TimeoutSeconds);
+	Result->SetStringField(TEXT("ima2_quality"), TEXT("high"));
+	Result->SetStringField(TEXT("ima2_size"), TEXT("1024x1024"));
+	Result->SetStringField(TEXT("ima2_format"), TEXT("png"));
+	Result->SetStringField(TEXT("ima2_background"), TEXT("auto"));
+	Result->SetStringField(TEXT("ima2_secret_policy"), TEXT("Monolith stores no API key; the ima2/imag2-gen server owns provider credentials and OAuth sessions."));
+	Result->SetStringField(TEXT("reference_png_dir"), ImageGenerationInternal::ResolveReferenceImageDirectory());
+	TSharedPtr<FJsonObject> Local = MakeShared<FJsonObject>();
+	Local->SetStringField(TEXT("provider"), TEXT("local_deterministic"));
+	Local->SetStringField(TEXT("model"), TEXT("monolith/local-gradient-bmp-v1"));
+	Local->SetStringField(TEXT("action"), TEXT("imagegen.generate_image"));
+	Result->SetObjectField(TEXT("local_placeholder"), Local);
 	ImageGenerationInternal::AddStringArray(Result, TEXT("aspect_ratios"), { TEXT("1:1"), TEXT("16:9"), TEXT("9:16"), TEXT("4:3"), TEXT("3:4"), TEXT("21:9") });
+	ImageGenerationInternal::AddStringArray(Result, TEXT("backgrounds"), { TEXT("transparent"), TEXT("opaque"), TEXT("auto") });
+	ImageGenerationInternal::AddStringArray(Result, TEXT("texture_roles"), ImageGenerationInternal::SupportedTextureRoles());
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -572,7 +1571,18 @@ FMonolithActionResult FMonolithImageGenActions::HandleGenerateImage(const TShare
 
 	int32 Width = 0;
 	int32 Height = 0;
-	if (!ImageGenerationInternal::ResolveAspectRatio(AspectRatio, Width, Height))
+	FString ResolutionSize;
+	bool bHasResolution = false;
+	FString ResolutionError;
+	if (!ImageGenerationInternal::ResolveResolutionParam(Params, bHasResolution, Width, Height, ResolutionSize, ResolutionError))
+	{
+		return FMonolithActionResult::Error(ResolutionError, -32602);
+	}
+	if (bHasResolution)
+	{
+		AspectRatio = ResolutionSize;
+	}
+	else if (!ImageGenerationInternal::ResolveAspectRatio(AspectRatio, Width, Height))
 	{
 		return FMonolithActionResult::Error(TEXT("Unsupported aspect_ratio. Expected one of: 1:1, 16:9, 9:16, 4:3, 3:4, 21:9"), -32602);
 	}
@@ -584,6 +1594,224 @@ FMonolithActionResult FMonolithImageGenActions::HandleGenerateImage(const TShare
 
 	return ImageGenerationInternal::ImportGeneratedBytes(
 		Params, BytesB64, TEXT("bmp"), ImageGenerationInternal::PromptToAssetName(Prompt), Provenance);
+}
+
+FMonolithActionResult FMonolithImageGenActions::HandleGenerateImageViaIma2(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing params object"), -32602);
+	}
+
+	FString Prompt;
+	if (!Params->TryGetStringField(TEXT("prompt"), Prompt) || Prompt.TrimStartAndEnd().IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or empty required param: prompt"), -32602);
+	}
+
+	FString ServerUrl;
+	if (!Params->TryGetStringField(TEXT("server_url"), ServerUrl) || ServerUrl.IsEmpty())
+	{
+		ServerUrl = ImageGenerationInternal::ResolveDefaultIma2ServerUrl();
+	}
+	FString ServerUrlError;
+	if (!ImageGenerationInternal::NormalizeIma2ServerUrl(ServerUrl, ServerUrl, ServerUrlError))
+	{
+		return FMonolithActionResult::Error(ServerUrlError, -32602);
+	}
+
+	FString Provider = ImageGenerationInternal::ResolveIma2Provider(Params);
+	if (!ImageGenerationInternal::IsValidIma2Provider(Provider))
+	{
+		FMonolithActionResult Error = FMonolithActionResult::Error(TEXT("provider must be 'oauth', 'api', or 'auto'"), -32602);
+		Error.WithHint(TEXT("Use provider='oauth' for the API-key-free Codex OAuth path on the ima2/imag2-gen server."));
+		return Error;
+	}
+
+	FString Quality;
+	if (!Params->TryGetStringField(TEXT("quality"), Quality) || Quality.IsEmpty())
+	{
+		Quality = TEXT("high");
+	}
+	FString Size;
+	if (!Params->TryGetStringField(TEXT("size"), Size) || Size.IsEmpty())
+	{
+		Size = TEXT("1024x1024");
+	}
+	int32 ResolutionWidth = 0;
+	int32 ResolutionHeight = 0;
+	FString ResolutionSize;
+	bool bHasResolution = false;
+	FString ResolutionError;
+	if (!ImageGenerationInternal::ResolveResolutionParam(Params, bHasResolution, ResolutionWidth, ResolutionHeight, ResolutionSize, ResolutionError))
+	{
+		return FMonolithActionResult::Error(ResolutionError, -32602);
+	}
+	if (bHasResolution)
+	{
+		Size = ResolutionSize;
+	}
+	FString Format;
+	if (!Params->TryGetStringField(TEXT("format"), Format) || Format.IsEmpty())
+	{
+		Format = TEXT("png");
+	}
+	Format = Format.ToLower();
+	if (Format == TEXT("jpg"))
+	{
+		Format = TEXT("jpeg");
+	}
+	if (Format != TEXT("png") && Format != TEXT("jpeg") && Format != TEXT("webp"))
+	{
+		return FMonolithActionResult::Error(TEXT("format must be 'png', 'jpeg', or 'webp' for ima2/OpenAI image generation"), -32602);
+	}
+	FString Background;
+	if (!Params->TryGetStringField(TEXT("background"), Background) || Background.IsEmpty())
+	{
+		Background = TEXT("auto");
+	}
+	Background = Background.ToLower();
+	if (!ImageGenerationInternal::IsValidIma2Background(Background))
+	{
+		return FMonolithActionResult::Error(TEXT("background must be 'transparent', 'opaque', or 'auto'"), -32602);
+	}
+	if (Background == TEXT("transparent") && !ImageGenerationInternal::IsTransparentCompatibleFormat(Format))
+	{
+		return FMonolithActionResult::Error(TEXT("background='transparent' requires format='png' or format='webp'"), -32602);
+	}
+	FString Moderation;
+	if (!Params->TryGetStringField(TEXT("moderation"), Moderation) || Moderation.IsEmpty())
+	{
+		Moderation = TEXT("low");
+	}
+	FString Mode;
+	if (!Params->TryGetStringField(TEXT("mode"), Mode) || Mode.IsEmpty())
+	{
+		Mode = TEXT("auto");
+	}
+	FString RequestId;
+	if (!Params->TryGetStringField(TEXT("request_id"), RequestId) || RequestId.IsEmpty())
+	{
+		RequestId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+	}
+
+	double TimeoutSecondsDouble = ImageGenerationInternal::DefaultIma2TimeoutSeconds;
+	if (const UMonolithSettings* Settings = UMonolithSettings::Get())
+	{
+		TimeoutSecondsDouble = FMath::Max(1.0f, Settings->ImageGenBridgeTimeoutSeconds);
+	}
+	Params->TryGetNumberField(TEXT("timeout_seconds"), TimeoutSecondsDouble);
+	const float TimeoutSeconds = FMath::Max(1.0f, static_cast<float>(TimeoutSecondsDouble));
+
+	FString Model;
+	if (!Params->TryGetStringField(TEXT("model"), Model) || Model.IsEmpty())
+	{
+		Model = ImageGenerationInternal::ResolveDefaultIma2Model();
+	}
+
+	TArray<TSharedPtr<FJsonValue>> PayloadReferences;
+	TArray<ImageGenerationInternal::FReferenceImageResult> SavedReferenceFiles;
+	FString ReferenceError;
+	if (!ImageGenerationInternal::BuildIma2ReferencePayload(Params, PayloadReferences, SavedReferenceFiles, ReferenceError))
+	{
+		return FMonolithActionResult::Error(ReferenceError, -32602);
+	}
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("prompt"), Prompt);
+	Payload->SetStringField(TEXT("provider"), Provider);
+	Payload->SetStringField(TEXT("model"), Model);
+	Payload->SetStringField(TEXT("quality"), Quality);
+	Payload->SetStringField(TEXT("size"), Size);
+	Payload->SetStringField(TEXT("format"), Format);
+	Payload->SetStringField(TEXT("background"), Background);
+	Payload->SetStringField(TEXT("moderation"), Moderation);
+	Payload->SetStringField(TEXT("mode"), Mode);
+	Payload->SetNumberField(TEXT("n"), 1);
+	Payload->SetStringField(TEXT("requestId"), RequestId);
+	ImageGenerationInternal::CopyOptionalString(Params, Payload, TEXT("reasoning_effort"), TEXT("reasoningEffort"));
+	ImageGenerationInternal::CopyOptionalString(Params, Payload, TEXT("session_id"), TEXT("sessionId"));
+	ImageGenerationInternal::CopyOptionalString(Params, Payload, TEXT("client_node_id"), TEXT("clientNodeId"));
+	ImageGenerationInternal::CopyOptionalBool(Params, Payload, TEXT("web_search_enabled"), TEXT("webSearchEnabled"));
+	if (PayloadReferences.Num() > 0)
+	{
+		Payload->SetArrayField(TEXT("references"), PayloadReferences);
+	}
+
+	ImageGenerationInternal::FIma2GenerateResponse Ima2Response;
+	FMonolithActionResult GenerateResult = ImageGenerationInternal::CallIma2Generate(ServerUrl, TimeoutSeconds, Payload.ToSharedRef(), Ima2Response);
+	if (!GenerateResult.bSuccess)
+	{
+		return GenerateResult;
+	}
+
+	ImageGenerationInternal::FCompressedImagePayload ImagePayload;
+	FString PayloadError;
+	if (!ImageGenerationInternal::PrepareCompressedImagePayload(Params, Ima2Response.ImageData, Format, ImagePayload, PayloadError))
+	{
+		return FMonolithActionResult::Error(PayloadError, -32602);
+	}
+
+	FString AspectRatio;
+	Params->TryGetStringField(TEXT("aspect_ratio"), AspectRatio);
+	FString EffectiveModel = Ima2Response.Model;
+	if (EffectiveModel.IsEmpty())
+	{
+		EffectiveModel = Model;
+	}
+	FString EffectiveProvider = Ima2Response.Provider.IsEmpty()
+		? FString::Printf(TEXT("ima2-gen/%s"), *Provider)
+		: FString::Printf(TEXT("ima2-gen/%s"), *Ima2Response.Provider);
+
+	TSharedPtr<FJsonObject> Provenance = ImageGenerationInternal::BuildProvenance(
+		EffectiveProvider, EffectiveModel, TEXT("ima2_http"), Prompt, AspectRatio, ImagePayload.FormatHint, ImagePayload.CompressedBytes);
+	Provenance->SetStringField(TEXT("ima2_server_url"), ServerUrl);
+	Provenance->SetStringField(TEXT("ima2_request_id"), Ima2Response.RequestId.IsEmpty() ? RequestId : Ima2Response.RequestId);
+	Provenance->SetStringField(TEXT("ima2_filename"), Ima2Response.Filename);
+	Provenance->SetStringField(TEXT("quality"), Ima2Response.Quality.IsEmpty() ? Quality : Ima2Response.Quality);
+	Provenance->SetStringField(TEXT("size"), Ima2Response.Size.IsEmpty() ? Size : Ima2Response.Size);
+	Provenance->SetStringField(TEXT("background"), Ima2Response.Background.IsEmpty() ? Background : Ima2Response.Background);
+	Provenance->SetStringField(TEXT("moderation"), Ima2Response.Moderation.IsEmpty() ? Moderation : Ima2Response.Moderation);
+	Provenance->SetStringField(TEXT("reference_count"), FString::FromInt(SavedReferenceFiles.Num()));
+	if (SavedReferenceFiles.Num() > 0)
+	{
+		TArray<FString> ReferenceHashes;
+		for (const ImageGenerationInternal::FReferenceImageResult& Reference : SavedReferenceFiles)
+		{
+			ReferenceHashes.Add(Reference.Hash);
+		}
+		Provenance->SetStringField(TEXT("reference_hashes"), FString::Join(ReferenceHashes, TEXT(",")));
+	}
+	if (!Ima2Response.RevisedPrompt.IsEmpty())
+	{
+		Provenance->SetStringField(TEXT("revised_prompt_hash"), ImageGenerationInternal::PromptHash(Ima2Response.RevisedPrompt));
+		Provenance->SetStringField(TEXT("revised_prompt_redacted"), TEXT("true"));
+	}
+
+	FMonolithActionResult ImportResult = ImageGenerationInternal::ImportGeneratedBytes(
+		Params, ImagePayload.BytesB64, ImagePayload.FormatHint, ImageGenerationInternal::PromptToAssetName(Prompt), Provenance);
+	if (!ImportResult.bSuccess)
+	{
+		return ImportResult;
+	}
+
+	TSharedPtr<FJsonObject> Bridge = MakeShared<FJsonObject>();
+	Bridge->SetStringField(TEXT("provider"), TEXT("ima2-gen"));
+	Bridge->SetStringField(TEXT("server_url"), ServerUrl);
+	Bridge->SetStringField(TEXT("request_id"), Ima2Response.RequestId.IsEmpty() ? RequestId : Ima2Response.RequestId);
+	Bridge->SetStringField(TEXT("filename"), Ima2Response.Filename);
+	Bridge->SetStringField(TEXT("response_provider"), Ima2Response.Provider);
+	Bridge->SetStringField(TEXT("model"), EffectiveModel);
+	Bridge->SetStringField(TEXT("quality"), Ima2Response.Quality.IsEmpty() ? Quality : Ima2Response.Quality);
+	Bridge->SetStringField(TEXT("size"), Ima2Response.Size.IsEmpty() ? Size : Ima2Response.Size);
+	Bridge->SetStringField(TEXT("background"), Ima2Response.Background.IsEmpty() ? Background : Ima2Response.Background);
+	Bridge->SetStringField(TEXT("moderation"), Ima2Response.Moderation.IsEmpty() ? Moderation : Ima2Response.Moderation);
+	Bridge->SetStringField(TEXT("elapsed"), Ima2Response.Elapsed);
+	Bridge->SetNumberField(TEXT("reference_count"), SavedReferenceFiles.Num());
+	ImportResult.Result->SetStringField(TEXT("reference_png_dir"), ImageGenerationInternal::ResolveReferenceImageDirectory());
+	ImportResult.Result->SetArrayField(TEXT("reference_png_files"), ImageGenerationInternal::ReferenceFilesToJson(SavedReferenceFiles));
+	ImportResult.Result->SetObjectField(TEXT("bridge"), Bridge);
+	return ImportResult;
 }
 
 FMonolithActionResult FMonolithImageGenActions::HandleImportGeneratedImage(const TSharedPtr<FJsonObject>& Params)
@@ -601,35 +1829,11 @@ FMonolithActionResult FMonolithImageGenActions::HandleImportGeneratedImage(const
 
 	FString FormatHint;
 	Params->TryGetStringField(TEXT("format_hint"), FormatHint);
-	BytesB64 = ImageGenerationInternal::StripDataUrlPrefix(BytesB64, FormatHint);
-	BytesB64 = ImageGenerationInternal::CompactBase64Payload(BytesB64);
-	if (FormatHint.IsEmpty())
+	ImageGenerationInternal::FCompressedImagePayload ImagePayload;
+	FString PayloadError;
+	if (!ImageGenerationInternal::PrepareCompressedImagePayload(Params, BytesB64, FormatHint, ImagePayload, PayloadError))
 	{
-		FormatHint = TEXT("png");
-	}
-
-	double MaxBytesDouble = ImageGenerationInternal::DefaultMaxCompressedBytes;
-	Params->TryGetNumberField(TEXT("max_bytes"), MaxBytesDouble);
-	const int32 MaxBytes = FMath::Max(1, static_cast<int32>(MaxBytesDouble));
-	const int64 EstimatedDecodedBytes = ImageGenerationInternal::EstimateBase64DecodedBytes(BytesB64);
-	if (EstimatedDecodedBytes > MaxBytes)
-	{
-		return FMonolithActionResult::Error(
-			FString::Printf(TEXT("Compressed image payload is estimated at %lld bytes, above max_bytes %d"), EstimatedDecodedBytes, MaxBytes),
-			-32602);
-	}
-
-	TArray<uint8> DecodedBytes;
-	if (!FBase64::Decode(BytesB64, DecodedBytes) || DecodedBytes.Num() == 0)
-	{
-		return FMonolithActionResult::Error(TEXT("Base64 decode of bytes_b64 failed or produced empty buffer"), -32602);
-	}
-
-	if (DecodedBytes.Num() > MaxBytes)
-	{
-		return FMonolithActionResult::Error(
-			FString::Printf(TEXT("Compressed image payload is %d bytes, above max_bytes %d"), DecodedBytes.Num(), MaxBytes),
-			-32602);
+		return FMonolithActionResult::Error(PayloadError, -32602);
 	}
 
 	FString Provider;
@@ -648,7 +1852,7 @@ FMonolithActionResult FMonolithImageGenActions::HandleImportGeneratedImage(const
 	Params->TryGetStringField(TEXT("aspect_ratio"), AspectRatio);
 
 	TSharedPtr<FJsonObject> Provenance = ImageGenerationInternal::BuildProvenance(
-		Provider, Model, TEXT("external_bytes"), Prompt, AspectRatio, FormatHint, DecodedBytes.Num());
+		Provider, Model, TEXT("external_bytes"), Prompt, AspectRatio, ImagePayload.FormatHint, ImagePayload.CompressedBytes);
 
 	FString FallbackName = TEXT("T_ExternalGeneratedImage");
 	if (!Prompt.IsEmpty())
@@ -656,7 +1860,7 @@ FMonolithActionResult FMonolithImageGenActions::HandleImportGeneratedImage(const
 		FallbackName = ImageGenerationInternal::PromptToAssetName(Prompt);
 	}
 
-	return ImageGenerationInternal::ImportGeneratedBytes(Params, BytesB64, FormatHint, FallbackName, Provenance);
+	return ImageGenerationInternal::ImportGeneratedBytes(Params, ImagePayload.BytesB64, ImagePayload.FormatHint, FallbackName, Provenance);
 }
 
 FMonolithActionResult FMonolithImageGenActions::HandleGetGeneratedAssetProvenance(const TSharedPtr<FJsonObject>& Params)
@@ -684,7 +1888,10 @@ FMonolithActionResult FMonolithImageGenActions::HandleGetGeneratedAssetProvenanc
 	const TArray<FString> Keys = {
 		TEXT("kind"), TEXT("provider"), TEXT("model"), TEXT("source"), TEXT("aspect_ratio"),
 		TEXT("format_hint"), TEXT("prompt_hash"), TEXT("prompt_redacted"),
-		TEXT("generated_at_utc"), TEXT("compressed_bytes")
+		TEXT("generated_at_utc"), TEXT("compressed_bytes"), TEXT("texture_role"), TEXT("ima2_server_url"),
+		TEXT("ima2_request_id"), TEXT("ima2_filename"), TEXT("quality"), TEXT("size"),
+		TEXT("background"), TEXT("moderation"), TEXT("reference_count"), TEXT("reference_hashes"),
+		TEXT("revised_prompt_hash"), TEXT("revised_prompt_redacted")
 	};
 	bool bFoundAny = false;
 	for (const FString& Key : Keys)

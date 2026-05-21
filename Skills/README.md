@@ -78,7 +78,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-chooser` | `chooser` | 6 | Chooser tables (data-driven selection) |
 | `unreal-interchange` | `interchange` | 16 | Interchange import/export pipelines |
 | `unreal-modelgen` | `modelgen` | 7 | AI/procedural model generation jobs |
-| `unreal-imagegen` | `imagegen` | 5 | AI image/texture generation |
+| `unreal-imagegen` | `imagegen` | 6 | AI image/texture generation |
 | `unreal-ndisplay` | `ndisplay` | 2 | nDisplay / LED-wall virtual production |
 
 ### Sequencing

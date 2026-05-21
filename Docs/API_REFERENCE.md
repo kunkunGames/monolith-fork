@@ -40,6 +40,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [leveldesign](#leveldesign) | 43 | Horror/encounter/accessibility analysis, framing, monster reveal, co-op balance |
 | [worldgen](#worldgen) | 63 | Blockout, replacement, procedural structures/terrain, optional town-generation workflows |
 | [modelgen](#modelgen) | 7 | Generated-model provider, job, import, and provenance workflows |
+| [imagegen](#imagegen) | 6 | Generated-image provider discovery, ima2 bridge generation, Texture2D import, and provenance workflows |
 | [ndisplay](#ndisplay) | 2 | Optional nDisplay / DisplayCluster config discovery registered by MonolithNDisplay |
 | [pcg](#pcg) | 4 | Optional PCG AssetRegistry/reflection discovery registered by MonolithPCG |
 | [slate](#slate) | 1 (+5 gated) | Live editor Slate window/widget inspection registered by MonolithSlate |
@@ -68,6 +69,7 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `ai.get_bt_graph` | **NEW** (Phase J F8) | Read-only graph dump distinct from `get_behavior_tree`'s structural inspection. |
 | `audio.create_test_wave` | **NEW** (Phase J F18) | Procedurally synthesizes a 16-bit mono sine `USoundWave` for tests with zero asset deps. |
 | `level_sequence.get_anim_mixer_status` / `level_sequence.list_anim_mixer_tracks` | **NEW** (2026-05-19) | Read-only Sequencer Anim Mixer parity probe. UE 5.7 builds report unavailable safely; UE 5.8+ builds can list reflected mixer tracks/layers without a hard module dependency. |
+| `imagegen.generate_image_via_ima2` | **NEW** (2026-05-21) | Calls the configured ima2/imag2-gen `/api/generate` server and imports the first returned image through the MonolithAsset Texture2D ingest path. Monolith does not own provider API keys. |
 | `audio.bind_sound_to_perception` | Param validation tightened (Phase J F11) | `loudness <= 0`, `max_range < 0`, and unknown `sense_class` values now reject up-front instead of writing junk userdata. |
 | `gas.bind_widget_to_attribute` (and 3 aliases) | Param validation tightened (Phase J F2/F3) | Empty `widget_path`, missing `attribute`, or unresolvable ASC now return structured errors before any reflection writes. |
 | `ai` BT actions | Error message standardization (Phase J F15) | All BT-related actions now return `{ "error": "<code>", "detail": "<human>" }` instead of mixed prose. |
@@ -1105,7 +1107,7 @@ Asset ingest, generic lifecycle operations, specialized asset enrichment, and as
 
 | Action | Summary |
 |--------|---------|
-| `import_texture_from_bytes` | Decode base64 compressed image bytes and create a `UTexture2D` asset. |
+| `import_texture_from_bytes` | Decode base64 compressed image bytes and create a `UTexture2D` asset. Optional `texture_role` applies Unreal-specific presets, post-processing, and validation metadata for UI, sprite, decal, basecolor, tileable world, normal, ORM/mask, height, and emissive textures. |
 | `import_font_family` | Import one or more TTF files as a composite `UFont` plus `UFontFace` assets. |
 | `import_texture_from_file` | Import an external image file as a `UTexture2D` asset with optional texture settings. |
 | `save_asset` | Save any loaded asset package to disk. |
@@ -1145,6 +1147,7 @@ Moved domains:
 | `leveldesign` | sightlines, hiding spots, accessibility, encounter pacing, `analyze_framing`, `evaluate_monster_reveal`, `analyze_co_op_balance` |
 | `worldgen` | blockout volumes, replacement workflows, procedural world/building/town generation |
 | `modelgen` | generated-model provider/job/import/provenance workflows |
+| `imagegen` | `generate_image_via_ima2`, `import_generated_image`, generated Texture2D provenance |
 | `asset` | `import_texture_from_file`, `save_asset`, `delete_assets`, `validate_naming_conventions`, `batch_rename_assets` |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the mesh namespace contract.
@@ -1188,6 +1191,25 @@ Blockout, replacement workflows, procedural structures/terrain, and optional tow
 Generated-model provider, job, import, and provenance workflows. **7 actions.**
 
 > For full param schemas, call `monolith_discover("modelgen")` at runtime.
+
+---
+
+## imagegen
+
+Generated-image provider discovery, deterministic local generation, ima2/imag2-gen HTTP generation, Texture2D import, and provenance workflows. **6 actions.**
+
+> For full param schemas, call `monolith_discover("imagegen")` at runtime.
+
+Default external generation uses `ImageGenBridgeServerUrl=http://192.168.0.10:3333`, `ImageGenBridgeProvider=oauth`, `ImageGenBridgeDefaultModel=gpt-5.5`, and `ImageGenBridgeTimeoutSeconds=420.0`. Monolith does not read or store OpenAI API keys; `provider="api"` requires the ima2/imag2-gen server host to provide `OPENAI_API_KEY`.
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `list_image_models` | none | Lists local deterministic generation, the ima2 bridge boundary, and caller-supplied external import. |
+| `get_image_generation_defaults` | none | Returns ima2 defaults (`model=gpt-5.5`), `/Game/GeneratedImages`, root reference PNG directory, local-placeholder fallback, texture role presets, import defaults, and prompt redaction policy. |
+| `generate_image` | `prompt`, optional `resolution`, `texture_role`, destination/import settings | Generates a deterministic local BMP placeholder and imports it as `UTexture2D`. No network or API keys. Defaults generated imports to `texture_role=basecolor`. |
+| `generate_image_via_ima2` | `prompt`, optional `server_url`, `provider`, `model`, `quality`, `size`/`resolution`, `format`, `background`, `moderation`, `texture_role`, `references`/`reference_images`/`reference_image_paths`, destination/import settings | POSTs to the ima2/imag2-gen `/api/generate` endpoint, forwards `background=transparent|opaque|auto`, imports the first returned image through `asset.import_texture_from_bytes`, applies the requested texture role, stores redacted provenance, and archives reference inputs as PNGs under `<ProjectDir>/GeneratedImages`. |
+| `import_generated_image` | `bytes_b64`, optional `format_hint`, `prompt`, `provider`, `model`, `texture_role`, destination/import settings | Imports externally generated base64 image bytes through the same Texture2D ingest path, applies the requested texture role, and stores redacted provenance. |
+| `get_generated_asset_provenance` | `asset_path` | Reads `Monolith.Generated.*` metadata from a generated Texture2D asset. |
 
 ---
 

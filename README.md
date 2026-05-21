@@ -44,7 +44,7 @@ Most MCP integrations register every action as a separate tool, which floods the
 
 **Asset (11 actions)** — Shared asset ingest, lifecycle, and hygiene workflows. Import Texture2D assets from base64 image bytes or external files, import font families as composite `UFont`/`UFontFace` assets, save or delete generic assets, validate naming conventions, batch-rename assets through `IAssetTools`, and inspect or validate specialized assets with read-only enrichers.
 
-**ImageGen (5 actions)** — Generated-image provider discovery, local deterministic placeholder Texture2D generation, caller-supplied generated-image import, and redacted provenance metadata. Remote image providers are caller-owned; Monolith imports external bytes through `imagegen.import_generated_image`.
+**ImageGen (6 actions)** — Generated-image provider discovery, local deterministic placeholder Texture2D generation, ima2/imag2-gen bridge generation, caller-supplied generated-image import, and redacted provenance metadata. The bridge defaults to `provider="oauth"` and `model="gpt-5.5"` without Monolith-side API keys, imports assets under `/Game/GeneratedImages` when no destination is supplied, and archives reference inputs as PNG files under the project root `GeneratedImages` folder.
 
 **GAS (136 actions)** — Complete Gameplay Ability System integration. 132 GAS-namespace actions plus 4 widget attribute-binding actions also aliased into the `ui` namespace. Create and manage Gameplay Abilities with activation policies, cooldowns, costs, and tags. Full AttributeSet CRUD — both C++ and Blueprint-based (via optional GBA plugin). Ships with `ULeviathanVitalsSet` AttributeSet template (Phase J F4) so projects without GBA still get a working starter set. Gameplay Effect authoring with modifiers, duration policies, stacking, period, and conditional application. Ability System Component (ASC) management — grant/revoke abilities, apply/remove effects, query active abilities and effects. Gameplay Tag utilities. Gameplay Cue management — create, trigger, inspect cues for audio/visual feedback. Target data generation and targeting tasks. Input binding for ability activation. Runtime inspection and debugging tools. Scaffolding actions that generate complete GAS setups from templates. Accessibility-focused infinite-duration GEs for reduced difficulty modes.
 
@@ -299,7 +299,7 @@ Monolith.uplugin
   MonolithLevelDesign   — Horror/encounter/accessibility analysis, room/acoustic/genre presets, framing, co-op balance (61 actions)
   MonolithWorldGen      — Blockout, procedural structures/terrain, replacement workflows, and optional town-generation workflows (63 actions)
   MonolithModelGen      — Generated-model provider, job, import, and provenance workflows (7 actions)
-  MonolithImageGen      — Generated-image provider discovery, Texture2D import, and provenance workflows (5 actions)
+  MonolithImageGen      — Generated-image provider discovery, ima2 bridge generation, Texture2D import, and provenance workflows (6 actions)
   MonolithAsset         — Asset ingest, lifecycle, naming/rename hygiene, and specialized asset inspection (11 actions)
   MonolithAI            — Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, Controllers, Perception, Navigation (243 actions)
   MonolithEditor        — Build triggers, log capture, compile output, crash context, GIF capture, blank map factory, module status, automation test list/run, PIE/console control (36 actions)
@@ -340,7 +340,7 @@ Standalone Tools (in Binaries/)
 | `leveldesign` | `leveldesign_query` | 61 | Horror/encounter/accessibility analysis, room/acoustic/genre presets, framing, monster reveal, and co-op spatial balance. |
 | `worldgen` | `worldgen_query` | 63 | Blockout, replacement, procedural structures/terrain, and optional town-generation workflows. |
 | `modelgen` | `modelgen_query` | 7 | Generated-model providers, jobs, imports, and provenance. |
-| `imagegen` | `imagegen_query` | 5 | Generated-image provider discovery, deterministic local Texture2D generation, external image import, and provenance. |
+| `imagegen` | `imagegen_query` | 6 | Generated-image provider discovery, deterministic local Texture2D generation, ima2 bridge generation, external image import, reference PNG archival, and provenance. |
 | `ai` | `ai_query` | 243 | BT, BB, State Trees, EQS, Smart Objects, Controllers, Perception, Navigation, runtime debugging, scaffolding, Mass/Zone Graph. Conditional on `WITH_STATETREE` + `WITH_SMARTOBJECTS` |
 | `gas` | `gas_query` | 136 | Gameplay Ability System — abilities, effects, attributes (incl. `ULeviathanVitalsSet`), ASC, tags, cues, targeting, input, inspect, scaffold. Conditional on `WITH_GBA` for Blueprint AttributeSets |
 | `logicdriver` | `logicdriver_query` | 66 | Logic Driver Pro state machines — SM CRUD, graph read/write, JSON spec, scaffolding, components. Conditional on `WITH_LOGICDRIVER` |

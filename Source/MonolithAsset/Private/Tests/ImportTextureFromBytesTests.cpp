@@ -4,6 +4,7 @@
 // Core / test
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/PackageName.h"
 
 // JSON / registry
 #include "Dom/JsonObject.h"
@@ -11,6 +12,7 @@
 
 // Texture verification
 #include "Engine/Texture2D.h"
+#include "Engine/TextureDefines.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectGlobals.h"
 
@@ -104,6 +106,68 @@ bool FMonolithAssetImportTextureFromBytesBasicTest::RunTest(const FString& Param
             TestEqual(TEXT("Tex->Source SizeY == 2"), Tex->Source.GetSizeY(), (int64)2);
 #endif
         }
+    }
+
+    return true;
+}
+
+/**
+ * MonolithAsset.ImportTextureFromBytes.TextureRoleNormal
+ *
+ * Verifies that the role-specific import pipeline applies Unreal data-texture
+ * settings before save/import finalization and returns validation metadata.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithAssetImportTextureFromBytesTextureRoleNormalTest,
+    "MonolithAsset.ImportTextureFromBytes.TextureRoleNormal",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetImportTextureFromBytesTextureRoleNormalTest::RunTest(const FString& Parameters)
+{
+    const FString RedPngB64 = TEXT(
+        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFUlEQVR4nGP8z8Dwn4GB"
+        "gYEJRIAwAB8XAgICR7MUAAAAAElFTkSuQmCC");
+
+    TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+    Params->SetStringField(TEXT("destination"),
+        TEXT("/Game/Tests/Monolith/Asset/Textures/T_ImportBytesNormalRoleTest"));
+    Params->SetStringField(TEXT("bytes_b64"), RedPngB64);
+    Params->SetStringField(TEXT("format_hint"), TEXT("png"));
+    Params->SetStringField(TEXT("texture_role"), TEXT("normal"));
+    Params->SetBoolField(TEXT("save"), false);
+
+    const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), Params);
+
+    TestTrue(TEXT("normal role import bSuccess"), Result.bSuccess);
+    if (!Result.bSuccess || !Result.Result.IsValid())
+    {
+        AddError(FString::Printf(TEXT("Action error: %s (code %d)"),
+            *Result.ErrorMessage, Result.ErrorCode));
+        return false;
+    }
+
+    FString TextureRole;
+    TestTrue(TEXT("texture_role returned"),
+        Result.Result->TryGetStringField(TEXT("texture_role"), TextureRole));
+    TestEqual(TEXT("texture_role normal"), TextureRole, FString(TEXT("normal")));
+
+    const TSharedPtr<FJsonObject>* Validation = nullptr;
+    TestTrue(TEXT("validation returned"),
+        Result.Result->TryGetObjectField(TEXT("validation"), Validation) && Validation && Validation->IsValid());
+
+    FString AssetPath;
+    Result.Result->TryGetStringField(TEXT("asset_path"), AssetPath);
+    const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
+    UTexture2D* Tex = FindObject<UTexture2D>(nullptr, *(AssetPath + TEXT(".") + AssetName));
+    TestNotNull(TEXT("normal role UTexture2D exists"), Tex);
+    if (Tex)
+    {
+        TestFalse(TEXT("normal role disables sRGB"), Tex->SRGB != 0);
+        TestEqual(TEXT("normal role compression"), Tex->CompressionSettings, TC_Normalmap);
+        TestEqual(TEXT("normal role LOD group"), Tex->LODGroup, TEXTUREGROUP_WorldNormalMap);
+        TestEqual(TEXT("normal role AddressX"), Tex->AddressX, TA_Wrap);
+        TestEqual(TEXT("normal role AddressY"), Tex->AddressY, TA_Wrap);
     }
 
     return true;
