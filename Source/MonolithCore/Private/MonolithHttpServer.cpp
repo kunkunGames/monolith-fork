@@ -777,8 +777,20 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleResourcesList(const TSharedPt
 	FString Cursor;
 	if (Params.IsValid())
 	{
-		Params->TryGetNumberField(TEXT("limit"), LimitValue);
-		Params->TryGetStringField(TEXT("cursor"), Cursor);
+		if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithJsonUtils::ErrorResponse(
+				Id,
+				FMonolithJsonUtils::ErrInvalidParams,
+				TEXT("Parameter 'limit' must be a number"));
+		}
+		if (Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), Cursor))
+		{
+			return FMonolithJsonUtils::ErrorResponse(
+				Id,
+				FMonolithJsonUtils::ErrInvalidParams,
+				TEXT("Parameter 'cursor' must be a string"));
+		}
 	}
 
 	if (!FMath::IsFinite(LimitValue) ||
