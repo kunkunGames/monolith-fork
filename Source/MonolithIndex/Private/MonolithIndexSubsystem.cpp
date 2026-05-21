@@ -256,6 +256,12 @@ TArray<FSearchResult> UMonolithIndexSubsystem::Search(const FString& Query, int3
 	return Database->FullTextSearch(Query, Limit);
 }
 
+TArray<FSearchResult> UMonolithIndexSubsystem::Search(const FString& Query, int32 Limit, const FProjectSearchOptions& Options)
+{
+	if (!Database.IsValid() || !Database->IsOpen()) return {};
+	return Database->FullTextSearch(Query, Limit, Options);
+}
+
 TSharedPtr<FJsonObject> UMonolithIndexSubsystem::FindReferences(const FString& PackagePath)
 {
 	if (!Database.IsValid() || !Database->IsOpen()) return nullptr;

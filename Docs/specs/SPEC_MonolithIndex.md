@@ -17,7 +17,7 @@
 | Class | Responsibility |
 |-------|---------------|
 | `FMonolithIndexModule` | Registers 19 `project` actions and 13 `collection` actions through owner-scoped registration |
-| `FMonolithIndexDatabase` | RAII SQLite wrapper. 13 tables + 2 FTS5 + 6 triggers + 1 meta. DELETE journal mode, 64MB cache. Schema v2: `saved_hash` column (Blake3 `FIoHash` hex), `schema_version` meta key |
+| `FMonolithIndexDatabase` | RAII SQLite wrapper. 14 authoritative tables (including `asset_search_values` and `meta`) + 7 external-content FTS5 tables + 21 triggers. DELETE journal mode, 64MB cache. Schema v2: `saved_hash` column (Blake3 `FIoHash` hex), `schema_version` meta key |
 | `FMonolithIndexReview` | CRG-inspired navigation/review over the existing `dependencies` graph plus rebuildable CRG projection/cache tables. Provides bounded BFS impact radius, read-only health, execute-gated FTS/CRG repair, cached/query-time risk scoring, changed-path impact detection, advisory unused-asset discovery, pre-merge gate aggregation, CRG snapshot/diff comparison, review-hotspot ranking, and review-context packaging. Uses only the public `FMonolithIndexDatabase` surface — the DB impl file is untouched (additive, REQ-009) |
 | `UMonolithIndexSubsystem` | UEditorSubsystem. 3-layer indexing (startup delta, live AR callbacks, full fallback). Hash-based startup catch-up. Live batched AR delegates on 2s timer. Deep asset indexing with game-thread batching. Batches every 100 assets. Progress notifications |
 | `IMonolithIndexer` | Pure virtual interface: GetSupportedClasses(), IndexAsset(), GetName(), IsSentinel(), SupportsIncrementalIndex(), IndexScoped() |
@@ -38,16 +38,16 @@
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `search` | `query` (required), `limit` (50) | FTS5 full-text search across all indexed assets, nodes, variables, parameters |
+| `search` | `query` (required), `limit` (50), `include_content` (true) | FTS5 full-text search across indexed assets and graph/content signals. Default content-inclusive mode covers assets, nodes, variables, parameters, DataTable rows, actors, and curated `asset_search_values`; `include_content=false` keeps legacy asset/node-only behavior |
 | `find_references` | `asset_path` (required) | Bidirectional dependency lookup |
 | `find_by_type` | `asset_type` (required), `limit` (100), `offset` (0) | Filter assets by class with pagination |
-| `get_stats` | none | Row counts for all 13 tables + asset class breakdown (top 20) |
+| `get_stats` | none | Row counts for all 14 authoritative tables + asset class breakdown (top 20) |
 | `get_asset_details` | `asset_path` (required) | Deep inspection: nodes, variables, references for a single asset |
 | `list_gameplay_tags` | `prefix`, `limit`, `offset` (optional) | List indexed gameplay tags, optionally filtered by prefix |
 | `search_gameplay_tags` | `query` (required) | Search gameplay tags and return referencing assets |
 | `impact_radius` | `asset_path` (required), `direction` (both), `max_depth` (2), `max_results` (200), `dependency_type` | Bounded BFS over `dependencies`: who is impacted within N hops (cycle-safe, `truncated` flag) |
-| `health` | `include_counts` (true) | Read-only diagnostics: v2 schema, 6 triggers, FTS row parity, orphan deps, CRG projection table/index/parity checks, journal mode |
-| `repair_fts` | `target` (all\|assets\|nodes), `execute` (false) | Rebuild `fts_assets`/`fts_nodes`. Dry-run unless `execute=true` (sole write gate); refused while `IsIndexing()` |
+| `health` | `include_counts` (true) | Read-only diagnostics: v2 schema, 21 FTS triggers, row parity for all project FTS tables, orphan deps, CRG projection table/index/parity checks, journal mode |
+| `repair_fts` | `target` (all\|assets\|nodes\|variables\|parameters\|datatable_rows\|actors\|asset_search_values), `execute` (false) | Rebuild project FTS tables. Dry-run unless `execute=true` (sole write gate); refused while `IsIndexing()` |
 | `repair_crg_cache` | `scope` (all), `execute` (false) | Rebuild derived `crg_nodes`/`crg_edges`/`crg_node_metrics`/`crg_meta` from `assets` and `dependencies`. Dry-run unless `execute=true`; refused while `IsIndexing()` |
 | `risk_score` | `asset_path`/`seed`, `limit` (20), `min_tier` (low) | Cached risk `{score,tier,reasons[],raw_counts,cache}` from CRG projection when present; safe query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
 | `detect_changes` | `changed_paths` or `paths`, `max_results` (200), `detail_level` (minimal) | VCS-agnostic changed asset path mapping: `.uasset`/`.umap` path/name -> indexed assets -> risk + depth-1 dependency impact + review priorities. Path stems treat SQL `LIKE` wildcards (`_`, `%`) as literal filename characters. Never shells out to P4/git |
@@ -78,11 +78,18 @@
 
 ### Database Schema
 
-**13 Tables:** assets, nodes, connections, variables, parameters, dependencies, actors, tags, tag_references, configs, cpp_symbols, datatable_rows, meta
+**14 Authoritative Tables:** assets, nodes, connections, variables, parameters, dependencies, actors, tags, tag_references, configs, cpp_symbols, datatable_rows, asset_search_values, meta
 
-**2 FTS5 Virtual Tables:**
-- `fts_assets` — content=assets, tokenize='porter unicode61', columns: asset_name, asset_class, description, package_path
+**7 FTS5 Virtual Tables:**
+- `fts_assets` — content=assets, tokenize='porter unicode61', columns: asset_name, asset_class, description, package_path, module_name
 - `fts_nodes` — content=nodes, tokenize='porter unicode61', columns: node_name, node_class, node_type
+- `fts_variables` — content=variables, tokenize='porter unicode61', columns: var_name, var_type, category, default_value
+- `fts_parameters` — content=parameters, tokenize='porter unicode61', columns: param_name, param_type, param_group, default_value, source
+- `fts_datatable_rows` — content=datatable_rows, tokenize='porter unicode61', columns: row_name
+- `fts_actors` — content=actors, tokenize='porter unicode61', columns: actor_name, actor_class, actor_label
+- `fts_asset_search_values` — content=asset_search_values, tokenize='porter unicode61', columns: value_text
+
+`asset_search_values` stores curated supplemental values that do not belong in a primary structured table column but are high-signal for search, including Blueprint comments, pin/default text, and DataTable cell values. This keeps the schema modular while letting `project.search include_content=true` find content that old asset/name search missed.
 
 **DB Location:** `Plugins/Monolith/Saved/ProjectIndex.db`
 
@@ -163,11 +170,11 @@ and minimal review-context output-contract coverage.
 Invariants honored by the implementation:
 
 - `ProjectIndex.db` is **Schema v2** (`schema_version` meta key + `assets.saved_hash` column/index, `PRAGMA table_info` migration). `project.health` must validate v2, not generic v1.
-- 6 FTS triggers (`fts_assets`/`fts_nodes` × ai/ad/au) are external-content FTS5 → `'rebuild'` is valid for `repair_fts`.
+- 21 FTS triggers (seven project FTS tables × ai/ad/au) are external-content FTS5 → `'rebuild'` is valid for `repair_fts`.
 - `FMonolithIndexDatabase` exposes a raw `FSQLiteDatabase*` (`GetRawDatabase()`) with **no DB-internal lock**; writes are caller-serialized. `repair_fts` and `repair_crg_cache` must gate on `UMonolithIndexSubsystem::IsIndexing()` and run inside transaction-scoped helpers.
 - CRG projection rows are disposable: `crg_nodes` maps one row per asset, `crg_edges` maps one row per dependency, and `crg_node_metrics` stores `risk_score`, tier, reasons JSON, raw count JSON, and `scoring_version`. Missing projection rows are cache misses, not action failures; current scoring is v3 and includes a bounded UE-domain sensitivity signal.
 - Direct lookup helpers to build bounded traversal on: `GetDependenciesForAsset` (out / `source_asset_id`), `GetReferencersOfAsset` (in / `target_asset_id`).
-- Review action outputs expose a stable contract: `input`, `limits`, `truncated`, and `next_actions` where applicable; `project.detect_changes` exposes top-level `changed_entity_count` / `impacted_count` plus `review_priorities` in every detail level and standard-mode `changed_entities[]` / `impact` / empty `test_gaps[]`, treats `_` and `%` literally when using path stems for package-path suffix matching, `project.find_unused` exposes capped `items[]` with `asset_path`, `asset_name`, `asset_class`, `confidence`, and `reasons[]` fields, `project.pre_merge_check` exposes `decision`, `checks[]`, `findings[]`, `risk_score`, and standard-mode nested `health` / `change_analysis` / `unused` payloads, `project.snapshot` exposes dry-run or stored snapshot metadata and uses high-resolution auto labels when omitted, `project.diff_snapshots` exposes capped `new_nodes[]`, `removed_nodes[]`, `new_edges[]`, `removed_edges[]`, and `summary_counts` and fails with `status=error` when the current CRG projection cannot be queried, `project.review_hotspots` exposes capped `hotspots[]` plus optional `questions[]`, while `project.review_context` additionally exposes compact `top_risks[]` and `context[]` fields so agents can triage without pulling full details.
+- Review/search action outputs expose a stable contract: `input`, `limits`, `truncated`, and `next_actions` where applicable; `project.search` returns `match_source`, `match_table`, `match_field`, `match_object_path`, and `match_value` so agents can separate asset/node hits from content hits; `project.detect_changes` exposes top-level `changed_entity_count` / `impacted_count` plus `review_priorities` in every detail level and standard-mode `changed_entities[]` / `impact` / empty `test_gaps[]`, treats `_` and `%` literally when using path stems for package-path suffix matching, `project.find_unused` exposes capped `items[]` with `asset_path`, `asset_name`, `asset_class`, `confidence`, and `reasons[]` fields, `project.pre_merge_check` exposes `decision`, `checks[]`, `findings[]`, `risk_score`, and standard-mode nested `health` / `change_analysis` / `unused` payloads, `project.snapshot` exposes dry-run or stored snapshot metadata and uses high-resolution auto labels when omitted, `project.diff_snapshots` exposes capped `new_nodes[]`, `removed_nodes[]`, `new_edges[]`, `removed_edges[]`, and `summary_counts` and fails with `status=error` when the current CRG projection cannot be queried, `project.review_hotspots` exposes capped `hotspots[]` plus optional `questions[]`, while `project.review_context` additionally exposes compact `top_risks[]` and `context[]` fields so agents can triage without pulling full details.
 - Test precedent: extend `Private/Tests/MonolithIndexQueryTests.cpp` (`Monolith.IndexGuard.Project.*`, temp-DB fixture) — do not introduce a new directory or `WITH_DEV_AUTOMATION_TESTS` guard.
 
 ---

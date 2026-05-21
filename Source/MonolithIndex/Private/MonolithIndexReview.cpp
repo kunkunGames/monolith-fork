@@ -904,7 +904,7 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 		TEXT("assets"), TEXT("nodes"), TEXT("connections"), TEXT("variables"),
 		TEXT("parameters"), TEXT("dependencies"), TEXT("actors"), TEXT("tags"),
 		TEXT("tag_references"), TEXT("configs"), TEXT("cpp_symbols"),
-		TEXT("datatable_rows"), TEXT("meta") };
+		TEXT("datatable_rows"), TEXT("asset_search_values"), TEXT("meta") };
 	for (const TCHAR* T : ExpectedTables)
 	{
 		Check(FString::Printf(TEXT("table:%s"), T), ObjectExists(Db, TEXT("table"), T),
@@ -912,7 +912,10 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 				: FString::Printf(TEXT("missing table %s"), T));
 	}
 
-	static const TCHAR* ExpectedFts[] = { TEXT("fts_assets"), TEXT("fts_nodes") };
+	static const TCHAR* ExpectedFts[] = {
+		TEXT("fts_assets"), TEXT("fts_nodes"), TEXT("fts_variables"),
+		TEXT("fts_parameters"), TEXT("fts_datatable_rows"), TEXT("fts_actors"),
+		TEXT("fts_asset_search_values") };
 	for (const TCHAR* F : ExpectedFts)
 	{
 		const bool bHas = ObjectExists(Db, TEXT("table"), F);
@@ -923,7 +926,12 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 
 	static const TCHAR* ExpectedTriggers[] = {
 		TEXT("fts_assets_ai"), TEXT("fts_assets_ad"), TEXT("fts_assets_au"),
-		TEXT("fts_nodes_ai"), TEXT("fts_nodes_ad"), TEXT("fts_nodes_au") };
+		TEXT("fts_nodes_ai"), TEXT("fts_nodes_ad"), TEXT("fts_nodes_au"),
+		TEXT("fts_variables_ai"), TEXT("fts_variables_ad"), TEXT("fts_variables_au"),
+		TEXT("fts_parameters_ai"), TEXT("fts_parameters_ad"), TEXT("fts_parameters_au"),
+		TEXT("fts_datatable_rows_ai"), TEXT("fts_datatable_rows_ad"), TEXT("fts_datatable_rows_au"),
+		TEXT("fts_actors_ai"), TEXT("fts_actors_ad"), TEXT("fts_actors_au"),
+		TEXT("fts_asset_search_values_ai"), TEXT("fts_asset_search_values_ad"), TEXT("fts_asset_search_values_au") };
 	for (const TCHAR* Tr : ExpectedTriggers)
 	{
 		const bool bHas = ObjectExists(Db, TEXT("trigger"), Tr);
@@ -975,6 +983,19 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 	Check(TEXT("fts:nodes_row_parity"), NCnt == FNCnt,
 		FString::Printf(TEXT("nodes=%lld fts_nodes=%lld%s"), NCnt, FNCnt,
 			NCnt == FNCnt ? TEXT("") : TEXT(" (mismatch -> project.repair_fts)")));
+	auto CheckFtsParity = [&](const TCHAR* CheckName, const TCHAR* BaseTable, const TCHAR* FtsTable)
+	{
+		const int64 BaseCnt = CountRows(Db, FString::Printf(TEXT("SELECT COUNT(*) FROM %s;"), BaseTable));
+		const int64 FtsCnt = CountRows(Db, FString::Printf(TEXT("SELECT COUNT(*) FROM %s;"), FtsTable));
+		Check(CheckName, BaseCnt == FtsCnt,
+			FString::Printf(TEXT("%s=%lld %s=%lld%s"), BaseTable, BaseCnt, FtsTable, FtsCnt,
+				BaseCnt == FtsCnt ? TEXT("") : TEXT(" (mismatch -> project.repair_fts)")));
+	};
+	CheckFtsParity(TEXT("fts:variables_row_parity"), TEXT("variables"), TEXT("fts_variables"));
+	CheckFtsParity(TEXT("fts:parameters_row_parity"), TEXT("parameters"), TEXT("fts_parameters"));
+	CheckFtsParity(TEXT("fts:datatable_rows_row_parity"), TEXT("datatable_rows"), TEXT("fts_datatable_rows"));
+	CheckFtsParity(TEXT("fts:actors_row_parity"), TEXT("actors"), TEXT("fts_actors"));
+	CheckFtsParity(TEXT("fts:asset_search_values_row_parity"), TEXT("asset_search_values"), TEXT("fts_asset_search_values"));
 
 	bool bHasAllCrg = true;
 	static const TCHAR* ExpectedCrgTables[] = {
@@ -1049,6 +1070,16 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 		Counts->SetNumberField(TEXT("nodes"), static_cast<double>(NCnt));
 		Counts->SetNumberField(TEXT("dependencies"),
 			static_cast<double>(CountRows(Db, TEXT("SELECT COUNT(*) FROM dependencies;"))));
+		Counts->SetNumberField(TEXT("variables"),
+			static_cast<double>(CountRows(Db, TEXT("SELECT COUNT(*) FROM variables;"))));
+		Counts->SetNumberField(TEXT("parameters"),
+			static_cast<double>(CountRows(Db, TEXT("SELECT COUNT(*) FROM parameters;"))));
+		Counts->SetNumberField(TEXT("datatable_rows"),
+			static_cast<double>(CountRows(Db, TEXT("SELECT COUNT(*) FROM datatable_rows;"))));
+		Counts->SetNumberField(TEXT("actors"),
+			static_cast<double>(CountRows(Db, TEXT("SELECT COUNT(*) FROM actors;"))));
+		Counts->SetNumberField(TEXT("asset_search_values"),
+			static_cast<double>(CountRows(Db, TEXT("SELECT COUNT(*) FROM asset_search_values;"))));
 		if (bHasAllCrg)
 		{
 			Counts->SetNumberField(TEXT("crg_nodes"), static_cast<double>(CrgNodeCnt));
@@ -1089,12 +1120,17 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RepairFts(FMonolithIndexDatabase& 
 	const FString T = Target.IsEmpty() ? TEXT("all") : Target;
 	if (T == TEXT("all") || T == TEXT("assets")) FtsTables.Add(TEXT("fts_assets"));
 	if (T == TEXT("all") || T == TEXT("nodes")) FtsTables.Add(TEXT("fts_nodes"));
+	if (T == TEXT("all") || T == TEXT("variables")) FtsTables.Add(TEXT("fts_variables"));
+	if (T == TEXT("all") || T == TEXT("parameters")) FtsTables.Add(TEXT("fts_parameters"));
+	if (T == TEXT("all") || T == TEXT("datatable_rows")) FtsTables.Add(TEXT("fts_datatable_rows"));
+	if (T == TEXT("all") || T == TEXT("actors")) FtsTables.Add(TEXT("fts_actors"));
+	if (T == TEXT("all") || T == TEXT("asset_search_values")) FtsTables.Add(TEXT("fts_asset_search_values"));
 
 	if (FtsTables.Num() == 0)
 	{
 		Root->SetStringField(TEXT("status"), TEXT("error"));
 		Root->SetStringField(TEXT("summary"),
-			FString::Printf(TEXT("Unknown target '%s' (expected all|assets|nodes)"), *T));
+			FString::Printf(TEXT("Unknown target '%s' (expected all|assets|nodes|variables|parameters|datatable_rows|actors|asset_search_values)"), *T));
 		Root->SetArrayField(TEXT("warnings"), FJsonArr());
 		Root->SetBoolField(TEXT("truncated"), false);
 		AddNext(Root, { TEXT("project.health") });

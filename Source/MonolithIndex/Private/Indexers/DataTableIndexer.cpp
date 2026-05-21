@@ -1,5 +1,6 @@
 #include "Indexers/DataTableIndexer.h"
 #include "MonolithSettings.h"
+#include "Utility/MonolithSearchValueWriter.h"
 #include "Engine/DataTable.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
@@ -23,6 +24,11 @@ bool FDataTableIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 	Registry.GetAssets(Filter, DataTableAssets);
 
 	int32 RowsInserted = 0;
+	FMonolithSearchValueWriter SearchValues(DB);
+	if (SearchValues.IsEnabled())
+	{
+		DB.DeleteAssetSearchValuesBySourceKind(TEXT("datatable_field"));
+	}
 
 	// Compiler-idle gate is enforced by FMonolithCompilerSafeDispatch at the call site (see issue #19).
 
@@ -51,6 +57,14 @@ bool FDataTableIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 			{
 				RowsInserted++;
 			}
+
+			IndexRowSearchValues(
+				SearchValues,
+				RowStruct,
+				Pair.Value,
+				DTAssetId,
+				DTAssetData.PackageName.ToString(),
+				Pair.Key.ToString());
 		}
 	}
 
@@ -122,4 +136,44 @@ FString FDataTableIndexer::RowStructToJson(const UScriptStruct* RowStruct, const
 	auto Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Result);
 	FJsonSerializer::Serialize(JsonObj, *Writer, true);
 	return Result;
+}
+
+void FDataTableIndexer::IndexRowSearchValues(
+	FMonolithSearchValueWriter& SearchValues,
+	const UScriptStruct* RowStruct,
+	const void* RowData,
+	int64 AssetId,
+	const FString& TablePath,
+	const FString& RowName)
+{
+	if (!SearchValues.IsEnabled() || !RowStruct || !RowData)
+	{
+		return;
+	}
+
+	const FString ObjectPath = TablePath + TEXT(":") + RowName;
+	for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
+	{
+		FProperty* Prop = *It;
+		if (!Prop) continue;
+
+		FString ValueText;
+		const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(RowData);
+		if (!FMonolithSearchValueWriter::ExportPropertyValueForSearch(Prop, ValuePtr, ValueText))
+		{
+			continue;
+		}
+
+		const FString FieldName = Prop->GetName();
+		SearchValues.AddValue(
+			AssetId,
+			TEXT("datatable_field"),
+			RowName,
+			ObjectPath,
+			RowStruct->GetName(),
+			FieldName,
+			RowName + TEXT(".") + FieldName,
+			ValueText,
+			TEXT("datatable_row_field"));
+	}
 }

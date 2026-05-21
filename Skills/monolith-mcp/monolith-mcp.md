@@ -57,14 +57,16 @@ When the editor and MCP server are down, `source` / `project` / `bridge` actions
 
 ```
 Plugins\Monolith\Binaries\monolith_query.exe source search_source UObject --limit=5
+Plugins\Monolith\Binaries\monolith_query.exe project search Health --limit=10 --include-content=true
 Plugins\Monolith\Binaries\monolith_query.exe project review_context /Game/Path/Asset --detail-level=minimal
 Plugins\Monolith\Binaries\monolith_query.exe source health
 ```
 
-The CLI is the MCP-free equivalent of `source_query` / `project_query` / `bridge_query` only — other namespaces need the running editor.
+The CLI is the MCP-free equivalent of `source_query` / `project_query` / `bridge_query` only — other namespaces need the running editor. Offline `project search` matches live `project.search`: `--include-content=true` is the default and searches assets, nodes, variables, parameters, DataTable rows, actors, and supplemental values; use `--include-content=false` for asset/node-only search.
 
 ## Rules
 
 - Route through the **live catalog** before calling actions; action names can change between versions.
 - Prefer `monolith_find` → `monolith_discover(..., mode:"schema")` over guessing parameters.
 - After indexing completes, the matching CRG projection/cache rebuilds automatically; run `project repair_crg_cache --execute` or `source repair_crg_cache --execute` only when health reports stale parity.
+- When project search looks stale, run `project health` first; `project repair_fts --target=all --execute` rebuilds all seven project FTS tables.

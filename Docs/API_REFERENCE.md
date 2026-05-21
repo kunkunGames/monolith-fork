@@ -878,8 +878,8 @@ CRG-inspired navigation/review (additive, over the existing `dependencies` graph
 | Action | Key params | Purpose |
 |--------|-----------|---------|
 | `project.impact_radius` | `asset_path`*, `direction`=both, `max_depth`=2, `max_results`=200, `dependency_type` | Cycle-safe bounded BFS; returns `impacted_assets[]`, `edges[]`, `truncated` |
-| `project.health` | `include_counts`=true | Read-only: v2 schema, 6 triggers, FTS row parity, orphan deps, CRG projection table/index/parity checks, journal mode; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
-| `project.repair_fts` | `target`=all\|assets\|nodes, `execute`=false | Rebuild `fts_assets`/`fts_nodes`. `execute=true` is the sole write gate; refused while indexing |
+| `project.health` | `include_counts`=true | Read-only: v2 schema, 21 FTS triggers, row parity for all project FTS tables, orphan deps, CRG projection table/index/parity checks, journal mode; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
+| `project.repair_fts` | `target`=all\|assets\|nodes\|variables\|parameters\|datatable_rows\|actors\|asset_search_values, `execute`=false | Rebuild project FTS tables. `execute=true` is the sole write gate; refused while indexing |
 | `project.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `assets` and `dependencies`. Dry-run unless `execute=true`; refused while indexing; ProjectIndex completion also runs this rebuild automatically |
 | `project.risk_score` | `asset_path`/`seed`, `limit`=20, `min_tier`=low | `{score,tier,reasons[],raw_counts,cache}` from `crg_node_metrics` when available; query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
 | `project.detect_changes` | `changed_paths` or `paths`, `max_results`=200, `detail_level`=minimal | Changed `.uasset`/`.umap` path/name mapping to indexed assets, risk, depth-1 dependency impact, and review priorities; no P4/git shell-out |
@@ -892,12 +892,15 @@ CRG-inspired navigation/review (additive, over the existing `dependencies` graph
 
 ### `project.search`
 
-Full-text search across all indexed project assets, nodes, variables, and parameters.
+Full-text search across indexed project assets and graph/content signals. By default it searches assets, nodes, variables, parameters, DataTable rows, level actors, and curated supplemental values such as Blueprint comments and pin/default text.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | string | **required** | FTS5 search query (supports `AND`, `OR`, `NOT`, `prefix*`) |
 | `limit` | integer | optional | Default: `50` |
+| `include_content` | bool | optional | Default: `true`. Set `false` for legacy asset/node-only search when broad content matches are too noisy |
+
+Results include `asset_path`, `asset_name`, `asset_class`, `module_name`, `match_context`, `rank`, and match provenance fields: `match_source`, `match_table`, `match_field`, `match_object_path`, `match_value`. Use `match_source` to distinguish `asset`, `node`, `variable`, `parameter`, `datatable_row`, `actor`, and `supplemental_value` hits.
 
 ### `project.find_references`
 
@@ -1101,7 +1104,7 @@ Read-only live editor Slate UI inspection registered by `MonolithSlate`. The sta
 
 ## asset
 
-Asset ingest, generic lifecycle operations, specialized asset enrichment, and asset hygiene. **11 actions.** `MonolithAsset` owns the namespace.
+Asset ingest, generic lifecycle operations, specialized asset enrichment, asset hygiene, and fuzzy live-AssetRegistry search. **12 actions.** `MonolithAsset` owns the namespace.
 
 > For full param schemas, call `monolith_discover("asset")` at runtime.
 
@@ -1118,6 +1121,7 @@ Asset ingest, generic lifecycle operations, specialized asset enrichment, and as
 | `inspect_assets_batch` | Inspect multiple assets with per-row success/error results. |
 | `validate_specialized_asset` | Validate a specialized asset and report warnings without mutation. |
 | `batch_rename_assets` | Preview or apply batch asset renames through `IAssetTools::RenameAssets`. |
+| `find_assets` | Fuzzy, scored, typo-tolerant search over the live `AssetRegistry`. Ranks by asset name/path/class (optional tags) via the shared `FMonolithFuzzyMatch` engine. Params: `query`, `path`, `recursive`, `class_names` (alias `class`), `limit`, `threshold`, `include_tags`, `include_score_breakdown`. Sees unsaved session assets; distinct from offline `project` search and exact-name did-you-mean. |
 
 ---
 
@@ -1586,6 +1590,7 @@ When the editor is closed but you still need to query Monolith:
   - **RX-5 (`pre_merge_check`):** live `source.pre_merge_check` / `project.pre_merge_check` and offline `monolith_query <source|project> pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]` compose `health`, `detect_changes`, and optional `find_unused` into an advisory `decision` (`pass`/`warn`/`fail`), `checks[]`, and `findings[]`. The offline action remains read-only and VCS-agnostic; it never shells out to P4/git.
   - **RX-4 (`snapshot` / `diff_snapshots`):** live `source.snapshot` / `project.snapshot` and offline `monolith_query <source|project> snapshot [label] [--label=name] [--execute]` store derived CRG projection manifests in `crg_snapshots`; live `source.diff_snapshots` / `project.diff_snapshots` and offline `monolith_query <source|project> diff_snapshots <before> [after] [--before=label-or-id] [--after=label-or-id|current] [--limit=N]` compare stored/current manifests. Snapshot writes are explicit (`execute=true` / `--execute`); auto labels use high-resolution ticks when callers omit labels; dry-runs and diffs are read-only. Diffs against `current` fail with `status=error` if the CRG projection query cannot be read.
   - **RX-8 (`review_hotspots`):** `monolith_query <source|project> review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]`. Read-only global triage over cached/native fan, risk, and size signals; outputs capped `hotspots[]`, optional `questions[]`, and `next_actions[]`.
+  - **Project FTS content search:** live `project.search` and offline `monolith_query project search <query> [--limit=N] [--include-content=true|false]` default to content-inclusive FTS over assets, nodes, variables, parameters, DataTable rows, actors, and supplemental values. `include_content=false` is the compatibility/noise-control path for asset/node-only search. Offline `project health` and `project repair_fts` validate/rebuild all seven project FTS tables.
   - **Source graph (`build_crg_graph` / `search_crg_graph`):** `monolith_query source build_crg_graph --execute` rebuilds `Saved/graph.db` from `Saved/EngineSource.db` files, symbols, references, and inheritance. `monolith_query source search_crg_graph UObject --limit=5` searches `nodes_fts` first and falls back to LIKE search when FTS has no rows. `--graph-db` remains an override for copied or non-standard graph DB locations.
   - **RX-6 (`bridge search_asset_symbols`):** `monolith_query bridge search_asset_symbols [--asset-path=/Game/...] [--symbol=Name] [--limit=N] [--detail-level=minimal|standard]`. Requires exactly one of `asset_path`/`symbol`, opens `ProjectIndex.db` and `EngineSource.db` read-only from the default `Saved` directory, and returns the editor-compatible `links[]` shape with `confidence`, `reasons[]`, `asset`, `symbol`, `warnings[]`, `count`, `truncated`, and `lexical_only=true`. `--db`, `--source-db`, and `--project-db` remain overrides for copied or non-standard DB locations.
 - **`python Plugins/Monolith/Saved/monolith_offline.py`** — same actions, stdlib-only.

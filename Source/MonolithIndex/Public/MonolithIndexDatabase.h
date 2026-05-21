@@ -127,6 +127,41 @@ struct FIndexedDataTableRow
 	FString RowData; // JSON blob
 };
 
+struct FIndexedSearchValue
+{
+	int64 Id = 0;
+	int64 AssetId = 0;
+	FString SourceKind;
+	FString ObjectName;
+	FString ObjectPath;
+	FString ObjectClass;
+	FString FieldName;
+	FString FieldPath;
+	FString ValueText;
+	FString Signal;
+};
+
+struct FProjectSearchOptions
+{
+	bool bIncludeAssetMatches = true;
+	bool bIncludeNodeMatches = true;
+	bool bIncludeStructuredContent = false;
+	bool bIncludeSupplementalValues = false;
+
+	static FProjectSearchOptions AssetNodeOnly()
+	{
+		return FProjectSearchOptions();
+	}
+
+	static FProjectSearchOptions ContentInclusive()
+	{
+		FProjectSearchOptions Options;
+		Options.bIncludeStructuredContent = true;
+		Options.bIncludeSupplementalValues = true;
+		return Options;
+	}
+};
+
 struct FSearchResult
 {
 	FString AssetPath;
@@ -134,6 +169,11 @@ struct FSearchResult
 	FString AssetClass;
 	FString ModuleName;
 	FString MatchContext; // snippet around the match
+	FString MatchSource;
+	FString MatchTable;
+	FString MatchField;
+	FString MatchObjectPath;
+	FString MatchValue;
 	float Rank = 0.0f;
 };
 
@@ -215,8 +255,14 @@ public:
 	// --- DataTable Row CRUD ---
 	int64 InsertDataTableRow(const FIndexedDataTableRow& Row);
 
+	// --- Supplemental Search Values ---
+	int64 InsertAssetSearchValue(const FIndexedSearchValue& Value);
+	bool DeleteAssetSearchValuesForAsset(int64 AssetId);
+	bool DeleteAssetSearchValuesBySourceKind(const FString& SourceKind);
+
 	// --- FTS5 Search ---
 	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit = 50);
+	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit, const FProjectSearchOptions& Options);
 
 	// --- Stats ---
 	TSharedPtr<FJsonObject> GetStats();

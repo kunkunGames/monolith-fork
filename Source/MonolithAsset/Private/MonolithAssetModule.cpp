@@ -1,5 +1,6 @@
 #include "MonolithAssetModule.h"
 
+#include "MonolithAssetFindActions.h"
 #include "MonolithAssetFontIngestActions.h"
 #include "MonolithAssetHygieneActions.h"
 #include "MonolithAssetInspectionActions.h"
@@ -27,6 +28,7 @@ void FMonolithAssetModule::StartupModule()
 		FMonolithAssetLifecycleActions::RegisterActions(OwnedRegistry);
 		FMonolithAssetHygieneActions::RegisterValidateNamingConventions(OwnedRegistry);
 		FMonolithAssetInspectionActions::RegisterActions(OwnedRegistry);
+		FMonolithAssetFindActions::RegisterActions(OwnedRegistry);
 		FMonolithAssetHygieneActions::RegisterBatchRenameAssets(OwnedRegistry);
 	});
 

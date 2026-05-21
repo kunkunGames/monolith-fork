@@ -30,6 +30,15 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 	}
 	Limit = FMath::Clamp(Limit, 1, 1000);
 
+	bool bIncludeContent = true;
+	if (Params->HasField(TEXT("include_content")))
+	{
+		if (!Params->TryGetBoolField(TEXT("include_content"), bIncludeContent))
+		{
+			return FMonolithActionResult::Error(TEXT("'include_content' parameter must be a bool"), -32602);
+		}
+	}
+
 	UMonolithIndexSubsystem* Subsystem = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>();
 	if (!Subsystem)
 	{
@@ -45,7 +54,10 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 		return FMonolithActionResult::Success(Result);
 	}
 
-	TArray<FSearchResult> SearchResults = Subsystem->Search(Query, Limit);
+	const FProjectSearchOptions Options = bIncludeContent
+		? FProjectSearchOptions::ContentInclusive()
+		: FProjectSearchOptions::AssetNodeOnly();
+	TArray<FSearchResult> SearchResults = Subsystem->Search(Query, Limit, Options);
 
 	auto Result = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> ResultsArr;
@@ -58,6 +70,11 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 		Entry->SetStringField(TEXT("asset_class"), SR.AssetClass);
 		Entry->SetStringField(TEXT("module_name"), SR.ModuleName);
 		Entry->SetStringField(TEXT("match_context"), SR.MatchContext);
+		Entry->SetStringField(TEXT("match_source"), SR.MatchSource);
+		Entry->SetStringField(TEXT("match_table"), SR.MatchTable);
+		Entry->SetStringField(TEXT("match_field"), SR.MatchField);
+		Entry->SetStringField(TEXT("match_object_path"), SR.MatchObjectPath);
+		Entry->SetStringField(TEXT("match_value"), SR.MatchValue);
 		Entry->SetNumberField(TEXT("rank"), SR.Rank);
 		ResultsArr.Add(MakeShared<FJsonValueObject>(Entry));
 	}
@@ -73,5 +90,6 @@ TSharedPtr<FJsonObject> FProjectSearchAction::GetSchema()
 	return FParamSchemaBuilder()
 		.Required(TEXT("query"), TEXT("string"), TEXT("FTS5 search query (supports AND, OR, NOT, prefix*)"))
 		.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum results to return"), TEXT("50"))
+		.Optional(TEXT("include_content"), TEXT("bool"), TEXT("Include variable/parameter/DataTable/actor/supplemental matches"), TEXT("true"))
 		.Build();
 }

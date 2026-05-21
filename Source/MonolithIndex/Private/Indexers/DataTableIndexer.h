@@ -22,4 +22,11 @@ public:
 private:
 	/** Serialize a single row struct instance to a JSON string */
 	static FString RowStructToJson(const UScriptStruct* RowStruct, const void* RowData);
+	static void IndexRowSearchValues(
+		class FMonolithSearchValueWriter& SearchValues,
+		const UScriptStruct* RowStruct,
+		const void* RowData,
+		int64 AssetId,
+		const FString& TablePath,
+		const FString& RowName);
 };

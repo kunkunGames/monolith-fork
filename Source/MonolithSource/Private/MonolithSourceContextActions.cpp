@@ -343,7 +343,8 @@ void AddAssetMatchesForSymbol(
 		return;
 	}
 
-	for (const FSearchResult& SearchResult : ProjectIndex->Search(Candidate, Limit))
+	const FProjectSearchOptions SearchOptions = FProjectSearchOptions::AssetNodeOnly();
+	for (const FSearchResult& SearchResult : ProjectIndex->Search(Candidate, Limit, SearchOptions))
 	{
 		TArray<FString> Reasons;
 		double Score = 0.45;
@@ -715,7 +716,8 @@ FMonolithActionResult FMonolithSourceContextActions::HandleSearchItems(const TSh
 		}
 		else
 		{
-			for (const FSearchResult& SearchResult : ProjectIndex->Search(Query, Limit))
+			const FProjectSearchOptions SearchOptions = FProjectSearchOptions::AssetNodeOnly();
+			for (const FSearchResult& SearchResult : ProjectIndex->Search(Query, Limit, SearchOptions))
 			{
 				const FString Category = SearchResult.AssetClass.Contains(TEXT("World")) || SearchResult.AssetClass.Contains(TEXT("Level"))
 					? TEXT("level")

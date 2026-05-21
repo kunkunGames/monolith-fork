@@ -243,6 +243,30 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Indexing|Post-Pass Indexers")
 	bool bIndexDataTables = true;
 
+	/** Enable curated supplemental values for ProjectIndex FTS search (comments, pin defaults, DataTable text fields). */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Search Values")
+	bool bIndexSearchableValues = true;
+
+	/** Maximum supplemental search values stored per asset. */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Search Values", meta=(ClampMin="0", ClampMax="2000"))
+	int32 MaxSearchableValuesPerAsset = 256;
+
+	/** Maximum supplemental search values stored per indexed object such as one Blueprint node or DataTable row. */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Search Values", meta=(ClampMin="0", ClampMax="128"))
+	int32 MaxSearchableValuesPerObject = 16;
+
+	/** Maximum characters stored per supplemental search value. Longer values are truncated. */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Search Values", meta=(ClampMin="32", ClampMax="4096"))
+	int32 MaxSearchableValueChars = 512;
+
+	/** Maximum nested struct/container depth for supplemental value extraction. */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Search Values", meta=(ClampMin="0", ClampMax="6"))
+	int32 MaxSearchableObjectDepth = 2;
+
+	/** Maximum array/set/map entries inspected per supplemental searchable container. */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Search Values", meta=(ClampMin="0", ClampMax="256"))
+	int32 MaxSearchableContainerItems = 32;
+
 	/** Enable config/INI indexing */
 	UPROPERTY(config, EditAnywhere, Category="Indexing|Post-Pass Indexers")
 	bool bIndexConfigs = true;

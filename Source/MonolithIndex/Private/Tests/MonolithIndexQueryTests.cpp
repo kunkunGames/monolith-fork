@@ -179,9 +179,76 @@ bool FProjectRepairFtsDryRunTest::RunTest(const FString& Parameters)
 	TSharedPtr<FJsonObject> Dry = FMonolithIndexReview::RepairFts(T.Db, TEXT("all"), false);
 	TestEqual(TEXT("dry-run ok"), Dry->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	const TArray<TSharedPtr<FJsonValue>>* Plan = nullptr;
-	TestTrue(TEXT("plan present"), Dry->TryGetArrayField(TEXT("plan"), Plan) && Plan && Plan->Num() == 2);
+	TestTrue(TEXT("plan present"), Dry->TryGetArrayField(TEXT("plan"), Plan) && Plan && Plan->Num() == 7);
 	TSharedPtr<FJsonObject> Exec = FMonolithIndexReview::RepairFts(T.Db, TEXT("all"), true);
 	TestEqual(TEXT("execute ok"), Exec->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSearchContentInclusiveFtsTest, "Monolith.IndexGuard.Project.SearchContentInclusiveFts", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectSearchContentInclusiveFtsTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+
+	const FString Probe = TEXT("SearchProbeAlpha");
+
+	FIndexedVariable Var;
+	Var.AssetId = T.A;
+	Var.VarName = TEXT("CooldownSeconds");
+	Var.VarType = TEXT("float");
+	Var.DefaultValue = Probe;
+	TestTrue(TEXT("variable inserted"), T.Db.InsertVariable(Var) > 0);
+
+	FIndexedParameter Param;
+	Param.AssetId = T.D;
+	Param.ParamName = TEXT("EmissiveLabel");
+	Param.ParamType = TEXT("Scalar");
+	Param.DefaultValue = Probe;
+	Param.Source = TEXT("Material");
+	TestTrue(TEXT("parameter inserted"), T.Db.InsertParameter(Param) > 0);
+
+	FIndexedDataTableRow Row;
+	Row.AssetId = T.C;
+	Row.RowName = Probe;
+	Row.RowData = TEXT("{}");
+	TestTrue(TEXT("datatable row inserted"), T.Db.InsertDataTableRow(Row) > 0);
+
+	FIndexedActor Actor;
+	Actor.AssetId = T.B;
+	Actor.ActorName = TEXT("BP_SearchProbeActor_C_0");
+	Actor.ActorClass = TEXT("BP_SearchProbeActor_C");
+	Actor.ActorLabel = Probe;
+	TestTrue(TEXT("actor inserted"), T.Db.InsertActor(Actor) > 0);
+
+	FIndexedSearchValue SearchValue;
+	SearchValue.AssetId = T.E;
+	SearchValue.SourceKind = TEXT("blueprint_node_comment");
+	SearchValue.ObjectName = TEXT("Node With Comment");
+	SearchValue.ObjectPath = TEXT("EventGraph.00000000-0000-0000-0000-000000000001");
+	SearchValue.ObjectClass = TEXT("K2Node_CallFunction");
+	SearchValue.FieldName = TEXT("comment");
+	SearchValue.FieldPath = TEXT("EventGraph.comment");
+	SearchValue.ValueText = Probe;
+	SearchValue.Signal = TEXT("comment");
+	TestTrue(TEXT("supplemental search value inserted"), T.Db.InsertAssetSearchValue(SearchValue) > 0);
+
+	const TArray<FSearchResult> AssetOnly = T.Db.FullTextSearch(Probe, 50, FProjectSearchOptions::AssetNodeOnly());
+	TestEqual(TEXT("asset/node-only search does not pick content fields"), AssetOnly.Num(), 0);
+
+	const TArray<FSearchResult> Content = T.Db.FullTextSearch(Probe, 50, FProjectSearchOptions::ContentInclusive());
+	TSet<FString> Sources;
+	for (const FSearchResult& Result : Content)
+	{
+		Sources.Add(Result.MatchSource);
+	}
+
+	TestTrue(TEXT("variable FTS result present"), Sources.Contains(TEXT("variable")));
+	TestTrue(TEXT("parameter FTS result present"), Sources.Contains(TEXT("parameter")));
+	TestTrue(TEXT("datatable row FTS result present"), Sources.Contains(TEXT("datatable_row")));
+	TestTrue(TEXT("actor FTS result present"), Sources.Contains(TEXT("actor")));
+	TestTrue(TEXT("supplemental value FTS result present"), Sources.Contains(TEXT("supplemental_value")));
+
 	return true;
 }
 

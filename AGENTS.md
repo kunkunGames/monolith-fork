@@ -55,6 +55,10 @@ After a successful C++ build, Live Coding, or hot reload, EngineSource.db should
 
 Offline `monolith_query.exe` calls in the default checkout resolve built-in DB paths from the executable location: `source` resolves `Saved/EngineSource.db`, `project` resolves `Saved/ProjectIndex.db`, `bridge` resolves both, and source CRG graph actions resolve `Saved/graph.db`. `--db`, `--source-db`, `--project-db`, and `--graph-db` remain override options for copied or non-standard databases.
 
+Project search is content-inclusive by default. Live `project.search` and offline `Binaries\monolith_query.exe project search` search `fts_assets`, `fts_nodes`, `fts_variables`, `fts_parameters`, `fts_datatable_rows`, `fts_actors`, and `fts_asset_search_values` unless `include_content=false` / `--include-content=false` is specified. Search results include `match_source`, `match_table`, `match_field`, `match_object_path`, and `match_value`; use these provenance fields before treating a hit as an asset identity match.
+
+`project repair_fts --target=all` covers all seven project FTS tables. Prefer a dry-run first on the live editor DB; use `--execute` only when repair is intended and the DB is writable, or verify write behavior on a copied DB.
+
 ## 12. Offline Source/Bridge Usage
 
 When the Monolith MCP server or Unreal Editor is not running, agents can use `Binaries/monolith_query.exe` directly. The source namespace covers C++ search, references, callers, callees, review context, risk score, and CRG-compatible graph search. The bridge namespace links assets and source symbols through `bridge search_asset_symbols`.
@@ -68,6 +72,19 @@ Binaries\monolith_query.exe bridge search_asset_symbols --symbol=UObject --limit
 ```
 
 `source search_crg_graph` reads `Saved/graph.db` and uses `nodes_fts` before falling back to LIKE. `bridge search_asset_symbols` is read-only, opens `Saved/ProjectIndex.db` and `Saved/EngineSource.db`, and returns heuristic links with `confidence`, `reasons`, `asset`, `symbol`, `warnings`, `count`, `truncated`, and `lexical_only`.
+
+## 12a. Offline Project Search Usage
+
+Use offline project search when MCP/editor access is down but `Saved/ProjectIndex.db` is present:
+
+```powershell
+Binaries\monolith_query.exe project search Health --limit=10 --include-content=true
+Binaries\monolith_query.exe project search Health --limit=10 --include-content=false
+Binaries\monolith_query.exe project health --include-counts=true
+Binaries\monolith_query.exe project repair_fts --target=all
+```
+
+Default `--include-content=true` is the high-recall discovery mode. Use `--include-content=false` for bridge/source context, asset identity matching, or noisy name/type lookup. Do not duplicate `EngineSource.db` source symbols or `graph.db` nodes into `ProjectIndex.db`; use `source`/`bridge` actions for source relationships.
 
 ## 13. MCP Connection Recovery in Go Checkout
 

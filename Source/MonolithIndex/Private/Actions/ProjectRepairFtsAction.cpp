@@ -32,7 +32,7 @@ FMonolithActionResult FProjectRepairFtsAction::Execute(const TSharedPtr<FJsonObj
 TSharedPtr<FJsonObject> FProjectRepairFtsAction::GetSchema()
 {
 	return FParamSchemaBuilder()
-		.Optional(TEXT("target"), TEXT("string"), TEXT("all|assets|nodes"), TEXT("all"))
+		.Optional(TEXT("target"), TEXT("string"), TEXT("all|assets|nodes|variables|parameters|datatable_rows|actors|asset_search_values"), TEXT("all"))
 		.Optional(TEXT("execute"), TEXT("bool"), TEXT("Apply the rebuild (sole write gate). Default dry-run"), TEXT("false"))
 		.Build();
 }

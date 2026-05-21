@@ -536,10 +536,11 @@ public:
         if (rc != SQLITE_OK)
             die("Failed to open database: " + path + " — " + sqlite3_errmsg(db));
 
+        exec("PRAGMA busy_timeout=5000;");
         if (query_only)
             exec("PRAGMA query_only=ON;");
         else
-            exec("PRAGMA journal_mode=DELETE;");
+            exec("PRAGMA query_only=OFF;");
     }
 
     void open_or_create(const std::string& path) {
@@ -2115,14 +2116,14 @@ static Args parse_args(int argc, char* argv[]) {
                   << "\nBridge actions:\n"
                   << "  search_asset_symbols [--asset-path=/Game/...] [--symbol=Name] [--limit=N] [--detail-level=minimal|standard]\n"
                   << "\nProject actions:\n"
-                  << "  search <query> [--limit=N]\n"
+                  << "  search <query> [--limit=N] [--include-content=true|false]\n"
                   << "  find_by_type <asset_class> [--limit=N] [--offset=N]\n"
                   << "  find_references <asset_path>\n"
                   << "  get_stats\n"
                   << "  get_asset_details <asset_path>\n"
                   << "  impact_radius <asset_path> [--direction=in|out|both] [--max-depth=N] [--max-results=N] [--dependency-type=Hard|Soft]\n"
                   << "  health [--include-counts=false]\n"
-                  << "  repair_fts [--target=all|assets|nodes] [--execute]\n"
+                  << "  repair_fts [--target=all|assets|nodes|variables|parameters|datatable_rows|actors|asset_search_values] [--execute]\n"
                   << "  repair_crg_cache [--scope=all] [--execute]\n"
                   << "  risk_score [asset_path] [--limit=N] [--min-tier=low|medium|high]\n"
                   << "  review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
@@ -4253,17 +4254,15 @@ public:
     void search(const Args& args) {
         if (args.positional.empty()) die("search requires a query argument");
         std::string q = args.positional[0];
-        int limit = args.opt_int("limit", 50);
+        int limit = clamp_int(args.opt_int("limit", 50), 1, 1000);
+        bool include_content = args.opt_bool("include_content", true);
 
         json results = json::array();
 
-        // Search assets FTS
-        {
+        auto add_matches = [&](const std::string& fts_table, const std::string& sql, const std::string& match_source) {
+            if (!object_exists(db, "table", fts_table)) return;
             auto rows = query(db,
-                "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
-                "snippet(fts_assets, 2, '>>>', '<<<', '...', 32) as ctx, rank "
-                "FROM fts_assets f JOIN assets a ON a.id = f.rowid "
-                "WHERE fts_assets MATCH ? ORDER BY rank LIMIT " + std::to_string(limit),
+                sql + " LIMIT " + std::to_string(limit) + ";",
                 {q});
             for (auto& r : rows) {
                 results.push_back({
@@ -4272,30 +4271,79 @@ public:
                     {"asset_class", r.get("asset_class")},
                     {"module_name", r.get("module_name")},
                     {"match_context", r.get("ctx")},
+                    {"match_source", match_source},
+                    {"match_table", r.get("match_table")},
+                    {"match_field", r.get("match_field")},
+                    {"match_object_path", r.get("match_object_path")},
+                    {"match_value", r.get("match_value")},
                     {"rank", r.get_double("rank")},
                 });
             }
-        }
+        };
 
-        // Search nodes FTS
-        {
-            auto rows = query(db,
+        add_matches(
+            "fts_assets",
+            "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+            "snippet(fts_assets, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank AS rank, "
+            "'assets' AS match_table, 'asset' AS match_field, a.package_path AS match_object_path, a.asset_name AS match_value "
+            "FROM fts_assets f JOIN assets a ON a.id = f.rowid "
+            "WHERE fts_assets MATCH ? ORDER BY f.rank",
+            "asset");
+
+        add_matches(
+            "fts_nodes",
+            "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+            "snippet(fts_nodes, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank AS rank, "
+            "'nodes' AS match_table, n.node_name AS match_field, n.node_name AS match_object_path, n.node_class AS match_value "
+            "FROM fts_nodes f JOIN nodes n ON n.id = f.rowid JOIN assets a ON a.id = n.asset_id "
+            "WHERE fts_nodes MATCH ? ORDER BY f.rank",
+            "node");
+
+        if (include_content) {
+            add_matches(
+                "fts_variables",
                 "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
-                "snippet(fts_nodes, 0, '>>>', '<<<', '...', 32) as ctx, f.rank "
-                "FROM fts_nodes f JOIN nodes n ON n.id = f.rowid "
-                "JOIN assets a ON a.id = n.asset_id "
-                "WHERE fts_nodes MATCH ? ORDER BY f.rank LIMIT " + std::to_string(limit),
-                {q});
-            for (auto& r : rows) {
-                results.push_back({
-                    {"asset_path", r.get("package_path")},
-                    {"asset_name", r.get("asset_name")},
-                    {"asset_class", r.get("asset_class")},
-                    {"module_name", r.get("module_name")},
-                    {"match_context", r.get("ctx")},
-                    {"rank", r.get_double("rank")},
-                });
-            }
+                "snippet(fts_variables, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank AS rank, "
+                "'variables' AS match_table, v.var_name AS match_field, v.var_name AS match_object_path, v.default_value AS match_value "
+                "FROM fts_variables f JOIN variables v ON v.id = f.rowid JOIN assets a ON a.id = v.asset_id "
+                "WHERE fts_variables MATCH ? ORDER BY f.rank",
+                "variable");
+
+            add_matches(
+                "fts_parameters",
+                "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+                "snippet(fts_parameters, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank AS rank, "
+                "'parameters' AS match_table, p.param_name AS match_field, p.param_name AS match_object_path, p.default_value AS match_value "
+                "FROM fts_parameters f JOIN parameters p ON p.id = f.rowid JOIN assets a ON a.id = p.asset_id "
+                "WHERE fts_parameters MATCH ? ORDER BY f.rank",
+                "parameter");
+
+            add_matches(
+                "fts_datatable_rows",
+                "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+                "snippet(fts_datatable_rows, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank AS rank, "
+                "'datatable_rows' AS match_table, 'row_name' AS match_field, r.row_name AS match_object_path, r.row_name AS match_value "
+                "FROM fts_datatable_rows f JOIN datatable_rows r ON r.id = f.rowid JOIN assets a ON a.id = r.asset_id "
+                "WHERE fts_datatable_rows MATCH ? ORDER BY f.rank",
+                "datatable_row");
+
+            add_matches(
+                "fts_actors",
+                "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+                "snippet(fts_actors, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank AS rank, "
+                "'actors' AS match_table, ac.actor_label AS match_field, ac.actor_name AS match_object_path, ac.actor_class AS match_value "
+                "FROM fts_actors f JOIN actors ac ON ac.id = f.rowid JOIN assets a ON a.id = ac.asset_id "
+                "WHERE fts_actors MATCH ? ORDER BY f.rank",
+                "actor");
+
+            add_matches(
+                "fts_asset_search_values",
+                "SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+                "snippet(fts_asset_search_values, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank AS rank, "
+                "'asset_search_values' AS match_table, sv.field_name AS match_field, sv.object_path AS match_object_path, sv.value_text AS match_value "
+                "FROM fts_asset_search_values f JOIN asset_search_values sv ON sv.id = f.rowid JOIN assets a ON a.id = sv.asset_id "
+                "WHERE fts_asset_search_values MATCH ? ORDER BY f.rank",
+                "supplemental_value");
         }
 
         // Sort by rank, truncate
@@ -4388,7 +4436,8 @@ public:
         json stats;
         static const char* tables[] = {
             "assets", "nodes", "connections", "variables", "parameters",
-            "dependencies", "actors", "tags", "configs", "datatable_rows"
+            "dependencies", "actors", "tags", "tag_references", "configs",
+            "cpp_symbols", "datatable_rows", "asset_search_values", "meta"
         };
         for (auto t : tables) {
             auto rows = query(db, std::string("SELECT COUNT(*) as c FROM ") + t);
@@ -4587,11 +4636,18 @@ public:
             root["checks"].push_back({{"check", name}, {"result", pass ? "ok" : "warning"}, {"detail", detail}});
             if (!pass) root["warnings"].push_back(detail);
         };
-        for (const char* t : {"assets", "nodes", "connections", "variables", "parameters", "dependencies", "actors", "tags", "tag_references", "configs", "cpp_symbols", "datatable_rows", "meta"})
+        for (const char* t : {"assets", "nodes", "connections", "variables", "parameters", "dependencies", "actors", "tags", "tag_references", "configs", "cpp_symbols", "datatable_rows", "asset_search_values", "meta"})
             check(std::string("table:") + t, object_exists(db, "table", t), object_exists(db, "table", t) ? std::string("table ") + t + " present" : std::string("missing table ") + t);
-        for (const char* f : {"fts_assets", "fts_nodes"})
+        for (const char* f : {"fts_assets", "fts_nodes", "fts_variables", "fts_parameters", "fts_datatable_rows", "fts_actors", "fts_asset_search_values"})
             check(std::string("fts:") + f, object_exists(db, "table", f), object_exists(db, "table", f) ? std::string("FTS table ") + f + " present" : std::string("missing FTS table ") + f);
-        for (const char* tr : {"fts_assets_ai", "fts_assets_ad", "fts_assets_au", "fts_nodes_ai", "fts_nodes_ad", "fts_nodes_au"})
+        for (const char* tr : {
+            "fts_assets_ai", "fts_assets_ad", "fts_assets_au",
+            "fts_nodes_ai", "fts_nodes_ad", "fts_nodes_au",
+            "fts_variables_ai", "fts_variables_ad", "fts_variables_au",
+            "fts_parameters_ai", "fts_parameters_ad", "fts_parameters_au",
+            "fts_datatable_rows_ai", "fts_datatable_rows_ad", "fts_datatable_rows_au",
+            "fts_actors_ai", "fts_actors_ad", "fts_actors_au",
+            "fts_asset_search_values_ai", "fts_asset_search_values_ad", "fts_asset_search_values_au"})
             check(std::string("trigger:") + tr, object_exists(db, "trigger", tr), object_exists(db, "trigger", tr) ? std::string("trigger ") + tr + " present" : std::string("missing trigger ") + tr + " (FTS may drift)");
         std::string schema_ver = scalar_str(db, "SELECT value FROM meta WHERE key = 'schema_version';");
         check("meta:schema_version", !schema_ver.empty(), schema_ver.empty() ? "meta.schema_version missing (pre-v2 / corrupt)" : "schema_version=" + schema_ver);
@@ -4609,10 +4665,34 @@ public:
         int64_t facnt = count_rows(db, "SELECT COUNT(*) FROM fts_assets;");
         int64_t ncnt = count_rows(db, "SELECT COUNT(*) FROM nodes;");
         int64_t fncnt = count_rows(db, "SELECT COUNT(*) FROM fts_nodes;");
+        int64_t vcnt = count_rows(db, "SELECT COUNT(*) FROM variables;");
+        int64_t fvcnt = count_rows(db, "SELECT COUNT(*) FROM fts_variables;");
+        int64_t pcnt = count_rows(db, "SELECT COUNT(*) FROM parameters;");
+        int64_t fpcnt = count_rows(db, "SELECT COUNT(*) FROM fts_parameters;");
+        int64_t dtcnt = count_rows(db, "SELECT COUNT(*) FROM datatable_rows;");
+        int64_t fdtcnt = count_rows(db, "SELECT COUNT(*) FROM fts_datatable_rows;");
+        int64_t actorcnt = count_rows(db, "SELECT COUNT(*) FROM actors;");
+        int64_t factorcnt = count_rows(db, "SELECT COUNT(*) FROM fts_actors;");
+        int64_t svcnt = count_rows(db, "SELECT COUNT(*) FROM asset_search_values;");
+        int64_t fsvcnt = count_rows(db, "SELECT COUNT(*) FROM fts_asset_search_values;");
         check("fts:assets_row_parity", acnt == facnt, "assets=" + std::to_string(acnt) + " fts_assets=" + std::to_string(facnt) + (acnt == facnt ? "" : " (mismatch -> project.repair_fts)"));
         check("fts:nodes_row_parity", ncnt == fncnt, "nodes=" + std::to_string(ncnt) + " fts_nodes=" + std::to_string(fncnt) + (ncnt == fncnt ? "" : " (mismatch -> project.repair_fts)"));
+        check("fts:variables_row_parity", vcnt == fvcnt, "variables=" + std::to_string(vcnt) + " fts_variables=" + std::to_string(fvcnt) + (vcnt == fvcnt ? "" : " (mismatch -> project.repair_fts)"));
+        check("fts:parameters_row_parity", pcnt == fpcnt, "parameters=" + std::to_string(pcnt) + " fts_parameters=" + std::to_string(fpcnt) + (pcnt == fpcnt ? "" : " (mismatch -> project.repair_fts)"));
+        check("fts:datatable_rows_row_parity", dtcnt == fdtcnt, "datatable_rows=" + std::to_string(dtcnt) + " fts_datatable_rows=" + std::to_string(fdtcnt) + (dtcnt == fdtcnt ? "" : " (mismatch -> project.repair_fts)"));
+        check("fts:actors_row_parity", actorcnt == factorcnt, "actors=" + std::to_string(actorcnt) + " fts_actors=" + std::to_string(factorcnt) + (actorcnt == factorcnt ? "" : " (mismatch -> project.repair_fts)"));
+        check("fts:asset_search_values_row_parity", svcnt == fsvcnt, "asset_search_values=" + std::to_string(svcnt) + " fts_asset_search_values=" + std::to_string(fsvcnt) + (svcnt == fsvcnt ? "" : " (mismatch -> project.repair_fts)"));
         root["schema"] = {{"schema_version", schema_ver}, {"journal_mode", scalar_str(db, "PRAGMA journal_mode;")}};
-        if (include_counts) root["row_counts"] = {{"assets", acnt}, {"nodes", ncnt}, {"dependencies", count_rows(db, "SELECT COUNT(*) FROM dependencies;")}};
+        if (include_counts) root["row_counts"] = {
+            {"assets", acnt},
+            {"nodes", ncnt},
+            {"variables", vcnt},
+            {"parameters", pcnt},
+            {"datatable_rows", dtcnt},
+            {"actors", actorcnt},
+            {"asset_search_values", svcnt},
+            {"dependencies", count_rows(db, "SELECT COUNT(*) FROM dependencies;")}
+        };
         // RX-2: CRG projection-cache health parity (mirrors editor Health).
         int64_t dep_cnt = count_rows(db, "SELECT COUNT(*) FROM dependencies;");
         append_crg_health_checks(db, "project", acnt, dep_cnt, root);
@@ -4638,10 +4718,33 @@ public:
         std::vector<std::string> tables;
         if (t == "all" || t == "assets") tables.push_back("fts_assets");
         if (t == "all" || t == "nodes") tables.push_back("fts_nodes");
+        if (t == "all" || t == "variables") tables.push_back("fts_variables");
+        if (t == "all" || t == "parameters") tables.push_back("fts_parameters");
+        if (t == "all" || t == "datatable_rows") tables.push_back("fts_datatable_rows");
+        if (t == "all" || t == "actors") tables.push_back("fts_actors");
+        if (t == "all" || t == "asset_search_values") tables.push_back("fts_asset_search_values");
         if (tables.empty()) {
             root["status"] = "error";
-            root["summary"] = "Unknown target '" + t + "' (expected all|assets|nodes)";
+            root["summary"] = "Unknown target '" + t + "' (expected all|assets|nodes|variables|parameters|datatable_rows|actors|asset_search_values)";
             add_next(root, {"project.health"});
+            return root;
+        }
+        std::vector<std::string> missing;
+        for (const auto& table : tables) {
+            if (!object_exists(db, "table", table)) missing.push_back(table);
+        }
+        if (!missing.empty()) {
+            std::string joined;
+            for (const auto& table : missing) {
+                if (!joined.empty()) joined += ", ";
+                joined += table;
+                root["warnings"].push_back("missing FTS table " + table);
+            }
+            root["status"] = "error";
+            root["summary"] = "Missing selected FTS table(s): " + joined + ". Open the editor to run schema migration or run monolith_reindex after updating.";
+            root["before"] = json::object();
+            root["after"] = json::object();
+            add_next(root, {"project.health", "monolith_reindex"});
             return root;
         }
         json before = json::object();

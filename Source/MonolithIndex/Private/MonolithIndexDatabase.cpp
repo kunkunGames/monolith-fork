@@ -213,6 +213,143 @@ CREATE TABLE IF NOT EXISTS meta (
 
 )SQL");
 
+static const TCHAR* GCreateSearchValueTablesSQL = TEXT(R"SQL(
+
+-- Curated supplemental values that are valuable for search but do not belong in
+-- a primary structured table column (Blueprint comments, pin defaults, row fields).
+CREATE TABLE IF NOT EXISTS asset_search_values (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    source_kind TEXT NOT NULL,
+    object_name TEXT DEFAULT '',
+    object_path TEXT DEFAULT '',
+    object_class TEXT DEFAULT '',
+    field_name TEXT DEFAULT '',
+    field_path TEXT DEFAULT '',
+    value_text TEXT NOT NULL,
+    signal TEXT DEFAULT '',
+    indexed_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_search_values_asset ON asset_search_values(asset_id);
+CREATE INDEX IF NOT EXISTS idx_search_values_source ON asset_search_values(source_kind);
+
+-- FTS5 indexes over structured content columns that already exist in ProjectIndex.
+CREATE VIRTUAL TABLE IF NOT EXISTS fts_variables USING fts5(
+    var_name,
+    var_type,
+    category,
+    default_value,
+    content=variables,
+    content_rowid=id,
+    tokenize='porter unicode61'
+);
+CREATE TRIGGER IF NOT EXISTS fts_variables_ai AFTER INSERT ON variables BEGIN
+    INSERT INTO fts_variables(rowid, var_name, var_type, category, default_value)
+    VALUES (new.id, new.var_name, new.var_type, new.category, new.default_value);
+END;
+CREATE TRIGGER IF NOT EXISTS fts_variables_ad AFTER DELETE ON variables BEGIN
+    INSERT INTO fts_variables(fts_variables, rowid, var_name, var_type, category, default_value)
+    VALUES ('delete', old.id, old.var_name, old.var_type, old.category, old.default_value);
+END;
+CREATE TRIGGER IF NOT EXISTS fts_variables_au AFTER UPDATE ON variables BEGIN
+    INSERT INTO fts_variables(fts_variables, rowid, var_name, var_type, category, default_value)
+    VALUES ('delete', old.id, old.var_name, old.var_type, old.category, old.default_value);
+    INSERT INTO fts_variables(rowid, var_name, var_type, category, default_value)
+    VALUES (new.id, new.var_name, new.var_type, new.category, new.default_value);
+END;
+
+CREATE VIRTUAL TABLE IF NOT EXISTS fts_parameters USING fts5(
+    param_name,
+    param_type,
+    param_group,
+    default_value,
+    source,
+    content=parameters,
+    content_rowid=id,
+    tokenize='porter unicode61'
+);
+CREATE TRIGGER IF NOT EXISTS fts_parameters_ai AFTER INSERT ON parameters BEGIN
+    INSERT INTO fts_parameters(rowid, param_name, param_type, param_group, default_value, source)
+    VALUES (new.id, new.param_name, new.param_type, new.param_group, new.default_value, new.source);
+END;
+CREATE TRIGGER IF NOT EXISTS fts_parameters_ad AFTER DELETE ON parameters BEGIN
+    INSERT INTO fts_parameters(fts_parameters, rowid, param_name, param_type, param_group, default_value, source)
+    VALUES ('delete', old.id, old.param_name, old.param_type, old.param_group, old.default_value, old.source);
+END;
+CREATE TRIGGER IF NOT EXISTS fts_parameters_au AFTER UPDATE ON parameters BEGIN
+    INSERT INTO fts_parameters(fts_parameters, rowid, param_name, param_type, param_group, default_value, source)
+    VALUES ('delete', old.id, old.param_name, old.param_type, old.param_group, old.default_value, old.source);
+    INSERT INTO fts_parameters(rowid, param_name, param_type, param_group, default_value, source)
+    VALUES (new.id, new.param_name, new.param_type, new.param_group, new.default_value, new.source);
+END;
+
+CREATE VIRTUAL TABLE IF NOT EXISTS fts_datatable_rows USING fts5(
+    row_name,
+    content=datatable_rows,
+    content_rowid=id,
+    tokenize='porter unicode61'
+);
+CREATE TRIGGER IF NOT EXISTS fts_datatable_rows_ai AFTER INSERT ON datatable_rows BEGIN
+    INSERT INTO fts_datatable_rows(rowid, row_name)
+    VALUES (new.id, new.row_name);
+END;
+CREATE TRIGGER IF NOT EXISTS fts_datatable_rows_ad AFTER DELETE ON datatable_rows BEGIN
+    INSERT INTO fts_datatable_rows(fts_datatable_rows, rowid, row_name)
+    VALUES ('delete', old.id, old.row_name);
+END;
+CREATE TRIGGER IF NOT EXISTS fts_datatable_rows_au AFTER UPDATE ON datatable_rows BEGIN
+    INSERT INTO fts_datatable_rows(fts_datatable_rows, rowid, row_name)
+    VALUES ('delete', old.id, old.row_name);
+    INSERT INTO fts_datatable_rows(rowid, row_name)
+    VALUES (new.id, new.row_name);
+END;
+
+CREATE VIRTUAL TABLE IF NOT EXISTS fts_actors USING fts5(
+    actor_name,
+    actor_class,
+    actor_label,
+    content=actors,
+    content_rowid=id,
+    tokenize='porter unicode61'
+);
+CREATE TRIGGER IF NOT EXISTS fts_actors_ai AFTER INSERT ON actors BEGIN
+    INSERT INTO fts_actors(rowid, actor_name, actor_class, actor_label)
+    VALUES (new.id, new.actor_name, new.actor_class, new.actor_label);
+END;
+CREATE TRIGGER IF NOT EXISTS fts_actors_ad AFTER DELETE ON actors BEGIN
+    INSERT INTO fts_actors(fts_actors, rowid, actor_name, actor_class, actor_label)
+    VALUES ('delete', old.id, old.actor_name, old.actor_class, old.actor_label);
+END;
+CREATE TRIGGER IF NOT EXISTS fts_actors_au AFTER UPDATE ON actors BEGIN
+    INSERT INTO fts_actors(fts_actors, rowid, actor_name, actor_class, actor_label)
+    VALUES ('delete', old.id, old.actor_name, old.actor_class, old.actor_label);
+    INSERT INTO fts_actors(rowid, actor_name, actor_class, actor_label)
+    VALUES (new.id, new.actor_name, new.actor_class, new.actor_label);
+END;
+
+CREATE VIRTUAL TABLE IF NOT EXISTS fts_asset_search_values USING fts5(
+    value_text,
+    content=asset_search_values,
+    content_rowid=id,
+    tokenize='porter unicode61'
+);
+CREATE TRIGGER IF NOT EXISTS fts_asset_search_values_ai AFTER INSERT ON asset_search_values BEGIN
+    INSERT INTO fts_asset_search_values(rowid, value_text)
+    VALUES (new.id, new.value_text);
+END;
+CREATE TRIGGER IF NOT EXISTS fts_asset_search_values_ad AFTER DELETE ON asset_search_values BEGIN
+    INSERT INTO fts_asset_search_values(fts_asset_search_values, rowid, value_text)
+    VALUES ('delete', old.id, old.value_text);
+END;
+CREATE TRIGGER IF NOT EXISTS fts_asset_search_values_au AFTER UPDATE ON asset_search_values BEGIN
+    INSERT INTO fts_asset_search_values(fts_asset_search_values, rowid, value_text)
+    VALUES ('delete', old.id, old.value_text);
+    INSERT INTO fts_asset_search_values(rowid, value_text)
+    VALUES (new.id, new.value_text);
+END;
+
+)SQL");
+
 // ============================================================
 // Constructor / Destructor
 // ============================================================
@@ -299,6 +436,8 @@ bool FMonolithIndexDatabase::Open(const FString& InDbPath)
 
 	// Ensure hash index exists (safe for both fresh and migrated DBs)
 	ExecuteSQL(TEXT("CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(saved_hash);"));
+	WriteMeta(TEXT("asset_search_values_schema_version"), TEXT("1"));
+	WriteMeta(TEXT("asset_search_values_extractor_version"), TEXT("1"));
 
 	UE_LOG(LogMonolithIndex, Log, TEXT("Index database opened: %s"), *DbPath);
 	return true;
@@ -330,8 +469,28 @@ bool FMonolithIndexDatabase::ResetDatabase()
 	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_nodes_ai;"));
 	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_nodes_ad;"));
 	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_nodes_au;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_variables_ai;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_variables_ad;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_variables_au;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_parameters_ai;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_parameters_ad;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_parameters_au;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_datatable_rows_ai;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_datatable_rows_ad;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_datatable_rows_au;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_actors_ai;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_actors_ad;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_actors_au;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_asset_search_values_ai;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_asset_search_values_ad;"));
+	ExecuteSQL(TEXT("DROP TRIGGER IF EXISTS fts_asset_search_values_au;"));
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS fts_assets;"));
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS fts_nodes;"));
+	ExecuteSQL(TEXT("DROP TABLE IF EXISTS fts_variables;"));
+	ExecuteSQL(TEXT("DROP TABLE IF EXISTS fts_parameters;"));
+	ExecuteSQL(TEXT("DROP TABLE IF EXISTS fts_datatable_rows;"));
+	ExecuteSQL(TEXT("DROP TABLE IF EXISTS fts_actors;"));
+	ExecuteSQL(TEXT("DROP TABLE IF EXISTS fts_asset_search_values;"));
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS tag_references;"));
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS tags;"));
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS connections;"));
@@ -343,6 +502,7 @@ bool FMonolithIndexDatabase::ResetDatabase()
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS configs;"));
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS cpp_symbols;"));
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS datatable_rows;"));
+	ExecuteSQL(TEXT("DROP TABLE IF EXISTS asset_search_values;"));
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS meta;"));
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS assets;"));
 
@@ -806,6 +966,56 @@ int64 FMonolithIndexDatabase::InsertDataTableRow(const FIndexedDataTableRow& Row
 }
 
 // ============================================================
+// Supplemental Search Value CRUD
+// ============================================================
+
+int64 FMonolithIndexDatabase::InsertAssetSearchValue(const FIndexedSearchValue& Value)
+{
+	if (!IsOpen() || Value.AssetId <= 0 || Value.ValueText.TrimStartAndEnd().IsEmpty())
+	{
+		return -1;
+	}
+
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database, TEXT(
+		"INSERT INTO asset_search_values "
+		"(asset_id, source_kind, object_name, object_path, object_class, field_name, field_path, value_text, signal) "
+		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"));
+	Stmt.SetBindingValueByIndex(1, Value.AssetId);
+	Stmt.SetBindingValueByIndex(2, Value.SourceKind);
+	Stmt.SetBindingValueByIndex(3, Value.ObjectName);
+	Stmt.SetBindingValueByIndex(4, Value.ObjectPath);
+	Stmt.SetBindingValueByIndex(5, Value.ObjectClass);
+	Stmt.SetBindingValueByIndex(6, Value.FieldName);
+	Stmt.SetBindingValueByIndex(7, Value.FieldPath);
+	Stmt.SetBindingValueByIndex(8, Value.ValueText);
+	Stmt.SetBindingValueByIndex(9, Value.Signal);
+
+	if (!Stmt.Execute()) return -1;
+	return Database->GetLastInsertRowId();
+}
+
+bool FMonolithIndexDatabase::DeleteAssetSearchValuesForAsset(int64 AssetId)
+{
+	if (!IsOpen()) return false;
+
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database, TEXT("DELETE FROM asset_search_values WHERE asset_id = ?;"));
+	Stmt.SetBindingValueByIndex(1, AssetId);
+	return Stmt.Execute();
+}
+
+bool FMonolithIndexDatabase::DeleteAssetSearchValuesBySourceKind(const FString& SourceKind)
+{
+	if (!IsOpen()) return false;
+
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database, TEXT("DELETE FROM asset_search_values WHERE source_kind = ?;"));
+	Stmt.SetBindingValueByIndex(1, SourceKind);
+	return Stmt.Execute();
+}
+
+// ============================================================
 // Meta
 // ============================================================
 
@@ -956,7 +1166,7 @@ bool FMonolithIndexDatabase::UpdateAssetMetadata(const FIndexedAsset& Asset)
 	return false;
 }
 
-// Deletes per-asset child data that deep indexing repopulates (nodes, variables, parameters, datatable_rows).
+// Deletes per-asset child data that deep indexing repopulates (nodes, variables, parameters, datatable_rows, search_values).
 // Does NOT delete: dependencies (DependencyIndexer sentinel), tag_references (GameplayTagIndexer sentinel),
 // actors (LevelIndexer sentinel). Those are scoped separately.
 bool FMonolithIndexDatabase::DeleteChildDataForAsset(int64 AssetId)
@@ -984,6 +1194,11 @@ bool FMonolithIndexDatabase::DeleteChildDataForAsset(int64 AssetId)
 	Stmt4.Create(*Database, TEXT("DELETE FROM datatable_rows WHERE asset_id = ?;"));
 	Stmt4.SetBindingValueByIndex(1, AssetId);
 	bSuccess &= Stmt4.Execute();
+
+	FSQLitePreparedStatement Stmt5;
+	Stmt5.Create(*Database, TEXT("DELETE FROM asset_search_values WHERE asset_id = ?;"));
+	Stmt5.SetBindingValueByIndex(1, AssetId);
+	bSuccess &= Stmt5.Execute();
 
 	return bSuccess;
 }
@@ -1016,60 +1231,119 @@ bool FMonolithIndexDatabase::UpdateSavedHash(const FString& PackagePath, const F
 
 TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Query, int32 Limit)
 {
+	return FullTextSearch(Query, Limit, FProjectSearchOptions::AssetNodeOnly());
+}
+
+TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Query, int32 Limit, const FProjectSearchOptions& Options)
+{
 	TArray<FSearchResult> Results;
 	if (!IsOpen()) return Results;
 	const int32 ClampedLimit = FMath::Clamp(Limit, 1, 1000);
 
-	// Search assets FTS
-	FString SQL = TEXT("SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, snippet(fts_assets, -1, '>>>', '<<<', '...', 32) as ctx, rank FROM fts_assets f JOIN assets a ON a.id = f.rowid WHERE fts_assets MATCH ? ORDER BY rank LIMIT ?;");
-
-	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, *SQL);
-	Stmt.SetBindingValueByIndex(1, Query);
-	Stmt.SetBindingValueByIndex(2, static_cast<int64>(ClampedLimit));
-
-	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	auto AddMatches = [&](const FString& SQL, const FString& MatchSource)
 	{
-		FSearchResult R;
-		Stmt.GetColumnValueByIndex(0, R.AssetPath);
-		Stmt.GetColumnValueByIndex(1, R.AssetName);
-		Stmt.GetColumnValueByIndex(2, R.AssetClass);
-		Stmt.GetColumnValueByIndex(3, R.ModuleName);
-		Stmt.GetColumnValueByIndex(4, R.MatchContext);
-		double RankD = 0.0;
-		Stmt.GetColumnValueByIndex(5, RankD);
-		R.Rank = static_cast<float>(RankD);
-		Results.Add(MoveTemp(R));
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Database, *SQL))
+		{
+			return;
+		}
+		Stmt.SetBindingValueByIndex(1, Query);
+		Stmt.SetBindingValueByIndex(2, static_cast<int64>(ClampedLimit));
+
+		while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			FSearchResult R;
+			Stmt.GetColumnValueByIndex(0, R.AssetPath);
+			Stmt.GetColumnValueByIndex(1, R.AssetName);
+			Stmt.GetColumnValueByIndex(2, R.AssetClass);
+			Stmt.GetColumnValueByIndex(3, R.ModuleName);
+			Stmt.GetColumnValueByIndex(4, R.MatchContext);
+			double RankD = 0.0;
+			Stmt.GetColumnValueByIndex(5, RankD);
+			R.Rank = static_cast<float>(RankD);
+			R.MatchSource = MatchSource;
+			Stmt.GetColumnValueByIndex(6, R.MatchTable);
+			Stmt.GetColumnValueByIndex(7, R.MatchField);
+			Stmt.GetColumnValueByIndex(8, R.MatchObjectPath);
+			Stmt.GetColumnValueByIndex(9, R.MatchValue);
+			Results.Add(MoveTemp(R));
+		}
+	};
+
+	if (Options.bIncludeAssetMatches)
+	{
+		AddMatches(TEXT(
+			"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+			"snippet(fts_assets, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank, "
+			"'assets', 'asset', a.package_path, a.asset_name "
+			"FROM fts_assets f JOIN assets a ON a.id = f.rowid "
+			"WHERE fts_assets MATCH ? ORDER BY f.rank LIMIT ?;"),
+			TEXT("asset"));
 	}
 
-	// Also search nodes FTS
-	FString NodeSQL = TEXT("SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, snippet(fts_nodes, -1, '>>>', '<<<', '...', 32) as ctx, f.rank FROM fts_nodes f JOIN nodes n ON n.id = f.rowid JOIN assets a ON a.id = n.asset_id WHERE fts_nodes MATCH ? ORDER BY f.rank LIMIT ?;");
-
-	FSQLitePreparedStatement Stmt2;
-	Stmt2.Create(*Database, *NodeSQL);
-	Stmt2.SetBindingValueByIndex(1, Query);
-	Stmt2.SetBindingValueByIndex(2, static_cast<int64>(ClampedLimit));
-
-	while (Stmt2.Step() == ESQLitePreparedStatementStepResult::Row)
+	if (Options.bIncludeNodeMatches)
 	{
-		FSearchResult R;
-		Stmt2.GetColumnValueByIndex(0, R.AssetPath);
-		Stmt2.GetColumnValueByIndex(1, R.AssetName);
-		Stmt2.GetColumnValueByIndex(2, R.AssetClass);
-		Stmt2.GetColumnValueByIndex(3, R.ModuleName);
-		Stmt2.GetColumnValueByIndex(4, R.MatchContext);
-		double RankD = 0.0;
-		Stmt2.GetColumnValueByIndex(5, RankD);
-		R.Rank = static_cast<float>(RankD);
-		Results.Add(MoveTemp(R));
+		AddMatches(TEXT(
+			"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+			"snippet(fts_nodes, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank, "
+			"'nodes', n.node_name, n.node_name, n.node_class "
+			"FROM fts_nodes f JOIN nodes n ON n.id = f.rowid JOIN assets a ON a.id = n.asset_id "
+			"WHERE fts_nodes MATCH ? ORDER BY f.rank LIMIT ?;"),
+			TEXT("node"));
+	}
+
+	if (Options.bIncludeStructuredContent)
+	{
+		AddMatches(TEXT(
+			"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+			"snippet(fts_variables, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank, "
+			"'variables', v.var_name, v.var_name, v.default_value "
+			"FROM fts_variables f JOIN variables v ON v.id = f.rowid JOIN assets a ON a.id = v.asset_id "
+			"WHERE fts_variables MATCH ? ORDER BY f.rank LIMIT ?;"),
+			TEXT("variable"));
+
+		AddMatches(TEXT(
+			"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+			"snippet(fts_parameters, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank, "
+			"'parameters', p.param_name, p.param_name, p.default_value "
+			"FROM fts_parameters f JOIN parameters p ON p.id = f.rowid JOIN assets a ON a.id = p.asset_id "
+			"WHERE fts_parameters MATCH ? ORDER BY f.rank LIMIT ?;"),
+			TEXT("parameter"));
+
+		AddMatches(TEXT(
+			"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+			"snippet(fts_datatable_rows, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank, "
+			"'datatable_rows', 'row_name', r.row_name, r.row_name "
+			"FROM fts_datatable_rows f JOIN datatable_rows r ON r.id = f.rowid JOIN assets a ON a.id = r.asset_id "
+			"WHERE fts_datatable_rows MATCH ? ORDER BY f.rank LIMIT ?;"),
+			TEXT("datatable_row"));
+
+		AddMatches(TEXT(
+			"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+			"snippet(fts_actors, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank, "
+			"'actors', ac.actor_label, ac.actor_name, ac.actor_class "
+			"FROM fts_actors f JOIN actors ac ON ac.id = f.rowid JOIN assets a ON a.id = ac.asset_id "
+			"WHERE fts_actors MATCH ? ORDER BY f.rank LIMIT ?;"),
+			TEXT("actor"));
+	}
+
+	if (Options.bIncludeSupplementalValues)
+	{
+		AddMatches(TEXT(
+			"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
+			"snippet(fts_asset_search_values, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank, "
+			"'asset_search_values', sv.field_name, sv.object_path, sv.value_text "
+			"FROM fts_asset_search_values f JOIN asset_search_values sv ON sv.id = f.rowid JOIN assets a ON a.id = sv.asset_id "
+			"WHERE fts_asset_search_values MATCH ? ORDER BY f.rank LIMIT ?;"),
+			TEXT("supplemental_value"));
 	}
 
 	// Sort combined results by rank (lower = better in FTS5)
 	Results.Sort([](const FSearchResult& A, const FSearchResult& B) { return A.Rank < B.Rank; });
 
-	if (Results.Num() > Limit)
+	if (Results.Num() > ClampedLimit)
 	{
-		Results.SetNum(Limit);
+		Results.SetNum(ClampedLimit);
 	}
 
 	return Results;
@@ -1109,6 +1383,7 @@ TSharedPtr<FJsonObject> FMonolithIndexDatabase::GetStats()
 	Stats->SetNumberField(TEXT("configs"), GetCount(TEXT("configs")));
 	Stats->SetNumberField(TEXT("cpp_symbols"), GetCount(TEXT("cpp_symbols")));
 	Stats->SetNumberField(TEXT("datatable_rows"), GetCount(TEXT("datatable_rows")));
+	Stats->SetNumberField(TEXT("asset_search_values"), GetCount(TEXT("asset_search_values")));
 	Stats->SetNumberField(TEXT("tag_references"), GetCount(TEXT("tag_references")));
 	Stats->SetNumberField(TEXT("meta"), GetCount(TEXT("meta")));
 
@@ -1330,49 +1605,54 @@ bool FMonolithIndexDatabase::CreateTables()
 	// GCreateTablesSQL contains multiple statements separated by semicolons.
 	// FSQLiteDatabase::Execute() only handles one statement at a time,
 	// so we split and execute each individually.
-	FString FullSQL(GCreateTablesSQL);
 	TArray<FString> Statements;
 
-	// Split on semicolons, tracking BEGIN/END depth for trigger bodies
-	int32 Start = 0;
-	int32 Depth = 0;
-	for (int32 i = 0; i < FullSQL.Len(); ++i)
+	auto AppendStatements = [&Statements](const TCHAR* SqlText)
 	{
-		// Check for BEGIN keyword (trigger body start)
-		if (i + 5 <= FullSQL.Len())
+		FString FullSQL(SqlText);
+		// Split on semicolons, tracking BEGIN/END depth for trigger bodies
+		int32 Start = 0;
+		int32 Depth = 0;
+		for (int32 i = 0; i < FullSQL.Len(); ++i)
 		{
-			FString Word = FullSQL.Mid(i, 5).ToUpper();
-			if (Word == TEXT("BEGIN") && (i == 0 || FChar::IsWhitespace(FullSQL[i - 1]) || FullSQL[i - 1] == '\n'))
+			// Check for BEGIN keyword (trigger body start)
+			if (i + 5 <= FullSQL.Len())
 			{
-				if (i + 5 >= FullSQL.Len() || FChar::IsWhitespace(FullSQL[i + 5]) || FullSQL[i + 5] == '\n')
+				FString Word = FullSQL.Mid(i, 5).ToUpper();
+				if (Word == TEXT("BEGIN") && (i == 0 || FChar::IsWhitespace(FullSQL[i - 1]) || FullSQL[i - 1] == '\n'))
 				{
-					Depth++;
+					if (i + 5 >= FullSQL.Len() || FChar::IsWhitespace(FullSQL[i + 5]) || FullSQL[i + 5] == '\n')
+					{
+						Depth++;
+					}
 				}
 			}
-		}
-		// Check for END keyword (trigger body end)
-		if (i + 3 <= FullSQL.Len())
-		{
-			FString Word = FullSQL.Mid(i, 3).ToUpper();
-			if (Word == TEXT("END") && (i == 0 || FChar::IsWhitespace(FullSQL[i - 1]) || FullSQL[i - 1] == '\n'))
+			// Check for END keyword (trigger body end)
+			if (i + 3 <= FullSQL.Len())
 			{
-				if (i + 3 >= FullSQL.Len() || FullSQL[i + 3] == ';' || FChar::IsWhitespace(FullSQL[i + 3]))
+				FString Word = FullSQL.Mid(i, 3).ToUpper();
+				if (Word == TEXT("END") && (i == 0 || FChar::IsWhitespace(FullSQL[i - 1]) || FullSQL[i - 1] == '\n'))
 				{
-					if (Depth > 0) Depth--;
+					if (i + 3 >= FullSQL.Len() || FullSQL[i + 3] == ';' || FChar::IsWhitespace(FullSQL[i + 3]))
+					{
+						if (Depth > 0) Depth--;
+					}
 				}
 			}
-		}
 
-		if (FullSQL[i] == ';' && Depth == 0)
-		{
-			FString Stmt = FullSQL.Mid(Start, i - Start + 1).TrimStartAndEnd();
-			if (!Stmt.IsEmpty() && Stmt != TEXT(";"))
+			if (FullSQL[i] == ';' && Depth == 0)
 			{
-				Statements.Add(Stmt);
+				FString Stmt = FullSQL.Mid(Start, i - Start + 1).TrimStartAndEnd();
+				if (!Stmt.IsEmpty() && Stmt != TEXT(";"))
+				{
+					Statements.Add(Stmt);
+				}
+				Start = i + 1;
 			}
-			Start = i + 1;
 		}
-	}
+	};
+	AppendStatements(GCreateTablesSQL);
+	AppendStatements(GCreateSearchValueTablesSQL);
 
 	bool bAllSucceeded = true;
 	for (const FString& Stmt : Statements)

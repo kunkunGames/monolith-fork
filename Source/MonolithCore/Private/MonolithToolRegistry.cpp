@@ -1,4 +1,5 @@
 #include "MonolithToolRegistry.h"
+#include "MonolithFuzzyMatch.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithCrashBreadcrumb.h"
@@ -7,7 +8,8 @@
 #include "HAL/PlatformMisc.h"
 
 // =============================================================================
-//  CC-05 — Levenshtein helper (file-local, only used by FindSimilarActions)
+//  File-local helpers. FindSimilarActions edit distance now lives in
+//  FMonolithFuzzyMatch::EditDistanceBounded (MonolithFuzzyMatch.h).
 // =============================================================================
 namespace
 {
@@ -30,40 +32,6 @@ namespace
 		FString Name;
 		FString PreviousValue;
 	};
-
-	// Iterative Levenshtein distance. Both inputs are short (action names, ~20 chars),
-	// so a fixed-size stack buffer is plenty. Returns INT32_MAX on overflow.
-	int32 LevenshteinDistance(const FString& A, const FString& B)
-	{
-		const int32 La = A.Len();
-		const int32 Lb = B.Len();
-		if (La == 0) return Lb;
-		if (Lb == 0) return La;
-
-		// Use two rolling rows of size Lb+1.
-		TArray<int32> Prev, Curr;
-		Prev.SetNumUninitialized(Lb + 1);
-		Curr.SetNumUninitialized(Lb + 1);
-		for (int32 j = 0; j <= Lb; ++j) Prev[j] = j;
-
-		for (int32 i = 1; i <= La; ++i)
-		{
-			Curr[0] = i;
-			const TCHAR Ca = A[i - 1];
-			for (int32 j = 1; j <= Lb; ++j)
-			{
-				const TCHAR Cb = B[j - 1];
-				const int32 Cost = (FChar::ToLower(Ca) == FChar::ToLower(Cb)) ? 0 : 1;
-				Curr[j] = FMath::Min3(
-					Prev[j] + 1,        // deletion
-					Curr[j - 1] + 1,    // insertion
-					Prev[j - 1] + Cost  // substitution
-				);
-			}
-			Swap(Prev, Curr);
-		}
-		return Prev[Lb];
-	}
 
 	bool StartsWithAnyActionVerb(const FString& Action, const TArray<FString>& Verbs)
 	{
@@ -1176,7 +1144,7 @@ TArray<FString> FMonolithToolRegistry::FindSimilarActions(const FString& Namespa
 			continue;
 		}
 
-		const int32 Dist = LevenshteinDistance(ActionName, Cand);
+		const int32 Dist = FMonolithFuzzyMatch::EditDistanceBounded(ActionName, Cand, Threshold, /*bCaseInsensitive=*/true);
 		if (Dist <= Threshold)
 		{
 			Scored.Add({Cand, 2 + Dist});

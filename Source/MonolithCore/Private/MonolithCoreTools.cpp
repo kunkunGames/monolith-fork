@@ -1,5 +1,6 @@
 #include "MonolithCoreTools.h"
 #include "MonolithCoreModule.h"
+#include "MonolithFuzzyMatch.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithHttpServer.h"
 #include "MonolithMcpSessionTracker.h"
@@ -77,262 +78,34 @@ static TArray<TSharedPtr<FJsonValue>> StringArrayToJson(const TArray<FString>& V
 	return Result;
 }
 
-static bool IsFindTokenChar(TCHAR Ch)
+// MCP routing alias table for monolith.find query expansion. The fuzzy primitives
+// (normalize / tokenize / distance / score) now live in FMonolithFuzzyMatch; only this
+// find-specific alias policy stays here and is passed to FMonolithFuzzyMatch::Tokenize.
+static const TMap<FString, TArray<FString>>& GetFindAliasTable()
 {
-	return FChar::IsAlnum(Ch);
-}
-
-static bool IsIgnoredFindToken(const FString& Token)
-{
-	static const TSet<FString> IgnoredTokens = {
-		TEXT("a"), TEXT("an"), TEXT("and"), TEXT("for"), TEXT("from"), TEXT("in"), TEXT("of"),
-		TEXT("on"), TEXT("or"), TEXT("the"), TEXT("to"), TEXT("with"), TEXT("using"), TEXT("use")
+	static const TMap<FString, TArray<FString>> AliasTable = {
+		{ TEXT("bp"), { TEXT("blueprint") } },
+		{ TEXT("abp"), { TEXT("animation"), TEXT("blueprint") } },
+		{ TEXT("anim"), { TEXT("animation"), TEXT("blueprint") } },
+		{ TEXT("cpp"), { TEXT("source"), TEXT("symbol") } },
+		{ TEXT("cplusplus"), { TEXT("source"), TEXT("symbol") } },
+		{ TEXT("code"), { TEXT("source"), TEXT("symbol") } },
+		{ TEXT("vfx"), { TEXT("niagara") } },
+		{ TEXT("particle"), { TEXT("niagara") } },
+		{ TEXT("particles"), { TEXT("niagara") } },
+		{ TEXT("effect"), { TEXT("niagara") } },
+		{ TEXT("mat"), { TEXT("material") } },
+		{ TEXT("shader"), { TEXT("material") } },
+		{ TEXT("format"), { TEXT("arrange"), TEXT("auto") } },
+		{ TEXT("formatter"), { TEXT("arrange"), TEXT("auto") } },
+		{ TEXT("layout"), { TEXT("arrange"), TEXT("auto") } },
+		{ TEXT("arrange"), { TEXT("layout"), TEXT("format") } },
+		{ TEXT("ref"), { TEXT("reference"), TEXT("references") } },
+		{ TEXT("refs"), { TEXT("reference"), TEXT("references") } },
+		{ TEXT("caller"), { TEXT("callers") } },
+		{ TEXT("callee"), { TEXT("callees") } },
 	};
-	return IgnoredTokens.Contains(Token);
-}
-
-static FString NormalizeFindText(FString Text)
-{
-	Text.ToLowerInline();
-	Text.ReplaceInline(TEXT("c++"), TEXT(" cpp "));
-	Text.ReplaceInline(TEXT("c#"), TEXT(" csharp "));
-	Text.ReplaceInline(TEXT("blueprintassist"), TEXT(" blueprint assist "));
-
-	for (int32 Index = 0; Index < Text.Len(); ++Index)
-	{
-		if (!IsFindTokenChar(Text[Index]))
-		{
-			Text[Index] = TEXT(' ');
-		}
-	}
-
-	TArray<FString> Tokens;
-	Text.ParseIntoArrayWS(Tokens);
-	return FString::Join(Tokens, TEXT(" "));
-}
-
-static void AddUniqueFindToken(TArray<FString>& Tokens, TSet<FString>& Seen, const FString& Token)
-{
-	if (Token.Len() < 2 || IsIgnoredFindToken(Token) || Seen.Contains(Token))
-	{
-		return;
-	}
-	Seen.Add(Token);
-	Tokens.Add(Token);
-}
-
-static void AddFindAlias(TArray<FString>& Tokens, TSet<FString>& Seen, const FString& Alias)
-{
-	AddUniqueFindToken(Tokens, Seen, Alias);
-}
-
-static TArray<FString> TokenizeFindText(const FString& Text, bool bExpandAliases)
-{
-	TArray<FString> RawTokens;
-	NormalizeFindText(Text).ParseIntoArrayWS(RawTokens);
-
-	TArray<FString> Tokens;
-	TSet<FString> Seen;
-	for (const FString& Token : RawTokens)
-	{
-		AddUniqueFindToken(Tokens, Seen, Token);
-	}
-
-	if (bExpandAliases)
-	{
-		const TArray<FString> Snapshot = Tokens;
-		for (const FString& Token : Snapshot)
-		{
-			if (Token == TEXT("bp"))
-			{
-				AddFindAlias(Tokens, Seen, TEXT("blueprint"));
-			}
-			else if (Token == TEXT("abp") || Token == TEXT("anim"))
-			{
-				AddFindAlias(Tokens, Seen, TEXT("animation"));
-				AddFindAlias(Tokens, Seen, TEXT("blueprint"));
-			}
-			else if (Token == TEXT("cpp") || Token == TEXT("cplusplus") || Token == TEXT("code"))
-			{
-				AddFindAlias(Tokens, Seen, TEXT("source"));
-				AddFindAlias(Tokens, Seen, TEXT("symbol"));
-			}
-			else if (Token == TEXT("vfx") || Token == TEXT("particle") || Token == TEXT("particles") || Token == TEXT("effect"))
-			{
-				AddFindAlias(Tokens, Seen, TEXT("niagara"));
-			}
-			else if (Token == TEXT("mat") || Token == TEXT("shader"))
-			{
-				AddFindAlias(Tokens, Seen, TEXT("material"));
-			}
-			else if (Token == TEXT("format") || Token == TEXT("formatter") || Token == TEXT("layout"))
-			{
-				AddFindAlias(Tokens, Seen, TEXT("arrange"));
-				AddFindAlias(Tokens, Seen, TEXT("auto"));
-			}
-			else if (Token == TEXT("arrange"))
-			{
-				AddFindAlias(Tokens, Seen, TEXT("layout"));
-				AddFindAlias(Tokens, Seen, TEXT("format"));
-			}
-			else if (Token == TEXT("ref") || Token == TEXT("refs"))
-			{
-				AddFindAlias(Tokens, Seen, TEXT("reference"));
-				AddFindAlias(Tokens, Seen, TEXT("references"));
-			}
-			else if (Token == TEXT("caller"))
-			{
-				AddFindAlias(Tokens, Seen, TEXT("callers"));
-			}
-			else if (Token == TEXT("callee"))
-			{
-				AddFindAlias(Tokens, Seen, TEXT("callees"));
-			}
-		}
-	}
-
-	return Tokens;
-}
-
-static int32 FindTokenEditDistanceBounded(const FString& A, const FString& B, int32 MaxDistance)
-{
-	const int32 La = A.Len();
-	const int32 Lb = B.Len();
-	if (FMath::Abs(La - Lb) > MaxDistance)
-	{
-		return MaxDistance + 1;
-	}
-	if (La == 0)
-	{
-		return Lb;
-	}
-	if (Lb == 0)
-	{
-		return La;
-	}
-
-	TArray<int32> Prev;
-	TArray<int32> Curr;
-	Prev.SetNumUninitialized(Lb + 1);
-	Curr.SetNumUninitialized(Lb + 1);
-	for (int32 J = 0; J <= Lb; ++J)
-	{
-		Prev[J] = J;
-	}
-
-	for (int32 I = 1; I <= La; ++I)
-	{
-		Curr[0] = I;
-		int32 RowMin = Curr[0];
-		const TCHAR Ca = A[I - 1];
-		for (int32 J = 1; J <= Lb; ++J)
-		{
-			const TCHAR Cb = B[J - 1];
-			const int32 Cost = (Ca == Cb) ? 0 : 1;
-			Curr[J] = FMath::Min3(
-				Prev[J] + 1,
-				Curr[J - 1] + 1,
-				Prev[J - 1] + Cost);
-			RowMin = FMath::Min(RowMin, Curr[J]);
-		}
-		if (RowMin > MaxDistance)
-		{
-			return MaxDistance + 1;
-		}
-		Swap(Prev, Curr);
-	}
-
-	return Prev[Lb];
-}
-
-static bool IsFindTypoMatch(const FString& QueryToken, const FString& FieldToken)
-{
-	if (QueryToken.Len() < 4 || FieldToken.Len() < 4)
-	{
-		return false;
-	}
-	if (QueryToken[0] != FieldToken[0])
-	{
-		return false;
-	}
-
-	const int32 MaxDistance = FMath::Max(QueryToken.Len(), FieldToken.Len()) >= 7 ? 2 : 1;
-	return FindTokenEditDistanceBounded(QueryToken, FieldToken, MaxDistance) <= MaxDistance;
-}
-
-static int32 ScoreFindTokens(
-	const TArray<FString>& QueryTokens,
-	const TArray<FString>& FieldTokens,
-	const FString& FieldText,
-	int32 ExactWeight,
-	int32 PrefixWeight,
-	int32 ContainsWeight,
-	int32 FuzzyWeight,
-	const TCHAR* Reason,
-	TArray<FString>& OutReasons,
-	TSet<FString>& OutMatchedTokens)
-{
-	int32 Score = 0;
-	bool bAnyMatch = false;
-	bool bAnyFuzzyMatch = false;
-
-	for (const FString& Token : QueryTokens)
-	{
-		bool bMatched = false;
-		if (FieldTokens.Contains(Token))
-		{
-			Score += ExactWeight;
-			bMatched = true;
-		}
-		else
-		{
-			for (const FString& FieldToken : FieldTokens)
-			{
-				if (FieldToken.StartsWith(Token))
-				{
-					Score += PrefixWeight;
-					bMatched = true;
-					break;
-				}
-			}
-		}
-
-		if (!bMatched && FieldText.Contains(Token))
-		{
-			Score += ContainsWeight;
-			bMatched = true;
-		}
-
-		if (!bMatched && FuzzyWeight > 0)
-		{
-			for (const FString& FieldToken : FieldTokens)
-			{
-				if (IsFindTypoMatch(Token, FieldToken))
-				{
-					Score += FuzzyWeight;
-					bMatched = true;
-					bAnyFuzzyMatch = true;
-					break;
-				}
-			}
-		}
-
-		if (bMatched)
-		{
-			bAnyMatch = true;
-			OutMatchedTokens.Add(Token);
-		}
-	}
-
-	if (bAnyMatch)
-	{
-		OutReasons.Add(Reason);
-	}
-	if (bAnyFuzzyMatch)
-	{
-		OutReasons.Add(FString::Printf(TEXT("%s_fuzzy"), Reason));
-	}
-	return Score;
+	return AliasTable;
 }
 
 static FString BuildFindSchemaText(const TSharedPtr<FJsonObject>& Schema)
@@ -390,8 +163,8 @@ static FString BuildFindSchemaText(const TSharedPtr<FJsonObject>& Schema)
 
 static void AppendDerivedFindMetadata(const FMonolithActionInfo& Info, TArray<FString>& Parts)
 {
-	const FString Action = NormalizeFindText(Info.Action);
-	const FString Namespace = NormalizeFindText(Info.Namespace);
+	const FString Action = FMonolithFuzzyMatch::NormalizeText(Info.Action);
+	const FString Namespace = FMonolithFuzzyMatch::NormalizeText(Info.Namespace);
 	const FString ActionId = Namespace + TEXT(".") + Action;
 
 	if (Action.Contains(TEXT("auto layout")) || Action.Contains(TEXT("layout")))
@@ -1033,9 +806,9 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 	}
 
 	const int32 Limit = FMath::Clamp(static_cast<int32>(LimitValue), 1, 50);
-	const FString QueryNormalized = NormalizeFindText(Query);
-	const TArray<FString> QueryTokens = TokenizeFindText(Query, true);
-	const TArray<FString> OriginalQueryTokens = TokenizeFindText(Query, false);
+	const FString QueryNormalized = FMonolithFuzzyMatch::NormalizeText(Query);
+	const TArray<FString> QueryTokens = FMonolithFuzzyMatch::Tokenize(Query, &GetFindAliasTable());
+	const TArray<FString> OriginalQueryTokens = FMonolithFuzzyMatch::Tokenize(Query);
 
 	struct FFindMatch
 	{
@@ -1053,13 +826,13 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 	for (const FMonolithActionInfo& Info : Actions)
 	{
 		const FString ActionId = Info.Namespace + TEXT(".") + Info.Action;
-		const FString ActionIdNormalized = NormalizeFindText(ActionId);
-		const FString ActionNormalized = NormalizeFindText(Info.Action);
-		const FString NamespaceNormalized = NormalizeFindText(Info.Namespace);
-		const FString CategoryNormalized = NormalizeFindText(Info.Category);
-		const FString DescriptionNormalized = NormalizeFindText(Info.Description);
-		const FString MetadataNormalized = NormalizeFindText(BuildFindSearchMetadataText(Info));
-		const FString SchemaNormalized = NormalizeFindText(BuildFindSchemaText(Info.ParamSchema));
+		const FString ActionIdNormalized = FMonolithFuzzyMatch::NormalizeText(ActionId);
+		const FString ActionNormalized = FMonolithFuzzyMatch::NormalizeText(Info.Action);
+		const FString NamespaceNormalized = FMonolithFuzzyMatch::NormalizeText(Info.Namespace);
+		const FString CategoryNormalized = FMonolithFuzzyMatch::NormalizeText(Info.Category);
+		const FString DescriptionNormalized = FMonolithFuzzyMatch::NormalizeText(Info.Description);
+		const FString MetadataNormalized = FMonolithFuzzyMatch::NormalizeText(BuildFindSearchMetadataText(Info));
+		const FString SchemaNormalized = FMonolithFuzzyMatch::NormalizeText(BuildFindSchemaText(Info.ParamSchema));
 		const FString SearchText = FString::Printf(
 			TEXT("%s %s %s %s %s"),
 			*ActionIdNormalized,
@@ -1067,12 +840,12 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 			*DescriptionNormalized,
 			*MetadataNormalized,
 			*SchemaNormalized);
-		const TArray<FString> ActionTokens = TokenizeFindText(Info.Action, false);
-		const TArray<FString> NamespaceTokens = TokenizeFindText(Info.Namespace, false);
-		const TArray<FString> CategoryTokens = TokenizeFindText(Info.Category, false);
-		const TArray<FString> DescriptionTokens = TokenizeFindText(Info.Description, false);
-		const TArray<FString> MetadataTokens = TokenizeFindText(MetadataNormalized, false);
-		const TArray<FString> SchemaTokens = TokenizeFindText(SchemaNormalized, false);
+		const TArray<FString> ActionTokens = FMonolithFuzzyMatch::Tokenize(Info.Action);
+		const TArray<FString> NamespaceTokens = FMonolithFuzzyMatch::Tokenize(Info.Namespace);
+		const TArray<FString> CategoryTokens = FMonolithFuzzyMatch::Tokenize(Info.Category);
+		const TArray<FString> DescriptionTokens = FMonolithFuzzyMatch::Tokenize(Info.Description);
+		const TArray<FString> MetadataTokens = FMonolithFuzzyMatch::Tokenize(MetadataNormalized);
+		const TArray<FString> SchemaTokens = FMonolithFuzzyMatch::Tokenize(SchemaNormalized);
 
 		int32 Score = 0;
 		TArray<FString> Reasons;
@@ -1115,12 +888,12 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 			}
 		}
 
-		Score += ScoreFindTokens(QueryTokens, NamespaceTokens, NamespaceNormalized, 35, 22, 10, 6, TEXT("namespace_tokens"), Reasons, MatchedTokens);
-		Score += ScoreFindTokens(QueryTokens, ActionTokens, ActionNormalized, 45, 30, 16, 8, TEXT("action_tokens"), Reasons, MatchedTokens);
-		Score += ScoreFindTokens(QueryTokens, CategoryTokens, CategoryNormalized, 25, 16, 8, 4, TEXT("category_tokens"), Reasons, MatchedTokens);
-		Score += ScoreFindTokens(QueryTokens, DescriptionTokens, DescriptionNormalized, 10, 6, 4, 3, TEXT("description_tokens"), Reasons, MatchedTokens);
-		Score += ScoreFindTokens(QueryTokens, MetadataTokens, MetadataNormalized, 38, 24, 10, 8, TEXT("metadata_tokens"), Reasons, MatchedTokens);
-		Score += ScoreFindTokens(QueryTokens, SchemaTokens, SchemaNormalized, 16, 10, 4, 3, TEXT("schema_tokens"), Reasons, MatchedTokens);
+		Score += FMonolithFuzzyMatch::ScoreTokens(QueryTokens, NamespaceTokens, NamespaceNormalized, FMonolithFuzzyWeights{ 35, 22, 10, 6 }, TEXT("namespace_tokens"), Reasons, MatchedTokens);
+		Score += FMonolithFuzzyMatch::ScoreTokens(QueryTokens, ActionTokens, ActionNormalized, FMonolithFuzzyWeights{ 45, 30, 16, 8 }, TEXT("action_tokens"), Reasons, MatchedTokens);
+		Score += FMonolithFuzzyMatch::ScoreTokens(QueryTokens, CategoryTokens, CategoryNormalized, FMonolithFuzzyWeights{ 25, 16, 8, 4 }, TEXT("category_tokens"), Reasons, MatchedTokens);
+		Score += FMonolithFuzzyMatch::ScoreTokens(QueryTokens, DescriptionTokens, DescriptionNormalized, FMonolithFuzzyWeights{ 10, 6, 4, 3 }, TEXT("description_tokens"), Reasons, MatchedTokens);
+		Score += FMonolithFuzzyMatch::ScoreTokens(QueryTokens, MetadataTokens, MetadataNormalized, FMonolithFuzzyWeights{ 38, 24, 10, 8 }, TEXT("metadata_tokens"), Reasons, MatchedTokens);
+		Score += FMonolithFuzzyMatch::ScoreTokens(QueryTokens, SchemaTokens, SchemaNormalized, FMonolithFuzzyWeights{ 16, 10, 4, 3 }, TEXT("schema_tokens"), Reasons, MatchedTokens);
 
 		const int32 OriginalTokenCount = OriginalQueryTokens.Num();
 		int32 MatchedOriginalTokenCount = 0;

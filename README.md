@@ -349,7 +349,7 @@ Standalone Tools (in Binaries/)
 | `ui` | `ui_query` | 119 (64 + 51 + 4) | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility. CommonUI 51 actions conditional on `WITH_COMMONUI`. 4 GAS attribute-binding aliases also live here |
 | `editor` | `editor_query` | 36 | Build triggers, error logs, compile output, crash context, scene capture, GIF capture, texture import, blank map factory, module status, UE automation test list/run, selection inspection, PIE control, console command execution |
 | `config` | `config_query` | 6 | INI resolution, explain, diff, search |
-| `project` | `project_query` | 7 | Deep project search — FTS5 across all indexed assets including marketplace plugins |
+| `project` | `project_query` | 19 | Deep project search/review — content-inclusive FTS5 across assets, graph nodes, variables, parameters, DataTables, actors, supplemental values, and marketplace plugins |
 | `source` | `source_query` | 11 | Native C++ engine source lookup, call graphs, class hierarchy, project reindex, hot-reload-aware refresh |
 | `level_sequence` | `level_sequence_query` | 8 | Level Sequence inspection: full binding inventory (one row per Guid×BindingIndex with kind classification — legacy Possessable/Spawnable + UE 5.7 UMovieSceneSpawnableActorBinding / Replaceable / Custom), Director Blueprint own functions (user / custom_event / sequencer_endpoint) and variables, event-track bindings with Director-function resolution, cross-sequence reverse lookup of function callers |
 
@@ -405,14 +405,17 @@ Plugins/Monolith/Binaries/monolith_query.exe source build_crg_graph --execute
 Plugins/Monolith/Binaries/monolith_query.exe source search_crg_graph UObject --limit=5
 
 # Project asset queries (JSON output)
-Plugins/Monolith/Binaries/monolith_query.exe project search damage --limit=10
+Plugins/Monolith/Binaries/monolith_query.exe project search damage --limit=10 --include-content=true
+Plugins/Monolith/Binaries/monolith_query.exe project search damage --limit=10 --include-content=false
 Plugins/Monolith/Binaries/monolith_query.exe project find_by_type Blueprint --limit=20
 Plugins/Monolith/Binaries/monolith_query.exe project get_stats
 ```
 
 Auto-detects database paths relative to exe location. No configuration needed: `source` opens `Saved/EngineSource.db`, `project` opens `Saved/ProjectIndex.db`, `bridge` opens both, and source CRG graph actions use `Saved/graph.db`. Default plugin checkout commands can use those paths without DB override arguments; reserve overrides for copied databases or non-standard layouts.
 
-**Source:** `Tools/MonolithQuery/monolith_query.cpp` (1080 lines)
+`project search` matches the live MCP action: content-inclusive search is the default and returns match provenance fields (`match_source`, `match_table`, `match_field`, `match_object_path`, `match_value`). Use `--include-content=false` when you only want legacy asset/node hits.
+
+**Source:** `Tools/MonolithQuery/monolith_query.cpp`
 
 ### Building from Source
 
@@ -422,8 +425,8 @@ Both tools use standard C/C++ with no UE dependency:
 # Proxy (requires WinHTTP, nlohmann/json header-only)
 cl /O2 /EHsc /std:c++17 Tools/MonolithProxy/monolith_proxy.cpp /Fe:Binaries/monolith_proxy.exe winhttp.lib
 
-# Query tool (sqlite3 amalgamation bundled)
-cl /O2 /EHsc /std:c++17 Tools/MonolithQuery/monolith_query.cpp /Fe:Binaries/monolith_query.exe
+# Query tool (sqlite3 amalgamation bundled; enables FTS5)
+cmd /c Tools\MonolithQuery\build.bat
 ```
 
 Precompiled binaries are included in every release — building from source is only needed if you want to modify the tools.

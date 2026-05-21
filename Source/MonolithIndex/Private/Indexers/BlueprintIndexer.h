@@ -19,6 +19,6 @@ public:
 	virtual FString GetName() const override { return TEXT("BlueprintIndexer"); }
 
 private:
-	void IndexGraph(class UEdGraph* Graph, FMonolithIndexDatabase& DB, int64 AssetId);
+	void IndexGraph(class UEdGraph* Graph, FMonolithIndexDatabase& DB, int64 AssetId, class FMonolithSearchValueWriter& SearchValues);
 	void IndexVariables(class UBlueprint* Blueprint, FMonolithIndexDatabase& DB, int64 AssetId);
 };

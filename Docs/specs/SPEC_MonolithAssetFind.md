@@ -5,7 +5,7 @@
 **Owner module:** `MonolithCore` (shared `FMonolithFuzzyMatch` engine), `MonolithAsset` (`asset.find_assets` action)
 **Namespace:** `asset` (new action), `monolith` (refactored)
 **MCP tool:** `asset_query`, `monolith_find`
-**Status:** Proposed (2026-05-21)
+**Status:** Implemented (2026-05-21) — Phase 1 (`FMonolithFuzzyMatch` engine + `monolith.find`/`FindSimilarActions` refactor) built and verified (all `Monolith.Core` automation tests pass, incl. 6 new `FuzzyMatch` tests + `FindSimilarActions` parity); Phase 2 (`asset.find_assets`) built and registered. Phase 3 (`FMonolithDidYouMean`) intentionally not done (YAGNI).
 
 ---
 

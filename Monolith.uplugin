@@ -166,6 +166,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "MonolithAsset",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "MonolithBlueprint",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
@@ -217,11 +222,6 @@
 		},
 		{
 			"Name": "MonolithUI",
-			"Type": "Editor",
-			"LoadingPhase": "Default"
-		},
-		{
-			"Name": "MonolithAsset",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
 		},

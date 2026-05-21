@@ -1,4 +1,5 @@
 #include "Indexers/BlueprintIndexer.h"
+#include "Utility/MonolithSearchValueWriter.h"
 #include "Engine/Blueprint.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
@@ -17,6 +18,8 @@ bool FBlueprintIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 	UBlueprint* Blueprint = Cast<UBlueprint>(LoadedAsset);
 	if (!Blueprint) return false;
 
+	FMonolithSearchValueWriter SearchValues(DB);
+
 	// Index all graphs
 	TArray<UEdGraph*> AllGraphs;
 	Blueprint->GetAllGraphs(AllGraphs);
@@ -25,7 +28,7 @@ bool FBlueprintIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 	{
 		if (Graph)
 		{
-			IndexGraph(Graph, DB, AssetId);
+			IndexGraph(Graph, DB, AssetId, SearchValues);
 		}
 	}
 
@@ -35,7 +38,7 @@ bool FBlueprintIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedA
 	return true;
 }
 
-void FBlueprintIndexer::IndexGraph(UEdGraph* Graph, FMonolithIndexDatabase& DB, int64 AssetId)
+void FBlueprintIndexer::IndexGraph(UEdGraph* Graph, FMonolithIndexDatabase& DB, int64 AssetId, FMonolithSearchValueWriter& SearchValues)
 {
 	if (!Graph) return;
 
@@ -89,6 +92,58 @@ void FBlueprintIndexer::IndexGraph(UEdGraph* Graph, FMonolithIndexDatabase& DB, 
 		if (NodeId >= 0)
 		{
 			NodeIdMap.Add(Node, NodeId);
+		}
+
+		const FString NodeTitle = IndexedNode.NodeName;
+		const FString ObjectPath = FString::Printf(
+			TEXT("%s.%s"),
+			*Graph->GetName(),
+			*Node->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+		if (!Node->NodeComment.TrimStartAndEnd().IsEmpty())
+		{
+			SearchValues.AddValue(
+				AssetId,
+				TEXT("blueprint_node_comment"),
+				NodeTitle,
+				ObjectPath,
+				IndexedNode.NodeClass,
+				TEXT("comment"),
+				ObjectPath + TEXT(".comment"),
+				Node->NodeComment,
+				TEXT("comment"));
+		}
+
+		for (UEdGraphPin* Pin : Node->Pins)
+		{
+			if (!Pin || Pin->Direction != EGPD_Input || Pin->LinkedTo.Num() > 0)
+			{
+				continue;
+			}
+
+			FString DefaultValue = Pin->DefaultValue;
+			if (DefaultValue.IsEmpty() && !Pin->DefaultTextValue.IsEmpty())
+			{
+				DefaultValue = Pin->DefaultTextValue.ToString();
+			}
+			if (DefaultValue.IsEmpty() && Pin->DefaultObject)
+			{
+				DefaultValue = Pin->DefaultObject->GetPathName();
+			}
+
+			if (!DefaultValue.TrimStartAndEnd().IsEmpty())
+			{
+				const FString PinName = Pin->PinName.ToString();
+				SearchValues.AddValue(
+					AssetId,
+					TEXT("blueprint_pin_default"),
+					NodeTitle,
+					ObjectPath,
+					IndexedNode.NodeClass,
+					PinName,
+					ObjectPath + TEXT(".") + PinName,
+					DefaultValue,
+					TEXT("pin_default"));
+			}
 		}
 	}
 

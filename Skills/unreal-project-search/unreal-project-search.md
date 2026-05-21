@@ -31,7 +31,7 @@ All asset paths follow UE content browser format (no .uasset extension):
 
 | Action | Params | Purpose |
 |--------|--------|---------|
-| `search` | `query` (string) | Full-text search across all indexed assets, nodes, variables, parameters |
+| `search` | `query` (string), `limit`?, `include_content`? | Full-text search across indexed assets plus graph/content signals. `include_content` defaults to `true`; set `false` for asset/node-only search |
 | `find_references` | `asset_path` (string) | Find all assets that reference a given asset |
 | `find_by_type` | `asset_type` (string), `module`? (string) | List all assets of a specific type, optionally filtered by plugin/module |
 | `get_asset_details` | `asset_path` (string) | Detailed metadata for a specific asset |
@@ -63,7 +63,7 @@ All asset paths follow UE content browser format (no .uasset extension):
 | `snapshot` | `label`?, `execute`? | Capture an index snapshot for later diffing |
 | `diff_snapshots` | `before`, `after`? | Diff two index snapshots |
 | `health` | `include_counts`? | Index health/parity check |
-| `repair_fts` | `target`?, `execute`? | Rebuild FTS index when search looks stale |
+| `repair_fts` | `target`?, `execute`? | Rebuild project FTS tables when search looks stale. Targets: `all`, `assets`, `nodes`, `variables`, `parameters`, `datatable_rows`, `actors`, `asset_search_values` |
 | `repair_crg_cache` | `scope`?, `execute`? | Rebuild project CRG projection/cache |
 
 > Asset **Collections** moved to their own namespace — see `unreal-collection`.
@@ -71,7 +71,7 @@ All asset paths follow UE content browser format (no .uasset extension):
 
 ## FTS5 Search Syntax
 
-The `search` action uses SQLite FTS5 under the hood. Key syntax:
+The `search` action uses SQLite FTS5 under the hood. By default it searches asset metadata, graph nodes, variables, parameters, DataTable row names, level actors, and curated supplemental values such as Blueprint comments and pin/default text.
 
 | Pattern | Meaning |
 |---------|---------|
@@ -81,6 +81,16 @@ The `search` action uses SQLite FTS5 under the hood. Key syntax:
 | `BP_Enemy OR BP_Ally` | Either term |
 | `BP_Enemy NOT Health` | Exclude term |
 | `BP_Enemy NEAR/3 Health` | Terms within 3 tokens |
+
+Search results expose provenance fields so agents can judge relevance without fetching the whole asset:
+
+| Field | Meaning |
+|-------|---------|
+| `match_source` | One of `asset`, `node`, `variable`, `parameter`, `datatable_row`, `actor`, `supplemental_value` |
+| `match_table` | Backing SQLite/FTS table for the hit |
+| `match_field` | Field or object name that matched |
+| `match_object_path` | Node/object path or asset path associated with the hit |
+| `match_value` | Matched value payload when available |
 
 ## Common Workflows
 
@@ -111,7 +121,7 @@ project_query({ action: "get_asset_details", params: { asset_path: "/Game/Bluepr
 
 ### Check index health
 ```
-project_query({ action: "get_stats", params: {} })
+project_query({ action: "health", params: { include_counts: true } })
 ```
 
 ### Find all Niagara systems
@@ -122,6 +132,11 @@ project_query({ action: "find_by_type", params: { asset_type: "NiagaraSystem" } 
 ### Find assets by variable or parameter name
 ```
 project_query({ action: "search", params: { query: "Health" } })
+```
+
+### Search only asset/node names when content matches are too broad
+```
+project_query({ action: "search", params: { query: "Health", include_content: false } })
 ```
 
 ## Supported Asset Types
@@ -137,8 +152,9 @@ The index covers these types for `find_by_type`:
 ## Tips
 
 - The index is built on first launch and auto-updates — use `monolith_reindex()` to force rebuild
-- FTS5 search covers asset names, node names, variable names, parameter names, and comments
+- FTS5 search covers asset names, node names, variable names, parameter names, DataTable row names, level actors, Blueprint comments, pin/default text, and curated supplemental values
+- Prefer the default `include_content=true` for discovery; use `include_content=false` only when content hits are too noisy for a name/type lookup
 - Use `find_references` to understand dependency chains before deleting or renaming assets
 - Combine with domain-specific tools: search first, then inspect with `blueprint_query`, `material_query`, etc.
-- `get_stats` shows last index time — if stale, trigger `monolith_reindex()`
+- `health` reports FTS parity and stale index symptoms; if stale, run `repair_fts execute=true` or trigger `monolith_reindex()` depending on the warning
 - Call `monolith_discover('namespace')` to see required/optional params for every action

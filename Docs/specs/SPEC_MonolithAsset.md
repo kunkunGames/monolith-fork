@@ -38,6 +38,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | `inspect_assets_batch` | `FMonolithAssetInspectionActions` | Inspect multiple assets with per-row success/error results. |
 | `validate_specialized_asset` | `FMonolithAssetInspectionActions` | Validate a specialized asset and report warnings without mutation. |
 | `batch_rename_assets` | `FMonolithAssetHygieneActions` | Preview or apply batch asset renames through `IAssetTools::RenameAssets`. |
+| `find_assets` | `FMonolithAssetFindActions` | Fuzzy, scored, typo-tolerant search over the live `AssetRegistry`; ranks by asset name/path/class (and optional tags) via the shared MonolithCore `FMonolithFuzzyMatch` engine. |
 
 ## 4. Build.cs Dependencies
 
@@ -61,6 +62,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | Lifecycle | `Public/MonolithAssetLifecycleActions.h`, `Private/MonolithAssetLifecycleActions.cpp` | Owns generic file texture import, asset save, and guarded delete operations previously scattered under editor/blueprint. |
 | Hygiene | `Public/MonolithAssetHygieneActions.h`, `Private/MonolithAssetHygieneActions.cpp` | Owns naming convention validation and batch rename fixup. |
 | Inspection | `Public/MonolithAssetInspectionActions.h`, `Private/MonolithAssetInspectionActions.cpp` | Former specialized asset inspection surface, now independent from `MonolithMaterial`. |
+| Find | `Public/MonolithAssetFindActions.h`, `Private/MonolithAssetFindActions.cpp` | Fuzzy live-`AssetRegistry` search (`asset.find_assets`); thin consumer of MonolithCore `FMonolithFuzzyMatch`, owns its own corpus/fields/weights. Distinct from exact-name `FMonolithAssetUtils::FindAssetCandidates` and offline `project` FTS search. |
 
 ## 7. Texture Role Pipeline
 
@@ -68,14 +70,16 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 
 | Role | Import / post-processing contract |
 |------|-----------------------------------|
-| `ui_icon`, `sprite` | `sRGB=true`, `TEXTUREGROUP_UI`, `TMGS_NoMipmaps`, clamp addressing, edge-background alpha extraction for opaque-background generated images, and transparent-pixel RGB alpha bleed. |
-| `decal` | `sRGB=true`, `TEXTUREGROUP_Effects`, group mips, clamp addressing, edge-background alpha extraction, alpha bleed, power-of-two warning. |
+| `ui_icon`, `sprite` | `sRGB=true`, `TEXTUREGROUP_UI`, `TMGS_NoMipmaps`, clamp addressing, edge-connected background alpha extraction for opaque-background generated images, and transparent-pixel RGB alpha bleed. |
+| `decal` | `sRGB=true`, `TEXTUREGROUP_Effects`, group mips, clamp addressing, edge-connected background alpha extraction, alpha bleed, power-of-two warning. |
 | `basecolor` | `sRGB=true`, `TC_Default`, `TEXTUREGROUP_World`, group mips, wrap addressing. |
 | `world_tile` | Base-color world settings plus wrap addressing, one-pixel opposite-edge seam harmonization, power-of-two check, and opposite-edge seam validation. |
 | `normal` | `sRGB=false`, `TC_Normalmap`, `TEXTUREGROUP_WorldNormalMap`, wrap addressing, power-of-two and tangent-space normal plausibility validation. |
 | `orm_mask` | `sRGB=false`, `TC_Masks`, `TEXTUREGROUP_WorldSpecular`, wrap addressing, channel-range validation. |
 | `height` | `sRGB=false`, `TC_Grayscale`, `TEXTUREGROUP_World`, wrap addressing, channel-range validation. |
 | `emissive` | `sRGB=true`, `TEXTUREGROUP_Effects`, group mips, clamp addressing. |
+
+For opaque-background generated images, alpha extraction first classifies pixels similar to the sampled edge background color, then flood-fills only those candidate pixels that are connected to an image edge. Disconnected interior pixels that resemble the background color remain opaque so highlights, pale hair, and enclosed details are not erased by global color keying.
 
 The action result includes `texture_role`, `settings_applied`, and `validation`. Validation is non-destructive and returns warnings instead of failing the import unless normal parameter validation fails. `settings.alpha_from_edge_background=false` disables generated alpha extraction, `settings.tile_seam_harmonize=false` disables world-tile seam harmonization, and `return_processed_png=true` returns the imported post-processing result as `processed_png_b64`. `asset.inspect_asset` and `asset.validate_specialized_asset` recognize `Texture2D` assets and report generated texture-role settings from `Monolith.Generated.texture_role` metadata.
 
@@ -85,4 +89,5 @@ The action result includes `texture_role`, `settings_applied`, and `validation`.
 |------|-------------|
 | Source stale scan | No old UI ingest action names, old UI ingest classes, or old specialized-asset inspection class names remain in source. |
 | Build | Run the primary `GoGameEditor` UBT command after closing any editor process that locks Monolith DLLs. |
-| Runtime discovery | `monolith_discover({ "namespace": "asset" })` should list 11 actions owned by `MonolithAsset`. |
+| Runtime discovery | `monolith_discover({ "namespace": "asset" })` should list 12 actions owned by `MonolithAsset`. |
+| Find engine reuse | `asset.find_assets` consumes `FMonolithFuzzyMatch` (MonolithCore); it must not duplicate edit-distance/tokenization, and `FMonolithAssetUtils::FindAssetCandidates` stays exact-name. |
