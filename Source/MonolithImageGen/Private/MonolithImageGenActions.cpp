@@ -57,6 +57,13 @@ namespace MonolithImageGen::ImageGenerationInternal
 		int32 PngBytes = 0;
 	};
 
+	struct FGeneratedSourcePngResult
+	{
+		FString SavedPngPath;
+		FString Hash;
+		int32 PngBytes = 0;
+	};
+
 	struct FIma2GenerateResponse
 	{
 		FString ImageData;
@@ -611,9 +618,374 @@ namespace MonolithImageGen::ImageGenerationInternal
 		Obj->SetArrayField(Field, JsonValues);
 	}
 
+	static TArray<FString> SupportedReferenceInputFields()
+	{
+		return {
+			TEXT("references"),
+			TEXT("reference_images"),
+			TEXT("reference_image_paths"),
+			TEXT("reference_png_paths"),
+			TEXT("reference_asset_paths")
+		};
+	}
+
 	static FString ResolveReferenceImageDirectory()
 	{
 		return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), ReferenceImageDirectoryName));
+	}
+
+	static FString ResolveGeneratedSourcePngPath(const FString& AssetPackagePath)
+	{
+		FString PackagePath = AssetPackagePath;
+		if (PackagePath.Contains(TEXT(".")))
+		{
+			PackagePath = PackagePath.Left(PackagePath.Find(TEXT(".")));
+		}
+
+		FString RelativePath = PackagePath;
+		const FString GeneratedRoot = FString(DefaultGeneratedAssetPath) / TEXT("");
+		if (RelativePath.Equals(DefaultGeneratedAssetPath))
+		{
+			RelativePath = FPackageName::GetLongPackageAssetName(PackagePath);
+		}
+		else if (RelativePath.StartsWith(GeneratedRoot))
+		{
+			RelativePath.RightChopInline(GeneratedRoot.Len());
+		}
+		else if (RelativePath.StartsWith(TEXT("/Game/")))
+		{
+			RelativePath.RightChopInline(6);
+		}
+
+		RelativePath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		while (RelativePath.StartsWith(TEXT("/")))
+		{
+			RelativePath.RightChopInline(1);
+		}
+		RelativePath.ReplaceInline(TEXT(".."), TEXT("_"));
+		if (RelativePath.IsEmpty())
+		{
+			RelativePath = TEXT("GeneratedImage");
+		}
+
+		return FPaths::ConvertRelativePathToFull(
+			FPaths::Combine(ResolveReferenceImageDirectory(), RelativePath + TEXT(".png")));
+	}
+
+	static bool EncodeCompressedImageAsPng(
+		const TArray<uint8>& CompressedBytes,
+		const FString& FormatHint,
+		const FString& SourceLabel,
+		TArray<uint8>& OutPngBytes,
+		FString& OutError)
+	{
+		const EImageFormat InputFormat = ParseImageFormatHint(FormatHint);
+		if (InputFormat == EImageFormat::Invalid)
+		{
+			OutError = FString::Printf(TEXT("Unsupported image format '%s'. Use PNG, JPEG, BMP, EXR, TGA, HDR, TIFF, or DDS."), *FormatHint);
+			return false;
+		}
+
+		IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+		TSharedPtr<IImageWrapper> InputWrapper = ImageWrapperModule.CreateImageWrapper(InputFormat);
+		if (!InputWrapper.IsValid() || !InputWrapper->SetCompressed(CompressedBytes.GetData(), CompressedBytes.Num()))
+		{
+			OutError = FString::Printf(TEXT("Failed to decode image '%s' as %s"), *SourceLabel, *FormatHint);
+			return false;
+		}
+
+		if (InputFormat == EImageFormat::PNG)
+		{
+			OutPngBytes = CompressedBytes;
+			return true;
+		}
+
+		TArray<uint8> RawBgra;
+		if (!InputWrapper->GetRaw(ERGBFormat::BGRA, 8, RawBgra) || RawBgra.Num() == 0)
+		{
+			OutError = FString::Printf(TEXT("Failed to extract BGRA pixels from image '%s'"), *SourceLabel);
+			return false;
+		}
+
+		const int32 Width = InputWrapper->GetWidth();
+		const int32 Height = InputWrapper->GetHeight();
+		if (Width <= 0 || Height <= 0)
+		{
+			OutError = FString::Printf(TEXT("Image '%s' has invalid dimensions %dx%d"), *SourceLabel, Width, Height);
+			return false;
+		}
+
+		TSharedPtr<IImageWrapper> PngWrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+		if (!PngWrapper.IsValid() || !PngWrapper->SetRaw(RawBgra.GetData(), RawBgra.Num(), Width, Height, ERGBFormat::BGRA, 8))
+		{
+			OutError = FString::Printf(TEXT("Failed to encode image '%s' as PNG"), *SourceLabel);
+			return false;
+		}
+
+		const TArray64<uint8> PngBytes64 = PngWrapper->GetCompressed(100);
+		if (PngBytes64.Num() == 0)
+		{
+			OutError = FString::Printf(TEXT("PNG encoding produced no data for image '%s'"), *SourceLabel);
+			return false;
+		}
+
+		OutPngBytes.Reset(PngBytes64.Num());
+		OutPngBytes.Append(PngBytes64.GetData(), PngBytes64.Num());
+		return true;
+	}
+
+	static FString TextureSourceFormatName(const ETextureSourceFormat Format)
+	{
+		switch (Format)
+		{
+		case TSF_G8:
+			return TEXT("TSF_G8");
+		case TSF_BGRA8:
+			return TEXT("TSF_BGRA8");
+		case TSF_BGRE8:
+			return TEXT("TSF_BGRE8");
+		case TSF_RGBA16:
+			return TEXT("TSF_RGBA16");
+		case TSF_RGBA16F:
+			return TEXT("TSF_RGBA16F");
+		case TSF_G16:
+			return TEXT("TSF_G16");
+		case TSF_RGBA32F:
+			return TEXT("TSF_RGBA32F");
+		case TSF_R16F:
+			return TEXT("TSF_R16F");
+		case TSF_R32F:
+			return TEXT("TSF_R32F");
+		default:
+			return TEXT("TSF_Invalid");
+		}
+	}
+
+	static bool NormalizeTextureAssetPath(
+		const FString& RawAssetPath,
+		FString& OutPackagePath,
+		FString& OutObjectPath,
+		FString& OutError)
+	{
+		FString Candidate = RawAssetPath.TrimStartAndEnd();
+		Candidate.RemoveFromStart(TEXT("Texture2D'"));
+		Candidate.RemoveFromEnd(TEXT("'"));
+		Candidate.ReplaceInline(TEXT("\\"), TEXT("/"));
+
+		if (Candidate.IsEmpty())
+		{
+			OutError = TEXT("reference_asset_paths entry is empty");
+			return false;
+		}
+
+		if (Candidate.Contains(TEXT(".")))
+		{
+			OutPackagePath = FPackageName::ObjectPathToPackageName(Candidate);
+		}
+		else
+		{
+			OutPackagePath = Candidate;
+		}
+
+		FText Reason;
+		if (!FPackageName::IsValidLongPackageName(OutPackagePath, false, &Reason))
+		{
+			OutError = FString::Printf(
+				TEXT("reference_asset_paths entry '%s' is not a valid Unreal package path: %s"),
+				*RawAssetPath,
+				*Reason.ToString());
+			return false;
+		}
+
+		const FString AssetName = FPackageName::GetLongPackageAssetName(OutPackagePath);
+		if (AssetName.IsEmpty())
+		{
+			OutError = FString::Printf(TEXT("reference_asset_paths entry '%s' has no asset name"), *RawAssetPath);
+			return false;
+		}
+
+		OutObjectPath = Candidate.Contains(TEXT(".")) ? Candidate : OutPackagePath + TEXT(".") + AssetName;
+		return true;
+	}
+
+	static bool ConvertTextureSourceMipToBgra8(
+		const FString& SourceLabel,
+		const ETextureSourceFormat SourceFormat,
+		const int64 Width,
+		const int64 Height,
+		const TArray64<uint8>& SourceBytes,
+		TArray<uint8>& OutRawBgra,
+		FString& OutError)
+	{
+		if (Width <= 0 || Height <= 0 || Width > MAX_int32 || Height > MAX_int32)
+		{
+			OutError = FString::Printf(TEXT("Texture reference '%s' has invalid dimensions %" INT64_FMT "x%" INT64_FMT), *SourceLabel, Width, Height);
+			return false;
+		}
+
+		const int64 PixelCount = Width * Height;
+		if (PixelCount <= 0 || PixelCount > MAX_int32 / 4)
+		{
+			OutError = FString::Printf(TEXT("Texture reference '%s' is too large to encode as PNG"), *SourceLabel);
+			return false;
+		}
+
+		if (SourceFormat == TSF_BGRA8)
+		{
+			const int64 ExpectedBytes = PixelCount * 4;
+			if (SourceBytes.Num() < ExpectedBytes || ExpectedBytes > MAX_int32)
+			{
+				OutError = FString::Printf(
+					TEXT("Texture reference '%s' source data has %" INT64_FMT " bytes, expected at least %" INT64_FMT),
+					*SourceLabel,
+					static_cast<int64>(SourceBytes.Num()),
+					ExpectedBytes);
+				return false;
+			}
+			OutRawBgra.Reset(static_cast<int32>(ExpectedBytes));
+			OutRawBgra.Append(SourceBytes.GetData(), static_cast<int32>(ExpectedBytes));
+			return true;
+		}
+
+		if (SourceFormat == TSF_G8)
+		{
+			if (SourceBytes.Num() < PixelCount)
+			{
+				OutError = FString::Printf(
+					TEXT("Texture reference '%s' source data has %" INT64_FMT " bytes, expected at least %" INT64_FMT),
+					*SourceLabel,
+					static_cast<int64>(SourceBytes.Num()),
+					PixelCount);
+				return false;
+			}
+			OutRawBgra.SetNumUninitialized(static_cast<int32>(PixelCount * 4));
+			for (int64 PixelIndex = 0; PixelIndex < PixelCount; ++PixelIndex)
+			{
+				const uint8 Gray = SourceBytes[PixelIndex];
+				uint8* Dest = OutRawBgra.GetData() + PixelIndex * 4;
+				Dest[0] = Gray;
+				Dest[1] = Gray;
+				Dest[2] = Gray;
+				Dest[3] = 255;
+			}
+			return true;
+		}
+
+		if (SourceFormat == TSF_G16)
+		{
+			const int64 ExpectedBytes = PixelCount * 2;
+			if (SourceBytes.Num() < ExpectedBytes)
+			{
+				OutError = FString::Printf(
+					TEXT("Texture reference '%s' source data has %" INT64_FMT " bytes, expected at least %" INT64_FMT),
+					*SourceLabel,
+					static_cast<int64>(SourceBytes.Num()),
+					ExpectedBytes);
+				return false;
+			}
+			OutRawBgra.SetNumUninitialized(static_cast<int32>(PixelCount * 4));
+			for (int64 PixelIndex = 0; PixelIndex < PixelCount; ++PixelIndex)
+			{
+				const uint16 Gray16 = static_cast<uint16>(SourceBytes[PixelIndex * 2])
+					| (static_cast<uint16>(SourceBytes[PixelIndex * 2 + 1]) << 8);
+				const uint8 Gray = static_cast<uint8>(Gray16 >> 8);
+				uint8* Dest = OutRawBgra.GetData() + PixelIndex * 4;
+				Dest[0] = Gray;
+				Dest[1] = Gray;
+				Dest[2] = Gray;
+				Dest[3] = 255;
+			}
+			return true;
+		}
+
+		OutError = FString::Printf(
+			TEXT("Texture reference '%s' uses unsupported source format %s. Supported source formats are TSF_BGRA8, TSF_G8, and TSF_G16."),
+			*SourceLabel,
+			*TextureSourceFormatName(SourceFormat));
+		return false;
+	}
+
+	static bool EncodeTextureSourceAsPng(
+		const FString& AssetPath,
+		TArray<uint8>& OutPngBytes,
+		FString& OutSource,
+		FString& OutError)
+	{
+		FString PackagePath;
+		FString ObjectPath;
+		if (!NormalizeTextureAssetPath(AssetPath, PackagePath, ObjectPath, OutError))
+		{
+			return false;
+		}
+
+		UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *ObjectPath);
+		if (!Texture)
+		{
+			OutError = FString::Printf(TEXT("reference_asset_paths entry '%s' did not resolve to a Texture2D"), *AssetPath);
+			return false;
+		}
+		if (!Texture->Source.IsValid())
+		{
+			OutError = FString::Printf(TEXT("Texture2D '%s' has no valid source art to extract"), *ObjectPath);
+			return false;
+		}
+		if (Texture->Source.GetNumBlocks() != 1 || Texture->Source.GetNumLayers() != 1)
+		{
+			OutError = FString::Printf(
+				TEXT("Texture2D '%s' source must have exactly one block and one layer; got %d blocks and %d layers"),
+				*ObjectPath,
+				Texture->Source.GetNumBlocks(),
+				Texture->Source.GetNumLayers());
+			return false;
+		}
+
+		IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+		TArray64<uint8> MipBytes;
+		if (!Texture->Source.GetMipData(MipBytes, 0, &ImageWrapperModule) || MipBytes.Num() == 0)
+		{
+			OutError = FString::Printf(TEXT("Failed to read Texture2D source mip for '%s'"), *ObjectPath);
+			return false;
+		}
+
+		TArray<uint8> RawBgra;
+		const ETextureSourceFormat SourceFormat = Texture->Source.GetFormat();
+		if (!ConvertTextureSourceMipToBgra8(
+			ObjectPath,
+			SourceFormat,
+			Texture->Source.GetSizeX(),
+			Texture->Source.GetSizeY(),
+			MipBytes,
+			RawBgra,
+			OutError))
+		{
+			return false;
+		}
+
+		TSharedPtr<IImageWrapper> PngWrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+		if (!PngWrapper.IsValid()
+			|| !PngWrapper->SetRaw(
+				RawBgra.GetData(),
+				RawBgra.Num(),
+				static_cast<int32>(Texture->Source.GetSizeX()),
+				static_cast<int32>(Texture->Source.GetSizeY()),
+				ERGBFormat::BGRA,
+				8))
+		{
+			OutError = FString::Printf(TEXT("Failed to encode Texture2D source '%s' as PNG"), *ObjectPath);
+			return false;
+		}
+
+		const TArray64<uint8> PngBytes64 = PngWrapper->GetCompressed(100);
+		if (PngBytes64.Num() == 0 || PngBytes64.Num() > MAX_int32)
+		{
+			OutError = FString::Printf(TEXT("PNG encoding produced no data for Texture2D source '%s'"), *ObjectPath);
+			return false;
+		}
+
+		OutPngBytes.Reset(static_cast<int32>(PngBytes64.Num()));
+		OutPngBytes.Append(PngBytes64.GetData(), static_cast<int32>(PngBytes64.Num()));
+		OutSource = ObjectPath;
+		return true;
 	}
 
 	static bool TryResolveLocalFilePath(const FString& RawPath, FString& OutFilePath)
@@ -692,6 +1064,13 @@ namespace MonolithImageGen::ImageGenerationInternal
 		return true;
 	}
 
+	static bool SaveReferencePngBytes(
+		const TArray<uint8>& PngBytes,
+		const FString& Source,
+		int32 ReferenceIndex,
+		FReferenceImageResult& OutReference,
+		FString& OutError);
+
 	static bool SaveReferenceAsPng(
 		const TArray<uint8>& CompressedBytes,
 		const FString& FormatHint,
@@ -700,52 +1079,29 @@ namespace MonolithImageGen::ImageGenerationInternal
 		FReferenceImageResult& OutReference,
 		FString& OutError)
 	{
-		const EImageFormat InputFormat = ParseImageFormatHint(FormatHint);
-		if (InputFormat == EImageFormat::Invalid)
-		{
-			OutError = FString::Printf(TEXT("Unsupported reference image format '%s'. Use PNG, JPEG, BMP, EXR, TGA, HDR, TIFF, or DDS."), *FormatHint);
-			return false;
-		}
-
-		IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
-		TSharedPtr<IImageWrapper> InputWrapper = ImageWrapperModule.CreateImageWrapper(InputFormat);
-		if (!InputWrapper.IsValid() || !InputWrapper->SetCompressed(CompressedBytes.GetData(), CompressedBytes.Num()))
-		{
-			OutError = FString::Printf(TEXT("Failed to decode reference image '%s' as %s"), *Source, *FormatHint);
-			return false;
-		}
-
-		TArray<uint8> RawBgra;
-		if (!InputWrapper->GetRaw(ERGBFormat::BGRA, 8, RawBgra) || RawBgra.Num() == 0)
-		{
-			OutError = FString::Printf(TEXT("Failed to extract BGRA pixels from reference image '%s'"), *Source);
-			return false;
-		}
-
-		const int32 Width = InputWrapper->GetWidth();
-		const int32 Height = InputWrapper->GetHeight();
-		if (Width <= 0 || Height <= 0)
-		{
-			OutError = FString::Printf(TEXT("Reference image '%s' has invalid dimensions %dx%d"), *Source, Width, Height);
-			return false;
-		}
-
-		TSharedPtr<IImageWrapper> PngWrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
-		if (!PngWrapper.IsValid() || !PngWrapper->SetRaw(RawBgra.GetData(), RawBgra.Num(), Width, Height, ERGBFormat::BGRA, 8))
-		{
-			OutError = FString::Printf(TEXT("Failed to encode reference image '%s' as PNG"), *Source);
-			return false;
-		}
-
-		const TArray64<uint8> PngBytes64 = PngWrapper->GetCompressed(100);
-		if (PngBytes64.Num() == 0)
-		{
-			OutError = FString::Printf(TEXT("PNG encoding produced no data for reference image '%s'"), *Source);
-			return false;
-		}
-
 		TArray<uint8> PngBytes;
-		PngBytes.Append(PngBytes64.GetData(), PngBytes64.Num());
+		if (!EncodeCompressedImageAsPng(CompressedBytes, FormatHint, Source, PngBytes, OutError))
+		{
+			OutError = FString::Printf(TEXT("Failed to save reference image PNG for '%s': %s"), *Source, *OutError);
+			return false;
+		}
+
+		return SaveReferencePngBytes(PngBytes, Source, ReferenceIndex, OutReference, OutError);
+	}
+
+	static bool SaveReferencePngBytes(
+		const TArray<uint8>& PngBytes,
+		const FString& Source,
+		int32 ReferenceIndex,
+		FReferenceImageResult& OutReference,
+		FString& OutError)
+	{
+		if (PngBytes.Num() == 0)
+		{
+			OutError = FString::Printf(TEXT("Reference image PNG for '%s' was empty"), *Source);
+			return false;
+		}
+
 		const FString Hash = HashBytes(PngBytes);
 		const FString OutputDir = ResolveReferenceImageDirectory();
 		if (!IFileManager::Get().MakeDirectory(*OutputDir, true))
@@ -769,6 +1125,61 @@ namespace MonolithImageGen::ImageGenerationInternal
 		OutReference.Hash = Hash;
 		OutReference.PngBytes = PngBytes.Num();
 		return true;
+	}
+
+	static bool SaveGeneratedSourcePngBytes(
+		const FString& AssetPackagePath,
+		const TArray<uint8>& PngBytes,
+		FGeneratedSourcePngResult& OutSourcePng,
+		FString& OutError)
+	{
+		if (PngBytes.Num() == 0)
+		{
+			OutError = TEXT("Postprocessed generated PNG payload was empty");
+			return false;
+		}
+
+		const FString OutputPath = ResolveGeneratedSourcePngPath(AssetPackagePath);
+		const FString OutputDir = FPaths::GetPath(OutputPath);
+		if (!IFileManager::Get().MakeDirectory(*OutputDir, true))
+		{
+			OutError = FString::Printf(TEXT("Failed to create generated source PNG directory '%s'"), *OutputDir);
+			return false;
+		}
+		if (!FFileHelper::SaveArrayToFile(PngBytes, *OutputPath))
+		{
+			OutError = FString::Printf(TEXT("Failed to save generated source PNG '%s'"), *OutputPath);
+			return false;
+		}
+
+		OutSourcePng.SavedPngPath = OutputPath;
+		OutSourcePng.Hash = HashBytes(PngBytes);
+		OutSourcePng.PngBytes = PngBytes.Num();
+		return true;
+	}
+
+	static bool SaveGeneratedSourcePng(
+		const FString& AssetPackagePath,
+		const FString& BytesB64,
+		const FString& FormatHint,
+		FGeneratedSourcePngResult& OutSourcePng,
+		FString& OutError)
+	{
+		TArray<uint8> CompressedBytes;
+		if (!FBase64::Decode(BytesB64, CompressedBytes) || CompressedBytes.Num() == 0)
+		{
+			OutError = TEXT("Base64 decode of generated image payload failed or produced empty buffer");
+			return false;
+		}
+
+		TArray<uint8> PngBytes;
+		if (!EncodeCompressedImageAsPng(CompressedBytes, FormatHint, AssetPackagePath, PngBytes, OutError))
+		{
+			OutError = FString::Printf(TEXT("Failed to encode generated source PNG for '%s': %s"), *AssetPackagePath, *OutError);
+			return false;
+		}
+
+		return SaveGeneratedSourcePngBytes(AssetPackagePath, PngBytes, OutSourcePng, OutError);
 	}
 
 	static bool ResolveReferenceFromObject(
@@ -883,6 +1294,111 @@ namespace MonolithImageGen::ImageGenerationInternal
 		return true;
 	}
 
+	static bool ResolveReferenceAssetPathFromObject(
+		const TSharedPtr<FJsonObject>& Obj,
+		FString& OutAssetPath,
+		FString& OutError)
+	{
+		if (!Obj.IsValid())
+		{
+			OutError = TEXT("reference_asset_paths entry object is invalid");
+			return false;
+		}
+
+		if (Obj->TryGetStringField(TEXT("asset_path"), OutAssetPath) && !OutAssetPath.IsEmpty())
+		{
+			return true;
+		}
+		if (Obj->TryGetStringField(TEXT("path"), OutAssetPath) && !OutAssetPath.IsEmpty())
+		{
+			return true;
+		}
+		if (Obj->TryGetStringField(TEXT("package_path"), OutAssetPath) && !OutAssetPath.IsEmpty())
+		{
+			return true;
+		}
+
+		OutError = TEXT("reference_asset_paths object must include asset_path, path, or package_path");
+		return false;
+	}
+
+	static bool AppendReferenceAssetPathValue(
+		const TSharedPtr<FJsonValue>& Value,
+		int32 ReferenceIndex,
+		TArray<TSharedPtr<FJsonValue>>& OutPayloadReferences,
+		TArray<FReferenceImageResult>& OutReferenceFiles,
+		FString& OutError)
+	{
+		if (!Value.IsValid())
+		{
+			OutError = FString::Printf(TEXT("reference_asset_paths[%d] is invalid"), ReferenceIndex);
+			return false;
+		}
+
+		FString AssetPath;
+		if (Value->Type == EJson::String)
+		{
+			AssetPath = Value->AsString();
+		}
+		else if (Value->Type == EJson::Object)
+		{
+			if (!ResolveReferenceAssetPathFromObject(Value->AsObject(), AssetPath, OutError))
+			{
+				return false;
+			}
+		}
+		else
+		{
+			OutError = FString::Printf(TEXT("reference_asset_paths[%d] must be a string or object"), ReferenceIndex);
+			return false;
+		}
+
+		TArray<uint8> PngBytes;
+		FString Source;
+		if (!EncodeTextureSourceAsPng(AssetPath, PngBytes, Source, OutError))
+		{
+			return false;
+		}
+
+		FReferenceImageResult Reference;
+		if (!SaveReferencePngBytes(PngBytes, Source, ReferenceIndex, Reference, OutError))
+		{
+			return false;
+		}
+
+		OutPayloadReferences.Add(MakeShared<FJsonValueString>(Reference.BytesB64));
+		OutReferenceFiles.Add(MoveTemp(Reference));
+		return true;
+	}
+
+	static bool AppendReferenceAssetPathArray(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* FieldName,
+		TArray<TSharedPtr<FJsonValue>>& OutPayloadReferences,
+		TArray<FReferenceImageResult>& OutReferenceFiles,
+		FString& OutError)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Params->TryGetArrayField(FieldName, Values) || !Values)
+		{
+			return true;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			if (OutPayloadReferences.Num() >= MaxReferenceImages)
+			{
+				OutError = FString::Printf(TEXT("Reference images may not exceed %d items"), MaxReferenceImages);
+				return false;
+			}
+			if (!AppendReferenceAssetPathValue(Value, OutPayloadReferences.Num(), OutPayloadReferences, OutReferenceFiles, OutError))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
 	static bool BuildIma2ReferencePayload(
 		const TSharedPtr<FJsonObject>& Params,
 		TArray<TSharedPtr<FJsonValue>>& OutPayloadReferences,
@@ -898,6 +1414,14 @@ namespace MonolithImageGen::ImageGenerationInternal
 			return false;
 		}
 		if (!AppendReferenceArray(Params, TEXT("reference_image_paths"), OutPayloadReferences, OutReferenceFiles, OutError))
+		{
+			return false;
+		}
+		if (!AppendReferenceArray(Params, TEXT("reference_png_paths"), OutPayloadReferences, OutReferenceFiles, OutError))
+		{
+			return false;
+		}
+		if (!AppendReferenceAssetPathArray(Params, TEXT("reference_asset_paths"), OutPayloadReferences, OutReferenceFiles, OutError))
 		{
 			return false;
 		}
@@ -1198,6 +1722,12 @@ namespace MonolithImageGen::ImageGenerationInternal
 		bool bSave = true;
 		Params->TryGetBoolField(TEXT("save"), bSave);
 		ImportParams->SetBoolField(TEXT("save"), bSave);
+		bool bSaveSourcePng = bSave;
+		Params->TryGetBoolField(TEXT("save_source_png"), bSaveSourcePng);
+		if (bSaveSourcePng)
+		{
+			ImportParams->SetBoolField(TEXT("return_processed_png"), true);
+		}
 
 		const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
 		const bool bHasSettings = Params->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj && SettingsObj->IsValid();
@@ -1228,6 +1758,32 @@ namespace MonolithImageGen::ImageGenerationInternal
 		}
 
 		const FString AssetPackagePath = ImportResult.Result->GetStringField(TEXT("asset_path"));
+		FGeneratedSourcePngResult SourcePng;
+		if (bSaveSourcePng)
+		{
+			FString SourcePngError;
+			TArray<uint8> ProcessedPngBytes;
+			FString ProcessedPngB64;
+			if (ImportResult.Result->TryGetStringField(TEXT("processed_png_b64"), ProcessedPngB64) && !ProcessedPngB64.IsEmpty())
+			{
+				FBase64::Decode(ProcessedPngB64, ProcessedPngBytes);
+			}
+			if (ProcessedPngBytes.Num() > 0)
+			{
+				if (!SaveGeneratedSourcePngBytes(AssetPackagePath, ProcessedPngBytes, SourcePng, SourcePngError))
+				{
+					return FMonolithActionResult::Error(SourcePngError, -32603);
+				}
+			}
+			else if (!SaveGeneratedSourcePng(AssetPackagePath, BytesB64, FormatHint, SourcePng, SourcePngError))
+			{
+				return FMonolithActionResult::Error(SourcePngError, -32603);
+			}
+			Provenance->SetStringField(TEXT("source_png_path"), SourcePng.SavedPngPath);
+			Provenance->SetStringField(TEXT("source_png_hash"), SourcePng.Hash);
+			Provenance->SetStringField(TEXT("source_png_bytes"), FString::FromInt(SourcePng.PngBytes));
+			Provenance->SetStringField(TEXT("source_png_kind"), ProcessedPngBytes.Num() > 0 ? TEXT("postprocessed") : TEXT("original_fallback"));
+		}
 		FString ImportedTextureRole;
 		if (ImportResult.Result->TryGetStringField(TEXT("texture_role"), ImportedTextureRole) && !ImportedTextureRole.IsEmpty())
 		{
@@ -1247,6 +1803,17 @@ namespace MonolithImageGen::ImageGenerationInternal
 		Result->SetStringField(TEXT("format_hint"), FormatHint);
 		Result->SetStringField(TEXT("overwrite_policy"), OverwritePolicy);
 		Result->SetBoolField(TEXT("saved"), bSave);
+		if (bSaveSourcePng)
+		{
+			Result->SetStringField(TEXT("source_png_path"), SourcePng.SavedPngPath);
+			Result->SetStringField(TEXT("source_png_hash"), SourcePng.Hash);
+			Result->SetNumberField(TEXT("source_png_bytes"), SourcePng.PngBytes);
+			FString SourcePngKind;
+			if (Provenance->TryGetStringField(TEXT("source_png_kind"), SourcePngKind) && !SourcePngKind.IsEmpty())
+			{
+				Result->SetStringField(TEXT("source_png_kind"), SourcePngKind);
+			}
+		}
 		Result->SetObjectField(TEXT("provenance"), Provenance);
 		if (!ImportedTextureRole.IsEmpty())
 		{
@@ -1374,6 +1941,7 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("texture_role"), TEXT("string"), TEXT("Unreal texture role preset forwarded to asset.import_texture_from_bytes: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, or emissive."), TEXT("basecolor"))
 			.Optional(TEXT("settings"), TEXT("object"), TEXT("Texture import settings compatible with asset.import_texture_from_bytes."))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported texture package"), TEXT("true"))
+			.Optional(TEXT("save_source_png"), TEXT("bool"), TEXT("Save a postprocessed PNG source copy under <ProjectDir>/GeneratedImages using the generated asset's relative path. Defaults to save."))
 			.Build(),
 		TEXT("Image"));
 
@@ -1398,6 +1966,8 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("references"), TEXT("array"), TEXT("Optional reference image array. Each item may be a data URL/base64 string or a local image file path."))
 			.Optional(TEXT("reference_images"), TEXT("array"), TEXT("Optional reference image objects/paths. Objects accept path, file_path, bytes_b64, data_url, and format_hint."))
 			.Optional(TEXT("reference_image_paths"), TEXT("array"), TEXT("Optional local reference image path array."))
+			.Optional(TEXT("reference_png_paths"), TEXT("array"), TEXT("Optional local reference PNG path array. Files are archived under <ProjectDir>/GeneratedImages and forwarded to ima2 as PNG base64."))
+			.Optional(TEXT("reference_asset_paths"), TEXT("array"), TEXT("Optional Unreal Texture2D package/object path array. Each Texture2D source mip is extracted to a PNG reference under <ProjectDir>/GeneratedImages before forwarding."))
 			.Optional(TEXT("request_id"), TEXT("string"), TEXT("Optional request ID forwarded as requestId."))
 			.Optional(TEXT("session_id"), TEXT("string"), TEXT("Optional ima2 session ID forwarded as sessionId."))
 			.Optional(TEXT("client_node_id"), TEXT("string"), TEXT("Optional ima2 client node ID forwarded as clientNodeId."))
@@ -1411,15 +1981,18 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("texture_role"), TEXT("string"), TEXT("Unreal texture role preset forwarded to asset.import_texture_from_bytes: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, or emissive."), TEXT("basecolor"))
 			.Optional(TEXT("settings"), TEXT("object"), TEXT("Texture import settings compatible with asset.import_texture_from_bytes."))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported texture package"), TEXT("true"))
+			.Optional(TEXT("save_source_png"), TEXT("bool"), TEXT("Save a postprocessed PNG source copy under <ProjectDir>/GeneratedImages using the generated asset's relative path. Defaults to save."))
 			.Build(),
 		TEXT("Image"));
 
 	Registry.RegisterAction(
 		TEXT("imagegen"), TEXT("import_generated_image"),
-		TEXT("Import externally generated image bytes as a Texture2D and attach redacted generation provenance. This is the safe remote-provider boundary."),
+		TEXT("Import externally generated image bytes or a local generated image file as a Texture2D and attach redacted generation provenance. This is the safe remote-provider boundary."),
 		FMonolithActionHandler::CreateStatic(&HandleImportGeneratedImage),
 		FParamSchemaBuilder()
-			.Required(TEXT("bytes_b64"), TEXT("string"), TEXT("Base64 image bytes, optionally with data:image/...;base64 prefix."))
+			.Optional(TEXT("bytes_b64"), TEXT("string"), TEXT("Base64 image bytes, optionally with data:image/...;base64 prefix. Required unless file_path is provided."))
+			.Optional(TEXT("file_path"), TEXT("string"), TEXT("Local generated image file path to import when bytes_b64 is omitted."))
+			.Optional(TEXT("path"), TEXT("string"), TEXT("Alias for file_path."))
 			.Optional(TEXT("format_hint"), TEXT("string"), TEXT("png, jpg, jpeg, bmp, exr, tga, hdr, tif, tiff, or dds. Auto-filled from data URL when possible."))
 			.Optional(TEXT("prompt"), TEXT("string"), TEXT("Prompt used externally. Stored only as a hash."))
 			.Optional(TEXT("provider"), TEXT("string"), TEXT("External provider id for provenance."), TEXT("external"))
@@ -1433,6 +2006,7 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("texture_role"), TEXT("string"), TEXT("Unreal texture role preset forwarded to asset.import_texture_from_bytes: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, or emissive."), TEXT("basecolor"))
 			.Optional(TEXT("settings"), TEXT("object"), TEXT("Texture import settings compatible with asset.import_texture_from_bytes."))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported texture package"), TEXT("true"))
+			.Optional(TEXT("save_source_png"), TEXT("bool"), TEXT("Save a postprocessed PNG source copy under <ProjectDir>/GeneratedImages using the generated asset's relative path. Defaults to save."))
 			.Build(),
 		TEXT("Image"));
 
@@ -1486,6 +2060,7 @@ FMonolithActionResult FMonolithImageGenActions::HandleListImageModels(const TSha
 	ImageGenerationInternal::AddStringArray(Ima2, TEXT("background"), { TEXT("transparent"), TEXT("opaque"), TEXT("auto") });
 	ImageGenerationInternal::AddStringArray(Ima2, TEXT("moderation"), { TEXT("auto"), TEXT("low") });
 	ImageGenerationInternal::AddStringArray(Ima2, TEXT("texture_roles"), ImageGenerationInternal::SupportedTextureRoles());
+	ImageGenerationInternal::AddStringArray(Ima2, TEXT("reference_input_fields"), ImageGenerationInternal::SupportedReferenceInputFields());
 	Models.Add(MakeShared<FJsonValueObject>(Ima2));
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1496,6 +2071,7 @@ FMonolithActionResult FMonolithImageGenActions::HandleListImageModels(const TSha
 	Result->SetStringField(TEXT("default_external_provider"), TEXT("ima2-gen"));
 	Result->SetStringField(TEXT("default_external_action"), TEXT("imagegen.generate_image_via_ima2"));
 	Result->SetStringField(TEXT("default_reference_png_dir"), ImageGenerationInternal::ResolveReferenceImageDirectory());
+	Result->SetStringField(TEXT("default_source_png_dir"), ImageGenerationInternal::ResolveReferenceImageDirectory());
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -1522,6 +2098,9 @@ FMonolithActionResult FMonolithImageGenActions::HandleGetImageGenerationDefaults
 	Result->SetStringField(TEXT("ima2_background"), TEXT("auto"));
 	Result->SetStringField(TEXT("ima2_secret_policy"), TEXT("Monolith stores no API key; the ima2/imag2-gen server owns provider credentials and OAuth sessions."));
 	Result->SetStringField(TEXT("reference_png_dir"), ImageGenerationInternal::ResolveReferenceImageDirectory());
+	Result->SetStringField(TEXT("source_png_dir"), ImageGenerationInternal::ResolveReferenceImageDirectory());
+	Result->SetBoolField(TEXT("save_source_png"), true);
+	ImageGenerationInternal::AddStringArray(Result, TEXT("reference_input_fields"), ImageGenerationInternal::SupportedReferenceInputFields());
 	TSharedPtr<FJsonObject> Local = MakeShared<FJsonObject>();
 	Local->SetStringField(TEXT("provider"), TEXT("local_deterministic"));
 	Local->SetStringField(TEXT("model"), TEXT("monolith/local-gradient-bmp-v1"));
@@ -1821,14 +2400,35 @@ FMonolithActionResult FMonolithImageGenActions::HandleImportGeneratedImage(const
 		return FMonolithActionResult::Error(TEXT("Missing params object"), -32602);
 	}
 
-	FString BytesB64;
-	if (!Params->TryGetStringField(TEXT("bytes_b64"), BytesB64) || BytesB64.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing or empty required param: bytes_b64"), -32602);
-	}
-
 	FString FormatHint;
 	Params->TryGetStringField(TEXT("format_hint"), FormatHint);
+	FString BytesB64;
+	bool bLoadedFromFile = false;
+	if (!Params->TryGetStringField(TEXT("bytes_b64"), BytesB64) || BytesB64.IsEmpty())
+	{
+		FString FilePath;
+		if (!Params->TryGetStringField(TEXT("file_path"), FilePath) || FilePath.IsEmpty())
+		{
+			Params->TryGetStringField(TEXT("path"), FilePath);
+		}
+		if (FilePath.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("Missing image input: provide bytes_b64 or file_path"), -32602);
+		}
+
+		TArray<uint8> FileBytes;
+		FString FileFormatHint;
+		FString Source;
+		FString FileError;
+		if (!ImageGenerationInternal::ResolveReferenceCompressedBytes(FilePath, FormatHint, FileBytes, FileFormatHint, Source, FileError))
+		{
+			return FMonolithActionResult::Error(FileError, -32602);
+		}
+		BytesB64 = FBase64::Encode(FileBytes);
+		FormatHint = FileFormatHint;
+		bLoadedFromFile = true;
+	}
+
 	ImageGenerationInternal::FCompressedImagePayload ImagePayload;
 	FString PayloadError;
 	if (!ImageGenerationInternal::PrepareCompressedImagePayload(Params, BytesB64, FormatHint, ImagePayload, PayloadError))
@@ -1852,7 +2452,7 @@ FMonolithActionResult FMonolithImageGenActions::HandleImportGeneratedImage(const
 	Params->TryGetStringField(TEXT("aspect_ratio"), AspectRatio);
 
 	TSharedPtr<FJsonObject> Provenance = ImageGenerationInternal::BuildProvenance(
-		Provider, Model, TEXT("external_bytes"), Prompt, AspectRatio, ImagePayload.FormatHint, ImagePayload.CompressedBytes);
+		Provider, Model, bLoadedFromFile ? TEXT("external_file") : TEXT("external_bytes"), Prompt, AspectRatio, ImagePayload.FormatHint, ImagePayload.CompressedBytes);
 
 	FString FallbackName = TEXT("T_ExternalGeneratedImage");
 	if (!Prompt.IsEmpty())
@@ -1891,7 +2491,8 @@ FMonolithActionResult FMonolithImageGenActions::HandleGetGeneratedAssetProvenanc
 		TEXT("generated_at_utc"), TEXT("compressed_bytes"), TEXT("texture_role"), TEXT("ima2_server_url"),
 		TEXT("ima2_request_id"), TEXT("ima2_filename"), TEXT("quality"), TEXT("size"),
 		TEXT("background"), TEXT("moderation"), TEXT("reference_count"), TEXT("reference_hashes"),
-		TEXT("revised_prompt_hash"), TEXT("revised_prompt_redacted")
+		TEXT("revised_prompt_hash"), TEXT("revised_prompt_redacted"),
+		TEXT("source_png_path"), TEXT("source_png_hash"), TEXT("source_png_bytes"), TEXT("source_png_kind")
 	};
 	bool bFoundAny = false;
 	for (const FString& Key : Keys)

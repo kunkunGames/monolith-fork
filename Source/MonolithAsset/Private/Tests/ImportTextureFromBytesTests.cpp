@@ -72,6 +72,59 @@ namespace
         return EncodePngB64(2, 2, Pixels);
     }
 
+    FString MakeEdgeBackgroundIconPngB64()
+    {
+        TArray<FColor> Pixels;
+        Pixels.Init(FColor(245, 245, 245, 255), 25);
+        for (int32 Y = 1; Y <= 3; ++Y)
+        {
+            for (int32 X = 1; X <= 3; ++X)
+            {
+                Pixels[Y * 5 + X] = FColor(220, 30, 30, 255);
+            }
+        }
+        Pixels[2 * 5 + 2] = FColor(245, 245, 245, 255);
+        return EncodePngB64(5, 5, Pixels);
+    }
+
+    FString MakeMismatchedTilePngB64()
+    {
+        TArray<FColor> Pixels;
+        Pixels.Init(FColor(64, 96, 128, 255), 16);
+        for (int32 Y = 0; Y < 4; ++Y)
+        {
+            Pixels[Y * 4 + 0] = FColor(0, 0, 0, 255);
+            Pixels[Y * 4 + 3] = FColor(255, 255, 255, 255);
+        }
+        return EncodePngB64(4, 4, Pixels);
+    }
+
+    bool DecodePngB64(const FString& PngB64, int32& OutW, int32& OutH, TArray<uint8>& OutRawBgra)
+    {
+        TArray<uint8> PngBytes;
+        if (!FBase64::Decode(PngB64, PngBytes) || PngBytes.Num() == 0)
+        {
+            return false;
+        }
+
+        IImageWrapperModule& ImageWrapperModule =
+            FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+        TSharedPtr<IImageWrapper> Wrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+        if (!Wrapper.IsValid() || !Wrapper->SetCompressed(PngBytes.GetData(), PngBytes.Num()))
+        {
+            return false;
+        }
+
+        OutW = Wrapper->GetWidth();
+        OutH = Wrapper->GetHeight();
+        return Wrapper->GetRaw(ERGBFormat::BGRA, 8, OutRawBgra) && OutRawBgra.Num() > 0;
+    }
+
+    uint8 AlphaAt(const TArray<uint8>& RawBgra, int32 W, int32 X, int32 Y)
+    {
+        return RawBgra[(Y * W + X) * 4 + 3];
+    }
+
     UTexture2D* FindTextureAtPackagePath(const FString& AssetPath)
     {
         const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
@@ -354,6 +407,104 @@ bool FMonolithAssetImportTextureFromBytesTextureRolePresetMatrixTest::RunTest(co
                 double AlphaBleedPixels = 0.0;
                 (*PostProcess)->TryGetNumberField(TEXT("alpha_bleed_pixels"), AlphaBleedPixels);
                 TestTrue(TEXT("alpha bleed filled transparent RGB pixels"), AlphaBleedPixels > 0.0);
+            }
+        }
+    }
+
+    const FString EdgeBackgroundIconPngB64 = MakeEdgeBackgroundIconPngB64();
+    TestFalse(TEXT("edge-background icon PNG fixture encoded"), EdgeBackgroundIconPngB64.IsEmpty());
+    if (!EdgeBackgroundIconPngB64.IsEmpty())
+    {
+        TSharedPtr<FJsonObject> EdgeAlphaParams = MakeShared<FJsonObject>();
+        EdgeAlphaParams->SetStringField(TEXT("destination"),
+            TEXT("/Game/Tests/Monolith/Asset/Textures/T_Role_EdgeBackgroundAlpha"));
+        EdgeAlphaParams->SetStringField(TEXT("bytes_b64"), EdgeBackgroundIconPngB64);
+        EdgeAlphaParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+        EdgeAlphaParams->SetStringField(TEXT("texture_role"), TEXT("ui_icon"));
+        EdgeAlphaParams->SetBoolField(TEXT("save"), false);
+        EdgeAlphaParams->SetBoolField(TEXT("return_processed_png"), true);
+
+        const FMonolithActionResult EdgeAlphaResult = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"), TEXT("import_texture_from_bytes"), EdgeAlphaParams);
+
+        TestTrue(TEXT("edge-background alpha import succeeds"), EdgeAlphaResult.bSuccess);
+        if (EdgeAlphaResult.bSuccess && EdgeAlphaResult.Result.IsValid())
+        {
+            const TSharedPtr<FJsonObject>* Validation = nullptr;
+            TestTrue(TEXT("edge-background alpha validation returned"),
+                EdgeAlphaResult.Result->TryGetObjectField(TEXT("validation"), Validation) && Validation && Validation->IsValid());
+            if (Validation && Validation->IsValid())
+            {
+                bool bHasAlpha = false;
+                (*Validation)->TryGetBoolField(TEXT("has_alpha"), bHasAlpha);
+                TestTrue(TEXT("edge-background alpha produces alpha"), bHasAlpha);
+
+                const TSharedPtr<FJsonObject>* PostProcess = nullptr;
+                TestTrue(TEXT("edge-background alpha postprocess returned"),
+                    (*Validation)->TryGetObjectField(TEXT("postprocess"), PostProcess) && PostProcess && PostProcess->IsValid());
+                if (PostProcess && PostProcess->IsValid())
+                {
+                    double EdgeAlphaPixels = 0.0;
+                    (*PostProcess)->TryGetNumberField(TEXT("alpha_from_edge_background_pixels"), EdgeAlphaPixels);
+                    TestTrue(TEXT("edge-background alpha changed pixels"), EdgeAlphaPixels > 0.0);
+                }
+            }
+
+            FString ProcessedPngB64;
+            TestTrue(TEXT("processed PNG returned"),
+                EdgeAlphaResult.Result->TryGetStringField(TEXT("processed_png_b64"), ProcessedPngB64) && !ProcessedPngB64.IsEmpty());
+            int32 W = 0;
+            int32 H = 0;
+            TArray<uint8> RawBgra;
+            TestTrue(TEXT("processed PNG decodes"), DecodePngB64(ProcessedPngB64, W, H, RawBgra));
+            if (RawBgra.Num() > 0)
+            {
+                TestEqual(TEXT("edge background corner is transparent"), AlphaAt(RawBgra, W, 0, 0), static_cast<uint8>(0));
+                TestEqual(TEXT("edge background foreground is opaque"), AlphaAt(RawBgra, W, 1, 1), static_cast<uint8>(255));
+                TestEqual(TEXT("edge background internal color hole stays opaque"), AlphaAt(RawBgra, W, 2, 2), static_cast<uint8>(255));
+            }
+        }
+    }
+
+    const FString MismatchedTilePngB64 = MakeMismatchedTilePngB64();
+    TestFalse(TEXT("mismatched tile PNG fixture encoded"), MismatchedTilePngB64.IsEmpty());
+    if (!MismatchedTilePngB64.IsEmpty())
+    {
+        TSharedPtr<FJsonObject> TileParams = MakeShared<FJsonObject>();
+        TileParams->SetStringField(TEXT("destination"),
+            TEXT("/Game/Tests/Monolith/Asset/Textures/T_Role_TileSeamHarmonize"));
+        TileParams->SetStringField(TEXT("bytes_b64"), MismatchedTilePngB64);
+        TileParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+        TileParams->SetStringField(TEXT("texture_role"), TEXT("world_tile"));
+        TileParams->SetBoolField(TEXT("save"), false);
+
+        const FMonolithActionResult TileResult = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("asset"), TEXT("import_texture_from_bytes"), TileParams);
+
+        TestTrue(TEXT("tile seam harmonize import succeeds"), TileResult.bSuccess);
+        if (TileResult.bSuccess && TileResult.Result.IsValid())
+        {
+            const TSharedPtr<FJsonObject>* Validation = nullptr;
+            TestTrue(TEXT("tile seam validation returned"),
+                TileResult.Result->TryGetObjectField(TEXT("validation"), Validation) && Validation && Validation->IsValid());
+            if (Validation && Validation->IsValid())
+            {
+                bool bPassed = false;
+                (*Validation)->TryGetBoolField(TEXT("passed"), bPassed);
+                TestTrue(TEXT("tile seam validation passes after harmonize"), bPassed);
+
+                const TSharedPtr<FJsonObject>* Tile = nullptr;
+                TestTrue(TEXT("tile seam metrics returned"),
+                    (*Validation)->TryGetObjectField(TEXT("tile"), Tile) && Tile && Tile->IsValid());
+                if (Tile && Tile->IsValid())
+                {
+                    double EdgeAverageDelta = -1.0;
+                    double EdgeMaxDelta = -1.0;
+                    (*Tile)->TryGetNumberField(TEXT("edge_average_delta"), EdgeAverageDelta);
+                    (*Tile)->TryGetNumberField(TEXT("edge_max_delta"), EdgeMaxDelta);
+                    TestEqual(TEXT("tile edge average delta harmonized"), EdgeAverageDelta, 0.0);
+                    TestEqual(TEXT("tile edge max delta harmonized"), EdgeMaxDelta, 0.0);
+                }
             }
         }
     }

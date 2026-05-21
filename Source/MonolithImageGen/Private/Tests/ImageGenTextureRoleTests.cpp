@@ -2,9 +2,14 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "CoreMinimal.h"
+#include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/Base64.h"
+#include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
+#include "UObject/Package.h"
 
 #include "Dom/JsonObject.h"
 #include "MonolithToolRegistry.h"
@@ -61,10 +66,135 @@ namespace
         return EncodePngB64(2, 2, Pixels);
     }
 
+    FString MakeEdgeBackgroundIconPngB64()
+    {
+        TArray<FColor> Pixels;
+        Pixels.Init(FColor(245, 245, 245, 255), 16);
+        Pixels[5] = FColor(220, 30, 30, 255);
+        Pixels[6] = FColor(220, 30, 30, 255);
+        Pixels[9] = FColor(220, 30, 30, 255);
+        Pixels[10] = FColor(220, 30, 30, 255);
+        return EncodePngB64(4, 4, Pixels);
+    }
+
     UTexture2D* FindTextureAtPackagePath(const FString& AssetPath)
     {
         const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
         return FindObject<UTexture2D>(nullptr, *(AssetPath + TEXT(".") + AssetName));
+    }
+
+    FString ExpectedSourcePngPath(const FString& AssetPath)
+    {
+        FString RelativePath = AssetPath;
+        const FString GeneratedRoot = TEXT("/Game/GeneratedImages/");
+        if (RelativePath.StartsWith(GeneratedRoot))
+        {
+            RelativePath.RightChopInline(GeneratedRoot.Len());
+        }
+        else if (RelativePath.StartsWith(TEXT("/Game/")))
+        {
+            RelativePath.RightChopInline(6);
+        }
+        return FPaths::ConvertRelativePathToFull(
+            FPaths::Combine(FPaths::ProjectDir(), TEXT("GeneratedImages"), RelativePath + TEXT(".png")));
+    }
+
+    FString ReferenceRootPath()
+    {
+        return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("GeneratedImages")));
+    }
+
+    TSet<FString> ListArchivedReferencePngFiles()
+    {
+        TSet<FString> Paths;
+        TArray<FString> Filenames;
+        const FString Pattern = FPaths::Combine(ReferenceRootPath(), TEXT("Ref_*.png"));
+        IFileManager::Get().FindFiles(Filenames, *Pattern, true, false);
+        for (const FString& Filename : Filenames)
+        {
+            Paths.Add(FPaths::Combine(ReferenceRootPath(), Filename));
+        }
+        return Paths;
+    }
+
+    bool HasPngSignature(const FString& FilePath)
+    {
+        TArray<uint8> Bytes;
+        if (!FFileHelper::LoadFileToArray(Bytes, *FilePath) || Bytes.Num() < 8)
+        {
+            return false;
+        }
+        return Bytes[0] == 0x89 && Bytes[1] == 0x50 && Bytes[2] == 0x4e && Bytes[3] == 0x47
+            && Bytes[4] == 0x0d && Bytes[5] == 0x0a && Bytes[6] == 0x1a && Bytes[7] == 0x0a;
+    }
+
+    bool PngFileHasTransparentPixel(const FString& FilePath)
+    {
+        TArray<uint8> Bytes;
+        if (!FFileHelper::LoadFileToArray(Bytes, *FilePath) || Bytes.Num() == 0)
+        {
+            return false;
+        }
+
+        IImageWrapperModule& ImageWrapperModule =
+            FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+        TSharedPtr<IImageWrapper> Wrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+        if (!Wrapper.IsValid() || !Wrapper->SetCompressed(Bytes.GetData(), Bytes.Num()))
+        {
+            return false;
+        }
+
+        TArray<uint8> RawBgra;
+        if (!Wrapper->GetRaw(ERGBFormat::BGRA, 8, RawBgra) || RawBgra.Num() == 0)
+        {
+            return false;
+        }
+        for (int32 Index = 3; Index < RawBgra.Num(); Index += 4)
+        {
+            if (RawBgra[Index] < 255)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    UTexture2D* MakeReferenceTextureFixture(const FString& PackagePath)
+    {
+        const FString AssetName = FPackageName::GetLongPackageAssetName(PackagePath);
+        UPackage* Package = CreatePackage(*PackagePath);
+        UTexture2D* Texture = FindObject<UTexture2D>(Package, *AssetName);
+        if (!Texture)
+        {
+            Texture = NewObject<UTexture2D>(Package, *AssetName, RF_Public | RF_Standalone);
+        }
+        if (!Texture)
+        {
+            return nullptr;
+        }
+
+        Texture->Source.Init(2, 2, 1, 1, TSF_BGRA8);
+        uint8* MipData = Texture->Source.LockMip(0);
+        if (!MipData)
+        {
+            return nullptr;
+        }
+
+        const FColor Pixels[] = {
+            FColor(255, 0, 0, 255),
+            FColor(0, 255, 0, 192),
+            FColor(0, 0, 255, 128),
+            FColor(255, 255, 255, 64)
+        };
+        for (int32 Index = 0; Index < 4; ++Index)
+        {
+            MipData[Index * 4 + 0] = Pixels[Index].B;
+            MipData[Index * 4 + 1] = Pixels[Index].G;
+            MipData[Index * 4 + 2] = Pixels[Index].R;
+            MipData[Index * 4 + 3] = Pixels[Index].A;
+        }
+        Texture->Source.UnlockMip(0);
+        return Texture;
     }
 }
 
@@ -116,6 +246,25 @@ bool FMonolithImageGenTextureRolesDefaultsTest::RunTest(const FString& Parameter
         {
             TestTrue(FString::Printf(TEXT("texture_roles contains %s"), *ExpectedRole),
                 JsonArrayHasString(*Roles, ExpectedRole));
+        }
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* ReferenceFields = nullptr;
+    TestTrue(TEXT("reference_input_fields returned"),
+        Defaults.Result->TryGetArrayField(TEXT("reference_input_fields"), ReferenceFields) && ReferenceFields);
+    if (ReferenceFields)
+    {
+        const FString ExpectedFields[] = {
+            TEXT("references"),
+            TEXT("reference_images"),
+            TEXT("reference_image_paths"),
+            TEXT("reference_png_paths"),
+            TEXT("reference_asset_paths")
+        };
+        for (const FString& ExpectedField : ExpectedFields)
+        {
+            TestTrue(FString::Printf(TEXT("reference_input_fields contains %s"), *ExpectedField),
+                JsonArrayHasString(*ReferenceFields, ExpectedField));
         }
     }
 
@@ -243,6 +392,10 @@ bool FMonolithImageGenTextureRolesImportExternalTest::RunTest(const FString& Par
     Params->SetStringField(TEXT("destination"), TEXT("/Game/Tests/Monolith/ImageGen/T_ImportExternalOrmRole"));
     Params->SetStringField(TEXT("texture_role"), TEXT("orm"));
     Params->SetBoolField(TEXT("save"), false);
+    Params->SetBoolField(TEXT("save_source_png"), true);
+
+    const FString RequestedPngPath = ExpectedSourcePngPath(TEXT("/Game/Tests/Monolith/ImageGen/T_ImportExternalOrmRole"));
+    IFileManager::Get().Delete(*RequestedPngPath, false, true);
 
     const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
         TEXT("imagegen"), TEXT("import_generated_image"), Params);
@@ -259,6 +412,16 @@ bool FMonolithImageGenTextureRolesImportExternalTest::RunTest(const FString& Par
     Result.Result->TryGetStringField(TEXT("texture_role"), TextureRole);
     TestEqual(TEXT("orm synonym normalizes to orm_mask"), TextureRole, FString(TEXT("orm_mask")));
 
+    FString AssetPath;
+    Result.Result->TryGetStringField(TEXT("asset_path"), AssetPath);
+    const FString ExpectedPngPath = ExpectedSourcePngPath(AssetPath);
+
+    FString SourcePngPath;
+    Result.Result->TryGetStringField(TEXT("source_png_path"), SourcePngPath);
+    TestEqual(TEXT("source PNG path mirrors asset path"), SourcePngPath, ExpectedPngPath);
+    TestTrue(TEXT("source PNG file exists"), FPaths::FileExists(SourcePngPath));
+    TestTrue(TEXT("source PNG has PNG signature"), HasPngSignature(SourcePngPath));
+
     const TSharedPtr<FJsonObject>* Provenance = nullptr;
     TestTrue(TEXT("external provenance returned"),
         Result.Result->TryGetObjectField(TEXT("provenance"), Provenance) && Provenance && Provenance->IsValid());
@@ -267,10 +430,12 @@ bool FMonolithImageGenTextureRolesImportExternalTest::RunTest(const FString& Par
         FString ProvenanceRole;
         (*Provenance)->TryGetStringField(TEXT("texture_role"), ProvenanceRole);
         TestEqual(TEXT("external provenance texture_role"), ProvenanceRole, FString(TEXT("orm_mask")));
+
+        FString ProvenanceSourcePngPath;
+        (*Provenance)->TryGetStringField(TEXT("source_png_path"), ProvenanceSourcePngPath);
+        TestEqual(TEXT("external provenance source PNG path"), ProvenanceSourcePngPath, ExpectedPngPath);
     }
 
-    FString AssetPath;
-    Result.Result->TryGetStringField(TEXT("asset_path"), AssetPath);
     UTexture2D* Tex = FindTextureAtPackagePath(AssetPath);
     TestNotNull(TEXT("external UTexture2D exists"), Tex);
     if (Tex)
@@ -282,6 +447,161 @@ bool FMonolithImageGenTextureRolesImportExternalTest::RunTest(const FString& Par
         TestEqual(TEXT("external ORM AddressY"), Tex->AddressY, TA_Wrap);
     }
 
+    IFileManager::Get().Delete(*ExpectedPngPath, false, true);
+
+    const FString IconPngB64 = MakeEdgeBackgroundIconPngB64();
+    TestFalse(TEXT("external icon PNG fixture encoded"), IconPngB64.IsEmpty());
+    if (!IconPngB64.IsEmpty())
+    {
+        TSharedPtr<FJsonObject> IconParams = MakeShared<FJsonObject>();
+        IconParams->SetStringField(TEXT("bytes_b64"), IconPngB64);
+        IconParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+        IconParams->SetStringField(TEXT("prompt"), TEXT("external generated icon on edge background"));
+        IconParams->SetStringField(TEXT("provider"), TEXT("external-test"));
+        IconParams->SetStringField(TEXT("model"), TEXT("test-model"));
+        IconParams->SetStringField(TEXT("destination"), TEXT("/Game/Tests/Monolith/ImageGen/T_ImportExternalIconPostprocessedMirror"));
+        IconParams->SetStringField(TEXT("texture_role"), TEXT("ui_icon"));
+        IconParams->SetBoolField(TEXT("save"), false);
+        IconParams->SetBoolField(TEXT("save_source_png"), true);
+
+        const FString RequestedIconPngPath = ExpectedSourcePngPath(TEXT("/Game/Tests/Monolith/ImageGen/T_ImportExternalIconPostprocessedMirror"));
+        IFileManager::Get().Delete(*RequestedIconPngPath, false, true);
+
+        const FMonolithActionResult IconResult = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("imagegen"), TEXT("import_generated_image"), IconParams);
+        TestTrue(TEXT("postprocessed mirror icon import succeeds"), IconResult.bSuccess);
+        if (IconResult.bSuccess && IconResult.Result.IsValid())
+        {
+            FString IconSourcePngPath;
+            TestTrue(TEXT("postprocessed mirror path returned"),
+                IconResult.Result->TryGetStringField(TEXT("source_png_path"), IconSourcePngPath) && !IconSourcePngPath.IsEmpty());
+            TestTrue(TEXT("postprocessed mirror PNG file exists"), FPaths::FileExists(IconSourcePngPath));
+            TestTrue(TEXT("postprocessed mirror has transparent pixel"), PngFileHasTransparentPixel(IconSourcePngPath));
+
+            FString SourcePngKind;
+            IconResult.Result->TryGetStringField(TEXT("source_png_kind"), SourcePngKind);
+            TestEqual(TEXT("source PNG mirror kind"), SourcePngKind, FString(TEXT("postprocessed")));
+
+            IFileManager::Get().Delete(*IconSourcePngPath, false, true);
+        }
+    }
+
+    TArray<uint8> FileImportBytes;
+    TestTrue(TEXT("external PNG fixture decodes for file_path import"), FBase64::Decode(PngB64, FileImportBytes));
+    const FString FixtureDir = FPaths::ConvertRelativePathToFull(
+        FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("MonolithImageGenTests")));
+    IFileManager::Get().MakeDirectory(*FixtureDir, true);
+    const FString FixturePath = FPaths::Combine(FixtureDir, TEXT("import-generated-file-path.png"));
+    TestTrue(TEXT("external PNG fixture file saved"), FFileHelper::SaveArrayToFile(FileImportBytes, *FixturePath));
+    if (!FileImportBytes.IsEmpty() && FPaths::FileExists(FixturePath))
+    {
+        TSharedPtr<FJsonObject> FileParams = MakeShared<FJsonObject>();
+        FileParams->SetStringField(TEXT("file_path"), FixturePath);
+        FileParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+        FileParams->SetStringField(TEXT("prompt"), TEXT("external generated height file path"));
+        FileParams->SetStringField(TEXT("provider"), TEXT("external-file-test"));
+        FileParams->SetStringField(TEXT("model"), TEXT("test-model"));
+        FileParams->SetStringField(TEXT("destination"), TEXT("/Game/Tests/Monolith/ImageGen/T_ImportExternalFilePathHeightRole"));
+        FileParams->SetStringField(TEXT("texture_role"), TEXT("height"));
+        FileParams->SetBoolField(TEXT("save"), false);
+        FileParams->SetBoolField(TEXT("save_source_png"), false);
+
+        const FMonolithActionResult FileResult = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("imagegen"), TEXT("import_generated_image"), FileParams);
+        TestTrue(TEXT("import_generated_image accepts file_path"), FileResult.bSuccess);
+        if (!FileResult.bSuccess)
+        {
+            AddError(FString::Printf(TEXT("Import file_path error: %s (code %d)"),
+                *FileResult.ErrorMessage, FileResult.ErrorCode));
+        }
+        else if (FileResult.Result.IsValid())
+        {
+            FString FileRole;
+            FileResult.Result->TryGetStringField(TEXT("texture_role"), FileRole);
+            TestEqual(TEXT("file_path import texture_role height"), FileRole, FString(TEXT("height")));
+
+            const TSharedPtr<FJsonObject>* FileProvenance = nullptr;
+            TestTrue(TEXT("file_path provenance returned"),
+                FileResult.Result->TryGetObjectField(TEXT("provenance"), FileProvenance) && FileProvenance && FileProvenance->IsValid());
+            if (FileProvenance && FileProvenance->IsValid())
+            {
+                FString SourceKind;
+                (*FileProvenance)->TryGetStringField(TEXT("source"), SourceKind);
+                TestEqual(TEXT("file_path provenance source"), SourceKind, FString(TEXT("external_file")));
+            }
+        }
+    }
+    IFileManager::Get().Delete(*FixturePath, false, true);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithImageGenReferenceInputsArchiveTest,
+    "MonolithImageGen.TextureRoles.ReferenceInputsArchive",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithImageGenReferenceInputsArchiveTest::RunTest(const FString& Parameters)
+{
+    EnsureImageGenModuleLoaded();
+
+    const FString FixtureDir = FPaths::ConvertRelativePathToFull(
+        FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("MonolithImageGenTests")));
+    IFileManager::Get().MakeDirectory(*FixtureDir, true);
+
+    const FString PngB64 = MakeSolidPngB64(FColor(12, 34, 56, 255));
+    TArray<uint8> PngBytes;
+    TestTrue(TEXT("reference PNG fixture decodes"), FBase64::Decode(PngB64, PngBytes));
+    const FString ReferencePngPath = FPaths::Combine(FixtureDir, TEXT("reference-png-path.png"));
+    TestTrue(TEXT("reference PNG fixture saved"), FFileHelper::SaveArrayToFile(PngBytes, *ReferencePngPath));
+
+    const FString ReferenceAssetPath = TEXT("/Game/Tests/Monolith/ImageGen/T_ReferenceAssetPathSource");
+    UTexture2D* ReferenceTexture = MakeReferenceTextureFixture(ReferenceAssetPath);
+    TestNotNull(TEXT("reference Texture2D fixture created"), ReferenceTexture);
+    if (!ReferenceTexture || !FPaths::FileExists(ReferencePngPath))
+    {
+        IFileManager::Get().Delete(*ReferencePngPath, false, true);
+        return false;
+    }
+
+    const TSet<FString> BeforeFiles = ListArchivedReferencePngFiles();
+
+    TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+    Params->SetStringField(TEXT("prompt"), TEXT("reference input archive smoke"));
+    Params->SetStringField(TEXT("server_url"), TEXT("http://127.0.0.1:9"));
+    Params->SetStringField(TEXT("destination"), TEXT("/Game/Tests/Monolith/ImageGen/T_ReferenceArchiveBridgeFailure"));
+    Params->SetNumberField(TEXT("timeout_seconds"), 1.0);
+    Params->SetBoolField(TEXT("save"), false);
+
+    TArray<TSharedPtr<FJsonValue>> ReferencePngPaths;
+    ReferencePngPaths.Add(MakeShared<FJsonValueString>(ReferencePngPath));
+    Params->SetArrayField(TEXT("reference_png_paths"), ReferencePngPaths);
+
+    TArray<TSharedPtr<FJsonValue>> ReferenceAssetPaths;
+    ReferenceAssetPaths.Add(MakeShared<FJsonValueString>(ReferenceAssetPath));
+    Params->SetArrayField(TEXT("reference_asset_paths"), ReferenceAssetPaths);
+
+    const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("imagegen"), TEXT("generate_image_via_ima2"), Params);
+    TestFalse(TEXT("closed local bridge port should fail after references are archived"), Result.bSuccess);
+
+    const TSet<FString> AfterFiles = ListArchivedReferencePngFiles();
+    TArray<FString> NewFiles;
+    for (const FString& FilePath : AfterFiles)
+    {
+        if (!BeforeFiles.Contains(FilePath))
+        {
+            NewFiles.Add(FilePath);
+        }
+    }
+
+    TestTrue(TEXT("reference_png_paths and reference_asset_paths archive PNG files before bridge call"), NewFiles.Num() >= 2);
+    for (const FString& FilePath : NewFiles)
+    {
+        TestTrue(FString::Printf(TEXT("archived reference has PNG signature: %s"), *FilePath), HasPngSignature(FilePath));
+        IFileManager::Get().Delete(*FilePath, false, true);
+    }
+
+    IFileManager::Get().Delete(*ReferencePngPath, false, true);
     return true;
 }
 

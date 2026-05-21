@@ -27,7 +27,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 
 | Action | Owner class | Purpose |
 |--------|-------------|---------|
-| `import_texture_from_bytes` | `MonolithAsset::FTextureIngestActions` | Decode base64 compressed image bytes and create a `UTexture2D` under `/Game/...`; optional `texture_role` applies Unreal texture-role import presets, lightweight post-processing, and validation metadata. |
+| `import_texture_from_bytes` | `MonolithAsset::FTextureIngestActions` | Decode base64 compressed image bytes and create a `UTexture2D` under `/Game/...`; optional `texture_role` applies Unreal texture-role import presets, role post-processing, validation metadata, and optional postprocessed PNG return. |
 | `import_font_family` | `MonolithAsset::FFontIngestActions` | Import one or more TTF files as a composite `UFont` plus `UFontFace` assets. |
 | `import_texture_from_file` | `FMonolithAssetLifecycleActions` | Import an external image file as a `UTexture2D` with optional compression, sRGB, tiling, max-size, and LOD-group settings. |
 | `save_asset` | `FMonolithAssetLifecycleActions` | Save any loaded asset package to disk. |
@@ -68,16 +68,16 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 
 | Role | Import / post-processing contract |
 |------|-----------------------------------|
-| `ui_icon`, `sprite` | `sRGB=true`, `TEXTUREGROUP_UI`, `TMGS_NoMipmaps`, clamp addressing, transparent-pixel RGB alpha bleed. |
-| `decal` | `sRGB=true`, `TEXTUREGROUP_Effects`, group mips, clamp addressing, alpha bleed, power-of-two warning. |
+| `ui_icon`, `sprite` | `sRGB=true`, `TEXTUREGROUP_UI`, `TMGS_NoMipmaps`, clamp addressing, edge-background alpha extraction for opaque-background generated images, and transparent-pixel RGB alpha bleed. |
+| `decal` | `sRGB=true`, `TEXTUREGROUP_Effects`, group mips, clamp addressing, edge-background alpha extraction, alpha bleed, power-of-two warning. |
 | `basecolor` | `sRGB=true`, `TC_Default`, `TEXTUREGROUP_World`, group mips, wrap addressing. |
-| `world_tile` | Base-color world settings plus wrap addressing, power-of-two check, and opposite-edge seam validation. |
+| `world_tile` | Base-color world settings plus wrap addressing, one-pixel opposite-edge seam harmonization, power-of-two check, and opposite-edge seam validation. |
 | `normal` | `sRGB=false`, `TC_Normalmap`, `TEXTUREGROUP_WorldNormalMap`, wrap addressing, power-of-two and tangent-space normal plausibility validation. |
 | `orm_mask` | `sRGB=false`, `TC_Masks`, `TEXTUREGROUP_WorldSpecular`, wrap addressing, channel-range validation. |
 | `height` | `sRGB=false`, `TC_Grayscale`, `TEXTUREGROUP_World`, wrap addressing, channel-range validation. |
 | `emissive` | `sRGB=true`, `TEXTUREGROUP_Effects`, group mips, clamp addressing. |
 
-The action result includes `texture_role`, `settings_applied`, and `validation`. Validation is non-destructive and returns warnings instead of failing the import unless normal parameter validation fails. `asset.inspect_asset` and `asset.validate_specialized_asset` recognize `Texture2D` assets and report generated texture-role settings from `Monolith.Generated.texture_role` metadata.
+The action result includes `texture_role`, `settings_applied`, and `validation`. Validation is non-destructive and returns warnings instead of failing the import unless normal parameter validation fails. `settings.alpha_from_edge_background=false` disables generated alpha extraction, `settings.tile_seam_harmonize=false` disables world-tile seam harmonization, and `return_processed_png=true` returns the imported post-processing result as `processed_png_b64`. `asset.inspect_asset` and `asset.validate_specialized_asset` recognize `Texture2D` assets and report generated texture-role settings from `Monolith.Generated.texture_role` metadata.
 
 ## 8. Verification
 

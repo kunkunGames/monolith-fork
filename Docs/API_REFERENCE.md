@@ -40,7 +40,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [leveldesign](#leveldesign) | 43 | Horror/encounter/accessibility analysis, framing, monster reveal, co-op balance |
 | [worldgen](#worldgen) | 63 | Blockout, replacement, procedural structures/terrain, optional town-generation workflows |
 | [modelgen](#modelgen) | 7 | Generated-model provider, job, import, and provenance workflows |
-| [imagegen](#imagegen) | 6 | Generated-image provider discovery, ima2 bridge generation, Texture2D import, and provenance workflows |
+| [imagegen](#imagegen) | 6 | Generated-image provider discovery, ima2 bridge generation, Texture2D import, source PNG mirroring, and provenance workflows |
 | [ndisplay](#ndisplay) | 2 | Optional nDisplay / DisplayCluster config discovery registered by MonolithNDisplay |
 | [pcg](#pcg) | 4 | Optional PCG AssetRegistry/reflection discovery registered by MonolithPCG |
 | [slate](#slate) | 1 (+5 gated) | Live editor Slate window/widget inspection registered by MonolithSlate |
@@ -1107,7 +1107,7 @@ Asset ingest, generic lifecycle operations, specialized asset enrichment, and as
 
 | Action | Summary |
 |--------|---------|
-| `import_texture_from_bytes` | Decode base64 compressed image bytes and create a `UTexture2D` asset. Optional `texture_role` applies Unreal-specific presets, post-processing, and validation metadata for UI, sprite, decal, basecolor, tileable world, normal, ORM/mask, height, and emissive textures. |
+| `import_texture_from_bytes` | Decode base64 compressed image bytes and create a `UTexture2D` asset. Optional `texture_role` applies Unreal-specific presets, role post-processing, and validation metadata for UI, sprite, decal, basecolor, tileable world, normal, ORM/mask, height, and emissive textures. `return_processed_png=true` returns the imported post-processed pixels as PNG. |
 | `import_font_family` | Import one or more TTF files as a composite `UFont` plus `UFontFace` assets. |
 | `import_texture_from_file` | Import an external image file as a `UTexture2D` asset with optional texture settings. |
 | `save_asset` | Save any loaded asset package to disk. |
@@ -1196,7 +1196,7 @@ Generated-model provider, job, import, and provenance workflows. **7 actions.**
 
 ## imagegen
 
-Generated-image provider discovery, deterministic local generation, ima2/imag2-gen HTTP generation, Texture2D import, and provenance workflows. **6 actions.**
+Generated-image provider discovery, deterministic local generation, ima2/imag2-gen HTTP generation, Texture2D import, source PNG mirroring, and provenance workflows. **6 actions.**
 
 > For full param schemas, call `monolith_discover("imagegen")` at runtime.
 
@@ -1205,11 +1205,11 @@ Default external generation uses `ImageGenBridgeServerUrl=http://192.168.0.10:33
 | Action | Params | Description |
 |--------|--------|-------------|
 | `list_image_models` | none | Lists local deterministic generation, the ima2 bridge boundary, and caller-supplied external import. |
-| `get_image_generation_defaults` | none | Returns ima2 defaults (`model=gpt-5.5`), `/Game/GeneratedImages`, root reference PNG directory, local-placeholder fallback, texture role presets, import defaults, and prompt redaction policy. |
-| `generate_image` | `prompt`, optional `resolution`, `texture_role`, destination/import settings | Generates a deterministic local BMP placeholder and imports it as `UTexture2D`. No network or API keys. Defaults generated imports to `texture_role=basecolor`. |
-| `generate_image_via_ima2` | `prompt`, optional `server_url`, `provider`, `model`, `quality`, `size`/`resolution`, `format`, `background`, `moderation`, `texture_role`, `references`/`reference_images`/`reference_image_paths`, destination/import settings | POSTs to the ima2/imag2-gen `/api/generate` endpoint, forwards `background=transparent|opaque|auto`, imports the first returned image through `asset.import_texture_from_bytes`, applies the requested texture role, stores redacted provenance, and archives reference inputs as PNGs under `<ProjectDir>/GeneratedImages`. |
-| `import_generated_image` | `bytes_b64`, optional `format_hint`, `prompt`, `provider`, `model`, `texture_role`, destination/import settings | Imports externally generated base64 image bytes through the same Texture2D ingest path, applies the requested texture role, and stores redacted provenance. |
-| `get_generated_asset_provenance` | `asset_path` | Reads `Monolith.Generated.*` metadata from a generated Texture2D asset. |
+| `get_image_generation_defaults` | none | Returns ima2 defaults (`model=gpt-5.5`), `/Game/GeneratedImages`, `source_png_dir`, root reference PNG directory, accepted `reference_input_fields`, local-placeholder fallback, texture role presets, import defaults, and prompt redaction policy. |
+| `generate_image` | `prompt`, optional `resolution`, `texture_role`, `save_source_png`, destination/import settings | Generates a deterministic local BMP placeholder and imports it as `UTexture2D`. No network or API keys. Defaults generated imports to `texture_role=basecolor` and mirrors saved imports as postprocessed PNGs under `<ProjectDir>/GeneratedImages`. |
+| `generate_image_via_ima2` | `prompt`, optional `server_url`, `provider`, `model`, `quality`, `size`/`resolution`, `format`, `background`, `moderation`, `texture_role`, `save_source_png`, `references`/`reference_images`/`reference_image_paths`/`reference_png_paths`/`reference_asset_paths`, destination/import settings | POSTs to the ima2/imag2-gen `/api/generate` endpoint, forwards `background=transparent|opaque|auto`, archives reference inputs as PNGs under `<ProjectDir>/GeneratedImages`, extracts Texture2D Source art for `reference_asset_paths`, imports the first returned image through `asset.import_texture_from_bytes`, applies the requested texture role, stores redacted provenance, and mirrors the postprocessed generated PNG under `<ProjectDir>/GeneratedImages`. |
+| `import_generated_image` | `bytes_b64` or `file_path`/`path`, optional `format_hint`, `prompt`, `provider`, `model`, `texture_role`, `save_source_png`, destination/import settings | Imports externally generated base64 image bytes or a local generated image file through the same Texture2D ingest path, applies the requested texture role, mirrors the postprocessed PNG under `<ProjectDir>/GeneratedImages`, and stores redacted provenance. |
+| `get_generated_asset_provenance` | `asset_path` | Reads `Monolith.Generated.*` metadata from a generated Texture2D asset, including `source_png_path`, `source_png_hash`, `source_png_bytes`, and `source_png_kind` when a source mirror was saved. |
 
 ---
 

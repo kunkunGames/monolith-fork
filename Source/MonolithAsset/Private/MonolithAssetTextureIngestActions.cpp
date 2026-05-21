@@ -11,6 +11,7 @@
 #include "Dom/JsonValue.h"
 #include "Misc/Base64.h"                        // FBase64::Decode
 #include "Misc/PackageName.h"                   // FPackageName::GetLongPackagePath / LongPackageNameToFilename / GetAssetPackageExtension
+#include "Misc/SecureHash.h"                    // FMD5
 #include "UObject/Package.h"                    // UPackage, SavePackage
 #include "UObject/SavePackage.h"                // FSavePackageArgs
 #include "UObject/UObjectGlobals.h"             // CreatePackage, NewObject
@@ -45,6 +46,8 @@ namespace MonolithAsset::TextureIngestInternal
         TextureAddress AddressX = TA_Clamp;
         TextureAddress AddressY = TA_Clamp;
         bool bAlphaBleed = false;
+        bool bAlphaFromEdgeBackground = false;
+        bool bHarmonizeTileEdges = false;
         bool bValidateNormal = false;
         bool bValidateTile = false;
         bool bValidateMask = false;
@@ -282,6 +285,7 @@ namespace MonolithAsset::TextureIngestInternal
             Preset.AddressX = TA_Clamp;
             Preset.AddressY = TA_Clamp;
             Preset.bAlphaBleed = true;
+            Preset.bAlphaFromEdgeBackground = true;
             return Preset;
         }
         if (Role == TEXT("decal"))
@@ -293,6 +297,7 @@ namespace MonolithAsset::TextureIngestInternal
             Preset.AddressX = TA_Clamp;
             Preset.AddressY = TA_Clamp;
             Preset.bAlphaBleed = true;
+            Preset.bAlphaFromEdgeBackground = true;
             Preset.bExpectPowerOfTwo = true;
             return Preset;
         }
@@ -304,6 +309,7 @@ namespace MonolithAsset::TextureIngestInternal
             Preset.LODGroup = TEXTUREGROUP_World;
             Preset.AddressX = TA_Wrap;
             Preset.AddressY = TA_Wrap;
+            Preset.bHarmonizeTileEdges = true;
             Preset.bValidateTile = true;
             Preset.bExpectPowerOfTwo = true;
             return Preset;
@@ -378,6 +384,225 @@ namespace MonolithAsset::TextureIngestInternal
         return Value > 0 && (Value & (Value - 1)) == 0;
     }
 
+    static FString HashBytes(const TArray<uint8>& Bytes)
+    {
+        FMD5 Md5;
+        if (Bytes.Num() > 0)
+        {
+            Md5.Update(Bytes.GetData(), Bytes.Num());
+        }
+        uint8 Digest[16];
+        Md5.Final(Digest);
+        return BytesToHex(Digest, UE_ARRAY_COUNT(Digest)).ToLower();
+    }
+
+    static bool EncodeRawBgraAsPng(const TArray<uint8>& RawBgra, int32 W, int32 H, TArray<uint8>& OutPngBytes)
+    {
+        if (W <= 0 || H <= 0 || RawBgra.Num() < static_cast<int64>(W) * static_cast<int64>(H) * 4)
+        {
+            return false;
+        }
+
+        IImageWrapperModule& ImageWrapperModule =
+            FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+        TSharedPtr<IImageWrapper> PngWrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+        if (!PngWrapper.IsValid() || !PngWrapper->SetRaw(RawBgra.GetData(), RawBgra.Num(), W, H, ERGBFormat::BGRA, 8))
+        {
+            return false;
+        }
+
+        const TArray64<uint8> PngBytes64 = PngWrapper->GetCompressed(100);
+        if (PngBytes64.Num() == 0)
+        {
+            return false;
+        }
+
+        OutPngBytes.Reset(PngBytes64.Num());
+        OutPngBytes.Append(PngBytes64.GetData(), PngBytes64.Num());
+        return true;
+    }
+
+    static bool HasNonOpaqueAlpha(const TArray<uint8>& RawBgra)
+    {
+        for (int32 Index = 3; Index < RawBgra.Num(); Index += 4)
+        {
+            if (RawBgra[Index] < 255)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static int32 ApplyEdgeBackgroundAlpha(TArray<uint8>& RawBgra, int32 W, int32 H)
+    {
+        if (W <= 0 || H <= 0 || HasNonOpaqueAlpha(RawBgra))
+        {
+            return 0;
+        }
+
+        int64 SumB = 0;
+        int64 SumG = 0;
+        int64 SumR = 0;
+        int64 Samples = 0;
+        auto AddSample = [&RawBgra, W, &SumB, &SumG, &SumR, &Samples](int32 X, int32 Y)
+        {
+            const int32 PixelIndex = (Y * W + X) * 4;
+            SumB += RawBgra[PixelIndex + 0];
+            SumG += RawBgra[PixelIndex + 1];
+            SumR += RawBgra[PixelIndex + 2];
+            ++Samples;
+        };
+
+        for (int32 X = 0; X < W; ++X)
+        {
+            AddSample(X, 0);
+            if (H > 1)
+            {
+                AddSample(X, H - 1);
+            }
+        }
+        for (int32 Y = 1; Y < H - 1; ++Y)
+        {
+            AddSample(0, Y);
+            if (W > 1)
+            {
+                AddSample(W - 1, Y);
+            }
+        }
+
+        if (Samples == 0)
+        {
+            return 0;
+        }
+
+        const int32 BackgroundB = static_cast<int32>(SumB / Samples);
+        const int32 BackgroundG = static_cast<int32>(SumG / Samples);
+        const int32 BackgroundR = static_cast<int32>(SumR / Samples);
+        constexpr int32 TransparentThreshold = 12;
+        constexpr int32 OpaqueThreshold = 54;
+
+        const int32 PixelCount = W * H;
+        TArray<uint8> CandidateAlpha;
+        CandidateAlpha.SetNumUninitialized(PixelCount);
+        int32 CandidatePixels = 0;
+        for (int32 Pixel = 0; Pixel < PixelCount; ++Pixel)
+        {
+            const int32 Index = Pixel * 4;
+            const int32 DeltaB = FMath::Abs(static_cast<int32>(RawBgra[Index + 0]) - BackgroundB);
+            const int32 DeltaG = FMath::Abs(static_cast<int32>(RawBgra[Index + 1]) - BackgroundG);
+            const int32 DeltaR = FMath::Abs(static_cast<int32>(RawBgra[Index + 2]) - BackgroundR);
+            const int32 Delta = FMath::Max3(DeltaB, DeltaG, DeltaR);
+
+            uint8 Alpha = 255;
+            if (Delta <= TransparentThreshold)
+            {
+                Alpha = 0;
+            }
+            else if (Delta < OpaqueThreshold)
+            {
+                Alpha = static_cast<uint8>(FMath::Clamp(
+                    ((Delta - TransparentThreshold) * 255) / (OpaqueThreshold - TransparentThreshold), 0, 255));
+            }
+            CandidateAlpha[Pixel] = Alpha;
+            if (Alpha < 255)
+            {
+                ++CandidatePixels;
+            }
+        }
+
+        if (CandidatePixels == 0)
+        {
+            return 0;
+        }
+
+        TArray<uint8> bBackgroundConnected;
+        bBackgroundConnected.Init(0, PixelCount);
+
+        TArray<int32> FloodQueue;
+        FloodQueue.Reserve(PixelCount);
+        auto TryAddCandidate = [&CandidateAlpha, &bBackgroundConnected, &FloodQueue, PixelCount](int32 Pixel)
+        {
+            if (Pixel < 0 || Pixel >= PixelCount || bBackgroundConnected[Pixel] != 0 || CandidateAlpha[Pixel] == 255)
+            {
+                return;
+            }
+            bBackgroundConnected[Pixel] = 1;
+            FloodQueue.Add(Pixel);
+        };
+
+        for (int32 X = 0; X < W; ++X)
+        {
+            TryAddCandidate(X);
+            if (H > 1)
+            {
+                TryAddCandidate((H - 1) * W + X);
+            }
+        }
+        for (int32 Y = 1; Y < H - 1; ++Y)
+        {
+            TryAddCandidate(Y * W);
+            if (W > 1)
+            {
+                TryAddCandidate(Y * W + (W - 1));
+            }
+        }
+
+        for (int32 QueueIndex = 0; QueueIndex < FloodQueue.Num(); ++QueueIndex)
+        {
+            const int32 Pixel = FloodQueue[QueueIndex];
+            const int32 X = Pixel % W;
+            const int32 Y = Pixel / W;
+            if (X > 0)
+            {
+                TryAddCandidate(Pixel - 1);
+            }
+            if (X + 1 < W)
+            {
+                TryAddCandidate(Pixel + 1);
+            }
+            if (Y > 0)
+            {
+                TryAddCandidate(Pixel - W);
+            }
+            if (Y + 1 < H)
+            {
+                TryAddCandidate(Pixel + W);
+            }
+        }
+
+        if (FloodQueue.Num() == 0)
+        {
+            return 0;
+        }
+
+        TArray<uint8> Candidate = RawBgra;
+        int32 NonOpaquePixels = 0;
+        int32 OpaquePixels = 0;
+        for (int32 Pixel = 0; Pixel < PixelCount; ++Pixel)
+        {
+            const int32 Index = Pixel * 4;
+            if (bBackgroundConnected[Pixel] != 0)
+            {
+                Candidate[Index + 3] = CandidateAlpha[Pixel];
+                ++NonOpaquePixels;
+            }
+            else
+            {
+                Candidate[Index + 3] = 255;
+                ++OpaquePixels;
+            }
+        }
+
+        if (OpaquePixels < FMath::Max(1, PixelCount / 100) || NonOpaquePixels == 0)
+        {
+            return 0;
+        }
+
+        RawBgra = MoveTemp(Candidate);
+        return NonOpaquePixels;
+    }
+
     static int32 ApplyAlphaBleed(TArray<uint8>& RawBgra, int32 W, int32 H, int32 Iterations = 2)
     {
         int32 TotalChanged = 0;
@@ -445,6 +670,61 @@ namespace MonolithAsset::TextureIngestInternal
         return TotalChanged;
     }
 
+    static int32 ApplyTileSeamHarmonization(TArray<uint8>& RawBgra, int32 W, int32 H)
+    {
+        if (W <= 1 || H <= 1)
+        {
+            return 0;
+        }
+
+        int32 ChangedPixels = 0;
+        auto HarmonizePair = [&RawBgra, &ChangedPixels](int32 AIndex, int32 BIndex)
+        {
+            const uint8 OldAB = RawBgra[AIndex + 0];
+            const uint8 OldAG = RawBgra[AIndex + 1];
+            const uint8 OldAR = RawBgra[AIndex + 2];
+            const uint8 OldAA = RawBgra[AIndex + 3];
+            const uint8 OldBB = RawBgra[BIndex + 0];
+            const uint8 OldBG = RawBgra[BIndex + 1];
+            const uint8 OldBR = RawBgra[BIndex + 2];
+            const uint8 OldBA = RawBgra[BIndex + 3];
+
+            const uint8 NewB = static_cast<uint8>((static_cast<int32>(OldAB) + static_cast<int32>(OldBB)) / 2);
+            const uint8 NewG = static_cast<uint8>((static_cast<int32>(OldAG) + static_cast<int32>(OldBG)) / 2);
+            const uint8 NewR = static_cast<uint8>((static_cast<int32>(OldAR) + static_cast<int32>(OldBR)) / 2);
+            const uint8 NewA = static_cast<uint8>((static_cast<int32>(OldAA) + static_cast<int32>(OldBA)) / 2);
+
+            const bool bChanged =
+                OldAB != NewB || OldAG != NewG || OldAR != NewR || OldAA != NewA ||
+                OldBB != NewB || OldBG != NewG || OldBR != NewR || OldBA != NewA;
+
+            RawBgra[AIndex + 0] = NewB;
+            RawBgra[AIndex + 1] = NewG;
+            RawBgra[AIndex + 2] = NewR;
+            RawBgra[AIndex + 3] = NewA;
+            RawBgra[BIndex + 0] = NewB;
+            RawBgra[BIndex + 1] = NewG;
+            RawBgra[BIndex + 2] = NewR;
+            RawBgra[BIndex + 3] = NewA;
+
+            if (bChanged)
+            {
+                ChangedPixels += 2;
+            }
+        };
+
+        for (int32 Y = 0; Y < H; ++Y)
+        {
+            HarmonizePair((Y * W + 0) * 4, (Y * W + (W - 1)) * 4);
+        }
+        for (int32 X = 0; X < W; ++X)
+        {
+            HarmonizePair((0 * W + X) * 4, ((H - 1) * W + X) * 4);
+        }
+
+        return ChangedPixels;
+    }
+
     static TSharedPtr<FJsonObject> BuildAppliedSettingsJson(
         TextureCompressionSettings Compression,
         bool bSRGB,
@@ -469,7 +749,9 @@ namespace MonolithAsset::TextureIngestInternal
         int32 W,
         int32 H,
         const FTextureRolePreset& Preset,
-        int32 AlphaBleedPixels)
+        int32 AlphaFromBackgroundPixels,
+        int32 AlphaBleedPixels,
+        int32 TileSeamPixels)
     {
         TArray<TSharedPtr<FJsonValue>> Warnings;
         const int64 PixelCount = static_cast<int64>(W) * static_cast<int64>(H);
@@ -597,7 +879,9 @@ namespace MonolithAsset::TextureIngestInternal
         AddStats(TEXT("a"), MinA, MaxA, SumA);
 
         TSharedPtr<FJsonObject> PostProcess = MakeShared<FJsonObject>();
+        PostProcess->SetNumberField(TEXT("alpha_from_edge_background_pixels"), AlphaFromBackgroundPixels);
         PostProcess->SetNumberField(TEXT("alpha_bleed_pixels"), AlphaBleedPixels);
+        PostProcess->SetNumberField(TEXT("tile_seam_harmonized_pixels"), TileSeamPixels);
 
         TSharedPtr<FJsonObject> Validation = MakeShared<FJsonObject>();
         Validation->SetStringField(TEXT("texture_role"), Role.IsEmpty() ? TEXT("default") : Role);
@@ -667,6 +951,8 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
 
     bool bSave = true;
     Params->TryGetBoolField(TEXT("save"), bSave);
+    bool bReturnProcessedPng = false;
+    Params->TryGetBoolField(TEXT("return_processed_png"), bReturnProcessedPng);
 
     TextureCompressionSettings Compression = TC_Default;
     bool bSRGB = true;
@@ -675,6 +961,8 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
     TextureAddress AddressX = TA_Clamp;
     TextureAddress AddressY = TA_Clamp;
     bool bAlphaBleed = false;
+    bool bAlphaFromEdgeBackground = false;
+    bool bHarmonizeTileEdges = false;
 
     const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
     Params->TryGetObjectField(TEXT("settings"), SettingsObj);
@@ -695,6 +983,8 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
         AddressX = RolePreset.AddressX;
         AddressY = RolePreset.AddressY;
         bAlphaBleed = RolePreset.bAlphaBleed;
+        bAlphaFromEdgeBackground = RolePreset.bAlphaFromEdgeBackground;
+        bHarmonizeTileEdges = RolePreset.bHarmonizeTileEdges;
     }
 
     if (SettingsObj && SettingsObj->IsValid())
@@ -739,6 +1029,19 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
         if ((*SettingsObj)->TryGetBoolField(TEXT("alpha_bleed"), bAlphaBleedValue))
         {
             bAlphaBleed = bAlphaBleedValue;
+        }
+
+        bool bAlphaFromBackgroundValue = false;
+        if ((*SettingsObj)->TryGetBoolField(TEXT("alpha_from_edge_background"), bAlphaFromBackgroundValue))
+        {
+            bAlphaFromEdgeBackground = bAlphaFromBackgroundValue;
+        }
+
+        bool bHarmonizeTileEdgesValue = false;
+        if ((*SettingsObj)->TryGetBoolField(TEXT("tile_seam_harmonize"), bHarmonizeTileEdgesValue)
+            || (*SettingsObj)->TryGetBoolField(TEXT("seam_harmonize"), bHarmonizeTileEdgesValue))
+        {
+            bHarmonizeTileEdges = bHarmonizeTileEdgesValue;
         }
     }
 
@@ -796,9 +1099,11 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
             -32603);
     }
 
+    const int32 AlphaFromBackgroundPixels = bAlphaFromEdgeBackground ? ApplyEdgeBackgroundAlpha(RawBgra, W, H) : 0;
     const int32 AlphaBleedPixels = bAlphaBleed ? ApplyAlphaBleed(RawBgra, W, H) : 0;
+    const int32 TileSeamPixels = bHarmonizeTileEdges ? ApplyTileSeamHarmonization(RawBgra, W, H) : 0;
     TSharedPtr<FJsonObject> Validation = BuildTextureValidationJson(
-        TextureRole, RawBgra, W, H, RolePreset, AlphaBleedPixels);
+        TextureRole, RawBgra, W, H, RolePreset, AlphaFromBackgroundPixels, AlphaBleedPixels, TileSeamPixels);
 
     // --- Resolve a unique package + asset name ---
     FAssetToolsModule& AssetToolsModule =
@@ -912,6 +1217,17 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
     ResultObj->SetStringField(TEXT("texture_role"), TextureRole.IsEmpty() ? TEXT("default") : TextureRole);
     ResultObj->SetObjectField(TEXT("settings_applied"), BuildAppliedSettingsJson(Compression, bSRGB, MipGen, LODGroup, AddressX, AddressY));
     ResultObj->SetObjectField(TEXT("validation"), Validation);
+    if (bReturnProcessedPng)
+    {
+        TArray<uint8> ProcessedPngBytes;
+        if (!EncodeRawBgraAsPng(RawBgra, W, H, ProcessedPngBytes))
+        {
+            return FMonolithActionResult::Error(TEXT("Failed to encode postprocessed texture pixels as PNG"), -32603);
+        }
+        ResultObj->SetStringField(TEXT("processed_png_b64"), FBase64::Encode(ProcessedPngBytes));
+        ResultObj->SetNumberField(TEXT("processed_png_bytes"), ProcessedPngBytes.Num());
+        ResultObj->SetStringField(TEXT("processed_png_hash"), HashBytes(ProcessedPngBytes));
+    }
     return FMonolithActionResult::Success(ResultObj);
 }
 
@@ -925,15 +1241,16 @@ void MonolithAsset::FTextureIngestActions::Register(FMonolithToolRegistry& Regis
              "bytes_b64 (string, required, base64 image bytes), "
              "format_hint (string, required, one of png|jpg|jpeg|bmp|exr|tga|hdr|tif|tiff|dds), "
              "texture_role (string, optional: ui_icon|sprite|decal|basecolor|world_tile|normal|orm_mask|height|emissive), "
-             "settings (object, optional: compression_settings, srgb, mip_gen_settings, lod_group, address_x, address_y, alpha_bleed), "
-             "save (bool, optional, default true)."),
+             "settings (object, optional: compression_settings, srgb, mip_gen_settings, lod_group, address_x, address_y, alpha_bleed, alpha_from_edge_background, tile_seam_harmonize), "
+             "save (bool, optional, default true), return_processed_png (bool, optional)."),
         FMonolithActionHandler::CreateStatic(&MonolithAsset::FTextureIngestActions::HandleImportTextureFromBytes),
         FParamSchemaBuilder()
             .Required(TEXT("destination"), TEXT("string"), TEXT("Output texture path without .uasset"))
             .Required(TEXT("bytes_b64"), TEXT("string"), TEXT("Base64-encoded image bytes"))
             .Required(TEXT("format_hint"), TEXT("string"), TEXT("png, jpg, jpeg, bmp, exr, tga, hdr, tif, tiff, or dds"))
             .Optional(TEXT("texture_role"), TEXT("string"), TEXT("Unreal texture role preset: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, or emissive"))
-            .Optional(TEXT("settings"), TEXT("object"), TEXT("Texture settings such as compression_settings, srgb, mip_gen_settings, lod_group, address_x, address_y, alpha_bleed"))
+            .Optional(TEXT("settings"), TEXT("object"), TEXT("Texture settings such as compression_settings, srgb, mip_gen_settings, lod_group, address_x, address_y, alpha_bleed, alpha_from_edge_background, tile_seam_harmonize"))
             .Optional(TEXT("save"), TEXT("bool"), TEXT("Save the texture asset"), TEXT("true"))
+            .Optional(TEXT("return_processed_png"), TEXT("bool"), TEXT("Return postprocessed imported pixels re-encoded as PNG"), TEXT("false"))
             .Build());
 }
