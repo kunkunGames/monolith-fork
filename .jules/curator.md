@@ -39,3 +39,8 @@
 **Learning:** Python tooling generates cache directories that aren't captured by standard Unreal ignores.
 **Prevention:** Add explicit ignore rules for Python tooling caches like `.ruff_cache/` in `.gitignore`.
 **Avoid:** Committing or leaving linter cache directories unstaged, which can cause spurious diffs.
+## 2026-05-21 - Ignore tool invocation Logs directory
+**Hygiene issue:** Tool invocation logs generated in `Logs/` were not ignored on case-sensitive file systems like Linux because the existing rule was only `logs/`.
+**Learning:** File system case sensitivity causes `logs/` to not match `Logs/`, exposing generated tool invocation JSONL logs (Proxy, Offline Query CLI, Editor actions) to accidental commits on Linux.
+**Prevention:** Add an explicit `Logs/` ignore rule that exactly matches the directory casing specified in tool log contracts (`Docs/specs/SPEC_MonolithToolInvocationLogs.md`).
+**Avoid:** Relying on lowercase ignore rules for capitalized directories on case-sensitive file systems.
