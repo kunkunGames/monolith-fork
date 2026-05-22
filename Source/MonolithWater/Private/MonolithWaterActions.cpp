@@ -169,6 +169,7 @@ FMonolithActionResult FMonolithWaterActions::ListBodies(const TSharedPtr<FJsonOb
 	Params->TryGetStringField(TEXT("actor_name_filter"), NameFilter);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(Limit);
 	int32 MatchedCount = 0;
 	TMap<FString, int32> ClassCounts;
 
