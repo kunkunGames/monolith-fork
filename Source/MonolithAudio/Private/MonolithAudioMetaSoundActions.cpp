@@ -708,7 +708,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::AddMetaSoundNode(const TSh
 	if (Params->HasField(TEXT("node_id")))
 	{
 		FString UserLabel;
-	Params->TryGetStringField(TEXT("node_id"), UserLabel);
+		if (!Params->TryGetStringField(TEXT("node_id"), UserLabel))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: node_id must be a string"));
+		}
 		ResultJson->SetStringField(TEXT("node_id"), UserLabel);
 
 		// Phase F #3: register the user label so subsequent calls (remove/connect/find_inputs/etc.)
@@ -1712,8 +1715,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 			if (ConnObj->HasField(TEXT("to_node")))
 			{
 				FString ToNodeId;
-			ConnObj->TryGetStringField(TEXT("to_node"), ToNodeId);
-				if (!DeclaredNodeIds.Contains(ToNodeId))
+				if (!ConnObj->TryGetStringField(TEXT("to_node"), ToNodeId))
+				{
+					PreValidationErrors.Add(FString::Printf(TEXT("interface_connection '%s' has malformed to_node: must be a string"), *Pair.Key));
+				}
+				else if (!DeclaredNodeIds.Contains(ToNodeId))
 				{
 					PreValidationErrors.Add(FString::Printf(TEXT("interface_connection '%s' target node '%s' not declared"), *Pair.Key, *ToNodeId));
 				}
@@ -1721,8 +1727,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 			if (ConnObj->HasField(TEXT("from_node")))
 			{
 				FString FromNodeId;
-			ConnObj->TryGetStringField(TEXT("from_node"), FromNodeId);
-				if (!DeclaredNodeIds.Contains(FromNodeId))
+				if (!ConnObj->TryGetStringField(TEXT("from_node"), FromNodeId))
+				{
+					PreValidationErrors.Add(FString::Printf(TEXT("interface_connection '%s' has malformed from_node: must be a string"), *Pair.Key));
+				}
+				else if (!DeclaredNodeIds.Contains(FromNodeId))
 				{
 					PreValidationErrors.Add(FString::Printf(TEXT("interface_connection '%s' source node '%s' not declared"), *Pair.Key, *FromNodeId));
 				}
@@ -2132,9 +2141,17 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 			if (ConnObj->HasField(TEXT("to_node")))
 			{
 				FString ToNodeId;
-			ConnObj->TryGetStringField(TEXT("to_node"), ToNodeId);
+				if (!ConnObj->TryGetStringField(TEXT("to_node"), ToNodeId))
+				{
+					SkippedInterfaces.Add(MakeSkipObj(InterfacePinName, TEXT("Malformed to_node: must be a string")));
+					continue;
+				}
 				FString ToPinName;
-			ConnObj->TryGetStringField(TEXT("to_pin"), ToPinName);
+				if (!ConnObj->TryGetStringField(TEXT("to_pin"), ToPinName))
+				{
+					SkippedInterfaces.Add(MakeSkipObj(InterfacePinName, TEXT("Malformed to_pin: must be a string")));
+					continue;
+				}
 
 				const FMetaSoundNodeHandle* ToHandle = NodeMap.Find(ToNodeId);
 				if (!ToHandle)
@@ -2173,9 +2190,17 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 			if (ConnObj->HasField(TEXT("from_node")))
 			{
 				FString FromNodeId;
-			ConnObj->TryGetStringField(TEXT("from_node"), FromNodeId);
+				if (!ConnObj->TryGetStringField(TEXT("from_node"), FromNodeId))
+				{
+					SkippedInterfaces.Add(MakeSkipObj(InterfacePinName, TEXT("Malformed from_node: must be a string")));
+					continue;
+				}
 				FString FromPinName;
-			ConnObj->TryGetStringField(TEXT("from_pin"), FromPinName);
+				if (!ConnObj->TryGetStringField(TEXT("from_pin"), FromPinName))
+				{
+					SkippedInterfaces.Add(MakeSkipObj(InterfacePinName, TEXT("Malformed from_pin: must be a string")));
+					continue;
+				}
 
 				const FMetaSoundNodeHandle* FromHandle = NodeMap.Find(FromNodeId);
 				if (!FromHandle)
