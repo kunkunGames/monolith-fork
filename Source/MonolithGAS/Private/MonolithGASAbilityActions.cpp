@@ -1107,7 +1107,11 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleSetAbilityPolicy(const T
 	// Instancing policy
 	if (Params->HasField(TEXT("instancing_policy")))
 	{
-		FString Val = Params->GetStringField(TEXT("instancing_policy"));
+		FString Val;
+		if (!Params->TryGetStringField(TEXT("instancing_policy"), Val))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: instancing_policy must be a string"));
+		}
 		EGameplayAbilityInstancingPolicy::Type Policy;
 		if (!ParseInstancingPolicy(Val, Policy))
 		{
@@ -1121,7 +1125,11 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleSetAbilityPolicy(const T
 	// Net execution policy
 	if (Params->HasField(TEXT("net_execution_policy")))
 	{
-		FString Val = Params->GetStringField(TEXT("net_execution_policy"));
+		FString Val;
+		if (!Params->TryGetStringField(TEXT("net_execution_policy"), Val))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: net_execution_policy must be a string"));
+		}
 		EGameplayAbilityNetExecutionPolicy::Type Policy;
 		if (!ParseNetExecutionPolicy(Val, Policy))
 		{
@@ -1135,7 +1143,11 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleSetAbilityPolicy(const T
 	// Net security policy
 	if (Params->HasField(TEXT("net_security_policy")))
 	{
-		FString Val = Params->GetStringField(TEXT("net_security_policy"));
+		FString Val;
+		if (!Params->TryGetStringField(TEXT("net_security_policy"), Val))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: net_security_policy must be a string"));
+		}
 		EGameplayAbilityNetSecurityPolicy::Type Policy;
 		if (!ParseNetSecurityPolicy(Val, Policy))
 		{
@@ -2055,11 +2067,20 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleCreateAbilityFromTemplat
 	if (Params->TryGetObjectField(TEXT("overrides"), Overrides))
 	{
 		if ((*Overrides)->HasField(TEXT("instancing_policy")))
-			InstancingPolicy = (*Overrides)->GetStringField(TEXT("instancing_policy"));
+		{
+			if (!(*Overrides)->TryGetStringField(TEXT("instancing_policy"), InstancingPolicy))
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: overrides.instancing_policy must be a string"));
+		}
 		if ((*Overrides)->HasField(TEXT("net_execution_policy")))
-			NetExecPolicy = (*Overrides)->GetStringField(TEXT("net_execution_policy"));
+		{
+			if (!(*Overrides)->TryGetStringField(TEXT("net_execution_policy"), NetExecPolicy))
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: overrides.net_execution_policy must be a string"));
+		}
 		if ((*Overrides)->HasField(TEXT("net_security_policy")))
-			NetSecPolicy = (*Overrides)->GetStringField(TEXT("net_security_policy"));
+		{
+			if (!(*Overrides)->TryGetStringField(TEXT("net_security_policy"), NetSecPolicy))
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: overrides.net_security_policy must be a string"));
+		}
 
 		const TArray<TSharedPtr<FJsonValue>>* OverrideTags;
 		if ((*Overrides)->TryGetArrayField(TEXT("ability_tags"), OverrideTags))
@@ -2118,16 +2139,22 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleCreateAbilityFromTemplat
 	{
 		if ((*Overrides)->HasField(TEXT("cost_effect_class")))
 		{
+			FString CostEffectClass;
+			if (!(*Overrides)->TryGetStringField(TEXT("cost_effect_class"), CostEffectClass))
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: overrides.cost_effect_class must be a string"));
 			TSharedPtr<FJsonObject> CostParams = MakeShared<FJsonObject>();
 			CostParams->SetStringField(TEXT("asset_path"), SavePath);
-			CostParams->SetStringField(TEXT("cost_effect_class"), (*Overrides)->GetStringField(TEXT("cost_effect_class")));
+			CostParams->SetStringField(TEXT("cost_effect_class"), CostEffectClass);
 			HandleSetAbilityCost(CostParams);
 		}
 		if ((*Overrides)->HasField(TEXT("cooldown_effect_class")))
 		{
+			FString CooldownEffectClass;
+			if (!(*Overrides)->TryGetStringField(TEXT("cooldown_effect_class"), CooldownEffectClass))
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: overrides.cooldown_effect_class must be a string"));
 			TSharedPtr<FJsonObject> CDParams = MakeShared<FJsonObject>();
 			CDParams->SetStringField(TEXT("asset_path"), SavePath);
-			CDParams->SetStringField(TEXT("cooldown_effect_class"), (*Overrides)->GetStringField(TEXT("cooldown_effect_class")));
+			CDParams->SetStringField(TEXT("cooldown_effect_class"), CooldownEffectClass);
 			HandleSetAbilityCooldown(CDParams);
 		}
 	}
@@ -2166,11 +2193,17 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleBuildAbilityFromSpec(con
 	CreateParams->SetStringField(TEXT("save_path"), SavePath);
 	if (Spec->HasField(TEXT("parent_class")))
 	{
-		CreateParams->SetStringField(TEXT("parent_class"), Spec->GetStringField(TEXT("parent_class")));
+		FString ParentClass;
+		if (!Spec->TryGetStringField(TEXT("parent_class"), ParentClass))
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: spec.parent_class must be a string"));
+		CreateParams->SetStringField(TEXT("parent_class"), ParentClass);
 	}
 	if (Spec->HasField(TEXT("display_name")))
 	{
-		CreateParams->SetStringField(TEXT("display_name"), Spec->GetStringField(TEXT("display_name")));
+		FString DisplayName;
+		if (!Spec->TryGetStringField(TEXT("display_name"), DisplayName))
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: spec.display_name must be a string"));
+		CreateParams->SetStringField(TEXT("display_name"), DisplayName);
 	}
 
 	FMonolithActionResult CreateResult = HandleCreateAbility(CreateParams);
@@ -2192,11 +2225,26 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleBuildAbilityFromSpec(con
 			TSharedPtr<FJsonObject> PolicyParams = MakeShared<FJsonObject>();
 			PolicyParams->SetStringField(TEXT("asset_path"), SavePath);
 			if (Spec->HasField(TEXT("instancing_policy")))
-				PolicyParams->SetStringField(TEXT("instancing_policy"), Spec->GetStringField(TEXT("instancing_policy")));
+			{
+				FString Policy;
+				if (!Spec->TryGetStringField(TEXT("instancing_policy"), Policy))
+					return FMonolithActionResult::Error(TEXT("Malformed parameter: spec.instancing_policy must be a string"));
+				PolicyParams->SetStringField(TEXT("instancing_policy"), Policy);
+			}
 			if (Spec->HasField(TEXT("net_execution_policy")))
-				PolicyParams->SetStringField(TEXT("net_execution_policy"), Spec->GetStringField(TEXT("net_execution_policy")));
+			{
+				FString Policy;
+				if (!Spec->TryGetStringField(TEXT("net_execution_policy"), Policy))
+					return FMonolithActionResult::Error(TEXT("Malformed parameter: spec.net_execution_policy must be a string"));
+				PolicyParams->SetStringField(TEXT("net_execution_policy"), Policy);
+			}
 			if (Spec->HasField(TEXT("net_security_policy")))
-				PolicyParams->SetStringField(TEXT("net_security_policy"), Spec->GetStringField(TEXT("net_security_policy")));
+			{
+				FString Policy;
+				if (!Spec->TryGetStringField(TEXT("net_security_policy"), Policy))
+					return FMonolithActionResult::Error(TEXT("Malformed parameter: spec.net_security_policy must be a string"));
+				PolicyParams->SetStringField(TEXT("net_security_policy"), Policy);
+			}
 
 			FMonolithActionResult PolicyResult = HandleSetAbilityPolicy(PolicyParams);
 			if (PolicyResult.bSuccess) AppliedSteps.Add(TEXT("policies"));
@@ -2228,9 +2276,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleBuildAbilityFromSpec(con
 	// Step 4: Cost
 	if (Spec->HasField(TEXT("cost_effect_class")))
 	{
+		FString CostEffectClass;
+		if (!Spec->TryGetStringField(TEXT("cost_effect_class"), CostEffectClass))
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: spec.cost_effect_class must be a string"));
 		TSharedPtr<FJsonObject> CostParams = MakeShared<FJsonObject>();
 		CostParams->SetStringField(TEXT("asset_path"), SavePath);
-		CostParams->SetStringField(TEXT("cost_effect_class"), Spec->GetStringField(TEXT("cost_effect_class")));
+		CostParams->SetStringField(TEXT("cost_effect_class"), CostEffectClass);
 		FMonolithActionResult CostResult = HandleSetAbilityCost(CostParams);
 		if (CostResult.bSuccess) AppliedSteps.Add(TEXT("cost"));
 	}
@@ -2238,9 +2289,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleBuildAbilityFromSpec(con
 	// Step 5: Cooldown
 	if (Spec->HasField(TEXT("cooldown_effect_class")))
 	{
+		FString CooldownEffectClass;
+		if (!Spec->TryGetStringField(TEXT("cooldown_effect_class"), CooldownEffectClass))
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: spec.cooldown_effect_class must be a string"));
 		TSharedPtr<FJsonObject> CDParams = MakeShared<FJsonObject>();
 		CDParams->SetStringField(TEXT("asset_path"), SavePath);
-		CDParams->SetStringField(TEXT("cooldown_effect_class"), Spec->GetStringField(TEXT("cooldown_effect_class")));
+		CDParams->SetStringField(TEXT("cooldown_effect_class"), CooldownEffectClass);
 		FMonolithActionResult CDResult = HandleSetAbilityCooldown(CDParams);
 		if (CDResult.bSuccess) AppliedSteps.Add(TEXT("cooldown"));
 	}
