@@ -184,6 +184,11 @@ jobs:
           # nothing to strip at this layer.
           cd "$GITHUB_WORKSPACE"
           git ls-files | while IFS= read -r f; do
+            case "$f" in
+              .github|.github/*|.jules|.jules/*|.vscode/*|.vs/*|.idea/*|Docs/testing/*|Intermediate/*|Saved/*|.git|.git/*)
+                continue
+                ;;
+            esac
             mkdir -p "$STAGE/$(dirname "$f")"
             cp -p "$f" "$STAGE/$f"
           done
