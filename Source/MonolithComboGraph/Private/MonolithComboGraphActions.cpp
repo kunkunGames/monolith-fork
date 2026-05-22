@@ -988,6 +988,10 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboGraph(const T
 	}
 
 	// Create package
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
@@ -1684,6 +1688,10 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboAbility(const
 	}
 
 	// Create package
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
