@@ -518,29 +518,52 @@ static std::string escape_fts(const std::string& query) {
 // SQLite RAII wrapper
 // ============================================================
 
+static std::string lower_copy(std::string value);
+
 class Database {
 public:
     sqlite3* db = nullptr;
 
     Database() = default;
-    ~Database() { if (db) sqlite3_close(db); }
+    ~Database() { close(); }
 
     Database(const Database&) = delete;
     Database& operator=(const Database&) = delete;
+
+    void close() noexcept {
+        if (!db) return;
+        sqlite3* handle = db;
+        db = nullptr;
+        write_open = false;
+        sqlite3_close(handle);
+    }
 
     void open(const std::string& path, bool query_only = true) {
         if (!fs::exists(path))
             die("Database not found: " + path);
 
+        if (query_only) {
+            std::string recovery_error;
+            if (!recover_rollback_journal(path, recovery_error)) {
+                die("Rollback journal exists for database and could not be recovered safely: " + path + "-journal - " + recovery_error);
+            }
+        }
+
+        close();
         int rc = sqlite3_open_v2(path.c_str(), &db, query_only ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE, nullptr);
         if (rc != SQLITE_OK)
             die("Failed to open database: " + path + " — " + sqlite3_errmsg(db));
 
+        write_open = !query_only;
         exec("PRAGMA busy_timeout=5000;");
-        if (query_only)
+        if (query_only) {
             exec("PRAGMA query_only=ON;");
-        else
+        } else {
+            exec("PRAGMA locking_mode=NORMAL;");
+            exec("PRAGMA journal_mode=DELETE;");
+            exec("PRAGMA synchronous=NORMAL;");
             exec("PRAGMA query_only=OFF;");
+        }
     }
 
     void open_or_create(const std::string& path) {
@@ -548,10 +571,14 @@ public:
         if (!parent.empty())
             fs::create_directories(parent);
 
+        close();
         int rc = sqlite3_open_v2(path.c_str(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
         if (rc != SQLITE_OK)
             die("Failed to open database: " + path + " — " + sqlite3_errmsg(db));
 
+        write_open = true;
+        exec("PRAGMA busy_timeout=5000;");
+        exec("PRAGMA locking_mode=NORMAL;");
         exec("PRAGMA journal_mode=DELETE;");
         exec("PRAGMA synchronous=NORMAL;");
     }
@@ -564,6 +591,108 @@ public:
             sqlite3_free(err);
             die("SQL error: " + msg);
         }
+    }
+
+    std::string scalar(const char* sql) {
+        sqlite3_stmt* stmt = nullptr;
+        int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr);
+        if (rc != SQLITE_OK)
+            die("SQL prepare failed: " + sqlite_error(db, rc));
+        std::string value;
+        rc = sqlite3_step(stmt);
+        if (rc == SQLITE_ROW) {
+            const unsigned char* text = sqlite3_column_text(stmt, 0);
+            if (text) value = reinterpret_cast<const char*>(text);
+        } else if (rc != SQLITE_DONE) {
+            std::string error = sqlite_error(db, rc);
+            sqlite3_finalize(stmt);
+            die("SQL step failed: " + error);
+        }
+        sqlite3_finalize(stmt);
+        return value;
+    }
+
+private:
+    bool write_open = false;
+
+    static bool rollback_journal_exists(const std::string& path) {
+        std::error_code ec;
+        return fs::exists(path + "-journal", ec);
+    }
+
+    static std::string sqlite_error(sqlite3* handle, int rc) {
+        const char* msg = handle ? sqlite3_errmsg(handle) : sqlite3_errstr(rc);
+        return msg ? std::string(msg) : ("SQLite error " + std::to_string(rc));
+    }
+
+    static bool exec_recovery(sqlite3* handle, const char* sql, std::string& error) {
+        char* err = nullptr;
+        int rc = sqlite3_exec(handle, sql, nullptr, nullptr, &err);
+        if (rc == SQLITE_OK) return true;
+
+        error = err ? std::string(err) : sqlite_error(handle, rc);
+        if (err) sqlite3_free(err);
+        return false;
+    }
+
+    static bool readonly_probe_ok(const std::string& path, std::string& error) {
+        sqlite3* probe_db = nullptr;
+        int rc = sqlite3_open_v2(path.c_str(), &probe_db, SQLITE_OPEN_READONLY, nullptr);
+        if (rc != SQLITE_OK) {
+            error = sqlite_error(probe_db, rc);
+            if (probe_db) sqlite3_close(probe_db);
+            return false;
+        }
+
+        bool ok = exec_recovery(probe_db, "PRAGMA busy_timeout=5000;", error)
+            && exec_recovery(probe_db, "PRAGMA schema_version;", error);
+
+        rc = sqlite3_close(probe_db);
+        if (ok && rc != SQLITE_OK) {
+            error = sqlite_error(probe_db, rc);
+            ok = false;
+        }
+
+        return ok;
+    }
+
+    static bool needs_writable_recovery(const std::string& error) {
+        std::string lower = error;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+        return lower.find("readonly") != std::string::npos
+            || lower.find("read-only") != std::string::npos
+            || lower.find("rollback") != std::string::npos;
+    }
+
+    static bool recover_rollback_journal(const std::string& path, std::string& error) {
+        if (!rollback_journal_exists(path)) return true;
+
+        std::string probe_error;
+        if (readonly_probe_ok(path, probe_error)) return true;
+        if (!needs_writable_recovery(probe_error)) {
+            error = probe_error;
+            return false;
+        }
+
+        sqlite3* recovery_db = nullptr;
+        int rc = sqlite3_open_v2(path.c_str(), &recovery_db, SQLITE_OPEN_READWRITE, nullptr);
+        if (rc != SQLITE_OK) {
+            error = sqlite_error(recovery_db, rc);
+            if (recovery_db) sqlite3_close(recovery_db);
+            return false;
+        }
+
+        bool ok = exec_recovery(recovery_db, "PRAGMA busy_timeout=5000;", error)
+            && exec_recovery(recovery_db, "PRAGMA schema_version;", error);
+
+        rc = sqlite3_close(recovery_db);
+        if (ok && rc != SQLITE_OK) {
+            error = sqlite_error(recovery_db, rc);
+            ok = false;
+        }
+
+        return ok;
     }
 };
 
@@ -3209,7 +3338,34 @@ public:
             "symbols=" + std::to_string(sym_cnt) + " symbols_fts=" + std::to_string(sym_fts_cnt) + (sym_cnt == sym_fts_cnt ? "" : " (mismatch -> source.repair_fts target=symbols)"));
         int64_t source_fts_cnt = count_rows(db, "SELECT COUNT(*) FROM source_fts;");
         root["checks"].push_back({{"check", "fts:source_fts_info"}, {"result", "info"}, {"detail", "source_fts rows=" + std::to_string(source_fts_cnt) + " (plain fts5; not rebuildable; reindex to repair)"}});
-        root["schema"] = {{"schema_version", schema_ver}, {"journal_mode", scalar_str(db, "PRAGMA journal_mode;")}};
+        std::string journal_mode = scalar_str(db, "PRAGMA journal_mode;");
+        root["schema"] = {{"schema_version", schema_ver}, {"journal_mode", journal_mode}};
+        if (lower_copy(journal_mode) == "wal") {
+            auto file_size = [](const std::string& path) -> uintmax_t {
+                std::error_code ec;
+                if (!fs::exists(path, ec)) return 0;
+                uintmax_t size = fs::file_size(path, ec);
+                return ec ? 0 : size;
+            };
+            json wal = {
+                {"wal_bytes", file_size(source_db_path + "-wal")},
+                {"shm_bytes", file_size(source_db_path + "-shm")},
+            };
+            sqlite3_stmt* stmt = nullptr;
+            int rc = sqlite3_prepare_v2(db.db, "PRAGMA wal_checkpoint(NOOP);", -1, &stmt, nullptr);
+            if (rc == SQLITE_OK) {
+                rc = sqlite3_step(stmt);
+                if (rc == SQLITE_ROW) {
+                    wal["checkpoint_busy"] = sqlite3_column_int64(stmt, 0);
+                    wal["log_frames"] = sqlite3_column_int64(stmt, 1);
+                    wal["checkpointed_frames"] = sqlite3_column_int64(stmt, 2);
+                }
+            } else {
+                wal["checkpoint_error"] = sqlite3_errmsg(db.db);
+            }
+            if (stmt) sqlite3_finalize(stmt);
+            root["wal"] = wal;
+        }
         if (include_counts) {
             root["row_counts"] = {
                 {"symbols", sym_cnt},

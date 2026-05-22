@@ -482,7 +482,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 	bool bOverwrite = false;
 	if (Params->HasField(TEXT("overwrite")))
 	{
-		if (!Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+		if (!MonolithGAS::TryGetStrictBoolField(Params, TEXT("overwrite"), bOverwrite))
 		{
 			return FMonolithActionResult::Error(TEXT("overwrite must be a boolean"));
 		}
@@ -490,7 +490,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 	bool bSave = true;
 	if (Params->HasField(TEXT("save")))
 	{
-		if (!Params->TryGetBoolField(TEXT("save"), bSave))
+		if (!MonolithGAS::TryGetStrictBoolField(Params, TEXT("save"), bSave))
 		{
 			return FMonolithActionResult::Error(TEXT("save must be a boolean"));
 		}

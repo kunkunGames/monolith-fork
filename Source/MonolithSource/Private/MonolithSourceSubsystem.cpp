@@ -49,8 +49,9 @@ void UMonolithSourceSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	// Commandlet mode (cook/compile): skip DB open. The running editor holds a WAL lock on
-	// EngineSource.db; a second open surfaces as "disk I/O error" → UAT ExitCode=1.
+	// Commandlet mode (cook/compile): skip DB open. Build/cook commandlets do not need the
+	// editor-owned source index, and avoiding a second long-lived DB handle keeps source
+	// indexing ownership in the editor or explicit reindex commandlet.
 	if (IsRunningCommandlet())
 	{
 		return;

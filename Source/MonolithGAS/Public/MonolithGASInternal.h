@@ -70,6 +70,12 @@ namespace MonolithGAS
 	// Validate required string param, return error result if missing
 	bool RequireStringParam(const TSharedPtr<FJsonObject>& Params, const FString& ParamName, FString& OutValue, FMonolithActionResult& OutError);
 
+	// Strict JSON field readers. UE's TryGet*Field APIs coerce some scalar types;
+	// these helpers reject mismatched JSON types before asset-creating actions run.
+	bool TryGetStrictStringField(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, FString& OutValue);
+	bool TryGetStrictNumberField(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, double& OutValue);
+	bool TryGetStrictBoolField(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, bool& OutValue);
+
 	// ---------------------------------------------------------------------------
 	// Asset Existence Guard (robust pre-check for create actions)
 	// ---------------------------------------------------------------------------

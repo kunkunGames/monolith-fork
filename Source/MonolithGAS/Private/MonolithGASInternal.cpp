@@ -209,6 +209,57 @@ bool RequireStringParam(const TSharedPtr<FJsonObject>& Params, const FString& Pa
 	return true;
 }
 
+bool TryGetStrictStringField(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, FString& OutValue)
+{
+	if (!Params.IsValid())
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonValue> Value = Params->TryGetField(FieldName);
+	if (!Value.IsValid() || Value->Type != EJson::String)
+	{
+		return false;
+	}
+
+	OutValue = Value->AsString();
+	return true;
+}
+
+bool TryGetStrictNumberField(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, double& OutValue)
+{
+	if (!Params.IsValid())
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonValue> Value = Params->TryGetField(FieldName);
+	if (!Value.IsValid() || Value->Type != EJson::Number)
+	{
+		return false;
+	}
+
+	OutValue = Value->AsNumber();
+	return true;
+}
+
+bool TryGetStrictBoolField(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, bool& OutValue)
+{
+	if (!Params.IsValid())
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonValue> Value = Params->TryGetField(FieldName);
+	if (!Value.IsValid() || Value->Type != EJson::Boolean)
+	{
+		return false;
+	}
+
+	OutValue = Value->AsBool();
+	return true;
+}
+
 // ---------------------------------------------------------------------------
 // Asset Existence Guard
 // ---------------------------------------------------------------------------

@@ -411,7 +411,7 @@ Plugins/Monolith/Binaries/monolith_query.exe project find_by_type Blueprint --li
 Plugins/Monolith/Binaries/monolith_query.exe project get_stats
 ```
 
-Auto-detects database paths relative to exe location. No configuration needed: `source` opens `Saved/EngineSource.db`, `project` opens `Saved/ProjectIndex.db`, `bridge` opens both, and source CRG graph actions use `Saved/graph.db`. Default plugin checkout commands can use those paths without DB override arguments; reserve overrides for copied databases or non-standard layouts.
+Auto-detects database paths relative to exe location. No configuration needed: `source` opens `Saved/EngineSource.db`, `project` opens `Saved/ProjectIndex.db`, `bridge` opens both, and source CRG graph actions use `Saved/graph.db`. Default plugin checkout commands can use those paths without DB override arguments; reserve overrides for copied databases or non-standard layouts. Source write actions keep `EngineSource.db` in rollback-journal `DELETE` so editor/MCP `FSQLiteDatabase` remains compatible; read-only source and bridge queries observe the current journal mode without changing it. `ProjectIndex.db` and `graph.db` also remain `DELETE`. If a rollback journal such as `EngineSource.db-journal` exists before a read-only query, the CLI probes it read-only and asks SQLite to recover only hot journals instead of deleting files by hand; active writer journals are left to the writer.
 
 `project search` matches the live MCP action: content-inclusive search is the default and returns match provenance fields (`match_source`, `match_table`, `match_field`, `match_object_path`, `match_value`). Use `--include-content=false` when you only want legacy asset/node hits.
 

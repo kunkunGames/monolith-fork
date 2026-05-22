@@ -90,6 +90,38 @@ static bool ExecuteMulti(FSQLiteDatabase& DB, const TCHAR* SQL)
 	return FlushStatement();
 }
 
+static FString ReadPragmaString(FSQLiteDatabase& DB, const TCHAR* Name)
+{
+	FString Value;
+	const FString SQL = FString::Printf(TEXT("PRAGMA %s;"), Name);
+	FSQLitePreparedStatement S;
+	if (S.Create(DB, *SQL) && S.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		S.GetColumnValueByIndex(0, Value);
+	}
+	return Value;
+}
+
+static bool ApplyEngineSourceDeletePragmas(FSQLiteDatabase& DB, const FString& DbPath)
+{
+	bool bOk = true;
+	bOk = DB.Execute(TEXT("PRAGMA busy_timeout=5000;")) && bOk;
+	bOk = DB.Execute(TEXT("PRAGMA locking_mode=NORMAL;")) && bOk;
+	bOk = DB.Execute(TEXT("PRAGMA journal_mode=DELETE;")) && bOk;
+	bOk = DB.Execute(TEXT("PRAGMA synchronous=NORMAL;")) && bOk;
+
+	const FString Journal = ReadPragmaString(DB, TEXT("journal_mode"));
+	if (!Journal.Equals(TEXT("delete"), ESearchCase::IgnoreCase))
+	{
+		UE_LOG(LogMonolithSource, Error,
+			TEXT("EngineSource DB did not enter DELETE journal mode: path=%s journal_mode=%s"),
+			*DbPath,
+			Journal.IsEmpty() ? TEXT("<unknown>") : *Journal);
+		return false;
+	}
+	return bOk;
+}
+
 // ============================================================
 // Constructor / Destructor
 // ============================================================
@@ -130,8 +162,14 @@ bool FMonolithSourceDatabase::Open(const FString& DbPath)
 		return false;
 	}
 
-	// Force DELETE journal mode — WAL breaks ReadOnly on Windows
-	Database->Execute(TEXT("PRAGMA journal_mode=DELETE;"));
+	if (!ApplyEngineSourceDeletePragmas(*Database, DbPath))
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Failed to configure EngineSource DB journal mode: %s"), *DbPath);
+		Database->Close();
+		delete Database;
+		Database = nullptr;
+		return false;
+	}
 
 	UE_LOG(LogMonolithSource, Log, TEXT("Engine source DB opened: %s"), *DbPath);
 	return true;
@@ -1486,9 +1524,14 @@ bool FMonolithSourceDatabase::OpenForWriting(const FString& DbPath)
 		return false;
 	}
 
-	// Belt-and-suspenders: force DELETE journal mode (WAL breaks ReadOnly on Windows, per lesson learned)
-	Database->Execute(TEXT("PRAGMA journal_mode=DELETE;"));
-	Database->Execute(TEXT("PRAGMA synchronous=NORMAL;"));
+	if (!ApplyEngineSourceDeletePragmas(*Database, DbPath))
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("OpenForWriting: failed to configure journal mode: %s"), *DbPath);
+		Database->Close();
+		delete Database;
+		Database = nullptr;
+		return false;
+	}
 	Database->Execute(TEXT("PRAGMA cache_size=-64000;"));   // 64 MB page cache
 
 	UE_LOG(LogMonolithSource, Log, TEXT("Engine source DB opened for writing: %s"), *DbPath);
@@ -1820,6 +1863,32 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	Schema->SetStringField(TEXT("journal_mode"), Journal);
 	Root->SetObjectField(TEXT("schema"), Schema);
 
+	if (Journal.Equals(TEXT("wal"), ESearchCase::IgnoreCase))
+	{
+		TSharedPtr<FJsonObject> Wal = MakeShared<FJsonObject>();
+		IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+		const FString WalPath = CachedDbPath + TEXT("-wal");
+		const FString ShmPath = CachedDbPath + TEXT("-shm");
+		Wal->SetNumberField(TEXT("wal_bytes"), static_cast<double>(FMath::Max<int64>(0, PlatformFile.FileSize(*WalPath))));
+		Wal->SetNumberField(TEXT("shm_bytes"), static_cast<double>(FMath::Max<int64>(0, PlatformFile.FileSize(*ShmPath))));
+
+		FSQLitePreparedStatement S;
+		if (S.Create(*Database, TEXT("PRAGMA wal_checkpoint(NOOP);"))
+			&& S.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			int64 Busy = 0;
+			int64 Log = 0;
+			int64 Checkpointed = 0;
+			S.GetColumnValueByIndex(0, Busy);
+			S.GetColumnValueByIndex(1, Log);
+			S.GetColumnValueByIndex(2, Checkpointed);
+			Wal->SetNumberField(TEXT("checkpoint_busy"), static_cast<double>(Busy));
+			Wal->SetNumberField(TEXT("log_frames"), static_cast<double>(Log));
+			Wal->SetNumberField(TEXT("checkpointed_frames"), static_cast<double>(Checkpointed));
+		}
+		Root->SetObjectField(TEXT("wal"), Wal);
+	}
+
 	if (bIncludeCounts)
 	{
 		TSharedPtr<FJsonObject> Counts = MakeShared<FJsonObject>();
@@ -1944,7 +2013,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 			bOk = false;
 			Warnings.Add(MakeShared<FJsonValueString>(TEXT("symbols_fts rebuild failed")));
 		}
-		if (bOk) Database->Execute(TEXT("COMMIT;"));
+		if (bOk)
+		{
+			Database->Execute(TEXT("COMMIT;"));
+		}
 		else Database->Execute(TEXT("ROLLBACK;"));
 	}
 
@@ -2176,7 +2248,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(bool bExecute)
 	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('built_at',datetime('now'));"), TEXT("built_at"));
 	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_built_at',datetime('now'));"), TEXT("source_built_at"));
 
-	if (bOk) Database->Execute(TEXT("COMMIT;"));
+	if (bOk)
+	{
+		Database->Execute(TEXT("COMMIT;"));
+	}
 	else Database->Execute(TEXT("ROLLBACK;"));
 
 	TSharedPtr<FJsonObject> After = MakeShared<FJsonObject>();

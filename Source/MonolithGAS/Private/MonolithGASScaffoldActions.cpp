@@ -18,9 +18,11 @@
 #include "GameplayTagsManager.h"
 #include "GameplayTagsEditorModule.h"
 #include "GameplayAbilitySpec.h"
+#include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
 #include "UObject/SavePackage.h"
 #include "Interfaces/IPluginManager.h"
@@ -112,6 +114,143 @@ static bool ModuleExistsInBuildCS(const FString& BuildCSPath, const FString& Mod
 	}
 	// Check for the module in dependency arrays
 	return Contents.Contains(FString::Printf(TEXT("\"%s\""), *ModuleName));
+}
+
+static FString GetModuleNameFromBuildCSPath(const FString& BuildCSPath)
+{
+	FString ModuleName = FPaths::GetBaseFilename(BuildCSPath);
+	ModuleName.RemoveFromEnd(TEXT(".Build"), ESearchCase::IgnoreCase);
+	return ModuleName;
+}
+
+static FString GetClassConfigName(const FString& NativeClassName)
+{
+	if (NativeClassName.Len() > 1 && NativeClassName[0] == TEXT("U")[0] && FChar::IsUpper(NativeClassName[1]))
+	{
+		return NativeClassName.RightChop(1);
+	}
+	return NativeClassName;
+}
+
+static void AddUniqueBuildCSCandidate(TArray<FString>& CandidatePaths, const FString& CandidatePath)
+{
+	FString NormalizedPath = FPaths::ConvertRelativePathToFull(CandidatePath);
+	FPaths::NormalizeFilename(NormalizedPath);
+	FPaths::CollapseRelativeDirectories(NormalizedPath);
+
+	for (const FString& ExistingPath : CandidatePaths)
+	{
+		if (ExistingPath.Equals(NormalizedPath, ESearchCase::IgnoreCase))
+		{
+			return;
+		}
+	}
+	CandidatePaths.Add(NormalizedPath);
+}
+
+static bool FindProjectBuildCSPath(
+	const FString& PreferredModuleName,
+	const TArray<FString>& RequiredModules,
+	bool bPreferRequiredModules,
+	FString& OutBuildCSPath,
+	FString& OutModuleName,
+	FString& OutDetail)
+{
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+	const FString SourceDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("Source"));
+
+	if (!PlatformFile.DirectoryExists(*SourceDir))
+	{
+		OutDetail = FString::Printf(TEXT("Project Source directory not found: %s"), *SourceDir);
+		return false;
+	}
+
+	TArray<FString> CandidatePaths;
+	const FString PreferredBuildCSPath = SourceDir / PreferredModuleName / (PreferredModuleName + TEXT(".Build.cs"));
+	if (PlatformFile.FileExists(*PreferredBuildCSPath))
+	{
+		AddUniqueBuildCSCandidate(CandidatePaths, PreferredBuildCSPath);
+	}
+
+	TArray<FString> DiscoveredPaths;
+	IFileManager::Get().FindFilesRecursive(
+		DiscoveredPaths,
+		*SourceDir,
+		TEXT("*.Build.cs"),
+		true,
+		false);
+	for (const FString& DiscoveredPath : DiscoveredPaths)
+	{
+		AddUniqueBuildCSCandidate(CandidatePaths, DiscoveredPath);
+	}
+
+	if (CandidatePaths.Num() == 0)
+	{
+		OutDetail = FString::Printf(TEXT("No Build.cs files found under project Source directory: %s"), *SourceDir);
+		return false;
+	}
+
+	int32 BestScore = MIN_int32;
+	FString BestPath;
+	FString BestModuleName;
+	int32 BestRequiredModuleCount = 0;
+
+	for (const FString& CandidatePath : CandidatePaths)
+	{
+		const FString CandidateModuleName = GetModuleNameFromBuildCSPath(CandidatePath);
+		int32 RequiredModuleCount = 0;
+		for (const FString& RequiredModule : RequiredModules)
+		{
+			if (ModuleExistsInBuildCS(CandidatePath, RequiredModule))
+			{
+				RequiredModuleCount++;
+			}
+		}
+
+		int32 Score = RequiredModuleCount * 100;
+		if (bPreferRequiredModules && RequiredModules.Num() > 0 && RequiredModuleCount == RequiredModules.Num())
+		{
+			Score += 1000;
+		}
+		if (CandidateModuleName.Equals(PreferredModuleName, ESearchCase::IgnoreCase))
+		{
+			Score += 500;
+		}
+		if (!CandidateModuleName.EndsWith(TEXT("Editor"), ESearchCase::IgnoreCase))
+		{
+			Score += 2000;
+		}
+		else
+		{
+			Score -= 2000;
+		}
+		if (CandidateModuleName.Contains(TEXT("Game"), ESearchCase::IgnoreCase))
+		{
+			Score += 50;
+		}
+		if (CandidateModuleName.Contains(TEXT("Core"), ESearchCase::IgnoreCase))
+		{
+			Score -= 25;
+		}
+
+		if (Score > BestScore)
+		{
+			BestScore = Score;
+			BestPath = CandidatePath;
+			BestModuleName = CandidateModuleName;
+			BestRequiredModuleCount = RequiredModuleCount;
+		}
+	}
+
+	OutBuildCSPath = BestPath;
+	OutModuleName = BestModuleName;
+	OutDetail = FString::Printf(
+		TEXT("Selected %s module from %s (%d/%d required GAS modules present)"),
+		*OutModuleName,
+		*OutBuildCSPath,
+		BestRequiredModuleCount,
+		RequiredModules.Num());
+	return true;
 }
 
 /** Add a module to the PublicDependencyModuleNames in Build.cs if not present */
@@ -240,12 +379,29 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleBootstrapGASFoundation(
 		Warnings.Add(MakeShared<FJsonValueString>(Msg));
 	};
 
+	TArray<FString> RequiredModules = {
+		TEXT("GameplayAbilities"),
+		TEXT("GameplayTags"),
+		TEXT("GameplayTasks")
+	};
+	FString BuildCSPath;
+	FString BuildCSModuleName;
+	FString BuildCSDetail;
+	const bool bFoundBuildCS = FindProjectBuildCSPath(
+		ProjectName,
+		RequiredModules,
+		false,
+		BuildCSPath,
+		BuildCSModuleName,
+		BuildCSDetail);
+	const FString CodeModuleName = bFoundBuildCS ? BuildCSModuleName : ProjectName;
+
 	// ── 1. Generate AbilitySystemGlobals subclass ──
 	FString ClassName = FString::Printf(TEXT("U%sAbilitySystemGlobals"), *ProjectName);
 	FString HeaderFileName = FString::Printf(TEXT("%sAbilitySystemGlobals.h"), *ProjectName);
 	FString SourceFileName = FString::Printf(TEXT("%sAbilitySystemGlobals.cpp"), *ProjectName);
 
-	FString SourceDir = FPaths::ProjectDir() / TEXT("Source") / ProjectName;
+	FString SourceDir = FPaths::ProjectDir() / TEXT("Source") / CodeModuleName;
 	FString HeaderPath = SourceDir / HeaderFileName;
 	FString SourcePath = SourceDir / SourceFileName;
 
@@ -285,7 +441,7 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleBootstrapGASFoundation(
 			"\t%s();\n"
 			"};\n"),
 			*FPaths::GetBaseFilename(HeaderPath),
-			*ProjectName.ToUpper(),
+			*CodeModuleName.ToUpper(),
 			*ClassName,
 			*ClassName);
 
@@ -327,7 +483,11 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleBootstrapGASFoundation(
 		CurrentGlobalsClass,
 		GGameIni);
 
-	FString DesiredClassName = FString::Printf(TEXT("/Script/%s.%s"), *ProjectName, *ClassName);
+	const FString ClassConfigName = GetClassConfigName(ClassName);
+	FString DesiredClassName = FString::Printf(
+		TEXT("/Script/%s.%s"),
+		*CodeModuleName,
+		*ClassConfigName);
 
 	if (CurrentGlobalsClass == DesiredClassName)
 	{
@@ -390,20 +550,13 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleBootstrapGASFoundation(
 		true, FString::Printf(TEXT("%d created, %d already existed"), FoldersCreated, FoldersExisted));
 
 	// ── 4. Add modules to Build.cs ──
-	FString BuildCSPath = FPaths::ProjectDir() / TEXT("Source") / ProjectName / (ProjectName + TEXT(".Build.cs"));
-	if (!PlatformFile.FileExists(*BuildCSPath))
+	if (!bFoundBuildCS)
 	{
 		AddChecklist(TEXT("Build.cs module dependencies"),
-			false, FString::Printf(TEXT("Build.cs not found at: %s"), *BuildCSPath));
+			false, BuildCSDetail);
 	}
 	else
 	{
-		TArray<FString> RequiredModules = {
-			TEXT("GameplayAbilities"),
-			TEXT("GameplayTags"),
-			TEXT("GameplayTasks")
-		};
-
 		TArray<FString> AddedModules;
 		TArray<FString> ExistingModules;
 		FString ModuleError;
@@ -429,15 +582,14 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleBootstrapGASFoundation(
 			}
 		}
 
-		FString Detail;
+		FString Detail = BuildCSDetail;
 		if (AddedModules.Num() > 0)
 		{
-			Detail = FString::Printf(TEXT("Added: %s"), *FString::Join(AddedModules, TEXT(", ")));
+			Detail += FString::Printf(TEXT(". Added: %s"), *FString::Join(AddedModules, TEXT(", ")));
 		}
 		if (ExistingModules.Num() > 0)
 		{
-			if (!Detail.IsEmpty()) Detail += TEXT(". ");
-			Detail += FString::Printf(TEXT("Already present: %s"), *FString::Join(ExistingModules, TEXT(", ")));
+			Detail += FString::Printf(TEXT(". Already present: %s"), *FString::Join(ExistingModules, TEXT(", ")));
 		}
 		AddChecklist(TEXT("Build.cs GAS module dependencies"), true, Detail);
 	}
@@ -445,6 +597,7 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleBootstrapGASFoundation(
 	// ── Build result ──
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("project_name"), ProjectName);
+	Result->SetStringField(TEXT("code_module_name"), CodeModuleName);
 	Result->SetBoolField(TEXT("all_succeeded"), bAllSucceeded);
 	Result->SetArrayField(TEXT("checklist"), Checklist);
 	if (Warnings.Num() > 0)
@@ -477,7 +630,6 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleValidateGASSetup(const 
 {
 	IAssetRegistry& AssetRegistry =
 		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 
 	TArray<TSharedPtr<FJsonValue>> Checks;
 	int32 Score = 0;
@@ -497,11 +649,17 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleValidateGASSetup(const 
 
 	// ── 1. GameplayAbilities module in Build.cs (2 pts) ──
 	{
-		// Find the project Build.cs
 		FString ProjectName = FApp::GetProjectName();
-		FString BuildCSPath = FPaths::ProjectDir() / TEXT("Source") / ProjectName / (ProjectName + TEXT(".Build.cs"));
+		TArray<FString> RequiredModules = {
+			TEXT("GameplayAbilities"),
+			TEXT("GameplayTags"),
+			TEXT("GameplayTasks")
+		};
+		FString BuildCSPath;
+		FString BuildCSModuleName;
+		FString BuildCSDetail;
 
-		if (PlatformFile.FileExists(*BuildCSPath))
+		if (FindProjectBuildCSPath(ProjectName, RequiredModules, true, BuildCSPath, BuildCSModuleName, BuildCSDetail))
 		{
 			bool bHasGA = ModuleExistsInBuildCS(BuildCSPath, TEXT("GameplayAbilities"));
 			bool bHasGT = ModuleExistsInBuildCS(BuildCSPath, TEXT("GameplayTags"));
@@ -510,7 +668,11 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleValidateGASSetup(const 
 			if (bHasGA && bHasGT && bHasGTasks)
 			{
 				AddCheck(TEXT("Build.cs modules"), true,
-					TEXT("GameplayAbilities, GameplayTags, and GameplayTasks all present"), 2);
+					FString::Printf(
+						TEXT("GameplayAbilities, GameplayTags, and GameplayTasks all present in %s.Build.cs. %s"),
+						*BuildCSModuleName,
+						*BuildCSDetail),
+					2);
 			}
 			else
 			{
@@ -519,13 +681,18 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleValidateGASSetup(const 
 				if (!bHasGT) Missing.Add(TEXT("GameplayTags"));
 				if (!bHasGTasks) Missing.Add(TEXT("GameplayTasks"));
 				AddCheck(TEXT("Build.cs modules"), false,
-					FString::Printf(TEXT("Missing: %s"), *FString::Join(Missing, TEXT(", "))), 2);
+					FString::Printf(
+						TEXT("Missing in %s.Build.cs: %s. %s"),
+						*BuildCSModuleName,
+						*FString::Join(Missing, TEXT(", ")),
+						*BuildCSDetail),
+					2);
 			}
 		}
 		else
 		{
 			AddCheck(TEXT("Build.cs modules"), false,
-				FString::Printf(TEXT("Build.cs not found at %s"), *BuildCSPath), 2);
+				BuildCSDetail, 2);
 		}
 	}
 
@@ -1192,49 +1359,49 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleScaffoldStatusEffect(co
 	if (Config->HasField(TEXT("duration")))
 	{
 		double TempVal = 0.0;
-		if (!Config->TryGetNumberField(TEXT("duration"), TempVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.duration must be a number"));
+		if (!MonolithGAS::TryGetStrictNumberField(Config, TEXT("duration"), TempVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.duration must be a number"));
 		Duration = static_cast<float>(TempVal);
 	}
 	float Period = 1.0f;
 	if (Config->HasField(TEXT("period")))
 	{
 		double TempVal = 0.0;
-		if (!Config->TryGetNumberField(TEXT("period"), TempVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.period must be a number"));
+		if (!MonolithGAS::TryGetStrictNumberField(Config, TEXT("period"), TempVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.period must be a number"));
 		Period = static_cast<float>(TempVal);
 	}
 	FString StackingType = TEXT("aggregate_by_target");
 	if (Config->HasField(TEXT("stacking_type")))
 	{
-		if (!Config->TryGetStringField(TEXT("stacking_type"), StackingType)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.stacking_type must be a string"));
+		if (!MonolithGAS::TryGetStrictStringField(Config, TEXT("stacking_type"), StackingType)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.stacking_type must be a string"));
 	}
 	int32 StackLimit = 5;
 	if (Config->HasField(TEXT("stack_limit")))
 	{
 		double TempVal = 0.0;
-		if (!Config->TryGetNumberField(TEXT("stack_limit"), TempVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.stack_limit must be a number"));
+		if (!MonolithGAS::TryGetStrictNumberField(Config, TEXT("stack_limit"), TempVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.stack_limit must be a number"));
 		StackLimit = FMath::Clamp(static_cast<int32>(TempVal), 0, 1000);
 	}
 	float DamagePerTick = 0.0f;
 	if (Config->HasField(TEXT("damage_per_tick")))
 	{
 		double TempVal = 0.0;
-		if (!Config->TryGetNumberField(TEXT("damage_per_tick"), TempVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.damage_per_tick must be a number"));
+		if (!MonolithGAS::TryGetStrictNumberField(Config, TEXT("damage_per_tick"), TempVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.damage_per_tick must be a number"));
 		DamagePerTick = static_cast<float>(TempVal);
 	}
 	FString Attribute;
 	if (Config->HasField(TEXT("attribute")))
 	{
-		if (!Config->TryGetStringField(TEXT("attribute"), Attribute)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.attribute must be a string"));
+		if (!MonolithGAS::TryGetStrictStringField(Config, TEXT("attribute"), Attribute)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.attribute must be a string"));
 	}
 	FString StatusTag;
 	if (Config->HasField(TEXT("status_tag")))
 	{
-		if (!Config->TryGetStringField(TEXT("status_tag"), StatusTag)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.status_tag must be a string"));
+		if (!MonolithGAS::TryGetStrictStringField(Config, TEXT("status_tag"), StatusTag)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.status_tag must be a string"));
 	}
 	FString CueTag;
 	if (Config->HasField(TEXT("cue_tag")))
 	{
-		if (!Config->TryGetStringField(TEXT("cue_tag"), CueTag)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.cue_tag must be a string"));
+		if (!MonolithGAS::TryGetStrictStringField(Config, TEXT("cue_tag"), CueTag)) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.cue_tag must be a string"));
 	}
 	TArray<FString> RemovesTags = MonolithGAS::ParseStringArray(Config, TEXT("removes_tags"));
 
@@ -1451,7 +1618,7 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleScaffoldWeaponAbility(c
 	FString FireMode = TEXT("single");
 	if (Params->HasField(TEXT("fire_mode")))
 	{
-		if (!Params->TryGetStringField(TEXT("fire_mode"), FireMode))
+		if (!MonolithGAS::TryGetStrictStringField(Params, TEXT("fire_mode"), FireMode))
 		{
 			return FMonolithActionResult::Error(TEXT("Malformed parameter: fire_mode must be a string"));
 		}

@@ -3833,11 +3833,11 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleScaffoldCustomAbilityTas
 			if (!Obj) continue;
 
 			FTaskParam P;
-			if (!Obj->TryGetStringField(TEXT("name"), P.Name) || P.Name.IsEmpty())
+			if (!MonolithGAS::TryGetStrictStringField(Obj, TEXT("name"), P.Name) || P.Name.IsEmpty())
 			{
 				return FMonolithActionResult::Error(FString::Printf(TEXT("parameters[%d].name is missing, empty, or not a string"), i));
 			}
-			if (!Obj->TryGetStringField(TEXT("type"), P.Type) || P.Type.IsEmpty())
+			if (!MonolithGAS::TryGetStrictStringField(Obj, TEXT("type"), P.Type) || P.Type.IsEmpty())
 			{
 				return FMonolithActionResult::Error(FString::Printf(TEXT("parameters[%d].type is missing, empty, or not a string"), i));
 			}
@@ -3868,14 +3868,14 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleScaffoldCustomAbilityTas
 			if (!Obj) continue;
 
 			FTaskDelegate D;
-			if (!Obj->TryGetStringField(TEXT("name"), D.Name) || D.Name.IsEmpty())
+			if (!MonolithGAS::TryGetStrictStringField(Obj, TEXT("name"), D.Name) || D.Name.IsEmpty())
 			{
 				return FMonolithActionResult::Error(FString::Printf(TEXT("delegates[%d].name is missing, empty, or not a string"), i));
 			}
 			// params is optional, so we use TryGetStringField but don't fail if it's missing or empty
 			if (Obj->HasField(TEXT("params")))
 			{
-				if (!Obj->TryGetStringField(TEXT("params"), D.DelegateParams))
+				if (!MonolithGAS::TryGetStrictStringField(Obj, TEXT("params"), D.DelegateParams))
 				{
 					return FMonolithActionResult::Error(FString::Printf(TEXT("delegates[%d].params is provided but not a string"), i));
 				}

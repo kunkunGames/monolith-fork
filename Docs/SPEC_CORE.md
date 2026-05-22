@@ -174,6 +174,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | # | Module | Spec | Summary |
 |---|--------|------|---------|
 | 3.1 | MonolithCore | [specs/SPEC_MonolithCore.md](specs/SPEC_MonolithCore.md) | HTTP server (bind retry, Restart(), `Monolith.Restart` console cmd), tool registry, discovery, policy-gated action execution metadata/transactions/post-edit validators, settings, auto-updater |
+| 3.1a | SQLite Journal Mode Policy | [specs/SPEC_MonolithSQLiteJournalMode.md](specs/SPEC_MonolithSQLiteJournalMode.md) | DB-by-DB rollback journal vs WAL policy: `EngineSource.db`, `ProjectIndex.db`, and `graph.db` remain `DELETE`; the `EngineSource.db` WAL gate failed because UE SQLiteCore's editor VFS cannot safely own WAL DBs |
 | 3.2 | MonolithBlueprint | [specs/SPEC_MonolithBlueprint.md](specs/SPEC_MonolithBlueprint.md) | Blueprint inspection, variable/component/graph CRUD, node ops, compile, spawn (89 actions) |
 | 3.3 | MonolithMaterial | [specs/SPEC_MonolithMaterial.md](specs/SPEC_MonolithMaterial.md) | Material inspection + graph editing + CRUD + function suite (63 material actions) |
 | 3.4 | MonolithPaper2D | [specs/SPEC_MonolithPaper2D.md](specs/SPEC_MonolithPaper2D.md) | Optional Paper2D AssetRegistry discovery (3 actions, no hard Paper2D dependency) |
@@ -275,6 +276,8 @@ Standalone C++ executable. No UE runtime, no Python, instant startup. Queries `E
 
 The default DB paths are inferred from the executable location. Normal plugin checkouts use this default resolution: `source` opens `Saved/EngineSource.db`, `project` opens `Saved/ProjectIndex.db`, `bridge` opens both, and source CRG graph actions use `Saved/graph.db`. `--db`, `--source-db`, `--project-db`, and `--graph-db` remain override options for copied DBs, temporary smoke tests, or non-standard layouts.
 
+Journal mode policy is DB-specific. Source write actions keep `EngineSource.db` on rollback-journal `DELETE`, with `synchronous=NORMAL`, `locking_mode=NORMAL`, and bounded `busy_timeout`. Source and bridge read-only paths observe journal mode without changing it. `ProjectIndex.db` and `graph.db` also remain rollback-journal `DELETE`. The attempted `EngineSource.db` WAL gate failed for the editor/MCP path because UE SQLiteCore's custom VFS does not support the shared-memory hooks WAL requires.
+
 ### 5.2 monolith_offline.py (legacy)
 
 > **LEGACY:** `monolith_offline.py` is superseded by `monolith_query.exe`. It remains functional as a zero-dependency fallback requiring only Python stdlib and no UE installation.
@@ -321,7 +324,7 @@ python Saved/monolith_offline.py <namespace> <action> [args...]
 
 ### Implementation Notes
 
-- Opens DBs with `PRAGMA query_only=ON` + `PRAGMA journal_mode=DELETE`. The DELETE journal mode override is mandatory — WAL mode silently returns 0 rows on Windows when opened in any read-only mode (same bug that affected the C++ module; see CLAUDE.md Key Lessons).
+- Legacy fallback behavior is not the journal-mode source of truth. Current offline support is `monolith_query.exe`; live Monolith DBs remain in `DELETE` journal mode because editor/MCP source access uses UE SQLiteCore.
 - FTS escaping mirrors `EscapeFTS()` in C++: `::` replaced with space, non-word chars stripped, each token wrapped as `"token"*` for prefix match.
 - `read_source` defaults to `--header` (includes `.h` declarations). Pass `--no-header` to skip header files.
 - `read_file` with `--end 0` (default) reads 200 lines from `--start`.

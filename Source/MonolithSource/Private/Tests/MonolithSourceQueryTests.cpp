@@ -34,6 +34,34 @@ bool FSourceSearchSymbolsClampsLimitTest::RunTest(const FString& Parameters)
 
 	DB.Close();
 	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*DbPath);
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-wal")));
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-shm")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceDatabaseUsesDeleteJournalModeTest, "Monolith.IndexGuard.Source.DatabaseUsesDeleteJournalMode", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceDatabaseUsesDeleteJournalModeTest::RunTest(const FString& Parameters)
+{
+	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithSourceDelete"), TEXT(".sqlite"));
+	FMonolithSourceDatabase DB;
+
+	TestTrue(TEXT("Temporary DB opens for writing"), DB.OpenForWriting(DbPath));
+	TestTrue(TEXT("Temporary DB creates schema"), DB.CreateTablesIfNeeded());
+
+	TSharedPtr<FJsonObject> Health = DB.ComputeHealth(false);
+	const TSharedPtr<FJsonObject>* Schema = nullptr;
+	TestTrue(TEXT("Health has schema object"), Health.IsValid() && Health->TryGetObjectField(TEXT("schema"), Schema) && Schema && Schema->IsValid());
+	if (Schema && Schema->IsValid())
+	{
+		TestEqual(TEXT("EngineSource.db uses DELETE journal mode"), (*Schema)->GetStringField(TEXT("journal_mode")).ToLower(), FString(TEXT("delete")));
+	}
+
+	DB.Close();
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*DbPath);
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-wal")));
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-shm")));
 
 	return true;
 }
@@ -75,7 +103,13 @@ namespace
 		~FTempSourceDb()
 		{
 			Db.Close();
-			if (!Path.IsEmpty()) FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*Path);
+			if (!Path.IsEmpty())
+			{
+				IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+				PlatformFile.DeleteFile(*Path);
+				PlatformFile.DeleteFile(*(Path + TEXT("-wal")));
+				PlatformFile.DeleteFile(*(Path + TEXT("-shm")));
+			}
 		}
 	};
 }
