@@ -28,10 +28,27 @@ public class MonolithDataflow : ModuleRules
 
 		if (!bReleaseBuild)
 		{
-			string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-			bHasDataflowRuntime =
-				Directory.Exists(Path.Combine(EngineDir, "Source", "Runtime", "Experimental", "Dataflow", "Core"))
-				&& Directory.Exists(Path.Combine(EngineDir, "Source", "Runtime", "Experimental", "Dataflow", "Engine"));
+			if (Target.ProjectFile != null)
+			{
+				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
+				if (Directory.Exists(ProjectPluginsDir))
+				{
+					bHasDataflowRuntime = Directory.Exists(Path.Combine(ProjectPluginsDir, "Dataflow"));
+				}
+			}
+
+			if (!bHasDataflowRuntime)
+			{
+				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
+				string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
+
+				bHasDataflowRuntime =
+					Directory.Exists(Path.Combine(EnginePluginsDir, "Experimental", "Dataflow"))
+					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "Dataflow"))
+					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Dataflow"))
+					|| (Directory.Exists(Path.Combine(EngineDir, "Source", "Runtime", "Experimental", "Dataflow", "Core"))
+						&& Directory.Exists(Path.Combine(EngineDir, "Source", "Runtime", "Experimental", "Dataflow", "Engine")));
+			}
 		}
 
 		if (bHasDataflowRuntime)

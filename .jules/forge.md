@@ -50,3 +50,9 @@ Avoid: Using short or generic wildcards like `Gameplaya*` when the plugin name i
 **Learning:** For optional Engine plugins that are conditionally queried and linked in a module's Build.cs, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file can cause the Engine to refuse to load the plugin entirely or fail dependency resolution when the optional dependency is enabled.
 **Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have a corresponding `"Optional": true` entry defined in `Monolith.uplugin`.
 **Avoid:** Linking optional plugins in `Build.cs` without adding them to `.uplugin`.
+
+## 2026-05-18 - [Safe Dataflow plugin detection in binary engine installs]
+**Build pattern:** Optional engine plugins falsely reported as missing when checking the `Engine/Source/Runtime/` tree.
+**Learning:** `MonolithDataflow.Build.cs` checked for the `Dataflow` plugin by looking inside the engine's `Source` directory. In binary engine distributions (like Epic Games Launcher installs), the `Source` directory may not exist or may be incomplete, meaning the Dataflow plugin support in Monolith was incorrectly disabled even when the plugin was installed and enabled.
+**Prevention:** Always check for optional plugins in the `Plugins` directory (e.g., `EnginePluginsDir` and `ProjectPluginsDir`) alongside or instead of `Source` paths, specifically checking `Plugins/Experimental/Dataflow` or `Plugins/Runtime/Dataflow`.
+**Avoid:** Checking only engine `Source` paths to detect optional runtime or experimental plugins, as this assumes the user has engine source code installed.
