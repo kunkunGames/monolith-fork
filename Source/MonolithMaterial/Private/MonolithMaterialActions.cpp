@@ -7493,6 +7493,7 @@ FMonolithActionResult FMonolithMaterialActions::BatchSetMaterialProperty(const T
 	GEditor->BeginTransaction(FText::FromString(TEXT("BatchSetMaterialProperty")));
 
 	TArray<TSharedPtr<FJsonValue>> ResultsArray;
+	ResultsArray.Reserve(AssetPaths.Num());
 
 	for (const FString& AssetPath : AssetPaths)
 	{
@@ -7676,6 +7677,7 @@ FMonolithActionResult FMonolithMaterialActions::BatchRecompile(const TSharedPtr<
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ResultsArray;
+	ResultsArray.Reserve(AssetPaths.Num());
 	int32 SuccessCount = 0;
 
 	for (const FString& AssetPath : AssetPaths)
