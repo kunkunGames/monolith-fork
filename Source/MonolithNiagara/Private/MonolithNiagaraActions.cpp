@@ -8346,7 +8346,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSpawnShape(const TShared
 	// Step 4: Apply shape parameters if provided
 	// -------------------------------------------------------------------------
 	TArray<FString> ParamsSet;
-	const TSharedPtr<FJsonObject>* ShapeParamsObj;
+	const TSharedPtr<FJsonObject>* ShapeParamsObj = nullptr;
 	if (!NodeGuid.IsEmpty() && Params->TryGetObjectField(TEXT("params"), ShapeParamsObj) && ShapeParamsObj->IsValid())
 	{
 		for (const auto& Pair : (*ShapeParamsObj)->Values)
@@ -9126,7 +9126,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMesh(const TShar
 	MeshRend->Meshes[MeshIndex].Mesh = SM;
 
 	// Optional scale
-	const TSharedPtr<FJsonObject>* ScaleObj;
+	const TSharedPtr<FJsonObject>* ScaleObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("scale"), ScaleObj) && ScaleObj->IsValid())
 	{
 		MeshRend->Meshes[MeshIndex].Scale = FVector(
@@ -9136,7 +9136,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMesh(const TShar
 	}
 
 	// Optional rotation
-	const TSharedPtr<FJsonObject>* RotObj;
+	const TSharedPtr<FJsonObject>* RotObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj->IsValid())
 	{
 		MeshRend->Meshes[MeshIndex].Rotation = FRotator(
@@ -9146,7 +9146,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMesh(const TShar
 	}
 
 	// Optional pivot offset
-	const TSharedPtr<FJsonObject>* PivotObj;
+	const TSharedPtr<FJsonObject>* PivotObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("pivot_offset"), PivotObj) && PivotObj->IsValid())
 	{
 		MeshRend->Meshes[MeshIndex].PivotOffset = FVector(
@@ -11223,7 +11223,7 @@ static TSharedPtr<FJsonObject> ExportSpecForDiff(UNiagaraSystem* System)
 	Params->SetBoolField(TEXT("include_values"), true);
 	FMonolithActionResult SpecResult = FMonolithNiagaraActions::HandleExportSystemSpec(Params);
 	if (!SpecResult.bSuccess || !SpecResult.Result.IsValid()) return nullptr;
-	const TSharedPtr<FJsonObject>* SpecObj;
+	const TSharedPtr<FJsonObject>* SpecObj = nullptr;
 	if (SpecResult.Result->TryGetObjectField(TEXT("spec"), SpecObj) && SpecObj->IsValid()) return *SpecObj;
 	return nullptr;
 }
@@ -11319,8 +11319,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 	Result->SetStringField(TEXT("system_b"), PathB);
 
 	// --- System property diffs ---
-	const TSharedPtr<FJsonObject>* SysPropsAPtr;
-	const TSharedPtr<FJsonObject>* SysPropsBPtr;
+	const TSharedPtr<FJsonObject>* SysPropsAPtr = nullptr;
+	const TSharedPtr<FJsonObject>* SysPropsBPtr = nullptr;
 	TSharedPtr<FJsonObject> SysPropsA = SpecA->TryGetObjectField(TEXT("system_properties"), SysPropsAPtr) && SysPropsAPtr->IsValid() ? *SysPropsAPtr : nullptr;
 	TSharedPtr<FJsonObject> SysPropsB = SpecB->TryGetObjectField(TEXT("system_properties"), SysPropsBPtr) && SysPropsBPtr->IsValid() ? *SysPropsBPtr : nullptr;
 	TSharedRef<FJsonObject> SysPropDiff = DiffJsonObjects(SysPropsA, SysPropsB, TEXT("system_properties"));
@@ -11496,8 +11496,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 						else
 						{
 							// Compare inputs
-							const TSharedPtr<FJsonObject>* InAPtr;
-							const TSharedPtr<FJsonObject>* InBPtr;
+							const TSharedPtr<FJsonObject>* InAPtr = nullptr;
+							const TSharedPtr<FJsonObject>* InBPtr = nullptr;
 							TSharedPtr<FJsonObject> InA = (*MA)->TryGetObjectField(TEXT("inputs"), InAPtr) && InAPtr->IsValid() ? *InAPtr : nullptr;
 							TSharedPtr<FJsonObject> InB = (*MB)->TryGetObjectField(TEXT("inputs"), InBPtr) && InBPtr->IsValid() ? *InBPtr : nullptr;
 							TSharedRef<FJsonObject> InDiff = DiffJsonObjects(InA, InB, TEXT("inputs"));
@@ -12059,7 +12059,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 			// Emitter properties
 			if (EO->HasField(TEXT("properties")))
 			{
-				const TSharedPtr<FJsonObject>* PropsPtr;
+				const TSharedPtr<FJsonObject>* PropsPtr = nullptr;
 				if (EO->TryGetObjectField(TEXT("properties"), PropsPtr) && PropsPtr->IsValid() && PropsPtr->Get() != nullptr)
 				{
 					for (auto& P : (*PropsPtr)->Values)
@@ -12102,7 +12102,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 
 					if (MO->HasField(TEXT("inputs")))
 					{
-						const TSharedPtr<FJsonObject>* InsPtr;
+						const TSharedPtr<FJsonObject>* InsPtr = nullptr;
 						if (MO->TryGetObjectField(TEXT("inputs"), InsPtr) && InsPtr->IsValid() && InsPtr->Get() != nullptr)
 						{
 							for (auto& IP : (*InsPtr)->Values)
@@ -12120,7 +12120,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 					}
 					if (MO->HasField(TEXT("bindings")))
 					{
-						const TSharedPtr<FJsonObject>* BindsPtr;
+						const TSharedPtr<FJsonObject>* BindsPtr = nullptr;
 						if (MO->TryGetObjectField(TEXT("bindings"), BindsPtr) && BindsPtr->IsValid() && BindsPtr->Get() != nullptr)
 						{
 							for (auto& BP2 : (*BindsPtr)->Values)
@@ -12139,7 +12139,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 					// Static switches
 					if (MO->HasField(TEXT("static_switches")))
 					{
-						const TSharedPtr<FJsonObject>* SwitchesPtr;
+						const TSharedPtr<FJsonObject>* SwitchesPtr = nullptr;
 						if (MO->TryGetObjectField(TEXT("static_switches"), SwitchesPtr) && SwitchesPtr->IsValid() && SwitchesPtr->Get() != nullptr)
 						{
 							for (auto& SW : (*SwitchesPtr)->Values)
@@ -12190,7 +12190,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 					}
 					if (RO->HasField(TEXT("properties")))
 					{
-						const TSharedPtr<FJsonObject>* RPropsPtr;
+						const TSharedPtr<FJsonObject>* RPropsPtr = nullptr;
 						if (RO->TryGetObjectField(TEXT("properties"), RPropsPtr) && RPropsPtr->IsValid() && RPropsPtr->Get() != nullptr)
 						{
 							for (auto& RP : (*RPropsPtr)->Values)
