@@ -38,6 +38,8 @@ namespace MonolithImageGen::ImageGenerationInternal
 	static constexpr int32 MaxResolutionEdge = 3840;
 	static constexpr int64 MaxResolutionPixels = 8294400;
 	static constexpr const TCHAR* DefaultGeneratedAssetPath = TEXT("/Game/GeneratedImages");
+	static constexpr const TCHAR* DefaultLocalModel = TEXT("monolith/local-gradient-png-v1");
+	static constexpr const TCHAR* LegacyLocalBmpModel = TEXT("monolith/local-gradient-bmp-v1");
 	static constexpr const TCHAR* DefaultIma2Model = TEXT("gpt-5.5");
 	static constexpr const TCHAR* ReferenceImageDirectoryName = TEXT("GeneratedImages");
 
@@ -219,6 +221,20 @@ namespace MonolithImageGen::ImageGenerationInternal
 		return PackagePath + TEXT(".") + FPackageName::GetLongPackageAssetName(PackagePath);
 	}
 
+	static FString DataUrlHeaderToImageFormatHint(const FString& Header)
+	{
+		if (Header.Contains(TEXT("image/png")))       { return TEXT("png"); }
+		if (Header.Contains(TEXT("image/jpeg")))     { return TEXT("jpg"); }
+		if (Header.Contains(TEXT("image/jpg")))      { return TEXT("jpg"); }
+		if (Header.Contains(TEXT("image/bmp")))      { return TEXT("bmp"); }
+		if (Header.Contains(TEXT("image/tga")))      { return TEXT("tga"); }
+		if (Header.Contains(TEXT("image/tiff")))     { return TEXT("tif"); }
+		if (Header.Contains(TEXT("image/hdr")))      { return TEXT("hdr"); }
+		if (Header.Contains(TEXT("image/exr")))      { return TEXT("exr"); }
+		if (Header.Contains(TEXT("image/webp")))     { return TEXT("webp"); }
+		return TEXT("");
+	}
+
 	static FString StripDataUrlPrefix(const FString& Input, FString& InOutFormatHint)
 	{
 		int32 CommaIndex = INDEX_NONE;
@@ -233,16 +249,10 @@ namespace MonolithImageGen::ImageGenerationInternal
 			return Input;
 		}
 
-		if (InOutFormatHint.IsEmpty())
+		const FString HeaderFormatHint = DataUrlHeaderToImageFormatHint(Header);
+		if (!HeaderFormatHint.IsEmpty())
 		{
-			if (Header.Contains(TEXT("image/png")))       { InOutFormatHint = TEXT("png"); }
-			else if (Header.Contains(TEXT("image/jpeg"))) { InOutFormatHint = TEXT("jpg"); }
-			else if (Header.Contains(TEXT("image/jpg")))  { InOutFormatHint = TEXT("jpg"); }
-			else if (Header.Contains(TEXT("image/bmp")))  { InOutFormatHint = TEXT("bmp"); }
-			else if (Header.Contains(TEXT("image/tga")))  { InOutFormatHint = TEXT("tga"); }
-			else if (Header.Contains(TEXT("image/tiff"))) { InOutFormatHint = TEXT("tif"); }
-			else if (Header.Contains(TEXT("image/hdr")))  { InOutFormatHint = TEXT("hdr"); }
-			else if (Header.Contains(TEXT("image/exr")))  { InOutFormatHint = TEXT("exr"); }
+			InOutFormatHint = HeaderFormatHint;
 		}
 
 		return Input.RightChop(CommaIndex + 1);
@@ -465,12 +475,12 @@ namespace MonolithImageGen::ImageGenerationInternal
 		FCompressedImagePayload& OutPayload,
 		FString& OutError)
 	{
-		FString FormatHint = RawFormatHint;
+		FString FormatHint = RawFormatHint.TrimStartAndEnd().ToLower();
 		FString BytesB64 = StripDataUrlPrefix(RawBytesB64, FormatHint);
 		BytesB64 = CompactBase64Payload(BytesB64);
-		if (FormatHint.IsEmpty())
+		if (FormatHint == TEXT("jpeg"))
 		{
-			FormatHint = TEXT("png");
+			FormatHint = TEXT("jpg");
 		}
 
 		double MaxBytesDouble = DefaultMaxCompressedBytes;
@@ -502,6 +512,38 @@ namespace MonolithImageGen::ImageGenerationInternal
 				DecodedBytes.Num(), MaxBytes);
 			return false;
 		}
+		FString DetectedFormatHint = DetectImageFormatHint(DecodedBytes);
+		if (DetectedFormatHint == TEXT("jpeg"))
+		{
+			DetectedFormatHint = TEXT("jpg");
+		}
+		if (!DetectedFormatHint.IsEmpty())
+		{
+			FormatHint = DetectedFormatHint;
+		}
+		if (FormatHint.IsEmpty())
+		{
+			OutError = TEXT("format_hint is required when the image format cannot be detected from bytes_b64");
+			return false;
+		}
+		if (FormatHint == TEXT("jpeg"))
+		{
+			FormatHint = TEXT("jpg");
+		}
+		if (ParseImageFormatHint(FormatHint) == EImageFormat::Invalid)
+		{
+			OutError = FString::Printf(
+				TEXT("Unsupported image format '%s'. MonolithImageGen generated image payloads must be PNG."),
+				*FormatHint);
+			return false;
+		}
+		if (FormatHint != TEXT("png"))
+		{
+			OutError = FString::Printf(
+				TEXT("MonolithImageGen accepts PNG image payloads only; '%s' is not supported for generated image import."),
+				*FormatHint);
+			return false;
+		}
 
 		OutPayload.BytesB64 = MoveTemp(BytesB64);
 		OutPayload.FormatHint = MoveTemp(FormatHint);
@@ -509,46 +551,15 @@ namespace MonolithImageGen::ImageGenerationInternal
 		return true;
 	}
 
-	static void AppendLe32(TArray<uint8>& Bytes, uint32 Value)
-	{
-		Bytes.Add(static_cast<uint8>(Value & 0xff));
-		Bytes.Add(static_cast<uint8>((Value >> 8) & 0xff));
-		Bytes.Add(static_cast<uint8>((Value >> 16) & 0xff));
-		Bytes.Add(static_cast<uint8>((Value >> 24) & 0xff));
-	}
-
-	static void AppendLe16(TArray<uint8>& Bytes, uint16 Value)
-	{
-		Bytes.Add(static_cast<uint8>(Value & 0xff));
-		Bytes.Add(static_cast<uint8>((Value >> 8) & 0xff));
-	}
-
-	static TArray<uint8> MakeDeterministicBmp(const FString& Prompt, int32 Width, int32 Height)
+	static TArray<uint8> MakeDeterministicPng(const FString& Prompt, int32 Width, int32 Height)
 	{
 		const uint32 Hash = GetTypeHash(Prompt);
 		const uint8 R0 = static_cast<uint8>(64 + (Hash & 0x7f));
 		const uint8 G0 = static_cast<uint8>(64 + ((Hash >> 8) & 0x7f));
 		const uint8 B0 = static_cast<uint8>(64 + ((Hash >> 16) & 0x7f));
 
-		TArray<uint8> Bytes;
-		Bytes.Reserve(54 + Width * Height * 4);
-		Bytes.Add('B');
-		Bytes.Add('M');
-		AppendLe32(Bytes, 54 + Width * Height * 4);
-		AppendLe16(Bytes, 0);
-		AppendLe16(Bytes, 0);
-		AppendLe32(Bytes, 54);
-		AppendLe32(Bytes, 40);
-		AppendLe32(Bytes, static_cast<uint32>(Width));
-		AppendLe32(Bytes, static_cast<uint32>(-Height));
-		AppendLe16(Bytes, 1);
-		AppendLe16(Bytes, 32);
-		AppendLe32(Bytes, 0);
-		AppendLe32(Bytes, Width * Height * 4);
-		AppendLe32(Bytes, 2835);
-		AppendLe32(Bytes, 2835);
-		AppendLe32(Bytes, 0);
-		AppendLe32(Bytes, 0);
+		TArray<FColor> Pixels;
+		Pixels.Reserve(Width * Height);
 
 		for (int32 Y = 0; Y < Height; ++Y)
 		{
@@ -558,12 +569,21 @@ namespace MonolithImageGen::ImageGenerationInternal
 				const uint8 B = static_cast<uint8>((B0 + (X * 91) / FMath::Max(1, Width) + Stripe) & 0xff);
 				const uint8 G = static_cast<uint8>((G0 + (Y * 91) / FMath::Max(1, Height) + Stripe) & 0xff);
 				const uint8 R = static_cast<uint8>((R0 + ((X + Y) * 47) / FMath::Max(1, Width + Height)) & 0xff);
-				Bytes.Add(B);
-				Bytes.Add(G);
-				Bytes.Add(R);
-				Bytes.Add(255);
+				Pixels.Add(FColor(R, G, B, 255));
 			}
 		}
+
+		IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+		TSharedPtr<IImageWrapper> Wrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+		if (!Wrapper.IsValid()
+			|| !Wrapper->SetRaw(Pixels.GetData(), Pixels.Num() * sizeof(FColor), Width, Height, ERGBFormat::BGRA, 8))
+		{
+			return {};
+		}
+
+		const TArray64<uint8> PngBytes64 = Wrapper->GetCompressed(100);
+		TArray<uint8> Bytes;
+		Bytes.Append(PngBytes64.GetData(), PngBytes64.Num());
 		return Bytes;
 	}
 
@@ -590,6 +610,172 @@ namespace MonolithImageGen::ImageGenerationInternal
 			TEXT("height"),
 			TEXT("emissive")
 		};
+	}
+
+	static FString NormalizeTextureRole(FString Role)
+	{
+		Role.TrimStartAndEndInline();
+		Role = Role.ToLower();
+		Role.ReplaceInline(TEXT("-"), TEXT("_"));
+		Role.ReplaceInline(TEXT(" "), TEXT("_"));
+		if (Role == TEXT("default") || Role == TEXT("none"))
+		{
+			return TEXT("");
+		}
+		if (Role == TEXT("ui"))
+		{
+			return TEXT("ui_icon");
+		}
+		if (Role == TEXT("albedo") || Role == TEXT("base_color") || Role == TEXT("diffuse"))
+		{
+			return TEXT("basecolor");
+		}
+		if (Role == TEXT("world") || Role == TEXT("mesh") || Role == TEXT("material"))
+		{
+			return TEXT("basecolor");
+		}
+		if (Role == TEXT("tile") || Role == TEXT("tileable"))
+		{
+			return TEXT("world_tile");
+		}
+		if (Role == TEXT("normalmap") || Role == TEXT("normal_map"))
+		{
+			return TEXT("normal");
+		}
+		if (Role == TEXT("orm") || Role == TEXT("packed_mask") || Role == TEXT("masks")
+			|| Role == TEXT("roughness") || Role == TEXT("metallic") || Role == TEXT("ao"))
+		{
+			return TEXT("orm_mask");
+		}
+		if (Role == TEXT("displacement"))
+		{
+			return TEXT("height");
+		}
+		return Role;
+	}
+
+	static bool IsSupportedTextureRole(const FString& Role)
+	{
+		return Role == TEXT("ui_icon")
+			|| Role == TEXT("sprite")
+			|| Role == TEXT("decal")
+			|| Role == TEXT("basecolor")
+			|| Role == TEXT("world_tile")
+			|| Role == TEXT("normal")
+			|| Role == TEXT("orm_mask")
+			|| Role == TEXT("height")
+			|| Role == TEXT("emissive");
+	}
+
+	static bool ResolveTextureRoleParam(const TSharedPtr<FJsonObject>& Params, FString& OutRole, FString& OutError)
+	{
+		const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
+		const bool bHasSettings = Params->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj && SettingsObj->IsValid();
+		FString Role;
+		Params->TryGetStringField(TEXT("texture_role"), Role);
+		if (Role.IsEmpty())
+		{
+			Params->TryGetStringField(TEXT("role"), Role);
+		}
+		if (Role.IsEmpty() && bHasSettings)
+		{
+			(*SettingsObj)->TryGetStringField(TEXT("texture_role"), Role);
+		}
+
+		OutRole = NormalizeTextureRole(Role);
+		if (OutRole.IsEmpty())
+		{
+			OutRole = TEXT("basecolor");
+		}
+		if (!IsSupportedTextureRole(OutRole))
+		{
+			OutError = FString::Printf(
+				TEXT("texture_role must be one of: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, emissive (got '%s')"),
+				*Role);
+			return false;
+		}
+		return true;
+	}
+
+	static bool RolePrefersTransparentBackground(const FString& TextureRole)
+	{
+		return TextureRole == TEXT("ui_icon")
+			|| TextureRole == TEXT("sprite")
+			|| TextureRole == TEXT("decal");
+	}
+
+	static bool RoleRejectsTransparentBackground(const FString& TextureRole)
+	{
+		return TextureRole == TEXT("world_tile")
+			|| TextureRole == TEXT("normal")
+			|| TextureRole == TEXT("orm_mask")
+			|| TextureRole == TEXT("height");
+	}
+
+	static bool ValidateTextureRoleBackground(const FString& TextureRole, const FString& Background, bool bComposePrompt, FString& OutError)
+	{
+		if (Background == TEXT("transparent") && RoleRejectsTransparentBackground(TextureRole))
+		{
+			OutError = FString::Printf(
+				TEXT("texture_role='%s' requires an opaque or auto background; transparent alpha is only appropriate for ui_icon, sprite, and decal generation"),
+				*TextureRole);
+			return false;
+		}
+		if (bComposePrompt && Background == TEXT("opaque") && RolePrefersTransparentBackground(TextureRole))
+		{
+			OutError = FString::Printf(
+				TEXT("compose_prompt=true with texture_role='%s' requires background='auto', background='transparent', or omitted background so the generated PNG can preserve alpha"),
+				*TextureRole);
+			return false;
+		}
+		return true;
+	}
+
+	static FString TextureRolePromptClause(const FString& TextureRole)
+	{
+		if (TextureRole == TEXT("ui_icon"))
+		{
+			return TEXT("UI icon texture: one centered readable subject, transparent background, clean alpha edge, strong silhouette, no cast shadow, no cropped edges.");
+		}
+		if (TextureRole == TEXT("sprite"))
+		{
+			return TEXT("Paper2D sprite texture or sprite sheet: orthographic game sprite, transparent background, full object visible, consistent scale, crisp alpha, no ground plane unless explicitly requested. If generating multiple poses or frames, arrange them in a strict evenly spaced grid with identical cell size, transparent gutters, aligned baselines, no overlap, no cropping, and consistent character scale in every cell.");
+		}
+		if (TextureRole == TEXT("decal"))
+		{
+			return TEXT("Decal texture: isolated decal artwork on transparent background, projection-friendly alpha edge, no rectangular backdrop.");
+		}
+		if (TextureRole == TEXT("world_tile"))
+		{
+			return TEXT("Tileable world material texture: seamless repeat on all edges, even scale, no visible border, no large unique landmark, no directional lighting.");
+		}
+		if (TextureRole == TEXT("normal"))
+		{
+			return TEXT("Tangent-space normal map texture only: valid RGB normal vectors, mostly blue/purple, no albedo color, no lighting, no labels.");
+		}
+		if (TextureRole == TEXT("orm_mask"))
+		{
+			return TEXT("Packed ORM mask texture only: R=ambient occlusion, G=roughness, B=metallic, grayscale channel data, no colored artwork.");
+		}
+		if (TextureRole == TEXT("height"))
+		{
+			return TEXT("Height/displacement texture only: single-channel grayscale height field, white high and black low, no color, no lighting.");
+		}
+		if (TextureRole == TEXT("emissive"))
+		{
+			return TEXT("Emissive texture: bright emission shapes on dark or transparent-safe surroundings, no baked surface lighting, no labels.");
+		}
+		return TEXT("Base color/albedo texture: color texture only, evenly lit, no baked shadows, no highlights, no reflections, no ambient occlusion, no normal or height information.");
+	}
+
+	static FString ComposeTextureRolePrompt(const FString& CallerPrompt, const FString& TextureRole)
+	{
+		const FString TrimmedPrompt = CallerPrompt.TrimStartAndEnd();
+		const FString RoleClause = TextureRolePromptClause(TextureRole);
+		return FString::Printf(
+			TEXT("%s\n\nUnreal Engine Texture2D requirements:\n- %s\n- Output must be a single PNG-ready image for direct Unreal import.\n- Do not include text, labels, watermarks, UI chrome, contact sheets, or multiple variants unless the caller explicitly requested them.\n- Keep the result faithful to the caller prompt while satisfying the texture role constraints."),
+			*TrimmedPrompt,
+			*RoleClause);
 	}
 
 	static TSharedPtr<FJsonObject> TextureRolePresetSummary()
@@ -1511,6 +1697,11 @@ namespace MonolithImageGen::ImageGenerationInternal
 			OutError = TEXT("server_url must not include credentials");
 			return false;
 		}
+		if (ServerUrl.Contains(TEXT("?")) || ServerUrl.Contains(TEXT("#")))
+		{
+			OutError = TEXT("server_url must be a base URL without query string or fragment");
+			return false;
+		}
 
 		OutServerUrl = MoveTemp(ServerUrl);
 		return true;
@@ -1526,10 +1717,20 @@ namespace MonolithImageGen::ImageGenerationInternal
 		return Background == TEXT("transparent") || Background == TEXT("opaque") || Background == TEXT("auto");
 	}
 
+	static FString ProviderSafeIma2Background(const FString& Background)
+	{
+		return Background == TEXT("transparent") ? FString(TEXT("auto")) : Background;
+	}
+
 	static bool IsTransparentCompatibleFormat(const FString& Format)
 	{
 		const FString Lower = Format.ToLower();
-		return Lower == TEXT("png") || Lower == TEXT("webp");
+		return Lower == TEXT("png");
+	}
+
+	static bool IsSupportedIma2OutputFormat(const FString& Format)
+	{
+		return Format == TEXT("png");
 	}
 
 	static FString ResolveIma2Provider(const TSharedPtr<FJsonObject>& Params)
@@ -1926,12 +2127,12 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 
 	Registry.RegisterAction(
 		TEXT("imagegen"), TEXT("generate_image"),
-		TEXT("Generate a deterministic local placeholder image from a prompt and import it as a Texture2D. Does not call remote providers or read API keys."),
+		TEXT("Generate a deterministic local PNG placeholder image from a prompt and import it as a Texture2D. Does not call remote providers or read API keys."),
 		FMonolithActionHandler::CreateStatic(&HandleGenerateImage),
 		FParamSchemaBuilder()
 			.Required(TEXT("prompt"), TEXT("string"), TEXT("Image prompt. Stored only as a hash in provenance."))
 			.Optional(TEXT("provider"), TEXT("string"), TEXT("Only 'local_deterministic' is supported in Monolith-native mode."), TEXT("local_deterministic"))
-			.Optional(TEXT("model"), TEXT("string"), TEXT("Only 'monolith/local-gradient-bmp-v1' is supported."), TEXT("monolith/local-gradient-bmp-v1"))
+			.Optional(TEXT("model"), TEXT("string"), TEXT("Only 'monolith/local-gradient-png-v1' is supported; the legacy bmp-v1 name is accepted as an alias."), ImageGenerationInternal::DefaultLocalModel)
 			.Optional(TEXT("aspect_ratio"), TEXT("string"), TEXT("1:1, 16:9, 9:16, 4:3, 3:4, or 21:9"), TEXT("1:1"))
 			.Optional(TEXT("resolution"), TEXT("array|string|object|number"), TEXT("Optional explicit resolution: [width,height], '1024x1024', 1024, or {width,height}. Overrides aspect_ratio."))
 			.Optional(TEXT("asset_path"), TEXT("string"), TEXT("Destination folder under /Game"), ImageGenerationInternal::DefaultGeneratedAssetPath)
@@ -1958,10 +2159,11 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("quality"), TEXT("string"), TEXT("low, medium, or high"), TEXT("high"))
 			.Optional(TEXT("size"), TEXT("string"), TEXT("ima2 image size, for example 1024x1024"), TEXT("1024x1024"))
 			.Optional(TEXT("resolution"), TEXT("array|string|object|number"), TEXT("Optional explicit resolution. Accepts [width,height], '1024x1024', 1024, or {width,height}; overrides size."))
-			.Optional(TEXT("format"), TEXT("string"), TEXT("Requested output format forwarded to ima2."), TEXT("png"))
-			.Optional(TEXT("background"), TEXT("string"), TEXT("Image-generation background forwarded to ima2/OpenAI: transparent, opaque, or auto."), TEXT("auto"))
+			.Optional(TEXT("format"), TEXT("string"), TEXT("Requested output format forwarded to ima2. MonolithImageGen accepts png only."), TEXT("png"))
+			.Optional(TEXT("background"), TEXT("string"), TEXT("Image-generation background request: transparent, opaque, or auto. Monolith forwards transparent as auto to ima2/OpenAI for compatibility."), TEXT("auto"))
 			.Optional(TEXT("moderation"), TEXT("string"), TEXT("auto or low"), TEXT("low"))
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("ima2 prompt mode."), TEXT("auto"))
+			.Optional(TEXT("compose_prompt"), TEXT("bool"), TEXT("When true, append Unreal texture_role-specific generation constraints to the provider prompt. Defaults true; set false to send the caller prompt verbatim."))
 			.Optional(TEXT("web_search_enabled"), TEXT("bool"), TEXT("Forward as webSearchEnabled when set."))
 			.Optional(TEXT("references"), TEXT("array"), TEXT("Optional reference image array. Each item may be a data URL/base64 string or a local image file path."))
 			.Optional(TEXT("reference_images"), TEXT("array"), TEXT("Optional reference image objects/paths. Objects accept path, file_path, bytes_b64, data_url, and format_hint."))
@@ -1993,7 +2195,7 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("bytes_b64"), TEXT("string"), TEXT("Base64 image bytes, optionally with data:image/...;base64 prefix. Required unless file_path is provided."))
 			.Optional(TEXT("file_path"), TEXT("string"), TEXT("Local generated image file path to import when bytes_b64 is omitted."))
 			.Optional(TEXT("path"), TEXT("string"), TEXT("Alias for file_path."))
-			.Optional(TEXT("format_hint"), TEXT("string"), TEXT("png, jpg, jpeg, bmp, exr, tga, hdr, tif, tiff, or dds. Auto-filled from data URL when possible."))
+			.Optional(TEXT("format_hint"), TEXT("string"), TEXT("png only. Auto-filled from data URL when possible."))
 			.Optional(TEXT("prompt"), TEXT("string"), TEXT("Prompt used externally. Stored only as a hash."))
 			.Optional(TEXT("provider"), TEXT("string"), TEXT("External provider id for provenance."), TEXT("external"))
 			.Optional(TEXT("model"), TEXT("string"), TEXT("External model id for provenance."), TEXT("unknown"))
@@ -2029,10 +2231,10 @@ FMonolithActionResult FMonolithImageGenActions::HandleListImageModels(const TSha
 
 	TSharedPtr<FJsonObject> Local = MakeShared<FJsonObject>();
 	Local->SetStringField(TEXT("provider"), TEXT("local_deterministic"));
-	Local->SetStringField(TEXT("model"), TEXT("monolith/local-gradient-bmp-v1"));
+	Local->SetStringField(TEXT("model"), ImageGenerationInternal::DefaultLocalModel);
 	Local->SetBoolField(TEXT("available"), true);
 	Local->SetBoolField(TEXT("network_required"), false);
-	Local->SetStringField(TEXT("output_format"), TEXT("bmp"));
+	Local->SetStringField(TEXT("output_format"), TEXT("png"));
 	ImageGenerationInternal::AddStringArray(Local, TEXT("aspect_ratios"), { TEXT("1:1"), TEXT("16:9"), TEXT("9:16"), TEXT("4:3"), TEXT("3:4"), TEXT("21:9") });
 	ImageGenerationInternal::AddStringArray(Local, TEXT("texture_roles"), ImageGenerationInternal::SupportedTextureRoles());
 	Models.Add(MakeShared<FJsonValueObject>(Local));
@@ -2057,9 +2259,11 @@ FMonolithActionResult FMonolithImageGenActions::HandleListImageModels(const TSha
 	Ima2->SetStringField(TEXT("provider_default"), BridgeProvider);
 	Ima2->SetStringField(TEXT("secret_policy"), TEXT("Monolith sends no provider credentials; OAuth/API-key auth is owned by the ima2/imag2-gen server."));
 	ImageGenerationInternal::AddStringArray(Ima2, TEXT("quality"), { TEXT("low"), TEXT("medium"), TEXT("high") });
+	ImageGenerationInternal::AddStringArray(Ima2, TEXT("formats"), { TEXT("png") });
 	ImageGenerationInternal::AddStringArray(Ima2, TEXT("background"), { TEXT("transparent"), TEXT("opaque"), TEXT("auto") });
 	ImageGenerationInternal::AddStringArray(Ima2, TEXT("moderation"), { TEXT("auto"), TEXT("low") });
 	ImageGenerationInternal::AddStringArray(Ima2, TEXT("texture_roles"), ImageGenerationInternal::SupportedTextureRoles());
+	Ima2->SetBoolField(TEXT("compose_prompt_default"), true);
 	ImageGenerationInternal::AddStringArray(Ima2, TEXT("reference_input_fields"), ImageGenerationInternal::SupportedReferenceInputFields());
 	Models.Add(MakeShared<FJsonValueObject>(Ima2));
 
@@ -2088,13 +2292,15 @@ FMonolithActionResult FMonolithImageGenActions::HandleGetImageGenerationDefaults
 	Result->SetObjectField(TEXT("texture_settings"), ImageGenerationInternal::DefaultTextureSettings());
 	Result->SetStringField(TEXT("texture_role"), TEXT("basecolor"));
 	Result->SetObjectField(TEXT("texture_role_presets"), ImageGenerationInternal::TextureRolePresetSummary());
-	Result->SetStringField(TEXT("prompt_policy"), TEXT("redacted: provenance stores prompt_hash only"));
+	Result->SetStringField(TEXT("prompt_policy"), TEXT("redacted: provenance stores effective prompt_hash only; compose_prompt defaults true"));
+	Result->SetBoolField(TEXT("compose_prompt"), true);
 	Result->SetStringField(TEXT("ima2_server_url"), ImageGenerationInternal::ResolveDefaultIma2ServerUrl());
 	Result->SetStringField(TEXT("ima2_provider"), ImageGenerationInternal::ResolveIma2Provider(MakeShared<FJsonObject>()));
 	Result->SetNumberField(TEXT("ima2_timeout_seconds"), ImageGenerationInternal::DefaultIma2TimeoutSeconds);
 	Result->SetStringField(TEXT("ima2_quality"), TEXT("high"));
 	Result->SetStringField(TEXT("ima2_size"), TEXT("1024x1024"));
 	Result->SetStringField(TEXT("ima2_format"), TEXT("png"));
+	ImageGenerationInternal::AddStringArray(Result, TEXT("ima2_formats"), { TEXT("png") });
 	Result->SetStringField(TEXT("ima2_background"), TEXT("auto"));
 	Result->SetStringField(TEXT("ima2_secret_policy"), TEXT("Monolith stores no API key; the ima2/imag2-gen server owns provider credentials and OAuth sessions."));
 	Result->SetStringField(TEXT("reference_png_dir"), ImageGenerationInternal::ResolveReferenceImageDirectory());
@@ -2103,7 +2309,7 @@ FMonolithActionResult FMonolithImageGenActions::HandleGetImageGenerationDefaults
 	ImageGenerationInternal::AddStringArray(Result, TEXT("reference_input_fields"), ImageGenerationInternal::SupportedReferenceInputFields());
 	TSharedPtr<FJsonObject> Local = MakeShared<FJsonObject>();
 	Local->SetStringField(TEXT("provider"), TEXT("local_deterministic"));
-	Local->SetStringField(TEXT("model"), TEXT("monolith/local-gradient-bmp-v1"));
+	Local->SetStringField(TEXT("model"), ImageGenerationInternal::DefaultLocalModel);
 	Local->SetStringField(TEXT("action"), TEXT("imagegen.generate_image"));
 	Result->SetObjectField(TEXT("local_placeholder"), Local);
 	ImageGenerationInternal::AddStringArray(Result, TEXT("aspect_ratios"), { TEXT("1:1"), TEXT("16:9"), TEXT("9:16"), TEXT("4:3"), TEXT("3:4"), TEXT("21:9") });
@@ -2133,12 +2339,16 @@ FMonolithActionResult FMonolithImageGenActions::HandleGenerateImage(const TShare
 	FString Model;
 	if (!Params->TryGetStringField(TEXT("model"), Model) || Model.IsEmpty())
 	{
-		Model = TEXT("monolith/local-gradient-bmp-v1");
+		Model = ImageGenerationInternal::DefaultLocalModel;
 	}
-	if (Provider != TEXT("local_deterministic") || Model != TEXT("monolith/local-gradient-bmp-v1"))
+	if (Model == ImageGenerationInternal::LegacyLocalBmpModel)
+	{
+		Model = ImageGenerationInternal::DefaultLocalModel;
+	}
+	if (Provider != TEXT("local_deterministic") || Model != ImageGenerationInternal::DefaultLocalModel)
 	{
 		return FMonolithActionResult::Error(
-			TEXT("Monolith-native generate_image supports only provider='local_deterministic' and model='monolith/local-gradient-bmp-v1'. Use imagegen.import_generated_image for external providers."),
+			TEXT("Monolith-native generate_image supports only provider='local_deterministic' and model='monolith/local-gradient-png-v1'. Use imagegen.import_generated_image for external providers."),
 			-32602);
 	}
 
@@ -2166,13 +2376,17 @@ FMonolithActionResult FMonolithImageGenActions::HandleGenerateImage(const TShare
 		return FMonolithActionResult::Error(TEXT("Unsupported aspect_ratio. Expected one of: 1:1, 16:9, 9:16, 4:3, 3:4, 21:9"), -32602);
 	}
 
-	const TArray<uint8> BmpBytes = ImageGenerationInternal::MakeDeterministicBmp(Prompt, Width, Height);
-	const FString BytesB64 = FBase64::Encode(BmpBytes);
+	const TArray<uint8> PngBytes = ImageGenerationInternal::MakeDeterministicPng(Prompt, Width, Height);
+	if (PngBytes.Num() == 0)
+	{
+		return FMonolithActionResult::Error(TEXT("Failed to encode deterministic local placeholder as PNG"), -32603);
+	}
+	const FString BytesB64 = FBase64::Encode(PngBytes);
 	TSharedPtr<FJsonObject> Provenance = ImageGenerationInternal::BuildProvenance(
-		Provider, Model, TEXT("local_deterministic"), Prompt, AspectRatio, TEXT("bmp"), BmpBytes.Num());
+		Provider, Model, TEXT("local_deterministic"), Prompt, AspectRatio, TEXT("png"), PngBytes.Num());
 
 	return ImageGenerationInternal::ImportGeneratedBytes(
-		Params, BytesB64, TEXT("bmp"), ImageGenerationInternal::PromptToAssetName(Prompt), Provenance);
+		Params, BytesB64, TEXT("png"), ImageGenerationInternal::PromptToAssetName(Prompt), Provenance);
 }
 
 FMonolithActionResult FMonolithImageGenActions::HandleGenerateImageViaIma2(const TSharedPtr<FJsonObject>& Params)
@@ -2240,12 +2454,21 @@ FMonolithActionResult FMonolithImageGenActions::HandleGenerateImageViaIma2(const
 	{
 		Format = TEXT("jpeg");
 	}
-	if (Format != TEXT("png") && Format != TEXT("jpeg") && Format != TEXT("webp"))
+	if (!ImageGenerationInternal::IsSupportedIma2OutputFormat(Format))
 	{
-		return FMonolithActionResult::Error(TEXT("format must be 'png', 'jpeg', or 'webp' for ima2/OpenAI image generation"), -32602);
+		return FMonolithActionResult::Error(TEXT("format must be 'png'; JPEG and WebP are not supported by the MonolithImageGen Texture2D generation path"), -32602);
 	}
+	FString TextureRole;
+	FString TextureRoleError;
+	if (!ImageGenerationInternal::ResolveTextureRoleParam(Params, TextureRole, TextureRoleError))
+	{
+		return FMonolithActionResult::Error(TextureRoleError, -32602);
+	}
+	bool bComposePrompt = true;
+	Params->TryGetBoolField(TEXT("compose_prompt"), bComposePrompt);
 	FString Background;
-	if (!Params->TryGetStringField(TEXT("background"), Background) || Background.IsEmpty())
+	const bool bHasExplicitBackground = Params->TryGetStringField(TEXT("background"), Background) && !Background.IsEmpty();
+	if (!bHasExplicitBackground)
 	{
 		Background = TEXT("auto");
 	}
@@ -2256,8 +2479,15 @@ FMonolithActionResult FMonolithImageGenActions::HandleGenerateImageViaIma2(const
 	}
 	if (Background == TEXT("transparent") && !ImageGenerationInternal::IsTransparentCompatibleFormat(Format))
 	{
-		return FMonolithActionResult::Error(TEXT("background='transparent' requires format='png' or format='webp'"), -32602);
+		return FMonolithActionResult::Error(TEXT("background='transparent' requires format='png'"), -32602);
 	}
+	FString TextureRoleBackgroundError;
+	if (!ImageGenerationInternal::ValidateTextureRoleBackground(TextureRole, Background, bComposePrompt, TextureRoleBackgroundError))
+	{
+		return FMonolithActionResult::Error(TextureRoleBackgroundError, -32602);
+	}
+	const FString RequestedBackground = Background;
+	const FString ProviderBackground = ImageGenerationInternal::ProviderSafeIma2Background(Background);
 	FString Moderation;
 	if (!Params->TryGetStringField(TEXT("moderation"), Moderation) || Moderation.IsEmpty())
 	{
@@ -2296,14 +2526,18 @@ FMonolithActionResult FMonolithImageGenActions::HandleGenerateImageViaIma2(const
 		return FMonolithActionResult::Error(ReferenceError, -32602);
 	}
 
+	const FString EffectivePrompt = bComposePrompt
+		? ImageGenerationInternal::ComposeTextureRolePrompt(Prompt, TextureRole)
+		: Prompt;
+
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("prompt"), Prompt);
+	Payload->SetStringField(TEXT("prompt"), EffectivePrompt);
 	Payload->SetStringField(TEXT("provider"), Provider);
 	Payload->SetStringField(TEXT("model"), Model);
 	Payload->SetStringField(TEXT("quality"), Quality);
 	Payload->SetStringField(TEXT("size"), Size);
 	Payload->SetStringField(TEXT("format"), Format);
-	Payload->SetStringField(TEXT("background"), Background);
+	Payload->SetStringField(TEXT("background"), ProviderBackground);
 	Payload->SetStringField(TEXT("moderation"), Moderation);
 	Payload->SetStringField(TEXT("mode"), Mode);
 	Payload->SetNumberField(TEXT("n"), 1);
@@ -2343,15 +2577,23 @@ FMonolithActionResult FMonolithImageGenActions::HandleGenerateImageViaIma2(const
 		: FString::Printf(TEXT("ima2-gen/%s"), *Ima2Response.Provider);
 
 	TSharedPtr<FJsonObject> Provenance = ImageGenerationInternal::BuildProvenance(
-		EffectiveProvider, EffectiveModel, TEXT("ima2_http"), Prompt, AspectRatio, ImagePayload.FormatHint, ImagePayload.CompressedBytes);
+		EffectiveProvider, EffectiveModel, TEXT("ima2_http"), EffectivePrompt, AspectRatio, ImagePayload.FormatHint, ImagePayload.CompressedBytes);
 	Provenance->SetStringField(TEXT("ima2_server_url"), ServerUrl);
 	Provenance->SetStringField(TEXT("ima2_request_id"), Ima2Response.RequestId.IsEmpty() ? RequestId : Ima2Response.RequestId);
 	Provenance->SetStringField(TEXT("ima2_filename"), Ima2Response.Filename);
 	Provenance->SetStringField(TEXT("quality"), Ima2Response.Quality.IsEmpty() ? Quality : Ima2Response.Quality);
 	Provenance->SetStringField(TEXT("size"), Ima2Response.Size.IsEmpty() ? Size : Ima2Response.Size);
-	Provenance->SetStringField(TEXT("background"), Ima2Response.Background.IsEmpty() ? Background : Ima2Response.Background);
+	Provenance->SetStringField(TEXT("background"), Ima2Response.Background.IsEmpty() ? ProviderBackground : Ima2Response.Background);
+	Provenance->SetStringField(TEXT("requested_background"), RequestedBackground);
+	Provenance->SetStringField(TEXT("provider_background"), ProviderBackground);
 	Provenance->SetStringField(TEXT("moderation"), Ima2Response.Moderation.IsEmpty() ? Moderation : Ima2Response.Moderation);
 	Provenance->SetStringField(TEXT("reference_count"), FString::FromInt(SavedReferenceFiles.Num()));
+	Provenance->SetStringField(TEXT("prompt_composed"), bComposePrompt ? TEXT("true") : TEXT("false"));
+	Provenance->SetStringField(TEXT("prompt_texture_role"), TextureRole);
+	if (bComposePrompt)
+	{
+		Provenance->SetStringField(TEXT("caller_prompt_hash"), ImageGenerationInternal::PromptHash(Prompt));
+	}
 	if (SavedReferenceFiles.Num() > 0)
 	{
 		TArray<FString> ReferenceHashes;
@@ -2383,9 +2625,13 @@ FMonolithActionResult FMonolithImageGenActions::HandleGenerateImageViaIma2(const
 	Bridge->SetStringField(TEXT("model"), EffectiveModel);
 	Bridge->SetStringField(TEXT("quality"), Ima2Response.Quality.IsEmpty() ? Quality : Ima2Response.Quality);
 	Bridge->SetStringField(TEXT("size"), Ima2Response.Size.IsEmpty() ? Size : Ima2Response.Size);
-	Bridge->SetStringField(TEXT("background"), Ima2Response.Background.IsEmpty() ? Background : Ima2Response.Background);
+	Bridge->SetStringField(TEXT("background"), Ima2Response.Background.IsEmpty() ? ProviderBackground : Ima2Response.Background);
+	Bridge->SetStringField(TEXT("requested_background"), RequestedBackground);
+	Bridge->SetStringField(TEXT("provider_background"), ProviderBackground);
 	Bridge->SetStringField(TEXT("moderation"), Ima2Response.Moderation.IsEmpty() ? Moderation : Ima2Response.Moderation);
 	Bridge->SetStringField(TEXT("elapsed"), Ima2Response.Elapsed);
+	Bridge->SetBoolField(TEXT("prompt_composed"), bComposePrompt);
+	Bridge->SetStringField(TEXT("prompt_texture_role"), TextureRole);
 	Bridge->SetNumberField(TEXT("reference_count"), SavedReferenceFiles.Num());
 	ImportResult.Result->SetStringField(TEXT("reference_png_dir"), ImageGenerationInternal::ResolveReferenceImageDirectory());
 	ImportResult.Result->SetArrayField(TEXT("reference_png_files"), ImageGenerationInternal::ReferenceFilesToJson(SavedReferenceFiles));
@@ -2490,8 +2736,10 @@ FMonolithActionResult FMonolithImageGenActions::HandleGetGeneratedAssetProvenanc
 		TEXT("format_hint"), TEXT("prompt_hash"), TEXT("prompt_redacted"),
 		TEXT("generated_at_utc"), TEXT("compressed_bytes"), TEXT("texture_role"), TEXT("ima2_server_url"),
 		TEXT("ima2_request_id"), TEXT("ima2_filename"), TEXT("quality"), TEXT("size"),
-		TEXT("background"), TEXT("moderation"), TEXT("reference_count"), TEXT("reference_hashes"),
+		TEXT("background"), TEXT("requested_background"), TEXT("provider_background"),
+		TEXT("moderation"), TEXT("reference_count"), TEXT("reference_hashes"),
 		TEXT("revised_prompt_hash"), TEXT("revised_prompt_redacted"),
+		TEXT("prompt_composed"), TEXT("prompt_texture_role"), TEXT("caller_prompt_hash"),
 		TEXT("source_png_path"), TEXT("source_png_hash"), TEXT("source_png_bytes"), TEXT("source_png_kind")
 	};
 	bool bFoundAny = false;

@@ -268,6 +268,20 @@ bool FMonolithImageGenTextureRolesDefaultsTest::RunTest(const FString& Parameter
         }
     }
 
+    const TArray<TSharedPtr<FJsonValue>>* Ima2Formats = nullptr;
+    TestTrue(TEXT("ima2_formats returned"),
+        Defaults.Result->TryGetArrayField(TEXT("ima2_formats"), Ima2Formats) && Ima2Formats);
+    if (Ima2Formats)
+    {
+        TestTrue(TEXT("ima2_formats contains png"), JsonArrayHasString(*Ima2Formats, TEXT("png")));
+        TestFalse(TEXT("ima2_formats excludes unsupported jpeg"), JsonArrayHasString(*Ima2Formats, TEXT("jpeg")));
+        TestFalse(TEXT("ima2_formats excludes unsupported webp"), JsonArrayHasString(*Ima2Formats, TEXT("webp")));
+    }
+
+    bool bComposePrompt = false;
+    TestTrue(TEXT("compose_prompt default returned"), Defaults.Result->TryGetBoolField(TEXT("compose_prompt"), bComposePrompt));
+    TestTrue(TEXT("compose_prompt defaults true"), bComposePrompt);
+
     const TSharedPtr<FJsonObject>* Presets = nullptr;
     TestTrue(TEXT("texture_role_presets returned"),
         Defaults.Result->TryGetObjectField(TEXT("texture_role_presets"), Presets) && Presets && Presets->IsValid());
@@ -293,6 +307,110 @@ bool FMonolithImageGenTextureRolesDefaultsTest::RunTest(const FString& Parameter
         FString DefaultPath;
         Models.Result->TryGetStringField(TEXT("default_asset_path"), DefaultPath);
         TestEqual(TEXT("list_image_models default path"), DefaultPath, FString(TEXT("/Game/GeneratedImages")));
+    }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithImageGenValidationTest,
+    "MonolithImageGen.TextureRoles.Validation",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithImageGenValidationTest::RunTest(const FString& Parameters)
+{
+    EnsureImageGenModuleLoaded();
+
+    TSharedPtr<FJsonObject> WebpParams = MakeShared<FJsonObject>();
+    WebpParams->SetStringField(TEXT("prompt"), TEXT("unsupported webp validation smoke"));
+    WebpParams->SetStringField(TEXT("server_url"), TEXT("http://127.0.0.1:9"));
+    WebpParams->SetStringField(TEXT("format"), TEXT("webp"));
+    WebpParams->SetNumberField(TEXT("timeout_seconds"), 1.0);
+    WebpParams->SetBoolField(TEXT("save"), false);
+    const FMonolithActionResult WebpResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("imagegen"), TEXT("generate_image_via_ima2"), WebpParams);
+    TestFalse(TEXT("generate_image_via_ima2 rejects WebP before bridge call"), WebpResult.bSuccess);
+    TestTrue(TEXT("WebP rejection explains Texture2D import support"),
+        WebpResult.ErrorMessage.Contains(TEXT("WebP")));
+
+    TSharedPtr<FJsonObject> JpegParams = MakeShared<FJsonObject>();
+    JpegParams->SetStringField(TEXT("prompt"), TEXT("unsupported jpeg validation smoke"));
+    JpegParams->SetStringField(TEXT("server_url"), TEXT("http://127.0.0.1:9"));
+    JpegParams->SetStringField(TEXT("format"), TEXT("jpeg"));
+    JpegParams->SetNumberField(TEXT("timeout_seconds"), 1.0);
+    JpegParams->SetBoolField(TEXT("save"), false);
+    const FMonolithActionResult JpegResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("imagegen"), TEXT("generate_image_via_ima2"), JpegParams);
+    TestFalse(TEXT("generate_image_via_ima2 rejects JPEG before bridge call"), JpegResult.bSuccess);
+    TestTrue(TEXT("JPEG rejection explains PNG-only contract"),
+        JpegResult.ErrorMessage.Contains(TEXT("JPEG")) && JpegResult.ErrorMessage.Contains(TEXT("png")));
+
+    TSharedPtr<FJsonObject> RoleParams = MakeShared<FJsonObject>();
+    RoleParams->SetStringField(TEXT("prompt"), TEXT("invalid role validation smoke"));
+    RoleParams->SetStringField(TEXT("server_url"), TEXT("http://127.0.0.1:9"));
+    RoleParams->SetStringField(TEXT("format"), TEXT("png"));
+    RoleParams->SetStringField(TEXT("texture_role"), TEXT("mystery_role"));
+    RoleParams->SetBoolField(TEXT("compose_prompt"), true);
+    RoleParams->SetNumberField(TEXT("timeout_seconds"), 1.0);
+    RoleParams->SetBoolField(TEXT("save"), false);
+    const FMonolithActionResult RoleResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("imagegen"), TEXT("generate_image_via_ima2"), RoleParams);
+    TestFalse(TEXT("generate_image_via_ima2 rejects invalid texture_role before bridge call"), RoleResult.bSuccess);
+    TestTrue(TEXT("texture_role rejection names the field"),
+        RoleResult.ErrorMessage.Contains(TEXT("texture_role")));
+
+    TSharedPtr<FJsonObject> NormalTransparentParams = MakeShared<FJsonObject>();
+    NormalTransparentParams->SetStringField(TEXT("prompt"), TEXT("normal map transparent validation smoke"));
+    NormalTransparentParams->SetStringField(TEXT("server_url"), TEXT("http://127.0.0.1:9"));
+    NormalTransparentParams->SetStringField(TEXT("format"), TEXT("png"));
+    NormalTransparentParams->SetStringField(TEXT("texture_role"), TEXT("normal"));
+    NormalTransparentParams->SetStringField(TEXT("background"), TEXT("transparent"));
+    NormalTransparentParams->SetBoolField(TEXT("compose_prompt"), true);
+    NormalTransparentParams->SetNumberField(TEXT("timeout_seconds"), 1.0);
+    NormalTransparentParams->SetBoolField(TEXT("save"), false);
+    const FMonolithActionResult NormalTransparentResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("imagegen"), TEXT("generate_image_via_ima2"), NormalTransparentParams);
+    TestFalse(TEXT("generate_image_via_ima2 rejects transparent background for normal maps"), NormalTransparentResult.bSuccess);
+    TestTrue(TEXT("normal transparent rejection explains background"),
+        NormalTransparentResult.ErrorMessage.Contains(TEXT("transparent")));
+
+    TSharedPtr<FJsonObject> QueryUrlParams = MakeShared<FJsonObject>();
+    QueryUrlParams->SetStringField(TEXT("prompt"), TEXT("server url query validation smoke"));
+    QueryUrlParams->SetStringField(TEXT("server_url"), TEXT("http://127.0.0.1:9?token=do-not-store"));
+    QueryUrlParams->SetBoolField(TEXT("save"), false);
+    const FMonolithActionResult QueryUrlResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("imagegen"), TEXT("generate_image_via_ima2"), QueryUrlParams);
+    TestFalse(TEXT("generate_image_via_ima2 rejects server_url query strings"), QueryUrlResult.bSuccess);
+    TestTrue(TEXT("query rejection does not echo query secret"),
+        !QueryUrlResult.ErrorMessage.Contains(TEXT("do-not-store")));
+
+    const FString PngB64 = MakeSolidPngB64(FColor(16, 48, 96, 255));
+    TestFalse(TEXT("data URL PNG fixture encoded"), PngB64.IsEmpty());
+    if (!PngB64.IsEmpty())
+    {
+        TSharedPtr<FJsonObject> DataUrlParams = MakeShared<FJsonObject>();
+        DataUrlParams->SetStringField(TEXT("bytes_b64"), FString(TEXT("data:image/png;base64,")) + PngB64);
+        DataUrlParams->SetStringField(TEXT("format_hint"), TEXT("jpeg"));
+        DataUrlParams->SetStringField(TEXT("prompt"), TEXT("data url format override"));
+        DataUrlParams->SetStringField(TEXT("destination"), TEXT("/Game/Tests/Monolith/ImageGen/T_ImportDataUrlFormatOverride"));
+        DataUrlParams->SetStringField(TEXT("texture_role"), TEXT("basecolor"));
+        DataUrlParams->SetBoolField(TEXT("save"), false);
+        DataUrlParams->SetBoolField(TEXT("save_source_png"), false);
+
+        const FMonolithActionResult DataUrlResult = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("imagegen"), TEXT("import_generated_image"), DataUrlParams);
+        TestTrue(TEXT("import_generated_image trusts data URL MIME over stale format_hint"), DataUrlResult.bSuccess);
+        if (!DataUrlResult.bSuccess)
+        {
+            AddError(FString::Printf(TEXT("Data URL import error: %s (code %d)"),
+                *DataUrlResult.ErrorMessage, DataUrlResult.ErrorCode));
+        }
+        else if (DataUrlResult.Result.IsValid())
+        {
+            FString FormatHint;
+            DataUrlResult.Result->TryGetStringField(TEXT("format_hint"), FormatHint);
+            TestEqual(TEXT("data URL format_hint becomes png"), FormatHint, FString(TEXT("png")));
+        }
     }
 
     return true;
@@ -348,6 +466,12 @@ bool FMonolithImageGenTextureRolesGenerateLocalTest::RunTest(const FString& Para
         FString ProvenanceRole;
         (*Provenance)->TryGetStringField(TEXT("texture_role"), ProvenanceRole);
         TestEqual(TEXT("provenance texture_role"), ProvenanceRole, FString(TEXT("ui_icon")));
+        FString FormatHint;
+        (*Provenance)->TryGetStringField(TEXT("format_hint"), FormatHint);
+        TestEqual(TEXT("local generated format_hint"), FormatHint, FString(TEXT("png")));
+        FString LocalModel;
+        (*Provenance)->TryGetStringField(TEXT("model"), LocalModel);
+        TestEqual(TEXT("local generated model"), LocalModel, FString(TEXT("monolith/local-gradient-png-v1")));
     }
 
     FString AssetPath;

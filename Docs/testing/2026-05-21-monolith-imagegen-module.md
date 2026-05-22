@@ -62,7 +62,7 @@ Note: the first reference-path smoke attempt closed the MCP connection while the
 | ima2-gen typecheck | `npm run typecheck` in `D:\P4\imag2-gen` | PASS. |
 | ima2-gen provider parity tests | `node --import tsx --test tests/api-provider-parity.test.ts tests/generate-route-validation-error.test.ts tests/cli-feature-parity-contract.test.js` | PASS: API provider forwards `background=transparent` and `output_format=png`; CLI exposes `--background`; `background=transparent` with JPEG is rejected before upstream. |
 | Monolith build | `UnrealBuildTool.exe GoGameEditor Win64 Development -Project="D:\P4\game\GO.uproject" -WaitMutex -NoHotReloadFromIDE` | PASS: `Result: Succeeded`. |
-| Monolith request validation | Source review of `imagegen.generate_image_via_ima2` implementation | PASS: optional `background` defaults to `auto`, accepts `transparent`, `opaque`, and `auto`, forwards the value to ima2-gen, records provenance, and rejects `transparent` unless `format` is PNG or WebP. |
+| Monolith request validation | Source review of `imagegen.generate_image_via_ima2` implementation | PASS: optional `background` defaults to `auto`, accepts `transparent`, `opaque`, and `auto`, forwards the value to ima2-gen, records provenance, and rejects non-PNG provider output before the bridge call. |
 
 ## 6. Follow-up Verification -- Texture Role Import Pipeline
 
