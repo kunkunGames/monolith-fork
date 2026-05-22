@@ -3490,13 +3490,24 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetRootMotionSettings(con
 
 	if (Params->HasField(TEXT("enable_root_motion")))
 	{
-		Seq->bEnableRootMotion = Params->GetBoolField(TEXT("enable_root_motion"));
+		bool bEnableRootMotion;
+		if (!Params->TryGetBoolField(TEXT("enable_root_motion"), bEnableRootMotion))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'enable_root_motion' must be a boolean"));
+		}
+		Seq->bEnableRootMotion = bEnableRootMotion;
 		bAnySet = true;
 	}
 
 	if (Params->HasField(TEXT("root_motion_lock")))
 	{
-		FString LockStr = Params->GetStringField(TEXT("root_motion_lock"));
+		FString LockStr;
+		if (!Params->TryGetStringField(TEXT("root_motion_lock"), LockStr))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'root_motion_lock' must be a string"));
+		}
 		if (LockStr.Equals(TEXT("AnimFirstFrame"), ESearchCase::IgnoreCase))
 			Seq->RootMotionRootLock = ERootMotionRootLock::AnimFirstFrame;
 		else if (LockStr.Equals(TEXT("Zero"), ESearchCase::IgnoreCase))
@@ -3513,7 +3524,13 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetRootMotionSettings(con
 
 	if (Params->HasField(TEXT("force_root_lock")))
 	{
-		Seq->bForceRootLock = Params->GetBoolField(TEXT("force_root_lock"));
+		bool bForceRootLock;
+		if (!Params->TryGetBoolField(TEXT("force_root_lock"), bForceRootLock))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'force_root_lock' must be a boolean"));
+		}
+		Seq->bForceRootLock = bForceRootLock;
 		bAnySet = true;
 	}
 
