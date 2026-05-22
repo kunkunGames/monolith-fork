@@ -71,6 +71,7 @@ bool FMonolithAssetFindSearchTest::RunTest(const FString& Parameters)
 
 	MakeTex(TEXT("BB_PunchBot"));
 	MakeTex(TEXT("BB_PunchBotVariant"));
+	MakeTex(TEXT("BB_Carte"));
 	MakeTex(TEXT("UnrelatedThing"));
 
 	// 1) Query ranks PunchBot assets and excludes the unrelated one (or scores it far lower).
@@ -103,7 +104,36 @@ bool FMonolithAssetFindSearchTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("typo query yields a match"), Result.Matches.Num() >= 1);
 	}
 
-	// 3) class_names filter to StaticMesh excludes the textures.
+	// 3) Adjacent transposition is accepted by default, but can be disabled for strict Levenshtein.
+	{
+		FAssetFindRequest Request;
+		Request.Query = TEXT("crate");
+		Request.Path = Folder;
+		Request.bIncludeScoreBreakdown = true;
+		FAssetFindResult Result;
+		FString Error;
+		TSharedPtr<FJsonObject> ErrorData;
+		FMonolithAssetFindActions::RunAssetFind(Request, Result, Error, ErrorData);
+		TestTrue(TEXT("transposed query yields a match by default"), Result.Matches.Num() >= 1);
+		if (Result.Matches.Num() > 0)
+		{
+			TestTrue(TEXT("transposition match is the Carte asset"), Result.Matches[0].AssetName.Contains(TEXT("Carte")));
+			TestEqual(TEXT("transposition distance is one edit"), Result.Matches[0].BestDistance, 1);
+		}
+	}
+	{
+		FAssetFindRequest Request;
+		Request.Query = TEXT("crate");
+		Request.Path = Folder;
+		Request.bAllowTransposition = false;
+		FAssetFindResult Result;
+		FString Error;
+		TSharedPtr<FJsonObject> ErrorData;
+		FMonolithAssetFindActions::RunAssetFind(Request, Result, Error, ErrorData);
+		TestEqual(TEXT("strict Levenshtein rejects the adjacent transposition"), Result.Matches.Num(), 0);
+	}
+
+	// 4) class_names filter to StaticMesh excludes the textures.
 	{
 		FAssetFindRequest Request;
 		Request.Query = TEXT("punchbot");
@@ -116,7 +146,7 @@ bool FMonolithAssetFindSearchTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("StaticMesh filter excludes textures"), Result.Matches.Num(), 0);
 	}
 
-	// 4) Absurd threshold drops everything.
+	// 5) Absurd threshold drops everything.
 	{
 		FAssetFindRequest Request;
 		Request.Query = TEXT("punchbot");
@@ -129,7 +159,7 @@ bool FMonolithAssetFindSearchTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("absurd threshold drops all"), Result.Matches.Num(), 0);
 	}
 
-	// 5) Invalid path is rejected with structured error data.
+	// 6) Invalid path is rejected with structured error data.
 	{
 		FAssetFindRequest Request;
 		Request.Query = TEXT("x");

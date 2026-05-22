@@ -1121,7 +1121,7 @@ Asset ingest, generic lifecycle operations, specialized asset enrichment, asset 
 | `inspect_assets_batch` | Inspect multiple assets with per-row success/error results. |
 | `validate_specialized_asset` | Validate a specialized asset and report warnings without mutation. |
 | `batch_rename_assets` | Preview or apply batch asset renames through `IAssetTools::RenameAssets`. |
-| `find_assets` | Fuzzy, scored, typo-tolerant search over the live `AssetRegistry`. Ranks by asset name/path/class (optional tags) via the shared `FMonolithFuzzyMatch` engine. Params: `query`, `path`, `recursive`, `class_names` (alias `class`), `limit`, `threshold`, `include_tags`, `include_score_breakdown`. Sees unsaved session assets; distinct from offline `project` search and exact-name did-you-mean. |
+| `find_assets` | Fuzzy, scored, typo-tolerant search over the live `AssetRegistry`. Ranks by asset name/path/class (optional tags) via the shared `FMonolithFuzzyMatch` engine. Params: `query`, `path`, `recursive`, `class_names` (alias `class`), `limit`, `threshold`, `include_tags`, `include_score_breakdown`, `allow_transposition` (default `true`, alias `bAllowTransposition`). Sees unsaved session assets; distinct from offline `project` search and exact-name did-you-mean. |
 
 ---
 

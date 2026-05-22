@@ -191,7 +191,8 @@ bool FMonolithAssetFindActions::RunAssetFind(const FAssetFindRequest& Request, F
 	{
 		const FAssetData& Data = Assets[Index];
 		const TArray<FMonolithFuzzyField> Fields = BuildFieldsForAsset(Data, Request.bIncludeTags);
-		const FMonolithFuzzyScore Score = FMonolithFuzzyMatch::ScoreCandidate(QueryNormalized, QueryTokens, Fields);
+		const FMonolithFuzzyScore Score = FMonolithFuzzyMatch::ScoreCandidate(
+			QueryNormalized, QueryTokens, Fields, Request.bAllowTransposition);
 
 		const bool bKeep = Request.Threshold.IsSet() ? (Score.Score >= Request.Threshold.GetValue()) : (Score.Score > 0);
 		if (!bKeep)
@@ -216,7 +217,8 @@ bool FMonolithAssetFindActions::RunAssetFind(const FAssetFindRequest& Request, F
 			{
 				TArray<FMonolithFuzzyField> Single;
 				Single.Add(Field);
-				const FMonolithFuzzyScore FieldScore = FMonolithFuzzyMatch::ScoreCandidate(QueryNormalized, QueryTokens, Single);
+				const FMonolithFuzzyScore FieldScore = FMonolithFuzzyMatch::ScoreCandidate(
+					QueryNormalized, QueryTokens, Single, Request.bAllowTransposition);
 				if (Field.ReasonTag)
 				{
 					Row.FieldScores.Add(FString(Field.ReasonTag), FieldScore.Score);
@@ -331,6 +333,11 @@ FMonolithActionResult FMonolithAssetFindActions::FindAssets(const TSharedPtr<FJs
 		return FMonolithActionResult::Error(TEXT("Invalid parameter 'include_score_breakdown': must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
+	if (Params->HasField(TEXT("allow_transposition")) && !Params->TryGetBoolField(TEXT("allow_transposition"), Request.bAllowTransposition))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameter 'allow_transposition': must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FAssetFindResult Search;
 	FString Error;
 	TSharedPtr<FJsonObject> ErrorData;
@@ -387,6 +394,7 @@ FMonolithActionResult FMonolithAssetFindActions::FindAssets(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("query"), Request.Query);
 	Result->SetStringField(TEXT("path"), Request.Path);
 	Result->SetBoolField(TEXT("recursive"), Request.bRecursive);
+	Result->SetBoolField(TEXT("allow_transposition"), Request.bAllowTransposition);
 	Result->SetStringField(TEXT("scoring_version"), TEXT("asset_fuzzy_v1"));
 	Result->SetNumberField(TEXT("count"), Search.Matches.Num());
 	Result->SetNumberField(TEXT("matched_count"), Search.MatchedCount);
@@ -418,5 +426,6 @@ void FMonolithAssetFindActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("threshold"), TEXT("integer"), TEXT("Minimum raw asset_fuzzy_v1 score to keep a match."), TEXT(""))
 			.Optional(TEXT("include_tags"), TEXT("boolean"), TEXT("Also score selected AssetRegistry tag values."), TEXT("false"))
 			.Optional(TEXT("include_score_breakdown"), TEXT("boolean"), TEXT("Include reason, matched_tokens, distance, and per-field score breakdown."), TEXT("false"))
+			.Optional(TEXT("allow_transposition"), TEXT("boolean"), TEXT("Count adjacent character swaps as one typo edit for fuzzy token matching."), TEXT("true"), { TEXT("bAllowTransposition") })
 			.Build());
 }

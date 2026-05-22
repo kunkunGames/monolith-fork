@@ -38,7 +38,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | `inspect_assets_batch` | `FMonolithAssetInspectionActions` | Inspect multiple assets with per-row success/error results. |
 | `validate_specialized_asset` | `FMonolithAssetInspectionActions` | Validate a specialized asset and report warnings without mutation. |
 | `batch_rename_assets` | `FMonolithAssetHygieneActions` | Preview or apply batch asset renames through `IAssetTools::RenameAssets`. |
-| `find_assets` | `FMonolithAssetFindActions` | Fuzzy, scored, typo-tolerant search over the live `AssetRegistry`; ranks by asset name/path/class (and optional tags) via the shared MonolithCore `FMonolithFuzzyMatch` engine. |
+| `find_assets` | `FMonolithAssetFindActions` | Fuzzy, scored, typo-tolerant search over the live `AssetRegistry`; ranks by asset name/path/class (and optional tags) via the shared MonolithCore `FMonolithFuzzyMatch` engine, with `allow_transposition` controlling Damerau adjacent-swap tolerance. |
 
 ## 4. Build.cs Dependencies
 
@@ -62,7 +62,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | Lifecycle | `Public/MonolithAssetLifecycleActions.h`, `Private/MonolithAssetLifecycleActions.cpp` | Owns generic file texture import, asset save, and guarded delete operations previously scattered under editor/blueprint. |
 | Hygiene | `Public/MonolithAssetHygieneActions.h`, `Private/MonolithAssetHygieneActions.cpp` | Owns naming convention validation and batch rename fixup. |
 | Inspection | `Public/MonolithAssetInspectionActions.h`, `Private/MonolithAssetInspectionActions.cpp` | Former specialized asset inspection surface, now independent from `MonolithMaterial`. |
-| Find | `Public/MonolithAssetFindActions.h`, `Private/MonolithAssetFindActions.cpp` | Fuzzy live-`AssetRegistry` search (`asset.find_assets`); thin consumer of MonolithCore `FMonolithFuzzyMatch`, owns its own corpus/fields/weights. Distinct from exact-name `FMonolithAssetUtils::FindAssetCandidates` and offline `project` FTS search. |
+| Find | `Public/MonolithAssetFindActions.h`, `Private/MonolithAssetFindActions.cpp` | Fuzzy live-`AssetRegistry` search (`asset.find_assets`); thin consumer of MonolithCore `FMonolithFuzzyMatch`, owns its own corpus/fields/weights and the `allow_transposition` option. Distinct from exact-name `FMonolithAssetUtils::FindAssetCandidates` and offline `project` FTS search. |
 
 ## 7. Texture Role Pipeline
 
@@ -90,4 +90,4 @@ The action result includes `texture_role`, `settings_applied`, and `validation`.
 | Source stale scan | No old UI ingest action names, old UI ingest classes, or old specialized-asset inspection class names remain in source. |
 | Build | Run the primary `GoGameEditor` UBT command after closing any editor process that locks Monolith DLLs. |
 | Runtime discovery | `monolith_discover({ "namespace": "asset" })` should list 12 actions owned by `MonolithAsset`. |
-| Find engine reuse | `asset.find_assets` consumes `FMonolithFuzzyMatch` (MonolithCore); it must not duplicate edit-distance/tokenization, and `FMonolithAssetUtils::FindAssetCandidates` stays exact-name. |
+| Find engine reuse | `asset.find_assets` consumes `FMonolithFuzzyMatch` (MonolithCore); it must not duplicate edit-distance/tokenization, `allow_transposition` must flow into `ScoreCandidate`, and `FMonolithAssetUtils::FindAssetCandidates` stays exact-name. |

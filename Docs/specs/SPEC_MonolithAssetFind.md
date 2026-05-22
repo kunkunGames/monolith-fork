@@ -35,7 +35,8 @@ Symptoms:
 ```
 Layer 0  FMonolithFuzzyMatch  (MonolithCore Public) — the ONLY shared code
          NormalizeText · Tokenize(text, alias?)
-         EditDistanceBounded(a, b, maxDistance, bCaseInsensitive)   ← unifies both Levenshteins
+         EditDistanceBounded(a, b, maxDistance, bCaseInsensitive, bAllowTransposition=false)
+         · optional Damerau adjacent-transposition support
          IsTypoMatch · ScoreTokens
          ScoreCandidate(query, fields[]) -> { score, reasons, matchedTokens, bestDistance }   (per-field only)
 
@@ -59,7 +60,7 @@ Untouched  FindAssetCandidates (MonolithCore/MonolithAssetUtils) — exact-Asset
 |-----------------------|---------|-------|
 | `NormalizeFindText` (Tools) | `NormalizeText` | unchanged behavior |
 | `TokenizeFindText` (Tools) | `Tokenize(text, aliasTable?)` | alias table becomes **caller-supplied**; no expansion when omitted |
-| `FindTokenEditDistanceBounded` (Tools) + `LevenshteinDistance` (Registry) | `EditDistanceBounded(a, b, maxDistance, bCaseInsensitive)` | one banded Levenshtein; `maxDistance=MAX_int32` reproduces the unbounded caller |
+| `FindTokenEditDistanceBounded` (Tools) + `LevenshteinDistance` (Registry) | `EditDistanceBounded(a, b, maxDistance, bCaseInsensitive, bAllowTransposition=false)` | one banded Levenshtein/optional restricted Damerau-OSA implementation; `maxDistance=MAX_int32` reproduces the unbounded caller |
 | `IsFindTypoMatch` (Tools) | `IsTypoMatch` | unchanged gate (≥4 chars, same first char, dist ≤ 1/2) |
 | `ScoreFindTokens` (Tools) | `ScoreTokens(query, fieldTokens, fieldText, FMonolithFuzzyWeights, reasonTag, outReasons, outMatched)` | unchanged scoring |
 | (per-field phrase-bonus + `ScoreTokens` loop inside `HandleFind`) | `ScoreCandidate(query, TArrayView<FMonolithFuzzyField>)` | **per-field composition only** (see caveat) |
@@ -95,6 +96,7 @@ Both keep their public signatures and outputs; existing tests are the parity gua
 | `threshold` | integer | no | (none) | Raw minimum score for `scoring_version="asset_fuzzy_v1"`. Not normalized and not portable across future scoring versions. |
 | `include_tags` | boolean | no | `false` | Also score selected registry tag values (extra cost); only the whitelist below is eligible. |
 | `include_score_breakdown` | boolean | no | `false` | Include `reason`, `matched_tokens`, `distance` per row. |
+| `allow_transposition` | boolean | no | `true` | Count adjacent swaps as one typo edit for fuzzy token matching (`crate` ↔ `carte`). Set `false` for strict Levenshtein. Internal request field: `bAllowTransposition`. |
 
 ### 4.1.1 Parameter normalization and validation
 
@@ -117,6 +119,7 @@ Validation details:
 | `threshold` | Optional integer >= 0. | Non-integer or negative. | `param="threshold"`, `reason="out_of_range"`, `min=0`. |
 | `include_tags` | Boolean. | Present but not boolean. | `param="include_tags"`, `reason="wrong_type"`. |
 | `include_score_breakdown` | Boolean. | Present but not boolean. | `param="include_score_breakdown"`, `reason="wrong_type"`. |
+| `allow_transposition` | Boolean. | Present but not boolean. | `param="allow_transposition"`, `reason="wrong_type"`. |
 
 Invalid params use `FMonolithActionResult::Error(Message, FMonolithJsonUtils::ErrInvalidParams).WithErrorData(Data)`. In JSON-RPC this becomes `error.code=-32602` with `error.data`; in structured tool content it appears as `error_code=-32602` with `error_data`.
 
@@ -157,7 +160,7 @@ This intentionally avoids a hand-maintained short-name→path table: the engine'
 | Class | `AssetClassPath` short name | 60 / — / — | 25 / 16 / 8 / 0 |
 | Tags (opt-in) | selected `TagsAndValues` | — | 10 / 6 / 4 / 0 |
 
-Asset alias table: `tex→texture`, `mat→material`, `bp→blueprint`, `sk→skeletal`, `sm→static mesh`, `mi→material instance`, `abp→animation blueprint`. `scoring_version="asset_fuzzy_v1"` (independent of find's `weighted_tokens_v3`).
+Asset alias table: `tex→texture`, `mat→material`, `bp→blueprint`, `sk→skeletal`, `sm→static mesh`, `mi→material instance`, `abp→animation blueprint`. `scoring_version="asset_fuzzy_v1"` (independent of find's `weighted_tokens_v3`). Transposition tolerance is enabled by default and flows into `FMonolithFuzzyMatch::ScoreCandidate`, so adjacent swaps count as distance 1; `false` preserves plain Levenshtein behavior for callers that want stricter typo matching.
 
 Tag scoring whitelist for `include_tags=true`:
 
@@ -248,6 +251,7 @@ struct FAssetFindRequest
     TOptional<int32> Threshold;
     bool bIncludeTags = false;
     bool bIncludeScoreBreakdown = false;
+    bool bAllowTransposition = true;
     int32 ScanBudget = 20000;
 };
 
@@ -316,7 +320,7 @@ A consumer-side `FMonolithDidYouMean` helper to centralize the `1→WithRetryWit
 | Engine units | `MonolithFuzzyMatchTests`: `EditDistanceBounded` band/early-out + case modes, `IsTypoMatch`, `ScoreTokens`, `ScoreCandidate`, normalization, alias expansion. |
 | `monolith_find` parity | Existing find tests green after refactor. |
 | Suggest parity | `MonolithErrorHintTests` (FindSimilarActions) green; GAS asset error-path retry/did-you-mean unchanged. |
-| Action tests | `FindAssetsTests`: exact-name top rank, typo (`punchb0t`→`BB_PunchBot`), short-name and path-form `class_names` filters, unknown class rejection, invalid param error data, no-match success, result row shape with/without score breakdown, `path` scope, `threshold` cut, `include_tags` whitelist, deterministic tie-break, `limit`/`truncated`. |
+| Action tests | `FindAssetsTests`: exact-name top rank, typo (`punchb0t`→`BB_PunchBot`), adjacent transposition on/off (`crate`↔`carte` with `allow_transposition`), short-name and path-form `class_names` filters, unknown class rejection, invalid param error data, no-match success, result row shape with/without score breakdown, `path` scope, `threshold` cut, `include_tags` whitelist, deterministic tie-break, `limit`/`truncated`. |
 | Runtime discovery | `monolith_discover({namespace:"asset"})` includes `find_assets` and preserves all pre-existing asset actions. In this checkout the expected count is 12 actions after adding `find_assets` (baseline 11 + 1). |
 
 ### 8.1 Test fixture strategy

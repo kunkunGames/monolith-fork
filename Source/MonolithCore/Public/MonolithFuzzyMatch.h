@@ -67,11 +67,17 @@ public:
 	 * (returns MaxDistance+1). For unbounded-style use pass a MaxDistance at least as large
 	 * as the threshold you compare against (callers do this; keep MaxDistance small to stay
 	 * well clear of INT32 overflow). bCaseInsensitive lowercases per character before compare.
+	 *
+	 * bAllowTransposition switches to the optimal-string-alignment (restricted Damerau) variant:
+	 * an adjacent transposition counts as one edit instead of two (e.g. "form" <-> "from").
+	 * Default false preserves plain Levenshtein for existing callers. With transposition on the
+	 * row-minimum early-out is disabled (a transposition can skip a row, making that bound unsafe);
+	 * the length-difference early-out still applies.
 	 */
-	static int32 EditDistanceBounded(const FString& A, const FString& B, int32 MaxDistance, bool bCaseInsensitive = false);
+	static int32 EditDistanceBounded(const FString& A, const FString& B, int32 MaxDistance, bool bCaseInsensitive = false, bool bAllowTransposition = false);
 
-	/** Typo gate: both >=4 chars, same first char, edit distance <= (2 if either >=7 else 1). */
-	static bool IsTypoMatch(const FString& QueryToken, const FString& FieldToken);
+	/** Typo gate: both >=4 chars, same first char, edit distance <= (2 if either >=7 else 1). bAllowTransposition counts an adjacent swap as one edit. */
+	static bool IsTypoMatch(const FString& QueryToken, const FString& FieldToken, bool bAllowTransposition = false);
 
 	/**
 	 * Score one field's tokens against the query tokens: exact/prefix/contains/fuzzy weighted,
@@ -86,7 +92,8 @@ public:
 		const TCHAR* Reason,
 		TArray<FString>& OutReasons,
 		TSet<FString>& OutMatchedTokens,
-		int32* OutBestDistance = nullptr);
+		int32* OutBestDistance = nullptr,
+		bool bAllowTransposition = false);
 
 	/**
 	 * Per-field composition convenience for Search callers: for each field applies the
@@ -96,5 +103,6 @@ public:
 	static FMonolithFuzzyScore ScoreCandidate(
 		const FString& QueryNormalized,
 		const TArray<FString>& QueryTokens,
-		TArrayView<const FMonolithFuzzyField> Fields);
+		TArrayView<const FMonolithFuzzyField> Fields,
+		bool bAllowTransposition = false);
 };

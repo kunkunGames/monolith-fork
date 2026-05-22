@@ -209,4 +209,32 @@ bool FMonolithFuzzyScoreCandidateTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithFuzzyTranspositionTest,
+	"Monolith.Core.FuzzyMatch.Transposition",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithFuzzyTranspositionTest::RunTest(const FString& Parameters)
+{
+	// Adjacent transposition: plain Levenshtein = 2, OSA (transposition on) = 1.
+	TestEqual(TEXT("plain: form/from = 2"),
+		FMonolithFuzzyMatch::EditDistanceBounded(TEXT("form"), TEXT("from"), 3, false, false), 2);
+	TestEqual(TEXT("OSA: form/from = 1"),
+		FMonolithFuzzyMatch::EditDistanceBounded(TEXT("form"), TEXT("from"), 3, false, true), 1);
+	TestEqual(TEXT("plain: receive/recieve = 2"),
+		FMonolithFuzzyMatch::EditDistanceBounded(TEXT("receive"), TEXT("recieve"), 3, false, false), 2);
+	TestEqual(TEXT("OSA: receive/recieve = 1"),
+		FMonolithFuzzyMatch::EditDistanceBounded(TEXT("receive"), TEXT("recieve"), 3, false, true), 1);
+
+	// The flag must not change non-transposition results (parity safety).
+	TestEqual(TEXT("kitten/sitting still 3 with transposition on"),
+		FMonolithFuzzyMatch::EditDistanceBounded(TEXT("kitten"), TEXT("sitting"), 10, false, true), 3);
+
+	// Typo gate: 4-char single swap is rejected by plain (dist 2 > max 1), accepted by OSA.
+	TestFalse(TEXT("plain typo gate rejects form/from"),
+		FMonolithFuzzyMatch::IsTypoMatch(TEXT("form"), TEXT("from"), false));
+	TestTrue(TEXT("OSA typo gate accepts form/from"),
+		FMonolithFuzzyMatch::IsTypoMatch(TEXT("form"), TEXT("from"), true));
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

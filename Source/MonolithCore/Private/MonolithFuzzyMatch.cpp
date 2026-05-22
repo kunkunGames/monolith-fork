@@ -94,10 +94,11 @@ TArray<FString> FMonolithFuzzyMatch::Tokenize(const FString& Text, const TMap<FS
 	return Tokens;
 }
 
-int32 FMonolithFuzzyMatch::EditDistanceBounded(const FString& A, const FString& B, int32 MaxDistance, bool bCaseInsensitive)
+int32 FMonolithFuzzyMatch::EditDistanceBounded(const FString& A, const FString& B, int32 MaxDistance, bool bCaseInsensitive, bool bAllowTransposition)
 {
 	const int32 La = A.Len();
 	const int32 Lb = B.Len();
+	// Length-difference lower bound holds for both Levenshtein and OSA (each edit changes length by <= 1).
 	if (FMath::Abs(La - Lb) > MaxDistance)
 	{
 		return MaxDistance + 1;
@@ -111,8 +112,13 @@ int32 FMonolithFuzzyMatch::EditDistanceBounded(const FString& A, const FString& 
 		return La;
 	}
 
+	auto Fold = [bCaseInsensitive](TCHAR Ch) { return bCaseInsensitive ? FChar::ToLower(Ch) : Ch; };
+
+	// Three rolling rows: PrevPrev (row i-2) is only read for the transposition term.
+	TArray<int32> PrevPrev;
 	TArray<int32> Prev;
 	TArray<int32> Curr;
+	PrevPrev.SetNumUninitialized(Lb + 1);
 	Prev.SetNumUninitialized(Lb + 1);
 	Curr.SetNumUninitialized(Lb + 1);
 	for (int32 J = 0; J <= Lb; ++J)
@@ -124,35 +130,45 @@ int32 FMonolithFuzzyMatch::EditDistanceBounded(const FString& A, const FString& 
 	{
 		Curr[0] = I;
 		int32 RowMin = Curr[0];
-		const TCHAR Ca = bCaseInsensitive ? FChar::ToLower(A[I - 1]) : A[I - 1];
+		const TCHAR Ca = Fold(A[I - 1]);
+		const TCHAR CaPrev = (I >= 2) ? Fold(A[I - 2]) : TEXT('\0');
 		for (int32 J = 1; J <= Lb; ++J)
 		{
-			const TCHAR Cb = bCaseInsensitive ? FChar::ToLower(B[J - 1]) : B[J - 1];
+			const TCHAR Cb = Fold(B[J - 1]);
 			const int32 Cost = (Ca == Cb) ? 0 : 1;
-			Curr[J] = FMath::Min3(
+			int32 Best = FMath::Min3(
 				Prev[J] + 1,
 				Curr[J - 1] + 1,
 				Prev[J - 1] + Cost);
-			RowMin = FMath::Min(RowMin, Curr[J]);
+			if (bAllowTransposition && I >= 2 && J >= 2 && Ca == Fold(B[J - 2]) && CaPrev == Cb)
+			{
+				Best = FMath::Min(Best, PrevPrev[J - 2] + 1);
+			}
+			Curr[J] = Best;
+			RowMin = FMath::Min(RowMin, Best);
 		}
-		if (RowMin > MaxDistance)
+		// Row-minimum early-out is valid only for plain Levenshtein. A transposition can skip
+		// row i-1, so a high minimum there does not bound the OSA result.
+		if (!bAllowTransposition && RowMin > MaxDistance)
 		{
 			return MaxDistance + 1;
 		}
+		// Rotate: PrevPrev <- old Prev (row i-1), Prev <- Curr (row i), Curr <- spare buffer.
+		Swap(PrevPrev, Prev);
 		Swap(Prev, Curr);
 	}
 
 	return Prev[Lb];
 }
 
-bool FMonolithFuzzyMatch::IsTypoMatch(const FString& QueryToken, const FString& FieldToken)
+bool FMonolithFuzzyMatch::IsTypoMatch(const FString& QueryToken, const FString& FieldToken, bool bAllowTransposition)
 {
 	const int32 MaxDistance = GetTypoMaxDistance(QueryToken, FieldToken);
 	if (MaxDistance < 0)
 	{
 		return false;
 	}
-	return EditDistanceBounded(QueryToken, FieldToken, MaxDistance) <= MaxDistance;
+	return EditDistanceBounded(QueryToken, FieldToken, MaxDistance, /*bCaseInsensitive=*/false, bAllowTransposition) <= MaxDistance;
 }
 
 int32 FMonolithFuzzyMatch::ScoreTokens(
@@ -163,7 +179,8 @@ int32 FMonolithFuzzyMatch::ScoreTokens(
 	const TCHAR* Reason,
 	TArray<FString>& OutReasons,
 	TSet<FString>& OutMatchedTokens,
-	int32* OutBestDistance)
+	int32* OutBestDistance,
+	bool bAllowTransposition)
 {
 	int32 Score = 0;
 	bool bAnyMatch = false;
@@ -205,7 +222,7 @@ int32 FMonolithFuzzyMatch::ScoreTokens(
 				{
 					continue;
 				}
-				const int32 Distance = EditDistanceBounded(Token, FieldToken, MaxDistance);
+				const int32 Distance = EditDistanceBounded(Token, FieldToken, MaxDistance, /*bCaseInsensitive=*/false, bAllowTransposition);
 				if (Distance <= MaxDistance)
 				{
 					Score += Weights.Fuzzy;
@@ -241,7 +258,8 @@ int32 FMonolithFuzzyMatch::ScoreTokens(
 FMonolithFuzzyScore FMonolithFuzzyMatch::ScoreCandidate(
 	const FString& QueryNormalized,
 	const TArray<FString>& QueryTokens,
-	TArrayView<const FMonolithFuzzyField> Fields)
+	TArrayView<const FMonolithFuzzyField> Fields,
+	bool bAllowTransposition)
 {
 	FMonolithFuzzyScore Result;
 
@@ -272,7 +290,7 @@ FMonolithFuzzyScore FMonolithFuzzyMatch::ScoreCandidate(
 		const TCHAR* TokenReason = Field.ReasonTag ? Field.ReasonTag : TEXT("field");
 		Result.Score += ScoreTokens(
 			QueryTokens, Field.Tokens, Field.Text, Field.Weights,
-			TokenReason, Result.Reasons, Matched, &Result.BestDistance);
+			TokenReason, Result.Reasons, Matched, &Result.BestDistance, bAllowTransposition);
 
 		for (const FString& Token : Matched)
 		{

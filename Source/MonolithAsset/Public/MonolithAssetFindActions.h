@@ -19,6 +19,7 @@ struct FAssetFindRequest
 	TOptional<int32> Threshold;
 	bool bIncludeTags = false;
 	bool bIncludeScoreBreakdown = false;
+	bool bAllowTransposition = true;
 	int32 ScanBudget = 20000;
 };
 
