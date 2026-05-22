@@ -90,7 +90,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | Skill | Namespace | ~Actions | Use for |
 |-------|-----------|---------:|---------|
 | `unreal-config` | `config` | 10 | `.ini` config, sections, console variables |
-| `unreal-source-control` | `source_control` | 7 | Perforce/Git status, checkout, submit, history |
+| `unreal-source-control` | `source_control` | 9 | Perforce/Git status, checkout/add/delete, revert |
 | `unreal-collection` | `collection` | 13 | Editor asset Collections |
 | `unreal-localization` | `localization` | 10 | Localization targets, string tables, cultures |
 

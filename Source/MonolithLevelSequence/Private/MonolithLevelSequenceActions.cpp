@@ -874,21 +874,19 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectors(const TShared
 	int64 TotalDirectorCount = 0;
 	{
 		FSQLitePreparedStatement CountStmt;
-		FString CountSQL = FString::Printf(TEXT(
+		FString CountSQL(TEXT(
 			"SELECT COUNT(*) "
-			"FROM level_sequence_directors "
-			"WHERE ls_path LIKE ?%s"),
-			*PathClause);
+			"FROM level_sequence_directors"));
+		if (!PathFilter.IsEmpty())
+		{
+			CountSQL += TEXT(" WHERE ls_path LIKE ? ESCAPE '\\'");
+		}
 
 		if (CountStmt.Create(*RawDB, *CountSQL))
 		{
 			if (!PathFilter.IsEmpty())
 			{
 				CountStmt.SetBindingValueByIndex(1, LikePattern);
-			}
-			else
-			{
-				CountStmt.SetBindingValueByIndex(1, TEXT("%"));
 			}
 			if (CountStmt.Step() == ESQLitePreparedStatementStepResult::Row)
 			{

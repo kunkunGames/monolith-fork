@@ -1,11 +1,11 @@
 ---
 name: unreal-source-control
-description: "Use for source control (Perforce/Git) operations from the editor via Monolith MCP: provider status, file/asset status, checkout, mark for add, revert, submit/changelists, and history. Triggers on source control, perforce, p4, git, changelist, checkout, mark for add, revert, submit, diff, file history, revision, depot."
+description: "Use for source control (Perforce/Git) operations from the editor via Monolith MCP: provider status, file/asset status, checkout, mark for add/delete, and revert. Triggers on source control, perforce, p4, git, changelist, checkout, mark for add, mark for delete, revert, diff, file history, revision, depot."
 ---
 
 # unreal-source-control
 
-**7 actions** via `source_control_query(action, params)`. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
+**9 actions** via `source_control_query(action, params)`. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
 
 ## Discovery
 
@@ -16,15 +16,17 @@ monolith_discover({ namespace: "source_control", action: "<action>", mode: "sche
 
 ## Action Reference
 
-### Core (7)
+### Core (9)
 
 | Action | Purpose |
 |--------|---------|
 | `add` | Mark files for add through the active Unreal source-control provider. |
 | `checkout` | Check out files through the active Unreal source-control provider. |
 | `checkout_or_add` | Prepare files for mutation by checking out existing source-controlled files or adding local files. |
+| `delete` | Mark files for delete through the active Unreal source-control provider. Requires confirm=true unless dry_run=true. |
 | `get_capabilities` | Return the active Unreal source-control provider and Phase 1 Monolith action capabilities. |
 | `get_status` | Return source-control status for filesystem or /Game package paths. |
+| `mark_for_delete` | Explicit mark-for-delete alias of delete. Requires confirm=true unless dry_run=true. |
 | `revert` | Revert files through the active Unreal source-control provider. Requires confirm=true unless dry_run=true. |
 | `revert_unchanged` | Revert unchanged files through the active Unreal source-control provider. Requires confirm=true unless dry_run=true. |
 

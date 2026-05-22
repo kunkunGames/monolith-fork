@@ -9,7 +9,7 @@
 
 ## 1. Purpose
 
-`MonolithSourceControl` owns the `source_control` namespace for Unreal SourceControl-provider status and guarded file prepare/revert operations. `MonolithCore` owns the shared `FMonolithSourceControlUtils` helper so explicit source-control actions and automatic asset mutation prepare use the same path normalization and checkout/add decisioning.
+`MonolithSourceControl` owns the `source_control` namespace for Unreal SourceControl-provider status and guarded file prepare/delete/revert operations. `MonolithCore` owns the shared `FMonolithSourceControlUtils` helper so explicit source-control actions and automatic asset mutation prepare use the same path normalization and checkout/add decisioning.
 
 ---
 
@@ -39,6 +39,8 @@
 | `source_control.checkout` | `paths`, `dry_run`? | Checks out files through the active provider, or returns current states for dry-runs. |
 | `source_control.add` | `paths`, `dry_run`? | Marks files for add through the active provider, or returns current states for dry-runs. |
 | `source_control.checkout_or_add` | `paths`, `dry_run`? | Chooses checkout/add/skip per file based on provider state, then executes the needed operations unless dry-run. |
+| `source_control.delete` | `paths`, `dry_run`?, `confirm`? | Marks files for delete through the active provider. Requires `confirm=true` unless `dry_run=true`. |
+| `source_control.mark_for_delete` | `paths`, `dry_run`?, `confirm`? | Explicit alias for provider mark-for-delete. Requires `confirm=true` unless `dry_run=true`. |
 | `source_control.revert` | `paths`, `dry_run`?, `confirm`? | Reverts files. Requires `confirm=true` unless `dry_run=true`. |
 | `source_control.revert_unchanged` | `paths`, `dry_run`?, `confirm`? | Reverts unchanged files. Requires `confirm=true` unless `dry_run=true`. |
 
@@ -48,7 +50,7 @@
 
 ## 4. Routing Validation Contract
 
-All seven `source_control` actions opt into registry-level top-level parameter validation via `FParamSchemaBuilder::EnableValidation()`. The registry rejects malformed `paths`, `dry_run`, and `confirm` types before provider state queries or source-control operations run.
+All nine `source_control` actions opt into registry-level top-level parameter validation via `FParamSchemaBuilder::EnableValidation()`. The registry rejects malformed `paths`, `dry_run`, and `confirm` types before provider state queries or source-control operations run.
 
 | Action | Registry-owned validation | Handler-owned validation |
 |--------|---------------------------|--------------------------|
@@ -57,6 +59,8 @@ All seven `source_control` actions opt into registry-level top-level parameter v
 | `checkout` | `paths` array; `dry_run` bool. | Path normalization, provider availability, checkout execution/state rows. |
 | `add` | `paths` array; `dry_run` bool. | Path normalization, provider availability, mark-for-add execution/state rows. |
 | `checkout_or_add` | `paths` array; `dry_run` bool. | State-based checkout/add decisioning and operation result aggregation. |
+| `delete` | `paths` array; `dry_run` bool; `confirm` bool. | Confirm gate, path normalization, provider availability, provider delete execution/state rows. |
+| `mark_for_delete` | `paths` array; `dry_run` bool; `confirm` bool. | Confirm gate, path normalization, provider availability, provider delete execution/state rows. |
 | `revert` | `paths` array; `dry_run` bool; `confirm` bool. | Confirm gate, path normalization, provider availability, revert execution/state rows. |
 | `revert_unchanged` | `paths` array; `dry_run` bool; `confirm` bool. | Confirm gate, path normalization, provider availability, revert-unchanged execution/state rows. |
 
@@ -70,7 +74,7 @@ Focused coverage: `FMonolithSourceControlTypedParamsTest`.
 |------|-------------|
 | Provider boundary | Actions use Unreal's active `ISourceControlProvider`; they do not shell out to P4, git, or external CLIs. |
 | Path boundary | Handlers normalize filesystem and `/Game` package/object paths before provider calls and report invalid entries per row. |
-| Mutation preview | `checkout`, `add`, `checkout_or_add`, `revert`, and `revert_unchanged` support `dry_run=true`; revert operations require either `confirm=true` or dry-run. |
+| Mutation preview | `checkout`, `add`, `checkout_or_add`, `delete`, `mark_for_delete`, `revert`, and `revert_unchanged` support `dry_run=true`; delete/revert operations require either `confirm=true` or dry-run. |
 | Result shape | Actions return provider metadata, normalized path rows, operation booleans/results, messages/errors, and state rows only; no file contents or credential material are returned. |
 | Automatic mutation prepare | Asset-mutation actions route through `FMonolithActionExecutionGuard`, which calls the same helper before and after handlers when dirty-package tracking is active. Provider unavailable/disabled is a non-fatal skip for this automatic path. Project/source/bridge/context/collection/system namespaces and non-project paths are ignored. |
 

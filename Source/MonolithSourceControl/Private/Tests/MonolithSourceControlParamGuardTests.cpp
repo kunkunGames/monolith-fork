@@ -37,6 +37,8 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 			{ TEXT("checkout"), true, TEXT("source_control.checkout registers") },
 			{ TEXT("add"), true, TEXT("source_control.add registers") },
 			{ TEXT("checkout_or_add"), true, TEXT("source_control.checkout_or_add registers") },
+			{ TEXT("delete"), true, TEXT("source_control.delete registers") },
+			{ TEXT("mark_for_delete"), true, TEXT("source_control.mark_for_delete registers") },
 			{ TEXT("revert"), true, TEXT("source_control.revert registers") },
 			{ TEXT("revert_unchanged"), true, TEXT("source_control.revert_unchanged registers") }
 		});
@@ -87,6 +89,26 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 				},
 				TEXT("dry_run"),
 				TEXT("source_control.checkout_or_add rejects non-bool dry_run")
+			},
+			{
+				TEXT("delete"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					AddValidPathArray(Params);
+					Params->SetStringField(TEXT("confirm"), TEXT("yes"));
+				},
+				TEXT("confirm"),
+				TEXT("source_control.delete rejects non-bool confirm")
+			},
+			{
+				TEXT("mark_for_delete"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					AddValidPathArray(Params);
+					Params->SetNumberField(TEXT("dry_run"), 1.0);
+				},
+				TEXT("dry_run"),
+				TEXT("source_control.mark_for_delete rejects numeric dry_run")
 			},
 			{
 				TEXT("revert"),

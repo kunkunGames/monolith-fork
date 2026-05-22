@@ -246,12 +246,15 @@ void FMonolithSourceControlActions::RegisterActions()
 	Registry.RegisterAction(TEXT("source_control"), TEXT("get_capabilities"),
 		TEXT("Return the active Unreal source-control provider and Phase 1 Monolith action capabilities."),
 		FMonolithActionHandler::CreateStatic(&HandleGetCapabilities),
-		MakeShared<FJsonObject>());
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("get_status"),
 		TEXT("Return source-control status for filesystem or /Game package paths."),
 		FMonolithActionHandler::CreateStatic(&HandleGetStatus),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
 			.Build());
 
@@ -259,6 +262,7 @@ void FMonolithSourceControlActions::RegisterActions()
 		TEXT("Check out files through the active Unreal source-control provider."),
 		FMonolithActionHandler::CreateStatic(&HandleCheckout),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
 			.Build());
@@ -267,6 +271,7 @@ void FMonolithSourceControlActions::RegisterActions()
 		TEXT("Mark files for add through the active Unreal source-control provider."),
 		FMonolithActionHandler::CreateStatic(&HandleAdd),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
 			.Build());
@@ -275,14 +280,36 @@ void FMonolithSourceControlActions::RegisterActions()
 		TEXT("Prepare files for mutation by checking out existing source-controlled files or adding local files."),
 		FMonolithActionHandler::CreateStatic(&HandleCheckoutOrAdd),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview actions without executing"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source_control"), TEXT("delete"),
+		TEXT("Mark files for delete through the active Unreal source-control provider. Requires confirm=true unless dry_run=true."),
+		FMonolithActionHandler::CreateStatic(&HandleDelete),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
+			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required to execute source-control delete"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source_control"), TEXT("mark_for_delete"),
+		TEXT("Mark files for delete through the active Unreal source-control provider. Alias of delete with an explicit source-control name. Requires confirm=true unless dry_run=true."),
+		FMonolithActionHandler::CreateStatic(&HandleMarkForDelete),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
+			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required to execute source-control mark for delete"), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("revert"),
 		TEXT("Revert files through the active Unreal source-control provider. Requires confirm=true unless dry_run=true."),
 		FMonolithActionHandler::CreateStatic(&HandleRevert),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
 			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required to execute revert"), TEXT("false"))
@@ -292,6 +319,7 @@ void FMonolithSourceControlActions::RegisterActions()
 		TEXT("Revert unchanged files through the active Unreal source-control provider. Requires confirm=true unless dry_run=true."),
 		FMonolithActionHandler::CreateStatic(&HandleRevertUnchanged),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
 			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required to execute revert unchanged"), TEXT("false"))
@@ -318,6 +346,8 @@ FMonolithActionResult FMonolithSourceControlActions::HandleGetCapabilities(const
 		TEXT("checkout"),
 		TEXT("add"),
 		TEXT("checkout_or_add"),
+		TEXT("delete"),
+		TEXT("mark_for_delete"),
 		TEXT("revert"),
 		TEXT("revert_unchanged") })
 	{
@@ -331,7 +361,7 @@ FMonolithActionResult FMonolithSourceControlActions::HandleGetCapabilities(const
 	Result->SetArrayField(TEXT("phase1_actions"), ActionsJson);
 	Result->SetBoolField(TEXT("supports_changelists"), false);
 	Result->SetBoolField(TEXT("supports_shelving"), false);
-	Result->SetStringField(TEXT("note"), TEXT("Phase 1 covers provider status and safe file prepare/revert actions only."));
+	Result->SetStringField(TEXT("note"), TEXT("Phase 1 covers provider status and safe file prepare/delete/revert actions only."));
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -400,6 +430,16 @@ FMonolithActionResult FMonolithSourceControlActions::HandleCheckoutOrAdd(const T
 		Result->SetArrayField(TEXT("paths"), PathRows);
 	}
 	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithSourceControlActions::HandleDelete(const TSharedPtr<FJsonObject>& Params)
+{
+	return ExecuteFileOperation(Params, TEXT("delete"), ISourceControlOperation::Create<FDelete>(), true);
+}
+
+FMonolithActionResult FMonolithSourceControlActions::HandleMarkForDelete(const TSharedPtr<FJsonObject>& Params)
+{
+	return ExecuteFileOperation(Params, TEXT("mark_for_delete"), ISourceControlOperation::Create<FDelete>(), true);
 }
 
 FMonolithActionResult FMonolithSourceControlActions::HandleRevert(const TSharedPtr<FJsonObject>& Params)
