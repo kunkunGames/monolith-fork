@@ -2184,7 +2184,11 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleSetBTBlackboard(cons
 
 FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleListBTNodeClasses(const TSharedPtr<FJsonObject>& Params)
 {
-	FString CategoryFilter = Params->GetStringField(TEXT("category")).ToLower();
+	FString CategoryFilter;
+	if (Params->TryGetStringField(TEXT("category"), CategoryFilter))
+	{
+		CategoryFilter = CategoryFilter.ToLower();
+	}
 
 	TArray<TSharedPtr<FJsonValue>> NodeClasses;
 
@@ -4076,7 +4080,8 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleValidateBehaviorTree
 		const TSharedPtr<FJsonObject>* IssueObj;
 		if (IssueVal->TryGetObject(IssueObj))
 		{
-			if ((*IssueObj)->GetStringField(TEXT("severity")) == TEXT("error"))
+			FString IssueSeverity;
+			if ((*IssueObj)->TryGetStringField(TEXT("severity"), IssueSeverity) && IssueSeverity == TEXT("error"))
 			{
 				bValid = false;
 				break;
@@ -4245,7 +4250,11 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCloneBTSubtree(const
 						TSharedPtr<FJsonObject> DecP = MakeShared<FJsonObject>();
 						DecP->SetStringField(TEXT("asset_path"), BTPath);
 						DecP->SetStringField(TEXT("node_id"), NewNodeId);
-						DecP->SetStringField(TEXT("decorator_class"), (*DecObj)->GetStringField(TEXT("class")));
+						FString DecClassVal;
+						if ((*DecObj)->TryGetStringField(TEXT("class"), DecClassVal))
+						{
+							DecP->SetStringField(TEXT("decorator_class"), DecClassVal);
+						}
 						const TSharedPtr<FJsonObject>* DecProps = nullptr;
 						if ((*DecObj)->TryGetObjectField(TEXT("properties"), DecProps) && DecProps && (*DecProps).IsValid())
 						{
@@ -4268,7 +4277,11 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCloneBTSubtree(const
 						TSharedPtr<FJsonObject> SvcP = MakeShared<FJsonObject>();
 						SvcP->SetStringField(TEXT("asset_path"), BTPath);
 						SvcP->SetStringField(TEXT("node_id"), NewNodeId);
-						SvcP->SetStringField(TEXT("service_class"), (*SvcObj)->GetStringField(TEXT("class")));
+						FString SvcClassVal;
+						if ((*SvcObj)->TryGetStringField(TEXT("class"), SvcClassVal))
+						{
+							SvcP->SetStringField(TEXT("service_class"), SvcClassVal);
+						}
 						const TSharedPtr<FJsonObject>* SvcProps = nullptr;
 						if ((*SvcObj)->TryGetObjectField(TEXT("properties"), SvcProps) && SvcProps && (*SvcProps).IsValid())
 						{

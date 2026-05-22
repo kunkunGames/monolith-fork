@@ -25,7 +25,7 @@ namespace
 	/** Load a UEnvQuery from the asset_path param. */
 	UEnvQuery* LoadEQSFromParams(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)
 	{
-		OutAssetPath = Params->GetStringField(TEXT("asset_path"));
+		Params->TryGetStringField(TEXT("asset_path"), OutAssetPath);
 		if (OutAssetPath.IsEmpty())
 		{
 			OutError = TEXT("Missing required param: asset_path");
@@ -743,7 +743,8 @@ FMonolithActionResult FMonolithAIEQSActions::HandleCreateEQSQuery(const TSharedP
 		return ErrResult;
 	}
 
-	FString AssetName = Params->GetStringField(TEXT("name"));
+	FString AssetName;
+	Params->TryGetStringField(TEXT("name"), AssetName);
 	if (AssetName.IsEmpty())
 	{
 		AssetName = FPackageName::GetShortName(SavePath);
@@ -820,7 +821,8 @@ FMonolithActionResult FMonolithAIEQSActions::HandleListEQSQueries(const TSharedP
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(UEnvQuery::StaticClass()->GetClassPathName(), Assets);
 
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 
 	TArray<TSharedPtr<FJsonValue>> Items;
 	Items.Reserve(Assets.Num());
@@ -1291,7 +1293,8 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 	Query->Modify();
 
 	// TestPurpose
-	FString PurposeStr = Params->GetStringField(TEXT("purpose"));
+	FString PurposeStr;
+	Params->TryGetStringField(TEXT("purpose"), PurposeStr);
 	if (!PurposeStr.IsEmpty())
 	{
 		int64 Val = StaticEnum<EEnvTestPurpose::Type>()->GetValueByNameString(PurposeStr);
@@ -1306,7 +1309,8 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 	}
 
 	// ScoringEquation
-	FString EquationStr = Params->GetStringField(TEXT("equation"));
+	FString EquationStr;
+	Params->TryGetStringField(TEXT("equation"), EquationStr);
 	if (!EquationStr.IsEmpty())
 	{
 		int64 Val = StaticEnum<EEnvTestScoreEquation::Type>()->GetValueByNameString(EquationStr);
@@ -1331,7 +1335,8 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 	}
 
 	// Clamp
-	FString ClampMinStr = Params->GetStringField(TEXT("clamp_min_type"));
+	FString ClampMinStr;
+	Params->TryGetStringField(TEXT("clamp_min_type"), ClampMinStr);
 	if (!ClampMinStr.IsEmpty())
 	{
 		int64 Val = StaticEnum<EEnvQueryTestClamping::Type>()->GetValueByNameString(ClampMinStr);
@@ -1340,7 +1345,8 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 			Test->ClampMinType = (EEnvQueryTestClamping::Type)Val;
 		}
 	}
-	FString ClampMaxStr = Params->GetStringField(TEXT("clamp_max_type"));
+	FString ClampMaxStr;
+	Params->TryGetStringField(TEXT("clamp_max_type"), ClampMaxStr);
 	if (!ClampMaxStr.IsEmpty())
 	{
 		int64 Val = StaticEnum<EEnvQueryTestClamping::Type>()->GetValueByNameString(ClampMaxStr);
@@ -1360,7 +1366,8 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 	}
 
 	// Normalization
-	FString NormStr = Params->GetStringField(TEXT("normalization_type"));
+	FString NormStr;
+	Params->TryGetStringField(TEXT("normalization_type"), NormStr);
 	if (!NormStr.IsEmpty())
 	{
 		int64 Val = StaticEnum<EEQSNormalizationType>()->GetValueByNameString(NormStr);
@@ -1436,7 +1443,8 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSFilter(const TSha
 	Query->Modify();
 
 	// FilterType
-	FString FilterTypeStr = Params->GetStringField(TEXT("filter_type"));
+	FString FilterTypeStr;
+	Params->TryGetStringField(TEXT("filter_type"), FilterTypeStr);
 	if (!FilterTypeStr.IsEmpty())
 	{
 		int64 Val = StaticEnum<EEnvTestFilterType::Type>()->GetValueByNameString(FilterTypeStr);
@@ -1800,14 +1808,16 @@ namespace
 	{
 		if (!Test || !ScoringObj.IsValid()) return;
 
-		FString PurposeStr = ScoringObj->GetStringField(TEXT("purpose"));
+		FString PurposeStr;
+		ScoringObj->TryGetStringField(TEXT("purpose"), PurposeStr);
 		if (!PurposeStr.IsEmpty())
 		{
 			int64 Val = StaticEnum<EEnvTestPurpose::Type>()->GetValueByNameString(PurposeStr);
 			if (Val != INDEX_NONE) Test->TestPurpose = (EEnvTestPurpose::Type)Val;
 		}
 
-		FString EquationStr = ScoringObj->GetStringField(TEXT("equation"));
+		FString EquationStr;
+		ScoringObj->TryGetStringField(TEXT("equation"), EquationStr);
 		if (!EquationStr.IsEmpty())
 		{
 			int64 Val = StaticEnum<EEnvTestScoreEquation::Type>()->GetValueByNameString(EquationStr);
@@ -1825,7 +1835,8 @@ namespace
 	{
 		if (!Test || !FilterObj.IsValid()) return;
 
-		FString FilterTypeStr = FilterObj->GetStringField(TEXT("filter_type"));
+		FString FilterTypeStr;
+		FilterObj->TryGetStringField(TEXT("filter_type"), FilterTypeStr);
 		if (!FilterTypeStr.IsEmpty())
 		{
 			int64 Val = StaticEnum<EEnvTestFilterType::Type>()->GetValueByNameString(FilterTypeStr);
@@ -1915,7 +1926,8 @@ FMonolithActionResult FMonolithAIEQSActions::HandleBuildEQSQueryFromSpec(const T
 			continue;
 		}
 
-		FString GenClassName = (*GenObj)->GetStringField(TEXT("class"));
+		FString GenClassName;
+		(*GenObj)->TryGetStringField(TEXT("class"), GenClassName);
 		if (GenClassName.IsEmpty())
 		{
 			Warnings.Add(FString::Printf(TEXT("Option[%d]: Generator missing 'class', skipped"), OptIdx));
@@ -1959,7 +1971,8 @@ FMonolithActionResult FMonolithAIEQSActions::HandleBuildEQSQueryFromSpec(const T
 					continue;
 				}
 
-				FString TestClassName = (*TestObj)->GetStringField(TEXT("class"));
+				FString TestClassName;
+				(*TestObj)->TryGetStringField(TEXT("class"), TestClassName);
 				if (TestClassName.IsEmpty())
 				{
 					Warnings.Add(FString::Printf(TEXT("Option[%d].Test[%d]: Missing 'class', skipped"), OptIdx, TestIdx));

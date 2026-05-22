@@ -68,3 +68,10 @@
 **Learning:** `TryGetNumberField` and `TryGetStringField` safely extract numeric and string parameters, avoiding ad-hoc type casts directly inside ternary statements and making the error/default handling clearer and safer against missing fields.
 **Reuse rule:** Use `TryGetNumberField` and `TryGetStringField` for extracting optional numbers/strings into an existing variable with a fallback default.
 **Avoid:** Duplicated `if HasField then GetNumberField` or `HasField ? GetNumberField : Default` blocks.
+
+## 2026-05-14 - Replace GetStringField with TryGetStringField across AI Actions
+
+**Pattern:** Unsafe `GetStringField` usage in `MonolithAIDiscoveryActions`, `MonolithAIEQSActions`, and `MonolithAIBehaviorTreeActions` for extracting optional parameters or when fields might be missing.
+**Learning:** Hard crashes occur when FJsonObject fails to find a field using `GetStringField`. Using `TryGetStringField` gracefully checks presence. The `ToLower()` chain must be wrapped inside the if statement where `TryGetStringField` returns true to retain original behavior safely.
+**Reuse rule:** Future AI action handlers should always prefer `TryGetStringField` with a fallback initialization rather than directly chaining `GetStringField().ToLower()`.
+**Avoid:** Avoid using `GetStringField` unless field existence is fully guaranteed.

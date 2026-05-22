@@ -251,7 +251,8 @@ namespace
 
 FMonolithActionResult FMonolithAIDiscoveryActions::HandleGetAIOverview(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -311,7 +312,11 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleListAINodeTypes(const T
 	}
 
 	System = System.ToLower();
-	FString CategoryFilter = Params->GetStringField(TEXT("category")).ToLower();
+	FString CategoryFilter;
+	if (Params->TryGetStringField(TEXT("category"), CategoryFilter))
+	{
+		CategoryFilter = CategoryFilter.ToLower();
+	}
 
 	TArray<TSharedPtr<FJsonValue>> NodeTypes;
 
@@ -382,7 +387,11 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleSearchAIAssets(const TS
 		return ErrResult;
 	}
 
-	FString AssetTypeFilter = Params->GetStringField(TEXT("asset_type")).ToLower();
+	FString AssetTypeFilter;
+	if (Params->TryGetStringField(TEXT("asset_type"), AssetTypeFilter))
+	{
+		AssetTypeFilter = AssetTypeFilter.ToLower();
+	}
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -514,7 +523,9 @@ namespace
 			TSharedPtr<FJsonObject> RefObj = Ref->AsObject();
 			if (RefObj.IsValid())
 			{
-				AlreadyFound.Add(RefObj->GetStringField(TEXT("asset_path")));
+				FString RefAssetPath;
+				RefObj->TryGetStringField(TEXT("asset_path"), RefAssetPath);
+				AlreadyFound.Add(RefAssetPath);
 			}
 		}
 
@@ -593,7 +604,8 @@ namespace
 
 FMonolithActionResult FMonolithAIDiscoveryActions::HandleValidateAIDataFlow(const TSharedPtr<FJsonObject>& Params)
 {
-	FString ControllerPath = Params->GetStringField(TEXT("controller_path"));
+	FString ControllerPath;
+	Params->TryGetStringField(TEXT("controller_path"), ControllerPath);
 	if (ControllerPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param: controller_path"));
@@ -852,7 +864,8 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleValidateAIDataFlow(cons
 
 FMonolithActionResult FMonolithAIDiscoveryActions::HandleFindEQSReferences(const TSharedPtr<FJsonObject>& Params)
 {
-	FString EQSPath = Params->GetStringField(TEXT("eqs_path"));
+	FString EQSPath;
+	Params->TryGetStringField(TEXT("eqs_path"), EQSPath);
 	if (EQSPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param: eqs_path"));
@@ -892,7 +905,8 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleFindEQSReferences(const
 
 FMonolithActionResult FMonolithAIDiscoveryActions::HandleFindSOReferences(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SOPath = Params->GetStringField(TEXT("so_path"));
+	FString SOPath;
+	Params->TryGetStringField(TEXT("so_path"), SOPath);
 	if (SOPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param: so_path"));
@@ -1135,7 +1149,8 @@ namespace
 FMonolithActionResult FMonolithAIDiscoveryActions::HandleLintStateTree(const TSharedPtr<FJsonObject>& Params)
 {
 #if WITH_STATETREE
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
@@ -1196,7 +1211,8 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleLintStateTree(const TSh
 
 FMonolithActionResult FMonolithAIDiscoveryActions::HandleDetectAICircularReferences(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 	TArray<TSharedPtr<FJsonValue>> Cycles;
@@ -1398,8 +1414,13 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleDetectAICircularReferen
 
 FMonolithActionResult FMonolithAIDiscoveryActions::HandleExportAIManifest(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
-	FString Format = Params->GetStringField(TEXT("format")).ToLower();
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
+	FString Format;
+	if (Params->TryGetStringField(TEXT("format"), Format))
+	{
+		Format = Format.ToLower();
+	}
 	if (Format.IsEmpty()) Format = TEXT("json");
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -1477,9 +1498,11 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleExportAIManifest(const 
 				for (const auto& Item : AssetArr)
 				{
 					TSharedPtr<FJsonObject> ItemObj = Item->AsObject();
+					FString TmpName;
+					FString TmpPath;
 					MarkdownOutput += FString::Printf(TEXT("| %s | `%s` | %d |\n"),
-						*ItemObj->GetStringField(TEXT("name")),
-						*ItemObj->GetStringField(TEXT("path")),
+						*(ItemObj->TryGetStringField(TEXT("name"), TmpName) ? TmpName : TEXT("")),
+						*(ItemObj->TryGetStringField(TEXT("path"), TmpPath) ? TmpPath : TEXT("")),
 						static_cast<int32>(ItemObj->GetNumberField(TEXT("referencer_count"))));
 				}
 			}
@@ -1580,7 +1603,8 @@ namespace
 
 FMonolithActionResult FMonolithAIDiscoveryActions::HandleGetAIBehaviorSummary(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
