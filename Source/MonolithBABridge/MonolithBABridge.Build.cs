@@ -59,8 +59,18 @@ public class MonolithBABridge : ModuleRules
 				if (!bHasBlueprintAssist)
 				{
 					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-					bHasBlueprintAssist = Directory.Exists(
-						Path.Combine(EnginePluginsDir, "BlueprintAssist"));
+					if (Directory.Exists(EnginePluginsDir))
+					{
+						bHasBlueprintAssist = Directory.Exists(
+							Path.Combine(EnginePluginsDir, "BlueprintAssist"));
+
+						if (!bHasBlueprintAssist)
+						{
+							bHasBlueprintAssist = Directory.GetDirectories(
+								EnginePluginsDir, "BlueprintAssist_*",
+								SearchOption.TopDirectoryOnly).Length > 0;
+						}
+					}
 				}
 			}
 		}
