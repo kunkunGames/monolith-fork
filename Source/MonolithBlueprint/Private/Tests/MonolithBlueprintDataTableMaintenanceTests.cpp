@@ -125,7 +125,8 @@ bool FMonolithBlueprintDataTableMaintenanceDryRunTest::RunTest(const FString& Pa
 
 		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("get_data_table_schema"), Params);
 		TestTrue(TEXT("get_data_table_schema succeeds for in-memory test DataTable"), Result.bSuccess);
-		TestTrue(TEXT("schema result is read-only"), Result.Result.IsValid() && Result.Result->GetBoolField(TEXT("read_only")));
+		bool bReadOnly = false;
+		TestTrue(TEXT("schema result is read-only"), Result.Result.IsValid() && Result.Result->TryGetBoolField(TEXT("read_only"), bReadOnly) && bReadOnly);
 	}
 
 	{
@@ -137,7 +138,8 @@ bool FMonolithBlueprintDataTableMaintenanceDryRunTest::RunTest(const FString& Pa
 
 		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("update_data_table_row"), Params);
 		TestTrue(TEXT("update_data_table_row dry_run succeeds"), Result.bSuccess);
-		TestTrue(TEXT("update_data_table_row dry_run reports no-op without changed"), Result.Result.IsValid() && !Result.Result->GetBoolField(TEXT("changed")));
+		bool bChanged = false;
+		TestTrue(TEXT("update_data_table_row dry_run reports no-op without changed"), Result.Result.IsValid() && Result.Result->TryGetBoolField(TEXT("changed"), bChanged) && !bChanged);
 	}
 
 	{
@@ -148,8 +150,10 @@ bool FMonolithBlueprintDataTableMaintenanceDryRunTest::RunTest(const FString& Pa
 
 		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("remove_data_table_row"), Params);
 		TestTrue(TEXT("remove_data_table_row dry_run succeeds"), Result.bSuccess);
-		TestTrue(TEXT("remove_data_table_row dry_run reports would_remove"), Result.Result.IsValid() && Result.Result->GetBoolField(TEXT("would_remove")));
-		TestTrue(TEXT("remove_data_table_row dry_run does not report changed"), Result.Result.IsValid() && !Result.Result->GetBoolField(TEXT("changed")));
+		bool bWouldRemove = false;
+		TestTrue(TEXT("remove_data_table_row dry_run reports would_remove"), Result.Result.IsValid() && Result.Result->TryGetBoolField(TEXT("would_remove"), bWouldRemove) && bWouldRemove);
+		bool bChanged = false;
+		TestTrue(TEXT("remove_data_table_row dry_run does not report changed"), Result.Result.IsValid() && Result.Result->TryGetBoolField(TEXT("changed"), bChanged) && !bChanged);
 	}
 
 	{
@@ -160,7 +164,8 @@ bool FMonolithBlueprintDataTableMaintenanceDryRunTest::RunTest(const FString& Pa
 
 		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("export_data_table_csv"), Params);
 		TestTrue(TEXT("export_data_table_csv dry_run succeeds"), Result.bSuccess);
-		TestTrue(TEXT("export_data_table_csv dry_run reports would_export"), Result.Result.IsValid() && Result.Result->GetBoolField(TEXT("would_export")));
+		bool bWouldExport = false;
+		TestTrue(TEXT("export_data_table_csv dry_run reports would_export"), Result.Result.IsValid() && Result.Result->TryGetBoolField(TEXT("would_export"), bWouldExport) && bWouldExport);
 	}
 
 	{
@@ -180,9 +185,10 @@ bool FMonolithBlueprintDataTableMaintenanceDryRunTest::RunTest(const FString& Pa
 
 		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("update_data_table_row"), Params);
 		TestTrue(TEXT("update_data_table_row accepts integer JSON number for int property"), Result.bSuccess);
-		TestEqual(TEXT("two fields are imported"), Result.Result.IsValid() ? Result.Result->GetIntegerField(TEXT("fields_set")) : 0, 2);
+		int32 FieldsSet = 0;
+		TestEqual(TEXT("two fields are imported"), Result.Result.IsValid() && Result.Result->TryGetNumberField(TEXT("fields_set"), FieldsSet) ? FieldsSet : 0, 2);
 		TestTrue(TEXT("Count appears in set_fields"), JsonStringArrayContains(Result.Result, TEXT("set_fields"), TEXT("Count")));
-		TestFalse(TEXT("no fields are skipped"), Result.Result.IsValid() && Result.Result->HasField(TEXT("skipped_fields")));
+		TestFalse(TEXT("no fields are skipped"), Result.Result.IsValid() && Result.Result->HasTypedField<EJson::Array>(TEXT("skipped_fields")));
 	}
 
 	return true;
