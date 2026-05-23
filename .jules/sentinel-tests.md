@@ -32,3 +32,8 @@
 Target: MonolithCore/MonolithUpdateSubsystem/ParseSha256FromReleaseNotes
 Learning: Regex boundary tests `(?![0-9a-fA-F])` for 64-hex string hashes are difficult to test while deeply embedded in an HTTP response handler.
 Prevention: Extract targeted logic into public static helper functions so they can be unit-tested without needing mock HTTP requests.
+
+## 2026-05-22 - MRQ Package Path Validation Testing
+**Target:** MonolithLevelSequence / MonolithMovieRenderQueueActions / SaveQueue
+**Learning:** Security bounds testing for package paths (`ValidatePackagePath`) must be verified on the real action namespace and after earlier action preconditions have been satisfied. MRQ save_queue path tests must run only when `WITH_MONOLITH_MRQ` is enabled and must seed the current queue with a job before asserting malformed-path errors.
+**Prevention:** Future Sentinel tasks checking optional/domain actions with package writes must confirm the action namespace, optional-dependency gate, and earlier resource preconditions before treating a failing action result as path-validation coverage.
