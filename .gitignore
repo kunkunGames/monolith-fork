@@ -69,6 +69,8 @@ TrainingMemory/
 # Generated databases
 EngineSource.db
 ProjectIndex.db
+*.db-wal
+*.db-shm
 .code-review-graph/
 compile_commands.json
 
