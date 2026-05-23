@@ -380,9 +380,17 @@ TSharedPtr<FJsonObject> FMonolithMeshTerrainActions::TerrainSampleToJson(const F
 
 	// Heights 2D array
 	TArray<TSharedPtr<FJsonValue>> RowsArr;
+	if (Sample.GridResY > 0)
+	{
+		RowsArr.Reserve(Sample.GridResY);
+	}
 	for (int32 Row = 0; Row < Sample.GridResY; ++Row)
 	{
 		TArray<TSharedPtr<FJsonValue>> ColArr;
+		if (Sample.GridResX > 0)
+		{
+			ColArr.Reserve(Sample.GridResX);
+		}
 		for (int32 Col = 0; Col < Sample.GridResX; ++Col)
 		{
 			ColArr.Add(MakeShared<FJsonValueNumber>(Sample.Heights[Row][Col]));
@@ -401,6 +409,7 @@ TSharedPtr<FJsonObject> FMonolithMeshTerrainActions::TerrainSampleToJson(const F
 
 	// Center
 	TArray<TSharedPtr<FJsonValue>> CArr;
+	CArr.Reserve(3);
 	CArr.Add(MakeShared<FJsonValueNumber>(Sample.Center.X));
 	CArr.Add(MakeShared<FJsonValueNumber>(Sample.Center.Y));
 	CArr.Add(MakeShared<FJsonValueNumber>(Sample.Center.Z));
@@ -408,6 +417,7 @@ TSharedPtr<FJsonObject> FMonolithMeshTerrainActions::TerrainSampleToJson(const F
 
 	// Average normal
 	TArray<TSharedPtr<FJsonValue>> NArr;
+	NArr.Reserve(3);
 	NArr.Add(MakeShared<FJsonValueNumber>(Sample.AvgNormal.X));
 	NArr.Add(MakeShared<FJsonValueNumber>(Sample.AvgNormal.Y));
 	NArr.Add(MakeShared<FJsonValueNumber>(Sample.AvgNormal.Z));
@@ -415,6 +425,7 @@ TSharedPtr<FJsonObject> FMonolithMeshTerrainActions::TerrainSampleToJson(const F
 
 	// Slope direction
 	TArray<TSharedPtr<FJsonValue>> SArr;
+	SArr.Reserve(3);
 	SArr.Add(MakeShared<FJsonValueNumber>(Sample.SlopeDirection.X));
 	SArr.Add(MakeShared<FJsonValueNumber>(Sample.SlopeDirection.Y));
 	SArr.Add(MakeShared<FJsonValueNumber>(Sample.SlopeDirection.Z));
@@ -422,6 +433,7 @@ TSharedPtr<FJsonObject> FMonolithMeshTerrainActions::TerrainSampleToJson(const F
 
 	// Size
 	TArray<TSharedPtr<FJsonValue>> SzArr;
+	SzArr.Reserve(2);
 	SzArr.Add(MakeShared<FJsonValueNumber>(Sample.SampleSize.X));
 	SzArr.Add(MakeShared<FJsonValueNumber>(Sample.SampleSize.Y));
 	J->SetArrayField(TEXT("size"), SzArr);
