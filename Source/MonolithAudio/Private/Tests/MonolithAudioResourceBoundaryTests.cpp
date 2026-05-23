@@ -449,6 +449,33 @@ bool FMonolithAudioCreateWavePlayerNodesLimitTest::RunTest(const FString& Parame
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioCreateDistanceCrossfadeCueLimitTest, "Monolith.LimitGuard.Audio.CreateDistanceCrossfadeCueClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAudioCreateDistanceCrossfadeCueLimitTest::RunTest(const FString& Parameters)
+{
+	// Test oversized array is rejected
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/TestLimitDistanceCue"));
+
+		TArray<TSharedPtr<FJsonValue>> OversizedBandsArray;
+		for (int32 i = 0; i < 101; ++i)
+		{
+			TSharedPtr<FJsonObject> BandObj = MakeShared<FJsonObject>();
+			BandObj->SetStringField(TEXT("sound_wave"), TEXT("/Game/Temp/SomeWave"));
+			OversizedBandsArray.Add(MakeShared<FJsonValueObject>(BandObj));
+		}
+		Params->SetArrayField(TEXT("bands"), OversizedBandsArray);
+
+		FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry::Get());
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("create_distance_crossfade_cue"), Params);
+
+		TestFalse(TEXT("Oversized bands array should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention maximum allowed"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed")));
+	}
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioCreateInteractiveMetaSoundLimitTest, "Monolith.LimitGuard.Audio.CreateInteractiveMetaSoundClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithAudioCreateInteractiveMetaSoundLimitTest::RunTest(const FString& Parameters)
 {

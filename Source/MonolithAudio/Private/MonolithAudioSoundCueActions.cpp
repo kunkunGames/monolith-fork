@@ -1943,6 +1943,11 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue(
 		return FMonolithActionResult::Error(TEXT("bands array is required and must not be empty"));
 	}
 
+	if (BandsArray->Num() > 100)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("bands array contains %d entries, which exceeds the maximum allowed (100)"), BandsArray->Num()));
+	}
+
 	FString Error;
 	USoundCue* Cue = CreateEmptySoundCue(AssetPath, Error);
 	if (!Cue) return FMonolithActionResult::Error(Error);
