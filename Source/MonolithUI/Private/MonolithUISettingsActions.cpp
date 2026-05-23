@@ -723,6 +723,10 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldAudioSettings(co
     // Hierarchy
     TSharedPtr<FJsonObject> Hierarchy = MakeShared<FJsonObject>();
     TArray<TSharedPtr<FJsonValue>> Children;
+    if (Categories.Num() > 1)
+    {
+        Children.Reserve(Categories.Num() - 1);
+    }
     for (int32 i = 1; i < Categories.Num(); ++i)
     {
         Children.Add(MakeShared<FJsonValueString>(Categories[i]));
@@ -745,6 +749,7 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldAudioSettings(co
 
     // Setup steps
     TArray<TSharedPtr<FJsonValue>> Steps;
+    Steps.Reserve(6);
     Steps.Add(MakeShared<FJsonValueString>(TEXT("1. Create SoundClass assets in Content Browser (right-click > Sounds > Sound Class)")));
     Steps.Add(MakeShared<FJsonValueString>(TEXT("2. Set parent-child hierarchy: Master > Music, SFX, Voice, Ambient")));
     Steps.Add(MakeShared<FJsonValueString>(TEXT("3. Create SoundMix_Master (right-click > Sounds > Sound Mix)")));
@@ -825,6 +830,7 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldInputRemapping(c
 
     // Save/load flow
     TArray<TSharedPtr<FJsonValue>> Flow;
+    Flow.Reserve(6);
     Flow.Add(MakeShared<FJsonValueString>(TEXT("1. On settings UI open: read current mappings from UEnhancedInputUserSettings")));
     Flow.Add(MakeShared<FJsonValueString>(TEXT("2. Populate each UInputKeySelector with the current FKey")));
     Flow.Add(MakeShared<FJsonValueString>(TEXT("3. On key selected: call MapPlayerKey() to update mapping")));
