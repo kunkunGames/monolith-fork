@@ -1399,20 +1399,39 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleSetSTStateProperties(co
 
 	if (Params->HasField(TEXT("weight")))
 	{
-		State->Weight = static_cast<float>(Params->GetNumberField(TEXT("weight")));
+		double WeightVal;
+		if (!Params->TryGetNumberField(TEXT("weight"), WeightVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'weight' must be a number"));
+		}
+		State->Weight = static_cast<float>(WeightVal);
 	}
 	if (Params->HasField(TEXT("selection_behavior")))
 	{
-		State->SelectionBehavior = ParseSelectionBehavior(Params->GetStringField(TEXT("selection_behavior")));
+		FString SelectionStr;
+		if (!Params->TryGetStringField(TEXT("selection_behavior"), SelectionStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'selection_behavior' must be a string"));
+		}
+		State->SelectionBehavior = ParseSelectionBehavior(SelectionStr);
 	}
 	if (Params->HasField(TEXT("tag")))
 	{
-		FString TagStr = Params->GetStringField(TEXT("tag"));
+		FString TagStr;
+		if (!Params->TryGetStringField(TEXT("tag"), TagStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'tag' must be a string"));
+		}
 		State->Tag = FGameplayTag::RequestGameplayTag(FName(*TagStr), /*bErrorIfNotFound=*/false);
 	}
 	if (Params->HasField(TEXT("enabled")))
 	{
-		State->bEnabled = Params->GetBoolField(TEXT("enabled"));
+		bool bEnabled;
+		if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"));
+		}
+		State->bEnabled = bEnabled;
 	}
 
 	ST->MarkPackageDirty();
@@ -1734,7 +1753,14 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTTransition(const T
 	FString TriggerStr = Params->GetStringField(TEXT("trigger"));
 	FString TargetStr = Params->GetStringField(TEXT("target_state"));
 	FString PriorityStr = Params->GetStringField(TEXT("priority"));
-	double Delay = Params->HasField(TEXT("delay")) ? Params->GetNumberField(TEXT("delay")) : 0.0;
+	double Delay = 0.0;
+	if (Params->HasField(TEXT("delay")))
+	{
+		if (!Params->TryGetNumberField(TEXT("delay"), Delay))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'delay' must be a number"));
+		}
+	}
 
 	if (StateId.IsEmpty() || TriggerStr.IsEmpty() || TargetStr.IsEmpty())
 	{
@@ -2838,8 +2864,14 @@ namespace
 
 				if (TransSpec->HasField(TEXT("delay")))
 				{
+					double DelayVal;
+					if (!TransSpec->TryGetNumberField(TEXT("delay"), DelayVal))
+					{
+						OutError = TEXT("Parameter 'delay' must be a number in transition spec");
+						return false;
+					}
 					Trans.bDelayTransition = true;
-					Trans.DelayDuration = TransSpec->GetNumberField(TEXT("delay"));
+					Trans.DelayDuration = static_cast<float>(DelayVal);
 				}
 
 				// Target — resolved as name-based link (deferred resolution at compile time)

@@ -55,3 +55,8 @@
 **Learning:** `HasField` only confirms a field exists, it does not confirm the type. Calling `GetNumberField` directly causes assertions if the JSON type is incorrect (e.g. a string).
 **Prevention:** Use `TryGetNumberField` to safely validate existence and extract type in a single call.
 **Avoid:** Assuming `HasField` is sufficient for robust optional parameter type safety.
+
+2026-05-15 - Do not skip type validation on optional nested values
+Malformed input pattern: Using unchecked `Get*Field` without ensuring type safety inside nested JSON objects (e.g. `weight`, `delay`, `enabled`).
+Learning: Existing code relies on `HasField` + `Get*Field` even in optional fields which silently skips validation and either crashes or corrupts assets if malformed type is passed.
+Prevention: Replace `HasField` + `Get*Field` with `HasField` + `TryGet*Field`. If the value is present but fails type validation, it MUST return `FMonolithActionResult::Error`.
