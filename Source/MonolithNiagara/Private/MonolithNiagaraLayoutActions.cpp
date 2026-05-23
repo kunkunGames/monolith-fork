@@ -47,11 +47,28 @@ void FMonolithNiagaraLayoutActions::RegisterActions(FMonolithToolRegistry& Regis
 namespace
 {
 	/** Normalize asset_path with common alias fallback */
-	FString NL_GetAssetPath(const TSharedPtr<FJsonObject>& Params)
+	bool NL_TryGetAssetPath(const TSharedPtr<FJsonObject>& Params, FString& OutPath, FString& OutError)
 	{
-		FString Path = Params->GetStringField(TEXT("asset_path"));
-		if (Path.IsEmpty()) Path = Params->GetStringField(TEXT("system_path"));
-		return Path;
+		OutPath.Reset();
+		if (Params->HasField(TEXT("asset_path")))
+		{
+			if (!Params->TryGetStringField(TEXT("asset_path"), OutPath))
+			{
+				OutError = TEXT("Parameter 'asset_path' must be a string");
+				return false;
+			}
+			if (!OutPath.IsEmpty())
+			{
+				return true;
+			}
+		}
+
+		if (Params->HasField(TEXT("system_path")) && !Params->TryGetStringField(TEXT("system_path"), OutPath))
+		{
+			OutError = TEXT("Parameter 'system_path' must be a string");
+			return false;
+		}
+		return true;
 	}
 
 	/**
@@ -221,15 +238,32 @@ namespace
 FMonolithActionResult FMonolithNiagaraLayoutActions::HandleAutoLayout(const TSharedPtr<FJsonObject>& Params)
 {
 	// --- Parse params ---
-	FString AssetPath = NL_GetAssetPath(Params);
+	FString Error;
+	FString AssetPath;
+	if (!NL_TryGetAssetPath(Params, AssetPath, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 	}
 
-	FString EmitterFilter = Params->GetStringField(TEXT("emitter"));
-	FString ScriptUsageStr = Params->GetStringField(TEXT("script_usage"));
-	FString Formatter = Params->GetStringField(TEXT("formatter"));
+	FString EmitterFilter;
+	if (Params->HasField(TEXT("emitter")) && !Params->TryGetStringField(TEXT("emitter"), EmitterFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	}
+	FString ScriptUsageStr;
+	if (Params->HasField(TEXT("script_usage")) && !Params->TryGetStringField(TEXT("script_usage"), ScriptUsageStr))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'script_usage' must be a string"));
+	}
+	FString Formatter;
+	if (Params->HasField(TEXT("formatter")) && !Params->TryGetStringField(TEXT("formatter"), Formatter))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'formatter' must be a string"));
+	}
 	if (Formatter.IsEmpty()) Formatter = TEXT("auto");
 
 	// --- Validate formatter ---
