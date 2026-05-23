@@ -660,6 +660,7 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleGetMeta
 		}
 
 		TArray<const FMetasoundFrontendEdge*> Edges = Introspection_GetNodeEdges(*Graph, NodeId, true, true);
+		EdgesArray.Reserve(Edges.Num());
 		for (const FMetasoundFrontendEdge* Edge : Edges)
 		{
 			EdgesArray.Add(MakeShared<FJsonValueObject>(Introspection_SerializeEdge(*Edge, *Graph)));
@@ -668,6 +669,7 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleGetMeta
 	}
 	else
 	{
+		EdgesArray.Reserve(Graph->Edges.Num());
 		for (const FMetasoundFrontendEdge& Edge : Graph->Edges)
 		{
 			EdgesArray.Add(MakeShared<FJsonValueObject>(Introspection_SerializeEdge(Edge, *Graph)));
@@ -747,6 +749,7 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleGetMeta
 	const FMetasoundFrontendClassInterface& ClassInterface = Doc.RootGraph.GetDefaultInterface();
 
 	TArray<TSharedPtr<FJsonValue>> InputsArray;
+	InputsArray.Reserve(ClassInterface.Inputs.Num());
 	for (const FMetasoundFrontendClassInput& Input : ClassInterface.Inputs)
 	{
 		TSharedPtr<FJsonObject> InputJson = MakeShared<FJsonObject>();
@@ -769,6 +772,7 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleGetMeta
 	}
 
 	TArray<TSharedPtr<FJsonValue>> OutputsArray;
+	OutputsArray.Reserve(ClassInterface.Outputs.Num());
 	for (const FMetasoundFrontendClassOutput& Output : ClassInterface.Outputs)
 	{
 		TSharedPtr<FJsonObject> OutputJson = MakeShared<FJsonObject>();
