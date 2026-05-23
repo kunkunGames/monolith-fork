@@ -388,7 +388,11 @@ static TSharedPtr<FJsonObject> SerializePin(URigVMPin* Pin)
 
 FMonolithActionResult FMonolithControlRigWriteActions::HandleGetControlRigGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+	}
 	FString GraphName;
 	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 
@@ -484,11 +488,17 @@ FMonolithActionResult FMonolithControlRigWriteActions::HandleGetControlRigGraph(
 
 FMonolithActionResult FMonolithControlRigWriteActions::HandleAddControlRigNode(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString StructPath = Params->GetStringField(TEXT("struct_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+	}
 
-	if (StructPath.IsEmpty())
+	FString StructPath;
+	if (!Params->TryGetStringField(TEXT("struct_path"), StructPath) || StructPath.IsEmpty())
+	{
 		return FMonolithActionResult::Error(TEXT("struct_path is required"));
+	}
 
 	double PosX = 0, PosY = 0;
 	Params->TryGetNumberField(TEXT("position_x"), PosX);
@@ -613,12 +623,23 @@ FMonolithActionResult FMonolithControlRigWriteActions::HandleAddControlRigNode(c
 
 FMonolithActionResult FMonolithControlRigWriteActions::HandleConnectControlRigPins(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString SourcePin = Params->GetStringField(TEXT("source_pin"));
-	FString TargetPin = Params->GetStringField(TEXT("target_pin"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+	}
 
-	if (SourcePin.IsEmpty() || TargetPin.IsEmpty())
-		return FMonolithActionResult::Error(TEXT("source_pin and target_pin are required"));
+	FString SourcePin;
+	if (!Params->TryGetStringField(TEXT("source_pin"), SourcePin) || SourcePin.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("source_pin is required"));
+	}
+
+	FString TargetPin;
+	if (!Params->TryGetStringField(TEXT("target_pin"), TargetPin) || TargetPin.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("target_pin is required"));
+	}
 
 	FString Error;
 	UControlRigBlueprint* CRB = LoadCRBlueprint(AssetPath, Error);
