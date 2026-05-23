@@ -56,7 +56,7 @@ bool FMonolithBAFormatterImpl::FormatGraph(
 	if (!SupportsGraph(Graph))
 	{
 		OutErrorMessage = FString::Printf(
-			TEXT("BA does not have formatter settings for graph type '%s'"),
+			TEXT("BA formatting is not supported or is disabled for graph type '%s'"),
 			*Graph->GetClass()->GetName());
 		return false;
 	}
