@@ -16,7 +16,10 @@ namespace
 		double LimitValue = 25.0;
 		if (Params.IsValid())
 		{
-			Params->TryGetNumberField(TEXT("limit"), LimitValue);
+			if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'limit' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 		return FMonolithActionResult::Success(
 			FMonolithActionExecutionGuard::Get().GetRecentAuditJson(static_cast<int32>(LimitValue)));
@@ -34,9 +37,18 @@ namespace
 		FString ActionFilter;
 		if (Params.IsValid())
 		{
-			Params->TryGetNumberField(TEXT("limit"), LimitValue);
-			Params->TryGetStringField(TEXT("status"), StatusFilter);
-			Params->TryGetStringField(TEXT("action"), ActionFilter);
+			if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'limit' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			if (Params->HasField(TEXT("status")) && !Params->TryGetStringField(TEXT("status"), StatusFilter))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'status' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			if (Params->HasField(TEXT("action")) && !Params->TryGetStringField(TEXT("action"), ActionFilter))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'action' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 		return FMonolithActionResult::Success(
 			FMonolithActionExecutionGuard::Get().GetToolCallRecordsJson(
@@ -50,7 +62,10 @@ namespace
 		FString Id;
 		if (Params.IsValid())
 		{
-			Params->TryGetStringField(TEXT("id"), Id);
+			if (Params->HasField(TEXT("id")) && !Params->TryGetStringField(TEXT("id"), Id))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'id' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 		if (Id.IsEmpty())
 		{
@@ -64,7 +79,10 @@ namespace
 		double LimitValue = 100.0;
 		if (Params.IsValid())
 		{
-			Params->TryGetNumberField(TEXT("limit"), LimitValue);
+			if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'limit' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 		return FMonolithActionResult::Success(
 			FMonolithActionExecutionGuard::Get().AnalyzeToolCallRecordsJson(static_cast<int32>(LimitValue)));
@@ -193,7 +211,10 @@ namespace
 		FString ActionName;
 		if (Params.IsValid())
 		{
-			Params->TryGetStringField(TEXT("action"), ActionName);
+			if (Params->HasField(TEXT("action")) && !Params->TryGetStringField(TEXT("action"), ActionName))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'action' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 
 		if (ActionName.IsEmpty())
