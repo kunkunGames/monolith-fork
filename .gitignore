@@ -69,6 +69,7 @@ TrainingMemory/
 # Generated databases
 EngineSource.db
 ProjectIndex.db
+graph.db
 *.db-wal
 *.db-shm
 .code-review-graph/
