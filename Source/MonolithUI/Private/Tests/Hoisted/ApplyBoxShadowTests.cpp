@@ -446,6 +446,7 @@ bool FMonolithUIApplyBoxShadowMultiLayerCapTest::RunTest(const FString& Paramete
     Params->SetStringField(TEXT("shadow_material_path"), ShadowMaterialPath);
     {
         TArray<TSharedPtr<FJsonValue>> Shadows;
+        Shadows.Reserve(3);
         for (int32 i = 0; i < 3; ++i)
         {
             TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();

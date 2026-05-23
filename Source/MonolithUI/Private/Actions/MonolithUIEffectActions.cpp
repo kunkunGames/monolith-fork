@@ -1699,6 +1699,7 @@ FMonolithActionResult MonolithUI::FEffectSurfaceActions::HandleApplyPreset(const
     if (Failures.Num() > 0)
     {
         TArray<TSharedPtr<FJsonValue>> WarnArr;
+        WarnArr.Reserve(Failures.Num());
         for (const FString& W : Failures) WarnArr.Add(MakeShared<FJsonValueString>(W));
         Out->SetArrayField(TEXT("warnings"), WarnArr);
     }
