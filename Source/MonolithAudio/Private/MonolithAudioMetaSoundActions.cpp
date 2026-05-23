@@ -1638,7 +1638,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 	}
 
 	bool bStrictMode = false;
-	Params->TryGetBoolField(TEXT("strict_mode"), bStrictMode);
+	if (Params->HasField(TEXT("strict_mode")) && !Params->TryGetBoolField(TEXT("strict_mode"), bStrictMode))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: strict_mode must be a boolean"));
+	}
 
 	// =====================================================================
 	// PRE-VALIDATION PASS — collect connection/declaration mismatches before

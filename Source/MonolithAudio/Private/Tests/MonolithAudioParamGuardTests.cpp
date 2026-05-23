@@ -2,19 +2,33 @@
 #include "Misc/AutomationTest.h"
 
 #include "MonolithAudioAssetActions.h"
+#include "MonolithAudioSoundCueActions.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
+
+#if WITH_METASOUND
+#include "MonolithAudioMetaSoundActions.h"
+#endif
 
 #if WITH_DEV_AUTOMATION_TESTS
 
 namespace
 {
+	void RegisterAudioParamGuardActions(FMonolithToolRegistry& Registry)
+	{
+		FMonolithAudioAssetActions::RegisterActions(Registry);
+		FMonolithAudioSoundCueActions::RegisterActions(Registry);
+#if WITH_METASOUND
+		FMonolithAudioMetaSoundActions::RegisterActions(Registry);
+#endif
+	}
+
 	FMonolithActionResult ExecuteAudioAction(const FString& Action, const TSharedPtr<FJsonObject>& Params)
 	{
 		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 		if (!Registry.HasAction(TEXT("audio"), Action))
 		{
-			FMonolithAudioAssetActions::RegisterActions(Registry);
+			RegisterAudioParamGuardActions(Registry);
 		}
 
 		return Registry.ExecuteAction(TEXT("audio"), Action, Params);
@@ -99,6 +113,8 @@ bool FMonolithParamGuardAudioCreateDistanceCrossfadeCueRejectsMalformedParamsTes
 	return true;
 }
 
+#if WITH_METASOUND
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioCreateMetaSoundSourceRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.CreateMetaSoundSourceRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardAudioCreateMetaSoundSourceRejectsMalformedParamsTest::RunTest(const FString& Parameters)
 {
@@ -129,6 +145,26 @@ bool FMonolithParamGuardAudioBuildMetaSoundRejectsMalformedSpecTest::RunTest(con
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioBuildMetaSoundRejectsMalformedStrictModeTest, "Monolith.ParamGuard.Audio.BuildMetaSoundRejectsMalformedStrictMode", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioBuildMetaSoundRejectsMalformedStrictModeTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/MS_TestRejectsStrictMode"));
+	Params->SetStringField(TEXT("strict_mode"), TEXT("malformed")); // Should be bool
+
+	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
+	Spec->SetStringField(TEXT("type"), TEXT("Source"));
+	Params->SetObjectField(TEXT("spec"), Spec);
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("build_metasound_from_spec"), Params);
+	TestTrue(TEXT("BuildMetaSoundFromSpec with malformed strict_mode should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("BuildMetaSoundFromSpec reports malformed strict_mode"), Result.ErrorMessage.Contains(TEXT("strict_mode must be a boolean")));
+
+	return true;
+}
+
+#endif // WITH_METASOUND
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioBuildSoundCueRejectsMalformedPropsTest, "Monolith.ParamGuard.Audio.BuildSoundCueRejectsMalformedProps", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardAudioBuildSoundCueRejectsMalformedPropsTest::RunTest(const FString& Parameters)
