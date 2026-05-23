@@ -747,6 +747,7 @@ namespace MonolithUI::SpecSerializerInternal
         if (!WBP) return;
 
 #if WITH_EDITORONLY_DATA
+        OutDoc.Animations.Reserve(WBP->Animations.Num());
         for (UWidgetAnimation* Anim : WBP->Animations)
         {
             if (!Anim) continue;
