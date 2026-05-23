@@ -69,7 +69,8 @@
 		},
 		{
 			"Name": "GameplayAbilities",
-			"Enabled": true
+			"Enabled": true,
+			"Optional": true
 		},
 		{
 			"Name": "StateTree",
