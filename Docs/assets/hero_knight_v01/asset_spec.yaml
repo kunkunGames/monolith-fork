@@ -1,0 +1,94 @@
+asset_id: hero_knight_v01
+asset_family: sprite_asset
+asset_profile: pc_character
+target_surface: paper2d_sheet
+final_cell: 256x256
+work_canvas: 768x768
+camera: side view
+background: transparent or flat chroma background
+lighting: top-left, soft 2-step shading
+outline: dark 2px outline
+palette: 16-24 colors
+model: your_base_model
+style_ref: style_ref/final_quality_target.png
+character_ref:
+  - character_ref/hero_front.png
+  - character_ref/hero_3q.png
+pose_control: ControlNet pose + silhouette
+seed_bank: [12031, 12032, 12033, 12034]
+negative:
+  - inconsistent costume
+  - extra limbs
+  - different weapon
+  - different face
+  - blurry
+  - noisy outline
+  - cropped feet
+  - off-center
+frames:
+  - id: idle_00
+    pose_guide: pose_guides/idle_00_pose.png
+    silhouette_guide: silhouette_guides/idle_00_silhouette.png
+    prompt_tags: [idle, neutral stance, side view]
+    pivot: bottom-center
+    baseline_px: 690
+    crop_margin_px: 36
+  - id: walk_00
+    pose_guide: pose_guides/walk_00_pose.png
+    silhouette_guide: silhouette_guides/walk_00_silhouette.png
+    prompt_tags: [walk, contact pose, side view]
+    pivot: bottom-center
+    baseline_px: 690
+    crop_margin_px: 36
+  - id: walk_01
+    pose_guide: pose_guides/walk_01_pose.png
+    silhouette_guide: silhouette_guides/walk_01_silhouette.png
+    prompt_tags: [walk, passing pose, side view]
+    pivot: bottom-center
+    baseline_px: 690
+    crop_margin_px: 36
+  - id: walk_02
+    pose_guide: pose_guides/walk_02_pose.png
+    silhouette_guide: silhouette_guides/walk_02_silhouette.png
+    prompt_tags: [walk, opposite contact pose, side view]
+    pivot: bottom-center
+    baseline_px: 690
+    crop_margin_px: 36
+  - id: walk_03
+    pose_guide: pose_guides/walk_03_pose.png
+    silhouette_guide: silhouette_guides/walk_03_silhouette.png
+    prompt_tags: [walk, opposite passing pose, side view]
+    pivot: bottom-center
+    baseline_px: 690
+    crop_margin_px: 36
+generation:
+  candidates_per_frame: 4
+  resolution: 768x768
+  format: png
+  texture_role: sprite
+  compose_prompt: true
+  reference_policy: use style_ref and all character_ref images for every frame
+  seeds_by_frame:
+    idle_00: [12031, 12032, 12033, 12034]
+    walk_00: [12031, 12032, 12033, 12034]
+    walk_01: [12031, 12032, 12033, 12034]
+    walk_02: [12031, 12032, 12033, 12034]
+    walk_03: [12031, 12032, 12033, 12034]
+selection:
+  reject_if:
+    - costume, face, or weapon differs from character_ref
+    - feet, sword tip, head, or outline are cropped
+    - silhouette differs from guide enough to change gameplay readability
+    - final 256px preview has unreadable hands, face, weapon, or boots
+postprocess:
+  alpha: edge-connected background extraction only
+  outline: normalize to dark 2px outline at final scale
+  palette: quantize to 16-24 colors after detail cleanup
+  scale: downscale from 768x768 to 256x256 per accepted frame
+  pivot: bottom-center
+export:
+  sprite_sheet: hero_knight_v01_sheet.png
+  metadata: hero_knight_v01_metadata.json
+  cell_size: [256, 256]
+  row_order: [side]
+  frame_order: [idle_00, walk_00, walk_01, walk_02, walk_03]

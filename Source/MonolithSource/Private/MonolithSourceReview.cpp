@@ -43,7 +43,7 @@ namespace
 		return TEXT("low");
 	}
 
-	bool ContainsAnyToken(const FString& LowerText, std::initializer_list<const TCHAR*> Tokens)
+	bool ReviewContainsAnyToken(const FString& LowerText, std::initializer_list<const TCHAR*> Tokens)
 	{
 		for (const TCHAR* Token : Tokens)
 		{
@@ -58,42 +58,42 @@ namespace
 	double SensitivityFactor(const FString& Text, FString& OutReason)
 	{
 		const FString Lower = Text.ToLower();
-		if (ContainsAnyToken(Lower, { TEXT("ufunction"), TEXT("server"), TEXT("client"), TEXT("netmulticast"), TEXT("onrep"), TEXT("replication"), TEXT("rpc"), TEXT("network") }))
+		if (ReviewContainsAnyToken(Lower, { TEXT("ufunction"), TEXT("server"), TEXT("client"), TEXT("netmulticast"), TEXT("onrep"), TEXT("replication"), TEXT("rpc"), TEXT("network") }))
 		{
 			OutReason = TEXT("sensitivity: replication/RPC or network surface");
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("save"), TEXT("serialize"), TEXT("archive") }))
+		if (ReviewContainsAnyToken(Lower, { TEXT("save"), TEXT("serialize"), TEXT("archive") }))
 		{
 			OutReason = TEXT("sensitivity: save/serialization surface");
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("auth"), TEXT("login"), TEXT("account"), TEXT("session") }))
+		if (ReviewContainsAnyToken(Lower, { TEXT("auth"), TEXT("login"), TEXT("account"), TEXT("session") }))
 		{
 			OutReason = TEXT("sensitivity: auth/account/session surface");
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("purchase"), TEXT("iap"), TEXT("store"), TEXT("entitlement") }))
+		if (ReviewContainsAnyToken(Lower, { TEXT("purchase"), TEXT("iap"), TEXT("store"), TEXT("entitlement") }))
 		{
 			OutReason = TEXT("sensitivity: purchase/store entitlement surface");
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("anticheat"), TEXT("anti_cheat"), TEXT("cheat") }))
+		if (ReviewContainsAnyToken(Lower, { TEXT("anticheat"), TEXT("anti_cheat"), TEXT("cheat") }))
 		{
 			OutReason = TEXT("sensitivity: anticheat surface");
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("crypt"), TEXT("encrypt"), TEXT("decrypt"), TEXT("sign"), TEXT("hash") }))
+		if (ReviewContainsAnyToken(Lower, { TEXT("crypt"), TEXT("encrypt"), TEXT("decrypt"), TEXT("sign"), TEXT("hash") }))
 		{
 			OutReason = TEXT("sensitivity: crypto/signing/hash surface");
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("exec"), TEXT("eval"), TEXT("command") }))
+		if (ReviewContainsAnyToken(Lower, { TEXT("exec"), TEXT("eval"), TEXT("command") }))
 		{
 			OutReason = TEXT("sensitivity: exec/eval/command surface");
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("file"), TEXT("registry"), TEXT("process") }))
+		if (ReviewContainsAnyToken(Lower, { TEXT("file"), TEXT("registry"), TEXT("process") }))
 		{
 			OutReason = TEXT("sensitivity: file/registry/process surface");
 			return 0.15;

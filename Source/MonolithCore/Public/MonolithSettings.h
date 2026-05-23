@@ -363,6 +363,9 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Modules", DisplayName="Enable ImageGen Module")
 	bool bEnableImageGen = true;
 
+	UPROPERTY(config, EditAnywhere, Category="Modules", DisplayName="Enable Sprite Module")
+	bool bEnableSprite = true;
+
 	UPROPERTY(config, EditAnywhere, Category="Modules|ImageGen", DisplayName="ImageGen Bridge Server URL",
 		meta=(ToolTip="Base URL for an external imag2-gen/ima2 server. Monolith sends generation requests here without provider credentials."))
 	FString ImageGenBridgeServerUrl = TEXT("http://192.168.0.10:3333");

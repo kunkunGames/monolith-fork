@@ -261,6 +261,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "MonolithSprite",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "MonolithInterchange",
 			"Type": "Editor",
 			"LoadingPhase": "Default"

@@ -28,3 +28,4 @@ monolith_discover({ namespace: "paper2d", action: "<action>", mode: "schema" }) 
 
 - This reference is generated from the live `RegisterAction` surface. If an action is missing or renamed, re-run `monolith_discover({ namespace: "paper2d" })` — the catalog is the source of truth.
 - Pass `mode: "schema"` to `monolith_discover` for required/optional params and types before calling an action.
+- For generated Paper2D/PaperZD sprite sheets, keep the final Texture2D dimensions power-of-two when practical. Preserve proven cell sizes and adjust columns first; for 256px four-direction character sheets, prefer `4x4=1024x1024` or `8x4=2048x1024` over non-power-of-two widths such as `6x4=1536x1024` unless the source art or runtime contract requires otherwise.

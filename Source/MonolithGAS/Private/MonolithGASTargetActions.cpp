@@ -1,4 +1,4 @@
-#include "MonolithGASTargetActions.h"
+﻿#include "MonolithGASTargetActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithGASInternal.h"
 #include "MonolithAssetUtils.h"
@@ -209,24 +209,6 @@ FMonolithActionResult FMonolithGASTargetActions::HandleCreateTargetActor(const T
 			FString::Printf(TEXT("Invalid targeting_type: '%s'. Valid: line, sphere, ground, custom"), *TargetingType));
 	}
 
-	if (Params->HasField(TEXT("max_range")))
-	{
-		double RangeVal = 0.0;
-		if (!MonolithGAS::TryGetStrictNumberField(Params, TEXT("max_range"), RangeVal))
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid type for max_range. Expected a number."));
-		}
-	}
-
-	if (Params->HasField(TEXT("radius")))
-	{
-		double RadiusVal = 0.0;
-		if (!MonolithGAS::TryGetStrictNumberField(Params, TEXT("radius"), RadiusVal))
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid type for radius. Expected a number."));
-		}
-	}
-
 	// Extract asset name
 	int32 LastSlash;
 	if (!SavePath.FindLastChar(TEXT('/'), LastSlash))
@@ -284,7 +266,7 @@ FMonolithActionResult FMonolithGASTargetActions::HandleCreateTargetActor(const T
 		if (Params->HasField(TEXT("max_range")))
 		{
 			double RangeVal = 0.0;
-			if (!MonolithGAS::TryGetStrictNumberField(Params, TEXT("max_range"), RangeVal))
+			if (!Params->TryGetNumberField(TEXT("max_range"), RangeVal))
 			{
 				return FMonolithActionResult::Error(TEXT("Invalid type for max_range. Expected a number."));
 			}
@@ -303,7 +285,7 @@ FMonolithActionResult FMonolithGASTargetActions::HandleCreateTargetActor(const T
 		if (Params->HasField(TEXT("radius")))
 		{
 			double RadiusVal = 0.0;
-			if (!MonolithGAS::TryGetStrictNumberField(Params, TEXT("radius"), RadiusVal))
+			if (!Params->TryGetNumberField(TEXT("radius"), RadiusVal))
 			{
 				return FMonolithActionResult::Error(TEXT("Invalid type for radius. Expected a number."));
 			}
@@ -381,7 +363,7 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 	if (Params->HasField(TEXT("max_range")))
 	{
 		double RangeVal = 0.0;
-		if (!MonolithGAS::TryGetStrictNumberField(Params, TEXT("max_range"), RangeVal))
+		if (!Params->TryGetNumberField(TEXT("max_range"), RangeVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for max_range. Expected a number."));
 		}
@@ -400,7 +382,7 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 	if (Params->HasField(TEXT("radius")))
 	{
 		double RadiusVal = 0.0;
-		if (!MonolithGAS::TryGetStrictNumberField(Params, TEXT("radius"), RadiusVal))
+		if (!Params->TryGetNumberField(TEXT("radius"), RadiusVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for radius. Expected a number."));
 		}
@@ -419,7 +401,7 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 	if (Params->HasField(TEXT("should_produce_target_data_on_server")))
 	{
 		bool bVal = false;
-		if (!MonolithGAS::TryGetStrictBoolField(Params, TEXT("should_produce_target_data_on_server"), bVal))
+		if (!Params->TryGetBoolField(TEXT("should_produce_target_data_on_server"), bVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for should_produce_target_data_on_server. Expected a boolean."));
 		}
@@ -433,7 +415,7 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 	if (Params->HasField(TEXT("debug_draw")))
 	{
 		bool bVal = false;
-		if (!MonolithGAS::TryGetStrictBoolField(Params, TEXT("debug_draw"), bVal))
+		if (!Params->TryGetBoolField(TEXT("debug_draw"), bVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for debug_draw. Expected a boolean."));
 		}
@@ -451,7 +433,7 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 	if (Params->HasField(TEXT("start_location_type")))
 	{
 		FString LocType;
-		if (!MonolithGAS::TryGetStrictStringField(Params, TEXT("start_location_type"), LocType))
+		if (!Params->TryGetStringField(TEXT("start_location_type"), LocType))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for start_location_type. Expected a string."));
 		}
@@ -670,7 +652,7 @@ FMonolithActionResult FMonolithGASTargetActions::HandleScaffoldFPSTargeting(cons
 	if (Params->HasField(TEXT("range")))
 	{
 		double RangeVal = 0.0;
-		if (!MonolithGAS::TryGetStrictNumberField(Params, TEXT("range"), RangeVal))
+		if (!Params->TryGetNumberField(TEXT("range"), RangeVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for range. Expected a number."));
 		}
@@ -681,20 +663,11 @@ FMonolithActionResult FMonolithGASTargetActions::HandleScaffoldFPSTargeting(cons
 	if (Params->HasField(TEXT("radius")))
 	{
 		double RadiusVal = 0.0;
-		if (!MonolithGAS::TryGetStrictNumberField(Params, TEXT("radius"), RadiusVal))
+		if (!Params->TryGetNumberField(TEXT("radius"), RadiusVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for radius. Expected a number."));
 		}
 		Radius = static_cast<float>(RadiusVal);
-	}
-
-	FString TASavePath;
-	if (Params->HasField(TEXT("save_path")))
-	{
-		if (!MonolithGAS::TryGetStrictStringField(Params, TEXT("save_path"), TASavePath))
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid type for save_path. Expected a string."));
-		}
 	}
 
 	// Verify ability exists
@@ -707,6 +680,14 @@ FMonolithActionResult FMonolithGASTargetActions::HandleScaffoldFPSTargeting(cons
 	}
 
 	// Determine save path for auto-created TargetActor
+	FString TASavePath;
+	if (Params->HasField(TEXT("save_path")))
+	{
+		if (!Params->TryGetStringField(TEXT("save_path"), TASavePath))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for save_path. Expected a string."));
+		}
+	}
 	if (TASavePath.IsEmpty())
 	{
 		// Extract directory from ability path and put TA there
