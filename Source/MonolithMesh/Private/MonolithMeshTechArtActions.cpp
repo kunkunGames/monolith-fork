@@ -218,8 +218,11 @@ FMonolithActionResult FMonolithMeshTechArtActions::ImportMesh(const TSharedPtr<F
 	UAutomatedAssetImportData* ImportData = NewObject<UAutomatedAssetImportData>();
 	ImportData->Filenames = Filenames;
 	ImportData->DestinationPath = Destination;
-	ImportData->bReplaceExisting = Params->HasField(TEXT("replace_existing"))
-		? Params->GetBoolField(TEXT("replace_existing")) : false;
+	ImportData->bReplaceExisting = false;
+	if (Params->HasField(TEXT("replace_existing")) && !Params->TryGetBoolField(TEXT("replace_existing"), ImportData->bReplaceExisting))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'replace_existing'. Expected boolean."));
+	}
 
 	// FBX-specific settings
 	bool bHasFbx = false;
@@ -438,8 +441,11 @@ FMonolithActionResult FMonolithMeshTechArtActions::FixMeshQuality(const TSharedP
 		Ops.Add(TEXT("fix_normals"));
 	}
 
-	double WeldTolerance = Params->HasField(TEXT("weld_tolerance"))
-		? Params->GetNumberField(TEXT("weld_tolerance")) : 0.01;
+	double WeldTolerance = 0.01;
+	if (Params->HasField(TEXT("weld_tolerance")) && !Params->TryGetNumberField(TEXT("weld_tolerance"), WeldTolerance))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'weld_tolerance'. Expected number."));
+	}
 
 	// Load mesh into handle pool for round-trip editing
 	FString HandleName = FString::Printf(TEXT("__techart_fix_%s"), *FGuid::NewGuid().ToString());
@@ -567,16 +573,26 @@ FMonolithActionResult FMonolithMeshTechArtActions::AutoGenerateLods(const TShare
 		return FMonolithActionResult::Error(TEXT("'asset_path' is required"));
 	}
 
-	int32 LodCount = Params->HasField(TEXT("lod_count"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("lod_count"))) : 3;
+	double LodCountD = 3.0;
+	if (Params->HasField(TEXT("lod_count")) && !Params->TryGetNumberField(TEXT("lod_count"), LodCountD))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'lod_count'. Expected number."));
+	}
+	int32 LodCount = static_cast<int32>(LodCountD);
 	LodCount = FMath::Clamp(LodCount, 1, 8);
 
-	double ReductionPerLod = Params->HasField(TEXT("reduction_per_lod"))
-		? Params->GetNumberField(TEXT("reduction_per_lod")) : 0.5;
+	double ReductionPerLod = 0.5;
+	if (Params->HasField(TEXT("reduction_per_lod")) && !Params->TryGetNumberField(TEXT("reduction_per_lod"), ReductionPerLod))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'reduction_per_lod'. Expected number."));
+	}
 	ReductionPerLod = FMath::Clamp(ReductionPerLod, 0.1, 0.9);
 
-	bool bPreserveUV = Params->HasField(TEXT("preserve_uv_borders"))
-		? Params->GetBoolField(TEXT("preserve_uv_borders")) : true;
+	bool bPreserveUV = true;
+	if (Params->HasField(TEXT("preserve_uv_borders")) && !Params->TryGetBoolField(TEXT("preserve_uv_borders"), bPreserveUV))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'preserve_uv_borders'. Expected boolean."));
+	}
 
 	// Parse optional screen sizes
 	TArray<float> ScreenSizes;
@@ -762,10 +778,17 @@ FMonolithActionResult FMonolithMeshTechArtActions::AutoGenerateLods(const TShare
 
 FMonolithActionResult FMonolithMeshTechArtActions::AnalyzeTexelDensity(const TSharedPtr<FJsonObject>& Params)
 {
-	double TargetDensity = Params->HasField(TEXT("target_density"))
-		? Params->GetNumberField(TEXT("target_density")) : 5.12;
-	int32 UVChannel = Params->HasField(TEXT("uv_channel"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("uv_channel"))) : 0;
+	double TargetDensity = 5.12;
+	if (Params->HasField(TEXT("target_density")) && !Params->TryGetNumberField(TEXT("target_density"), TargetDensity))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'target_density'. Expected number."));
+	}
+	double UVChannelD = 0.0;
+	if (Params->HasField(TEXT("uv_channel")) && !Params->TryGetNumberField(TEXT("uv_channel"), UVChannelD))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'uv_channel'. Expected number."));
+	}
+	int32 UVChannel = static_cast<int32>(UVChannelD);
 
 	// Collect actors to analyze
 	TArray<AActor*> Actors;
@@ -963,7 +986,11 @@ FMonolithActionResult FMonolithMeshTechArtActions::AnalyzeMaterialCostInRegion(c
 	{
 		FVector Center;
 		MonolithMeshUtils::ParseVector(Params, TEXT("center"), Center);
-		double Radius = Params->GetNumberField(TEXT("radius"));
+		double Radius = 0.0;
+		if (!Params->TryGetNumberField(TEXT("radius"), Radius))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'radius'. Expected number."));
+		}
 
 		for (TActorIterator<AActor> It(World); It; ++It)
 		{
@@ -1183,10 +1210,19 @@ FMonolithActionResult FMonolithMeshTechArtActions::SetMeshCollision(const TShare
 		const TSharedPtr<FJsonObject>* ConvexParams = nullptr;
 		if (Params->TryGetObjectField(TEXT("auto_convex"), ConvexParams) && ConvexParams)
 		{
-			int32 MaxHulls = (*ConvexParams)->HasField(TEXT("hull_count"))
-				? static_cast<int32>((*ConvexParams)->GetNumberField(TEXT("hull_count"))) : 4;
-			int32 MaxVerts = (*ConvexParams)->HasField(TEXT("max_verts"))
-				? static_cast<int32>((*ConvexParams)->GetNumberField(TEXT("max_verts"))) : 32;
+			double MaxHullsD = 4.0;
+			if ((*ConvexParams)->HasField(TEXT("hull_count")) && !(*ConvexParams)->TryGetNumberField(TEXT("hull_count"), MaxHullsD))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'hull_count'. Expected number."));
+			}
+			int32 MaxHulls = static_cast<int32>(MaxHullsD);
+
+			double MaxVertsD = 32.0;
+			if ((*ConvexParams)->HasField(TEXT("max_verts")) && !(*ConvexParams)->TryGetNumberField(TEXT("max_verts"), MaxVertsD))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'max_verts'. Expected number."));
+			}
+			int32 MaxVerts = static_cast<int32>(MaxVertsD);
 
 			// Load mesh into handle pool
 			FString HandleName = FString::Printf(TEXT("__techart_collision_%s"), *FGuid::NewGuid().ToString());
@@ -1311,8 +1347,11 @@ FMonolithActionResult FMonolithMeshTechArtActions::SetMeshCollision(const TShare
 
 FMonolithActionResult FMonolithMeshTechArtActions::AnalyzeLightmapDensity(const TSharedPtr<FJsonObject>& Params)
 {
-	double TargetDensity = Params->HasField(TEXT("target_density"))
-		? Params->GetNumberField(TEXT("target_density")) : 4.0;
+	double TargetDensity = 4.0;
+	if (Params->HasField(TEXT("target_density")) && !Params->TryGetNumberField(TEXT("target_density"), TargetDensity))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'target_density'. Expected number."));
+	}
 
 	UWorld* World = MonolithMeshUtils::GetEditorWorld();
 	if (!World)
