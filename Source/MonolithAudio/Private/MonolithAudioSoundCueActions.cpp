@@ -232,6 +232,7 @@ TSharedPtr<FJsonObject> FMonolithAudioSoundCueActions::SerializeNode(USoundCue* 
 		{
 			TArray<TSharedPtr<FJsonValue>> JsonArray;
 			FScriptArrayHelper ArrayHelper(ArrayProp, ValuePtr);
+			JsonArray.Reserve(ArrayHelper.Num());
 			for (int32 i = 0; i < ArrayHelper.Num(); ++i)
 			{
 				const void* ElemPtr = ArrayHelper.GetRawPtr(i);
@@ -267,6 +268,7 @@ TSharedPtr<FJsonObject> FMonolithAudioSoundCueActions::SerializeNode(USoundCue* 
 
 	// Child connections
 	TArray<TSharedPtr<FJsonValue>> ChildArray;
+	ChildArray.Reserve(Node->ChildNodes.Num());
 	for (int32 i = 0; i < Node->ChildNodes.Num(); ++i)
 	{
 		USoundNode* Child = Node->ChildNodes[i];
@@ -810,6 +812,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateSoundCue(const TShare
 	if (Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) && WavesArray && WavesArray->Num() > 0)
 	{
 		TArray<FString> WavePaths;
+		WavePaths.Reserve(WavesArray->Num());
 		for (const auto& Val : *WavesArray)
 		{
 			FString Path;
@@ -880,6 +883,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::GetSoundCueGraph(const TSha
 	// Nodes
 	TArray<TSharedPtr<FJsonValue>> NodesArray;
 #if WITH_EDITORONLY_DATA
+	NodesArray.Reserve(Cue->AllNodes.Num());
 	for (USoundNode* Node : Cue->AllNodes)
 	{
 		if (Node)
@@ -892,6 +896,15 @@ FMonolithActionResult FMonolithAudioSoundCueActions::GetSoundCueGraph(const TSha
 
 	// Connections (from -> to with child_index)
 	TArray<TSharedPtr<FJsonValue>> ConnsArray;
+	int32 TotalConnections = 0;
+#if WITH_EDITORONLY_DATA
+	for (USoundNode* Node : Cue->AllNodes)
+	{
+		if (!Node) continue;
+		TotalConnections += Node->ChildNodes.Num();
+	}
+#endif
+	ConnsArray.Reserve(TotalConnections);
 #if WITH_EDITORONLY_DATA
 	for (USoundNode* Node : Cue->AllNodes)
 	{
@@ -1238,6 +1251,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::ListSoundCueNodeTypes(const
 	};
 
 	TArray<TSharedPtr<FJsonValue>> TypesArray;
+	TypesArray.Reserve(UE_ARRAY_COUNT(NodeTypes));
 	for (const auto& Info : NodeTypes)
 	{
 		auto TypeJson = MakeShared<FJsonObject>();
@@ -1272,6 +1286,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::FindSoundWavesInCue(const T
 	TArray<TSharedPtr<FJsonValue>> WavesArray;
 
 #if WITH_EDITORONLY_DATA
+	WavesArray.Reserve(Cue->AllNodes.Num());
 	for (USoundNode* Node : Cue->AllNodes)
 	{
 		USoundNodeWavePlayer* WavePlayer = Cast<USoundNodeWavePlayer>(Node);
@@ -1667,6 +1682,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateRandomSoundCue(const 
 	}
 
 	TArray<FString> WavePaths;
+	WavePaths.Reserve(WavesArray->Num());
 	for (const auto& Val : *WavesArray)
 	{
 		FString Path;
@@ -1752,6 +1768,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateLayeredSoundCue(const
 	}
 
 	TArray<FString> WavePaths;
+	WavePaths.Reserve(WavesArray->Num());
 	for (const auto& Val : *WavesArray)
 	{
 		FString Path;
@@ -1840,6 +1857,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateLoopingAmbientCue(con
 	Params->TryGetNumberField(TEXT("delay_max"), DelayMax);
 
 	TArray<FString> WavePaths;
+	WavePaths.Reserve(WavesArray->Num());
 	for (const auto& Val : *WavesArray)
 	{
 		FString Path;
@@ -2069,6 +2087,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateSwitchSoundCue(const 
 	}
 
 	TArray<FString> WavePaths;
+	WavePaths.Reserve(WavesArray->Num());
 	for (const auto& Val : *WavesArray)
 	{
 		FString Path;
