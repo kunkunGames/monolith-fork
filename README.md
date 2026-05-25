@@ -161,9 +161,9 @@ Monolith ships with a stdio-to-HTTP proxy that keeps your MCP session alive when
 }
 ```
 
-**Option B: Python proxy (fallback — works on all platforms)**
+**Option B: Python / Node.js proxy (fallback — works on all platforms)**
 
-Requires Python 3.8+ ([python.org](https://python.org)).
+Requires Python 3.8+ ([python.org](https://python.org)) or Node.js 18+ ([nodejs.org](https://nodejs.org/)).
 
 Windows:
 ```json
@@ -477,10 +477,10 @@ See [SECURITY.md](SECURITY.md) for the full threat model and disclosure policy.
 | **Claude can't find any tools** | Check `.mcp.json` transport type: Claude Code uses `"http"`, Cursor/Cline use `"streamableHttp"`. Restart your AI client after creating the file. |
 | **Tools fail on first try** | Restart Claude Code to refresh the MCP connection. Known quirk with initial connection timing. |
 | **Port 9316 already in use** | Change the port in Editor Preferences > Plugins > Monolith, then update `.mcp.json` to match. |
-| **Proxy says "Python 3 not found"** | On Windows, switch to the C++ proxy (`monolith_proxy.exe`) — no Python needed. On macOS/Linux, install Python 3.8+ and ensure `python3` is on your PATH. |
+| **Proxy says "Python 3.8+ or Node.js not found"** | On Windows, switch to the C++ proxy (`monolith_proxy.exe`) — no Python/Node needed. On macOS/Linux, install Python 3.8+ or Node.js 18+ and ensure `python3` or `node` is on your PATH. |
 | **monolith_query.exe returns no results** | The exe looks for databases relative to its own location. Make sure `Saved/EngineSource.db` and `Saved/ProjectIndex.db` exist (created on first editor launch). |
 | **macOS: `monolith_proxy.sh` permission denied** | Make sure the script is executable: `chmod +x Plugins/Monolith/Scripts/monolith_proxy.sh`. |
-| **macOS/Linux: native C++ proxy not available** | The prebuilt `monolith_proxy.exe` is Windows-only for now. Use the Python proxy (`monolith_proxy.sh`) — same protocol, same features. |
+| **macOS/Linux: native C++ proxy not available** | The prebuilt `monolith_proxy.exe` is Windows-only for now. Use the Python/Node proxy (`monolith_proxy.sh`) — same protocol, same features. |
 
 ---
 
