@@ -17,7 +17,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | Namespace | Actions | Description |
 |-----------|---------|-------------|
 | [monolith](#monolith) | 5 primary + management/profile/audit helpers | Core server tools (find, discover, status, update, reindex), MCP/session diagnostics, readiness/onboarding/notification settings, execution audit/policy, and tool profile management |
-| [blueprint](#blueprint) | 100 | Blueprint read/write, variable/component/graph CRUD, DataTable maintenance, node ops, compile, auto-layout, spawn actors |
+| [blueprint](#blueprint) | 99 | Blueprint read/write, variable/component/graph CRUD, DataTable maintenance, node ops, compile, auto-layout, spawn actors |
 | [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection / Fracture visibility registered by MonolithChaosFracture |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [paper2d](#paper2d) | 3 | Optional Paper2D AssetRegistry discovery registered by MonolithPaper2D |
@@ -267,7 +267,7 @@ Optional nDisplay / DisplayCluster config discovery registered by `MonolithNDisp
 
 ## blueprint
 
-Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, DataTables, and spawn-time actor placement. **93 actions.**
+Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, DataTables, and spawn-time actor placement. **99 actions.**
 
 > For full param schemas, call `monolith_discover("blueprint")` at runtime. The action surface is too broad to enumerate here without bloat — high-traffic actions are documented below; the rest are listed and discoverable.
 >

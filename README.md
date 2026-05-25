@@ -22,7 +22,7 @@ Most MCP integrations register every action as a separate tool, which floods the
 
 ## What Can It Actually Do?
 
-**Blueprint (89 actions)** — Full programmatic control of every Blueprint in your project. Create from any parent class, build entire node graphs from a JSON spec, add/remove/connect/disconnect nodes in bulk, manage variables, components, functions, macros, and event dispatchers. Implement interfaces, reparent hierarchies, edit construction scripts, read/write CDO properties on any Blueprint or DataAsset. The auto-layout engine uses a modified Sugiyama algorithm so AI-generated graphs actually look clean. Compare two Blueprints side-by-side, scaffold from templates, manage data tables, user defined structs and enums. Hand the AI a description and it builds the whole thing — or point it at an existing Blueprint and it'll surgically rewire what you need.
+**Blueprint (99 actions)** — Full programmatic control of every Blueprint in your project. Create from any parent class, build entire node graphs from a JSON spec, add/remove/connect/disconnect nodes in bulk, manage variables, components, functions, macros, and event dispatchers. Implement interfaces, reparent hierarchies, edit construction scripts, read/write CDO properties on any Blueprint or DataAsset. The auto-layout engine uses a modified Sugiyama algorithm so AI-generated graphs actually look clean. Compare two Blueprints side-by-side, scaffold from templates, manage data tables, user defined structs and enums. Hand the AI a description and it builds the whole thing — or point it at an existing Blueprint and it'll surgically rewire what you need.
 
 **Material (63 actions)** — Create materials, material instances, and material functions from scratch. Build entire PBR graphs programmatically — add expressions, connect pins, auto-layout, recompile. Drop in custom HLSL nodes. Import textures from disk and wire them directly into material slots. Batch-set properties across dozens of instances at once. Render material previews and thumbnails without leaving the AI session. Preview textures with full metadata, check tiling quality with anti-tiling analysis, batch delete expressions, clear entire graphs. Full material function support: create, build internal graphs, export/import between projects. Get compilation stats, validate for errors, inspect shader complexity. Covers the full material workflow from creation to validation.
 
@@ -62,7 +62,7 @@ Most MCP integrations register every action as a separate tool, which floods the
 
 ## Features
 
-- **Blueprint (89 actions)** — Full CRUD, node graph manipulation, JSON-to-Blueprint building, auto-layout (Sugiyama), CDO property access, data tables, structs, enums, template system, Blueprint comparison. Works as a complete Blueprint co-pilot with any MCP client
+- **Blueprint (99 actions)** — Full CRUD, node graph manipulation, JSON-to-Blueprint building, auto-layout (Sugiyama), CDO property access, data tables, structs, enums, template system, Blueprint comparison. Works as a complete Blueprint co-pilot with any MCP client
 - **Material authoring (63 actions)** — Programmatic PBR graph building, custom HLSL, material functions, texture import, batch operations, preview rendering, compilation stats, tiling quality analysis, texture preview
 - **Animation (135 actions)** — Sequences, montages, blend spaces, Animation Blueprint graph writing (add states, transitions, rules, wire nodes), PoseSearch, Control Rig, Physics Assets, IK Rigs, Retargeters, skeleton management
 - **Niagara VFX (109 actions)** — System/emitter lifecycle, dynamic inputs, event handlers, sim stages, Parameter Collections, Effect Types, scalability settings, renderer presets, data interfaces, system diffing, batch execute
@@ -292,7 +292,7 @@ Get-ChildItem Plugins\Monolith\Skills -Directory | ForEach-Object {
 ```
 Monolith.uplugin
   MonolithCore          — HTTP server, tool registry, discovery, auto-updater (6 actions)
-  MonolithBlueprint     — Blueprint read/write, variable/component/graph CRUD, node operations, compile, CDO reader (89 actions)
+  MonolithBlueprint     — Blueprint read/write, variable/component/graph CRUD, node operations, compile, CDO reader (99 actions)
   MonolithMaterial      — Material inspection + graph editing + CRUD + material functions + tiling quality (63 actions)
   MonolithAnimation     — Animation sequences, montages, ABPs, PoseSearch, IKRig, Control Rig (135 actions)
   MonolithNiagara       — Niagara particle systems, dynamic inputs, event handlers, sim stages, NPC, scalability (109 actions)
@@ -333,7 +333,7 @@ Standalone Tools (in Binaries/)
 | `monolith` | `monolith_status` | — | Server health, version, index status |
 | `monolith` | `monolith_reindex` | — | Trigger full project re-index |
 | `monolith` | `monolith_update` | — | Check or install updates |
-| `blueprint` | `blueprint_query` | 89 | Full Blueprint CRUD — read/write graphs, variables, components, functions, nodes, compile, CDO properties, auto-layout |
+| `blueprint` | `blueprint_query` | 99 | Full Blueprint CRUD — read/write graphs, variables, components, functions, nodes, compile, CDO properties, auto-layout |
 | `material` | `material_query` | 63 | Inspection, editing, graph building, material functions, previews, validation, tiling quality, texture preview, CRUD |
 | `animation` | `animation_query` | 135 | Montages, blend spaces, ABPs, skeletons, bone tracks, PoseSearch, IKRig, Control Rig, ABP/ControlRig writes |
 | `niagara` | `niagara_query` | 109 | Systems, emitters, modules, parameters, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types, scalability |
