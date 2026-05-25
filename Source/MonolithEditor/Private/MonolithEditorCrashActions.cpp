@@ -259,8 +259,14 @@ namespace
 			{
 				return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
 			}
-			Params->TryGetStringField(TEXT("since"), Since);
-			Params->TryGetStringField(TEXT("tool"), ToolFilter);
+			if (Params->HasField(TEXT("since")) && !Params->TryGetStringField(TEXT("since"), Since))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'since' must be a string"), -32602);
+			}
+			if (Params->HasField(TEXT("tool")) && !Params->TryGetStringField(TEXT("tool"), ToolFilter))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'tool' must be a string"), -32602);
+			}
 		}
 
 		const FString Dir = FMonolithCrashBreadcrumb::GetCrashesDir();
@@ -325,8 +331,14 @@ namespace
 		FString GroupBy = TEXT("tool");
 		if (Params.IsValid())
 		{
-			Params->TryGetStringField(TEXT("since"), Since);
-			Params->TryGetStringField(TEXT("group_by"), GroupBy);
+			if (Params->HasField(TEXT("since")) && !Params->TryGetStringField(TEXT("since"), Since))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'since' must be a string"), -32602);
+			}
+			if (Params->HasField(TEXT("group_by")) && !Params->TryGetStringField(TEXT("group_by"), GroupBy))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'group_by' must be a string"), -32602);
+			}
 		}
 
 		const FString Dir = FMonolithCrashBreadcrumb::GetCrashesDir();
@@ -434,9 +446,18 @@ namespace
 			{
 				return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
 			}
-			Params->TryGetStringField(TEXT("since"), Since);
-			Params->TryGetStringField(TEXT("tool"), ToolFilter);
-			Params->TryGetBoolField(TEXT("include_ignored"), bIncludeIgnored);
+			if (Params->HasField(TEXT("since")) && !Params->TryGetStringField(TEXT("since"), Since))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'since' must be a string"), -32602);
+			}
+			if (Params->HasField(TEXT("tool")) && !Params->TryGetStringField(TEXT("tool"), ToolFilter))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'tool' must be a string"), -32602);
+			}
+			if (Params->HasField(TEXT("include_ignored")) && !Params->TryGetBoolField(TEXT("include_ignored"), bIncludeIgnored))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'include_ignored' must be a boolean"), -32602);
+			}
 		}
 
 		const FString Dir = FMonolithCrashBreadcrumb::GetCrashesDir();
@@ -509,8 +530,14 @@ namespace
 		bool bIncludeParams = false;
 		if (Params.IsValid())
 		{
-			Params->TryGetStringField(TEXT("file"), RequestedFile);
-			Params->TryGetBoolField(TEXT("include_params"), bIncludeParams);
+			if (Params->HasField(TEXT("file")) && !Params->TryGetStringField(TEXT("file"), RequestedFile))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'file' must be a string"), -32602);
+			}
+			if (Params->HasField(TEXT("include_params")) && !Params->TryGetBoolField(TEXT("include_params"), bIncludeParams))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'include_params' must be a boolean"), -32602);
+			}
 		}
 
 		FString FileName;
@@ -543,7 +570,10 @@ namespace
 		FString RequestedFile;
 		if (Params.IsValid())
 		{
-			Params->TryGetStringField(TEXT("file"), RequestedFile);
+			if (Params->HasField(TEXT("file")) && !Params->TryGetStringField(TEXT("file"), RequestedFile))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'file' must be a string"), -32602);
+			}
 		}
 
 		FString FileName;
@@ -583,9 +613,18 @@ namespace
 		bool bIgnored = true;
 		if (Params.IsValid())
 		{
-			Params->TryGetStringField(TEXT("file"), RequestedFile);
-			Params->TryGetStringField(TEXT("note"), Note);
-			Params->TryGetBoolField(TEXT("ignored"), bIgnored);
+			if (Params->HasField(TEXT("file")) && !Params->TryGetStringField(TEXT("file"), RequestedFile))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'file' must be a string"), -32602);
+			}
+			if (Params->HasField(TEXT("note")) && !Params->TryGetStringField(TEXT("note"), Note))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'note' must be a string"), -32602);
+			}
+			if (Params->HasField(TEXT("ignored")) && !Params->TryGetBoolField(TEXT("ignored"), bIgnored))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'ignored' must be a boolean"), -32602);
+			}
 		}
 		if (RequestedFile.IsEmpty())
 		{
