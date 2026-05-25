@@ -159,7 +159,7 @@ $trackedFiles = $allTrackedFiles | Where-Object {
         $keep = $false
     }
     # Enforce release ZIP hygiene: explicitly exclude build/local folders even if accidentally tracked
-    if ($keep -and ($path -like "Intermediate/*" -or $path -like "Saved/*" -or $path -like ".git/*" -or $path -eq ".git" -or $path -like ".github/*" -or $path -eq ".github" -or $path -like ".jules/*" -or $path -eq ".jules" -or $path -like ".vscode/*" -or $path -like ".vs/*" -or $path -like ".idea/*")) {
+    if ($keep -and ($path -like "Intermediate/*" -or $path -like "Saved/*" -or $path -like ".git/*" -or $path -eq ".git" -or $path -like ".github/*" -or $path -eq ".github" -or $path -like ".jules/*" -or $path -eq ".jules" -or $path -like ".vscode/*" -or $path -like ".vs/*" -or $path -like ".idea/*" -or $path -like ".pytest_cache/*" -or $path -eq ".pytest_cache")) {
         $keep = $false
     }
     $keep

@@ -45,3 +45,9 @@
 **Learning:** Monolith's release script packages the entire directory, meaning `.jules/` and `.github/` must be explicitly excluded. Additionally, the auto-updater does a destructive swap, so developer directories present in a local clone must be explicitly preserved from the backup.
 **Prevention:** Ensure `.github/` and `.jules/` are excluded in `Scripts/make_release.ps1`. Ensure the updater's `monolith_swap.bat` and `monolith_swap.sh` preserve these directories.
 **Avoid:** Packaging workflow artifacts into public release ZIPs or wiping out local developer state during an auto-update.
+
+## 2026-05-21 - Ignore .pytest_cache in release ZIP and source control
+**Release risk:** Python tool caches like `.pytest_cache/` can be accidentally tracked or packaged into release ZIPs, bloating the plugin or causing local collisions for users running their own Python environment.
+**Learning:** Monolith's standard `.gitignore` rule for Python caches is `__pycache__/`, which does not cover pytest's specific cache folder `.pytest_cache/`. Likewise, `make_release.ps1` explicitly checks for many local developer folders but did not include `.pytest_cache`.
+**Prevention:** Ensure `.pytest_cache/` is explicitly ignored in `.gitignore` and `.pytest_cache/*` or `.pytest_cache` is excluded in `Scripts/make_release.ps1` hygiene checks.
+**Avoid:** Trusting standard language ignores to cover tool-specific generated folders that might pollute release artifacts or source control.

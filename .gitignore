@@ -17,6 +17,7 @@ Logs/
 *.DotSettings.user
 *.patch_*
 __pycache__/
+.pytest_cache/
 *.pyc
 *.log
 *.bak
