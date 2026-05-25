@@ -7491,6 +7491,12 @@ FMonolithActionResult FMonolithMaterialActions::BatchSetMaterialProperty(const T
 		return FMonolithActionResult::Error(TEXT("asset_paths array is empty"));
 	}
 
+	// Limit transaction scope to avoid hitching or huge undo buffers
+	if (AssetPaths.Num() > 200)
+	{
+		return FMonolithActionResult::Error(TEXT("asset_paths array exceeds maximum allowed size (200)"));
+	}
+
 	// Build a params object without asset_paths — just the properties
 	// We reuse SetMaterialProperty by forwarding per-asset, but we wrap in a single transaction
 	GEditor->BeginTransaction(FText::FromString(TEXT("BatchSetMaterialProperty")));

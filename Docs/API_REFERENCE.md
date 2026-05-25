@@ -404,6 +404,7 @@ Material graph editing, inspection, CRUD, material functions, instances, custom 
 | Transactions | 2 | `begin_transaction`, `end_transaction` |
 
 `preview_textures` limits `asset_paths` to 100 entries per request to bound contact sheet memory use.
+`batch_set_material_property` limits `asset_paths` to 200 entries to bound transaction scope.
 
 ### `build_material_graph` gotcha
 
