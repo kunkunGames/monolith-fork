@@ -52,8 +52,16 @@ public class MonolithLogicDriver : ModuleRules
 				if (!bHasLogicDriver)
 				{
 					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-					bHasLogicDriver = Directory.Exists(
-						Path.Combine(EnginePluginsDir, "SMSystem"));
+					if (Directory.Exists(EnginePluginsDir))
+					{
+						bHasLogicDriver = Directory.Exists(
+							Path.Combine(EnginePluginsDir, "SMSystem"))
+							|| Directory.Exists(
+								Path.Combine(EnginePluginsDir, "LogicDriver"))
+							|| Directory.GetDirectories(
+								EnginePluginsDir, "LogicDriver_*",
+								SearchOption.TopDirectoryOnly).Length > 0;
+					}
 				}
 			}
 		}
