@@ -106,3 +106,9 @@
 **Learning:** When branch names end with unique randomized strings, `git branch -r` lists appear noisy, and other agents cannot easily grep or match exact prefixes to detect overlapping intents.
 **Prevention:** Updated `AGENTS.md` to strictly forbid appending random identifiers to branch names. Branch names must be predictable and descriptive.
 **Avoid:** Appending `-1234567890` or similar random/timestamp suffixes to branch names.
+
+## 2026-05-23 - Require prefix matching for branch collision checks
+**Coordination issue:** Agents were creating overlapping PRs (e.g., `project-indexer/harden-param-parsing-110...` vs `...-516...`) because they were only checking for exact branch name matches during duplicate checks.
+**Learning:** Despite the rule against random suffixes, agents sometimes append them. An exact match check fails to identify these overlapping branches.
+**Prevention:** Updated `AGENTS.md` to explicitly require agents to evaluate prefix matches (e.g., `jules/agent/module/topic`) instead of exact matches when checking for branch collisions.
+**Avoid:** Proceeding with work just because a `git branch -r` exact match fails, without checking if a branch with the same intent prefix exists.
