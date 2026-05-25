@@ -836,14 +836,14 @@ FMonolithActionResult FMonolithEditorActions::HandleSearchBuildOutput(const TSha
 	}
 
 	int32 Limit = 100;
-	if (Params->HasField(TEXT("limit")))
+	double LimitValue = 0.0;
+	if (Params->TryGetNumberField(TEXT("limit"), LimitValue))
 	{
-		double LimitValue = 0.0;
-		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"));
-		}
 		Limit = static_cast<int32>(LimitValue);
+	}
+	else if (Params->HasField(TEXT("limit")))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	Limit = FMath::Clamp(Limit, 1, 1000);
 
@@ -1061,13 +1061,22 @@ FMonolithActionResult FMonolithEditorActions::HandleGetLiveCodingDiagnostics(con
 FMonolithActionResult FMonolithEditorActions::HandleGetRecentLogs(const TSharedPtr<FJsonObject>& Params)
 {
 	int32 Count = 100;
-	if (Params->HasField(TEXT("count")))
+	double CountValue = 0.0;
+	if (Params->TryGetNumberField(TEXT("count"), CountValue))
 	{
-		Count = static_cast<int32>(Params->GetNumberField(TEXT("count")));
+		Count = static_cast<int32>(CountValue);
+	}
+	else if (Params->HasField(TEXT("count")))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'count' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	else if (Params->TryGetNumberField(TEXT("max"), CountValue))
+	{
+		Count = static_cast<int32>(CountValue);
 	}
 	else if (Params->HasField(TEXT("max")))
 	{
-		Count = static_cast<int32>(Params->GetNumberField(TEXT("max")));
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'max' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	Count = FMath::Clamp(Count, 1, 1000);
 
@@ -1098,9 +1107,14 @@ FMonolithActionResult FMonolithEditorActions::HandleSearchLogs(const TSharedPtr<
 	ELogVerbosity::Type MaxVerbosity = VerbosityStr.IsEmpty() ? ELogVerbosity::VeryVerbose : StringToVerbosity(VerbosityStr);
 
 	int32 Limit = 200;
-	if (Params->HasField(TEXT("limit")))
+	double LimitValue = 0.0;
+	if (Params->TryGetNumberField(TEXT("limit"), LimitValue))
 	{
-		Limit = static_cast<int32>(Params->GetNumberField(TEXT("limit")));
+		Limit = static_cast<int32>(LimitValue);
+	}
+	else if (Params->HasField(TEXT("limit")))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	Limit = FMath::Clamp(Limit, 1, 2000);
 
@@ -1126,9 +1140,14 @@ FMonolithActionResult FMonolithEditorActions::HandleSearchLogs(const TSharedPtr<
 FMonolithActionResult FMonolithEditorActions::HandleTailLog(const TSharedPtr<FJsonObject>& Params)
 {
 	int32 Count = 50;
-	if (Params->HasField(TEXT("count")))
+	double CountValue = 0.0;
+	if (Params->TryGetNumberField(TEXT("count"), CountValue))
 	{
-		Count = static_cast<int32>(Params->GetNumberField(TEXT("count")));
+		Count = static_cast<int32>(CountValue);
+	}
+	else if (Params->HasField(TEXT("count")))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'count' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	Count = FMath::Clamp(Count, 1, 500);
 
