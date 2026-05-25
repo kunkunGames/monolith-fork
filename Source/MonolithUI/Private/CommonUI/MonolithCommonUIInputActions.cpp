@@ -324,6 +324,7 @@ namespace MonolithCommonUIInput
 		if (FArrayProperty* P = FindFProperty<FArrayProperty>(UCommonInputSettings::StaticClass(), TEXT("ControllerData")))
 		{
 			FScriptArrayHelper Helper(P, P->ContainerPtrToValuePtr<void>(Settings));
+			Entries.Reserve(Helper.Num());
 			for (int32 i = 0; i < Helper.Num(); ++i)
 			{
 				if (FSoftClassProperty* InnerProp = CastField<FSoftClassProperty>(P->Inner))
