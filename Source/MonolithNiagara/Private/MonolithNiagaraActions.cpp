@@ -3595,8 +3595,8 @@ FMonolithActionResult FMonolithNiagaraActions::CreateScriptFromHLSL(const TShare
 	auto GetJsonArray = [](const TSharedPtr<FJsonObject>& P, const FString& FieldName) -> TArray<TSharedPtr<FJsonValue>>
 	{
 		if (!P->HasField(FieldName)) return {};
-		const TArray<TSharedPtr<FJsonValue>>* ArrPtr;
-		if (P->TryGetArrayField(FieldName, ArrPtr)) return *ArrPtr;
+		const TArray<TSharedPtr<FJsonValue>>* ArrPtr = nullptr;
+		if (P->TryGetArrayField(FieldName, ArrPtr) && ArrPtr) return *ArrPtr;
 		// Fallback: try parsing as string
 		FString Str = P->GetStringField(FieldName);
 		if (!Str.IsEmpty())
@@ -8196,8 +8196,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSpawnShape(const TShared
 				TEXT("ConeLocation"), TEXT("TorusLocation"), TEXT("ShapeLocation")
 			};
 
-			const TArray<TSharedPtr<FJsonValue>>* ModulesArr;
-			if (ModResult.Result->TryGetArrayField(TEXT("modules"), ModulesArr))
+			const TArray<TSharedPtr<FJsonValue>>* ModulesArr = nullptr;
+			if (ModResult.Result->TryGetArrayField(TEXT("modules"), ModulesArr) && ModulesArr)
 			{
 				bool bSameShapeAlreadyPresent = false;
 				for (const TSharedPtr<FJsonValue>& ModVal : *ModulesArr)
@@ -8260,8 +8260,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSpawnShape(const TShared
 		FMonolithActionResult ModResult = HandleGetOrderedModules(GetModParams);
 		if (ModResult.bSuccess && ModResult.Result.IsValid())
 		{
-			const TArray<TSharedPtr<FJsonValue>>* ModulesArr;
-			if (ModResult.Result->TryGetArrayField(TEXT("modules"), ModulesArr))
+			const TArray<TSharedPtr<FJsonValue>>* ModulesArr = nullptr;
+			if (ModResult.Result->TryGetArrayField(TEXT("modules"), ModulesArr) && ModulesArr)
 			{
 				for (const TSharedPtr<FJsonValue>& ModVal : *ModulesArr)
 				{
