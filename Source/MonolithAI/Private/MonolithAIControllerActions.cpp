@@ -317,6 +317,7 @@ FMonolithActionResult FMonolithAIControllerActions::HandleListAIControllers(cons
 	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 
 	TArray<TSharedPtr<FJsonValue>> Items;
+	Items.Reserve(Assets.Num());
 	for (const FAssetData& Asset : Assets)
 	{
 		// Check if this Blueprint's parent is AAIController

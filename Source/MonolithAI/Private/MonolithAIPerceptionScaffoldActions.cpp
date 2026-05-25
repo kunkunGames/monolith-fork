@@ -178,6 +178,7 @@ FMonolithActionResult FMonolithAIPerceptionScaffoldActions::HandleAddPerceptionT
 	// 2. Add each requested sense config (using ConfigureSense — public API; same
 	//    pattern as MonolithAIPerceptionActions::FindOrCreateSenseConfig).
 	TArray<TSharedPtr<FJsonValue>> SensesAddedArr;
+	SensesAddedArr.Reserve(RequestedSenses.Num());
 	for (const FString& Sense : RequestedSenses)
 	{
 		if (Sense.Equals(TEXT("Sight"), ESearchCase::IgnoreCase))
