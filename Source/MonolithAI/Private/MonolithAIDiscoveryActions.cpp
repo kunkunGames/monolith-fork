@@ -1466,6 +1466,7 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleExportAIManifest(const 
 		AR.GetAssetsByClass(TypeInfo.ClassPath, Assets);
 
 		TArray<TSharedPtr<FJsonValue>> AssetArr;
+		AssetArr.Reserve(Assets.Num());
 		for (const FAssetData& Asset : Assets)
 		{
 			if (!PathFilter.IsEmpty() && !Asset.GetObjectPathString().StartsWith(PathFilter)) continue;
