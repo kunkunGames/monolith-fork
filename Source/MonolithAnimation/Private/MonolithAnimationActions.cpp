@@ -2986,7 +2986,13 @@ static ERichCurveInterpMode StringToInterpMode(const FString& Str)
 FMonolithActionResult FMonolithAnimationActions::HandleListCurves(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	bool bIncludeKeys = Params->HasField(TEXT("include_keys")) && Params->GetBoolField(TEXT("include_keys"));
+
+	bool bIncludeKeys = false;
+	if (Params->HasField(TEXT("include_keys")))
+	{
+		if (!Params->TryGetBoolField(TEXT("include_keys"), bIncludeKeys))
+			return FMonolithActionResult::Error(TEXT("Parameter 'include_keys' must be a boolean"));
+	}
 
 	UAnimSequence* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
@@ -3151,12 +3157,24 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetCurveKeys(const TShare
 		const TSharedPtr<FJsonObject>& KeyObj = *KeyObjPtr;
 
 		FRichCurveKey Key;
-		Key.Time = static_cast<float>(KeyObj->GetNumberField(TEXT("time")));
-		Key.Value = static_cast<float>(KeyObj->GetNumberField(TEXT("value")));
+
+		double OutTime, OutValue;
+		if (!KeyObj->TryGetNumberField(TEXT("time"), OutTime)) return FMonolithActionResult::Error(TEXT("Parameter 'time' must be a number"));
+		Key.Time = static_cast<float>(OutTime);
+
+		if (!KeyObj->TryGetNumberField(TEXT("value"), OutValue)) return FMonolithActionResult::Error(TEXT("Parameter 'value' must be a number"));
+		Key.Value = static_cast<float>(OutValue);
+
 		if (KeyObj->HasField(TEXT("interp")))
-			Key.InterpMode = StringToInterpMode(KeyObj->GetStringField(TEXT("interp")));
+		{
+			FString OutInterp;
+			if (!KeyObj->TryGetStringField(TEXT("interp"), OutInterp)) return FMonolithActionResult::Error(TEXT("Parameter 'interp' must be a string"));
+			Key.InterpMode = StringToInterpMode(OutInterp);
+		}
 		else
+		{
 			Key.InterpMode = RCIM_Cubic;
+		}
 		Keys.Add(Key);
 	}
 
