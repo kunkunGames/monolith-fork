@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.14.9 (Beta)
+**Version:** 0.14.10 (Beta)
 
 > **Action-count audit (2026-05-21):** static registration audit reports **70 `mesh` actions** after the routing cleanup and source-domain split. `MonolithMesh` owns 66 mesh actions; `MonolithLevelDesign` contributes four mesh-optimization actions (`find_replace_mesh`, `set_lod_screen_sizes`, `find_instancing_candidates`, `convert_to_hism`) because their implementations reuse level/editor-world context while the runtime domain is mesh. Mesh validation (`validate_game_ready`, `suggest_lod_strategy`, `batch_validate`, `compare_lod_chain`) stays in `mesh`; generic asset ingest/hygiene/inspection registers under `asset` from `MonolithAsset`; composition/encounter review (`analyze_framing`, `evaluate_monster_reveal`, `analyze_co_op_balance`) registers under `leveldesign`; procedural town/building actions register under `worldgen`; generated-model actions register under `modelgen`. PCG discovery is owned by `MonolithPCG`; Paper2D discovery is owned by `MonolithPaper2D`; Water discovery is owned by `MonolithWater`; Dataflow discovery is owned by `MonolithDataflow`; Chaos/Fracture discovery is owned by `MonolithChaosFracture`; nDisplay discovery is owned by `MonolithNDisplay`; Interchange import/export is owned by `MonolithInterchange`. Runtime action tables below retain legacy class/action names for cross-spec reference where the public action contract predates the physical source split; actual `.h/.cpp` files for `scene`, `leveldesign`, `worldgen`, `modelgen`, and `asset` now live under their owning modules.
 
