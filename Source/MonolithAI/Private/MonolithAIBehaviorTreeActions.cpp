@@ -3773,6 +3773,8 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleBuildBTFromSpec(cons
 
 	// Always emit skipped_nodes (may be empty); keep legacy 'warnings' too for back-compat.
 	TArray<TSharedPtr<FJsonValue>> SkippedArr;
+	// SkippedArr.Reserve intentionally uses Ctx.Warnings.Num() since we add all warnings to SkippedArr as well
+	SkippedArr.Reserve(Ctx.Warnings.Num());
 	if (Ctx.Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;

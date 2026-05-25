@@ -843,11 +843,13 @@ FMonolithActionResult FMonolithAIDiscoveryActions::HandleValidateAIDataFlow(cons
 	}
 
 	TArray<TSharedPtr<FJsonValue>> IssueArr;
+	IssueArr.Reserve(Issues.Num());
 	for (const FString& I : Issues) IssueArr.Add(MakeShared<FJsonValueString>(I));
 	Result->SetArrayField(TEXT("issues"), IssueArr);
 	Result->SetNumberField(TEXT("issue_count"), Issues.Num());
 
 	TArray<TSharedPtr<FJsonValue>> FlowArr;
+	FlowArr.Reserve(DataFlowItems.Num());
 	for (const FString& F : DataFlowItems) FlowArr.Add(MakeShared<FJsonValueString>(F));
 	Result->SetArrayField(TEXT("data_flow"), FlowArr);
 
