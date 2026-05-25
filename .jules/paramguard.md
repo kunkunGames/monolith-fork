@@ -60,3 +60,8 @@
 Malformed input pattern: Using unchecked `Get*Field` without ensuring type safety inside nested JSON objects (e.g. `weight`, `delay`, `enabled`).
 Learning: Existing code relies on `HasField` + `Get*Field` even in optional fields which silently skips validation and either crashes or corrupts assets if malformed type is passed.
 Prevention: Replace `HasField` + `Get*Field` with `HasField` + `TryGet*Field`. If the value is present but fails type validation, it MUST return `FMonolithActionResult::Error`.
+
+2026-05-14 - Replace crashes with clear error handling when optional fields exist but have wrong type
+Malformed input pattern: An optional field (`uv_tiling`, `background_color`) is present with the wrong JSON type in `HandleCaptureScenePreview`.
+Learning: Using `HasField` followed by `GetNumberField` or `GetArrayField` will crash or assert if the type doesn't match the client input. Validation schema wasn't enough.
+Prevention: If an optional field is present, use `TryGetNumberField` or `TryGetArrayField`. If the `TryGet` fails, return an invalid-param error instead of falling back to default or crashing.

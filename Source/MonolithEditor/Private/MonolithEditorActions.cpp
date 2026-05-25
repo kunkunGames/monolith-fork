@@ -1878,21 +1878,37 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 		float UVTiling = 1.0f;
 		if (Params->HasField(TEXT("uv_tiling")))
 		{
-			UVTiling = (float)Params->GetNumberField(TEXT("uv_tiling"));
-			if (UVTiling <= 0.0f) UVTiling = 1.0f;
+			double TempUVTiling = 0.0;
+			if (Params->TryGetNumberField(TEXT("uv_tiling"), TempUVTiling))
+			{
+				UVTiling = (float)TempUVTiling;
+				if (UVTiling <= 0.0f) UVTiling = 1.0f;
+			}
+			else
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'uv_tiling' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 
 		FLinearColor BgColor(0.18f, 0.18f, 0.18f);
 		if (Params->HasField(TEXT("background_color")))
 		{
-			const TArray<TSharedPtr<FJsonValue>>& BgArr = Params->GetArrayField(TEXT("background_color"));
-			if (BgArr.Num() >= 3)
+			const TArray<TSharedPtr<FJsonValue>>* BgArr = nullptr;
+			if (Params->TryGetArrayField(TEXT("background_color"), BgArr) && BgArr)
 			{
-				BgColor = FLinearColor(
-					(float)BgArr[0]->AsNumber(),
-					(float)BgArr[1]->AsNumber(),
-					(float)BgArr[2]->AsNumber(),
-					BgArr.Num() >= 4 ? (float)BgArr[3]->AsNumber() : 1.0f);
+				if (BgArr->Num() >= 3)
+				{
+					double R = 0.0, G = 0.0, B = 0.0, A = 1.0;
+					if (!(*BgArr)[0]->TryGetNumber(R) || !(*BgArr)[1]->TryGetNumber(G) || !(*BgArr)[2]->TryGetNumber(B) || (BgArr->Num() >= 4 && !(*BgArr)[3]->TryGetNumber(A)))
+					{
+						return FMonolithActionResult::Error(TEXT("Invalid param: 'background_color' elements must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+					}
+					BgColor = FLinearColor((float)R, (float)G, (float)B, (float)A);
+				}
+			}
+			else
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'background_color' must be an array"), FMonolithJsonUtils::ErrInvalidParams);
 			}
 		}
 
