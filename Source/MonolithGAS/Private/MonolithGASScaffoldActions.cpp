@@ -777,9 +777,12 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleValidateGASSetup(const 
 	for (const auto& CheckVal : Checks)
 	{
 		const TSharedPtr<FJsonObject>& Check = CheckVal->AsObject();
-		if (!Check->GetBoolField(TEXT("passed")))
+		bool bPassed = false;
+		Check->TryGetBoolField(TEXT("passed"), bPassed);
+		if (!bPassed)
 		{
-			FString CheckName = Check->GetStringField(TEXT("check"));
+			FString CheckName;
+			Check->TryGetStringField(TEXT("check"), CheckName);
 			FString Rec;
 			if (CheckName == TEXT("Build.cs modules"))
 				Rec = TEXT("Run bootstrap_gas_foundation to add GameplayAbilities/Tags/Tasks modules");

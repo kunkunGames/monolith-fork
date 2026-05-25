@@ -1485,8 +1485,20 @@ namespace
 		const TSharedPtr<FJsonObject>* PosObj;
 		if (Params->TryGetObjectField(TEXT("position"), PosObj))
 		{
-			OutX = static_cast<int32>((*PosObj)->GetNumberField(TEXT("x")));
-			OutY = static_cast<int32>((*PosObj)->GetNumberField(TEXT("y")));
+			double TempX = static_cast<double>(DefaultX);
+			double TempY = static_cast<double>(DefaultY);
+			const bool bHasX = (*PosObj)->TryGetNumberField(TEXT("x"), TempX);
+			const bool bHasY = (*PosObj)->TryGetNumberField(TEXT("y"), TempY);
+			if (!bHasX)
+			{
+				TempX = static_cast<double>(DefaultX);
+			}
+			if (!bHasY)
+			{
+				TempY = static_cast<double>(DefaultY);
+			}
+			OutX = static_cast<int32>(TempX);
+			OutY = static_cast<int32>(TempY);
 		}
 	}
 

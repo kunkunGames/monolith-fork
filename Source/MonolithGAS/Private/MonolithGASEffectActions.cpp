@@ -1754,7 +1754,12 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetGEComponent(const TSha
 	int32 TargetIndex = 0;
 	if (Params->HasField(TEXT("index")))
 	{
-		TargetIndex = static_cast<int32>(Params->GetNumberField(TEXT("index")));
+		double TempVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("index"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("index must be a number"));
+		}
+		TargetIndex = static_cast<int32>(TempVal);
 	}
 
 	int32 FoundCount = 0;
@@ -2056,12 +2061,21 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetPeriod(const TSharedPt
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: period"));
 	}
 
-	float PeriodValue = Params->GetNumberField(TEXT("period"));
+	double PeriodValue = 0.0;
+	if (!Params->TryGetNumberField(TEXT("period"), PeriodValue))
+	{
+		return FMonolithActionResult::Error(TEXT("period must be a number"));
+	}
 	GE->Period = FScalableFloat(PeriodValue);
 
 	if (Params->HasField(TEXT("execute_on_application")))
 	{
-		GE->bExecutePeriodicEffectOnApplication = Params->GetBoolField(TEXT("execute_on_application"));
+		bool bExecute = false;
+		if (!Params->TryGetBoolField(TEXT("execute_on_application"), bExecute))
+		{
+			return FMonolithActionResult::Error(TEXT("execute_on_application must be a boolean"));
+		}
+		GE->bExecutePeriodicEffectOnApplication = bExecute;
 	}
 
 	MarkModified(BP);
