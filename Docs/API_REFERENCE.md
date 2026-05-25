@@ -170,7 +170,7 @@ Get Monolith server health: version, uptime, port, registered action count, name
 
 ### `monolith.update`
 
-Check for or install Monolith updates from GitHub Releases. Auto-updater hits `https://api.github.com/repos/tumourlove/monolith/releases/latest`.
+Check for or install Monolith updates from GitHub Releases. Auto-updater hits `https://api.github.com/repos/tumourlove/monolith/releases/latest` and verifies integrity against the `Monolith-SHA256:`, `Monolith-macOS-SHA256:`, or `Monolith-Linux-SHA256:` markers in the release notes.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
