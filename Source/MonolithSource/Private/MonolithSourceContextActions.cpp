@@ -54,11 +54,20 @@ bool GetOptionalInt(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, i
 	return true;
 }
 
-bool GetOptionalBool(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, bool DefaultValue)
+bool GetOptionalBool(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, bool DefaultValue, bool& OutValue, FString& OutError)
 {
-	bool BoolValue = DefaultValue;
-	Params->TryGetBoolField(Field, BoolValue);
-	return BoolValue;
+	OutValue = DefaultValue;
+	if (!Params->HasField(Field))
+	{
+		return true;
+	}
+
+	if (!Params->TryGetBoolField(Field, OutValue))
+	{
+		OutError = FString::Printf(TEXT("'%s' parameter must be a boolean"), Field);
+		return false;
+	}
+	return true;
 }
 
 FString ShortenSourcePath(const FString& FullPath)
@@ -562,7 +571,13 @@ FMonolithActionResult FMonolithSourceContextActions::HandleGetIndexStatus(const 
 		ProjectObj->SetBoolField(TEXT("indexing"), ProjectIndex->IsIndexing());
 		ProjectObj->SetNumberField(TEXT("progress"), ProjectIndex->GetProgress());
 		ProjectObj->SetStringField(TEXT("status_message"), ProjectIndex->GetStatusMessage());
-		if (GetOptionalBool(Params, TEXT("include_stats"), false))
+		bool bIncludeStats = false;
+		FString Error;
+		if (!GetOptionalBool(Params, TEXT("include_stats"), false, bIncludeStats, Error))
+		{
+			return FMonolithActionResult::Error(Error, -32602);
+		}
+		if (bIncludeStats)
 		{
 			TSharedPtr<FJsonObject> Stats = ProjectIndex->GetStats();
 			if (Stats.IsValid())
@@ -592,7 +607,12 @@ FMonolithActionResult FMonolithSourceContextActions::HandleStartIndexing(const T
 	{
 		return FMonolithActionResult::Error(TEXT("'scope' must be a string"), -32602);
 	}
-	const bool bFull = GetOptionalBool(Params, TEXT("full"), false);
+	bool bFull = false;
+	FString Error;
+	if (!GetOptionalBool(Params, TEXT("full"), false, bFull, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 
 	if (Scope != TEXT("all") && Scope != TEXT("assets") && Scope != TEXT("source"))
 	{
@@ -685,8 +705,16 @@ FMonolithActionResult FMonolithSourceContextActions::HandleSearchItems(const TSh
 	}
 	Limit = FMath::Clamp(Limit, 1, MaxSearchLimit);
 
-	const bool bIncludeAssets = GetOptionalBool(Params, TEXT("include_assets"), true);
-	const bool bIncludeSource = GetOptionalBool(Params, TEXT("include_source"), true);
+	bool bIncludeAssets = true;
+	if (!GetOptionalBool(Params, TEXT("include_assets"), true, bIncludeAssets, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
+	bool bIncludeSource = true;
+	if (!GetOptionalBool(Params, TEXT("include_source"), true, bIncludeSource, Error))
+	{
+		return FMonolithActionResult::Error(Error, -32602);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Items;
 	TArray<TSharedPtr<FJsonValue>> Warnings;
@@ -844,16 +872,16 @@ FMonolithActionResult FMonolithSourceContextActions::HandleSearchAssetSymbols(co
 {
 	FString AssetPath;
 	FString SymbolSeed;
-	if (Params->HasField(TEXT("asset_path")) && !Params->HasTypedField<EJson::String>(TEXT("asset_path")))
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
 	{
 		return FMonolithActionResult::Error(TEXT("'asset_path' must be a string"), -32602);
 	}
-	if (Params->HasField(TEXT("symbol")) && !Params->HasTypedField<EJson::String>(TEXT("symbol")))
+	if (Params->HasField(TEXT("symbol")) && !Params->TryGetStringField(TEXT("symbol"), SymbolSeed))
 	{
 		return FMonolithActionResult::Error(TEXT("'symbol' must be a string"), -32602);
 	}
-	const bool bHasAsset = Params->TryGetStringField(TEXT("asset_path"), AssetPath) && !AssetPath.TrimStartAndEnd().IsEmpty();
-	const bool bHasSymbol = Params->TryGetStringField(TEXT("symbol"), SymbolSeed) && !SymbolSeed.TrimStartAndEnd().IsEmpty();
+	const bool bHasAsset = !AssetPath.TrimStartAndEnd().IsEmpty();
+	const bool bHasSymbol = !SymbolSeed.TrimStartAndEnd().IsEmpty();
 	if (bHasAsset == bHasSymbol)
 	{
 		return FMonolithActionResult::Error(TEXT("Provide exactly one of 'asset_path' or 'symbol'"), -32602);
