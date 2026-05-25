@@ -402,8 +402,8 @@ FMonolithActionResult FMonolithNiagaraLayoutActions::HandleAutoLayout(const TSha
 	for (const FGraphEntry& Entry : GraphsToFormat)
 	{
 		bool bSuccess = false;
-		FString Error;
-		auto GraphResult = FormatOneGraph(FormatterImpl, Entry.Graph, Entry.Label, bSuccess, Error);
+		FString GraphError;
+		auto GraphResult = FormatOneGraph(FormatterImpl, Entry.Graph, Entry.Label, bSuccess, GraphError);
 
 		if (bSuccess)
 		{
@@ -415,7 +415,7 @@ FMonolithActionResult FMonolithNiagaraLayoutActions::HandleAutoLayout(const TSha
 		else
 		{
 			++FailCount;
-			LastError = Error;
+			LastError = GraphError;
 		}
 
 		GraphResults.Add(MakeShared<FJsonValueObject>(GraphResult));

@@ -14,7 +14,7 @@
 
 namespace
 {
-	constexpr TCHAR MovieRenderNamespace[] = TEXT("movie_render");
+	constexpr TCHAR MovieRenderSecurityTestNamespace[] = TEXT("movie_render");
 
 	class FScopedMRQSaveQueueFixture
 	{
@@ -70,12 +70,12 @@ namespace
 	FMonolithActionResult ExecuteMRQSecurityAction(const FString& Action, const TSharedPtr<FJsonObject>& Params)
 	{
 		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
-		if (!Registry.HasAction(MovieRenderNamespace, Action))
+		if (!Registry.HasAction(MovieRenderSecurityTestNamespace, Action))
 		{
 			FMonolithMovieRenderQueueActions::RegisterActions(Registry);
 		}
 
-		return Registry.ExecuteAction(MovieRenderNamespace, Action, Params);
+		return Registry.ExecuteAction(MovieRenderSecurityTestNamespace, Action, Params);
 	}
 }
 
@@ -85,9 +85,9 @@ namespace
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithMRQSecuritySaveQueuePathTest, "Monolith.Security.LevelSequence.MovieRenderQueue.SaveQueue.RejectsMalformedPath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithMRQSecuritySaveQueuePathTest::RunTest(const FString& Parameters)
 {
-	FMonolithScopedTestNamespace ScopedNamespace(MovieRenderNamespace);
+	FMonolithScopedTestNamespace ScopedNamespace(MovieRenderSecurityTestNamespace);
 	FMonolithMovieRenderQueueActions::RegisterActions(FMonolithToolRegistry::Get());
-	TestTrue(TEXT("movie_render.save_queue is registered"), FMonolithToolRegistry::Get().HasAction(MovieRenderNamespace, TEXT("save_queue")));
+	TestTrue(TEXT("movie_render.save_queue is registered"), FMonolithToolRegistry::Get().HasAction(MovieRenderSecurityTestNamespace, TEXT("save_queue")));
 
 	FScopedMRQSaveQueueFixture QueueFixture;
 	FString SetupError;
