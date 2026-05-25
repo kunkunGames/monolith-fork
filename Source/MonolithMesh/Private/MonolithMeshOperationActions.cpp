@@ -524,11 +524,20 @@ FMonolithActionResult FMonolithMeshOperationActions::MeshSimplify(const TSharedP
 
 	if (Params->HasField(TEXT("target_triangles")))
 	{
-		TargetTris = static_cast<int32>(Params->GetNumberField(TEXT("target_triangles")));
+		double TempTargetTris;
+		if (!Params->TryGetNumberField(TEXT("target_triangles"), TempTargetTris))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'target_triangles' must be a number"));
+		}
+		TargetTris = static_cast<int32>(TempTargetTris);
 	}
 	else if (Params->HasField(TEXT("target_percentage")))
 	{
-		double Pct = Params->GetNumberField(TEXT("target_percentage"));
+		double Pct;
+		if (!Params->TryGetNumberField(TEXT("target_percentage"), Pct))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'target_percentage' must be a number"));
+		}
 		Pct = FMath::Clamp(Pct, 0.0, 1.0);
 		TargetTris = FMath::Max(4, FMath::RoundToInt32(OriginalTris * Pct));
 	}
@@ -539,7 +548,12 @@ FMonolithActionResult FMonolithMeshOperationActions::MeshSimplify(const TSharedP
 
 	if (Params->HasField(TEXT("max_deviation")))
 	{
-		float Tolerance = static_cast<float>(Params->GetNumberField(TEXT("max_deviation")));
+		double TempTolerance;
+		if (!Params->TryGetNumberField(TEXT("max_deviation"), TempTolerance))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'max_deviation' must be a number"));
+		}
+		float Tolerance = static_cast<float>(TempTolerance);
 		FGeometryScriptSimplifyMeshOptions Opts;
 		UGeometryScriptLibrary_MeshSimplifyFunctions::ApplySimplifyToTolerance(Mesh, Tolerance, Opts);
 	}

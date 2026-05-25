@@ -12,3 +12,7 @@ MeshCartographer PRs improve MonolithMesh parameter safety and spatial/geometry 
 ## Review Gate
 - Compile the module for any broad mesh param parsing PR.
 - Manually inspect each edited `if`/`else` region around geometry mutations.
+2026-05-24 - Parameter Type Safety in Mesh Operation Actions
+Malformed input pattern: Mesh simplify actions used HasField with GetNumberField directly, crashing or returning 0.0 for string types.
+Learning: Checking HasField alone does not validate the type of an optional parameter before geometric mutation.
+Prevention: Replace unguarded GetNumberField with TryGetNumberField to explicitly reject wrong-type JSON fields with FMonolithActionResult::Error.
