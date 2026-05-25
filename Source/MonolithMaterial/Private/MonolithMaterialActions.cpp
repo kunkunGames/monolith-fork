@@ -4253,6 +4253,7 @@ FMonolithActionResult FMonolithMaterialActions::GetExpressionConnections(const T
 
 	// Build outputs array
 	TArray<TSharedPtr<FJsonValue>> OutputsArray;
+	OutputsArray.Reserve(TargetExpr->Outputs.Num());
 	for (int32 i = 0; i < TargetExpr->Outputs.Num(); ++i)
 	{
 		auto OutputJson = MakeShared<FJsonObject>();
@@ -5363,6 +5364,7 @@ FMonolithActionResult FMonolithMaterialActions::ReplaceExpression(const TSharedP
 
 	// Build output name map from old expression
 	TMap<int32, FString> OldOutputNames;
+	OldOutputNames.Reserve(OldExpr->Outputs.Num());
 	for (int32 i = 0; i < OldExpr->Outputs.Num(); ++i)
 	{
 		OldOutputNames.Add(i, OldExpr->Outputs[i].OutputName.ToString());
@@ -5690,6 +5692,7 @@ FMonolithActionResult FMonolithMaterialActions::GetExpressionPinInfo(const TShar
 
 	// Read outputs
 	TArray<TSharedPtr<FJsonValue>> OutputsArray;
+	OutputsArray.Reserve(TempExpr->Outputs.Num());
 	for (int32 i = 0; i < TempExpr->Outputs.Num(); ++i)
 	{
 		auto OutputJson = MakeShared<FJsonObject>();
