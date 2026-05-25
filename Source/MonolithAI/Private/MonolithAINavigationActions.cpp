@@ -359,6 +359,7 @@ FMonolithActionResult FMonolithAINavigationActions::HandleGetNavSystemConfig(con
 	// Supported agents
 	const TArray<FNavDataConfig>& SupportedAgents = NavSys->GetSupportedAgents();
 	TArray<TSharedPtr<FJsonValue>> Agents;
+	Agents.Reserve(SupportedAgents.Num());
 	for (int32 i = 0; i < SupportedAgents.Num(); ++i)
 	{
 		const FNavDataConfig& Config = SupportedAgents[i];
@@ -374,6 +375,7 @@ FMonolithActionResult FMonolithAINavigationActions::HandleGetNavSystemConfig(con
 
 	// Nav data instances
 	TArray<TSharedPtr<FJsonValue>> NavDatas;
+	NavDatas.Reserve(NavSys->NavDataSet.Num());
 	for (ANavigationData* NavData : NavSys->NavDataSet)
 	{
 		if (!NavData) continue;
@@ -1174,6 +1176,7 @@ FMonolithActionResult FMonolithAINavigationActions::HandleListNavLinks(const TSh
 
 		// Point links info
 		TArray<TSharedPtr<FJsonValue>> PointLinksArr;
+		PointLinksArr.Reserve(Link->PointLinks.Num());
 		for (const FNavigationLink& PL : Link->PointLinks)
 		{
 			auto PLObj = MakeShared<FJsonObject>();
@@ -1241,6 +1244,7 @@ FMonolithActionResult FMonolithAINavigationActions::HandleFindPath(const TShared
 		const TArray<FNavPathPoint>& PathPoints = PathResult.Path->GetPathPoints();
 
 		TArray<TSharedPtr<FJsonValue>> Points;
+		Points.Reserve(PathPoints.Num());
 		double TotalDistance = 0.0;
 
 		for (int32 i = 0; i < PathPoints.Num(); ++i)
