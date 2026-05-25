@@ -354,6 +354,7 @@ static TSharedPtr<FJsonObject> SerializePin(URigVMPin* Pin)
 
 	// Connected pins
 	TArray<TSharedPtr<FJsonValue>> ConnArr;
+	ConnArr.Reserve(Pin->GetLinks().Num());
 	for (URigVMLink* Link : Pin->GetLinks())
 	{
 		URigVMPin* OtherPin = (Link->GetSourcePin() == Pin) ? Link->GetTargetPin() : Link->GetSourcePin();
@@ -372,6 +373,7 @@ static TSharedPtr<FJsonObject> SerializePin(URigVMPin* Pin)
 	if (SubPins.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> SubArr;
+		SubArr.Reserve(SubPins.Num());
 		for (URigVMPin* SubPin : SubPins)
 		{
 			SubArr.Add(MakeShared<FJsonValueObject>(SerializePin(SubPin)));
@@ -405,6 +407,7 @@ FMonolithActionResult FMonolithControlRigWriteActions::HandleGetControlRigGraph(
 
 	// Serialize nodes
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
+	NodesArr.Reserve(Graph->GetNodes().Num());
 	for (URigVMNode* Node : Graph->GetNodes())
 	{
 		if (!Node) continue;
@@ -434,6 +437,7 @@ FMonolithActionResult FMonolithControlRigWriteActions::HandleGetControlRigGraph(
 
 		// Pins (top-level only — sub-pins are nested inside)
 		TArray<TSharedPtr<FJsonValue>> PinsArr;
+		PinsArr.Reserve(Node->GetPins().Num());
 		for (URigVMPin* Pin : Node->GetPins())
 		{
 			if (!Pin) continue;
@@ -446,6 +450,7 @@ FMonolithActionResult FMonolithControlRigWriteActions::HandleGetControlRigGraph(
 
 	// Serialize links
 	TArray<TSharedPtr<FJsonValue>> LinksArr;
+	LinksArr.Reserve(Graph->GetLinks().Num());
 	for (URigVMLink* Link : Graph->GetLinks())
 	{
 		if (!Link) continue;
@@ -457,8 +462,9 @@ FMonolithActionResult FMonolithControlRigWriteActions::HandleGetControlRigGraph(
 	}
 
 	// List available sub-graphs
-	TArray<TSharedPtr<FJsonValue>> SubGraphArr;
 	TArray<URigVMGraph*> ContainedGraphs = Graph->GetContainedGraphs();
+	TArray<TSharedPtr<FJsonValue>> SubGraphArr;
+	SubGraphArr.Reserve(ContainedGraphs.Num());
 	for (URigVMGraph* SubG : ContainedGraphs)
 	{
 		if (SubG)
@@ -603,6 +609,7 @@ FMonolithActionResult FMonolithControlRigWriteActions::HandleAddControlRigNode(c
 
 	// Return pin names for reference
 	TArray<TSharedPtr<FJsonValue>> PinNames;
+	PinNames.Reserve(NewNode->GetPins().Num());
 	for (URigVMPin* Pin : NewNode->GetPins())
 	{
 		if (!Pin) continue;
