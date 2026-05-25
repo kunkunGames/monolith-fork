@@ -378,7 +378,7 @@ def parse_agent_tools_frontmatter(text: str) -> set[str] | None:
             if stripped.startswith("- "):
                 tools.add(clean_tool_value(stripped[2:]))
                 continue
-            if line and not line[0].isspace():
+            if line and not line[0].isspace() and not stripped.startswith("#"):
                 in_tools_list = False
         if stripped.startswith("tools:"):
             found_tools = True

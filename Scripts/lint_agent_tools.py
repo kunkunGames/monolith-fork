@@ -54,7 +54,7 @@ def parse_tools_line(text: str) -> tuple[set[str], int] | None:
             if stripped.startswith("- "):
                 tools.add(clean_tool_value(stripped[2:]))
                 continue
-            if line and not line[0].isspace():
+            if line and not line[0].isspace() and not stripped.startswith("#"):
                 in_tools_list = False
 
         if stripped.startswith("tools:"):
