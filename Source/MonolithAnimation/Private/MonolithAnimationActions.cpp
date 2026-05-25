@@ -1647,6 +1647,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetSkeletonInfo(const TSh
 	Root->SetNumberField(TEXT("bone_count"), BoneCount);
 
 	TArray<TSharedPtr<FJsonValue>> BonesArr;
+	BonesArr.Reserve(Skeleton->GetReferenceSkeleton().GetNum());
 	for (int32 i = 0; i < BoneCount; ++i)
 	{
 		TSharedPtr<FJsonObject> BoneObj = MakeShared<FJsonObject>();
@@ -1661,6 +1662,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetSkeletonInfo(const TSh
 
 	const TArray<FVirtualBone>& VBones = Skeleton->GetVirtualBones();
 	TArray<TSharedPtr<FJsonValue>> VBonesArr;
+	VBonesArr.Reserve(Skeleton->GetVirtualBones().Num());
 	for (const FVirtualBone& VB : VBones)
 	{
 		TSharedPtr<FJsonObject> VBObj = MakeShared<FJsonObject>();
@@ -1690,6 +1692,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetSkeletalMeshInfo(const
 	// Morph targets
 	TArray<TSharedPtr<FJsonValue>> MorphArr;
 	TArray<FString> MorphNames = Mesh->K2_GetAllMorphTargetNames();
+	MorphArr.Reserve(MorphNames.Num());
 	for (const FString& MorphName : MorphNames)
 	{
 		MorphArr.Add(MakeShared<FJsonValueString>(MorphName));
@@ -1699,6 +1702,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetSkeletalMeshInfo(const
 
 	// Sockets
 	TArray<TSharedPtr<FJsonValue>> SocketArr;
+	SocketArr.Reserve(Mesh->NumSockets());
 	for (int32 i = 0; i < Mesh->NumSockets(); ++i)
 	{
 		USkeletalMeshSocket* Sock = Mesh->GetSocketByIndex(i);
@@ -2731,6 +2735,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetBoneRefPose(const TSha
 	Root->SetNumberField(TEXT("bone_count"), NumBones);
 
 	TArray<TSharedPtr<FJsonValue>> BonesArr;
+	BonesArr.Reserve(BoneIndices.Num());
 	for (int32 BoneIdx : BoneIndices)
 	{
 		const FName BoneName = RefSkel->GetBoneName(BoneIdx);
