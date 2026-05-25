@@ -617,9 +617,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
                                 return FMonolithActionResult::Error(TEXT("keyframe.time must be a number"), -32602);
                             }
                             double Value = Defaults[SubIdx];
-                            if (KfObj->HasField(FieldNames[SubIdx]))
+                            const TSharedPtr<FJsonValue> ValField = KfObj->TryGetField(FieldNames[SubIdx]);
+                            if (ValField.IsValid())
                             {
-                                if (!KfObj->TryGetNumberField(FieldNames[SubIdx], Value))
+                                if (!ValField->TryGetNumber(Value))
                                 {
                                     return FMonolithActionResult::Error(
                                         FString::Printf(TEXT("keyframe.%s must be a number"), *FieldNames[SubIdx]), -32602);
@@ -691,9 +692,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
                                 return FMonolithActionResult::Error(TEXT("keyframe.time must be a number"), -32602);
                             }
                             double Value = Defaults[SubIdx];
-                            if (KfObj->HasField(FieldNames[SubIdx]))
+                            const TSharedPtr<FJsonValue> ValField = KfObj->TryGetField(FieldNames[SubIdx]);
+                            if (ValField.IsValid())
                             {
-                                if (!KfObj->TryGetNumberField(FieldNames[SubIdx], Value))
+                                if (!ValField->TryGetNumber(Value))
                                 {
                                     return FMonolithActionResult::Error(
                                         FString::Printf(TEXT("keyframe.%s must be a number"), *FieldNames[SubIdx]), -32602);
@@ -768,9 +770,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleAddAnimationKeyframe(co
         return ParamError;
     }
     FString Component;
-    if (Params->HasField(TEXT("component")))
+    const TSharedPtr<FJsonValue> CompField = Params->TryGetField(TEXT("component"));
+    if (CompField.IsValid())
     {
-        if (!Params->TryGetStringField(TEXT("component"), Component))
+        if (!CompField->TryGetString(Component))
         {
             return FMonolithActionResult::Error(TEXT("component must be a string"), -32602);
         }

@@ -99,10 +99,14 @@ FMonolithActionResult FMonolithUISlotActions::HandleSetSlotProperty(const TShare
         if (Params->TryGetObjectField(TEXT("anchors"), AnchorObj))
         {
             double MinX = 0.0, MinY = 0.0, MaxX = 0.0, MaxY = 0.0;
-            if ((*AnchorObj)->HasField(TEXT("min_x")) && !(*AnchorObj)->TryGetNumberField(TEXT("min_x"), MinX)) return FMonolithActionResult::Error(TEXT("Invalid param: anchors.min_x must be a number"));
-            if ((*AnchorObj)->HasField(TEXT("min_y")) && !(*AnchorObj)->TryGetNumberField(TEXT("min_y"), MinY)) return FMonolithActionResult::Error(TEXT("Invalid param: anchors.min_y must be a number"));
-            if ((*AnchorObj)->HasField(TEXT("max_x")) && !(*AnchorObj)->TryGetNumberField(TEXT("max_x"), MaxX)) return FMonolithActionResult::Error(TEXT("Invalid param: anchors.max_x must be a number"));
-            if ((*AnchorObj)->HasField(TEXT("max_y")) && !(*AnchorObj)->TryGetNumberField(TEXT("max_y"), MaxY)) return FMonolithActionResult::Error(TEXT("Invalid param: anchors.max_y must be a number"));
+            const TSharedPtr<FJsonValue> MinXField = (*AnchorObj)->TryGetField(TEXT("min_x"));
+            if (MinXField.IsValid() && !MinXField->TryGetNumber(MinX)) return FMonolithActionResult::Error(TEXT("Invalid param: anchors.min_x must be a number"));
+            const TSharedPtr<FJsonValue> MinYField = (*AnchorObj)->TryGetField(TEXT("min_y"));
+            if (MinYField.IsValid() && !MinYField->TryGetNumber(MinY)) return FMonolithActionResult::Error(TEXT("Invalid param: anchors.min_y must be a number"));
+            const TSharedPtr<FJsonValue> MaxXField = (*AnchorObj)->TryGetField(TEXT("max_x"));
+            if (MaxXField.IsValid() && !MaxXField->TryGetNumber(MaxX)) return FMonolithActionResult::Error(TEXT("Invalid param: anchors.max_x must be a number"));
+            const TSharedPtr<FJsonValue> MaxYField = (*AnchorObj)->TryGetField(TEXT("max_y"));
+            if (MaxYField.IsValid() && !MaxYField->TryGetNumber(MaxY)) return FMonolithActionResult::Error(TEXT("Invalid param: anchors.max_y must be a number"));
 
             FAnchors A(MinX, MinY, MaxX, MaxY);
             CS->SetAnchors(A);
