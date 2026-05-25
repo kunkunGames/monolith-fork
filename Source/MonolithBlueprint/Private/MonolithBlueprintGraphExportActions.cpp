@@ -156,6 +156,7 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleExportGraph(co
 
 	// Serialize all nodes with extended info
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
+	NodesArr.Reserve(Graph->Nodes.Num());
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
 		if (!Node) continue;
@@ -167,6 +168,7 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleExportGraph(co
 	// Format: {from_node, from_pin, to_node, to_pin}
 	// Only output each connection once (from the output side)
 	TArray<TSharedPtr<FJsonValue>> ConnectionsArr;
+	ConnectionsArr.Reserve(Graph->Nodes.Num() * 2);
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
 		if (!Node) continue;
