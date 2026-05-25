@@ -25,6 +25,7 @@
       "GeometryFramework",
       "GeometryScripting",
       "GeometryScriptingCore",
+      "GameFeatures",
       "LogicDriver",
       "MassEntity",
       "MassGameplay",
