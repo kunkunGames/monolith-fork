@@ -17,6 +17,7 @@
 #include "ScopedTransaction.h"
 #include "Editor.h"
 #include "Engine/World.h"
+#endif // WITH_MASSENTITY
 
 #if WITH_ZONEGRAPH
 #include "ZoneGraphSubsystem.h"
@@ -25,6 +26,8 @@
 #include "ZoneGraphData.h"
 #include "EngineUtils.h"
 #endif // WITH_ZONEGRAPH
+
+#if WITH_MASSENTITY
 
 // ============================================================
 //  Helpers
@@ -155,6 +158,8 @@ void FMonolithAIAdvancedActions::RegisterActions(FMonolithToolRegistry& Registry
 		FMonolithActionHandler::CreateStatic(&HandleGetMassEntityStats),
 		FParamSchemaBuilder().Build());
 
+#endif // WITH_MASSENTITY
+
 #if WITH_ZONEGRAPH
 	// 227. list_zone_graphs
 	Registry.RegisterAction(TEXT("ai"), TEXT("list_zone_graphs"),
@@ -183,8 +188,6 @@ void FMonolithAIAdvancedActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Optional(TEXT("data_handle"), TEXT("number"), TEXT("ZoneGraph dataset handle index for multi-data worlds"))
 			.Build());
 #endif // WITH_ZONEGRAPH
-
-#endif // WITH_MASSENTITY
 }
 
 // ============================================================
@@ -648,6 +651,8 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleGetMassEntityStats(const
 	return FMonolithActionResult::Success(Result);
 }
 
+#endif // WITH_MASSENTITY
+
 // ============================================================
 //  ZoneGraph actions (227-229)
 // ============================================================
@@ -866,5 +871,3 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleGetZoneLaneInfo(const TS
 }
 
 #endif // WITH_ZONEGRAPH
-
-#endif // WITH_MASSENTITY

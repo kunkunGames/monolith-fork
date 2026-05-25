@@ -62,3 +62,9 @@ Avoid: Using short or generic wildcards like `Gameplaya*` when the plugin name i
 **Learning:** For optional Engine plugins that are conditionally queried and linked in a module's Build.cs, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file can cause the Engine to refuse to load the plugin entirely or fail dependency resolution when the optional dependency is enabled.
 **Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have a corresponding `"Optional": true` entry defined in `Monolith.uplugin`.
 **Avoid:** Linking optional plugins in `Build.cs` without making them `"Optional": true` in `.uplugin`.
+
+## 2026-05-18 - [Fix nested compile guards in optional features]
+**Build pattern:** Optional features (e.g., `WITH_ZONEGRAPH`) nested inside the compile guards of other optional features (e.g., `WITH_MASSENTITY`).
+**Learning:** This caused `ZoneGraph` actions to be completely unavailable unless `MassEntity` was also enabled, even though the `.Build.cs` probes for them independently and they are independent engine features.
+**Prevention:** Ensure that independent compile guards like `#if WITH_ZONEGRAPH` are kept at the top level of the `#if` structure in header and implementation files. They should not be nested under `#if WITH_MASSENTITY` unless there is an explicit cross-module dependency.
+**Avoid:** Nesting `#if WITH_...` optional guards for independent features.

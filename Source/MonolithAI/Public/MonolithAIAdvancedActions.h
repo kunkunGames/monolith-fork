@@ -19,11 +19,12 @@ private:
 	static FMonolithActionResult HandleValidateMassEntityConfig(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetMassEntityStats(const TSharedPtr<FJsonObject>& Params);
 
+#endif // WITH_MASSENTITY
+
 #if WITH_ZONEGRAPH
+private:
 	static FMonolithActionResult HandleListZoneGraphs(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleQueryZoneLanes(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetZoneLaneInfo(const TSharedPtr<FJsonObject>& Params);
 #endif // WITH_ZONEGRAPH
-
-#endif // WITH_MASSENTITY
 };
