@@ -1311,6 +1311,10 @@ Grant a `UGameplayAbility` to a pawn's `UAbilitySystemComponent` directly withou
 
 Read-only GAS runtime preflight. It returns `pie_active`, ASC counts, aggregate ability/effect/tag/attribute-set totals, and optional actor samples. Unlike actor-specific PIE tools, it succeeds outside PIE with `has_runtime_data=false` so automation clients can decide whether to start PIE before calling deeper snapshot actions.
 
+### GAS scaffold and validator module resolution
+
+`gas.validate_gas_setup` and `gas.bootstrap_gas_foundation` resolve the project runtime code module by scanning `Source/*/*.Build.cs` and preferring runtime modules over editor modules. The validator response includes `module_name` and `build_cs_path`; GO resolves to `Source/GoGame/GoGame.Build.cs`, not `Source/GO/GO.Build.cs`. GAS scaffold, target, input, ability mutation, and custom ability task actions reject wrong-type string/number/bool JSON fields before mutating assets or source files.
+
 ### `gas.validate_cue_coverage`
 
 Read-only GameplayCue audit. Existing output reports GameplayEffect cue tags with no handler and GameplayCue Notify assets that no GameplayEffect references. Optional param `include_registered_tags_without_notifies=true` also walks the registered `GameplayCue` tag subtree and returns `registered_cue_tag_count`, `registered_notify_handler_scope`, `registered_tags_without_notifies_count`, and sorted `registered_tags_without_notifies` for tags that would execute with no visible Notify. With `path_filter`, the registered-tag comparison still uses global project Notify handlers to avoid false positives for handlers outside the filtered path.

@@ -9,6 +9,7 @@
 #include "AttributeSet.h"
 #include "GameplayEffect.h"
 #include "EngineUtils.h"
+#include "HAL/FileManager.h"
 #include "UObject/Package.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 
@@ -199,11 +200,99 @@ TArray<FString> ParseStringArray(const TSharedPtr<FJsonObject>& Params, const FS
 
 bool RequireStringParam(const TSharedPtr<FJsonObject>& Params, const FString& ParamName, FString& OutValue, FMonolithActionResult& OutError)
 {
-	OutValue = Params->GetStringField(ParamName);
+	OutValue.Reset();
+	if (!Params.IsValid() || !Params->HasField(ParamName))
+	{
+		OutError = FMonolithActionResult::Error(
+			FString::Printf(TEXT("Missing required parameter: %s"), *ParamName));
+		return false;
+	}
+
+	TSharedPtr<FJsonValue> Value = Params->TryGetField(ParamName);
+	if (!Value.IsValid() || Value->Type == EJson::Null)
+	{
+		OutError = FMonolithActionResult::Error(
+			FString::Printf(TEXT("Missing required parameter: %s"), *ParamName));
+		return false;
+	}
+
+	if (Value->Type != EJson::String || !Value->TryGetString(OutValue))
+	{
+		OutError = FMonolithActionResult::Error(
+			FString::Printf(TEXT("Invalid parameter: %s must be a string"), *ParamName));
+		return false;
+	}
+
+	OutValue.TrimStartAndEndInline();
 	if (OutValue.IsEmpty())
 	{
 		OutError = FMonolithActionResult::Error(
 			FString::Printf(TEXT("Missing required parameter: %s"), *ParamName));
+		return false;
+	}
+	return true;
+}
+
+static FString GetParamDisplayName(const FString& ParamName, const FString& DisplayName)
+{
+	return DisplayName.IsEmpty() ? ParamName : DisplayName;
+}
+
+bool TryReadOptionalStringParam(const TSharedPtr<FJsonObject>& Params, const FString& ParamName, FString& OutValue,
+	FString& OutError, const FString& DisplayName, bool bAllowEmpty)
+{
+	if (!Params.IsValid() || !Params->HasField(ParamName))
+	{
+		return true;
+	}
+
+	TSharedPtr<FJsonValue> Value = Params->TryGetField(ParamName);
+	if (!Value.IsValid() || Value->Type != EJson::String || !Value->TryGetString(OutValue))
+	{
+		OutError = FString::Printf(TEXT("Invalid parameter: %s must be a string"), *GetParamDisplayName(ParamName, DisplayName));
+		return false;
+	}
+	if (!bAllowEmpty)
+	{
+		OutValue.TrimStartAndEndInline();
+		if (OutValue.IsEmpty())
+		{
+			OutError = FString::Printf(TEXT("Invalid parameter: %s must be a non-empty string"), *GetParamDisplayName(ParamName, DisplayName));
+			return false;
+		}
+	}
+	return true;
+}
+
+bool TryReadOptionalNumberParam(const TSharedPtr<FJsonObject>& Params, const FString& ParamName, double& OutValue,
+	FString& OutError, const FString& DisplayName)
+{
+	if (!Params.IsValid() || !Params->HasField(ParamName))
+	{
+		return true;
+	}
+
+	TSharedPtr<FJsonValue> Value = Params->TryGetField(ParamName);
+	if (!Value.IsValid() || Value->Type != EJson::Number || !Value->TryGetNumber(OutValue))
+	{
+		OutError = FString::Printf(TEXT("Invalid parameter: %s must be a number"), *GetParamDisplayName(ParamName, DisplayName));
+		return false;
+	}
+	return true;
+}
+
+bool TryReadOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const FString& ParamName, bool& OutValue,
+	FString& OutError, const FString& DisplayName)
+{
+	if (!Params.IsValid() || !Params->HasField(ParamName))
+	{
+		return true;
+	}
+
+	TSharedPtr<FJsonValue> Value = Params->TryGetField(ParamName);
+	if (!Value.IsValid() || Value->Type != EJson::Boolean || !Value->TryGetBool(OutValue))
+	{
+		OutError = FString::Printf(TEXT("Invalid parameter: %s must be a boolean"), *GetParamDisplayName(ParamName, DisplayName));
 		return false;
 	}
 	return true;
@@ -321,8 +410,116 @@ bool LoadGameplayEffectBP(const FString& Path, UBlueprint*& OutBP, UGameplayEffe
 // Project Source Helper (A4)
 // ---------------------------------------------------------------------------
 
+static FString GetBuildCSModuleName(const FString& BuildCSPath)
+{
+	FString FileName = FPaths::GetCleanFilename(BuildCSPath);
+	if (!FileName.RemoveFromEnd(TEXT(".Build.cs"), ESearchCase::IgnoreCase))
+	{
+		return FString();
+	}
+	return FileName;
+}
+
+static int32 ScoreProjectCodeModule(const FString& ModuleName)
+{
+	const FString ProjectName = FApp::GetProjectName();
+	const bool bIsEditorModule = ModuleName.EndsWith(TEXT("Editor"), ESearchCase::IgnoreCase);
+
+	int32 Score = 0;
+	if (ModuleName.Equals(ProjectName, ESearchCase::IgnoreCase))
+	{
+		Score += 1000;
+	}
+	if (!bIsEditorModule)
+	{
+		Score += 500;
+	}
+	else
+	{
+		Score -= 200;
+	}
+	if (ModuleName.Contains(TEXT("Game"), ESearchCase::IgnoreCase))
+	{
+		Score += 50;
+	}
+	if (!ProjectName.IsEmpty() && ModuleName.Contains(ProjectName, ESearchCase::IgnoreCase))
+	{
+		Score += 20;
+	}
+	return Score;
+}
+
+bool ResolveProjectCodeModule(FProjectCodeModuleInfo& OutInfo, FString* OutError)
+{
+	OutInfo = FProjectCodeModuleInfo();
+
+	const FString SourceRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("Source"));
+	if (!FPaths::DirectoryExists(SourceRoot))
+	{
+		if (OutError)
+		{
+			*OutError = FString::Printf(TEXT("Project Source directory not found: %s"), *SourceRoot);
+		}
+		return false;
+	}
+
+	TArray<FString> BuildCSFiles;
+	IFileManager::Get().FindFilesRecursive(BuildCSFiles, *SourceRoot, TEXT("*.Build.cs"), true, false);
+	if (BuildCSFiles.Num() == 0)
+	{
+		if (OutError)
+		{
+			*OutError = FString::Printf(TEXT("No project Build.cs files found under: %s"), *SourceRoot);
+		}
+		return false;
+	}
+
+	BuildCSFiles.Sort();
+
+	int32 BestIndex = INDEX_NONE;
+	int32 BestScore = -MAX_int32;
+	for (int32 Index = 0; Index < BuildCSFiles.Num(); ++Index)
+	{
+		const FString ModuleName = GetBuildCSModuleName(BuildCSFiles[Index]);
+		if (ModuleName.IsEmpty())
+		{
+			continue;
+		}
+
+		const int32 Score = ScoreProjectCodeModule(ModuleName);
+		if (BestIndex == INDEX_NONE || Score > BestScore)
+		{
+			BestIndex = Index;
+			BestScore = Score;
+		}
+	}
+
+	if (BestIndex == INDEX_NONE)
+	{
+		if (OutError)
+		{
+			*OutError = FString::Printf(TEXT("No valid project module Build.cs files found under: %s"), *SourceRoot);
+		}
+		return false;
+	}
+
+	OutInfo.BuildCSPath = FPaths::ConvertRelativePathToFull(BuildCSFiles[BestIndex]);
+	FPaths::NormalizeFilename(OutInfo.BuildCSPath);
+	OutInfo.ModuleName = GetBuildCSModuleName(OutInfo.BuildCSPath);
+	OutInfo.ModuleDir = FPaths::GetPath(OutInfo.BuildCSPath);
+	FPaths::NormalizeFilename(OutInfo.ModuleDir);
+	OutInfo.ApiMacro = OutInfo.ModuleName.ToUpper() + TEXT("_API");
+	OutInfo.bIsRuntimeModule = !OutInfo.ModuleName.EndsWith(TEXT("Editor"), ESearchCase::IgnoreCase);
+	return true;
+}
+
 FString GetProjectSourceDir()
 {
+	FProjectCodeModuleInfo ModuleInfo;
+	if (ResolveProjectCodeModule(ModuleInfo))
+	{
+		return ModuleInfo.ModuleDir;
+	}
 	return FPaths::ProjectDir() / TEXT("Source") / FApp::GetProjectName();
 }
 

@@ -38,6 +38,19 @@ when absent. Present wrong-type values, including modifier `value`, stacking lim
 duration magnitudes, component `chance`, and copy flags, return invalid-param errors
 instead of being silently ignored.
 
+GAS scaffolding and validation resolve the project runtime module from
+`<ProjectDir>/Source/*/*.Build.cs` instead of assuming
+`Source/<ProjectName>/<ProjectName>.Build.cs`. Runtime modules are preferred over
+editor modules; in the GO project this selects `Source/GoGame/GoGame.Build.cs`.
+`gas::validate_gas_setup` reports the selected `module_name` and `build_cs_path`,
+and `gas::bootstrap_gas_foundation` writes generated source files, API macros, and
+`/Script/<ModuleName>.<ClassName>` config paths against that selected module.
+
+Scaffold, target, input, ability mutation, and custom ability task actions use
+strict JSON scalar guards for string/number/bool fields before mutating assets
+or source files. Wrong-type input is rejected before package creation, CDO
+edits, or file writes.
+
 ### GameplayCue Coverage Contract
 
 `gas::validate_cue_coverage` is the read-only audit entrypoint for GameplayCue wiring. It scans GameplayEffect Blueprint cue references and GameplayCue Notify Blueprint handlers, then returns `missing_handlers`, `orphaned_cues`, counts, and `fully_covered`.
@@ -67,6 +80,7 @@ This closes the UE 5.8 `GASToolsets::FindCueTagsWithoutNotifies` parity gap for 
 - **F8 (2026-04-26)** — `gas::grant_ability_to_pawn` added (+1).
 - **F9 logging (2026-04-26)** — Observability adds + `LogMonolithGASUIBinding` / `LogMonolithGASUIBindingExt` retired into parent `LogMonolithGAS` category.
 - **Runtime summary (2026-05-19)** — `gas::get_runtime_summary` added (+1). The action is read-only and PIE-safe: outside PIE it returns `pie_active=false` with zero counts instead of an error, and during PIE it summarizes matching ASCs plus optional actor samples.
+- **Validator/ParamGuard hardening (2026-05-26)** — `validate_gas_setup` and `bootstrap_gas_foundation` use resolved project code modules, and GAS ParamGuard tests cover malformed scaffold/target/input/custom-task scalar inputs before mutation. The local CL442 recheck also routed touched ability mutation action params through the same strict scalar readers.
 
 See [SPEC_CORE.md §11 Recent Fixes](../SPEC_CORE.md#recent-fixes-phase-j--shipped-in-0147) for the long-form descriptions.
 

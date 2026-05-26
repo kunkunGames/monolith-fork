@@ -569,7 +569,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleCreateAbility(const TSha
 	}
 
 	// Resolve parent class
-	FString ParentClassName = Params->GetStringField(TEXT("parent_class"));
+	FString ParamError;
+	FString ParentClassName = TEXT("GameplayAbility");
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("parent_class"), ParentClassName, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
 	if (ParentClassName.IsEmpty())
 	{
 		ParentClassName = TEXT("GameplayAbility");
@@ -671,7 +676,11 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleCreateAbility(const TSha
 	}
 
 	// Set display name if provided
-	FString DisplayName = Params->GetStringField(TEXT("display_name"));
+	FString DisplayName;
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("display_name"), DisplayName, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
 	if (!DisplayName.IsEmpty())
 	{
 		NewBP->BlueprintDisplayName = DisplayName;
@@ -797,9 +806,22 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleGetAbilityInfo(const TSh
 
 FMonolithActionResult FMonolithGASAbilityActions::HandleListAbilities(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
-	FString TagFilter = Params->GetStringField(TEXT("tag_filter"));
-	FString ParentClassFilter = Params->GetStringField(TEXT("parent_class_filter"));
+	FString ParamError;
+	FString PathFilter;
+	FString TagFilter;
+	FString ParentClassFilter;
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("path_filter"), PathFilter, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("tag_filter"), TagFilter, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("parent_class_filter"), ParentClassFilter, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
 
 	// Use asset registry to find all Blueprint assets
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -994,7 +1016,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleSetAbilityTags(const TSh
 	FGameplayTagContainer InputTags = MonolithGAS::ParseTagContainer(Params, TEXT("tags"), SkippedTags);
 
 	// Determine mode
-	FString Mode = Params->GetStringField(TEXT("mode"));
+	FString ParamError;
+	FString Mode = TEXT("set");
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("mode"), Mode, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
 	if (Mode.IsEmpty())
 	{
 		Mode = TEXT("set");
@@ -1054,7 +1081,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleGetAbilityTags(const TSh
 		return Err;
 	}
 
-	FString ContainerName = Params->GetStringField(TEXT("container"));
+	FString ParamError;
+	FString ContainerName;
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("container"), ContainerName, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), Ctx.AssetPath);
@@ -1108,7 +1140,8 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleSetAbilityPolicy(const T
 	if (Params->HasField(TEXT("instancing_policy")))
 	{
 		FString Val;
-		if (!Params->TryGetStringField(TEXT("instancing_policy"), Val))
+		FString ParamError;
+		if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("instancing_policy"), Val, ParamError))
 		{
 			return FMonolithActionResult::Error(TEXT("Malformed parameter: instancing_policy must be a string"));
 		}
@@ -1126,7 +1159,8 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleSetAbilityPolicy(const T
 	if (Params->HasField(TEXT("net_execution_policy")))
 	{
 		FString Val;
-		if (!Params->TryGetStringField(TEXT("net_execution_policy"), Val))
+		FString ParamError;
+		if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("net_execution_policy"), Val, ParamError))
 		{
 			return FMonolithActionResult::Error(TEXT("Malformed parameter: net_execution_policy must be a string"));
 		}
@@ -1144,7 +1178,8 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleSetAbilityPolicy(const T
 	if (Params->HasField(TEXT("net_security_policy")))
 	{
 		FString Val;
-		if (!Params->TryGetStringField(TEXT("net_security_policy"), Val))
+		FString ParamError;
+		if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("net_security_policy"), Val, ParamError))
 		{
 			return FMonolithActionResult::Error(TEXT("Malformed parameter: net_security_policy must be a string"));
 		}
@@ -1432,22 +1467,35 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleSetAbilityFlags(const TS
 	bool bChanged = false;
 
 	bool bReplicateInput = false;
-	if (Params->TryGetBoolField(TEXT("replicate_input_directly"), bReplicateInput))
+	FString ParamError;
+	if (Params->HasField(TEXT("replicate_input_directly")))
 	{
+		if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("replicate_input_directly"), bReplicateInput, ParamError))
+		{
+			return FMonolithActionResult::Error(ParamError);
+		}
 		SetBoolProperty(Ctx.CDO, FName(TEXT("bReplicateInputDirectly")), bReplicateInput);
 		bChanged = true;
 	}
 
 	bool bRetriggerInstanced = false;
-	if (Params->TryGetBoolField(TEXT("retrigger_instanced_ability"), bRetriggerInstanced))
+	if (Params->HasField(TEXT("retrigger_instanced_ability")))
 	{
+		if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("retrigger_instanced_ability"), bRetriggerInstanced, ParamError))
+		{
+			return FMonolithActionResult::Error(ParamError);
+		}
 		SetBoolProperty(Ctx.CDO, FName(TEXT("bRetriggerInstancedAbility")), bRetriggerInstanced);
 		bChanged = true;
 	}
 
 	bool bServerRespectsCancel = false;
-	if (Params->TryGetBoolField(TEXT("server_respects_remote_ability_cancellation"), bServerRespectsCancel))
+	if (Params->HasField(TEXT("server_respects_remote_ability_cancellation")))
 	{
+		if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("server_respects_remote_ability_cancellation"), bServerRespectsCancel, ParamError))
+		{
+			return FMonolithActionResult::Error(ParamError);
+		}
 		SetBoolProperty(Ctx.CDO, FName(TEXT("bServerRespectsRemoteAbilityCancellation")), bServerRespectsCancel);
 		bChanged = true;
 	}
@@ -1663,7 +1711,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleAddAbilityTaskNode(const
 	}
 
 	// Find the factory function
-	FString FactoryFuncHint = Params->GetStringField(TEXT("factory_function"));
+	FString ParamError;
+	FString FactoryFuncHint;
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("factory_function"), FactoryFuncHint, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
 	UFunction* FactoryFunc = FindTaskFactoryFunction(TaskClass, FactoryFuncHint);
 	if (!FactoryFunc)
 	{
@@ -1720,7 +1773,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleAddCommitAndEndFlow(cons
 		return Err;
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString ParamError;
+	FString GraphName;
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("graph_name"), GraphName, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
 	UEdGraph* Graph = GetAbilityEventGraph(Ctx.BP, GraphName);
 	if (!Graph)
 	{
@@ -1830,7 +1888,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleAddEffectApplication(con
 		return Err;
 	}
 
-	FString Target = Params->GetStringField(TEXT("target"));
+	FString ParamError;
+	FString Target;
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("target"), Target, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
 	if (Target.IsEmpty()) Target = TEXT("self");
 
 	bool bToSelf = (Target.ToLower() == TEXT("self") || Target.ToLower() == TEXT("owner"));
@@ -2584,7 +2647,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleDuplicateAbility(const T
 
 FMonolithActionResult FMonolithGASAbilityActions::HandleListAbilityTasks(const TSharedPtr<FJsonObject>& Params)
 {
-	FString CategoryFilter = Params->GetStringField(TEXT("category_filter"));
+	FString ParamError;
+	FString CategoryFilter;
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("category_filter"), CategoryFilter, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> TaskList;
 
@@ -2853,7 +2921,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleWireAbilityTaskDelegate(
 		return Err;
 	}
 
-	FString TargetPinName = Params->GetStringField(TEXT("target_pin"));
+	FString ParamError;
+	FString TargetPinName;
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("target_pin"), TargetPinName, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
 	if (TargetPinName.IsEmpty()) TargetPinName = TEXT("execute");
 
 	// Find both nodes across all graphs
@@ -2984,7 +3057,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleGetAbilityGraphFlow(cons
 		return Err;
 	}
 
-	FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString ParamError;
+	FString GraphName;
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("graph_name"), GraphName, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
 	UEdGraph* Graph = GetAbilityEventGraph(Ctx.BP, GraphName);
 	if (!Graph)
 	{
@@ -3323,7 +3401,11 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleFindAbilitiesByTag(const
 	if (!MonolithGAS::RequireStringParam(Params, TEXT("tag"), TagStr, Err)) return Err;
 
 	FString MatchType = TEXT("exact");
-	Params->TryGetStringField(TEXT("match_type"), MatchType);
+	FString ParamError;
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("match_type"), MatchType, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
 	bool bPartial = MatchType.Equals(TEXT("partial"), ESearchCase::IgnoreCase);
 
 	FGameplayTag SearchTag = FGameplayTag::RequestGameplayTag(FName(*TagStr), false);
@@ -3845,11 +3927,14 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleScaffoldCustomAbilityTas
 			if (!Obj) continue;
 
 			FTaskParam P;
-			if (!Obj->TryGetStringField(TEXT("name"), P.Name) || P.Name.IsEmpty())
+			FString ParamError;
+			if (!Obj->HasField(TEXT("name")) || !MonolithGAS::TryReadOptionalStringParam(Obj, TEXT("name"), P.Name, ParamError,
+				FString::Printf(TEXT("parameters[%d].name"), i), false))
 			{
 				return FMonolithActionResult::Error(FString::Printf(TEXT("parameters[%d].name is missing, empty, or not a string"), i));
 			}
-			if (!Obj->TryGetStringField(TEXT("type"), P.Type) || P.Type.IsEmpty())
+			if (!Obj->HasField(TEXT("type")) || !MonolithGAS::TryReadOptionalStringParam(Obj, TEXT("type"), P.Type, ParamError,
+				FString::Printf(TEXT("parameters[%d].type"), i), false))
 			{
 				return FMonolithActionResult::Error(FString::Printf(TEXT("parameters[%d].type is missing, empty, or not a string"), i));
 			}
@@ -3880,17 +3965,16 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleScaffoldCustomAbilityTas
 			if (!Obj) continue;
 
 			FTaskDelegate D;
-			if (!Obj->TryGetStringField(TEXT("name"), D.Name) || D.Name.IsEmpty())
+			FString ParamError;
+			if (!Obj->HasField(TEXT("name")) || !MonolithGAS::TryReadOptionalStringParam(Obj, TEXT("name"), D.Name, ParamError,
+				FString::Printf(TEXT("delegates[%d].name"), i), false))
 			{
 				return FMonolithActionResult::Error(FString::Printf(TEXT("delegates[%d].name is missing, empty, or not a string"), i));
 			}
-			// params is optional, so we use TryGetStringField but don't fail if it's missing or empty
-			if (Obj->HasField(TEXT("params")))
+			if (!MonolithGAS::TryReadOptionalStringParam(Obj, TEXT("params"), D.DelegateParams, ParamError,
+				FString::Printf(TEXT("delegates[%d].params"), i)))
 			{
-				if (!Obj->TryGetStringField(TEXT("params"), D.DelegateParams))
-				{
-					return FMonolithActionResult::Error(FString::Printf(TEXT("delegates[%d].params is provided but not a string"), i));
-				}
+				return FMonolithActionResult::Error(FString::Printf(TEXT("delegates[%d].params is provided but not a string"), i));
 			}
 
 			TaskDelegates.Add(D);

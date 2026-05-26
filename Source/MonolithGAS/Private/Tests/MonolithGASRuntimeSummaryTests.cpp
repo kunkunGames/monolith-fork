@@ -2,6 +2,8 @@
 #include "Misc/AutomationTest.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "MonolithGASInternal.h"
+#include "MonolithGASScaffoldActions.h"
 #include "MonolithToolRegistry.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -40,6 +42,53 @@ bool FGASRuntimeSummaryPreflightShapeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("actors array should be empty when samples are disabled"), Actors != nullptr && Actors->Num() == 0);
 
 	TestTrue(TEXT("Result should include an operator-facing message"), Result.Result->HasField(TEXT("message")));
+	return true;
+}
+
+#endif // WITH_DEV_AUTOMATION_TESTS
+
+#if WITH_DEV_AUTOMATION_TESTS
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGASValidateSetupUsesResolvedProjectModuleTest, "Monolith.GAS.ValidateSetup.UsesResolvedProjectModule", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGASValidateSetupUsesResolvedProjectModuleTest::RunTest(const FString& Parameters)
+{
+	MonolithGAS::FProjectCodeModuleInfo ModuleInfo;
+	FString ResolveError;
+	TestTrue(TEXT("Project code module should resolve from Source/*.Build.cs"),
+		MonolithGAS::ResolveProjectCodeModule(ModuleInfo, &ResolveError));
+	if (ModuleInfo.ModuleName.IsEmpty())
+	{
+		AddError(FString::Printf(TEXT("ResolveProjectCodeModule failed: %s"), *ResolveError));
+		return false;
+	}
+
+	TestFalse(TEXT("Resolved module should prefer a runtime module over an editor module"),
+		ModuleInfo.ModuleName.EndsWith(TEXT("Editor")));
+	TestTrue(TEXT("Resolved Build.cs should exist"), FPaths::FileExists(ModuleInfo.BuildCSPath));
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("gas"), TEXT("validate_gas_setup")))
+	{
+		FMonolithGASScaffoldActions::RegisterActions(Registry);
+	}
+
+	FMonolithActionResult Result = Registry.ExecuteAction(TEXT("gas"), TEXT("validate_gas_setup"), MakeShared<FJsonObject>());
+	TestTrue(TEXT("validate_gas_setup should execute"), Result.bSuccess);
+	TestTrue(TEXT("validate_gas_setup should return a JSON result"), Result.Result.IsValid());
+	if (!Result.Result.IsValid())
+	{
+		return false;
+	}
+
+	FString ReportedModule;
+	FString ReportedBuildCSPath;
+	TestTrue(TEXT("validate_gas_setup should report selected module_name"),
+		Result.Result->TryGetStringField(TEXT("module_name"), ReportedModule));
+	TestTrue(TEXT("validate_gas_setup should report selected build_cs_path"),
+		Result.Result->TryGetStringField(TEXT("build_cs_path"), ReportedBuildCSPath));
+	TestEqual(TEXT("validate_gas_setup should use the resolver-selected module"), ReportedModule, ModuleInfo.ModuleName);
+	TestEqual(TEXT("validate_gas_setup should use the resolver-selected Build.cs"), ReportedBuildCSPath, ModuleInfo.BuildCSPath);
+
 	return true;
 }
 

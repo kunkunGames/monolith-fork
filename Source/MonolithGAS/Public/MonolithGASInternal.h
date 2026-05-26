@@ -67,8 +67,15 @@ namespace MonolithGAS
 	// Parse a JSON array field into TArray<FString>
 	TArray<FString> ParseStringArray(const TSharedPtr<FJsonObject>& Params, const FString& FieldName);
 
-	// Validate required string param, return error result if missing
+	// Validate required string param, return error result if missing or malformed.
 	bool RequireStringParam(const TSharedPtr<FJsonObject>& Params, const FString& ParamName, FString& OutValue, FMonolithActionResult& OutError);
+
+	bool TryReadOptionalStringParam(const TSharedPtr<FJsonObject>& Params, const FString& ParamName, FString& OutValue,
+		FString& OutError, const FString& DisplayName = FString(), bool bAllowEmpty = true);
+	bool TryReadOptionalNumberParam(const TSharedPtr<FJsonObject>& Params, const FString& ParamName, double& OutValue,
+		FString& OutError, const FString& DisplayName = FString());
+	bool TryReadOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const FString& ParamName, bool& OutValue,
+		FString& OutError, const FString& DisplayName = FString());
 
 	// ---------------------------------------------------------------------------
 	// Asset Existence Guard (robust pre-check for create actions)
@@ -105,7 +112,19 @@ namespace MonolithGAS
 	// Project Source Helper (A4)
 	// ---------------------------------------------------------------------------
 
-	// Get the project Source directory path (e.g. "<ProjectDir>/Source/<ProjectName>")
+	struct FProjectCodeModuleInfo
+	{
+		FString ModuleName;
+		FString ModuleDir;
+		FString BuildCSPath;
+		FString ApiMacro;
+		bool bIsRuntimeModule = false;
+	};
+
+	// Resolve the primary project code module from Source/*/*.Build.cs.
+	bool ResolveProjectCodeModule(FProjectCodeModuleInfo& OutInfo, FString* OutError = nullptr);
+
+	// Get the selected project module Source directory path.
 	FString GetProjectSourceDir();
 
 	// ---------------------------------------------------------------------------

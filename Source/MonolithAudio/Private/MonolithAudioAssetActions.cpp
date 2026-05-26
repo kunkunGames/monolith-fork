@@ -36,6 +36,98 @@
 // Helpers
 // ============================================================================
 
+namespace
+{
+	struct FMonolithAudioEQSettingsDraft
+	{
+		double RootTime = 0.0;
+		float FrequencyCenter0 = 600.0f;
+		float Gain0 = 1.0f;
+		float Bandwidth0 = 1.0f;
+		float FrequencyCenter1 = 1000.0f;
+		float Gain1 = 1.0f;
+		float Bandwidth1 = 1.0f;
+		float FrequencyCenter2 = 2000.0f;
+		float Gain2 = 1.0f;
+		float Bandwidth2 = 1.0f;
+		float FrequencyCenter3 = 10000.0f;
+		float Gain3 = 1.0f;
+		float Bandwidth3 = 1.0f;
+	};
+
+	bool ReadAudioEQNumberField(const TSharedPtr<FJsonObject>& Json, const TCHAR* FieldName, double& OutValue, FString& OutError)
+	{
+		if (!Json->HasField(FieldName))
+		{
+			return true;
+		}
+
+		if (!Json->TryGetNumberField(FieldName, OutValue))
+		{
+			OutError = FString::Printf(TEXT("Malformed parameter: %s must be a number"), FieldName);
+			return false;
+		}
+
+		return true;
+	}
+
+	bool JsonToAudioEQSettingsDraft(const TSharedPtr<FJsonObject>& Json, FMonolithAudioEQSettingsDraft& OutDraft, FString& OutError)
+	{
+		if (!Json.IsValid())
+		{
+			OutError = TEXT("eq_settings must be an object");
+			return false;
+		}
+
+		double DVal = 0.0;
+		if (!ReadAudioEQNumberField(Json, TEXT("RootTime"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("RootTime"))) OutDraft.RootTime = DVal;
+		if (!ReadAudioEQNumberField(Json, TEXT("FrequencyCenter0"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("FrequencyCenter0"))) OutDraft.FrequencyCenter0 = static_cast<float>(DVal);
+		if (!ReadAudioEQNumberField(Json, TEXT("Gain0"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("Gain0"))) OutDraft.Gain0 = static_cast<float>(DVal);
+		if (!ReadAudioEQNumberField(Json, TEXT("Bandwidth0"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("Bandwidth0"))) OutDraft.Bandwidth0 = static_cast<float>(DVal);
+		if (!ReadAudioEQNumberField(Json, TEXT("FrequencyCenter1"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("FrequencyCenter1"))) OutDraft.FrequencyCenter1 = static_cast<float>(DVal);
+		if (!ReadAudioEQNumberField(Json, TEXT("Gain1"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("Gain1"))) OutDraft.Gain1 = static_cast<float>(DVal);
+		if (!ReadAudioEQNumberField(Json, TEXT("Bandwidth1"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("Bandwidth1"))) OutDraft.Bandwidth1 = static_cast<float>(DVal);
+		if (!ReadAudioEQNumberField(Json, TEXT("FrequencyCenter2"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("FrequencyCenter2"))) OutDraft.FrequencyCenter2 = static_cast<float>(DVal);
+		if (!ReadAudioEQNumberField(Json, TEXT("Gain2"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("Gain2"))) OutDraft.Gain2 = static_cast<float>(DVal);
+		if (!ReadAudioEQNumberField(Json, TEXT("Bandwidth2"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("Bandwidth2"))) OutDraft.Bandwidth2 = static_cast<float>(DVal);
+		if (!ReadAudioEQNumberField(Json, TEXT("FrequencyCenter3"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("FrequencyCenter3"))) OutDraft.FrequencyCenter3 = static_cast<float>(DVal);
+		if (!ReadAudioEQNumberField(Json, TEXT("Gain3"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("Gain3"))) OutDraft.Gain3 = static_cast<float>(DVal);
+		if (!ReadAudioEQNumberField(Json, TEXT("Bandwidth3"), DVal, OutError)) return false;
+		if (Json->HasField(TEXT("Bandwidth3"))) OutDraft.Bandwidth3 = static_cast<float>(DVal);
+
+		return true;
+	}
+
+	void ApplyAudioEQSettingsDraft(const FMonolithAudioEQSettingsDraft& Draft, FAudioEQEffect& OutSettings)
+	{
+		OutSettings.RootTime = Draft.RootTime;
+		OutSettings.FrequencyCenter0 = Draft.FrequencyCenter0;
+		OutSettings.Gain0 = Draft.Gain0;
+		OutSettings.Bandwidth0 = Draft.Bandwidth0;
+		OutSettings.FrequencyCenter1 = Draft.FrequencyCenter1;
+		OutSettings.Gain1 = Draft.Gain1;
+		OutSettings.Bandwidth1 = Draft.Bandwidth1;
+		OutSettings.FrequencyCenter2 = Draft.FrequencyCenter2;
+		OutSettings.Gain2 = Draft.Gain2;
+		OutSettings.Bandwidth2 = Draft.Bandwidth2;
+		OutSettings.FrequencyCenter3 = Draft.FrequencyCenter3;
+		OutSettings.Gain3 = Draft.Gain3;
+		OutSettings.Bandwidth3 = Draft.Bandwidth3;
+	}
+}
+
 bool FMonolithAudioAssetActions::SplitAssetPath(const FString& AssetPath, FString& OutPackagePath, FString& OutAssetName)
 {
 	int32 LastSlash;
@@ -985,13 +1077,18 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundMix(const TSharedPt
 
 	// 3. Pre-validate EQ settings
 	bool bHasEq = false;
-	FAudioEQEffect ParsedEq;
+	FMonolithAudioEQSettingsDraft ParsedEq;
 	const TSharedPtr<FJsonObject>* EqJson = nullptr;
-	if (Params->TryGetObjectField(TEXT("eq_settings"), EqJson) && EqJson && EqJson->IsValid())
+	if (Params->HasField(TEXT("eq_settings")))
 	{
+		if (!Params->TryGetObjectField(TEXT("eq_settings"), EqJson) || !EqJson || !EqJson->IsValid())
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: eq_settings must be an object"));
+		}
+
 		bHasEq = true;
 		FString SetError;
-		if (!JsonToStruct(*EqJson, FAudioEQEffect::StaticStruct(), &ParsedEq, SetError))
+		if (!JsonToAudioEQSettingsDraft(*EqJson, ParsedEq, SetError))
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("eq_settings error: %s"), *SetError));
 		}
@@ -1007,7 +1104,7 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundMix(const TSharedPt
 
 	if (bHasEq)
 	{
-		Asset->EQSettings = ParsedEq;
+		ApplyAudioEQSettingsDraft(ParsedEq, Asset->EQSettings);
 	}
 
 	if (bHasEffects)
@@ -1140,13 +1237,18 @@ FMonolithActionResult FMonolithAudioAssetActions::SetSoundMixSettings(const TSha
 
 	// 3. Pre-validate EQ settings
 	bool bHasEq = false;
-	FAudioEQEffect ParsedEq;
+	FMonolithAudioEQSettingsDraft ParsedEq;
 	const TSharedPtr<FJsonObject>* EqJson = nullptr;
-	if (Params->TryGetObjectField(TEXT("eq_settings"), EqJson) && EqJson && EqJson->IsValid())
+	if (Params->HasField(TEXT("eq_settings")))
 	{
+		if (!Params->TryGetObjectField(TEXT("eq_settings"), EqJson) || !EqJson || !EqJson->IsValid())
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: eq_settings must be an object"));
+		}
+
 		bHasEq = true;
 		FString SetError;
-		if (!JsonToStruct(*EqJson, FAudioEQEffect::StaticStruct(), &ParsedEq, SetError))
+		if (!JsonToAudioEQSettingsDraft(*EqJson, ParsedEq, SetError))
 		{
 			return FMonolithActionResult::Error(SetError);
 		}
@@ -1157,7 +1259,7 @@ FMonolithActionResult FMonolithAudioAssetActions::SetSoundMixSettings(const TSha
 
 	if (bHasEq)
 	{
-		Asset->EQSettings = ParsedEq;
+		ApplyAudioEQSettingsDraft(ParsedEq, Asset->EQSettings);
 	}
 
 	if (bHasEffects)
