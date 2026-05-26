@@ -5,7 +5,7 @@ description: Use when working with Unreal Engine Blueprints via Monolith MCP —
 
 # Unreal Blueprint Workflows
 
-**99 Blueprint actions** via `blueprint_query()`. Discover first: `monolith_discover({ namespace: "blueprint" })`
+**122 Blueprint actions** via `blueprint_query()`. Discover first: `monolith_discover({ namespace: "blueprint" })`
 
 Also works on: Level Blueprints (map path or `$current`), Widget Blueprints.
 
