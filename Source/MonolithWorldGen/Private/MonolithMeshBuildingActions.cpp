@@ -1655,11 +1655,40 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateBuildingFromGrid(const
 	}
 
 	// ---- Parse configuration ----
-	float CellSize = Params->HasField(TEXT("cell_size")) ? static_cast<float>(Params->GetNumberField(TEXT("cell_size"))) : 50.0f;
-	float ExteriorT = Params->HasField(TEXT("exterior_wall_thickness")) ? static_cast<float>(Params->GetNumberField(TEXT("exterior_wall_thickness"))) : 15.0f;
-	float InteriorT = Params->HasField(TEXT("interior_wall_thickness")) ? static_cast<float>(Params->GetNumberField(TEXT("interior_wall_thickness"))) : 10.0f;
-	float FloorHeight = Params->HasField(TEXT("floor_height")) ? static_cast<float>(Params->GetNumberField(TEXT("floor_height"))) : 270.0f;
-	float FloorThick = Params->HasField(TEXT("floor_thickness")) ? static_cast<float>(Params->GetNumberField(TEXT("floor_thickness"))) : 3.0f;
+	double TmpCellSize = 50.0;
+	if (Params->HasField(TEXT("cell_size")) && !Params->TryGetNumberField(TEXT("cell_size"), TmpCellSize))
+	{
+		return FMonolithActionResult::Error(TEXT("cell_size must be a number"));
+	}
+	float CellSize = static_cast<float>(TmpCellSize);
+
+	double TmpExteriorT = 15.0;
+	if (Params->HasField(TEXT("exterior_wall_thickness")) && !Params->TryGetNumberField(TEXT("exterior_wall_thickness"), TmpExteriorT))
+	{
+		return FMonolithActionResult::Error(TEXT("exterior_wall_thickness must be a number"));
+	}
+	float ExteriorT = static_cast<float>(TmpExteriorT);
+
+	double TmpInteriorT = 10.0;
+	if (Params->HasField(TEXT("interior_wall_thickness")) && !Params->TryGetNumberField(TEXT("interior_wall_thickness"), TmpInteriorT))
+	{
+		return FMonolithActionResult::Error(TEXT("interior_wall_thickness must be a number"));
+	}
+	float InteriorT = static_cast<float>(TmpInteriorT);
+
+	double TmpFloorHeight = 270.0;
+	if (Params->HasField(TEXT("floor_height")) && !Params->TryGetNumberField(TEXT("floor_height"), TmpFloorHeight))
+	{
+		return FMonolithActionResult::Error(TEXT("floor_height must be a number"));
+	}
+	float FloorHeight = static_cast<float>(TmpFloorHeight);
+
+	double TmpFloorThick = 3.0;
+	if (Params->HasField(TEXT("floor_thickness")) && !Params->TryGetNumberField(TEXT("floor_thickness"), TmpFloorThick))
+	{
+		return FMonolithActionResult::Error(TEXT("floor_thickness must be a number"));
+	}
+	float FloorThick = static_cast<float>(TmpFloorThick);
 
 	FString SavePath;
 	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
@@ -1729,15 +1758,35 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateBuildingFromGrid(const
 	}
 
 	// ---- Parse optional flags ----
-	bool bOmitExteriorWalls = Params->HasField(TEXT("omit_exterior_walls"))
-		? Params->GetBoolField(TEXT("omit_exterior_walls")) : false;
+	bool bOmitExteriorWalls = false;
+	if (Params->HasField(TEXT("omit_exterior_walls")) && !Params->TryGetBoolField(TEXT("omit_exterior_walls"), bOmitExteriorWalls))
+	{
+		return FMonolithActionResult::Error(TEXT("omit_exterior_walls must be a boolean"));
+	}
+
+	bool bOverwrite = false;
+	if (Params->HasField(TEXT("overwrite")) && !Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+	{
+		return FMonolithActionResult::Error(TEXT("overwrite must be a boolean"));
+	}
+
+	bool bSnapToFloor = true;
+	if (Params->HasField(TEXT("snap_to_floor")) && !Params->TryGetBoolField(TEXT("snap_to_floor"), bSnapToFloor))
+	{
+		return FMonolithActionResult::Error(TEXT("snap_to_floor must be a boolean"));
+	}
 
 	// ---- Facade style (v3 integrated facade) ----
 	FString FacadeStyleName;
 	Params->TryGetStringField(TEXT("facade_style"), FacadeStyleName);
 	bool bHasFacadeStyle = !FacadeStyleName.IsEmpty();
-	int32 FacadeSeed = Params->HasField(TEXT("facade_seed"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("facade_seed"))) : 0;
+
+	double TmpFacadeSeed = 0.0;
+	if (Params->HasField(TEXT("facade_seed")) && !Params->TryGetNumberField(TEXT("facade_seed"), TmpFacadeSeed))
+	{
+		return FMonolithActionResult::Error(TEXT("facade_seed must be a number"));
+	}
+	int32 FacadeSeed = static_cast<int32>(TmpFacadeSeed);
 
 	// When facade_style is provided, automatically omit exterior walls from the base generator
 	// because the facade functions will generate the exterior walls WITH openings
@@ -1937,7 +1986,6 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateBuildingFromGrid(const
 	int32 TriCount = Mesh->GetTriangleCount();
 
 	// 13. Save mesh to asset
-	bool bOverwrite = Params->HasField(TEXT("overwrite")) ? Params->GetBoolField(TEXT("overwrite")) : false;
 	FString SaveErr;
 	if (!FMonolithMeshProceduralActions::SaveMeshToAsset(Mesh, SavePath, bOverwrite, SaveErr))
 	{
@@ -1947,7 +1995,6 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateBuildingFromGrid(const
 
 	// 14. Place in scene
 	FRotator Rotation = FRotator::ZeroRotator;
-	bool bSnapToFloor = !Params->HasField(TEXT("snap_to_floor")) || Params->GetBoolField(TEXT("snap_to_floor"));
 	AActor* Actor = FMonolithMeshProceduralActions::PlaceMeshInScene(SavePath, Location, Rotation, Label, bSnapToFloor, Folder);
 
 	if (Actor)
