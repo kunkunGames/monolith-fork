@@ -22,12 +22,6 @@ namespace
 
 		return Registry.ExecuteAction(TEXT("logicdriver"), Action, Params);
 	}
-
-	bool MentionsInvalidPackagePath(const FMonolithActionResult& Result)
-	{
-		return Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
-			Result.ErrorMessage.Contains(TEXT("//Game/Malformed_Path"));
-	}
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -38,37 +32,61 @@ namespace
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLogicDriverCrashguardPackagePathValidation, "Monolith.Crashguard.MonolithLogicDriver.PackagePathValidation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithLogicDriverCrashguardPackagePathValidation::RunTest(const FString& Parameters)
 {
-	// 1. Setup invalid payload
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("save_path"), TEXT("//Game/Malformed_Path")); // Double slash is fatal to CreatePackage
-
-	// 2. Test create_state_machine
+	struct FMalformedPathCase
 	{
-		FMonolithActionResult Result = ExecuteLogicDriverAction(TEXT("create_state_machine"), Payload);
+		const TCHAR* Path;
+		const TCHAR* ExpectedError;
+		const TCHAR* AltExpectedError; // for create_state_machine's AssetName calculation
+	};
 
-		TestTrue(TEXT("create_state_machine should fail on malformed path"), !Result.bSuccess);
-		TestTrue(TEXT("Error should mention validation failure"), MentionsInvalidPackagePath(Result));
-	}
+	const FMalformedPathCase MalformedPaths[] = {
+		{ TEXT(""), TEXT("Missing required param 'save_path'"), TEXT("Missing required param 'save_path'") },
+		{ TEXT("//Game/Malformed_Path"), TEXT("Invalid package path"), TEXT("Invalid package path") },
+		{ TEXT("Game/Malformed_Path"), TEXT("Invalid package path"), TEXT("Invalid package path") },
+		{ TEXT("/Game/Malformed_Path/"), TEXT("Invalid package path"), TEXT("Could not determine asset name from save_path") },
+		{ TEXT("/Game/Malformed_Path#1"), TEXT("Invalid package path"), TEXT("Invalid package path") },
+	};
 
-	// 3. Test scaffold_hello_world_sm
+	for (const FMalformedPathCase& Case : MalformedPaths)
 	{
-		FMonolithActionResult Result = ExecuteLogicDriverAction(TEXT("scaffold_hello_world_sm"), Payload);
+		// 1. Setup invalid payload
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("save_path"), Case.Path);
 
-		TestTrue(TEXT("scaffold_hello_world_sm should fail on malformed path"), !Result.bSuccess);
-		TestTrue(TEXT("Error should mention validation failure"), MentionsInvalidPackagePath(Result));
-	}
+		// 2. Test create_state_machine
+		{
+			FMonolithActionResult Result = ExecuteLogicDriverAction(TEXT("create_state_machine"), Payload);
 
-	// 4. Test build_sm_from_spec
-	{
-		TSharedPtr<FJsonObject> SpecPayload = MakeShared<FJsonObject>();
-		SpecPayload->SetStringField(TEXT("save_path"), TEXT("//Game/Malformed_Path"));
-		TSharedPtr<FJsonObject> EmptySpec = MakeShared<FJsonObject>();
-		SpecPayload->SetObjectField(TEXT("spec"), EmptySpec);
+			TestFalse(*FString::Printf(TEXT("create_state_machine with malformed path '%s' should return Error"), Case.Path), Result.bSuccess);
+			TestTrue(
+				*FString::Printf(TEXT("create_state_machine malformed path '%s' should report '%s' or '%s'"), Case.Path, Case.ExpectedError, Case.AltExpectedError),
+				Result.ErrorMessage.Contains(Case.ExpectedError) || Result.ErrorMessage.Contains(Case.AltExpectedError));
+		}
 
-		FMonolithActionResult Result = ExecuteLogicDriverAction(TEXT("build_sm_from_spec"), SpecPayload);
+		// 3. Test scaffold_hello_world_sm
+		{
+			FMonolithActionResult Result = ExecuteLogicDriverAction(TEXT("scaffold_hello_world_sm"), Payload);
 
-		TestTrue(TEXT("build_sm_from_spec should fail on malformed path"), !Result.bSuccess);
-		TestTrue(TEXT("Error should mention validation failure"), MentionsInvalidPackagePath(Result));
+			TestFalse(*FString::Printf(TEXT("scaffold_hello_world_sm with malformed path '%s' should return Error"), Case.Path), Result.bSuccess);
+			TestTrue(
+				*FString::Printf(TEXT("scaffold_hello_world_sm malformed path '%s' should report '%s'"), Case.Path, Case.ExpectedError),
+				Result.ErrorMessage.Contains(Case.ExpectedError));
+		}
+
+		// 4. Test build_sm_from_spec
+		{
+			TSharedPtr<FJsonObject> SpecPayload = MakeShared<FJsonObject>();
+			SpecPayload->SetStringField(TEXT("save_path"), Case.Path);
+			TSharedPtr<FJsonObject> EmptySpec = MakeShared<FJsonObject>();
+			SpecPayload->SetObjectField(TEXT("spec"), EmptySpec);
+
+			FMonolithActionResult Result = ExecuteLogicDriverAction(TEXT("build_sm_from_spec"), SpecPayload);
+
+			TestFalse(*FString::Printf(TEXT("build_sm_from_spec with malformed path '%s' should return Error"), Case.Path), Result.bSuccess);
+			TestTrue(
+				*FString::Printf(TEXT("build_sm_from_spec malformed path '%s' should report '%s'"), Case.Path, Case.ExpectedError),
+				Result.ErrorMessage.Contains(Case.ExpectedError));
+		}
 	}
 
 	return true;
