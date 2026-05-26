@@ -3469,17 +3469,65 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetBlendSpaceAxis(const T
 	BS->Modify();
 
 	if (Params->HasField(TEXT("name")))
-		BlendParam->DisplayName = Params->GetStringField(TEXT("name"));
+	{
+		FString DisplayName;
+		if (!Params->TryGetStringField(TEXT("name"), DisplayName))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'name' must be a string"));
+		}
+		BlendParam->DisplayName = DisplayName;
+	}
 	if (Params->HasField(TEXT("min")))
-		BlendParam->Min = static_cast<float>(Params->GetNumberField(TEXT("min")));
+	{
+		double TempMin;
+		if (!Params->TryGetNumberField(TEXT("min"), TempMin))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'min' must be a number"));
+		}
+		BlendParam->Min = static_cast<float>(TempMin);
+	}
 	if (Params->HasField(TEXT("max")))
-		BlendParam->Max = static_cast<float>(Params->GetNumberField(TEXT("max")));
+	{
+		double TempMax;
+		if (!Params->TryGetNumberField(TEXT("max"), TempMax))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'max' must be a number"));
+		}
+		BlendParam->Max = static_cast<float>(TempMax);
+	}
 	if (Params->HasField(TEXT("grid_divisions")))
-		BlendParam->GridNum = static_cast<int32>(Params->GetNumberField(TEXT("grid_divisions")));
+	{
+		double TempGridDivisions;
+		if (!Params->TryGetNumberField(TEXT("grid_divisions"), TempGridDivisions))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'grid_divisions' must be a number"));
+		}
+		BlendParam->GridNum = static_cast<int32>(TempGridDivisions);
+	}
 	if (Params->HasField(TEXT("snap_to_grid")))
-		BlendParam->bSnapToGrid = Params->GetBoolField(TEXT("snap_to_grid"));
+	{
+		bool bSnapToGrid;
+		if (!Params->TryGetBoolField(TEXT("snap_to_grid"), bSnapToGrid))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'snap_to_grid' must be a boolean"));
+		}
+		BlendParam->bSnapToGrid = bSnapToGrid;
+	}
 	if (Params->HasField(TEXT("wrap_input")))
-		BlendParam->bWrapInput = Params->GetBoolField(TEXT("wrap_input"));
+	{
+		bool bWrapInput;
+		if (!Params->TryGetBoolField(TEXT("wrap_input"), bWrapInput))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'wrap_input' must be a boolean"));
+		}
+		BlendParam->bWrapInput = bWrapInput;
+	}
 
 	// Validate min < max
 	if (BlendParam->Min >= BlendParam->Max)
