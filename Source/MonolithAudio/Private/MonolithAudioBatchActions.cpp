@@ -991,7 +991,10 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	if (Template->HasField(TEXT("sound_class")))
 	{
 		FString ClassPath;
-		Template->TryGetStringField(TEXT("sound_class"), ClassPath);
+		if (!Template->TryGetStringField(TEXT("sound_class"), ClassPath))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed template.sound_class: must be a string"));
+		}
 		SoundClass = LoadAudioAsset<USoundClass>(ClassPath);
 		if (!SoundClass)
 		{
@@ -1004,7 +1007,10 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	if (Template->HasField(TEXT("attenuation")))
 	{
 		FString AttenPath;
-		Template->TryGetStringField(TEXT("attenuation"), AttenPath);
+		if (!Template->TryGetStringField(TEXT("attenuation"), AttenPath))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed template.attenuation: must be a string"));
+		}
 		Attenuation = LoadAudioAsset<USoundAttenuation>(AttenPath);
 		if (!Attenuation)
 		{
@@ -1051,7 +1057,10 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 			if (CompObj->HasField(TEXT("type")))
 			{
 				FString TypeStr;
-				CompObj->TryGetStringField(TEXT("type"), TypeStr);
+				if (!CompObj->TryGetStringField(TEXT("type"), TypeStr))
+				{
+					return FMonolithActionResult::Error(TEXT("Malformed compression.type: must be a string"));
+				}
 				FString TypeError;
 				if (!ParseCompressionType(TypeStr, CompressionType, TypeError))
 				{
@@ -1085,7 +1094,10 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	if (Template->HasField(TEXT("submix")))
 	{
 		FString SubmixPath;
-		Template->TryGetStringField(TEXT("submix"), SubmixPath);
+		if (!Template->TryGetStringField(TEXT("submix"), SubmixPath))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed template.submix: must be a string"));
+		}
 		Submix = LoadAudioAsset<USoundSubmix>(SubmixPath);
 		if (!Submix)
 		{
@@ -1098,7 +1110,10 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	if (Template->HasField(TEXT("concurrency")))
 	{
 		FString ConcPath;
-		Template->TryGetStringField(TEXT("concurrency"), ConcPath);
+		if (!Template->TryGetStringField(TEXT("concurrency"), ConcPath))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed template.concurrency: must be a string"));
+		}
 		Concurrency = LoadAudioAsset<USoundConcurrency>(ConcPath);
 		if (!Concurrency)
 		{
@@ -1123,7 +1138,10 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	if (bHasVirtualization)
 	{
 		FString ModeStr;
-		Template->TryGetStringField(TEXT("virtualization"), ModeStr);
+		if (!Template->TryGetStringField(TEXT("virtualization"), ModeStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed template.virtualization: must be a string"));
+		}
 		FString ModeError;
 		if (!ParseVirtualizationMode(ModeStr, VirtMode, ModeError))
 		{

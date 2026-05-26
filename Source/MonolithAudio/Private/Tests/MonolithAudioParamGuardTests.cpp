@@ -35,6 +35,26 @@ namespace
 	}
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioApplyTemplateRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.ApplyAudioTemplateRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioApplyTemplateRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+	TArray<TSharedPtr<FJsonValue>> AssetsArray;
+	AssetsArray.Add(MakeShared<FJsonValueString>(TEXT("/Game/Audio/SW_Test")));
+	Params->SetArrayField(TEXT("asset_paths"), AssetsArray);
+
+	TSharedPtr<FJsonObject> Template = MakeShared<FJsonObject>();
+	Template->SetNumberField(TEXT("sound_class"), 123); // Should be string
+	Params->SetObjectField(TEXT("template"), Template);
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("apply_audio_template"), Params);
+
+	TestTrue(TEXT("ApplyAudioTemplate with malformed sound_class should return Error"), !Result.bSuccess);
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.ModifySoundSubmixRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardAudioRejectsMalformedParamsTest::RunTest(const FString& Parameters)
 {
