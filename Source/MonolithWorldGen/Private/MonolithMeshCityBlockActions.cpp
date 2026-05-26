@@ -226,7 +226,11 @@ void FMonolithMeshCityBlockActions::ApplyPresetDefaults(const TSharedPtr<FJsonOb
 	{
 		if (!Params->HasField(Field) && Preset->HasField(Field))
 		{
-			Params->SetStringField(Field, Preset->GetStringField(Field));
+			FString Val;
+			if (Preset->TryGetStringField(Field, Val))
+			{
+				Params->SetStringField(Field, Val);
+			}
 		}
 	}
 
@@ -1651,7 +1655,11 @@ FMonolithActionResult FMonolithMeshCityBlockActions::CreateCityBlock(const TShar
 				}
 				if (BuildingResult->HasField(TEXT("building_id")))
 				{
-					RoofParams->SetStringField(TEXT("building_id"), BuildingResult->GetStringField(TEXT("building_id")));
+					FString BldgId;
+					if (BuildingResult->TryGetStringField(TEXT("building_id"), BldgId))
+					{
+						RoofParams->SetStringField(TEXT("building_id"), BldgId);
+					}
 				}
 			}
 
@@ -1659,8 +1667,8 @@ FMonolithActionResult FMonolithMeshCityBlockActions::CreateCityBlock(const TShar
 			bool bHasRoofType = false;
 			if (FloorPlanResult.IsValid() && FloorPlanResult->HasField(TEXT("roof_type")))
 			{
-				FString RT = FloorPlanResult->GetStringField(TEXT("roof_type"));
-				if (!RT.IsEmpty())
+				FString RT;
+				if (FloorPlanResult->TryGetStringField(TEXT("roof_type"), RT) && !RT.IsEmpty())
 				{
 					RoofParams->SetStringField(TEXT("roof_type"), RT);
 					bHasRoofType = true;
