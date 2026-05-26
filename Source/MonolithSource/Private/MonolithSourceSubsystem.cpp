@@ -3,6 +3,7 @@
 #include "MonolithSettings.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
+#include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "Async/Async.h"
 #include "Interfaces/IPluginManager.h"
@@ -11,6 +12,10 @@
 
 namespace
 {
+	constexpr int32 SourceDbOpenRetryAttempts = 3;
+	constexpr float SourceDbOpenRetryDelaySeconds = 0.10f;
+	constexpr double SourceDbOpenFailureCooldownSeconds = 2.0;
+
 	void RebuildSourceCrgCacheAfterIndexing(FMonolithSourceDatabase* Database, const TCHAR* Context)
 	{
 		if (!Database || !Database->IsOpen())
@@ -58,20 +63,7 @@ void UMonolithSourceSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 
 	Database = MakeUnique<FMonolithSourceDatabase>();
-	FString DbPath = GetDatabasePath();
-
-	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-	if (PlatformFile.FileExists(*DbPath))
-	{
-		if (Database->Open(DbPath))
-		{
-			UE_LOG(LogMonolithSource, Log, TEXT("Engine source DB loaded from %s"), *DbPath);
-		}
-	}
-	else
-	{
-		UE_LOG(LogMonolithSource, Log, TEXT("Engine source DB not found at %s — run source.trigger_reindex to create it"), *DbPath);
-	}
+	TryOpenDatabaseWithRetry(GetDatabasePath(), TEXT("Initialize"));
 
 	// F17 (2026-04-26): Auto-reindex on hot-reload / Live Coding completion.
 	// Without this, agents see stale source_query results until a manual `source.trigger_project_reindex` call.
@@ -106,6 +98,12 @@ void UMonolithSourceSubsystem::Deinitialize()
 		Database->Close();
 	}
 	Super::Deinitialize();
+}
+
+FMonolithSourceDatabase* UMonolithSourceSubsystem::GetDatabase()
+{
+	EnsureDatabaseOpen();
+	return Database.IsValid() ? Database.Get() : nullptr;
 }
 
 // ============================================================
@@ -270,19 +268,76 @@ void UMonolithSourceSubsystem::TriggerProjectReindex()
 // Helpers
 // ============================================================
 
-void UMonolithSourceSubsystem::ReopenDatabase(const FString& DbPath)
+bool UMonolithSourceSubsystem::EnsureDatabaseOpen()
 {
-	if (Database.IsValid())
+	if (IsRunningCommandlet())
 	{
-		IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-		if (PlatformFile.FileExists(*DbPath))
+		return false;
+	}
+
+	if (Database.IsValid() && Database->IsOpen())
+	{
+		return true;
+	}
+
+	if (bIsIndexing)
+	{
+		return false;
+	}
+
+	const double Now = FPlatformTime::Seconds();
+	if (LastDatabaseOpenFailureTimeSeconds > 0.0 &&
+		(Now - LastDatabaseOpenFailureTimeSeconds) < SourceDbOpenFailureCooldownSeconds)
+	{
+		return false;
+	}
+
+	return TryOpenDatabaseWithRetry(GetDatabasePath(), TEXT("Lazy source DB reopen"));
+}
+
+bool UMonolithSourceSubsystem::TryOpenDatabaseWithRetry(const FString& DbPath, const TCHAR* Context)
+{
+	if (!Database.IsValid())
+	{
+		Database = MakeUnique<FMonolithSourceDatabase>();
+	}
+
+	if (Database->IsOpen())
+	{
+		return true;
+	}
+
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+	if (!PlatformFile.FileExists(*DbPath))
+	{
+		UE_LOG(LogMonolithSource, Log, TEXT("Engine source DB not found at %s — run source.trigger_reindex to create it"), *DbPath);
+		LastDatabaseOpenFailureTimeSeconds = FPlatformTime::Seconds();
+		return false;
+	}
+
+	for (int32 Attempt = 1; Attempt <= SourceDbOpenRetryAttempts; ++Attempt)
+	{
+		if (Database->Open(DbPath))
 		{
-			if (Database->Open(DbPath))
-			{
-				UE_LOG(LogMonolithSource, Log, TEXT("Engine source DB reopened: %s"), *DbPath);
-			}
+			LastDatabaseOpenFailureTimeSeconds = 0.0;
+			UE_LOG(LogMonolithSource, Log, TEXT("%s: Engine source DB opened from %s after %d attempt(s)"), Context, *DbPath, Attempt);
+			return true;
+		}
+
+		if (Attempt < SourceDbOpenRetryAttempts)
+		{
+			FPlatformProcess::Sleep(SourceDbOpenRetryDelaySeconds * Attempt);
 		}
 	}
+
+	LastDatabaseOpenFailureTimeSeconds = FPlatformTime::Seconds();
+	UE_LOG(LogMonolithSource, Warning, TEXT("%s: failed to open EngineSource.db after %d attempt(s): %s"), Context, SourceDbOpenRetryAttempts, *DbPath);
+	return false;
+}
+
+void UMonolithSourceSubsystem::ReopenDatabase(const FString& DbPath)
+{
+	TryOpenDatabaseWithRetry(DbPath, TEXT("Reopen source DB"));
 }
 
 FString UMonolithSourceSubsystem::GetDatabasePath() const
@@ -290,7 +345,7 @@ FString UMonolithSourceSubsystem::GetDatabasePath() const
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
 	if (Settings && !Settings->EngineSourceDBPathOverride.Path.IsEmpty())
 	{
-		return Settings->EngineSourceDBPathOverride.Path / TEXT("EngineSource.db");
+		return FPaths::ConvertRelativePathToFull(Settings->EngineSourceDBPathOverride.Path / TEXT("EngineSource.db"));
 	}
 
 	// Use the actual plugin directory so the DB lands next to the plugin regardless
@@ -298,11 +353,11 @@ FString UMonolithSourceSubsystem::GetDatabasePath() const
 	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Monolith"));
 	if (Plugin.IsValid())
 	{
-		return Plugin->GetBaseDir() / TEXT("Saved") / TEXT("EngineSource.db");
+		return FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir() / TEXT("Saved") / TEXT("EngineSource.db"));
 	}
 
 	// Fallback — should not be reached when running inside the plugin itself
-	return FPaths::ProjectPluginsDir() / TEXT("Monolith") / TEXT("Saved") / TEXT("EngineSource.db");
+	return FPaths::ConvertRelativePathToFull(FPaths::ProjectPluginsDir() / TEXT("Monolith") / TEXT("Saved") / TEXT("EngineSource.db"));
 }
 
 FString UMonolithSourceSubsystem::GetEngineSourcePath() const

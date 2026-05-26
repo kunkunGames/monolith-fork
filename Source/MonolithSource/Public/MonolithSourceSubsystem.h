@@ -22,8 +22,8 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
-	/** Get the source database (read-only). May be null if DB doesn't exist. */
-	FMonolithSourceDatabase* GetDatabase() { return Database.IsValid() ? Database.Get() : nullptr; }
+	/** Get the source database (read-only). Lazily reopens the DB after transient startup/open failures. */
+	FMonolithSourceDatabase* GetDatabase();
 
 	/** Full reindex: engine + shaders + project source (clean build). */
 	void TriggerReindex();
@@ -39,6 +39,8 @@ private:
 	FString GetEngineSourcePath() const;
 	FString GetEngineShaderPath() const;
 	FString GetProjectPath() const;
+	bool EnsureDatabaseOpen();
+	bool TryOpenDatabaseWithRetry(const FString& DbPath, const TCHAR* Context);
 	void ReopenDatabase(const FString& DbPath);
 
 	/**
@@ -60,4 +62,7 @@ private:
 
 	/** F17: FPlatformTime::Seconds() at last successful auto-kick — used for the 5s cooldown. */
 	double LastReindexTimeSeconds = 0.0;
+
+	/** Last failed lazy DB open attempt; throttles repeated source_query failures. */
+	double LastDatabaseOpenFailureTimeSeconds = 0.0;
 };
