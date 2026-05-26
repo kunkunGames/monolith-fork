@@ -2995,6 +2995,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldBossAI(const TSh
 	TSharedPtr<FJsonObject> Result = BuildGenreScaffoldResult(Name, TEXT("Boss AI"), CreatedAssets, Warnings, NextSteps);
 
 	TArray<TSharedPtr<FJsonValue>> PhaseArr;
+	PhaseArr.Reserve(Phases.Num());
 	for (const FPhaseInfo& Phase : Phases)
 	{
 		TSharedPtr<FJsonObject> PhaseObj = MakeShared<FJsonObject>();
