@@ -30,7 +30,7 @@ public class MonolithBABridge : ModuleRules
 
 					if (!bHasBlueprintAssist)
 					{
-						bHasBlueprintAssist = Directory.GetDirectories(
+						bHasBlueprintAssist = Directory.Exists(ProjectPluginsDir) && Directory.GetDirectories(
 							ProjectPluginsDir, "BlueprintAssist_*",
 							SearchOption.TopDirectoryOnly).Length > 0;
 					}
@@ -49,7 +49,7 @@ public class MonolithBABridge : ModuleRules
 
 					if (!bHasBlueprintAssist)
 					{
-						bHasBlueprintAssist = Directory.GetDirectories(
+						bHasBlueprintAssist = Directory.Exists(MarketplaceDir) && Directory.GetDirectories(
 							MarketplaceDir, "BlueprintAssist_*",
 							SearchOption.TopDirectoryOnly).Length > 0;
 					}
@@ -66,7 +66,7 @@ public class MonolithBABridge : ModuleRules
 
 						if (!bHasBlueprintAssist)
 						{
-							bHasBlueprintAssist = Directory.GetDirectories(
+							bHasBlueprintAssist = Directory.Exists(EnginePluginsDir) && Directory.GetDirectories(
 								EnginePluginsDir, "BlueprintAssist_*",
 								SearchOption.TopDirectoryOnly).Length > 0;
 						}

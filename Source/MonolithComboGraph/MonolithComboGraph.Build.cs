@@ -22,9 +22,9 @@ public class MonolithComboGraph : ModuleRules
 				{
 					bHasComboGraph = Directory.Exists(
 						Path.Combine(ProjectPluginsDir, "ComboGraph"))
-						|| Directory.GetDirectories(
+						|| (Directory.Exists(ProjectPluginsDir) && Directory.GetDirectories(
 							ProjectPluginsDir, "ComboGraph_*",
-							SearchOption.TopDirectoryOnly).Length > 0;
+							SearchOption.TopDirectoryOnly).Length > 0);
 				}
 			}
 
@@ -40,7 +40,7 @@ public class MonolithComboGraph : ModuleRules
 
 					if (!bHasComboGraph)
 					{
-						bHasComboGraph = Directory.GetDirectories(
+						bHasComboGraph = Directory.Exists(MarketplaceDir) && Directory.GetDirectories(
 							MarketplaceDir, "ComboGraph_*",
 							SearchOption.TopDirectoryOnly).Length > 0;
 					}

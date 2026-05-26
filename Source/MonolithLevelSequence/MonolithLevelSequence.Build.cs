@@ -44,7 +44,7 @@ public class MonolithLevelSequence : ModuleRules
 				if (Directory.Exists(ProjectPluginsDir))
 				{
 					bHasMovieRenderPipeline = Directory.Exists(Path.Combine(ProjectPluginsDir, "MovieRenderPipeline"))
-						|| Directory.GetDirectories(ProjectPluginsDir, "MovieRenderPipeline_*", SearchOption.TopDirectoryOnly).Length > 0;
+						|| (Directory.Exists(ProjectPluginsDir) && Directory.GetDirectories(ProjectPluginsDir, "MovieRenderPipeline_*", SearchOption.TopDirectoryOnly).Length > 0);
 				}
 			}
 

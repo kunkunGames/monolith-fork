@@ -24,9 +24,9 @@ public class MonolithLogicDriver : ModuleRules
 						Path.Combine(ProjectPluginsDir, "SMSystem"))
 						|| Directory.Exists(
 							Path.Combine(ProjectPluginsDir, "LogicDriver"))
-						|| Directory.GetDirectories(
+						|| (Directory.Exists(ProjectPluginsDir) && Directory.GetDirectories(
 							ProjectPluginsDir, "LogicDriver_*",
-							SearchOption.TopDirectoryOnly).Length > 0;
+							SearchOption.TopDirectoryOnly).Length > 0);
 				}
 			}
 
@@ -42,7 +42,7 @@ public class MonolithLogicDriver : ModuleRules
 
 					if (!bHasLogicDriver)
 					{
-						bHasLogicDriver = Directory.GetDirectories(
+						bHasLogicDriver = Directory.Exists(MarketplaceDir) && Directory.GetDirectories(
 							MarketplaceDir, "LogicDriver_*",
 							SearchOption.TopDirectoryOnly).Length > 0;
 					}
@@ -58,9 +58,9 @@ public class MonolithLogicDriver : ModuleRules
 							Path.Combine(EnginePluginsDir, "SMSystem"))
 							|| Directory.Exists(
 								Path.Combine(EnginePluginsDir, "LogicDriver"))
-							|| Directory.GetDirectories(
+							|| (Directory.Exists(EnginePluginsDir) && Directory.GetDirectories(
 								EnginePluginsDir, "LogicDriver_*",
-								SearchOption.TopDirectoryOnly).Length > 0;
+								SearchOption.TopDirectoryOnly).Length > 0);
 					}
 				}
 			}
