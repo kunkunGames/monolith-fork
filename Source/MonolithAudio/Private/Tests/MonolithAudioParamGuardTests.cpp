@@ -72,6 +72,70 @@ bool FMonolithParamGuardAudioRejectsMalformedParamsTest::RunTest(const FString& 
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioCreateSoundMixRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.CreateSoundMixRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioCreateSoundMixRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SM_TestSoundMix1"));
+	Params->SetStringField(TEXT("initial_delay"), TEXT("malformed")); // Should be number
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("create_sound_mix"), Params);
+	TestTrue(TEXT("CreateSoundMix with malformed initial_delay should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("CreateSoundMix reports malformed initial_delay"), Result.ErrorMessage.Contains(TEXT("initial_delay must be a number")));
+
+	TSharedPtr<FJsonObject> Params2 = MakeShared<FJsonObject>();
+	Params2->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SM_TestSoundMix2"));
+	TArray<TSharedPtr<FJsonValue>> ClassEffects;
+	TSharedPtr<FJsonObject> EffectObj = MakeShared<FJsonObject>();
+	EffectObj->SetStringField(TEXT("SoundClass"), TEXT("None"));
+	EffectObj->SetStringField(TEXT("bApplyToChildren"), TEXT("malformed")); // Should be bool
+	ClassEffects.Add(MakeShared<FJsonValueObject>(EffectObj));
+	Params2->SetArrayField(TEXT("class_effects"), ClassEffects);
+
+	FMonolithActionResult Result2 = ExecuteAudioAction(TEXT("create_sound_mix"), Params2);
+	TestTrue(TEXT("CreateSoundMix with malformed bApplyToChildren should return Error"), !Result2.bSuccess);
+	TestTrue(TEXT("CreateSoundMix reports malformed class_effects error"), Result2.ErrorMessage.Contains(TEXT("bApplyToChildren must be a boolean")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioSetSoundMixSettingsRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.SetSoundMixSettingsRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioSetSoundMixSettingsRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+	CreateParams->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SM_TestSoundMixForEdit"));
+	ExecuteAudioAction(TEXT("create_sound_mix"), CreateParams);
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SM_TestSoundMixForEdit"));
+	TArray<TSharedPtr<FJsonValue>> ClassEffects;
+	TSharedPtr<FJsonObject> EffectObj = MakeShared<FJsonObject>();
+	EffectObj->SetStringField(TEXT("SoundClass"), TEXT("None"));
+	EffectObj->SetStringField(TEXT("bApplyToChildren"), TEXT("malformed")); // Should be bool
+	ClassEffects.Add(MakeShared<FJsonValueObject>(EffectObj));
+	Params->SetArrayField(TEXT("class_effects"), ClassEffects);
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("set_sound_mix_settings"), Params);
+	TestTrue(TEXT("SetSoundMixSettings with malformed bApplyToChildren should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("SetSoundMixSettings reports malformed class_effects error"), Result.ErrorMessage.Contains(TEXT("bApplyToChildren must be a boolean")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioCreateTestWaveRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.CreateTestWaveRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioCreateTestWaveRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SW_TestTestWave"));
+	Params->SetStringField(TEXT("frequency_hz"), TEXT("malformed")); // Should be number
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("create_test_wave"), Params);
+	TestTrue(TEXT("CreateTestWave with malformed property should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("CreateTestWave reports malformed property"), Result.ErrorMessage.Contains(TEXT("frequency_hz must be a number")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioBuildSoundCueRejectsMalformedSpecTest, "Monolith.ParamGuard.Audio.BuildSoundCueRejectsMalformedSpec", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardAudioBuildSoundCueRejectsMalformedSpecTest::RunTest(const FString& Parameters)
 {

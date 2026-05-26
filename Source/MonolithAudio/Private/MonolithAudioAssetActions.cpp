@@ -885,12 +885,44 @@ static bool JsonToSoundClassAdjuster(const TSharedPtr<FJsonObject>& Json, FSound
 	}
 
 	double DVal;
-	if (Json->TryGetNumberField(TEXT("VolumeAdjuster"), DVal)) OutAdjuster.VolumeAdjuster = static_cast<float>(DVal);
-	if (Json->TryGetNumberField(TEXT("PitchAdjuster"), DVal)) OutAdjuster.PitchAdjuster = static_cast<float>(DVal);
-	if (Json->TryGetNumberField(TEXT("LowPassFilterFrequency"), DVal)) OutAdjuster.LowPassFilterFrequency = static_cast<float>(DVal);
+	if (Json->HasField(TEXT("VolumeAdjuster")))
+	{
+		if (!Json->TryGetNumberField(TEXT("VolumeAdjuster"), DVal))
+		{
+			OutError = TEXT("Malformed parameter: VolumeAdjuster must be a number");
+			return false;
+		}
+		OutAdjuster.VolumeAdjuster = static_cast<float>(DVal);
+	}
+	if (Json->HasField(TEXT("PitchAdjuster")))
+	{
+		if (!Json->TryGetNumberField(TEXT("PitchAdjuster"), DVal))
+		{
+			OutError = TEXT("Malformed parameter: PitchAdjuster must be a number");
+			return false;
+		}
+		OutAdjuster.PitchAdjuster = static_cast<float>(DVal);
+	}
+	if (Json->HasField(TEXT("LowPassFilterFrequency")))
+	{
+		if (!Json->TryGetNumberField(TEXT("LowPassFilterFrequency"), DVal))
+		{
+			OutError = TEXT("Malformed parameter: LowPassFilterFrequency must be a number");
+			return false;
+		}
+		OutAdjuster.LowPassFilterFrequency = static_cast<float>(DVal);
+	}
 
 	bool bVal;
-	if (Json->TryGetBoolField(TEXT("bApplyToChildren"), bVal)) OutAdjuster.bApplyToChildren = bVal;
+	if (Json->HasField(TEXT("bApplyToChildren")))
+	{
+		if (!Json->TryGetBoolField(TEXT("bApplyToChildren"), bVal))
+		{
+			OutError = TEXT("Malformed parameter: bApplyToChildren must be a boolean");
+			return false;
+		}
+		OutAdjuster.bApplyToChildren = bVal;
+	}
 
 	return true;
 }
@@ -904,29 +936,37 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundMix(const TSharedPt
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
-	FString Error;
-	USoundMix* Asset = CreateAudioAsset<USoundMixFactory, USoundMix>(AssetPath, Error);
-	if (!Asset)
+	// 1. Pre-validate timing fields
+	bool bHasInitialDelay = false, bHasFadeIn = false, bHasDuration = false, bHasFadeOut = false;
+	double InitialDelayVal = 0, FadeInVal = 0, DurationVal = 0, FadeOutVal = 0;
+	if (Params->HasField(TEXT("initial_delay")))
 	{
-		return FMonolithActionResult::Error(Error);
+		if (!Params->TryGetNumberField(TEXT("initial_delay"), InitialDelayVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: initial_delay must be a number"));
+		bHasInitialDelay = true;
+	}
+	if (Params->HasField(TEXT("fade_in_time")))
+	{
+		if (!Params->TryGetNumberField(TEXT("fade_in_time"), FadeInVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: fade_in_time must be a number"));
+		bHasFadeIn = true;
+	}
+	if (Params->HasField(TEXT("duration")))
+	{
+		if (!Params->TryGetNumberField(TEXT("duration"), DurationVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: duration must be a number"));
+		bHasDuration = true;
+	}
+	if (Params->HasField(TEXT("fade_out_time")))
+	{
+		if (!Params->TryGetNumberField(TEXT("fade_out_time"), FadeOutVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: fade_out_time must be a number"));
+		bHasFadeOut = true;
 	}
 
-	// Apply optional EQ settings
-	const TSharedPtr<FJsonObject>* EqJson = nullptr;
-	if (Params->TryGetObjectField(TEXT("eq_settings"), EqJson) && EqJson && EqJson->IsValid())
-	{
-		FString SetError;
-		if (!JsonToStruct(*EqJson, FAudioEQEffect::StaticStruct(), &Asset->EQSettings, SetError))
-		{
-			UE_LOG(LogMonolith, Warning, TEXT("create_sound_mix: EQ settings error: %s"), *SetError);
-		}
-	}
-
-	// Apply optional class effects
+	// 2. Pre-validate class effects
+	bool bHasEffects = false;
+	TArray<FSoundClassAdjuster> ParsedEffects;
 	const TArray<TSharedPtr<FJsonValue>>* ClassEffectsArr = nullptr;
 	if (Params->TryGetArrayField(TEXT("class_effects"), ClassEffectsArr) && ClassEffectsArr)
 	{
-		Asset->SoundClassEffects.Empty();
+		bHasEffects = true;
 		for (const auto& Val : *ClassEffectsArr)
 		{
 			const TSharedPtr<FJsonObject>* AdjusterObj = nullptr;
@@ -934,24 +974,51 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundMix(const TSharedPt
 			{
 				FSoundClassAdjuster Adjuster;
 				FString AdjError;
-				if (JsonToSoundClassAdjuster(*AdjusterObj, Adjuster, AdjError))
+				if (!JsonToSoundClassAdjuster(*AdjusterObj, Adjuster, AdjError))
 				{
-					Asset->SoundClassEffects.Add(Adjuster);
+					return FMonolithActionResult::Error(FString::Printf(TEXT("class_effects error: %s"), *AdjError));
 				}
-				else
-				{
-					UE_LOG(LogMonolith, Warning, TEXT("create_sound_mix: class effect error: %s"), *AdjError);
-				}
+				ParsedEffects.Add(Adjuster);
 			}
 		}
 	}
 
-	// Timing fields
-	double DVal;
-	if (Params->TryGetNumberField(TEXT("initial_delay"), DVal)) Asset->InitialDelay = static_cast<float>(DVal);
-	if (Params->TryGetNumberField(TEXT("fade_in_time"), DVal)) Asset->FadeInTime = static_cast<float>(DVal);
-	if (Params->TryGetNumberField(TEXT("duration"), DVal)) Asset->Duration = static_cast<float>(DVal);
-	if (Params->TryGetNumberField(TEXT("fade_out_time"), DVal)) Asset->FadeOutTime = static_cast<float>(DVal);
+	// 3. Pre-validate EQ settings
+	bool bHasEq = false;
+	FAudioEQEffect ParsedEq;
+	const TSharedPtr<FJsonObject>* EqJson = nullptr;
+	if (Params->TryGetObjectField(TEXT("eq_settings"), EqJson) && EqJson && EqJson->IsValid())
+	{
+		bHasEq = true;
+		FString SetError;
+		if (!JsonToStruct(*EqJson, FAudioEQEffect::StaticStruct(), &ParsedEq, SetError))
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("eq_settings error: %s"), *SetError));
+		}
+	}
+
+	// 4. Create and mutate asset only after all validation passes
+	FString Error;
+	USoundMix* Asset = CreateAudioAsset<USoundMixFactory, USoundMix>(AssetPath, Error);
+	if (!Asset)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+
+	if (bHasEq)
+	{
+		Asset->EQSettings = ParsedEq;
+	}
+
+	if (bHasEffects)
+	{
+		Asset->SoundClassEffects = ParsedEffects;
+	}
+
+	if (bHasInitialDelay) Asset->InitialDelay = static_cast<float>(InitialDelayVal);
+	if (bHasFadeIn) Asset->FadeInTime = static_cast<float>(FadeInVal);
+	if (bHasDuration) Asset->Duration = static_cast<float>(DurationVal);
+	if (bHasFadeOut) Asset->FadeOutTime = static_cast<float>(FadeOutVal);
 
 	Asset->GetPackage()->MarkPackageDirty();
 
@@ -1024,23 +1091,37 @@ FMonolithActionResult FMonolithAudioAssetActions::SetSoundMixSettings(const TSha
 		return FMonolithActionResult::Error(Error);
 	}
 
-	Asset->Modify();
-
-	// EQ settings
-	const TSharedPtr<FJsonObject>* EqJson = nullptr;
-	if (Params->TryGetObjectField(TEXT("eq_settings"), EqJson) && EqJson && EqJson->IsValid())
+	// 1. Pre-validate timing fields
+	bool bHasInitialDelay = false, bHasFadeIn = false, bHasDuration = false, bHasFadeOut = false;
+	double InitialDelayVal = 0, FadeInVal = 0, DurationVal = 0, FadeOutVal = 0;
+	if (Params->HasField(TEXT("initial_delay")))
 	{
-		if (!JsonToStruct(*EqJson, FAudioEQEffect::StaticStruct(), &Asset->EQSettings, Error))
-		{
-			return FMonolithActionResult::Error(Error);
-		}
+		if (!Params->TryGetNumberField(TEXT("initial_delay"), InitialDelayVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: initial_delay must be a number"));
+		bHasInitialDelay = true;
+	}
+	if (Params->HasField(TEXT("fade_in_time")))
+	{
+		if (!Params->TryGetNumberField(TEXT("fade_in_time"), FadeInVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: fade_in_time must be a number"));
+		bHasFadeIn = true;
+	}
+	if (Params->HasField(TEXT("duration")))
+	{
+		if (!Params->TryGetNumberField(TEXT("duration"), DurationVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: duration must be a number"));
+		bHasDuration = true;
+	}
+	if (Params->HasField(TEXT("fade_out_time")))
+	{
+		if (!Params->TryGetNumberField(TEXT("fade_out_time"), FadeOutVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: fade_out_time must be a number"));
+		bHasFadeOut = true;
 	}
 
-	// Class effects (replaces entire array)
+	// 2. Pre-validate class effects
+	bool bHasEffects = false;
+	TArray<FSoundClassAdjuster> ParsedEffects;
 	const TArray<TSharedPtr<FJsonValue>>* ClassEffectsArr = nullptr;
 	if (Params->TryGetArrayField(TEXT("class_effects"), ClassEffectsArr) && ClassEffectsArr)
 	{
-		Asset->SoundClassEffects.Empty();
+		bHasEffects = true;
 		for (const auto& Val : *ClassEffectsArr)
 		{
 			const TSharedPtr<FJsonObject>* AdjusterObj = nullptr;
@@ -1048,24 +1129,46 @@ FMonolithActionResult FMonolithAudioAssetActions::SetSoundMixSettings(const TSha
 			{
 				FSoundClassAdjuster Adjuster;
 				FString AdjError;
-				if (JsonToSoundClassAdjuster(*AdjusterObj, Adjuster, AdjError))
-				{
-					Asset->SoundClassEffects.Add(Adjuster);
-				}
-				else
+				if (!JsonToSoundClassAdjuster(*AdjusterObj, Adjuster, AdjError))
 				{
 					return FMonolithActionResult::Error(FString::Printf(TEXT("class_effects error: %s"), *AdjError));
 				}
+				ParsedEffects.Add(Adjuster);
 			}
 		}
 	}
 
-	// Timing fields
-	double DVal;
-	if (Params->TryGetNumberField(TEXT("initial_delay"), DVal)) Asset->InitialDelay = static_cast<float>(DVal);
-	if (Params->TryGetNumberField(TEXT("fade_in_time"), DVal)) Asset->FadeInTime = static_cast<float>(DVal);
-	if (Params->TryGetNumberField(TEXT("duration"), DVal)) Asset->Duration = static_cast<float>(DVal);
-	if (Params->TryGetNumberField(TEXT("fade_out_time"), DVal)) Asset->FadeOutTime = static_cast<float>(DVal);
+	// 3. Pre-validate EQ settings
+	bool bHasEq = false;
+	FAudioEQEffect ParsedEq;
+	const TSharedPtr<FJsonObject>* EqJson = nullptr;
+	if (Params->TryGetObjectField(TEXT("eq_settings"), EqJson) && EqJson && EqJson->IsValid())
+	{
+		bHasEq = true;
+		FString SetError;
+		if (!JsonToStruct(*EqJson, FAudioEQEffect::StaticStruct(), &ParsedEq, SetError))
+		{
+			return FMonolithActionResult::Error(SetError);
+		}
+	}
+
+	// 4. Mutate asset only after all validation passes
+	Asset->Modify();
+
+	if (bHasEq)
+	{
+		Asset->EQSettings = ParsedEq;
+	}
+
+	if (bHasEffects)
+	{
+		Asset->SoundClassEffects = ParsedEffects;
+	}
+
+	if (bHasInitialDelay) Asset->InitialDelay = static_cast<float>(InitialDelayVal);
+	if (bHasFadeIn) Asset->FadeInTime = static_cast<float>(FadeInVal);
+	if (bHasDuration) Asset->Duration = static_cast<float>(DurationVal);
+	if (bHasFadeOut) Asset->FadeOutTime = static_cast<float>(FadeOutVal);
 
 	Asset->PostEditChange();
 	Asset->GetPackage()->MarkPackageDirty();
@@ -1552,10 +1655,26 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateTestWave(const TSharedPt
 	double Amplitude = 0.5;
 
 	double TmpD = 0.0;
-	if (Params->TryGetNumberField(TEXT("frequency_hz"), TmpD)) FrequencyHz = TmpD;
-	if (Params->TryGetNumberField(TEXT("duration_seconds"), TmpD)) DurationSeconds = TmpD;
-	if (Params->TryGetNumberField(TEXT("amplitude"), TmpD)) Amplitude = TmpD;
-	if (Params->TryGetNumberField(TEXT("sample_rate"), TmpD)) SampleRate = static_cast<int32>(TmpD);
+	if (Params->HasField(TEXT("frequency_hz")))
+	{
+		if (!Params->TryGetNumberField(TEXT("frequency_hz"), TmpD)) return FMonolithActionResult::Error(TEXT("Malformed parameter: frequency_hz must be a number"));
+		FrequencyHz = TmpD;
+	}
+	if (Params->HasField(TEXT("duration_seconds")))
+	{
+		if (!Params->TryGetNumberField(TEXT("duration_seconds"), TmpD)) return FMonolithActionResult::Error(TEXT("Malformed parameter: duration_seconds must be a number"));
+		DurationSeconds = TmpD;
+	}
+	if (Params->HasField(TEXT("amplitude")))
+	{
+		if (!Params->TryGetNumberField(TEXT("amplitude"), TmpD)) return FMonolithActionResult::Error(TEXT("Malformed parameter: amplitude must be a number"));
+		Amplitude = TmpD;
+	}
+	if (Params->HasField(TEXT("sample_rate")))
+	{
+		if (!Params->TryGetNumberField(TEXT("sample_rate"), TmpD)) return FMonolithActionResult::Error(TEXT("Malformed parameter: sample_rate must be a number"));
+		SampleRate = static_cast<int32>(TmpD);
+	}
 
 	if (FrequencyHz < 20.0 || FrequencyHz > 20000.0)
 	{
