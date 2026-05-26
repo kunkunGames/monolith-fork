@@ -409,6 +409,7 @@ FMonolithActionResult FMonolithAnimLayoutActions::HandleListMetaHumanAssets(cons
 	AssetRegistry.GetAssets(Filter, Assets);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(Limit);
 	int32 MatchedCount = 0;
 	TMap<FString, int32> ClassCounts;
 

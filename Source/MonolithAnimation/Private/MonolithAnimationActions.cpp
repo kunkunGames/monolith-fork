@@ -1439,6 +1439,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetBoneTrackKeys(const TS
 		TArray<TSharedPtr<FJsonValue>> Arr;
 		if (FJsonSerializer::Deserialize(Reader, Arr))
 		{
+			Positions.Reserve(Arr.Num());
 			for (const auto& Val : Arr)
 			{
 				const TArray<TSharedPtr<FJsonValue>>* Inner;
@@ -1457,6 +1458,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetBoneTrackKeys(const TS
 		TArray<TSharedPtr<FJsonValue>> Arr;
 		if (FJsonSerializer::Deserialize(Reader, Arr))
 		{
+			Rotations.Reserve(Arr.Num());
 			for (const auto& Val : Arr)
 			{
 				const TArray<TSharedPtr<FJsonValue>>* Inner;
@@ -1475,6 +1477,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetBoneTrackKeys(const TS
 		TArray<TSharedPtr<FJsonValue>> Arr;
 		if (FJsonSerializer::Deserialize(Reader, Arr))
 		{
+			Scales.Reserve(Arr.Num());
 			for (const auto& Val : Arr)
 			{
 				const TArray<TSharedPtr<FJsonValue>>* Inner;
@@ -1554,6 +1557,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveVirtualBones(const 
 	const TArray<TSharedPtr<FJsonValue>>* BoneNamesArray;
 	if (Params->TryGetArrayField(TEXT("bone_names"), BoneNamesArray))
 	{
+		BoneNames.Reserve(BoneNamesArray->Num());
 		for (const auto& Val : *BoneNamesArray)
 		{
 			BoneNames.Add(Val->AsString());
@@ -1568,6 +1572,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveVirtualBones(const 
 	if (BoneNames.Num() == 0)
 	{
 		TArray<FName> AllVBNames;
+		AllVBNames.Reserve(Skeleton->GetVirtualBones().Num());
 		for (const FVirtualBone& VB : Skeleton->GetVirtualBones())
 		{
 			AllVBNames.Add(VB.VirtualBoneName);
