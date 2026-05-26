@@ -1,5 +1,6 @@
 #include "MonolithMaterialModule.h"
 #include "MonolithMaterialActions.h"
+#include "MonolithMaterialBulkFillAdapter.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
@@ -15,12 +16,15 @@ void FMonolithMaterialModule::StartupModule()
 	{
 		FMonolithMaterialActions::RegisterActions(OwnedRegistry);
 	});
+	FMonolithMaterialBulkFillAdapter::Register();
+
 	UE_LOG(LogMonolith, Log, TEXT("Monolith - Material module loaded (%d material actions)"),
 		Registry.GetNamespaceActionCount(TEXT("material")));
 }
 
 void FMonolithMaterialModule::ShutdownModule()
 {
+	FMonolithMaterialBulkFillAdapter::Unregister();
 	FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithMaterial"));
 }
 

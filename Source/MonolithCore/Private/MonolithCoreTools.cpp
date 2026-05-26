@@ -1,4 +1,5 @@
 #include "MonolithCoreTools.h"
+#include "MonolithGuideTool.h"
 #include "MonolithCoreModule.h"
 #include "MonolithFuzzyMatch.h"
 #include "MonolithJsonUtils.h"
@@ -619,6 +620,10 @@ void FMonolithCoreTools::RegisterAll()
 		);
 	}
 
+	// monolith_guide — editorial cross-namespace workflow guide (separate tool file,
+	// one-tool-per-file; registers into the "monolith" namespace).
+	FMonolithGuideTool::RegisterAll();
+
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("get_mcp_server_status"),
 		TEXT("Return Monolith MCP transport status, CORS/header policy, protocol support, route state, and request limits."),
@@ -1176,6 +1181,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 
 		Result->SetArrayField(TEXT("namespaces"), NsArray);
 		Result->SetNumberField(TEXT("total_actions"), Registry.GetActionCount());
+		Result->SetStringField(TEXT("guide_hint"), TEXT("Call monolith_guide() for editorial cross-namespace workflow recipes, decision matrices, and error-recovery maps. Section-keyed to bound context cost."));
 	}
 
 	return FMonolithActionResult::Success(Result);

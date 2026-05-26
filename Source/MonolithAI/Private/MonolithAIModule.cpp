@@ -18,6 +18,7 @@
 #include "MonolithAIMassZoneGraphActions.h"
 #include "MonolithAIIndexer.h"
 #include "MonolithIndexSubsystem.h"
+#include "MonolithAIBulkFillAdapter.h"
 #include "Editor.h"
 
 DEFINE_LOG_CATEGORY(LogMonolithAI);
@@ -48,6 +49,12 @@ void FMonolithAIModule::StartupModule()
 	FMonolithAIAdvancedActions::RegisterActions(Registry);
 	FMonolithAIMassZoneGraphActions::RegisterActions(Registry);
 	FMonolithAIChooserActions::RegisterActions(Registry);
+
+	// Phase 5 Step 1 (MCP Ergonomics, 2026-05-11) — register the ai adapter on the
+	// central FMonolithBulkFillRegistry. No WITH_* gate needed (AIModule is always-on
+	// engine core). Body delegates EQS-tests/BB-keys/SmartObject-slots fill_kinds to
+	// FMonolithReflectionWalker.
+	FMonolithAIBulkFillAdapter::Register();
 
 	// Register the AI deep indexer into MonolithIndex (deferred until editor subsystems are ready)
 	if (Settings->bIndexAI)
@@ -84,6 +91,7 @@ void FMonolithAIModule::ShutdownModule()
 		PostEngineInitHandle.Reset();
 	}
 
+	FMonolithAIBulkFillAdapter::Unregister();
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("ai"));
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("chooser"));
 }

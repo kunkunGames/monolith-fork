@@ -13,6 +13,7 @@
 #include "MonolithGASInspectActions.h"
 #include "MonolithGASScaffoldActions.h"
 #include "MonolithGASUIBindingActions.h"
+#include "MonolithGASBulkFillAdapter.h"
 
 DEFINE_LOG_CATEGORY(LogMonolithGAS);
 
@@ -47,6 +48,8 @@ void FMonolithGASModule::StartupModule()
 		FMonolithGASUIBindingActions::RegisterActions(OwnedRegistry);
 	});
 
+	FMonolithGASBulkFillAdapter::Register();
+
 	int32 ActionCount = Registry.GetNamespaceActionCount(TEXT("gas"));
 	const TCHAR* GbaStatus =
 #if WITH_GBA
@@ -59,6 +62,7 @@ void FMonolithGASModule::StartupModule()
 
 void FMonolithGASModule::ShutdownModule()
 {
+	FMonolithGASBulkFillAdapter::Unregister();
 	FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithGAS"));
 }
 

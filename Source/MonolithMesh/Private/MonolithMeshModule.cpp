@@ -7,6 +7,7 @@
 #include "MonolithLevelInstanceActions.h"
 #include "MonolithHlodActions.h"
 #include "MonolithActorMergeActions.h"
+#include "MonolithMeshBulkFillAdapter.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
@@ -73,6 +74,12 @@ void FMonolithMeshModule::StartupModule()
 	UE_LOG(LogMonolith, Log, TEXT("Monolith — Mesh operations enabled (GeometryScript available)"));
 #endif
 
+	// Phase 5 Step 5 (MCP Ergonomics, 2026-05-11) — register the mesh adapter
+	// OUTSIDE the WITH_GEOMETRYSCRIPT gate so bulk_fill is available regardless
+	// of GeometryScript availability. SurfaceDataTable + ActorProperties
+	// fill_kinds are reflection-bound, not GeometryScript-bound.
+	FMonolithMeshBulkFillAdapter::Register();
+
 	UE_LOG(LogMonolith, Log, TEXT("Monolith — Mesh module loaded (%d actions)"),
 		FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("mesh")));
 }
@@ -86,6 +93,7 @@ void FMonolithMeshModule::ShutdownModule()
 	HandlePool = nullptr;
 #endif
 
+	FMonolithMeshBulkFillAdapter::Unregister();
 	FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithMesh"));
 }
 

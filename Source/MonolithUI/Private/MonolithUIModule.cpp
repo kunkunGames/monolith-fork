@@ -36,6 +36,18 @@
 // from Phases A-G+I.
 #include "Actions/MonolithUISpecActions.h"
 
+// Phase 4 (2026-05-11) — bulk_fill / describe adapter for target_namespace="ui".
+// Per H5 stub-adapter invariant: Register() ALWAYS runs from StartupModule,
+// regardless of WITH_COMMONUI. The adapter BODY splits per fill_kind:
+//   * vanilla UMG paths (DataTableRows, WidgetProperties, slot-prop describe)
+//     run gate-free
+//   * CommonUI-specific paths (InputActionDataTable) are #if WITH_COMMONUI
+//     gated INSIDE the adapter with a clean stub error in the #else branch.
+// SINGLE-TRANSACTION INVARIANT: the 40-row input-action DT write commits as
+// ONE FScopedTransaction + ONE Modify + N AddRow + ONE MarkPackageDirty —
+// THE fix for the 2026-04-25 parallel-burst editor crash.
+#include "MonolithUIBulkFillAdapter.h"
+
 #if WITH_COMMONUI
 #include "CommonUI/MonolithCommonUIActions.h"
 #include "Style/MonolithUIStyleDiagnosticsActions.h"
@@ -93,6 +105,8 @@ void FMonolithUIModule::StartupModule()
 #endif
     });
 
+    FMonolithUIBulkFillAdapter::Register();
+
     // OnPostEngineInit re-scan: editor subsystems initialise AFTER OnPostEngineInit
     // has fired, so the SUBSYSTEM's own Initialize cannot listen to it. The
     // module's StartupModule runs earlier — register here, dispatch into the
@@ -129,6 +143,10 @@ void FMonolithUIModule::ShutdownModule()
         FCoreDelegates::OnPostEngineInit.Remove(GMonolithUIPostEngineInitHandle);
         GMonolithUIPostEngineInitHandle.Reset();
     }
+
+    // Phase 4 (2026-05-11) — symmetric unregister of the bulk_fill / describe
+    // adapter. Mirrors the unconditional Register() in StartupModule.
+    FMonolithUIBulkFillAdapter::Unregister();
 
     FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithUI"));
 

@@ -1,14 +1,16 @@
 # Monolith API Reference
 
-**Version:** v0.14.10 · **Last updated:** 2026-05-21
+**Version:** v0.15.0 · **Last updated:** 2026-05-23
 
-Action and dispatcher totals are runtime-discovered. Call `monolith_status()` for live totals, `monolith_find("task text")` when the exact action is unclear, and `monolith_discover("<namespace>")` or `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` for current action schemas; 24 town-gen actions remain experimental and disabled until `bEnableProceduralTownGen=true`.
+**In-tree action total: 1344** registered across **19 in-tree namespaces** (all active by default; 45 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the registry to 1389). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, which are included in that headline figure. The five `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers bring the MCP tool count to 23. This total EXCLUDES sibling-plugin actions (`MonolithISX`, `MonolithSteamBridge`, `MonolithSubstance`, `MonolithClaudeDesignBridge`) — they ship in their own repos and are not in the public release zip.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
 > Auto-generated and hand-curated. Each action is dispatched via HTTP POST to `http://localhost:<port>` with JSON body `{ "namespace": "<ns>", "action": "<action>", "params": { ... } }`, or via the MCP `tools/list` surface that AI clients see at session start.
 >
-> For the most current param schemas, call `monolith_discover` at runtime — it returns live schemas straight out of the plugin. Use `monolith_find` first for fuzzy task-to-action routing. This document is a curated reference, not a source-of-truth substitute.
+> For the most current param schemas, call `monolith_discover("<namespace>")` at runtime — it returns live schemas straight out of the plugin. This document is a curated reference, not a source-of-truth substitute.
+>
+> **0.15.0:** the namespace counts in the Table of Contents and the per-namespace body sections below were regenerated against live `monolith_discover()` on 2026-05-23 — the 0.14.8 → 0.15.0 additions are reflected (the `bulk_fill` / `describe` framework, the blueprint dataset read/edit pack, the UI/Blueprint gap-closure actions, `monolith_guide`, `editor` Python/PIE/console verbs, the `level_sequence` namespace, and the audio MetaSound document-introspection actions). Body sections list every action by category; deep-dive param tables cover the high-traffic ones. For the exhaustive live param schema of any action, call `monolith_discover("<namespace>")` or `describe_query("action_schema", ...)`.
 
 ---
 
@@ -16,42 +18,26 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 
 | Namespace | Actions | Description |
 |-----------|---------|-------------|
-| [monolith](#monolith) | 5 primary + management/profile/audit helpers | Core server tools (find, discover, status, update, reindex), MCP/session diagnostics, readiness/onboarding/notification settings, execution audit/policy, and tool profile management |
-| [blueprint](#blueprint) | 99 | Blueprint read/write, variable/component/graph CRUD, DataTable maintenance, node ops, compile, auto-layout, spawn actors |
-| [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection / Fracture visibility registered by MonolithChaosFracture |
+| [monolith](#monolith) | 5 | Core server tools (discover, status, update, reindex, guide) |
+| [blueprint](#blueprint) | 111 | Blueprint read/write, variable/component/graph CRUD, node ops, compile, auto-layout, spawn actors, dataset read/edit pack (DataTable/CurveTable/StringTable + `seed_data_asset`), cross-class property access, parent-function overrides |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
-| [paper2d](#paper2d) | 3 | Optional Paper2D AssetRegistry discovery registered by MonolithPaper2D |
-| [animation](#animation) | 135 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig |
-| [level_sequence](#level_sequence) | 13 | Level Sequence bindings, Director Blueprint/event wiring, saved replay metadata, and optional Sequencer Anim Mixer read-only inspection |
-| [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types) |
-| [editor](#editor) | 57 | Live Coding builds, compile output capture, Live Coding diagnostics, editor logs, scene capture, texture import, map creation, module status, automation test list/run/status/history, selection inspection, PIE/console control |
-| [config](#config) | 10 | INI config, plugin, and cvar inspection/search |
-| [dataflow](#dataflow) | 2 (+6 optional) | Optional Dataflow AssetRegistry/module-status discovery and graph inspection registered by MonolithDataflow |
-| [gamefeatures](#gamefeatures) | 1 (+4 gated) | Optional Game Feature plugin inventory and GameFeatureData inspection registered by MonolithGameFeatures |
-| [localization](#localization) | 10 | Culture inspection and guarded StringTable CRUD/import/export |
-| [interchange](#interchange) | 16 | Normalized import/export validation, guarded import mutation, reimport metadata, reimport, and export actions registered by MonolithInterchange |
-| [project](#project) | 19 | Project-wide asset index (SQLite + FTS5) |
-| [collection](#collection) | 13 | Content Browser static/dynamic collection management |
-| [source](#source) | 27 | Unreal Engine C++ source code navigation |
-| [asset](#asset) | 8 | Asset ingest, specialized asset enrichment, naming, and rename hygiene |
-| [mesh](#mesh) | 70 | Static mesh inspection/operations/validation/performance/tech-art workflows |
-| [scene](#scene) | 76 | Editor-world actor CRUD, spatial queries, lighting, audio, decals, scatter, metadata |
-| [level_instance](#level_instance) | 16 | Level Instance and prefab workflows |
-| [leveldesign](#leveldesign) | 43 | Horror/encounter/accessibility analysis, framing, monster reveal, co-op balance |
-| [worldgen](#worldgen) | 63 | Blockout, replacement, procedural structures/terrain, optional town-generation workflows |
-| [modelgen](#modelgen) | 7 | Generated-model provider, job, import, and provenance workflows |
-| [imagegen](#imagegen) | 6 | Generated-image provider discovery, ima2 bridge generation, Texture2D import, source PNG mirroring, and provenance workflows |
-| [ndisplay](#ndisplay) | 2 | Optional nDisplay / DisplayCluster config discovery registered by MonolithNDisplay |
-| [pcg](#pcg) | 4 | Optional PCG AssetRegistry/reflection discovery registered by MonolithPCG |
-| [slate](#slate) | 1 (+5 gated) | Live editor Slate window/widget inspection registered by MonolithSlate |
-| [water](#water) | 2 | Optional Water/Landscape actor discovery registered by MonolithWater |
-| [ui](#ui) | 119 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, accessibility, CommonUI, GAS UI bindings |
-| [gas](#gas) | 136 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
+| [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs (incl. custom anim-graph nodes), montages, skeletons, PoseSearch, IKRig, Control Rig |
+| [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning) |
+| [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
+| [config](#config) | 6 | INI config inspection and search |
+| [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
+| [source](#source) | 11 | Unreal Engine C++ source code navigation |
+| [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
+| [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
+| [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
-| [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
+| [ai](#ai) | 221 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
-| [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD and document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
-| **In-tree subtotal** | runtime | Use `monolith_status()` for authoritative totals; +24 town-gen actions register when enabled |
+| [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD + document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
+| [level_sequence](#level_sequence) | 8 | Level Sequence inspection: binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
+| [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 12 per-namespace adapters (`apply`, `list_namespaces`) |
+| [describe](#describe) | 3 | Read-only schema introspection for the same 12 adapters (`schema`, `list_targets`, `action_schema`) |
+| **In-tree subtotal** | **1344** | (all default-active; +45 experimental town gen → 1389 when registered) |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -68,31 +54,31 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `ai.add_perception_to_actor` | **NEW** (Phase J F8) | Direct perception attach without going through `add_perception_component` + manual wiring. |
 | `ai.get_bt_graph` | **NEW** (Phase J F8) | Read-only graph dump distinct from `get_behavior_tree`'s structural inspection. |
 | `audio.create_test_wave` | **NEW** (Phase J F18) | Procedurally synthesizes a 16-bit mono sine `USoundWave` for tests with zero asset deps. |
-| `level_sequence.get_anim_mixer_status` / `level_sequence.list_anim_mixer_tracks` | **NEW** (2026-05-19) | Read-only Sequencer Anim Mixer parity probe. UE 5.7 builds report unavailable safely; UE 5.8+ builds can list reflected mixer tracks/layers without a hard module dependency. |
-| `imagegen.generate_image_via_ima2` | **NEW** (2026-05-21) | Calls the configured ima2/imag2-gen `/api/generate` server and imports the first returned image through the MonolithAsset Texture2D ingest path. Monolith does not own provider API keys. |
 | `audio.bind_sound_to_perception` | Param validation tightened (Phase J F11) | `loudness <= 0`, `max_range < 0`, and unknown `sense_class` values now reject up-front instead of writing junk userdata. |
 | `gas.bind_widget_to_attribute` (and 3 aliases) | Param validation tightened (Phase J F2/F3) | Empty `widget_path`, missing `attribute`, or unresolvable ASC now return structured errors before any reflection writes. |
 | `ai` BT actions | Error message standardization (Phase J F15) | All BT-related actions now return `{ "error": "<code>", "detail": "<human>" }` instead of mixed prose. |
 | `gas` UI binding response | Shape change (Phase J F5) | Returns `{ bindings: [...], count: N }` instead of a bare array. Wrap your client parsers. |
-| `blueprint` DataTable maintenance | **NEW** | Adds schema inspection, guarded row update/remove, and guarded CSV export for `UDataTable` assets. |
-| `blueprint.add_event_node` | Interface override support | When `event_name` matches a BlueprintEvent function from an implemented interface, the action now creates a real `K2Node_Event` override instead of falling back to a same-named `K2Node_CustomEvent`. Parent-class override and custom-event behavior is unchanged. |
-| `localization` StringTable actions | **NEW** | Adds guarded StringTable create/edit/remove/metadata plus CSV import/export with `dry_run`/`confirm` write gates. |
-| `monolith.discover` / `monolith.describe_domain` action rows | Metadata added | Each action row includes `execution_policy` metadata (`policy_id`, `defaulted`, dirty-package/transaction/validation flags). Explicit mutating policies can now opt into central dirty-package tracking, transaction wrapping, and post-edit validation. |
-| `monolith.find` / `monolith.discover` | **EXPANDED** | Adds fuzzy task-to-action search plus projection-aware discovery (`mode=summary|actions|schema`, `query`, `action`, `fields`, `limit`, `cursor`). Domain `{namespace}_query` tools stay stable; `tools/list` descriptions no longer inline every action name. Settings-dependent deferred catalog actions remain available for diagnostics but are not the agent-facing catalog route. |
-| Core monolith + Source/index schemas | Param validation tightened | Opted-in schemas now reject wrong JSON types, unsupported enum strings, and out-of-range numeric controls before handler dispatch. Current Core coverage includes routing/discovery/status, update/reindex, MCP/session compatibility, onboarding/readiness/notification settings, execution audit/policy, and tool profile management. Source coverage includes all live `source` and `index` actions. |
-| `monolith.set_action_execution_policy` | Placeholder promoted | Developer-only local override for known action execution policies. Supports `read_only`, `track_dirty_packages`, `transaction_optional`, `transaction_required`, and `post_edit_validate`. |
-| `pcg.get_graph_asset` | **NEW** | Adds bounded AssetRegistry metadata inspection for one PCG graph-like asset without loading PCG classes or adding a hard PCG dependency. |
-| `paper2d.get_asset` | **NEW** | Returns one Paper2D AssetRegistry row and bounded tags under `/Game` without loading Paper2D assets or depending on Paper2D headers. |
-| `dataflow.*` | **EXPANDED** | Moved Dataflow discovery from `mesh.*` into `MonolithDataflow`, then added six optional read-only graph inspection actions gated by `WITH_MONOLITH_DATAFLOW`. |
-| `chaos_fracture.*` | **ROUTE CHANGE** | Moved Geometry Collection / Fracture visibility from `mesh.*` action names into the dedicated `MonolithChaosFracture` module and `chaos_fracture` namespace. |
-| `gamefeatures.*` | **NEW** | Adds `gamefeatures.get_status` plus four opt-in read-only inspection actions in the dedicated `MonolithGameFeatures` module. |
-| `slate.*` | **NEW** | Adds `slate.get_inspector_status` plus five opt-in read-only live Slate window/widget inspection actions in the dedicated `MonolithSlate` module. |
-| `water.*` | **ROUTE CHANGE** | Moved Water discovery from `mesh.get_water_status` / `mesh.list_water_bodies` into the dedicated `MonolithWater` module and `water` namespace. |
-| `ndisplay.*` | **OWNER CHANGE** | Kept the public `ndisplay` action names but moved registration from `MonolithMesh` to `MonolithNDisplay`. |
-| `interchange.*` | **OWNER CHANGE** | Kept the public `interchange` action names but moved registration from `MonolithMesh` to `MonolithInterchange`. |
-| `level_sequence.get_saved_replay` | **NEW** | Returns metadata for one saved replay container or file under the project Saved replay roots. Absolute paths, traversal, and file bytes are rejected. |
 
 The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespaces — same handler, two callable paths. Pick whichever reads better from your client.
+
+## Recent API Changes (v0.14.8 → v0.15.0)
+
+These releases added the `level_sequence` namespace, the `bulk_fill` / `describe` ergonomics framework, a blueprint dataset read/edit pack, a UI/Blueprint gap-closure sweep, `monolith_guide`, and editor automation verbs. The per-namespace body sections below now document these; full param schemas for everything are also live via `monolith_discover("<namespace>")`.
+
+| Action | Change | Reason |
+|--------|--------|--------|
+| `bulk_fill_query("apply" / "list_namespaces")` | **NEW namespace** (0.15.0) | Reflection-walker bulk property fill across 12 per-namespace adapters, with `dry_run` previews. |
+| `describe_query("schema" / "list_targets" / "action_schema")` | **NEW namespace** (0.15.0) | Read-only schema introspection for the same adapters; `action_schema` returns any registered action's full param schema. |
+| `monolith.guide` | **NEW** (0.15.0) | Section-keyed onboarding guide for AI agents (onboarding / recipes / decisions / errors / skills_map / gotchas) with a live registry overlay. |
+| `blueprint` dataset pack (17 actions) | **NEW** (0.15.0) | DataTable (8), CurveTable (5), StringTable (3), `seed_data_asset` (1) — read with row-struct schema inline, bulk upsert with dry-run, row CRUD, JSON/CSV import/export. |
+| `blueprint.add_property_access` / `override_parent_function` / `save_dirty_assets` | **NEW** (0.15.0) | Cross-class UPROPERTY get/set, value-returning parent-function override, batch save of dirty BP/Widget packages. |
+| `ui` scaffolders + gap-closure (Tier 2/3/4 + Phase 3/4) | **NEW** (0.15.0) | `scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu`, `build_menu_from_spec`, `rename_widget`, `audit_focus_chain`, `set_widget_navigation_bulk`, `dump_widget_navigation`, `convert_border_to_common`, `reparent_widget_root`, `set_widget_is_variable`, and more. |
+| `animation.add_anim_graph_node` | Param widened (0.15.0) | Optional `node_class` resolves arbitrary concrete custom `UAnimGraphNode_Base` classes by path/name; built-in `node_type` aliases preserved. |
+| `niagara.get_system_summary` / `get_emitter_summary` | Param added (0.15.0, PR #60 @middle233) | Optional `detail_level: "compact" \| "full"` for event-aware payloads. `validate_system` now reasons about inter-emitter event chains. |
+| `niagara.get_emitter_summary` `event_handlers[]` | **REMOVED — breaking** (0.15.0, PR #60) | Superseded by `consumed_events[]` (compact + full) and `incoming_events[]` (full only). Migrate `event_handlers[].source_emitter_id` → `incoming_events[].source_emitter_id`. |
+| `mesh.import_mesh` | Params added (0.15.0, PR #58 @4698to) | Optional `import_as_skeletal` + `import_animations` widen the importer to `USkeletalMesh` + bundled `UAnimSequence` assets. |
+| UserDefinedEnum-in-UserDefinedStruct schema | Fixed (0.15.0) | Now surfaces `enum_values` and accepts display-name writes instead of reporting a bare `int32`. Affects `read_data_table`, `describe_data_table_schema`, every bulk_fill/describe adapter, and `describe_query("schema")`. |
+| `blueprint.create_user_defined_enum` | Fixed (0.15.0) | No longer drops the last enumerator of every enum it creates. |
 
 ---
 
@@ -100,63 +86,16 @@ The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespa
 
 Core server management and introspection.
 
-Core-owned production `monolith` action schemas opt into registry-level top-level validation. Wrong JSON types, unsupported enum strings, and out-of-range limits are rejected with JSON-RPC `-32602` before the handler runs for routing/discovery, status/readiness, update/reindex, MCP/session compatibility, onboarding/notification settings, execution audit/policy, and tool profile management actions.
-
-When `bEnableMcpResources=true`, MonolithCore also exposes MCP `resources/list` and `resources/read` through `FMonolithResourceRegistry`. Default docs are registered only after their backing markdown is readable and non-empty. `resources/list` returns a string `nextCursor` only when another page exists; the exhausted page omits `nextCursor`.
-
-When `bEnableAdvancedToolCallRecords=true`, MonolithCore registers `monolith.list_tool_call_records`, `monolith.get_tool_call_record`, and `monolith.analyze_tool_call_records`. These actions expose bounded, redacted, in-memory ToolCall records for local diagnostics; raw params, result payloads, auth headers, cookies, bearer tokens, and API keys are not stored.
-
-When `bEnableStructuredToolResults=true`, MCP `tools/call` responses keep the legacy `content[]` text JSON entry and additionally include `structuredContent` plus `_meta`. Successful calls mirror the action result object in `structuredContent`; errors expose `ok=false`, `error`, `error_code`, optional `hints`, `related_actions`, and `error_data` while preserving the existing human-readable text error.
-
-When `bEnableMcpSessionMode=true`, MonolithCore observes `MCP-Session-Id` and `MCP-Protocol-Version` on `POST /mcp` requests in a bounded process-local table. `monolith.list_mcp_sessions` returns redacted/hash identifiers, protocol version, request counts, timestamps, method names, and tool names only. It does not store raw session ids, params, result payloads, auth headers, cookies, bearer tokens, or API keys; progress notifications and in-flight cancellation are not active in this slice.
-
-`monolith.set_mcp_compatibility_options` supports `options.browser_access` values of `"loopback_only"` and `"disabled"`. `"loopback_only"` preserves the localhost/127.0.0.1/[::1] browser CORS allowlist; `"disabled"` omits `Access-Control-Allow-Origin` for browser origins while keeping non-browser MCP clients working. Legacy SSE/message routes, wildcard CORS, and arbitrary origin allowlists are not supported.
-
-### `monolith.find`
-
-Find profile-allowed Monolith actions by task text, namespace, category, action name, description, registered search metadata, or param schema text. This is the fast routing entrypoint when the exact namespace/action is unclear. Scoring uses `weighted_tokens_v3`: weighted phrase/token matching, curated routing aliases such as `vfx -> niagara`, `bp -> blueprint`, and `layout/format/arrange`, derived intent hints for common action names, and low-weight typo-tolerant token matches for longer terms.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `query` | string | **required** | Task or action text to search for, for example `"find caller graph action"` |
-| `namespace` | string | optional | Optional namespace filter such as `source`, `blueprint`, `ui`, or `monolith` |
-| `limit` | integer | optional | Maximum matches to return. Default `8`, max `50` |
-| `include_schema` | boolean | optional | Include matched action schemas. Default `false` |
-
-**Returns:** `{ status, query, scoring_version, count, truncated, matches, next_actions }`. Each match includes `action_id`, `namespace`, `action`, `description`, `mcp_tool`, `score`, `reason`, `status`, `matched_tokens`, and optional `params` when `include_schema=true`. `reason` can include `metadata_tokens`, `schema_tokens`, and `*_fuzzy` entries when search metadata, param schema text, or typo-tolerant token matches contributed.
-
----
-
 ### `monolith.discover`
 
-Canonical live catalog. The global default is compact namespace summary; namespace calls preserve the old detailed action/schema behavior unless `mode` is explicitly set.
+List available tool namespaces and their actions. Pass `namespace` to filter; pass `category` to narrow further (e.g. `"CommonUI"` inside `ui`).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `namespace` | string | optional | Filter to a specific namespace |
-| `action` | string | optional | Filter to one action name or `namespace.action` id. Implies schema mode when `mode` is omitted |
-| `query` | string | optional | Text filter over namespace, action, category, and description |
 | `category` | string | optional | Filter actions within the namespace by category |
-| `mode` | string | optional | `summary`, `actions`, or `schema` |
-| `fields` | array/string | optional | Allowlist of row fields; accepts an array of strings or comma-separated string |
-| `limit` | integer | optional | Maximum namespace/action rows. Default `100`, max `500` |
-| `cursor` | string | optional | Continuation cursor returned by a previous response |
-| `include_optional` | boolean | optional | Include known optional namespaces that are disabled or not installed. Default `true` |
 
-**Returns:** `status`, `mode`, `snapshot_mode=live_registry`, `active_profile_id`, `profile_filtered`, row counts, `truncated`, optional `next_cursor`, plus `namespaces` or `actions`. `schema` mode returns one action row at the top level. Action rows carry `execution_policy` metadata and optional `search_metadata`; `inputSchema` / `params` are included for schema mode and legacy namespace-detail calls.
-
----
-
-### `monolith.set_action_execution_policy`
-
-Developer-only local override for a registered action's execution policy. This is intended for staged policy cleanup and local verification, not persistent user configuration.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `action` | string | **required** | Fully qualified action name such as `blueprint.add_node` |
-| `policy` | object | optional | Policy object. Omit to reset to `read_only` |
-
-Supported `policy.policy_id` values are `read_only`, `track_dirty_packages`, `transaction_optional`, `transaction_required`, and `post_edit_validate`. `post_edit_validate` runs a policy-gated post-handler validator and reports `post_edit_validation_status` in audit rows; validation failure returns structured `error.data.post_edit_validation` without claiming automatic asset rollback.
+**Returns:** Per-action param schemas for every registered action. AI clients also receive these in `tools/list` at session start, so most callers never need to call `discover` explicitly.
 
 ---
 
@@ -170,7 +109,7 @@ Get Monolith server health: version, uptime, port, registered action count, name
 
 ### `monolith.update`
 
-Check for or install Monolith updates from GitHub Releases. Auto-updater hits `https://api.github.com/repos/tumourlove/monolith/releases/latest` and verifies integrity against the `Monolith-SHA256:`, `Monolith-macOS-SHA256:`, or `Monolith-Linux-SHA256:` markers in the release notes.
+Check for or install Monolith updates from GitHub Releases. Auto-updater hits `https://api.github.com/repos/tumourlove/monolith/releases/latest`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -188,90 +127,23 @@ Re-index the Monolith project database. Incremental by default (delta only). Pas
 
 ---
 
-## interchange
+### `monolith.guide`
 
-Normalized import/export workflow registered by `MonolithInterchange`. Use this namespace
-when the caller has a local source file and wants validation, batch rows, reimport
-metadata, or a generic import/export path instead of a narrow mesh/material helper.
+Section-keyed editorial onboarding guide for your AI agent — an onboarding script, worked cross-namespace recipes, X-vs-Y decision matrices, error-to-recovery maps, a skills map, and Monolith-specific gotchas. Hand-authored markdown plus a **live registry overlay**, so the action counts and version it reports always match your running build. New in 0.15.0. Built for users with no project `CLAUDE.md` or private skills — point your AI at it and it self-onboards. Offline parity via `monolith_query.exe monolith guide`.
 
-All mutation actions require `confirm=true` unless `dry_run=true`. Source files are
-limited to project/content/saved roots unless `allow_external=true`.
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `section` | string | optional | One of `onboarding`, `recipes`, `decisions`, `errors`, `skills_map`, `gotchas`. Omit for the full index + all sections. An unknown value returns a validation error listing the valid keys. |
 
-| Action | Required Params | Notes |
-|--------|-----------------|-------|
-| `get_supported_formats` | none | Lists known extensions, module availability, default allowed roots, and policy notes |
-| `can_import` | `source_file` | Validates source existence, extension, Interchange availability, root policy, and optional `destination_path` |
-| `can_reimport` | `asset_path` | Reports reflected source import data and source file existence |
-| `get_import_data` | `asset_path` | Returns reflected import source file rows without mutation |
-| `import_asset` | `source_file`, `destination_path`, `conflict_policy` | Imports one source file and returns one structured row |
-| `import_assets` | `source_files`, `destination_path`, `conflict_policy` | Imports files sequentially; per-file validation failures do not stop later rows |
-| `import_scene` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for scene-like formats |
-| `import_mesh` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for mesh-like formats |
-| `import_skeletal_mesh` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for skeletal mesh sources |
-| `import_texture` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for texture sources |
-| `import_audio` | `source_file`, `destination_path`, `conflict_policy` | Typed alias over guarded import for audio sources |
-| `import_with_options` | `source_file`, `destination_path`, `conflict_policy` | Same guarded import path with an optional forward-compatible `options` object |
-| `update_reimport_path` | `asset_path`, `source_file` | Updates the reflected source path after source/root validation |
-| `reimport_asset` | `asset_path` | Reimports one existing asset through Unreal's reimport manager |
-| `reimport_assets` | `asset_paths` | Reimports assets sequentially and returns one row per asset |
-| `export_asset` | `asset_path`, `file_path` | Exports one asset after output path validation |
-
-Conflict policy values are `fail`, `overwrite`, `rename`, and `reimport_only`.
-`fail` rejects likely destination package collisions before import using the
-expected package derived from the source filename, but scene/factory outputs can
-still create differently named packages. `overwrite` forwards replace intent.
-`rename` is a best-effort pass-through with overwrite disabled; inspect
-`imported_assets` for the final package names.
-
----
-
-## dataflow
-
-Optional Dataflow discovery and graph inspection registered by `MonolithDataflow`. `get_status` and `list_assets` stay dependency-light and AssetRegistry/module-status-only. When UE 5.7 Dataflow runtime headers are available and `MONOLITH_RELEASE_BUILD` is not set, six additional read-only graph inspection actions register under the same namespace. **2 always-on actions + 6 optional graph inspection actions.**
-
-| Action | Required Params | Notes |
-|--------|-----------------|-------|
-| `get_status` | none | Reports Dataflow/Chaos graph module availability, implemented actions, and future action boundaries |
-| `list_assets` | none | Lists Dataflow-like registry rows under `/Game`; optional `package_path`, `limit` |
-| `get_dataflow_graph` | `asset_path` | Returns bounded Dataflow nodes, pins, editable property snapshots, and connections; optional `node_limit`, `connection_limit`, `include_properties` |
-| `list_dataflow_node_types` | none | Lists registered Dataflow node factory types; optional `filter`, `common_only`, `limit`, `include_pins` |
-| `get_dataflow_node_schema` | `type_name` | Returns one Dataflow node type schema, pins, and optional editable default properties |
-| `validate_dataflow_graph` | `asset_path` | Reports duplicate node names/GUIDs and broken connection references |
-| `list_dataflow_variables` | `asset_path` | Lists Dataflow property bag variables, metadata, and serialized values |
-| `list_dataflow_comments` | `asset_path` | Lists editor comment boxes and bounded contained-node hints; optional `node_limit` |
-
----
-
-## chaos_fracture
-
-Optional Geometry Collection / Fracture visibility registered by `MonolithChaosFracture`. The namespace is read-only and reflection/AssetRegistry-only; it does not include Fracture headers, load Fracture tooling, run fracture operations, or mutate assets. **3 actions.**
-
-| Action | Required Params | Notes |
-|--------|-----------------|-------|
-| `get_status` | none | Reports Geometry Collection / Fracture module availability, reflected type presence, implemented actions, and future boundaries |
-| `list_geometry_collection_assets` | none | Lists Geometry Collection-like registry rows under `/Game`; optional `package_path`, `limit` |
-| `list_geometry_collection_components` | none | Lists reflected Geometry Collection-like components in the current editor world; optional `limit` |
-
----
-
-## ndisplay
-
-Optional nDisplay / DisplayCluster config discovery registered by `MonolithNDisplay`. The namespace is read-only and AssetRegistry/module-status-only; it does not include DisplayCluster headers, load configs, edit projection policies, or save assets. **2 actions.**
-
-| Action | Required Params | Notes |
-|--------|-----------------|-------|
-| `get_status` | none | Reports DisplayCluster module availability, implemented actions, and future action boundaries |
-| `list_config_assets` | none | Lists DisplayCluster/nDisplay config-like registry rows under `/Game`; optional `package_path`, `limit` |
+**Returns:** The requested section (or full guide) as markdown, plus the live per-namespace action counts and plugin version.
 
 ---
 
 ## blueprint
 
-Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, DataTables, and spawn-time actor placement. **99 actions.**
+Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, spawn-time actor placement, and dataset read/edit (DataTable / CurveTable / StringTable round-trip + `seed_data_asset`). **111 actions.**
 
 > For full param schemas, call `monolith_discover("blueprint")` at runtime. The action surface is too broad to enumerate here without bloat — high-traffic actions are documented below; the rest are listed and discoverable.
->
-> Layout note: `blueprint.auto_layout` no longer invokes Blueprint Assist on asset mutation paths. `formatter="auto"` uses the built-in formatter; `formatter="blueprint_assist"` returns an explicit disabled error.
 
 **Action categories:**
 
@@ -286,15 +158,18 @@ Full read/write access to Blueprint graphs, variables, components, functions, no
 | Bulk / batch | 4 | `batch_execute`, `add_nodes_bulk`, `connect_pins_bulk`, `set_pin_defaults_bulk` |
 | Timelines | 4 | `add_timeline`, `add_timeline_track`, `set_timeline_keys`, `get_timeline_data` |
 | Compile / validate | 3 | `compile_blueprint`, `validate_blueprint`, `get_dependencies` |
-| Asset CRUD | 12 | `create_blueprint`, `duplicate_blueprint`, `create_user_defined_struct`, `create_user_defined_enum`, `create_data_table`, `add_data_table_row`, `get_data_table_rows`, `get_data_table_schema`, `update_data_table_row`, `remove_data_table_row`, `export_data_table_csv`, `create_data_asset` |
+| Asset CRUD | 8 | `create_blueprint`, `duplicate_blueprint`, `save_asset`, `create_user_defined_struct`, `create_user_defined_enum`, `create_data_table`, `add_data_table_row`, `get_data_table_rows`, `create_data_asset` |
+| Dataset — DataTable (0.15.0) | 8 | `read_data_table`, `describe_data_table_schema`, `set_data_table_rows`, `remove_data_table_row`, `rename_data_table_row`, `duplicate_data_table_row`, `export_data_table`, `import_data_table` |
+| Dataset — CurveTable (0.15.0) | 5 | `read_curve_table`, `set_curve_table_keys`, `add_curve_table_row`, `remove_curve_table_row`, `rename_curve_table_row` |
+| Dataset — StringTable (0.15.0) | 3 | `read_string_table`, `set_string_table_entries`, `remove_string_table_entry` |
+| Dataset — DataAsset (0.15.0) | 1 | `seed_data_asset` (create + bulk-fill in one atomic call) |
+| Cross-class / overrides (0.15.0) | 3 | `add_property_access`, `override_parent_function`, `save_dirty_assets` |
 | CDO | 2 | `get_cdo_properties`, `set_cdo_property` |
 | Templates / spec | 4 | `build_blueprint_from_spec`, `apply_template`, `list_templates`, `compare_blueprints` |
 | Layout | 2 | `auto_layout`, `export_graph` |
 | Spawn | 2 | `spawn_blueprint_actor`, `batch_spawn_blueprint_actors` |
 
 **Header set most callers reach for first:**
-
-`blueprint.add_event_node` resolves parent-class overrides first, then implemented-interface BlueprintEvent functions, and only creates a `K2Node_CustomEvent` when no override target exists. Use it for C++/Blueprint interface events such as interactable callbacks before falling back to manual custom events.
 
 ### `blueprint.list_graphs`
 
@@ -317,53 +192,6 @@ Lightweight overview with node id/class/title and exec connections only. ~10 KB 
 
 The crown jewel — author an entire Blueprint (parent class, variables, components, functions, event graph nodes, connections) from a single JSON spec. Validates and compiles in one call. See `monolith_discover("blueprint")` for the full spec schema.
 
-### `blueprint.get_data_table_schema`
-
-Inspect a `UDataTable` row struct without returning row data.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | DataTable asset path |
-
-**Returns:** `row_struct`, `row_struct_path`, `column_count`, and `columns[]` with friendly/internal names, C++ type, and property class.
-
-### `blueprint.update_data_table_row`
-
-Update an existing DataTable row with the same JSON-to-`ImportText` conversion used by `add_data_table_row`. JSON numbers targeting integer fields are emitted as integer text before import.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | DataTable asset path |
-| `row_name` | string | **required** | Row key |
-| `values` | object | **required** | Column/value object |
-| `create_if_missing` | bool | optional | Create the row if it does not exist; default `false` |
-| `dry_run` | bool | optional | Preview without writing |
-| `confirm` | bool | optional | Required for non-dry-run writes |
-| `save` | bool | optional | Save the package after mutation; default `false` |
-
-### `blueprint.remove_data_table_row`
-
-Remove one row from a DataTable by row name.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | DataTable asset path |
-| `row_name` | string | **required** | Row key |
-| `dry_run` | bool | optional | Preview without writing |
-| `confirm` | bool | optional | Required for non-dry-run writes |
-| `save` | bool | optional | Save the package after mutation; default `false` |
-
-### `blueprint.export_data_table_csv`
-
-Export a DataTable to CSV under the project directory. `byte_count` reports the actual file size after writing; dry-run reports a UTF-8 byte estimate.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | DataTable asset path |
-| `file_path` | string | **required** | Destination CSV path under the project directory |
-| `dry_run` | bool | optional | Preview without writing |
-| `confirm` | bool | optional | Required for non-dry-run writes |
-
 ### `blueprint.spawn_blueprint_actor`
 
 | Parameter | Type | Required | Description |
@@ -374,6 +202,107 @@ Export a DataTable to CSV under the project directory. `byte_count` reports the 
 | `scale` | array | optional | `[x, y, z]` |
 | `folder_path` | string | optional | Outliner folder. **Recommended** — all spawned actors should set a folder path |
 
+### Dataset read/edit pack (0.15.0)
+
+LLM-friendly read → edit → write loop for DataTables, CurveTables, and StringTables, plus `seed_data_asset` for DataAssets. Engine-generic (reflection + string class/struct resolution), zero sibling-plugin coupling. Reuses the MonolithCore reflection framework — reads inline an `FSchemaDescriptor`-shaped schema; writes return an `FDryRunReport`-shaped per-field result. All write actions take `save` (default `false`) to persist the package; reads never mutate.
+
+#### `blueprint.read_data_table`
+
+Read a DataTable's full contents plus its inline row schema. Supersedes `get_data_table_rows` by inlining the schema with the data.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | DataTable asset path (e.g. `/Game/Data/DT_Weapons`) |
+| `include_schema` | boolean | optional | Include the inline row-field schema array. Default: `true` |
+| `row_name` | string | optional | Return only this row; otherwise return all rows |
+
+Returns `{ row_struct, row_struct_path, total_rows, schema:[{type_name, import_text_form, enum_values, range, children}], rows:[{row_name, values}] }`. Companion: `describe_data_table_schema` (schema only, no row data).
+
+#### `blueprint.set_data_table_rows`
+
+Bulk add/update DataTable rows in one call. Fires one editor-refresh broadcast at the end.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | DataTable asset path |
+| `rows` | array | **required** | Array of `{row_name, values:{field:value}, mode?}` — mode is `upsert` (default), `add`, or `update` |
+| `dry_run` | boolean | optional | Validate only — emit would-be writes but do not persist. Default: `false` |
+| `strict` | boolean | optional | Promote silent drops / unknown fields / enum misses to hard errors. Default: `false` |
+| `save` | boolean | optional | Save the package after applying. Default: `false` |
+
+Returns an `FDryRunReport`-shaped per-field `{path, current, proposed, ok, reason}`.
+
+#### Remaining dataset actions
+
+| Action | Key params | Notes |
+|--------|-----------|-------|
+| `describe_data_table_schema` | `asset_path` | Row schema only, no data |
+| `remove_data_table_row` | `asset_path`, `row_name`, `save?` | Row delete |
+| `rename_data_table_row` | `asset_path`, `old_name`, `new_name`, `save?` | Row rename |
+| `duplicate_data_table_row` | `asset_path`, `source_row`, `new_name`, `save?` | Row copy |
+| `export_data_table` | `asset_path`, `format?` (`json`/`csv`), `use_json_objects?`, `simple_text?` | Round-trippable text blob |
+| `import_data_table` | `asset_path`, `text`, `format?`, `mode` (`replace` only), `save?` | **REPLACES** all rows; RowStruct must already be set |
+| `read_curve_table` | `asset_path`, `row_name?` | Returns `mode` (`rich`/`simple`/`empty`) + per-key data |
+| `set_curve_table_keys` | `asset_path`, `row_name`, `keys[{time,value}]`, `mode?`, `interp_mode?`, `save?` | First write locks rich-vs-simple; `cubic` → rich, others → simple |
+| `add_curve_table_row` | `asset_path`, `row_name`, `interp_mode?`, `save?` | Empty curve row |
+| `remove_curve_table_row` / `rename_curve_table_row` | `asset_path`, `row_name` / `old_name`+`new_name`, `save?` | Curve row CRUD |
+| `read_string_table` | `asset_path`, `include_meta?` | Returns namespace + `entries:[{key, source_string, meta?}]` |
+| `set_string_table_entries` | `asset_path`, `entries[{key, source_string}]`, `mode?` (`upsert`/`replace`), `namespace?`, `save?` | Upsert or full replace |
+| `remove_string_table_entry` | `asset_path`, `key`, `save?` | Entry delete |
+
+#### `blueprint.seed_data_asset`
+
+Create AND populate a `UObject` DataAsset in one atomic call — `create_data_asset`'s body plus a reflection-walker fill of the supplied property `tree`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `save_path` | string | **required** | Asset save path (e.g. `/Game/Data/DA_HealingPotion`) |
+| `class_name` | string | **required** | `UObject` class name (same resolution as `create_data_asset`) |
+| `tree` | object | **required** | Nested JSON of properties to walk against the new asset's reflection schema |
+| `dry_run` | boolean | optional | Validate the tree against the class WITHOUT creating the asset. Default: `false` |
+| `strict` | boolean | optional | Promote silent drops / unknown fields / enum misses to hard errors. Default: `false` |
+| `skip_save` | boolean | optional | Skip synchronous package save. Default: `false` |
+
+Existing DataAssets otherwise round-trip through `bulk_fill_query("apply")` + `describe_query("schema")`.
+
+### Cross-class access + parent overrides (0.15.0)
+
+#### `blueprint.add_property_access`
+
+Author a `VariableGet` (or `VariableSet` if `is_setter`) node that reads/writes a UPROPERTY on an **arbitrary foreign class** — not just the Blueprint's own variables. `member_class` is resolved by string, then `VariableReference.SetExternalMember()` binds the member so the value pin resolves to the property's real type (unlike `node_type='VariableGet'`, which is self-context only and produces a wildcard 0-pin node for foreign properties).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Blueprint asset path |
+| `member_class` | string | **required** | Class that owns the property (e.g. `Item`, `UItem`, `AActor`). Resolved native-first; accepts `U`/`A` prefix or bare name |
+| `member_name` | string | **required** | Name of the UPROPERTY to read/write |
+| `graph_name` | string | optional | Graph name (defaults to EventGraph) |
+| `is_setter` | bool | optional | `true` creates a `VariableSet` (write) node; otherwise a `VariableGet` (read). Default: `false` |
+| `position` | array | optional | `[x, y]` (default `[0, 0]`) |
+
+Returns `node_id`, `value_pin_id`, and `target_pin_id` (the object/self input the caller wires via `connect_pins` to supply the instance).
+
+#### `blueprint.override_parent_function`
+
+Author a Blueprint override of an overridable parent function (`BlueprintImplementableEvent` / `BlueprintNativeEvent`), **including those that RETURN a value** (e.g. `UCommonActivatableWidget::BP_GetDesiredFocusTarget` → `UWidget*`). `add_function` cannot do this and the event-node form has no ReturnValue pin.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Blueprint asset path |
+| `parent_function_name` | string | **required** | Name of the overridable parent function |
+
+Returns `graph_name`, `entry_node_id`, `return_pin_id`/`name`, `override_class`, `has_return_value`.
+
+#### `blueprint.save_dirty_assets`
+
+Save ALL currently-dirty Blueprint and Widget Blueprint packages in one sweep — closes the data-loss window after a batch of edits that dirty but do not persist packages.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path_prefix` | string | optional | Only save assets whose package path starts with this prefix. Default: `/Game`. Empty string = all dirty BP/Widget packages |
+
+Returns `saved[]`, `failed[]`, `count`.
+
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithBlueprint.md` for the deep dive.
 
 ---
@@ -383,8 +312,6 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithBlueprint.md` for the deep dive.
 Material graph editing, inspection, CRUD, material functions, instances, custom HLSL nodes, PBR pipeline. **63 actions.**
 
 > For full param schemas, call `monolith_discover("material")` at runtime.
->
-> Layout note: `material.auto_layout` no longer invokes Blueprint Assist on asset mutation paths. `formatter="auto"` uses UE built-in layout; `formatter="blueprint_assist"` returns an explicit disabled error.
 
 **Action categories:**
 
@@ -393,18 +320,15 @@ Material graph editing, inspection, CRUD, material functions, instances, custom 
 | Graph inspection | 7 | `get_all_expressions`, `get_expression_details`, `get_full_connection_graph`, `get_expression_pin_info`, `get_expression_connections`, `list_expression_classes`, `get_compilation_stats` |
 | Graph CRUD | 12 | `build_material_graph`, `connect_expressions`, `disconnect_expression`, `delete_expression`, `delete_expressions`, `clear_graph`, `move_expression`, `duplicate_expression`, `replace_expression`, `rename_expression`, `set_expression_property`, `auto_layout` |
 | Material assets | 7 | `create_material`, `create_material_instance`, `duplicate_material`, `save_material`, `set_material_property`, `get_material_properties`, `recompile_material` |
-| Material instances | 7 | `get_material_parameters`, `get_instance_parameters`, `set_instance_parameter`, `set_instance_parameters`, `set_instance_parent`, `clear_instance_parameter`, `list_material_instances` |
+| Material instances | 6 | `get_material_parameters`, `get_instance_parameters`, `set_instance_parameter`, `set_instance_parameters`, `set_instance_parent`, `clear_instance_parameter`, `list_material_instances` |
 | Material functions | 12 | `create_material_function`, `build_function_graph`, `get_function_info`, `export_function_graph`, `set_function_metadata`, `update_material_function`, `delete_function_expression`, `create_function_instance`, `set_function_instance_parameter`, `get_function_instance_info`, `layout_function_expressions`, `rename_function_parameter_group` |
 | Custom HLSL | 2 | `create_custom_hlsl_node`, `update_custom_hlsl_node` |
 | Spec / templates | 3 | `export_material_graph`, `import_material_graph`, `validate_material` |
 | Preview / capture | 2 | `render_preview`, `get_thumbnail` |
-| Textures | 6 | `import_texture`, `create_pbr_material_from_disk`, `get_texture_properties`, `preview_texture`, `preview_textures`, `check_tiling_quality` |
+| Textures | 5 | `import_texture`, `create_pbr_material_from_disk`, `get_texture_properties`, `preview_texture`, `preview_textures`, `check_tiling_quality` |
 | Layers | 1 | `get_layer_info` |
 | Batch | 2 | `batch_set_material_property`, `batch_recompile` |
 | Transactions | 2 | `begin_transaction`, `end_transaction` |
-
-`preview_textures` limits `asset_paths` to 100 entries per request to bound contact sheet memory use.
-`batch_set_material_property` limits `asset_paths` to 200 entries to bound transaction scope.
 
 ### `build_material_graph` gotcha
 
@@ -418,21 +342,9 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithMaterial.md` for full graph_spec s
 
 ---
 
-## paper2d
-
-Optional Paper2D discovery registered by `MonolithPaper2D`. The namespace is read-only and AssetRegistry-only; it does not include Paper2D headers, load Paper2D assets, or require the Paper2D plugin at compile time. **3 actions.**
-
-| Action | Required Params | Notes |
-|--------|-----------------|-------|
-| `get_status` | none | Reports Paper2D/Paper2DEditor module availability and supported asset classes |
-| `list_assets` | none | Lists PaperSprite, PaperFlipbook, PaperTileSet, and PaperTileMap registry rows under `/Game`; optional `package_path`, `limit` |
-| `get_asset` | `asset_path` | Returns one bounded Paper2D registry row; optional `include_tags`, `tag_limit` |
-
----
-
 ## animation
 
-Animation curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig. 135 actions total — 104 baseline + 13 PoseSearch + 5 ABP write + 12 Control Rig write + 1 layout.
+Animation curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig. **125 actions** total — the 118 baseline (96 core + 13 PoseSearch + 5 ABP write + 3 Control Rig write + 1 layout) plus the v0.14.9/v0.14.10 PR pack: `copy_bone_pose_between_sequences`, `list_bone_tracks`, `get_skeleton_preview_attached_assets`, `get_bone_ref_pose`, and the three `*_compatible_skeleton` actions.
 
 > For full param schemas, call `monolith_discover("animation")` at runtime.
 
@@ -441,16 +353,17 @@ Animation curves, bone tracks, sync markers, root motion, compression, blend spa
 | Category | Actions | Examples |
 |----------|---------|----------|
 | Sequence ops | 12 | `get_sequence_info`, `get_sequence_notifies`, `set_sequence_properties`, `set_additive_settings`, `set_compression_settings`, `set_root_motion_settings`, `create_sequence`, `duplicate_sequence`, `build_sequence_from_poses` |
-| Bone tracks | 4 | `add_bone_track`, `remove_bone_track`, `set_bone_track_keys`, `get_bone_track_keys` |
+| Bone tracks | 6 | `add_bone_track`, `remove_bone_track`, `set_bone_track_keys`, `get_bone_track_keys`, `list_bone_tracks`, `copy_bone_pose_between_sequences` |
 | Curves | 6 | `add_curve`, `remove_curve`, `set_curve_keys`, `get_curve_keys`, `list_curves`, `get_skeleton_curves` |
 | Notifies | 9 | `add_notify`, `add_notify_state`, `remove_notify`, `set_notify_time`, `set_notify_duration`, `set_notify_track`, `set_notify_properties`, `bulk_add_notify`, `clone_notify_setup` |
 | Sync markers | 4 | `get_sync_markers`, `add_sync_marker`, `remove_sync_marker`, `rename_sync_marker` |
 | Skeleton | 5 | `get_skeleton_info`, `get_skeletal_mesh_info`, `add_socket`, `remove_socket`, `set_socket_transform`, `get_skeleton_sockets`, `add_virtual_bone`, `remove_virtual_bones`, `compare_skeletons` |
+| Skeleton (read/compat, v0.14.10) | 5 | `get_skeleton_preview_attached_assets`, `get_bone_ref_pose`, `get_compatible_skeletons`, `add_compatible_skeleton`, `remove_compatible_skeleton` |
 | Montages | 9 | `get_montage_info`, `create_montage`, `set_montage_blend`, `add_montage_section`, `delete_montage_section`, `set_section_next`, `set_section_time`, `add_montage_slot`, `set_montage_slot`, `add_montage_anim_segment`, `create_montage_from_sections` |
 | Blend spaces | 8 | `get_blend_space_info`, `create_blend_space`, `create_blend_space_1d`, `create_aim_offset`, `create_aim_offset_1d`, `add_blendspace_sample`, `edit_blendspace_sample`, `delete_blendspace_sample`, `set_blend_space_axis` |
 | ABPs | 9 | `get_abp_info`, `create_anim_blueprint`, `get_state_machines`, `get_state_info`, `get_transitions`, `get_blend_nodes`, `get_linked_layers`, `get_graphs`, `get_nodes`, `get_abp_variables`, `get_abp_linked_assets` |
 | State machines (write) | 3 | `add_state_to_machine`, `add_transition`, `set_transition_rule` |
-| ABP graph (write) | 5 | `add_anim_graph_node`, `connect_anim_graph_pins`, `set_state_animation`, `add_variable_get`, `set_anim_graph_node_property` |
+| ABP graph (write) | 5 | `add_anim_graph_node` (aliases or generic `UAnimGraphNode_Base` class path/name via `node_type` / `node_class`), `connect_anim_graph_pins`, `set_state_animation`, `add_variable_get`, `set_anim_graph_node_property` |
 | Composites | 3 | `get_composite_info`, `add_composite_segment`, `remove_composite_segment`, `create_composite` |
 | IKRig / Retarget | 6 | `get_ikrig_info`, `add_ik_solver`, `get_retargeter_info`, `set_retarget_chain_mapping`, `add_retarget_chain`, `remove_retarget_chain`, `set_retarget_chain_bones` |
 | Control Rig | 7 | `get_control_rig_info`, `get_control_rig_variables`, `add_control_rig_element`, `get_control_rig_graph`, `add_control_rig_node`, `connect_control_rig_pins` |
@@ -463,61 +376,28 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
 
 ---
 
-## level_sequence
-
-Level Sequence bindings, Director Blueprint/event wiring, saved replay metadata, and optional Sequencer Anim Mixer read-only inspection. **13 actions.**
-
-> For full param schemas, call `monolith_discover("level_sequence")` at runtime.
-
-**Action categories:**
-
-| Category | Actions | Examples |
-|----------|---------|----------|
-| Smoke | 1 | `ping` |
-| Replay read-only | 3 | `get_replay_status`, `list_saved_replays`, `get_saved_replay` |
-| Bindings | 1 | `list_bindings` |
-| Anim Mixer read-only | 2 | `get_anim_mixer_status`, `list_anim_mixer_tracks` |
-| Director discover | 2 | `list_directors`, `get_director_info` |
-| Director inspect | 3 | `list_director_functions`, `list_director_variables`, `list_event_bindings` |
-| Reverse lookup | 1 | `find_director_function_callers` |
-
-Anim Mixer actions intentionally soft-probe Epic's UE 5.8 Experimental `MovieSceneAnimMixer` plugin by module/class/property names only. UE 5.7 projects without the plugin still compile and return `plugin_available=false` / `track_count=0`; UE 5.8+ projects with the plugin loaded can inspect reflected mixer tracks, layers, sections, and child-track counts.
-
-See `Plugins/Monolith/Docs/specs/SPEC_MonolithLevelSequence.md` for the deep dive.
-
----
-
 ## niagara
 
 Niagara VFX system editing — emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types. **109 actions** (108 baseline + 1 layout).
 
 > For full param schemas, call `monolith_discover("niagara")` at runtime.
->
-> Emitter selector parameters accept GUID, exact or case-insensitive display name, unique instance name, or a `list_emitters` numeric index string such as `"0"`. `auto_layout` follows the same selector contract as the core Niagara emitter actions.
->
-> Layout note: Niagara has no built-in graph formatter. `niagara.auto_layout` uses Blueprint Assist as a fallback when the bridge is available; `formatter="monolith"` returns an explicit unsupported error.
-
-`list_systems`, `list_module_scripts`, and `search_dynamic_inputs` accept a numeric
-`limit`. Missing values keep their existing defaults (`50`, `50`, and `20`
-respectively), present non-numeric values return an invalid-param error, and
-numeric values are clamped to the inclusive range `[1, 1000]`.
 
 **Action categories:**
 
 | Category | Actions | Examples |
 |----------|---------|----------|
-| Systems | 12 | `create_system`, `create_system_from_spec`, `duplicate_system`, `validate_system`, `save_system`, `set_system_property`, `get_system_property`, `get_system_summary`, `get_system_diagnostics`, `set_fixed_bounds`, `set_effect_type`, `list_systems` |
-| Emitters | 15 | `add_emitter`, `remove_emitter`, `duplicate_emitter`, `set_emitter_enabled`, `reorder_emitters`, `set_emitter_property`, `get_emitter_property`, `get_emitter_summary`, `list_emitters`, `list_emitter_properties`, `create_emitter`, `rename_emitter`, `save_emitter_as_template`, `clear_emitter_modules`, `get_emitter_parent` |
-| Modules | 16 | `add_module`, `remove_module`, `move_module`, `set_module_enabled`, `get_ordered_modules`, `get_module_inputs`, `get_module_graph`, `get_module_input_value`, `get_module_output_parameters`, `get_module_script_inputs`, `set_module_input_value`, `set_module_input_binding`, `set_module_input_di`, `clone_module_overrides`, `duplicate_module`, `list_module_scripts` |
+| Systems | 11 | `create_system`, `create_system_from_spec`, `duplicate_system`, `validate_system`, `save_system`, `set_system_property`, `get_system_property`, `get_system_summary`, `get_system_diagnostics`, `set_fixed_bounds`, `set_effect_type`, `list_systems` |
+| Emitters | 12 | `add_emitter`, `remove_emitter`, `duplicate_emitter`, `set_emitter_enabled`, `reorder_emitters`, `set_emitter_property`, `get_emitter_property`, `get_emitter_summary`, `list_emitters`, `list_emitter_properties`, `create_emitter`, `rename_emitter`, `save_emitter_as_template`, `clear_emitter_modules`, `get_emitter_parent` |
+| Modules | 10 | `add_module`, `remove_module`, `move_module`, `set_module_enabled`, `get_ordered_modules`, `get_module_inputs`, `get_module_graph`, `get_module_input_value`, `get_module_output_parameters`, `get_module_script_inputs`, `set_module_input_value`, `set_module_input_binding`, `set_module_input_di`, `clone_module_overrides`, `duplicate_module`, `list_module_scripts` |
 | HLSL / scripts | 2 | `create_module_from_hlsl`, `create_function_from_hlsl` |
-| Parameters | 13 | `get_all_parameters`, `get_user_parameters`, `get_parameter_value`, `get_parameter_type`, `trace_parameter_binding`, `add_user_parameter`, `remove_user_parameter`, `set_parameter_default`, `set_curve_value`, `get_available_parameters`, `rename_user_parameter`, `set_static_switch_value`, `get_static_switch_value` |
-| Renderers | 12 | `add_renderer`, `remove_renderer`, `set_renderer_material`, `set_renderer_property`, `get_renderer_bindings`, `set_renderer_binding`, `list_renderers`, `list_renderer_properties`, `list_available_renderers`, `set_renderer_mesh`, `configure_ribbon`, `configure_subuv` |
-| Dynamic inputs | 8 | `add_dynamic_input`, `set_dynamic_input_value`, `search_dynamic_inputs`, `list_dynamic_inputs`, `get_dynamic_input_tree`, `remove_dynamic_input`, `get_dynamic_input_value`, `get_dynamic_input_inputs` |
-| Event handlers / sim stages | 9 | `add_event_handler`, `get_event_handlers`, `set_event_handler_property`, `remove_event_handler`, `add_simulation_stage`, `get_simulation_stages`, `set_simulation_stage_property`, `remove_simulation_stage`, `set_spawn_shape` |
+| Parameters | 9 | `get_all_parameters`, `get_user_parameters`, `get_parameter_value`, `get_parameter_type`, `trace_parameter_binding`, `add_user_parameter`, `remove_user_parameter`, `set_parameter_default`, `set_curve_value`, `get_available_parameters`, `rename_user_parameter`, `set_static_switch_value`, `get_static_switch_value` |
+| Renderers | 9 | `add_renderer`, `remove_renderer`, `set_renderer_material`, `set_renderer_property`, `get_renderer_bindings`, `set_renderer_binding`, `list_renderers`, `list_renderer_properties`, `list_available_renderers`, `set_renderer_mesh`, `configure_ribbon`, `configure_subuv` |
+| Dynamic inputs | 7 | `add_dynamic_input`, `set_dynamic_input_value`, `search_dynamic_inputs`, `list_dynamic_inputs`, `get_dynamic_input_tree`, `remove_dynamic_input`, `get_dynamic_input_value`, `get_dynamic_input_inputs` |
+| Event handlers / sim stages | 8 | `add_event_handler`, `get_event_handlers`, `set_event_handler_property`, `remove_event_handler`, `add_simulation_stage`, `get_simulation_stages`, `set_simulation_stage_property`, `remove_simulation_stage`, `set_spawn_shape` |
 | NPC | 5 | `create_npc`, `get_npc`, `add_npc_parameter`, `remove_npc_parameter`, `set_npc_default` |
 | Effect types | 3 | `create_effect_type`, `get_effect_type`, `set_effect_type_property` |
 | Data interfaces | 4 | `get_di_functions`, `get_compiled_gpu_hlsl`, `configure_data_interface`, `get_di_properties` |
-| Compile / preview | 5 | `request_compile`, `preview_system`, `diff_systems`, `get_scalability_settings`, `set_scalability_settings` |
+| Compile / preview | 4 | `request_compile`, `preview_system`, `diff_systems`, `get_scalability_settings`, `set_scalability_settings` |
 | Curves / spec | 5 | `configure_curve_keys`, `import_system_spec`, `export_system_spec`, `batch_execute`, `auto_layout` |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithNiagara.md`.
@@ -526,7 +406,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithNiagara.md`.
 
 ## editor
 
-Live Coding builds, compile output capture, Live Coding diagnostics, editor log capture, scene capture, viewport info, GIF capture, **map creation**, **module status**, selection/context inspection, crash reporting, automation execution/status/history, scripting, and PIE/console control. **55 actions.** Generic file texture import and asset save/delete live under `asset`.
+Live Coding builds, compile output capture, editor log capture, scene capture, texture import, asset deletion, viewport info, GIF capture, **map creation** and **module status** (Phase J F8), plus the **PIE / console / Python automation** verbs (`run_console_command`, `start_pie`, `stop_pie`, `run_python`, `load_level` — v0.14.9/v0.14.10). **29 actions.**
 
 ### `editor.trigger_build` / `editor.live_compile`
 
@@ -552,14 +432,6 @@ Check compile status: `compiling`, `last_result`, `last_compile_time`, `errors_s
 
 Build summary, search-build-log-by-pattern, structured compile report. See `monolith_discover("editor")` for params.
 
-### `editor.get_live_coding_diagnostics`
-
-Read-only diagnostic summary for the most recent Monolith-triggered Live Coding compile. It normalizes result state, reports Live Coding module availability/session flags, counts fresh compile-category errors and warnings, and returns bounded log excerpts from `LogLiveCoding`, `LogCompile`, and `LogLinker`. UBT artifact scraping is out of scope for this editor-session action, so `ubt_diagnostics` is an explicit empty array with `ubt_diagnostic_source="not_checked"`.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `max_log_entries` | integer | optional | Maximum fresh compile log rows to return. Default 50, max 200 |
-
 ### `editor.get_recent_logs` · `editor.search_logs` · `editor.tail_log` · `editor.get_log_categories` · `editor.get_log_stats`
 
 Editor log inspection. `search_logs` accepts `pattern`, `category`, `verbosity`, `limit`. `tail_log` and `get_recent_logs` take `count`.
@@ -584,7 +456,15 @@ Render a Niagara system or material in a preview scene and screenshot it.
 
 ### `editor.capture_sequence_frames`
 
-Capture multiple frames at specified timestamps. Same params as `capture_scene_preview` plus `timestamps[]` (Max: 1000), `output_dir`, `filename_prefix`, `persistent`.
+Capture multiple frames at specified timestamps. Same params as `capture_scene_preview` plus `timestamps[]`, `output_dir`, `filename_prefix`, `persistent`.
+
+### `editor.import_texture`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `source_path` | string | **required** | Absolute path to source image (PNG, TGA, EXR, HDR) |
+| `destination` | string | **required** | UE asset path |
+| `settings` | object | optional | `{compression, srgb, tiling, max_size, lod_group}` |
 
 ### `editor.stitch_flipbook`
 
@@ -602,38 +482,18 @@ Stitch frame PNGs into a flipbook atlas. Used by the VFX training harness.
 
 > **Experimental flag.** Designed for the VFX training harness. Treat as best-effort.
 
+### `editor.delete_assets`
+
+Delete UE assets by path. **Experimental.** Use the `allowed_prefixes` safety guard.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_paths` | array | **required** | UE asset paths to delete |
+| `allowed_prefixes` | array | optional | Restrict to paths starting with one of these (e.g. `["/Game/AgentTraining/"]`) |
+
 ### `editor.get_viewport_info`
 
 Current editor viewport camera position, rotation, FOV, resolution. *No parameters.*
-
-### `editor.list_open_viewports`
-
-List level editor viewport capture sources plus visual-capture capability status for asset-editor, widget-designer, and thumbnail paths. *No parameters.*
-
-### `editor.capture_level_viewport`
-
-Capture a level editor viewport to PNG. The action errors when the requested viewport is unavailable instead of substituting another capture source.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `viewport_index` | integer | optional | Index from `editor.list_open_viewports`. Default: `0` |
-| `camera` | object | optional | `{location:[x,y,z], rotation:[p,y,r], fov:60}` applied before capture |
-| `output_path` | string | optional | Output PNG path. Defaults under `Saved/Screenshots/Monolith` |
-
-### `editor.capture_asset_thumbnail`
-
-Capture an asset thumbnail to an image file (PNG by default). This is an explicit fallback path, not an asset-editor viewport capture; callers must pass `thumbnail_fallback=true`.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | Asset path to capture |
-| `thumbnail_fallback` | bool | **required** | Must be `true`; prevents silent viewport-to-thumbnail substitution |
-| `thumbnail_size` | integer | optional | Square thumbnail size in pixels, `16..2048`. Default: `256` |
-| `output_path` | string | optional | Output image path. Relative paths resolve under the project directory. Supported extensions are `png`, `jpg`/`jpeg`, `bmp`, `exr`, `tga`, and `hdr`; unknown or missing extensions are normalized to `.png`. The response `output_path` and `format` fields report the normalized file path and actual encoder used |
-
-### `editor.capture_asset_editor_viewport` · `editor.capture_widget_designer`
-
-Return structured `unavailable` responses until Monolith can identify and report the exact asset-editor or widget-designer viewport source. These actions do not fall back to level viewport or thumbnail captures.
 
 ### `editor.capture_system_gif`
 
@@ -647,25 +507,6 @@ Capture a Niagara system as a sequence of PNG frames with optional GIF encoding 
 | `resolution` | integer | optional | Default: `256` |
 | `output_path` | string | optional | Default: `Saved/Screenshots/Monolith/GIF_<timestamp>` |
 | `encoder` | string | optional | `frames_only` (default), `ffmpeg`, or `python` |
-
-### `editor.list_automation_tests` · `editor.find_automation_tests` · `editor.run_automation_tests`
-
-Inspect or run registered automation tests inside the running editor process. `run_automation_tests` is synchronous, records a `run_id`, state/progress counters, result totals, per-test details, and a compact session history entry.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `prefix` | string | **required for run** | Test full-path prefix to run or filter |
-| `query` | string | optional | Case-insensitive substring for `find_automation_tests` |
-| `max_tests` | integer | optional | `run_automation_tests` cap, default 200, hard max 1000 |
-| `max_results` | integer | optional | `find_automation_tests` cap, default 100, hard max 1000 |
-
-### `editor.get_automation_run_status` · `editor.stop_automation_tests` · `editor.list_automation_history`
-
-Runtime automation observability for clients that need UnrealMCP-style status polling. The Monolith runner uses synchronous `StartTestByName + StopTest`, so `stop_automation_tests` is an explicit structured no-op with `stop_status="unsupported_cancel"` and `can_stop=false`.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `max_results` | integer | optional | `list_automation_history` count, default 20, capped to in-memory history capacity |
 
 ### `editor.create_empty_map` · NEW in Phase J F8
 
@@ -684,11 +525,42 @@ Report plugin-enabled + module-loaded status for Monolith (or arbitrary) modules
 |-----------|------|----------|-------------|
 | `module_names` | array | optional | Module name strings. Omit to query all Monolith modules. Unknown names return `enabled=false, loaded=false` (no error). |
 
+### `editor.run_console_command` · NEW in v0.14.10
+
+Execute a console command. Routes to the first PIE `PlayerController` found (so exec UFUNCTIONs on the possessed pawn fire); falls back to `GEngine->Exec` on the editor world when no PIE session is active. Returns which world type was used (`pie` / `editor`) and whether the PC path was taken.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `command` | string | **required** | Console command string (e.g. `BowLoop 1`, `WalkLoop`, `Cam3P 1`) |
+
+### `editor.start_pie` · `editor.stop_pie` · NEW in v0.14.10
+
+`start_pie` queues an in-viewport Play-In-Editor session (refuses to queue a duplicate when a PIE world is already alive); response includes `mode: 'in_viewport'`. `stop_pie` calls `RequestEndPlayMap` when a PIE world exists, no-op (`stopped: false`) otherwise. Both take *no parameters*. Pairs with `run_python` / `load_level` for fully automated in-game test flows.
+
+### `editor.run_python` · NEW in v0.14.9
+
+Execute a Python command, statement, or file via `IPythonScriptPlugin::ExecPythonCommandEx`. Returns success, captured Python stdout/stderr (typed info/warning/error), and (for `evaluate_statement` mode) the evaluated result. Requires `PythonScriptPlugin` (engine-shipped Experimental, enabled by `Monolith.uplugin`).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `command` | string | **required** | Python source — inline code, single statement, or a file path with optional space-separated args (when `mode=execute_file`) |
+| `mode` | string | optional | `execute_file` (default), `execute_statement`, or `evaluate_statement` |
+| `unattended` | bool | optional | Set `GIsRunningUnattendedScript=true` to suppress UI dialogs. Default: `false` |
+| `file_scope` | string | optional | Scope for `execute_file`: `private` (isolated, default) or `public` (shared with REPL console) |
+
+### `editor.load_level` · NEW in v0.14.9
+
+Close the current persistent level (without saving) and load the specified level by `/Game/...` asset path. Wraps `ULevelEditorSubsystem::LoadLevel`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | **required** | Asset path of the level to load (e.g. `/Game/Maps/L_Backyard`). Must exist. |
+
 ---
 
 ## config
 
-INI config, plugin, and cvar inspection/search. **10 actions.** Read-only.
+INI config file inspection and search. **6 actions.** Read-only.
 
 ### `config.resolve_setting`
 
@@ -748,160 +620,18 @@ List all config files with their hierarchy level.
 
 ---
 
-## localization
-
-Culture and StringTable operations. **10 actions.** Inspection actions are read-only; StringTable write actions require `dry_run=true` or `confirm=true`.
-
-### `localization.list_cultures`
-
-List available cultures known to Unreal internationalization.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `culture_names` | array | optional | Culture names to resolve; omitted returns current culture context |
-| `include_derived` | bool | optional | Include derived cultures when resolving `culture_names`; default `true` |
-
-### `localization.list_string_tables`
-
-List StringTable assets under a project content path.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `path` | string | optional | `/Game` content path to scan; default `/Game` |
-| `include_entries` | bool | optional | Include capped entry rows; default `false` |
-| `include_metadata` | bool | optional | Include per-entry metadata when entries are included; default `false` |
-| `limit` | integer | optional | Maximum tables or entries to return; clamped to 1-1000 |
-
-### `localization.get_string_table`
-
-Inspect a StringTable asset and return capped entries.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | StringTable asset path under `/Game` |
-| `include_metadata` | bool | optional | Include per-entry metadata; default `true` |
-| `limit` | integer | optional | Maximum entries to return; clamped to 1-1000 |
-
-### `localization.validate_string_table`
-
-Validate a StringTable asset for empty keys, empty strings, case-insensitive duplicate-looking keys, and large-table warnings.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | StringTable asset path under `/Game` |
-
-### `localization.create_string_table`
-
-Create a `UStringTable` asset under `/Game`.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | New StringTable asset path under `/Game` |
-| `namespace` | string | optional | StringTable namespace; defaults to asset name |
-| `dry_run` | bool | optional | Preview without writing |
-| `confirm` | bool | optional | Required for non-dry-run writes |
-| `save` | bool | optional | Save the package after creation; default `false` |
-
-### `localization.set_string_entry`
-
-Add or replace one StringTable entry and optional metadata.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | StringTable asset path under `/Game` |
-| `key` | string | **required** | Entry key |
-| `source_string` | string | **required** | Source string to store |
-| `metadata` | object | optional | String metadata fields to set on the entry |
-| `dry_run` | bool | optional | Preview without writing |
-| `confirm` | bool | optional | Required for non-dry-run writes |
-| `save` | bool | optional | Save the package after mutation; default `false` |
-
-### `localization.remove_string_entry`
-
-Remove one StringTable entry by key.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | StringTable asset path under `/Game` |
-| `key` | string | **required** | Entry key |
-| `dry_run` | bool | optional | Preview without writing |
-| `confirm` | bool | optional | Required for non-dry-run writes |
-| `save` | bool | optional | Save the package after mutation; default `false` |
-
-### `localization.set_string_metadata`
-
-Add, replace, or remove one metadata value on one entry.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | StringTable asset path under `/Game` |
-| `key` | string | **required** | Entry key |
-| `metadata_key` | string | **required** | Metadata key |
-| `metadata_value` | string | optional | Metadata value to set |
-| `remove` | bool | optional | Remove `metadata_key` instead of setting `metadata_value` |
-| `dry_run` | bool | optional | Preview without writing |
-| `confirm` | bool | optional | Required for non-dry-run writes |
-| `save` | bool | optional | Save the package after mutation; default `false` |
-
-### `localization.import_string_table_csv`
-
-Import `key,source_string,<metadata...>` rows from an in-project CSV file into a StringTable.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | StringTable asset path under `/Game` |
-| `file_path` | string | **required** | CSV path under the project directory |
-| `replace_existing` | bool | optional | Clear existing entries before importing; default `false`. Refuses empty or fully skipped imports to avoid accidental table clears |
-| `dry_run` | bool | optional | Preview without writing |
-| `confirm` | bool | optional | Required for non-dry-run writes |
-| `save` | bool | optional | Save the package after mutation; default `false` |
-
-### `localization.export_string_table_csv`
-
-Export StringTable entries to a CSV file under the project directory.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_path` | string | **required** | StringTable asset path under `/Game` |
-| `file_path` | string | **required** | Destination CSV path under the project directory |
-| `include_metadata` | bool | optional | Include metadata columns; default `true` |
-| `dry_run` | bool | optional | Preview without writing |
-| `confirm` | bool | optional | Required for non-dry-run writes |
-
----
-
 ## project
 
-Project-wide asset index backed by SQLite + FTS5. **19 actions.**
-
-CRG-inspired navigation/review (additive, over the existing `dependencies` graph plus rebuildable derived `crg_*` projection/cache tables):
-
-| Action | Key params | Purpose |
-|--------|-----------|---------|
-| `project.impact_radius` | `asset_path`*, `direction`=both, `max_depth`=2, `max_results`=200, `dependency_type` | Cycle-safe bounded BFS; returns `impacted_assets[]`, `edges[]`, `truncated` |
-| `project.health` | `include_counts`=true | Read-only: v2 schema, 21 FTS triggers, row parity for all project FTS tables, orphan deps, CRG projection table/index/parity checks, journal mode; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
-| `project.repair_fts` | `target`=all\|assets\|nodes\|variables\|parameters\|datatable_rows\|actors\|asset_search_values, `execute`=false | Rebuild project FTS tables. `execute=true` is the sole write gate; refused while indexing |
-| `project.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `assets` and `dependencies`. Dry-run unless `execute=true`; refused while indexing; ProjectIndex completion also runs this rebuild automatically |
-| `project.risk_score` | `asset_path`/`seed`, `limit`=20, `min_tier`=low | `{score,tier,reasons[],raw_counts,cache}` from `crg_node_metrics` when available; query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
-| `project.detect_changes` | `changed_paths` or `paths`, `max_results`=200, `detail_level`=minimal | Changed `.uasset`/`.umap` path/name mapping to indexed assets, risk, depth-1 dependency impact, and review priorities; no P4/git shell-out |
-| `project.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory orphan-asset candidates with `confidence` + `reasons[]`; excludes World/Level/PrimaryAssetLabel roots and never mutates |
-| `project.pre_merge_check` | `changed_paths` or `paths`, `max_results`=200, `unused_limit`=20, `detail_level`=minimal | Advisory pre-merge gate composed from health, detect_changes, and optional find_unused; returns `decision`, `checks[]`, `findings[]`, and next actions; no P4/git shell-out |
-| `project.snapshot` | `label`, `execute`=false | Dry-run by default; `execute=true` stores current CRG projection node/edge manifest in derived `crg_snapshots` |
-| `project.diff_snapshots` | `before`*, `after`=current, `limit`=100 | Read-only diff between stored/current CRG manifests; returns `summary_counts` and capped new/removed node/edge samples |
-| `project.review_hotspots` | `kind`=all, `limit`=50, `min_lines`=100, `include_questions`=true | Global review queue ranked by fan-in/fan-out/risk/large graph signals with optional advisory questions |
-| `project.review_context` | `asset_path`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`; `minimal` omits full details |
+Project-wide asset index backed by SQLite + FTS5. **7 actions.**
 
 ### `project.search`
 
-Full-text search across indexed project assets and graph/content signals. By default it searches assets, nodes, variables, parameters, DataTable rows, level actors, and curated supplemental values such as Blueprint comments and pin/default text.
+Full-text search across all indexed project assets, nodes, variables, and parameters.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | string | **required** | FTS5 search query (supports `AND`, `OR`, `NOT`, `prefix*`) |
 | `limit` | integer | optional | Default: `50` |
-| `include_content` | bool | optional | Default: `true`. Set `false` for legacy asset/node-only search when broad content matches are too noisy |
-
-Results include `asset_path`, `asset_name`, `asset_class`, `module_name`, `match_context`, `rank`, and match provenance fields: `match_source`, `match_table`, `match_field`, `match_object_path`, `match_value`. Use `match_source` to distinguish `asset`, `node`, `variable`, `parameter`, `datatable_row`, `actor`, and `supplemental_value` hits.
 
 ### `project.find_references`
 
@@ -946,54 +676,9 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 
 ---
 
-## collection
-
-Content Browser collection management. **13 actions.** `MonolithIndex` registers this namespace alongside `project`; shutdown is owner-scoped so collection actions do not clear other namespaces.
-
-> For full param schemas, call `monolith_discover("collection")` at runtime.
-
-Common actions: `list_collections`, `get_collection`, `create_collection`, `delete_collection`, `add_assets`, `remove_assets`, `list_assets`, `contains_asset`, `set_dynamic_query`, `get_dynamic_query`, `set_collection_color`, `validate_collection_name`, `create_unique_collection_name`.
-
----
-
-## bridge
-
-Local bridge discovery backed by ProjectIndex and EngineSource. **5 actions.**
-
-| Action | Key params | Purpose |
-|--------|-----------|---------|
-| `bridge.get_index_status` | `include_stats`=false | Report local project/source index readiness for mention search and bridge lookups |
-| `bridge.start_indexing` | `scope`=all\|assets\|source, `full`=false | Start project asset and/or source indexing from one bridge entry point |
-| `bridge.search_items` | `query`*, `limit`=24, `include_assets`=true, `include_source`=true | Search indexed assets, source symbols, and source lines for prompt context |
-| `bridge.build_attachment` | `item_id`*, `context_lines`=12, `max_chars`=12000 | Materialize a `bridge.search_items` item into a bounded text attachment |
-| `bridge.search_asset_symbols` | `asset_path` or `symbol`, `limit`=20, `detail_level`=minimal | RX-6 read-only asset<->source bridge. Requires exactly one non-empty string seed and rejects wrong-typed seeds with `-32602`. Returns bounded heuristic `links[]` with `confidence`, `reasons[]`, `asset`, `symbol`, `warnings[]`, `truncated`, and `next_actions`; never mutates indexes or shells out. Offline parity uses `monolith_query bridge search_asset_symbols` over `ProjectIndex.db` + `EngineSource.db` |
-
----
-
 ## source
 
-Unreal Engine C++ source code navigation. 1M+ symbols indexed. **27 actions.**
-
-CRG-inspired navigation/review (additive, over the existing `"references"` + `inheritance` graph plus rebuildable derived `crg_*` projection/cache tables):
-
-| Action | Key params | Purpose |
-|--------|-----------|---------|
-| `source.impact_radius` | `symbol`*, `edge_kinds`=call\|type\|inheritance, `direction`=both, `max_depth`=2, `max_results`=200 | Cycle-safe bounded BFS; call/type filters are exact, `include` returns a warning until path resolution is supported. Returns `impacted_symbols[]`, `edges[]`, `warnings[]`, `truncated` |
-| `source.health` | `include_counts`=true | Read-only: v1 schema, `journal_mode`, WAL sidecar/checkpoint counters if an accidental WAL DB is opened by a WAL-capable path, `symbols_ai/ad` triggers, `symbols_fts` parity, orphan refs, CRG projection table/index/parity checks; `source_fts` info-only; returns `input`, `limits`, `checks[]`, `warnings[]`, `next_actions` |
-| `source.repair_fts` | `target`=all\|symbols\|source, `execute`=false | Rebuild `symbols_fts`. `target=source` → reindex guidance (plain fts5). Refused while indexing |
-| `source.repair_crg_cache` | `scope`=all, `execute`=false | Create/rebuild derived `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta` from `symbols`, `"references"`, and `inheritance`. Dry-run unless `execute=true`; refused while indexing; source indexing completion also runs this rebuild automatically |
-| `source.build_crg_graph` | `execute`=false, `graph_db` optional | Build or dry-run a CRG-compatible `Saved/graph.db` from `Saved/EngineSource.db` files, symbols, references, and inheritance. Uses the default graph DB path unless `graph_db` points to a copied/non-standard location |
-| `source.rebuild_crg_graph` | `execute`=false, `graph_db` optional | Alias of `source.build_crg_graph` for explicit rebuild workflows |
-| `source.search_crg_graph` | `query`*, `kind` optional, `limit`=20, `graph_db` optional | Search `Saved/graph.db` graph nodes through `nodes_fts` first, with LIKE fallback when FTS returns no rows |
-| `source.crg_graph_health` | `graph_db` optional | Validate `Saved/graph.db` schema version, node counts, FTS parity, and graph availability |
-| `source.risk_score` | `symbol`*, `limit`=10, `min_tier`=low | `{score,tier,reasons[],raw_counts,cache}` from `crg_node_metrics` when available; query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
-| `source.detect_changes` | `changed_paths` or `paths`, `changed_ranges`, `diff_text`, `max_results`=200, `detail_level`=minimal | Changed source path suffix mapping to symbols, risk, depth-1 caller impact, heuristic test gaps, and review priorities. RX-1.1: optional `changed_ranges`/`diff_text` restrict matches to symbols overlapping changed line ranges (CRG overlap rule); `input.precision` ∈ `{file,line}`; no P4/git shell-out (caller supplies the diff). Offline CLI adds `--diff-file`, `--diff-stdin`, `--ranges=path:s-e` |
-| `source.find_unused` | `kind`=all, `limit`=100, `min_confidence`=low | Advisory function/class/struct dead-symbol candidates with `confidence` + `reasons[]`; excludes UE reflection/automation/entry markers and never mutates |
-| `source.pre_merge_check` | `changed_paths` or `paths`, `max_results`=200, `unused_limit`=20, `detail_level`=minimal | Advisory pre-merge gate composed from health, detect_changes, and optional find_unused; returns `decision`, `checks[]`, `findings[]`, and next actions; no P4/git shell-out |
-| `source.snapshot` | `label`, `execute`=false | Dry-run by default; `execute=true` stores current CRG projection node/edge manifest in derived `crg_snapshots` |
-| `source.diff_snapshots` | `before`*, `after`=current, `limit`=100 | Read-only diff between stored/current CRG manifests; returns `summary_counts` and capped new/removed node/edge samples |
-| `source.review_hotspots` | `kind`=all, `limit`=50, `min_lines`=100, `include_questions`=true | Global review queue ranked by fan-in/fan-out/risk/large symbol signals with optional advisory questions |
-| `source.review_context` | `symbol`*, `direction`=both, `detail_level`=minimal | Seed + impact + risk + `top_risks[]` + compact `context[]` + `next_actions`. Distinct from single-item `bridge.build_attachment` |
+Unreal Engine C++ source code navigation. 1M+ symbols indexed. **11 actions.**
 
 ### `source.read_source`
 
@@ -1055,211 +740,93 @@ CRG-inspired navigation/review (additive, over the existing `"references"` + `in
 
 ### `source.trigger_reindex` · `source.trigger_project_reindex`
 
-`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*. Successful source indexing reopens `EngineSource.db` and rebuilds the source CRG projection/cache automatically. In the editor, Live Coding / hot-reload completion kicks `trigger_project_reindex` so post-build C++ symbols become available to `source_query` without a manual refresh.
-
----
-
-## pcg
-
-Optional PCG discovery registered by `MonolithPCG`. The namespace is read-only and AssetRegistry/reflection-only; it does not include PCG headers, load PCG assets, execute graphs, or require the PCG plugin at compile time. **4 actions.**
-
-| Action | Required Params | Notes |
-|--------|-----------------|-------|
-| `get_status` | none | Reports optional PCG module/type availability and current/future action boundaries |
-| `list_graph_assets` | none | Lists PCG graph-like registry rows under `/Game`; optional `package_path`, `limit` |
-| `get_graph_asset` | `asset_path` | Returns one bounded PCG graph-like registry row; optional `include_tags`, `tag_limit` |
-| `list_components` | none | Lists PCG-like components in the current editor world using reflected class names; optional `limit` |
-
----
-
-## gamefeatures
-
-Optional Game Feature plugin inventory and `GameFeatureData` inspection registered by `MonolithGameFeatures`. The namespace is read-only and uses plugin descriptors, AssetRegistry metadata, and bounded reflection; it does not link Epic's experimental `GameFeaturesToolset`, activate/deactivate plugins, or create plugin files. **1 action is always registered; 4 detailed inspection actions register when `bEnableGameFeatureActions=true` and the editor restarts.**
-
-| Action | Required Params | Notes |
-|--------|-----------------|-------|
-| `get_status` | none | Always registered. Reports flags, module load state, scan roots, registered actions, actions available after opt-in, and reserved creation boundaries |
-| `list_plugins` | none | Gated. Lists Game Feature-style plugin descriptors; optional `limit`, `include_engine` |
-| `find_game_feature_data` | `plugin_name` or `asset_path` | Gated. Resolves a plugin or package/object path to one `GameFeatureData` AssetRegistry row without loading arbitrary paths |
-| `describe_game_feature_data` | `plugin_name` or `asset_path` | Gated. Loads one resolved `GameFeatureData` asset and returns bounded reflected action summaries |
-| `validate_plugin` | `plugin_name` | Gated. Checks descriptor, enabled `GameFeatures` dependency, content root, GameFeatureData presence, and creation gate state |
-
-Creation is reserved for a later spec. The current module does not register `create_plugin`, `activate_plugin`, `deactivate_plugin`, delete, overwrite, or descriptor mutation actions.
-
----
-
-## slate
-
-Read-only live editor Slate UI inspection registered by `MonolithSlate`. The status action is always available; the five detailed inspection actions are off by default and require `bEnableSlateInspectorActions=true` plus an editor restart. The module does not link UE 5.8 `SlateInspectorToolset`, `ToolsetRegistry`, or UnrealMCP, and it does not register click, keyboard, hover, text input, or widget mutation actions.
-
-| Action | Key params | Gate | Purpose |
-|--------|------------|------|---------|
-| `get_inspector_status` | none | always | Reports Slate initialization, feature-flag state, visible window count, ref generation, TTL, and registered/gated action lists. |
-| `list_windows` | `include_titles` | `bEnableSlateInspectorActions` | Lists visible top-level Slate windows with bounded geometry and redacted titles. |
-| `snapshot_widgets` | `window_index`, `max_depth`, `max_widgets`, `include_hidden` | `bEnableSlateInspectorActions` | Builds a bounded flat tree and returns short-lived opaque widget refs. |
-| `describe_widget` | `ref` | `bEnableSlateInspectorActions` | Resolves a current ref and returns type, state, geometry, text, parent, and capped child summaries. |
-| `capture_widget` | `ref`, `max_bytes` | `bEnableSlateInspectorActions` | Captures a Slate widget or active Slate window with Slate screenshot APIs and returns capped PNG base64. |
-| `wait_for_widget` | `text_contains`, `type`, `visible`, `timeout_ms`, `poll_interval_ms` | `bEnableSlateInspectorActions` | Runs a bounded single-scan read-only search for a matching widget condition without input simulation. |
-
----
-
-## asset
-
-Asset ingest, generic lifecycle operations, specialized asset enrichment, asset hygiene, and fuzzy live-AssetRegistry search. **12 actions.** `MonolithAsset` owns the namespace.
-
-> For full param schemas, call `monolith_discover("asset")` at runtime.
-
-| Action | Summary |
-|--------|---------|
-| `import_texture_from_bytes` | Decode base64 compressed image bytes and create a `UTexture2D` asset. Optional `texture_role` applies Unreal-specific presets, role post-processing, and validation metadata for UI, sprite, decal, basecolor, tileable world, normal, ORM/mask, height, and emissive textures. `return_processed_png=true` returns the imported post-processed pixels as PNG. |
-| `import_font_family` | Import one or more TTF files as a composite `UFont` plus `UFontFace` assets. |
-| `import_texture_from_file` | Import an external image file as a `UTexture2D` asset with optional texture settings. |
-| `save_asset` | Save any loaded asset package to disk. |
-| `delete_assets` | Delete assets by path with optional `allowed_prefixes` and `dry_run`. |
-| `validate_naming_conventions` | Scan assets by path and report prefix-rule violations. |
-| `list_supported_asset_enrichers` | List specialized read-only asset enrichers. |
-| `inspect_asset` | Inspect one asset with specialized read-only enrichment. |
-| `inspect_assets_batch` | Inspect multiple assets with per-row success/error results. |
-| `validate_specialized_asset` | Validate a specialized asset and report warnings without mutation. |
-| `batch_rename_assets` | Preview or apply batch asset renames through `IAssetTools::RenameAssets`. |
-| `find_assets` | Fuzzy, scored, typo-tolerant search over the live `AssetRegistry`. Ranks by asset name/path/class (optional tags) via the shared `FMonolithFuzzyMatch` engine. Params: `query`, `path`, `recursive`, `class_names` (alias `class`), `limit`, `threshold`, `include_tags`, `include_score_breakdown`, `allow_transposition` (default `true`, alias `bAllowTransposition`). Sees unsaved session assets; distinct from offline `project` search and exact-name did-you-mean. |
+`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*.
 
 ---
 
 ## mesh
 
-Static mesh inspection, mesh comparison, GeometryScript operations, mesh validation, mesh performance budgeting, proxy/HLOD helpers, cache/handle utilities, prop-kit helpers, tech-art mesh workflows, and level-context mesh optimization helpers. **70 actions.**
+Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript, procedural geometry, lighting, audio, performance, mesh import (incl. skeletal + animation, PR #58), and **experimental** procedural town generation. **194 actions** (always registered, in the public count) + 45 experimental town gen (gated on `bEnableProceduralTownGen=true`, default `false`) = 239 when town-gen is on.
 
-> For full param schemas, call `monolith_discover("mesh")` at runtime.
+> For full param schemas, call `monolith_discover("mesh")` at runtime. The action surface is too broad for full enumeration — see categories below.
 
-**Action categories:**
+**Action categories (core, always registered):**
 
 | Category | Examples |
 |----------|----------|
 | Mesh inspection | `get_mesh_info`, `get_mesh_bounds`, `get_mesh_materials`, `get_mesh_lods`, `get_mesh_collision`, `get_mesh_uvs`, `analyze_skeletal_mesh`, `analyze_mesh_quality`, `compare_meshes`, `get_vertex_data`, `search_meshes_by_size`, `get_mesh_catalog_stats` |
-| Performance | `get_triangle_budget`, `analyze_texel_density`, `find_instancing_candidates`, `convert_to_hism`, `set_lod_screen_sizes`, `setup_hlod`, `analyze_texture_budget`, `generate_proxy_mesh` |
-| Validation | `validate_game_ready`, `suggest_lod_strategy`, `batch_validate`, `compare_lod_chain` |
+| Scene actors | `get_actor_info`, `spawn_actor`, `move_actor`, `duplicate_actor`, `delete_actors`, `group_actors`, `set_actor_properties`, `align_actors`, `snap_to_floor`, `manage_folders`, `set_actor_tags` |
+| Spatial queries | `query_raycast`, `query_multi_raycast`, `query_radial_sweep`, `query_overlap`, `query_nearest`, `query_line_of_sight`, `get_actors_in_volume`, `get_scene_bounds`, `get_scene_statistics`, `get_spatial_relationships`, `query_navmesh` |
+| Blockout | `get_blockout_volumes`, `setup_blockout_volume`, `create_blockout_primitive`, `create_blockout_primitives_batch`, `create_blockout_grid`, `match_asset_to_blockout`, `match_all_in_volume`, `apply_replacement`, `clear_blockout`, `export_blockout_layout`, `import_blockout_layout`, `scan_volume`, `scatter_props`, `create_blockout_blueprint` |
+| Level analysis | `analyze_sightlines`, `find_hiding_spots`, `find_ambush_points`, `analyze_choke_points`, `analyze_escape_routes`, `classify_zone_tension`, `analyze_pacing_curve`, `find_dead_ends`, `validate_path_width`, `validate_navigation_complexity`, `analyze_visual_contrast`, `find_rest_points`, `validate_interactive_reach`, `generate_accessibility_report` |
+| Performance | `get_region_performance`, `estimate_placement_cost`, `find_overdraw_hotspots`, `analyze_shadow_cost`, `get_triangle_budget`, `analyze_texel_density`, `analyze_material_cost_in_region`, `analyze_lightmap_density`, `find_instancing_candidates`, `convert_to_hism`, `setup_hlod`, `analyze_texture_budget`, `generate_proxy_mesh` |
+| Lighting | `place_light`, `set_light_properties`, `sample_light_levels`, `find_dark_corners`, `analyze_light_transitions`, `get_light_coverage`, `suggest_light_placement` |
+| Audio | `get_audio_volumes`, `get_surface_materials`, `estimate_footstep_sound`, `analyze_room_acoustics`, `analyze_sound_propagation`, `find_loud_surfaces`, `find_sound_paths`, `can_ai_hear_from`, `get_stealth_map`, `find_quiet_path`, `suggest_audio_volumes`, `create_audio_volume`, `set_surface_type` |
+| Decals / scatter | `place_decals`, `place_along_path`, `analyze_prop_density`, `place_storytelling_scene`, `scatter_on_surface`, `scatter_on_walls`, `scatter_on_ceiling`, `randomize_transforms` |
+| Encounter design | `analyze_ai_territory`, `evaluate_safe_room`, `predict_player_paths`, `evaluate_spawn_point`, `suggest_scare_positions`, `evaluate_encounter_pacing`, `design_encounter`, `suggest_patrol_route`, `analyze_level_pacing_structure`, `generate_scare_sequence`, `validate_horror_intensity`, `evaluate_monster_reveal`, `analyze_co_op_balance` |
+| Templates / presets | `list_room_templates`, `get_room_template`, `apply_room_template`, `create_room_template`, `list_storytelling_patterns`, `create_storytelling_pattern`, `list_acoustic_profiles`, `create_acoustic_profile`, `create_tension_profile`, `list_genre_presets`, `export_genre_preset`, `import_genre_preset` |
+| Validation | `validate_game_ready`, `suggest_lod_strategy`, `batch_validate`, `compare_lod_chain`, `validate_naming_conventions`, `batch_rename_assets` |
 | GeometryScript | `mesh_boolean`, `mesh_simplify`, `mesh_remesh`, `generate_collision`, `generate_lods`, `fill_holes`, `compute_uvs`, `mirror_mesh` |
+| Mesh import / export | `import_mesh` (static or `import_as_skeletal` + `import_animations`, PR #58), `export_mesh` (FBX, PR #41) |
 | Procedural meshes | `create_parametric_mesh`, `create_horror_prop`, `create_structure`, `create_building_shell`, `create_maze`, `create_pipe_network`, `create_fragments`, `create_terrain_patch` |
-| Cache and handles | `list_cached_meshes`, `clear_cache`, `validate_cache`, `get_cache_stats`, `create_handle`, `release_handle`, `list_handles`, `save_handle` |
-| Level-context mesh optimization | `find_replace_mesh`, `set_lod_screen_sizes`, `find_instancing_candidates`, `convert_to_hism` |
+| Cache | `list_cached_meshes`, `clear_cache`, `validate_cache`, `get_cache_stats` |
+| Handles | `create_handle`, `release_handle`, `list_handles`, `save_handle` |
+| Prefabs | `create_prefab`, `create_blueprint_prefab`, `spawn_prefab`, `place_blueprint_actor`, `place_spline`, `create_prop_kit`, `place_prop_kit` |
+| Hospice / accessibility | `generate_hospice_report`, `analyze_framing` |
 
-Moved domains:
+**Action categories (experimental town gen, OFF by default):**
 
-| Namespace | Former mesh-domain examples |
-|-----------|-----------------------------|
-| `scene` | actor CRUD, spatial queries, lighting, audio, decals, scatter, scene metadata/statistics |
-| `leveldesign` | sightlines, hiding spots, accessibility, encounter pacing, `analyze_framing`, `evaluate_monster_reveal`, `analyze_co_op_balance` |
-| `worldgen` | blockout volumes, replacement workflows, procedural world/building/town generation |
-| `modelgen` | generated-model provider/job/import/provenance workflows |
-| `imagegen` | `generate_image_via_ima2`, `import_generated_image`, generated Texture2D provenance |
-| `asset` | `import_texture_from_file`, `save_asset`, `delete_assets`, `validate_naming_conventions`, `batch_rename_assets` |
+| Category | Examples |
+|----------|----------|
+| Floor plans | `generate_floor_plan`, `create_building_from_grid` |
+| Facades / roofs | `generate_facade`, `generate_roof`, `generate_arch_features` |
+| City blocks | `create_city_block`, `register_building`, `query_spatial_registry` |
+| Auto volumes | `create_auto_volumes`, `adapt_terrain` |
+| Furnishing | `furnish_room`, `validate_building` |
+| Debug | Debug views and diagnostics |
 
-See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the mesh namespace contract.
+> **Experimental — town gen has known geometry issues** (wall misalignment, room separation). Fix Plans v2-v5 applied 27+ fixes but fundamental issues remain. Core mesh actions (sweep walls, auto-collision, proc mesh caching, blueprint prefabs) work fine.
 
----
-
-## scene
-
-Editor-world actor CRUD, spatial queries, lighting/audio/decal/scatter helpers, and scene metadata/statistics. **76 actions.** `scene` is a shared namespace owned by `MonolithScene`, `MonolithEditor`, and `MonolithLevelDesign`; owner-scoped registration prevents one module from unregistering another module's actions.
-
-> For full param schemas, call `monolith_discover("scene")` at runtime.
-
----
-
-## leveldesign
-
-Horror/encounter/accessibility analysis, room/acoustic/genre presets, framing, monster reveal, and co-op spatial balance. **43 actions.** Broad editor-world placement, mesh optimization, and prefab actions route through `scene`, `mesh`, and `level_instance` instead of this namespace.
-
-> For full param schemas, call `monolith_discover("leveldesign")` at runtime.
-
----
-
-## level_instance
-
-Level Instance and prefab workflows. **16 actions.** `MonolithMesh` registers the core Level Instance surface; `MonolithLevelDesign` contributes `create_prefab`, `create_blueprint_prefab`, and `spawn_prefab` because those actions are prefab workflows, not level-design analysis.
-
-> For full param schemas, call `monolith_discover("level_instance")` at runtime.
-
----
-
-## worldgen
-
-Blockout, replacement workflows, procedural structures/terrain, and optional town-generation workflows. **63 actions.**
-
-> For full param schemas, call `monolith_discover("worldgen")` at runtime.
-
----
-
-## modelgen
-
-Generated-model provider, job, import, and provenance workflows. **7 actions.**
-
-> For full param schemas, call `monolith_discover("modelgen")` at runtime.
-
----
-
-## imagegen
-
-Generated-image provider discovery, deterministic local generation, ima2/imag2-gen HTTP generation, Texture2D import, source PNG mirroring, and provenance workflows. **6 actions.**
-
-> For full param schemas, call `monolith_discover("imagegen")` at runtime.
-
-Default external generation uses `ImageGenBridgeServerUrl=http://192.168.0.10:3333`, `ImageGenBridgeProvider=oauth`, `ImageGenBridgeDefaultModel=gpt-5.5`, and `ImageGenBridgeTimeoutSeconds=420.0`. Bridge output format is PNG only; JPEG, WebP, and other provider formats are rejected before the bridge call. Monolith does not read or store OpenAI API keys; `provider="api"` requires the ima2/imag2-gen server host to provide `OPENAI_API_KEY`.
-
-| Action | Params | Description |
-|--------|--------|-------------|
-| `list_image_models` | none | Lists local deterministic generation, the ima2 bridge boundary, and caller-supplied external import. |
-| `get_image_generation_defaults` | none | Returns ima2 defaults (`model=gpt-5.5`, `format=png`, `compose_prompt=true`), `/Game/GeneratedImages`, `source_png_dir`, root reference PNG directory, accepted `reference_input_fields`, local-placeholder fallback, texture role presets, import defaults, and prompt redaction policy. |
-| `generate_image` | `prompt`, optional `resolution`, `texture_role`, `save_source_png`, destination/import settings | Generates a deterministic local PNG placeholder and imports it as `UTexture2D`. No network or API keys. Defaults generated imports to `texture_role=basecolor` and mirrors saved imports as postprocessed PNGs under `<ProjectDir>/GeneratedImages`. |
-| `generate_image_via_ima2` | `prompt`, optional `server_url`, `provider`, `model`, `quality`, `size`/`resolution`, `format=png`, `background`, `moderation`, `compose_prompt`, `texture_role`, `save_source_png`, `references`/`reference_images`/`reference_image_paths`/`reference_png_paths`/`reference_asset_paths`, destination/import settings | POSTs to the ima2/imag2-gen `/api/generate` endpoint, forwards provider `background=auto|opaque` only (`background=transparent` caller requests are normalized to provider `auto`), archives reference inputs as PNGs under `<ProjectDir>/GeneratedImages`, extracts Texture2D Source art for `reference_asset_paths`, imports the first returned PNG through `asset.import_texture_from_bytes`, applies the requested texture role, stores redacted provenance, and mirrors the postprocessed generated PNG under `<ProjectDir>/GeneratedImages`. `compose_prompt` defaults true and appends Unreal `texture_role` constraints; set it false to send the caller prompt verbatim. |
-| `import_generated_image` | PNG `bytes_b64` or PNG `file_path`/`path`, optional `format_hint`, `prompt`, `provider`, `model`, `texture_role`, `save_source_png`, destination/import settings | Imports externally generated PNG bytes or a local generated PNG file through the same Texture2D ingest path, applies the requested texture role, mirrors the postprocessed PNG under `<ProjectDir>/GeneratedImages`, and stores redacted provenance. JPEG, WebP, and other generated payload formats are rejected. |
-| `get_generated_asset_provenance` | `asset_path` | Reads `Monolith.Generated.*` metadata from a generated Texture2D asset, including prompt composition hashes, `source_png_path`, `source_png_hash`, `source_png_bytes`, and `source_png_kind` when a source mirror was saved. |
-
----
-
-## water
-
-Optional Water/Landscape discovery registered by `MonolithWater`. The namespace is read-only and reflection-only; it does not include Water or Landscape headers, mutate actors/splines/zones/landscapes, or require the Water plugin at compile time. **2 actions.**
-
-| Action | Params | Description |
-|--------|--------|-------------|
-| `get_status` | none | Reports Water, WaterEditor, Landscape, and LandscapeEditor module availability plus Water-like actor counts. |
-| `list_bodies` | `limit`?, `actor_name_filter`? | Lists reflected Water-like actors/components in the current editor world. |
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the full action catalog.
 
 ---
 
 ## ui
 
-UMG widget Blueprint CRUD, templates, styling, animation, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. **119 actions** = 115 module-owned UI actions (64 always-on + 51 CommonUI) + 4 GAS UI binding aliases.
+UMG widget Blueprint CRUD, templates, styling, animation (v1 + v2), the schema-driven **Spec / EffectSurface** architecture, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. **138 actions** — the UMG + Spec/EffectSurface baseline (66 always-on, incl. the v0.15.0 navigation/conversion gap-closure + headline scaffolders) + 51 CommonUI (registered when `WITH_COMMONUI=1`) + 4 GAS UI binding aliases. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated.
 
-> For full param schemas, call `monolith_discover("ui")` at runtime.
+> For full param schemas, call `monolith_discover("ui")` at runtime. The surface is large — categories below; the v0.15.0-new actions are flagged.
 
-**Action categories (UMG baseline, always registered):**
+**Action categories (UMG + Spec baseline, always registered):**
 
 | Category | Actions | Examples |
 |----------|---------|----------|
-| Widget CRUD | 7 | `create_widget_blueprint`, `get_widget_tree`, `add_widget`, `remove_widget`, `set_widget_property`, `compile_widget`, `list_widget_types` |
-| Slot / layout | 3 | `set_slot_property`, `set_anchor_preset`, `move_widget` |
+| Widget CRUD | 9 | `create_widget_blueprint`, `get_widget_tree`, `add_widget`, `remove_widget`, `set_widget_property` (accepts `value` alias), `compile_widget` (returns `errors[]`/`warnings[]`), `list_widget_types`, `rename_widget`, `dump_blueprint_compile_log` |
+| Variable flags (v0.15.0) | 3 | `add_widget_variable`, `set_widget_is_variable`, `list_widget_property_enums` |
+| Root / reparent (v0.15.0) | 1 | `reparent_widget_root` |
+| Slot / layout | 4 | `set_slot_property`, `set_anchor_preset`, `move_widget`, `set_brush` |
 | Styling | 6 | `set_font`, `set_color_scheme`, `batch_style`, `set_text`, `set_image`, `setup_list_view` |
-| Templates | 8 | `create_hud_element`, `create_menu`, `create_settings_panel`, `create_dialog`, `create_notification_toast`, `create_loading_screen`, `create_inventory_grid`, `create_save_slot_list` |
+| Templates / scaffolds | 13 | `create_hud_element`, `create_menu`, `create_settings_panel`, `create_dialog`, `create_notification_toast`, `create_loading_screen`, `create_inventory_grid`, `create_save_slot_list`, `scaffold_game_user_settings`, `scaffold_save_game`, `scaffold_save_subsystem`, `scaffold_audio_settings`, `scaffold_input_remapping` |
+| Headline scaffolders (v0.15.0) | 3 | `scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu` |
 | Animation v1 | 5 | `list_animations`, `get_animation_details`, `create_animation`, `add_animation_keyframe`, `remove_animation` |
 | Animation v2 | 5 | `create_animation_v2`, `add_bezier_eased_segment`, `bake_spring_animation`, `add_animation_event_track`, `bind_animation_to_event` |
-| Bindings / inspection | 4 | `list_widget_events`, `list_widget_properties`, `setup_list_view`, `get_widget_bindings` |
-| Settings scaffolds | 5 | `scaffold_game_user_settings`, `scaffold_save_game`, `scaffold_save_subsystem`, `scaffold_audio_settings`, `scaffold_input_remapping` |
-| Accessibility | 4 | `scaffold_accessibility_subsystem`, `audit_accessibility`, `set_colorblind_mode`, `set_text_scale` |
-| Design effects | 3 | `set_rounded_corners`, `apply_box_shadow`, `create_gradient_mid_from_spec` |
-| EffectSurface / Spec / Type Registry | 14 | `set_effect_surface_*`, `apply_effect_surface_preset`, `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec`, `dump_property_allowlist` |
+| Inspection | 3 | `list_widget_events`, `list_widget_properties`, `get_widget_bindings` |
+| Design import | 4 | `import_texture_from_bytes`, `import_font_family`, `set_rounded_corners`, `create_gradient_mid_from_spec` |
+| EffectSurface (provider-gated, `-32010` when absent) | 13 | `apply_box_shadow`, `set_effect_surface_corners`, `set_effect_surface_fill`, `set_effect_surface_border`, `set_effect_surface_dropShadow`, `set_effect_surface_innerShadow`, `set_effect_surface_glow`, `set_effect_surface_filter`, `set_effect_surface_backdropBlur`, `set_effect_surface_insetHighlight`, `apply_effect_surface_preset` |
+| Spec round-trip | 4 | `build_ui_from_spec`, `dump_ui_spec`, `dump_ui_spec_schema`, `build_menu_from_spec` (v0.15.0) |
+| Accessibility | 6 | `scaffold_accessibility_subsystem`, `audit_accessibility`, `set_colorblind_mode`, `set_text_scale`, `apply_high_contrast_variant`, `set_text_scale_binding` |
+| Allowlist / diagnostics | 2 | `dump_property_allowlist`, `dump_style_cache_stats` |
 
 **Action categories (CommonUI, registered when `WITH_COMMONUI=1`):**
 
 | Category | Actions | Examples |
 |----------|---------|----------|
 | Activatable widgets | 8 | `create_activatable_widget`, `create_activatable_stack`, `create_activatable_switcher`, `configure_activatable`, `push_to_activatable_stack`, `pop_activatable_stack`, `get_activatable_stack_state`, `set_activatable_transition` |
-| Common buttons / styles | 6 | `convert_button_to_common`, `configure_common_button`, `create_common_button_style`, `create_common_text_style`, `create_common_border_style`, `apply_style_to_widget`, `batch_retheme` |
+| Common buttons / styles | 7 | `convert_button_to_common`, `configure_common_button`, `create_common_button_style`, `create_common_text_style`, `create_common_border_style`, `apply_style_to_widget`, `batch_retheme` |
 | Common config | 2 | `configure_common_text`, `configure_common_border` |
+| Conversion gap-closure (v0.15.0) | 4 | `convert_textblock_to_common`, `convert_border_to_common`, `set_action_bar_button_class`, `apply_token_binding` |
 | Input | 7 | `create_input_action_data_table`, `add_input_action_row`, `bind_common_action_widget`, `create_bound_action_bar`, `get_active_input_type`, `set_input_type_override`, `list_platform_input_tables` |
-| Navigation / focus | 5 | `set_widget_navigation`, `set_initial_focus_target`, `force_focus`, `get_focus_path`, `request_refresh_focus`, `enforce_focus_ring` |
+| Navigation / focus | 9 | `set_widget_navigation`, `set_widget_navigation_bulk` (v0.15.0), `dump_widget_navigation` (v0.15.0), `set_initial_focus_target`, `force_focus`, `get_focus_path`, `request_refresh_focus`, `audit_focus_chain`, `enforce_focus_ring` |
 | Lists / tabs / groups | 4 | `setup_common_list_view`, `create_tab_list_widget`, `register_tab`, `create_button_group` |
 | Carousels / switcher | 2 | `configure_animated_switcher`, `create_widget_carousel` |
 | Hardware | 1 | `create_hardware_visibility_border` |
@@ -1267,8 +834,8 @@ UMG widget Blueprint CRUD, templates, styling, animation, settings scaffolding, 
 | Lazy / load guard | 2 | `create_lazy_image`, `create_load_guard` |
 | Modals / messages | 2 | `show_common_message`, `configure_modal_overlay` |
 | Audit / report | 2 | `audit_commonui_widget`, `export_commonui_report` |
-| Reload | 1 | `hot_reload_styles`, `dump_action_router_state` |
-| Reduce motion | 1 | `wrap_with_reduce_motion_gate`, `set_text_scale_binding` |
+| Reload / diagnostics | 2 | `hot_reload_styles`, `dump_action_router_state` |
+| Reduce motion | 1 | `wrap_with_reduce_motion_gate` |
 
 **GAS UI binding aliases (4 — same handlers as `gas::*` versions):**
 
@@ -1283,7 +850,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithUI.md` for the deep dive including
 
 ## gas
 
-Gameplay Ability System integration. **136 actions** across 11 categories — covers the full GAS authoring pipeline. **Conditional on `#if WITH_GBA`** — projects without the GameplayAbilities plugin register 0 GAS actions.
+Gameplay Ability System integration. **135 actions** across 11 categories — covers the full GAS authoring pipeline. **Conditional on `#if WITH_GBA`** — projects without the GameplayAbilities plugin register 0 GAS actions.
 
 > For full param schemas, call `monolith_discover("gas")` at runtime.
 
@@ -1300,24 +867,12 @@ Gameplay Ability System integration. **136 actions** across 11 categories — co
 | Cues | 10 | `create_gameplay_cue_notify`, `link_cue_to_effect`, `unlink_cue_from_effect`, `get_cue_info`, `list_gameplay_cues`, `set_cue_parameters`, `find_cue_triggers`, `validate_cue_coverage`, `batch_create_cues`, `scaffold_cue_library` |
 | Targeting | 5 | `create_target_actor`, `configure_target_actor`, `add_targeting_to_ability`, `scaffold_fps_targeting`, `validate_targeting` |
 | Input | 5 | `setup_ability_input_binding`, `bind_ability_to_input`, `batch_bind_abilities`, `get_ability_input_bindings`, `scaffold_input_binding_component` |
-| Inspect (PIE) | 7 | `export_gas_manifest`, `get_runtime_summary`, `snapshot_gas_state`, `get_tag_state`, `get_cooldown_state`, `trace_ability_activation`, `compare_gas_states` |
+| Inspect (PIE) | 6 | `export_gas_manifest`, `snapshot_gas_state`, `get_tag_state`, `get_cooldown_state`, `trace_ability_activation`, `compare_gas_states` |
 | UI bindings | 4 | `bind_widget_to_attribute`, `unbind_widget_attribute`, `list_attribute_bindings`, `clear_widget_attribute_bindings` *(also aliased into `ui` namespace — same handlers)* |
 
 ### `gas.grant_ability_to_pawn` · NEW in Phase J F8
 
 Grant a `UGameplayAbility` to a pawn's `UAbilitySystemComponent` directly without scaffold-side wiring or `apply_effect` ceremony. See `monolith_discover("gas")` for params.
-
-### `gas.get_runtime_summary` · NEW on 2026-05-19
-
-Read-only GAS runtime preflight. It returns `pie_active`, ASC counts, aggregate ability/effect/tag/attribute-set totals, and optional actor samples. Unlike actor-specific PIE tools, it succeeds outside PIE with `has_runtime_data=false` so automation clients can decide whether to start PIE before calling deeper snapshot actions.
-
-### GAS scaffold and validator module resolution
-
-`gas.validate_gas_setup` and `gas.bootstrap_gas_foundation` resolve the project runtime code module by scanning `Source/*/*.Build.cs` and preferring runtime modules over editor modules. The validator response includes `module_name` and `build_cs_path`; GO resolves to `Source/GoGame/GoGame.Build.cs`, not `Source/GO/GO.Build.cs`. GAS scaffold, target, input, ability mutation, and custom ability task actions reject wrong-type string/number/bool JSON fields before mutating assets or source files.
-
-### `gas.validate_cue_coverage`
-
-Read-only GameplayCue audit. Existing output reports GameplayEffect cue tags with no handler and GameplayCue Notify assets that no GameplayEffect references. Optional param `include_registered_tags_without_notifies=true` also walks the registered `GameplayCue` tag subtree and returns `registered_cue_tag_count`, `registered_notify_handler_scope`, `registered_tags_without_notifies_count`, and sorted `registered_tags_without_notifies` for tags that would execute with no visible Notify. With `path_filter`, the registered-tag comparison still uses global project Notify handlers to avoid false positives for handlers outside the filtered path.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithGAS.md` for the deep dive.
 
@@ -1349,7 +904,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithComboGraph.md`.
 
 ## ai
 
-Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass Entity, Zone Graph, runtime PIE inspection, and a deep library of scaffolds. **243 actions** — the largest single conditional namespace.
+Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass Entity, Zone Graph, runtime PIE inspection, and a deep library of scaffolds. **221 actions** — the largest single conditional namespace.
 
 **Conditional on `#if WITH_STATETREE` + `#if WITH_SMARTOBJECTS`** — projects missing either plugin register 0 AI actions.
 
@@ -1360,37 +915,22 @@ Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart
 | Category | Actions | Examples |
 |----------|---------|----------|
 | Blackboards | 12 | `create_blackboard`, `get_blackboard`, `list_blackboards`, `delete_blackboard`, `duplicate_blackboard`, `add_bb_key`, `remove_bb_key`, `rename_bb_key`, `get_bb_key_details`, `batch_add_bb_keys`, `set_bb_parent`, `compare_blackboards` |
-| Behavior Trees | 32 | `create_behavior_tree`, `get_behavior_tree`, `list_behavior_trees`, `delete_behavior_tree`, `duplicate_behavior_tree`, `set_bt_blackboard`, `list_bt_node_classes`, `add_bt_node`, `remove_bt_node`, `move_bt_node`, `add_bt_decorator`, `remove_bt_decorator`, `add_bt_service`, `remove_bt_service`, `set_bt_node_property`, `get_bt_node_properties`, `reorder_bt_children`, `add_bt_run_eqs_task`, `add_bt_smart_object_task`, `add_bt_use_ability_task`, `build_behavior_tree_from_spec`, `export_bt_spec`, `import_bt_spec`, `validate_behavior_tree`, `clone_bt_subtree`, `auto_arrange_bt`, `compare_behavior_trees`, `create_bt_task_blueprint`, `create_bt_decorator_blueprint`, `create_bt_service_blueprint`, `generate_bt_diagram`, `get_bt_graph` *(NEW Phase J F8)* |
-| State Trees | 35 | `create_state_tree`, `get_state_tree`, `list_state_trees`, `delete_state_tree`, `duplicate_state_tree`, `compile_state_tree`, `set_st_schema`, `add_st_state`, `remove_st_state`, `rename_st_state`, `move_st_state`, `set_st_state_properties`, `add_st_task`, `remove_st_task`, `set_st_task_property`, `add_st_enter_condition`, `remove_st_enter_condition`, `add_st_transition`, `remove_st_transition`, `add_st_property_binding`, `remove_st_property_binding`, `get_st_bindings`, `get_st_bindable_properties`, `list_st_task_types`, `list_st_condition_types`, `add_st_transition_condition`, `add_st_consideration`, `configure_st_consideration`, `validate_state_tree`, `list_st_extension_types`, `add_st_extension`, `build_state_tree_from_spec`, `export_st_spec`, `generate_st_diagram`, `auto_arrange_st` |
-| EQS | 20 | `create_eqs_query`, `get_eqs_query`, `list_eqs_queries`, `delete_eqs_query`, `duplicate_eqs_query`, `add_eqs_generator`, `remove_eqs_generator`, `configure_eqs_generator`, `add_eqs_test`, `remove_eqs_test`, `configure_eqs_test`, `configure_eqs_scoring`, `configure_eqs_filter`, `list_eqs_generator_types`, `list_eqs_test_types`, `list_eqs_contexts`, `validate_eqs_query`, `reorder_eqs_tests`, `build_eqs_query_from_spec`, `create_eqs_from_template` |
-| AI Controllers | 10 | `create_ai_controller`, `get_ai_controller`, `list_ai_controllers`, `set_ai_controller_bt`, `set_pawn_ai_controller_class`, `set_ai_controller_flags`, `set_ai_team`, `get_ai_team`, `spawn_ai_actor`, `get_ai_actors` |
-| Perception | 12 | `add_perception_component`, `get_perception_config`, `configure_sight_sense`, `configure_hearing_sense`, `configure_damage_sense`, `configure_touch_sense`, `remove_sense`, `add_stimuli_source_component`, `configure_stimuli_source`, `validate_perception_setup`, `get_ai_system_config`, `add_perception_to_actor` *(NEW Phase J F8)* |
-| Smart Objects | 16 | `create_smart_object_definition`, `get_smart_object_definition`, `list_smart_object_definitions`, `delete_smart_object_definition`, `add_so_slot`, `remove_so_slot`, `configure_so_slot`, `add_so_behavior_definition`, `remove_so_behavior_definition`, `set_so_tags`, `add_smart_object_component`, `place_smart_object_actor`, `find_smart_objects_in_level`, `validate_smart_object_definition`, `create_so_from_template`, `duplicate_smart_object_definition` |
-| Navigation | 24 | `get_nav_system_config`, `get_navmesh_config`, `set_navmesh_config`, `get_navmesh_stats`, `add_nav_bounds_volume`, `list_nav_bounds_volumes`, `build_navigation`, `get_nav_build_status`, `list_nav_areas`, `create_nav_area`, `add_nav_modifier_volume`, `add_nav_link_proxy`, `configure_nav_link`, `list_nav_links`, `find_path`, `test_path`, `project_point_to_navigation`, `get_random_navigable_point`, `navigation_raycast`, `configure_nav_agent`, `add_nav_invoker_component`, `get_crowd_manager_config`, `set_crowd_manager_config`, `analyze_navigation_coverage` |
-| Runtime PIE | 14 | `runtime_get_bb_value`, `runtime_set_bb_value`, `runtime_clear_bb_value`, `runtime_get_bt_state`, `runtime_start_bt`, `runtime_stop_bt`, `runtime_get_bt_execution_path`, `runtime_get_perceived_actors`, `runtime_check_perception`, `runtime_report_noise`, `runtime_get_st_active_states`, `runtime_send_st_event`, `runtime_find_smart_objects`, `runtime_run_eqs_query` |
+| Behavior Trees | 25 | `create_behavior_tree`, `get_behavior_tree`, `list_behavior_trees`, `delete_behavior_tree`, `duplicate_behavior_tree`, `set_bt_blackboard`, `list_bt_node_classes`, `add_bt_node`, `remove_bt_node`, `move_bt_node`, `add_bt_decorator`, `remove_bt_decorator`, `add_bt_service`, `remove_bt_service`, `set_bt_node_property`, `get_bt_node_properties`, `reorder_bt_children`, `add_bt_run_eqs_task`, `add_bt_smart_object_task`, `add_bt_use_ability_task`, `build_behavior_tree_from_spec`, `export_bt_spec`, `import_bt_spec`, `validate_behavior_tree`, `clone_bt_subtree`, `auto_arrange_bt`, `compare_behavior_trees`, `create_bt_task_blueprint`, `create_bt_decorator_blueprint`, `create_bt_service_blueprint`, `generate_bt_diagram`, `get_bt_graph` *(NEW Phase J F8)* |
+| State Trees | 28 | `create_state_tree`, `get_state_tree`, `list_state_trees`, `delete_state_tree`, `duplicate_state_tree`, `compile_state_tree`, `set_st_schema`, `add_st_state`, `remove_st_state`, `rename_st_state`, `move_st_state`, `set_st_state_properties`, `add_st_task`, `remove_st_task`, `set_st_task_property`, `add_st_enter_condition`, `remove_st_enter_condition`, `add_st_transition`, `remove_st_transition`, `add_st_property_binding`, `remove_st_property_binding`, `get_st_bindings`, `get_st_bindable_properties`, `list_st_task_types`, `list_st_condition_types`, `add_st_transition_condition`, `add_st_consideration`, `configure_st_consideration`, `validate_state_tree`, `list_st_extension_types`, `add_st_extension`, `build_state_tree_from_spec`, `export_st_spec`, `generate_st_diagram`, `auto_arrange_st` |
+| EQS | 21 | `create_eqs_query`, `get_eqs_query`, `list_eqs_queries`, `delete_eqs_query`, `duplicate_eqs_query`, `add_eqs_generator`, `remove_eqs_generator`, `configure_eqs_generator`, `add_eqs_test`, `remove_eqs_test`, `configure_eqs_test`, `configure_eqs_scoring`, `configure_eqs_filter`, `list_eqs_generator_types`, `list_eqs_test_types`, `list_eqs_contexts`, `validate_eqs_query`, `reorder_eqs_tests`, `build_eqs_query_from_spec`, `create_eqs_from_template` |
+| AI Controllers | 8 | `create_ai_controller`, `get_ai_controller`, `list_ai_controllers`, `set_ai_controller_bt`, `set_pawn_ai_controller_class`, `set_ai_controller_flags`, `set_ai_team`, `get_ai_team`, `spawn_ai_actor`, `get_ai_actors` |
+| Perception | 11 | `add_perception_component`, `get_perception_config`, `configure_sight_sense`, `configure_hearing_sense`, `configure_damage_sense`, `configure_touch_sense`, `remove_sense`, `add_stimuli_source_component`, `configure_stimuli_source`, `validate_perception_setup`, `get_ai_system_config`, `add_perception_to_actor` *(NEW Phase J F8)* |
+| Smart Objects | 14 | `create_smart_object_definition`, `get_smart_object_definition`, `list_smart_object_definitions`, `delete_smart_object_definition`, `add_so_slot`, `remove_so_slot`, `configure_so_slot`, `add_so_behavior_definition`, `remove_so_behavior_definition`, `set_so_tags`, `add_smart_object_component`, `place_smart_object_actor`, `find_smart_objects_in_level`, `validate_smart_object_definition`, `create_so_from_template`, `duplicate_smart_object_definition` |
+| Navigation | 19 | `get_nav_system_config`, `get_navmesh_config`, `set_navmesh_config`, `get_navmesh_stats`, `add_nav_bounds_volume`, `list_nav_bounds_volumes`, `build_navigation`, `get_nav_build_status`, `list_nav_areas`, `create_nav_area`, `add_nav_modifier_volume`, `add_nav_link_proxy`, `configure_nav_link`, `list_nav_links`, `find_path`, `test_path`, `project_point_to_navigation`, `get_random_navigable_point`, `navigation_raycast`, `configure_nav_agent`, `add_nav_invoker_component`, `get_crowd_manager_config`, `set_crowd_manager_config`, `analyze_navigation_coverage` |
+| Runtime PIE | 13 | `runtime_get_bb_value`, `runtime_set_bb_value`, `runtime_clear_bb_value`, `runtime_get_bt_state`, `runtime_start_bt`, `runtime_stop_bt`, `runtime_get_bt_execution_path`, `runtime_get_perceived_actors`, `runtime_check_perception`, `runtime_report_noise`, `runtime_get_st_active_states`, `runtime_send_st_event`, `runtime_find_smart_objects`, `runtime_run_eqs_query` |
 | Scaffolds | 21 | `hello_world_ai`, `scaffold_complete_ai_character`, `scaffold_perception_to_blackboard`, `scaffold_team_system`, `scaffold_patrol_investigate_ai`, `scaffold_enemy_ai`, `scaffold_eqs_move_sequence`, `create_bt_from_template`, `create_st_from_template`, `scaffold_ai_controller_blueprint`, `scaffold_companion_ai`, `scaffold_boss_ai`, `scaffold_ambient_npc`, `scaffold_horror_stalker`, `scaffold_horror_ambush`, `scaffold_horror_presence`, `scaffold_horror_mimic`, `scaffold_stealth_game_ai`, `scaffold_turret_ai`, `scaffold_group_coordinator`, `scaffold_flying_ai` |
-| Validation / lint | 13 | `batch_validate_ai_assets`, `validate_ai_controller`, `get_ai_overview`, `list_ai_node_types`, `search_ai_assets`, `validate_ai_data_flow`, `find_eqs_references`, `find_so_references`, `lint_behavior_tree`, `lint_state_tree`, `detect_ai_circular_references`, `export_ai_manifest`, `get_ai_behavior_summary` |
-| Mass Entity | 9 | `list_mass_entity_configs`, `get_mass_entity_config`, `create_mass_entity_config`, `add_mass_trait`, `remove_mass_trait`, `list_mass_traits`, `list_mass_processors`, `validate_mass_entity_config`, `get_mass_entity_stats` |
+| Validation / lint | 9 | `batch_validate_ai_assets`, `validate_ai_controller`, `get_ai_overview`, `list_ai_node_types`, `search_ai_assets`, `validate_ai_data_flow`, `find_eqs_references`, `find_so_references`, `lint_behavior_tree`, `lint_state_tree`, `detect_ai_circular_references`, `export_ai_manifest`, `get_ai_behavior_summary` |
+| Mass Entity | 8 | `list_mass_entity_configs`, `get_mass_entity_config`, `create_mass_entity_config`, `add_mass_trait`, `remove_mass_trait`, `list_mass_traits`, `list_mass_processors`, `validate_mass_entity_config`, `get_mass_entity_stats` |
 | Zone Graph | 3 | `list_zone_graphs`, `query_zone_lanes`, `get_zone_lane_info` |
 
 > **Phase J F15:** all BT-related actions now return `{ "error": "<code>", "detail": "<human>" }` instead of mixed prose. Update your error parsers.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithAI.md` for the deep dive — it's a long one.
-
----
-
-## world_conditions
-
-Read-only inspection of Unreal WorldConditions query definitions, focused on SmartObject preconditions. **4 actions.** Disabled by default through `bEnableWorldConditionsInspection`; optional compile guards are `WITH_MONOLITH_WORLDCONDITIONS` and `WITH_MONOLITH_WORLDCONDITIONS_SMARTOBJECTS`.
-
-| Action | Params | Notes |
-|--------|--------|-------|
-| `get_status` | none | Reports feature flag state, compile guards, module availability, and candidate owner count. |
-| `list_query_owners` | `path_filter?`, `limit?` | Lists SmartObjectDefinition assets that can own object/slot WorldCondition preconditions. |
-| `describe_query` | `asset_path`, `query?`, `slot_index?` | Describes object `preconditions` or slot `slot_selection_preconditions` without mutating assets. |
-| `describe_condition_types` | `limit?` | Lists loaded `FWorldConditionBase`-derived struct types and reflected property metadata. |
-
-See `Plugins/Monolith/Docs/specs/SPEC_MonolithWorldConditions.md`.
 
 ---
 
@@ -1426,9 +966,9 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithLogicDriver.md`.
 
 ## audio
 
-Sound Cue + MetaSound graph CRUD, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings, and a small batch of test helpers. **86 actions.**
+Sound Cue + MetaSound graph CRUD + on-disk document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings, and a small batch of test helpers. **98 actions.**
 
-> For full param schemas, call `monolith_discover("audio")` at runtime. MetaSound graph actions are conditional on `#if WITH_METASOUND` — projects without MetaSound get Sound Cue + CRUD + batch actions but no MetaSound graph building.
+> For full param schemas, call `monolith_discover("audio")` at runtime. MetaSound graph + document actions are conditional on `#if WITH_METASOUND` — projects without MetaSound get Sound Cue + CRUD + batch actions but no MetaSound graph building or document walk. The 12 document-introspection actions (PR #18, v0.14.10) read **on-disk document state** for arbitrary assets without an active builder session — distinct from the Builder-side graph actions which read live builder state during mutation.
 
 **Action categories:**
 
@@ -1447,14 +987,15 @@ Sound Cue + MetaSound graph CRUD, attenuation/class/mix/submix/concurrency, batc
 | Perception bindings | 4 | `bind_sound_to_perception`, `unbind_sound_from_perception`, `get_sound_perception_binding`, `list_perception_bound_sounds` |
 | MetaSound assets | 3 | `create_metasound_source`, `create_metasound_patch`, `create_metasound_preset` |
 | MetaSound graph | 12 | `add_metasound_node`, `remove_metasound_node`, `connect_metasound_nodes`, `disconnect_metasound_nodes`, `add_metasound_input`, `add_metasound_output`, `set_metasound_input_default`, `add_metasound_interface`, `get_metasound_graph`, `list_metasound_connections`, `add_metasound_variable`, `set_metasound_node_location` |
-| MetaSound discovery | 6 | `list_available_metasound_nodes`, `get_metasound_node_info`, `find_metasound_node_inputs`, `find_metasound_node_outputs`, `get_metasound_input_names` |
-| MetaSound spec / templates | 6 | `build_metasound_from_spec`, `create_oneshot_sfx`, `create_looping_ambient_metasound`, `create_synthesized_tone`, `create_interactive_metasound` |
+| MetaSound discovery (Builder-side) | 6 | `list_available_metasound_nodes`, `get_metasound_node_info`, `find_metasound_node_inputs`, `find_metasound_node_outputs`, `get_metasound_input_names` |
+| MetaSound document introspection (v0.14.10, PR #18) | 12 | `list_metasounds`, `list_metasound_documents`, `get_metasound_document`, `get_metasound_summary`, `inspect_metasound_node_instance`, `get_metasound_document_connections`, `get_metasound_document_variables`, `get_metasound_user_parameters`, `search_metasound_document_nodes`, `get_metasound_info`, `get_metasound_dependencies`, `validate_metasound` |
+| MetaSound spec / templates | 6 | `build_metasound_from_spec`, `create_oneshot_sfx`, `create_looping_ambient_metasound`, `create_synthesized_tone`, `create_interactive_metasound`, `create_metasound_preset` |
 
 ### `audio.create_test_wave` · NEW in Phase J F18
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `asset_path` | string | **required** | Destination asset path under `/Game/` |
+| `path` | string | **required** | Destination asset path under `/Game/` |
 | `frequency_hz` | number | optional | Sine frequency (20.0 to 20000.0). Default: `440.0` |
 | `duration_seconds` | number | optional | Clip length (0.05 to 5.0). Default: `0.5` |
 | `sample_rate` | integer | optional | Allowlist `{22050, 44100, 48000}`. Default: `44100` |
@@ -1478,6 +1019,83 @@ Stamp a `UMonolithSoundPerceptionUserData` onto a `USoundBase` (Cue / MetaSoundS
 > **Phase J F11:** `loudness <= 0`, `max_range < 0`, and unknown `sense_class` values now reject up-front instead of writing junk userdata.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithAudio.md`.
+
+---
+
+## level_sequence
+
+Level Sequence inspection — binding inventory (legacy possessables/spawnables + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, and cross-sequence reverse lookup. **8 actions.** Backed by a dedicated SQLite indexer (`MonolithLevelSequence` module, PR #45). Read-only.
+
+| Action | Key params | Notes |
+|--------|-----------|-------|
+| `ping` | — | Smoke test; returns `{status:ok, module:MonolithLevelSequence}` |
+| `list_directors` | `asset_path_filter?` (glob) | Level Sequences with a Director BP + function/variable counts |
+| `get_director_info` | `asset_path` | Function counts by kind (`user`/`custom_event`/`sequencer_endpoint`), variable count, event-binding counts, sample of up to 10 functions |
+| `list_director_functions` | `asset_path`, `kind?` | Own functions filtered by `user`/`custom_event`/`sequencer_endpoint`/`event`/`all` (own-only, matching the blueprint convention) |
+| `list_director_variables` | `asset_path` | Director `NewVariables` (name + K2-schema type) in declaration order |
+| `list_event_bindings` | `asset_path` | Event-track bindings grouped by binding GUID (possessable/spawnable/master) + the sections that fire Director functions |
+| `list_bindings` | `asset_path`, `kind?` | **ALL** bindings regardless of event tracks — `possessable`/`spawnable`/`replaceable`/`custom`. Catches UE 5.7 `UMovieSceneCustomBinding` rows that `list_event_bindings` misses |
+| `find_director_function_callers` | `function_name`, `asset_path_filter?` (glob) | Cross-sequence reverse lookup: every event-track section across the project that fires a given Director function |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithLevelSequence.md`.
+
+---
+
+## bulk_fill
+
+Reflection-walker bulk property fill across 12 per-namespace adapters. **2 actions.** Framework dispatcher in `MonolithCore` (0.15.0); each adapter self-registers from its owning module — zero compile-time linkage from core into adapter modules.
+
+### `bulk_fill_query.apply`
+
+Apply a JSON-tree fill to an asset via the target namespace's adapter. Walks the target's reflection schema, supports preview-without-persist and strict promotion of silent drops.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target_namespace` | string | **required** | Adapter namespace: `blueprint`, `gas`, `ui`, `ai`, `niagara`, `material`, `audio`, `mesh`, `animation`, `logicdriver`, `combograph` (plus the sibling `inventory` adapter when present) |
+| `target` | string | **required** | Asset path or adapter-defined target (e.g. `/Game/Items/DA_HealingPotion`) |
+| `tree` | object | **required** | Nested JSON of properties to walk against the target's reflection schema |
+| `dry_run` | boolean | optional | Validate only — emit would-be writes but do not persist. Default: `false` |
+| `strict` | boolean | optional | Promote silent drops / clamps / unknown-fields to hard errors. Default: `false` |
+
+Returns an `FDryRunReport`-shaped result (`FieldWrites` / `SilentDrops` / `Clamps` / `Errors`).
+
+### `bulk_fill_query.list_namespaces`
+
+List `target_namespace` values the bulk_fill registry currently knows about (one row per registered adapter). *No parameters.*
+
+---
+
+## describe
+
+Read-only schema introspection for the same 12 adapters, plus action-param introspection. **3 actions.** Companion to `bulk_fill` (0.15.0).
+
+### `describe_query.schema`
+
+Return a rich `FSchemaDescriptor` tree (type names, ImportText forms, enum-value lists, clamp ranges, nested children) for an asset/action via its namespace adapter.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target_namespace` | string | **required** | Adapter namespace whose schema should be introspected |
+| `target` | string | **required** | Asset path or action name to describe |
+
+### `describe_query.list_targets`
+
+List the asset paths / action names the describe adapter can introspect for a given `target_namespace`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target_namespace` | string | **required** | Adapter namespace whose introspection inventory should be listed |
+
+### `describe_query.action_schema`
+
+Return a registered ACTION's param schema (names, types, required, defaults, aliases, descriptions) by `(target_namespace, action)` — so callers stop trial-and-erroring param names.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target_namespace` | string | **required** | Namespace that owns the action (e.g. `blueprint`, `ui`) |
+| `action` | string | **required** | Action name whose param schema to return (e.g. `add_nodes_bulk`) |
+
+See the per-system SPECs' "Bulk Fill & Describe Surface" sections for each adapter's `fill_kind` catalogue.
 
 ---
 
@@ -1588,16 +1206,7 @@ Before writing any client code:
 
 When the editor is closed but you still need to query Monolith:
 
-- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool. It mirrors the live `project` / `source` query actions, including CRG navigation/review (`impact_radius`, `health`, `repair_fts`, `repair_crg_cache`, `build_crg_graph`, `rebuild_crg_graph`, `search_crg_graph`, `crg_graph_health`, `risk_score`, `detect_changes`, `find_unused`, `snapshot`, `diff_snapshots`, `review_context`, `review_hotspots`, `pre_merge_check`) and the read-only bridge (`bridge search_asset_symbols`). It stays read-only by default; `repair_fts`, `repair_crg_cache`, `snapshot`, and `build_crg_graph` write only with explicit `--execute`. Default DB paths are resolved from the executable location, so the primary command form has no DB override: `source` uses `Saved/EngineSource.db`, `project` uses `Saved/ProjectIndex.db`, `bridge` opens both, and source graph actions use `Saved/graph.db`. Source write actions keep `EngineSource.db` in rollback-journal `DELETE` so editor/MCP `FSQLiteDatabase` remains compatible; read-only source and bridge paths observe journal mode without changing it. `ProjectIndex.db` and `graph.db` also remain rollback-journal `DELETE`. Before read-only opens, the CLI probes adjacent rollback journals read-only and only asks SQLite for a bounded writable recovery pass when the journal is hot; it does not manually delete active writer journals.
-  - **RX-2/RX-7 (CRG cache parity + scoring v3):** offline `risk_score` reads `crg_node_metrics` when the projection cache is present (rebuilt caches report `scoring_version=3`, per-item `cache.status=hit`) and falls back to query-time scoring v3 otherwise, matching the editor. Offline `health` emits the same `crg:*` checks the editor `ComputeHealth`/`Health` produce (table/index/parity/orphan/cache_version/scoring_version); a missing cache is `info`, never a regression. Offline `repair_crg_cache` is execute-gated and rebuilds only the derived `crg_*` cache rows from existing indexed source/project tables, purging stale/orphan metrics before inserting rebuilt metrics.
-  - **RX-1 (`detect_changes`):** live `source.detect_changes` / `project.detect_changes` and offline `monolith_query <source|project> detect_changes <path...> [--changed-paths=a,b] [--max-results=N] [--detail-level=minimal|standard]`. Maps a Perforce changelist / changed paths to indexed symbols (source: `files.path` suffix match) or assets (project: `package_path`/`asset_name`), escaping SQL `LIKE` wildcards so `_` and `%` in filenames are matched literally. Reuses the RX-2 cached risk (or query-time fallback), adds a bounded depth-1 impact set, advisory heuristic test-gaps (source only; EngineSource has no `TESTED_BY` edge), and risk-ordered `review_priorities`. `changed_paths` is the VCS-agnostic primary input; no P4/git shell-out.
-  - **RX-3 (`find_unused`):** live `source.find_unused` / `project.find_unused` and offline `monolith_query <source|project> find_unused [--kind=...] [--limit=N] [--min-confidence=low|medium|high]`. Advisory dead-symbol (source: 0 inbound `"references"`, not an inheritance parent, `is_ue_macro=0`, no UFUNCTION/automation/entry markers) / orphan-asset (project: never a `dependencies.target_asset_id`, not a World/Level/PrimaryAssetLabel root) detection. Each item has `confidence` + `reasons[]`; recall-first (default `min-confidence=low`) since UE reflection/delegate/Blueprint/soft-path edges are not in the graph — never reports `high`, never mutates.
-  - **RX-5 (`pre_merge_check`):** live `source.pre_merge_check` / `project.pre_merge_check` and offline `monolith_query <source|project> pre_merge_check <path...> [--changed-paths=a,b] [--max-results=N] [--unused-limit=N] [--detail-level=minimal|standard] [--include-unused=false]` compose `health`, `detect_changes`, and optional `find_unused` into an advisory `decision` (`pass`/`warn`/`fail`), `checks[]`, and `findings[]`. The offline action remains read-only and VCS-agnostic; it never shells out to P4/git.
-  - **RX-4 (`snapshot` / `diff_snapshots`):** live `source.snapshot` / `project.snapshot` and offline `monolith_query <source|project> snapshot [label] [--label=name] [--execute]` store derived CRG projection manifests in `crg_snapshots`; live `source.diff_snapshots` / `project.diff_snapshots` and offline `monolith_query <source|project> diff_snapshots <before> [after] [--before=label-or-id] [--after=label-or-id|current] [--limit=N]` compare stored/current manifests. Snapshot writes are explicit (`execute=true` / `--execute`); auto labels use high-resolution ticks when callers omit labels; dry-runs and diffs are read-only. Diffs against `current` fail with `status=error` if the CRG projection query cannot be read.
-  - **RX-8 (`review_hotspots`):** `monolith_query <source|project> review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]`. Read-only global triage over cached/native fan, risk, and size signals; outputs capped `hotspots[]`, optional `questions[]`, and `next_actions[]`.
-  - **Project FTS content search:** live `project.search` and offline `monolith_query project search <query> [--limit=N] [--include-content=true|false]` default to content-inclusive FTS over assets, nodes, variables, parameters, DataTable rows, actors, and supplemental values. `include_content=false` is the compatibility/noise-control path for asset/node-only search. Offline `project health` and `project repair_fts` validate/rebuild all seven project FTS tables.
-  - **Source graph (`build_crg_graph` / `search_crg_graph`):** `monolith_query source build_crg_graph --execute` rebuilds `Saved/graph.db` from `Saved/EngineSource.db` files, symbols, references, and inheritance. `monolith_query source search_crg_graph UObject --limit=5` searches `nodes_fts` first and falls back to LIKE search when FTS has no rows. `--graph-db` remains an override for copied or non-standard graph DB locations.
-  - **RX-6 (`bridge search_asset_symbols`):** `monolith_query bridge search_asset_symbols [--asset-path=/Game/...] [--symbol=Name] [--limit=N] [--detail-level=minimal|standard]`. Requires exactly one of `asset_path`/`symbol`, opens `ProjectIndex.db` and `EngineSource.db` read-only from the default `Saved` directory, and returns the editor-compatible `links[]` shape with `confidence`, `reasons[]`, `asset`, `symbol`, `warnings[]`, `count`, `truncated`, and `lexical_only=true`. `--db`, `--source-db`, and `--project-db` remain overrides for copied or non-standard DB locations.
+- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool, read-only. Same actions for read-only namespaces (project, source, config).
 - **`python Plugins/Monolith/Saved/monolith_offline.py`** — same actions, stdlib-only.
 
 Both invoke the same SQLite indexes the live MCP uses.
@@ -1621,19 +1230,9 @@ Both invoke the same SQLite indexes the live MCP uses.
 | MonolithComboGraph | `WITH_COMBOGRAPH` (ComboGraph marketplace plugin) | 0 |
 | MonolithLogicDriver | `WITH_LOGICDRIVER` (Logic Driver Pro marketplace plugin) | 0 |
 | MonolithAI | `WITH_STATETREE` + `WITH_SMARTOBJECTS` (engine plugins) | 0 |
-| MonolithWorldConditions | `WITH_MONOLITH_WORLDCONDITIONS` + `WITH_MONOLITH_WORLDCONDITIONS_SMARTOBJECTS` for SmartObject query owners | Status-only unavailable responses |
 | MonolithUI CommonUI | `WITH_COMMONUI` | 42 (UMG baseline only) |
 | MonolithAudio MetaSound | `WITH_METASOUND` | Sound Cue + CRUD + batch (no MetaSound graph) |
-| MonolithWorldGen town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | Optional town-generation actions register under `worldgen`; the `mesh` namespace remains mesh-only. |
-| MonolithDataflow | none (AssetRegistry/module-status-only optional plugin probe) | 2 `dataflow` namespace discovery actions |
-| MonolithChaosFracture | none (AssetRegistry/reflection-only optional plugin probe) | 3 `chaos_fracture` namespace visibility actions |
-| MonolithNDisplay | none (AssetRegistry/module-status-only optional plugin probe) | 2 `ndisplay` namespace discovery actions |
-| MonolithInterchange | none (guarded Unreal import/export integration; probes Interchange module availability at runtime) | 16 `interchange` namespace import/export actions |
-| MonolithGameFeatures | `bEnableGameFeatureActions` for detailed inspection actions | 1 `gamefeatures.get_status` action always registered; 4 more read-only inspection actions when enabled |
-| MonolithPCG | none (AssetRegistry/reflection-only optional plugin probe) | 4 `pcg` namespace discovery actions |
-| MonolithPaper2D | none (AssetRegistry-only optional plugin probe) | 3 `paper2d` namespace discovery actions |
-| MonolithSlate | `bEnableSlateInspectorActions` for detailed inspection actions | 1 `slate.get_inspector_status` action always registered; 5 more read-only inspection actions when enabled |
-| MonolithWater | none (reflection-only optional plugin probe) | 2 `water` namespace discovery actions |
+| MonolithMesh town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | 195 (core mesh only) |
 
 ---
 
