@@ -469,6 +469,7 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleListMassTraits(const TSh
 	TArray<UClass*> DerivedClasses;
 	GetDerivedClasses(UMassEntityTraitBase::StaticClass(), DerivedClasses, /*bRecursive=*/true);
 
+	TraitArr.Reserve(DerivedClasses.Num());
 	for (UClass* Cls : DerivedClasses)
 	{
 		if (Cls->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists))
@@ -514,6 +515,7 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleListMassProcessors(const
 	TArray<UClass*> DerivedClasses;
 	GetDerivedClasses(UMassProcessor::StaticClass(), DerivedClasses, /*bRecursive=*/true);
 
+	ProcessorArr.Reserve(DerivedClasses.Num());
 	for (UClass* Cls : DerivedClasses)
 	{
 		if (Cls->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists))
