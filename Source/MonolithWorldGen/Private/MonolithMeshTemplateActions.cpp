@@ -171,7 +171,11 @@ FMonolithActionResult FMonolithMeshTemplateActions::ListRoomTemplates(const TSha
 		}
 
 		auto Entry = MakeShared<FJsonObject>();
-		Entry->SetStringField(TEXT("name"), JsonObj->GetStringField(TEXT("name")));
+		FString Name;
+		if (JsonObj->TryGetStringField(TEXT("name"), Name))
+		{
+			Entry->SetStringField(TEXT("name"), Name);
+		}
 		Entry->SetStringField(TEXT("category"), Category);
 
 		FString Description;

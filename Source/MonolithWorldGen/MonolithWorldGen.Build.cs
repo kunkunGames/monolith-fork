@@ -57,9 +57,9 @@ public class MonolithWorldGen : ModuleRules
 				{
 					bHasGeometryScripting =
 						Directory.Exists(Path.Combine(ProjectPluginsDir, "GeometryScripting"))
-						|| Directory.GetDirectories(
+						|| (Directory.Exists(ProjectPluginsDir) && Directory.GetDirectories(
 							ProjectPluginsDir, "GeometryScripting_*",
-							SearchOption.TopDirectoryOnly).Length > 0;
+							SearchOption.TopDirectoryOnly).Length > 0);
 				}
 			}
 

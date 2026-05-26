@@ -220,6 +220,7 @@ FMonolithActionResult FMonolithEditorSelectionActions::HandleGetSelectedActors(c
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ActorArray;
+	ActorArray.Reserve(SelectedActors->Num());
 	for (FSelectionIterator It(*SelectedActors); It; ++It)
 	{
 		AActor* Actor = Cast<AActor>(*It);
@@ -514,6 +515,8 @@ FMonolithActionResult FMonolithEditorSelectionActions::HandleDescribeAssetContex
 
 	TArray<TSharedPtr<FJsonValue>> Items;
 	TArray<TSharedPtr<FJsonValue>> Skipped;
+	Items.Reserve(FMath::Min(AssetPaths.Num(), MaxItems));
+	Skipped.Reserve(FMath::Max(0, AssetPaths.Num() - MaxItems));
 	for (const FString& AssetPath : AssetPaths)
 	{
 		if (Items.Num() >= MaxItems)
@@ -566,6 +569,8 @@ FMonolithActionResult FMonolithEditorSelectionActions::HandleDescribeActorContex
 
 	TArray<TSharedPtr<FJsonValue>> Items;
 	TArray<TSharedPtr<FJsonValue>> Skipped;
+	Items.Reserve(FMath::Min(ActorReferences.Num(), MaxItems));
+	Skipped.Reserve(FMath::Max(0, ActorReferences.Num() - MaxItems));
 	for (const FString& ActorReference : ActorReferences)
 	{
 		if (Items.Num() >= MaxItems)

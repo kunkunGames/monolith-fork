@@ -2949,7 +2949,7 @@ FMonolithActionResult FMonolithMeshBlockoutActions::CreateBlockoutBlueprint(cons
 	FString SavePath = TEXT("/Game/Monolith/Blockout/BP_MonolithBlockoutVolume");
 	if (Params->HasField(TEXT("save_path")))
 	{
-		SavePath = Params->GetStringField(TEXT("save_path"));
+		Params->TryGetStringField(TEXT("save_path"), SavePath);
 	}
 
 	bool bForce = false;

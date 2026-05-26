@@ -68,3 +68,9 @@ Avoid: Using short or generic wildcards like `Gameplaya*` when the plugin name i
 **Learning:** This caused `ZoneGraph` actions to be completely unavailable unless `MassEntity` was also enabled, even though the `.Build.cs` probes for them independently and they are independent engine features.
 **Prevention:** Ensure that independent compile guards like `#if WITH_ZONEGRAPH` are kept at the top level of the `#if` structure in header and implementation files. They should not be nested under `#if WITH_MASSENTITY` unless there is an explicit cross-module dependency.
 **Avoid:** Nesting `#if WITH_...` optional guards for independent features.
+
+## 2026-05-26 - [Directory.GetDirectories exception guard in Build.cs]
+**Build pattern:** `DirectoryNotFoundException` when using `Directory.GetDirectories` on a directory path that might not exist (e.g. `ProjectPluginsDir`, `MarketplaceDir`, `EnginePluginsDir`).
+**Learning:** `Directory.GetDirectories` throws an exception if the base path is missing. Using it to probe for optional plugin subdirectories inside the engine, marketplace, or project directories can break the build if the base directory itself was never created. This is especially true for `ProjectPluginsDir` and `MarketplaceDir` which might not exist in a fresh project or engine install.
+**Prevention:** Always check if the base path exists using `Directory.Exists(BaseDir)` before calling `Directory.GetDirectories(BaseDir, ...)` to avoid exceptions.
+**Avoid:** Calling `Directory.GetDirectories` without verifying the base directory exists.

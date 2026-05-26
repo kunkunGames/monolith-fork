@@ -299,6 +299,7 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchAssignSoundClass(const TS
 
 	int32 Modified = 0;
 	TArray<TSharedPtr<FJsonValue>> Failed;
+	Failed.Reserve(AssetPaths.Num());
 
 	for (const FString& Path : AssetPaths)
 	{
@@ -349,6 +350,7 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchAssignAttenuation(const T
 
 	int32 Modified = 0;
 	TArray<TSharedPtr<FJsonValue>> Failed;
+	Failed.Reserve(AssetPaths.Num());
 
 	for (const FString& Path : AssetPaths)
 	{
@@ -420,6 +422,7 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetCompression(const TSha
 
 	int32 Modified = 0;
 	TArray<TSharedPtr<FJsonValue>> Failed;
+	Failed.Reserve(AssetPaths.Num());
 
 	for (const FString& Path : AssetPaths)
 	{
@@ -483,6 +486,7 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetSubmix(const TSharedPt
 
 	int32 Modified = 0;
 	TArray<TSharedPtr<FJsonValue>> Failed;
+	Failed.Reserve(AssetPaths.Num());
 
 	for (const FString& Path : AssetPaths)
 	{
@@ -533,6 +537,7 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetConcurrency(const TSha
 
 	int32 Modified = 0;
 	TArray<TSharedPtr<FJsonValue>> Failed;
+	Failed.Reserve(AssetPaths.Num());
 
 	for (const FString& Path : AssetPaths)
 	{
@@ -580,6 +585,7 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetLooping(const TSharedP
 
 	int32 Modified = 0;
 	TArray<TSharedPtr<FJsonValue>> Failed;
+	Failed.Reserve(AssetPaths.Num());
 
 	for (const FString& Path : AssetPaths)
 	{
@@ -631,6 +637,7 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetVirtualization(const T
 
 	int32 Modified = 0;
 	TArray<TSharedPtr<FJsonValue>> Failed;
+	Failed.Reserve(AssetPaths.Num());
 
 	for (const FString& Path : AssetPaths)
 	{
@@ -687,6 +694,7 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchRenameAudio(const TShared
 	TArray<FAssetRenameData> RenameList;
 	RenameList.Reserve(AssetPaths.Num());
 	TArray<TSharedPtr<FJsonValue>> Failed;
+	Failed.Reserve(AssetPaths.Num());
 	// Track new paths for the result
 	TArray<TSharedPtr<FJsonValue>> NewPathsArray;
 	NewPathsArray.Reserve(AssetPaths.Num());
@@ -800,6 +808,7 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetSoundWaveProperties(co
 
 	int32 Modified = 0;
 	TArray<TSharedPtr<FJsonValue>> Failed;
+	Failed.Reserve(AssetPaths.Num());
 
 	for (const FString& Path : AssetPaths)
 	{
@@ -1158,6 +1167,7 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 	// Apply to all assets
 	int32 Modified = 0;
 	TArray<TSharedPtr<FJsonValue>> Failed;
+	Failed.Reserve(AssetPaths.Num());
 
 	for (const FString& Path : AssetPaths)
 	{

@@ -3119,6 +3119,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 
 	// Always include frame paths
 	TArray<TSharedPtr<FJsonValue>> PathArr;
+	PathArr.Reserve(FramePaths.Num());
 	for (const FString& P : FramePaths)
 		PathArr.Add(MakeShared<FJsonValueString>(P));
 	Result->SetArrayField(TEXT("frame_paths"), PathArr);
@@ -3807,6 +3808,10 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 		TArray<TSharedPtr<FJsonValue>> ErrorsJson;
 		TArray<TSharedPtr<FJsonValue>> WarningsJson;
 		TArray<TSharedPtr<FJsonValue>> LogSnippetsJson;
+		const int32 NumEntries = ExecInfo.GetEntries().Num();
+		ErrorsJson.Reserve(NumEntries);
+		WarningsJson.Reserve(NumEntries);
+		LogSnippetsJson.Reserve(NumEntries);
 		for (const FAutomationExecutionEntry& Entry : ExecInfo.GetEntries())
 		{
 			if (Entry.Event.Type == EAutomationEventType::Error)
