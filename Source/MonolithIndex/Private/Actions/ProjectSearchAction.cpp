@@ -47,11 +47,14 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 
 	if (Subsystem->IsIndexing())
 	{
-		auto Result = MakeShared<FJsonObject>();
-		Result->SetBoolField(TEXT("success"), false);
-		Result->SetStringField(TEXT("error"), TEXT("Indexing is currently in progress"));
-		Result->SetNumberField(TEXT("progress"), Subsystem->GetProgress());
-		return FMonolithActionResult::Success(Result);
+		return FMonolithActionResult::Error(TEXT("Indexing is currently in progress"), -32000)
+			.WithHint(TEXT("Wait for indexing to complete or use project.get_stats to check progress"));
+	}
+
+	FMonolithIndexDatabase* DB = Subsystem->GetDatabase();
+	if (!DB || !DB->IsOpen())
+	{
+		return FMonolithActionResult::Error(TEXT("Project index database not available"));
 	}
 
 	const FProjectSearchOptions Options = bIncludeContent

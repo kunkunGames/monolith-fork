@@ -631,7 +631,7 @@ Project-wide asset index backed by SQLite + FTS5. **7 actions.**
 
 ### `project.search`
 
-Full-text search across all indexed project assets, nodes, variables, and parameters.
+Full-text search across all indexed project assets, nodes, variables, and parameters. (Returns an MCP error `-32000` if the index database is offline or indexing is currently in progress).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
