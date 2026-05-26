@@ -42,8 +42,8 @@ namespace MonolithBulkFillActionsInternal
 		return FParamSchemaBuilder()
 			.Required(TEXT("target_namespace"), TEXT("string"),
 				TEXT("Adapter namespace whose schema should be introspected."))
-			.Required(TEXT("target"), TEXT("string"),
-				TEXT("Asset path or action name to describe."))
+			.Optional(TEXT("target"), TEXT("string"),
+				TEXT("Asset path or action name to describe. Omit or pass an empty string for the adapter's namespace-level writable-shape summary."))
 			.Build();
 	}
 
@@ -51,7 +51,7 @@ namespace MonolithBulkFillActionsInternal
 	{
 		return FParamSchemaBuilder()
 			.Required(TEXT("target_namespace"), TEXT("string"),
-				TEXT("Adapter namespace whose introspection inventory should be listed."))
+				TEXT("Registered adapter namespace whose optional introspection inventory should be listed. If inventory_supported=false, the namespace is registered but does not expose an authoritative target list; use describe.schema without target for the namespace-level shape or with a known target for target-specific shape."))
 			.Build();
 	}
 
@@ -155,10 +155,10 @@ namespace MonolithBulkFillActionsInternal
 		Params->TryGetStringField(TEXT("target_namespace"), TargetNamespace);
 		Params->TryGetStringField(TEXT("target"), Target);
 
-		if (TargetNamespace.IsEmpty() || Target.IsEmpty())
+		if (TargetNamespace.IsEmpty())
 		{
 			return FMonolithActionResult::Error(
-				TEXT("describe.schema requires target_namespace and target"),
+				TEXT("describe.schema requires target_namespace"),
 				FMonolithJsonUtils::ErrInvalidParams);
 		}
 
@@ -191,7 +191,18 @@ namespace MonolithBulkFillActionsInternal
 				FMonolithJsonUtils::ErrInvalidParams);
 		}
 
-		const TArray<FString> Targets = FMonolithBulkFillRegistry::Get().DispatchListTargets(TargetNamespace);
+		FMonolithBulkFillRegistry& Registry = FMonolithBulkFillRegistry::Get();
+		if (!Registry.HasAdapter(TargetNamespace))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("no describe adapter registered for namespace '%s'"), *TargetNamespace),
+				FMonolithJsonUtils::ErrOptionalDepUnavailable);
+		}
+
+		const bool bInventorySupported = Registry.HasListTargetsAdapter(TargetNamespace);
+		const TArray<FString> Targets = bInventorySupported
+			? Registry.DispatchListTargets(TargetNamespace)
+			: TArray<FString>();
 
 		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
 		TArray<TSharedPtr<FJsonValue>> Arr;
@@ -199,6 +210,16 @@ namespace MonolithBulkFillActionsInternal
 		Out->SetArrayField(TEXT("targets"), Arr);
 		Out->SetStringField(TEXT("namespace"), TargetNamespace);
 		Out->SetNumberField(TEXT("count"), Targets.Num());
+		Out->SetBoolField(TEXT("inventory_supported"), bInventorySupported);
+		Out->SetStringField(TEXT("contract"),
+			bInventorySupported
+				? TEXT("authoritative_adapter_inventory")
+				: TEXT("optional_inventory_not_implemented"));
+		if (!bInventorySupported)
+		{
+			Out->SetStringField(TEXT("message"),
+				TEXT("This namespace is registered for describe.schema, but it does not expose an authoritative describe.list_targets inventory. An empty targets array means inventory is unsupported, not that the namespace has no describable targets."));
+		}
 		return FMonolithActionResult::Success(Out);
 	}
 
@@ -282,14 +303,14 @@ void FMonolithBulkFillActions::RegisterAll()
 	Reg.RegisterAction(
 		TEXT("describe"),
 		TEXT("schema"),
-		TEXT("Return a rich FSchemaDescriptor tree (type names, ImportText forms, enum-value lists, clamp ranges, nested children) for an asset/action via its namespace adapter."),
+		TEXT("Return a rich FSchemaDescriptor tree (type names, ImportText forms, enum-value lists, clamp ranges, nested children) for a namespace-level shape or target-specific asset/action via its namespace adapter."),
 		FMonolithActionHandler::CreateStatic(&HandleDescribeSchema),
 		BuildDescribeSchema());
 
 	Reg.RegisterAction(
 		TEXT("describe"),
 		TEXT("list_targets"),
-		TEXT("List the asset paths / action names the describe adapter can introspect for a given target_namespace."),
+		TEXT("List the asset paths / action names the describe adapter can introspect for a given target_namespace when the adapter implements an authoritative inventory. Registered namespaces without an inventory return inventory_supported=false and an empty targets array."),
 		FMonolithActionHandler::CreateStatic(&HandleDescribeListTargets),
 		BuildDescribeListTargetsSchema());
 

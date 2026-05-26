@@ -519,7 +519,7 @@ static bool ReadOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const T
 	{
 		return true;
 	}
-	if (!Params->TryGetBoolField(FieldName, OutValue))
+	if (FieldValue->Type != EJson::Boolean || !Params->TryGetBoolField(FieldName, OutValue))
 	{
 		OutError = FString::Printf(TEXT("Malformed parameter: %s must be a boolean"), FieldName);
 		return false;

@@ -24,6 +24,7 @@
 // uses the same surface — project precedent.
 
 #include "MonolithMaterialBulkFillAdapter.h"
+#include "MonolithBulkFillAdapterUtils.h"
 #include "MonolithBulkFillRegistry.h"
 #include "MonolithBulkFillTypes.h"
 #include "Reflection/MonolithReflectionWalker.h"
@@ -41,19 +42,6 @@
 
 namespace MonolithMaterialBulkFillInternal
 {
-	static FDryRunReport MakeResolveFailureReport(const FString& Reason)
-	{
-		FDryRunReport Report;
-		FBulkFillFieldWrite Write;
-		Write.Path = TEXT("(adapter)");
-		Write.bOk = false;
-		Write.Reason = Reason;
-		Report.FieldWrites.Add(Write);
-		Report.Errors = 1;
-		Report.bWouldApply = false;
-		return Report;
-	}
-
 	// Detect layer-targeted writes — Non-Goals §29 rejects these explicitly.
 	static bool LooksLikeLayeredParam(const FString& Name)
 	{
@@ -70,7 +58,7 @@ namespace MonolithMaterialBulkFillInternal
 		UMaterialInstanceConstant* MIC = Cast<UMaterialInstanceConstant>(Asset);
 		if (!MIC)
 		{
-			return MakeResolveFailureReport(FString::Printf(
+			return FMonolithBulkFillReportUtils::MakeFailureReport(FString::Printf(
 				TEXT("material adapter: target '%s' is not a UMaterialInstanceConstant (got %s)"),
 				*Spec.TargetAsset,
 				Asset ? *Asset->GetClass()->GetName() : TEXT("(null)")));
@@ -80,13 +68,7 @@ namespace MonolithMaterialBulkFillInternal
 
 		auto RecordField = [&](const FString& Path, const FString& Value, bool bOk, const FString& Reason = FString())
 		{
-			FBulkFillFieldWrite W;
-			W.Path = Path;
-			W.ProposedValue = Value;
-			W.bOk = bOk;
-			W.Reason = Reason;
-			Report.FieldWrites.Add(W);
-			if (!bOk) Report.Errors++;
+			FMonolithBulkFillReportUtils::AddFieldWrite(Report, Path, Value, bOk, Reason);
 		};
 
 		TSharedPtr<FScopedTransaction> Transaction;
@@ -326,54 +308,52 @@ namespace MonolithMaterialBulkFillInternal
 			// MaterialAttributeLayers rejection.
 			if ((*GraphSpecObj)->HasField(TEXT("material_attribute_layers")))
 			{
-				return MakeResolveFailureReport(
+				return FMonolithBulkFillReportUtils::MakeFailureReport(
 					TEXT("material adapter: MaterialAttributeLayers writes rejected — "
 					     "WISHLIST per design Non-Goals §29 (MaterialAttributeLayers reflection-hostile)"));
 			}
 		}
 
-		// v1 stub — adapter doesn't drive build_material_graph itself. The report
-		// surfaces SilentDrops; callers run the underlying action and merge results.
+		// Audit-only surface: this adapter does not drive build_material_graph.
+		// Return an error-shaped report so automation cannot mistake the audit for
+		// a committed material graph edit.
 		Report.bWouldApply = false;
 		FBulkFillFieldWrite Info;
 		Info.Path = TEXT("(adapter)");
-		Info.bOk = true;
+		Info.bOk = false;
 		Info.Reason = TEXT(
-			"BuildMaterialGraph adapter v1: SilentDrops scan complete. Call "
+			"BuildMaterialGraph adapter is audit-only: SilentDrops scan complete. Call "
 			"material_query('build_material_graph') with the same graph_spec to commit. "
-			"The adapter does NOT drive the build itself — it audits the spec.");
+			"The adapter does NOT drive the build itself.");
 		Report.FieldWrites.Add(Info);
+		Report.Errors = 1;
 		return Report;
 	}
 
 	static FSchemaDescriptor BuildTopLevelDescribe()
 	{
 		FSchemaDescriptor Root;
-		Root.FieldPath = TEXT("material");
-		Root.TypeName = TEXT("Namespace");
-		Root.ImportTextForm = TEXT(
-			"fill_kind in {MICParameters, BuildMaterialGraph} — target=<UMaterialInstanceConstant | UMaterial>");
+		Root = FMonolithBulkFillDescriptorUtils::MakeNamespaceRoot(
+			TEXT("material"),
+			TEXT("Namespace"),
+			TEXT("fill_kind in {MICParameters, BuildMaterialGraph} — target=<UMaterialInstanceConstant | UMaterial>"));
 
-		FSchemaDescriptor MIC;
-		MIC.FieldPath = TEXT("MICParameters");
-		MIC.TypeName = TEXT("fill_kind");
-		MIC.ImportTextForm = TEXT(
-			"{\"fill_kind\":\"MICParameters\",\"scalars\":{...},\"vectors\":{...},\"textures\":{...},\"switches\":{...}}");
+		FSchemaDescriptor MIC = FMonolithBulkFillDescriptorUtils::MakeFillKind(
+			TEXT("MICParameters"),
+			TEXT("{\"fill_kind\":\"MICParameters\",\"scalars\":{...},\"vectors\":{...},\"textures\":{...},\"switches\":{...}}"));
 		Root.Children.Add(MIC);
 
-		FSchemaDescriptor BMG;
-		BMG.FieldPath = TEXT("BuildMaterialGraph");
-		BMG.TypeName = TEXT("fill_kind");
-		BMG.ImportTextForm = TEXT(
-			"{\"fill_kind\":\"BuildMaterialGraph\",\"graph_spec\":{...}} — "
-			"v1 audits only; callers must run material_query('build_material_graph') to commit");
+		FSchemaDescriptor BMG = FMonolithBulkFillDescriptorUtils::MakeFillKind(
+			TEXT("BuildMaterialGraph"),
+			TEXT("{\"fill_kind\":\"BuildMaterialGraph\",\"graph_spec\":{...}} — "
+				"audit-only; returns an error-shaped report until this adapter commits through material_query('build_material_graph')"),
+			TEXT("audit_only_fill_kind"));
 		Root.Children.Add(BMG);
 
-		FSchemaDescriptor Wish;
-		Wish.FieldPath = TEXT("(MaterialAttributeLayers)");
-		Wish.TypeName = TEXT("wishlist");
-		Wish.ImportTextForm = TEXT(
-			"(WISHLIST) — MaterialAttributeLayers writes rejected. Reflection-hostile per design Non-Goals §29.");
+		FSchemaDescriptor Wish = FMonolithBulkFillDescriptorUtils::MakeFillKind(
+			TEXT("(MaterialAttributeLayers)"),
+			TEXT("(WISHLIST) — MaterialAttributeLayers writes rejected. Reflection-hostile per design Non-Goals §29."),
+			TEXT("wishlist"));
 		Root.Children.Add(Wish);
 
 		return Root;
@@ -384,24 +364,22 @@ FDryRunReport FMonolithMaterialBulkFillAdapter::MaterialBulkFill(const FBulkFill
 {
 	using namespace MonolithMaterialBulkFillInternal;
 
-	if (!Spec.Tree.IsValid())
-	{
-		return MakeResolveFailureReport(TEXT("material adapter: spec.tree is null"));
-	}
-
 	FString FillKind;
-	Spec.Tree->TryGetStringField(TEXT("fill_kind"), FillKind);
-	if (FillKind.IsEmpty())
+	FDryRunReport FillKindFailure;
+	if (!FMonolithBulkFillJsonUtils::TryGetRequiredFillKind(
+		Spec,
+		TEXT("material"),
+		TEXT("'MICParameters', 'BuildMaterialGraph'"),
+		FillKind,
+		FillKindFailure))
 	{
-		return MakeResolveFailureReport(TEXT(
-			"material adapter: spec.tree.fill_kind required — one of "
-			"'MICParameters', 'BuildMaterialGraph'"));
+		return FillKindFailure;
 	}
 
 	if (FillKind == TEXT("MICParameters"))      return HandleMICParameters(Spec);
 	if (FillKind == TEXT("BuildMaterialGraph")) return HandleBuildMaterialGraph(Spec);
 
-	return MakeResolveFailureReport(FString::Printf(
+	return FMonolithBulkFillReportUtils::MakeFailureReport(FString::Printf(
 		TEXT("material adapter: unknown fill_kind '%s'"), *FillKind));
 }
 
@@ -417,12 +395,10 @@ FSchemaDescriptor FMonolithMaterialBulkFillAdapter::MaterialDescribe(const FStri
 	UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(TargetAsset);
 	if (!Asset)
 	{
-		FSchemaDescriptor Err;
-		Err.FieldPath = TEXT("(adapter)");
-		Err.TypeName = TEXT("error");
-		Err.ImportTextForm = FString::Printf(
-			TEXT("material describe: asset not found at '%s'"), *TargetAsset);
-		return Err;
+		return FMonolithBulkFillDescriptorUtils::MakeFillKind(
+			TEXT("(adapter)"),
+			FString::Printf(TEXT("material describe: asset not found at '%s'"), *TargetAsset),
+			TEXT("error"));
 	}
 
 	FSchemaDescriptor Out = FMonolithReflectionWalker::DescribeStruct(Asset->GetClass());

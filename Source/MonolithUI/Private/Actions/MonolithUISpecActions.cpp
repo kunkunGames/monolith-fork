@@ -1004,9 +1004,10 @@ namespace MonolithUI::SpecActionsInternal
     // ------------------------------------------------------------------
     // Phase 3 Item #18 (2026-05-16 UI Gap Audit) — ui::build_menu_from_spec
     //
-    // Conservative MVP scope (matches the orchestrator-blessed Phase 2 Item #10
-    // pattern: validator + registration FULL, multi-screen builder pipeline
-    // STUB-with-clear-status). The action accepts a menu-shape document of:
+    // Conservative MVP scope: validator + per-screen embedded spec dispatch are
+    // implemented, while cross-screen aggregation and kind-only scaffolder
+    // dispatch return non-mutating status. The action accepts a menu-shape
+    // document of:
     //
     //     {
     //       "layers":       [{ "id": "...", "screens": ["..."] }, ...],
@@ -1020,8 +1021,8 @@ namespace MonolithUI::SpecActionsInternal
     // For each screen that supplies an embedded `spec`, the MVP dispatches it
     // through the existing FUISpecBuilder pipeline (one call per screen). The
     // focus_table / nav_overrides / layer-aggregation surface is captured in
-    // the response under `status="stub"` so the LLM can see the partial
-    // implementation boundary without crashing on missing functionality. Modes
+    // the response under explicit non-mutating status so callers cannot treat
+    // partial coverage as a complete committed edit. Modes
     // (`dry_run`, `treat_warnings_as_errors`, `raw_mode`, `overwrite`) are
     // forwarded onto every per-screen build call so the menu-level mode flag
     // propagates uniformly.
@@ -1083,7 +1084,7 @@ namespace MonolithUI::SpecActionsInternal
                 TEXT("`screens` array is required and must contain at least one entry. "
                      "Each entry needs {id, asset_path} and either an embedded `spec` "
                      "(FUISpecDocument) or a `kind` token for scaffolder dispatch (kind dispatch "
-                     "is STUB in this MVP)."));
+                     "is not implemented in this action)."));
         }
 
         const TArray<TSharedPtr<FJsonValue>>* Layers = nullptr;
@@ -1098,7 +1099,7 @@ namespace MonolithUI::SpecActionsInternal
         if (bHasLayers || bHasFocusTable || bHasNavOverrides)
         {
             AddWarning(TEXT("MenuShape"), TEXT("layers|focus_table|nav_overrides"),
-                TEXT("layers / focus_table / nav_overrides are accepted but applied as STUB in this MVP. "
+                TEXT("layers / focus_table / nav_overrides are accepted but not applied by this action. "
                      "Per-screen `spec` builds run FULL via FUISpecBuilder. The cross-screen "
                      "aggregation surface (activatable-stack layer hierarchy, focus-table CDO writes, "
                      "nav-override propagation) is deferred to issue #3-18b. Caller-supplied entries "
@@ -1162,14 +1163,17 @@ namespace MonolithUI::SpecActionsInternal
             const TSharedPtr<FJsonObject>* EmbeddedSpec = nullptr;
             if (!(*ScreenObj)->TryGetObjectField(TEXT("spec"), EmbeddedSpec) || !EmbeddedSpec)
             {
-                // Kind-only dispatch is the STUB surface. Surface it loudly so
+                // Kind-only dispatch is not implemented here. Surface it loudly so
                 // the caller knows the per-screen WBP is NOT being built.
-                ScreenOut->SetStringField(TEXT("status"), TEXT("stub"));
+                ScreenOut->SetBoolField(TEXT("bSuccess"), false);
+                ScreenOut->SetBoolField(TEXT("bCommitted"), false);
+                ScreenOut->SetStringField(TEXT("status"), TEXT("not_implemented"));
                 ScreenOut->SetStringField(TEXT("reason"),
-                    TEXT("screen has no embedded `spec` — kind-based scaffolder dispatch is deferred to issue #3-18b. "
+                    TEXT("screen has no embedded `spec` — kind-based scaffolder dispatch is not implemented in build_menu_from_spec. "
                          "Pass a full FUISpecDocument under screens[N].spec to build this screen now, or call "
                          "scaffold_main_menu / scaffold_settings_panel_with_tabs / scaffold_pause_menu directly."));
                 ScreenResults.Add(MakeShared<FJsonValueObject>(ScreenOut));
+                bAllSucceeded = false;
                 continue;
             }
 
@@ -1222,10 +1226,14 @@ namespace MonolithUI::SpecActionsInternal
 
         // ---- Response ------------------------------------------------------
         TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
-        Out->SetBoolField(TEXT("bSuccess"), bAllSucceeded && StructuralErrors.Num() == 0);
+        const bool bHasDeferredAggregation = bHasLayers || bHasFocusTable || bHasNavOverrides;
+        const bool bCommittedAllRequestedWork = bAllSucceeded && StructuralErrors.Num() == 0 && !bHasDeferredAggregation;
+        Out->SetBoolField(TEXT("bSuccess"), bCommittedAllRequestedWork);
+        Out->SetBoolField(TEXT("bCommittedAllRequestedWork"), bCommittedAllRequestedWork);
         if (!RequestId.IsEmpty()) Out->SetStringField(TEXT("request_id"), RequestId);
         Out->SetStringField(TEXT("status"),
-            (bHasLayers || bHasFocusTable || bHasNavOverrides) ? TEXT("partial_stub") : TEXT("ok"));
+            bCommittedAllRequestedWork ? TEXT("ok")
+            : (bHasDeferredAggregation ? TEXT("partial_non_mutating") : TEXT("incomplete_non_mutating")));
         Out->SetArrayField(TEXT("screens"), ScreenResults);
 
         TSharedPtr<FJsonObject> Counts = MakeShared<FJsonObject>();
@@ -1304,7 +1312,7 @@ void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
     // Phase 3 Item #18 (2026-05-16 UI Gap Audit) — build_menu_from_spec.
     // Always-on (not WITH_COMMONUI-gated): the spec system is the source
     // of the shared menu document grammar; per-screen WBPs may use CommonUI
-    // types but the dispatch surface itself is engine-side. MVP-STUB —
+    // types but the dispatch surface itself is engine-side.
     // per-screen `spec` builds run FULL via FUISpecBuilder; cross-screen
     // aggregation (layers / focus_table / nav_overrides) is deferred to
     // issue #3-18b. Same modes as build_ui_from_spec.
@@ -1314,11 +1322,12 @@ void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
              "focus_table[], nav_overrides[]}. For each screens[N] entry that includes an embedded "
              "`spec` (FUISpecDocument), dispatches through the existing FUISpecBuilder pipeline "
              "(same atomicity + dry-run + strict-mode semantics as build_ui_from_spec). screens[N] "
-             "entries without an embedded `spec` echo back as status='stub' (kind-based scaffolder "
-             "dispatch deferred to issue #3-18b). layers / focus_table / nav_overrides are accepted, "
+             "entries without an embedded `spec` echo back as status='not_implemented' and bSuccess=false "
+             "(kind-based scaffolder dispatch is not implemented in this action). layers / focus_table / nav_overrides are accepted, "
              "validated structurally, and echoed under `deferred_aggregation` so user-space tooling "
-             "can post-process — the cross-screen activatable-stack hierarchy, focus-table CDO writes, "
-             "and nav-override propagation are deferred. Modes (`dry_run`, `treat_warnings_as_errors`, "
+             "can post-process; the action returns status='partial_non_mutating' and bSuccess=false when "
+             "those fields are present because the cross-screen activatable-stack hierarchy, focus-table CDO writes, "
+             "and nav-override propagation are not applied. Modes (`dry_run`, `treat_warnings_as_errors`, "
              "`raw_mode`, `overwrite`) propagate to every per-screen build call. Returns "
              "{ bSuccess, status, screens[], aggregate_node_counts, errors?, warnings?, "
              "deferred_aggregation?, request_id? } where each screens[] entry includes a full "
@@ -1327,13 +1336,13 @@ void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
         FParamSchemaBuilder()
             .Required(TEXT("screens"), TEXT("array"),
                 TEXT("[{ id, asset_path, spec?, kind? }, ...] — each entry triggers a per-screen FUISpecBuilder "
-                     "dispatch when `spec` is set. Without `spec`, the entry echoes status='stub'."))
+                     "dispatch when `spec` is set. Without `spec`, the entry echoes status='not_implemented' and bSuccess=false."))
             .Optional(TEXT("layers"), TEXT("array"),
-                TEXT("[{ id, screens[] }, ...] — activatable-stack layer hierarchy. STUB (echoed back, not applied)."))
+                TEXT("[{ id, screens[] }, ...] — activatable-stack layer hierarchy. Echoed back and not applied; response is partial_non_mutating."))
             .Optional(TEXT("focus_table"), TEXT("array"),
-                TEXT("[{ screen, target }, ...] — per-screen DesiredFocusTargetName CDO writes. STUB (echoed back)."))
+                TEXT("[{ screen, target }, ...] — per-screen DesiredFocusTargetName CDO writes. Echoed back and not applied; response is partial_non_mutating."))
             .Optional(TEXT("nav_overrides"), TEXT("array"),
-                TEXT("[{ screen, widget, direction, target }, ...] — per-widget nav overrides. STUB (echoed back)."))
+                TEXT("[{ screen, widget, direction, target }, ...] — per-widget nav overrides. Echoed back and not applied; response is partial_non_mutating."))
             .Optional(TEXT("overwrite"), TEXT("boolean"),
                 TEXT("Replace existing WBPs at each screen's asset_path. Default true."), TEXT("true"))
             .Optional(TEXT("dry_run"), TEXT("boolean"),

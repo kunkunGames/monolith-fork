@@ -68,7 +68,7 @@ Counts re-verified against `RegisterAction(TEXT("ui"), ...)` call sites on 2026-
 | `FMonolithUIRegistryActions` | Registers `dump_property_allowlist` (Phase B diagnostic) |
 | `MonolithUI::FTextureIngestActions` / `FFontIngestActions` / `FAnimationCoreActions` / `FAnimationEventActions` / `FRoundedCornerActions` / `FShadowActions` / `FGradientActions` | Hoisted Design Import + Animation v2 verbs (Phase D, 2026-04-26) |
 | `MonolithUI::FEffectSurfaceActions` | EffectSurface sub-bag setters + preset (Phase F, 2026-04-26) |
-| `MonolithUI::FSpecActions` | `build_ui_from_spec` + `dump_ui_spec_schema` + `dump_ui_spec` (Phases H + J, 2026-04-26) + `build_menu_from_spec` (Phase 3 of the 2026-05-16 UI Gap Audit, MVP-STUB) |
+| `MonolithUI::FSpecActions` | `build_ui_from_spec` + `dump_ui_spec_schema` + `dump_ui_spec` (Phases H + J, 2026-04-26) + `build_menu_from_spec` (Phase 3 of the 2026-05-16 UI Gap Audit; compacted so deferred aggregation is explicitly non-mutating) |
 | `MonolithCommonUITemplate::Register` | CommonUI headline scaffolders: `scaffold_main_menu` / `scaffold_settings_panel_with_tabs` / `scaffold_pause_menu` (Phase 3 of the 2026-05-16 UI Gap Audit). File-static handlers in `CommonUI/MonolithCommonUITemplateActions.cpp` — `WITH_COMMONUI` only |
 | `UMonolithUIRegistrySubsystem` (UEditorSubsystem) | Live type registry + per-type property allowlist (Phase B) |
 | `FUITypeRegistry` / `FUIPropertyAllowlist` / `FUIPropertyPathCache` / `FUIReflectionHelper` | Registry data model + safe reflection write surface (Phases B + C) |
@@ -206,7 +206,7 @@ Class-as-data: style creators (`create_common_button_style`, `create_common_text
 | `batch_retheme` | `asset_path`, `style_map` | Retheme multiple widgets in a single transaction |
 | `configure_common_text` | `asset_path`, `widget_name`, `properties` | Set `UCommonTextBlock` properties (style, scroll speed, auto-collapse) |
 | `configure_common_border` | `asset_path`, `widget_name`, `properties` | Set `UCommonBorder` properties (style, opacity, etc.) |
-| `apply_token_binding` | `wbp_path`, `widget_name`, `target_property`, `token_key` | **MVP-STUB.** Bind a widget property to a UI design token sourced from `TokenforgeRuntime`. Returns `-32011 ErrTokenforgeRuntimeUnavailable` when the plugin is absent (see § Error Contract — Optional Tokenforge Provider Absence (-32011)). Successful response carries `status:"stub"` — param validation + Tokenforge probe are FULL, BP-graph node-write into NativeConstruct is deferred to a follow-up. Phase 2 Item #10 (2026-05-16 UI Gap Audit). |
+| `apply_token_binding` | `wbp_path`, `widget_name`, `target_property`, `token_key` | **Validation/probe only until BP graph writes ship.** Returns `-32011 ErrTokenforgeRuntimeUnavailable` when the plugin is absent (see § Error Contract — Optional Tokenforge Provider Absence (-32011)). When Tokenforge is available and validation passes, the BP-graph node-write path returns `-32012` with `status:"not_implemented"` so callers cannot mistake it for a committed binding. Phase 2 Item #10 (2026-05-16 UI Gap Audit), compacted 2026-05-26. |
 | `convert_textblock_to_common` | `wbp_path`, `widget_name` | Replace a `UTextBlock` with a `UCommonTextBlock` while preserving the variable identity (FName + `bIsVariable`), parent slot, and authored text/font/colour/shadow state. Style left at engine default — chain `apply_style_to_widget` with a `UCommonTextStyle` reference to complete the rethemed migration. Mirrors the reconciliation pattern from `convert_button_to_common` (variable identity preserved Y). Phase 2 Item #12 (2026-05-16 UI Gap Audit). |
 | `set_action_bar_button_class` | `wbp_path`, `widget_name`, `button_class` | Set `UCommonBoundActionBar::ActionButtonClass` on an existing bar widget. Writes through BOTH the authoring tree (`Wbp->WidgetTree`) AND the generated class's archetype tree (`UWidgetBlueprintGeneratedClass::GetWidgetTreeArchetype()`) so the value survives subsequent `compile_blueprint` passes. `button_class` must resolve to a `UCommonButtonBase` subclass. Mirrors the FClassProperty reflection pattern from Phase 1 Bug #4 (`MonolithCommonUIInputActions.cpp:265-282`). Phase 2 Item #13 (2026-05-16 UI Gap Audit). |
 | `convert_border_to_common` | `wbp_path` (alias `asset_path`), `widget_name` | Replace a `UBorder` with a `UCommonBorder`, preserving the variable identity (FName + `bIsVariable`), parent slot (or tree-root position), and the single content child. `UCommonBorder` is concrete, so no `target_class` is needed. Style left at engine default — chain `apply_style_to_widget` with a `UCommonBorderStyle` to finish the rethemed migration. Mirrors the reconciliation pattern from `convert_button_to_common` / `convert_textblock_to_common`. Phase 3 (2026-05-23 UI Blueprint Gap Audit). |
@@ -446,7 +446,7 @@ ui::build_ui_from_spec({
 
 ### Menu Spec Builder (M5 — Phase 3 of the 2026-05-16 UI Gap Audit)
 
-**Status:** MVP-STUB landed 2026-05-16. Per-screen `spec` builds run **FULL** via `FUISpecBuilder`. Cross-screen aggregation (`layers[]` activatable-stack hierarchy, `focus_table[]` CDO writes, `nav_overrides[]` propagation) is **DEFERRED** to issue #3-18b — captured entries echo back in the response under `deferred_aggregation` so user-space tooling can post-process.
+**Status:** Landed 2026-05-16, compacted 2026-05-26. Per-screen `spec` builds run **FULL** via `FUISpecBuilder`. Cross-screen aggregation (`layers[]` activatable-stack hierarchy, `focus_table[]` CDO writes, `nav_overrides[]` propagation) is **DEFERRED** to issue #3-18b — captured entries echo back in the response under `deferred_aggregation`, and the aggregate status is non-mutating (`partial_non_mutating` / `incomplete`) rather than committed success.
 
 **Action surface:** `ui::build_menu_from_spec` (always-on — registered from `Actions/MonolithUISpecActions.cpp`, not WITH_COMMONUI-gated; per-screen builders may construct CommonUI widgets but the dispatch surface itself is engine-side).
 
@@ -463,11 +463,13 @@ ui::build_ui_from_spec({
 
 **Modes preserved from `build_ui_from_spec`:** `dry_run`, `treat_warnings_as_errors`, `raw_mode`, `overwrite`, `request_id`. Per-screen builds receive `<request_id>:<screen.id>` so consumers can correlate aggregate vs per-screen calls.
 
-**Response shape:** `{ bSuccess, status, request_id?, screens[], aggregate_node_counts, errors?, warnings?, deferred_aggregation? }` where each `screens[N]` entry includes a full `build_result` object (same shape as `build_ui_from_spec`'s response). `status` is `ok` when all screens succeeded and no `layers/focus_table/nav_overrides` entries were supplied; `partial_stub` when those deferred surfaces had caller-supplied entries; `validation_failed` on structural errors.
+**Response shape:** `{ bSuccess, status, request_id?, screens[], aggregate_node_counts, errors?, warnings?, deferred_aggregation? }` where each `screens[N]` entry includes a full `build_result` object (same shape as `build_ui_from_spec`'s response). `status` is `ok` only when all screens commit and no deferred `layers/focus_table/nav_overrides` entries were supplied; `partial_non_mutating` marks deferred aggregation surfaces that were acknowledged but not committed; `incomplete` marks screen specs that cannot commit; `validation_failed` covers structural errors. Non-mutating placeholder paths do not return committed-success status.
 
 ### Spec Serializer (M5 — Phase J, landed 2026-04-26)
 
 `FUISpecSerializer` is the inverse of `FUISpecBuilder`. The MCP action `ui::dump_ui_spec(asset_path)` reads a live `UWidgetBlueprint` and produces a `FUISpecDocument` JSON suitable for round-tripping back through `ui::build_ui_from_spec`. Combined with the builder, this gives a true Build -> Dump -> Build identity for every property surfaced through the Phase B/C allowlist.
+
+**Widget variable GUID reconciliation (2026-05-26 compact merge):** `MonolithUI::ReconcileWidgetVariableGuids` builds its live widget-name set from `UWidgetBlueprint::WidgetTree->GetAllWidgets(...)`, not from source-widget iteration that can retain removed widgets. This prevents stale entries such as a deleted `CanvasPanel_0` from remaining in `WidgetVariableNameToGuidMap` after spec rebuilds.
 
 **Pipeline:**
 
@@ -979,15 +981,17 @@ The `category` value (`"OptionalDepUnavailable"`) matches the `-32010` shape, so
 
 Invariants: NEVER a crash. NEVER a silent success. NEVER a different code. The literal substring `"TokenforgeRuntime plugin not enabled"` is byte-stable across releases — tests assert that substring only, not the full message.
 
-### Implementation status (Phase 2 MVP-STUB)
+### Implementation status (Phase 2 validation/probe, compacted 2026-05-26)
 
 The Tokenforge availability probe and the structured -32011 error path are **FULL** as of 2026-05-16. The action's full responsibility — writing BP-graph nodes into the WBP's `NativeConstruct` event graph that call `UUISubsystem::GetColor` / `GetFont` / etc. and pipe the result into the target property's setter — is **DEFERRED** to a follow-up (tracked as issue #2-10b in the Phase 2 plan).
 
-Successful responses (Tokenforge IS available) carry `status:"stub"` + a `reason` string explaining the partial state, so callers can branch deterministically on "wired vs registered-only":
+Tokenforge-available validation paths now return a non-success not-implemented response for the deferred BP graph write, so callers can branch deterministically on "not committed" instead of treating a placeholder as a real binding:
 
 ```jsonc
 {
-  "bSuccess": true,
+  "bSuccess": false,
+  "ErrorCode": -32012,
+  "ErrorMessage": "apply_token_binding validation passed, but BP-graph node-write is not implemented",
   "Result": {
     "wbp_path": "/Game/UI/WBP_MainMenu",
     "widget_name": "Title",
@@ -995,13 +999,13 @@ Successful responses (Tokenforge IS available) carry `status:"stub"` + a `reason
     "token_key": "color.surface.default",
     "tokenforge_available": true,
     "tokenforge_version": "<version>",
-    "status": "stub",
-    "reason": "BP-graph node-write surface deferred. Param validation + Tokenforge probe FULL — node construction in NativeConstruct event graph awaits issue #2-10b follow-up. Action is registered + discoverable so callers can branch on status='stub'."
+    "status": "not_implemented",
+    "reason": "BP-graph node-write surface is not implemented in apply_token_binding. Use static CommonUI style actions for committed styling today."
   }
 }
 ```
 
-Why register an MVP-STUB: keeping the action in the registry with a deterministic `status:"stub"` signal lets downstream tooling (LLM-driven UI authoring pipelines) discover the surface, validate inputs end-to-end, and write fail-soft branches NOW — without waiting for the BP-graph node-writer to land. When the follow-up ships, `status` flips to `"applied"` and the response payload gains a `bindings_written[]` array.
+Why keep the action registered: downstream tooling can discover the future surface and validate inputs, while the current response is explicitly non-mutating. When the follow-up ships, the error path is replaced by `status:"applied"` and the response payload gains a `bindings_written[]` array.
 
 ### Pattern reusability
 

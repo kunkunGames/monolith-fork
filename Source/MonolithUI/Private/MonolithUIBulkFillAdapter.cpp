@@ -31,6 +31,7 @@
 // race against the editor's DataTable mutation cradle.
 
 #include "MonolithUIBulkFillAdapter.h"
+#include "MonolithBulkFillAdapterUtils.h"
 #include "MonolithBulkFillRegistry.h"
 #include "MonolithBulkFillTypes.h"
 #include "MonolithAssetUtils.h"
@@ -94,15 +95,7 @@ namespace MonolithUIBulkFillInternal
 	// (the shared per-namespace adapter precedent).
 	static FDryRunReport MakeResolveFailureReport(const FString& Reason)
 	{
-		FDryRunReport Report;
-		FBulkFillFieldWrite Write;
-		Write.Path = TEXT("(adapter)");
-		Write.bOk = false;
-		Write.Reason = Reason;
-		Report.FieldWrites.Add(Write);
-		Report.Errors = 1;
-		Report.bWouldApply = false;
-		return Report;
+		return FMonolithBulkFillReportUtils::MakeFailureReport(Reason);
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -625,24 +618,15 @@ namespace MonolithUIBulkFillInternal
 	// Top-level describe tree when caller passes empty / unknown target.
 	static FSchemaDescriptor BuildTopLevelDescribe()
 	{
-		FSchemaDescriptor Root;
-		Root.FieldPath = TEXT("ui");
-		Root.TypeName = TEXT("Namespace<UMG + CommonUI>");
-		Root.ImportTextForm = TEXT(
-			"target=<DT path | WBP path with `|widget_name=X[|kind=slot|widget]`>");
+		FSchemaDescriptor Root = FMonolithBulkFillDescriptorUtils::MakeNamespaceRoot(
+			TEXT("ui"),
+			TEXT("Namespace<UMG + CommonUI>"),
+			TEXT("target=<DT path | WBP path with `|widget_name=X[|kind=slot|widget]`>"));
 
 		auto AddKind = [&](const TCHAR* Kind, const TCHAR* Sample, const TCHAR* Note)
 		{
-			FSchemaDescriptor K;
-			K.FieldPath = Kind;
-			K.TypeName = TEXT("fill_kind");
-			K.ImportTextForm = Sample;
-			// FSchemaDescriptor carries no Reason field; documentation rides in a
-			// child descriptor so the schema-walk JSON shape stays uniform.
-			FSchemaDescriptor Doc;
-			Doc.FieldPath = TEXT("(note)");
-			Doc.TypeName = TEXT("doc");
-			Doc.ImportTextForm = Note;
+			FSchemaDescriptor K = FMonolithBulkFillDescriptorUtils::MakeFillKind(Kind, Sample);
+			FSchemaDescriptor Doc = FMonolithBulkFillDescriptorUtils::MakeDocNote(Note);
 			K.Children.Add(Doc);
 			Root.Children.Add(K);
 		};
@@ -677,18 +661,16 @@ FDryRunReport FMonolithUIBulkFillAdapter::UIBulkFill(const FBulkFillSpec& Spec)
 {
 	using namespace MonolithUIBulkFillInternal;
 
-	if (!Spec.Tree.IsValid())
-	{
-		return MakeResolveFailureReport(TEXT("ui adapter: spec.tree is null"));
-	}
-
 	FString FillKind;
-	Spec.Tree->TryGetStringField(TEXT("fill_kind"), FillKind);
-	if (FillKind.IsEmpty())
+	FDryRunReport FillKindFailure;
+	if (!FMonolithBulkFillJsonUtils::TryGetRequiredFillKind(
+		Spec,
+		TEXT("ui"),
+		TEXT("'DataTableRows', 'InputActionDataTable', 'WidgetProperties'"),
+		FillKind,
+		FillKindFailure))
 	{
-		return MakeResolveFailureReport(TEXT(
-			"ui adapter: spec.tree.fill_kind required — one of "
-			"'DataTableRows', 'InputActionDataTable', 'WidgetProperties'"));
+		return FillKindFailure;
 	}
 
 	// VANILLA UMG PATHS — gate-free. Run regardless of WITH_COMMONUI.

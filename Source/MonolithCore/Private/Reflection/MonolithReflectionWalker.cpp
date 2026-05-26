@@ -277,7 +277,16 @@ void FMonolithReflectionWalker::WriteScalar(FProperty* Prop, void* ValuePtr, con
 	FString ValStr;
 	if (JsonVal->Type == EJson::Number)
 	{
-		ValStr = FString::SanitizeFloat(JsonVal->AsNumber());
+		const double NumberValue = JsonVal->AsNumber();
+		if (const FNumericProperty* NumericProp = CastField<FNumericProperty>(Prop);
+			NumericProp && NumericProp->IsInteger())
+		{
+			ValStr = FString::Printf(TEXT("%lld"), static_cast<int64>(NumberValue));
+		}
+		else
+		{
+			ValStr = FString::SanitizeFloat(NumberValue);
+		}
 	}
 	else if (JsonVal->Type == EJson::Boolean)
 	{
@@ -289,9 +298,15 @@ void FMonolithReflectionWalker::WriteScalar(FProperty* Prop, void* ValuePtr, con
 		OutWrite.Reason = TEXT("scalar field cannot be null");
 		return;
 	}
-	else
+	else if (JsonVal->Type == EJson::String)
 	{
 		ValStr = JsonVal->AsString();
+	}
+	else
+	{
+		OutWrite.bOk = false;
+		OutWrite.Reason = TEXT("expected scalar JSON string, number, or boolean");
+		return;
 	}
 
 	// Snapshot current value for the report.

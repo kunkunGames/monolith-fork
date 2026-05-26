@@ -136,6 +136,8 @@
 | `export_data_table` | `asset_path`, `format`? (`"json"`\|`"csv"`, default `"json"`), `use_json_objects`? (default true), `simple_text`? (default false) | Read the WHOLE table as one text blob (JSON or CSV) for token-efficient in-context editing. Calls `UDataTable::GetTableAsJSON`/`GetTableAsCSV` (`#if WITH_EDITOR`). `use_json_objects` sets `EDataTableExportFlags::UseJsonObjectsForStructs` so nested structs export as clean JSON objects (not GUID-suffixed ExportText blobs) — default-on to match the engine's own export. Returns `row_struct`, `row_struct_path`, `total_rows`, `format`, `text`. |
 | `import_data_table` | `asset_path`, `format`? (`"json"`\|`"csv"`, default `"json"`), `text`, `mode` (`"replace"` — must be passed explicitly), `save`? (default false) | Re-import a whole-table text blob. Calls `UDataTable::CreateTableFromJSONString`/`CreateTableFromCSVString`. **REPLACES the entire row set** (import, not merge — unlisted rows are deleted by design); `mode` accepts only `"replace"` and must be explicit. Requires `GetRowStruct() != nullptr` (errors otherwise). Broadcasts `PostChange` after import. Returns `{rows_written, problems:[string], replaced, saved}`. |
 
+Boolean params in the DataTable maintenance pack must be JSON booleans. String values such as `"yes"` are rejected during param validation before any asset load or mutation.
+
 *DataAsset (1)*
 | Action | Params | Description |
 |--------|--------|-------------|

@@ -42,9 +42,17 @@ void FMonolithBulkFillRegistry::UnregisterAdapter(const FString& TargetNamespace
 
 FDryRunReport FMonolithBulkFillRegistry::DispatchBulkFill(const FBulkFillSpec& Spec) const
 {
-	FScopeLock Lock(&AdapterLock);
-	const FAdapterPair* Pair = Adapters.Find(Spec.TargetNamespace);
-	if (!Pair || !Pair->BulkFill)
+	FBulkFillAdapter BulkFill;
+	{
+		FScopeLock Lock(&AdapterLock);
+		const FAdapterPair* Pair = Adapters.Find(Spec.TargetNamespace);
+		if (Pair)
+		{
+			BulkFill = Pair->BulkFill;
+		}
+	}
+
+	if (!BulkFill)
 	{
 		FDryRunReport Empty;
 		FBulkFillFieldWrite W;
@@ -56,32 +64,51 @@ FDryRunReport FMonolithBulkFillRegistry::DispatchBulkFill(const FBulkFillSpec& S
 		Empty.Errors = 1;
 		return Empty;
 	}
-	return Pair->BulkFill(Spec);
+
+	return BulkFill(Spec);
 }
 
 FSchemaDescriptor FMonolithBulkFillRegistry::DispatchDescribe(const FString& TargetNamespace, const FString& TargetAssetOrAction) const
 {
-	FScopeLock Lock(&AdapterLock);
-	const FAdapterPair* Pair = Adapters.Find(TargetNamespace);
-	if (!Pair || !Pair->Describe)
+	FDescribeAdapter Describe;
+	{
+		FScopeLock Lock(&AdapterLock);
+		const FAdapterPair* Pair = Adapters.Find(TargetNamespace);
+		if (Pair)
+		{
+			Describe = Pair->Describe;
+		}
+	}
+
+	if (!Describe)
 	{
 		FSchemaDescriptor Empty;
 		Empty.FieldPath = TEXT("<unregistered>");
 		Empty.TypeName = FString::Printf(TEXT("no describe adapter for '%s'"), *TargetNamespace);
 		return Empty;
 	}
-	return Pair->Describe(TargetAssetOrAction);
+
+	return Describe(TargetAssetOrAction);
 }
 
 TArray<FString> FMonolithBulkFillRegistry::DispatchListTargets(const FString& TargetNamespace) const
 {
-	FScopeLock Lock(&AdapterLock);
-	const FAdapterPair* Pair = Adapters.Find(TargetNamespace);
-	if (!Pair || !Pair->ListTargets)
+	FListTargetsAdapter ListTargets;
+	{
+		FScopeLock Lock(&AdapterLock);
+		const FAdapterPair* Pair = Adapters.Find(TargetNamespace);
+		if (Pair)
+		{
+			ListTargets = Pair->ListTargets;
+		}
+	}
+
+	if (!ListTargets)
 	{
 		return TArray<FString>();
 	}
-	return Pair->ListTargets();
+
+	return ListTargets();
 }
 
 TArray<FString> FMonolithBulkFillRegistry::GetRegisteredNamespaces() const
@@ -96,4 +123,11 @@ bool FMonolithBulkFillRegistry::HasAdapter(const FString& TargetNamespace) const
 {
 	FScopeLock Lock(&AdapterLock);
 	return Adapters.Contains(TargetNamespace);
+}
+
+bool FMonolithBulkFillRegistry::HasListTargetsAdapter(const FString& TargetNamespace) const
+{
+	FScopeLock Lock(&AdapterLock);
+	const FAdapterPair* Pair = Adapters.Find(TargetNamespace);
+	return Pair && static_cast<bool>(Pair->ListTargets);
 }

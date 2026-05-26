@@ -1,16 +1,18 @@
 # Monolith API Reference
 
-**Version:** v0.15.0 · **Last updated:** 2026-05-23
+**Version:** v0.15.0 · **Last updated:** 2026-05-26
 
-**In-tree action total: 1344** registered across **19 in-tree namespaces** (all active by default; 45 town-gen actions are experimental and disabled until you flip `bEnableProceduralTownGen=true`, which lifts the registry to 1389). The `ui` namespace re-exports 4 GAS UI binding actions as aliases, which are included in that headline figure. The five `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers bring the MCP tool count to 23. This total EXCLUDES sibling-plugin actions (`MonolithISX`, `MonolithSteamBridge`, `MonolithSubstance`, `MonolithClaudeDesignBridge`) — they ship in their own repos and are not in the public release zip.
+**Live full-project snapshot (2026-05-26):** `monolith_status()` reported **1584 registered actions across 45 namespaces** in this Go checkout, and MCP `tools/list` exposed **77 client tools**, including **44 `_query` namespace dispatch tools**. This live total includes loaded sibling/private plugins and conditional namespaces present in the project. Exact current schemas come from runtime `monolith_find`, `monolith_discover`, and `describe`, not from static prose.
+
+The table below is a curated public/in-tree reference. It intentionally excludes sibling-plugin actions (`MonolithISX`, `MonolithSteamBridge`, `MonolithSubstance`, `MonolithClaudeDesignBridge`, and project-private bridges) that ship in their own repos or distributions. When the live project snapshot and the curated table differ, treat that as a documented conditional delta unless this file explicitly says otherwise.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
 > Auto-generated and hand-curated. Each action is dispatched via HTTP POST to `http://localhost:<port>` with JSON body `{ "namespace": "<ns>", "action": "<action>", "params": { ... } }`, or via the MCP `tools/list` surface that AI clients see at session start.
 >
-> For the most current param schemas, call `monolith_discover("<namespace>")` at runtime — it returns live schemas straight out of the plugin. This document is a curated reference, not a source-of-truth substitute.
+> For the most current param schemas, call `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` at runtime — it returns live schemas straight out of the plugin. This document is a curated reference, not a source-of-truth substitute.
 >
-> **0.15.0:** the namespace counts in the Table of Contents and the per-namespace body sections below were regenerated against live `monolith_discover()` on 2026-05-23 — the 0.14.8 → 0.15.0 additions are reflected (the `bulk_fill` / `describe` framework, the blueprint dataset read/edit pack, the UI/Blueprint gap-closure actions, `monolith_guide`, `editor` Python/PIE/console verbs, the `level_sequence` namespace, and the audio MetaSound document-introspection actions). Body sections list every action by category; deep-dive param tables cover the high-traffic ones. For the exhaustive live param schema of any action, call `monolith_discover("<namespace>")` or `describe_query("action_schema", ...)`.
+> **0.15.0:** the namespace counts in the Table of Contents and the per-namespace body sections below are a curated in-tree reference. The 2026-05-26 live Go snapshot is 1584 actions / 45 namespaces with sibling/private plugins loaded. For the exhaustive live param schema of any action, call `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` or `describe_query("action_schema", ...)`.
 
 ---
 
@@ -35,9 +37,9 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD + document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
 | [level_sequence](#level_sequence) | 8 | Level Sequence inspection: binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
-| [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 12 per-namespace adapters (`apply`, `list_namespaces`) |
-| [describe](#describe) | 3 | Read-only schema introspection for the same 12 adapters (`schema`, `list_targets`, `action_schema`) |
-| **In-tree subtotal** | **1344** | (all default-active; +45 experimental town gen → 1389 when registered) |
+| [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 11 in-tree adapters, plus optional sibling adapters when present (`apply`, `list_namespaces`) |
+| [describe](#describe) | 3 | Read-only schema introspection for the same adapter registry (`schema`, optional `list_targets`, `action_schema`) |
+| **Curated in-tree subtotal** | **1344** | Static public/in-tree reference from the curated body below; the 2026-05-26 fully loaded Go project reports 1584 live actions / 45 namespaces. |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -63,12 +65,13 @@ The aliased GAS UI binding actions live in **both** `ui::*` and `gas::*` namespa
 
 ## Recent API Changes (v0.14.8 → v0.15.0)
 
-These releases added the `level_sequence` namespace, the `bulk_fill` / `describe` ergonomics framework, a blueprint dataset read/edit pack, a UI/Blueprint gap-closure sweep, `monolith_guide`, and editor automation verbs. The per-namespace body sections below now document these; full param schemas for everything are also live via `monolith_discover("<namespace>")`.
+These releases added the `level_sequence` namespace, the `bulk_fill` / `describe` ergonomics framework, a blueprint dataset read/edit pack, a UI/Blueprint gap-closure sweep, `monolith_guide`, and editor automation verbs. The per-namespace body sections below now document these; full param schemas for everything are also live via focused `monolith_discover` schema mode.
 
 | Action | Change | Reason |
 |--------|--------|--------|
-| `bulk_fill_query("apply" / "list_namespaces")` | **NEW namespace** (0.15.0) | Reflection-walker bulk property fill across 12 per-namespace adapters, with `dry_run` previews. |
-| `describe_query("schema" / "list_targets" / "action_schema")` | **NEW namespace** (0.15.0) | Read-only schema introspection for the same adapters; `action_schema` returns any registered action's full param schema. |
+| `bulk_fill_query("apply" / "list_namespaces")` | **NEW namespace** (0.15.0) | Reflection-walker bulk property fill across 11 in-tree adapters, with `dry_run` previews; sibling adapters may register when installed. |
+| `describe_query("schema" / "list_targets" / "action_schema")` | **NEW namespace** (0.15.0) | Read-only schema introspection for the same adapter registry; `schema` supports namespace-level descriptors without `target`, `list_targets` is optional inventory, and `action_schema` returns a registered action's full param schema. |
+| `monolith_discover` | Params added (0.15.0 compact merge) | Adds optional `action` and `mode` (`summary`, `actions`, `schema`) so callers can request one exact action schema without dumping a whole namespace. |
 | `monolith.guide` | **NEW** (0.15.0) | Section-keyed onboarding guide for AI agents (onboarding / recipes / decisions / errors / skills_map / gotchas) with a live registry overlay. |
 | `blueprint` dataset pack (17 actions) | **NEW** (0.15.0) | DataTable (8), CurveTable (5), StringTable (3), `seed_data_asset` (1) — read with row-struct schema inline, bulk upsert with dry-run, row CRUD, JSON/CSV import/export. |
 | `blueprint.add_property_access` / `override_parent_function` / `save_dirty_assets` | **NEW** (0.15.0) | Cross-class UPROPERTY get/set, value-returning parent-function override, batch save of dirty BP/Widget packages. |
@@ -88,14 +91,16 @@ Core server management and introspection.
 
 ### `monolith.discover`
 
-List available tool namespaces and their actions. Pass `namespace` to filter; pass `category` to narrow further (e.g. `"CommonUI"` inside `ui`).
+List available tool namespaces and their actions. Pass `namespace` to filter; pass `category` to narrow further (e.g. `"CommonUI"` inside `ui`). Pass both `namespace` and `action` with `mode="schema"` to fetch one exact action schema without dumping the whole namespace.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `namespace` | string | optional | Filter to a specific namespace |
+| `action` | string | optional | Filter to a specific action inside `namespace`; most useful with `mode="schema"` |
 | `category` | string | optional | Filter actions within the namespace by category |
+| `mode` | enum | optional | `summary`, `actions`, or `schema`. Default is summary-style namespace discovery unless a legacy caller requests the namespace payload. |
 
-**Returns:** Per-action param schemas for every registered action. AI clients also receive these in `tools/list` at session start, so most callers never need to call `discover` explicitly.
+**Returns:** Namespace summaries, action rows, or exact param schemas depending on `mode`. AI clients also receive MCP tool schemas in `tools/list` at session start, so callers should request focused schema mode when they need exact params for one action.
 
 ---
 
@@ -793,9 +798,9 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the full action catal
 
 ## ui
 
-UMG widget Blueprint CRUD, templates, styling, animation (v1 + v2), the schema-driven **Spec / EffectSurface** architecture, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. **138 actions** — the UMG + Spec/EffectSurface baseline (66 always-on, incl. the v0.15.0 navigation/conversion gap-closure + headline scaffolders) + 51 CommonUI (registered when `WITH_COMMONUI=1`) + 4 GAS UI binding aliases. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated.
+UMG widget Blueprint CRUD, templates, styling, animation (v1 + v2), the schema-driven **Spec / EffectSurface** architecture, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. **138 curated actions** — 79 module-owned always-on actions + 55 CommonUI actions (registered when `WITH_COMMONUI=1`) + 4 GAS UI binding aliases. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated; `apply_token_binding` is validation/probe only until BP graph writes ship and returns non-success `status:"not_implemented"` for the deferred write.
 
-> For full param schemas, call `monolith_discover("ui")` at runtime. The surface is large — categories below; the v0.15.0-new actions are flagged.
+> For full param schemas, use focused `monolith_discover` schema mode at runtime. The surface is large — categories below; the v0.15.0-new actions are flagged.
 
 **Action categories (UMG + Spec baseline, always registered):**
 
@@ -1043,7 +1048,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithLevelSequence.md`.
 
 ## bulk_fill
 
-Reflection-walker bulk property fill across 12 per-namespace adapters. **2 actions.** Framework dispatcher in `MonolithCore` (0.15.0); each adapter self-registers from its owning module — zero compile-time linkage from core into adapter modules.
+Reflection-walker bulk property fill across 11 in-tree per-namespace adapters, with optional sibling adapters when installed. **2 actions.** Framework dispatcher in `MonolithCore` (0.15.0); each adapter self-registers from its owning module — zero compile-time linkage from core into adapter modules.
 
 ### `bulk_fill_query.apply`
 
@@ -1067,20 +1072,20 @@ List `target_namespace` values the bulk_fill registry currently knows about (one
 
 ## describe
 
-Read-only schema introspection for the same 12 adapters, plus action-param introspection. **3 actions.** Companion to `bulk_fill` (0.15.0).
+Read-only schema introspection for the same adapter registry, plus action-param introspection. **3 actions.** Companion to `bulk_fill` (0.15.0).
 
 ### `describe_query.schema`
 
-Return a rich `FSchemaDescriptor` tree (type names, ImportText forms, enum-value lists, clamp ranges, nested children) for an asset/action via its namespace adapter.
+Return a rich `FSchemaDescriptor` tree (type names, ImportText forms, enum-value lists, clamp ranges, nested children) for a namespace, asset, or action via its namespace adapter.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `target_namespace` | string | **required** | Adapter namespace whose schema should be introspected |
-| `target` | string | **required** | Asset path or action name to describe |
+| `target` | string | optional | Asset path or action name to describe. Omit it to request the adapter's namespace-level writable-shape descriptor. |
 
 ### `describe_query.list_targets`
 
-List the asset paths / action names the describe adapter can introspect for a given `target_namespace`.
+List the asset paths / action names the describe adapter can introspect for a given `target_namespace`, when that adapter supports inventory. Target listing is optional: adapters may return `inventory_supported=false` / `optional_inventory_not_implemented`; use `bulk_fill_query.list_namespaces` and `describe_query.schema` to determine adapter support.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1111,7 +1116,7 @@ If you're building a sibling plugin yourself, read `Plugins/Monolith/Docs/SIBLIN
 |---|---|---|---|---|
 | External sibling plugin | Custom | Varies | Registers its own namespace at startup and ships through its own repo/channel. | Outside `Plugins/Monolith/` |
 
-**Why these aren't in the in-tree count:** the in-tree 1271/16 figure counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
+**Why these aren't in the curated in-tree count:** the public Monolith reference counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
 
 Private sibling bridges are intentionally omitted from the public API reference. Their action rosters, namespaces, and release notes belong in their own repos/channels; Monolith must not publish them as part of the public API surface.
 
@@ -1193,10 +1198,11 @@ generate_floor_plan → create_building_from_grid → generate_facade → genera
 
 Before writing any client code:
 
-1. `monolith_discover()` — list all namespaces and their actions.
-2. `monolith_discover("<namespace>")` — get full param schemas for one namespace.
-3. `project_query("search", {query: "..."})` — find assets by name/type.
-4. `source_query("search_source", {query: "..."})` — verify UE 5.7 API signatures.
+1. `monolith_find("task description")` — route the task to candidate namespaces/actions when the action is unclear.
+2. `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` — get exact params for one action.
+3. `describe_query("schema", { "target_namespace": "<namespace>", "target": "..." })` — inspect writable shape before reflective writes. Omit `target` only when you need the namespace-level descriptor.
+4. `project_query("search", {query: "..."})` — find assets by name/type/content provenance.
+5. `source_query("search_source", {query: "..."})` — verify UE 5.7 API signatures.
 
 **Golden rule:** never fabricate action names. The cogitator will be displeased.
 

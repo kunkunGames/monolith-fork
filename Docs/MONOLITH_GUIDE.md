@@ -8,11 +8,12 @@
 
 You are an AI agent driving an Unreal Engine editor through Monolith's MCP tools. Three calls orient you before you touch anything:
 
-1. **`monolith_discover()`** — no arguments. Returns the namespace inventory: every namespace, its action count, and which optional namespaces are gated off in this project (e.g. `gas`, `combograph`, `logicdriver` only register when their plugin is present). This response also carries a `guide_hint` pointing back here. Call `monolith_discover("<namespace>")` to get the full action list **and parameter schemas** for one namespace — do this before calling any action you have not used, rather than guessing argument names.
+1. **`monolith_find("task description")`** — routes your task to likely namespaces/actions when you do not already know the verb.
 2. **`monolith_status()`** — confirms the editor is reachable, reports the plugin version and the live total action count. If this fails or the MCP connection drops, the editor is down — nothing else will work until it is back up.
-3. **`monolith_guide(section="recipes")`** — pull the worked cross-namespace examples once you know what you want to build.
+3. **`monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })`** — returns the exact parameter schema for one action. Use broader namespace discovery only when you need to browse an unfamiliar namespace.
+4. **`monolith_guide(section="recipes")`** — pull the worked cross-namespace examples once you know what you want to build.
 
-Each `monolith_discover("<namespace>")` costs real tokens — a large namespace's schema dump is sizeable. Spend that cost intentionally: discover the one or two namespaces your task needs, not all of them. For the authoritative per-namespace action counts and the in-tree total, see `Docs/SPEC_CORE.md` §12 (Action Count Summary) — counts shift between releases, so trust the live `monolith_discover()` figure over any number written in prose.
+Each broad `monolith_discover("<namespace>")` costs real tokens — a large namespace's schema dump is sizeable. Spend that cost intentionally: use `monolith_find` for routing and focused `mode:"schema"` discovery for exact params. For the authoritative live count, trust `monolith_status()` / live discovery over any number written in prose.
 
 The golden rule underneath all of this: **discover before you guess.** Action names, parameter names, and which namespaces exist are all answerable at runtime. Fabricating any of them wastes a round-trip on a guaranteed error.
 
@@ -20,7 +21,7 @@ The golden rule underneath all of this: **discover before you guess.** Action na
 
 These are cross-namespace flows that no single namespace's docs cover. Each step names `namespace.action` and ends with a verify call. For single-asset authoring chains (one material, one Sound Cue, one state machine), use the pipelines in `Docs/SPEC_CORE.md` §13 instead — the recipes here are the multi-namespace cases.
 
-**Pointer — spec builders.** Several namespaces expose a `build_*_from_spec` family (`build_material_graph` with a `graph_spec`, `build_sm_from_spec`, `build_sound_cue_from_spec`, `build_ui_from_spec`, and others). These are transactional: one call populates a whole graph with validation, connection resolution, and rollback. Prefer them over hand-sequencing `create → add → connect`. Discover the exact spec shape with `monolith_discover("<namespace>")` and read the schema for the builder action.
+**Pointer — spec builders.** Several namespaces expose a `build_*_from_spec` family (`build_material_graph` with a `graph_spec`, `build_sm_from_spec`, `build_sound_cue_from_spec`, `build_ui_from_spec`, and others). These are transactional: one call populates a whole graph with validation, connection resolution, and rollback. Prefer them over hand-sequencing `create → add → connect`. Discover the exact spec shape with focused `monolith_discover` schema mode for the builder action.
 
 **Recipe 1 — Ship a melee ability with audio and HUD feedback.**
 1. `gas.create_gameplay_ability` — author the ability asset (gated on `WITH_GBA`).
@@ -46,7 +47,7 @@ These are cross-namespace flows that no single namespace's docs cover. Each step
 **Recipe 4 — Stand up a settings menu.**
 1. `ui.scaffold_settings_panel_with_tabs` — generates the tabbed panel shell.
 2. `ui.build_menu_from_spec` — populate options from a JSON spec.
-3. `ui.apply_token_binding` — bind to a design-token style set if you use one.
+3. `ui.apply_token_binding` — optional Tokenforge validation/probe only until the BP graph node writer ships; use static CommonUI style actions for committed styling today.
 4. **Verify:** `ui_query("compile_widget", ...)` returns empty `errors[]`; `ui_query("audit_focus_chain", ...)` confirms gamepad navigation.
 
 ## decisions
@@ -56,7 +57,7 @@ When two tools overlap, pick by intent:
 - **`build_material_graph` (with `graph_spec`) vs `bulk_fill_query("apply")`.** Use `build_material_graph` to author a material's expression graph — it understands material nodes and connections. Use `bulk_fill_query("apply", target_namespace=..., target=...)` to set many *properties* on an existing asset in one reflection-driven write (e.g. populating a DataAsset or a component's fields). Builders shape graphs; bulk_fill shapes property trees. Read the writable field tree first with `describe_query("schema", ...)`.
 - **`live_compile` vs UBT.** `editor_query("live_compile")` hot-patches `.cpp`-only changes into the running editor — fast, in-memory, lost on restart. Any **header** change (new class, changed signature, new `UPROPERTY`/`UFUNCTION`) needs a full UnrealBuildTool build plus an editor restart; Live Coding cannot pick up new compiled symbols. If a live_compile "succeeds" but the new symbol isn't found, you changed a header — rebuild.
 - **`source_query` vs `project_query`.** `source_query` searches **C++ engine/plugin source** (signatures, includes, class hierarchies) — use it to verify an API before writing code. `project_query` searches **content assets** (Blueprints, materials, meshes by path/name/type) — use it to find or confirm an asset exists before referencing it.
-- **`monolith_discover` vs `monolith_guide`.** `monolith_discover` is the machine surface — exact action names and parameter schemas. `monolith_guide` (this tool) is the editorial layer — *why* and *in what order*. Discover tells you the verbs; the guide tells you the sentences.
+- **`monolith_find` vs `monolith_discover` vs `monolith_guide`.** `monolith_find` is routing, `monolith_discover` is exact action/schema inventory, and `monolith_guide` is the editorial layer — *why* and *in what order*. Find tells you candidate verbs, discover gives exact params, and the guide tells you the sentences.
 - **`bulk_fill_query` vs `describe_query`.** `describe_query("schema", ...)` is read-only: it returns the authoritative field tree (paths, ImportText grammar, ranges, enum values) for an adapter namespace. `bulk_fill_query("apply", ...)` performs the write. Describe to learn the shape, bulk_fill to commit it; `bulk_fill_query("list_namespaces")` shows which adapters are available.
 
 ## errors
@@ -67,7 +68,7 @@ Workflow-level recovery — the map from a symptom to the fix. (Individual actio
 - **"Unknown namespace" / a namespace you expected is missing from `monolith_discover()`.** That namespace is gated behind an optional plugin and the gate is off in this project. `gas` needs GameplayAbilities (`WITH_GBA`), `combograph` needs ComboGraph, `logicdriver` needs Logic Driver Pro, `ai` needs StateTree + SmartObjects, MetaSound audio actions need MetaSound. Install/enable the plugin and rebuild, or use a different namespace.
 - **MCP connection dropped mid-session / tools stop responding.** Monolith runs in-process inside the editor. A dropped connection means the editor closed or crashed. Restart the editor; `monolith_status()` confirms when it is back.
 - **"Plugin 'X' not found" / "Unable to find plugin."** A referenced sibling plugin is not installed. Monolith's sibling plugins ship separately and are **not** in the Monolith release zip. Install the sibling, or drop the dependency.
-- **"Unknown action" on a namespace you do have.** You guessed the action name. Call `monolith_discover("<namespace>")` to list the real action names — never invent them.
+- **"Unknown action" on a namespace you do have.** You guessed the action name. Call `monolith_find("what you are trying to do")`, then focused `monolith_discover` schema mode for the chosen action — never invent action names.
 - **Reflective-write errors from `bulk_fill_query("apply")`** (bad field path, type mismatch, out-of-range value). Call `describe_query("schema", target_namespace=..., target=...)` first to read the exact field paths, ImportText grammar, enum values, and clamp ranges, then re-issue the write to match.
 
 ## skills_map

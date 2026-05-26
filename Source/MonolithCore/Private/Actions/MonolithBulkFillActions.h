@@ -15,7 +15,7 @@
 class FMonolithBulkFillActions
 {
 public:
-	/** Register the 4 actions (bulk_fill.apply, bulk_fill.list_namespaces, describe.schema, describe.list_targets). */
+	/** Register the 5 actions (bulk_fill.apply, bulk_fill.list_namespaces, describe.schema, describe.list_targets, describe.action_schema). */
 	static void RegisterAll();
 
 	/** Called from FMonolithCoreModule::ShutdownModule (mirrors UnregisterNamespace pattern). */

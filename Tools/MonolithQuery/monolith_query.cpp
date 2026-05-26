@@ -5790,6 +5790,7 @@ static std::string resolve_bridge_db_path(const std::string& explicit_db,
 // probing the same exe-relative layouts resolve_db_dir() uses. Returns empty
 // if not found.
 //   exe at Plugins/Monolith/Tools/MonolithQuery/ -> root is ../../
+//   exe at Plugins/Monolith/Tools/MonolithQuery/build/ -> root is ../../../
 //   exe at Plugins/Monolith/Binaries/            -> root is ../
 //   exe at Plugins/Monolith/ (plugin root)       -> root is ./
 static fs::path resolve_plugin_root() {
@@ -5798,6 +5799,7 @@ static fs::path resolve_plugin_root() {
         return fs::path();
 
     const fs::path candidates[] = {
+        exe_dir / ".." / ".." / "..", // Tools/MonolithQuery/build/
         exe_dir / ".." / "..",   // Tools/MonolithQuery/
         exe_dir / "..",          // Binaries/
         exe_dir                  // plugin root

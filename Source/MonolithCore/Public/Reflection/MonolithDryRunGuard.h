@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
-// FMonolithDryRunGuard — RAII-ish helper used inside existing write actions
-// to add `dry_run: true` support with minimal boilerplate. Phase 0 primitive.
+// FMonolithDryRunGuard: reads dry_run/strict flags and serializes dry-run
+// reports. It does not open transactions, perform rollback, or prevent writes
+// by itself; callers must branch before mutation.
 
 #pragma once
 
@@ -10,8 +11,12 @@
 struct FMonolithActionResult;
 
 /**
- * Helper used inside existing write actions to add `dry_run: true` support
- * with minimal boilerplate.
+ * Helper used inside existing write actions to read `dry_run: true` and return
+ * a dry-run report with minimal boilerplate.
+ *
+ * This helper is deliberately not a transaction or rollback guard. Callers must
+ * validate first, call MakeDryRunResponse before any mutation when IsDryRun() is
+ * true, and own transaction/rollback semantics for the real write path.
  *
  * Usage:
  *   FMonolithActionResult FMyActions::HandleFoo(const TSharedPtr<FJsonObject>& Params)

@@ -276,15 +276,20 @@ namespace MonolithUI
 
         TSet<FName> LiveVariableNames;
 
-        WBP->ForEachSourceWidget([WBP, &LiveVariableNames](UWidget* Widget)
+        if (WBP->WidgetTree)
         {
-            if (Widget)
+            TArray<UWidget*> LiveWidgets;
+            WBP->WidgetTree->GetAllWidgets(LiveWidgets);
+            for (UWidget* Widget : LiveWidgets)
             {
-                const FName WidgetName = Widget->GetFName();
-                LiveVariableNames.Add(WidgetName);
-                RegisterVariableName(WBP, WidgetName);
+                if (Widget)
+                {
+                    const FName WidgetName = Widget->GetFName();
+                    LiveVariableNames.Add(WidgetName);
+                    RegisterVariableName(WBP, WidgetName);
+                }
             }
-        });
+        }
 
         for (UWidgetAnimation* Animation : WBP->Animations)
         {

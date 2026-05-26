@@ -14,7 +14,10 @@
  * "bulk_fill" + "describe" dispatchers route on the spec's TargetNamespace.
  *
  * Thread model: read on game thread (dispatch path), written on
- * module-startup-thread. FCriticalSection AdapterLock serialises both sides.
+ * module-startup-thread. FCriticalSection AdapterLock serialises adapter-table
+ * access only; dispatch copies the callback under lock and invokes it after
+ * releasing the lock so adapters may safely perform long work or call back into
+ * registry/query surfaces.
  */
 class MONOLITHCORE_API FMonolithBulkFillRegistry
 {
@@ -29,7 +32,8 @@ public:
 	 * Per-namespace introspection adapter for `describe.list_targets`.
 	 * Returns the set of asset paths or action names the namespace can introspect.
 	 * Optional — namespaces without an inventory can leave it unset (the dispatcher
-	 * returns an empty array).
+	 * reports inventory_supported=false instead of implying an empty authoritative
+	 * inventory.
 	 */
 	using FListTargetsAdapter = TFunction<TArray<FString>()>;
 
@@ -52,6 +56,9 @@ public:
 
 	/** True if at least one adapter is registered for the given namespace. */
 	bool HasAdapter(const FString& TargetNamespace) const;
+
+	/** True if the namespace has an explicit inventory callback for describe.list_targets. */
+	bool HasListTargetsAdapter(const FString& TargetNamespace) const;
 
 private:
 	FMonolithBulkFillRegistry() = default;

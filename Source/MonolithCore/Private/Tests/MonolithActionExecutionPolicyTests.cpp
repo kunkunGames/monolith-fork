@@ -3,6 +3,7 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithActionExecutionGuard.h"
 #include "MonolithCoreTools.h"
+#include "MonolithParamSchema.h"
 #include "MonolithSettings.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
@@ -72,7 +73,10 @@ namespace
 			TEXT("explicit_action"),
 			TEXT("Policy metadata explicit test action."),
 			FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult),
-			nullptr,
+			FParamSchemaBuilder()
+				.EnableValidation()
+				.Required(TEXT("target"), TEXT("string"), TEXT("Target identifier for discover schema filtering."))
+				.Build(),
 			TEXT("Test"),
 			MakePolicySliceExplicitMutationPolicy());
 
@@ -157,6 +161,52 @@ bool FMonolithActionExecutionPolicyDiscoverTest::RunTest(const FString& Paramete
 				TestFalse(TEXT("Explicit policy is not defaulted"), (*Policy)->GetBoolField(TEXT("defaulted")));
 				TestTrue(TEXT("Explicit policy requests transaction metadata"), (*Policy)->GetBoolField(TEXT("transaction_wrapping")));
 				TestTrue(TEXT("Explicit policy is enforced"), (*Policy)->GetBoolField(TEXT("enforced")));
+			}
+		}
+	}
+
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("policytest"));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyDiscoverActionSchemaModeTest,
+	"Monolith.Core.ActionExecutionPolicy.DiscoverActionSchemaMode",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionExecutionPolicyDiscoverActionSchemaModeTest::RunTest(const FString& Parameters)
+{
+	RegisterPolicySliceTestNamespace();
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("namespace"), TEXT("policytest"));
+	Params->SetStringField(TEXT("action"), TEXT("explicit_action"));
+	Params->SetStringField(TEXT("mode"), TEXT("schema"));
+	FMonolithActionResult Result = FMonolithCoreTools::HandleDiscover(Params);
+	TestTrue(TEXT("Discover action schema succeeds"), Result.bSuccess);
+	TestTrue(TEXT("Discover action schema result valid"), Result.Result.IsValid());
+
+	if (Result.Result.IsValid())
+	{
+		TestEqual(TEXT("Schema mode is echoed"), Result.Result->GetStringField(TEXT("mode")), TEXT("schema"));
+		TestEqual(TEXT("Filtered action is echoed"), Result.Result->GetStringField(TEXT("action")), TEXT("explicit_action"));
+
+		const TSharedPtr<FJsonObject>* Schema = nullptr;
+		TestTrue(TEXT("Schema object exists"), Result.Result->TryGetObjectField(TEXT("schema"), Schema));
+		if (Schema && Schema->IsValid())
+		{
+			TestEqual(TEXT("Schema row action"), (*Schema)->GetStringField(TEXT("action")), TEXT("explicit_action"));
+
+			const TSharedPtr<FJsonObject>* ParamsSchema = nullptr;
+			TestTrue(TEXT("Param schema object exists"), (*Schema)->TryGetObjectField(TEXT("params"), ParamsSchema));
+			if (ParamsSchema && ParamsSchema->IsValid())
+			{
+				const TSharedPtr<FJsonObject>* TargetParam = nullptr;
+				TestTrue(TEXT("Target param exists"), (*ParamsSchema)->TryGetObjectField(TEXT("target"), TargetParam));
+				if (TargetParam && TargetParam->IsValid())
+				{
+					TestEqual(TEXT("Target param type"), (*TargetParam)->GetStringField(TEXT("type")), TEXT("string"));
+					TestTrue(TEXT("Target param required"), (*TargetParam)->GetBoolField(TEXT("required")));
+				}
 			}
 		}
 	}

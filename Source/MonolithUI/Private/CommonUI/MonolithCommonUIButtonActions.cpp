@@ -803,9 +803,9 @@ namespace MonolithCommonUIButton
 	// widget calls UUISubsystem::GetColor / GetFont / etc. at construct time and
 	// pipes the result into a target property's setter.
 	//
-	// PHASE 2 IMPLEMENTATION LEVEL: MVP-STUB.
+	// PHASE 2 IMPLEMENTATION LEVEL: validation/probe only.
 	//
-	// Why stub: writing K2 node graphs programmatically (UK2Node_CallFunction,
+	// Why validation-only: writing K2 node graphs programmatically (UK2Node_CallFunction,
 	// UK2Node_VariableSet, UK2Node_Knot for routing, ULinker::Resolve for the
 	// pin schema) is non-trivial — the canonical surface lives in
 	// MonolithBlueprint/Private/MonolithBlueprintNodeActions.cpp and would
@@ -814,8 +814,8 @@ namespace MonolithCommonUIButton
 	// the K2Node construction + pin-wiring inside MonolithUI. Either path
 	// inflates this dispatch beyond the time budget; the action is registered
 	// here so downstream callers don't 404, the Tokenforge availability probe
-	// works end-to-end, and a follow-up issue can land the BP-graph node-write
-	// surface.
+	// works end-to-end. Because no widget mutation is committed here, the handler
+	// returns a JSON-RPC error after validation instead of a success-shaped no-op.
 	//
 	// Tokenforge probe + -32011 error code path are FULLY implemented per the
 	// design spec — that's the critical bit for the Steam build's "optional dep
@@ -872,7 +872,7 @@ namespace MonolithCommonUIButton
 		if (!Loaded.bSuccess) return Loaded;
 
 		// Verify the target_property actually exists on the widget class — this
-		// catches typos before we ship the stub response, so a follow-up
+		// catches typos before the not-implemented response, so a follow-up
 		// full-impl can rely on the validated property path.
 		if (!FindFProperty<FProperty>(Target->GetClass(), FName(*TargetProperty)))
 		{
@@ -882,11 +882,10 @@ namespace MonolithCommonUIButton
 				-32602);
 		}
 
-		// --- MVP-STUB response --------------------------------------------------
 		// Action registered, params validated, Tokenforge probe ran. The actual
-		// BP-graph node-write into NativeConstruct is deferred — flagged with a
-		// machine-readable status field so callers know the difference between
-		// "everything wired" and "registered but not yet binding".
+		// BP-graph node-write into NativeConstruct is not implemented here, so
+		// return an error-shaped response that automation cannot mistake for a
+		// committed binding.
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 		Result->SetStringField(TEXT("wbp_path"), WbpPath);
 		Result->SetStringField(TEXT("widget_name"), WidgetName);
@@ -894,12 +893,17 @@ namespace MonolithCommonUIButton
 		Result->SetStringField(TEXT("token_key"), TokenKey);
 		Result->SetBoolField(TEXT("tokenforge_available"), true);
 		Result->SetStringField(TEXT("tokenforge_version"), TokenforgePlugin->GetDescriptor().VersionName);
-		Result->SetStringField(TEXT("status"), TEXT("stub"));
+		Result->SetBoolField(TEXT("bCommitted"), false);
+		Result->SetStringField(TEXT("status"), TEXT("not_implemented"));
+		Result->SetStringField(TEXT("category"), TEXT("NotImplemented"));
 		Result->SetStringField(TEXT("reason"),
-			TEXT("BP-graph node-write surface deferred. Param validation + Tokenforge probe FULL — "
-				 "node construction in NativeConstruct event graph awaits issue #2-10b follow-up. "
-				 "Action is registered + discoverable so callers can branch on status='stub'."));
-		return FMonolithActionResult::Success(Result);
+			TEXT("BP-graph node-write surface is not implemented in apply_token_binding. "
+				 "Param validation + Tokenforge probe ran, but no NativeConstruct graph binding was committed."));
+		FMonolithActionResult Err = FMonolithActionResult::Error(
+			TEXT("apply_token_binding validation passed, but BP-graph node-write is not implemented"),
+			-32012);
+		Err.WithErrorData(Result).WithRelatedAction(TEXT("apply_style_to_widget"));
+		return Err;
 	}
 
 	// ----- Phase 2 Item #12 — convert_textblock_to_common ----------------------
@@ -1460,16 +1464,16 @@ namespace MonolithCommonUIButton
 			Cat);
 
 		// Phase 2 Item #10 (2026-05-16 UI gap audit): apply_token_binding.
-		// MVP-STUB — Tokenforge probe + param validation are FULL; BP-graph
-		// node-write into NativeConstruct is deferred (issue #2-10b). Returns
-		// -32011 ErrTokenforgeRuntimeUnavailable when the plugin is absent.
+		// Validation/probe only: Tokenforge probe + param validation are FULL;
+		// BP-graph node-write into NativeConstruct returns -32012 NotImplemented.
+		// Returns -32011 ErrTokenforgeRuntimeUnavailable when the plugin is absent.
 		Registry.RegisterAction(
 			TEXT("ui"), TEXT("apply_token_binding"),
 			TEXT("Bind a widget property to a UI design token sourced from TokenforgeRuntime. "
 				 "Returns -32011 with {dep_name, widget_type, alternative, category} when Tokenforge is not enabled "
-				 "(mirrors the -32010 EffectSurface contract). Current implementation level: MVP-STUB — "
-				 "param validation and Tokenforge probe FULL, BP-graph node-write into NativeConstruct deferred. "
-				 "Successful response carries status='stub' so callers can branch on partial implementation."),
+				 "(mirrors the -32010 EffectSurface contract). Current implementation level: validation/probe only; "
+				 "param validation and Tokenforge probe run, but BP-graph node-write into NativeConstruct returns "
+				 "-32012 with error.data.status='not_implemented' so callers cannot mistake it for a committed binding."),
 			FMonolithActionHandler::CreateStatic(&HandleApplyTokenBinding),
 			FParamSchemaBuilder()
 				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path (alias: asset_path)"))

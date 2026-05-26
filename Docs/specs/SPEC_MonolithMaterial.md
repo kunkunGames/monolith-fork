@@ -75,7 +75,7 @@
 
 `MonolithMaterialBulkFillAdapter` registers under `FMonolithBulkFillRegistry` for the `material` namespace, exposed via the framework-level `bulk_fill_query("apply", ...)` and `describe_query("schema", ...)` dispatchers. Phase 5 of the MCP ergonomics rollout (design spec `Docs/plans/2026-05-11-monolith-mcp-ergonomics-design.md`).
 
-**Surface summary.** `bulk_fill_query("apply", target_namespace="material", target="<asset_path>", tree={...})` covers two distinct fanout paths: MIC parameter sheets (the RL_LWSkin_Array_DCR class of pain — 80-120 params per MIC) and a v1 audit-only wrapper over `build_material_graph`. `describe_query("schema", target_namespace="material", target="<asset_path>")` returns the writable parameter surface — groups, ranges, defaults, sampler types per MIC parent.
+**Surface summary.** `bulk_fill_query("apply", target_namespace="material", target="<asset_path>", tree={...})` covers two distinct fanout paths: MIC parameter sheets (the RL_LWSkin_Array_DCR class of pain — 80-120 params per MIC) and a v1 audit-only wrapper over `build_material_graph`. `describe_query("schema", target_namespace="material", target="<asset_path>")` returns the writable parameter surface — groups, ranges, defaults, sampler types per MIC parent. Omitting `target` returns the namespace-level material descriptor for planning.
 
 **fill_kind catalogue (2 — enumerated against `MonolithMaterialBulkFillAdapter.cpp`):**
 

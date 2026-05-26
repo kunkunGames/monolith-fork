@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
-// FMonolithDryRunGuard implementation. Phase 0 framework primitive.
+// FMonolithDryRunGuard implementation. This file only handles flag parsing and
+// report serialization; write prevention remains the caller's branch contract.
 
 #include "Reflection/MonolithDryRunGuard.h"
 #include "MonolithToolRegistry.h"

@@ -1,37 +1,117 @@
 // SPDX-License-Identifier: MIT
-// FMonolithReflectionWalker automation tests. Phase 0.
-//
-// Per plan §"No Placeholders": these 5 test cases are SHIPPED as
-// declared-but-deferred-body. Each test compiles, links, and is enumerable
-// by the editor's Automation tab. The pressure-test bodies (fixture asset
-// instantiation + JSON tree composition + post-write reflection comparison)
-// land in a Phase 0 polish task scheduled after the framework's first
-// adapter (Phase 1 blueprint pilot) provides a real call-site to exercise.
-//
-// This is NOT a TBD/placeholder: the test classes are real, the RunTest
-// signatures are real, the test names are stable. The bodies presently
-// return true so the test runner can enumerate them green — a follow-up
-// task replaces the body content. Reasoning per plan §"No Placeholders":
-// "test class STUBS with the named test methods (5 named tests with
-// empty RunTest() bodies that return true)" is the explicitly-authorised
-// deferred-body pattern.
+// FMonolithReflectionWalker automation tests.
 
 #include "Misc/AutomationTest.h"
-#include "Reflection/MonolithReflectionWalker.h"
-#include "Reflection/MonolithDryRunGuard.h"
+
 #include "MonolithBulkFillTypes.h"
+#include "MonolithReflectionWalkerTestTypes.h"
+#include "Reflection/MonolithDryRunGuard.h"
+#include "Reflection/MonolithReflectionWalker.h"
+
 #include "Dom/JsonObject.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-// ---------------------------------------------------------------------------
-// Test 1: WalkerWritesAllScalarsAndContainers
-// Per plan §12 Phase 0: fixture struct with one field per FProperty subtype
-// (int, float, FName, FString, FVector, TArray<int>, TMap<FName,FString>,
-// TSet<FName>, TSoftObjectPtr<UTexture2D>, EImageFormat enum, nested
-// FLinearColor). Asserts every bOk == true, post-write read-back via
-// ExportText_Direct matches input. Body deferred per "No Placeholders".
-// ---------------------------------------------------------------------------
+namespace
+{
+	FBulkFillSpec MakeSpec(bool bStrict = false)
+	{
+		FBulkFillSpec Spec;
+		Spec.TargetNamespace = TEXT("reflection_test");
+		Spec.TargetAsset = TEXT("/Temp/ReflectionWalkerTest");
+		Spec.bStrict = bStrict;
+		return Spec;
+	}
+
+	TSharedPtr<FJsonValue> JsonString(const FString& Value)
+	{
+		return MakeShared<FJsonValueString>(Value);
+	}
+
+	TSharedPtr<FJsonValue> JsonNumber(double Value)
+	{
+		return MakeShared<FJsonValueNumber>(Value);
+	}
+
+	TSharedPtr<FJsonValue> JsonObjectValue(const TSharedPtr<FJsonObject>& Object)
+	{
+		return MakeShared<FJsonValueObject>(Object);
+	}
+
+	TSharedPtr<FJsonValue> JsonArrayValue(const TArray<TSharedPtr<FJsonValue>>& Values)
+	{
+		return MakeShared<FJsonValueArray>(Values);
+	}
+
+	TSharedPtr<FJsonObject> MakeVectorObject(double X, double Y, double Z)
+	{
+		TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
+		Object->SetNumberField(TEXT("X"), X);
+		Object->SetNumberField(TEXT("Y"), Y);
+		Object->SetNumberField(TEXT("Z"), Z);
+		return Object;
+	}
+
+	TSharedPtr<FJsonObject> MakeNestedObject(int32 Count, const FString& Label)
+	{
+		TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
+		Object->SetNumberField(TEXT("NestedCount"), Count);
+		Object->SetStringField(TEXT("NestedLabel"), Label);
+		return Object;
+	}
+
+	TSharedPtr<FJsonObject> MakeMapObject()
+	{
+		TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
+		Object->SetStringField(TEXT("Alpha"), TEXT("One"));
+		Object->SetStringField(TEXT("Beta"), TEXT("Two"));
+		return Object;
+	}
+
+	TSharedPtr<FJsonObject> MakeFullWriteTree()
+	{
+		UEnum* Enum = StaticEnum<EMonolithReflectionWalkerTestEnum>();
+		const FString HeavyToken = Enum
+			? Enum->GetNameStringByValue(static_cast<int64>(EMonolithReflectionWalkerTestEnum::Heavy))
+			: TEXT("Heavy");
+
+		TSharedPtr<FJsonObject> Tree = MakeShared<FJsonObject>();
+		Tree->SetNumberField(TEXT("IntValue"), 42);
+		Tree->SetNumberField(TEXT("FloatValue"), 3.5);
+		Tree->SetStringField(TEXT("NameValue"), TEXT("Hero"));
+		Tree->SetStringField(TEXT("StringValue"), TEXT("Ready"));
+		Tree->SetObjectField(TEXT("VectorValue"), MakeVectorObject(1.0, 2.0, 3.0));
+		Tree->SetArrayField(TEXT("IntArray"), { JsonNumber(1), JsonNumber(2), JsonNumber(3) });
+		Tree->SetObjectField(TEXT("NameMap"), MakeMapObject());
+		Tree->SetArrayField(TEXT("NameSet"), { JsonString(TEXT("One")), JsonString(TEXT("Two")) });
+		Tree->SetStringField(TEXT("SoftTexture"), TEXT("Texture2D'/Engine/EngineResources/DefaultTexture.DefaultTexture'"));
+		Tree->SetStringField(TEXT("EnumValue"), HeavyToken);
+		Tree->SetObjectField(TEXT("Nested"), MakeNestedObject(7, TEXT("Inner")));
+		return Tree;
+	}
+
+	const FBulkFillFieldWrite* FindWrite(const FDryRunReport& Report, const FString& Path)
+	{
+		return Report.FieldWrites.FindByPredicate(
+			[&Path](const FBulkFillFieldWrite& Write)
+			{
+				return Write.Path == Path;
+			});
+	}
+
+	bool AllWritesOk(const FDryRunReport& Report)
+	{
+		for (const FBulkFillFieldWrite& Write : Report.FieldWrites)
+		{
+			if (!Write.bOk)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FMonolithReflectionWalkerScalarsAndContainersTest,
 	"Leviathan.Monolith.Reflection.WalkerWritesAllScalarsAndContainers",
@@ -39,20 +119,37 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMonolithReflectionWalkerScalarsAndContainersTest::RunTest(const FString& /*Parameters*/)
 {
-	// Phase 0 polish task: load /Game/Tests/Monolith/Reflection/S_BulkFillWalkerTestStruct,
-	// build a JSON tree covering int / float / FName / FString / FVector / TArray /
-	// TMap / TSet / TSoftObjectPtr / enum / nested struct, call WriteTree, assert.
-	TestTrue(TEXT("Phase 0 stub — body deferred to polish task post Phase 1"), true);
+	UMonolithReflectionWalkerTestObject* Object = NewObject<UMonolithReflectionWalkerTestObject>();
+	TestNotNull(TEXT("fixture object"), Object);
+
+	const FDryRunReport Report = FMonolithReflectionWalker::WriteTree(
+		MakeFullWriteTree(),
+		UMonolithReflectionWalkerTestObject::StaticClass(),
+		Object,
+		Object,
+		MakeSpec(false));
+
+	TestTrue(TEXT("committed write reports would_apply"), Report.bWouldApply);
+	TestEqual(TEXT("no write errors"), Report.Errors, 0);
+	TestTrue(TEXT("all field writes accepted"), AllWritesOk(Report));
+	TestTrue(TEXT("has top-level writes"), Report.FieldWrites.Num() >= 11);
+
+	TestEqual(TEXT("IntValue"), Object->IntValue, 42);
+	TestEqual(TEXT("FloatValue"), Object->FloatValue, 3.5f);
+	TestEqual(TEXT("NameValue"), Object->NameValue, FName(TEXT("Hero")));
+	TestEqual(TEXT("StringValue"), Object->StringValue, FString(TEXT("Ready")));
+	TestEqual(TEXT("VectorValue"), Object->VectorValue, FVector(1.0, 2.0, 3.0));
+	TestEqual(TEXT("IntArray count"), Object->IntArray.Num(), 3);
+	TestEqual(TEXT("IntArray[2]"), Object->IntArray.IsValidIndex(2) ? Object->IntArray[2] : INDEX_NONE, 3);
+	TestEqual(TEXT("NameMap Alpha"), Object->NameMap.FindRef(FName(TEXT("Alpha"))), FString(TEXT("One")));
+	TestTrue(TEXT("NameSet contains Two"), Object->NameSet.Contains(FName(TEXT("Two"))));
+	TestTrue(TEXT("SoftTexture path accepted"), Object->SoftTexture.ToSoftObjectPath().ToString().Contains(TEXT("/Engine/EngineResources/DefaultTexture")));
+	TestEqual(TEXT("EnumValue"), Object->EnumValue, EMonolithReflectionWalkerTestEnum::Heavy);
+	TestEqual(TEXT("NestedCount"), Object->Nested.NestedCount, 7);
+	TestEqual(TEXT("NestedLabel"), Object->Nested.NestedLabel, FString(TEXT("Inner")));
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Test 2: WalkerRejectsTypeCoerceTrap
-// Per plan §12 Phase 0: feed a tree where a string field is in JSON-object
-// position. Expect walker to flag bOk == false + Reason mentions type mismatch,
-// NOT crash. Guards against the FJsonValueString empty-not-null gotcha
-// (UE57Gotchas.md §JSON).
-// ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FMonolithReflectionWalkerRejectsTypeCoerceTrapTest,
 	"Leviathan.Monolith.Reflection.WalkerRejectsTypeCoerceTrap",
@@ -60,16 +157,34 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMonolithReflectionWalkerRejectsTypeCoerceTrapTest::RunTest(const FString& /*Parameters*/)
 {
-	TestTrue(TEXT("Phase 0 stub — body deferred to polish task post Phase 1"), true);
+	UMonolithReflectionWalkerTestObject* Object = NewObject<UMonolithReflectionWalkerTestObject>();
+	Object->StringValue = TEXT("Original");
+
+	TSharedPtr<FJsonObject> BadStringObject = MakeShared<FJsonObject>();
+	BadStringObject->SetStringField(TEXT("unexpected"), TEXT("object"));
+
+	TSharedPtr<FJsonObject> Tree = MakeShared<FJsonObject>();
+	Tree->SetObjectField(TEXT("StringValue"), BadStringObject);
+
+	const FDryRunReport Report = FMonolithReflectionWalker::WriteTree(
+		Tree,
+		UMonolithReflectionWalkerTestObject::StaticClass(),
+		Object,
+		Object,
+		MakeSpec(false));
+
+	const FBulkFillFieldWrite* Write = FindWrite(Report, TEXT("StringValue"));
+	TestNotNull(TEXT("StringValue write exists"), Write);
+	if (Write)
+	{
+		TestFalse(TEXT("object is rejected for scalar field"), Write->bOk);
+		TestTrue(TEXT("reason explains scalar expectation"), Write->Reason.Contains(TEXT("expected scalar")));
+	}
+	TestEqual(TEXT("StringValue remains unchanged"), Object->StringValue, FString(TEXT("Original")));
+	TestEqual(TEXT("one error"), Report.Errors, 1);
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Test 3: WalkerStrictModeBlocksUnknownKey
-// Per plan §12 Phase 0: tree has one bogus key "NotAFieldOnThisStruct": 42.
-// With strict=false, expect FieldWrites entry with bOk == false + bWouldApply
-// == true. With strict=true, expect bWouldApply == false.
-// ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FMonolithReflectionWalkerStrictModeBlocksUnknownKeyTest,
 	"Leviathan.Monolith.Reflection.WalkerStrictModeBlocksUnknownKey",
@@ -77,16 +192,31 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMonolithReflectionWalkerStrictModeBlocksUnknownKeyTest::RunTest(const FString& /*Parameters*/)
 {
-	TestTrue(TEXT("Phase 0 stub — body deferred to polish task post Phase 1"), true);
+	UMonolithReflectionWalkerTestObject* Object = NewObject<UMonolithReflectionWalkerTestObject>();
+
+	TSharedPtr<FJsonObject> Tree = MakeShared<FJsonObject>();
+	Tree->SetNumberField(TEXT("NotAFieldOnThisStruct"), 42);
+
+	const FDryRunReport PermissiveReport = FMonolithReflectionWalker::WriteTree(
+		Tree,
+		UMonolithReflectionWalkerTestObject::StaticClass(),
+		Object,
+		Object,
+		MakeSpec(false));
+	TestEqual(TEXT("permissive unknown key error count"), PermissiveReport.Errors, 1);
+	TestTrue(TEXT("permissive mode still reports would_apply"), PermissiveReport.bWouldApply);
+
+	const FDryRunReport StrictReport = FMonolithReflectionWalker::WriteTree(
+		Tree,
+		UMonolithReflectionWalkerTestObject::StaticClass(),
+		Object,
+		Object,
+		MakeSpec(true));
+	TestEqual(TEXT("strict unknown key error count"), StrictReport.Errors, 1);
+	TestFalse(TEXT("strict mode blocks apply"), StrictReport.bWouldApply);
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Test 4: WalkerEnumMissReportsTypo
-// Per plan §12 Phase 0: tree sets an FEnumProperty to "Constnt" (typo).
-// Walker calls UEnum::GetValueByNameString which returns INDEX_NONE; FieldWrite
-// carries bOk == false, Reason mentions enum-not-found.
-// ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FMonolithReflectionWalkerEnumMissReportsTypoTest,
 	"Leviathan.Monolith.Reflection.WalkerEnumMissReportsTypo",
@@ -94,16 +224,31 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMonolithReflectionWalkerEnumMissReportsTypoTest::RunTest(const FString& /*Parameters*/)
 {
-	TestTrue(TEXT("Phase 0 stub — body deferred to polish task post Phase 1"), true);
+	UMonolithReflectionWalkerTestObject* Object = NewObject<UMonolithReflectionWalkerTestObject>();
+	Object->EnumValue = EMonolithReflectionWalkerTestEnum::Light;
+
+	TSharedPtr<FJsonObject> Tree = MakeShared<FJsonObject>();
+	Tree->SetStringField(TEXT("EnumValue"), TEXT("Constnt"));
+
+	const FDryRunReport Report = FMonolithReflectionWalker::WriteTree(
+		Tree,
+		UMonolithReflectionWalkerTestObject::StaticClass(),
+		Object,
+		Object,
+		MakeSpec(false));
+
+	const FBulkFillFieldWrite* Write = FindWrite(Report, TEXT("EnumValue"));
+	TestNotNull(TEXT("EnumValue write exists"), Write);
+	if (Write)
+	{
+		TestFalse(TEXT("typo enum token rejected"), Write->bOk);
+		TestTrue(TEXT("reason reports enum miss"), Write->Reason.Contains(TEXT("not found")));
+	}
+	TestEqual(TEXT("EnumValue remains unchanged"), Object->EnumValue, EMonolithReflectionWalkerTestEnum::Light);
+	TestEqual(TEXT("one enum error"), Report.Errors, 1);
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Test 5: DryRunNoSideEffects
-// Per plan §12 Phase 0: walker called via InspectTree against a populated
-// container; expect zero mutations to Container (verify via pre/post
-// ExportText_Direct comparison).
-// ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FMonolithReflectionWalkerDryRunNoSideEffectsTest,
 	"Leviathan.Monolith.Reflection.DryRunNoSideEffects",
@@ -111,7 +256,37 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMonolithReflectionWalkerDryRunNoSideEffectsTest::RunTest(const FString& /*Parameters*/)
 {
-	TestTrue(TEXT("Phase 0 stub — body deferred to polish task post Phase 1"), true);
+	UMonolithReflectionWalkerTestObject* Object = NewObject<UMonolithReflectionWalkerTestObject>();
+	Object->IntValue = 5;
+	Object->StringValue = TEXT("Before");
+	Object->VectorValue = FVector(9.0, 8.0, 7.0);
+	Object->IntArray = { 9, 8 };
+	Object->NameMap.Add(FName(TEXT("Before")), TEXT("Value"));
+	Object->NameSet.Add(FName(TEXT("Before")));
+	Object->EnumValue = EMonolithReflectionWalkerTestEnum::Light;
+	Object->Nested.NestedCount = 1;
+	Object->Nested.NestedLabel = TEXT("BeforeNested");
+
+	const FDryRunReport Report = FMonolithReflectionWalker::InspectTree(
+		MakeFullWriteTree(),
+		UMonolithReflectionWalkerTestObject::StaticClass(),
+		Object,
+		MakeSpec(false));
+
+	TestFalse(TEXT("dry-run never applies"), Report.bWouldApply);
+	TestEqual(TEXT("dry-run no write errors"), Report.Errors, 0);
+	TestTrue(TEXT("dry-run reports accepted writes"), AllWritesOk(Report));
+
+	TestEqual(TEXT("IntValue unchanged"), Object->IntValue, 5);
+	TestEqual(TEXT("StringValue unchanged"), Object->StringValue, FString(TEXT("Before")));
+	TestEqual(TEXT("VectorValue unchanged"), Object->VectorValue, FVector(9.0, 8.0, 7.0));
+	TestEqual(TEXT("IntArray count unchanged"), Object->IntArray.Num(), 2);
+	TestEqual(TEXT("IntArray[0] unchanged"), Object->IntArray.IsValidIndex(0) ? Object->IntArray[0] : INDEX_NONE, 9);
+	TestEqual(TEXT("NameMap unchanged"), Object->NameMap.FindRef(FName(TEXT("Before"))), FString(TEXT("Value")));
+	TestTrue(TEXT("NameSet unchanged"), Object->NameSet.Contains(FName(TEXT("Before"))));
+	TestEqual(TEXT("EnumValue unchanged"), Object->EnumValue, EMonolithReflectionWalkerTestEnum::Light);
+	TestEqual(TEXT("NestedCount unchanged"), Object->Nested.NestedCount, 1);
+	TestEqual(TEXT("NestedLabel unchanged"), Object->Nested.NestedLabel, FString(TEXT("BeforeNested")));
 	return true;
 }
 

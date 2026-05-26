@@ -80,6 +80,9 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 	}
 
 	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("contract"), TEXT("search_only_not_write_schema"));
+	Result->SetStringField(TEXT("mutation_validation"),
+		TEXT("Use describe.schema, describe.action_schema, or the target action schema before mutating any search result."));
 	Result->SetArrayField(TEXT("results"), ResultsArr);
 	Result->SetNumberField(TEXT("count"), SearchResults.Num());
 	return FMonolithActionResult::Success(Result);
@@ -88,8 +91,8 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 TSharedPtr<FJsonObject> FProjectSearchAction::GetSchema()
 {
 	return FParamSchemaBuilder()
-		.Required(TEXT("query"), TEXT("string"), TEXT("FTS5 search query (supports AND, OR, NOT, prefix*)"))
+		.Required(TEXT("query"), TEXT("string"), TEXT("FTS5 search query (supports AND, OR, NOT, prefix*). Search results are not writable schema."))
 		.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum results to return"), TEXT("50"))
-		.Optional(TEXT("include_content"), TEXT("bool"), TEXT("Include variable/parameter/DataTable/actor/supplemental matches"), TEXT("true"))
+		.Optional(TEXT("include_content"), TEXT("bool"), TEXT("Include variable/parameter/DataTable/actor/supplemental matches for discovery only"), TEXT("true"))
 		.Build();
 }

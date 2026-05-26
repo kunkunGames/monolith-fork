@@ -254,6 +254,40 @@ static FString BuildFindSearchMetadataText(const FMonolithActionInfo& Info)
 	return FString::Join(Parts, TEXT(" "));
 }
 
+static TSharedPtr<FJsonObject> MakeDiscoverActionRow(const FMonolithActionInfo& ActionInfo)
+{
+	TSharedPtr<FJsonObject> ActionObj = MakeShared<FJsonObject>();
+	ActionObj->SetStringField(TEXT("action"), ActionInfo.Action);
+	ActionObj->SetStringField(TEXT("description"), ActionInfo.Description);
+	ActionObj->SetObjectField(TEXT("execution_policy"), ActionInfo.ExecutionPolicy.ToJson());
+	if (!ActionInfo.Category.IsEmpty())
+	{
+		ActionObj->SetStringField(TEXT("category"), ActionInfo.Category);
+	}
+	if (!ActionInfo.SearchMetadata.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> SearchObj = MakeShared<FJsonObject>();
+		if (ActionInfo.SearchMetadata.Keywords.Num() > 0)
+		{
+			SearchObj->SetArrayField(TEXT("keywords"), StringArrayToJson(ActionInfo.SearchMetadata.Keywords));
+		}
+		if (ActionInfo.SearchMetadata.Aliases.Num() > 0)
+		{
+			SearchObj->SetArrayField(TEXT("aliases"), StringArrayToJson(ActionInfo.SearchMetadata.Aliases));
+		}
+		if (ActionInfo.SearchMetadata.Examples.Num() > 0)
+		{
+			SearchObj->SetArrayField(TEXT("examples"), StringArrayToJson(ActionInfo.SearchMetadata.Examples));
+		}
+		ActionObj->SetObjectField(TEXT("search_metadata"), SearchObj);
+	}
+	if (ActionInfo.ParamSchema.IsValid())
+	{
+		ActionObj->SetObjectField(TEXT("params"), ActionInfo.ParamSchema);
+	}
+	return ActionObj;
+}
+
 static FString GetBrowserAccessMode(const UMonolithSettings* Settings)
 {
 	return (!Settings || Settings->bEnableBrowserLoopbackCors) ? TEXT("loopback_only") : TEXT("disabled");
@@ -571,12 +605,15 @@ void FMonolithCoreTools::RegisterAll()
 	{
 		Registry.RegisterAction(
 			TEXT("monolith"), TEXT("discover"),
-			TEXT("List available tool namespaces and their actions. Pass namespace (and optional category) to filter."),
+			TEXT("List available tool namespaces, actions, or an exact action schema. Pass namespace/action/mode to narrow the live registry output."),
 			FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleDiscover),
 			FParamSchemaBuilder()
 				.EnableValidation()
 				.Optional(TEXT("namespace"), TEXT("string"), TEXT("Optional: filter to a specific namespace"))
+				.Optional(TEXT("action"), TEXT("string"), TEXT("Optional: filter to one action inside namespace. Implies mode='schema' when mode is omitted."))
 				.Optional(TEXT("category"), TEXT("string"), TEXT("Optional: filter actions within the namespace by category (e.g. 'CommonUI' inside 'ui')"))
+				.Optional(TEXT("mode"), TEXT("string"), TEXT("summary for namespace counts, actions for namespace action rows, schema for action param schemas."), TEXT("summary"))
+				.Enum(TEXT("mode"), { TEXT("summary"), TEXT("actions"), TEXT("schema") })
 				.Build()
 		);
 	}
@@ -990,24 +1027,55 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
 	FString FilterNamespace;
+	FString FilterAction;
 	FString FilterCategory;
+	FString Mode;
 	if (Params.IsValid())
 	{
 		if (Params->HasField(TEXT("namespace")) && !Params->TryGetStringField(TEXT("namespace"), FilterNamespace))
 		{
 			return FMonolithActionResult::Error(TEXT("Parameter 'namespace' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		}
+		if (Params->HasField(TEXT("action")) && !Params->TryGetStringField(TEXT("action"), FilterAction))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'action' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		if (Params->HasField(TEXT("category")) && !Params->TryGetStringField(TEXT("category"), FilterCategory))
 		{
 			return FMonolithActionResult::Error(TEXT("Parameter 'category' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		}
+		if (Params->HasField(TEXT("mode")) && !Params->TryGetStringField(TEXT("mode"), Mode))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'mode' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+
+	FilterNamespace.TrimStartAndEndInline();
+	FilterAction.TrimStartAndEndInline();
+	FilterCategory.TrimStartAndEndInline();
+	Mode.TrimStartAndEndInline();
+	Mode.ToLowerInline();
+
+	if (Mode.IsEmpty())
+	{
+		Mode = FilterNamespace.IsEmpty() ? TEXT("summary") : (FilterAction.IsEmpty() ? TEXT("actions") : TEXT("schema"));
+	}
+	if (Mode != TEXT("summary") && Mode != TEXT("actions") && Mode != TEXT("schema"))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Parameter 'mode' must be one of summary, actions, schema; got '%s'"), *Mode),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (!FilterAction.IsEmpty() && FilterNamespace.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'action' requires 'namespace'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	TArray<FString> Namespaces = Registry.GetNamespaces();
 
-	if (!FilterNamespace.IsEmpty())
+	if (!FilterNamespace.IsEmpty() && Mode != TEXT("summary"))
 	{
 		// Filter to specific namespace — return detailed action list
 		TArray<FMonolithActionInfo> Actions = Registry.GetActions(FilterNamespace);
@@ -1073,56 +1141,61 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 				return Info.Category.Equals(FilterCategory, ESearchCase::IgnoreCase);
 			});
 		}
+		if (!FilterAction.IsEmpty())
+		{
+			Actions = Actions.FilterByPredicate([&FilterAction](const FMonolithActionInfo& Info)
+			{
+				return Info.Action.Equals(FilterAction, ESearchCase::IgnoreCase);
+			});
+			if (Actions.Num() == 0)
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(TEXT("Unknown action: %s.%s"), *FilterNamespace, *FilterAction),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
 
 		Result->SetStringField(TEXT("namespace"), FilterNamespace);
+		Result->SetStringField(TEXT("mode"), Mode);
 		if (!FilterCategory.IsEmpty())
 		{
 			Result->SetStringField(TEXT("category"), FilterCategory);
 		}
-		TArray<TSharedPtr<FJsonValue>> ActionArray;
-		ActionArray.Reserve(Actions.Num());
-		for (const FMonolithActionInfo& ActionInfo : Actions)
+		if (!FilterAction.IsEmpty())
 		{
-			TSharedPtr<FJsonObject> ActionObj = MakeShared<FJsonObject>();
-			ActionObj->SetStringField(TEXT("action"), ActionInfo.Action);
-			ActionObj->SetStringField(TEXT("description"), ActionInfo.Description);
-			ActionObj->SetObjectField(TEXT("execution_policy"), ActionInfo.ExecutionPolicy.ToJson());
-			if (!ActionInfo.Category.IsEmpty())
-			{
-				ActionObj->SetStringField(TEXT("category"), ActionInfo.Category);
-			}
-			if (!ActionInfo.SearchMetadata.IsEmpty())
-			{
-				TSharedPtr<FJsonObject> SearchObj = MakeShared<FJsonObject>();
-				if (ActionInfo.SearchMetadata.Keywords.Num() > 0)
-				{
-					SearchObj->SetArrayField(TEXT("keywords"), StringArrayToJson(ActionInfo.SearchMetadata.Keywords));
-				}
-				if (ActionInfo.SearchMetadata.Aliases.Num() > 0)
-				{
-					SearchObj->SetArrayField(TEXT("aliases"), StringArrayToJson(ActionInfo.SearchMetadata.Aliases));
-				}
-				if (ActionInfo.SearchMetadata.Examples.Num() > 0)
-				{
-					SearchObj->SetArrayField(TEXT("examples"), StringArrayToJson(ActionInfo.SearchMetadata.Examples));
-				}
-				ActionObj->SetObjectField(TEXT("search_metadata"), SearchObj);
-			}
-			if (ActionInfo.ParamSchema.IsValid())
-			{
-				ActionObj->SetObjectField(TEXT("params"), ActionInfo.ParamSchema);
-			}
-			ActionArray.Add(MakeShared<FJsonValueObject>(ActionObj));
+			Result->SetStringField(TEXT("action"), Actions[0].Action);
+			Result->SetObjectField(TEXT("schema"), MakeDiscoverActionRow(Actions[0]));
 		}
-		Result->SetArrayField(TEXT("actions"), ActionArray);
+		else
+		{
+			TArray<TSharedPtr<FJsonValue>> ActionArray;
+			ActionArray.Reserve(Actions.Num());
+			for (const FMonolithActionInfo& ActionInfo : Actions)
+			{
+				ActionArray.Add(MakeShared<FJsonValueObject>(MakeDiscoverActionRow(ActionInfo)));
+			}
+			Result->SetArrayField(TEXT("actions"), ActionArray);
+		}
 	}
 	else
 	{
 		// Return all namespaces with action counts
+		Result->SetStringField(TEXT("mode"), TEXT("summary"));
+		if (!FilterNamespace.IsEmpty())
+		{
+			Result->SetStringField(TEXT("namespace"), FilterNamespace);
+		}
 		TArray<TSharedPtr<FJsonValue>> NsArray;
 		NsArray.Reserve(Namespaces.Num());
+		bool bMatchedNamespace = false;
 		for (const FString& Ns : Namespaces)
 		{
+			if (!FilterNamespace.IsEmpty() && !Ns.Equals(FilterNamespace, ESearchCase::IgnoreCase))
+			{
+				continue;
+			}
+
+			bMatchedNamespace = true;
 			TArray<FString> Actions = Registry.GetActionNames(Ns);
 			TSharedPtr<FJsonObject> NsObj = MakeShared<FJsonObject>();
 			NsObj->SetStringField(TEXT("namespace"), Ns);
@@ -1145,6 +1218,11 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		OptionalArray.Reserve(OptionalModules.Num());
 		for (const FKnownOptionalModule& Mod : OptionalModules)
 		{
+			if (!FilterNamespace.IsEmpty() && !Mod.Namespace.Equals(FilterNamespace, ESearchCase::IgnoreCase))
+			{
+				continue;
+			}
+
 			// Skip if this namespace already has registered actions (it's active)
 			if (Namespaces.Contains(Mod.Namespace))
 			{
@@ -1172,6 +1250,13 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 				: FString::Printf(TEXT("Enable in Project Settings > Plugins > Monolith > Modules > Optional (%s), then restart the editor."), *Mod.SettingsField));
 
 			OptionalArray.Add(MakeShared<FJsonValueObject>(OptObj));
+		}
+
+		if (!FilterNamespace.IsEmpty() && !bMatchedNamespace && OptionalArray.Num() == 0)
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Unknown namespace: %s"), *FilterNamespace),
+				FMonolithJsonUtils::ErrInvalidParams);
 		}
 
 		if (OptionalArray.Num() > 0)
