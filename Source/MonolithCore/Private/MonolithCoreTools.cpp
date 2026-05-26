@@ -808,7 +808,7 @@ void FMonolithCoreTools::RegisterAll()
 		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleSetNotificationSettings),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Optional(TEXT("settings"), TEXT("object"), TEXT("Object of notification preference booleans to update"))
+			.Required(TEXT("settings"), TEXT("object"), TEXT("Object of notification preference booleans to update"))
 			.Build()
 	);
 
