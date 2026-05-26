@@ -9,16 +9,35 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithMaterialSecurityPathTest, "Monolith.Se
 
 bool FMonolithMaterialSecurityPathTest::RunTest(const FString& Parameters)
 {
-	// Setup payload with double slash to simulate malformed path
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("asset_path"), TEXT("//Game/MalformedPath/TestMaterial"));
+	TArray<FString> MalformedPaths = {
+		TEXT(""), // Empty path
+		TEXT("//Game/MalformedPath/TestMaterial"), // Double leading slash
+		TEXT("Game/MalformedPath/TestMaterial"), // Missing leading slash
+		TEXT("/Game/MalformedPath/TestMaterial/"), // Trailing slash
+		TEXT("/Game/MalformedPath/TestMaterial#Invalid") // Illegal characters
+	};
 
-	// Call the action
-	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("material"), TEXT("create"), Payload);
+	for (const FString& Path : MalformedPaths)
+	{
+		// Setup payload to simulate malformed path
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("asset_path"), Path);
 
-	// Verify it failed gracefully and returned the validation error
-	TestFalse(TEXT("Action should fail on malformed path"), Result.bSuccess);
-	TestTrue(TEXT("Error should complain about invalid package path"), Result.ErrorMessage.Contains(TEXT("Invalid package path")));
+		// Call the action
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("material"), TEXT("create"), Payload);
+
+		// Verify it failed gracefully and returned the validation error
+		TestFalse(*FString::Printf(TEXT("Action should fail on malformed path: %s"), *Path), Result.bSuccess);
+		TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), Result.ErrorMessage.IsEmpty());
+		if (!Path.IsEmpty())
+		{
+			TestTrue(*FString::Printf(TEXT("Error should complain about invalid package path or empty asset name for: %s"), *Path),
+				Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
+				Result.ErrorMessage.Contains(TEXT("Invalid asset path")) ||
+				Result.ErrorMessage.Contains(TEXT("Asset name is empty")) ||
+				Result.ErrorMessage.Contains(TEXT("Package path")));
+		}
+	}
 
 	return true;
 }

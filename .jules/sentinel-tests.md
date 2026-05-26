@@ -37,3 +37,8 @@ Prevention: Extract targeted logic into public static helper functions so they c
 **Target:** MonolithLevelSequence / MonolithMovieRenderQueueActions / SaveQueue
 **Learning:** Security bounds testing for package paths (`ValidatePackagePath`) must be verified on the real action namespace and after earlier action preconditions have been satisfied. MRQ save_queue path tests must run only when `WITH_MONOLITH_MRQ` is enabled and must seed the current queue with a job before asserting malformed-path errors.
 **Prevention:** Future Sentinel tasks checking optional/domain actions with package writes must confirm the action namespace, optional-dependency gate, and earlier resource preconditions before treating a failing action result as path-validation coverage.
+
+## 2026-05-24 - Comprehensive Path Testing for Material Actions
+**Target:** MonolithMaterial / create / ValidatePackagePath
+**Learning:** Checking a single malformed state (`//Game/...`) in Material actions is insufficient. Path validation testing must explicitly iterate multiple malicious/boundary states (empty, missing slash, trailing slash, invalid characters) using a parameter array for comprehensive security regression.
+**Prevention:** Future tests targeting path validation must employ `TArray<FString> MalformedPaths` containing empty path, double slash, missing slash, trailing slash, and illegal character test cases, and iterate over them ensuring graceful failure.
