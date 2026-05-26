@@ -39,16 +39,19 @@ Agents often create temporary files (such as `pr_body.txt`, helper Python script
 ## 7. Single Responsibility
 Agents must keep PRs tightly scoped. Do not mix unrelated security, test, spec, performance, release, refactor, and prompt-governance work in one PR. If the only remaining useful change requires bundling unrelated concerns, stop without PR instead.
 
-## 8. Public Action Contracts
+## 8. Unauthorized PR Operations
+Agents must not close, merge, or delete pull requests or branches unless explicitly authorized to do so by the user. If you encounter a superseded, redundant, or conflicting PR/branch, you should stop without PR (no-op) instead of taking destructive actions to "clean up" the queue.
+
+## 9. Public Action Contracts
 Agents performing routine refactoring, performance optimization (Bolt), or hygiene (Curator) tasks must not modify public action contracts or JSON parameter schemas without explicit justification. If a behavior change is not the primary goal, do not alter expected inputs/outputs just to simplify code.
 
-## 9. Minimum PR Value Threshold
+## 10. Minimum PR Value Threshold
 Passing static CI is not enough to make a scheduled PR worth merging; a PR must also be non-overlapping, current after rebase, and clearly more valuable than a no-op. Stop without PR if the only available change is a micro-edit against shared coordination docs, action-count docs, or release docs where multiple agents often race.
 
-## 10. External CI Limits
+## 11. External CI Limits
 If a GitHub Actions CI check fails with a billing-related error (e.g., "recent account payments have failed" or "spending limit needs to be increased"), recognize that this is an external repository limit, not a code defect. Do not attempt to fix it via code changes; simply inform the user.
 
-## 11. Index Freshness and CRG Cache
+## 12. Index Freshness and CRG Cache
 Project and source indexing must keep their CRG projection/cache data in sync. Successful ProjectIndex and EngineSource indexing completion rebuilds the matching CRG projection/cache automatically; if `project.health` or `source.health` reports stale CRG parity, run the matching `repair_crg_cache` action with execute enabled.
 
 After a successful C++ build, Live Coding, or hot reload, EngineSource.db should refresh through incremental project source indexing. If the post-build reload hook did not fire or the editor was unavailable, run `source.trigger_project_reindex` once the existing EngineSource.db bootstrap is present.
@@ -59,7 +62,7 @@ Project search is content-inclusive by default. Live `project.search` and offlin
 
 `project repair_fts --target=all` covers all seven project FTS tables. Prefer a dry-run first on the live editor DB; use `--execute` only when repair is intended and the DB is writable, or verify write behavior on a copied DB.
 
-## 12. Offline Source/Bridge Usage
+## 13. Offline Source/Bridge Usage
 
 When the Monolith MCP server or Unreal Editor is not running, agents can use `Binaries/monolith_query.exe` directly. The source namespace covers C++ search, references, callers, callees, review context, risk score, and CRG-compatible graph search. The bridge namespace links assets and source symbols through `bridge search_asset_symbols`.
 
@@ -73,7 +76,7 @@ Binaries\monolith_query.exe bridge search_asset_symbols --symbol=UObject --limit
 
 `source search_crg_graph` reads `Saved/graph.db` and uses `nodes_fts` before falling back to LIKE. `bridge search_asset_symbols` is read-only, opens `Saved/ProjectIndex.db` and `Saved/EngineSource.db`, and returns heuristic links with `confidence`, `reasons`, `asset`, `symbol`, `warnings`, `count`, `truncated`, and `lexical_only`.
 
-## 12a. Offline Project Search Usage
+## 13a. Offline Project Search Usage
 
 Use offline project search when MCP/editor access is down but `Saved/ProjectIndex.db` is present:
 
@@ -86,7 +89,7 @@ Binaries\monolith_query.exe project repair_fts --target=all
 
 Default `--include-content=true` is the high-recall discovery mode. Use `--include-content=false` for bridge/source context, asset identity matching, or noisy name/type lookup. Do not duplicate `EngineSource.db` source symbols or `graph.db` nodes into `ProjectIndex.db`; use `source`/`bridge` actions for source relationships.
 
-## 13. MCP Connection Recovery in Go Checkout
+## 14. MCP Connection Recovery in Go Checkout
 
 For Go checkout work that needs editor-backed Monolith actions, use the configured MCP client connection to `http://localhost:9316/mcp` and confirm it with `monolith_status()` or the active MCP client's health check before calling editor actions. If the MCP endpoint is unreachable or the transport fails, start the project headless editor wrapper and reconnect the existing Monolith proxy/client instead of bypassing Monolith:
 
@@ -96,7 +99,7 @@ D:\P4\game\BatchFiles\RunHeadlessEditor.bat
 
 Wait for `localhost:9316` to listen, reconnect to `http://localhost:9316/mcp`, then re-run `monolith_status()` before using `monolith_find`, `monolith_discover`, or namespace actions. If the endpoint still cannot connect after the editor starts, inspect `D:\P4\game\Saved\HeadlessMcp\Logs\HeadlessEditor-*.log` and the Monolith proxy/editor invocation logs, report the concrete blocker, and limit fallback work to read-only `Binaries\monolith_query.exe` source/project/bridge queries while editor-only actions remain blocked.
 
-## 14. Tool Invocation Daily Logs
+## 15. Tool Invocation Daily Logs
 
 The daily invocation log contract is documented in `Docs/specs/SPEC_MonolithToolInvocationLogs.md`. When a checkout includes the implementation, the files are local diagnostics only and must not be treated as canonical tool output.
 

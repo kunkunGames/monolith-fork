@@ -112,3 +112,9 @@
 **Learning:** Despite the rule against random suffixes, agents sometimes append them. An exact match check fails to identify these overlapping branches.
 **Prevention:** Updated `AGENTS.md` to explicitly require agents to evaluate prefix matches (e.g., `jules/agent/module/topic`) instead of exact matches when checking for branch collisions.
 **Avoid:** Proceeding with work just because a `git branch -r` exact match fails, without checking if a branch with the same intent prefix exists.
+
+## 2026-05-26 - Forbid autonomous PR/branch deletion
+**Coordination issue:** Agents were attempting to close, merge, or delete PRs or branches when finding overlaps during duplicate checks, assuming autonomous cleanup was required.
+**Learning:** Autonomous PR lifecycle management (closing/deleting) is destructive and unsafe without explicit authority, leading to accidental loss of valid context or branches.
+**Prevention:** Added 'Unauthorized PR Operations' rule to AGENTS.md explicitly forbidding agents from closing, merging, or deleting PRs or branches unless authorized.
+**Avoid:** Attempting to close or delete superseded or overlapping branches; use no-op (stop without PR) instead.
