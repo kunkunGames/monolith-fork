@@ -6238,7 +6238,14 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveSyncMarker(const TS
 
 	if (bHasIndex)
 	{
-		int32 MarkerIndex = static_cast<int32>(Params->GetNumberField(TEXT("marker_index")));
+		double TempIndex;
+		if (!Params->TryGetNumberField(TEXT("marker_index"), TempIndex))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'marker_index' must be a number"));
+		}
+		int32 MarkerIndex = static_cast<int32>(TempIndex);
+
 		if (!Seq->AuthoredSyncMarkers.IsValidIndex(MarkerIndex))
 		{
 			GEditor->EndTransaction();
@@ -6249,7 +6256,12 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveSyncMarker(const TS
 	}
 	else
 	{
-		FString MarkerNameStr = Params->GetStringField(TEXT("marker_name"));
+		FString MarkerNameStr;
+		if (!Params->TryGetStringField(TEXT("marker_name"), MarkerNameStr))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Parameter 'marker_name' must be a string"));
+		}
 		FName NameToRemove(*MarkerNameStr);
 
 		TArray<FName> NamesToRemove;
