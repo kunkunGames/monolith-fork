@@ -17,6 +17,14 @@
 | GitHub PR #469 diff | PASS: PR touched only `.jules/agent-coordination.md` and `.jules/marshal.md`; current branch contains an expanded equivalent coordination map |
 | Upstream 0.16.0 overlap audit | PASS: overlap files were reviewed in Core HTTP initialize instructions, proxy initialize instructions, Editor preview/inspection actions, Build.cs dependencies, release script excludes, docs, and descriptor counts |
 
+Overlap metrics:
+
+| Metric | Value |
+|---|---:|
+| Upstream files changed from merge base to `tumourlove/master` | 22 |
+| Fork-custom files changed from merge base to pre-upstream fork parent | 806 |
+| Files touched by both upstream and fork-custom deltas | 12 |
+
 ## 2. Action Registry Deduplication
 
 Command:
@@ -64,6 +72,7 @@ Result: PASS for no-link compile validation; full link was blocked by an externa
 Notes:
 
 - `UnrealBuildTool ... -NoLink` reported `Result: Succeeded`.
+- Continuation audit reran `UnrealBuildTool ... -NoLink` on 2026-05-27 and reported `Target is up to date` plus `Result: Succeeded`.
 - A full link attempt after the audit was blocked because running `UnrealEditor.exe` PID `51732` held `D:\P4\game\Binaries\Win64\UnrealEditor-GoGame.dll`. This was a file-lock/link issue, not a C++ compile error.
 - Non-blocking warning: Monolith/Go depend on deprecated `MassEntity`.
 
@@ -115,3 +124,29 @@ Covered high-risk 0.16 paths:
 - `Monolith.Editor.Preview.CaptureStaticMesh`
 - `Monolith.Editor.Preview.CaptureSkeletalMesh`
 - `Monolith.Editor.Preview.CaptureWidget`
+
+## 7. Persistence Regression Automation
+
+Commands:
+
+```powershell
+& "$engineRoot\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "D:\P4\game\GO.uproject" -NullRHI -NoSound -Unattended -NoSplash -NoP4 -ExecCmds="Automation RunTests Monolith.Mesh.Persistence; Quit" -TestExit="Automation Test Queue Empty" -ReportExportPath="D:\P4\game\Saved\AutomationReports\monolith-merge-persistence-current"
+& "$engineRoot\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "D:\P4\game\GO.uproject" -NullRHI -NoSound -Unattended -NoSplash -NoP4 -ExecCmds="Automation RunTests Monolith.AI.Persistence; Quit" -TestExit="Automation Test Queue Empty" -ReportExportPath="D:\P4\game\Saved\AutomationReports\monolith-merge-ai-persistence-current"
+```
+
+Result: PASS.
+
+| Report | Succeeded | Succeeded with warnings | Failed | Path |
+|---|---:|---:|---:|---|
+| Mesh persistence | 2 | 0 | 0 | `D:\P4\game\Saved\AutomationReports\monolith-merge-persistence-current\index.json` |
+| AI persistence | 1 | 0 | 0 | `D:\P4\game\Saved\AutomationReports\monolith-merge-ai-persistence-current\index.json` |
+
+Covered high-risk 0.16 persistence paths:
+
+- `Monolith.Mesh.Persistence.ConvertToHism`
+- `Monolith.Mesh.Persistence.PlaceSpline`
+- `Monolith.AI.Persistence.PlaceSmartObjectActor.RootComponent`
+
+Notes:
+
+- Current code verifies the Issue #63 component-persistence pattern in the fork's moved implementations: `mesh.convert_to_hism` lives in `MonolithLevelDesignEditingActions.cpp`, `scene.place_spline` lives in `MonolithLevelDesignPlacementActions.cpp`, and `ai.place_smart_object_actor` keeps both root and SmartObject components in `InstanceComponents`.
