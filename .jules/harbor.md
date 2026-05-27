@@ -47,7 +47,7 @@
 **Avoid:** Packaging workflow artifacts into public release ZIPs or wiping out local developer state during an auto-update.
 
 ## 2026-05-21 - Ignore .pytest_cache in release ZIP and source control
-**Release risk:** Python tool caches like `.pytest_cache/` can be accidentally tracked or packaged into release ZIPs, bloating the plugin or causing local collisions for users running their own Python environment.
-**Learning:** Monolith's standard `.gitignore` rule for Python caches is `__pycache__/`, which does not cover pytest's specific cache folder `.pytest_cache/`. Likewise, `make_release.ps1` explicitly checks for many local developer folders but did not include `.pytest_cache`.
-**Prevention:** Ensure `.pytest_cache/` is explicitly ignored in `.gitignore` and `.pytest_cache/*` or `.pytest_cache` is excluded in `Scripts/make_release.ps1` hygiene checks.
+**Release risk:** Python tool caches like `.pytest_cache/` and `.ruff_cache/` can be accidentally tracked or packaged into release ZIPs, bloating the plugin or causing local collisions for users running their own Python environment.
+**Learning:** Monolith's standard `.gitignore` rule for Python caches is `__pycache__/`, which does not cover tool-specific cache folders like `.pytest_cache/` or `.ruff_cache/`. Likewise, `make_release.ps1` explicitly checks for many local developer folders but may miss new tool caches.
+**Prevention:** Ensure tool caches like `.pytest_cache/` and `.ruff_cache/` are explicitly ignored in `.gitignore`, and excluded in `Scripts/make_release.ps1` hygiene checks. Also, preserve them in the updater scripts (`monolith_swap.bat` and `monolith_swap.sh`) so dev state isn't wiped during auto-updates.
 **Avoid:** Trusting standard language ignores to cover tool-specific generated folders that might pollute release artifacts or source control.
