@@ -667,6 +667,15 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleInitialize(const TSharedPtr<F
 
 	Result->SetObjectField(TEXT("capabilities"), Capabilities);
 
+	// Onboarding hint so agents discover schemas instead of guessing parameter names.
+	Result->SetStringField(TEXT("instructions"),
+		TEXT("Monolith MCP server for Unreal Engine. ")
+		TEXT("Before calling a domain action, check its schema instead of guessing: ")
+		TEXT("monolith_discover() lists namespaces, monolith_discover('<namespace>') lists a ")
+		TEXT("namespace's actions, and describe_query('action_schema', ...) returns an action's ")
+		TEXT("exact parameter schema. monolith_guide(section='recipes') gives cross-namespace ")
+		TEXT("workflows, decision matrices, and gotchas."));
+
 	return FMonolithJsonUtils::SuccessResponse(Id, MakeShared<FJsonValueObject>(Result));
 }
 

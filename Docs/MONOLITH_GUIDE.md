@@ -50,6 +50,19 @@ These are cross-namespace flows that no single namespace's docs cover. Each step
 3. `ui.apply_token_binding` — optional Tokenforge validation/probe only until the BP graph node writer ships; use static CommonUI style actions for committed styling today.
 4. **Verify:** `ui_query("compile_widget", ...)` returns empty `errors[]`; `ui_query("audit_focus_chain", ...)` confirms gamepad navigation.
 
+**Recipe 5 — Visual introspection: going beyond thumbnails.** Default content-browser thumbnails are 256² and rendered with editor defaults — fine for identification, useless for tech-art inspection. Three `editor::` actions raise fidelity.
+1. `editor.capture_scene_preview` — render ONE asset on a preview mesh at the resolution and angle you choose. `asset_type` accepts `material`, `niagara`, `static_mesh`, `skeletal_mesh` (with optional `animation_path` + `seek_time` for a posed-frame capture), and `widget` (UMG via `FWidgetRenderer`, with `scale` DPI multiplier). Example: `editor_query("capture_scene_preview", {asset_type: "skeletal_mesh", asset_path: "/Game/Characters/SK_Hero", animation_path: "/Game/Characters/Anims/AS_Idle", seek_time: 0.5, output_path: "D:/captures/hero_idle.png", width: 1024, height: 1024})`.
+2. `editor.capture_with_overlay` — same single-asset capture path, but renders under an engine debug-view show flag for tech-art inspection. Modes: `wireframe`, `normals`, `uv_density`, `lightmap_density`, `shader_complexity`. Example: `editor_query("capture_with_overlay", {asset_path: "/Game/Meshes/SM_Rock", overlay_mode: "shader_complexity", output_path: "D:/captures/rock_complexity.png"})`.
+3. `editor.capture_material_grid` — render N material instances side-by-side under shared lighting in a single PNG. Auto-grid via `ceil(sqrt(N))`; pass `columns` to override. Example: `editor_query("capture_material_grid", {material_instances: ["/Game/Materials/MI_Stone_A", "/Game/Materials/MI_Stone_B", "/Game/Materials/MI_Stone_C", "/Game/Materials/MI_Stone_D"], output_path: "D:/captures/stones_grid.png"})`.
+
+All three are editor-only, render-thread-enqueue style, and return `{success, output_path, width, height}`.
+
+**Recipe 6 — Reading asset structure without rendering.** When you need structured data (parameter names, channel statistics, packing detection) rather than a picture, two `editor::` inspect actions walk the asset reflectively — pure JSON, no render-thread cost.
+1. `editor.inspect_material_pbr` — walks a material's texture parameter list, classifies each by PBR role (`base_color`, `normal`, `roughness`, `metallic`, `ao`, `emissive`, `orm`, `arm`, `mra`, etc.), and detects ORM / ARM / MRA channel-packing on the source textures. Returns `{slots: {base_color_texture: ..., normal_texture: ..., ...}, packed_channels: [{texture, packing}], unmapped_parameters: [...]}`. Example: `editor_query("inspect_material_pbr", {asset_path: "/Game/Materials/M_Concrete"})`.
+2. `editor.inspect_texture_channels` — locks the source mip read-only and reports per-channel statistics (R/G/B/A min, max, mean) plus the source format and dimensions. Optional `emit_splits=true` writes one PNG per channel for visual diff. Returns `{width, height, format, channel_stats: {r: {min, max, mean}, g: {...}, b: {...}, a: {...}}, split_paths?}`. Example: `editor_query("inspect_texture_channels", {asset_path: "/Game/Textures/T_Concrete_ORM", emit_splits: true, output_dir: "D:/splits/"})`.
+
+Prefer the inspect actions over capture when downstream logic needs to branch on the data (e.g. "if this is ORM-packed, route channel R to AO; if not, treat the slot as standalone Roughness"). Prefer capture when a human or a vision model needs to look at the pixels.
+
 ## decisions
 
 When two tools overlap, pick by intent:
@@ -59,6 +72,10 @@ When two tools overlap, pick by intent:
 - **`source_query` vs `project_query`.** `source_query` searches **C++ engine/plugin source** (signatures, includes, class hierarchies) — use it to verify an API before writing code. `project_query` searches **content assets** (Blueprints, materials, meshes by path/name/type) — use it to find or confirm an asset exists before referencing it.
 - **`monolith_find` vs `monolith_discover` vs `monolith_guide`.** `monolith_find` is routing, `monolith_discover` is exact action/schema inventory, and `monolith_guide` is the editorial layer — *why* and *in what order*. Find tells you candidate verbs, discover gives exact params, and the guide tells you the sentences.
 - **`bulk_fill_query` vs `describe_query`.** `describe_query("schema", ...)` is read-only: it returns the authoritative field tree (paths, ImportText grammar, ranges, enum values) for an adapter namespace. `bulk_fill_query("apply", ...)` performs the write. Describe to learn the shape, bulk_fill to commit it; `bulk_fill_query("list_namespaces")` shows which adapters are available.
+- **`capture_scene_preview` vs `capture_material_grid` vs `inspect_material_pbr`.** Three actions that look adjacent but solve different problems:
+  - `editor.capture_scene_preview` — ONE material/asset rendered on a preview mesh, returns a single PNG. Use when you need a higher-fidelity thumbnail than the content-browser default.
+  - `editor.capture_material_grid` — N material instances side-by-side in a shared scene, returns ONE composite PNG. Use when comparing variations (stone palette, skin tones, decal alphabet) is the goal.
+  - `editor.inspect_material_pbr` — NO rendering. Walks the parameter list and returns structured JSON (PBR slot classification + ORM/ARM/MRA channel-packing detection). Use when downstream logic needs to branch on the data rather than look at pixels.
 
 ## errors
 

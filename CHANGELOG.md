@@ -4,6 +4,47 @@ All notable changes to Monolith will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+## [0.16.0] - 2026-05-27
+
+A small, focused release between the v0.15.0 ergonomics framework and the next major surface. Headline work: a five-action **preview & inspection surface** expansion in the `editor::` namespace (renders + structural-data reads for tech-art and AI agents), one MCP-introspection hint that points agents at the schema-discovery surface before they guess parameter names, and two component-persistence fixes from a community-reported regression.
+
+### Added
+
+- **Preview & inspection surface expansion (`editor::` namespace):** extended
+  `editor::capture_scene_preview` `asset_type` enum to support `static_mesh`,
+  `skeletal_mesh` (with optional `animation_path` + `seek_time` for posed
+  capture), and `widget` (UMG via `FWidgetRenderer` with `scale` DPI multiplier).
+  New `editor::capture_material_grid` (N material instances side-by-side under
+  shared lighting; auto-grid layout via `ceil(sqrt(N))` with optional `columns`
+  override). New `editor::capture_with_overlay` (5 engine debug-view modes:
+  wireframe, normals, uv_density, lightmap_density, shader_complexity). New
+  `editor::inspect_material_pbr` (PBR texture parameter classification +
+  ORM/ARM/MRA channel-packing detection — pure reflection, no rendering). New
+  `editor::inspect_texture_channels` (per-channel R/G/B/A min/max/mean
+  statistics + optional per-channel split PNGs). All editor-only. AI
+  discoverability via new `monolith_guide` recipe entries.
+
+- **Schema-discovery hint in MCP `initialize` instructions (Issue #62, @middle233).**
+  Both the C++ HTTP server (`HandleInitialize`) and the Python proxy now point AI agents
+  at `monolith_discover`, `describe_query("action_schema")`, and `monolith_guide` from the
+  initial handshake — so clients read schemas instead of trial-and-erroring parameter names.
+  No new action; widens the existing introspection surface's discoverability.
+
+### Fixed
+
+- **Component persistence (Issue #63, @Heiselisha):** `mesh.convert_to_hism`, `mesh.place_spline`, and
+  `ai.place_smart_object_actor` now call `AActor::AddInstanceComponent` on every component they create, so
+  the components survive level save/reload. Convert-to-HISM also gains a pre-destroy guard that preserves
+  source actors if HISM instance creation reports a count mismatch. `mesh.place_spline` follow-up: root +
+  spline components now spawn with `EComponentMobility::Static` so saved spline data round-trips through
+  the level's Static-mobility persistence path.
+
+### Contributors
+
+Big thanks to **@middle233** for [Issue #62](https://github.com/tumourlove/monolith/issues/62) (MCP schema-discovery guidance gap) and to **@Heiselisha** for [Issue #63](https://github.com/tumourlove/monolith/issues/63) (HISM / spline / SmartObject component persistence regression). Both issues drove fixes that ship in this release.
+
 ## [0.15.0] - 2026-05-23
 
 This release rolls up everything since v0.14.10 (20 commits). Headline work: the **MCP ergonomics framework** (`bulk_fill_query` + `describe_query` routing to 12 per-namespace adapters), a **dataset read/edit ergonomics pack** (17 new `blueprint` actions for round-tripping DataTables / CurveTables / StringTables + `seed_data_asset`), the **UI/Blueprint MCP gap-closure** sweep (9 new actions across 4 phases + the 0516 UI gap-audit Tier 1–4), the new **`monolith_guide`** editorial action, and two community PRs (#58, #60). Two reflection/enum correctness fixes, plus a sibling-plugin-reference scrub in shipping comments.

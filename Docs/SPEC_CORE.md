@@ -456,6 +456,35 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
 
 ---
 
+### Editor Component Persistence (UPROPERTY-Backed References)
+
+Any MCP action that builds components on an editor-spawned `AActor` via `NewObject<...>(Actor, ...)` MUST register each component on `AActor::InstanceComponents` (a `UPROPERTY(Instanced) TArray<TObjectPtr<UActorComponent>>` at `Engine/Source/Runtime/Engine/Classes/GameFramework/Actor.h:4331`). Without `AActor::AddInstanceComponent(Comp)` the owning actor holds no UPROPERTY-backed reference to the component, `RegisterComponent()` wires it up for the current session only, and the component disappears on level save/reload — silent data loss. This was the root cause of Issue #63 across three action sites. The canonical sequence — `Modify()` -> `NewObject(... RF_Transactional)` -> `SetupAttachment` / `SetRootComponent` -> `AddInstanceComponent` -> `RegisterComponent` -> component setup -> `MarkPackageDirty()` — matches `Engine/Source/Editor/UnrealEd/Private/Factories/ActorFactory.cpp:1321` and `Engine/Source/Editor/UnrealEd/Private/Kismet2/ComponentEditorUtils.cpp:621`:
+
+```cpp
+Actor->Modify();
+USomeComponent* Comp = NewObject<USomeComponent>(
+    Actor, USomeComponent::StaticClass(), TEXT("ComponentName"), RF_Transactional);
+Comp->SetupAttachment(RootComp);   // or Actor->SetRootComponent(Comp) for the root
+Actor->AddInstanceComponent(Comp); // THE persistence anchor — order vs RegisterComponent is flexible; what matters is the array references the component at save-time
+Comp->RegisterComponent();
+Comp->SetStaticMesh(...);          // component-specific configuration AFTER register
+Actor->MarkPackageDirty();         // once all components are added
+```
+
+---
+
+### Preview & Inspection Surface (`editor::`)
+
+The `editor::` namespace exposes a tight family of capture and inspect actions that let AI agents introspect Unreal assets at higher fidelity than the default 256² thumbnail. Four new actions land alongside three extensions to the existing `editor::capture_scene_preview`. **Extended `asset_type` enum values:** `static_mesh`, `skeletal_mesh` (with optional `animation_path` + `seek_time` for posed-frame capture), and `widget` (UMG via `FWidgetRenderer` with `scale` DPI multiplier) join the prior `material` / `niagara`. **New actions:** `editor::capture_material_grid` (N material instances side-by-side under shared lighting, auto-grid via `ceil(sqrt(N))` with optional `columns` override); `editor::capture_with_overlay` (single-asset capture under one of five engine debug-view show flags — `wireframe`, `normals`, `uv_density`, `lightmap_density`, `shader_complexity`); `editor::inspect_material_pbr` (reflective walk of a material's texture parameter list, classifying each by PBR slot and detecting ORM / ARM / MRA channel-packing — pure JSON, no rendering); `editor::inspect_texture_channels` (per-channel R/G/B/A min/max/mean statistics + optional per-channel split PNGs via `emit_splits`). All seven are editor-only and live in `MonolithEditor`.
+
+The canonical pattern for the capture-style actions is `FAdvancedPreviewScene` + `USceneCaptureComponent2D` + `UTextureRenderTarget2D` + `FImageUtils::SaveImageAutoFormat` (mirrors the existing `HandleCaptureScenePreview` recipe — game-thread invoke, render-thread enqueue via `CaptureScene()`, readback via `GameThread_GetRenderTargetResource()->ReadPixels()`). The widget path additionally uses `FWidgetRenderer::DrawWidget` against the same RT (guard with `FApp::CanEverRender()` — headless commandlets and `-nullrhi` will return a clear error). The inspect-style actions skip the render path entirely: `inspect_material_pbr` walks `UMaterialEditingLibrary::GetTextureParameterNames` + `GetTextureParameterValue` then routes each through a small PBR classifier; `inspect_texture_channels` locks the source mip via `FTextureSource::LockMipReadOnly`, computes statistics in a single pass, and writes split PNGs only when `emit_splits=true`.
+
+Source-of-truth files: `Source/MonolithEditor/Private/MonolithEditorActions.cpp` (the `asset_type` enum extension lives inside `HandleCaptureScenePreview`), `Source/MonolithEditor/Private/MonolithEditorPreviewActions.cpp` (`capture_material_grid` + `capture_with_overlay`), `Source/MonolithEditor/Private/MonolithEditorInspectActions.cpp` (`inspect_material_pbr` + `inspect_texture_channels`). Header surface lives in `Source/MonolithEditor/Public/MonolithEditorActions.h` (four new static handler declarations alongside the existing capture handler).
+
+AI discoverability: `monolith_guide(section="recipes")` returns Recipe 5 ("Visual introspection — going beyond thumbnails") and Recipe 6 ("Reading asset structure without rendering"); `monolith_guide(section="decisions")` returns the `capture_scene_preview` vs `capture_material_grid` vs `inspect_material_pbr` decision matrix. Live schemas come from `monolith_discover("editor")`.
+
+---
+
 ## 11. Known Issues & Workarounds
 
 See `TODO.md` for the full list. Key architectural constraints:
@@ -511,7 +540,7 @@ The live full-project snapshot was re-verified on 2026-05-26: `monolith_status()
 | MonolithAnimation | animation | 125 | Includes 5 ABP write actions (`add_anim_graph_node`, `connect_anim_graph_pins`, `set_state_animation`, `add_variable_get`, `set_anim_graph_node_property`), 3 ControlRig write, 1 layout, plus 103 baseline (96 + 1 v0.14.9 `copy_bone_pose_between_sequences` — PR #51 by @MaxenceEpitech + 1 v0.14.10 `list_bone_tracks` — PR #54 by @MaxenceEpitech + 2 v0.14.10 PR #55 by @MaxenceEpitech: `get_skeleton_preview_attached_assets`, `get_bone_ref_pose` + 3 v0.14.10 PR #56 by @MaxenceEpitech: `{get,add,remove}_compatible_skeleton`) + 13 PoseSearch |
 | MonolithNiagara | niagara | 109 | 108 baseline + 1 layout (`auto_layout`) |
 | MonolithMesh | mesh | 239 (194 core + 45 experimental town gen) | Town gen registered only when `bEnableProceduralTownGen=true` (default false) |
-| MonolithEditor | editor | 29 | 20 base + 2 J F8 (`create_empty_map`, `get_module_status`) + 2 PR #48 (`list_automation_tests`, `run_automation_tests`) + 2 Issue #50 (`run_python`, `load_level`) + 3 v0.14.10 PR #54 (`start_pie`, `stop_pie`, `run_console_command` — by @MaxenceEpitech) |
+| MonolithEditor | editor | 59 | 55 existing editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, module-status, asset-context, crash-report, and metadata toolsets + 4 v0.16.0 preview & inspection (`capture_material_grid`, `capture_with_overlay`, `inspect_material_pbr`, `inspect_texture_channels`) |
 | MonolithConfig | config | 6 | |
 | MonolithIndex | project | 7 | |
 | MonolithSource | source | 11 | |
@@ -536,6 +565,8 @@ Dataset ergonomics added 17 public in-tree `blueprint` namespace actions:
 - **StringTable (3):** `read_string_table`, `set_string_table_entries`, `remove_string_table_entry`.
 
 ZERO new module deps across all 17 (`MonolithBlueprint.Build.cs` unchanged). `MonolithBlueprintModule.cpp` startup log strings are not treated as action-count authority; live registry/discover counts are.
+
+**2026-05-27 — v0.16.0 (+4 editor, preview & inspection surface expansion):** Editor namespace gains 4 new in-tree actions — `capture_material_grid` and `capture_with_overlay` (composite-capture rendering pass), `inspect_material_pbr` and `inspect_texture_channels` (pure structural-data reads, no rendering). The Editor row above is updated 55 -> 59 for the current merged tree. The existing `capture_scene_preview` is additionally **extended** with three new `asset_type` enum values (`static_mesh`, `skeletal_mesh`, `widget`) — schema widening only, no count delta. All 4 new actions are PUBLIC, in-tree `MonolithEditor`-namespace — **zero sibling-plugin actions** (per `monolith-release.md` Action Count Discipline). Plus 1 schema-only widening of MCP `initialize` instructions (`HandleInitialize` + Python proxy point agents at `monolith_discover` / `describe_query("action_schema")` / `monolith_guide` — Issue #62 by @middle233) — no count delta. Plus persistence fixes across 3 existing actions (`mesh.convert_to_hism`, `mesh.place_spline`, `ai.place_smart_object_actor` — Issue #63 by @Heiselisha) — no count delta. The aggregate figures in the **Total** row (in-tree, distinct, the conditional `WITH_*` variants, and live) shift +4 from the previous verified snapshot and are deferred together to the next holistic count-audit. The `.uplugin` Description and `SPEC_MonolithEditor.md` per-module figures have been updated in this commit to match.
 
 **Note:** MonolithMesh includes 194 core actions (always registered) plus 45 experimental Procedural Town Generator actions (registered only when `bEnableProceduralTownGen = true`, default: false — known geometry issues). MonolithGAS is conditional on `#if WITH_GBA` — projects without GameplayAbilities register 0 GAS actions. MonolithComboGraph is conditional on `#if WITH_COMBOGRAPH` — projects without the ComboGraph plugin register 0 combograph actions. MonolithAI is conditional on `#if WITH_STATETREE` + `#if WITH_SMARTOBJECTS` — projects without these register 0 AI actions. MonolithLogicDriver is conditional on `#if WITH_LOGICDRIVER` — projects without Logic Driver Pro register 0 logicdriver actions. MonolithAudio MetaSound actions are conditional on `#if WITH_METASOUND` — projects without MetaSound get Sound Cue + CRUD + batch actions but no MetaSound graph building. MonolithUI includes 79 always-on actions (Widget CRUD + Slot + Templates + Styling + v1 Animation + v2 hoisted Animation + Bindings + Settings + Accessibility + Hoisted Design Import + EffectSurface + Spec Builder + Type Registry diagnostic + v0.14.11 Tier 2 close-the-loop + Tier 3 scaffolders) plus 55 CommonUI actions, and the full-stack configuration also sees 4 GAS aliases when `WITH_GBA=1`. The Phase A–L architecture expansion (2026-04-26) added the Spec System (`build_ui_from_spec` / `dump_ui_spec_schema` / `dump_ui_spec`), Type Registry + per-type property allowlist, EffectSurface widget + sub-bag setters, and the dedup-driven Style Service. v0.14.11 [Unreleased] adds Tier 2+3 close-the-loop ergonomics actions on top of the Tier 1 correctness fixes — see [`specs/SPEC_MonolithUI.md`](specs/SPEC_MonolithUI.md) for the full breakdown. MonolithBABridge registers no MCP actions — it only provides the `IMonolithGraphFormatter` IModularFeatures bridge consumed by `auto_layout` in the blueprint, material, animation, and niagara modules. The compact merge verifies 11 in-tree `bulk_fill_query` / `describe_query` adapter implementations; per-namespace fill_kind catalogues live in each per-module SPEC's "Bulk Fill & Describe Surface" section.
 
