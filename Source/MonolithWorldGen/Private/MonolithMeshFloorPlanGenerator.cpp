@@ -2679,9 +2679,11 @@ TSharedPtr<FJsonObject> FMonolithMeshFloorPlanGenerator::BuildOutputJson(
 
 	// Grid as 2D array
 	TArray<TSharedPtr<FJsonValue>> GridArr;
+	GridArr.Reserve(GridH);
 	for (int32 Y = 0; Y < GridH; ++Y)
 	{
 		TArray<TSharedPtr<FJsonValue>> RowArr;
+		RowArr.Reserve(GridW);
 		for (int32 X = 0; X < GridW; ++X)
 		{
 			RowArr.Add(MakeShared<FJsonValueNumber>(Grid[Y][X]));
@@ -2692,6 +2694,7 @@ TSharedPtr<FJsonObject> FMonolithMeshFloorPlanGenerator::BuildOutputJson(
 
 	// Rooms
 	TArray<TSharedPtr<FJsonValue>> RoomArr;
+	RoomArr.Reserve(Rooms.Num());
 	for (const FRoomDef& R : Rooms)
 	{
 		RoomArr.Add(MakeShared<FJsonValueObject>(R.ToJson()));
@@ -2700,6 +2703,7 @@ TSharedPtr<FJsonObject> FMonolithMeshFloorPlanGenerator::BuildOutputJson(
 
 	// Doors
 	TArray<TSharedPtr<FJsonValue>> DoorArr;
+	DoorArr.Reserve(Doors.Num());
 	for (const FDoorDef& D : Doors)
 	{
 		auto DJ = MakeShared<FJsonObject>();
