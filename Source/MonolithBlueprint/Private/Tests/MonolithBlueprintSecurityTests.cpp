@@ -46,6 +46,15 @@ bool FMonolithBlueprintSecurityPathTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("create_blueprint should fail on malformed path"), BlueprintResult.bSuccess);
 	TestTrue(TEXT("create_blueprint error should complain about invalid package path"), BlueprintResult.ErrorMessage.Contains(TEXT("Invalid package path")));
 
+	// Test seed_data_asset
+	TSharedPtr<FJsonObject> SeedDataAssetPayload = MakeShared<FJsonObject>();
+	SeedDataAssetPayload->SetStringField(TEXT("save_path"), TEXT("//Game/MalformedPath/DA_TestSeedAsset"));
+	SeedDataAssetPayload->SetStringField(TEXT("class_name"), TEXT("PrimaryDataAsset"));
+
+	FMonolithActionResult SeedDataAssetResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("seed_data_asset"), SeedDataAssetPayload);
+	TestFalse(TEXT("seed_data_asset should fail on malformed path"), SeedDataAssetResult.bSuccess);
+	TestTrue(TEXT("seed_data_asset error should complain about invalid package path"), SeedDataAssetResult.ErrorMessage.Contains(TEXT("Invalid package path")));
+
 	return true;
 }
 

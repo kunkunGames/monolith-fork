@@ -1617,6 +1617,11 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 	}
 
 	// Create package + instance.
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
