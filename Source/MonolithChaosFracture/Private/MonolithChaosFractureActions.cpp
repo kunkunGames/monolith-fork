@@ -170,7 +170,10 @@ FMonolithActionResult FMonolithChaosFractureActions::ListGeometryCollectionAsset
 	}
 
 	double LimitValue = 100.0;
-	Params->TryGetNumberField(TEXT("limit"), LimitValue);
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+	}
 	const int32 Limit = MonolithChaosFracture::ClampLimit(LimitValue);
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -182,6 +185,7 @@ FMonolithActionResult FMonolithChaosFractureActions::ListGeometryCollectionAsset
 	AssetRegistry.GetAssets(Filter, Assets);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(FMath::Min(Assets.Num(), Limit));
 	int32 MatchedCount = 0;
 	for (const FAssetData& Asset : Assets)
 	{
@@ -221,7 +225,10 @@ FMonolithActionResult FMonolithChaosFractureActions::ListGeometryCollectionAsset
 FMonolithActionResult FMonolithChaosFractureActions::ListGeometryCollectionComponents(const TSharedPtr<FJsonObject>& Params)
 {
 	double LimitValue = 100.0;
-	Params->TryGetNumberField(TEXT("limit"), LimitValue);
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+	}
 	const int32 Limit = MonolithChaosFracture::ClampLimit(LimitValue);
 
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
@@ -236,6 +243,7 @@ FMonolithActionResult FMonolithChaosFractureActions::ListGeometryCollectionCompo
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(Limit);
 	int32 MatchedCount = 0;
 	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
 	{
