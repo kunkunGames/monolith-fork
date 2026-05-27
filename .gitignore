@@ -19,6 +19,7 @@ Logs/
 __pycache__/
 .pytest_cache/
 *.pyc
+.venv/
 *.log
 *.bak
 *.tmp
