@@ -221,13 +221,29 @@ namespace
 
 FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Category = Params->GetStringField(TEXT("file"));
-	FString Section = Params->GetStringField(TEXT("section"));
-	FString Key = Params->GetStringField(TEXT("key"));
+	FString Category;
+	if (!Params->TryGetStringField(TEXT("file"), Category))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or invalid 'file' parameter"));
+	}
+	if (Category.Contains(TEXT("..")))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid 'file' parameter. Cannot contain path traversal characters."));
+	}
+
+	FString Section;
+	if (!Params->TryGetStringField(TEXT("section"), Section))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or invalid 'section' parameter"));
+	}
+
+	FString Key;
+	if (!Params->TryGetStringField(TEXT("key"), Key))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or invalid 'key' parameter"));
+	}
 
 	// Use GConfig to get the effective (fully-resolved) value
-	FString ConfigFilename = FString::Printf(TEXT("%s%s.ini"), *FPaths::ProjectConfigDir(), *FString::Printf(TEXT("Default%s"), *Category));
-
 	FString Value;
 	bool bFound = GConfig->GetString(*Section, *Key, Value, GConfig->GetConfigFilename(*Category));
 
@@ -253,7 +269,10 @@ FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJ
 FMonolithActionResult FMonolithConfigActions::ExplainSetting(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Category, Section, Key;
-	Params->TryGetStringField(TEXT("file"), Category);
+	if (Params->TryGetStringField(TEXT("file"), Category) && Category.Contains(TEXT("..")))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid 'file' parameter. Cannot contain path traversal characters."));
+	}
 	Params->TryGetStringField(TEXT("section"), Section);
 	Params->TryGetStringField(TEXT("key"), Key);
 
@@ -490,7 +509,11 @@ static TSharedPtr<FJsonObject> MakeDiffEntry(
 
 FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Category = Params->GetStringField(TEXT("file"));
+	FString Category;
+	if (!Params->TryGetStringField(TEXT("file"), Category))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or invalid 'file' parameter"));
+	}
 	if (Category.Contains(TEXT("..")))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid 'file' parameter. Category cannot contain path traversal characters."));
@@ -595,7 +618,12 @@ FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<F
 
 FMonolithActionResult FMonolithConfigActions::SearchConfig(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Query = Params->GetStringField(TEXT("query"));
+	FString Query;
+	if (!Params->TryGetStringField(TEXT("query"), Query))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or invalid 'query' parameter"));
+	}
+
 	FString FilterCategory;
 	if (Params->TryGetStringField(TEXT("category"), FilterCategory) && FilterCategory.Contains(TEXT("..")))
 	{
@@ -687,8 +715,21 @@ FMonolithActionResult FMonolithConfigActions::SearchConfig(const TSharedPtr<FJso
 
 FMonolithActionResult FMonolithConfigActions::GetSection(const TSharedPtr<FJsonObject>& Params)
 {
-	FString FileShortName = Params->GetStringField(TEXT("file"));
-	FString Section = Params->GetStringField(TEXT("section"));
+	FString FileShortName;
+	if (!Params->TryGetStringField(TEXT("file"), FileShortName))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or invalid 'file' parameter"));
+	}
+	if (FileShortName.Contains(TEXT("..")))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid 'file' parameter. Cannot contain path traversal characters."));
+	}
+
+	FString Section;
+	if (!Params->TryGetStringField(TEXT("section"), Section))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or invalid 'section' parameter"));
+	}
 
 	// Support category-style names (e.g., "Engine" -> "DefaultEngine" or "BaseEngine")
 	if (!FileShortName.StartsWith(TEXT("Default")) && !FileShortName.StartsWith(TEXT("Base"))
