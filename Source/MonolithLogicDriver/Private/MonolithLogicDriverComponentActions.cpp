@@ -115,6 +115,24 @@ namespace
 	}
 }
 
+static UBlueprint* LoadActorBlueprintForSM(const FString& BPPath, FMonolithActionResult& OutError)
+{
+	UBlueprint* BP = Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BPPath));
+	if (!BP)
+	{
+		OutError = FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load Blueprint at '%s'"), *BPPath));
+		return nullptr;
+	}
+
+	if (!BP->SimpleConstructionScript)
+	{
+		OutError = FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint '%s' has no SimpleConstructionScript (not an Actor BP?)"), *BPPath));
+		return nullptr;
+	}
+
+	return BP;
+}
+
 void FMonolithLogicDriverComponentActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("get_sm_component_config"),
@@ -159,16 +177,11 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleGetSMComponent
 	FString ComponentName;
 	Params->TryGetStringField(TEXT("component_name"), ComponentName);
 
-	// Load the Blueprint
-	UBlueprint* BP = Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BPPath));
+	FMonolithActionResult LoadError;
+	UBlueprint* BP = LoadActorBlueprintForSM(BPPath, LoadError);
 	if (!BP)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load Blueprint at '%s'"), *BPPath));
-	}
-
-	if (!BP->SimpleConstructionScript)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint '%s' has no SimpleConstructionScript (not an Actor BP?)"), *BPPath));
+		return LoadError;
 	}
 
 	// Scan SCS nodes for SM component
@@ -281,15 +294,11 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleAddSMComponent
 		CompName = CustomCompName;
 	}
 
-	// Load actor Blueprint
-	UBlueprint* BP = Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BPPath));
+	FMonolithActionResult LoadError;
+	UBlueprint* BP = LoadActorBlueprintForSM(BPPath, LoadError);
 	if (!BP)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load Blueprint at '%s'"), *BPPath));
-	}
-	if (!BP->SimpleConstructionScript)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint '%s' has no SimpleConstructionScript (not an Actor BP?)"), *BPPath));
+		return LoadError;
 	}
 
 	// Get SM component class
@@ -398,14 +407,11 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleConfigureSMCom
 		return FMonolithActionResult::Error(TEXT("Malformed parameter: tick_interval must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	UBlueprint* BP = Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BPPath));
+	FMonolithActionResult LoadError;
+	UBlueprint* BP = LoadActorBlueprintForSM(BPPath, LoadError);
 	if (!BP)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load Blueprint at '%s'"), *BPPath));
-	}
-	if (!BP->SimpleConstructionScript)
-	{
-		return FMonolithActionResult::Error(TEXT("Blueprint has no SimpleConstructionScript (not an Actor BP?)"));
+		return LoadError;
 	}
 
 	// Find SM component template
