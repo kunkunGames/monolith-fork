@@ -33,13 +33,13 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
-| [ai](#ai) | 221 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
+| [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD + document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
 | [level_sequence](#level_sequence) | 8 | Level Sequence inspection: binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
 | [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 11 in-tree adapters, plus optional sibling adapters when present (`apply`, `list_namespaces`) |
 | [describe](#describe) | 3 | Read-only schema introspection for the same adapter registry (`schema`, optional `list_targets`, `action_schema`) |
-| **Curated in-tree subtotal** | **1344** | Static public/in-tree reference from the curated body below; the 2026-05-26 fully loaded Go project reports 1584 live actions / 45 namespaces. |
+| **Curated in-tree subtotal** | **1366** | Static public/in-tree reference from the curated body below; the 2026-05-26 fully loaded Go project reports 1584 live actions / 45 namespaces. |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -909,7 +909,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithComboGraph.md`.
 
 ## ai
 
-Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass Entity, Zone Graph, runtime PIE inspection, and a deep library of scaffolds. **221 actions** — the largest single conditional namespace.
+Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass Entity, Zone Graph, runtime PIE inspection, and a deep library of scaffolds. **243 actions** — the largest single conditional namespace.
 
 **Conditional on `#if WITH_STATETREE` + `#if WITH_SMARTOBJECTS`** — projects missing either plugin register 0 AI actions.
 
