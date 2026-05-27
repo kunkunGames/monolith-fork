@@ -1186,6 +1186,12 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleCompareBlackboards(con
 	TArray<TSharedPtr<FJsonValue>> Changed;
 	TArray<TSharedPtr<FJsonValue>> Same;
 
+	OnlyInA.Reserve(MapA.Num());
+	OnlyInB.Reserve(MapB.Num());
+	const int32 MinSize = FMath::Min(MapA.Num(), MapB.Num());
+	Changed.Reserve(MinSize);
+	Same.Reserve(MinSize);
+
 	// Keys in A
 	for (const auto& Pair : MapA)
 	{
