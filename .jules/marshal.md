@@ -118,3 +118,9 @@
 **Learning:** Autonomous PR lifecycle management (closing/deleting) is destructive and unsafe without explicit authority, leading to accidental loss of valid context or branches.
 **Prevention:** Added 'Unauthorized PR Operations' rule to AGENTS.md explicitly forbidding agents from closing, merging, or deleting PRs or branches unless authorized.
 **Avoid:** Attempting to close or delete superseded or overlapping branches; use no-op (stop without PR) instead.
+
+## 2026-05-27 - Standardize execution plan requirements
+**Coordination issue:** Agents were creating vague execution plans, guessing code structure from grep snippets, and forgetting mandatory verification steps.
+**Learning:** Without explicit plan requirements in `AGENTS.md`, agents fallback to generic planning behavior, which often leads to planning failures or skipped static checks.
+**Prevention:** Added an 'Execution Plan Requirements' rule to `AGENTS.md` requiring grounded, specific steps based on full file reads, mandatory inclusion of static CI checks (`python Scripts/ci_static_checks.py ...`), explicit verification commands, and exact wording for the pre-commit step.
+**Avoid:** Writing generic execution plans without reading full file contents, or omitting the required CI and verification commands from the plan outline.

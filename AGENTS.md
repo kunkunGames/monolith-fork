@@ -111,3 +111,9 @@ The daily invocation log contract is documented in `Docs/specs/SPEC_MonolithTool
 - For proxy/query smoke tests or temporary diagnostics, set `MONOLITH_TOOL_LOG_DIR` before launching the process to isolate logs outside `Logs/`.
 - Use the logs to aggregate repeated missing-action, schema-confusing, retry, large-result, editor-unavailable, and escape-hatch patterns before changing namespace placement or action contracts.
 - Do not commit `Logs/*`; logs can contain project/source context even after redaction and truncation.
+
+## 16. Execution Plan Requirements
+When creating execution plans, agents must adhere to the following rules to ensure tasks translate directly to safe, verifiable actions:
+- **Groundedness and Specificity:** Never guess or assume function names, variable names, or the presence/absence of specific code blocks based solely on `grep` snippets. Always read the exact target file contents to confirm the precise code structure before drafting steps. Steps must be specific, actionable directives (e.g., 'Edit <file> to add <code snippet>'). Avoid vague phrasing like 'Analyze the issue' or 'Implement the change'.
+- **Completeness:** Execution plans must explicitly include a step to run the project's static checks (`python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json --github check`) and a verification stage (e.g., `git diff --check` and `git status --short`) before the final pre-commit step.
+- **Pre-commit Description:** The final pre-commit step description must be exactly: 'Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done.'
