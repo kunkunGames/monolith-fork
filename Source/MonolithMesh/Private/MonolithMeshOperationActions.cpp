@@ -585,7 +585,11 @@ FMonolithActionResult FMonolithMeshOperationActions::MeshRemesh(const TSharedPtr
 		return FMonolithActionResult::Error(TEXT("'handle' is required"));
 	}
 
-	double TargetEdgeLength = Params->GetNumberField(TEXT("target_edge_length"));
+	double TargetEdgeLength;
+	if (!Params->TryGetNumberField(TEXT("target_edge_length"), TargetEdgeLength))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'target_edge_length' is required and must be a number"));
+	}
 	if (TargetEdgeLength <= 0.0)
 	{
 		return FMonolithActionResult::Error(TEXT("'target_edge_length' must be positive"));
