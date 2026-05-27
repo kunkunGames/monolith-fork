@@ -23,8 +23,7 @@ public:
 	// Bulk upsert/add/update (dry_run + strict, FDryRunReport-shaped per field)
 	static FMonolithActionResult HandleSetDataTableRows(const TSharedPtr<FJsonObject>& Params);
 
-	// Row CRUD
-	static FMonolithActionResult HandleRemoveDataTableRow(const TSharedPtr<FJsonObject>& Params);
+	// Row rename/copy
 	static FMonolithActionResult HandleRenameDataTableRow(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleDuplicateDataTableRow(const TSharedPtr<FJsonObject>& Params);
 

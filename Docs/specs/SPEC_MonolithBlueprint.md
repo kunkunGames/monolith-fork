@@ -14,13 +14,13 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithBlueprintModule` | Registers 122 blueprint actions |
+| `FMonolithBlueprintModule` | Registers 121 blueprint actions |
 | `FMonolithBlueprintActions` | Static handlers. Uses `FMonolithAssetUtils::LoadAssetByPath<UBlueprint>` |
 | `MonolithBlueprintInternal` | Helpers: AddGraphArray, FindGraphByName, PinTypeToString, SerializePin/Node, TraceExecFlow, FindEntryNode |
 
-### Actions (109 — namespace: "blueprint")
+### Actions (121 — namespace: "blueprint")
 
-> **Per-module baseline note (2026-05-23):** this file's baseline was 92 (it carries the 2026-05-22 `add_property_access` +1 but predates the Phase 2 `override_parent_function` / `save_dirty_assets` +2 that SPEC_CORE §12 already folded into its authoritative 94). Part B adds +17 (dataset ergonomics, below), so this file's count moves 92 → 109 while §12's authoritative `blueprint` row moves 94 → 111. The residual 2-action gap (this file's 109 vs §12's 111) is the pre-existing Phase 2 drift §12's reconciliation notes already track — deferred to the next holistic count-audit, not patched here.
+> **Count note (2026-05-27):** current static registry scan reports 121 unique `blueprint` actions after removing a duplicate `remove_data_table_row` registration. The table below remains a focused contract summary; use `monolith_discover("blueprint")` for the exhaustive live action schema.
 
 **Read Actions (14)**
 | Action | Params | Description |
@@ -130,7 +130,7 @@
 | `read_data_table` | `asset_path`, `include_schema`? (default true), `row_name`? | Read the whole table (or one row) WITH inline row schema. Returns `asset_path`, `row_struct`, `row_struct_path`, `total_rows`, `schema` (per-field `FSchemaDescriptor` from `DescribeStruct(GetRowStruct())` — `name`, `type_name`, `import_text_form`, `enum_values`, `range_min`/`range_max`, nested children; present when `include_schema=true`), and `rows` (`[{row_name, values:{field: stringified-value}}]`). Schema-inline-with-data is the keystone: the LLM never guesses field names or types. Supersedes the older `get_data_table_rows`. |
 | `describe_data_table_schema` | `asset_path` | Schema only, no rows — for planning edits on a huge table without pulling every row. Returns `row_struct`, `row_struct_path`, `schema` (same per-field `FSchemaDescriptor` array as `read_data_table`). |
 | `set_data_table_rows` | `asset_path`, `rows` (`[{row_name, values:{field:value}, mode?:"upsert"\|"add"\|"update"}]`), `dry_run`? (default false), `strict`? (default false), `save`? (default false) | Bulk add/update rows in one transaction. Mirrors `bulk_fill_query("apply")` ergonomics: per-field writes go through the same ImportText path as `add_data_table_row` and report `current`/`proposed`/`ok`/`reason`. `dry_run` validates without mutating; `strict` promotes coercion/unknown-field/enum-miss to hard errors. Default `mode` is `upsert` (closes the can't-edit-existing-row gap). Returns an `FDryRunReport`-shaped payload (`rows[]`, `errors`, `would_apply`, `saved`). Calls `FDataTableEditorUtils::BroadcastPostChange` once so open editors refresh. |
-| `remove_data_table_row` | `asset_path`, `row_name`, `save`? | Remove a row. Thin wrapper over `FDataTableEditorUtils::RemoveRow` (which broadcasts internally). Returns `{removed}`. |
+| `remove_data_table_row` | `asset_path`, `row_name`, `dry_run`?, `confirm`?, `save`? | Guarded row delete. Requires `dry_run=true` or `confirm=true`; dry-run returns `would_remove` without mutation, confirmed writes mark the DataTable dirty and optionally save. |
 | `rename_data_table_row` | `asset_path`, `old_name`, `new_name`, `save`? | Rename a row. Wrapper over `FDataTableEditorUtils::RenameRow`. Returns `{renamed}`. |
 | `duplicate_data_table_row` | `asset_path`, `source_row`, `new_name`, `save`? | Duplicate a row with all values. Wrapper over `FDataTableEditorUtils::DuplicateRow`. Returns `{row_name}`. |
 | `export_data_table` | `asset_path`, `format`? (`"json"`\|`"csv"`, default `"json"`), `use_json_objects`? (default true), `simple_text`? (default false) | Read the WHOLE table as one text blob (JSON or CSV) for token-efficient in-context editing. Calls `UDataTable::GetTableAsJSON`/`GetTableAsCSV` (`#if WITH_EDITOR`). `use_json_objects` sets `EDataTableExportFlags::UseJsonObjectsForStructs` so nested structs export as clean JSON objects (not GUID-suffixed ExportText blobs) — default-on to match the engine's own export. Returns `row_struct`, `row_struct_path`, `total_rows`, `format`, `text`. |

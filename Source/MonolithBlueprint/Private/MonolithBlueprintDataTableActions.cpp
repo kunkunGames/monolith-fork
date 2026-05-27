@@ -218,15 +218,6 @@ void FMonolithBlueprintDataTableActions::RegisterActions(FMonolithToolRegistry& 
 			.Optional(TEXT("save"),       TEXT("boolean"), TEXT("If true, save the package after applying."), TEXT("false"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("blueprint"), TEXT("remove_data_table_row"),
-		TEXT("Remove a single row from a DataTable. Refreshes any open DataTable editor."),
-		FMonolithActionHandler::CreateStatic(&HandleRemoveDataTableRow),
-		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"),  TEXT("DataTable asset path"))
-			.Required(TEXT("row_name"),   TEXT("string"),  TEXT("Row name / key to remove"))
-			.Optional(TEXT("save"),       TEXT("boolean"), TEXT("If true, save the package after removing."), TEXT("false"))
-			.Build());
-
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("rename_data_table_row"),
 		TEXT("Rename a single DataTable row. Refreshes any open DataTable editor."),
 		FMonolithActionHandler::CreateStatic(&HandleRenameDataTableRow),
@@ -594,45 +585,6 @@ FMonolithActionResult FMonolithBlueprintDataTableActions::HandleSetDataTableRows
 	Root->SetNumberField(TEXT("errors"), TotalErrors);
 	Root->SetBoolField(TEXT("would_apply"), bDryRun ? (TotalErrors == 0) : bWouldApplyAll);
 	Root->SetBoolField(TEXT("dry_run"), bDryRun);
-	Root->SetBoolField(TEXT("saved"), bSaved);
-	Root->SetBoolField(TEXT("success"), true);
-	return FMonolithActionResult::Success(Root);
-}
-
-// ============================================================
-//  remove_data_table_row
-// ============================================================
-
-FMonolithActionResult FMonolithBlueprintDataTableActions::HandleRemoveDataTableRow(const TSharedPtr<FJsonObject>& Params)
-{
-	using namespace MonolithDataTableInternal;
-
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString RowName = Params->GetStringField(TEXT("row_name"));
-	if (AssetPath.IsEmpty()) { return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path")); }
-	if (RowName.IsEmpty())   { return FMonolithActionResult::Error(TEXT("Missing required parameter: row_name")); }
-
-	const UScriptStruct* RowStruct = nullptr;
-	FString Error;
-	UDataTable* DataTable = ResolveDataTable(AssetPath, RowStruct, Error);
-	if (!DataTable) { return FMonolithActionResult::Error(Error); }
-
-	// FDataTableEditorUtils::RemoveRow broadcasts RowList internally.
-	const bool bRemoved = FDataTableEditorUtils::RemoveRow(DataTable, FName(*RowName));
-	if (!bRemoved)
-	{
-		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Failed to remove row '%s' from '%s' (row not found?)"), *RowName, *AssetPath));
-	}
-
-	bool bSave = false;
-	Params->TryGetBoolField(TEXT("save"), bSave);
-	bool bSaved = bSave ? UEditorAssetLibrary::SaveLoadedAsset(DataTable, false) : false;
-
-	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
-	Root->SetStringField(TEXT("asset_path"), AssetPath);
-	Root->SetStringField(TEXT("row_name"), RowName);
-	Root->SetBoolField(TEXT("removed"), true);
 	Root->SetBoolField(TEXT("saved"), bSaved);
 	Root->SetBoolField(TEXT("success"), true);
 	return FMonolithActionResult::Success(Root);

@@ -51,7 +51,7 @@ void FMonolithBlueprintModule::StartupModule()
 	// central bulk_fill.apply / describe.schema dispatchers (Phase 0).
 	FMonolithBlueprintBulkFillAdapter::Register();
 
-	UE_LOG(LogMonolith, Log, TEXT("Monolith — Blueprint module loaded (105 actions + bulk_fill/describe adapter)"));
+	UE_LOG(LogMonolith, Log, TEXT("Monolith — Blueprint module loaded (121 actions + bulk_fill/describe adapter)"));
 }
 
 void FMonolithBlueprintModule::ShutdownModule()

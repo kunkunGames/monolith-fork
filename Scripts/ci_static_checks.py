@@ -263,6 +263,47 @@ def check_automation_test_names(ctx: CheckContext) -> None:
             ctx.block("automation-tests", f"Duplicate UE Automation Test name: {name}", paths[0])
 
 
+def check_action_registry_duplicates(ctx: CheckContext) -> None:
+    config = ctx.config.get("action_registry", {})
+    if config.get("enabled", True) is False:
+        return
+
+    source_dir = ctx.path(str(ctx.config.get("source_dir", "Source")))
+    if not source_dir.is_dir():
+        return
+
+    extensions = set(config.get("scan_extensions", [".cpp", ".h", ".hpp"]))
+    register_re = re.compile(
+        r"RegisterAction\s*\(\s*TEXT\(\"([^\"]+)\"\)\s*,\s*TEXT\(\"([^\"]+)\"\)",
+        re.MULTILINE | re.DOTALL,
+    )
+    registrations: dict[tuple[str, str], list[tuple[Path, int]]] = {}
+
+    for path in ctx.tracked_files():
+        if path.suffix not in extensions:
+            continue
+        try:
+            path.resolve().relative_to(source_dir)
+        except ValueError:
+            continue
+
+        text = read_text(path)
+        for match in register_re.finditer(text):
+            namespace, action = match.group(1), match.group(2)
+            line_number = text.count("\n", 0, match.start()) + 1
+            registrations.setdefault((namespace, action), []).append((path, line_number))
+
+    for (namespace, action), locations in sorted(registrations.items()):
+        if len(locations) <= 1:
+            continue
+        location_text = ", ".join(f"{ctx.rel(path)}:{line}" for path, line in locations)
+        ctx.block(
+            "action-registry",
+            f"Duplicate action registration {namespace}.{action}: {location_text}",
+            locations[0][0],
+        )
+
+
 def check_generated_h_include_order(ctx: CheckContext) -> None:
     for path in ctx.tracked_files():
         if path.suffix not in {".h", ".hpp"}:
@@ -604,6 +645,7 @@ def check_proxy_smoke(ctx: CheckContext) -> None:
 def run_checks(ctx: CheckContext) -> list[Finding]:
     check_uplugin_and_modules(ctx)
     check_automation_test_names(ctx)
+    check_action_registry_duplicates(ctx)
     check_generated_h_include_order(ctx)
     check_text_hygiene(ctx)
     check_repo_hygiene(ctx)
@@ -762,6 +804,17 @@ def run_selftest() -> int:
             lambda root: (root / "Source/Foo/Private/DuplicateTests.cpp").write_text(
                 "IMPLEMENT_SIMPLE_AUTOMATION_TEST(FOne, \"Monolith.Duplicate\", Flags)\n"
                 "IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTwo, \"Monolith.Duplicate\", Flags)\n",
+                encoding="utf-8",
+            ),
+        ),
+        (
+            "duplicate action registration",
+            "action-registry",
+            lambda root: (root / "Source/Foo/Private/DuplicateActions.cpp").write_text(
+                "void Register(FRegistry& Registry) {\n"
+                "    Registry.RegisterAction(TEXT(\"foo\"), TEXT(\"bar\"), TEXT(\"one\"), Handler);\n"
+                "    Registry.RegisterAction(TEXT(\"foo\"), TEXT(\"bar\"), TEXT(\"two\"), Handler);\n"
+                "}\n",
                 encoding="utf-8",
             ),
         ),

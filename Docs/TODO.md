@@ -681,7 +681,7 @@ Priority features identified for future waves:
 - [x] Material `get_thumbnail` now accepts `save_to_file` param (2026-03-09)
 - [x] Niagara `get_compiled_gpu_hlsl` auto-compiles system if HLSL not available (2026-03-09)
 - [x] Niagara `User.` prefix stripped in get_parameter_value, trace_parameter_binding, remove_user_parameter, set_parameter_default (2026-03-09)
-- [x] Per-action param schemas in `monolith_discover()` output — all 122 actions now have param documentation (2026-03-09)
+- [x] Per-action param schemas in `monolith_discover()` output — all current 121 blueprint actions have param documentation (2026-03-09; count reconciled after duplicate-action cleanup on 2026-05-27)
 - [x] Niagara `get_module_inputs` — types now use `PinToTypeDefinition` instead of default Vector4f (2026-03-09)
 - [x] Niagara `get_ordered_modules` — usage filter now works with shorthands ("spawn", "update"), returns error on invalid values, returns all stages when omitted (2026-03-09)
 - [x] Niagara `get_renderer_bindings` — clean JSON output (name/bound_to/type) instead of raw UE struct dumps (2026-03-09)

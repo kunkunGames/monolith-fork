@@ -146,7 +146,7 @@ Section-keyed editorial onboarding guide for your AI agent — an onboarding scr
 
 ## blueprint
 
-Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, spawn-time actor placement, and dataset read/edit (DataTable / CurveTable / StringTable round-trip + `seed_data_asset`). **122 actions.**
+Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, spawn-time actor placement, and dataset read/edit (DataTable / CurveTable / StringTable round-trip + `seed_data_asset`). **121 actions.**
 
 > For full param schemas, call `monolith_discover("blueprint")` at runtime. The action surface is too broad to enumerate here without bloat — high-traffic actions are documented below; the rest are listed and discoverable.
 
@@ -242,7 +242,7 @@ Returns an `FDryRunReport`-shaped per-field `{path, current, proposed, ok, reaso
 | Action | Key params | Notes |
 |--------|-----------|-------|
 | `describe_data_table_schema` | `asset_path` | Row schema only, no data |
-| `remove_data_table_row` | `asset_path`, `row_name`, `save?` | Row delete |
+| `remove_data_table_row` | `asset_path`, `row_name`, `dry_run?`, `confirm?`, `save?` | Guarded row delete; requires `dry_run=true` or `confirm=true` |
 | `rename_data_table_row` | `asset_path`, `old_name`, `new_name`, `save?` | Row rename |
 | `duplicate_data_table_row` | `asset_path`, `source_row`, `new_name`, `save?` | Row copy |
 | `export_data_table` | `asset_path`, `format?` (`json`/`csv`), `use_json_objects?`, `simple_text?` | Round-trippable text blob |
