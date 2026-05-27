@@ -1817,6 +1817,8 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleRequestCompile),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.Optional(TEXT("force"), TEXT("bool"), TEXT("Force compilation"), TEXT("false"))
+			.Optional(TEXT("synchronous"), TEXT("bool"), TEXT("Wait for compilation to complete"), TEXT("false"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("create_system"), TEXT("Create a new Niagara system"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateSystem),
