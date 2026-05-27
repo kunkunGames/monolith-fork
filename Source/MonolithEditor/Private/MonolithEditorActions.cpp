@@ -3160,12 +3160,38 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureLevelViewport(const T
 	}
 
 	const TSharedPtr<FJsonObject>* CameraObject = nullptr;
-	if (Params->TryGetObjectField(TEXT("camera"), CameraObject) && CameraObject && CameraObject->IsValid())
+	TSharedPtr<FJsonObject> ParsedCamera;
+	if (Params->HasField(TEXT("camera")))
+	{
+		if (!Params->TryGetObjectField(TEXT("camera"), CameraObject))
+		{
+			FString CameraStr;
+			if (Params->TryGetStringField(TEXT("camera"), CameraStr) && !CameraStr.IsEmpty())
+			{
+				ParsedCamera = FMonolithJsonUtils::Parse(CameraStr);
+				if (!ParsedCamera.IsValid())
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'camera' JSON string could not be parsed"), FMonolithJsonUtils::ErrInvalidParams);
+				}
+				CameraObject = &ParsedCamera;
+			}
+			else
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'camera' must be an object or JSON string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
+	}
+
+	if (CameraObject && *CameraObject && (*CameraObject)->IsValid())
 	{
 		FVector Location;
 		if (ReadVectorArray(*CameraObject, TEXT("location"), Location))
 		{
 			Client->SetViewLocation(Location);
+		}
+		else if ((*CameraObject)->HasField(TEXT("location")))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.location' must be an array"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 
 		FRotator Rotation;
@@ -3173,11 +3199,25 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureLevelViewport(const T
 		{
 			Client->SetViewRotation(Rotation);
 		}
+		else if ((*CameraObject)->HasField(TEXT("rotation")))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.rotation' must be an array"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 
 		double Fov = 0.0;
-		if ((*CameraObject)->TryGetNumberField(TEXT("fov"), Fov) && Fov > 0.0)
+		if ((*CameraObject)->HasField(TEXT("fov")))
 		{
-			Client->ViewFOV = FMath::Clamp(static_cast<float>(Fov), 5.0f, 170.0f);
+			if ((*CameraObject)->TryGetNumberField(TEXT("fov"), Fov))
+			{
+				if (Fov > 0.0)
+				{
+					Client->ViewFOV = FMath::Clamp(static_cast<float>(Fov), 5.0f, 170.0f);
+				}
+			}
+			else
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.fov' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 
 		Client->Invalidate();
@@ -3196,7 +3236,10 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureLevelViewport(const T
 	}
 
 	FString OutputPath;
-	Params->TryGetStringField(TEXT("output_path"), OutputPath);
+	if (Params->HasField(TEXT("output_path")) && !Params->TryGetStringField(TEXT("output_path"), OutputPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'output_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (OutputPath.IsEmpty())
 	{
 		OutputPath = FPaths::ProjectSavedDir() / TEXT("Screenshots/Monolith/LevelViewport_") + FDateTime::UtcNow().ToString(TEXT("%Y%m%d_%H%M%S")) + TEXT(".png");
