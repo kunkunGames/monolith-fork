@@ -146,7 +146,7 @@ Section-keyed editorial onboarding guide for your AI agent — an onboarding scr
 
 ## blueprint
 
-Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, spawn-time actor placement, and dataset read/edit (DataTable / CurveTable / StringTable round-trip + `seed_data_asset`). **111 actions.**
+Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, spawn-time actor placement, and dataset read/edit (DataTable / CurveTable / StringTable round-trip + `seed_data_asset`). **122 actions.**
 
 > For full param schemas, call `monolith_discover("blueprint")` at runtime. The action surface is too broad to enumerate here without bloat — high-traffic actions are documented below; the rest are listed and discoverable.
 
@@ -631,7 +631,7 @@ Project-wide asset index backed by SQLite + FTS5. **7 actions.**
 
 ### `project.search`
 
-Full-text search across all indexed project assets, nodes, variables, and parameters.
+Full-text search across all indexed project assets, nodes, variables, and parameters. (Returns an MCP error `-32000` if the index database is offline or indexing is currently in progress).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|

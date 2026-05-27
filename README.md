@@ -14,19 +14,71 @@ Most MCP integrations for Unreal register every action as a separate tool. That 
 
 One plugin. One MCP endpoint. 23 tools instead of 1300+. The AI calls `monolith_discover()` and `monolith_guide()` when it needs to know what's available, and otherwise just hits `blueprint_query("create_asset", ...)`, `material_query("compile", ...)`, and so on.
 
-I use it every day. It does what I need.
+> **Platform:** Windows, macOS, Linux.
+
+## Why Monolith?
+
+Most MCP integrations register every action as a separate tool, which floods the AI's context window and buries the actually useful stuff. Monolith uses a **namespace dispatch pattern** instead: each domain exposes a single `{namespace}_query(action, params)` tool, and a central `monolith_discover()` call lists everything available. Small tool list (23 tools), massive capability (1385 actions across 19 in-tree namespaces; sibling plugins add their own and push the live registry higher when loaded). The AI gets oriented fast and spends its context on your actual problem.
+
+## What Can It Actually Do?
+
+**Blueprint (122 actions)** — Full programmatic control of every Blueprint in your project. Create from any parent class, build entire node graphs from a JSON spec, add/remove/connect/disconnect nodes in bulk, manage variables, components, functions, macros, and event dispatchers. Implement interfaces, reparent hierarchies, edit construction scripts, read/write CDO properties on any Blueprint or DataAsset. The auto-layout engine uses a modified Sugiyama algorithm so AI-generated graphs actually look clean. Compare two Blueprints side-by-side, scaffold from templates, manage user defined structs and enums. New in 0.15.0: a **dataset read/edit pack** for round-tripping DataTables, CurveTables, and StringTables — read rows with the row struct schema inline, bulk upsert with dry-run previews, row CRUD, JSON/CSV import/export, plus `seed_data_asset` to create and populate a DataAsset in one atomic call. Also new: `add_property_access` (get/set a UPROPERTY on any foreign class by name, resolved to its real type), `override_parent_function` (override an overridable parent function that returns a value), and `save_dirty_assets` to flush a batch of edits. Hand the AI a description and it builds the whole thing — or point it at an existing Blueprint and it'll surgically rewire what you need.
+
+**Material (63 actions)** — Create materials, material instances, and material functions from scratch. Build entire PBR graphs programmatically — add expressions, connect pins, auto-layout, recompile. Drop in custom HLSL nodes. Import textures from disk and wire them directly into material slots. Batch-set properties across dozens of instances at once. Render material previews and thumbnails without leaving the AI session. Preview textures with full metadata, check tiling quality with anti-tiling analysis, batch delete expressions, clear entire graphs. Full material function support: create, build internal graphs, export/import between projects. Get compilation stats, validate for errors, inspect shader complexity. Covers the full material workflow from creation to validation.
+
+**Animation (125 actions)** — The entire animation pipeline, end to end. Create and edit sequences with bone tracks, curves, notifies, and sync markers. Build montages with sections, slots, blending config, and anim segments. Set up 1D/2D Blend Spaces and Aim Offsets with sample points. **Animation Blueprint graph writing** — add states to state machines, create transitions, set transition rules, add and connect anim graph nodes, set state animations. As of 0.15.0, `add_anim_graph_node` resolves arbitrary concrete custom AnimGraph node classes by path or name (not just the built-in node-type aliases), so AI can wire up nodes from any plugin's `UAnimGraphNode_Base` subclass. AI can build ABP locomotion setups programmatically, not just read them. PoseSearch integration: create schemas and databases, configure channels, rebuild the search index. Control Rig graph manipulation with node wiring and variable management. Physics Asset editing for body and constraint properties. IK Rig and Retargeter support — chain mapping, solver configuration, the works. Skeleton management with sockets, virtual bones, and curves. 125 actions covering the full animation pipeline.
+
+**Niagara (109 actions)** — Full system and emitter lifecycle — create, duplicate, configure, compile, save. Module CRUD with override-preserving reorder so you don't blow away artist tweaks. Complete dynamic input lifecycle: attach inputs, inspect the tree, read values, remove them. Event handler and simulation stage CRUD. Niagara Parameter Collections with full param management. Effect Type creation with scalability and culling configuration. Per-quality-level scalability settings. Renderer helpers for every type — mesh assignment, ribbon presets (trail, beam, lightning, tube), SubUV and flipbook setup. Data interface configuration and property inspection handles JSON arrays and structs natively. Diff two systems to see exactly what changed. Clone overrides between modules, duplicate modules, discover parameter bindings, inspect module outputs, rename user parameters. Batch execute with read-only optimization so queries don't trigger unnecessary recompiles. Full `export_system_spec` and `import_system_spec` with merge mode. As of 0.15.0, `get_system_summary` / `get_emitter_summary` take a `detail_level` for richer event-aware payloads, and `validate_system` reasons about inter-emitter event chains — thanks to @middle233's PR #60. Covers the full Niagara workflow from system creation to final polish.
+
+**UI (138 actions)** — Widget Blueprint CRUD with full widget tree manipulation. UMG baseline plus Animation v2, EffectSurface, Spec Builder, Type Registry, hoisted Design Import, and 51 CommonUI actions (conditional on `WITH_COMMONUI`), plus 4 GAS attribute-binding aliases. 0.15.0 closed a big chunk of the MCP gap here: close-the-loop primitives (`rename_widget`, `add_widget_variable`, `audit_focus_chain`, `list_widget_property_enums`, `convert_textblock_to_common`, `dump_blueprint_compile_log` and friends), headline scaffolders (`scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu`, `build_menu_from_spec`), and gap-closure actions like `set_widget_navigation_bulk`, `dump_widget_navigation`, `convert_border_to_common`, `reparent_widget_root`, and `set_widget_is_variable`. Pre-built templates for common game UI: HUD elements, menus, settings panels, confirmation dialogs, loading screens, inventory grids, save slot lists, notification toasts. Style everything — brushes, fonts, color schemes, batch style operations. Create keyframed widget animations. Full game scaffolding: settings systems, save/load, audio config, input remapping, accessibility features. Run accessibility audits, set up colorblind modes, configure text scaling. Covers the full UI workflow from widget creation to accessibility.
+
+**Editor (59 actions)** — Trigger full UBT builds or Live Coding compiles, read build errors and compiler output, search and tail editor logs, get crash context after failures. Capture preview screenshots of materials, Niagara systems, static meshes, skeletal meshes, widgets, material grids, and debug overlays. Inspect material PBR slots and texture channels without rendering. Capture multi-frame GIF sequences, create blank maps, query module status, list/run UE automation tests, inspect editor selections and asset context, plus a Python escape-hatch and persistent-level swap for automation flows. The AI can compile your code, read the errors, fix the C++, recompile, and verify the fix — all without you touching the editor.
+
+**Config (6 actions)** — Full INI resolution chain awareness: Base, Platform, Project, User. Ask what any setting does, where it's overridden, what the effective value is, and how it differs from the engine default. Search across all config files at once. Perfect for performance tuning sessions where you want the AI to just sort out your INIs.
+
+**Source (11 actions)** — Search over 1M+ Unreal Engine C++ symbols instantly. Read function implementations, get full class hierarchies, trace call graphs (callers and callees), verify include paths — all against a local index, fully offline. The native C++ indexer runs automatically on editor startup. No Python, no setup. Optionally index your project's own C++ source for the same coverage on your code. The AI never has to guess at a function signature again.
+
+**Project (7 actions)** — SQLite FTS5 full-text search across every indexed asset in your project. Find assets by name, type, path, or content. Trace references between assets. Search gameplay tags. Get detailed asset metadata. The index updates live as assets change and covers marketplace/Fab plugin content too — 15 deep indexers registered including DataAsset subclasses.
+
+**Mesh (194 actions)** — The biggest module by far. 194 core actions across 22 capability tiers, plus 45 procedural town generation actions that are disabled by default (work-in-progress, and unless you're willing to dig in and help improve it, best left alone for now — they're not in the advertised public count). Mesh inspection and comparison. Full actor CRUD with scene manipulation. Physics-based spatial queries (raycasts, sweeps, overlaps) that work in-editor without PIE. Level blockout workflow with auto-matching and atomic replacement. GeometryScript mesh operations (boolean, simplify, remesh, LOD gen, UV projection). Horror spatial analysis — sightlines, hiding spots, ambush points, zone tension, pacing curves (WIP). Accessibility validation with A-F grading. Lighting analysis (WIP), audio/acoustics with Sabine RT60 and stealth maps (WIP), performance budgeting (WIP). Decal placement with storytelling presets. Level design tools for lights, volumes, sublevels, prefabs, HISM instancing. Tech art pipeline for mesh import (now with optional skeletal-mesh + animation import via `import_mesh`, thanks to @4698to's PR #58), LOD gen, texel density, collision authoring. Context-aware prop scatter on any surface. Procedural geometry — parametric furniture (15 types), horror props (7 types), architectural structures, mazes, pipes, terrain. Genre preset system for any game type. Encounter design with patrol routes, safe room evaluation, and scare sequence generation. Full accessibility reporting.
+
+**GAS (135 actions)** — Complete Gameplay Ability System integration. 131 GAS-namespace actions plus 4 widget attribute-binding actions also aliased into the `ui` namespace. Create and manage Gameplay Abilities with activation policies, cooldowns, costs, and tags. Full AttributeSet CRUD — both C++ and Blueprint-based (via optional GBA plugin). Ships with `ULeviathanVitalsSet` AttributeSet template (Phase J F4) so projects without GBA still get a working starter set. Gameplay Effect authoring with modifiers, duration policies, stacking, period, and conditional application. Ability System Component (ASC) management — grant/revoke abilities, apply/remove effects, query active abilities and effects. Gameplay Tag utilities. Gameplay Cue management — create, trigger, inspect cues for audio/visual feedback. Target data generation and targeting tasks. Input binding for ability activation. Runtime inspection and debugging tools. Scaffolding actions that generate complete GAS setups from templates. Accessibility-focused infinite-duration GEs for reduced difficulty modes.
+
+**AI (221 actions)** — The most comprehensive AI tooling available through any MCP server. Full lifecycle management for Behavior Trees, Blackboards, State Trees, Environment Query System (EQS), Smart Objects, AI Controllers, AI Perception, Navigation, and runtime debugging. Crown jewel actions: `build_behavior_tree_from_spec` and `build_state_tree_from_spec` — hand the AI a JSON description of your desired AI behavior and it builds the entire asset programmatically. Phase J shipped BT crash hardening (F1) and BT graph + perception inspection helpers (F8). Create BT nodes (tasks, decorators, services), wire them into trees, configure blackboard keys, set up EQS queries with generators and tests, define Smart Object slots with behavior configs, configure perception senses (sight, hearing, damage, touch), manage navigation filters and query filters, inspect and debug AI at runtime during PIE. Scaffolding actions generate complete AI setups from templates — patrol AI, combat AI, companion AI, and more. 221 actions across 15 categories. Conditional on State Tree and Smart Objects plugins (both ship with UE) — gated via `WITH_STATETREE` and `WITH_SMARTOBJECTS` (Phase J F22 retrofit). Optional Mass Entity and Zone Graph integration for large-scale AI.
+
+**Logic Driver (66 actions)** — Full integration with Logic Driver Pro, a marketplace state machine plugin. State machine CRUD — create, inspect, compile, delete. Graph read/write — add states, transitions, configure properties, set transition rules. Node configuration for state nodes, conduit nodes, and transition events. Runtime/PIE control — start, stop, query active states, trigger transitions. One-shot `build_sm_from_spec` builds complete state machines from a JSON specification. JSON spec import/export for templating and version control. Scaffolding actions generate common patterns (door controller, health system, AI patrol, dialogue system, elevator, puzzle, inventory). Component management — add/configure Logic Driver components on actors. Text graph visualization for debugging. Discovery actions list available node classes and templates. Reflection-only integration (no direct C++ API linkage) — works with any Logic Driver Pro version. Conditional on `#if WITH_LOGICDRIVER` — auto-detected at build time.
+
+**ComboGraph (13 actions)** — Integration with the ComboGraph marketplace plugin for visual combo tree editing. Graph CRUD — create, inspect, validate combo graphs. Node and edge management — add combo nodes with montage animations, wire them with edges, configure effects and cues. GAS cross-integration — scaffold combo abilities that bridge ComboGraph with Gameplay Ability System. Reflection-only integration, conditional on `#if WITH_COMBOGRAPH`.
+
+**Audio (98 actions)** — Editor-time audio asset authoring across the full UE audio pipeline. 82 baseline audio-namespace actions plus 4 perception-binding actions (`bind_sound_to_perception` and friends, Phase J integration) plus 12 v0.14.10 MetaSound document introspection actions (PR #18 by @alakangas — read-side complement to the existing Builder API). Full CRUD on the 5 configurable audio asset types — SoundAttenuation, SoundClass, SoundMix, SoundConcurrency, SoundSubmix. Sound Cue graph construction — add nodes (22 types), wire them, set properties via reflection. MetaSound Builder API integration for programmatic MetaSound authoring — nodes, pins, graph inputs/outputs, interfaces, variables. MetaSound document introspection (v0.14.10) for read-only inspection of any on-disk MetaSound asset — list, document walk, summary, node instance details, connections, variables, user parameters, search, info, dependencies, validation. Crown jewels: `build_sound_cue_from_spec` and `build_metasound_from_spec` — declarative JSON-to-graph in a single call. Batch operations for class/attenuation/submix/concurrency/compression/looping/virtualization across dozens of assets at once. Audio health checks — find unused sounds, missing attenuation, unassigned classes. Built-in `create_test_wave` (Phase J F18) generates a sine SoundWave on demand for diagnostic work. Phase J F11 added a hardened audio asset validator. Five template Sound Cues (random, layered, looping ambient, distance crossfade, switch) and four template MetaSounds (oneshot SFX, looping ambient, synth tone, interactive). SoundWave inspection is read-only; reflection-based property edits still work for batch sound wave tuning. MetaSound features gated on `#if WITH_METASOUND` — graceful degradation when absent.
 
 ---
 
 ## What it does
 
-Monolith exposes **1348 actions across 19 in-tree namespaces** through a namespace-dispatch pattern: each domain registers a single `{namespace}_query(action, params)` tool, and a central `monolith_discover()` lists everything available.
-
-Covered domains: Blueprints, Materials, Animation, Niagara, Mesh, UI (incl. CommonUI), AI (Behavior Trees, State Trees, EQS, Smart Objects, Perception, Navigation), Gameplay Ability System, Logic Driver state machines, ComboGraph combo trees, Audio (Sound Cues + MetaSounds), Editor control (UBT builds, log capture, scene capture, asset preview & inspection), Engine source search (1M+ symbols, fully offline), Project asset search (SQLite FTS5), INI config, Level Sequences, plus a `bulk_fill` / `describe` reflection framework for deep property writes and a `monolith_guide` self-onboarding tool for your AI.
-
-Full per-namespace breakdown: **[Tool Reference (wiki)](https://github.com/tumourlove/monolith/wiki/Tool-Reference)**.
-
-Works with **Claude Code**, **Cursor**, **Cline**, or any MCP-compatible client. Windows, macOS, Linux.
+- **Blueprint (122 actions)** — Full CRUD, node graph manipulation, JSON-to-Blueprint building, auto-layout (Sugiyama), CDO property access, structs, enums, template system, Blueprint comparison, cross-class property get/set, parent-function overrides. Includes a 0.15.0 dataset read/edit pack (DataTable/CurveTable/StringTable round-trip + `seed_data_asset`). Works as a complete Blueprint co-pilot with any MCP client
+- **Material authoring (63 actions)** — Programmatic PBR graph building, custom HLSL, material functions, texture import, batch operations, preview rendering, compilation stats, tiling quality analysis, texture preview
+- **Animation (125 actions)** — Sequences, montages, blend spaces, Animation Blueprint graph writing (add states, transitions, rules, wire nodes — including arbitrary custom `UAnimGraphNode_Base` classes via `add_anim_graph_node`), PoseSearch, Control Rig, Physics Assets, IK Rigs, Retargeters, skeleton management
+- **Niagara VFX (109 actions)** — System/emitter lifecycle, dynamic inputs, event handlers, sim stages, Parameter Collections, Effect Types, scalability settings, renderer presets, data interfaces, system diffing, batch execute, event-aware summaries + `validate_system` event-chain reasoning (`detail_level`, 0.15.0)
+- **Mesh (194 actions)** — 22 capability tiers: mesh inspection, scene manipulation, spatial queries, blockout-to-production, GeometryScript ops, horror spatial analysis (WIP), accessibility validation (A-F grading), lighting (WIP), audio/acoustics (WIP), performance budgeting (WIP), decals, level design, tech art pipeline (mesh import now supports optional skeletal-mesh + animation import via `import_mesh`, PR #58 by @4698to), context-aware props, procedural geometry (furniture, horror props, structures, mazes, terrain), genre presets, encounter design, accessibility reports. +45 town gen actions (work-in-progress, disabled by default, not in the public count)
+- **AI (221 actions)** — Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, AI Controllers, Perception, Navigation, runtime debugging, scaffolding. Crown jewels: `build_behavior_tree_from_spec` and `build_state_tree_from_spec`. Gated on `WITH_STATETREE` + `WITH_SMARTOBJECTS` (Phase J F22)
+- **GAS (135 actions)** — Full Gameplay Ability System: abilities, AttributeSets (C++ + `ULeviathanVitalsSet` template; Blueprint sets via optional GBA), Gameplay Effects, ASC management, tags, cues, targeting, input binding, runtime inspection, scaffolding templates, accessibility-focused infinite-duration GEs. 4 attribute-binding actions surface in the `ui` namespace as aliases
+- **Logic Driver (66 actions)** — Logic Driver Pro state machines: SM CRUD, graph read/write, node config, runtime/PIE, `build_sm_from_spec`, JSON spec, scaffolding (door, health, AI patrol, dialogue, elevator, puzzle, inventory), component management
+- **ComboGraph (13 actions)** — ComboGraph combo trees: graph CRUD, nodes, edges, effects, cues, GAS cross-integration, ability scaffolding
+- **Audio (98 actions)** — Sound asset CRUD (SoundAttenuation, SoundClass, SoundMix, SoundConcurrency, SoundSubmix), Sound Cue graph building, MetaSound Builder API + document introspection (conditional on `WITH_METASOUND`; v0.14.10 +12 introspection actions from PR #18 by @alakangas), batch ops, audio health checks, `build_sound_cue_from_spec`, `build_metasound_from_spec`, `apply_audio_template`, template cues + MetaSounds, sine-wave test asset factory, AI perception sound binding
+- **UI (138 actions)** — UMG baseline + 51 CommonUI (gated on `WITH_COMMONUI`, shipped v0.14.0) + 4 GAS attribute-binding aliases, plus the 0.15.0 gap-closure sweep: close-the-loop primitives, headline scaffolders (`scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu`, `build_menu_from_spec`), and navigation/conversion actions (`set_widget_navigation_bulk`, `dump_widget_navigation`, `convert_border_to_common`, `reparent_widget_root`, `set_widget_is_variable`). Widget Blueprint CRUD, pre-built templates (HUDs, menus, settings, inventory, save slots), styling, animation, game system scaffolding (save/load, audio, input remapping), accessibility audit, colorblind modes, text scaling
+- **Editor control (59 actions)** — UBT builds, Live Coding, error diagnosis, log search, scene capture, material-grid and overlay captures, material PBR and texture-channel inspection, GIF capture, crash context, blank map factory, module status, selection/context inspection, automation test list/run, Python escape-hatch, persistent-level swap
+- **Config intelligence (6 actions)** — Full INI resolution chain, explain, diff, search across all config files
+- **Project search (7 actions)** — SQLite FTS5 across all indexed assets including marketplace/Fab content, reference tracing, 15 deep indexers
+- **Engine source (11 actions)** — Native C++ indexer over 1M+ symbols, call graphs, class hierarchy, offline — no Python required. Auto-reindex on hot-reload (Phase J F17)
+- **Standalone C++ tools** — `monolith_proxy.exe` (MCP proxy) and `monolith_query.exe` (offline DB queries) — zero Python, zero UE dependency, instant startup
+- **Auto-updater** — Off by default as of v0.14.6. When enabled, checks GitHub Releases on editor startup, verifies SHA256 against the release notes marker, downloads and stages updates, auto-swaps on exit
+- **MCP auto-reconnect proxy** — stdio-to-HTTP proxy keeps Claude Code sessions alive across editor restarts. Available as native exe (zero dependencies) or Python script (fallback)
+- **Optional module system** — Extend Monolith with new MCP namespaces for third-party plugins (GeometryScripting, BlueprintAssist, GBA, ComboGraph, Logic Driver, MetaSound) without breaking the build for users who don't own them. The sibling-plugin pattern lets you ship your own integration plugin alongside Monolith — see `Docs/SIBLING_PLUGIN_GUIDE.md`
+- **Claude Code skills** — 16 domain-specific workflow guides bundled with the plugin
+- **Bulk-fill + describe ergonomics framework** — `bulk_fill_query` (`apply` / `list_namespaces`) and `describe_query` (`schema` / `list_targets`) route through a reflection-walker to 12 per-namespace adapters, so your AI can populate or inspect deeply-nested property trees in a single call with dry-run previews (per-field writes, silent drops, clamps, errors). One mental model for bulk authoring across blueprint, gas, ui, ai, niagara, material, audio, mesh, animation, logicdriver, combograph, and the ISX sibling. `describe_query("action_schema")` returns any registered action's full param schema so callers stop guessing param names
+- **`monolith_guide()`** — Section-keyed editorial onboarding guide for your AI agent: an onboarding script, worked cross-namespace recipes, X-vs-Y decision matrices, error-to-recovery maps, a skills map, and Monolith-specific gotchas — plus a live registry overlay so the action counts always match your running build. Pull a single section (`monolith_guide(section="recipes")`) to bound context cost. Built for users with no project `CLAUDE.md` or private skills — point your AI at it and it self-onboards. Hand-authored markdown + live counts; offline CLI parity. Error messages now self-describe their recovery steps inline
+- **Pure C++** — Direct UE API access, embedded HTTP MCP server, zero external dependencies
 
 ---
 
@@ -58,7 +110,108 @@ The native C++ proxy keeps your AI session alive when the editor restarts. For *
 
 **3. Open the editor.** Wait 30-60 seconds for the first-launch index. When you see `Monolith MCP server listening on port 9316` in the Output Log (filter `LogMonolith`), connect your AI client and ask *"what Monolith tools do you have?"* to verify.
 
-Project-instructions files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, etc.) vary per assistant — just paste the namespace list into your AI and ask it to generate the right format for your toolchain. Full install variants, troubleshooting, and post-install setup live on the [Installation wiki](https://github.com/tumourlove/monolith/wiki/Installation).
+Windows:
+```json
+{
+  "mcpServers": {
+    "monolith": {
+      "command": "Plugins/Monolith/Scripts/monolith_proxy.bat",
+      "args": []
+    }
+  }
+}
+```
+
+macOS / Linux:
+```json
+{
+  "mcpServers": {
+    "monolith": {
+      "command": "Plugins/Monolith/Scripts/monolith_proxy.sh",
+      "args": []
+    }
+  }
+}
+```
+
+> **No proxy?** Use direct HTTP instead — you'll just need to restart Claude Code each time the editor restarts:
+> ```json
+> {"mcpServers": {"monolith": {"type": "http", "url": "http://localhost:9316/mcp"}}}
+> ```
+
+**For Cursor / Cline:**
+
+```json
+{
+  "mcpServers": {
+    "monolith": {
+      "type": "streamableHttp",
+      "url": "http://localhost:9316/mcp"
+    }
+  }
+}
+```
+
+> Cursor and Cline handle server restarts natively — the proxy isn't needed.
+
+### Step 3: Open the editor
+
+Open your `.uproject` as normal. On first launch:
+
+1. Monolith auto-indexes your project (30-60 seconds depending on size — go get a coffee)
+2. Open the **Output Log** (Window > Developer Tools > Output Log)
+3. Filter for `LogMonolith` — you'll see the server start up and the index complete
+
+When you see `Monolith MCP server listening on port 9316`, you're in business.
+
+### Step 4: Connect your AI
+
+1. Open **Claude Code** (or your MCP client) from your project directory — the one with `.mcp.json`
+2. Claude Code auto-detects `.mcp.json` on startup and connects to Monolith
+3. Sanity check: ask *"What Monolith tools do you have?"*
+
+You should get back a list of namespace tools (`blueprint_query`, `material_query`, etc.). If you do, everything's working.
+
+### Step 5: Add project instructions for your AI
+
+Different AI coding assistants use different conventions for project-instructions files (`CLAUDE.md` for Claude Code, `AGENTS.md` for Codex, `.cursorrules` for Cursor, `.github/copilot-instructions.md` for Copilot, plus a long tail). Those conventions evolve faster than a static template can keep up — so rather than ship a template that grows stale, the recommended workflow is to ask your AI directly.
+
+Practical prompt to feed your assistant once Monolith is installed and running:
+
+> *"I've installed the Monolith Unreal plugin. It exposes ~1385 actions across 19 namespaces (`blueprint`, `material`, `animation`, `niagara`, `mesh`, `ui`, `gas`, `ai`, `audio`, etc.) over an in-process MCP HTTP listener at `http://localhost:9316/mcp`. What's the best-practice format for a project-instructions file for [your assistant — e.g. `CLAUDE.md`, `AGENTS.md`, `.cursorrules`]? It should help with action discovery via `monolith_discover()` and `monolith_guide()`, asset-path conventions like `/Game/Path/Asset`, and verifying UE 5.7 APIs via `source_query` before writing code."*
+
+Whatever your AI generates, drop it at the appropriate path for your toolchain. The action counts and workflow notes from this README's earlier sections are usable input.
+
+### Step 6: (Optional) Index your project's C++ source
+
+Engine source indexing is automatic — `source_query` works immediately with no setup.
+
+If you also want your AI to search your **own project's C++ source** (find callers, callees, and class hierarchies across your own code):
+
+1. Install **Python 3.10+**
+2. Run `python Plugins/Monolith/Scripts/index_project.py` from your project root
+3. Your project source gets indexed into `EngineSource.db` alongside engine symbols
+4. To re-run the indexer without leaving the editor: `source_query("trigger_project_reindex")`
+
+### Verify it's alive
+
+With the editor running, hit this from any terminal:
+
+```bash
+curl -X POST http://localhost:9316/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+You'll get a JSON response listing all Monolith tools. If you get "connection refused", the editor isn't running or something went sideways — check the Output Log for `LogMonolith` errors.
+
+### (Optional) Install Claude Code skills
+
+Monolith ships domain-specific workflow skills for Claude Code:
+
+```bash
+cp -r Plugins/Monolith/Skills/* ~/.claude/skills/
+```
 
 ---
 
@@ -66,10 +219,61 @@ Project-instructions files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, etc.) vary
 
 Two zero-dependency C++ executables ship in `Binaries/` and work without the editor:
 
+```
+Monolith.uplugin
+  MonolithCore          — HTTP server, tool registry, discovery, auto-updater, monolith_guide, bulk_fill + describe ergonomics framework (monolith meta 5 + bulk_fill 2 + describe 3 actions)
+  MonolithBlueprint     — Blueprint read/write, variable/component/graph CRUD, node operations, compile, CDO reader, dataset read/edit pack (DataTable/CurveTable/StringTable) (122 actions)
+  MonolithMaterial      — Material inspection + graph editing + CRUD + material functions + tiling quality (63 actions)
+  MonolithAnimation     — Animation sequences, montages, ABPs (incl. custom anim-graph nodes), PoseSearch, IKRig, Control Rig (125 actions)
+  MonolithNiagara       — Niagara particle systems, dynamic inputs, event handlers, sim stages, event-aware summaries, scalability (109 actions)
+  MonolithMesh          — Mesh inspection, scene manipulation, spatial queries, blockout, procedural geometry, horror/accessibility (194 core actions + 45 experimental town gen, off by default)
+  MonolithAI            — Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, Controllers, Perception, Navigation (221 actions)
+  MonolithEditor        — Build triggers, log capture, compile output, crash context, scene/material-grid/overlay capture, material PBR and texture-channel inspection, GIF capture, blank map factory, module status, automation test list/run, Python escape-hatch, level swap (59 actions)
+  MonolithConfig        — Config/INI resolution and search (6 actions)
+  MonolithIndex         — SQLite FTS5 deep project indexer, marketplace content, 15 asset indexers (7 actions)
+  MonolithSource        — Native C++ engine source indexer, call graphs, class hierarchy, hot-reload-aware reindex (11 actions)
+  MonolithUI            — UI widget Blueprint CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, CommonUI, scaffolders + gap-closure (138 actions)
+  MonolithGAS           — Gameplay Ability System: abilities, effects, attributes, ASC, tags, cues, targeting, ULeviathanVitalsSet template (135 actions)
+  MonolithLogicDriver   — Logic Driver Pro state machines: SM CRUD, graph read/write, JSON spec, scaffolding (66 actions)
+  MonolithComboGraph    — ComboGraph combo trees: graph CRUD, nodes, edges, effects, cues (13 actions)
+  MonolithAudio         — Audio asset CRUD, Sound Cue + MetaSound graph building + document introspection, batch ops, templates, AI perception binding, sine test wave (98 actions)
+  MonolithAudioRuntime  — Runtime sub-module supplying perception classes for audio.bind_sound_to_perception (0 MCP actions)
+  MonolithBABridge      — Blueprint Assist integration bridge (0 MCP actions — IModularFeatures only)
+  MonolithLevelSequence — Level Sequence introspection: full per-LS binding inventory (legacy Possessable/Spawnable + UE 5.7 UMovieSceneCustomBinding family), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup (8 actions)
+```
+
 - **`monolith_proxy.exe`** — MCP stdio↔HTTP proxy. Keeps your AI session alive across editor restarts. Used by the `.mcp.json` config above.
 - **`monolith_query.exe`** — Offline DB query tool. Queries the engine source index and project asset index without launching UE (instant startup). Useful for terminal-side lookups and CI.
 
-Details: [wiki Tool Reference](https://github.com/tumourlove/monolith/wiki/Tool-Reference).
+**1385 actions across 19 in-tree namespaces, exposed through 23 MCP tools (16 namespace dispatchers + `bulk_fill_query` + `describe_query` + 5 `monolith_*` meta-tools). The `ui` namespace double-counts 4 aliased GAS attribute-binding actions in that headline figure. 45 town-gen experimental actions are disabled by default (`bEnableProceduralTownGen=false`); enabling them brings the in-tree registry to 1430.** This count EXCLUDES sibling-plugin actions — `MonolithISX`, `MonolithSteamBridge`, `MonolithSubstance`, and `MonolithClaudeDesignBridge` ship in their own repos and are not in the public release zip. Live editors with sibling plugins loaded report higher counts.
+
+### Tool Reference
+
+| Namespace | Tool | Actions | Description |
+|-----------|------|---------|-------------|
+| `monolith` | `monolith_discover` | — | List available actions per namespace |
+| `monolith` | `monolith_status` | — | Server health, version, index status |
+| `monolith` | `monolith_reindex` | — | Trigger full project re-index |
+| `monolith` | `monolith_update` | — | Check or install updates |
+| `monolith` | `monolith_guide` | — | Section-keyed onboarding guide for your AI (onboarding / recipes / decisions / errors / skills_map / gotchas) with a live registry overlay |
+| `blueprint` | `blueprint_query` | 122 | Full Blueprint CRUD — read/write graphs, variables, components, functions, nodes, compile, CDO properties, auto-layout, dataset read/edit pack (DataTable/CurveTable/StringTable + `seed_data_asset`), cross-class property access, parent-function overrides |
+| `material` | `material_query` | 63 | Inspection, editing, graph building, material functions, previews, validation, tiling quality, texture preview, CRUD |
+| `animation` | `animation_query` | 125 | Montages, blend spaces, ABPs, skeletons, bone tracks, PoseSearch, IKRig, Control Rig, ABP/ControlRig writes, custom anim-graph nodes |
+| `niagara` | `niagara_query` | 109 | Systems, emitters, modules, parameters, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, scalability, event-aware summaries + `validate_system` event-chain reasoning |
+| `mesh` | `mesh_query` | 194 (+45) | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, horror analysis, lighting, audio, performance, procedural geometry, encounter design, mesh import (incl. skeletal + animation). Town gen 45 actions registered only when `bEnableProceduralTownGen=true` (not in the public count) |
+| `ai` | `ai_query` | 221 | BT, BB, State Trees, EQS, Smart Objects, Controllers, Perception, Navigation, runtime debugging, scaffolding. Conditional on `WITH_STATETREE` + `WITH_SMARTOBJECTS` |
+| `gas` | `gas_query` | 135 | Gameplay Ability System — abilities, effects, attributes (incl. `ULeviathanVitalsSet`), ASC, tags, cues, targeting, input, inspect, scaffold. Conditional on `WITH_GBA` for Blueprint AttributeSets |
+| `logicdriver` | `logicdriver_query` | 66 | Logic Driver Pro state machines — SM CRUD, graph read/write, JSON spec, scaffolding, components. Conditional on `WITH_LOGICDRIVER` |
+| `combograph` | `combograph_query` | 13 | ComboGraph combo trees — graph CRUD, nodes, edges, effects, cues, ability scaffolding. Conditional on `WITH_COMBOGRAPH` |
+| `audio` | `audio_query` | 98 | Sound asset CRUD, Sound Cue + MetaSound graph building (Builder API write-side), MetaSound document introspection (read-side, v0.14.10 +12 from PR #18 by @alakangas), batch ops, audio health checks, templates, sine test wave, AI perception binding. MetaSound features conditional on `WITH_METASOUND` |
+| `ui` | `ui_query` | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility. CommonUI 51 actions conditional on `WITH_COMMONUI`. 4 GAS attribute-binding aliases also live here |
+| `editor` | `editor_query` | 59 | Build triggers, error logs, compile output, crash context, scene/material-grid/overlay capture, material PBR and texture-channel inspection, GIF capture, blank map factory, module status, selection/context inspection, UE automation test list/run, Python escape-hatch, persistent-level swap |
+| `config` | `config_query` | 6 | INI resolution, explain, diff, search |
+| `project` | `project_query` | 7 | Deep project search — FTS5 across all indexed assets including marketplace plugins |
+| `source` | `source_query` | 11 | Native C++ engine source lookup, call graphs, class hierarchy, project reindex, hot-reload-aware refresh |
+| `bulk_fill` | `bulk_fill_query` | 2 | Reflection-walker bulk property fill across 12 per-namespace adapters — `apply` (dry-run-able tree write), `list_namespaces` |
+| `describe` | `describe_query` | 3 | Read-only schema introspection for the same 12 adapters — `schema`, `list_targets`, `action_schema` (any registered action's full param schema) |
+| `level_sequence` | `level_sequence_query` | 8 | Level Sequence inspection: full binding inventory (one row per Guid×BindingIndex with kind classification — legacy Possessable/Spawnable + UE 5.7 UMovieSceneSpawnableActorBinding / Replaceable / Custom), Director Blueprint own functions (user / custom_event / sequencer_endpoint) and variables, event-track bindings with Director-function resolution, cross-sequence reverse lookup of function callers |
 
 ---
 

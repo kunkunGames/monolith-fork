@@ -630,9 +630,12 @@ FMonolithActionResult FMonolithMeshOperationActions::GenerateCollision(const TSh
 		? Params->GetStringField(TEXT("method")).ToLower()
 		: TEXT("convex_decomp");
 
-	int32 MaxHulls = Params->HasField(TEXT("max_hulls"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("max_hulls")))
-		: 4;
+	double TempMaxHulls = 4.0;
+	if (Params->HasField(TEXT("max_hulls")) && !Params->TryGetNumberField(TEXT("max_hulls"), TempMaxHulls))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'max_hulls'. Expected number."));
+	}
+	int32 MaxHulls = static_cast<int32>(TempMaxHulls);
 
 	FString Error;
 	UDynamicMesh* Mesh = Pool->GetHandle(HandleName, Error);
@@ -707,15 +710,22 @@ FMonolithActionResult FMonolithMeshOperationActions::GenerateLods(const TSharedP
 		return FMonolithActionResult::Error(TEXT("'handle' is required"));
 	}
 
-	int32 LodCount = static_cast<int32>(Params->GetNumberField(TEXT("lod_count")));
+	double TempLodCount = 0.0;
+	if (!Params->TryGetNumberField(TEXT("lod_count"), TempLodCount))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'lod_count' is required and must be a number"));
+	}
+	int32 LodCount = static_cast<int32>(TempLodCount);
 	if (LodCount <= 0 || LodCount > 8)
 	{
 		return FMonolithActionResult::Error(TEXT("'lod_count' must be between 1 and 8"));
 	}
 
-	double ReductionPerLod = Params->HasField(TEXT("reduction_per_lod"))
-		? Params->GetNumberField(TEXT("reduction_per_lod"))
-		: 0.5;
+	double ReductionPerLod = 0.5;
+	if (Params->HasField(TEXT("reduction_per_lod")) && !Params->TryGetNumberField(TEXT("reduction_per_lod"), ReductionPerLod))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'reduction_per_lod'. Expected number."));
+	}
 	ReductionPerLod = FMath::Clamp(ReductionPerLod, 0.1, 0.9);
 
 	FString Error;
@@ -826,9 +836,12 @@ FMonolithActionResult FMonolithMeshOperationActions::ComputeUvs(const TSharedPtr
 		? Params->GetStringField(TEXT("method")).ToLower()
 		: TEXT("auto_unwrap");
 
-	int32 UVChannel = Params->HasField(TEXT("uv_channel"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("uv_channel")))
-		: 0;
+	double TempUVChannel = 0.0;
+	if (Params->HasField(TEXT("uv_channel")) && !Params->TryGetNumberField(TEXT("uv_channel"), TempUVChannel))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'uv_channel'. Expected number."));
+	}
+	int32 UVChannel = static_cast<int32>(TempUVChannel);
 
 	FString Error;
 	UDynamicMesh* Mesh = Pool->GetHandle(HandleName, Error);
@@ -1035,10 +1048,14 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometryRecomputeNormals(co
 	}
 	else if (Mode == TEXT("split"))
 	{
+		double TempAngle = 15.0;
+		if (Params->HasField(TEXT("split_angle")) && !Params->TryGetNumberField(TEXT("split_angle"), TempAngle))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'split_angle'. Expected number."));
+		}
+
 		FGeometryScriptSplitNormalsOptions SplitOptions;
-		SplitOptions.OpeningAngleDeg = Params->HasField(TEXT("split_angle"))
-			? static_cast<float>(Params->GetNumberField(TEXT("split_angle")))
-			: 15.0f;
+		SplitOptions.OpeningAngleDeg = static_cast<float>(TempAngle);
 		FGeometryScriptCalculateNormalsOptions NormalOptions;
 		UGeometryScriptLibrary_MeshNormalsFunctions::ComputeSplitNormals(Mesh, SplitOptions, NormalOptions);
 	}
@@ -1083,10 +1100,12 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometrySubdivide(const TSh
 	const FString Method = Params->HasField(TEXT("method"))
 		? Params->GetStringField(TEXT("method")).ToLower()
 		: TEXT("uniform");
-	const int32 Level = FMath::Clamp(
-		Params->HasField(TEXT("level")) ? static_cast<int32>(Params->GetNumberField(TEXT("level"))) : 1,
-		1,
-		5);
+	double TempLevel = 1.0;
+	if (Params->HasField(TEXT("level")) && !Params->TryGetNumberField(TEXT("level"), TempLevel))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'level'. Expected number."));
+	}
+	const int32 Level = FMath::Clamp(static_cast<int32>(TempLevel), 1, 5);
 	const int32 OriginalTris = Mesh->GetTriangleCount();
 
 	if (Method == TEXT("uniform"))
@@ -1170,21 +1189,45 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometryMaterialIds(const T
 	}
 	else if (Verb == TEXT("remap"))
 	{
-		const int32 FromId = Params->HasField(TEXT("from_id")) ? static_cast<int32>(Params->GetNumberField(TEXT("from_id"))) : 0;
-		const int32 ToId = Params->HasField(TEXT("to_id")) ? static_cast<int32>(Params->GetNumberField(TEXT("to_id"))) : 0;
+		double TempFromId = 0.0;
+		if (Params->HasField(TEXT("from_id")) && !Params->TryGetNumberField(TEXT("from_id"), TempFromId))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'from_id'. Expected number."));
+		}
+		const int32 FromId = static_cast<int32>(TempFromId);
+
+		double TempToId = 0.0;
+		if (Params->HasField(TEXT("to_id")) && !Params->TryGetNumberField(TEXT("to_id"), TempToId))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'to_id'. Expected number."));
+		}
+		const int32 ToId = static_cast<int32>(TempToId);
+
 		UGeometryScriptLibrary_MeshMaterialFunctions::RemapMaterialIDs(Mesh, FromId, ToId);
 		Result->SetNumberField(TEXT("from_id"), FromId);
 		Result->SetNumberField(TEXT("to_id"), ToId);
 	}
 	else if (Verb == TEXT("clear"))
 	{
-		const int32 ClearValue = Params->HasField(TEXT("clear_value")) ? static_cast<int32>(Params->GetNumberField(TEXT("clear_value"))) : 0;
+		double TempClearValue = 0.0;
+		if (Params->HasField(TEXT("clear_value")) && !Params->TryGetNumberField(TEXT("clear_value"), TempClearValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'clear_value'. Expected number."));
+		}
+		const int32 ClearValue = static_cast<int32>(TempClearValue);
+
 		UGeometryScriptLibrary_MeshMaterialFunctions::ClearMaterialIDs(Mesh, ClearValue);
 		Result->SetNumberField(TEXT("clear_value"), ClearValue);
 	}
 	else if (Verb == TEXT("delete_by_id"))
 	{
-		const int32 MaterialId = Params->HasField(TEXT("material_id")) ? static_cast<int32>(Params->GetNumberField(TEXT("material_id"))) : 0;
+		double TempMaterialId = 0.0;
+		if (Params->HasField(TEXT("material_id")) && !Params->TryGetNumberField(TEXT("material_id"), TempMaterialId))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'material_id'. Expected number."));
+		}
+		const int32 MaterialId = static_cast<int32>(TempMaterialId);
+
 		int32 NumDeleted = 0;
 		UGeometryScriptLibrary_MeshMaterialFunctions::DeleteTrianglesByMaterialID(Mesh, MaterialId, NumDeleted);
 		Result->SetNumberField(TEXT("material_id"), MaterialId);
@@ -1210,6 +1253,20 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometrySmooth(const TShare
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
+	double TempIterations = 10.0;
+	if (Params->HasField(TEXT("iterations")) && !Params->TryGetNumberField(TEXT("iterations"), TempIterations))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'iterations'. Expected number."));
+	}
+	const int32 Iterations = FMath::Clamp(static_cast<int32>(TempIterations), 1, 200);
+
+	double TempSpeed = 0.25;
+	if (Params->HasField(TEXT("speed")) && !Params->TryGetNumberField(TEXT("speed"), TempSpeed))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'speed'. Expected number."));
+	}
+	const float Speed = FMath::Clamp(static_cast<float>(TempSpeed), 0.0f, 1.0f);
+
 	FString WorkingHandle;
 	FString Error;
 	UDynamicMesh* Mesh = GetWorkingMeshForOperation(Pool, Params, TEXT("geometry_smooth"), WorkingHandle, Error);
@@ -1218,14 +1275,6 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometrySmooth(const TShare
 		return FMonolithActionResult::Error(Error);
 	}
 
-	const int32 Iterations = FMath::Clamp(
-		Params->HasField(TEXT("iterations")) ? static_cast<int32>(Params->GetNumberField(TEXT("iterations"))) : 10,
-		1,
-		200);
-	const float Speed = FMath::Clamp(
-		Params->HasField(TEXT("speed")) ? static_cast<float>(Params->GetNumberField(TEXT("speed"))) : 0.25f,
-		0.0f,
-		1.0f);
 	const int32 OriginalTris = Mesh->GetTriangleCount();
 
 	FGeometryScriptIterativeMeshSmoothingOptions Options;

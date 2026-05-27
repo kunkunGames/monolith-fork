@@ -3660,8 +3660,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputValue(const T
 		if (O->HasField(TEXT("x")))
 		{
 			double X = O->GetNumberField(TEXT("x")), Y = O->GetNumberField(TEXT("y"));
-			double Z = O->HasField(TEXT("z")) ? O->GetNumberField(TEXT("z")) : 0.0;
-			double W = O->HasField(TEXT("w")) ? O->GetNumberField(TEXT("w")) : 0.0;
+			double Z = 0.0;
+			O->TryGetNumberField(TEXT("z"), Z);
+			double W = 0.0;
+			O->TryGetNumberField(TEXT("w"), W);
 			if (O->HasField(TEXT("w"))) ValStr = FString::Printf(TEXT("%f,%f,%f,%f"), X, Y, Z, W);
 			else if (O->HasField(TEXT("z"))) ValStr = FString::Printf(TEXT("%f,%f,%f"), X, Y, Z);
 			else ValStr = FString::Printf(TEXT("%f,%f"), X, Y);
@@ -7330,10 +7332,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureCurveKeys(const TS
 				K->SetStringField(TEXT("interp_mode"), InterpMode == RCIM_Linear ? TEXT("linear") : InterpMode == RCIM_Constant ? TEXT("constant") : TEXT("cubic"));
 				return MakeShared<FJsonValueObject>(K);
 			};
-			if (KO->HasField(TEXT("r"))) RedKeys.Add(MakeKey(static_cast<float>(KO->GetNumberField(TEXT("r")))));
-			if (KO->HasField(TEXT("g"))) GreenKeys.Add(MakeKey(static_cast<float>(KO->GetNumberField(TEXT("g")))));
-			if (KO->HasField(TEXT("b"))) BlueKeys.Add(MakeKey(static_cast<float>(KO->GetNumberField(TEXT("b")))));
-			if (KO->HasField(TEXT("a"))) AlphaKeys.Add(MakeKey(static_cast<float>(KO->GetNumberField(TEXT("a")))));
+			double Val = 0.0;
+			if (KO->TryGetNumberField(TEXT("r"), Val)) RedKeys.Add(MakeKey(static_cast<float>(Val)));
+			if (KO->TryGetNumberField(TEXT("g"), Val)) GreenKeys.Add(MakeKey(static_cast<float>(Val)));
+			if (KO->TryGetNumberField(TEXT("b"), Val)) BlueKeys.Add(MakeKey(static_cast<float>(Val)));
+			if (KO->TryGetNumberField(TEXT("a"), Val)) AlphaKeys.Add(MakeKey(static_cast<float>(Val)));
 		}
 		if (RedKeys.Num() > 0) Config->SetField(TEXT("red"), MakeShared<FJsonValueArray>(RedKeys));
 		if (GreenKeys.Num() > 0) Config->SetField(TEXT("green"), MakeShared<FJsonValueArray>(GreenKeys));
@@ -7356,10 +7359,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureCurveKeys(const TS
 				K->SetStringField(TEXT("interp_mode"), InterpMode == RCIM_Linear ? TEXT("linear") : InterpMode == RCIM_Constant ? TEXT("constant") : TEXT("cubic"));
 				return MakeShared<FJsonValueObject>(K);
 			};
-			if (KO->HasField(TEXT("x"))) XKeys.Add(MakeKey(static_cast<float>(KO->GetNumberField(TEXT("x")))));
-			if (KO->HasField(TEXT("y"))) YKeys.Add(MakeKey(static_cast<float>(KO->GetNumberField(TEXT("y")))));
-			if (KO->HasField(TEXT("z"))) ZKeys.Add(MakeKey(static_cast<float>(KO->GetNumberField(TEXT("z")))));
-			if (KO->HasField(TEXT("w"))) WKeys.Add(MakeKey(static_cast<float>(KO->GetNumberField(TEXT("w")))));
+			double Val = 0.0;
+			if (KO->TryGetNumberField(TEXT("x"), Val)) XKeys.Add(MakeKey(static_cast<float>(Val)));
+			if (KO->TryGetNumberField(TEXT("y"), Val)) YKeys.Add(MakeKey(static_cast<float>(Val)));
+			if (KO->TryGetNumberField(TEXT("z"), Val)) ZKeys.Add(MakeKey(static_cast<float>(Val)));
+			if (KO->TryGetNumberField(TEXT("w"), Val)) WKeys.Add(MakeKey(static_cast<float>(Val)));
 		}
 		if (XKeys.Num() > 0) Config->SetField(TEXT("x"), MakeShared<FJsonValueArray>(XKeys));
 		if (YKeys.Num() > 0) Config->SetField(TEXT("y"), MakeShared<FJsonValueArray>(YKeys));
@@ -9847,10 +9851,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMesh(const TShar
 	const TSharedPtr<FJsonObject>* RotObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj->IsValid())
 	{
-		MeshRend->Meshes[MeshIndex].Rotation = FRotator(
-			(*RotObj)->HasField(TEXT("pitch")) ? (*RotObj)->GetNumberField(TEXT("pitch")) : 0.0,
-			(*RotObj)->HasField(TEXT("yaw"))   ? (*RotObj)->GetNumberField(TEXT("yaw"))   : 0.0,
-			(*RotObj)->HasField(TEXT("roll"))  ? (*RotObj)->GetNumberField(TEXT("roll"))  : 0.0);
+		double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
+		(*RotObj)->TryGetNumberField(TEXT("pitch"), Pitch);
+		(*RotObj)->TryGetNumberField(TEXT("yaw"), Yaw);
+		(*RotObj)->TryGetNumberField(TEXT("roll"), Roll);
+		MeshRend->Meshes[MeshIndex].Rotation = FRotator(Pitch, Yaw, Roll);
 	}
 
 	// Optional pivot offset

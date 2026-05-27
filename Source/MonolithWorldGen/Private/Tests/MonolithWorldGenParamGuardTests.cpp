@@ -6,6 +6,7 @@
 #if WITH_GEOMETRYSCRIPT
 #include "MonolithMeshTerrainActions.h"
 #include "MonolithMeshRoofActions.h"
+#include "MonolithMeshBuildingActions.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardWorldGenTerrainSampleMalformedParamsTest, "Monolith.ParamGuard.MonolithWorldGen.TerrainSampleRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -90,4 +91,47 @@ bool FMonolithParamGuardWorldGenRoofMalformedParamsTest::RunTest(const FString& 
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardWorldGenBuildingFromGridMalformedParamsTest, "Monolith.ParamGuard.MonolithWorldGen.CreateBuildingFromGridRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardWorldGenBuildingFromGridMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshBuildingActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("create_building_from_grid action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("worldgen"), TEXT("create_building_from_grid")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("save_path"), TEXT("/Game/TestBuilding"));
+
+	// Create dummy grid
+	TArray<TSharedPtr<FJsonValue>> Grid;
+	TArray<TSharedPtr<FJsonValue>> Row;
+	Row.Add(MakeShared<FJsonValueNumber>(1));
+	Grid.Add(MakeShared<FJsonValueArray>(Row));
+	Params->SetArrayField(TEXT("grid"), Grid);
+
+	// Create dummy rooms
+	TArray<TSharedPtr<FJsonValue>> Rooms;
+	Params->SetArrayField(TEXT("rooms"), Rooms);
+
+	// Create dummy doors
+	TArray<TSharedPtr<FJsonValue>> Doors;
+	Params->SetArrayField(TEXT("doors"), Doors);
+
+	// Add malformed parameter
+	Params->SetStringField(TEXT("cell_size"), TEXT("invalid_string"));
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("create_building_from_grid"), Params);
+	TestFalse(TEXT("create_building_from_grid rejects malformed cell_size parameter"), Result.bSuccess);
+	TestTrue(TEXT("create_building_from_grid reports the validation error"), Result.ErrorMessage.Contains(TEXT("cell_size must be a number")));
+
+	Params->RemoveField(TEXT("cell_size"));
+	Params->SetStringField(TEXT("snap_to_floor"), TEXT("invalid_string"));
+
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("create_building_from_grid"), Params);
+	TestFalse(TEXT("create_building_from_grid rejects malformed snap_to_floor parameter"), Result.bSuccess);
+	TestTrue(TEXT("create_building_from_grid reports the late validation error before mutation"), Result.ErrorMessage.Contains(TEXT("snap_to_floor must be a boolean")));
+
+	return true;
+}
+
 #endif // WITH_GEOMETRYSCRIPT

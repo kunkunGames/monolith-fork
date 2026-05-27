@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
 #include "MonolithMeshInspectionActions.h"
+#include "MonolithMeshOperationActions.h"
 #include "Dom/JsonObject.h"
 #include "MonolithMeshProceduralActions.h"
 
@@ -18,6 +19,27 @@ bool FMonolithParamGuardMeshInspectionMalformedParamsTest::RunTest(const FString
         FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("get_mesh_info"), Params);
         TestFalse(TEXT("GetMeshInfo rejects missing asset_path"), Result.bSuccess);
         TestTrue(TEXT("GetMeshInfo reports the missing asset_path validation error"), Result.ErrorMessage.Contains(TEXT("asset_path is required")));
+    }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshOperationMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.OperationRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardMeshOperationMalformedParamsTest::RunTest(const FString& Parameters)
+{
+    FMonolithMeshOperationActions::RegisterActions(FMonolithToolRegistry::Get());
+    TestTrue(TEXT("geometry_smooth action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("geometry_smooth")));
+
+    // Parameter validation should happen before pool lookups for malformed requests.
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("handle"), TEXT("mesh_123")); // Fails pool lookup if param parsing succeeds, but parsing should fail first
+        Params->SetStringField(TEXT("iterations"), TEXT("many")); // Malformed
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("geometry_smooth"), Params);
+        TestFalse(TEXT("GeometrySmooth rejects malformed iterations parameter"), Result.bSuccess);
+        TestTrue(TEXT("GeometrySmooth reports the validation error"), Result.ErrorMessage.Contains(TEXT("Invalid type for parameter 'iterations'. Expected number.")));
     }
 
     return true;
