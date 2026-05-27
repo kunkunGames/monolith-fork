@@ -50,8 +50,18 @@ public class MonolithComboGraph : ModuleRules
 				if (!bHasComboGraph)
 				{
 					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-					bHasComboGraph = Directory.Exists(
-						Path.Combine(EnginePluginsDir, "ComboGraph"));
+					if (Directory.Exists(EnginePluginsDir))
+					{
+						bHasComboGraph = Directory.Exists(
+							Path.Combine(EnginePluginsDir, "ComboGraph"));
+
+						if (!bHasComboGraph)
+						{
+							bHasComboGraph = Directory.Exists(EnginePluginsDir) && Directory.GetDirectories(
+								EnginePluginsDir, "ComboGraph_*",
+								SearchOption.TopDirectoryOnly).Length > 0;
+						}
+					}
 				}
 			}
 		}
