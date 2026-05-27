@@ -176,13 +176,13 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 	}
 	TSharedPtr<FJsonObject> Spec = *SpecPtr;
 
-	if (Spec->HasField(TEXT("states")))
+	const TArray<TSharedPtr<FJsonValue>>* StatesPtr = nullptr;
+	if (Spec->HasField(TEXT("states")) && !Spec->TryGetArrayField(TEXT("states"), StatesPtr))
 	{
-		const TArray<TSharedPtr<FJsonValue>>* StatesPtr = nullptr;
-		if (!Spec->TryGetArrayField(TEXT("states"), StatesPtr) || !StatesPtr)
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid param: 'states' must be an array"));
-		}
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'states' must be an array"));
+	}
+	if (StatesPtr)
+	{
 		for (const TSharedPtr<FJsonValue>& StateVal : *StatesPtr)
 		{
 			const TSharedPtr<FJsonObject>* StateObjPtr = nullptr;
@@ -206,14 +206,11 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 	const TCHAR* ArrayFieldNames[] = { TEXT("conduits"), TEXT("nested_sms"), TEXT("transitions") };
 	for (const TCHAR* FieldName : ArrayFieldNames)
 	{
-		if (Spec->HasField(FieldName))
+		const TArray<TSharedPtr<FJsonValue>>* ArrayPtr = nullptr;
+		if (Spec->HasField(FieldName) && !Spec->TryGetArrayField(FieldName, ArrayPtr))
 		{
-			const TArray<TSharedPtr<FJsonValue>>* ArrayPtr = nullptr;
-			if (!Spec->TryGetArrayField(FieldName, ArrayPtr) || !ArrayPtr)
-			{
-				return FMonolithActionResult::Error(
-					FString::Printf(TEXT("Invalid param: '%s' must be an array"), FieldName));
-			}
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Invalid param: '%s' must be an array"), FieldName));
 		}
 	}
 
@@ -320,14 +317,14 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 	TSharedPtr<FJsonObject> NodeGuids = MakeShared<FJsonObject>();
 	int32 PosX = 300;
 
-	if (Spec->HasField(TEXT("states")))
+	const TArray<TSharedPtr<FJsonValue>>* StatesPtr2 = nullptr;
+	if (Spec->HasField(TEXT("states")) && !Spec->TryGetArrayField(TEXT("states"), StatesPtr2))
 	{
-		const TArray<TSharedPtr<FJsonValue>>* StatesPtr = nullptr;
-		if (!Spec->TryGetArrayField(TEXT("states"), StatesPtr) || !StatesPtr)
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid param: 'states' must be an array"));
-		}
-		const TArray<TSharedPtr<FJsonValue>>& States = *StatesPtr;
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'states' must be an array"));
+	}
+	if (StatesPtr2)
+	{
+		const TArray<TSharedPtr<FJsonValue>>& States = *StatesPtr2;
 		for (const TSharedPtr<FJsonValue>& StateVal : States)
 		{
 			const TSharedPtr<FJsonObject>& StateObj = StateVal->AsObject();
@@ -373,13 +370,13 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 	}
 
 	// ── 3. Create conduits ──
-	if (ConduitClass && Spec->HasField(TEXT("conduits")))
+	const TArray<TSharedPtr<FJsonValue>>* ConduitsPtr = nullptr;
+	if (ConduitClass && Spec->HasField(TEXT("conduits")) && !Spec->TryGetArrayField(TEXT("conduits"), ConduitsPtr))
 	{
-		const TArray<TSharedPtr<FJsonValue>>* ConduitsPtr = nullptr;
-		if (!Spec->TryGetArrayField(TEXT("conduits"), ConduitsPtr) || !ConduitsPtr)
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid param: 'conduits' must be an array"));
-		}
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'conduits' must be an array"));
+	}
+	if (ConduitClass && ConduitsPtr)
+	{
 		const TArray<TSharedPtr<FJsonValue>>& Conduits = *ConduitsPtr;
 		for (const TSharedPtr<FJsonValue>& CV : Conduits)
 		{
@@ -399,13 +396,13 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 	}
 
 	// ── 4. Create nested SMs ──
-	if (SMNodeClass && Spec->HasField(TEXT("nested_sms")))
+	const TArray<TSharedPtr<FJsonValue>>* NestedSMsPtr = nullptr;
+	if (SMNodeClass && Spec->HasField(TEXT("nested_sms")) && !Spec->TryGetArrayField(TEXT("nested_sms"), NestedSMsPtr))
 	{
-		const TArray<TSharedPtr<FJsonValue>>* NestedSMsPtr = nullptr;
-		if (!Spec->TryGetArrayField(TEXT("nested_sms"), NestedSMsPtr) || !NestedSMsPtr)
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid param: 'nested_sms' must be an array"));
-		}
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'nested_sms' must be an array"));
+	}
+	if (SMNodeClass && NestedSMsPtr)
+	{
 		const TArray<TSharedPtr<FJsonValue>>& NestedSMs = *NestedSMsPtr;
 		for (const TSharedPtr<FJsonValue>& NV : NestedSMs)
 		{
@@ -445,13 +442,13 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 
 	// ── 5. Wire transitions ──
 	int32 TransitionsCreated = 0;
-	if (Spec->HasField(TEXT("transitions")))
+	const TArray<TSharedPtr<FJsonValue>>* TransitionsPtr = nullptr;
+	if (Spec->HasField(TEXT("transitions")) && !Spec->TryGetArrayField(TEXT("transitions"), TransitionsPtr))
 	{
-		const TArray<TSharedPtr<FJsonValue>>* TransitionsPtr = nullptr;
-		if (!Spec->TryGetArrayField(TEXT("transitions"), TransitionsPtr) || !TransitionsPtr)
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid param: 'transitions' must be an array"));
-		}
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'transitions' must be an array"));
+	}
+	if (TransitionsPtr)
+	{
 		const TArray<TSharedPtr<FJsonValue>>& Transitions = *TransitionsPtr;
 		for (const TSharedPtr<FJsonValue>& TV : Transitions)
 		{
