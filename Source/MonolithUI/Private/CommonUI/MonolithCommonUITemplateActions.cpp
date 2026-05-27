@@ -33,6 +33,7 @@
 // the whole file compiles to an empty TU when CommonUI is absent.
 
 #include "MonolithCommonUIHelpers.h"
+#include "MonolithPackagePathValidator.h"
 
 #if WITH_COMMONUI
 
@@ -216,6 +217,12 @@ namespace MonolithCommonUITemplate
         {
             return FMonolithActionResult::Error(TEXT("save_path must contain at least one / separator"));
         }
+
+        if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+        {
+            return FMonolithActionResult::Error(FString::Printf(TEXT("CreateBlankActivatableWBP: %s"), *ValidationError));
+        }
+
         OutPackage = CreatePackage(*SavePath);
         if (!OutPackage)
         {
