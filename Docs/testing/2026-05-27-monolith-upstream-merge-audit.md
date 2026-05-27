@@ -48,6 +48,7 @@ Notes:
 | `git diff --check` | PASS |
 | `python Scripts\ci_static_checks.py --config .github\monolith-static-ci.json selftest` | PASS |
 | `python Scripts\ci_static_checks.py --config .github\monolith-static-ci.json check` | PASS: blocking findings `0`; advisory findings `389` from existing CRLF line endings plus missing external `.claude/agents` directory |
+| Broad source scan | PASS: `RegisterAction` duplicate pairs `0`; handler references with missing definitions `0`; duplicate `IMPLEMENT_MODULE` entries `0`; unresolved merge conflict markers `0`; git unmerged index entries `0` |
 
 ## 4. Build
 
@@ -58,11 +59,12 @@ $engineRoot = powershell -NoProfile -ExecutionPolicy Bypass -File "D:\P4\game\Ba
 & "$engineRoot\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" GoGameEditor Win64 Development -Project="D:\P4\game\GO.uproject" -WaitMutex -NoHotReloadFromIDE
 ```
 
-Result: PASS.
+Result: PASS for no-link compile validation; full link was blocked by an external running editor lock in the continuation audit.
 
 Notes:
 
-- UBT reported `Result: Succeeded`.
+- `UnrealBuildTool ... -NoLink` reported `Result: Succeeded`.
+- A full link attempt after the audit was blocked because running `UnrealEditor.exe` PID `51732` held `D:\P4\game\Binaries\Win64\UnrealEditor-GoGame.dll`. This was a file-lock/link issue, not a C++ compile error.
 - Non-blocking warning: Monolith/Go depend on deprecated `MassEntity`.
 
 ## 5. Automation
@@ -70,7 +72,7 @@ Notes:
 Command:
 
 ```powershell
-& "$engineRoot\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "D:\P4\game\GO.uproject" -NullRHI -NoSound -Unattended -NoSplash -NoP4 -ExecCmds="Automation RunTests Monolith.ParamGuard.Blueprint.DataTableMaintenance; Quit" -TestExit="Automation Test Queue Empty" -ReportExportPath="D:\P4\game\Saved\AutomationReports\monolith-merge-datatable-maintenance"
+& "$engineRoot\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "D:\P4\game\GO.uproject" -NullRHI -NoSound -Unattended -NoSplash -NoP4 -ExecCmds="Automation RunTests Monolith.ParamGuard.Blueprint.DataTableMaintenance; Quit" -TestExit="Automation Test Queue Empty" -ReportExportPath="D:\P4\game\Saved\AutomationReports\monolith-merge-datatable-maintenance-current"
 ```
 
 Result: PASS.
@@ -80,9 +82,36 @@ Result: PASS.
 | Succeeded | 0 |
 | Succeeded with warnings | 5 |
 | Failed | 0 |
-| Report path | `D:\P4\game\Saved\AutomationReports\monolith-merge-datatable-maintenance\index.json` |
+| Report path | `D:\P4\game\Saved\AutomationReports\monolith-merge-datatable-maintenance-current\index.json` |
 
 Notes:
 
 - The warnings are expected test-local registry overwrite logs caused by repeated `FMonolithBlueprintStructActions::RegisterActions` calls inside the automation fixture.
 - The fixture verified guarded DataTable writes, malformed boolean rejection, dry-run remove behavior, path guarding, and registration presence.
+
+## 6. Editor 0.16 Preview / Inspect Automation
+
+Command:
+
+```powershell
+& "$engineRoot\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "D:\P4\game\GO.uproject" -NullRHI -NoSound -Unattended -NoSplash -NoP4 -ExecCmds="Automation RunTests Monolith.Editor; Quit" -TestExit="Automation Test Queue Empty" -ReportExportPath="D:\P4\game\Saved\AutomationReports\monolith-merge-editor-current"
+```
+
+Result: PASS.
+
+| Report | Value |
+|---|---:|
+| Succeeded | 16 |
+| Succeeded with warnings | 0 |
+| Failed | 0 |
+| Report path | `D:\P4\game\Saved\AutomationReports\monolith-merge-editor-current\index.json` |
+
+Covered high-risk 0.16 paths:
+
+- `Monolith.Editor.Inspect.MaterialPBR`
+- `Monolith.Editor.Inspect.TextureChannels`
+- `Monolith.Editor.Preview.CaptureMaterialGrid`
+- `Monolith.Editor.Preview.CaptureWithOverlay.*`
+- `Monolith.Editor.Preview.CaptureStaticMesh`
+- `Monolith.Editor.Preview.CaptureSkeletalMesh`
+- `Monolith.Editor.Preview.CaptureWidget`
