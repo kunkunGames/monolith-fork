@@ -83,6 +83,13 @@ public class MonolithGAS : ModuleRules
 					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
 					bHasGBA = Directory.Exists(
 						Path.Combine(EnginePluginsDir, "BlueprintAttributes"));
+
+					if (!bHasGBA)
+					{
+						bHasGBA = Directory.Exists(EnginePluginsDir) && Directory.GetDirectories(
+							EnginePluginsDir, "BlueprintAttributes_*",
+							SearchOption.TopDirectoryOnly).Length > 0;
+					}
 				}
 			}
 		}
