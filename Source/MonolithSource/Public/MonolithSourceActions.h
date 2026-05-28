@@ -27,6 +27,7 @@ private:
 
 	// CRG-inspired navigation/review (additive; existing handlers unchanged)
 	static FMonolithActionResult HandleImpactRadius(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleFindOverrides(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleHealth(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRepairFts(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRepairCrgCache(const TSharedPtr<FJsonObject>& Params);

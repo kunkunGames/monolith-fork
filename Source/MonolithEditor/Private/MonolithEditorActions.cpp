@@ -3187,7 +3187,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureLevelViewport(const T
 		}
 	}
 
-	if (CameraObject && *CameraObject && (*CameraObject)->IsValid())
+	if (CameraObject && CameraObject->IsValid())
 	{
 		FVector Location;
 		if (ReadVectorArray(*CameraObject, TEXT("location"), Location))

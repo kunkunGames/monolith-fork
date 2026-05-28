@@ -58,6 +58,8 @@ After a successful C++ build, Live Coding, or hot reload, EngineSource.db should
 
 Offline `monolith_query.exe` calls in the default checkout resolve built-in DB paths from the executable location: `source` resolves `Saved/EngineSource.db`, `project` resolves `Saved/ProjectIndex.db`, `bridge` resolves both, and source CRG graph actions resolve `Saved/graph.db`. `--db`, `--source-db`, `--project-db`, and `--graph-db` remain override options for copied or non-standard databases.
 
+For routine source lookup and code-review triage, prefer `source search_source`, `source risk_score`, `source review_context`, `source impact_radius`, `source review_hotspots`, and `source health`. `source impact_radius` defaults to `call|type|inheritance`; pass `edge_kinds=call|type|inheritance|override` only when override traversal is intentionally part of the blast-radius query. Use `source find_overrides` before changing virtual/override functions, preferably with a qualified symbol such as `UActorComponent::BeginPlay`, and use `source review_hotspots kind=override` to find high-fanout override contracts. `source build_crg_graph --execute` is an explicit CRG-compatible `Saved/graph.db` export/search maintenance action, not routine setup. `source repair_crg_cache --execute` remains the repair path for stale EngineSource `crg_*` projection/cache parity. `Saved/graph.db` is not the source of truth for `risk_score` or `review_context`; current `graph.db` flow/community/risk auxiliary tables are reserved/unimplemented placeholders and zero rows there are not a health failure.
+
 Project search is content-inclusive by default. Live `project.search` and offline `Binaries\monolith_query.exe project search` search `fts_assets`, `fts_nodes`, `fts_variables`, `fts_parameters`, `fts_datatable_rows`, `fts_actors`, and `fts_asset_search_values` unless `include_content=false` / `--include-content=false` is specified. Search results include `match_source`, `match_table`, `match_field`, `match_object_path`, and `match_value`; use these provenance fields before treating a hit as an asset identity match.
 
 `project repair_fts --target=all` covers all seven project FTS tables. Prefer a dry-run first on the live editor DB; use `--execute` only when repair is intended and the DB is writable, or verify write behavior on a copied DB.
@@ -68,13 +70,16 @@ When the Monolith MCP server or Unreal Editor is not running, agents can use `Bi
 
 ```powershell
 Binaries\monolith_query.exe source search_source UObject --limit=5
-Binaries\monolith_query.exe source build_crg_graph --execute
-Binaries\monolith_query.exe source search_crg_graph UObject --limit=5
+Binaries\monolith_query.exe source risk_score UObject --limit=5
+Binaries\monolith_query.exe source review_context UObject --detail-level=minimal
+Binaries\monolith_query.exe source review_hotspots --kind=override --limit=10
+Binaries\monolith_query.exe source find_overrides UActorComponent::BeginPlay --direction=in --max-depth=2
+Binaries\monolith_query.exe source health --include-counts=true
 Binaries\monolith_query.exe bridge search_asset_symbols --asset-path=/Game/Maps/Interactable/BP_Wave --limit=5
 Binaries\monolith_query.exe bridge search_asset_symbols --symbol=UObject --limit=5
 ```
 
-`source search_crg_graph` reads `Saved/graph.db` and uses `nodes_fts` before falling back to LIKE. `bridge search_asset_symbols` is read-only, opens `Saved/ProjectIndex.db` and `Saved/EngineSource.db`, and returns heuristic links with `confidence`, `reasons`, `asset`, `symbol`, `warnings`, `count`, `truncated`, and `lexical_only`.
+`source search_crg_graph` reads `Saved/graph.db` and uses `nodes_fts` before falling back to LIKE. Use `source build_crg_graph --execute` only when that graph-node search/export surface is explicitly needed; the builder uses a graph rebuild lock, skips when source-signature metadata is current unless `--force` is passed, and replaces `graph.db` only after a validated temp DB build. Live editor/MCP execute calls return `status=started`, `job_id`, and `poll_action=source.crg_graph_health`; offline `monolith_query.exe source build_crg_graph --execute` remains synchronous. `bridge search_asset_symbols` is read-only, opens `Saved/ProjectIndex.db` and `Saved/EngineSource.db`, and returns heuristic links with `confidence`, `reasons`, `asset`, `symbol`, `warnings`, `count`, `truncated`, and `lexical_only`.
 
 ## 13a. Offline Project Search Usage
 

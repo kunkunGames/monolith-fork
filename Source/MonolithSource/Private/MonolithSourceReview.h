@@ -29,6 +29,14 @@ public:
 		int32 MaxDepth,
 		int32 MaxResults);
 
+	/** Override-only impact view: child override methods and parent overridden methods. */
+	static TSharedPtr<FJsonObject> FindOverrides(
+		FMonolithSourceDatabase& Db,
+		const FString& Symbol,
+		const FString& Direction,
+		int32 MaxDepth,
+		int32 MaxResults);
+
 	/** Query-time risk: caller/callee degree, descendants, UE macro, fan. */
 	static TSharedPtr<FJsonObject> RiskScore(
 		FMonolithSourceDatabase& Db,
@@ -36,7 +44,7 @@ public:
 		int32 Limit,
 		const FString& MinTier);
 
-	/** Rank global source review hotspots by fan-in, fan-out, risk, LOC, or all. */
+	/** Rank global source review hotspots by fan-in, fan-out, risk, LOC, override, or all. */
 	static TSharedPtr<FJsonObject> ReviewHotspots(
 		FMonolithSourceDatabase& Db,
 		const FString& Kind,

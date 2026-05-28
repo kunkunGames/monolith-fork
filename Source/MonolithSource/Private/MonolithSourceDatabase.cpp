@@ -16,6 +16,406 @@ static FString MakeAutoSnapshotLabel(const TCHAR* Prefix)
 	return FString::Printf(TEXT("%s-%lld"), Prefix, FDateTime::UtcNow().GetTicks());
 }
 
+static FString CollapseWhitespace(FString Value)
+{
+	FString Out;
+	bool bPendingSpace = false;
+	for (int32 Index = 0; Index < Value.Len(); ++Index)
+	{
+		const TCHAR Ch = Value[Index];
+		if (FChar::IsWhitespace(Ch))
+		{
+			if (!Out.IsEmpty())
+			{
+				bPendingSpace = true;
+			}
+			continue;
+		}
+		if (bPendingSpace)
+		{
+			Out += TEXT(" ");
+			bPendingSpace = false;
+		}
+		Out += Ch;
+	}
+	return Out.TrimStartAndEnd();
+}
+
+static int32 FindMatchingParen(const FString& Text, int32 OpenIndex)
+{
+	int32 Depth = 0;
+	for (int32 Index = OpenIndex; Index < Text.Len(); ++Index)
+	{
+		if (Text[Index] == TEXT('('))
+		{
+			++Depth;
+		}
+		else if (Text[Index] == TEXT(')'))
+		{
+			--Depth;
+			if (Depth == 0)
+			{
+				return Index;
+			}
+		}
+	}
+	return INDEX_NONE;
+}
+
+static bool ExtractParamsAtParen(const FString& Signature, int32 OpenIndex, FString& OutParams)
+{
+	const int32 CloseIndex = FindMatchingParen(Signature, OpenIndex);
+	if (CloseIndex == INDEX_NONE || CloseIndex <= OpenIndex)
+	{
+		return false;
+	}
+	OutParams = Signature.Mid(OpenIndex + 1, CloseIndex - OpenIndex - 1);
+	return true;
+}
+
+static bool ExtractSignatureParams(const FString& Signature, const FString& FunctionName, FString& OutParams)
+{
+	if (!FunctionName.IsEmpty())
+	{
+		int32 SearchFrom = 0;
+		while (SearchFrom < Signature.Len())
+		{
+			const int32 NameIndex = Signature.Find(FunctionName, ESearchCase::CaseSensitive, ESearchDir::FromStart, SearchFrom);
+			if (NameIndex == INDEX_NONE)
+			{
+				break;
+			}
+			const int32 Before = NameIndex - 1;
+			const bool bLeftBoundary = Before < 0 || !(FChar::IsAlnum(Signature[Before]) || Signature[Before] == TEXT('_'));
+			int32 OpenIndex = NameIndex + FunctionName.Len();
+			while (OpenIndex < Signature.Len() && FChar::IsWhitespace(Signature[OpenIndex]))
+			{
+				++OpenIndex;
+			}
+			if (bLeftBoundary && OpenIndex < Signature.Len() && Signature[OpenIndex] == TEXT('(')
+				&& ExtractParamsAtParen(Signature, OpenIndex, OutParams))
+			{
+				return true;
+			}
+			SearchFrom = NameIndex + FMath::Max(1, FunctionName.Len());
+		}
+	}
+
+	for (int32 Index = 0; Index < Signature.Len(); ++Index)
+	{
+		if (Signature[Index] == TEXT('(') && ExtractParamsAtParen(Signature, Index, OutParams))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+static TArray<FString> SplitTopLevelParams(const FString& Params)
+{
+	TArray<FString> Out;
+	FString Current;
+	int32 AngleDepth = 0;
+	int32 ParenDepth = 0;
+	int32 BracketDepth = 0;
+	for (int32 Index = 0; Index < Params.Len(); ++Index)
+	{
+		const TCHAR Ch = Params[Index];
+		if (Ch == TEXT('<')) ++AngleDepth;
+		else if (Ch == TEXT('>') && AngleDepth > 0) --AngleDepth;
+		else if (Ch == TEXT('(')) ++ParenDepth;
+		else if (Ch == TEXT(')') && ParenDepth > 0) --ParenDepth;
+		else if (Ch == TEXT('[')) ++BracketDepth;
+		else if (Ch == TEXT(']') && BracketDepth > 0) --BracketDepth;
+
+		if (Ch == TEXT(',') && AngleDepth == 0 && ParenDepth == 0 && BracketDepth == 0)
+		{
+			Out.Add(Current.TrimStartAndEnd());
+			Current.Empty();
+			continue;
+		}
+		Current += Ch;
+	}
+	const FString Tail = Current.TrimStartAndEnd();
+	if (!Tail.IsEmpty())
+	{
+		Out.Add(Tail);
+	}
+	return Out;
+}
+
+static FString StripDefaultParamValue(const FString& Param)
+{
+	int32 AngleDepth = 0;
+	int32 ParenDepth = 0;
+	int32 BracketDepth = 0;
+	for (int32 Index = 0; Index < Param.Len(); ++Index)
+	{
+		const TCHAR Ch = Param[Index];
+		if (Ch == TEXT('<')) ++AngleDepth;
+		else if (Ch == TEXT('>') && AngleDepth > 0) --AngleDepth;
+		else if (Ch == TEXT('(')) ++ParenDepth;
+		else if (Ch == TEXT(')') && ParenDepth > 0) --ParenDepth;
+		else if (Ch == TEXT('[')) ++BracketDepth;
+		else if (Ch == TEXT(']') && BracketDepth > 0) --BracketDepth;
+		else if (Ch == TEXT('=') && AngleDepth == 0 && ParenDepth == 0 && BracketDepth == 0)
+		{
+			return Param.Left(Index).TrimStartAndEnd();
+		}
+	}
+	return Param.TrimStartAndEnd();
+}
+
+static bool IsIdentifierChar(TCHAR Ch)
+{
+	return FChar::IsAlnum(Ch) || Ch == TEXT('_');
+}
+
+static bool IsTrailingTypeQualifier(const FString& Word)
+{
+	const FString Lower = Word.ToLower();
+	return Lower == TEXT("const")
+		|| Lower == TEXT("volatile")
+		|| Lower == TEXT("mutable")
+		|| Lower == TEXT("final")
+		|| Lower == TEXT("override");
+}
+
+static FString StripTrailingParamName(FString Param)
+{
+	Param = Param.TrimStartAndEnd();
+	if (Param.EndsWith(TEXT("...")))
+	{
+		return Param;
+	}
+
+	int32 End = Param.Len() - 1;
+	while (End >= 0 && FChar::IsWhitespace(Param[End])) --End;
+	if (End < 0 || !IsIdentifierChar(Param[End]))
+	{
+		return Param;
+	}
+
+	int32 Start = End;
+	while (Start >= 0 && IsIdentifierChar(Param[Start])) --Start;
+	const FString Word = Param.Mid(Start + 1, End - Start);
+	if (IsTrailingTypeQualifier(Word))
+	{
+		return Param;
+	}
+
+	const FString Prefix = Param.Left(Start + 1).TrimEnd();
+	if (Prefix.IsEmpty())
+	{
+		return Param;
+	}
+	return Prefix;
+}
+
+static FString NormalizeOverrideParam(FString Param)
+{
+	Param = CollapseWhitespace(StripTrailingParamName(StripDefaultParamValue(Param)));
+	Param.ReplaceInline(TEXT(" &"), TEXT("&"));
+	Param.ReplaceInline(TEXT(" *"), TEXT("*"));
+	Param.ReplaceInline(TEXT(" &&"), TEXT("&&"));
+	Param.ReplaceInline(TEXT(" ,"), TEXT(","));
+	Param.ReplaceInline(TEXT(", "), TEXT(","));
+	return Param.TrimStartAndEnd();
+}
+
+static bool NormalizeOverrideParams(const FString& Signature, const FString& FunctionName, FString& OutNormalized)
+{
+	FString Params;
+	if (!ExtractSignatureParams(Signature, FunctionName, Params))
+	{
+		return false;
+	}
+	TArray<FString> Parts = SplitTopLevelParams(Params);
+	if (Parts.Num() == 1)
+	{
+		const FString Only = Parts[0].TrimStartAndEnd().ToLower();
+		if (Only == TEXT("void"))
+		{
+			Parts.Empty();
+		}
+	}
+	for (FString& Part : Parts)
+	{
+		Part = NormalizeOverrideParam(Part);
+	}
+	OutNormalized = FString::Join(Parts, TEXT(","));
+	return true;
+}
+
+static bool AreOverrideSignaturesCompatible(
+	const FString& ChildSignature,
+	const FString& ParentSignature,
+	const FString& ChildName,
+	const FString& ParentName,
+	FString& OutReason)
+{
+	if (ChildSignature.IsEmpty() || ParentSignature.IsEmpty())
+	{
+		OutReason = TEXT("signature parameters unavailable but assuming compatible");
+		return true;
+	}
+	FString ChildParams;
+	FString ParentParams;
+	if (!NormalizeOverrideParams(ChildSignature, ChildName, ChildParams)
+		|| !NormalizeOverrideParams(ParentSignature, ParentName, ParentParams))
+	{
+		OutReason = TEXT("signature parameters unavailable but assuming compatible");
+		return true;
+	}
+	if (ChildParams != ParentParams)
+	{
+		OutReason = TEXT("same name but different normalized parameter list");
+		return false;
+	}
+	OutReason = ChildParams.IsEmpty()
+		? TEXT("same name and zero parameters")
+		: TEXT("same name and matching normalized parameter list");
+	return true;
+}
+
+static FString OverrideConfidenceForReason(const FString& Reason)
+{
+	return Reason.Contains(TEXT("assuming compatible")) ? TEXT("medium") : TEXT("high");
+}
+
+static void ReadOverrideEdges(FSQLitePreparedStatement& Stmt, TArray<FMonolithSourceOverrideEdge>& Result, int32 MaxResults)
+{
+	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		FMonolithSourceOverrideEdge Edge;
+		FString ChildSignature;
+		FString ParentSignature;
+		Stmt.GetColumnValueByIndex(0, Edge.FromSymbolId);
+		Stmt.GetColumnValueByIndex(1, Edge.ToSymbolId);
+		Stmt.GetColumnValueByIndex(2, Edge.FromName);
+		Stmt.GetColumnValueByIndex(3, Edge.FromQualifiedName);
+		Stmt.GetColumnValueByIndex(4, Edge.ToName);
+		Stmt.GetColumnValueByIndex(5, Edge.ToQualifiedName);
+		Stmt.GetColumnValueByIndex(6, Edge.ChildClassName);
+		Stmt.GetColumnValueByIndex(7, Edge.ChildClassQualifiedName);
+		Stmt.GetColumnValueByIndex(8, Edge.ParentClassName);
+		Stmt.GetColumnValueByIndex(9, Edge.ParentClassQualifiedName);
+		Stmt.GetColumnValueByIndex(10, ChildSignature);
+		Stmt.GetColumnValueByIndex(11, ParentSignature);
+
+		FString Reason;
+		if (!AreOverrideSignaturesCompatible(ChildSignature, ParentSignature, Edge.FromName, Edge.ToName, Reason))
+		{
+			continue;
+		}
+		Edge.Confidence = OverrideConfidenceForReason(Reason);
+		Edge.Reason = Reason;
+		Result.Add(MoveTemp(Edge));
+		if (Result.Num() >= MaxResults)
+		{
+			break;
+		}
+	}
+}
+
+static bool ReadCachedOverrideEdges(FSQLitePreparedStatement& Stmt, TArray<FMonolithSourceOverrideEdge>& Result)
+{
+	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		FMonolithSourceOverrideEdge Edge;
+		Stmt.GetColumnValueByIndex(0, Edge.FromSymbolId);
+		Stmt.GetColumnValueByIndex(1, Edge.ToSymbolId);
+		Stmt.GetColumnValueByIndex(2, Edge.FromName);
+		Stmt.GetColumnValueByIndex(3, Edge.FromQualifiedName);
+		Stmt.GetColumnValueByIndex(4, Edge.ToName);
+		Stmt.GetColumnValueByIndex(5, Edge.ToQualifiedName);
+		Stmt.GetColumnValueByIndex(6, Edge.ChildClassName);
+		Stmt.GetColumnValueByIndex(7, Edge.ChildClassQualifiedName);
+		Stmt.GetColumnValueByIndex(8, Edge.ParentClassName);
+		Stmt.GetColumnValueByIndex(9, Edge.ParentClassQualifiedName);
+		Stmt.GetColumnValueByIndex(10, Edge.Confidence);
+		Stmt.GetColumnValueByIndex(11, Edge.Reason);
+		Result.Add(MoveTemp(Edge));
+	}
+	return true;
+}
+
+static bool PopulateSourceOverrideEdgeCacheLocked(FSQLiteDatabase& DB, int64& OutCount, FString& OutError)
+{
+	OutCount = 0;
+	FSQLitePreparedStatement Candidates;
+	if (!Candidates.Create(DB, TEXT(
+		"SELECT child_fn.id,base_fn.id,"
+		"       child_fn.name,child_fn.qualified_name,base_fn.name,base_fn.qualified_name,"
+		"       child_cls.name,child_cls.qualified_name,base_cls.name,base_cls.qualified_name,"
+		"       COALESCE(child_fn.signature,''),COALESCE(base_fn.signature,'') "
+		"FROM symbols AS child_fn INDEXED BY idx_symbols_override_signature "
+		"JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id "
+		"JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id = child_cls.id "
+		"JOIN symbols base_cls ON base_cls.id = i.parent_id "
+		"JOIN symbols AS base_fn INDEXED BY idx_symbols_parent_name_kind ON base_fn.parent_symbol_id = base_cls.id "
+		"    AND base_fn.name = child_fn.name "
+		"    AND base_fn.kind = child_fn.kind "
+		"WHERE child_fn.kind = 'function' "
+		"  AND child_fn.signature LIKE '%%override%%' "
+		"ORDER BY base_fn.id, child_fn.id;")))
+	{
+		OutError = DB.GetLastError();
+		return false;
+	}
+
+	FSQLitePreparedStatement Insert;
+	if (!Insert.Create(DB, TEXT(
+		"INSERT OR IGNORE INTO source_override_edges "
+		"(child_symbol_id,parent_symbol_id,confidence,reason,updated_at) "
+		"VALUES (?, ?, ?, ?, CAST(strftime('%s','now') AS INTEGER));")))
+	{
+		OutError = DB.GetLastError();
+		return false;
+	}
+
+	while (Candidates.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		FMonolithSourceOverrideEdge Edge;
+		FString ChildSignature;
+		FString ParentSignature;
+		Candidates.GetColumnValueByIndex(0, Edge.FromSymbolId);
+		Candidates.GetColumnValueByIndex(1, Edge.ToSymbolId);
+		Candidates.GetColumnValueByIndex(2, Edge.FromName);
+		Candidates.GetColumnValueByIndex(3, Edge.FromQualifiedName);
+		Candidates.GetColumnValueByIndex(4, Edge.ToName);
+		Candidates.GetColumnValueByIndex(5, Edge.ToQualifiedName);
+		Candidates.GetColumnValueByIndex(6, Edge.ChildClassName);
+		Candidates.GetColumnValueByIndex(7, Edge.ChildClassQualifiedName);
+		Candidates.GetColumnValueByIndex(8, Edge.ParentClassName);
+		Candidates.GetColumnValueByIndex(9, Edge.ParentClassQualifiedName);
+		Candidates.GetColumnValueByIndex(10, ChildSignature);
+		Candidates.GetColumnValueByIndex(11, ParentSignature);
+
+		FString Reason;
+		if (!AreOverrideSignaturesCompatible(ChildSignature, ParentSignature, Edge.FromName, Edge.ToName, Reason))
+		{
+			continue;
+		}
+		Edge.Confidence = OverrideConfidenceForReason(Reason);
+		Edge.Reason = Reason;
+
+		Insert.Reset();
+		Insert.SetBindingValueByIndex(1, Edge.FromSymbolId);
+		Insert.SetBindingValueByIndex(2, Edge.ToSymbolId);
+		Insert.SetBindingValueByIndex(3, Edge.Confidence);
+		Insert.SetBindingValueByIndex(4, Edge.Reason);
+		const ESQLitePreparedStatementStepResult Step = Insert.Step();
+		if (Step != ESQLitePreparedStatementStepResult::Done)
+		{
+			OutError = DB.GetLastError();
+			return false;
+		}
+		++OutCount;
+	}
+	return true;
+}
+
 // ============================================================
 // Helper: execute a multi-statement SQL string statement-by-statement.
 // FSQLiteDatabase::Execute() only runs the first statement when given
@@ -567,6 +967,34 @@ static bool TableExistsLocked(FSQLiteDatabase& DB, const TCHAR* Name)
 	return S.Step() == ESQLitePreparedStatementStepResult::Row;
 }
 
+static bool CrgMetaEqualsLocked(FSQLiteDatabase& DB, const TCHAR* Key, const TCHAR* Expected)
+{
+	if (!TableExistsLocked(DB, TEXT("crg_meta")))
+	{
+		return false;
+	}
+
+	FSQLitePreparedStatement S;
+	if (!S.Create(DB, TEXT("SELECT value FROM crg_meta WHERE key = ? LIMIT 1;")))
+	{
+		return false;
+	}
+	S.SetBindingValueByIndex(1, FString(Key));
+	if (S.Step() != ESQLitePreparedStatementStepResult::Row)
+	{
+		return false;
+	}
+	FString Value;
+	S.GetColumnValueByIndex(0, Value);
+	return Value == FString(Expected);
+}
+
+static bool SourceOverrideEdgeCacheReadyLocked(FSQLiteDatabase& DB)
+{
+	return TableExistsLocked(DB, TEXT("source_override_edges"))
+		&& CrgMetaEqualsLocked(DB, TEXT("source_override_edges_version"), TEXT("1"));
+}
+
 static int64 CountIdLocked(FSQLiteDatabase& DB, const TCHAR* Sql, int64 Id)
 {
 	FSQLitePreparedStatement S;
@@ -845,12 +1273,29 @@ static const TCHAR* GCrgProjectionDdl =
 	TEXT("key TEXT PRIMARY KEY,")
 	TEXT("value TEXT NOT NULL")
 	TEXT(");")
+	TEXT("CREATE TABLE IF NOT EXISTS source_override_edges (")
+	TEXT("child_symbol_id INTEGER NOT NULL,")
+	TEXT("parent_symbol_id INTEGER NOT NULL,")
+	TEXT("confidence TEXT NOT NULL DEFAULT 'high',")
+	TEXT("reason TEXT NOT NULL DEFAULT '',")
+	TEXT("updated_at INTEGER NOT NULL,")
+	TEXT("PRIMARY KEY(child_symbol_id, parent_symbol_id)")
+	TEXT(");")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_nodes_domain_native ON crg_nodes(domain, native_table, native_id);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_nodes_stable ON crg_nodes(domain, stable_key);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_source ON crg_edges(domain, source_node_id);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_target ON crg_edges(domain, target_node_id);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_kind_subkind ON crg_edges(domain, edge_kind, edge_subkind);")
-	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_metrics_score ON crg_node_metrics(risk_score DESC);");
+	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_metrics_score ON crg_node_metrics(risk_score DESC);")
+	TEXT("CREATE INDEX IF NOT EXISTS idx_source_override_edges_parent ON source_override_edges(parent_symbol_id, child_symbol_id);")
+	TEXT("CREATE INDEX IF NOT EXISTS idx_source_override_edges_child ON source_override_edges(child_symbol_id, parent_symbol_id);");
+
+static const TCHAR* GSourceReviewIndexDdl =
+	TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_parent_name_kind ON symbols(parent_symbol_id, name, kind);")
+	TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_name_kind_parent ON symbols(name, kind, parent_symbol_id);")
+	TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_override_signature ON symbols(kind, parent_symbol_id, name) WHERE kind='function' AND signature LIKE '%override%';")
+	TEXT("CREATE INDEX IF NOT EXISTS idx_inheritance_parent_child ON inheritance(parent_id, child_id);")
+	TEXT("CREATE INDEX IF NOT EXISTS idx_inheritance_child_parent ON inheritance(child_id, parent_id);");
 
 void FMonolithSourceDatabase::Close()
 {
@@ -933,7 +1378,7 @@ FMonolithSourceSymbol FMonolithSourceDatabase::ReadSymbolFromStatement(FSQLitePr
 	Stmt.GetColumnValueByIndex(6, LineEnd);
 	Sym.LineStart = LineStart;
 	Sym.LineEnd = LineEnd;
-	// parent_symbol_id at index 7 — skip
+	Stmt.GetColumnValueByIndex(7, Sym.ParentSymbolId);
 	Stmt.GetColumnValueByIndex(8, Sym.Access);
 	Stmt.GetColumnValueByIndex(9, Sym.Signature);
 	Stmt.GetColumnValueByIndex(10, Sym.Docstring);
@@ -977,12 +1422,15 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::GetSymbolsByName(const FS
 	if (!Database || !Database->IsValid()) return Result;
 
 	const int32 SafeLimit = Limit > 0 ? FMath::Clamp(Limit, 1, 1000) : 0;
+	const bool bQualifiedLookup = Name.Contains(TEXT("::"));
+	const TCHAR* NameColumn = bQualifiedLookup ? TEXT("qualified_name") : TEXT("name");
 	FSQLitePreparedStatement Stmt;
 	if (Kind.IsEmpty())
 	{
-		Stmt.Create(*Database, SafeLimit > 0
-			? TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC LIMIT ?;")
-			: TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC;"));
+		const FString Sql = SafeLimit > 0
+			? FString::Printf(TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE %s = ? ORDER BY (line_end > line_start) DESC LIMIT ?;"), NameColumn)
+			: FString::Printf(TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE %s = ? ORDER BY (line_end > line_start) DESC;"), NameColumn);
+		Stmt.Create(*Database, *Sql);
 		Stmt.SetBindingValueByIndex(1, Name);
 		if (SafeLimit > 0)
 		{
@@ -991,9 +1439,10 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::GetSymbolsByName(const FS
 	}
 	else
 	{
-		Stmt.Create(*Database, SafeLimit > 0
-			? TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? AND kind = ? ORDER BY (line_end > line_start) DESC LIMIT ?;")
-			: TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? AND kind = ? ORDER BY (line_end > line_start) DESC;"));
+		const FString Sql = SafeLimit > 0
+			? FString::Printf(TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE %s = ? AND kind = ? ORDER BY (line_end > line_start) DESC LIMIT ?;"), NameColumn)
+			: FString::Printf(TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE %s = ? AND kind = ? ORDER BY (line_end > line_start) DESC;"), NameColumn);
+		Stmt.Create(*Database, *Sql);
 		Stmt.SetBindingValueByIndex(1, Name);
 		Stmt.SetBindingValueByIndex(2, Kind);
 		if (SafeLimit > 0)
@@ -1239,6 +1688,113 @@ TArray<FMonolithSourceInheritance> FMonolithSourceDatabase::GetChildren(int64 Sy
 		Inh.LineEnd = LE;
 		Result.Add(MoveTemp(Inh));
 	}
+	return Result;
+}
+
+TArray<FMonolithSourceOverrideEdge> FMonolithSourceDatabase::GetOverridesTo(int64 SymbolId, int32 Limit)
+{
+	FScopeLock Lock(&DbLock);
+	TArray<FMonolithSourceOverrideEdge> Result;
+	if (!Database || !Database->IsValid()) return Result;
+
+	const int32 SafeLimit = FMath::Clamp(Limit, 1, 1000);
+	const int32 ProbeLimit = FMath::Clamp(SafeLimit * 4, SafeLimit, 1000);
+	FSQLitePreparedStatement Stmt;
+	if (SourceOverrideEdgeCacheReadyLocked(*Database))
+	{
+		if (Stmt.Create(*Database, TEXT(
+			"SELECT child_fn.id,base_fn.id,"
+			"       child_fn.name,child_fn.qualified_name,base_fn.name,base_fn.qualified_name,"
+			"       child_cls.name,child_cls.qualified_name,base_cls.name,base_cls.qualified_name,"
+			"       e.confidence,e.reason "
+			"FROM source_override_edges e "
+			"JOIN symbols child_fn ON child_fn.id = e.child_symbol_id "
+			"JOIN symbols base_fn ON base_fn.id = e.parent_symbol_id "
+			"JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id "
+			"JOIN symbols base_cls ON base_cls.id = base_fn.parent_symbol_id "
+			"WHERE e.parent_symbol_id = ? "
+			"ORDER BY child_fn.qualified_name "
+			"LIMIT ?;")))
+		{
+			Stmt.SetBindingValueByIndex(1, SymbolId);
+			Stmt.SetBindingValueByIndex(2, static_cast<int64>(SafeLimit));
+			ReadCachedOverrideEdges(Stmt, Result);
+			return Result;
+		}
+	}
+
+	Stmt.Create(*Database, TEXT(
+		"SELECT child_fn.id,base_fn.id,"
+		"       child_fn.name,child_fn.qualified_name,base_fn.name,base_fn.qualified_name,"
+		"       child_cls.name,child_cls.qualified_name,base_cls.name,base_cls.qualified_name,"
+		"       COALESCE(child_fn.signature,''),COALESCE(base_fn.signature,'') "
+		"FROM symbols base_fn "
+		"JOIN symbols base_cls ON base_cls.id = base_fn.parent_symbol_id "
+		"JOIN symbols child_fn ON child_fn.name = base_fn.name "
+		"    AND child_fn.kind = base_fn.kind "
+		"    AND child_fn.id != base_fn.id "
+		"JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id "
+		"JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id = child_cls.id "
+		"    AND i.parent_id = base_cls.id "
+		"WHERE base_fn.id = ? AND base_fn.kind = 'function' "
+		"ORDER BY child_fn.qualified_name "
+		"LIMIT ?;"));
+	Stmt.SetBindingValueByIndex(1, SymbolId);
+	Stmt.SetBindingValueByIndex(2, static_cast<int64>(ProbeLimit));
+	ReadOverrideEdges(Stmt, Result, SafeLimit);
+	return Result;
+}
+
+TArray<FMonolithSourceOverrideEdge> FMonolithSourceDatabase::GetOverridesFrom(int64 SymbolId, int32 Limit)
+{
+	FScopeLock Lock(&DbLock);
+	TArray<FMonolithSourceOverrideEdge> Result;
+	if (!Database || !Database->IsValid()) return Result;
+
+	const int32 SafeLimit = FMath::Clamp(Limit, 1, 1000);
+	const int32 ProbeLimit = FMath::Clamp(SafeLimit * 4, SafeLimit, 1000);
+	FSQLitePreparedStatement Stmt;
+	if (SourceOverrideEdgeCacheReadyLocked(*Database))
+	{
+		if (Stmt.Create(*Database, TEXT(
+			"SELECT child_fn.id,base_fn.id,"
+			"       child_fn.name,child_fn.qualified_name,base_fn.name,base_fn.qualified_name,"
+			"       child_cls.name,child_cls.qualified_name,base_cls.name,base_cls.qualified_name,"
+			"       e.confidence,e.reason "
+			"FROM source_override_edges e "
+			"JOIN symbols child_fn ON child_fn.id = e.child_symbol_id "
+			"JOIN symbols base_fn ON base_fn.id = e.parent_symbol_id "
+			"JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id "
+			"JOIN symbols base_cls ON base_cls.id = base_fn.parent_symbol_id "
+			"WHERE e.child_symbol_id = ? "
+			"ORDER BY base_fn.qualified_name "
+			"LIMIT ?;")))
+		{
+			Stmt.SetBindingValueByIndex(1, SymbolId);
+			Stmt.SetBindingValueByIndex(2, static_cast<int64>(SafeLimit));
+			ReadCachedOverrideEdges(Stmt, Result);
+			return Result;
+		}
+	}
+
+	Stmt.Create(*Database, TEXT(
+		"SELECT child_fn.id,base_fn.id,"
+		"       child_fn.name,child_fn.qualified_name,base_fn.name,base_fn.qualified_name,"
+		"       child_cls.name,child_cls.qualified_name,base_cls.name,base_cls.qualified_name,"
+		"       COALESCE(child_fn.signature,''),COALESCE(base_fn.signature,'') "
+		"FROM symbols child_fn "
+		"JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id "
+		"JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id = child_cls.id "
+		"JOIN symbols base_cls ON base_cls.id = i.parent_id "
+		"JOIN symbols base_fn ON base_fn.parent_symbol_id = base_cls.id "
+		"    AND base_fn.name = child_fn.name "
+		"    AND base_fn.kind = child_fn.kind "
+		"WHERE child_fn.id = ? AND child_fn.kind = 'function' "
+		"ORDER BY base_fn.qualified_name "
+		"LIMIT ?;"));
+	Stmt.SetBindingValueByIndex(1, SymbolId);
+	Stmt.SetBindingValueByIndex(2, static_cast<int64>(ProbeLimit));
+	ReadOverrideEdges(Stmt, Result, SafeLimit);
 	return Result;
 }
 
@@ -1764,15 +2320,20 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		FString::Printf(TEXT("symbols=%lld symbols_fts=%lld%s"), SymCnt, SymFtsCnt,
 			SymCnt == SymFtsCnt ? TEXT("") : TEXT(" (mismatch -> source.repair_fts target=symbols)")));
 
-	bool bHasAllCrg = true;
+	bool bHasCoreCrg = true;
 	for (const TCHAR* T : { TEXT("crg_nodes"), TEXT("crg_edges"), TEXT("crg_node_metrics"), TEXT("crg_meta") })
 	{
 		const bool bHas = Exists(TEXT("table"), T);
-		bHasAllCrg = bHasAllCrg && bHas;
+		bHasCoreCrg = bHasCoreCrg && bHas;
 		Check(FString::Printf(TEXT("crg:table:%s"), T), bHas,
 			bHas ? FString::Printf(TEXT("CRG projection table %s present"), T)
 				: FString::Printf(TEXT("missing CRG projection table %s (run source.repair_crg_cache)"), T));
 	}
+	const bool bHasSourceOverrideEdges = Exists(TEXT("table"), TEXT("source_override_edges"));
+	Check(TEXT("crg:table:source_override_edges"), bHasSourceOverrideEdges,
+		bHasSourceOverrideEdges ? TEXT("CRG projection table source_override_edges present")
+			: TEXT("missing CRG projection table source_override_edges (run source.repair_crg_cache)"));
+
 	for (const TCHAR* I : {
 		TEXT("idx_crg_nodes_domain_native"), TEXT("idx_crg_nodes_stable"),
 		TEXT("idx_crg_edges_domain_source"), TEXT("idx_crg_edges_domain_target"),
@@ -1783,10 +2344,20 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 			bHas ? FString::Printf(TEXT("CRG projection index %s present"), I)
 				: FString::Printf(TEXT("missing CRG projection index %s (run source.repair_crg_cache)"), I));
 	}
+	for (const TCHAR* I : {
+		TEXT("idx_source_override_edges_parent"), TEXT("idx_source_override_edges_child"),
+		TEXT("idx_symbols_override_signature"),
+		TEXT("idx_inheritance_parent_child"), TEXT("idx_inheritance_child_parent") })
+	{
+		const bool bHas = Exists(TEXT("index"), I);
+		Check(FString::Printf(TEXT("crg:index:%s"), I), bHas,
+			bHas ? FString::Printf(TEXT("CRG projection index %s present"), I)
+				: FString::Printf(TEXT("missing CRG projection index %s (run source.repair_crg_cache)"), I));
+	}
 	int64 CrgNodeCnt = -1;
 	int64 CrgEdgeCnt = -1;
 	int64 CrgMetricCnt = -1;
-	if (bHasAllCrg)
+	if (bHasCoreCrg)
 	{
 		const int64 ValidRefCnt = CountOf(TEXT(
 			"SELECT COUNT(*) FROM \"references\" r "
@@ -1835,6 +2406,19 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		Check(TEXT("crg:scoring_version"), CrgScoringVersion == TEXT("3"),
 			CrgScoringVersion.IsEmpty() ? TEXT("crg_meta.scoring_version missing (run source.repair_crg_cache)")
 				: FString::Printf(TEXT("crg scoring_version=%s (expected 3)"), *CrgScoringVersion));
+	}
+	if (bHasSourceOverrideEdges && Exists(TEXT("table"), TEXT("crg_meta")))
+	{
+		FString OverrideEdgesVersion;
+		FSQLitePreparedStatement S3;
+		if (S3.Create(*Database, TEXT("SELECT value FROM crg_meta WHERE key = 'source_override_edges_version';"))
+			&& S3.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			S3.GetColumnValueByIndex(0, OverrideEdgesVersion);
+		}
+		Check(TEXT("crg:source_override_edges_version"), OverrideEdgesVersion == TEXT("1"),
+			OverrideEdgesVersion.IsEmpty() ? TEXT("crg_meta.source_override_edges_version missing (run source.repair_crg_cache)")
+				: FString::Printf(TEXT("source override edge cache version=%s (expected 1)"), *OverrideEdgesVersion));
 	}
 
 	// source_fts is a plain (non external-content) fts5 table — a row-count
@@ -1898,11 +2482,16 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		Counts->SetNumberField(TEXT("inheritance"),
 			static_cast<double>(CountOf(TEXT("SELECT COUNT(*) FROM inheritance;"))));
 		Counts->SetNumberField(TEXT("source_fts"), static_cast<double>(SrcFtsCnt));
-		if (bHasAllCrg)
+		if (bHasCoreCrg)
 		{
 			Counts->SetNumberField(TEXT("crg_nodes"), static_cast<double>(CrgNodeCnt));
 			Counts->SetNumberField(TEXT("crg_edges"), static_cast<double>(CrgEdgeCnt));
 			Counts->SetNumberField(TEXT("crg_node_metrics"), static_cast<double>(CrgMetricCnt));
+		}
+		if (bHasSourceOverrideEdges)
+		{
+			Counts->SetNumberField(TEXT("source_override_edges"),
+				static_cast<double>(CountOf(TEXT("SELECT COUNT(*) FROM source_override_edges;"))));
 		}
 		Root->SetObjectField(TEXT("row_counts"), Counts);
 	}
@@ -2038,21 +2627,41 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 
 TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(bool bExecute)
 {
+	return RepairCrgCache(TEXT("all"), bExecute);
+}
+
+TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(const FString& Scope, bool bExecute)
+{
 	FScopeLock Lock(&DbLock);
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	const FString NormalizedScope = Scope.IsEmpty() ? TEXT("all") : Scope.ToLower();
 	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
 	Input->SetBoolField(TEXT("execute"), bExecute);
+	Input->SetStringField(TEXT("scope"), NormalizedScope);
 	Root->SetObjectField(TEXT("input"), Input);
 	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
 	Limits->SetBoolField(TEXT("execute"), bExecute);
+	Limits->SetStringField(TEXT("scope"), NormalizedScope);
 	Root->SetObjectField(TEXT("limits"), Limits);
 
 	TArray<TSharedPtr<FJsonValue>> Warnings;
 	TArray<TSharedPtr<FJsonValue>> Plan;
-	Plan.Add(MakeShared<FJsonValueString>(TEXT("CREATE IF MISSING crg_nodes/crg_edges/crg_node_metrics/crg_meta")));
-	Plan.Add(MakeShared<FJsonValueString>(TEXT("DELETE existing source CRG projection rows")));
-	Plan.Add(MakeShared<FJsonValueString>(TEXT("SOURCE symbols -> crg_nodes; references/inheritance -> crg_edges")));
-	Plan.Add(MakeShared<FJsonValueString>(TEXT("Recompute caller/callee/descendant/risk_score into crg_node_metrics")));
+	if (NormalizedScope == TEXT("override_edges"))
+	{
+		Plan.Add(MakeShared<FJsonValueString>(TEXT("CREATE IF MISSING source_override_edges and helper indexes")));
+		Plan.Add(MakeShared<FJsonValueString>(TEXT("DELETE existing source_override_edges rows")));
+		Plan.Add(MakeShared<FJsonValueString>(TEXT("Recompute signature-aware source_override_edges cache")));
+		Plan.Add(MakeShared<FJsonValueString>(TEXT("Update crg_meta.source_override_edges_version")));
+	}
+	else
+	{
+		Plan.Add(MakeShared<FJsonValueString>(TEXT("CREATE IF MISSING crg_nodes/crg_edges/crg_node_metrics/crg_meta")));
+		Plan.Add(MakeShared<FJsonValueString>(TEXT("CREATE IF MISSING review/override helper indexes")));
+		Plan.Add(MakeShared<FJsonValueString>(TEXT("DELETE existing source CRG projection rows")));
+		Plan.Add(MakeShared<FJsonValueString>(TEXT("SOURCE symbols -> crg_nodes; references/inheritance -> crg_edges")));
+		Plan.Add(MakeShared<FJsonValueString>(TEXT("Recompute caller/callee/descendant/risk_score into crg_node_metrics")));
+		Plan.Add(MakeShared<FJsonValueString>(TEXT("Recompute signature-aware source_override_edges cache")));
+	}
 	Root->SetArrayField(TEXT("plan"), Plan);
 
 	if (!Database || !Database->IsValid())
@@ -2062,6 +2671,16 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(bool bExecute)
 		Root->SetArrayField(TEXT("warnings"), Warnings);
 		Root->SetBoolField(TEXT("truncated"), false);
 		AddNextActions(Root, { TEXT("source.trigger_reindex"), TEXT("source.health") });
+		return Root;
+	}
+	if (NormalizedScope != TEXT("all") && NormalizedScope != TEXT("override_edges"))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("Unsupported scope for source.repair_crg_cache (expected all|override_edges)"));
+		Root->SetObjectField(TEXT("after"), MakeShared<FJsonObject>());
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.repair_crg_cache scope=all"), TEXT("source.repair_crg_cache scope=override_edges"), TEXT("source.health") });
 		return Root;
 	}
 
@@ -2101,6 +2720,11 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(bool bExecute)
 			Count(TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain = 'source';"))));
 		Before->SetNumberField(TEXT("crg_node_metrics"), static_cast<double>(
 			Count(TEXT("SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain = 'source';"))));
+		if (Exists(TEXT("table"), TEXT("source_override_edges")))
+		{
+			Before->SetNumberField(TEXT("source_override_edges"), static_cast<double>(
+				Count(TEXT("SELECT COUNT(*) FROM source_override_edges;"))));
+		}
 	}
 	Root->SetObjectField(TEXT("before"), Before);
 
@@ -2108,15 +2732,21 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(bool bExecute)
 	{
 		Root->SetStringField(TEXT("status"), TEXT("ok"));
 		Root->SetStringField(TEXT("summary"),
-			TEXT("Dry-run: source CRG projection/cache would be rebuilt. Pass execute=true to apply."));
+			NormalizedScope == TEXT("override_edges")
+				? TEXT("Dry-run: source override edge cache would be rebuilt. Pass execute=true to apply.")
+				: TEXT("Dry-run: source CRG projection/cache would be rebuilt. Pass execute=true to apply."));
 		Root->SetObjectField(TEXT("after"), MakeShared<FJsonObject>());
 		Root->SetArrayField(TEXT("warnings"), Warnings);
 		Root->SetBoolField(TEXT("truncated"), false);
-		AddNextActions(Root, { TEXT("source.repair_crg_cache (execute=true)"), TEXT("source.health"), TEXT("source.risk_score") });
+		AddNextActions(Root, { TEXT("source.repair_crg_cache (execute=true)"), TEXT("source.repair_crg_cache scope=override_edges execute=true"), TEXT("source.health"), TEXT("source.risk_score") });
 		return Root;
 	}
 
 	bool bOk = ExecuteMulti(*Database, GCrgProjectionDdl);
+	if (bOk)
+	{
+		bOk = ExecuteMulti(*Database, GSourceReviewIndexDdl);
+	}
 	auto Exec = [&](const TCHAR* Sql, const TCHAR* Label)
 	{
 		if (!bOk) return;
@@ -2128,6 +2758,55 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(bool bExecute)
 		}
 	};
 
+	if (NormalizedScope == TEXT("override_edges"))
+	{
+		if (bOk)
+		{
+			bOk = Database->Execute(TEXT("BEGIN;"));
+		}
+		Exec(TEXT("DELETE FROM source_override_edges;"), TEXT("clear source override edges"));
+
+		int64 OverrideEdgeCount = 0;
+		if (bOk)
+		{
+			FString OverrideError;
+			if (!PopulateSourceOverrideEdgeCacheLocked(*Database, OverrideEdgeCount, OverrideError))
+			{
+				bOk = false;
+				Warnings.Add(MakeShared<FJsonValueString>(
+					OverrideError.IsEmpty()
+						? TEXT("CRG cache rebuild failed at source override edge cache")
+						: FString::Printf(TEXT("CRG cache rebuild failed at source override edge cache: %s"), *OverrideError)));
+			}
+		}
+		Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','1');"), TEXT("source_override_edges_version"));
+		if (bOk)
+		{
+			Root->SetNumberField(TEXT("source_override_edges_built"), static_cast<double>(OverrideEdgeCount));
+			Database->Execute(TEXT("COMMIT;"));
+		}
+		else
+		{
+			Database->Execute(TEXT("ROLLBACK;"));
+		}
+
+		TSharedPtr<FJsonObject> After = MakeShared<FJsonObject>();
+		if (Exists(TEXT("table"), TEXT("source_override_edges")))
+		{
+			After->SetNumberField(TEXT("source_override_edges"), static_cast<double>(
+				Count(TEXT("SELECT COUNT(*) FROM source_override_edges;"))));
+		}
+		Root->SetObjectField(TEXT("after"), After);
+		Root->SetStringField(TEXT("status"), bOk ? TEXT("ok") : TEXT("error"));
+		Root->SetStringField(TEXT("summary"), bOk
+			? TEXT("Rebuilt source override edge cache")
+			: TEXT("source override edge cache rebuild failed; rolled back"));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.health"), TEXT("source.find_overrides"), TEXT("source.review_hotspots kind=override") });
+		return Root;
+	}
+
 	if (bOk)
 	{
 		bOk = Database->Execute(TEXT("BEGIN;"));
@@ -2135,6 +2814,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(bool bExecute)
 	Exec(TEXT("DELETE FROM crg_node_metrics WHERE node_id IN (SELECT id FROM crg_nodes WHERE domain = 'source');"), TEXT("clear metrics"));
 	Exec(TEXT("DELETE FROM crg_edges WHERE domain = 'source';"), TEXT("clear edges"));
 	Exec(TEXT("DELETE FROM crg_nodes WHERE domain = 'source';"), TEXT("clear nodes"));
+	Exec(TEXT("DELETE FROM source_override_edges;"), TEXT("clear source override edges"));
 	Exec(TEXT(
 		"INSERT INTO crg_nodes(id,domain,native_table,native_id,stable_key,kind,name,path,module,source_revision,extra,updated_at) "
 		"SELECT s.id,'source','symbols',s.id,COALESCE(s.qualified_name,s.name) || '#' || s.id,"
@@ -2248,6 +2928,25 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(bool bExecute)
 	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('built_at',datetime('now'));"), TEXT("built_at"));
 	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_built_at',datetime('now'));"), TEXT("source_built_at"));
 
+	int64 OverrideEdgeCount = 0;
+	if (bOk)
+	{
+		FString OverrideError;
+		if (!PopulateSourceOverrideEdgeCacheLocked(*Database, OverrideEdgeCount, OverrideError))
+		{
+			bOk = false;
+			Warnings.Add(MakeShared<FJsonValueString>(
+				OverrideError.IsEmpty()
+					? TEXT("CRG cache rebuild failed at source override edge cache")
+					: FString::Printf(TEXT("CRG cache rebuild failed at source override edge cache: %s"), *OverrideError)));
+		}
+	}
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','1');"), TEXT("source_override_edges_version"));
+	if (bOk)
+	{
+		Root->SetNumberField(TEXT("source_override_edges_built"), static_cast<double>(OverrideEdgeCount));
+	}
+
 	if (bOk)
 	{
 		Database->Execute(TEXT("COMMIT;"));
@@ -2263,6 +2962,8 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(bool bExecute)
 			Count(TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain = 'source';"))));
 		After->SetNumberField(TEXT("crg_node_metrics"), static_cast<double>(
 			Count(TEXT("SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain = 'source';"))));
+		After->SetNumberField(TEXT("source_override_edges"), static_cast<double>(
+			Count(TEXT("SELECT COUNT(*) FROM source_override_edges;"))));
 	}
 	Root->SetObjectField(TEXT("after"), After);
 	Root->SetStringField(TEXT("status"), bOk ? TEXT("ok") : TEXT("error"));
@@ -3354,10 +4055,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 
 	if (NormalizedKind != TEXT("fan_in") && NormalizedKind != TEXT("fan_out")
 		&& NormalizedKind != TEXT("risk") && NormalizedKind != TEXT("large")
-		&& NormalizedKind != TEXT("all"))
+		&& NormalizedKind != TEXT("override") && NormalizedKind != TEXT("all"))
 	{
 		Root->SetStringField(TEXT("status"), TEXT("error"));
-		Root->SetStringField(TEXT("summary"), TEXT("Unsupported kind for source.review_hotspots (expected fan_in|fan_out|risk|large|all)"));
+		Root->SetStringField(TEXT("summary"), TEXT("Unsupported kind for source.review_hotspots (expected fan_in|fan_out|risk|large|override|all)"));
 		Root->SetArrayField(TEXT("hotspots"), TArray<TSharedPtr<FJsonValue>>());
 		Root->SetBoolField(TEXT("truncated"), false);
 		AddNextActions(Root, { TEXT("source.review_hotspots kind=all"), TEXT("source.risk_score") });
@@ -3385,27 +4086,157 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 		return S.Step() == ESQLitePreparedStatementStepResult::Row;
 	};
 	const bool bHasCrg = Exists(TEXT("crg_nodes")) && Exists(TEXT("crg_node_metrics"));
+	const bool bHasOverrideCache = bHasCrg && SourceOverrideEdgeCacheReadyLocked(*Database);
 
-	const FString CacheJoin = bHasCrg
-		? TEXT("LEFT JOIN crg_nodes n ON n.domain='source' AND n.native_table='symbols' AND n.native_id=c.id "
-			"LEFT JOIN crg_node_metrics m ON m.node_id=n.id ")
-		: TEXT("");
-	const FString RiskScoreExpr = bHasCrg
-		? TEXT("COALESCE(m.risk_score, c.estimated_risk)")
-		: TEXT("c.estimated_risk");
-	const FString RiskTierExpr = bHasCrg
-		? TEXT("COALESCE(m.risk_tier, CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END)")
-		: TEXT("CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END");
-	const FString WhereClause = NormalizedKind == TEXT("large")
-		? FString::Printf(TEXT("WHERE lines >= %d "), LocFloor)
-		: TEXT("WHERE fan_in > 0 OR fan_out > 0 OR descendants > 0 OR risk_score > 0 OR lines >= ") + FString::FromInt(LocFloor) + TEXT(" ");
+	FString WhereClause;
+	if (NormalizedKind == TEXT("large"))
+	{
+		WhereClause = FString::Printf(TEXT("WHERE lines >= %d "), LocFloor);
+	}
+	else if (NormalizedKind == TEXT("override"))
+	{
+		WhereClause = TEXT("WHERE override_children > 0 OR overridden_parents > 0 ");
+	}
+	else
+	{
+		WhereClause = TEXT("WHERE fan_in > 0 OR fan_out > 0 OR descendants > 0 OR risk_score > 0 OR lines >= ") + FString::FromInt(LocFloor) + TEXT(" ");
+	}
 	FString OrderBy = TEXT("ORDER BY hotspot_score DESC, risk_score DESC, fan_in DESC, lines DESC ");
 	if (NormalizedKind == TEXT("fan_in")) OrderBy = TEXT("ORDER BY fan_in DESC, risk_score DESC, lines DESC ");
 	else if (NormalizedKind == TEXT("fan_out")) OrderBy = TEXT("ORDER BY fan_out DESC, risk_score DESC, lines DESC ");
 	else if (NormalizedKind == TEXT("risk")) OrderBy = TEXT("ORDER BY risk_score DESC, fan_in DESC, lines DESC ");
 	else if (NormalizedKind == TEXT("large")) OrderBy = TEXT("ORDER BY lines DESC, risk_score DESC, fan_in DESC ");
+	else if (NormalizedKind == TEXT("override")) OrderBy = TEXT("ORDER BY override_children DESC, overridden_parents DESC, risk_score DESC, fan_in DESC, lines DESC ");
+	const int32 FetchLimit = NormalizedKind == TEXT("override")
+		? FMath::Clamp(Cap * 8 + 50, Cap + 1, 2000)
+		: Cap + 1;
+	const int32 OverrideSeedLimit = FMath::Clamp(Cap * 1000, 5000, 10000);
 
-	const FString Sql = FString::Printf(TEXT(
+	FString Sql;
+	if (NormalizedKind == TEXT("override"))
+	{
+		if (bHasOverrideCache)
+		{
+			Sql = FString::Printf(TEXT(
+			"WITH override_symbols AS ("
+			"  SELECT parent_symbol_id AS symbol_id FROM source_override_edges"
+			"  UNION SELECT child_symbol_id AS symbol_id FROM source_override_edges"
+			"), override_children AS ("
+			"  SELECT parent_symbol_id AS symbol_id, COUNT(*) AS override_children FROM source_override_edges GROUP BY parent_symbol_id"
+			"), overridden_parents AS ("
+			"  SELECT child_symbol_id AS symbol_id, COUNT(*) AS overridden_parents FROM source_override_edges GROUP BY child_symbol_id"
+			"), scored AS ("
+			"  SELECT s.id,s.name,s.qualified_name,s.kind,COALESCE(f.path,'') AS file,s.line_start,s.line_end,"
+			"         CASE WHEN s.line_end >= s.line_start THEN s.line_end - s.line_start + 1 ELSE 0 END AS lines,"
+			"         COALESCE(m.fan_in,0) AS fan_in,COALESCE(m.fan_out,0) AS fan_out,"
+			"         COALESCE(m.descendants,0) AS descendants,"
+			"         COALESCE(oc.override_children,0) AS override_children,"
+			"         COALESCE(op.overridden_parents,0) AS overridden_parents,"
+			"         COALESCE(m.risk_score,0.0) AS risk_score,COALESCE(m.risk_tier, 'low') AS risk_tier "
+			"  FROM override_symbols os "
+			"  JOIN symbols s ON s.id=os.symbol_id "
+			"  LEFT JOIN files f ON f.id=s.file_id "
+			"  LEFT JOIN override_children oc ON oc.symbol_id=s.id "
+			"  LEFT JOIN overridden_parents op ON op.symbol_id=s.id "
+			"  LEFT JOIN crg_nodes n ON n.domain='source' AND n.native_table='symbols' AND n.native_id=s.id "
+			"  LEFT JOIN crg_node_metrics m ON m.node_id=n.id"
+			") "
+			"SELECT *, MAX(risk_score, MIN(override_children,30)/30.0, MIN(overridden_parents,10)/10.0, MIN(lines,500)/500.0) AS hotspot_score "
+			"FROM scored %s%sLIMIT %d;"),
+			*WhereClause, *OrderBy, FetchLimit);
+		}
+		else if (bHasCrg)
+		{
+			Sql = FString::Printf(TEXT(
+			"WITH child_seed AS ("
+			"  SELECT id,name,kind,parent_symbol_id FROM symbols "
+			"  WHERE kind='function' AND signature LIKE '%%override%%' LIMIT %d"
+			"), override_children AS ("
+			"  SELECT base_fn.id AS symbol_id, COUNT(*) AS override_children "
+			"  FROM child_seed child_fn "
+			"  JOIN symbols child_cls ON child_cls.id=child_fn.parent_symbol_id "
+			"  JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id=child_cls.id "
+			"  JOIN symbols base_cls ON base_cls.id=i.parent_id "
+			"  JOIN symbols base_fn ON base_fn.parent_symbol_id=base_cls.id AND base_fn.name=child_fn.name AND base_fn.kind=child_fn.kind "
+			"  GROUP BY base_fn.id"
+			"), scored AS ("
+			"  SELECT s.id,s.name,s.qualified_name,s.kind,COALESCE(f.path,'') AS file,s.line_start,s.line_end,"
+			"         CASE WHEN s.line_end >= s.line_start THEN s.line_end - s.line_start + 1 ELSE 0 END AS lines,"
+			"         COALESCE(m.fan_in,0) AS fan_in,COALESCE(m.fan_out,0) AS fan_out,"
+			"         COALESCE(m.descendants,0) AS descendants,oc.override_children,0 AS overridden_parents,"
+			"         COALESCE(m.risk_score,0.0) AS risk_score,COALESCE(m.risk_tier, 'low') AS risk_tier "
+			"  FROM override_children oc "
+			"  JOIN symbols s ON s.id=oc.symbol_id "
+			"  LEFT JOIN files f ON f.id=s.file_id "
+			"  LEFT JOIN crg_nodes n ON n.domain='source' AND n.native_table='symbols' AND n.native_id=s.id "
+			"  LEFT JOIN crg_node_metrics m ON m.node_id=n.id"
+			") "
+			"SELECT *, MAX(risk_score, MIN(override_children,30)/30.0, MIN(lines,500)/500.0) AS hotspot_score "
+			"FROM scored %s%sLIMIT %d;"),
+			OverrideSeedLimit, *WhereClause, *OrderBy, FetchLimit);
+		}
+		else
+		{
+			const FString RiskScoreExpr = TEXT("c.estimated_risk");
+			const FString RiskTierExpr = TEXT("CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END");
+			Sql = FString::Printf(TEXT(
+			"WITH child_seed AS ("
+			"  SELECT id,name,kind,parent_symbol_id FROM symbols "
+			"  WHERE kind='function' AND signature LIKE '%%override%%' LIMIT %d"
+			"), override_children AS ("
+			"  SELECT base_fn.id AS symbol_id, COUNT(*) AS override_children "
+			"  FROM child_seed child_fn "
+			"  JOIN symbols child_cls ON child_cls.id=child_fn.parent_symbol_id "
+			"  JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id=child_cls.id "
+			"  JOIN symbols base_cls ON base_cls.id=i.parent_id "
+			"  JOIN symbols base_fn ON base_fn.parent_symbol_id=base_cls.id AND base_fn.name=child_fn.name AND base_fn.kind=child_fn.kind "
+			"  GROUP BY base_fn.id"
+			"), ref_in AS ("
+			"  SELECT to_symbol_id AS symbol_id, COUNT(*) AS fan_in, COUNT(DISTINCT r.file_id) AS caller_files FROM \"references\" r GROUP BY to_symbol_id"
+			"), ref_out AS ("
+			"  SELECT from_symbol_id AS symbol_id, COUNT(*) AS fan_out FROM \"references\" r GROUP BY from_symbol_id"
+			"), inh_desc AS ("
+			"  SELECT parent_id AS symbol_id, COUNT(*) AS descendants FROM inheritance GROUP BY parent_id"
+			"), counts AS ("
+			"  SELECT s.id,s.name,s.qualified_name,s.kind,COALESCE(f.path,'') AS file,s.line_start,s.line_end,"
+			"         CASE WHEN s.line_end >= s.line_start THEN s.line_end - s.line_start + 1 ELSE 0 END AS lines,"
+			"         COALESCE(ri.fan_in,0) AS fan_in,COALESCE(ro.fan_out,0) AS fan_out,COALESCE(id.descendants,0) AS descendants,"
+			"         oc.override_children,0 AS overridden_parents,COALESCE(ri.caller_files,0) AS caller_files,s.is_ue_macro AS is_ue_macro,"
+			"         CASE WHEN lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%ufunction%%' THEN 1 ELSE 0 END AS sensitivity,"
+			"         MIN(1.0, MIN(COALESCE(ri.fan_in,0),50)/50.0*0.35 + MIN(COALESCE(id.descendants,0),30)/30.0*0.25 + MIN(COALESCE(ro.fan_out,0),50)/50.0*0.10 + CASE WHEN s.is_ue_macro != 0 THEN 0.15 ELSE 0 END + MIN(COALESCE(ri.caller_files,0),20)/20.0*0.15) AS estimated_risk "
+			"  FROM override_children oc JOIN symbols s ON s.id=oc.symbol_id LEFT JOIN files f ON f.id=s.file_id "
+			"  LEFT JOIN ref_in ri ON ri.symbol_id=s.id LEFT JOIN ref_out ro ON ro.symbol_id=s.id LEFT JOIN inh_desc id ON id.symbol_id=s.id"
+			"), scored AS ("
+			"  SELECT c.id,c.name,c.qualified_name,c.kind,c.file,c.line_start,c.line_end,c.lines,c.fan_in,c.fan_out,c.descendants,c.override_children,c.overridden_parents,%s AS risk_score,%s AS risk_tier FROM counts c"
+			") "
+			"SELECT *, MAX(risk_score, MIN(override_children,30)/30.0, MIN(lines,500)/500.0) AS hotspot_score FROM scored %s%sLIMIT %d;"),
+			OverrideSeedLimit, *RiskScoreExpr, *RiskTierExpr, *WhereClause, *OrderBy, FetchLimit);
+		}
+	}
+	else if (bHasCrg)
+	{
+		Sql = FString::Printf(TEXT(
+		"WITH scored AS ("
+		"  SELECT s.id,s.name,s.qualified_name,s.kind,COALESCE(f.path,'') AS file,s.line_start,s.line_end,"
+		"         CASE WHEN s.line_end >= s.line_start THEN s.line_end - s.line_start + 1 ELSE 0 END AS lines,"
+		"         COALESCE(m.fan_in,0) AS fan_in,COALESCE(m.fan_out,0) AS fan_out,"
+		"         COALESCE(m.descendants,0) AS descendants,0 AS override_children,0 AS overridden_parents,"
+		"         COALESCE(m.risk_score,0.0) AS risk_score,"
+		"         COALESCE(m.risk_tier, 'low') AS risk_tier "
+		"  FROM symbols s "
+		"  LEFT JOIN files f ON f.id=s.file_id "
+		"  LEFT JOIN crg_nodes n ON n.domain='source' AND n.native_table='symbols' AND n.native_id=s.id "
+		"  LEFT JOIN crg_node_metrics m ON m.node_id=n.id"
+		") "
+		"SELECT *, MAX(risk_score, MIN(fan_in,50)/50.0, MIN(fan_out,50)/50.0, MIN(lines,500)/500.0) AS hotspot_score "
+		"FROM scored %s%sLIMIT %d;"),
+		*WhereClause, *OrderBy, FetchLimit);
+	}
+	else
+	{
+		const FString RiskScoreExpr = TEXT("c.estimated_risk");
+		const FString RiskTierExpr = TEXT("CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END");
+		Sql = FString::Printf(TEXT(
 		"WITH ref_in AS ("
 		"  SELECT to_symbol_id AS symbol_id, COUNT(*) AS fan_in, COUNT(DISTINCT r.file_id) AS caller_files "
 		"  FROM \"references\" r JOIN symbols fs ON fs.id=r.from_symbol_id JOIN symbols ts ON ts.id=r.to_symbol_id GROUP BY to_symbol_id"
@@ -3420,6 +4251,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 		"         CASE WHEN s.line_end >= s.line_start THEN s.line_end - s.line_start + 1 ELSE 0 END AS lines,"
 		"         COALESCE(ri.fan_in,0) AS fan_in,COALESCE(ro.fan_out,0) AS fan_out,"
 		"         COALESCE(id.descendants,0) AS descendants,COALESCE(ri.caller_files,0) AS caller_files,"
+		"         0 AS override_children,0 AS overridden_parents,"
 		"         s.is_ue_macro AS is_ue_macro,"
 		"         CASE WHEN lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%ufunction%%'"
 		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%%server%%'"
@@ -3443,12 +4275,13 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 		"  FROM base"
 		"), scored AS ("
 		"  SELECT c.id,c.name,c.qualified_name,c.kind,c.file,c.line_start,c.line_end,c.lines,"
-		"         c.fan_in,c.fan_out,c.descendants,%s AS risk_score,%s AS risk_tier "
-		"  FROM counts c %s"
+		"         c.fan_in,c.fan_out,c.descendants,c.override_children,c.overridden_parents,%s AS risk_score,%s AS risk_tier "
+		"  FROM counts c"
 		") "
 		"SELECT *, MAX(risk_score, MIN(fan_in,50)/50.0, MIN(fan_out,50)/50.0, MIN(lines,500)/500.0) AS hotspot_score "
 		"FROM scored %s%sLIMIT %d;"),
-		*RiskScoreExpr, *RiskTierExpr, *CacheJoin, *WhereClause, *OrderBy, Cap + 1);
+		*RiskScoreExpr, *RiskTierExpr, *WhereClause, *OrderBy, FetchLimit);
+	}
 
 	FSQLitePreparedStatement S;
 	TArray<TSharedPtr<FJsonValue>> Hotspots;
@@ -3458,14 +4291,9 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 	{
 		while (S.Step() == ESQLitePreparedStatementStepResult::Row)
 		{
-			if (Hotspots.Num() >= Cap)
-			{
-				bTruncated = true;
-				break;
-			}
 			int64 Id = 0;
 			FString Name, QualifiedName, SymKind, File, Tier;
-			int32 LineStart = 0, LineEnd = 0, Lines = 0, FanIn = 0, FanOut = 0, Desc = 0;
+			int32 LineStart = 0, LineEnd = 0, Lines = 0, FanIn = 0, FanOut = 0, Desc = 0, OverrideChildren = 0, OverriddenParents = 0;
 			double Risk = 0.0;
 			S.GetColumnValueByIndex(0, Id);
 			S.GetColumnValueByIndex(1, Name);
@@ -3478,19 +4306,41 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 			S.GetColumnValueByIndex(8, FanIn);
 			S.GetColumnValueByIndex(9, FanOut);
 			S.GetColumnValueByIndex(10, Desc);
-			S.GetColumnValueByIndex(11, Risk);
-			S.GetColumnValueByIndex(12, Tier);
+			S.GetColumnValueByIndex(11, OverrideChildren);
+			S.GetColumnValueByIndex(12, OverriddenParents);
+			S.GetColumnValueByIndex(13, Risk);
+			S.GetColumnValueByIndex(14, Tier);
+
+			// Cached override counts are signature-aware. Query-time fallback is approximate by design
+			// so this global ranking stays a single bounded query instead of N+1 override lookups.
+			if (NormalizedKind == TEXT("override") && OverrideChildren <= 0 && OverriddenParents <= 0)
+			{
+				continue;
+			}
+			Risk = FMath::Min(1.0, Risk
+				+ FMath::Min<double>(OverrideChildren, 30) / 30.0 * 0.20
+				+ FMath::Min<double>(OverriddenParents, 10) / 10.0 * 0.05);
+			Tier = Risk >= 0.66 ? TEXT("high") : (Risk >= 0.33 ? TEXT("medium") : TEXT("low"));
+			if (Hotspots.Num() >= Cap)
+			{
+				bTruncated = true;
+				break;
+			}
 
 			FString Primary = NormalizedKind;
 			if (Primary == TEXT("all"))
 			{
 				const double InSignal = FMath::Min<double>(FanIn, 50) / 50.0;
 				const double OutSignal = FMath::Min<double>(FanOut, 50) / 50.0;
+				const double OverrideSignal = FMath::Max(
+					FMath::Min<double>(OverrideChildren, 30) / 30.0,
+					FMath::Min<double>(OverriddenParents, 10) / 10.0);
 				const double LargeSignal = FMath::Min<double>(Lines, 500) / 500.0;
 				Primary = TEXT("risk");
 				double Best = Risk;
 				if (InSignal > Best) { Best = InSignal; Primary = TEXT("fan_in"); }
 				if (OutSignal > Best) { Best = OutSignal; Primary = TEXT("fan_out"); }
+				if (OverrideSignal > Best) { Best = OverrideSignal; Primary = TEXT("override"); }
 				if (LargeSignal > Best) { Primary = TEXT("large"); }
 			}
 
@@ -3507,6 +4357,8 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 			Metrics->SetNumberField(TEXT("fan_in"), FanIn);
 			Metrics->SetNumberField(TEXT("fan_out"), FanOut);
 			Metrics->SetNumberField(TEXT("descendants"), Desc);
+			Metrics->SetNumberField(TEXT("override_children"), OverrideChildren);
+			Metrics->SetNumberField(TEXT("overridden_parents"), OverriddenParents);
 			Metrics->SetNumberField(TEXT("risk_score"), FMath::RoundToDouble(Risk * 1000.0) / 1000.0);
 			Metrics->SetStringField(TEXT("risk_tier"), Tier);
 			Metrics->SetNumberField(TEXT("lines"), Lines);
@@ -3521,7 +4373,9 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 				Q->SetStringField(TEXT("reason"), Primary);
 				Q->SetStringField(TEXT("question"), Primary == TEXT("large")
 					? TEXT("Can this large symbol be split or covered by focused tests before risky edits?")
-					: TEXT("Which callers and tests cover this hotspot before changing it?"));
+					: (Primary == TEXT("override")
+						? TEXT("Which child overrides and parent contracts must be reviewed before changing this method?")
+						: TEXT("Which callers and tests cover this hotspot before changing it?")));
 				Questions.Add(MakeShared<FJsonValueObject>(Q));
 			}
 		}
@@ -3531,13 +4385,18 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 	Root->SetStringField(TEXT("summary"), FString::Printf(
 		TEXT("%d source review hotspot(s) ranked by %s%s"),
 		Hotspots.Num(), *NormalizedKind, bHasCrg ? TEXT(" using CRG cache when available") : TEXT(" using native fallback")));
+	TSharedPtr<FJsonObject> Cache = MakeShared<FJsonObject>();
+	Cache->SetStringField(TEXT("status"), bHasCrg ? TEXT("hit") : TEXT("miss"));
+	Cache->SetStringField(TEXT("source"), bHasOverrideCache ? TEXT("crg_node_metrics + source_override_edges")
+		: (bHasCrg ? TEXT("crg_node_metrics + query-time override aggregation") : TEXT("query-time references/inheritance/override aggregation")));
+	Root->SetObjectField(TEXT("cache"), Cache);
 	Root->SetArrayField(TEXT("hotspots"), Hotspots);
 	if (bIncludeQuestions)
 	{
 		Root->SetArrayField(TEXT("questions"), Questions);
 	}
 	Root->SetBoolField(TEXT("truncated"), bTruncated);
-	AddNextActions(Root, { TEXT("source.review_context"), TEXT("source.risk_score"), TEXT("source.impact_radius") });
+	AddNextActions(Root, { TEXT("source.review_context"), TEXT("source.find_overrides"), TEXT("source.risk_score"), TEXT("source.impact_radius") });
 	return Root;
 }
 

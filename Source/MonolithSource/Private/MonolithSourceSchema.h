@@ -59,6 +59,9 @@ namespace MonolithSourceSchema
 		TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_kind           ON symbols(kind);")
 		TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_file_id        ON symbols(file_id);")
 		TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_parent         ON symbols(parent_symbol_id);")
+		TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_parent_name_kind ON symbols(parent_symbol_id, name, kind);")
+		TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_name_kind_parent ON symbols(name, kind, parent_symbol_id);")
+		TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_override_signature ON symbols(kind, parent_symbol_id, name) WHERE kind='function' AND signature LIKE '%override%';")
 
 		TEXT("CREATE TABLE IF NOT EXISTS inheritance (")
 		TEXT("    id        INTEGER PRIMARY KEY AUTOINCREMENT,")
@@ -66,6 +69,8 @@ namespace MonolithSourceSchema
 		TEXT("    parent_id INTEGER NOT NULL REFERENCES symbols(id),")
 		TEXT("    UNIQUE(child_id, parent_id)")
 		TEXT(");")
+		TEXT("CREATE INDEX IF NOT EXISTS idx_inheritance_parent_child ON inheritance(parent_id, child_id);")
+		TEXT("CREATE INDEX IF NOT EXISTS idx_inheritance_child_parent ON inheritance(child_id, parent_id);")
 
 		TEXT("CREATE TABLE IF NOT EXISTS \"references\" (")
 		TEXT("    id             INTEGER PRIMARY KEY AUTOINCREMENT,")

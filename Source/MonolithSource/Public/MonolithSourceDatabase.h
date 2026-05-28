@@ -17,6 +17,7 @@ struct FMonolithSourceSymbol
 	int64 FileId = 0;
 	int32 LineStart = 0;
 	int32 LineEnd = 0;
+	int64 ParentSymbolId = 0;
 	FString Access;
 	FString Signature;
 	FString Docstring;
@@ -45,6 +46,22 @@ struct FMonolithSourceInheritance
 	int64 FileId = 0;
 	int32 LineStart = 0;
 	int32 LineEnd = 0;
+};
+
+struct FMonolithSourceOverrideEdge
+{
+	int64 FromSymbolId = 0; // Child override method.
+	int64 ToSymbolId = 0;   // Parent overridden method.
+	FString FromName;
+	FString FromQualifiedName;
+	FString ToName;
+	FString ToQualifiedName;
+	FString ChildClassName;
+	FString ChildClassQualifiedName;
+	FString ParentClassName;
+	FString ParentClassQualifiedName;
+	FString Confidence;
+	FString Reason;
 };
 
 struct FMonolithSourceModuleStats
@@ -104,6 +121,8 @@ public:
 	// --- Inheritance queries ---
 	TArray<FMonolithSourceInheritance> GetParents(int64 SymbolId);
 	TArray<FMonolithSourceInheritance> GetChildren(int64 SymbolId);
+	TArray<FMonolithSourceOverrideEdge> GetOverridesTo(int64 SymbolId, int32 Limit = 50);
+	TArray<FMonolithSourceOverrideEdge> GetOverridesFrom(int64 SymbolId, int32 Limit = 50);
 
 	// --- Module queries ---
 	TOptional<FMonolithSourceModuleStats> GetModuleStats(const FString& ModuleName);
@@ -132,6 +151,7 @@ public:
 	 * inheritance. Default dry-run; mutates only when bExecute is true.
 	 */
 	TSharedPtr<FJsonObject> RepairCrgCache(bool bExecute);
+	TSharedPtr<FJsonObject> RepairCrgCache(const FString& Scope, bool bExecute);
 	/** Cached symbol risk row, or nullptr when the derived cache is absent/stale. */
 	TSharedPtr<FJsonObject> GetCachedRiskForSymbol(int64 SymbolId);
 	/**
@@ -158,7 +178,7 @@ public:
 	TSharedPtr<FJsonObject> Snapshot(const FString& Label, bool bExecute);
 	/** Read-only diff between a stored CRG projection snapshot and another stored/current manifest. */
 	TSharedPtr<FJsonObject> DiffSnapshots(const FString& Before, const FString& After, int32 Limit);
-	/** Top source review hotspots from CRG/native fan-in, fan-out, risk and LOC signals. */
+	/** Top source review hotspots from CRG/native fan-in, fan-out, risk, LOC, and override signals. */
 	TSharedPtr<FJsonObject> ReviewHotspots(const FString& Kind, int32 Limit, int32 MinLines, bool bIncludeQuestions);
 
 	// --- Write methods (for C++ indexer) ---

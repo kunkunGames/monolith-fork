@@ -309,14 +309,24 @@ void FMonolithSourceActions::RegisterAll()
 
 	// CRG-inspired navigation/review surface (additive; existing actions unchanged).
 	Registry.RegisterAction(TEXT("source"), TEXT("impact_radius"),
-		TEXT("Bounded BFS over call/type references and inheritance: who is impacted within N hops"),
+		TEXT("Bounded BFS over call/type references, inheritance and function overrides: who is impacted within N hops"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleImpactRadius),
 		FParamSchemaBuilder()
 			.Required(TEXT("symbol"), TEXT("string"), TEXT("Seed symbol name"))
-			.Optional(TEXT("edge_kinds"), TEXT("string"), TEXT("call|type|inheritance (combine with |); include emits a warning until include paths resolve to files"), TEXT("call|type|inheritance"))
+			.Optional(TEXT("edge_kinds"), TEXT("string"), TEXT("call|type|inheritance by default; append |override or use find_overrides for virtual/override function edits; include emits a warning until include paths resolve to files"), TEXT("call|type|inheritance"))
 			.Optional(TEXT("direction"), TEXT("string"), TEXT("in|out|both"), TEXT("both"))
 			.Optional(TEXT("max_depth"), TEXT("integer"), TEXT("Max traversal hops"), TEXT("2"))
 			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max impacted symbols"), TEXT("200"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("find_overrides"),
+		TEXT("Find function override relationships for a symbol using indexed class inheritance and matching method signatures"),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleFindOverrides),
+		FParamSchemaBuilder()
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("Seed function symbol name"))
+			.Optional(TEXT("direction"), TEXT("string"), TEXT("in=child overrides, out=overridden parents, both"), TEXT("both"))
+			.Optional(TEXT("max_depth"), TEXT("integer"), TEXT("Max override traversal hops"), TEXT("2"))
+			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max override-related symbols"), TEXT("200"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("health"),
@@ -338,15 +348,16 @@ void FMonolithSourceActions::RegisterAll()
 		TEXT("Rebuild derived EngineSource CRG projection/cache tables. Dry-run unless execute=true"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleRepairCrgCache),
 		FParamSchemaBuilder()
-			.Optional(TEXT("scope"), TEXT("string"), TEXT("Only 'all' is supported in this version"), TEXT("all"))
+			.Optional(TEXT("scope"), TEXT("string"), TEXT("all|override_edges; override_edges refreshes only source_override_edges/version"), TEXT("all"))
 			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Apply rebuild (sole write gate). Default dry-run"), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("build_crg_graph"),
-		TEXT("Build Saved/graph.db from EngineSource symbols, references and inheritance. Dry-run unless execute=true"),
+		TEXT("Build Saved/graph.db from EngineSource symbols, references and inheritance via atomic temp replacement. Dry-run unless execute=true"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleBuildCrgGraph),
 		FParamSchemaBuilder()
 			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Apply graph.db rebuild (sole write gate). Default dry-run"), TEXT("false"))
+			.Optional(TEXT("force"), TEXT("bool"), TEXT("Force rebuild even when graph.db metadata matches the current source signature"), TEXT("false"))
 			.Optional(TEXT("graph_db"), TEXT("string"), TEXT("Optional non-default graph DB path"))
 			.Build());
 
@@ -355,6 +366,7 @@ void FMonolithSourceActions::RegisterAll()
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleRebuildCrgGraph),
 		FParamSchemaBuilder()
 			.Optional(TEXT("execute"), TEXT("bool"), TEXT("Apply graph.db rebuild (sole write gate). Default dry-run"), TEXT("false"))
+			.Optional(TEXT("force"), TEXT("bool"), TEXT("Force rebuild even when graph.db metadata matches the current source signature"), TEXT("false"))
 			.Optional(TEXT("graph_db"), TEXT("string"), TEXT("Optional non-default graph DB path"))
 			.Build());
 
@@ -435,10 +447,10 @@ void FMonolithSourceActions::RegisterAll()
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("review_hotspots"),
-		TEXT("Rank global source review hotspots by fan-in, fan-out, risk, LOC size, or all signals"),
+		TEXT("Rank global source review hotspots by fan-in, fan-out, risk, LOC size, override fanout, or all signals"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleReviewHotspots),
 		FParamSchemaBuilder()
-			.Optional(TEXT("kind"), TEXT("string"), TEXT("fan_in|fan_out|risk|large|all"), TEXT("all"))
+			.Optional(TEXT("kind"), TEXT("string"), TEXT("fan_in|fan_out|risk|large|override|all"), TEXT("all"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max hotspots"), TEXT("50"))
 			.Optional(TEXT("min_lines"), TEXT("integer"), TEXT("Large-symbol LOC floor"), TEXT("100"))
 			.Optional(TEXT("include_questions"), TEXT("bool"), TEXT("Add advisory review questions"), TEXT("true"))
@@ -492,6 +504,25 @@ FMonolithActionResult FMonolithSourceActions::HandleImpactRadius(const TSharedPt
 	return FMonolithActionResult::Success(R);
 }
 
+FMonolithActionResult FMonolithSourceActions::HandleFindOverrides(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString Symbol = FMonolithSourceReview::PStr(Params, TEXT("symbol"));
+	if (Symbol.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("'symbol' parameter is required"), -32602);
+	}
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB)
+	{
+		return FMonolithActionResult::Error(TEXT("Source index database not available"));
+	}
+	TSharedPtr<FJsonObject> R = FMonolithSourceReview::FindOverrides(*DB, Symbol,
+		FMonolithSourceReview::PStr(Params, TEXT("direction"), TEXT("both")),
+		FMonolithSourceReview::PInt(Params, TEXT("max_depth"), 2),
+		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200));
+	return FMonolithActionResult::Success(R);
+}
+
 FMonolithActionResult FMonolithSourceActions::HandleHealth(const TSharedPtr<FJsonObject>& Params)
 {
 	FMonolithSourceDatabase* DB = GetDB();
@@ -535,10 +566,10 @@ FMonolithActionResult FMonolithSourceActions::HandleRepairCrgCache(const TShared
 		return FMonolithActionResult::Error(TEXT("Source index database not available"));
 	}
 	const bool bExecute = FMonolithSourceReview::PBool(Params, TEXT("execute"), false);
-	const FString Scope = FMonolithSourceReview::PStr(Params, TEXT("scope"), TEXT("all"));
-	if (Scope != TEXT("all"))
+	const FString Scope = FMonolithSourceReview::PStr(Params, TEXT("scope"), TEXT("all")).ToLower();
+	if (Scope != TEXT("all") && Scope != TEXT("override_edges"))
 	{
-		return FMonolithActionResult::Error(TEXT("Unsupported scope for repair_crg_cache (expected 'all')"), -32602);
+		return FMonolithActionResult::Error(TEXT("Unsupported scope for repair_crg_cache (expected 'all' or 'override_edges')"), -32602);
 	}
 
 	if (bExecute && GEditor)
@@ -552,7 +583,7 @@ FMonolithActionResult FMonolithSourceActions::HandleRepairCrgCache(const TShared
 				.WithHint(TEXT("Use source.repair_crg_cache (dry-run) meanwhile, or source.health"));
 		}
 	}
-	return FMonolithActionResult::Success(DB->RepairCrgCache(bExecute));
+	return FMonolithActionResult::Success(DB->RepairCrgCache(Scope, bExecute));
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleBuildCrgGraph(const TSharedPtr<FJsonObject>& Params)
@@ -575,7 +606,57 @@ FMonolithActionResult FMonolithSourceActions::HandleBuildCrgGraph(const TSharedP
 	{
 		Args += TEXT(" --execute");
 	}
+	if (FMonolithSourceReview::PBool(Params, TEXT("force"), false))
+	{
+		Args += TEXT(" --force");
+	}
 	Args += OptionalGraphDbArg(Params);
+	if (bExecute)
+	{
+		const FString ExePath = GetMonolithQueryExePath();
+		if (!FPaths::FileExists(ExePath))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("monolith_query.exe not found: %s"), *ExePath), -32000);
+		}
+
+		uint32 ProcessId = 0;
+		FProcHandle Proc = FPlatformProcess::CreateProc(
+			*ExePath,
+			*Args,
+			true,
+			true,
+			true,
+			&ProcessId,
+			0,
+			*FPaths::GetPath(ExePath),
+			nullptr,
+			nullptr);
+		if (!Proc.IsValid())
+		{
+			return FMonolithActionResult::Error(TEXT("Failed to start async graph.db rebuild process"), -32000);
+		}
+		FPlatformProcess::CloseProc(Proc);
+
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("status"), TEXT("started"));
+		Result->SetStringField(TEXT("summary"), TEXT("Started async source.build_crg_graph process"));
+		Result->SetStringField(TEXT("job_id"), FString::Printf(TEXT("source-build-crg-graph-%u"), ProcessId));
+		Result->SetStringField(TEXT("poll_action"), TEXT("source.crg_graph_health"));
+		Result->SetNumberField(TEXT("child_pid"), ProcessId);
+		const FString GraphDb = FMonolithSourceReview::PStr(Params, TEXT("graph_db"));
+		if (!GraphDb.IsEmpty())
+		{
+			Result->SetStringField(TEXT("graph_db"), GraphDb);
+		}
+		Result->SetStringField(TEXT("command"), Args);
+		TArray<TSharedPtr<FJsonValue>> Next;
+		Next.Add(MakeShared<FJsonValueString>(TEXT("source.crg_graph_health")));
+		Next.Add(MakeShared<FJsonValueString>(TEXT("source.search_source")));
+		Next.Add(MakeShared<FJsonValueString>(TEXT("source.review_context")));
+		Result->SetArrayField(TEXT("next_actions"), Next);
+		return FMonolithActionResult::Success(Result);
+	}
 	return RunMonolithQueryJson(Args);
 }
 

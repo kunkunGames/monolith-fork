@@ -62,7 +62,7 @@ Monolith owns the source graph. Prefer `source_query` and the offline `monolith_
 - `source_query("search_source", {...})` — symbol/text search across engine + project C++.
 - `source_query("find_references" | "find_callers" | "find_callees", {...})`.
 - `source_query("get_symbol_context" | "get_class_hierarchy" | "read_source", {...})`.
-- `source_query("risk_score" | "review_context" | "impact_radius", {...})` before code-review risk claims.
+- `source_query("risk_score" | "review_context" | "impact_radius" | "find_overrides" | "review_hotspots", {...})` before code-review risk claims.
 
 No MCP or editor running: use the offline CLI as the MCP-free equivalent of `source_query`; it provides the same `source` actions and reads `EngineSource.db` without UE runtime. In the default local checkout, the offline CLI resolves built-in DB paths from the executable location: `source` resolves `Plugins\Monolith\Saved\EngineSource.db`, `project` resolves `Plugins\Monolith\Saved\ProjectIndex.db`, `bridge` resolves both, and source CRG graph actions resolve `Plugins\Monolith\Saved\graph.db`.
 
@@ -70,19 +70,20 @@ No MCP or editor running: use the offline CLI as the MCP-free equivalent of `sou
 Plugins\Monolith\Binaries\monolith_query.exe source search_source UObject --limit=5
 Plugins\Monolith\Binaries\monolith_query.exe source risk_score UObject --limit=5
 Plugins\Monolith\Binaries\monolith_query.exe source review_context UObject --detail-level=minimal
+Plugins\Monolith\Binaries\monolith_query.exe source review_hotspots --kind=override --limit=10
+Plugins\Monolith\Binaries\monolith_query.exe source find_overrides UActorComponent::BeginPlay --direction=in --max-depth=2
 ```
 
 For source CRG graph navigation, Monolith builds CRG-compatible graph data natively into `Plugins\Monolith\Saved\graph.db` from `Saved\EngineSource.db`. Normal offline CLI calls follow those defaults without DB or graph override arguments:
 
 ```powershell
 Plugins\Monolith\Binaries\monolith_query.exe source repair_crg_cache --execute
-Plugins\Monolith\Binaries\monolith_query.exe source build_crg_graph --execute
 Plugins\Monolith\Binaries\monolith_query.exe source search_crg_graph UObject --limit=5
 Plugins\Monolith\Binaries\monolith_query.exe source risk_score UObject --limit=5
 Plugins\Monolith\Binaries\monolith_query.exe source review_context UObject --detail-level=minimal
 ```
 
-Use `source search_source` for general symbol/source-line lookup, `source search_crg_graph` for CRG-compatible graph node search, and use `source review_context` or `source risk_score` before making code-review claims.
+Use `source search_source` for general symbol/source-line lookup, `source search_crg_graph` only for CRG-compatible graph node search/export, and `source review_context` or `source risk_score` before making code-review claims. `source impact_radius` defaults to `call|type|inheritance`; pass `edge_kinds=call|type|inheritance|override` only when override traversal is intentionally part of the blast-radius query. Use `source find_overrides` for virtual/override function edits, `source review_hotspots kind=override` for high-fanout virtual contracts, and pass a qualified symbol when possible to avoid broad same-name searches. `source repair_crg_cache --execute` repairs the EngineSource `crg_*` cache used by risk/review actions. `source build_crg_graph --execute` is explicit graph maintenance, not routine setup; it builds a temp `graph.db`, validates it, skips if metadata is current unless `--force` is passed, and then atomically replaces the old graph. Live editor/MCP execute calls return `status=started`, `job_id`, and `poll_action=source.crg_graph_health`; offline CLI execute remains synchronous. `graph.db` flow/community/risk auxiliary tables are reserved/unimplemented placeholders and zero rows there are not a health failure.
 
 ## Bridge asset/source navigation
 
@@ -118,6 +119,7 @@ Asset paths use Unreal object paths, not `.uasset` filenames:
 - Raw file walk is only acceptable when both MCP and the offline DB are unavailable (`Plugins\Monolith\Binaries\monolith_query.exe source health`).
 - Never guess `#include` paths or UE API signatures; verify them with `source_query` or the offline source-action CLI.
 - Default offline CLI examples rely on built-in DB resolution: `source` uses `EngineSource.db`, `project` uses `ProjectIndex.db`, `bridge` opens both, and source CRG graph actions use `graph.db`; copied or non-standard DBs can use override arguments.
+- For C++ impact review, prefer qualified symbols with `source review_context`, `source impact_radius`, and `source find_overrides`; unqualified function names can intentionally fan out to multiple same-name seeds.
 - Index/reindex completion should rebuild CRG projection/cache automatically; use `project repair_crg_cache --execute` or `source repair_crg_cache --execute` only when health reports stale CRG parity or manual repair is required.
 - If a task needs an editor capability and no Monolith action covers it, extend or add the Monolith action in the owning `Source/Monolith*` module (handler + param schema + tests + spec/docs sync). Do **not** substitute `editor_query("run_python")` or ad-hoc editor scripting for a missing action; `run_python` is one-off diagnostics only.
 - For material work, use the durable Monolith flow: `create_material` -> `build_material_graph` -> `connect_expressions` -> `recompile_material`.

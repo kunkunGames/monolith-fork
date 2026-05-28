@@ -28,6 +28,7 @@
 #include <iomanip>
 #include <mutex>
 #include <stdexcept>
+#include <cerrno>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -35,6 +36,10 @@
 #include <windows.h>
 #include <bcrypt.h>
 #pragma comment(lib, "bcrypt.lib")
+#else
+#include <fcntl.h>
+#include <signal.h>
+#include <unistd.h>
 #endif
 
 #include "sqlite3.h"
@@ -181,6 +186,31 @@ static std::string process_instance_id() {
 #endif
     ) + ":" + iso_local_now());
     return id;
+}
+
+static int64_t current_process_id() {
+#ifdef _WIN32
+    return static_cast<int64_t>(GetCurrentProcessId());
+#else
+    return static_cast<int64_t>(getpid());
+#endif
+}
+
+static bool process_is_running(int64_t pid) {
+    if (pid <= 0) return false;
+#ifdef _WIN32
+    HANDLE handle = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid));
+    if (!handle) {
+        DWORD error = GetLastError();
+        return error == ERROR_ACCESS_DENIED;
+    }
+    DWORD wait_result = WaitForSingleObject(handle, 0);
+    CloseHandle(handle);
+    return wait_result == WAIT_TIMEOUT;
+#else
+    if (kill(static_cast<pid_t>(pid), 0) == 0) return true;
+    return errno == EPERM;
+#endif
 }
 
 static std::string infer_intent(const std::string& ns, const std::string& action, int exit_code) {
@@ -851,6 +881,189 @@ static std::string trim_copy(std::string value) {
     return value;
 }
 
+static std::string collapse_ws_copy(const std::string& value) {
+    std::string out;
+    bool pending_space = false;
+    for (unsigned char ch : value) {
+        if (std::isspace(ch)) {
+            if (!out.empty()) pending_space = true;
+            continue;
+        }
+        if (pending_space) {
+            out.push_back(' ');
+            pending_space = false;
+        }
+        out.push_back(static_cast<char>(ch));
+    }
+    return trim_copy(out);
+}
+
+static bool is_ident_char(char ch) {
+    return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_';
+}
+
+static size_t find_matching_paren(const std::string& text, size_t open) {
+    int depth = 0;
+    for (size_t i = open; i < text.size(); ++i) {
+        if (text[i] == '(') ++depth;
+        else if (text[i] == ')') {
+            --depth;
+            if (depth == 0) return i;
+        }
+    }
+    return std::string::npos;
+}
+
+static bool extract_params_at_paren(const std::string& signature, size_t open, std::string& out_params) {
+    size_t close = find_matching_paren(signature, open);
+    if (close == std::string::npos || close <= open) return false;
+    out_params = signature.substr(open + 1, close - open - 1);
+    return true;
+}
+
+static bool extract_signature_params(const std::string& signature,
+                                     const std::string& function_name,
+                                     std::string& out_params) {
+    if (!function_name.empty()) {
+        size_t search_from = 0;
+        while (search_from < signature.size()) {
+            size_t name_pos = signature.find(function_name, search_from);
+            if (name_pos == std::string::npos) break;
+            bool left_boundary = name_pos == 0 || !is_ident_char(signature[name_pos - 1]);
+            size_t open = name_pos + function_name.size();
+            while (open < signature.size() && std::isspace(static_cast<unsigned char>(signature[open]))) ++open;
+            if (left_boundary && open < signature.size() && signature[open] == '('
+                && extract_params_at_paren(signature, open, out_params)) {
+                return true;
+            }
+            search_from = name_pos + std::max<size_t>(1, function_name.size());
+        }
+    }
+    for (size_t i = 0; i < signature.size(); ++i) {
+        if (signature[i] == '(' && extract_params_at_paren(signature, i, out_params)) return true;
+    }
+    return false;
+}
+
+static std::vector<std::string> split_top_level_params(const std::string& params) {
+    std::vector<std::string> out;
+    std::string cur;
+    int angle = 0, paren = 0, bracket = 0;
+    for (char ch : params) {
+        if (ch == '<') ++angle;
+        else if (ch == '>' && angle > 0) --angle;
+        else if (ch == '(') ++paren;
+        else if (ch == ')' && paren > 0) --paren;
+        else if (ch == '[') ++bracket;
+        else if (ch == ']' && bracket > 0) --bracket;
+        if (ch == ',' && angle == 0 && paren == 0 && bracket == 0) {
+            std::string part = trim_copy(cur);
+            if (!part.empty()) out.push_back(part);
+            cur.clear();
+            continue;
+        }
+        cur.push_back(ch);
+    }
+    std::string tail = trim_copy(cur);
+    if (!tail.empty()) out.push_back(tail);
+    return out;
+}
+
+static std::string strip_default_param_value(const std::string& param) {
+    int angle = 0, paren = 0, bracket = 0;
+    for (size_t i = 0; i < param.size(); ++i) {
+        char ch = param[i];
+        if (ch == '<') ++angle;
+        else if (ch == '>' && angle > 0) --angle;
+        else if (ch == '(') ++paren;
+        else if (ch == ')' && paren > 0) --paren;
+        else if (ch == '[') ++bracket;
+        else if (ch == ']' && bracket > 0) --bracket;
+        else if (ch == '=' && angle == 0 && paren == 0 && bracket == 0) {
+            return trim_copy(param.substr(0, i));
+        }
+    }
+    return trim_copy(param);
+}
+
+static bool is_trailing_type_qualifier(const std::string& word) {
+    std::string lower = lower_copy(word);
+    return lower == "const" || lower == "volatile" || lower == "mutable"
+        || lower == "final" || lower == "override";
+}
+
+static std::string strip_trailing_param_name(std::string param) {
+    param = trim_copy(param);
+    if (param.size() >= 3 && param.substr(param.size() - 3) == "...") return param;
+    if (param.empty() || !is_ident_char(param.back())) return param;
+    size_t end = param.size();
+    size_t start = end;
+    while (start > 0 && is_ident_char(param[start - 1])) --start;
+    std::string word = param.substr(start, end - start);
+    if (is_trailing_type_qualifier(word)) return param;
+    std::string prefix = trim_copy(param.substr(0, start));
+    return prefix.empty() ? param : prefix;
+}
+
+static std::string normalize_override_param(std::string param) {
+    param = collapse_ws_copy(strip_trailing_param_name(strip_default_param_value(param)));
+    for (const auto& repl : std::vector<std::pair<std::string, std::string>>{
+        {" &", "&"}, {" *", "*"}, {" &&", "&&"}, {" ,", ","}, {", ", ","}}) {
+        size_t pos = 0;
+        while ((pos = param.find(repl.first, pos)) != std::string::npos) {
+            param.replace(pos, repl.first.size(), repl.second);
+            pos += repl.second.size();
+        }
+    }
+    return trim_copy(param);
+}
+
+static bool normalize_override_params(const std::string& signature,
+                                      const std::string& function_name,
+                                      std::string& out_normalized) {
+    std::string params;
+    if (!extract_signature_params(signature, function_name, params)) return false;
+    auto parts = split_top_level_params(params);
+    if (parts.size() == 1 && lower_copy(trim_copy(parts[0])) == "void") parts.clear();
+    for (auto& part : parts) part = normalize_override_param(part);
+    std::ostringstream out;
+    for (size_t i = 0; i < parts.size(); ++i) {
+        if (i > 0) out << ",";
+        out << parts[i];
+    }
+    out_normalized = out.str();
+    return true;
+}
+
+static bool override_signatures_match(const std::string& child_signature,
+                                      const std::string& parent_signature,
+                                      const std::string& child_name,
+                                      const std::string& parent_name,
+                                      std::string& reason) {
+    if (trim_copy(child_signature).empty() || trim_copy(parent_signature).empty()) {
+        reason = "signature parameters unavailable but assuming compatible";
+        return true;
+    }
+    std::string child_params, parent_params;
+    if (!normalize_override_params(child_signature, child_name, child_params)
+        || !normalize_override_params(parent_signature, parent_name, parent_params)) {
+        reason = "signature parameters unavailable but assuming compatible";
+        return true;
+    }
+    if (child_params != parent_params) {
+        reason = "same name but different normalized parameter list";
+        return false;
+    }
+    reason = child_params.empty()
+        ? "same name and zero parameters"
+        : "same name and matching normalized parameter list";
+    return true;
+}
+
+static const char* override_confidence_for_reason(const std::string& reason) {
+    return reason.find("assuming compatible") != std::string::npos ? "medium" : "high";
+}
+
 static bool is_numeric_string(const std::string& value) {
     if (value.empty()) return false;
     return std::all_of(value.begin(), value.end(),
@@ -910,6 +1123,217 @@ static void add_next(json& root, std::initializer_list<const char*> actions) {
     root["next_actions"] = json::array();
     for (const char* action : actions) root["next_actions"].push_back(action);
 }
+
+static bool remove_file_best_effort(const std::string& path, std::string* error = nullptr) {
+    std::error_code ec;
+    fs::remove(path, ec);
+    if (ec && error) *error = ec.message();
+    return !ec;
+}
+
+static void remove_sqlite_sidecars_best_effort(const std::string& db_path) {
+    remove_file_best_effort(db_path + "-journal");
+    remove_file_best_effort(db_path + "-wal");
+    remove_file_best_effort(db_path + "-shm");
+}
+
+static bool atomic_replace_file(const std::string& source_path,
+                                const std::string& target_path,
+                                std::string& error) {
+#ifdef _WIN32
+    fs::path source_fs(source_path);
+    fs::path target_fs(target_path);
+    if (!MoveFileExW(source_fs.wstring().c_str(),
+                     target_fs.wstring().c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        DWORD code = GetLastError();
+        std::ostringstream out;
+        out << "MoveFileExW failed with Win32 error " << code;
+        error = out.str();
+        return false;
+    }
+    return true;
+#else
+    std::error_code ec;
+    fs::rename(source_path, target_path, ec);
+    if (ec) {
+        error = ec.message();
+        return false;
+    }
+    return true;
+#endif
+}
+
+static bool try_open_readonly_database(Database& db,
+                                       const std::string& path,
+                                       std::string& error) {
+    try {
+        db.open(path, true);
+        return true;
+    } catch (const QueryFatal& e) {
+        error = e.what();
+    } catch (const std::exception& e) {
+        error = e.what();
+    }
+    return false;
+}
+
+static bool looks_like_graph_busy_error(const std::string& error) {
+    const std::string lower = lower_copy(error);
+    return lower.find("database is locked") != std::string::npos
+        || lower.find("rollback journal") != std::string::npos
+        || lower.find("sharing violation") != std::string::npos
+        || lower.find("locked") != std::string::npos;
+}
+
+static json graph_busy_json(const std::string& action,
+                            const std::string& graph_db_path,
+                            const std::string& reason) {
+    json root = {
+        {"status", "busy"},
+        {"summary", "CRG graph database is busy; use EngineSource-backed source actions while the graph rebuild finishes"},
+        {"action", action},
+        {"graph_db", graph_db_path},
+        {"journal_path", graph_db_path + "-journal"},
+        {"busy_reason", reason},
+        {"warnings", json::array({reason})},
+        {"next_actions", json::array({"source.search_source", "source.risk_score", "source.review_context", "source.crg_graph_health"})},
+        {"truncated", false},
+    };
+    return root;
+}
+
+class GraphRebuildLock {
+public:
+    explicit GraphRebuildLock(std::string path)
+        : lock_path(std::move(path)) {}
+
+    GraphRebuildLock(const GraphRebuildLock&) = delete;
+    GraphRebuildLock& operator=(const GraphRebuildLock&) = delete;
+
+    ~GraphRebuildLock() {
+        release();
+    }
+
+    bool acquire(json& busy) {
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            if (try_create_lock()) {
+                write_payload();
+                return true;
+            }
+
+            json existing = read_payload();
+            const int64_t owner_pid = existing.value("owner_pid", static_cast<int64_t>(0));
+            const bool stale = owner_pid > 0 && !process_is_running(owner_pid);
+            if (stale) {
+                remove_file_best_effort(lock_path);
+                continue;
+            }
+
+            busy = {
+                {"status", "busy"},
+                {"summary", "CRG graph rebuild is already running"},
+                {"lock_path", lock_path},
+                {"owner_pid", owner_pid},
+                {"lock", existing},
+                {"next_actions", json::array({"source.crg_graph_health", "source.search_source", "source.review_context"})},
+                {"warnings", json::array({"another build_crg_graph --execute process owns the graph rebuild lock"})},
+                {"truncated", false},
+            };
+            return false;
+        }
+
+        busy = {
+            {"status", "busy"},
+            {"summary", "CRG graph rebuild lock could not be acquired"},
+            {"lock_path", lock_path},
+            {"next_actions", json::array({"source.crg_graph_health", "source.search_source", "source.review_context"})},
+            {"warnings", json::array({"graph rebuild lock exists and could not be reclaimed"})},
+            {"truncated", false},
+        };
+        return false;
+    }
+
+    const std::string& path() const {
+        return lock_path;
+    }
+
+private:
+    std::string lock_path;
+#ifdef _WIN32
+    HANDLE handle = INVALID_HANDLE_VALUE;
+#else
+    int fd = -1;
+#endif
+
+    bool try_create_lock() {
+        fs::path parent = fs::path(lock_path).parent_path();
+        if (!parent.empty()) fs::create_directories(parent);
+#ifdef _WIN32
+        handle = CreateFileW(fs::path(lock_path).wstring().c_str(),
+                             GENERIC_WRITE | DELETE,
+                             FILE_SHARE_READ,
+                             nullptr,
+                             CREATE_NEW,
+                             FILE_ATTRIBUTE_TEMPORARY,
+                             nullptr);
+        return handle != INVALID_HANDLE_VALUE;
+#else
+        fd = ::open(lock_path.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0600);
+        return fd >= 0;
+#endif
+    }
+
+    void write_payload() {
+        json payload = {
+            {"owner_pid", current_process_id()},
+            {"created_at", iso_local_now()},
+            {"tool", "monolith_query"},
+            {"purpose", "source build_crg_graph atomic rebuild"},
+        };
+        const std::string text = payload.dump(2);
+#ifdef _WIN32
+        if (handle != INVALID_HANDLE_VALUE) {
+            DWORD written = 0;
+            WriteFile(handle, text.data(), static_cast<DWORD>(text.size()), &written, nullptr);
+            FlushFileBuffers(handle);
+        }
+#else
+        if (fd >= 0) {
+            (void)::write(fd, text.data(), text.size());
+            (void)::fsync(fd);
+        }
+#endif
+    }
+
+    json read_payload() const {
+        try {
+            std::ifstream in(lock_path, std::ios::binary);
+            std::stringstream buffer;
+            buffer << in.rdbuf();
+            json parsed = json::parse(buffer.str(), nullptr, false);
+            if (parsed.is_object()) return parsed;
+        } catch (...) {
+        }
+        return json::object();
+    }
+
+    void release() {
+#ifdef _WIN32
+        if (handle != INVALID_HANDLE_VALUE) {
+            CloseHandle(handle);
+            handle = INVALID_HANDLE_VALUE;
+            remove_file_best_effort(lock_path);
+        }
+#else
+        if (fd >= 0) {
+            close(fd);
+            fd = -1;
+            remove_file_best_effort(lock_path);
+        }
+#endif
+    }
+};
 
 static std::string json_string_field(const json& object, const std::string& field,
                                      const std::string& fallback) {
@@ -1080,18 +1504,100 @@ static const char* kCrgProjectionDdl[] = {
     "key TEXT PRIMARY KEY,"
     "value TEXT NOT NULL"
     ");",
+    "CREATE TABLE IF NOT EXISTS source_override_edges ("
+    "child_symbol_id INTEGER NOT NULL,"
+    "parent_symbol_id INTEGER NOT NULL,"
+    "confidence TEXT NOT NULL DEFAULT 'high',"
+    "reason TEXT NOT NULL DEFAULT '',"
+    "updated_at INTEGER NOT NULL,"
+    "PRIMARY KEY(child_symbol_id, parent_symbol_id)"
+    ");",
     "CREATE INDEX IF NOT EXISTS idx_crg_nodes_domain_native ON crg_nodes(domain, native_table, native_id);",
     "CREATE INDEX IF NOT EXISTS idx_crg_nodes_stable ON crg_nodes(domain, stable_key);",
     "CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_source ON crg_edges(domain, source_node_id);",
     "CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_target ON crg_edges(domain, target_node_id);",
     "CREATE INDEX IF NOT EXISTS idx_crg_edges_kind_subkind ON crg_edges(domain, edge_kind, edge_subkind);",
     "CREATE INDEX IF NOT EXISTS idx_crg_metrics_score ON crg_node_metrics(risk_score DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_source_override_edges_parent ON source_override_edges(parent_symbol_id, child_symbol_id);",
+    "CREATE INDEX IF NOT EXISTS idx_source_override_edges_child ON source_override_edges(child_symbol_id, parent_symbol_id);",
+};
+
+static const char* kSourceReviewIndexDdl[] = {
+    "CREATE INDEX IF NOT EXISTS idx_symbols_parent_name_kind ON symbols(parent_symbol_id, name, kind);",
+    "CREATE INDEX IF NOT EXISTS idx_symbols_name_kind_parent ON symbols(name, kind, parent_symbol_id);",
+    "CREATE INDEX IF NOT EXISTS idx_symbols_override_signature ON symbols(kind, parent_symbol_id, name) WHERE kind='function' AND signature LIKE '%override%';",
+    "CREATE INDEX IF NOT EXISTS idx_inheritance_parent_child ON inheritance(parent_id, child_id);",
+    "CREATE INDEX IF NOT EXISTS idx_inheritance_child_parent ON inheritance(child_id, parent_id);",
 };
 
 static bool ensure_crg_projection_tables(Database& db, std::string& error) {
     for (const char* sql : kCrgProjectionDdl) {
         if (!exec_sql_ok(db, sql, error)) return false;
     }
+    return true;
+}
+
+static bool ensure_source_review_indexes(Database& db, std::string& error) {
+    for (const char* sql : kSourceReviewIndexDdl) {
+        if (!exec_sql_ok(db, sql, error)) return false;
+    }
+    return true;
+}
+
+static bool populate_source_override_edge_cache(Database& db, int64_t& out_count, std::string& error) {
+    out_count = 0;
+    Rows candidates;
+    if (!query_rows_ok(db, R"SQL(
+SELECT child_fn.id AS child_id,base_fn.id AS parent_id,
+       child_fn.name AS child_name,base_fn.name AS parent_name,
+       COALESCE(child_fn.signature,'') AS child_signature,
+       COALESCE(base_fn.signature,'') AS parent_signature
+FROM symbols AS child_fn INDEXED BY idx_symbols_override_signature
+JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id
+JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id = child_cls.id
+JOIN symbols base_cls ON base_cls.id = i.parent_id
+JOIN symbols AS base_fn INDEXED BY idx_symbols_parent_name_kind ON base_fn.parent_symbol_id = base_cls.id
+    AND base_fn.name = child_fn.name
+    AND base_fn.kind = child_fn.kind
+WHERE child_fn.kind = 'function'
+  AND child_fn.signature LIKE '%override%'
+ORDER BY base_fn.id, child_fn.id;
+)SQL", {}, candidates, error)) {
+        return false;
+    }
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(db.db,
+        "INSERT OR IGNORE INTO source_override_edges "
+        "(child_symbol_id,parent_symbol_id,confidence,reason,updated_at) "
+        "VALUES (?, ?, ?, ?, CAST(strftime('%s','now') AS INTEGER));",
+        -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        error = sqlite3_errmsg(db.db);
+        return false;
+    }
+
+    for (const Row& row : candidates) {
+        std::string reason;
+        if (!override_signatures_match(row.get("child_signature"), row.get("parent_signature"),
+                                       row.get("child_name"), row.get("parent_name"), reason)) {
+            continue;
+        }
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
+        sqlite3_bind_int64(stmt, 1, static_cast<sqlite3_int64>(row.get_int64("child_id")));
+        sqlite3_bind_int64(stmt, 2, static_cast<sqlite3_int64>(row.get_int64("parent_id")));
+        sqlite3_bind_text(stmt, 3, override_confidence_for_reason(reason), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 4, reason.c_str(), -1, SQLITE_TRANSIENT);
+        rc = sqlite3_step(stmt);
+        if (rc != SQLITE_DONE) {
+            error = sqlite3_errmsg(db.db);
+            sqlite3_finalize(stmt);
+            return false;
+        }
+        ++out_count;
+    }
+    sqlite3_finalize(stmt);
     return true;
 }
 
@@ -1222,6 +1728,26 @@ static bool ensure_crg_graph_tables(Database& db, std::string& error) {
     return true;
 }
 
+static bool crg_graph_ddl_is_index(const char* sql) {
+    return lower_copy(trim_copy(sql)).rfind("create index", 0) == 0;
+}
+
+static bool ensure_crg_graph_base_tables(Database& db, std::string& error) {
+    for (const char* sql : kCrgGraphDdl) {
+        if (crg_graph_ddl_is_index(sql)) continue;
+        if (!exec_sql_ok(db, sql, error)) return false;
+    }
+    return true;
+}
+
+static bool ensure_crg_graph_indexes(Database& db, std::string& error) {
+    for (const char* sql : kCrgGraphDdl) {
+        if (!crg_graph_ddl_is_index(sql)) continue;
+        if (!exec_sql_ok(db, sql, error)) return false;
+    }
+    return true;
+}
+
 static bool has_crg_graph_tables(Database& db) {
     return object_exists(db, "table", "nodes")
         && object_exists(db, "table", "edges")
@@ -1236,6 +1762,23 @@ static json crg_graph_counts(Database& db) {
     counts["files"] = object_exists(db, "table", "nodes") ? count_rows(db, "SELECT COUNT(*) FROM nodes WHERE kind = 'File';") : -1;
     counts["symbols"] = object_exists(db, "table", "nodes") ? count_rows(db, "SELECT COUNT(*) FROM nodes WHERE kind != 'File';") : -1;
     counts["fts_rows"] = object_exists(db, "table", "nodes_fts") ? count_rows(db, "SELECT COUNT(*) FROM nodes_fts;") : -1;
+    return counts;
+}
+
+static json crg_graph_auxiliary_counts(Database& db) {
+    json counts = json::object();
+    for (const char* table : {
+        "flows",
+        "flow_memberships",
+        "flow_snapshots",
+        "communities",
+        "community_summaries",
+        "risk_index",
+    }) {
+        counts[table] = object_exists(db, "table", table)
+            ? count_rows(db, std::string("SELECT COUNT(*) FROM ") + table + ";")
+            : -1;
+    }
     return counts;
 }
 
@@ -1260,7 +1803,16 @@ static json crg_graph_health_json(const std::string& graph_db_path) {
     }
 
     Database graph;
-    graph.open(graph_db_path, true);
+    std::string open_error;
+    if (!try_open_readonly_database(graph, graph_db_path, open_error)) {
+        json busy = graph_busy_json("source.crg_graph_health", graph_db_path, open_error);
+        busy["input"] = root["input"];
+        busy["checks"] = json::array({
+            {{"check", "graph_db_readable"}, {"result", looks_like_graph_busy_error(open_error) ? "busy" : "warning"}, {"detail", open_error}}
+        });
+        if (!looks_like_graph_busy_error(open_error)) busy["status"] = "warning";
+        return busy;
+    }
     auto add_check = [&](const std::string& name, bool ok, const std::string& detail) {
         root["checks"].push_back({{"check", name}, {"result", ok ? "ok" : "warning"}, {"detail", detail}});
         if (!ok) root["warnings"].push_back(detail);
@@ -1281,6 +1833,11 @@ static json crg_graph_health_json(const std::string& graph_db_path) {
     add_check("metadata:schema_version", schema_version == "9",
               schema_version.empty() ? "metadata.schema_version missing" : "schema_version=" + schema_version + " (expected 9)");
     root["counts"] = counts;
+    root["auxiliary_tables"] = {
+        {"population_status", "reserved_unimplemented"},
+        {"detail", "flow, community, and graph risk-index tables are schema-reserved and are not populated by the current builder"},
+        {"counts", crg_graph_auxiliary_counts(graph)},
+    };
     root["status"] = root["warnings"].empty() ? "ok" : "warning";
     root["summary"] = root["warnings"].empty()
         ? "CRG graph database schema, FTS, and metadata OK"
@@ -1306,7 +1863,51 @@ static json source_graph_build_counts(Database& source_db) {
     return counts;
 }
 
-static std::vector<std::pair<std::string, std::string>> crg_graph_build_sql(const std::string& source_db_path) {
+static int64_t json_count_value(const json& counts, const std::string& key) {
+    if (!counts.is_object() || !counts.contains(key) || !counts[key].is_number_integer()) return -1;
+    return counts[key].get<int64_t>();
+}
+
+static std::string source_graph_signature(const json& source_counts) {
+    std::ostringstream out;
+    out << "v1"
+        << ":files=" << json_count_value(source_counts, "files")
+        << ":symbols=" << json_count_value(source_counts, "symbols")
+        << ":valid_references=" << json_count_value(source_counts, "valid_references")
+        << ":inheritance=" << json_count_value(source_counts, "inheritance");
+    return out.str();
+}
+
+static bool graph_metadata_matches_source(Database& graph,
+                                          const json& source_counts,
+                                          json& metadata) {
+    metadata = json::object();
+    if (!has_crg_graph_tables(graph)) return false;
+
+    Rows rows = query(graph,
+        "SELECT key,value FROM metadata WHERE key IN ("
+        "'schema_version','source_signature_version','source_files','source_symbols',"
+        "'source_valid_references','source_inheritance','source_signature'"
+        ");");
+    for (const auto& row : rows) {
+        metadata[row.get("key")] = row.get("value");
+    }
+
+    auto equals_count = [&](const char* metadata_key, const char* count_key) {
+        return metadata.value(metadata_key, std::string()) == std::to_string(json_count_value(source_counts, count_key));
+    };
+
+    return metadata.value("schema_version", std::string()) == "9"
+        && metadata.value("source_signature_version", std::string()) == "1"
+        && equals_count("source_files", "files")
+        && equals_count("source_symbols", "symbols")
+        && equals_count("source_valid_references", "valid_references")
+        && equals_count("source_inheritance", "inheritance")
+        && metadata.value("source_signature", std::string()) == source_graph_signature(source_counts);
+}
+
+static std::vector<std::pair<std::string, std::string>> crg_graph_build_sql(const std::string& source_db_path,
+                                                                            const json& source_counts) {
     return {
         {"clear risk index", "DELETE FROM risk_index;"},
         {"clear flow memberships", "DELETE FROM flow_memberships;"},
@@ -1435,6 +2036,13 @@ LEFT JOIN src.files pf ON pf.id = ps.file_id;
         {"metadata source db", "INSERT OR REPLACE INTO metadata(key,value) VALUES('monolith_source_db'," + sql_quote(source_db_path) + ");"},
         {"metadata built_at", "INSERT OR REPLACE INTO metadata(key,value) VALUES('built_at',datetime('now'));"},
         {"metadata builder", "INSERT OR REPLACE INTO metadata(key,value) VALUES('builder','monolith_query source build_crg_graph');"},
+        {"metadata source signature version", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source_signature_version','1');"},
+        {"metadata source files", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source_files','" + std::to_string(json_count_value(source_counts, "files")) + "');"},
+        {"metadata source symbols", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source_symbols','" + std::to_string(json_count_value(source_counts, "symbols")) + "');"},
+        {"metadata source valid references", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source_valid_references','" + std::to_string(json_count_value(source_counts, "valid_references")) + "');"},
+        {"metadata source inheritance", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source_inheritance','" + std::to_string(json_count_value(source_counts, "inheritance")) + "');"},
+        {"metadata source signature", "INSERT OR REPLACE INTO metadata(key,value) VALUES('source_signature'," + sql_quote(source_graph_signature(source_counts)) + ");"},
+        {"metadata auxiliary tables", "INSERT OR REPLACE INTO metadata(key,value) VALUES('auxiliary_tables','reserved_unimplemented:flows,flow_memberships,flow_snapshots,communities,community_summaries,risk_index');"},
         {"rebuild fts", "INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild');"},
     };
 }
@@ -1455,6 +2063,9 @@ static json crg_repair_counts(Database& db, const std::string& domain) {
         counts["crg_node_metrics"] = count_rows(db,
             "SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id "
             "WHERE n.domain = '" + domain + "';");
+        if (domain == "source" && object_exists(db, "table", "source_override_edges")) {
+            counts["source_override_edges"] = count_rows(db, "SELECT COUNT(*) FROM source_override_edges;");
+        }
     }
     return counts;
 }
@@ -1466,6 +2077,7 @@ static std::vector<std::pair<std::string, std::string>> crg_repair_sql(const std
             {"clear metrics", "DELETE FROM crg_node_metrics WHERE node_id IN (SELECT id FROM crg_nodes WHERE domain = 'source');"},
             {"clear edges", "DELETE FROM crg_edges WHERE domain = 'source';"},
             {"clear nodes", "DELETE FROM crg_nodes WHERE domain = 'source';"},
+            {"clear source override edges", "DELETE FROM source_override_edges;"},
             {"source nodes", R"SQL(
 INSERT INTO crg_nodes(id,domain,native_table,native_id,stable_key,kind,name,path,module,source_revision,extra,updated_at)
 SELECT s.id,'source','symbols',s.id,COALESCE(s.qualified_name,s.name) || '#' || s.id,
@@ -1691,16 +2303,30 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
                                   const std::string& scope, bool execute) {
     std::string normalized_scope = scope.empty() ? "all" : lower_copy(scope);
     json warnings = json::array();
-    json plan = json::array({
-        "CREATE IF MISSING crg_nodes/crg_edges/crg_node_metrics/crg_meta",
-        "DELETE existing " + domain + " CRG projection rows",
-        domain == "source"
-            ? "SOURCE symbols -> crg_nodes; references/inheritance -> crg_edges"
-            : "PROJECT assets -> crg_nodes; dependencies -> crg_edges",
-        domain == "source"
-            ? "Recompute caller/callee/descendant/risk_score into crg_node_metrics"
-            : "Recompute fan-in/fan-out/hard-in/risk_score into crg_node_metrics",
-    });
+    json plan = json::array();
+    if (domain == "source" && normalized_scope == "override_edges") {
+        plan = json::array({
+            "CREATE IF MISSING source_override_edges and helper indexes",
+            "DELETE existing source_override_edges rows",
+            "Recompute signature-aware source_override_edges cache",
+            "Update crg_meta.source_override_edges_version",
+        });
+    } else {
+        plan = json::array({
+            "CREATE IF MISSING crg_nodes/crg_edges/crg_node_metrics/crg_meta",
+            domain == "source" ? "CREATE IF MISSING review/override helper indexes" : "USE existing project review indexes",
+            "DELETE existing " + domain + " CRG projection rows",
+            domain == "source"
+                ? "SOURCE symbols -> crg_nodes; references/inheritance -> crg_edges"
+                : "PROJECT assets -> crg_nodes; dependencies -> crg_edges",
+            domain == "source"
+                ? "Recompute caller/callee/descendant/risk_score into crg_node_metrics"
+                : "Recompute fan-in/fan-out/hard-in/risk_score into crg_node_metrics",
+        });
+    }
+    if (domain == "source" && normalized_scope != "override_edges") {
+        plan.push_back("Recompute signature-aware source_override_edges cache");
+    }
     json root = {
         {"input", {{"execute", execute}, {"scope", normalized_scope}}},
         {"limits", {{"execute", execute}, {"scope", normalized_scope}}},
@@ -1708,19 +2334,27 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
         {"warnings", warnings},
         {"truncated", false},
     };
-    if (normalized_scope != "all") {
+    if (normalized_scope != "all" && !(domain == "source" && normalized_scope == "override_edges")) {
         root["status"] = "error";
-        root["summary"] = "Unsupported scope for repair_crg_cache (expected 'all')";
-        root["next_actions"] = json::array({domain + ".repair_crg_cache --scope=all", domain + ".health"});
+        root["summary"] = domain == "source"
+            ? "Unsupported scope for repair_crg_cache (expected 'all' or 'override_edges')"
+            : "Unsupported scope for repair_crg_cache (expected 'all')";
+        root["next_actions"] = domain == "source"
+            ? json::array({"source.repair_crg_cache --scope=all", "source.repair_crg_cache --scope=override_edges", "source.health"})
+            : json::array({domain + ".repair_crg_cache --scope=all", domain + ".health"});
         return root;
     }
 
     root["before"] = crg_repair_counts(db, domain);
     if (!execute) {
         root["status"] = "ok";
-        root["summary"] = "Dry-run: " + domain + " CRG projection/cache would be rebuilt. Pass --execute to apply.";
+        root["summary"] = normalized_scope == "override_edges"
+            ? "Dry-run: source override edge cache would be rebuilt. Pass --execute to apply."
+            : "Dry-run: " + domain + " CRG projection/cache would be rebuilt. Pass --execute to apply.";
         root["after"] = json::object();
-        root["next_actions"] = json::array({domain + ".repair_crg_cache --execute", domain + ".health", domain + ".risk_score"});
+        root["next_actions"] = domain == "source"
+            ? json::array({"source.repair_crg_cache --execute", "source.repair_crg_cache --scope=override_edges --execute", "source.health", "source.risk_score"})
+            : json::array({domain + ".repair_crg_cache --execute", domain + ".health", domain + ".risk_score"});
         return root;
     }
 
@@ -1733,8 +2367,36 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
     if (!ensure_crg_projection_tables(db, error)) {
         fail("create schema", error);
     }
+    if (ok && domain == "source" && !ensure_source_review_indexes(db, error)) {
+        fail("create source review indexes", error);
+    }
     if (ok && !exec_sql_ok(db, "BEGIN;", error)) {
         fail("begin transaction", error);
+    }
+    if (ok && domain == "source" && normalized_scope == "override_edges") {
+        if (!exec_sql_ok(db, "DELETE FROM source_override_edges;", error)) {
+            fail("clear source override edges", error);
+        } else {
+            int64_t override_edges = 0;
+            if (!populate_source_override_edge_cache(db, override_edges, error)) {
+                fail("source override edge cache", error);
+            } else if (!exec_sql_ok(db, "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','1');", error)) {
+                fail("source_override_edges_version", error);
+            } else {
+                root["source_override_edges_built"] = override_edges;
+            }
+        }
+        if (ok) {
+            if (!exec_sql_ok(db, "COMMIT;", error)) fail("commit", error);
+        } else {
+            std::string rollback_error;
+            exec_sql_ok(db, "ROLLBACK;", rollback_error);
+        }
+        root["after"] = crg_repair_counts(db, domain);
+        root["status"] = ok ? "ok" : "error";
+        root["summary"] = ok ? "Rebuilt source override edge cache" : "source override edge cache rebuild failed; rolled back";
+        root["next_actions"] = json::array({"source.health", "source.find_overrides", "source.review_hotspots"});
+        return root;
     }
     if (ok) {
         for (const auto& step : crg_repair_sql(domain)) {
@@ -1742,6 +2404,16 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
                 fail(step.first, error);
                 break;
             }
+        }
+    }
+    if (ok && domain == "source") {
+        int64_t override_edges = 0;
+        if (!populate_source_override_edge_cache(db, override_edges, error)) {
+            fail("source override edge cache", error);
+        } else if (!exec_sql_ok(db, "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','1');", error)) {
+            fail("source_override_edges_version", error);
+        } else {
+            root["source_override_edges_built"] = override_edges;
         }
     }
     if (ok) {
@@ -2088,6 +2760,12 @@ static bool crg_cache_present(Database& db) {
         && object_exists(db, "table", "crg_meta");
 }
 
+static bool source_override_edge_cache_ready(Database& db) {
+    return object_exists(db, "table", "source_override_edges")
+        && object_exists(db, "table", "crg_meta")
+        && scalar_str(db, "SELECT value FROM crg_meta WHERE key='source_override_edges_version';") == "1";
+}
+
 // Returns a populated risk item (score/tier/reasons/raw_counts + cache) on a
 // cache hit, or a null json on miss/absent. Joins on native_id so it is
 // robust whether crg_nodes.id is AUTOINCREMENT or aliased to the native id.
@@ -2152,6 +2830,12 @@ static void append_crg_health_checks(Database& db, const std::string& domain,
         check(std::string("crg:table:") + t, object_exists(db, "table", t),
               object_exists(db, "table", t) ? std::string("CRG table ") + t + " present"
                                             : std::string("missing CRG table ") + t);
+    if (domain == "source") {
+        check("crg:table:source_override_edges", object_exists(db, "table", "source_override_edges"),
+              object_exists(db, "table", "source_override_edges")
+                  ? "CRG table source_override_edges present"
+                  : "missing CRG table source_override_edges (run source.repair_crg_cache)");
+    }
     int64_t cnodes = count_rows(db, "SELECT COUNT(*) FROM crg_nodes WHERE domain = '" + domain + "';");
     int64_t cedges = count_rows(db, "SELECT COUNT(*) FROM crg_edges WHERE domain = '" + domain + "';");
     int64_t cmetrics = count_rows(db,
@@ -2181,6 +2865,12 @@ static void append_crg_health_checks(Database& db, const std::string& domain,
     check("crg:scoring_version", scoring_ver == "3",
           scoring_ver.empty() ? "crg_meta.scoring_version missing (run repair_crg_cache)"
                               : "crg scoring_version=" + scoring_ver + " (expected 3)");
+    if (domain == "source") {
+        std::string override_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'source_override_edges_version';");
+        check("crg:source_override_edges_version", override_ver == "1",
+              override_ver.empty() ? "crg_meta.source_override_edges_version missing (run source.repair_crg_cache)"
+                                   : "source override edge cache version=" + override_ver + " (expected 1)");
+    }
 }
 
 // ============================================================
@@ -2227,16 +2917,17 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  get_module_info <module_name>\n"
                   << "  get_symbol_context <symbol> [--context-lines=N]\n"
                   << "  read_file <file_path> [--start=N] [--end=N]\n"
-                  << "  impact_radius <symbol> [--edge-kinds=call|type|inheritance] [--direction=in|out|both] [--max-depth=N] [--max-results=N]\n"
+                  << "  impact_radius <symbol> [--edge-kinds=call|type|inheritance[|override]] [--direction=in|out|both] [--max-depth=N] [--max-results=N]\n"
+                  << "  find_overrides <symbol> [--direction=in|out|both] [--max-depth=N] [--max-results=N]\n"
                   << "  health [--include-counts=false]\n"
                   << "  repair_fts [--target=all|symbols|source] [--execute]\n"
-                  << "  repair_crg_cache [--scope=all] [--execute]\n"
-                  << "  build_crg_graph [--execute] [--graph-db=PATH]\n"
-                  << "  rebuild_crg_graph [--execute] [--graph-db=PATH]\n"
+                  << "  repair_crg_cache [--scope=all|override_edges] [--execute]\n"
+                  << "  build_crg_graph [--execute] [--force] [--graph-db=PATH]\n"
+                  << "  rebuild_crg_graph [--execute] [--force] [--graph-db=PATH]\n"
                   << "  search_crg_graph <query> [--kind=K] [--limit=N] [--graph-db=PATH]\n"
                   << "  crg_graph_health [--graph-db=PATH]\n"
                   << "  risk_score <symbol> [--limit=N] [--min-tier=low|medium|high]\n"
-                  << "  review_hotspots [--kind=fan_in|fan_out|risk|large|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
+                  << "  review_hotspots [--kind=fan_in|fan_out|risk|large|override|all] [--limit=N] [--min-lines=N] [--include-questions=false]\n"
                   << "  review_context <symbol> [--direction=in|out|both] [--detail-level=minimal|standard]\n"
                   << "  detect_changes <path...> [--changed-paths=a,b] [--ranges=path:s-e,...] [--diff-file=PATH] [--diff-stdin] [--max-results=N] [--detail-level=minimal|standard]\n"
                   << "  find_unused [--kind=function|class|struct|all] [--limit=N] [--min-confidence=low|medium|high]\n"
@@ -3267,10 +3958,11 @@ public:
     }
 
     Rows symbols_by_name(const std::string& symbol, int limit = 5) {
+        std::string column = symbol.find("::") != std::string::npos ? "qualified_name" : "name";
         auto rows = query(db,
             "SELECT id, name, qualified_name, kind, file_id, line_start, line_end, "
             "parent_symbol_id, access, signature, docstring, is_ue_macro "
-            "FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC LIMIT " + std::to_string(limit),
+            "FROM symbols WHERE " + column + " = ? ORDER BY (line_end > line_start) DESC LIMIT " + std::to_string(limit),
             {symbol});
         if (rows.empty()) {
             rows = query(db,
@@ -3304,6 +3996,131 @@ public:
         if (depth >= 0) o["depth"] = depth;
         std::string sig = r.get("signature");
         if (!sig.empty()) o["signature"] = sig;
+        return o;
+    }
+
+    Rows filter_override_rows(const Rows& rows, int limit) {
+        Rows out;
+        for (auto row : rows) {
+            std::string reason;
+            if (!override_signatures_match(row.get("child_signature"), row.get("parent_signature"),
+                                           row.get("child_name"), row.get("parent_name"), reason)) {
+                continue;
+            }
+            row.cols["confidence"] = override_confidence_for_reason(reason);
+            row.cols["reason"] = reason;
+            out.push_back(std::move(row));
+            if ((int)out.size() >= limit) break;
+        }
+        return out;
+    }
+
+    Rows override_edges_to(const std::string& symbol_id, int limit) {
+        if (source_override_edge_cache_ready(db)) {
+            return query(db, R"SQL(
+SELECT child_fn.id AS child_id,base_fn.id AS parent_id,
+       child_fn.name AS child_name,child_fn.qualified_name AS child_qualified_name,
+       base_fn.name AS parent_name,base_fn.qualified_name AS parent_qualified_name,
+       child_cls.name AS child_class_name,child_cls.qualified_name AS child_class_qualified_name,
+       base_cls.name AS parent_class_name,base_cls.qualified_name AS parent_class_qualified_name,
+       e.confidence AS confidence,
+       e.reason AS reason
+FROM source_override_edges e
+JOIN symbols child_fn ON child_fn.id = e.child_symbol_id
+JOIN symbols base_fn ON base_fn.id = e.parent_symbol_id
+JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id
+JOIN symbols base_cls ON base_cls.id = base_fn.parent_symbol_id
+WHERE e.parent_symbol_id = ?
+ORDER BY child_fn.qualified_name
+LIMIT ?
+)SQL", {symbol_id, std::to_string(clamp_int(limit, 1, 1000))});
+        }
+        int sql_limit = clamp_int(limit * 4, limit, 1000);
+        return filter_override_rows(query(db, R"SQL(
+SELECT child_fn.id AS child_id,base_fn.id AS parent_id,
+       child_fn.name AS child_name,child_fn.qualified_name AS child_qualified_name,
+       base_fn.name AS parent_name,base_fn.qualified_name AS parent_qualified_name,
+       child_cls.name AS child_class_name,child_cls.qualified_name AS child_class_qualified_name,
+       base_cls.name AS parent_class_name,base_cls.qualified_name AS parent_class_qualified_name,
+       COALESCE(child_fn.signature,'') AS child_signature,
+       COALESCE(base_fn.signature,'') AS parent_signature
+FROM symbols base_fn
+JOIN symbols base_cls ON base_cls.id = base_fn.parent_symbol_id
+JOIN symbols child_fn ON child_fn.name = base_fn.name
+    AND child_fn.kind = base_fn.kind
+    AND child_fn.id != base_fn.id
+JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id
+JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id = child_cls.id
+    AND i.parent_id = base_cls.id
+WHERE base_fn.id = ? AND base_fn.kind = 'function'
+ORDER BY child_fn.qualified_name
+LIMIT ?
+)SQL", {symbol_id, std::to_string(sql_limit)}), limit);
+    }
+
+    Rows override_edges_from(const std::string& symbol_id, int limit) {
+        if (source_override_edge_cache_ready(db)) {
+            return query(db, R"SQL(
+SELECT child_fn.id AS child_id,base_fn.id AS parent_id,
+       child_fn.name AS child_name,child_fn.qualified_name AS child_qualified_name,
+       base_fn.name AS parent_name,base_fn.qualified_name AS parent_qualified_name,
+       child_cls.name AS child_class_name,child_cls.qualified_name AS child_class_qualified_name,
+       base_cls.name AS parent_class_name,base_cls.qualified_name AS parent_class_qualified_name,
+       e.confidence AS confidence,
+       e.reason AS reason
+FROM source_override_edges e
+JOIN symbols child_fn ON child_fn.id = e.child_symbol_id
+JOIN symbols base_fn ON base_fn.id = e.parent_symbol_id
+JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id
+JOIN symbols base_cls ON base_cls.id = base_fn.parent_symbol_id
+WHERE e.child_symbol_id = ?
+ORDER BY base_fn.qualified_name
+LIMIT ?
+)SQL", {symbol_id, std::to_string(clamp_int(limit, 1, 1000))});
+        }
+        int sql_limit = clamp_int(limit * 4, limit, 1000);
+        return filter_override_rows(query(db, R"SQL(
+SELECT child_fn.id AS child_id,base_fn.id AS parent_id,
+       child_fn.name AS child_name,child_fn.qualified_name AS child_qualified_name,
+       base_fn.name AS parent_name,base_fn.qualified_name AS parent_qualified_name,
+       child_cls.name AS child_class_name,child_cls.qualified_name AS child_class_qualified_name,
+       base_cls.name AS parent_class_name,base_cls.qualified_name AS parent_class_qualified_name,
+       COALESCE(child_fn.signature,'') AS child_signature,
+       COALESCE(base_fn.signature,'') AS parent_signature
+FROM symbols child_fn
+JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id
+JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id = child_cls.id
+JOIN symbols base_cls ON base_cls.id = i.parent_id
+JOIN symbols base_fn ON base_fn.parent_symbol_id = base_cls.id
+    AND base_fn.name = child_fn.name
+    AND base_fn.kind = child_fn.kind
+WHERE child_fn.id = ? AND child_fn.kind = 'function'
+ORDER BY base_fn.qualified_name
+LIMIT ?
+)SQL", {symbol_id, std::to_string(sql_limit)}), limit);
+    }
+
+    json override_edge_json(const Row& r, int depth = -1) {
+        json o = {
+            {"from", r.get_int64("child_id")},
+            {"to", r.get_int64("parent_id")},
+            {"kind", "override"},
+            {"confidence", r.get("confidence", "high")},
+            {"reason", r.get("reason")},
+            {"child", {
+                {"id", r.get_int64("child_id")},
+                {"name", r.get("child_name")},
+                {"qualified_name", r.get("child_qualified_name")},
+                {"class", r.get("child_class_qualified_name")},
+            }},
+            {"parent", {
+                {"id", r.get_int64("parent_id")},
+                {"name", r.get("parent_name")},
+                {"qualified_name", r.get("parent_qualified_name")},
+                {"class", r.get("parent_class_qualified_name")},
+            }},
+        };
+        if (depth >= 0) o["depth"] = depth;
         return o;
     }
 
@@ -3450,19 +4267,23 @@ public:
     json build_crg_graph_json(const Args& args) {
         const std::string graph_path = graph_db_path(args);
         const bool execute = args.opt_bool("execute", false);
+        const bool force = args.opt_bool("force", false);
+        const json source_counts = source_graph_build_counts(db);
         json root = {
-            {"input", {{"execute", execute}, {"source_db", source_db_path}, {"graph_db", graph_path}}},
-            {"limits", {{"execute", execute}}},
+            {"input", {{"execute", execute}, {"force", force}, {"source_db", source_db_path}, {"graph_db", graph_path}}},
+            {"limits", {{"execute", execute}, {"force", force}}},
             {"graph_db", graph_path},
             {"source_db", source_db_path},
+            {"build_mode", "atomic_temp_replace"},
             {"plan", json::array({
-                "CREATE IF MISSING CRG-compatible nodes/edges/metadata/FTS schema in Saved/graph.db",
+                "BUILD CRG-compatible nodes/edges/metadata/FTS schema into a same-directory temp graph DB",
                 "REPLACE graph nodes from EngineSource files + symbols",
                 "REPLACE graph edges from file containment, references and inheritance",
                 "REBUILD nodes_fts from nodes",
-                "WRITE schema_version=9 and Monolith build metadata"
+                "VALIDATE temp graph counts, FTS parity, schema_version=9 and source signature metadata",
+                "Atomically replace Saved/graph.db only after validation"
             })},
-            {"source_counts", source_graph_build_counts(db)},
+            {"source_counts", source_counts},
             {"warnings", json::array()},
             {"truncated", false},
         };
@@ -3470,7 +4291,16 @@ public:
         if (!execute) {
             if (fs::exists(graph_path)) {
                 Database graph;
-                graph.open(graph_path, true);
+                std::string open_error;
+                if (!try_open_readonly_database(graph, graph_path, open_error)) {
+                    json busy = graph_busy_json("source.build_crg_graph", graph_path, open_error);
+                    busy["input"] = root["input"];
+                    busy["source_db"] = source_db_path;
+                    busy["source_counts"] = source_counts;
+                    busy["build_mode"] = root["build_mode"];
+                    busy["summary"] = "Dry-run: CRG graph database is busy; no writes were attempted";
+                    return busy;
+                }
                 root["before"] = crg_graph_counts(graph);
             } else {
                 root["before"] = json::object();
@@ -3479,36 +4309,88 @@ public:
             root["after"] = json::object();
             root["status"] = "ok";
             root["summary"] = "Dry-run: Saved/graph.db would be rebuilt from EngineSource.db. Pass --execute to apply.";
-            root["next_actions"] = json::array({"source.build_crg_graph --execute", "source.crg_graph_health"});
+            root["next_actions"] = json::array({"source.build_crg_graph --execute", "source.crg_graph_health", "source.search_source"});
             return root;
+        }
+
+        const std::string lock_path = graph_path + ".rebuild.lock";
+        root["lock_path"] = lock_path;
+        GraphRebuildLock rebuild_lock(lock_path);
+        json busy;
+        if (!rebuild_lock.acquire(busy)) {
+            busy["input"] = root["input"];
+            busy["graph_db"] = graph_path;
+            busy["source_db"] = source_db_path;
+            busy["build_mode"] = root["build_mode"];
+            return busy;
+        }
+
+        json existing_metadata = json::object();
+        if (fs::exists(graph_path)) {
+            Database existing_graph;
+            std::string open_error;
+            if (!try_open_readonly_database(existing_graph, graph_path, open_error)) {
+                json busy_graph = graph_busy_json("source.build_crg_graph", graph_path, open_error);
+                busy_graph["input"] = root["input"];
+                busy_graph["source_db"] = source_db_path;
+                busy_graph["lock_path"] = lock_path;
+                busy_graph["build_mode"] = root["build_mode"];
+                return busy_graph;
+            }
+            root["before"] = crg_graph_counts(existing_graph);
+            if (!force && graph_metadata_matches_source(existing_graph, source_counts, existing_metadata)) {
+                root["after"] = root["before"];
+                root["metadata"] = existing_metadata;
+                root["status"] = "ok";
+                root["summary"] = "Saved/graph.db is already current for the EngineSource source signature";
+                root["skipped"] = true;
+                root["replaced"] = false;
+                root["next_actions"] = json::array({"source.search_crg_graph", "source.crg_graph_health", "source.review_context"});
+                return root;
+            }
+            root["metadata_before"] = existing_metadata;
+        } else {
+            root["before"] = json::object();
+            root["warnings"].push_back("graph database does not exist yet");
         }
 
         bool ok = true;
         std::string error;
         Database graph;
-        graph.open_or_create(graph_path);
-        root["before"] = crg_graph_counts(graph);
+        const std::string temp_path = graph_path + ".rebuild." + std::to_string(current_process_id()) + ".tmp";
+        root["temp_graph_db"] = temp_path;
+        root["replaced"] = false;
+        root["skipped"] = false;
+
+        remove_file_best_effort(temp_path);
+        remove_sqlite_sidecars_best_effort(temp_path);
 
         auto fail = [&](const std::string& label, const std::string& err) {
             ok = false;
             root["warnings"].push_back("CRG graph rebuild failed at " + label + (err.empty() ? "" : ": " + err));
         };
 
+        graph.open_or_create(temp_path);
         if (!exec_sql_ok(graph, "PRAGMA foreign_keys=OFF;", error)) fail("pragma foreign_keys", error);
         if (ok && !exec_sql_ok(graph, "ATTACH DATABASE " + sql_quote(source_db_path) + " AS src;", error)) fail("attach source", error);
         if (ok && !exec_sql_ok(graph, "DROP TABLE IF EXISTS nodes_fts;", error)) fail("drop stale nodes_fts", error);
-        if (ok && !ensure_crg_graph_tables(graph, error)) fail("create schema", error);
+        if (ok && !ensure_crg_graph_base_tables(graph, error)) fail("create base schema", error);
         if (ok && !exec_sql_ok(graph, "BEGIN;", error)) fail("begin transaction", error);
         if (ok) {
-            for (const auto& step : crg_graph_build_sql(source_db_path)) {
+            for (const auto& step : crg_graph_build_sql(source_db_path, source_counts)) {
                 if (!exec_sql_ok(graph, step.second, error)) {
                     fail(step.first, error);
                     break;
                 }
             }
         }
+        if (ok && !ensure_crg_graph_indexes(graph, error)) fail("create indexes", error);
         if (ok) {
-            if (!exec_sql_ok(graph, "COMMIT;", error)) fail("commit", error);
+            if (!exec_sql_ok(graph, "COMMIT;", error)) {
+                fail("commit", error);
+                std::string rollback_error;
+                exec_sql_ok(graph, "ROLLBACK;", rollback_error);
+            }
         } else {
             std::string rollback_error;
             exec_sql_ok(graph, "ROLLBACK;", rollback_error);
@@ -3516,14 +4398,48 @@ public:
         std::string detach_error;
         exec_sql_ok(graph, "DETACH DATABASE src;", detach_error);
 
-        root["after"] = crg_graph_counts(graph);
+        json temp_counts = ok ? crg_graph_counts(graph) : json::object();
+        const std::string schema_version = ok ? scalar_str(graph, "SELECT value FROM metadata WHERE key = 'schema_version';") : "";
+        json validation = {
+            {"nodes_gt_zero", ok && temp_counts.value("nodes", static_cast<int64_t>(-1)) > 0},
+            {"edges_gt_zero", ok && temp_counts.value("edges", static_cast<int64_t>(-1)) > 0},
+            {"fts_row_parity", ok && temp_counts.value("nodes", static_cast<int64_t>(-1)) == temp_counts.value("fts_rows", static_cast<int64_t>(-2))},
+            {"schema_version", schema_version},
+            {"schema_version_ok", ok && schema_version == "9"},
+        };
+        validation["passed"] = validation["nodes_gt_zero"].get<bool>()
+            && validation["edges_gt_zero"].get<bool>()
+            && validation["fts_row_parity"].get<bool>()
+            && validation["schema_version_ok"].get<bool>();
+        root["validation"] = validation;
+        root["after"] = temp_counts;
+
+        if (ok && !validation["passed"].get<bool>()) {
+            fail("validate temp graph", validation.dump());
+        }
+
+        graph.close();
+        if (ok) {
+            std::string replace_error;
+            if (!atomic_replace_file(temp_path, graph_path, replace_error)) {
+                fail("atomic replace", replace_error);
+            } else {
+                root["replaced"] = true;
+            }
+        }
+
+        if (!ok) {
+            remove_file_best_effort(temp_path);
+            remove_sqlite_sidecars_best_effort(temp_path);
+        }
+
         root["status"] = ok ? "ok" : "error";
         root["summary"] = ok
-            ? "Rebuilt Saved/graph.db from EngineSource files, symbols, references and inheritance"
-            : "Saved/graph.db rebuild failed; rolled back";
+            ? "Rebuilt Saved/graph.db atomically from EngineSource files, symbols, references and inheritance"
+            : "Saved/graph.db atomic rebuild failed; existing graph database was left untouched";
         root["next_actions"] = ok
             ? json::array({"source.search_crg_graph", "source.crg_graph_health", "source.review_context"})
-            : json::array({"source.crg_graph_health", "source.health"});
+            : json::array({"source.crg_graph_health", "source.health", "source.search_source"});
         return root;
     }
 
@@ -3565,7 +4481,17 @@ public:
         }
 
         Database graph;
-        graph.open(graph_path, true);
+        std::string open_error;
+        if (!try_open_readonly_database(graph, graph_path, open_error)) {
+            json busy = graph_busy_json("source.search_crg_graph", graph_path, open_error);
+            busy["input"] = root["input"];
+            busy["limits"] = root["limits"];
+            busy["results"] = json::array();
+            busy["count"] = 0;
+            if (!looks_like_graph_busy_error(open_error)) busy["status"] = "warning";
+            print_json(busy);
+            return;
+        }
         bool used_fts = false;
         Rows rows;
         if (object_exists(graph, "table", "nodes_fts")) {
@@ -3629,34 +4555,69 @@ public:
         print_json(root);
     }
 
+    json augment_override_risk(json risk, int64_t id) {
+        Rows override_children = override_edges_to(std::to_string(id), 1000);
+        Rows override_parents = override_edges_from(std::to_string(id), 100);
+        if (override_children.empty() && override_parents.empty()) return risk;
+
+        if (!risk.contains("reasons") || !risk["reasons"].is_array()) risk["reasons"] = json::array();
+        double score = risk.value("score", 0.0);
+        double child_factor = std::min<double>(override_children.size(), 30) / 30.0 * 0.20;
+        double parent_factor = std::min<double>(override_parents.size(), 10) / 10.0 * 0.05;
+        if (child_factor > 0.0) {
+            risk["reasons"].push_back("override fan-out: " + std::to_string(override_children.size()) + " child override method(s)");
+        }
+        if (parent_factor > 0.0) {
+            risk["reasons"].push_back("overrides parent method(s): " + std::to_string(override_parents.size()));
+        }
+        score = std::max(0.0, std::min(score + child_factor + parent_factor, 1.0));
+        risk["score"] = std::round(score * 1000.0) / 1000.0;
+        risk["tier"] = tier_for(score);
+        if (!risk.contains("raw_counts") || !risk["raw_counts"].is_object()) risk["raw_counts"] = json::object();
+        risk["raw_counts"]["override_children"] = override_children.size();
+        risk["raw_counts"]["overridden_parents"] = override_parents.size();
+        if (risk.contains("cache") && risk["cache"].is_object()) risk["cache"]["override_augmented"] = true;
+        return risk;
+    }
+
     json score_symbol(const Row& sym) {
-        std::string id = sym.get("id");
-        auto callers = query(db, "SELECT ref_kind, file_id FROM \"references\" WHERE to_symbol_id = ? LIMIT 500", {id});
-        auto callees = query(db, "SELECT ref_kind, file_id FROM \"references\" WHERE from_symbol_id = ? LIMIT 500", {id});
-        auto children = query(db, "SELECT child_id FROM inheritance WHERE parent_id = ?", {id});
-        auto parents = query(db, "SELECT parent_id FROM inheritance WHERE child_id = ?", {id});
-        std::set<std::string> caller_files;
-        for (const auto& r : callers) caller_files.insert(r.get("file_id"));
+        int64_t id = sym.get_int64("id");
+        int64_t callers = count_rows(db, "SELECT COUNT(*) FROM \"references\" WHERE to_symbol_id = " + std::to_string(id) + ";");
+        int64_t callees = count_rows(db, "SELECT COUNT(*) FROM \"references\" WHERE from_symbol_id = " + std::to_string(id) + ";");
+        int64_t children = count_rows(db, "SELECT COUNT(*) FROM inheritance WHERE parent_id = " + std::to_string(id) + ";");
+        int64_t parents = count_rows(db, "SELECT COUNT(*) FROM inheritance WHERE child_id = " + std::to_string(id) + ";");
+        int64_t caller_files = count_rows(db, "SELECT COUNT(DISTINCT file_id) FROM \"references\" WHERE to_symbol_id = " + std::to_string(id) + ";");
+        Rows override_children = override_edges_to(std::to_string(id), 1000);
+        Rows override_parents = override_edges_from(std::to_string(id), 100);
+        callers = std::max<int64_t>(callers, 0);
+        callees = std::max<int64_t>(callees, 0);
+        children = std::max<int64_t>(children, 0);
+        parents = std::max<int64_t>(parents, 0);
+        caller_files = std::max<int64_t>(caller_files, 0);
         json reasons = json::array();
         double raw = 0.0;
         auto factor = [&](double c, const std::string& why) {
             if (c > 0.0) { raw += c; reasons.push_back(why); }
         };
-        factor(std::min<double>(callers.size(), 50) / 50.0 * 0.35, "caller fan-in: " + std::to_string(callers.size()));
-        factor(std::min<double>(children.size(), 30) / 30.0 * 0.25, "inheritance descendants (1-hop): " + std::to_string(children.size()));
-        factor(std::min<double>(callees.size(), 50) / 50.0 * 0.10, "callee fan-out: " + std::to_string(callees.size()));
+        factor(std::min<double>(callers, 50) / 50.0 * 0.35, "caller fan-in: " + std::to_string(callers));
+        factor(std::min<double>(children, 30) / 30.0 * 0.25, "inheritance descendants (1-hop): " + std::to_string(children));
+        factor(std::min<double>(override_children.size(), 30) / 30.0 * 0.20,
+               "override fan-out: " + std::to_string(override_children.size()) + " child override method(s)");
+        factor(std::min<double>(callees, 50) / 50.0 * 0.10, "callee fan-out: " + std::to_string(callees));
+        factor(std::min<double>(override_parents.size(), 10) / 10.0 * 0.05,
+               "overrides parent method(s): " + std::to_string(override_parents.size()));
         factor(sym.get_int("is_ue_macro") != 0 ? 0.15 : 0.0, "UE reflection macro symbol (UCLASS/UFUNCTION/UPROPERTY family)");
-        factor(caller_files.size() > 1 ? std::min<double>(caller_files.size(), 20) / 20.0 * 0.15 : 0.0,
-            "module/file boundary crossing: " + std::to_string(caller_files.size()) + " distinct caller file(s)");
+        factor(caller_files > 1 ? std::min<double>(caller_files, 20) / 20.0 * 0.15 : 0.0,
+            "module/file boundary crossing: " + std::to_string(caller_files) + " distinct caller file(s)");
         auto sensitivity = sensitivity_factor(
             sym.get("name") + " " + sym.get("qualified_name") + " " + sym.get("kind") + " " + sym.get("signature"),
             true);
         factor(sensitivity.first, sensitivity.second);
-        if (callers.empty() && sym.get("kind").find("function") != std::string::npos)
+        if (callers == 0 && sym.get("kind").find("function") != std::string::npos)
             reasons.push_back("missing direct callers: function has 0 indexed callers; may be reflection/delegate/Blueprint-invoked");
         double score = std::max(0.0, std::min(raw, 1.0));
         return {
-            {"id", sym.get_int64("id")},
+            {"id", id},
             {"name", sym.get("name")},
             {"qualified_name", sym.get("qualified_name")},
             {"kind", sym.get("kind")},
@@ -3664,14 +4625,18 @@ public:
             {"tier", tier_for(score)},
             {"reasons", reasons},
             {"raw_counts", {
-                {"callers", callers.size()},
-                {"callees", callees.size()},
-                {"descendants", children.size()},
-                {"ancestors", parents.size()},
-                {"caller_files", caller_files.size()},
+                {"callers", callers},
+                {"callees", callees},
+                {"descendants", children},
+                {"ancestors", parents},
+                {"override_children", override_children.size()},
+                {"overridden_parents", override_parents.size()},
+                {"caller_files", caller_files},
                 {"is_ue_macro", sym.get_int("is_ue_macro") != 0},
                 {"sensitivity", sensitivity.first},
             }},
+            {"cache", {{"status", crg_cache_present(db) ? "miss" : "unavailable"}}},
+            {"scoring_version", "3"},
         };
     }
 
@@ -3695,7 +4660,7 @@ public:
             json scored;
             if (!cached.is_null()) {
                 any_cache_hit = true;
-                scored = cached;
+                scored = augment_override_risk(cached, row.get_int64("id"));
                 scored["id"] = row.get_int64("id");
                 scored["name"] = row.get("name");
                 scored["qualified_name"] = row.get("qualified_name");
@@ -3715,7 +4680,7 @@ public:
         root["scoring_version"] = sv;
         root["items"] = items;
         root["truncated"] = false;
-        add_next(root, {"source.review_context", "source.impact_radius"});
+        add_next(root, {"source.review_context", "source.find_overrides", "source.impact_radius"});
         return root;
     }
 
@@ -3734,34 +4699,117 @@ public:
             {"input", {{"kind", k}, {"include_questions", include_questions}}},
             {"limits", {{"limit", cap}, {"min_lines", loc_floor}}},
         };
-        if (k != "fan_in" && k != "fan_out" && k != "risk" && k != "large" && k != "all") {
+        if (k != "fan_in" && k != "fan_out" && k != "risk" && k != "large" && k != "override" && k != "all") {
             root["status"] = "error";
-            root["summary"] = "Unsupported kind for source.review_hotspots (expected fan_in|fan_out|risk|large|all)";
+            root["summary"] = "Unsupported kind for source.review_hotspots (expected fan_in|fan_out|risk|large|override|all)";
             root["hotspots"] = json::array();
             root["truncated"] = false;
             add_next(root, {"source.review_hotspots", "source.risk_score"});
             return root;
         }
 
-        bool has_cache = crg_cache_present(db);
-        std::string cache_join = has_cache
-            ? "LEFT JOIN crg_nodes n ON n.domain='source' AND n.native_table='symbols' AND n.native_id=c.id "
-              "LEFT JOIN crg_node_metrics m ON m.node_id=n.id "
-            : "";
-        std::string risk_expr = has_cache ? "COALESCE(m.risk_score, c.estimated_risk)" : "c.estimated_risk";
-        std::string tier_expr = has_cache
-            ? "COALESCE(m.risk_tier, CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END)"
-            : "CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END";
-        std::string where = (k == "large")
-            ? "WHERE lines >= " + std::to_string(loc_floor) + " "
-            : "WHERE fan_in > 0 OR fan_out > 0 OR descendants > 0 OR risk_score > 0 OR lines >= " + std::to_string(loc_floor) + " ";
+        bool has_crg_cache = crg_cache_present(db);
+        bool has_override_cache = has_crg_cache && source_override_edge_cache_ready(db);
+        std::string where;
+        if (k == "large") {
+            where = "WHERE lines >= " + std::to_string(loc_floor) + " ";
+        } else if (k == "override") {
+            where = "WHERE override_children > 0 OR overridden_parents > 0 ";
+        } else {
+            where = "WHERE fan_in > 0 OR fan_out > 0 OR descendants > 0 OR risk_score > 0 OR lines >= " + std::to_string(loc_floor) + " ";
+        }
         std::string order = "ORDER BY hotspot_score DESC, risk_score DESC, fan_in DESC, lines DESC ";
         if (k == "fan_in") order = "ORDER BY fan_in DESC, risk_score DESC, lines DESC ";
         else if (k == "fan_out") order = "ORDER BY fan_out DESC, risk_score DESC, lines DESC ";
         else if (k == "risk") order = "ORDER BY risk_score DESC, fan_in DESC, lines DESC ";
         else if (k == "large") order = "ORDER BY lines DESC, risk_score DESC, fan_in DESC ";
+        else if (k == "override") order = "ORDER BY override_children DESC, overridden_parents DESC, risk_score DESC, fan_in DESC, lines DESC ";
+        int fetch_limit = (k == "override")
+            ? std::min(2000, std::max(cap + 1, cap * 8 + 50))
+            : cap + 1;
+        int override_seed_limit = std::min(10000, std::max(5000, cap * 1000));
 
-        std::string sql = R"SQL(
+        std::string sql;
+        if (k == "override") {
+            if (has_override_cache) {
+                sql = "WITH override_symbols AS ("
+                      "  SELECT parent_symbol_id AS symbol_id FROM source_override_edges"
+                      "  UNION SELECT child_symbol_id AS symbol_id FROM source_override_edges"
+                      "), override_children AS ("
+                      "  SELECT parent_symbol_id AS symbol_id, COUNT(*) AS override_children FROM source_override_edges GROUP BY parent_symbol_id"
+                      "), overridden_parents AS ("
+                      "  SELECT child_symbol_id AS symbol_id, COUNT(*) AS overridden_parents FROM source_override_edges GROUP BY child_symbol_id"
+                      "), scored AS ("
+                      "  SELECT s.id,s.name,s.qualified_name,s.kind,COALESCE(f.path,'') AS file,s.line_start,s.line_end,"
+                      "         CASE WHEN s.line_end >= s.line_start THEN s.line_end - s.line_start + 1 ELSE 0 END AS lines,"
+                      "         COALESCE(m.fan_in,0) AS fan_in,COALESCE(m.fan_out,0) AS fan_out,"
+                      "         COALESCE(m.descendants,0) AS descendants,"
+                      "         COALESCE(oc.override_children,0) AS override_children,"
+                      "         COALESCE(op.overridden_parents,0) AS overridden_parents,"
+                      "         COALESCE(m.risk_score,0.0) AS risk_score,COALESCE(m.risk_tier, 'low') AS risk_tier "
+                      "  FROM override_symbols os "
+                      "  JOIN symbols s ON s.id=os.symbol_id "
+                      "  LEFT JOIN files f ON f.id=s.file_id "
+                      "  LEFT JOIN override_children oc ON oc.symbol_id=s.id "
+                      "  LEFT JOIN overridden_parents op ON op.symbol_id=s.id "
+                      "  LEFT JOIN crg_nodes n ON n.domain='source' AND n.native_table='symbols' AND n.native_id=s.id "
+                      "  LEFT JOIN crg_node_metrics m ON m.node_id=n.id"
+                      ") "
+                      "SELECT *, MAX(risk_score, MIN(override_children,30)/30.0, MIN(overridden_parents,10)/10.0, MIN(lines,500)/500.0) AS hotspot_score "
+                      "FROM scored " + where + order + "LIMIT " + std::to_string(fetch_limit) + ";";
+            } else {
+                std::string risk_expr = "c.estimated_risk";
+                std::string tier_expr = "CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END";
+                sql = "WITH child_seed AS ("
+                      "  SELECT id,name,kind,parent_symbol_id FROM symbols "
+                      "  WHERE kind='function' AND signature LIKE '%override%' LIMIT " + std::to_string(override_seed_limit) +
+                      "), override_children AS ("
+                      "  SELECT base_fn.id AS symbol_id, COUNT(*) AS override_children "
+                      "  FROM child_seed child_fn "
+                      "  JOIN symbols child_cls ON child_cls.id=child_fn.parent_symbol_id "
+                      "  JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id=child_cls.id "
+                      "  JOIN symbols base_cls ON base_cls.id=i.parent_id "
+                      "  JOIN symbols base_fn ON base_fn.parent_symbol_id=base_cls.id AND base_fn.name=child_fn.name AND base_fn.kind=child_fn.kind "
+                      "  GROUP BY base_fn.id"
+                      "), ref_in AS ("
+                      "  SELECT to_symbol_id AS symbol_id, COUNT(*) AS fan_in, COUNT(DISTINCT r.file_id) AS caller_files FROM \"references\" r GROUP BY to_symbol_id"
+                      "), ref_out AS ("
+                      "  SELECT from_symbol_id AS symbol_id, COUNT(*) AS fan_out FROM \"references\" r GROUP BY from_symbol_id"
+                      "), inh_desc AS ("
+                      "  SELECT parent_id AS symbol_id, COUNT(*) AS descendants FROM inheritance GROUP BY parent_id"
+                      "), counts AS ("
+                      "  SELECT s.id,s.name,s.qualified_name,s.kind,COALESCE(f.path,'') AS file,s.line_start,s.line_end,"
+                      "         CASE WHEN s.line_end >= s.line_start THEN s.line_end - s.line_start + 1 ELSE 0 END AS lines,"
+                      "         COALESCE(ri.fan_in,0) AS fan_in,COALESCE(ro.fan_out,0) AS fan_out,COALESCE(id.descendants,0) AS descendants,"
+                      "         oc.override_children,0 AS overridden_parents,COALESCE(ri.caller_files,0) AS caller_files,s.is_ue_macro AS is_ue_macro,"
+                      "         MIN(1.0, MIN(COALESCE(ri.fan_in,0),50)/50.0*0.35 + MIN(COALESCE(id.descendants,0),30)/30.0*0.25 + MIN(COALESCE(ro.fan_out,0),50)/50.0*0.10 + CASE WHEN s.is_ue_macro != 0 THEN 0.15 ELSE 0 END + MIN(COALESCE(ri.caller_files,0),20)/20.0*0.15) AS estimated_risk "
+                      "  FROM override_children oc JOIN symbols s ON s.id=oc.symbol_id LEFT JOIN files f ON f.id=s.file_id "
+                      "  LEFT JOIN ref_in ri ON ri.symbol_id=s.id LEFT JOIN ref_out ro ON ro.symbol_id=s.id LEFT JOIN inh_desc id ON id.symbol_id=s.id"
+                      "), scored AS ("
+                      "  SELECT c.id,c.name,c.qualified_name,c.kind,c.file,c.line_start,c.line_end,c.lines,c.fan_in,c.fan_out,c.descendants,c.override_children,c.overridden_parents," + risk_expr + " AS risk_score," + tier_expr + " AS risk_tier FROM counts c"
+                      ") "
+                      "SELECT *, MAX(risk_score, MIN(override_children,30)/30.0, MIN(lines,500)/500.0) AS hotspot_score FROM scored " + where + order + "LIMIT " + std::to_string(fetch_limit) + ";";
+            }
+        } else if (has_crg_cache) {
+            sql = R"SQL(
+WITH scored AS (
+  SELECT s.id,s.name,s.qualified_name,s.kind,COALESCE(f.path,'') AS file,s.line_start,s.line_end,
+         CASE WHEN s.line_end >= s.line_start THEN s.line_end - s.line_start + 1 ELSE 0 END AS lines,
+         COALESCE(m.fan_in,0) AS fan_in,COALESCE(m.fan_out,0) AS fan_out,
+         COALESCE(m.descendants,0) AS descendants,0 AS override_children,0 AS overridden_parents,
+         COALESCE(m.risk_score,0.0) AS risk_score,
+         COALESCE(m.risk_tier, 'low') AS risk_tier
+  FROM symbols s
+  LEFT JOIN files f ON f.id=s.file_id
+  LEFT JOIN crg_nodes n ON n.domain='source' AND n.native_table='symbols' AND n.native_id=s.id
+  LEFT JOIN crg_node_metrics m ON m.node_id=n.id
+)
+SELECT *, MAX(risk_score, MIN(fan_in,50)/50.0, MIN(fan_out,50)/50.0, MIN(lines,500)/500.0) AS hotspot_score
+FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";";
+        } else {
+            std::string risk_expr = "c.estimated_risk";
+            std::string tier_expr = "CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END";
+            sql = R"SQL(
 WITH ref_in AS (
   SELECT to_symbol_id AS symbol_id, COUNT(*) AS fan_in, COUNT(DISTINCT r.file_id) AS caller_files
   FROM "references" r JOIN symbols fs ON fs.id=r.from_symbol_id JOIN symbols ts ON ts.id=r.to_symbol_id GROUP BY to_symbol_id
@@ -3776,6 +4824,7 @@ WITH ref_in AS (
          CASE WHEN s.line_end >= s.line_start THEN s.line_end - s.line_start + 1 ELSE 0 END AS lines,
          COALESCE(ri.fan_in,0) AS fan_in,COALESCE(ro.fan_out,0) AS fan_out,
          COALESCE(id.descendants,0) AS descendants,COALESCE(ri.caller_files,0) AS caller_files,
+         0 AS override_children,0 AS overridden_parents,
          s.is_ue_macro AS is_ue_macro,
          CASE WHEN lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%ufunction%'
             OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%server%'
@@ -3799,39 +4848,57 @@ WITH ref_in AS (
   FROM base
 ), scored AS (
   SELECT c.id,c.name,c.qualified_name,c.kind,c.file,c.line_start,c.line_end,c.lines,
-         c.fan_in,c.fan_out,c.descendants,)SQL" + risk_expr + R"SQL( AS risk_score,)SQL" + tier_expr + R"SQL( AS risk_tier
-  FROM counts c )SQL" + cache_join + R"SQL(
+         c.fan_in,c.fan_out,c.descendants,c.override_children,c.overridden_parents,)SQL" + risk_expr + R"SQL( AS risk_score,)SQL" + tier_expr + R"SQL( AS risk_tier
+  FROM counts c
 )
 SELECT *, MAX(risk_score, MIN(fan_in,50)/50.0, MIN(fan_out,50)/50.0, MIN(lines,500)/500.0) AS hotspot_score
-FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
+FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";";
+        }
 
         Rows rows = query(db, sql);
-        bool truncated = (int)rows.size() > cap;
-        if (truncated) rows.pop_back();
+        bool truncated = false;
         json hotspots = json::array();
         json questions = json::array();
         for (const auto& r : rows) {
             int fan_in = r.get_int("fan_in");
             int fan_out = r.get_int("fan_out");
+            int override_children = r.get_int("override_children");
+            int overridden_parents = r.get_int("overridden_parents");
+            if (k == "override" && override_children <= 0 && overridden_parents <= 0) {
+                continue;
+            }
             int lines = r.get_int("lines");
             double risk = r.get_double("risk_score");
+            risk = std::min(1.0, risk
+                + std::min<double>(override_children, 30) / 30.0 * 0.20
+                + std::min<double>(overridden_parents, 10) / 10.0 * 0.05);
+            if ((int)hotspots.size() >= cap) {
+                truncated = true;
+                break;
+            }
             std::string primary = k;
             if (primary == "all") {
                 double best = risk;
                 primary = "risk";
                 double in_signal = std::min<double>(fan_in, 50) / 50.0;
                 double out_signal = std::min<double>(fan_out, 50) / 50.0;
+                double override_signal = std::max(
+                    std::min<double>(override_children, 30) / 30.0,
+                    std::min<double>(overridden_parents, 10) / 10.0);
                 double large_signal = std::min<double>(lines, 500) / 500.0;
                 if (in_signal > best) { best = in_signal; primary = "fan_in"; }
                 if (out_signal > best) { best = out_signal; primary = "fan_out"; }
+                if (override_signal > best) { best = override_signal; primary = "override"; }
                 if (large_signal > best) primary = "large";
             }
             json signals = {
                 {"fan_in", fan_in},
                 {"fan_out", fan_out},
                 {"descendants", r.get_int("descendants")},
+                {"override_children", override_children},
+                {"overridden_parents", overridden_parents},
                 {"risk_score", std::round(risk * 1000.0) / 1000.0},
-                {"risk_tier", r.get("risk_tier", tier_for(risk))},
+                {"risk_tier", tier_for(risk)},
                 {"lines", lines},
             };
             hotspots.push_back({
@@ -3852,17 +4919,24 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                     {"reason", primary},
                     {"question", primary == "large"
                         ? "Can this large symbol be split or covered by focused tests before risky edits?"
-                        : "Which callers and tests cover this hotspot before changing it?"},
+                        : (primary == "override"
+                            ? "Which child overrides and parent contracts must be reviewed before changing this method?"
+                            : "Which callers and tests cover this hotspot before changing it?")},
                 });
             }
         }
         root["status"] = "ok";
         root["summary"] = std::to_string(hotspots.size()) + " source review hotspot(s) ranked by " + k
-            + (has_cache ? " using CRG cache when available" : " using native fallback");
+            + (has_crg_cache ? " using CRG cache when available" : " using native fallback");
+        root["cache"] = {
+            {"status", has_crg_cache ? "hit" : "miss"},
+            {"source", has_override_cache ? "crg_node_metrics + source_override_edges"
+                : (has_crg_cache ? "crg_node_metrics + query-time override aggregation" : "query-time references/inheritance/override aggregation")},
+        };
         root["hotspots"] = hotspots;
         if (include_questions) root["questions"] = questions;
         root["truncated"] = truncated;
-        add_next(root, {"source.review_context", "source.risk_score", "source.impact_radius"});
+        add_next(root, {"source.review_context", "source.find_overrides", "source.risk_score", "source.impact_radius"});
         return root;
     }
 
@@ -3899,6 +4973,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
         bool call = wants_kind(kinds, "call");
         bool type = wants_kind(kinds, "type");
         bool inh = wants_kind(kinds, "inheritance");
+        bool over = wants_kind(kinds, "override");
         std::set<std::string> visited;
         std::vector<std::string> frontier;
         root["seed_symbols"] = json::array();
@@ -3926,6 +5001,8 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                 if (in && type) append_refs("SELECT from_symbol_id, to_symbol_id, ref_kind FROM \"references\" WHERE to_symbol_id = ? AND ref_kind = ? LIMIT ?", "type", true);
                 if (out && inh) for (const auto& r : query(db, "SELECT parent_id AS id FROM inheritance WHERE child_id = ?", {cur})) neighbors.push_back({r.get("id"), "inheritance"});
                 if (in && inh) for (const auto& r : query(db, "SELECT child_id AS id FROM inheritance WHERE parent_id = ?", {cur})) neighbors.push_back({r.get("id"), "inheritance"});
+                if (out && over) for (const auto& r : override_edges_from(cur, per_node)) neighbors.push_back({r.get("parent_id"), "override"});
+                if (in && over) for (const auto& r : override_edges_to(cur, per_node)) neighbors.push_back({r.get("child_id"), "override"});
                 for (const auto& n : neighbors) {
                     if (n.first.empty() || n.first == cur) continue;
                     edges.push_back({{"from", std::stoll(cur)}, {"to", std::stoll(n.first)}, {"kind", n.second}, {"depth", d}});
@@ -3948,7 +5025,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
         root["impacted_symbols"] = impacted;
         root["edges"] = edges;
         root["truncated"] = truncated;
-        add_next(root, {"source.review_context", "source.risk_score", "source.find_callers"});
+        add_next(root, {"source.review_context", "source.find_overrides", "source.risk_score", "source.find_callers"});
         return root;
     }
 
@@ -3957,6 +5034,40 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
         if (symbol.empty() && !args.positional.empty()) symbol = args.positional[0];
         if (symbol.empty()) die("impact_radius requires a symbol argument");
         print_json(source_impact_radius_json(symbol, args.opt("edge_kinds", "call|type|inheritance"), args.opt("direction", "both"), args.opt_int("max_depth", 2), args.opt_int("max_results", 200)));
+    }
+
+    void find_overrides(const Args& args) {
+        std::string symbol = args.opt("symbol");
+        if (symbol.empty() && !args.positional.empty()) symbol = args.positional[0];
+        if (symbol.empty()) die("find_overrides requires a symbol argument");
+        std::string direction = args.opt("direction", "both");
+        int max_depth = args.opt_int("max_depth", 2);
+        int max_results = args.opt_int("max_results", 200);
+        json root = source_impact_radius_json(symbol, "override", direction, max_depth, max_results);
+        root["overrides"] = root.value("impacted_symbols", json::array());
+        root["direct_override_edges"] = json::array();
+
+        int cap = clamp_int(max_results <= 0 ? 200 : max_results, 1, 1000);
+        auto seeds = symbols_by_name(symbol, 5);
+        bool in = direction != "out";
+        bool out = direction != "in";
+        for (const auto& seed : seeds) {
+            if (out) {
+                for (const auto& edge : override_edges_from(seed.get("id"), cap)) {
+                    root["direct_override_edges"].push_back(override_edge_json(edge, 1));
+                }
+            }
+            if (in) {
+                for (const auto& edge : override_edges_to(seed.get("id"), cap)) {
+                    root["direct_override_edges"].push_back(override_edge_json(edge, 1));
+                }
+            }
+        }
+        root["summary"] = std::to_string(root["overrides"].size()) + " override-related symbol(s) within depth "
+            + std::to_string(clamp_int(max_depth <= 0 ? 2 : max_depth, 0, 8))
+            + " (" + direction + ") of " + symbol;
+        add_next(root, {"source.impact_radius", "source.review_context", "source.risk_score"});
+        print_json(root);
     }
 
     void review_context(const Args& args) {
@@ -3980,11 +5091,21 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
             return;
         }
         Row seed = seeds[0];
-        json risk = score_symbol(seed);
+        json cached = try_cached_risk(db, "source", "symbols", seed.get_int64("id"));
+        json risk;
+        if (!cached.is_null()) {
+            risk = augment_override_risk(cached, seed.get_int64("id"));
+            risk["id"] = seed.get_int64("id");
+            risk["name"] = seed.get("name");
+            risk["qualified_name"] = seed.get("qualified_name");
+            risk["kind"] = seed.get("kind");
+        } else {
+            risk = score_symbol(seed);
+        }
         root["risk"] = risk;
         root["top_risks"] = json::array();
         for (size_t i = 0; i < risk["reasons"].size() && i < 5; ++i) root["top_risks"].push_back(risk["reasons"][i]);
-        json impact = source_impact_radius_json(symbol, "call|type|inheritance", direction, max_depth, minimal ? std::min(max_results, 25) : max_results);
+        json impact = source_impact_radius_json(symbol, "call|type|inheritance|override", direction, max_depth, minimal ? std::min(max_results, 25) : max_results);
         json summary = {{"truncated", impact.value("truncated", false)}};
         summary["impacted_count"] = impact["impacted_symbols"].size();
         summary["top_impacted"] = json::array();
@@ -4084,7 +5205,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                 seen.insert(sid);
                 json cached = try_cached_risk(db, "source", "symbols", sid);
                 json item;
-                if (!cached.is_null()) { any_cache = true; item = cached; }
+                if (!cached.is_null()) { any_cache = true; item = augment_override_risk(cached, sid); }
                 else { item = score_symbol(r); item["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}}; item["scoring_version"] = "3"; }
                 item["id"] = sid;
                 item["name"] = r.get("name");
@@ -4162,7 +5283,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
             root["test_gaps"] = test_gaps;
             root["review_priorities"] = priorities;
         }
-        add_next(root, {"source.review_context", "source.impact_radius", "source.risk_score"});
+        add_next(root, {"source.review_context", "source.find_overrides", "source.impact_radius", "source.risk_score"});
         return root;
     }
 
@@ -6069,6 +7190,7 @@ int main(int argc, char* argv[]) {
                 {"get_symbol_context",  [](SourceActions& s, const Args& a) { s.get_symbol_context(a); }},
                 {"read_file",           [](SourceActions& s, const Args& a) { s.read_file(a); }},
                 {"impact_radius",       [](SourceActions& s, const Args& a) { s.impact_radius(a); }},
+                {"find_overrides",      [](SourceActions& s, const Args& a) { s.find_overrides(a); }},
                 {"health",              [](SourceActions& s, const Args& a) { s.health(a); }},
                 {"repair_fts",          [](SourceActions& s, const Args& a) { s.repair_fts(a); }},
                 {"repair_crg_cache",    [](SourceActions& s, const Args& a) { s.repair_crg_cache(a); }},

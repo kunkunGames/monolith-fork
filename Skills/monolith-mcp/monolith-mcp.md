@@ -60,6 +60,8 @@ Plugins\Monolith\Binaries\monolith_query.exe source search_source UObject --limi
 Plugins\Monolith\Binaries\monolith_query.exe project search Health --limit=10 --include-content=true
 Plugins\Monolith\Binaries\monolith_query.exe project review_context /Game/Path/Asset --detail-level=minimal
 Plugins\Monolith\Binaries\monolith_query.exe source health
+Plugins\Monolith\Binaries\monolith_query.exe source find_overrides UActorComponent::BeginPlay --direction=in --max-depth=2
+Plugins\Monolith\Binaries\monolith_query.exe source review_hotspots --kind=override --limit=10
 ```
 
 The CLI is the MCP-free equivalent of `source_query` / `project_query` / `bridge_query` only — other namespaces need the running editor. Offline `project search` matches live `project.search`: `--include-content=true` is the default and searches assets, nodes, variables, parameters, DataTable rows, actors, and supplemental values; use `--include-content=false` for asset/node-only search.
@@ -69,4 +71,6 @@ The CLI is the MCP-free equivalent of `source_query` / `project_query` / `bridge
 - Route through the **live catalog** before calling actions; action names can change between versions.
 - Prefer `monolith_find` → `monolith_discover(..., mode:"schema")` over guessing parameters.
 - After indexing completes, the matching CRG projection/cache rebuilds automatically; run `project repair_crg_cache --execute` or `source repair_crg_cache --execute` only when health reports stale parity.
+- `source repair_crg_cache --execute` rebuilds EngineSource `crg_*` metrics plus the signature-aware `source_override_edges` cache used by `find_overrides`, `impact_radius`, `risk_score`, `review_context`, and `review_hotspots --kind=override`. Use `source repair_crg_cache --scope=override_edges --execute` when only the override edge cache/version is stale.
 - When project search looks stale, run `project health` first; `project repair_fts --target=all --execute` rebuilds all seven project FTS tables.
+- `Saved\graph.db` is the CRG-compatible source graph export/search artifact, not the source of truth for source risk/review actions. Its `flows`, `communities`, and `risk_index` auxiliary tables are reserved placeholders; zero rows there are not a health failure.

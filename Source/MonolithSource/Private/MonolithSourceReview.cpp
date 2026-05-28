@@ -10,7 +10,7 @@ namespace
 
 	bool WantsKind(const FString& EdgeKinds, const TCHAR* Kind)
 	{
-		if (EdgeKinds.IsEmpty()) return true; // default = all
+		if (EdgeKinds.IsEmpty()) return true;
 		return EdgeKinds.Contains(Kind);
 	}
 
@@ -138,9 +138,65 @@ namespace
 	/** Shared single-symbol risk used by risk_score and review_context. */
 	TSharedPtr<FJsonObject> ScoreSymbol(FMonolithSourceDatabase& Db, const FMonolithSourceSymbol& Sym)
 	{
+		const TArray<FMonolithSourceOverrideEdge> OverrideChildren = Db.GetOverridesTo(Sym.Id, 1000);
+		const TArray<FMonolithSourceOverrideEdge> OverrideParents = Db.GetOverridesFrom(Sym.Id, 100);
+
+		auto ApplyOverrideRisk = [&](TSharedPtr<FJsonObject> Risk) -> TSharedPtr<FJsonObject>
+		{
+			if (!Risk.IsValid() || (OverrideChildren.Num() == 0 && OverrideParents.Num() == 0))
+			{
+				return Risk;
+			}
+
+			double Score = 0.0;
+			Risk->TryGetNumberField(TEXT("score"), Score);
+			FJsonArr Reasons;
+			const TArray<TSharedPtr<FJsonValue>>* ExistingReasons = nullptr;
+			if (Risk->TryGetArrayField(TEXT("reasons"), ExistingReasons) && ExistingReasons)
+			{
+				Reasons = *ExistingReasons;
+			}
+
+			const double OverrideChildFactor = FMath::Min<double>(OverrideChildren.Num(), 30) / 30.0 * 0.20;
+			const double OverrideParentFactor = FMath::Min<double>(OverrideParents.Num(), 10) / 10.0 * 0.05;
+			if (OverrideChildFactor > 0.0)
+			{
+				Reasons.Add(MakeShared<FJsonValueString>(FString::Printf(
+					TEXT("override fan-out: %d child override method(s)"),
+					OverrideChildren.Num())));
+			}
+			if (OverrideParentFactor > 0.0)
+			{
+				Reasons.Add(MakeShared<FJsonValueString>(FString::Printf(
+					TEXT("overrides parent method(s): %d"),
+					OverrideParents.Num())));
+			}
+			Score = FMath::Clamp(Score + OverrideChildFactor + OverrideParentFactor, 0.0, 1.0);
+			Risk->SetNumberField(TEXT("score"), FMath::RoundToDouble(Score * 1000.0) / 1000.0);
+			Risk->SetStringField(TEXT("tier"), TierFor(Score));
+			Risk->SetArrayField(TEXT("reasons"), Reasons);
+
+			TSharedPtr<FJsonObject> RawCounts = Risk->GetObjectField(TEXT("raw_counts"));
+			if (!RawCounts.IsValid())
+			{
+				RawCounts = MakeShared<FJsonObject>();
+			}
+			RawCounts->SetNumberField(TEXT("override_children"), OverrideChildren.Num());
+			RawCounts->SetNumberField(TEXT("overridden_parents"), OverrideParents.Num());
+			Risk->SetObjectField(TEXT("raw_counts"), RawCounts);
+
+			TSharedPtr<FJsonObject> Cache = Risk->GetObjectField(TEXT("cache"));
+			if (Cache.IsValid())
+			{
+				Cache->SetBoolField(TEXT("override_augmented"), true);
+				Risk->SetObjectField(TEXT("cache"), Cache);
+			}
+			return Risk;
+		};
+
 		if (TSharedPtr<FJsonObject> Cached = Db.GetCachedRiskForSymbol(Sym.Id))
 		{
-			return Cached;
+			return ApplyOverrideRisk(Cached);
 		}
 
 		const TArray<FMonolithSourceReference> Callers = Db.GetReferencesTo(Sym.Id, TEXT(""), 500);
@@ -167,8 +223,12 @@ namespace
 			FString::Printf(TEXT("caller fan-in: %d"), Callers.Num()));
 		Factor(FMath::Min<double>(Children.Num(), 30) / 30.0 * 0.25,
 			FString::Printf(TEXT("inheritance descendants (1-hop): %d"), Children.Num()));
+		Factor(FMath::Min<double>(OverrideChildren.Num(), 30) / 30.0 * 0.20,
+			FString::Printf(TEXT("override fan-out: %d child override method(s)"), OverrideChildren.Num()));
 		Factor(FMath::Min<double>(Callees.Num(), 50) / 50.0 * 0.10,
 			FString::Printf(TEXT("callee fan-out: %d"), Callees.Num()));
+		Factor(FMath::Min<double>(OverrideParents.Num(), 10) / 10.0 * 0.05,
+			FString::Printf(TEXT("overrides parent method(s): %d"), OverrideParents.Num()));
 		Factor(Sym.bIsUEMacro ? 0.15 : 0.0,
 			TEXT("UE reflection macro symbol (UCLASS/UFUNCTION/UPROPERTY family)"));
 		Factor(bCrossesFiles ? FMath::Min<double>(CallerFiles.Num(), 20) / 20.0 * 0.15 : 0.0,
@@ -197,6 +257,8 @@ namespace
 		RC->SetNumberField(TEXT("callees"), Callees.Num());
 		RC->SetNumberField(TEXT("descendants"), Children.Num());
 		RC->SetNumberField(TEXT("ancestors"), Parents.Num());
+		RC->SetNumberField(TEXT("override_children"), OverrideChildren.Num());
+		RC->SetNumberField(TEXT("overridden_parents"), OverrideParents.Num());
 		RC->SetNumberField(TEXT("caller_files"), CallerFiles.Num());
 		RC->SetBoolField(TEXT("is_ue_macro"), Sym.bIsUEMacro);
 		RC->SetNumberField(TEXT("sensitivity"), Sensitivity);
@@ -217,17 +279,19 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ImpactRadius(
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	const int32 Depth = ClampDepth(MaxDepth);
 	const int32 Limit = ClampResults(MaxResults);
+	const FString EffectiveEdgeKinds = EdgeKinds.IsEmpty() ? TEXT("call|type|inheritance") : EdgeKinds;
 	const bool bIn = Direction != TEXT("out");
 	const bool bOut = Direction != TEXT("in");
-	const bool bCall = WantsKind(EdgeKinds, TEXT("call"));
-	const bool bType = WantsKind(EdgeKinds, TEXT("type"));
+	const bool bCall = WantsKind(EffectiveEdgeKinds, TEXT("call"));
+	const bool bType = WantsKind(EffectiveEdgeKinds, TEXT("type"));
 	const bool bRefs = bCall || bType;
-	const bool bInh = WantsKind(EdgeKinds, TEXT("inheritance"));
-	const bool bIncludeRequested = !EdgeKinds.IsEmpty() && WantsKind(EdgeKinds, TEXT("include"));
+	const bool bInh = WantsKind(EffectiveEdgeKinds, TEXT("inheritance"));
+	const bool bOverride = WantsKind(EffectiveEdgeKinds, TEXT("override"));
+	const bool bIncludeRequested = !EdgeKinds.IsEmpty() && WantsKind(EffectiveEdgeKinds, TEXT("include"));
 
 	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
 	Input->SetStringField(TEXT("symbol"), Symbol);
-	Input->SetStringField(TEXT("edge_kinds"), EdgeKinds.IsEmpty() ? TEXT("call|type|inheritance") : EdgeKinds);
+	Input->SetStringField(TEXT("edge_kinds"), EffectiveEdgeKinds);
 	Input->SetStringField(TEXT("direction"), Direction);
 	Root->SetObjectField(TEXT("input"), Input);
 	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
@@ -316,6 +380,20 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ImpactRadius(
 					Neighbors.Emplace(C.Id, TEXT("inheritance"));
 				}
 			}
+			if (bOverride && bOut)
+			{
+				for (const FMonolithSourceOverrideEdge& O : Db.GetOverridesFrom(Cur, PerNode))
+				{
+					Neighbors.Emplace(O.ToSymbolId, TEXT("override"));
+				}
+			}
+			if (bOverride && bIn)
+			{
+				for (const FMonolithSourceOverrideEdge& O : Db.GetOverridesTo(Cur, PerNode))
+				{
+					Neighbors.Emplace(O.FromSymbolId, TEXT("override"));
+				}
+			}
 
 			for (const TPair<int64, FString>& N : Neighbors)
 			{
@@ -352,7 +430,38 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ImpactRadius(
 	Root->SetArrayField(TEXT("edges"), Edges);
 	Root->SetBoolField(TEXT("truncated"), bTrunc);
 	Root->SetArrayField(TEXT("warnings"), Warnings);
-	AddNext(Root, { TEXT("source.review_context"), TEXT("source.risk_score"), TEXT("source.find_callers") });
+	AddNext(Root, { TEXT("source.review_context"), TEXT("source.find_overrides"), TEXT("source.risk_score"), TEXT("source.find_callers") });
+	return Root;
+}
+
+TSharedPtr<FJsonObject> FMonolithSourceReview::FindOverrides(
+	FMonolithSourceDatabase& Db,
+	const FString& Symbol,
+	const FString& Direction,
+	int32 MaxDepth,
+	int32 MaxResults)
+{
+	const FString EffectiveDirection = Direction.IsEmpty() ? TEXT("both") : Direction;
+	TSharedPtr<FJsonObject> Root = ImpactRadius(
+		Db,
+		Symbol,
+		TEXT("override"),
+		EffectiveDirection,
+		MaxDepth,
+		MaxResults);
+
+	const TArray<TSharedPtr<FJsonValue>>* Impacted = nullptr;
+	if (Root->TryGetArrayField(TEXT("impacted_symbols"), Impacted) && Impacted)
+	{
+		Root->SetArrayField(TEXT("overrides"), *Impacted);
+		Root->SetStringField(TEXT("summary"), FString::Printf(
+			TEXT("%d override-related symbol(s) within depth %d (%s) of %s"),
+			Impacted->Num(),
+			ClampDepth(MaxDepth),
+			*EffectiveDirection,
+			*Symbol));
+	}
+	AddNext(Root, { TEXT("source.impact_radius"), TEXT("source.review_context"), TEXT("source.risk_score") });
 	return Root;
 }
 
@@ -417,7 +526,7 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::RiskScore(
 	Root->SetStringField(TEXT("scoring_version"), ExpectedScoringVersion);
 	Root->SetArrayField(TEXT("items"), Items);
 	Root->SetBoolField(TEXT("truncated"), false);
-	AddNext(Root, { TEXT("source.repair_crg_cache"), TEXT("source.review_context"), TEXT("source.impact_radius") });
+	AddNext(Root, { TEXT("source.repair_crg_cache"), TEXT("source.review_context"), TEXT("source.find_overrides"), TEXT("source.impact_radius") });
 	return Root;
 }
 
@@ -470,7 +579,7 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(
 	Root->SetArrayField(TEXT("top_risks"), TopRiskReasons(Risk, 5));
 
 	TSharedPtr<FJsonObject> Impact = ImpactRadius(Db, Symbol,
-		TEXT("call|type|inheritance"),
+		TEXT("call|type|inheritance|override"),
 		Direction.IsEmpty() ? TEXT("both") : Direction,
 		MaxDepth, bMinimal ? FMath::Min(MaxResults, 25) : MaxResults);
 
@@ -521,6 +630,6 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(
 		*Seed.Name, *RiskTier,
 		bMinimal ? TEXT("minimal") : TEXT("standard")));
 	Root->SetBoolField(TEXT("truncated"), bImpactTruncated);
-	AddNext(Root, { TEXT("source.read_source"), TEXT("source.impact_radius"), TEXT("source.get_class_hierarchy") });
+	AddNext(Root, { TEXT("source.read_source"), TEXT("source.impact_radius"), TEXT("source.find_overrides"), TEXT("source.get_class_hierarchy") });
 	return Root;
 }
