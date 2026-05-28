@@ -286,8 +286,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleOverrideParentFuncti
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString ParentFuncName = Params->GetStringField(TEXT("parent_function_name"));
-	if (ParentFuncName.IsEmpty())
+	FString ParentFuncName;
+	if (!Params->TryGetStringField(TEXT("parent_function_name"), ParentFuncName) || ParentFuncName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: parent_function_name"));
 	}

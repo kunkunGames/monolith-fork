@@ -268,8 +268,8 @@ FMonolithActionResult FMonolithBlueprintDataTableActions::HandleReadDataTable(co
 {
 	using namespace MonolithDataTableInternal;
 
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	}
@@ -339,8 +339,8 @@ FMonolithActionResult FMonolithBlueprintDataTableActions::HandleDescribeDataTabl
 {
 	using namespace MonolithDataTableInternal;
 
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	}
@@ -371,8 +371,8 @@ FMonolithActionResult FMonolithBlueprintDataTableActions::HandleSetDataTableRows
 {
 	using namespace MonolithDataTableInternal;
 
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	}
@@ -437,8 +437,8 @@ FMonolithActionResult FMonolithBlueprintDataTableActions::HandleSetDataTableRows
 		}
 		const TSharedPtr<FJsonObject>& RowObj = *RowObjPtr;
 
-		const FString RowName = RowObj->GetStringField(TEXT("row_name"));
-		if (RowName.IsEmpty())
+		FString RowName;
+		if (!RowObj->TryGetStringField(TEXT("row_name"), RowName) || RowName.IsEmpty())
 		{
 			TotalErrors++;
 			bWouldApplyAll = false;
@@ -598,12 +598,12 @@ FMonolithActionResult FMonolithBlueprintDataTableActions::HandleRenameDataTableR
 {
 	using namespace MonolithDataTableInternal;
 
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString OldName = Params->GetStringField(TEXT("old_name"));
-	const FString NewName = Params->GetStringField(TEXT("new_name"));
-	if (AssetPath.IsEmpty()) { return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path")); }
-	if (OldName.IsEmpty())   { return FMonolithActionResult::Error(TEXT("Missing required parameter: old_name")); }
-	if (NewName.IsEmpty())   { return FMonolithActionResult::Error(TEXT("Missing required parameter: new_name")); }
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) { return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path")); }
+	FString OldName;
+	if (!Params->TryGetStringField(TEXT("old_name"), OldName) || OldName.IsEmpty())   { return FMonolithActionResult::Error(TEXT("Missing required parameter: old_name")); }
+	FString NewName;
+	if (!Params->TryGetStringField(TEXT("new_name"), NewName) || NewName.IsEmpty())   { return FMonolithActionResult::Error(TEXT("Missing required parameter: new_name")); }
 
 	const UScriptStruct* RowStruct = nullptr;
 	FString Error;
@@ -641,12 +641,12 @@ FMonolithActionResult FMonolithBlueprintDataTableActions::HandleDuplicateDataTab
 {
 	using namespace MonolithDataTableInternal;
 
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString SourceRow = Params->GetStringField(TEXT("source_row"));
-	const FString NewName = Params->GetStringField(TEXT("new_name"));
-	if (AssetPath.IsEmpty())  { return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path")); }
-	if (SourceRow.IsEmpty())  { return FMonolithActionResult::Error(TEXT("Missing required parameter: source_row")); }
-	if (NewName.IsEmpty())    { return FMonolithActionResult::Error(TEXT("Missing required parameter: new_name")); }
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())  { return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path")); }
+	FString SourceRow;
+	if (!Params->TryGetStringField(TEXT("source_row"), SourceRow) || SourceRow.IsEmpty())  { return FMonolithActionResult::Error(TEXT("Missing required parameter: source_row")); }
+	FString NewName;
+	if (!Params->TryGetStringField(TEXT("new_name"), NewName) || NewName.IsEmpty())    { return FMonolithActionResult::Error(TEXT("Missing required parameter: new_name")); }
 
 	const UScriptStruct* RowStruct = nullptr;
 	FString Error;
@@ -685,8 +685,8 @@ FMonolithActionResult FMonolithBlueprintDataTableActions::HandleExportDataTable(
 #if WITH_EDITOR
 	using namespace MonolithDataTableInternal;
 
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	}
@@ -737,10 +737,10 @@ FMonolithActionResult FMonolithBlueprintDataTableActions::HandleImportDataTable(
 {
 	using namespace MonolithDataTableInternal;
 
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString Text = Params->GetStringField(TEXT("text"));
-	if (AssetPath.IsEmpty()) { return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path")); }
-	if (Text.IsEmpty())      { return FMonolithActionResult::Error(TEXT("Missing required parameter: text")); }
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) { return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path")); }
+	FString Text;
+	if (!Params->TryGetStringField(TEXT("text"), Text) || Text.IsEmpty())      { return FMonolithActionResult::Error(TEXT("Missing required parameter: text")); }
 
 	UDataTable* DataTable = FMonolithAssetUtils::LoadAssetByPath<UDataTable>(AssetPath);
 	if (!DataTable)

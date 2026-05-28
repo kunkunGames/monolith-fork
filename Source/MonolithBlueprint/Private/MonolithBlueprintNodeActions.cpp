@@ -1985,14 +1985,14 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddPropertyAccess(con
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	const FString MemberClassName = Params->GetStringField(TEXT("member_class"));
-	if (MemberClassName.IsEmpty())
+	FString MemberClassName;
+	if (!Params->TryGetStringField(TEXT("member_class"), MemberClassName) || MemberClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("add_property_access requires 'member_class'"));
 	}
 
-	const FString MemberName = Params->GetStringField(TEXT("member_name"));
-	if (MemberName.IsEmpty())
+	FString MemberName;
+	if (!Params->TryGetStringField(TEXT("member_name"), MemberName) || MemberName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("add_property_access requires 'member_name'"));
 	}
@@ -2000,7 +2000,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddPropertyAccess(con
 	bool bIsSetter = false;
 	Params->TryGetBoolField(TEXT("is_setter"), bIsSetter);
 
-	const FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	UEdGraph* Graph = MonolithBlueprintInternal::FindGraphByName(BP, GraphName);
 	if (!Graph)
 	{
@@ -2808,7 +2809,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 			// real write would produce. Without an asset_path the bias is off and
 			// behaviour is the unbiased first-match.
 			bool bPreferWidget = false;
-			if (!Params->GetStringField(TEXT("asset_path")).IsEmpty())
+			FString ResolveAssetPathParam;
+			if (Params->TryGetStringField(TEXT("asset_path"), ResolveAssetPathParam) && !ResolveAssetPathParam.IsEmpty())
 			{
 				FString ResolveAssetPath;
 				UBlueprint* ContextBP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, ResolveAssetPath);

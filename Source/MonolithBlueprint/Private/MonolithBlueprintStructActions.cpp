@@ -1494,14 +1494,14 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 {
 	using namespace MonolithSeedDataAssetInternal;
 
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty())
+	FString SavePath;
+	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"));
 	}
 
-	FString ClassName = Params->GetStringField(TEXT("class_name"));
-	if (ClassName.IsEmpty())
+	FString ClassName;
+	if (!Params->TryGetStringField(TEXT("class_name"), ClassName) || ClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: class_name"));
 	}

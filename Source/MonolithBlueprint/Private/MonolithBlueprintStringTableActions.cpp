@@ -74,8 +74,8 @@ FMonolithActionResult FMonolithBlueprintStringTableActions::HandleReadStringTabl
 {
 	using namespace MonolithStringTableInternal;
 
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	}
@@ -138,8 +138,8 @@ FMonolithActionResult FMonolithBlueprintStringTableActions::HandleSetStringTable
 {
 	using namespace MonolithStringTableInternal;
 
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	}
@@ -232,10 +232,10 @@ FMonolithActionResult FMonolithBlueprintStringTableActions::HandleRemoveStringTa
 {
 	using namespace MonolithStringTableInternal;
 
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString Key = Params->GetStringField(TEXT("key"));
-	if (AssetPath.IsEmpty()) { return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path")); }
-	if (Key.IsEmpty())       { return FMonolithActionResult::Error(TEXT("Missing required parameter: key")); }
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty()) { return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path")); }
+	FString Key;
+	if (!Params->TryGetStringField(TEXT("key"), Key) || Key.IsEmpty())       { return FMonolithActionResult::Error(TEXT("Missing required parameter: key")); }
 
 	FString Error;
 	UStringTable* StringTable = ResolveStringTable(AssetPath, Error);
