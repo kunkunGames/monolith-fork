@@ -813,7 +813,8 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleCreateStateTree(const T
 	UStateTreeFactory* Factory = NewObject<UStateTreeFactory>();
 
 	// Set schema if provided
-	const FString SchemaClassName = Params->HasField(TEXT("schema_class")) ? Params->GetStringField(TEXT("schema_class")) : FString();
+	FString SchemaClassName;
+	Params->TryGetStringField(TEXT("schema_class"), SchemaClassName);
 	UClass* SchemaClass = ResolveStateTreeSchemaClass(SchemaClassName);
 	if (!SchemaClass)
 	{
@@ -3083,7 +3084,8 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleBuildStateTreeFromSpec(
 	UStateTreeFactory* Factory = NewObject<UStateTreeFactory>();
 
 	// Set schema from spec
-	const FString SchemaClassName = Spec->HasField(TEXT("schema_class")) ? Spec->GetStringField(TEXT("schema_class")) : FString();
+	FString SchemaClassName;
+	Spec->TryGetStringField(TEXT("schema_class"), SchemaClassName);
 	UClass* SchemaClass = ResolveStateTreeSchemaClass(SchemaClassName);
 	if (!SchemaClass)
 	{

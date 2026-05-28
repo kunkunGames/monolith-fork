@@ -75,3 +75,10 @@
 **Learning:** Hard crashes occur when FJsonObject fails to find a field using `GetStringField`. Using `TryGetStringField` gracefully checks presence. The `ToLower()` chain must be wrapped inside the if statement where `TryGetStringField` returns true to retain original behavior safely.
 **Reuse rule:** Future AI action handlers should always prefer `TryGetStringField` with a fallback initialization rather than directly chaining `GetStringField().ToLower()`.
 **Avoid:** Avoid using `GetStringField` unless field existence is fully guaranteed.
+
+## 2026-05-29 - Safe JSON Schema Extraction for StateTree
+
+**Pattern:** Replaced `HasField(TEXT("schema_class")) ? GetStringField(TEXT("schema_class")) : FString()` with `TryGetStringField` in `MonolithAIStateTreeActions.cpp`.
+**Learning:** Optional string extraction should not depend on `GetStringField`; if a supplied JSON value has the wrong type, the handler should keep the default or return a controlled error instead of relying on assertion-prone accessors.
+**Reuse rule:** For optional string properties that default to empty strings, initialize an `FString` and use `TryGetStringField`.
+**Avoid:** Avoid the ternary `HasField` + `GetStringField` pattern for optional user-supplied JSON fields.
