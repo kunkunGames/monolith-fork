@@ -41,3 +41,7 @@ Prevention: Operations that allocate uncompressed rendering buffers or composite
 **Boundary:** `sound_waves` array length in `CreateInteractiveMetaSound` action inside `MonolithAudioMetaSoundActions.cpp`.
 **Learning:** An unbounded arrays combined with iterating and creating builder node representations within `CreateInteractiveMetaSound` can lead to unchecked resource allocation resulting in out-of-memory or timeout exploits for large inputs.
 **Prevention:** Always assert a hard maximum array boundary (e.g. 100) after reading an array field and before processing nodes using `FString::Printf(TEXT("... exceeds the maximum allowed (100)"), ArrayPtr->Num())` for large list based actions.
+## 2026-05-28 - 🧱 LimitGuard: Bound audio batch actions array lengths
+**Boundary:** `asset_paths` array length in all audio batch actions.
+**Learning:** `asset_paths` was unbounded across 10+ batch operations like `batch_assign_sound_class`, `batch_assign_attenuation`, `apply_audio_template`, etc. If an extremely large array of assets (e.g. 50,000+ project assets) is passed by a user, iterating and mutating all those assets synchronously in a single undo transaction without yield could cause massive memory spikes and lock up the editor.
+**Prevention:** In `AudioBatchHelpers::ParseAssetPaths`, add a hard cap on `asset_paths.Num()` (e.g. `200` to mirror `batch_execute` standards) to prevent excessive single-action processing load.

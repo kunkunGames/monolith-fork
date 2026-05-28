@@ -89,6 +89,13 @@ namespace AudioBatchHelpers
 			OutError = TEXT("asset_paths array is empty");
 			return false;
 		}
+
+		if (OutPaths.Num() > 200)
+		{
+			OutError = FString::Printf(TEXT("asset_paths array contains %d entries, which exceeds the maximum allowed (200)"), OutPaths.Num());
+			return false;
+		}
+
 		return true;
 	}
 

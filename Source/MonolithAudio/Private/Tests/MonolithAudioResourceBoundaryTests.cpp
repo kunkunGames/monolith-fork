@@ -2,6 +2,7 @@
 #include "MonolithAudioQueryActions.h"
 #include "MonolithAudioMetaSoundActions.h"
 #include "MonolithAudioSoundCueActions.h"
+#include "MonolithAudioBatchActions.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 
@@ -418,11 +419,41 @@ bool FMonolithAudioListAvailableMetaSoundNodesLimitTest::RunTest(const FString& 
 
 namespace
 {
+FMonolithActionResult ExecuteBatchAssignSoundClass(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithAudioBatchActions::RegisterActions(FMonolithToolRegistry::Get());
+	return FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("batch_assign_sound_class"), Params);
+}
+
 FMonolithActionResult ExecuteCreateRandomSoundCue(const TSharedPtr<FJsonObject>& Params)
 {
 	FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry::Get());
 	return FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("create_random_sound_cue"), Params);
 }
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioBatchActionsLimitTest, "Monolith.LimitGuard.Audio.BatchActionsClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAudioBatchActionsLimitTest::RunTest(const FString& Parameters)
+{
+	// Test oversized array is rejected
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("sound_class"), TEXT("/Game/Temp/SomeClass"));
+
+		TArray<TSharedPtr<FJsonValue>> OversizedWavesArray;
+		for (int32 i = 0; i < 201; ++i)
+		{
+			OversizedWavesArray.Add(MakeShared<FJsonValueString>(TEXT("/Game/Temp/SomeWave")));
+		}
+		Params->SetArrayField(TEXT("asset_paths"), OversizedWavesArray);
+
+		FMonolithActionResult Result = ExecuteBatchAssignSoundClass(Params);
+
+		TestFalse(TEXT("Oversized wave array should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention maximum allowed"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed")));
+	}
+
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioCreateWavePlayerNodesLimitTest, "Monolith.LimitGuard.Audio.CreateWavePlayerNodesClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
