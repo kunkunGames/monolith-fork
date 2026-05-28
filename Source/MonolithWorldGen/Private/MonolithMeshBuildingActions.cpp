@@ -224,12 +224,38 @@ bool FMonolithMeshBuildingActions::ParseDoors(const TArray<TSharedPtr<FJsonValue
 			Door.EdgeEnd = Door.EdgeStart;
 		}
 
+		double TmpWidth;
 		if ((*DoorObj)->HasField(TEXT("width")))
-			Door.Width = static_cast<float>((*DoorObj)->GetNumberField(TEXT("width")));
+		{
+			if (!(*DoorObj)->TryGetNumberField(TEXT("width"), TmpWidth))
+			{
+				OutError = FString::Printf(TEXT("doors[%d] 'width' must be a number"), i);
+				return false;
+			}
+			Door.Width = static_cast<float>(TmpWidth);
+		}
+
+		double TmpHeight;
 		if ((*DoorObj)->HasField(TEXT("height")))
-			Door.Height = static_cast<float>((*DoorObj)->GetNumberField(TEXT("height")));
+		{
+			if (!(*DoorObj)->TryGetNumberField(TEXT("height"), TmpHeight))
+			{
+				OutError = FString::Printf(TEXT("doors[%d] 'height' must be a number"), i);
+				return false;
+			}
+			Door.Height = static_cast<float>(TmpHeight);
+		}
+
+		bool bTmpTraversable;
 		if ((*DoorObj)->HasField(TEXT("traversable")))
-			Door.bTraversable = (*DoorObj)->GetBoolField(TEXT("traversable"));
+		{
+			if (!(*DoorObj)->TryGetBoolField(TEXT("traversable"), bTmpTraversable))
+			{
+				OutError = FString::Printf(TEXT("doors[%d] 'traversable' must be a boolean"), i);
+				return false;
+			}
+			Door.bTraversable = bTmpTraversable;
+		}
 
 		OutDoors.Add(MoveTemp(Door));
 	}
@@ -254,10 +280,27 @@ bool FMonolithMeshBuildingActions::ParseStairwells(const TArray<TSharedPtr<FJson
 			Stair.StairwellId = FString::Printf(TEXT("stair_%d"), i);
 		}
 
+		double TmpConnectsA;
 		if ((*StairObj)->HasField(TEXT("connects_floor_a")))
-			Stair.ConnectsFloorA = static_cast<int32>((*StairObj)->GetNumberField(TEXT("connects_floor_a")));
+		{
+			if (!(*StairObj)->TryGetNumberField(TEXT("connects_floor_a"), TmpConnectsA))
+			{
+				OutError = FString::Printf(TEXT("stairwells[%d] 'connects_floor_a' must be a number"), i);
+				return false;
+			}
+			Stair.ConnectsFloorA = static_cast<int32>(TmpConnectsA);
+		}
+
+		double TmpConnectsB;
 		if ((*StairObj)->HasField(TEXT("connects_floor_b")))
-			Stair.ConnectsFloorB = static_cast<int32>((*StairObj)->GetNumberField(TEXT("connects_floor_b")));
+		{
+			if (!(*StairObj)->TryGetNumberField(TEXT("connects_floor_b"), TmpConnectsB))
+			{
+				OutError = FString::Printf(TEXT("stairwells[%d] 'connects_floor_b' must be a number"), i);
+				return false;
+			}
+			Stair.ConnectsFloorB = static_cast<int32>(TmpConnectsB);
+		}
 
 		const TArray<TSharedPtr<FJsonValue>>* CellsArr = nullptr;
 		if ((*StairObj)->TryGetArrayField(TEXT("grid_cells"), CellsArr) && CellsArr)
@@ -2085,16 +2128,19 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateGridFromRooms(const TS
 		}
 		(*RoomObj)->TryGetStringField(TEXT("room_type"), Rect.RoomType);
 
-		if (!(*RoomObj)->HasField(TEXT("x")) || !(*RoomObj)->HasField(TEXT("y")) ||
-			!(*RoomObj)->HasField(TEXT("width")) || !(*RoomObj)->HasField(TEXT("height")))
+		double TmpX, TmpY, TmpW, TmpH;
+		if (!(*RoomObj)->TryGetNumberField(TEXT("x"), TmpX) ||
+			!(*RoomObj)->TryGetNumberField(TEXT("y"), TmpY) ||
+			!(*RoomObj)->TryGetNumberField(TEXT("width"), TmpW) ||
+			!(*RoomObj)->TryGetNumberField(TEXT("height"), TmpH))
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("rooms[%d] missing x, y, width, or height"), i));
+			return FMonolithActionResult::Error(FString::Printf(TEXT("rooms[%d] missing or invalid x, y, width, or height"), i));
 		}
 
-		Rect.X = static_cast<int32>((*RoomObj)->GetNumberField(TEXT("x")));
-		Rect.Y = static_cast<int32>((*RoomObj)->GetNumberField(TEXT("y")));
-		Rect.Width = static_cast<int32>((*RoomObj)->GetNumberField(TEXT("width")));
-		Rect.Height = static_cast<int32>((*RoomObj)->GetNumberField(TEXT("height")));
+		Rect.X = static_cast<int32>(TmpX);
+		Rect.Y = static_cast<int32>(TmpY);
+		Rect.Width = static_cast<int32>(TmpW);
+		Rect.Height = static_cast<int32>(TmpH);
 
 		if (Rect.Width <= 0 || Rect.Height <= 0)
 		{

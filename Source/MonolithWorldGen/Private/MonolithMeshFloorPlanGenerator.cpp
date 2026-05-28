@@ -1006,8 +1006,16 @@ bool FMonolithMeshFloorPlanGenerator::ParseArchetypeJson(const TSharedPtr<FJsonO
 	Json->TryGetStringField(TEXT("roof_type"), OutArchetype.RoofType);
 
 	// Parse floor_height
+	double TmpFloorHeight;
 	if (Json->HasField(TEXT("floor_height")))
-		OutArchetype.FloorHeight = static_cast<float>(Json->GetNumberField(TEXT("floor_height")));
+	{
+		if (!Json->TryGetNumberField(TEXT("floor_height"), TmpFloorHeight))
+		{
+			OutError = TEXT("'floor_height' must be a number");
+			return false;
+		}
+		OutArchetype.FloorHeight = static_cast<float>(TmpFloorHeight);
+	}
 
 	// Parse material_hints
 	const TSharedPtr<FJsonObject>* MatHintsObj = nullptr;
@@ -1022,10 +1030,26 @@ bool FMonolithMeshFloorPlanGenerator::ParseArchetypeJson(const TSharedPtr<FJsonO
 	const TSharedPtr<FJsonObject>* FloorsObj = nullptr;
 	if (Json->TryGetObjectField(TEXT("floors"), FloorsObj) && FloorsObj && (*FloorsObj).IsValid())
 	{
+		double TmpMin;
 		if ((*FloorsObj)->HasField(TEXT("min")))
-			OutArchetype.FloorsMin = static_cast<int32>((*FloorsObj)->GetNumberField(TEXT("min")));
+		{
+			if (!(*FloorsObj)->TryGetNumberField(TEXT("min"), TmpMin))
+			{
+				OutError = TEXT("'floors.min' must be a number");
+				return false;
+			}
+			OutArchetype.FloorsMin = static_cast<int32>(TmpMin);
+		}
+		double TmpMax;
 		if ((*FloorsObj)->HasField(TEXT("max")))
-			OutArchetype.FloorsMax = static_cast<int32>((*FloorsObj)->GetNumberField(TEXT("max")));
+		{
+			if (!(*FloorsObj)->TryGetNumberField(TEXT("max"), TmpMax))
+			{
+				OutError = TEXT("'floors.max' must be a number");
+				return false;
+			}
+			OutArchetype.FloorsMax = static_cast<int32>(TmpMax);
+		}
 	}
 
 	// WP-2: Parse circulation type
@@ -1052,10 +1076,27 @@ bool FMonolithMeshFloorPlanGenerator::ParseArchetypeJson(const TSharedPtr<FJsonO
 		FArchetypeRoom Room;
 		(*RObj)->TryGetStringField(TEXT("type"), Room.Type);
 
+		double TmpMinArea;
 		if ((*RObj)->HasField(TEXT("min_area")))
-			Room.MinArea = static_cast<float>((*RObj)->GetNumberField(TEXT("min_area")));
+		{
+			if (!(*RObj)->TryGetNumberField(TEXT("min_area"), TmpMinArea))
+			{
+				OutError = FString::Printf(TEXT("room type '%s': 'min_area' must be a number"), *Room.Type);
+				return false;
+			}
+			Room.MinArea = static_cast<float>(TmpMinArea);
+		}
+
+		double TmpMaxArea;
 		if ((*RObj)->HasField(TEXT("max_area")))
-			Room.MaxArea = static_cast<float>((*RObj)->GetNumberField(TEXT("max_area")));
+		{
+			if (!(*RObj)->TryGetNumberField(TEXT("max_area"), TmpMaxArea))
+			{
+				OutError = FString::Printf(TEXT("room type '%s': 'max_area' must be a number"), *Room.Type);
+				return false;
+			}
+			Room.MaxArea = static_cast<float>(TmpMaxArea);
+		}
 
 		// Count can be a number or an array [min, max]
 		if ((*RObj)->HasField(TEXT("count")))
@@ -1068,30 +1109,87 @@ bool FMonolithMeshFloorPlanGenerator::ParseArchetypeJson(const TSharedPtr<FJsonO
 			}
 			else
 			{
-				int32 CountVal = static_cast<int32>((*RObj)->GetNumberField(TEXT("count")));
+				double TmpCountVal;
+				if (!(*RObj)->TryGetNumberField(TEXT("count"), TmpCountVal))
+				{
+					OutError = FString::Printf(TEXT("room type '%s': 'count' must be a number or an array"), *Room.Type);
+					return false;
+				}
+				int32 CountVal = static_cast<int32>(TmpCountVal);
 				Room.CountMin = CountVal;
 				Room.CountMax = CountVal;
 			}
 		}
 
+		bool bTmpRequired;
 		if ((*RObj)->HasField(TEXT("required")))
-			Room.bRequired = (*RObj)->GetBoolField(TEXT("required"));
+		{
+			if (!(*RObj)->TryGetBoolField(TEXT("required"), bTmpRequired))
+			{
+				OutError = FString::Printf(TEXT("room type '%s': 'required' must be a boolean"), *Room.Type);
+				return false;
+			}
+			Room.bRequired = bTmpRequired;
+		}
+
+		double TmpPriority;
 		if ((*RObj)->HasField(TEXT("priority")))
-			Room.Priority = static_cast<int32>((*RObj)->GetNumberField(TEXT("priority")));
+		{
+			if (!(*RObj)->TryGetNumberField(TEXT("priority"), TmpPriority))
+			{
+				OutError = FString::Printf(TEXT("room type '%s': 'priority' must be a number"), *Room.Type);
+				return false;
+			}
+			Room.Priority = static_cast<int32>(TmpPriority);
+		}
+
+		bool bTmpAutoGenerate;
 		if ((*RObj)->HasField(TEXT("auto_generate")))
-			Room.bAutoGenerate = (*RObj)->GetBoolField(TEXT("auto_generate"));
+		{
+			if (!(*RObj)->TryGetBoolField(TEXT("auto_generate"), bTmpAutoGenerate))
+			{
+				OutError = FString::Printf(TEXT("room type '%s': 'auto_generate' must be a boolean"), *Room.Type);
+				return false;
+			}
+			Room.bAutoGenerate = bTmpAutoGenerate;
+		}
+
+		bool bTmpExteriorWall;
 		if ((*RObj)->HasField(TEXT("exterior_wall")))
-			Room.bExteriorWall = (*RObj)->GetBoolField(TEXT("exterior_wall"));
+		{
+			if (!(*RObj)->TryGetBoolField(TEXT("exterior_wall"), bTmpExteriorWall))
+			{
+				OutError = FString::Printf(TEXT("room type '%s': 'exterior_wall' must be a boolean"), *Room.Type);
+				return false;
+			}
+			Room.bExteriorWall = bTmpExteriorWall;
+		}
 
 		// Per-floor assignment
 		if ((*RObj)->HasField(TEXT("floor")))
 			(*RObj)->TryGetStringField(TEXT("floor"), Room.Floor);
 
-		// Aspect ratio constraints
+		double TmpMinAspect;
 		if ((*RObj)->HasField(TEXT("min_aspect")))
-			Room.MinAspect = static_cast<float>((*RObj)->GetNumberField(TEXT("min_aspect")));
+		{
+			if (!(*RObj)->TryGetNumberField(TEXT("min_aspect"), TmpMinAspect))
+			{
+				OutError = FString::Printf(TEXT("room type '%s': 'min_aspect' must be a number"), *Room.Type);
+				return false;
+			}
+			Room.MinAspect = static_cast<float>(TmpMinAspect);
+		}
+
+		double TmpMaxAspect;
 		if ((*RObj)->HasField(TEXT("max_aspect")))
-			Room.MaxAspect = static_cast<float>((*RObj)->GetNumberField(TEXT("max_aspect")));
+		{
+			if (!(*RObj)->TryGetNumberField(TEXT("max_aspect"), TmpMaxAspect))
+			{
+				OutError = FString::Printf(TEXT("room type '%s': 'max_aspect' must be a number"), *Room.Type);
+				return false;
+			}
+			Room.MaxAspect = static_cast<float>(TmpMaxAspect);
+		}
 
 		OutArchetype.Rooms.Add(MoveTemp(Room));
 	}
