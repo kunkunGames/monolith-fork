@@ -160,6 +160,7 @@ namespace MonolithCommonUIAccessibility
 				SkipObj->SetStringField(TEXT("missing_property"), TEXT("bRespectReduceMotion"));
 
 				TArray<TSharedPtr<FJsonValue>> SuggestedArr;
+				SuggestedArr.Reserve(SuggestedParentClasses.Num());
 				for (const FString& Cls : SuggestedParentClasses)
 				{
 					SuggestedArr.Add(MakeShared<FJsonValueString>(Cls));
