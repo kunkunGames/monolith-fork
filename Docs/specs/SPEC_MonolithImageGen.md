@@ -42,7 +42,7 @@ The module depends on `MonolithAsset` for the exported `MonolithAsset::FTextureI
 | Setting | Default | Effect |
 |---------|---------|--------|
 | `bEnableImageGen` | `true` | Enables `MonolithImageGen` startup registration for `imagegen` actions. Restart required after changing. |
-| `ImageGenBridgeServerUrl` | `http://192.168.0.10:3333` | Base URL for the external ima2/imag2-gen server used by `generate_image_via_ima2`. |
+| `ImageGenBridgeServerUrl` | `http://192.168.1.147:3333` | Base URL for the external ima2/imag2-gen server used by `generate_image_via_ima2`. |
 | `ImageGenBridgeProvider` | `oauth` | Provider forwarded to ima2. `oauth` uses the server host's Codex OAuth session; `api` requires the server host to provide `OPENAI_API_KEY`. |
 | `ImageGenBridgeDefaultModel` | `gpt-5.5` | Model forwarded to ima2 when `generate_image_via_ima2` omits `model`. |
 | `ImageGenBridgeTimeoutSeconds` | `420.0` | Blocking HTTP timeout for a generation request. |
@@ -51,7 +51,7 @@ The module depends on `MonolithAsset` for the exported `MonolithAsset::FTextureI
 
 `generate_image` is local deterministic only: provider `local_deterministic`, model `monolith/local-gradient-png-v1`, output PNG. It does not call remote providers or read API keys. The legacy `monolith/local-gradient-bmp-v1` model name is accepted as an alias for compatibility but still produces PNG.
 
-`generate_image_via_ima2` calls the configured ima2/imag2-gen `/api/generate` endpoint. By default it targets `http://192.168.0.10:3333` with `provider="oauth"`, `model="gpt-5.5"`, `quality="high"`, `size="1024x1024"`, `format="png"`, `background="auto"`, `compose_prompt=true`, and `moderation="low"`. Monolith accepts only PNG bridge output; JPEG, WebP, and other provider formats are rejected before the bridge call so generated assets enter the project through one lossless Texture2D path. Monolith does not read, store, or forward OpenAI API keys; OAuth/API-key ownership stays on the ima2/imag2-gen server host.
+`generate_image_via_ima2` calls the configured ima2/imag2-gen `/api/generate` endpoint. By default it targets `http://192.168.1.147:3333` with `provider="oauth"`, `model="gpt-5.5"`, `quality="high"`, `size="1024x1024"`, `format="png"`, `background="auto"`, `compose_prompt=true`, and `moderation="low"`. Monolith accepts only PNG bridge output; JPEG, WebP, and other provider formats are rejected before the bridge call so generated assets enter the project through one lossless Texture2D path. Monolith does not read, store, or forward OpenAI API keys; OAuth/API-key ownership stays on the ima2/imag2-gen server host.
 
 External provider results still enter Monolith through the same Texture2D import boundary. `generate_image`, `generate_image_via_ima2`, and `import_generated_image` import through `MonolithAsset::FTextureIngestActions::HandleImportTextureFromBytes`, save the role-postprocessed imported pixels as a PNG mirror by default when the imported package is saved, and tag assets with redacted `Monolith.Generated.*` metadata. `generate_image_via_ima2` and `import_generated_image` validate compressed payload size and accept PNG generated payloads only before import; `import_generated_image` accepts either `bytes_b64` or `file_path`/`path` for local generated PNG files. Prompt text is not persisted; provenance stores prompt hashes plus `prompt_redacted=true`. Generated imports default to `texture_role="basecolor"` unless the caller supplies another role.
 

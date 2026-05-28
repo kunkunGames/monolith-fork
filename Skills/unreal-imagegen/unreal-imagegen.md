@@ -21,7 +21,7 @@ monolith_discover({ namespace: "imagegen", action: "<action>", mode: "schema" })
 | Action | Purpose |
 |--------|---------|
 | `generate_image` | Generate a deterministic local PNG placeholder image from a prompt and import it as a Texture2D. Supports optional explicit `resolution` and `texture_role`; does not call remote providers or read API keys. |
-| `generate_image_via_ima2` | Call the configured ima2/imag2-gen server, import the first generated PNG as a Texture2D, and attach redacted provenance. Defaults to `http://192.168.0.10:3333` with `provider="oauth"` and `model="gpt-5.5"`; Monolith sends no API key. Supports `size`/`resolution`, `background=auto|opaque` provider output, `compose_prompt`, `texture_role`, and reference image paths/base64. |
+| `generate_image_via_ima2` | Call the configured ima2/imag2-gen server, import the first generated PNG as a Texture2D, and attach redacted provenance. Defaults to `http://192.168.1.147:3333` with `provider="oauth"` and `model="gpt-5.5"`; Monolith sends no API key. Supports `size`/`resolution`, `background=auto|opaque` provider output, `compose_prompt`, `texture_role`, and reference image paths/base64. |
 | `get_generated_asset_provenance` | Read redacted generation provenance (model, prompt hash, timestamp) from a Texture2D asset's metadata. |
 | `get_image_generation_defaults` | Return default image generation settings, accepted aspect ratios, destination path, ima2 bridge settings, and provenance policy. |
 | `import_generated_image` | Import externally generated image bytes as a Texture2D and attach redacted generation provenance. This is the safe remote-provider boundary. |

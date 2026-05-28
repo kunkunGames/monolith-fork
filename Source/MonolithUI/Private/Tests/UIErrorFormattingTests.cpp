@@ -44,6 +44,7 @@
 
 #include "MonolithPackagePathValidator.h"
 #include "MonolithToolRegistry.h"
+#include "Tests/Hoisted/MonolithUITestFixtureUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonSerializer.h"
@@ -98,42 +99,15 @@ namespace MonolithUI::ErrorFormattingTests
             return AssetPath;
         }
 
-        UPackage* Package = CreatePackage(*AssetPath);
-        if (!Package) return AssetPath;
-
-        UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
-        Factory->BlueprintType = BPTYPE_Normal;
-        Factory->ParentClass   = UUserWidget::StaticClass();
-        UObject* Created = Factory->FactoryCreateNew(
-            UWidgetBlueprint::StaticClass(), Package,
-            FName(*AssetName), RF_Public | RF_Standalone, nullptr, GWarn);
-        UWidgetBlueprint* WBP = Cast<UWidgetBlueprint>(Created);
-        if (!WBP || !WBP->WidgetTree) return AssetPath;
-
-        UCanvasPanel* Root = WBP->WidgetTree->ConstructWidget<UCanvasPanel>(
-            UCanvasPanel::StaticClass(), TEXT("RootCanvas"));
-        WBP->WidgetTree->RootWidget = Root;
-        WBP->OnVariableAdded(Root->GetFName());
-
-        if (ChildClass)
+        FString FixtureError;
+        UWidget* Child = nullptr;
+        if (!MonolithUI::TestUtils::CreateOrReuseTestWidgetBlueprint(
+            AssetPath, ChildName, ChildClass, FixtureError, &Child))
         {
-            UWidget* Child = WBP->WidgetTree->ConstructWidget<UWidget>(ChildClass, ChildName);
-            Root->AddChild(Child);
-            WBP->OnVariableAdded(Child->GetFName());
+            return AssetPath;
         }
 
-        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
-        FKismetEditorUtilities::CompileBlueprint(WBP);
-
-        FAssetRegistryModule::AssetCreated(WBP);
-        Package->MarkPackageDirty();
-        FSavePackageArgs SaveArgs;
-        SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
-        UPackage::SavePackage(Package, WBP,
-            *FPackageName::LongPackageNameToFilename(AssetPath, FPackageName::GetAssetPackageExtension()),
-            SaveArgs);
-
-        OutWBP = WBP;
+        OutWBP = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
         return AssetPath;
     }
 

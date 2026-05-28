@@ -12,6 +12,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "MonolithToolRegistry.h"
+#include "Actions/Hoisted/RoundedCornerActions.h"
 
 // UMG -- shared test fixture
 #include "Tests/Hoisted/MonolithUITestFixtureUtils.h"
@@ -221,9 +222,15 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMonolithUISetRoundedCornersInvalidParamsTest::RunTest(const FString& Parameters)
 {
+    FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+    if (!Registry.HasAction(TEXT("ui"), TEXT("set_rounded_corners")))
+    {
+        MonolithUI::FRoundedCornerActions::Register(Registry);
+    }
+
     {
         TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
-        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+        const FMonolithActionResult R = Registry.ExecuteAction(
             TEXT("ui"), TEXT("set_rounded_corners"), P);
         TestFalse(TEXT("missing asset_path -> failure"), R.bSuccess);
         TestEqual(TEXT("missing asset_path -> -32602"), R.ErrorCode, -32602);
@@ -232,7 +239,7 @@ bool FMonolithUISetRoundedCornersInvalidParamsTest::RunTest(const FString& Param
     {
         TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
         P->SetStringField(TEXT("asset_path"), TEXT("/Game/Foo/Bar"));
-        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+        const FMonolithActionResult R = Registry.ExecuteAction(
             TEXT("ui"), TEXT("set_rounded_corners"), P);
         TestFalse(TEXT("missing widget_name -> failure"), R.bSuccess);
         TestEqual(TEXT("missing widget_name -> -32602"), R.ErrorCode, -32602);
@@ -242,7 +249,7 @@ bool FMonolithUISetRoundedCornersInvalidParamsTest::RunTest(const FString& Param
         TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
         P->SetStringField(TEXT("asset_path"), TEXT("/Game/Foo/Bar"));
         P->SetStringField(TEXT("widget_name"), TEXT("Anything"));
-        const FMonolithActionResult R = FMonolithToolRegistry::Get().ExecuteAction(
+        const FMonolithActionResult R = Registry.ExecuteAction(
             TEXT("ui"), TEXT("set_rounded_corners"), P);
         TestFalse(TEXT("no optional fields -> failure"), R.bSuccess);
         TestEqual(TEXT("no optional fields -> -32602"), R.ErrorCode, -32602);

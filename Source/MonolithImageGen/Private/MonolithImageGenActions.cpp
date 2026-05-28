@@ -90,7 +90,7 @@ namespace MonolithImageGen::ImageGenerationInternal
 				return Settings->ImageGenBridgeServerUrl;
 			}
 		}
-		return TEXT("http://192.168.0.10:3333");
+		return TEXT("http://192.168.1.147:3333");
 	}
 
 	static FString ResolveDefaultIma2Model()
@@ -2152,7 +2152,7 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleGenerateImageViaIma2),
 		FParamSchemaBuilder()
 			.Required(TEXT("prompt"), TEXT("string"), TEXT("Image prompt. Sent to the configured ima2/imag2-gen server; stored locally only as a hash."))
-			.Optional(TEXT("server_url"), TEXT("string"), TEXT("ima2/imag2-gen base URL. Defaults to Monolith ImageGenBridgeServerUrl."), TEXT("http://192.168.0.10:3333"))
+			.Optional(TEXT("server_url"), TEXT("string"), TEXT("ima2/imag2-gen base URL. Defaults to Monolith ImageGenBridgeServerUrl."), TEXT("http://192.168.1.147:3333"))
 			.Optional(TEXT("provider"), TEXT("string"), TEXT("oauth, api, or auto. oauth uses the ima2 server host's Codex OAuth session."), TEXT("oauth"))
 			.Optional(TEXT("model"), TEXT("string"), TEXT("ima2 image model forwarded to /api/generate."), ImageGenerationInternal::DefaultIma2Model)
 			.Optional(TEXT("reasoning_effort"), TEXT("string"), TEXT("Optional API-provider reasoning effort forwarded as reasoningEffort."))

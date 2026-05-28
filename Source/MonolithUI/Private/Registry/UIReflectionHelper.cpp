@@ -114,7 +114,8 @@ namespace
     }
 
     // FLinearColor — "#RRGGBBAA" OR array[r,g,b,a] OR object{r,g,b,a}.
-    // Routes hex-string parses through MonolithUI::ParseColor (degamma path).
+    // TryParseColor keeps hex strings in byte-linear space; ParseColor is the
+    // legacy fallback for malformed shapes that still start with '#'.
     bool ParseLinearColor(const TSharedPtr<FJsonValue>& Value, FLinearColor& Out)
     {
         if (!Value.IsValid()) return false;

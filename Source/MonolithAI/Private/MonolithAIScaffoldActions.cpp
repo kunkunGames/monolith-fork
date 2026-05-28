@@ -14,6 +14,7 @@
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "Engine/DataTable.h"
+#include "Dom/JsonValue.h"
 #include "EnvironmentQuery/EnvQuery.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -164,7 +165,7 @@ TSharedPtr<FJsonObject> FMonolithAIScaffoldActions::BuildBTTemplateSpec(const FS
 		TSharedPtr<FJsonObject> ChaseSeq = MakeNode(TEXT("composite"), TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> HasTargetDec = MakeShared<FJsonObject>();
-			HasTargetDec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			HasTargetDec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SetProp(HasTargetDec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("TargetActor"));
 			SetDecorators(ChaseSeq, { MakeShared<FJsonValueObject>(HasTargetDec) });
 
@@ -251,7 +252,7 @@ TSharedPtr<FJsonObject> FMonolithAIScaffoldActions::BuildBTTemplateSpec(const FS
 		TSharedPtr<FJsonObject> ChaseSeq = MakeNode(TEXT("composite"), TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> HasTargetDec = MakeShared<FJsonObject>();
-			HasTargetDec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			HasTargetDec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SetProp(HasTargetDec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("TargetActor"));
 			SetDecorators(ChaseSeq, { MakeShared<FJsonValueObject>(HasTargetDec) });
 
@@ -292,7 +293,7 @@ TSharedPtr<FJsonObject> FMonolithAIScaffoldActions::BuildBTTemplateSpec(const FS
 		TSharedPtr<FJsonObject> InvestigateSeq = MakeNode(TEXT("composite"), TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> HeardDec = MakeShared<FJsonObject>();
-			HeardDec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			HeardDec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SetProp(HeardDec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("bHeardNoise"));
 			SetDecorators(InvestigateSeq, { MakeShared<FJsonValueObject>(HeardDec) });
 
@@ -1325,10 +1326,15 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldPatrolInvestigat
 	FString PatrolType = Params->GetStringField(TEXT("patrol_type"));
 	if (PatrolType.IsEmpty()) PatrolType = TEXT("loop");
 
-	if (Params->HasField(TEXT("investigation_radius")))
+	TSharedPtr<FJsonValue> InvestigationRadiusValue = Params->TryGetField(TEXT("investigation_radius"));
+	if (InvestigationRadiusValue.IsValid())
 	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("investigation_radius"), TempVal))
+		if (InvestigationRadiusValue->Type != EJson::Number)
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'investigation_radius' must be a number"));
+		}
+		double TempVal = 0.0;
+		if (!InvestigationRadiusValue->TryGetNumber(TempVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Parameter 'investigation_radius' must be a number"));
 		}
@@ -1389,7 +1395,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldPatrolInvestigat
 		TSharedPtr<FJsonObject> ChaseSeq = MakeNode(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> Dec = MakeShared<FJsonObject>();
-			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SetProp(Dec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("TargetActor"));
 			ChaseSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(Dec) });
 
@@ -1404,7 +1410,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldPatrolInvestigat
 		TSharedPtr<FJsonObject> InvestigateSeq = MakeNode(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> Dec = MakeShared<FJsonObject>();
-			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SetProp(Dec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("bHeardNoise"));
 			InvestigateSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(Dec) });
 
@@ -2722,7 +2728,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldCompanionAI(cons
 		{
 			TSharedPtr<FJsonObject> CombatSeq = MakeNode(TEXT("BTComposite_Sequence"));
 			TSharedPtr<FJsonObject> HasEnemyDec = MakeShared<FJsonObject>();
-			HasEnemyDec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			HasEnemyDec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SetProp(HasEnemyDec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("EnemyTarget"));
 			CombatSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(HasEnemyDec) });
 
@@ -2744,7 +2750,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldCompanionAI(cons
 		TSharedPtr<FJsonObject> FollowSeq = MakeNode(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> HasFollowDec = MakeShared<FJsonObject>();
-			HasFollowDec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			HasFollowDec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SetProp(HasFollowDec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("FollowTarget"));
 			FollowSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(HasFollowDec) });
 
@@ -2925,7 +2931,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldBossAI(const TSh
 			TSharedPtr<FJsonObject> PhaseSeq = MakeNode(TEXT("BTComposite_Sequence"));
 
 			TSharedPtr<FJsonObject> PhaseDec = MakeShared<FJsonObject>();
-			PhaseDec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			PhaseDec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SetProp(PhaseDec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("CurrentPhase"));
 			PhaseSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(PhaseDec) });
 
@@ -3260,7 +3266,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorStalker(co
 		TSharedPtr<FJsonObject> AtkSeq = MN(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> Dec = MakeShared<FJsonObject>();
-			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SP(Dec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("bCanAttack"));
 			AtkSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(Dec) });
 
@@ -3279,7 +3285,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorStalker(co
 		TSharedPtr<FJsonObject> StalkSeq = MN(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> Dec = MakeShared<FJsonObject>();
-			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SP(Dec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("TargetActor"));
 			StalkSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(Dec) });
 
@@ -3404,7 +3410,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorAmbush(con
 		TSharedPtr<FJsonObject> RetSeq = MN(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> Dec = MakeShared<FJsonObject>();
-			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SP(Dec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("bAttackComplete"));
 			RetSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(Dec) });
 			TSharedPtr<FJsonObject> Move = MN(TEXT("BTTask_MoveTo"));
@@ -3418,7 +3424,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorAmbush(con
 		TSharedPtr<FJsonObject> AtkSeq = MN(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> Dec = MakeShared<FJsonObject>();
-			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SP(Dec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("bTriggered"));
 			AtkSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(Dec) });
 			TSharedPtr<FJsonObject> Lunge = MN(TEXT("BTTask_MoveTo"));
@@ -3540,7 +3546,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorPresence(c
 		TSharedPtr<FJsonObject> ActiveSeq = MN(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> Dec = MakeShared<FJsonObject>();
-			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SP(Dec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("bPlayerNearby"));
 			ActiveSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(Dec) });
 			TSharedPtr<FJsonObject> EffW = MN(TEXT("BTTask_Wait"));
@@ -3655,7 +3661,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorMimic(cons
 		TSharedPtr<FJsonObject> AtkSeq = MN(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> Dec = MakeShared<FJsonObject>();
-			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SP(Dec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("bRevealed"));
 			AtkSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(Dec) });
 			TSharedPtr<FJsonObject> Move = MN(TEXT("BTTask_MoveTo"));
@@ -3784,7 +3790,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldStealthGameAI(co
 		TSharedPtr<FJsonObject> CombatSeq = MN(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> Dec = MakeShared<FJsonObject>();
-			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SP(Dec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("TargetActor"));
 			CombatSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(Dec) });
 			TSharedPtr<FJsonObject> Move = MN(TEXT("BTTask_MoveTo"));
@@ -3937,7 +3943,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldTurretAI(const T
 		TSharedPtr<FJsonObject> FireSeq = MN(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> Dec = MakeShared<FJsonObject>();
-			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SP(Dec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("TargetActor"));
 			FireSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(Dec) });
 			TSharedPtr<FJsonObject> Fire = MN(TEXT("BTTask_Wait"));
@@ -4057,7 +4063,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldGroupCoordinator
 		TSharedPtr<FJsonObject> RoleSeq = MN(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> Dec = MakeShared<FJsonObject>();
-			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SP(Dec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("bSquadEngaged"));
 			RoleSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(Dec) });
 			TSharedPtr<FJsonObject> Move = MN(TEXT("BTTask_MoveTo"));
@@ -4189,7 +4195,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldFlyingAI(const T
 		TSharedPtr<FJsonObject> AtkSeq = MN(TEXT("BTComposite_Sequence"));
 		{
 			TSharedPtr<FJsonObject> Dec = MakeShared<FJsonObject>();
-			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_BlackboardBase"));
+			Dec->SetStringField(TEXT("class"), TEXT("BTDecorator_Blackboard"));
 			SP(Dec, TEXT("BlackboardKey.SelectedKeyName"), TEXT("TargetActor"));
 			AtkSeq->SetArrayField(TEXT("decorators"), { MakeShared<FJsonValueObject>(Dec) });
 			TSharedPtr<FJsonObject> Dive = MN(TEXT("BTTask_MoveTo"));

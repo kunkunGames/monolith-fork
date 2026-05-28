@@ -368,7 +368,7 @@ public:
 
 	UPROPERTY(config, EditAnywhere, Category="Modules|ImageGen", DisplayName="ImageGen Bridge Server URL",
 		meta=(ToolTip="Base URL for an external imag2-gen/ima2 server. Monolith sends generation requests here without provider credentials."))
-	FString ImageGenBridgeServerUrl = TEXT("http://192.168.0.10:3333");
+	FString ImageGenBridgeServerUrl = TEXT("http://192.168.1.147:3333");
 
 	UPROPERTY(config, EditAnywhere, Category="Modules|ImageGen", DisplayName="ImageGen Bridge Provider",
 		meta=(ToolTip="imag2-gen provider to request: oauth, api, or auto. The default OAuth path uses the imag2-gen host's Codex OAuth session."))

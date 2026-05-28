@@ -898,14 +898,19 @@ FMonolithActionResult FMonolithEditorActions::HandleSearchBuildOutput(const TSha
 	}
 
 	int32 Limit = 100;
-	double LimitValue = 0.0;
-	if (Params->TryGetNumberField(TEXT("limit"), LimitValue))
+	TSharedPtr<FJsonValue> LimitJson = Params->TryGetField(TEXT("limit"));
+	if (LimitJson.IsValid())
 	{
+		if (LimitJson->Type != EJson::Number)
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		double LimitValue = 0.0;
+		if (!LimitJson->TryGetNumber(LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		Limit = static_cast<int32>(LimitValue);
-	}
-	else if (Params->HasField(TEXT("limit")))
-	{
-		return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	Limit = FMath::Clamp(Limit, 1, 1000);
 

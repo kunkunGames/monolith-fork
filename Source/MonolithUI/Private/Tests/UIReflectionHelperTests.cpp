@@ -283,8 +283,8 @@ bool FMonolithUIReflectionLinearColorHexTest::RunTest(const FString& /*Parameter
     const FUIReflectionApplyResult Res = Helper.Apply(Widget, TEXT("ColorAndOpacity"), Value);
     TestTrue(FString::Printf(TEXT("Apply succeeded: %s/%s"), *Res.FailureReason, *Res.Detail), Res.bSuccess);
 
-    // Round-trip the written linear color back through ToFColor(true) (sRGB).
-    const FColor Sampled = Widget->GetColorAndOpacity().ToFColor(true);
+    // TryParseColor intentionally keeps hex bytes in linear byte space.
+    const FColor Sampled = Widget->GetColorAndOpacity().ToFColor(false);
     TestEqual(TEXT("R byte round-trips"), (int32)Sampled.R, 0xFF);
     TestEqual(TEXT("G byte round-trips"), (int32)Sampled.G, 0x88);
     TestEqual(TEXT("B byte round-trips"), (int32)Sampled.B, 0x00);

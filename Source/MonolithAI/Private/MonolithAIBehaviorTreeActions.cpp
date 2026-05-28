@@ -1131,6 +1131,11 @@ namespace
 			Ctx.Warnings.Add(FString::Printf(TEXT("Unknown node type '%s', skipped"), *TypeName));
 			return nullptr;
 		}
+		if (BTNodeClass->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists))
+		{
+			Ctx.Warnings.Add(FString::Printf(TEXT("Node type '%s' is abstract, deprecated, or superseded, skipped"), *TypeName));
+			return nullptr;
+		}
 
 		// Validate it's a composite or task
 		bool bIsComposite = BTNodeClass->IsChildOf(UBTCompositeNode::StaticClass());
@@ -1217,7 +1222,8 @@ namespace
 				{
 					DecClass = FindFirstObject<UClass>(*(FString(TEXT("U")) + DecClassName), EFindFirstObjectOptions::EnsureIfAmbiguous);
 				}
-				if (!DecClass || !DecClass->IsChildOf(UBTDecorator::StaticClass()))
+				if (!DecClass || !DecClass->IsChildOf(UBTDecorator::StaticClass())
+					|| DecClass->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists))
 				{
 					Ctx.Warnings.Add(FString::Printf(TEXT("Decorator class '%s' not found or invalid"), *DecClassName));
 					continue;
@@ -1260,7 +1266,8 @@ namespace
 				{
 					SvcClass = FindFirstObject<UClass>(*(FString(TEXT("U")) + SvcClassName), EFindFirstObjectOptions::EnsureIfAmbiguous);
 				}
-				if (!SvcClass || !SvcClass->IsChildOf(UBTService::StaticClass()))
+				if (!SvcClass || !SvcClass->IsChildOf(UBTService::StaticClass())
+					|| SvcClass->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists))
 				{
 					Ctx.Warnings.Add(FString::Printf(TEXT("Service class '%s' not found or invalid"), *SvcClassName));
 					continue;
