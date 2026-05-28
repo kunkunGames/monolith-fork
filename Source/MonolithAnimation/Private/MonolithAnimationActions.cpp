@@ -1069,9 +1069,12 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetLiveLinkStatus(const T
 
 FMonolithActionResult FMonolithAnimationActions::HandleAddMontageSection(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString SectionName = Params->GetStringField(TEXT("section_name"));
-	double StartTime = Params->GetNumberField(TEXT("start_time"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+	FString SectionName;
+	if (!Params->TryGetStringField(TEXT("section_name"), SectionName)) return FMonolithActionResult::Error(TEXT("Parameter 'section_name' must be a string"));
+	double StartTime;
+	if (!Params->TryGetNumberField(TEXT("start_time"), StartTime)) return FMonolithActionResult::Error(TEXT("Parameter 'start_time' must be a number"));
 
 	UAnimMontage* Montage = FMonolithAssetUtils::LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage) return FMonolithActionResult::Error(FString::Printf(TEXT("Montage not found: %s"), *AssetPath));
@@ -1095,8 +1098,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddMontageSection(const T
 
 FMonolithActionResult FMonolithAnimationActions::HandleDeleteMontageSection(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 SectionIndex = static_cast<int32>(Params->GetNumberField(TEXT("section_index")));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+	double TempIndex;
+	if (!Params->TryGetNumberField(TEXT("section_index"), TempIndex)) return FMonolithActionResult::Error(TEXT("Parameter 'section_index' must be a number"));
+	int32 SectionIndex = static_cast<int32>(TempIndex);
 
 	UAnimMontage* Montage = FMonolithAssetUtils::LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage) return FMonolithActionResult::Error(FString::Printf(TEXT("Montage not found: %s"), *AssetPath));
@@ -1150,9 +1156,13 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetSectionNext(const TSha
 
 FMonolithActionResult FMonolithAnimationActions::HandleSetSectionTime(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString SectionName = Params->GetStringField(TEXT("section_name"));
-	float NewTime = static_cast<float>(Params->GetNumberField(TEXT("new_time")));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+	FString SectionName;
+	if (!Params->TryGetStringField(TEXT("section_name"), SectionName)) return FMonolithActionResult::Error(TEXT("Parameter 'section_name' must be a string"));
+	double TempTime;
+	if (!Params->TryGetNumberField(TEXT("new_time"), TempTime)) return FMonolithActionResult::Error(TEXT("Parameter 'new_time' must be a number"));
+	float NewTime = static_cast<float>(TempTime);
 
 	UAnimMontage* Montage = FMonolithAssetUtils::LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage) return FMonolithActionResult::Error(FString::Printf(TEXT("Montage not found: %s"), *AssetPath));
