@@ -525,3 +525,56 @@ bool FProjectReviewContextMinimalTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("minimal omits full details"), R->HasField(TEXT("details")));
 	return true;
 }
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSearchTagsUsesPreparedLikeTest, "Monolith.IndexGuard.Project.TagsUsesPreparedLike", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectSearchTagsUsesPreparedLikeTest::RunTest(const FString& Parameters)
+{
+	FMonolithIndexDatabase Db;
+	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithIdxTags"), TEXT(".sqlite"));
+	TestTrue(TEXT("temporary DB opens"), Db.Open(DbPath));
+
+	FIndexedTag Tag1;
+	Tag1.TagName = TEXT("Weapon.Melee_Sword");
+	Db.InsertTag(Tag1);
+
+	FIndexedTag Tag2;
+	Tag2.TagName = TEXT("Weapon.Melee.Axe");
+	Db.InsertTag(Tag2);
+
+	FIndexedTag Tag3;
+	Tag3.TagName = TEXT("Damage.Physical_Slash");
+	Db.InsertTag(Tag3);
+
+	FSQLiteDatabase* RawDB = Db.GetRawDatabase();
+	TestTrue(TEXT("raw db valid"), RawDB != nullptr);
+
+	FSQLitePreparedStatement Stmt;
+	TestTrue(TEXT("statement created"), Stmt.Create(*RawDB, TEXT("SELECT tag_name FROM tags WHERE tag_name LIKE ? ESCAPE '\\' ORDER BY tag_name LIMIT ?;")));
+
+	// Test case: Query contains underscore which is a wildcard in SQL
+	FString Query = TEXT("Melee_S");
+	FString EscapedQuery = Query.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
+	FString LikePattern = TEXT("%") + EscapedQuery + TEXT("%");
+
+	Stmt.SetBindingValueByIndex(1, LikePattern);
+	Stmt.SetBindingValueByIndex(2, static_cast<int64>(10));
+
+	TArray<FString> Results;
+	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		FString TagName;
+		Stmt.GetColumnValueByIndex(0, TagName);
+		Results.Add(TagName);
+	}
+
+	TestEqual(TEXT("escaped wildcard returns exactly 1 tag"), Results.Num(), 1);
+	if (Results.Num() > 0)
+	{
+		TestEqual(TEXT("matched correct tag"), Results[0], TEXT("Weapon.Melee_Sword"));
+	}
+
+	Db.Close();
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*DbPath);
+	return true;
+}
