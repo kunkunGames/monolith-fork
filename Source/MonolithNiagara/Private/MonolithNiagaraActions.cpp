@@ -3434,7 +3434,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleMoveModule(const TSharedPtr
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
-	int32 NewIndex = static_cast<int32>(Params->GetNumberField(TEXT("new_index")));
+	double NewIndex_Double;
+	if (!Params->TryGetNumberField(TEXT("new_index"), NewIndex_Double))
+		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: new_index"));
+	int32 NewIndex = static_cast<int32>(NewIndex_Double);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -5348,7 +5351,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveRenderer(const TShare
 {
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	int32 RendererIndex = static_cast<int32>(Params->GetNumberField(TEXT("renderer_index")));
+	double RendererIndex_Double;
+	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
+		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
+	int32 RendererIndex = static_cast<int32>(RendererIndex_Double);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -5374,7 +5380,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMaterial(const T
 {
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	int32 RendererIndex = static_cast<int32>(Params->GetNumberField(TEXT("renderer_index")));
+	double RendererIndex_Double;
+	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
+		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
+	int32 RendererIndex = static_cast<int32>(RendererIndex_Double);
 	FString MaterialPath = Params->GetStringField(TEXT("material"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -5419,7 +5428,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererProperty(const T
 {
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	int32 RendererIndex = static_cast<int32>(Params->GetNumberField(TEXT("renderer_index")));
+	double RendererIndex_Double;
+	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
+		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
+	int32 RendererIndex = static_cast<int32>(RendererIndex_Double);
 	FString PropertyName = Params->GetStringField(TEXT("property"));
 	if (PropertyName.IsEmpty()) PropertyName = Params->GetStringField(TEXT("property_name"));
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
@@ -5488,7 +5500,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetRendererBindings(const T
 {
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	int32 RendererIndex = static_cast<int32>(Params->GetNumberField(TEXT("renderer_index")));
+	double RendererIndex_Double;
+	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
+		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
+	int32 RendererIndex = static_cast<int32>(RendererIndex_Double);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -5523,7 +5538,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererBinding(const TS
 {
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	int32 RendererIndex = static_cast<int32>(Params->GetNumberField(TEXT("renderer_index")));
+	double RendererIndex_Double;
+	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
+		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
+	int32 RendererIndex = static_cast<int32>(RendererIndex_Double);
 	FString BindingName = Params->GetStringField(TEXT("binding_name"));
 	FString AttributePath = Params->GetStringField(TEXT("attribute"));
 
@@ -6466,7 +6484,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListRendererProperties(cons
 {
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	int32 RendererIndex = static_cast<int32>(Params->GetNumberField(TEXT("renderer_index")));
+	double RendererIndex_Double;
+	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
+		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
+	int32 RendererIndex = static_cast<int32>(RendererIndex_Double);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -9806,7 +9827,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMesh(const TShar
 {
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	int32 RendererIndex = static_cast<int32>(Params->GetNumberField(TEXT("renderer_index")));
+	double RendererIndex_Double;
+	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
+		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
+	int32 RendererIndex = static_cast<int32>(RendererIndex_Double);
 	FString MeshPath = Params->GetStringField(TEXT("mesh"));
 	if (MeshPath.IsEmpty()) MeshPath = Params->GetStringField(TEXT("mesh_path"));
 	int32 MeshIndex = 0;
@@ -9887,7 +9911,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureRibbon(const TShar
 {
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	int32 RendererIndex = static_cast<int32>(Params->GetNumberField(TEXT("renderer_index")));
+	double RendererIndex_Double;
+	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
+		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
+	int32 RendererIndex = static_cast<int32>(RendererIndex_Double);
 	FString Preset = FString();
 	if (Params->TryGetStringField(TEXT("preset"), Preset)) Preset = Preset.ToLower();
 
@@ -10045,9 +10072,18 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureSubUV(const TShare
 {
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	int32 RendererIndex = static_cast<int32>(Params->GetNumberField(TEXT("renderer_index")));
-	int32 Columns = static_cast<int32>(Params->GetNumberField(TEXT("columns")));
-	int32 Rows = static_cast<int32>(Params->GetNumberField(TEXT("rows")));
+	double RendererIndex_Double;
+	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
+		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: renderer_index"));
+	int32 RendererIndex = static_cast<int32>(RendererIndex_Double);
+	double Columns_Double;
+	if (!Params->TryGetNumberField(TEXT("columns"), Columns_Double))
+		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: columns"));
+	int32 Columns = static_cast<int32>(Columns_Double);
+	double Rows_Double;
+	if (!Params->TryGetNumberField(TEXT("rows"), Rows_Double))
+		return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: rows"));
+	int32 Rows = static_cast<int32>(Rows_Double);
 	bool bBlend = false;
 	Params->TryGetBoolField(TEXT("blend"), bBlend);
 	bool bAddModule = false;
@@ -10729,7 +10765,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateEffectType(const TSha
 
 	if (Params->HasField(TEXT("max_distance")))
 	{
-		float MaxDist = static_cast<float>(Params->GetNumberField(TEXT("max_distance")));
+		double MaxDist_Double;
+		if (!Params->TryGetNumberField(TEXT("max_distance"), MaxDist_Double))
+			return FMonolithActionResult::Error(TEXT("Missing or invalid numeric field: max_distance"));
+		float MaxDist = static_cast<float>(MaxDist_Double);
 		// Try direct MaxDistance property first, then scalability settings
 		FProperty* MaxDistProp = UNiagaraEffectType::StaticClass()->FindPropertyByName(FName(TEXT("MaxDistance")));
 		if (MaxDistProp)
