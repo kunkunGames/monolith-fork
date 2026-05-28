@@ -598,9 +598,12 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddAnimGraphNode(const TSh
 	Params->TryGetStringField(TEXT("node_type"), NodeType);
 	FString NodeClassSpecifier;
 	Params->TryGetStringField(TEXT("node_class"), NodeClassSpecifier);
-	FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
-	FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
-	FString AnimAsset = Params->HasField(TEXT("anim_asset")) ? Params->GetStringField(TEXT("anim_asset")) : TEXT("");
+	FString GraphName = TEXT("AnimGraph");
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	FString StateName = TEXT("");
+	Params->TryGetStringField(TEXT("state_name"), StateName);
+	FString AnimAsset = TEXT("");
+	Params->TryGetStringField(TEXT("anim_asset"), AnimAsset);
 
 	double TempVal;
 	float PosX = 200.f;

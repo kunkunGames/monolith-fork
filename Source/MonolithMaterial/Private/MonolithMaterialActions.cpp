@@ -3746,11 +3746,13 @@ FMonolithActionResult FMonolithMaterialActions::ConnectExpressions(const TShared
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString FromExprName = Params->GetStringField(TEXT("from_expression"));
-	FString FromOutput = Params->HasField(TEXT("from_pin")) ? Params->GetStringField(TEXT("from_pin")) : TEXT("");
+	FString FromOutput = TEXT("");
+	Params->TryGetStringField(TEXT("from_pin"), FromOutput);
 	Params->TryGetStringField(TEXT("from_output"), FromOutput);
 	FString ToExprName = TEXT("");
 	Params->TryGetStringField(TEXT("to_expression"), ToExprName);
-	FString ToInput = Params->HasField(TEXT("to_pin")) ? Params->GetStringField(TEXT("to_pin")) : TEXT("");
+	FString ToInput = TEXT("");
+	Params->TryGetStringField(TEXT("to_pin"), ToInput);
 	Params->TryGetStringField(TEXT("to_input"), ToInput);
 	ToInput = NormalizeInputPinName(ToInput);
 	FString ToProperty = TEXT("");
