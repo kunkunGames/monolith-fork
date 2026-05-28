@@ -14,12 +14,20 @@ FMonolithActionResult FProjectFindReferencesAction::Execute(const TSharedPtr<FJs
 		{
 			return FMonolithActionResult::Error(TEXT("'asset_path' parameter must be a string"), -32602);
 		}
+		if (PackagePath.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("'asset_path' parameter cannot be empty"), -32602);
+		}
 	}
 	if (PackagePath.IsEmpty() && Params->HasField(TEXT("package_path")))
 	{
 		if (!Params->TryGetStringField(TEXT("package_path"), PackagePath))
 		{
 			return FMonolithActionResult::Error(TEXT("'package_path' parameter must be a string"), -32602);
+		}
+		if (PackagePath.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("'package_path' parameter cannot be empty"), -32602);
 		}
 	}
 	if (PackagePath.IsEmpty())
