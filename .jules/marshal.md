@@ -124,3 +124,9 @@
 **Learning:** Without explicit plan requirements in `AGENTS.md`, agents fallback to generic planning behavior, which often leads to planning failures or skipped static checks.
 **Prevention:** Added an 'Execution Plan Requirements' rule to `AGENTS.md` requiring grounded, specific steps based on full file reads, mandatory inclusion of static CI checks (`python Scripts/ci_static_checks.py ...`), explicit verification commands, and exact wording for the pre-commit step.
 **Avoid:** Writing generic execution plans without reading full file contents, or omitting the required CI and verification commands from the plan outline.
+
+## 2026-05-31 - Reference agent coordination map in AGENTS.md
+**Coordination issue:** Agents were unaware of the cross-domain file boundaries established in `.jules/agent-coordination.md` because it wasn't referenced in the primary `AGENTS.md` file.
+**Learning:** Secondary coordination files are often missed by agents unless they are explicitly referenced in the primary global configuration file (`AGENTS.md`).
+**Prevention:** Updated `AGENTS.md` Single Responsibility section to explicitly refer agents to `.jules/agent-coordination.md` for domain boundaries.
+**Avoid:** Creating supplementary coordination documentation without linking it from the primary `AGENTS.md` document.
