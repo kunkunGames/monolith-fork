@@ -115,7 +115,7 @@ Windows:
 {
   "mcpServers": {
     "monolith": {
-      "command": "Plugins/Monolith/Scripts/monolith_proxy.bat",
+      "command": "Plugins/Monolith/Binaries/monolith_proxy.exe",
       "args": []
     }
   }
