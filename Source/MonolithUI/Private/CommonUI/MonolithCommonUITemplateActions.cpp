@@ -583,10 +583,12 @@ namespace MonolithCommonUITemplate
         Result->SetArrayField(TEXT("widgets_created"), WidgetsCreated);
 
         TArray<TSharedPtr<FJsonValue>> ErrArr;
+        ErrArr.Reserve(CompileErrors.Num());
         for (const FString& E : CompileErrors) ErrArr.Add(MakeShared<FJsonValueString>(E));
         Result->SetArrayField(TEXT("errors"), ErrArr);
 
         TArray<TSharedPtr<FJsonValue>> WarnArr;
+        WarnArr.Reserve(CompileWarnings.Num());
         for (const FString& W : CompileWarnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
         Result->SetArrayField(TEXT("warnings"), WarnArr);
 
@@ -729,10 +731,12 @@ namespace MonolithCommonUITemplate
         Result->SetArrayField(TEXT("widgets_created"), WidgetsCreated);
 
         TArray<TSharedPtr<FJsonValue>> ErrArr;
+        ErrArr.Reserve(CompileErrors.Num());
         for (const FString& E : CompileErrors) ErrArr.Add(MakeShared<FJsonValueString>(E));
         Result->SetArrayField(TEXT("errors"), ErrArr);
 
         TArray<TSharedPtr<FJsonValue>> WarnArr;
+        WarnArr.Reserve(CompileWarnings.Num());
         for (const FString& W : CompileWarnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
         Result->SetArrayField(TEXT("warnings"), WarnArr);
 
@@ -893,10 +897,12 @@ namespace MonolithCommonUITemplate
         Result->SetArrayField(TEXT("widgets_created"), WidgetsCreated);
 
         TArray<TSharedPtr<FJsonValue>> ErrArr;
+        ErrArr.Reserve(CompileErrors.Num());
         for (const FString& E : CompileErrors) ErrArr.Add(MakeShared<FJsonValueString>(E));
         Result->SetArrayField(TEXT("errors"), ErrArr);
 
         TArray<TSharedPtr<FJsonValue>> WarnArr;
+        WarnArr.Reserve(CompileWarnings.Num());
         for (const FString& W : CompileWarnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
         Result->SetArrayField(TEXT("warnings"), WarnArr);
 
