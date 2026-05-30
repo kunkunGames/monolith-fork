@@ -289,6 +289,40 @@ System-level reads + writes target `UNiagaraSystem` UPROPERTYs directly. Emitter
 - PIE-time parameter snooping for `User.*` — `(WISHLIST)` per cross-cutting PIE-bound quirks; cannot be unblocked without engine-level changes.
 - CSV ingest for FRichCurve keys — `(WISHLIST v1.1)` per Q2.
 
+### Blueprint-Callable Surface (issue #64)
+
+`UMonolithNiagaraQueryLibrary` is a `UBlueprintFunctionLibrary` in the editor-only MonolithNiagara module (Type=Editor) that exposes read-only Niagara dispatcher actions as Blueprint-callable nodes for Blueprint utilities and Editor Utility Widgets. Because the module is editor-only, this surface carries **zero cost in packaged/runtime builds**. Tranche 1 of 2.
+
+**Architecture.** Each node is a thin forwarder. A private static helper `ExecuteNiagaraActionAsJson(Action, Params, bool& bOutSuccess, FString& OutError)` calls `FMonolithToolRegistry::Get().ExecuteAction("niagara", Action, Params)`, guards against an empty registry, an unknown action, and a null result (returning `bSuccess=false` plus a descriptive `OutError` — never crashes), then serializes the result to a JSON `FString`. Every node returns an `FString` JSON payload plus `bool& bSuccess` and `FString& OutError` out-params.
+
+**Categories:** `Monolith|Niagara|Inspection` and `Monolith|Niagara|Search`.
+
+**Tranche 1 nodes (17, shipped):**
+
+| Node | Backing `niagara` action |
+|------|--------------------------|
+| `GetNiagaraSystemInfo` | `get_system_summary` |
+| `GetNiagaraEmitters` | `list_emitters` |
+| `GetNiagaraEmitterSummary` | `get_emitter_summary` |
+| `GetNiagaraModules` | `get_ordered_modules` |
+| `GetNiagaraModuleInputs` | `get_module_inputs` |
+| `GetNiagaraModuleGraph` | `get_module_graph` |
+| `GetNiagaraParameters` | `get_all_parameters` |
+| `GetNiagaraUserParameters` | `get_user_parameters` |
+| `GetNiagaraRenderers` | `list_renderers` (+ `get_renderer_bindings` when `bIncludeBindings`) |
+| `GetNiagaraEvents` | `get_event_handlers` |
+| `GetNiagaraDIFunctions` | `get_di_functions` |
+| `GetNiagaraSimulationStages` | `get_simulation_stages` |
+| `GetNiagaraStats` | `get_system_diagnostics` |
+| `GetNiagaraInventory` | `list_systems` |
+| `GetNiagaraHLSLOutput` | `get_compiled_gpu_hlsl` |
+| `SearchNiagaraSystems` | `list_systems` |
+| `SearchNiagaraModules` | `list_module_scripts` |
+
+**No action-count change** — Tranche 1 adds no new dispatcher actions; the nodes are pure wrappers over existing ones.
+
+**Tranche 2 (WISHLIST, next).** `GetNiagaraDataInterfaces` (WISHLIST) backed by a new per-system DI enumeration backend, plus 6 new search/discovery dispatcher actions (WISHLIST) — `search_by_parameter`, `search_by_data_interface`, `query_niagara`, `find_similar_systems`, `search_by_material`, `find_niagara_references` — and their wrapper nodes. Not yet built.
+
 ### UE 5.7 Compatibility Fixes (6 sites)
 
 All marked with "UE 5.7 FIX" comments:
