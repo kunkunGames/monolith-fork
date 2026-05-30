@@ -291,7 +291,7 @@ System-level reads + writes target `UNiagaraSystem` UPROPERTYs directly. Emitter
 
 ### Blueprint-Callable Surface (issue #64)
 
-`UMonolithNiagaraQueryLibrary` is a `UBlueprintFunctionLibrary` in the editor-only MonolithNiagara module (Type=Editor) that exposes read-only Niagara dispatcher actions as Blueprint-callable nodes for Blueprint utilities and Editor Utility Widgets. Because the module is editor-only, this surface carries **zero cost in packaged/runtime builds**. Tranche 1 of 2.
+`UMonolithNiagaraQueryLibrary` is a `UBlueprintFunctionLibrary` in the editor-only MonolithNiagara module (Type=Editor) that exposes read-only Niagara dispatcher actions as Blueprint-callable nodes for Blueprint utilities and Editor Utility Widgets. Because the module is editor-only, this surface carries **zero cost in packaged/runtime builds**. Tranches 1 + 2 of 2 SHIPPED — the BFL now exposes all **24 nodes** (17 Tranche 1 + 7 Tranche 2).
 
 **Architecture.** Each node is a thin forwarder. A private static helper `ExecuteNiagaraActionAsJson(Action, Params, bool& bOutSuccess, FString& OutError)` calls `FMonolithToolRegistry::Get().ExecuteAction("niagara", Action, Params)`, guards against an empty registry, an unknown action, and a null result (returning `bSuccess=false` plus a descriptive `OutError` — never crashes), then serializes the result to a JSON `FString`. Every node returns an `FString` JSON payload plus `bool& bSuccess` and `FString& OutError` out-params.
 
@@ -319,9 +319,21 @@ System-level reads + writes target `UNiagaraSystem` UPROPERTYs directly. Emitter
 | `SearchNiagaraSystems` | `list_systems` |
 | `SearchNiagaraModules` | `list_module_scripts` |
 
-**No action-count change** — Tranche 1 adds no new dispatcher actions; the nodes are pure wrappers over existing ones.
+**No action-count change for Tranche 1** — its 17 nodes are pure wrappers over existing actions.
 
-**Tranche 2 (WISHLIST, next).** `GetNiagaraDataInterfaces` (WISHLIST) backed by a new per-system DI enumeration backend, plus 6 new search/discovery dispatcher actions (WISHLIST) — `search_by_parameter`, `search_by_data_interface`, `query_niagara`, `find_similar_systems`, `search_by_material`, `find_niagara_references` — and their wrapper nodes. Not yet built.
+**Tranche 2 nodes (7, shipped).** Seven new read-only `niagara` dispatcher actions plus their wrapper nodes. **Unlike Tranche 1, these add +7 to the `niagara` action count** (six new search/discovery actions + one per-system DI enumeration).
+
+| Node | Backing `niagara` action | Description |
+|------|--------------------------|-------------|
+| `SearchNiagaraByParameter` | `search_by_parameter` | Find systems exposing a user parameter by case-insensitive substring name, optional type filter |
+| `SearchNiagaraByDataInterface` | `search_by_data_interface` | Find systems using a DI whose class name matches (per-system `ForEachDataInterface` traversal) |
+| `QueryNiagara` | `query_niagara` | Structured-filter DSL over all systems (AND-joined conditions: `emitters >/</= N`, `sim_target=GPU\|CPU`, `has_renderer=<name>`) |
+| `FindSimilarNiagaraSystems` | `find_similar_systems` | Rank systems by structural similarity to a reference (weighted: emitter-count proximity + renderer-class Jaccard + module-name Jaccard; self=1.0) |
+| `SearchNiagaraByMaterial` | `search_by_material` | Find systems whose emitter renderers reference a given material |
+| `FindNiagaraReferences` | `find_niagara_references` | Find all assets referencing a given Niagara asset (Asset Registry referencer graph) |
+| `GetNiagaraDataInterfaces` | `list_system_data_interfaces` | Enumerate DIs actually USED BY a given system (per-system traversal; distinct from CDO-only `get_di_properties`) |
+
+These 7 actions land green (issue #64, Tranche 2). The `niagara` namespace count rises 120 → 127 (see [SPEC_CORE.md §12](../SPEC_CORE.md#12-action-count-summary)).
 
 ### UE 5.7 Compatibility Fixes (6 sites)
 

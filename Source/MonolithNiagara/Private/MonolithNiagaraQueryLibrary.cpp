@@ -276,3 +276,80 @@ FString UMonolithNiagaraQueryLibrary::SearchNiagaraModules(
 	}
 	return ExecuteNiagaraActionAsJson(TEXT("list_module_scripts"), Params, bSuccess, OutError);
 }
+
+// =====================================================================================
+// Tranche 2 (#64): Search & Discovery gap-action nodes + per-system DI
+// =====================================================================================
+
+FString UMonolithNiagaraQueryLibrary::SearchNiagaraByParameter(
+	const FString& ParameterName, const FString& ParameterType, const FString& Folder, int32 Limit,
+	bool& bSuccess, FString& OutError)
+{
+	const TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("parameter_name"), ParameterName);
+	SetOptionalString(Params, TEXT("parameter_type"), ParameterType);
+	SetOptionalString(Params, TEXT("folder"), Folder);
+	SetOptionalPositiveInt(Params, TEXT("limit"), Limit);
+	return ExecuteNiagaraActionAsJson(TEXT("search_by_parameter"), Params, bSuccess, OutError);
+}
+
+FString UMonolithNiagaraQueryLibrary::SearchNiagaraByDataInterface(
+	const FString& DIClass, const FString& Folder, int32 Limit, bool& bSuccess, FString& OutError)
+{
+	const TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("di_class"), DIClass);
+	SetOptionalString(Params, TEXT("folder"), Folder);
+	SetOptionalPositiveInt(Params, TEXT("limit"), Limit);
+	return ExecuteNiagaraActionAsJson(TEXT("search_by_data_interface"), Params, bSuccess, OutError);
+}
+
+FString UMonolithNiagaraQueryLibrary::QueryNiagara(
+	const FString& QueryString, const FString& Folder, int32 Limit, bool& bSuccess, FString& OutError)
+{
+	const TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("query_string"), QueryString);
+	SetOptionalString(Params, TEXT("folder"), Folder);
+	SetOptionalPositiveInt(Params, TEXT("limit"), Limit);
+	return ExecuteNiagaraActionAsJson(TEXT("query_niagara"), Params, bSuccess, OutError);
+}
+
+FString UMonolithNiagaraQueryLibrary::FindSimilarNiagaraSystems(
+	const FString& AssetPath, float Threshold, int32 Limit, bool& bSuccess, FString& OutError)
+{
+	const TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), AssetPath);
+	// Forward threshold only when in (0,1); non-positive falls through to the action's 0.5 default.
+	if (Threshold > 0.0f)
+	{
+		Params->SetNumberField(TEXT("threshold"), Threshold);
+	}
+	SetOptionalPositiveInt(Params, TEXT("limit"), Limit);
+	return ExecuteNiagaraActionAsJson(TEXT("find_similar_systems"), Params, bSuccess, OutError);
+}
+
+FString UMonolithNiagaraQueryLibrary::SearchNiagaraByMaterial(
+	const FString& MaterialPath, const FString& Folder, int32 Limit, bool& bSuccess, FString& OutError)
+{
+	const TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("material_path"), MaterialPath);
+	SetOptionalString(Params, TEXT("folder"), Folder);
+	SetOptionalPositiveInt(Params, TEXT("limit"), Limit);
+	return ExecuteNiagaraActionAsJson(TEXT("search_by_material"), Params, bSuccess, OutError);
+}
+
+FString UMonolithNiagaraQueryLibrary::FindNiagaraReferences(
+	const FString& AssetPath, int32 Limit, bool& bSuccess, FString& OutError)
+{
+	const TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), AssetPath);
+	SetOptionalPositiveInt(Params, TEXT("limit"), Limit);
+	return ExecuteNiagaraActionAsJson(TEXT("find_niagara_references"), Params, bSuccess, OutError);
+}
+
+FString UMonolithNiagaraQueryLibrary::GetNiagaraDataInterfaces(
+	const FString& AssetPath, bool& bSuccess, FString& OutError)
+{
+	const TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), AssetPath);
+	return ExecuteNiagaraActionAsJson(TEXT("list_system_data_interfaces"), Params, bSuccess, OutError);
+}

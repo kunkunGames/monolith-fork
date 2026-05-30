@@ -197,6 +197,18 @@ public:
 	static FMonolithActionResult HandleGetEmitterParent(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRenameUserParameter(const TSharedPtr<FJsonObject>& Params);
 
+	// --- Tranche 2 (#64): read-only Search & Discovery + per-system DI (7 new) ---
+	// All asset-registry / per-system traversal, no mutation. Backs the BP wrapper nodes in
+	// UMonolithNiagaraQueryLibrary (SearchNiagaraByParameter / ByDataInterface / ByMaterial,
+	// QueryNiagara, FindSimilarNiagaraSystems, FindNiagaraReferences, GetNiagaraDataInterfaces).
+	static FMonolithActionResult HandleSearchByParameter(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSearchByDataInterface(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleQueryNiagara(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleFindSimilarSystems(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSearchByMaterial(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleFindNiagaraReferences(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleListSystemDataInterfaces(const TSharedPtr<FJsonObject>& Params);
+
 	// --- Helpers (public for use by free functions) ---
 	static FString SerializeParameterValue(const FNiagaraVariable& Variable, const FNiagaraParameterStore& Store);
 

@@ -17,6 +17,10 @@
 #include "NiagaraNodeCustomHlsl.h"
 #include "NiagaraNodeInput.h"
 #include "NiagaraDataInterface.h"
+// Tranche 2 (#64): per-system DI enumeration. Verified UE 5.7 (offline source index):
+// FNiagaraDataInterfaceUtilities::ForEachDataInterface(const UNiagaraSystem*, TFunction<bool(const FDataInterfaceUsageContext&)>)
+// — asset-time overload at NiagaraDataInterfaceUtilities.h:43 (NOT the FNiagaraSystemInstance* runtime overloads at :37/:40).
+#include "NiagaraDataInterfaceUtilities.h"
 #include "NiagaraDataInterfaceCurve.h"
 #include "NiagaraDataInterfaceColorCurve.h"
 #include "NiagaraDataInterfaceVector2DCurve.h"
@@ -2638,6 +2642,55 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("old_name"), TEXT("string"), TEXT("Current parameter name (with or without User. prefix)"))
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("New parameter name (with or without User. prefix)"))
+			.Build());
+
+	// --- Tranche 2 (#64): read-only Search & Discovery + per-system DI (7 new) ---
+	Registry.RegisterAction(TEXT("niagara"), TEXT("search_by_parameter"), TEXT("Find Niagara systems exposing a user parameter whose name (case-insensitive) contains the query. Optional type filter."),
+		FMonolithActionHandler::CreateStatic(&HandleSearchByParameter),
+		FParamSchemaBuilder()
+			.Required(TEXT("parameter_name"), TEXT("string"), TEXT("Parameter name substring to match (case-insensitive, partial)"))
+			.Optional(TEXT("parameter_type"), TEXT("string"), TEXT("Optional type filter (e.g. float, Vector, LinearColor) matched against the parameter's type name"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Content path to restrict the scan (e.g. /Game/VFX)"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max matching systems (default: 50)"))
+			.Build());
+	Registry.RegisterAction(TEXT("niagara"), TEXT("search_by_data_interface"), TEXT("Find Niagara systems using a Data Interface whose class name (case-insensitive) contains the query. Per-system traversal via FNiagaraDataInterfaceUtilities::ForEachDataInterface."),
+		FMonolithActionHandler::CreateStatic(&HandleSearchByDataInterface),
+		FParamSchemaBuilder()
+			.Required(TEXT("di_class"), TEXT("string"), TEXT("Data interface class-name substring (e.g. NiagaraDataInterfaceCurve, Curve, Grid2D)"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Content path to restrict the scan (e.g. /Game/VFX)"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max matching systems (default: 50). NOTE: this action loads each system — limit + folder are the cost governors."))
+			.Build());
+	Registry.RegisterAction(TEXT("niagara"), TEXT("query_niagara"), TEXT("Structured-filter query over all systems. Conditions joined by AND, comma- or AND-separated: emitters>N / emitters<N / emitters=N, sim_target=GPU|CPU, has_renderer=<name>. Deterministic DSL, NOT natural language."),
+		FMonolithActionHandler::CreateStatic(&HandleQueryNiagara),
+		FParamSchemaBuilder()
+			.Required(TEXT("query_string"), TEXT("string"), TEXT("e.g. 'emitters=2, sim_target=GPU' or 'emitters>1 AND has_renderer=Mesh'"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Content path to restrict the scan (e.g. /Game/VFX)"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max matching systems (default: 50)"))
+			.Build());
+	Registry.RegisterAction(TEXT("niagara"), TEXT("find_similar_systems"), TEXT("Rank systems by structural similarity to a reference system. Score = weighted blend of emitter-count proximity, renderer-class-set Jaccard, and module-name-set Jaccard. Reference scores 1.0 against itself."),
+		FMonolithActionHandler::CreateStatic(&HandleFindSimilarSystems),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Reference Niagara system asset path"))
+			.Optional(TEXT("threshold"), TEXT("number"), TEXT("Minimum similarity score to include (0..1, default: 0.5)"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max ranked matches (default: 10)"))
+			.Build());
+	Registry.RegisterAction(TEXT("niagara"), TEXT("search_by_material"), TEXT("Find Niagara systems whose emitter renderers reference a given material. Walks each system's emitters' renderers' material bindings (Sprite/Ribbon/Mesh)."),
+		FMonolithActionHandler::CreateStatic(&HandleSearchByMaterial),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("material_path"), TEXT("Material / MaterialInterface asset path to find users of"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Content path to restrict the scan (e.g. /Game/VFX)"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max matching systems (default: 50). Loads each system — limit + folder are the cost governors."))
+			.Build());
+	Registry.RegisterAction(TEXT("niagara"), TEXT("find_niagara_references"), TEXT("Find all assets that reference a given Niagara asset, via the Asset Registry referencer graph (IAssetRegistry::GetReferencers)."),
+		FMonolithActionHandler::CreateStatic(&HandleFindNiagaraReferences),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara asset path to find referencers of"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max referencers returned (default: 100)"))
+			.Build());
+	Registry.RegisterAction(TEXT("niagara"), TEXT("list_system_data_interfaces"), TEXT("Enumerate the Data Interfaces actually USED BY a given system (per-system traversal via FNiagaraDataInterfaceUtilities::ForEachDataInterface). Distinct from get_di_properties (CDO-class reflection only)."),
+		FMonolithActionHandler::CreateStatic(&HandleListSystemDataInterfaces),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Build());
 }
 
@@ -5883,6 +5936,14 @@ FMonolithActionResult FMonolithNiagaraActions::HandleBatchExecute(const TSharedP
 		else if (OpName == TEXT("rename_user_parameter")) SubResult = HandleRenameUserParameter(SubParams);
 		// Layout (Phase 3b)
 		else if (OpName == TEXT("auto_layout")) SubResult = FMonolithNiagaraLayoutActions::HandleAutoLayout(SubParams);
+		// Tranche 2 (#64): read-only Search & Discovery + per-system DI
+		else if (OpName == TEXT("search_by_parameter")) SubResult = HandleSearchByParameter(SubParams);
+		else if (OpName == TEXT("search_by_data_interface")) SubResult = HandleSearchByDataInterface(SubParams);
+		else if (OpName == TEXT("query_niagara")) SubResult = HandleQueryNiagara(SubParams);
+		else if (OpName == TEXT("find_similar_systems")) SubResult = HandleFindSimilarSystems(SubParams);
+		else if (OpName == TEXT("search_by_material")) SubResult = HandleSearchByMaterial(SubParams);
+		else if (OpName == TEXT("find_niagara_references")) SubResult = HandleFindNiagaraReferences(SubParams);
+		else if (OpName == TEXT("list_system_data_interfaces")) SubResult = HandleListSystemDataInterfaces(SubParams);
 
 		RO->SetBoolField(TEXT("success"), SubResult.bSuccess);
 		if (!SubResult.bSuccess) RO->SetStringField(TEXT("error"), SubResult.ErrorMessage);
@@ -14234,5 +14295,581 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRenameUserParameter(const T
 		R->SetArrayField(TEXT("warnings"), WarnArr);
 	}
 	R->SetStringField(TEXT("note"), TEXT("Custom HLSL modules referencing 'User.OldName' in string form are NOT automatically updated"));
+	return SuccessObj(R);
+}
+
+// ============================================================================
+// Tranche 2 (#64): read-only Search & Discovery + per-system DI
+//
+// All seven actions are pure read-only traversal. Shared building blocks (all verified in-tree
+// and re-confirmed against the UE 5.7 offline source index):
+//   - ARFilter over UNiagaraSystem::StaticClass()->GetClassPathName()  (clone of HandleListSystems)
+//   - UNiagaraSystem::GetExposedParameters() -> FNiagaraUserRedirectionParameterStore&
+//        .ReadParameterVariables() -> TArrayView<const FNiagaraVariableWithOffset>   (cf. line ~233)
+//   - UNiagaraSystem::GetEmitterHandles() -> const TArray<FNiagaraEmitterHandle>&
+//        FNiagaraEmitterHandle::GetEmitterData() -> FVersionedNiagaraEmitterData*
+//        ED->SimTarget (ENiagaraSimTarget), ED->GetRenderers(), ED->GraphSource (UNiagaraScriptSource*)
+//   - Asset-time renderer material extraction by concrete-type cast: Sprite/Ribbon ->Material,
+//        Mesh ->OverrideMaterials[].ExplicitMat   (cf. lines ~8069, ~8620)
+//   - FNiagaraDataInterfaceUtilities::ForEachDataInterface(const UNiagaraSystem*, lambda) (header :43)
+//   - IAssetRegistry::GetReferencers(FName PackageName, TArray<FName>&, ...) (IAssetRegistry.h:592)
+// ============================================================================
+
+namespace
+{
+	// Build the AR + ARFilter for NiagaraSystem assets, optionally restricted to a content folder.
+	IAssetRegistry& GetNiagaraSystemFilter(const FString& FolderFilter, FARFilter& OutFilter)
+	{
+		IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		OutFilter.ClassPaths.Add(UNiagaraSystem::StaticClass()->GetClassPathName());
+		OutFilter.bRecursiveClasses = true;
+		OutFilter.bRecursivePaths = true;
+		if (!FolderFilter.IsEmpty())
+		{
+			OutFilter.PackagePaths.Add(FName(*FolderFilter));
+		}
+		return AR;
+	}
+
+	FString ReadFolderFilter(const TSharedPtr<FJsonObject>& Params)
+	{
+		return Params->HasField(TEXT("folder")) ? Params->GetStringField(TEXT("folder")) : TEXT("");
+	}
+
+	int32 ReadLimit(const TSharedPtr<FJsonObject>& Params, int32 Default)
+	{
+		return Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : Default;
+	}
+
+	// Extract the material referenced by a renderer-properties object at asset time (no runtime instance).
+	// Mirrors the proven Sprite/Ribbon/Mesh extraction at lines ~8069 / ~8620.
+	UMaterialInterface* GetRendererMaterialAssetTime(UNiagaraRendererProperties* Rend)
+	{
+		if (!Rend) return nullptr;
+		if (UNiagaraSpriteRendererProperties* S = Cast<UNiagaraSpriteRendererProperties>(Rend)) return S->Material;
+		if (UNiagaraRibbonRendererProperties* Rib = Cast<UNiagaraRibbonRendererProperties>(Rend)) return Rib->Material;
+		if (UNiagaraMeshRendererProperties* MR = Cast<UNiagaraMeshRendererProperties>(Rend))
+		{
+			if (MR->OverrideMaterials.Num() > 0 && MR->OverrideMaterials[0].ExplicitMat)
+			{
+				return MR->OverrideMaterials[0].ExplicitMat;
+			}
+		}
+		return nullptr;
+	}
+
+	// Collect the set of module-script asset paths used across all emitter graphs of a system.
+	// Used as the structural fingerprint for find_similar_systems / query_niagara has_module.
+	void CollectSystemModulePaths(UNiagaraSystem* System, TSet<FString>& OutModulePaths)
+	{
+		if (!System) return;
+		TSet<UNiagaraGraph*> Visited;
+		for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+		{
+			const FVersionedNiagaraEmitterData* ED = Handle.GetEmitterData();
+			if (!ED) continue;
+			UNiagaraScriptSource* Source = Cast<UNiagaraScriptSource>(ED->GraphSource);
+			if (!Source || !Source->NodeGraph) continue;
+			UNiagaraGraph* Graph = Source->NodeGraph;
+			if (Visited.Contains(Graph)) continue;
+			Visited.Add(Graph);
+			for (UEdGraphNode* N : Graph->Nodes)
+			{
+				UNiagaraNodeFunctionCall* FN = Cast<UNiagaraNodeFunctionCall>(N);
+				if (FN && FN->FunctionScript)
+				{
+					OutModulePaths.Add(FN->FunctionScript->GetPathName());
+				}
+			}
+		}
+	}
+
+	// Collect the set of renderer class names across all emitters of a system.
+	void CollectSystemRendererClasses(UNiagaraSystem* System, TSet<FString>& OutRendererClasses)
+	{
+		if (!System) return;
+		for (const FNiagaraEmitterHandle& Handle : System->GetEmitterHandles())
+		{
+			const FVersionedNiagaraEmitterData* ED = Handle.GetEmitterData();
+			if (!ED) continue;
+			for (UNiagaraRendererProperties* Rend : ED->GetRenderers())
+			{
+				if (Rend) OutRendererClasses.Add(Rend->GetClass()->GetName());
+			}
+		}
+	}
+
+	// Jaccard similarity of two string sets: |A n B| / |A u B| (empty/empty -> 1.0).
+	double JaccardSimilarity(const TSet<FString>& A, const TSet<FString>& B)
+	{
+		if (A.Num() == 0 && B.Num() == 0) return 1.0;
+		int32 Inter = 0;
+		for (const FString& E : A) { if (B.Contains(E)) Inter++; }
+		const int32 Uni = A.Num() + B.Num() - Inter;
+		return Uni > 0 ? static_cast<double>(Inter) / static_cast<double>(Uni) : 0.0;
+	}
+}
+
+// ----------------------------------------------------------------------------
+// search_by_parameter — systems exposing a user parameter matching a name (and optional type)
+// ----------------------------------------------------------------------------
+FMonolithActionResult FMonolithNiagaraActions::HandleSearchByParameter(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString ParamQuery = Params->HasField(TEXT("parameter_name")) ? Params->GetStringField(TEXT("parameter_name")) : TEXT("");
+	if (ParamQuery.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: parameter_name"));
+	const FString TypeQuery = Params->HasField(TEXT("parameter_type")) ? Params->GetStringField(TEXT("parameter_type")) : TEXT("");
+	const FString Folder = ReadFolderFilter(Params);
+	const int32 Limit = ReadLimit(Params, 50);
+
+	FARFilter Filter;
+	IAssetRegistry& AR = GetNiagaraSystemFilter(Folder, Filter);
+	TArray<FAssetData> Assets;
+	AR.GetAssets(Filter, Assets);
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	for (const FAssetData& Asset : Assets)
+	{
+		const FString PackagePath = Asset.GetSoftObjectPath().ToString();
+		UNiagaraSystem* Sys = LoadObject<UNiagaraSystem>(nullptr, *PackagePath);
+		if (!Sys) continue;
+
+		FNiagaraUserRedirectionParameterStore& US = Sys->GetExposedParameters();
+		TArrayView<const FNiagaraVariableWithOffset> Vars = US.ReadParameterVariables();
+		for (const FNiagaraVariableWithOffset& VWO : Vars)
+		{
+			const FNiagaraVariable& V = VWO; // upcast (matches in-tree idiom at line ~1756)
+			const FString VarName = V.GetName().ToString();
+			if (!VarName.Contains(ParamQuery, ESearchCase::IgnoreCase)) continue;
+
+			const FString VarType = V.GetType().GetName();
+			if (!TypeQuery.IsEmpty() && !VarType.Contains(TypeQuery, ESearchCase::IgnoreCase)) continue;
+
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("path"), PackagePath);
+			Entry->SetStringField(TEXT("param_name"), VarName);
+			Entry->SetStringField(TEXT("param_type"), VarType);
+			Results.Add(MakeShared<FJsonValueObject>(Entry));
+			break; // one hit per system is enough
+		}
+		if (Results.Num() >= Limit) break;
+	}
+
+	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
+	R->SetStringField(TEXT("parameter_name"), ParamQuery);
+	R->SetNumberField(TEXT("count"), Results.Num());
+	R->SetArrayField(TEXT("systems"), Results);
+	return SuccessObj(R);
+}
+
+// ----------------------------------------------------------------------------
+// search_by_data_interface — systems using a DI whose class name matches the query
+// ----------------------------------------------------------------------------
+FMonolithActionResult FMonolithNiagaraActions::HandleSearchByDataInterface(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString DIQuery = Params->HasField(TEXT("di_class")) ? Params->GetStringField(TEXT("di_class")) : TEXT("");
+	if (DIQuery.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: di_class"));
+	const FString Folder = ReadFolderFilter(Params);
+	const int32 Limit = ReadLimit(Params, 50);
+
+	FARFilter Filter;
+	IAssetRegistry& AR = GetNiagaraSystemFilter(Folder, Filter);
+	TArray<FAssetData> Assets;
+	AR.GetAssets(Filter, Assets);
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	for (const FAssetData& Asset : Assets)
+	{
+		const FString PackagePath = Asset.GetSoftObjectPath().ToString();
+		UNiagaraSystem* Sys = LoadObject<UNiagaraSystem>(nullptr, *PackagePath);
+		if (!Sys) continue;
+
+		bool bMatched = false;
+		FString MatchedClass;
+		// Asset-time overload (NiagaraDataInterfaceUtilities.h:43). Return false to stop early.
+		FNiagaraDataInterfaceUtilities::ForEachDataInterface(Sys,
+			[&DIQuery, &bMatched, &MatchedClass](const FNiagaraDataInterfaceUtilities::FDataInterfaceUsageContext& Ctx) -> bool
+			{
+				if (Ctx.DataInterface)
+				{
+					const FString ClassName = Ctx.DataInterface->GetClass()->GetName();
+					if (ClassName.Contains(DIQuery, ESearchCase::IgnoreCase))
+					{
+						bMatched = true;
+						MatchedClass = ClassName;
+						return false; // stop iterating this system
+					}
+				}
+				return true; // continue
+			});
+
+		if (bMatched)
+		{
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("path"), PackagePath);
+			Entry->SetStringField(TEXT("di_class"), MatchedClass);
+			Results.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		if (Results.Num() >= Limit) break;
+	}
+
+	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
+	R->SetStringField(TEXT("di_class"), DIQuery);
+	R->SetNumberField(TEXT("count"), Results.Num());
+	R->SetArrayField(TEXT("systems"), Results);
+	return SuccessObj(R);
+}
+
+// ----------------------------------------------------------------------------
+// query_niagara — deterministic structured-filter DSL over all systems
+//   Conditions (AND): emitters>N / emitters<N / emitters=N, sim_target=GPU|CPU, has_renderer=<name>
+//   Separators: comma and/or the literal "AND" (case-insensitive). NOT natural language.
+// ----------------------------------------------------------------------------
+FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString QueryString = Params->HasField(TEXT("query_string")) ? Params->GetStringField(TEXT("query_string")) : TEXT("");
+	if (QueryString.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: query_string"));
+	const FString Folder = ReadFolderFilter(Params);
+	const int32 Limit = ReadLimit(Params, 50);
+
+	// Parse conditions. Normalize "AND" to comma, then split on comma.
+	FString Normalized = QueryString;
+	Normalized.ReplaceInline(TEXT(" AND "), TEXT(","), ESearchCase::IgnoreCase);
+	Normalized.ReplaceInline(TEXT(" and "), TEXT(","), ESearchCase::IgnoreCase);
+	TArray<FString> RawConds;
+	Normalized.ParseIntoArray(RawConds, TEXT(","), true);
+
+	struct FCond { FString Key; FString Op; FString Value; };
+	TArray<FCond> Conds;
+	for (FString Raw : RawConds)
+	{
+		Raw.TrimStartAndEndInline();
+		if (Raw.IsEmpty()) continue;
+		FString Op;
+		int32 OpIdx = INDEX_NONE;
+		// Check multi-char operators before single-char so ">=" isn't truncated to ">".
+		for (const TCHAR* Candidate : { TEXT(">="), TEXT("<="), TEXT(">"), TEXT("<"), TEXT("=") })
+		{
+			if (Raw.Contains(Candidate, ESearchCase::CaseSensitive))
+			{
+				OpIdx = Raw.Find(Candidate, ESearchCase::CaseSensitive);
+				Op = Candidate;
+				break;
+			}
+		}
+		if (OpIdx == INDEX_NONE) continue; // malformed condition skipped
+		FCond C;
+		C.Key = Raw.Left(OpIdx).TrimStartAndEnd().ToLower();
+		C.Op = Op;
+		C.Value = Raw.Mid(OpIdx + Op.Len()).TrimStartAndEnd();
+		Conds.Add(C);
+	}
+
+	if (Conds.Num() == 0)
+	{
+		return FMonolithActionResult::Error(TEXT("No valid conditions parsed. Supported: emitters>N / emitters<N / emitters=N, sim_target=GPU|CPU, has_renderer=<name>"));
+	}
+
+	FARFilter Filter;
+	IAssetRegistry& AR = GetNiagaraSystemFilter(Folder, Filter);
+	TArray<FAssetData> Assets;
+	AR.GetAssets(Filter, Assets);
+
+	TArray<TSharedPtr<FJsonValue>> Matches;
+	for (const FAssetData& Asset : Assets)
+	{
+		const FString PackagePath = Asset.GetSoftObjectPath().ToString();
+		UNiagaraSystem* Sys = LoadObject<UNiagaraSystem>(nullptr, *PackagePath);
+		if (!Sys) continue;
+
+		const int32 EmitterCount = Sys->GetEmitterHandles().Num();
+		bool bHasGPU = false, bHasCPU = false;
+		TSet<FString> RendererClasses;
+		for (const FNiagaraEmitterHandle& Handle : Sys->GetEmitterHandles())
+		{
+			const FVersionedNiagaraEmitterData* ED = Handle.GetEmitterData();
+			if (!ED) continue;
+			if (ED->SimTarget == ENiagaraSimTarget::GPUComputeSim) bHasGPU = true; else bHasCPU = true;
+			for (UNiagaraRendererProperties* Rend : ED->GetRenderers())
+			{
+				if (Rend) RendererClasses.Add(Rend->GetClass()->GetName());
+			}
+		}
+
+		bool bAllMatch = true;
+		for (const FCond& C : Conds)
+		{
+			bool bThis = false;
+			if (C.Key == TEXT("emitters"))
+			{
+				const int32 N = FCString::Atoi(*C.Value);
+				if (C.Op == TEXT("=")) bThis = (EmitterCount == N);
+				else if (C.Op == TEXT(">")) bThis = (EmitterCount > N);
+				else if (C.Op == TEXT("<")) bThis = (EmitterCount < N);
+				else if (C.Op == TEXT(">=")) bThis = (EmitterCount >= N);
+				else if (C.Op == TEXT("<=")) bThis = (EmitterCount <= N);
+			}
+			else if (C.Key == TEXT("sim_target"))
+			{
+				const FString V = C.Value.ToUpper();
+				if (V.StartsWith(TEXT("GPU"))) bThis = bHasGPU;
+				else if (V.StartsWith(TEXT("CPU"))) bThis = bHasCPU;
+			}
+			else if (C.Key == TEXT("has_renderer"))
+			{
+				for (const FString& RC : RendererClasses)
+				{
+					if (RC.Contains(C.Value, ESearchCase::IgnoreCase)) { bThis = true; break; }
+				}
+			}
+			if (!bThis) { bAllMatch = false; break; }
+		}
+
+		if (bAllMatch)
+		{
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("path"), PackagePath);
+			Entry->SetNumberField(TEXT("emitter_count"), EmitterCount);
+			TArray<TSharedPtr<FJsonValue>> SimTargets;
+			if (bHasGPU) SimTargets.Add(MakeShared<FJsonValueString>(TEXT("GPU")));
+			if (bHasCPU) SimTargets.Add(MakeShared<FJsonValueString>(TEXT("CPU")));
+			Entry->SetArrayField(TEXT("sim_targets"), SimTargets);
+			Matches.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		if (Matches.Num() >= Limit) break;
+	}
+
+	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
+	R->SetStringField(TEXT("query"), QueryString);
+	R->SetNumberField(TEXT("count"), Matches.Num());
+	R->SetArrayField(TEXT("matches"), Matches);
+	return SuccessObj(R);
+}
+
+// ----------------------------------------------------------------------------
+// find_similar_systems — rank systems by structural similarity to a reference system.
+//   Similarity metric (0..1): weighted blend of three structural signals
+//     0.34 * emitter-count proximity (1 - |dA-dB| / max(dA,dB,1))
+//     0.33 * Jaccard(renderer-class sets)
+//     0.33 * Jaccard(module-script-path sets)
+//   The reference scores exactly 1.0 against itself (identical on all three signals).
+// ----------------------------------------------------------------------------
+FMonolithActionResult FMonolithNiagaraActions::HandleFindSimilarSystems(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString RefPath = GetAssetPath(Params);
+	if (RefPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
+	const double Threshold = Params->HasField(TEXT("threshold")) ? Params->GetNumberField(TEXT("threshold")) : 0.5;
+	const int32 Limit = ReadLimit(Params, 10);
+
+	UNiagaraSystem* RefSys = LoadSystem(RefPath);
+	if (!RefSys) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load reference system '%s'"), *RefPath));
+
+	const int32 RefEmitters = RefSys->GetEmitterHandles().Num();
+	TSet<FString> RefRenderers; CollectSystemRendererClasses(RefSys, RefRenderers);
+	TSet<FString> RefModules; CollectSystemModulePaths(RefSys, RefModules);
+	const FString RefPackagePath = RefSys->GetPathName();
+
+	FARFilter Filter;
+	IAssetRegistry& AR = GetNiagaraSystemFilter(TEXT(""), Filter);
+	TArray<FAssetData> Assets;
+	AR.GetAssets(Filter, Assets);
+
+	struct FScored { FString Path; double Score; };
+	TArray<FScored> Scored;
+	for (const FAssetData& Asset : Assets)
+	{
+		const FString PackagePath = Asset.GetSoftObjectPath().ToString();
+		UNiagaraSystem* Sys = LoadObject<UNiagaraSystem>(nullptr, *PackagePath);
+		if (!Sys) continue;
+		const bool bIsSelf = (Sys == RefSys) || (Sys->GetPathName() == RefPackagePath);
+
+		const int32 Emitters = Sys->GetEmitterHandles().Num();
+		TSet<FString> Renderers; CollectSystemRendererClasses(Sys, Renderers);
+		TSet<FString> Modules; CollectSystemModulePaths(Sys, Modules);
+
+		const int32 MaxE = FMath::Max3(RefEmitters, Emitters, 1);
+		const double EmitterProx = 1.0 - (static_cast<double>(FMath::Abs(RefEmitters - Emitters)) / static_cast<double>(MaxE));
+		const double RendJac = JaccardSimilarity(RefRenderers, Renderers);
+		const double ModJac = JaccardSimilarity(RefModules, Modules);
+		const double Score = 0.34 * EmitterProx + 0.33 * RendJac + 0.33 * ModJac;
+
+		if (bIsSelf || Score >= Threshold)
+		{
+			Scored.Add({ PackagePath, bIsSelf ? 1.0 : Score });
+		}
+	}
+
+	Scored.Sort([](const FScored& A, const FScored& B) { return A.Score > B.Score; });
+
+	TArray<TSharedPtr<FJsonValue>> Matches;
+	for (const FScored& S : Scored)
+	{
+		if (Matches.Num() >= Limit) break;
+		TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("path"), S.Path);
+		Entry->SetNumberField(TEXT("similarity"), S.Score);
+		Matches.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
+	R->SetStringField(TEXT("asset_path"), RefPath);
+	R->SetNumberField(TEXT("emitter_count"), RefEmitters);
+	R->SetNumberField(TEXT("module_count"), RefModules.Num());
+	R->SetNumberField(TEXT("count"), Matches.Num());
+	R->SetArrayField(TEXT("matches"), Matches);
+	return SuccessObj(R);
+}
+
+// ----------------------------------------------------------------------------
+// search_by_material — systems whose emitter renderers reference a given material
+// ----------------------------------------------------------------------------
+FMonolithActionResult FMonolithNiagaraActions::HandleSearchByMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+	FString MaterialPath = Params->HasField(TEXT("material_path")) ? Params->GetStringField(TEXT("material_path")) : TEXT("");
+	if (MaterialPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: material_path"));
+	const FString Folder = ReadFolderFilter(Params);
+	const int32 Limit = ReadLimit(Params, 50);
+
+	// Normalize: compare on package-path prefix so /Game/M_Foo and /Game/M_Foo.M_Foo both match.
+	FString TargetObjPath = MaterialPath;
+	int32 DotIdx;
+	if (TargetObjPath.FindChar('.', DotIdx))
+	{
+		TargetObjPath = TargetObjPath.Left(DotIdx);
+	}
+
+	FARFilter Filter;
+	IAssetRegistry& AR = GetNiagaraSystemFilter(Folder, Filter);
+	TArray<FAssetData> Assets;
+	AR.GetAssets(Filter, Assets);
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	for (const FAssetData& Asset : Assets)
+	{
+		const FString PackagePath = Asset.GetSoftObjectPath().ToString();
+		UNiagaraSystem* Sys = LoadObject<UNiagaraSystem>(nullptr, *PackagePath);
+		if (!Sys) continue;
+
+		bool bMatched = false;
+		FString MatchedEmitter;
+		for (const FNiagaraEmitterHandle& Handle : Sys->GetEmitterHandles())
+		{
+			const FVersionedNiagaraEmitterData* ED = Handle.GetEmitterData();
+			if (!ED) continue;
+			for (UNiagaraRendererProperties* Rend : ED->GetRenderers())
+			{
+				UMaterialInterface* Mat = GetRendererMaterialAssetTime(Rend);
+				if (!Mat) continue;
+				FString MatPath = Mat->GetPathName();
+				int32 MDot;
+				if (MatPath.FindChar('.', MDot)) MatPath = MatPath.Left(MDot);
+				if (MatPath == TargetObjPath)
+				{
+					bMatched = true;
+					MatchedEmitter = Handle.GetName().ToString();
+					break;
+				}
+			}
+			if (bMatched) break;
+		}
+
+		if (bMatched)
+		{
+			TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("path"), PackagePath);
+			Entry->SetStringField(TEXT("emitter"), MatchedEmitter);
+			Results.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		if (Results.Num() >= Limit) break;
+	}
+
+	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
+	R->SetStringField(TEXT("material_path"), MaterialPath);
+	R->SetNumberField(TEXT("count"), Results.Num());
+	R->SetArrayField(TEXT("systems"), Results);
+	return SuccessObj(R);
+}
+
+// ----------------------------------------------------------------------------
+// find_niagara_references — assets referencing a given Niagara asset (AR referencer graph)
+// ----------------------------------------------------------------------------
+FMonolithActionResult FMonolithNiagaraActions::HandleFindNiagaraReferences(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString AssetPath = GetAssetPath(Params);
+	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
+	const int32 Limit = ReadLimit(Params, 100);
+
+	// Convert object path (/Game/VFX/NS_Foo or /Game/VFX/NS_Foo.NS_Foo) to long package name (/Game/VFX/NS_Foo).
+	FString PackageName = AssetPath;
+	int32 DotIdx;
+	if (PackageName.FindChar('.', DotIdx))
+	{
+		PackageName = PackageName.Left(DotIdx);
+	}
+
+	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+
+	TArray<FName> Referencers;
+	// IAssetRegistry::GetReferencers(FName PackageName, TArray<FName>&, Category=Package) — verified IAssetRegistry.h:592
+	AR.GetReferencers(FName(*PackageName), Referencers);
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	for (const FName& Ref : Referencers)
+	{
+		if (Results.Num() >= Limit) break;
+		Results.Add(MakeShared<FJsonValueString>(Ref.ToString()));
+	}
+
+	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
+	R->SetStringField(TEXT("asset_path"), AssetPath);
+	R->SetStringField(TEXT("package_name"), PackageName);
+	R->SetNumberField(TEXT("count"), Results.Num());
+	R->SetNumberField(TEXT("total_referencers"), Referencers.Num());
+	R->SetArrayField(TEXT("referencers"), Results);
+	return SuccessObj(R);
+}
+
+// ----------------------------------------------------------------------------
+// list_system_data_interfaces — DIs actually USED BY a given system (per-system traversal).
+//   Distinct from get_di_properties (CDO-class reflection only).
+// ----------------------------------------------------------------------------
+FMonolithActionResult FMonolithNiagaraActions::HandleListSystemDataInterfaces(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString AssetPath = GetAssetPath(Params);
+	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
+
+	UNiagaraSystem* Sys = LoadSystem(AssetPath);
+	if (!Sys) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load system '%s'"), *AssetPath));
+
+	TArray<TSharedPtr<FJsonValue>> DIs;
+	TSet<FString> Seen; // dedupe by variable+class so repeated DI bindings collapse
+	// Asset-time overload (NiagaraDataInterfaceUtilities.h:43). Return true to continue.
+	FNiagaraDataInterfaceUtilities::ForEachDataInterface(Sys,
+		[&DIs, &Seen](const FNiagaraDataInterfaceUtilities::FDataInterfaceUsageContext& Ctx) -> bool
+		{
+			if (Ctx.DataInterface)
+			{
+				const FString ClassName = Ctx.DataInterface->GetClass()->GetName();
+				const FString VarName = Ctx.Variable.GetName().ToString();
+				const FString Key = VarName + TEXT("|") + ClassName;
+				if (!Seen.Contains(Key))
+				{
+					Seen.Add(Key);
+					TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+					Entry->SetStringField(TEXT("variable"), VarName);
+					Entry->SetStringField(TEXT("class"), ClassName);
+					if (Ctx.OwnerObject)
+					{
+						Entry->SetStringField(TEXT("owner"), Ctx.OwnerObject->GetName());
+					}
+					DIs.Add(MakeShared<FJsonValueObject>(Entry));
+				}
+			}
+			return true; // continue iterating
+		});
+
+	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
+	R->SetStringField(TEXT("asset_path"), AssetPath);
+	R->SetNumberField(TEXT("count"), DIs.Num());
+	R->SetArrayField(TEXT("data_interfaces"), DIs);
 	return SuccessObj(R);
 }

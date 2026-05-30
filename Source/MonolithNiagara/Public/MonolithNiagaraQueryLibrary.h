@@ -227,4 +227,93 @@ public:
 		bool bIncludeMetadata,
 		UPARAM(DisplayName = "Success") bool& bSuccess,
 		FString& OutError);
+
+	// ---------------------------------------------------------------------------------------
+	// Tranche 2 (#64): Search & Discovery gap-action nodes (Monolith|Niagara|Search)
+	// ---------------------------------------------------------------------------------------
+
+	/** Find systems exposing a user parameter matching a name (optional type filter). Wraps niagara.search_by_parameter. Editor game-thread only. */
+	UFUNCTION(BlueprintCallable,
+		Category = "Monolith|Niagara|Search",
+		meta = (AdvancedDisplay = "ParameterType,Folder,Limit",
+		        Keywords = "niagara search parameter find by"))
+	static MONOLITHNIAGARA_API FString SearchNiagaraByParameter(
+		const FString& ParameterName,
+		const FString& ParameterType,
+		const FString& Folder,
+		int32 Limit,
+		UPARAM(DisplayName = "Success") bool& bSuccess,
+		FString& OutError);
+
+	/** Find systems using a Data Interface whose class name matches the query. Wraps niagara.search_by_data_interface. Editor game-thread only; loads each system. */
+	UFUNCTION(BlueprintCallable,
+		Category = "Monolith|Niagara|Search",
+		meta = (AdvancedDisplay = "Folder,Limit",
+		        Keywords = "niagara search data interface di find by"))
+	static MONOLITHNIAGARA_API FString SearchNiagaraByDataInterface(
+		const FString& DIClass,
+		const FString& Folder,
+		int32 Limit,
+		UPARAM(DisplayName = "Success") bool& bSuccess,
+		FString& OutError);
+
+	/** Structured-filter query over systems (emitters=N, sim_target=GPU|CPU, has_renderer=...). Wraps niagara.query_niagara. NOT natural language. Editor game-thread only. */
+	UFUNCTION(BlueprintCallable,
+		Category = "Monolith|Niagara|Search",
+		meta = (AdvancedDisplay = "Folder,Limit",
+		        Keywords = "niagara query filter dsl search"))
+	static MONOLITHNIAGARA_API FString QueryNiagara(
+		const FString& QueryString,
+		const FString& Folder,
+		int32 Limit,
+		UPARAM(DisplayName = "Success") bool& bSuccess,
+		FString& OutError);
+
+	/** Rank systems by structural similarity to a reference system (1.0 = identical). Wraps niagara.find_similar_systems. Editor game-thread only. */
+	UFUNCTION(BlueprintCallable,
+		Category = "Monolith|Niagara|Search",
+		meta = (AdvancedDisplay = "Threshold,Limit",
+		        Keywords = "niagara similar systems cluster find"))
+	static MONOLITHNIAGARA_API FString FindSimilarNiagaraSystems(
+		const FString& AssetPath,
+		float Threshold,
+		int32 Limit,
+		UPARAM(DisplayName = "Success") bool& bSuccess,
+		FString& OutError);
+
+	/** Find systems whose emitter renderers reference a given material. Wraps niagara.search_by_material. Editor game-thread only; loads each system. */
+	UFUNCTION(BlueprintCallable,
+		Category = "Monolith|Niagara|Search",
+		meta = (AdvancedDisplay = "Folder,Limit",
+		        Keywords = "niagara search material find by renderer"))
+	static MONOLITHNIAGARA_API FString SearchNiagaraByMaterial(
+		const FString& MaterialPath,
+		const FString& Folder,
+		int32 Limit,
+		UPARAM(DisplayName = "Success") bool& bSuccess,
+		FString& OutError);
+
+	/** Find all assets referencing a given Niagara asset (Asset Registry referencer graph). Wraps niagara.find_niagara_references. Editor game-thread only. */
+	UFUNCTION(BlueprintCallable,
+		Category = "Monolith|Niagara|Search",
+		meta = (AdvancedDisplay = "Limit",
+		        Keywords = "niagara references referencers find dependencies"))
+	static MONOLITHNIAGARA_API FString FindNiagaraReferences(
+		const FString& AssetPath,
+		int32 Limit,
+		UPARAM(DisplayName = "Success") bool& bSuccess,
+		FString& OutError);
+
+	// ---------------------------------------------------------------------------------------
+	// Tranche 2 (#64): per-system Data Interface enumeration (Monolith|Niagara|Inspection)
+	// ---------------------------------------------------------------------------------------
+
+	/** Enumerate the Data Interfaces actually USED BY a system (per-system traversal, not CDO-class). Wraps niagara.list_system_data_interfaces. Editor game-thread only. */
+	UFUNCTION(BlueprintCallable,
+		Category = "Monolith|Niagara|Inspection",
+		meta = (Keywords = "niagara data interfaces di system used enumerate"))
+	static MONOLITHNIAGARA_API FString GetNiagaraDataInterfaces(
+		const FString& AssetPath,
+		UPARAM(DisplayName = "Success") bool& bSuccess,
+		FString& OutError);
 };
