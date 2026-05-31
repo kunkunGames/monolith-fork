@@ -9,11 +9,13 @@
 ## MonolithGAS
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, GameplayAbilities, GameplayTags
-**Namespace:** `gas` (135 actions) + 4 cross-namespace aliases into `ui` | **Tool:** `gas_query(action, params)` | **Actions:** 135 (Phase J F8: +`grant_ability_to_pawn`)
-**Conditional:** GBA (Blueprint Attributes) features wrapped in `#if WITH_GBA`. Core GAS engine modules (GameplayAbilities, GameplayTags, GameplayTasks) are always available. When GBA is absent, Blueprint AttributeSet creation is disabled but all 135 actions still register and compile cleanly. When `bEnableGAS` is disabled in settings, 0 actions registered.
+**Namespace:** `gas` (142 actions) + 4 cross-namespace aliases into `ui` | **Tool:** `gas_query(action, params)` | **Actions:** 142 (Phase J F8: +`grant_ability_to_pawn`; 2026-05-31 Go workflow P0/P3/P4: +DataAsset profile describe/validate/set and runtime event/cue probes)
+**Conditional:** GBA (Blueprint Attributes) features wrapped in `#if WITH_GBA`. Core GAS engine modules (GameplayAbilities, GameplayTags, GameplayTasks) are always available. When GBA is absent, Blueprint AttributeSet creation is disabled but all 142 actions still register and compile cleanly. When `bEnableGAS` is disabled in settings, 0 `gas` actions registered.
 **Settings toggle:** `bEnableGAS` (default: True)
 
 MonolithGAS provides full MCP coverage of the Gameplay Ability System. It covers ability CRUD, attribute set management, gameplay effect authoring, ASC (Ability System Component) inspection and manipulation, gameplay tag operations, gameplay cue management, target data, input binding, runtime inspection, scaffolding of common GAS patterns, and Widget→Attribute binding via class-extension authoring.
+
+Related follow-up: [SPEC_MonolithGAS_GoWorkflowImprovements.md](SPEC_MonolithGAS_GoWorkflowImprovements.md) captures DataAsset-driven skill, tag-based input, held/channel policy, runtime cue/event proof, and offline GAS validation improvements discovered during the Go GAS enhancement pass. The implementation adds DataAsset GAS profile describe/validate actions, manifest embedding, release-input ability validation, safe dry-run-first DataAsset profile writes, runtime event/cue probe actions, and readiness fields on `get_runtime_summary`. A dedicated offline `monolith_query.exe gas` namespace remains deferred to preserve CLI routing cohesion.
 
 ### Action Categories
 
@@ -27,11 +29,12 @@ MonolithGAS provides full MCP coverage of the Gameplay Ability System. It covers
 | Cues | 10 | Create/edit gameplay cue notifies (static and actor), cue tags, cue parameters, handler lookup |
 | Targets | 5 | Target data handles, target actor selection, target data confirmation, custom target data types |
 | Input | 5 | Bind abilities to Enhanced Input actions, input tag mapping, activation on input |
-| Inspect | 6 | Runtime inspection of active abilities, applied effects, attribute snapshots, ability task state, prediction keys |
+| DataAsset Profile | 3 | `describe_data_asset_gas_profile`, `validate_data_asset_gas_profile`, `set_data_asset_gas_fields` for DataAsset-driven GAS skill/profile inspection, validation, and transacted dry-run-first field writes |
+| Inspect | 10 | Runtime inspection of active abilities, applied effects, attribute snapshots, ability task state, prediction keys, safe readiness summary, and bounded PIE event/cue probes |
 | Scaffold | 7 | Scaffold common GAS setups: init_attribute_set, init_asc_actor, init_ability_set, init_damage_pipeline, init_cooldown_system, init_stacking_effect, **`grant_ability_to_pawn`** (Phase J F8 — author-time append to ASC startup-abilities array via reflection) |
 | UI Binding | 4 | `bind_widget_to_attribute`, `unbind_widget_attribute`, `list_attribute_bindings`, `clear_widget_attribute_bindings`. Authored via `UMonolithGASAttributeBindingClassExtension`. **Also registered as aliases in the `ui` namespace** (so `ui::bind_widget_to_attribute` and `gas::bind_widget_to_attribute` dispatch to the same handler — see `MonolithGASUIBindingActions.cpp:561-577`). The `ui::` aliases are documented in [SPEC_MonolithUI.md](SPEC_MonolithUI.md) "GAS Bridge Aliases" section |
 
-**Total:** 28 + 20 + 26 + 14 + 10 + 10 + 5 + 5 + 6 + 7 + 4 = **135**.
+**Total:** 28 + 20 + 26 + 14 + 10 + 10 + 5 + 5 + 3 + 10 + 7 + 4 = **142**.
 
 ### Phase J fixes touching this module
 
@@ -41,6 +44,7 @@ MonolithGAS provides full MCP coverage of the Gameplay Ability System. It covers
 - **F6 (2026-04-26)** — J1 spec relaxed to match impl (`warnings` omitted-when-empty, AttributeSet enumeration dropped, full-valid-list replaces Levenshtein "did you mean").
 - **F8 (2026-04-26)** — `gas::grant_ability_to_pawn` added (+1).
 - **F9 logging (2026-04-26)** — Observability adds + `LogMonolithGASUIBinding` / `LogMonolithGASUIBindingExt` retired into parent `LogMonolithGAS` category.
+- **Go workflow P0/P3/P4 (2026-05-31)** — `gas::describe_data_asset_gas_profile`, `gas::validate_data_asset_gas_profile`, `gas::set_data_asset_gas_fields`, `gas::start_event_cue_probe`, `gas::stop_event_cue_probe`, and `gas::expect_event_cue` added (+6). `gas::get_runtime_summary` now reports GAS namespace registration, action count, `WITH_GBA`, ProjectIndex availability, and read-only fallback guidance while remaining safe outside PIE.
 
 See [SPEC_CORE.md §11 Recent Fixes](../SPEC_CORE.md#recent-fixes-phase-j--shipped-in-0147) for the long-form descriptions.
 
@@ -105,4 +109,3 @@ Returns:
 
 - `Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASBulkFillAdapter.h` / `.cpp` — the adapter
 - `Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASModule.cpp` — `Register()` + `Unregister()` call sites
-

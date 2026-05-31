@@ -119,8 +119,10 @@ namespace
 		FString Path;
 		int64 FileId = 0;
 		int64 BaseClass = 0, MidClass = 0, ChildClass = 0;
+		int64 IndirectClass = 0, IndirectChildClass = 0;
+		int64 ImplOnlyClass = 0, ImplOnlyTick = 0;
 		int64 LeftClass = 0, RightClass = 0, DiamondClass = 0;
-		int64 BaseTick = 0, MidTick = 0, ChildTick = 0;
+		int64 BaseTick = 0, MidTick = 0, ChildTick = 0, IndirectTick = 0;
 		int64 BaseReset = 0, MidResetMismatch = 0;
 		int64 BaseApply = 0, LeftApply = 0, RightApply = 0, DiamondApply = 0;
 		int64 BaseResolve = 0, MidResolve = 0;
@@ -135,12 +137,17 @@ namespace
 			BaseClass = Db.InsertSymbol(TEXT("Base"), TEXT("M::Base"), TEXT("class"), FileId, 1, 20, 0, TEXT("public"), TEXT(""), TEXT(""), false);
 			MidClass = Db.InsertSymbol(TEXT("Mid"), TEXT("M::Mid"), TEXT("class"), FileId, 21, 60, 0, TEXT("public"), TEXT(""), TEXT(""), false);
 			ChildClass = Db.InsertSymbol(TEXT("Child"), TEXT("M::Child"), TEXT("class"), FileId, 61, 100, 0, TEXT("public"), TEXT(""), TEXT(""), false);
+			IndirectClass = Db.InsertSymbol(TEXT("Indirect"), TEXT("M::Indirect"), TEXT("class"), FileId, 181, 200, 0, TEXT("public"), TEXT(""), TEXT(""), false);
+			IndirectChildClass = Db.InsertSymbol(TEXT("IndirectChild"), TEXT("M::IndirectChild"), TEXT("class"), FileId, 201, 220, 0, TEXT("public"), TEXT(""), TEXT(""), false);
+			ImplOnlyClass = Db.InsertSymbol(TEXT("ImplOnly"), TEXT("M::ImplOnly"), TEXT("class"), FileId, 221, 240, 0, TEXT("public"), TEXT(""), TEXT(""), false);
 			LeftClass = Db.InsertSymbol(TEXT("Left"), TEXT("M::Left"), TEXT("class"), FileId, 101, 120, 0, TEXT("public"), TEXT(""), TEXT(""), false);
 			RightClass = Db.InsertSymbol(TEXT("Right"), TEXT("M::Right"), TEXT("class"), FileId, 121, 140, 0, TEXT("public"), TEXT(""), TEXT(""), false);
 			DiamondClass = Db.InsertSymbol(TEXT("Diamond"), TEXT("M::Diamond"), TEXT("class"), FileId, 141, 180, 0, TEXT("public"), TEXT(""), TEXT(""), false);
 			BaseTick = Db.InsertSymbol(TEXT("Tick"), TEXT("M::Base::Tick"), TEXT("function"), FileId, 4, 5, BaseClass, TEXT("public"), TEXT("virtual void Tick(float DeltaTime)"), TEXT(""), false);
 			MidTick = Db.InsertSymbol(TEXT("Tick"), TEXT("M::Mid::Tick"), TEXT("function"), FileId, 25, 26, MidClass, TEXT("public"), TEXT("virtual void Tick(float DeltaTime) override { Call(DeltaTime); }"), TEXT(""), false);
 			ChildTick = Db.InsertSymbol(TEXT("Tick"), TEXT("M::Child::Tick"), TEXT("function"), FileId, 65, 66, ChildClass, TEXT("public"), TEXT("void Tick(float DeltaTime) override { if (DeltaTime > 0.0f) { TickImpl(DeltaTime); } }"), TEXT(""), false);
+			IndirectTick = Db.InsertSymbol(TEXT("Tick"), TEXT("M::IndirectChild::Tick"), TEXT("function"), FileId, 205, 206, IndirectChildClass, TEXT("public"), TEXT("void Tick(float DeltaTime) override"), TEXT(""), false);
+			ImplOnlyTick = Db.InsertSymbol(TEXT("ImplOnly::Tick"), TEXT("M::ImplOnly::ImplOnly::Tick"), TEXT("function"), FileId, 225, 226, ImplOnlyClass, TEXT("public"), TEXT("void ImplOnly::Tick(float DeltaTime)"), TEXT(""), false);
 			BaseReset = Db.InsertSymbol(TEXT("Reset"), TEXT("M::Base::Reset"), TEXT("function"), FileId, 8, 9, BaseClass, TEXT("public"), TEXT("virtual void Reset(int32 Count)"), TEXT(""), false);
 			MidResetMismatch = Db.InsertSymbol(TEXT("Reset"), TEXT("M::Mid::Reset"), TEXT("function"), FileId, 30, 31, MidClass, TEXT("public"), TEXT("void Reset(float Count) override"), TEXT(""), false);
 			BaseApply = Db.InsertSymbol(TEXT("Apply"), TEXT("M::Base::Apply"), TEXT("function"), FileId, 12, 13, BaseClass, TEXT("public"), TEXT("virtual void Apply(int32 Count)"), TEXT(""), false);
@@ -151,14 +158,17 @@ namespace
 			MidResolve = Db.InsertSymbol(TEXT("Resolve"), TEXT("M::Mid::Resolve"), TEXT("function"), FileId, 35, 36, MidClass, TEXT("public"), TEXT("void Resolve() override"), TEXT(""), false);
 			Db.InsertInheritance(MidClass, BaseClass);
 			Db.InsertInheritance(ChildClass, MidClass);
+			Db.InsertInheritance(IndirectClass, BaseClass);
+			Db.InsertInheritance(IndirectChildClass, IndirectClass);
 			Db.InsertInheritance(LeftClass, BaseClass);
 			Db.InsertInheritance(RightClass, BaseClass);
 			Db.InsertInheritance(DiamondClass, LeftClass);
 			Db.InsertInheritance(DiamondClass, RightClass);
 			Db.SetMeta(TEXT("schema_version"), TEXT("1"));
 			return BaseClass > 0 && MidClass > 0 && ChildClass > 0
+				&& IndirectClass > 0 && IndirectChildClass > 0 && ImplOnlyClass > 0
 				&& LeftClass > 0 && RightClass > 0 && DiamondClass > 0
-				&& BaseTick > 0 && MidTick > 0 && ChildTick > 0
+				&& BaseTick > 0 && MidTick > 0 && ChildTick > 0 && IndirectTick > 0 && ImplOnlyTick > 0
 				&& BaseReset > 0 && MidResetMismatch > 0
 				&& BaseApply > 0 && LeftApply > 0 && RightApply > 0 && DiamondApply > 0
 				&& BaseResolve > 0 && MidResolve > 0;
@@ -265,18 +275,42 @@ bool FSourceOverrideEdgesMatchSignaturesTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("temp override source db built"), T.Build());
 
 	const TArray<FMonolithSourceOverrideEdge> BaseOverrides = T.Db.GetOverridesTo(T.BaseTick, 10);
-	TestEqual(TEXT("Base::Tick has one direct child override"), BaseOverrides.Num(), 1);
-	if (BaseOverrides.Num() == 1)
+	auto HasOverrideFrom = [](const TArray<FMonolithSourceOverrideEdge>& Edges, int64 SymbolId) -> bool
 	{
-		TestEqual(TEXT("Base::Tick override is Mid::Tick"), BaseOverrides[0].FromSymbolId, T.MidTick);
+		return Edges.ContainsByPredicate([&](const FMonolithSourceOverrideEdge& Edge)
+		{
+			return Edge.FromSymbolId == SymbolId;
+		});
+	};
+	auto HasOverrideTo = [](const TArray<FMonolithSourceOverrideEdge>& Edges, int64 SymbolId) -> bool
+	{
+		return Edges.ContainsByPredicate([&](const FMonolithSourceOverrideEdge& Edge)
+		{
+			return Edge.ToSymbolId == SymbolId;
+		});
+	};
+	TestEqual(TEXT("Base::Tick includes all descendant overrides"), BaseOverrides.Num(), 3);
+	if (BaseOverrides.Num() == 3)
+	{
+		TestTrue(TEXT("Base::Tick includes Mid::Tick"), HasOverrideFrom(BaseOverrides, T.MidTick));
+		TestTrue(TEXT("Base::Tick includes Child::Tick"), HasOverrideFrom(BaseOverrides, T.ChildTick));
+		TestTrue(TEXT("Base::Tick includes indirect descendant override"), HasOverrideFrom(BaseOverrides, T.IndirectTick));
 		TestEqual(TEXT("override confidence high"), BaseOverrides[0].Confidence, FString(TEXT("high")));
 	}
 
 	const TArray<FMonolithSourceOverrideEdge> ChildParents = T.Db.GetOverridesFrom(T.ChildTick, 10);
-	TestEqual(TEXT("Child::Tick overrides one direct parent method"), ChildParents.Num(), 1);
-	if (ChildParents.Num() == 1)
+	TestEqual(TEXT("Child::Tick resolves all overridden ancestor methods"), ChildParents.Num(), 2);
+	if (ChildParents.Num() == 2)
 	{
-		TestEqual(TEXT("Child::Tick parent override is Mid::Tick"), ChildParents[0].ToSymbolId, T.MidTick);
+		TestTrue(TEXT("Child::Tick overrides Mid::Tick"), HasOverrideTo(ChildParents, T.MidTick));
+		TestTrue(TEXT("Child::Tick overrides Base::Tick"), HasOverrideTo(ChildParents, T.BaseTick));
+	}
+
+	const TArray<FMonolithSourceSymbol> ImplOnlySymbols = T.Db.GetSymbolsByName(TEXT("M::ImplOnly::Tick"), TEXT("function"), 5);
+	TestEqual(TEXT("duplicated qualified implementation lookup resolves by qualified_name"), ImplOnlySymbols.Num(), 1);
+	if (ImplOnlySymbols.Num() == 1)
+	{
+		TestEqual(TEXT("implementation-only symbol id"), ImplOnlySymbols[0].Id, T.ImplOnlyTick);
 	}
 
 	const TArray<FMonolithSourceOverrideEdge> ResetOverrides = T.Db.GetOverridesTo(T.BaseReset, 10);
@@ -298,14 +332,16 @@ bool FSourceFindOverridesTraversesDepthTest::RunTest(const FString& Parameters)
 	FTempOverrideSourceDb T;
 	TestTrue(TEXT("temp override source db built"), T.Build());
 
-	TSharedPtr<FJsonObject> R = FMonolithSourceReview::FindOverrides(T.Db, TEXT("M::Base::Tick"), TEXT("in"), 2, 200);
+	TSharedPtr<FJsonObject> R = FMonolithSourceReview::FindOverrides(T.Db, TEXT("M::Base::Tick"), TEXT("in"), 1, 200);
 	TestEqual(TEXT("find_overrides status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	const TArray<TSharedPtr<FJsonValue>>* Overrides = nullptr;
 	TestTrue(TEXT("overrides array present"), R->TryGetArrayField(TEXT("overrides"), Overrides) && Overrides != nullptr);
 	TestTrue(TEXT("Mid::Tick appears as depth-1 override"), JsonArrayHasQualifiedName(Overrides, TEXT("M::Mid::Tick")));
-	TestTrue(TEXT("Child::Tick appears through depth-2 override traversal"), JsonArrayHasQualifiedName(Overrides, TEXT("M::Child::Tick")));
+	TestTrue(TEXT("Child::Tick appears through transitive ancestor override lookup"), JsonArrayHasQualifiedName(Overrides, TEXT("M::Child::Tick")));
+	TestTrue(TEXT("IndirectChild::Tick appears despite intermediate class not redeclaring Tick"), JsonArrayHasQualifiedName(Overrides, TEXT("M::IndirectChild::Tick")));
 	TestEqual(TEXT("Mid::Tick override depth is 1"), JsonArrayQualifiedNameDepth(Overrides, TEXT("M::Mid::Tick")), 1);
-	TestEqual(TEXT("Child::Tick override depth is 2"), JsonArrayQualifiedNameDepth(Overrides, TEXT("M::Child::Tick")), 2);
+	TestEqual(TEXT("Child::Tick override depth is 1"), JsonArrayQualifiedNameDepth(Overrides, TEXT("M::Child::Tick")), 1);
+	TestEqual(TEXT("IndirectChild::Tick override depth is 1"), JsonArrayQualifiedNameDepth(Overrides, TEXT("M::IndirectChild::Tick")), 1);
 
 	const TArray<TSharedPtr<FJsonValue>>* Edges = nullptr;
 	TestTrue(TEXT("override edges present"), R->TryGetArrayField(TEXT("edges"), Edges) && Edges != nullptr && Edges->Num() >= 2);
@@ -333,7 +369,7 @@ bool FSourceFindOverridesHandlesDiamondDepthTest::RunTest(const FString& Paramet
 	TestTrue(TEXT("diamond overrides array present"), R->TryGetArrayField(TEXT("overrides"), Overrides) && Overrides != nullptr);
 	TestEqual(TEXT("Left::Apply is direct depth 1"), JsonArrayQualifiedNameDepth(Overrides, TEXT("M::Left::Apply")), 1);
 	TestEqual(TEXT("Right::Apply is direct depth 1"), JsonArrayQualifiedNameDepth(Overrides, TEXT("M::Right::Apply")), 1);
-	TestEqual(TEXT("Diamond::Apply is depth 2"), JsonArrayQualifiedNameDepth(Overrides, TEXT("M::Diamond::Apply")), 2);
+	TestEqual(TEXT("Diamond::Apply is found through transitive diamond ancestry"), JsonArrayQualifiedNameDepth(Overrides, TEXT("M::Diamond::Apply")), 1);
 	TestEqual(TEXT("Diamond::Apply emitted once despite two parent paths"), JsonArrayQualifiedNameCount(Overrides, TEXT("M::Diamond::Apply")), 1);
 	return true;
 }
@@ -355,12 +391,12 @@ bool FSourceRiskScoreIncludesOverrideFanoutTest::RunTest(const FString& Paramete
 		TestTrue(TEXT("raw_counts present"), RawCounts.IsValid());
 		if (RawCounts.IsValid())
 		{
-			TestEqual(TEXT("risk raw count includes direct override children"), RawCounts->GetIntegerField(TEXT("override_children")), 1);
+			TestEqual(TEXT("risk raw count includes descendant override children"), RawCounts->GetIntegerField(TEXT("override_children")), 3);
 		}
 		double Score = 0.0;
 		TestTrue(TEXT("risk score value present"), Item->TryGetNumberField(TEXT("score"), Score));
-		TestTrue(TEXT("override fanout increases risk score"), Score >= 0.006 && Score <= 0.008);
-		TestEqual(TEXT("single override fanout remains low tier"), Item->GetStringField(TEXT("tier")), FString(TEXT("low")));
+		TestTrue(TEXT("override fanout increases risk score"), Score >= 0.019 && Score <= 0.021);
+		TestEqual(TEXT("override fanout remains low tier"), Item->GetStringField(TEXT("tier")), FString(TEXT("low")));
 		const TArray<TSharedPtr<FJsonValue>>* Reasons = nullptr;
 		TestTrue(TEXT("risk reasons present"), Item->TryGetArrayField(TEXT("reasons"), Reasons) && Reasons != nullptr);
 		bool bOverrideReason = false;
@@ -670,7 +706,7 @@ bool FSourceReviewHotspotsOverrideTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("signals object valid"), Signals.IsValid());
 		if (Signals.IsValid())
 		{
-			TestEqual(TEXT("signature-aware override child count"), Signals->GetIntegerField(TEXT("override_children")), 1);
+			TestEqual(TEXT("signature-aware override child count"), Signals->GetIntegerField(TEXT("override_children")), 3);
 			TestEqual(TEXT("no overridden parent for base method"), Signals->GetIntegerField(TEXT("overridden_parents")), 0);
 		}
 	}
@@ -694,11 +730,11 @@ bool FSourceRepairCrgBuildsOverrideEdgeCacheTest::RunTest(const FString& Paramet
 	TestTrue(TEXT("repair after object present"), After.IsValid());
 	if (After.IsValid())
 	{
-		TestEqual(TEXT("exact override edge cache count"), After->GetIntegerField(TEXT("source_override_edges")), 7);
+		TestEqual(TEXT("exact override edge cache count"), After->GetIntegerField(TEXT("source_override_edges")), 10);
 	}
 
 	const TArray<FMonolithSourceOverrideEdge> BaseOverrides = T.Db.GetOverridesTo(T.BaseTick, 10);
-	TestEqual(TEXT("cached Base::Tick direct child override"), BaseOverrides.Num(), 1);
+	TestEqual(TEXT("cached Base::Tick descendant child overrides"), BaseOverrides.Num(), 3);
 	const TArray<FMonolithSourceOverrideEdge> ResetOverrides = T.Db.GetOverridesTo(T.BaseReset, 10);
 	TestEqual(TEXT("cached Reset mismatch stays excluded"), ResetOverrides.Num(), 0);
 	const TArray<FMonolithSourceOverrideEdge> UnknownSignatureOverrides = T.Db.GetOverridesTo(T.BaseResolve, 10);

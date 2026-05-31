@@ -138,6 +138,12 @@ namespace MonolithSourceSchema
 		TEXT("DROP TABLE IF EXISTS symbols;")
 		TEXT("DROP TABLE IF EXISTS files;")
 		TEXT("DROP TABLE IF EXISTS modules;")
+		TEXT("DROP TABLE IF EXISTS crg_nodes;")
+		TEXT("DROP TABLE IF EXISTS crg_edges;")
+		TEXT("DROP TABLE IF EXISTS crg_node_metrics;")
+		TEXT("DROP TABLE IF EXISTS crg_meta;")
+		TEXT("DROP TABLE IF EXISTS crg_snapshots;")
+		TEXT("DROP TABLE IF EXISTS source_override_edges;")
 		TEXT("DROP TABLE IF EXISTS meta;");
 
 } // namespace MonolithSourceSchema

@@ -103,7 +103,7 @@ namespace
 		return Path + TEXT(".") + AssetName;
 	}
 
-	FString NormalizePackagePath(const FString& Path)
+	FString NormalizeInputAssetPackagePath(const FString& Path)
 	{
 		FString PackagePath = Path;
 		FString ObjectName;
@@ -508,7 +508,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 		return FMonolithActionResult::Error(Error);
 	}
 
-	const FString PackagePath = NormalizePackagePath(AssetPath);
+	const FString PackagePath = NormalizeInputAssetPackagePath(AssetPath);
 	const FString ObjectPath = NormalizeObjectPath(PackagePath);
 	UInputAction* Action = LoadObject<UInputAction>(nullptr, *ObjectPath);
 	if (Action && !bOverwrite)
@@ -815,7 +815,7 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 		return FMonolithActionResult::Error(Error);
 	}
 
-	const FString PackagePath = NormalizePackagePath(AssetPath);
+	const FString PackagePath = NormalizeInputAssetPackagePath(AssetPath);
 	const FString ObjectPath = NormalizeObjectPath(PackagePath);
 	UInputMappingContext* Context = LoadObject<UInputMappingContext>(nullptr, *ObjectPath);
 	if (Context && !bOverwrite)

@@ -898,6 +898,23 @@ static std::string collapse_ws_copy(const std::string& value) {
     return trim_copy(out);
 }
 
+static std::string duplicated_qualified_lookup_name(const std::string& name) {
+    size_t pos = name.rfind("::");
+    if (pos == std::string::npos) return name;
+    std::string owner = name.substr(0, pos);
+    return owner.empty() ? name : owner + "::" + name;
+}
+
+static std::string short_owner_duplicated_qualified_lookup_name(const std::string& name) {
+    size_t pos = name.rfind("::");
+    if (pos == std::string::npos) return name;
+    std::string owner = name.substr(0, pos);
+    std::string method = name.substr(pos + 2);
+    size_t owner_pos = owner.rfind("::");
+    std::string short_owner = owner_pos == std::string::npos ? owner : owner.substr(owner_pos + 2);
+    return owner.empty() || short_owner.empty() ? name : owner + "::" + short_owner + "::" + method;
+}
+
 static bool is_ident_char(char ch) {
     return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_';
 }
@@ -1005,8 +1022,17 @@ static std::string strip_trailing_param_name(std::string param) {
     return prefix.empty() ? param : prefix;
 }
 
+static std::string strip_leading_elaborated_type_keyword(std::string param) {
+    param = trim_copy(param);
+    std::string lower = lower_copy(param);
+    for (const std::string& keyword : {"enum ", "class ", "struct "}) {
+        if (lower.rfind(keyword, 0) == 0) return trim_copy(param.substr(keyword.size()));
+    }
+    return param;
+}
+
 static std::string normalize_override_param(std::string param) {
-    param = collapse_ws_copy(strip_trailing_param_name(strip_default_param_value(param)));
+    param = collapse_ws_copy(strip_leading_elaborated_type_keyword(strip_trailing_param_name(strip_default_param_value(param))));
     for (const auto& repl : std::vector<std::pair<std::string, std::string>>{
         {" &", "&"}, {" *", "*"}, {" &&", "&&"}, {" ,", ","}, {", ", ","}}) {
         size_t pos = 0;
@@ -1548,19 +1574,29 @@ static bool populate_source_override_edge_cache(Database& db, int64_t& out_count
     out_count = 0;
     Rows candidates;
     if (!query_rows_ok(db, R"SQL(
+WITH RECURSIVE child_seed(id,name,qualified_name,kind,parent_symbol_id,signature) AS (
+  SELECT id,name,qualified_name,kind,parent_symbol_id,signature FROM symbols
+  WHERE kind = 'function' AND signature LIKE '%override%'
+), ancestors(child_class_id, ancestor_class_id) AS (
+  SELECT child_id, parent_id FROM inheritance
+  UNION
+  SELECT a.child_class_id, i.parent_id
+  FROM ancestors a
+  JOIN inheritance AS i ON i.child_id = a.ancestor_class_id
+)
 SELECT child_fn.id AS child_id,base_fn.id AS parent_id,
        child_fn.name AS child_name,base_fn.name AS parent_name,
        COALESCE(child_fn.signature,'') AS child_signature,
        COALESCE(base_fn.signature,'') AS parent_signature
-FROM symbols AS child_fn INDEXED BY idx_symbols_override_signature
+FROM child_seed AS child_fn
 JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id
-JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id = child_cls.id
-JOIN symbols base_cls ON base_cls.id = i.parent_id
+JOIN ancestors AS a ON a.child_class_id = child_cls.id
+JOIN symbols base_cls ON base_cls.id = a.ancestor_class_id
 JOIN symbols AS base_fn INDEXED BY idx_symbols_parent_name_kind ON base_fn.parent_symbol_id = base_cls.id
-    AND base_fn.name = child_fn.name
+    AND (base_fn.name = child_fn.name
+      OR base_fn.name = base_cls.name || '::' || child_fn.name)
     AND base_fn.kind = child_fn.kind
 WHERE child_fn.kind = 'function'
-  AND child_fn.signature LIKE '%override%'
 ORDER BY base_fn.id, child_fn.id;
 )SQL", {}, candidates, error)) {
         return false;
@@ -2380,7 +2416,7 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
             int64_t override_edges = 0;
             if (!populate_source_override_edge_cache(db, override_edges, error)) {
                 fail("source override edge cache", error);
-            } else if (!exec_sql_ok(db, "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','1');", error)) {
+            } else if (!exec_sql_ok(db, "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','2');", error)) {
                 fail("source_override_edges_version", error);
             } else {
                 root["source_override_edges_built"] = override_edges;
@@ -2410,7 +2446,7 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
         int64_t override_edges = 0;
         if (!populate_source_override_edge_cache(db, override_edges, error)) {
             fail("source override edge cache", error);
-        } else if (!exec_sql_ok(db, "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','1');", error)) {
+        } else if (!exec_sql_ok(db, "INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','2');", error)) {
             fail("source_override_edges_version", error);
         } else {
             root["source_override_edges_built"] = override_edges;
@@ -2763,7 +2799,7 @@ static bool crg_cache_present(Database& db) {
 static bool source_override_edge_cache_ready(Database& db) {
     return object_exists(db, "table", "source_override_edges")
         && object_exists(db, "table", "crg_meta")
-        && scalar_str(db, "SELECT value FROM crg_meta WHERE key='source_override_edges_version';") == "1";
+        && scalar_str(db, "SELECT value FROM crg_meta WHERE key='source_override_edges_version';") == "2";
 }
 
 // Returns a populated risk item (score/tier/reasons/raw_counts + cache) on a
@@ -2867,9 +2903,9 @@ static void append_crg_health_checks(Database& db, const std::string& domain,
                               : "crg scoring_version=" + scoring_ver + " (expected 3)");
     if (domain == "source") {
         std::string override_ver = scalar_str(db, "SELECT value FROM crg_meta WHERE key = 'source_override_edges_version';");
-        check("crg:source_override_edges_version", override_ver == "1",
+        check("crg:source_override_edges_version", override_ver == "2",
               override_ver.empty() ? "crg_meta.source_override_edges_version missing (run source.repair_crg_cache)"
-                                   : "source override edge cache version=" + override_ver + " (expected 1)");
+                                   : "source override edge cache version=" + override_ver + " (expected 2)");
     }
 }
 
@@ -3958,12 +3994,26 @@ public:
     }
 
     Rows symbols_by_name(const std::string& symbol, int limit = 5) {
-        std::string column = symbol.find("::") != std::string::npos ? "qualified_name" : "name";
-        auto rows = query(db,
-            "SELECT id, name, qualified_name, kind, file_id, line_start, line_end, "
-            "parent_symbol_id, access, signature, docstring, is_ue_macro "
-            "FROM symbols WHERE " + column + " = ? ORDER BY (line_end > line_start) DESC LIMIT " + std::to_string(limit),
-            {symbol});
+        Rows rows;
+        if (symbol.find("::") != std::string::npos) {
+            std::string duplicated = duplicated_qualified_lookup_name(symbol);
+            std::string short_owner_duplicated = short_owner_duplicated_qualified_lookup_name(symbol);
+            rows = query(db,
+                "SELECT id, name, qualified_name, kind, file_id, line_start, line_end, "
+                "parent_symbol_id, access, signature, docstring, is_ue_macro "
+                "FROM symbols "
+                "WHERE (qualified_name = ? OR name = ? OR qualified_name = ? OR qualified_name = ?) "
+                "ORDER BY CASE WHEN qualified_name = ? THEN 0 WHEN name = ? THEN 1 WHEN qualified_name = ? THEN 2 WHEN qualified_name = ? THEN 3 ELSE 4 END, "
+                "         (line_end > line_start) DESC "
+                "LIMIT " + std::to_string(limit),
+                {symbol, symbol, duplicated, short_owner_duplicated, symbol, symbol, duplicated, short_owner_duplicated});
+        } else {
+            rows = query(db,
+                "SELECT id, name, qualified_name, kind, file_id, line_start, line_end, "
+                "parent_symbol_id, access, signature, docstring, is_ue_macro "
+                "FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC LIMIT " + std::to_string(limit),
+                {symbol});
+        }
         if (rows.empty()) {
             rows = query(db,
                 "SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, "
@@ -4037,6 +4087,13 @@ LIMIT ?
         }
         int sql_limit = clamp_int(limit * 4, limit, 1000);
         return filter_override_rows(query(db, R"SQL(
+WITH RECURSIVE descendants(base_class_id, child_class_id) AS (
+  SELECT parent_id, child_id FROM inheritance
+  UNION
+  SELECT d.base_class_id, i.child_id
+  FROM descendants d
+  JOIN inheritance AS i ON i.parent_id = d.child_class_id
+)
 SELECT child_fn.id AS child_id,base_fn.id AS parent_id,
        child_fn.name AS child_name,child_fn.qualified_name AS child_qualified_name,
        base_fn.name AS parent_name,base_fn.qualified_name AS parent_qualified_name,
@@ -4046,12 +4103,13 @@ SELECT child_fn.id AS child_id,base_fn.id AS parent_id,
        COALESCE(base_fn.signature,'') AS parent_signature
 FROM symbols base_fn
 JOIN symbols base_cls ON base_cls.id = base_fn.parent_symbol_id
-JOIN symbols child_fn ON child_fn.name = base_fn.name
+JOIN descendants AS d ON d.base_class_id = base_cls.id
+JOIN symbols child_cls ON child_cls.id = d.child_class_id
+JOIN symbols child_fn ON child_fn.parent_symbol_id = child_cls.id
+    AND (base_fn.name = child_fn.name
+      OR base_fn.name = base_cls.name || '::' || child_fn.name)
     AND child_fn.kind = base_fn.kind
     AND child_fn.id != base_fn.id
-JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id
-JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id = child_cls.id
-    AND i.parent_id = base_cls.id
 WHERE base_fn.id = ? AND base_fn.kind = 'function'
 ORDER BY child_fn.qualified_name
 LIMIT ?
@@ -4080,6 +4138,13 @@ LIMIT ?
         }
         int sql_limit = clamp_int(limit * 4, limit, 1000);
         return filter_override_rows(query(db, R"SQL(
+WITH RECURSIVE ancestors(child_class_id, ancestor_class_id) AS (
+  SELECT child_id, parent_id FROM inheritance
+  UNION
+  SELECT a.child_class_id, i.parent_id
+  FROM ancestors a
+  JOIN inheritance AS i ON i.child_id = a.ancestor_class_id
+)
 SELECT child_fn.id AS child_id,base_fn.id AS parent_id,
        child_fn.name AS child_name,child_fn.qualified_name AS child_qualified_name,
        base_fn.name AS parent_name,base_fn.qualified_name AS parent_qualified_name,
@@ -4089,10 +4154,11 @@ SELECT child_fn.id AS child_id,base_fn.id AS parent_id,
        COALESCE(base_fn.signature,'') AS parent_signature
 FROM symbols child_fn
 JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id
-JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id = child_cls.id
-JOIN symbols base_cls ON base_cls.id = i.parent_id
-JOIN symbols base_fn ON base_fn.parent_symbol_id = base_cls.id
-    AND base_fn.name = child_fn.name
+JOIN ancestors AS a ON a.child_class_id = child_cls.id
+JOIN symbols base_cls ON base_cls.id = a.ancestor_class_id
+JOIN symbols base_fn INDEXED BY idx_symbols_parent_name_kind ON base_fn.parent_symbol_id = base_cls.id
+    AND (base_fn.name = child_fn.name
+      OR base_fn.name = base_cls.name || '::' || child_fn.name)
     AND base_fn.kind = child_fn.kind
 WHERE child_fn.id = ? AND child_fn.kind = 'function'
 ORDER BY base_fn.qualified_name
@@ -4760,16 +4826,25 @@ LIMIT ?
             } else {
                 std::string risk_expr = "c.estimated_risk";
                 std::string tier_expr = "CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END";
-                sql = "WITH child_seed AS ("
+                sql = "WITH RECURSIVE child_seed AS ("
                       "  SELECT id,name,kind,parent_symbol_id FROM symbols "
                       "  WHERE kind='function' AND signature LIKE '%override%' LIMIT " + std::to_string(override_seed_limit) +
+                      "), ancestors(child_class_id, ancestor_class_id) AS ("
+                      "  SELECT child_id, parent_id FROM inheritance"
+                      "  UNION "
+                      "  SELECT a.child_class_id, i.parent_id "
+                      "  FROM ancestors a "
+                      "  JOIN inheritance AS i ON i.child_id=a.ancestor_class_id"
                       "), override_children AS ("
                       "  SELECT base_fn.id AS symbol_id, COUNT(*) AS override_children "
                       "  FROM child_seed child_fn "
                       "  JOIN symbols child_cls ON child_cls.id=child_fn.parent_symbol_id "
-                      "  JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id=child_cls.id "
-                      "  JOIN symbols base_cls ON base_cls.id=i.parent_id "
-                      "  JOIN symbols base_fn ON base_fn.parent_symbol_id=base_cls.id AND base_fn.name=child_fn.name AND base_fn.kind=child_fn.kind "
+                      "  JOIN ancestors AS a ON a.child_class_id=child_cls.id "
+                      "  JOIN symbols base_cls ON base_cls.id=a.ancestor_class_id "
+                      "  JOIN symbols base_fn INDEXED BY idx_symbols_parent_name_kind ON base_fn.parent_symbol_id=base_cls.id "
+                      "    AND (base_fn.name=child_fn.name "
+                      "      OR base_fn.name=base_cls.name || '::' || child_fn.name) "
+                      "    AND base_fn.kind=child_fn.kind "
                       "  GROUP BY base_fn.id"
                       "), ref_in AS ("
                       "  SELECT to_symbol_id AS symbol_id, COUNT(*) AS fan_in, COUNT(DISTINCT r.file_id) AS caller_files FROM \"references\" r GROUP BY to_symbol_id"
@@ -4864,6 +4939,11 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
             int fan_out = r.get_int("fan_out");
             int override_children = r.get_int("override_children");
             int overridden_parents = r.get_int("overridden_parents");
+            if (k == "override" && !has_override_cache) {
+                std::string symbol_id = std::to_string(r.get_int64("id"));
+                override_children = static_cast<int>(override_edges_to(symbol_id, 1000).size());
+                overridden_parents = static_cast<int>(override_edges_from(symbol_id, 1000).size());
+            }
             if (k == "override" && override_children <= 0 && overridden_parents <= 0) {
                 continue;
             }
@@ -5117,7 +5197,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
         root["status"] = "ok";
         root["summary"] = seed.get("name") + " risk=" + risk["tier"].get<std::string>() + " (" + (minimal ? "minimal" : "standard") + "); review the top impacted symbols and high-risk reasons";
         root["truncated"] = impact.value("truncated", false);
-        add_next(root, {"source.read_source", "source.impact_radius", "source.get_class_hierarchy"});
+        add_next(root, {"source.read_source", "source.impact_radius", "source.find_overrides", "source.get_class_hierarchy"});
         print_json(root);
     }
 

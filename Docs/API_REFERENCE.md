@@ -31,7 +31,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
-| [gas](#gas) | 135 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, inspect, scaffold |
+| [gas](#gas) | 142 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, DataAsset profile inspection/writes, runtime probes, scaffold |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
@@ -39,7 +39,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [level_sequence](#level_sequence) | 8 | Level Sequence inspection: binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
 | [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 11 in-tree adapters, plus optional sibling adapters when present (`apply`, `list_namespaces`) |
 | [describe](#describe) | 3 | Read-only schema introspection for the same adapter registry (`schema`, optional `list_targets`, `action_schema`) |
-| **Curated in-tree subtotal** | **1366** | Static public/in-tree reference from the curated body below; the 2026-05-26 fully loaded Go project reports 1584 live actions / 45 namespaces. |
+| **Curated in-tree subtotal** | **1373** | Static public/in-tree reference from the curated body below; the 2026-05-26 fully loaded Go project reports 1584 live actions / 45 namespaces. |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -53,6 +53,9 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `editor.create_empty_map` | **NEW** (Phase J F8) | Test scaffolding needed a blank UWorld factory that doesn't depend on engine templates. |
 | `editor.get_module_status` | **NEW** (Phase J F8) | Lets clients query plugin/module load state without grepping logs. Wraps `IPluginManager` + `FModuleManager`. |
 | `gas.grant_ability_to_pawn` | **NEW** (Phase J F8) | Convenience action for runtime ability grants. Earlier you had to grant via `apply_effect` or scaffold-side wiring. |
+| `gas.describe_data_asset_gas_profile` / `gas.validate_data_asset_gas_profile` / `gas.set_data_asset_gas_fields` | **NEW** (2026-05-31 Go workflow P0/P3) | DataAsset-driven GAS profile inspection/validation plus strict, transacted, dry-run-first field writes for ability/effect/cue/input/policy roles. |
+| `gas.start_event_cue_probe` / `gas.stop_event_cue_probe` / `gas.expect_event_cue` | **NEW** (2026-05-31 Go workflow P4) | Bounded PIE probe actions for GameplayEvent payload capture and active GameplayCue tag-count evidence; instant cue execute payload hooks are reported as unsupported instead of false success. |
+| `gas.get_runtime_summary` | Return payload expanded (2026-05-31 Go workflow P0) | Adds namespace readiness, action count, `WITH_GBA`, ProjectIndex availability, and read-only fallback guidance while preserving safe no-PIE behavior. |
 | `ai.add_perception_to_actor` | **NEW** (Phase J F8) | Direct perception attach without going through `add_perception_component` + manual wiring. |
 | `ai.get_bt_graph` | **NEW** (Phase J F8) | Read-only graph dump distinct from `get_behavior_tree`'s structural inspection. |
 | `audio.create_test_wave` | **NEW** (Phase J F18) | Procedurally synthesizes a 16-bit mono sine `USoundWave` for tests with zero asset deps. |
@@ -855,7 +858,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithUI.md` for the deep dive including
 
 ## gas
 
-Gameplay Ability System integration. **135 actions** across 11 categories — covers the full GAS authoring pipeline. **Conditional on `#if WITH_GBA`** — projects without the GameplayAbilities plugin register 0 GAS actions.
+Gameplay Ability System integration. **142 actions** across 12 categories — covers the full GAS authoring pipeline. **Conditional on `#if WITH_GBA`** — projects without the GameplayAbilities plugin register 0 GAS actions.
 
 > For full param schemas, call `monolith_discover("gas")` at runtime.
 
@@ -872,8 +875,17 @@ Gameplay Ability System integration. **135 actions** across 11 categories — co
 | Cues | 10 | `create_gameplay_cue_notify`, `link_cue_to_effect`, `unlink_cue_from_effect`, `get_cue_info`, `list_gameplay_cues`, `set_cue_parameters`, `find_cue_triggers`, `validate_cue_coverage`, `batch_create_cues`, `scaffold_cue_library` |
 | Targeting | 5 | `create_target_actor`, `configure_target_actor`, `add_targeting_to_ability`, `scaffold_fps_targeting`, `validate_targeting` |
 | Input | 5 | `setup_ability_input_binding`, `bind_ability_to_input`, `batch_bind_abilities`, `get_ability_input_bindings`, `scaffold_input_binding_component` |
-| Inspect (PIE) | 6 | `export_gas_manifest`, `snapshot_gas_state`, `get_tag_state`, `get_cooldown_state`, `trace_ability_activation`, `compare_gas_states` |
+| DataAsset Profile | 3 | `describe_data_asset_gas_profile`, `validate_data_asset_gas_profile`, `set_data_asset_gas_fields` |
+| Inspect / Readiness | 10 | `export_gas_manifest`, `get_runtime_summary`, `snapshot_gas_state`, `get_tag_state`, `get_cooldown_state`, `trace_ability_activation`, `compare_gas_states`, `start_event_cue_probe`, `stop_event_cue_probe`, `expect_event_cue` |
 | UI bindings | 4 | `bind_widget_to_attribute`, `unbind_widget_attribute`, `list_attribute_bindings`, `clear_widget_attribute_bindings` *(also aliased into `ui` namespace — same handlers)* |
+
+### `gas.describe_data_asset_gas_profile` / `gas.validate_data_asset_gas_profile` / `gas.set_data_asset_gas_fields` · NEW in Go workflow P0/P3
+
+Inspection, validation, and safe field writes for DataAsset-driven GAS skill/profile assets. The describe action accepts `asset_path` plus an optional profile map of semantic roles to UPROPERTY candidates. The validate action scans a `path_filter`, detects missing or invalid ability/effect/cue/input/policy fields, broken references, duplicate input action/tag pairs, deprecated `DynamicAbilityTags` source usage, and incomplete Started/Completed/Canceled release support. The set action accepts `asset_path`, `fields`, optional `profile`, `dry_run` (default true), `strict` (default true), and `save` (default false); non-dry-run writes are transacted and report the post-write profile shape.
+
+### `gas.start_event_cue_probe` / `gas.stop_event_cue_probe` / `gas.expect_event_cue` · NEW in Go workflow P4
+
+PIE-only runtime evidence for DataAsset/native GAS flows. `start_event_cue_probe` attaches bounded listeners to an actor ASC, `stop_event_cue_probe` removes them and returns captured rows, and `expect_event_cue` wraps an optional Monolith trigger action with pass/fail evidence. Gameplay events use `UAbilitySystemComponent::AddGameplayEventTagContainerDelegate`; cue coverage uses active tag-count changes through `RegisterGameplayTagEvent`, so instant `ExecuteGameplayCue` payload capture is explicitly reported as unsupported by UE 5.7 public hooks.
 
 ### `gas.grant_ability_to_pawn` · NEW in Phase J F8
 

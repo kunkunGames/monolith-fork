@@ -17,4 +17,7 @@ private:
 	static FMonolithActionResult HandleGetCooldownState(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleTraceAbilityActivation(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCompareGASStates(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleStartEventCueProbe(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleStopEventCueProbe(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleExpectEventCue(const TSharedPtr<FJsonObject>& Params);
 };

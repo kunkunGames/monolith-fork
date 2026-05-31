@@ -710,7 +710,7 @@ FMonolithActionResult FMonolithGASInputActions::HandleScaffoldInputBindingCompon
 		"\n"
 		"private:\n"
 		"\tvoid OnInputStarted(const FAbilityInputBinding& Binding);\n"
-		"\tvoid OnInputCompleted(const FAbilityInputBinding& Binding);\n"
+		"\tvoid OnInputReleased(const FAbilityInputBinding& Binding);\n"
 		"\n"
 		"\tTWeakObjectPtr<UAbilitySystemComponent> CachedASC;\n"
 		"};\n"),
@@ -778,7 +778,9 @@ FMonolithActionResult FMonolithGASInputActions::HandleScaffoldInputBindingCompon
 		"\t\tInputComponent->BindAction(Binding.InputAction, ETriggerEvent::Started, this,\n"
 		"\t\t\t&%s::OnInputStarted, Binding);\n"
 		"\t\tInputComponent->BindAction(Binding.InputAction, ETriggerEvent::Completed, this,\n"
-		"\t\t\t&%s::OnInputCompleted, Binding);\n"
+		"\t\t\t&%s::OnInputReleased, Binding);\n"
+		"\t\tInputComponent->BindAction(Binding.InputAction, ETriggerEvent::Canceled, this,\n"
+		"\t\t\t&%s::OnInputReleased, Binding);\n"
 		"\t}\n"
 		"}\n"
 		"\n"
@@ -788,10 +790,21 @@ FMonolithActionResult FMonolithGASInputActions::HandleScaffoldInputBindingCompon
 		"\n"
 		"\tif (Binding.AbilityTag.IsValid())\n"
 		"\t{\n"
-		"\t\t// Tag-based: try to activate any ability matching the tag\n"
-		"\t\tFGameplayTagContainer TagContainer;\n"
-		"\t\tTagContainer.AddTag(Binding.AbilityTag);\n"
-		"\t\tCachedASC->TryActivateAbilitiesByTag(TagContainer);\n"
+		"\t\tbool bHandled = false;\n"
+		"\t\tfor (FGameplayAbilitySpec& Spec : CachedASC->GetActivatableAbilities())\n"
+		"\t\t{\n"
+		"\t\t\tif (!Spec.Ability || !Spec.GetDynamicSpecSourceTags().HasTagExact(Binding.AbilityTag)) continue;\n"
+		"\t\t\tCachedASC->AbilitySpecInputPressed(Spec);\n"
+		"\t\t\tif (!Spec.IsActive())\n"
+		"\t\t\t{\n"
+		"\t\t\t\tCachedASC->TryActivateAbility(Spec.Handle);\n"
+		"\t\t\t}\n"
+		"\t\t\tbHandled = true;\n"
+		"\t\t}\n"
+		"\t\tif (!bHandled && Binding.AbilityClass)\n"
+		"\t\t{\n"
+		"\t\t\tCachedASC->TryActivateAbilityByClass(Binding.AbilityClass);\n"
+		"\t\t}\n"
 		"\t}\n"
 		"\telse if (Binding.AbilityClass)\n"
 		"\t{\n"
@@ -799,16 +812,21 @@ FMonolithActionResult FMonolithGASInputActions::HandleScaffoldInputBindingCompon
 		"\t}\n"
 		"}\n"
 		"\n"
-		"void %s::OnInputCompleted(const FAbilityInputBinding& Binding)\n"
+		"void %s::OnInputReleased(const FAbilityInputBinding& Binding)\n"
 		"{\n"
-		"\t// Override for hold-to-activate or channeled abilities\n"
-		"\t// For now, input release is a no-op for instant abilities\n"
+		"\tif (!CachedASC.IsValid() || !Binding.AbilityTag.IsValid()) return;\n"
+		"\n"
+		"\tfor (FGameplayAbilitySpec& Spec : CachedASC->GetActivatableAbilities())\n"
+		"\t{\n"
+		"\t\tif (!Spec.Ability || !Spec.GetDynamicSpecSourceTags().HasTagExact(Binding.AbilityTag)) continue;\n"
+		"\t\tCachedASC->AbilitySpecInputReleased(Spec);\n"
+		"\t}\n"
 		"}\n"),
 		*HeaderFileName,
 		*ClassName, *ClassName,
 		*ClassName,
 		*ClassName,
-		*ClassName, *ClassName,
+		*ClassName, *ClassName, *ClassName,
 		*ClassName,
 		*ClassName);
 

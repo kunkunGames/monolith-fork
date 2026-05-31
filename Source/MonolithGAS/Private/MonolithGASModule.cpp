@@ -9,6 +9,7 @@
 #include "MonolithGASCueActions.h"
 #include "MonolithGASTargetActions.h"
 #include "MonolithGASInputActions.h"
+#include "MonolithGASDataAssetProfileActions.h"
 #include "MonolithGASInputAssetActions.h"
 #include "MonolithGASInspectActions.h"
 #include "MonolithGASScaffoldActions.h"
@@ -43,6 +44,7 @@ void FMonolithGASModule::StartupModule()
 		FMonolithGASCueActions::RegisterActions(OwnedRegistry);
 		FMonolithGASTargetActions::RegisterActions(OwnedRegistry);
 		FMonolithGASInputActions::RegisterActions(OwnedRegistry);
+		FMonolithGASDataAssetProfileActions::RegisterActions(OwnedRegistry);
 		FMonolithGASInspectActions::RegisterActions(OwnedRegistry);
 		FMonolithGASScaffoldActions::RegisterActions(OwnedRegistry);
 		FMonolithGASUIBindingActions::RegisterActions(OwnedRegistry);

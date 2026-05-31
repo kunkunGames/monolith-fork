@@ -8,6 +8,7 @@
 #include "GameplayEffectComponent.h"
 #include "GameplayEffectComponents/AssetTagsGameplayEffectComponent.h"
 #include "AbilitySystemComponent.h"
+#include "Abilities/GameplayAbilityTypes.h"
 #include "GameplayCueNotify_Static.h"
 #include "GameplayCueNotify_Actor.h"
 #include "GameplayTagContainer.h"
@@ -33,6 +34,10 @@ void FMonolithGASInspectActions::RegisterActions(FMonolithToolRegistry& Registry
 		FParamSchemaBuilder()
 			.Optional(TEXT("format"), TEXT("string"), TEXT("Output format: 'json' (default)"), TEXT("json"))
 			.Optional(TEXT("include_relationships"), TEXT("boolean"), TEXT("Include cross-asset references (effect->attribute, ability->effect, cue->effect)"), TEXT("true"))
+			.Optional(TEXT("include_data_asset_profiles"), TEXT("boolean"), TEXT("Include DataAsset-driven GAS profile rows via validate_data_asset_gas_profile"), TEXT("true"))
+			.Optional(TEXT("data_asset_path_filter"), TEXT("string"), TEXT("Optional DataAsset profile path filter; defaults to path_filter or /Game"))
+			.Optional(TEXT("data_asset_profile"), TEXT("object"), TEXT("Optional role -> property candidates map passed to validate_data_asset_gas_profile"))
+			.Optional(TEXT("max_data_asset_profiles"), TEXT("number"), TEXT("Maximum DataAsset profile rows to include (default 500)"), TEXT("500"))
 			.Optional(TEXT("output_path"), TEXT("string"), TEXT("File path to write manifest (default: returns inline)"))
 			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Restrict to assets under this path"))
 			.Build());
@@ -83,6 +88,36 @@ void FMonolithGASInspectActions::RegisterActions(FMonolithToolRegistry& Registry
 		FParamSchemaBuilder()
 			.Required(TEXT("snapshot_a"), TEXT("object"), TEXT("First snapshot (from snapshot_gas_state)"))
 			.Required(TEXT("snapshot_b"), TEXT("object"), TEXT("Second snapshot (from snapshot_gas_state)"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("gas"), TEXT("start_event_cue_probe"),
+		TEXT("Start a bounded PIE probe for GameplayEvent payloads and active GameplayCue tag-count changes on an actor ASC."),
+		FMonolithActionHandler::CreateStatic(&HandleStartEventCueProbe),
+		FParamSchemaBuilder()
+			.Required(TEXT("actor"), TEXT("string"), TEXT("Actor name, label, or path in PIE world"))
+			.Optional(TEXT("event_tags"), TEXT("array"), TEXT("GameplayEvent tags to capture"))
+			.Optional(TEXT("event_tag"), TEXT("string"), TEXT("Single GameplayEvent tag to capture"))
+			.Optional(TEXT("cue_tags"), TEXT("array"), TEXT("GameplayCue tags whose active tag-count changes should be captured"))
+			.Optional(TEXT("cue_tag"), TEXT("string"), TEXT("Single GameplayCue tag whose active tag-count changes should be captured"))
+			.Optional(TEXT("max_events"), TEXT("number"), TEXT("Maximum captured rows before truncation (default 128)"), TEXT("128"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("gas"), TEXT("stop_event_cue_probe"),
+		TEXT("Stop a PIE event/cue probe and return captured rows with hook-coverage notes."),
+		FMonolithActionHandler::CreateStatic(&HandleStopEventCueProbe),
+		FParamSchemaBuilder()
+			.Required(TEXT("probe_id"), TEXT("string"), TEXT("Probe id returned by start_event_cue_probe"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("gas"), TEXT("expect_event_cue"),
+		TEXT("Run an optional Monolith trigger action under a temporary event/cue probe and return pass/fail evidence."),
+		FMonolithActionHandler::CreateStatic(&HandleExpectEventCue),
+		FParamSchemaBuilder()
+			.Required(TEXT("actor"), TEXT("string"), TEXT("Actor name, label, or path in PIE world"))
+			.Optional(TEXT("event_tag"), TEXT("string"), TEXT("Expected GameplayEvent tag"))
+			.Optional(TEXT("cue_tag"), TEXT("string"), TEXT("Expected active GameplayCue tag-count change"))
+			.Optional(TEXT("trigger_action"), TEXT("object"), TEXT("Optional {namespace, action, params} Monolith action to execute while the probe is active"))
+			.Optional(TEXT("max_events"), TEXT("number"), TEXT("Maximum captured rows before truncation (default 128)"), TEXT("128"))
 			.Build());
 }
 
@@ -139,6 +174,269 @@ TArray<TSharedPtr<FJsonValue>> TagsToJsonArray(const FGameplayTagContainer& Cont
 	return Arr;
 }
 
+struct FGASEventCueProbeState
+{
+	FString ProbeId;
+	FString ActorIdentifier;
+	FString WorldName;
+	TWeakObjectPtr<AActor> Actor;
+	TWeakObjectPtr<UAbilitySystemComponent> ASC;
+	FGameplayTagContainer EventTags;
+	FGameplayTagContainer CueTags;
+	FDelegateHandle EventHandle;
+	TArray<TPair<FGameplayTag, FDelegateHandle>> CueHandles;
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	int32 EventCount = 0;
+	int32 CueTagChangeCount = 0;
+	int32 MaxEvents = 128;
+	bool bTruncated = false;
+	FDateTime StartedAtUtc;
+};
+
+static TMap<FString, TSharedPtr<FGASEventCueProbeState>> GEventCueProbes;
+
+FString ActorDebugName(const AActor* Actor)
+{
+	return Actor ? FString::Printf(TEXT("%s (%s)"), *Actor->GetActorLabel(), *Actor->GetPathName()) : FString();
+}
+
+FString ObjectPathOrEmpty(const UObject* Object)
+{
+	return Object ? Object->GetPathName() : FString();
+}
+
+TSharedPtr<FJsonObject> MakeProbeHookCoverage()
+{
+	TSharedPtr<FJsonObject> Coverage = MakeShared<FJsonObject>();
+	Coverage->SetStringField(TEXT("gameplay_event_capture"), TEXT("UAbilitySystemComponent::AddGameplayEventTagContainerDelegate"));
+	Coverage->SetStringField(TEXT("gameplay_cue_capture"), TEXT("UAbilitySystemComponent::RegisterGameplayTagEvent active-tag count changes"));
+	Coverage->SetBoolField(TEXT("gameplay_cue_execute_capture_supported"), false);
+	Coverage->SetStringField(TEXT("gameplay_cue_execute_note"),
+		TEXT("UE 5.7 exposes no public delegate for instant ExecuteGameplayCue payloads. This probe captures Add/Remove/active cue tag-count changes only; instant semantic cue execution is reported as unsupported instead of treated as success."));
+	return Coverage;
+}
+
+bool AppendTagFromString(const FString& FieldName, const FString& TagString, FGameplayTagContainer& OutTags, FString& OutError)
+{
+	if (TagString.IsEmpty())
+	{
+		OutError = FString::Printf(TEXT("%s must not contain an empty tag string."), *FieldName);
+		return false;
+	}
+
+	const FGameplayTag Tag = FGameplayTag::RequestGameplayTag(FName(*TagString), false);
+	if (!Tag.IsValid())
+	{
+		OutError = FString::Printf(TEXT("%s references unregistered gameplay tag '%s'."), *FieldName, *TagString);
+		return false;
+	}
+
+	OutTags.AddTag(Tag);
+	return true;
+}
+
+bool ReadProbeTags(const TSharedPtr<FJsonObject>& Params, const FString& ArrayField, const FString& SingularField,
+	FGameplayTagContainer& OutTags, FString& OutError)
+{
+	FString SingleTag;
+	if (Params->TryGetStringField(SingularField, SingleTag))
+	{
+		if (!AppendTagFromString(SingularField, SingleTag, OutTags, OutError))
+		{
+			return false;
+		}
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+	if (Params->TryGetArrayField(ArrayField, Values))
+	{
+		for (int32 Index = 0; Index < Values->Num(); ++Index)
+		{
+			if (!(*Values)[Index].IsValid() || (*Values)[Index]->Type != EJson::String)
+			{
+				OutError = FString::Printf(TEXT("%s[%d] must be a gameplay tag string."), *ArrayField, Index);
+				return false;
+			}
+			if (!AppendTagFromString(ArrayField, (*Values)[Index]->AsString(), OutTags, OutError))
+			{
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+TSharedPtr<FJsonObject> SerializeGameplayEventRow(const FString& ProbeId, const FGASEventCueProbeState& Probe,
+	FGameplayTag MatchingTag, const FGameplayEventData* Payload)
+{
+	TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+	Row->SetStringField(TEXT("type"), TEXT("gameplay_event"));
+	Row->SetStringField(TEXT("probe_id"), ProbeId);
+	Row->SetStringField(TEXT("timestamp_utc"), FDateTime::UtcNow().ToIso8601());
+	Row->SetStringField(TEXT("matched_tag"), MatchingTag.ToString());
+	Row->SetStringField(TEXT("actor"), ActorDebugName(Probe.Actor.Get()));
+
+	if (Payload)
+	{
+		const FGameplayTag EventTag = Payload->EventTag.IsValid() ? Payload->EventTag : MatchingTag;
+		Row->SetStringField(TEXT("tag"), EventTag.ToString());
+		Row->SetNumberField(TEXT("event_magnitude"), Payload->EventMagnitude);
+		Row->SetStringField(TEXT("instigator"), ObjectPathOrEmpty(Payload->Instigator.Get()));
+		Row->SetStringField(TEXT("target"), ObjectPathOrEmpty(Payload->Target.Get()));
+		Row->SetStringField(TEXT("optional_object"), ObjectPathOrEmpty(Payload->OptionalObject.Get()));
+		Row->SetStringField(TEXT("optional_object2"), ObjectPathOrEmpty(Payload->OptionalObject2.Get()));
+		Row->SetField(TEXT("instigator_tags"), MonolithGAS::TagContainerToJson(Payload->InstigatorTags));
+		Row->SetField(TEXT("target_tags"), MonolithGAS::TagContainerToJson(Payload->TargetTags));
+		Row->SetBoolField(TEXT("has_context"), Payload->ContextHandle.IsValid());
+		Row->SetNumberField(TEXT("target_data_count"), Payload->TargetData.Num());
+	}
+	else
+	{
+		Row->SetStringField(TEXT("tag"), MatchingTag.ToString());
+		Row->SetBoolField(TEXT("payload_missing"), true);
+	}
+
+	return Row;
+}
+
+TSharedPtr<FJsonObject> SerializeCueTagChangeRow(const FString& ProbeId, const FGASEventCueProbeState& Probe,
+	FGameplayTag CueTag, int32 NewCount)
+{
+	TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+	Row->SetStringField(TEXT("type"), TEXT("gameplay_cue_tag_count"));
+	Row->SetStringField(TEXT("probe_id"), ProbeId);
+	Row->SetStringField(TEXT("timestamp_utc"), FDateTime::UtcNow().ToIso8601());
+	Row->SetStringField(TEXT("tag"), CueTag.ToString());
+	Row->SetNumberField(TEXT("tag_count"), NewCount);
+	Row->SetBoolField(TEXT("active"), NewCount > 0);
+	Row->SetStringField(TEXT("actor"), ActorDebugName(Probe.Actor.Get()));
+	Row->SetStringField(TEXT("capture_note"), TEXT("Active cue tag-count change; instant ExecuteGameplayCue payloads are not directly observable by this hook."));
+	return Row;
+}
+
+void AddProbeRow(FGASEventCueProbeState& Probe, const TSharedPtr<FJsonObject>& Row, bool bCueRow)
+{
+	if (!Row.IsValid())
+	{
+		return;
+	}
+	if (Probe.Rows.Num() >= Probe.MaxEvents)
+	{
+		Probe.bTruncated = true;
+		return;
+	}
+
+	Probe.Rows.Add(MakeShared<FJsonValueObject>(Row));
+	if (bCueRow)
+	{
+		++Probe.CueTagChangeCount;
+	}
+	else
+	{
+		++Probe.EventCount;
+	}
+}
+
+void CaptureGameplayEventForProbe(const FString ProbeId, FGameplayTag MatchingTag, const FGameplayEventData* Payload)
+{
+	if (TSharedPtr<FGASEventCueProbeState>* Found = GEventCueProbes.Find(ProbeId))
+	{
+		AddProbeRow(**Found, SerializeGameplayEventRow(ProbeId, **Found, MatchingTag, Payload), false);
+	}
+}
+
+void CaptureCueTagChangeForProbe(const FString ProbeId, const FGameplayTag CueTag, int32 NewCount)
+{
+	if (TSharedPtr<FGASEventCueProbeState>* Found = GEventCueProbes.Find(ProbeId))
+	{
+		AddProbeRow(**Found, SerializeCueTagChangeRow(ProbeId, **Found, CueTag, NewCount), true);
+	}
+}
+
+void RemoveProbeDelegates(FGASEventCueProbeState& Probe)
+{
+	if (UAbilitySystemComponent* ASC = Probe.ASC.Get())
+	{
+		if (Probe.EventHandle.IsValid() && Probe.EventTags.Num() > 0)
+		{
+			ASC->RemoveGameplayEventTagContainerDelegate(Probe.EventTags, Probe.EventHandle);
+		}
+		for (const TPair<FGameplayTag, FDelegateHandle>& CueHandle : Probe.CueHandles)
+		{
+			if (CueHandle.Key.IsValid() && CueHandle.Value.IsValid())
+			{
+				ASC->UnregisterGameplayTagEvent(CueHandle.Value, CueHandle.Key, EGameplayTagEventType::NewOrRemoved);
+			}
+		}
+	}
+
+	Probe.EventHandle.Reset();
+	Probe.CueHandles.Reset();
+}
+
+void PruneInvalidEventCueProbes()
+{
+	TArray<FString> InvalidProbeIds;
+	for (const TPair<FString, TSharedPtr<FGASEventCueProbeState>>& Pair : GEventCueProbes)
+	{
+		if (!Pair.Value.IsValid() || !Pair.Value->ASC.IsValid())
+		{
+			InvalidProbeIds.Add(Pair.Key);
+		}
+	}
+	for (const FString& ProbeId : InvalidProbeIds)
+	{
+		GEventCueProbes.Remove(ProbeId);
+	}
+}
+
+TSharedPtr<FJsonObject> BuildProbeResult(const FGASEventCueProbeState& Probe, bool bActive)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("probe_id"), Probe.ProbeId);
+	Result->SetBoolField(TEXT("active"), bActive);
+	Result->SetStringField(TEXT("actor"), ActorDebugName(Probe.Actor.Get()));
+	Result->SetStringField(TEXT("actor_identifier"), Probe.ActorIdentifier);
+	Result->SetStringField(TEXT("world"), Probe.WorldName);
+	Result->SetStringField(TEXT("started_at_utc"), Probe.StartedAtUtc.ToIso8601());
+	Result->SetNumberField(TEXT("event_count"), Probe.EventCount);
+	Result->SetNumberField(TEXT("cue_tag_change_count"), Probe.CueTagChangeCount);
+	Result->SetNumberField(TEXT("captured_count"), Probe.Rows.Num());
+	Result->SetNumberField(TEXT("max_events"), Probe.MaxEvents);
+	Result->SetBoolField(TEXT("truncated"), Probe.bTruncated);
+	Result->SetField(TEXT("event_tags"), MonolithGAS::TagContainerToJson(Probe.EventTags));
+	Result->SetField(TEXT("cue_tags"), MonolithGAS::TagContainerToJson(Probe.CueTags));
+	Result->SetObjectField(TEXT("hook_coverage"), MakeProbeHookCoverage());
+	Result->SetArrayField(TEXT("rows"), Probe.Rows);
+	return Result;
+}
+
+bool FindProbeRowWithTag(const FGASEventCueProbeState& Probe, const FString& RowType, const FGameplayTag& Tag)
+{
+	for (const TSharedPtr<FJsonValue>& RowValue : Probe.Rows)
+	{
+		if (!RowValue.IsValid() || RowValue->Type != EJson::Object)
+		{
+			continue;
+		}
+		const TSharedPtr<FJsonObject> Row = RowValue->AsObject();
+		if (!Row.IsValid())
+		{
+			continue;
+		}
+
+		FString Type;
+		FString RowTag;
+		Row->TryGetStringField(TEXT("type"), Type);
+		Row->TryGetStringField(TEXT("tag"), RowTag);
+		if (Type == RowType && RowTag == Tag.ToString())
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 } // anonymous namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -153,11 +451,23 @@ FMonolithActionResult FMonolithGASInspectActions::HandleExportGASManifest(const 
 
 	bool bIncludeRelationships = true;
 	Params->TryGetBoolField(TEXT("include_relationships"), bIncludeRelationships);
+	bool bIncludeDataAssetProfiles = true;
+	Params->TryGetBoolField(TEXT("include_data_asset_profiles"), bIncludeDataAssetProfiles);
 
 	FString OutputPath;
 	Params->TryGetStringField(TEXT("output_path"), OutputPath);
 	FString PathFilter;
 	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
+	FString DataAssetPathFilter;
+	Params->TryGetStringField(TEXT("data_asset_path_filter"), DataAssetPathFilter);
+	if (DataAssetPathFilter.IsEmpty())
+	{
+		DataAssetPathFilter = PathFilter.IsEmpty() ? TEXT("/Game") : PathFilter;
+	}
+	double MaxDataAssetProfilesValue = 500.0;
+	Params->TryGetNumberField(TEXT("max_data_asset_profiles"), MaxDataAssetProfilesValue);
+	const int32 MaxDataAssetProfiles = FMath::Clamp(FMath::FloorToInt(MaxDataAssetProfilesValue), 1, 5000);
+	TArray<TSharedPtr<FJsonValue>> ManifestWarnings;
 
 	IAssetRegistry& AssetRegistry =
 		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -544,6 +854,41 @@ FMonolithActionResult FMonolithGASInspectActions::HandleExportGASManifest(const 
 		TagsArr.Add(MakeShared<FJsonValueString>(Tag.ToString()));
 	}
 
+	TSharedPtr<FJsonObject> DataAssetProfilesReport;
+	if (bIncludeDataAssetProfiles)
+	{
+		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+		if (Registry.HasAction(TEXT("gas"), TEXT("validate_data_asset_gas_profile")))
+		{
+			TSharedPtr<FJsonObject> ProfileParams = MakeShared<FJsonObject>();
+			ProfileParams->SetStringField(TEXT("path_filter"), DataAssetPathFilter);
+			ProfileParams->SetBoolField(TEXT("include_source_scan"), false);
+			ProfileParams->SetNumberField(TEXT("max_assets"), MaxDataAssetProfiles);
+
+			const TSharedPtr<FJsonObject>* ProfileOverride = nullptr;
+			if (Params->TryGetObjectField(TEXT("data_asset_profile"), ProfileOverride) && ProfileOverride && ProfileOverride->IsValid())
+			{
+				ProfileParams->SetObjectField(TEXT("profile"), *ProfileOverride);
+			}
+
+			FMonolithActionResult ProfileResult = Registry.ExecuteAction(TEXT("gas"), TEXT("validate_data_asset_gas_profile"), ProfileParams);
+			if (ProfileResult.bSuccess && ProfileResult.Result.IsValid())
+			{
+				DataAssetProfilesReport = ProfileResult.Result;
+			}
+			else
+			{
+				ManifestWarnings.Add(MakeShared<FJsonValueString>(
+					FString::Printf(TEXT("DataAsset GAS profile report unavailable: %s"), *ProfileResult.ErrorMessage)));
+			}
+		}
+		else
+		{
+			ManifestWarnings.Add(MakeShared<FJsonValueString>(
+				TEXT("DataAsset GAS profile actions are not registered; manifest data_asset_profiles omitted.")));
+		}
+	}
+
 	// ── Build manifest ──
 	TSharedPtr<FJsonObject> Manifest = MakeShared<FJsonObject>();
 
@@ -555,6 +900,16 @@ FMonolithActionResult FMonolithGASInspectActions::HandleExportGASManifest(const 
 	Summary->SetNumberField(TEXT("asc_blueprints"), ASCArr.Num());
 	Summary->SetNumberField(TEXT("gameplay_cues"), CuesArr.Num());
 	Summary->SetNumberField(TEXT("gameplay_tags"), TagsArr.Num());
+	if (DataAssetProfilesReport.IsValid())
+	{
+		double DataAssetProfileCount = 0.0;
+		DataAssetProfilesReport->TryGetNumberField(TEXT("count"), DataAssetProfileCount);
+		Summary->SetNumberField(TEXT("data_asset_profiles"), DataAssetProfileCount);
+	}
+	else
+	{
+		Summary->SetNumberField(TEXT("data_asset_profiles"), 0);
+	}
 	Manifest->SetObjectField(TEXT("summary"), Summary);
 
 	// Data
@@ -564,6 +919,14 @@ FMonolithActionResult FMonolithGASInspectActions::HandleExportGASManifest(const 
 	Manifest->SetArrayField(TEXT("asc_blueprints"), ASCArr);
 	Manifest->SetArrayField(TEXT("gameplay_cues"), CuesArr);
 	Manifest->SetArrayField(TEXT("gameplay_tags"), TagsArr);
+	if (DataAssetProfilesReport.IsValid())
+	{
+		Manifest->SetObjectField(TEXT("data_asset_profiles"), DataAssetProfilesReport);
+	}
+	if (ManifestWarnings.Num() > 0)
+	{
+		Manifest->SetArrayField(TEXT("warnings"), ManifestWarnings);
+	}
 
 	// ── Relationships ──
 	if (bIncludeRelationships)
@@ -630,6 +993,10 @@ FMonolithActionResult FMonolithGASInspectActions::HandleExportGASManifest(const 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("format"), Format);
 	Result->SetObjectField(TEXT("summary"), Summary);
+	if (ManifestWarnings.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("warnings"), ManifestWarnings);
+	}
 
 	if (!OutputPath.IsEmpty())
 	{
@@ -825,6 +1192,23 @@ FMonolithActionResult FMonolithGASInspectActions::HandleGetRuntimeSummary(const 
 	Result->SetNumberField(TEXT("total_owned_tag_count"), 0);
 	Result->SetBoolField(TEXT("include_actor_samples"), bIncludeActorSamples);
 	Result->SetNumberField(TEXT("max_actors"), MaxActorSamples);
+	Result->SetBoolField(TEXT("gas_namespace_registered"), FMonolithToolRegistry::Get().HasNamespace(TEXT("gas")));
+	Result->SetNumberField(TEXT("gas_action_count"), FMonolithToolRegistry::Get().GetNamespaceActionCount(TEXT("gas")));
+#if WITH_GBA
+	Result->SetBoolField(TEXT("with_gba"), true);
+#else
+	Result->SetBoolField(TEXT("with_gba"), false);
+#endif
+	const FString ProjectIndexPath = FPaths::ProjectPluginsDir() / TEXT("Monolith/Saved/ProjectIndex.db");
+	Result->SetBoolField(TEXT("project_index_available"), FPaths::FileExists(ProjectIndexPath));
+	Result->SetStringField(TEXT("project_index_path"), ProjectIndexPath);
+	TSharedPtr<FJsonObject> Fallback = MakeShared<FJsonObject>();
+	Fallback->SetStringField(TEXT("source_cli"), TEXT("monolith_query.exe source ..."));
+	Fallback->SetStringField(TEXT("project_cli"), TEXT("monolith_query.exe project ..."));
+	Fallback->SetBoolField(TEXT("offline_gas_namespace_available"), false);
+	Fallback->SetStringField(TEXT("offline_gas_note"),
+		TEXT("Dedicated monolith_query.exe gas actions are deferred; use source/project read-only reports when live gas_query is unavailable."));
+	Result->SetObjectField(TEXT("read_only_fallback"), Fallback);
 	if (!ClassFilter.IsEmpty())
 	{
 		Result->SetStringField(TEXT("class_filter"), ClassFilter);
@@ -886,6 +1270,257 @@ FMonolithActionResult FMonolithGASInspectActions::HandleGetRuntimeSummary(const 
 	Result->SetStringField(TEXT("message"),
 		FString::Printf(TEXT("Found %d actors with AbilitySystemComponents in PIE world"), ASCCount));
 	return FMonolithActionResult::Success(Result);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// event/cue runtime probe
+// ─────────────────────────────────────────────────────────────────────────────
+
+FMonolithActionResult FMonolithGASInspectActions::HandleStartEventCueProbe(const TSharedPtr<FJsonObject>& Params)
+{
+	PruneInvalidEventCueProbes();
+
+	FString ActorIdent;
+	FMonolithActionResult Err;
+	if (!MonolithGAS::RequireStringParam(Params, TEXT("actor"), ActorIdent, Err))
+	{
+		return Err;
+	}
+
+	UWorld* World = MonolithGAS::GetPIEWorld();
+	if (!World)
+	{
+		return FMonolithActionResult::Error(TEXT("No PIE world found. Start Play-In-Editor first."));
+	}
+
+	AActor* Actor = MonolithGAS::FindActorInPIE(ActorIdent);
+	if (!Actor)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Actor not found in PIE world: '%s'"), *ActorIdent));
+	}
+
+	UAbilitySystemComponent* ASC = MonolithGAS::GetASCFromActor(Actor);
+	if (!ASC)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Actor '%s' has no AbilitySystemComponent"), *ActorIdent));
+	}
+
+	FGameplayTagContainer EventTags;
+	FGameplayTagContainer CueTags;
+	FString TagError;
+	if (!ReadProbeTags(Params, TEXT("event_tags"), TEXT("event_tag"), EventTags, TagError)
+		|| !ReadProbeTags(Params, TEXT("cue_tags"), TEXT("cue_tag"), CueTags, TagError))
+	{
+		return FMonolithActionResult::Error(TagError);
+	}
+	if (EventTags.Num() == 0 && CueTags.Num() == 0)
+	{
+		return FMonolithActionResult::Error(TEXT("At least one event_tag/event_tags or cue_tag/cue_tags value is required."));
+	}
+
+	double MaxEventsValue = 128.0;
+	Params->TryGetNumberField(TEXT("max_events"), MaxEventsValue);
+
+	TSharedPtr<FGASEventCueProbeState> Probe = MakeShared<FGASEventCueProbeState>();
+	Probe->ProbeId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
+	Probe->ActorIdentifier = ActorIdent;
+	Probe->WorldName = World->GetName();
+	Probe->Actor = Actor;
+	Probe->ASC = ASC;
+	Probe->EventTags = EventTags;
+	Probe->CueTags = CueTags;
+	Probe->MaxEvents = FMath::Clamp(FMath::FloorToInt(MaxEventsValue), 1, 10000);
+	Probe->StartedAtUtc = FDateTime::UtcNow();
+
+	if (EventTags.Num() > 0)
+	{
+		Probe->EventHandle = ASC->AddGameplayEventTagContainerDelegate(
+			EventTags,
+			FGameplayEventTagMulticastDelegate::FDelegate::CreateLambda(
+				[ProbeId = Probe->ProbeId](FGameplayTag MatchingTag, const FGameplayEventData* Payload)
+				{
+					CaptureGameplayEventForProbe(ProbeId, MatchingTag, Payload);
+				}));
+	}
+
+	for (const FGameplayTag& CueTag : CueTags)
+	{
+		FDelegateHandle Handle = ASC->RegisterGameplayTagEvent(CueTag, EGameplayTagEventType::NewOrRemoved).Add(
+			FOnGameplayEffectTagCountChanged::FDelegate::CreateLambda(
+				[ProbeId = Probe->ProbeId](const FGameplayTag ChangedTag, int32 NewCount)
+				{
+					CaptureCueTagChangeForProbe(ProbeId, ChangedTag, NewCount);
+				}));
+		Probe->CueHandles.Add(TPair<FGameplayTag, FDelegateHandle>(CueTag, Handle));
+	}
+
+	GEventCueProbes.Add(Probe->ProbeId, Probe);
+
+	TSharedPtr<FJsonObject> Result = BuildProbeResult(*Probe, true);
+	Result->SetStringField(TEXT("message"), TEXT("Event/cue probe started. Trigger gameplay, then call stop_event_cue_probe."));
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithGASInspectActions::HandleStopEventCueProbe(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ProbeId;
+	FMonolithActionResult Err;
+	if (!MonolithGAS::RequireStringParam(Params, TEXT("probe_id"), ProbeId, Err))
+	{
+		return Err;
+	}
+
+	TSharedPtr<FGASEventCueProbeState> Probe;
+	if (!GEventCueProbes.RemoveAndCopyValue(ProbeId, Probe) || !Probe.IsValid())
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Event/cue probe not found: %s"), *ProbeId));
+	}
+
+	RemoveProbeDelegates(*Probe);
+	TSharedPtr<FJsonObject> Result = BuildProbeResult(*Probe, false);
+	Result->SetStringField(TEXT("message"), TEXT("Event/cue probe stopped."));
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithGASInspectActions::HandleExpectEventCue(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> StartParams = MakeShared<FJsonObject>();
+	FString ActorIdent;
+	FMonolithActionResult Err;
+	if (!MonolithGAS::RequireStringParam(Params, TEXT("actor"), ActorIdent, Err))
+	{
+		return Err;
+	}
+	StartParams->SetStringField(TEXT("actor"), ActorIdent);
+
+	FGameplayTag ExpectedEventTag;
+	FGameplayTag ExpectedCueTag;
+	FString ExpectedEventTagString;
+	FString ExpectedCueTagString;
+	if (Params->TryGetStringField(TEXT("event_tag"), ExpectedEventTagString))
+	{
+		ExpectedEventTag = FGameplayTag::RequestGameplayTag(FName(*ExpectedEventTagString), false);
+		if (!ExpectedEventTag.IsValid())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("event_tag references unregistered gameplay tag '%s'."), *ExpectedEventTagString));
+		}
+		StartParams->SetStringField(TEXT("event_tag"), ExpectedEventTagString);
+	}
+	if (Params->TryGetStringField(TEXT("cue_tag"), ExpectedCueTagString))
+	{
+		ExpectedCueTag = FGameplayTag::RequestGameplayTag(FName(*ExpectedCueTagString), false);
+		if (!ExpectedCueTag.IsValid())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("cue_tag references unregistered gameplay tag '%s'."), *ExpectedCueTagString));
+		}
+		StartParams->SetStringField(TEXT("cue_tag"), ExpectedCueTagString);
+	}
+	if (!ExpectedEventTag.IsValid() && !ExpectedCueTag.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("event_tag or cue_tag is required."));
+	}
+
+	double MaxEventsValue = 128.0;
+	Params->TryGetNumberField(TEXT("max_events"), MaxEventsValue);
+	StartParams->SetNumberField(TEXT("max_events"), MaxEventsValue);
+
+	FMonolithActionResult StartResult = HandleStartEventCueProbe(StartParams);
+	if (!StartResult.bSuccess || !StartResult.Result.IsValid())
+	{
+		return StartResult;
+	}
+
+	FString ProbeId;
+	StartResult.Result->TryGetStringField(TEXT("probe_id"), ProbeId);
+	TSharedPtr<FJsonObject> TriggerReport = MakeShared<FJsonObject>();
+	TriggerReport->SetBoolField(TEXT("executed"), false);
+
+	const TSharedPtr<FJsonObject>* TriggerAction = nullptr;
+	if (Params->TryGetObjectField(TEXT("trigger_action"), TriggerAction) && TriggerAction && TriggerAction->IsValid())
+	{
+		FString Namespace;
+		FString Action;
+		if (!(*TriggerAction)->TryGetStringField(TEXT("namespace"), Namespace)
+			|| !(*TriggerAction)->TryGetStringField(TEXT("action"), Action)
+			|| Namespace.IsEmpty() || Action.IsEmpty())
+		{
+			TSharedPtr<FJsonObject> StopParams = MakeShared<FJsonObject>();
+			StopParams->SetStringField(TEXT("probe_id"), ProbeId);
+			HandleStopEventCueProbe(StopParams);
+			return FMonolithActionResult::Error(TEXT("trigger_action must contain non-empty namespace and action strings."));
+		}
+		if (Namespace == TEXT("gas") && (Action == TEXT("start_event_cue_probe")
+			|| Action == TEXT("stop_event_cue_probe") || Action == TEXT("expect_event_cue")))
+		{
+			TSharedPtr<FJsonObject> StopParams = MakeShared<FJsonObject>();
+			StopParams->SetStringField(TEXT("probe_id"), ProbeId);
+			HandleStopEventCueProbe(StopParams);
+			return FMonolithActionResult::Error(TEXT("trigger_action may not call event/cue probe actions recursively."));
+		}
+
+		const TSharedPtr<FJsonObject>* TriggerParams = nullptr;
+		TSharedPtr<FJsonObject> ExecuteParams = MakeShared<FJsonObject>();
+		if ((*TriggerAction)->TryGetObjectField(TEXT("params"), TriggerParams) && TriggerParams && TriggerParams->IsValid())
+		{
+			ExecuteParams = *TriggerParams;
+		}
+
+		const FMonolithActionResult TriggerResult = FMonolithToolRegistry::Get().ExecuteAction(Namespace, Action, ExecuteParams);
+		TriggerReport->SetBoolField(TEXT("executed"), true);
+		TriggerReport->SetStringField(TEXT("namespace"), Namespace);
+		TriggerReport->SetStringField(TEXT("action"), Action);
+		TriggerReport->SetBoolField(TEXT("success"), TriggerResult.bSuccess);
+		if (!TriggerResult.ErrorMessage.IsEmpty())
+		{
+			TriggerReport->SetStringField(TEXT("error"), TriggerResult.ErrorMessage);
+		}
+		if (TriggerResult.Result.IsValid())
+		{
+			TriggerReport->SetObjectField(TEXT("result"), TriggerResult.Result);
+		}
+	}
+	else
+	{
+		TriggerReport->SetStringField(TEXT("note"), TEXT("No trigger_action supplied; expect_event_cue only evaluates events captured during this call."));
+	}
+
+	TSharedPtr<FJsonObject> StopParams = MakeShared<FJsonObject>();
+	StopParams->SetStringField(TEXT("probe_id"), ProbeId);
+	FMonolithActionResult StopResult = HandleStopEventCueProbe(StopParams);
+	if (!StopResult.bSuccess || !StopResult.Result.IsValid())
+	{
+		return StopResult;
+	}
+
+	TSharedPtr<FGASEventCueProbeState> Probe = MakeShared<FGASEventCueProbeState>();
+	// Reconstruct only the row set needed for matching from the stop result.
+	const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+	if (StopResult.Result->TryGetArrayField(TEXT("rows"), Rows) && Rows)
+	{
+		Probe->Rows = *Rows;
+	}
+
+	const bool bEventPass = !ExpectedEventTag.IsValid()
+		|| FindProbeRowWithTag(*Probe, TEXT("gameplay_event"), ExpectedEventTag);
+	const bool bCuePass = !ExpectedCueTag.IsValid()
+		|| FindProbeRowWithTag(*Probe, TEXT("gameplay_cue_tag_count"), ExpectedCueTag);
+	const bool bPassed = bEventPass && bCuePass;
+
+	StopResult.Result->SetBoolField(TEXT("passed"), bPassed);
+	StopResult.Result->SetObjectField(TEXT("trigger_action"), TriggerReport);
+	StopResult.Result->SetStringField(TEXT("expected_event_tag"), ExpectedEventTag.IsValid() ? ExpectedEventTag.ToString() : FString());
+	StopResult.Result->SetStringField(TEXT("expected_cue_tag"), ExpectedCueTag.IsValid() ? ExpectedCueTag.ToString() : FString());
+	StopResult.Result->SetBoolField(TEXT("event_matched"), bEventPass);
+	StopResult.Result->SetBoolField(TEXT("cue_matched"), bCuePass);
+	StopResult.Result->SetStringField(TEXT("message"), bPassed
+		? TEXT("Expected event/cue evidence was captured.")
+		: TEXT("Expected event/cue evidence was not captured. For cue tags, instant ExecuteGameplayCue payloads are not directly observable by UE 5.7 public hooks."));
+
+	return FMonolithActionResult::Success(StopResult.Result);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

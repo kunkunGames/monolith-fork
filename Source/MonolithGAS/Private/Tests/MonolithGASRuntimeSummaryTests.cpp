@@ -3,6 +3,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "MonolithGASInternal.h"
+#include "MonolithGASInspectActions.h"
 #include "MonolithGASScaffoldActions.h"
 #include "MonolithToolRegistry.h"
 
@@ -37,11 +38,44 @@ bool FGASRuntimeSummaryPreflightShapeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Result should expose sampled_asc_count"), Result.Result->TryGetNumberField(TEXT("sampled_asc_count"), SampledASCCount));
 	TestEqual(TEXT("sampled_asc_count should honor include_actor_samples=false"), SampledASCCount, 0.0);
 
+	bool bGasNamespaceRegistered = false;
+	TestTrue(TEXT("Result should expose gas_namespace_registered"),
+		Result.Result->TryGetBoolField(TEXT("gas_namespace_registered"), bGasNamespaceRegistered));
+
+	double GASActionCount = -1.0;
+	TestTrue(TEXT("Result should expose gas_action_count"),
+		Result.Result->TryGetNumberField(TEXT("gas_action_count"), GASActionCount));
+	TestTrue(TEXT("GAS action count should be non-negative"), GASActionCount >= 0.0);
+
+	bool bProjectIndexAvailable = false;
+	TestTrue(TEXT("Result should expose project_index_available"),
+		Result.Result->TryGetBoolField(TEXT("project_index_available"), bProjectIndexAvailable));
+	TestTrue(TEXT("Result should expose read_only_fallback"),
+		Result.Result->HasTypedField<EJson::Object>(TEXT("read_only_fallback")));
+
 	const TArray<TSharedPtr<FJsonValue>>* Actors = nullptr;
 	TestTrue(TEXT("Result should always expose actors array"), Result.Result->TryGetArrayField(TEXT("actors"), Actors));
 	TestTrue(TEXT("actors array should be empty when samples are disabled"), Actors != nullptr && Actors->Num() == 0);
 
 	TestTrue(TEXT("Result should include an operator-facing message"), Result.Result->HasField(TEXT("message")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FGASEventCueProbeOutsidePIETest, "Monolith.GAS.EventCueProbe.OutsidePIEErrors", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FGASEventCueProbeOutsidePIETest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("gas"), TEXT("start_event_cue_probe")))
+	{
+		FMonolithGASInspectActions::RegisterActions(Registry);
+	}
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("actor"), TEXT("__MonolithMissingActor"));
+
+	FMonolithActionResult Result = Registry.ExecuteAction(TEXT("gas"), TEXT("start_event_cue_probe"), Params);
+	TestFalse(TEXT("start_event_cue_probe should fail cleanly outside PIE"), Result.bSuccess);
+	TestFalse(TEXT("start_event_cue_probe should report a no-PIE error"), Result.ErrorMessage.IsEmpty());
 	return true;
 }
 

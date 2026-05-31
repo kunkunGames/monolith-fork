@@ -41,6 +41,33 @@ static FString CollapseWhitespace(FString Value)
 	return Out.TrimStartAndEnd();
 }
 
+static FString MakeDuplicatedQualifiedLookupName(const FString& Name)
+{
+	const int32 LastScope = Name.Find(TEXT("::"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+	if (LastScope == INDEX_NONE)
+	{
+		return Name;
+	}
+
+	const FString Owner = Name.Left(LastScope);
+	return Owner.IsEmpty() ? Name : Owner + TEXT("::") + Name;
+}
+
+static FString MakeShortOwnerDuplicatedQualifiedLookupName(const FString& Name)
+{
+	const int32 LastScope = Name.Find(TEXT("::"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+	if (LastScope == INDEX_NONE)
+	{
+		return Name;
+	}
+
+	const FString Owner = Name.Left(LastScope);
+	const FString Method = Name.Mid(LastScope + 2);
+	const int32 OwnerScope = Owner.Find(TEXT("::"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+	const FString ShortOwner = OwnerScope == INDEX_NONE ? Owner : Owner.Mid(OwnerScope + 2);
+	return Owner.IsEmpty() || ShortOwner.IsEmpty() ? Name : Owner + TEXT("::") + ShortOwner + TEXT("::") + Method;
+}
+
 static int32 FindMatchingParen(const FString& Text, int32 OpenIndex)
 {
 	int32 Depth = 0;
@@ -212,9 +239,22 @@ static FString StripTrailingParamName(FString Param)
 	return Prefix;
 }
 
+static FString StripLeadingElaboratedTypeKeyword(FString Param)
+{
+	Param = Param.TrimStartAndEnd();
+	for (const TCHAR* Keyword : { TEXT("enum "), TEXT("class "), TEXT("struct ") })
+	{
+		if (Param.StartsWith(Keyword, ESearchCase::IgnoreCase))
+		{
+			return Param.Mid(FCString::Strlen(Keyword)).TrimStartAndEnd();
+		}
+	}
+	return Param;
+}
+
 static FString NormalizeOverrideParam(FString Param)
 {
-	Param = CollapseWhitespace(StripTrailingParamName(StripDefaultParamValue(Param)));
+	Param = CollapseWhitespace(StripLeadingElaboratedTypeKeyword(StripTrailingParamName(StripDefaultParamValue(Param))));
 	Param.ReplaceInline(TEXT(" &"), TEXT("&"));
 	Param.ReplaceInline(TEXT(" *"), TEXT("*"));
 	Param.ReplaceInline(TEXT(" &&"), TEXT("&&"));
@@ -340,24 +380,111 @@ static bool ReadCachedOverrideEdges(FSQLitePreparedStatement& Stmt, TArray<FMono
 	return true;
 }
 
+static int32 CountOverrideEdgesToUnlocked(FSQLiteDatabase& DB, int64 SymbolId, int32 Limit)
+{
+	const int32 SafeLimit = FMath::Clamp(Limit, 1, 1000);
+	const int32 ProbeLimit = FMath::Clamp(SafeLimit * 4, SafeLimit, 1000);
+	FSQLitePreparedStatement Stmt;
+	if (!Stmt.Create(DB, TEXT(
+		"WITH RECURSIVE descendants(base_class_id, child_class_id) AS ("
+		"  SELECT parent_id, child_id FROM inheritance"
+		"  UNION "
+		"  SELECT d.base_class_id, i.child_id "
+		"  FROM descendants d "
+		"  JOIN inheritance AS i ON i.parent_id = d.child_class_id"
+		") "
+		"SELECT child_fn.id,base_fn.id,"
+		"       child_fn.name,child_fn.qualified_name,base_fn.name,base_fn.qualified_name,"
+		"       child_cls.name,child_cls.qualified_name,base_cls.name,base_cls.qualified_name,"
+		"       COALESCE(child_fn.signature,''),COALESCE(base_fn.signature,'') "
+		"FROM symbols base_fn "
+		"JOIN symbols base_cls ON base_cls.id = base_fn.parent_symbol_id "
+		"JOIN descendants AS d ON d.base_class_id = base_cls.id "
+		"JOIN symbols child_cls ON child_cls.id = d.child_class_id "
+		"JOIN symbols child_fn ON child_fn.parent_symbol_id = child_cls.id "
+		"    AND (base_fn.name = child_fn.name "
+		"      OR base_fn.name = base_cls.name || '::' || child_fn.name) "
+		"    AND child_fn.kind = base_fn.kind "
+		"    AND child_fn.id != base_fn.id "
+		"WHERE base_fn.id = ? AND base_fn.kind = 'function' "
+		"ORDER BY child_fn.qualified_name "
+		"LIMIT ?;")))
+	{
+		return 0;
+	}
+	Stmt.SetBindingValueByIndex(1, SymbolId);
+	Stmt.SetBindingValueByIndex(2, static_cast<int64>(ProbeLimit));
+	TArray<FMonolithSourceOverrideEdge> Edges;
+	ReadOverrideEdges(Stmt, Edges, SafeLimit);
+	return Edges.Num();
+}
+
+static int32 CountOverrideEdgesFromUnlocked(FSQLiteDatabase& DB, int64 SymbolId, int32 Limit)
+{
+	const int32 SafeLimit = FMath::Clamp(Limit, 1, 1000);
+	const int32 ProbeLimit = FMath::Clamp(SafeLimit * 4, SafeLimit, 1000);
+	FSQLitePreparedStatement Stmt;
+	if (!Stmt.Create(DB, TEXT(
+		"WITH RECURSIVE ancestors(child_class_id, ancestor_class_id) AS ("
+		"  SELECT child_id, parent_id FROM inheritance"
+		"  UNION "
+		"  SELECT a.child_class_id, i.parent_id "
+		"  FROM ancestors a "
+		"  JOIN inheritance AS i ON i.child_id = a.ancestor_class_id"
+		") "
+		"SELECT child_fn.id,base_fn.id,"
+		"       child_fn.name,child_fn.qualified_name,base_fn.name,base_fn.qualified_name,"
+		"       child_cls.name,child_cls.qualified_name,base_cls.name,base_cls.qualified_name,"
+		"       COALESCE(child_fn.signature,''),COALESCE(base_fn.signature,'') "
+		"FROM symbols child_fn "
+		"JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id "
+		"JOIN ancestors AS a ON a.child_class_id = child_cls.id "
+		"JOIN symbols base_cls ON base_cls.id = a.ancestor_class_id "
+		"JOIN symbols base_fn INDEXED BY idx_symbols_parent_name_kind ON base_fn.parent_symbol_id = base_cls.id "
+		"    AND (base_fn.name = child_fn.name "
+		"      OR base_fn.name = base_cls.name || '::' || child_fn.name) "
+		"    AND base_fn.kind = child_fn.kind "
+		"WHERE child_fn.id = ? AND child_fn.kind = 'function' "
+		"ORDER BY base_fn.qualified_name "
+		"LIMIT ?;")))
+	{
+		return 0;
+	}
+	Stmt.SetBindingValueByIndex(1, SymbolId);
+	Stmt.SetBindingValueByIndex(2, static_cast<int64>(ProbeLimit));
+	TArray<FMonolithSourceOverrideEdge> Edges;
+	ReadOverrideEdges(Stmt, Edges, SafeLimit);
+	return Edges.Num();
+}
+
 static bool PopulateSourceOverrideEdgeCacheLocked(FSQLiteDatabase& DB, int64& OutCount, FString& OutError)
 {
 	OutCount = 0;
 	FSQLitePreparedStatement Candidates;
 	if (!Candidates.Create(DB, TEXT(
+		"WITH RECURSIVE child_seed(id,name,qualified_name,kind,parent_symbol_id,signature) AS ("
+		"  SELECT id,name,qualified_name,kind,parent_symbol_id,signature FROM symbols "
+		"  WHERE kind = 'function' AND signature LIKE '%%override%%'"
+		"), ancestors(child_class_id, ancestor_class_id) AS ("
+		"  SELECT child_id, parent_id FROM inheritance"
+		"  UNION "
+		"  SELECT a.child_class_id, i.parent_id "
+		"  FROM ancestors a "
+		"  JOIN inheritance AS i ON i.child_id = a.ancestor_class_id"
+		") "
 		"SELECT child_fn.id,base_fn.id,"
 		"       child_fn.name,child_fn.qualified_name,base_fn.name,base_fn.qualified_name,"
 		"       child_cls.name,child_cls.qualified_name,base_cls.name,base_cls.qualified_name,"
 		"       COALESCE(child_fn.signature,''),COALESCE(base_fn.signature,'') "
-		"FROM symbols AS child_fn INDEXED BY idx_symbols_override_signature "
+		"FROM child_seed AS child_fn "
 		"JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id "
-		"JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id = child_cls.id "
-		"JOIN symbols base_cls ON base_cls.id = i.parent_id "
+		"JOIN ancestors AS a ON a.child_class_id = child_cls.id "
+		"JOIN symbols base_cls ON base_cls.id = a.ancestor_class_id "
 		"JOIN symbols AS base_fn INDEXED BY idx_symbols_parent_name_kind ON base_fn.parent_symbol_id = base_cls.id "
-		"    AND base_fn.name = child_fn.name "
+		"    AND (base_fn.name = child_fn.name "
+		"      OR base_fn.name = base_cls.name || '::' || child_fn.name) "
 		"    AND base_fn.kind = child_fn.kind "
 		"WHERE child_fn.kind = 'function' "
-		"  AND child_fn.signature LIKE '%%override%%' "
 		"ORDER BY base_fn.id, child_fn.id;")))
 	{
 		OutError = DB.GetLastError();
@@ -992,7 +1119,7 @@ static bool CrgMetaEqualsLocked(FSQLiteDatabase& DB, const TCHAR* Key, const TCH
 static bool SourceOverrideEdgeCacheReadyLocked(FSQLiteDatabase& DB)
 {
 	return TableExistsLocked(DB, TEXT("source_override_edges"))
-		&& CrgMetaEqualsLocked(DB, TEXT("source_override_edges_version"), TEXT("1"));
+		&& CrgMetaEqualsLocked(DB, TEXT("source_override_edges_version"), TEXT("2"));
 }
 
 static int64 CountIdLocked(FSQLiteDatabase& DB, const TCHAR* Sql, int64 Id)
@@ -1287,8 +1414,7 @@ static const TCHAR* GCrgProjectionDdl =
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_target ON crg_edges(domain, target_node_id);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_kind_subkind ON crg_edges(domain, edge_kind, edge_subkind);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_metrics_score ON crg_node_metrics(risk_score DESC);")
-	TEXT("CREATE INDEX IF NOT EXISTS idx_source_override_edges_parent ON source_override_edges(parent_symbol_id, child_symbol_id);")
-	TEXT("CREATE INDEX IF NOT EXISTS idx_source_override_edges_child ON source_override_edges(child_symbol_id, parent_symbol_id);");
+	TEXT("CREATE INDEX IF NOT EXISTS idx_source_override_edges_parent ON source_override_edges(parent_symbol_id, child_symbol_id);");
 
 static const TCHAR* GSourceReviewIndexDdl =
 	TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_parent_name_kind ON symbols(parent_symbol_id, name, kind);")
@@ -1423,31 +1549,65 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::GetSymbolsByName(const FS
 
 	const int32 SafeLimit = Limit > 0 ? FMath::Clamp(Limit, 1, 1000) : 0;
 	const bool bQualifiedLookup = Name.Contains(TEXT("::"));
-	const TCHAR* NameColumn = bQualifiedLookup ? TEXT("qualified_name") : TEXT("name");
 	FSQLitePreparedStatement Stmt;
-	if (Kind.IsEmpty())
+	if (bQualifiedLookup)
 	{
-		const FString Sql = SafeLimit > 0
-			? FString::Printf(TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE %s = ? ORDER BY (line_end > line_start) DESC LIMIT ?;"), NameColumn)
-			: FString::Printf(TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE %s = ? ORDER BY (line_end > line_start) DESC;"), NameColumn);
+		const FString DuplicatedName = MakeDuplicatedQualifiedLookupName(Name);
+		const FString ShortOwnerDuplicatedName = MakeShortOwnerDuplicatedQualifiedLookupName(Name);
+		const FString KindClause = Kind.IsEmpty() ? TEXT("") : TEXT(" AND kind = ?");
+		const FString LimitClause = SafeLimit > 0 ? TEXT(" LIMIT ?") : TEXT("");
+		const FString Sql = FString::Printf(TEXT(
+			"SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro "
+			"FROM symbols "
+			"WHERE (qualified_name = ? OR name = ? OR qualified_name = ? OR qualified_name = ?)%s "
+			"ORDER BY CASE WHEN qualified_name = ? THEN 0 WHEN name = ? THEN 1 WHEN qualified_name = ? THEN 2 WHEN qualified_name = ? THEN 3 ELSE 4 END, "
+			"         (line_end > line_start) DESC%s;"),
+			*KindClause, *LimitClause);
 		Stmt.Create(*Database, *Sql);
 		Stmt.SetBindingValueByIndex(1, Name);
+		Stmt.SetBindingValueByIndex(2, Name);
+		Stmt.SetBindingValueByIndex(3, DuplicatedName);
+		Stmt.SetBindingValueByIndex(4, ShortOwnerDuplicatedName);
+		int32 BindIndex = 5;
+		if (!Kind.IsEmpty())
+		{
+			Stmt.SetBindingValueByIndex(BindIndex++, Kind);
+		}
+		Stmt.SetBindingValueByIndex(BindIndex++, Name);
+		Stmt.SetBindingValueByIndex(BindIndex++, Name);
+		Stmt.SetBindingValueByIndex(BindIndex++, DuplicatedName);
+		Stmt.SetBindingValueByIndex(BindIndex++, ShortOwnerDuplicatedName);
 		if (SafeLimit > 0)
 		{
-			Stmt.SetBindingValueByIndex(2, static_cast<int64>(SafeLimit));
+			Stmt.SetBindingValueByIndex(BindIndex++, static_cast<int64>(SafeLimit));
 		}
 	}
 	else
 	{
-		const FString Sql = SafeLimit > 0
-			? FString::Printf(TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE %s = ? AND kind = ? ORDER BY (line_end > line_start) DESC LIMIT ?;"), NameColumn)
-			: FString::Printf(TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE %s = ? AND kind = ? ORDER BY (line_end > line_start) DESC;"), NameColumn);
-		Stmt.Create(*Database, *Sql);
-		Stmt.SetBindingValueByIndex(1, Name);
-		Stmt.SetBindingValueByIndex(2, Kind);
-		if (SafeLimit > 0)
+		if (Kind.IsEmpty())
 		{
-			Stmt.SetBindingValueByIndex(3, static_cast<int64>(SafeLimit));
+			const FString Sql = SafeLimit > 0
+				? TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC LIMIT ?;")
+				: TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC;");
+			Stmt.Create(*Database, *Sql);
+			Stmt.SetBindingValueByIndex(1, Name);
+			if (SafeLimit > 0)
+			{
+				Stmt.SetBindingValueByIndex(2, static_cast<int64>(SafeLimit));
+			}
+		}
+		else
+		{
+			const FString Sql = SafeLimit > 0
+				? TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? AND kind = ? ORDER BY (line_end > line_start) DESC LIMIT ?;")
+				: TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? AND kind = ? ORDER BY (line_end > line_start) DESC;");
+			Stmt.Create(*Database, *Sql);
+			Stmt.SetBindingValueByIndex(1, Name);
+			Stmt.SetBindingValueByIndex(2, Kind);
+			if (SafeLimit > 0)
+			{
+				Stmt.SetBindingValueByIndex(3, static_cast<int64>(SafeLimit));
+			}
 		}
 	}
 
@@ -1724,18 +1884,26 @@ TArray<FMonolithSourceOverrideEdge> FMonolithSourceDatabase::GetOverridesTo(int6
 	}
 
 	Stmt.Create(*Database, TEXT(
+		"WITH RECURSIVE descendants(base_class_id, child_class_id) AS ("
+		"  SELECT parent_id, child_id FROM inheritance"
+		"  UNION "
+		"  SELECT d.base_class_id, i.child_id "
+		"  FROM descendants d "
+		"  JOIN inheritance AS i ON i.parent_id = d.child_class_id"
+		") "
 		"SELECT child_fn.id,base_fn.id,"
 		"       child_fn.name,child_fn.qualified_name,base_fn.name,base_fn.qualified_name,"
 		"       child_cls.name,child_cls.qualified_name,base_cls.name,base_cls.qualified_name,"
 		"       COALESCE(child_fn.signature,''),COALESCE(base_fn.signature,'') "
 		"FROM symbols base_fn "
 		"JOIN symbols base_cls ON base_cls.id = base_fn.parent_symbol_id "
-		"JOIN symbols child_fn ON child_fn.name = base_fn.name "
+		"JOIN descendants AS d ON d.base_class_id = base_cls.id "
+		"JOIN symbols child_cls ON child_cls.id = d.child_class_id "
+		"JOIN symbols child_fn ON child_fn.parent_symbol_id = child_cls.id "
+		"    AND (base_fn.name = child_fn.name "
+		"      OR base_fn.name = base_cls.name || '::' || child_fn.name) "
 		"    AND child_fn.kind = base_fn.kind "
 		"    AND child_fn.id != base_fn.id "
-		"JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id "
-		"JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id = child_cls.id "
-		"    AND i.parent_id = base_cls.id "
 		"WHERE base_fn.id = ? AND base_fn.kind = 'function' "
 		"ORDER BY child_fn.qualified_name "
 		"LIMIT ?;"));
@@ -1778,16 +1946,24 @@ TArray<FMonolithSourceOverrideEdge> FMonolithSourceDatabase::GetOverridesFrom(in
 	}
 
 	Stmt.Create(*Database, TEXT(
+		"WITH RECURSIVE ancestors(child_class_id, ancestor_class_id) AS ("
+		"  SELECT child_id, parent_id FROM inheritance"
+		"  UNION "
+		"  SELECT a.child_class_id, i.parent_id "
+		"  FROM ancestors a "
+		"  JOIN inheritance AS i ON i.child_id = a.ancestor_class_id"
+		") "
 		"SELECT child_fn.id,base_fn.id,"
 		"       child_fn.name,child_fn.qualified_name,base_fn.name,base_fn.qualified_name,"
 		"       child_cls.name,child_cls.qualified_name,base_cls.name,base_cls.qualified_name,"
 		"       COALESCE(child_fn.signature,''),COALESCE(base_fn.signature,'') "
 		"FROM symbols child_fn "
 		"JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id "
-		"JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id = child_cls.id "
-		"JOIN symbols base_cls ON base_cls.id = i.parent_id "
-		"JOIN symbols base_fn ON base_fn.parent_symbol_id = base_cls.id "
-		"    AND base_fn.name = child_fn.name "
+		"JOIN ancestors AS a ON a.child_class_id = child_cls.id "
+		"JOIN symbols base_cls ON base_cls.id = a.ancestor_class_id "
+		"JOIN symbols base_fn INDEXED BY idx_symbols_parent_name_kind ON base_fn.parent_symbol_id = base_cls.id "
+		"    AND (base_fn.name = child_fn.name "
+		"      OR base_fn.name = base_cls.name || '::' || child_fn.name) "
 		"    AND base_fn.kind = child_fn.kind "
 		"WHERE child_fn.id = ? AND child_fn.kind = 'function' "
 		"ORDER BY base_fn.qualified_name "
@@ -2345,7 +2521,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 				: FString::Printf(TEXT("missing CRG projection index %s (run source.repair_crg_cache)"), I));
 	}
 	for (const TCHAR* I : {
-		TEXT("idx_source_override_edges_parent"), TEXT("idx_source_override_edges_child"),
+		TEXT("idx_source_override_edges_parent"),
 		TEXT("idx_symbols_override_signature"),
 		TEXT("idx_inheritance_parent_child"), TEXT("idx_inheritance_child_parent") })
 	{
@@ -2416,9 +2592,9 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		{
 			S3.GetColumnValueByIndex(0, OverrideEdgesVersion);
 		}
-		Check(TEXT("crg:source_override_edges_version"), OverrideEdgesVersion == TEXT("1"),
+		Check(TEXT("crg:source_override_edges_version"), OverrideEdgesVersion == TEXT("2"),
 			OverrideEdgesVersion.IsEmpty() ? TEXT("crg_meta.source_override_edges_version missing (run source.repair_crg_cache)")
-				: FString::Printf(TEXT("source override edge cache version=%s (expected 1)"), *OverrideEdgesVersion));
+				: FString::Printf(TEXT("source override edge cache version=%s (expected 2)"), *OverrideEdgesVersion));
 	}
 
 	// source_fts is a plain (non external-content) fts5 table — a row-count
@@ -2779,7 +2955,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(const FString& S
 						: FString::Printf(TEXT("CRG cache rebuild failed at source override edge cache: %s"), *OverrideError)));
 			}
 		}
-		Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','1');"), TEXT("source_override_edges_version"));
+		Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','2');"), TEXT("source_override_edges_version"));
 		if (bOk)
 		{
 			Root->SetNumberField(TEXT("source_override_edges_built"), static_cast<double>(OverrideEdgeCount));
@@ -2941,7 +3117,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(const FString& S
 					: FString::Printf(TEXT("CRG cache rebuild failed at source override edge cache: %s"), *OverrideError)));
 		}
 	}
-	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','1');"), TEXT("source_override_edges_version"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','2');"), TEXT("source_override_edges_version"));
 	if (bOk)
 	{
 		Root->SetNumberField(TEXT("source_override_edges_built"), static_cast<double>(OverrideEdgeCount));
@@ -4148,16 +4324,25 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 		else if (bHasCrg)
 		{
 			Sql = FString::Printf(TEXT(
-			"WITH child_seed AS ("
+			"WITH RECURSIVE child_seed AS ("
 			"  SELECT id,name,kind,parent_symbol_id FROM symbols "
 			"  WHERE kind='function' AND signature LIKE '%%override%%' LIMIT %d"
+			"), ancestors(child_class_id, ancestor_class_id) AS ("
+			"  SELECT child_id, parent_id FROM inheritance"
+			"  UNION "
+			"  SELECT a.child_class_id, i.parent_id "
+			"  FROM ancestors a "
+			"  JOIN inheritance AS i ON i.child_id = a.ancestor_class_id"
 			"), override_children AS ("
 			"  SELECT base_fn.id AS symbol_id, COUNT(*) AS override_children "
 			"  FROM child_seed child_fn "
 			"  JOIN symbols child_cls ON child_cls.id=child_fn.parent_symbol_id "
-			"  JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id=child_cls.id "
-			"  JOIN symbols base_cls ON base_cls.id=i.parent_id "
-			"  JOIN symbols base_fn ON base_fn.parent_symbol_id=base_cls.id AND base_fn.name=child_fn.name AND base_fn.kind=child_fn.kind "
+			"  JOIN ancestors AS a ON a.child_class_id=child_cls.id "
+			"  JOIN symbols base_cls ON base_cls.id=a.ancestor_class_id "
+			"  JOIN symbols base_fn INDEXED BY idx_symbols_parent_name_kind ON base_fn.parent_symbol_id=base_cls.id "
+			"    AND (base_fn.name=child_fn.name "
+			"      OR base_fn.name=base_cls.name || '::' || child_fn.name) "
+			"    AND base_fn.kind=child_fn.kind "
 			"  GROUP BY base_fn.id"
 			"), scored AS ("
 			"  SELECT s.id,s.name,s.qualified_name,s.kind,COALESCE(f.path,'') AS file,s.line_start,s.line_end,"
@@ -4180,16 +4365,25 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 			const FString RiskScoreExpr = TEXT("c.estimated_risk");
 			const FString RiskTierExpr = TEXT("CASE WHEN c.estimated_risk >= 0.66 THEN 'high' WHEN c.estimated_risk >= 0.33 THEN 'medium' ELSE 'low' END");
 			Sql = FString::Printf(TEXT(
-			"WITH child_seed AS ("
+			"WITH RECURSIVE child_seed AS ("
 			"  SELECT id,name,kind,parent_symbol_id FROM symbols "
 			"  WHERE kind='function' AND signature LIKE '%%override%%' LIMIT %d"
+			"), ancestors(child_class_id, ancestor_class_id) AS ("
+			"  SELECT child_id, parent_id FROM inheritance"
+			"  UNION "
+			"  SELECT a.child_class_id, i.parent_id "
+			"  FROM ancestors a "
+			"  JOIN inheritance AS i ON i.child_id = a.ancestor_class_id"
 			"), override_children AS ("
 			"  SELECT base_fn.id AS symbol_id, COUNT(*) AS override_children "
 			"  FROM child_seed child_fn "
 			"  JOIN symbols child_cls ON child_cls.id=child_fn.parent_symbol_id "
-			"  JOIN inheritance AS i INDEXED BY idx_inheritance_child_parent ON i.child_id=child_cls.id "
-			"  JOIN symbols base_cls ON base_cls.id=i.parent_id "
-			"  JOIN symbols base_fn ON base_fn.parent_symbol_id=base_cls.id AND base_fn.name=child_fn.name AND base_fn.kind=child_fn.kind "
+			"  JOIN ancestors AS a ON a.child_class_id=child_cls.id "
+			"  JOIN symbols base_cls ON base_cls.id=a.ancestor_class_id "
+			"  JOIN symbols base_fn INDEXED BY idx_symbols_parent_name_kind ON base_fn.parent_symbol_id=base_cls.id "
+			"    AND (base_fn.name=child_fn.name "
+			"      OR base_fn.name=base_cls.name || '::' || child_fn.name) "
+			"    AND base_fn.kind=child_fn.kind "
 			"  GROUP BY base_fn.id"
 			"), ref_in AS ("
 			"  SELECT to_symbol_id AS symbol_id, COUNT(*) AS fan_in, COUNT(DISTINCT r.file_id) AS caller_files FROM \"references\" r GROUP BY to_symbol_id"
@@ -4311,8 +4505,11 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReviewHotspots(
 			S.GetColumnValueByIndex(13, Risk);
 			S.GetColumnValueByIndex(14, Tier);
 
-			// Cached override counts are signature-aware. Query-time fallback is approximate by design
-			// so this global ranking stays a single bounded query instead of N+1 override lookups.
+			if (NormalizedKind == TEXT("override") && !bHasOverrideCache)
+			{
+				OverrideChildren = CountOverrideEdgesToUnlocked(*Database, Id, 1000);
+				OverriddenParents = CountOverrideEdgesFromUnlocked(*Database, Id, 1000);
+			}
 			if (NormalizedKind == TEXT("override") && OverrideChildren <= 0 && OverriddenParents <= 0)
 			{
 				continue;

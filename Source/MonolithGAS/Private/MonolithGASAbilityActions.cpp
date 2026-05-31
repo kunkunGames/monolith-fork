@@ -538,10 +538,11 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 
 	Registry.RegisterAction(TEXT("gas"), TEXT("validate_ability_blueprint"),
-		TEXT("Check for unhandled delegates, missing EndAbility, tasks in wrong BP type, NonInstanced misuse"),
+		TEXT("Check for unhandled delegates, missing EndAbility, WaitInputRelease/WaitDelay policy issues, tasks in wrong BP type, NonInstanced misuse"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateAbilityBlueprint),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path to validate"))
+			.Optional(TEXT("release_input_supported"), TEXT("boolean"), TEXT("Set true when project input binding is known to call AbilitySpecInputReleased for release/cancel paths"), TEXT("false"))
 			.Build());
 
 	// Phase 4: Advanced
@@ -3689,6 +3690,8 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleValidateAbilityBlueprint
 
 	TArray<TSharedPtr<FJsonValue>> Errors;
 	TArray<TSharedPtr<FJsonValue>> Warnings;
+	bool bReleaseInputSupported = false;
+	Params->TryGetBoolField(TEXT("release_input_supported"), bReleaseInputSupported);
 
 	bool bIsAbilityBP = MonolithGAS::IsAbilityBlueprint(BP);
 
@@ -3743,7 +3746,10 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleValidateAbilityBlueprint
 	bool bHasCommitAbility = false;
 	bool bHasEndAbility = false;
 	bool bHasActivateAbility = false;
+	bool bHasWaitInputRelease = false;
+	bool bHasWaitDelay = false;
 	int32 TaskNodeCount = 0;
+	int32 InvalidWaitDelayCount = 0;
 	TArray<FString> AllDanglingDelegates;
 
 	for (UEdGraph* Graph : BP->UbergraphPages)
@@ -3769,6 +3775,67 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleValidateAbilityBlueprint
 			if (Node->IsA<UK2Node_LatentAbilityCall>())
 			{
 				TaskNodeCount++;
+				const FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
+				const bool bNodeIsWaitInputRelease =
+					NodeTitle.Contains(TEXT("WaitInputRelease"), ESearchCase::IgnoreCase)
+					|| NodeTitle.Contains(TEXT("Wait Input Release"), ESearchCase::IgnoreCase);
+				const bool bNodeIsWaitDelay =
+					NodeTitle.Contains(TEXT("WaitDelay"), ESearchCase::IgnoreCase)
+					|| NodeTitle.Contains(TEXT("Wait Delay"), ESearchCase::IgnoreCase);
+
+				bHasWaitInputRelease = bHasWaitInputRelease || bNodeIsWaitInputRelease;
+				bHasWaitDelay = bHasWaitDelay || bNodeIsWaitDelay;
+
+				if (bNodeIsWaitDelay)
+				{
+					bool bDurationSourceLooksPositive = false;
+					bool bFoundDurationPin = false;
+					FString DurationDefault;
+					for (UEdGraphPin* Pin : Node->Pins)
+					{
+						if (!Pin || Pin->Direction != EGPD_Input)
+						{
+							continue;
+						}
+
+						const FString PinName = Pin->PinName.ToString();
+						if (!PinName.Contains(TEXT("Time"), ESearchCase::IgnoreCase)
+							&& !PinName.Contains(TEXT("Duration"), ESearchCase::IgnoreCase))
+						{
+							continue;
+						}
+
+						bFoundDurationPin = true;
+						if (Pin->LinkedTo.Num() > 0)
+						{
+							bDurationSourceLooksPositive = true;
+							break;
+						}
+
+						DurationDefault = Pin->DefaultValue;
+						const double Duration = FCString::Atod(*DurationDefault);
+						if (Duration > 0.0)
+						{
+							bDurationSourceLooksPositive = true;
+							break;
+						}
+					}
+
+					if (!bDurationSourceLooksPositive)
+					{
+						++InvalidWaitDelayCount;
+						TSharedPtr<FJsonObject> WarnObj = MakeShared<FJsonObject>();
+						WarnObj->SetStringField(TEXT("type"), TEXT("wait_delay_non_positive_duration"));
+						WarnObj->SetStringField(TEXT("severity"), TEXT("warning"));
+						WarnObj->SetStringField(TEXT("node"), NodeTitle);
+						WarnObj->SetStringField(TEXT("message"),
+							bFoundDurationPin
+								? FString::Printf(TEXT("WaitDelay node has no linked duration source and default duration '%s' is not positive."), *DurationDefault)
+								: TEXT("WaitDelay node has no detectable duration input pin."));
+						Warnings.Add(MakeShared<FJsonValueObject>(WarnObj));
+					}
+				}
+
 				for (UEdGraphPin* Pin : Node->Pins)
 				{
 					if (Pin && !Pin->bHidden &&
@@ -3794,6 +3861,16 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleValidateAbilityBlueprint
 		ErrObj->SetStringField(TEXT("message"),
 			TEXT("No EndAbility call found in any graph. The ability will never terminate."));
 		Errors.Add(MakeShared<FJsonValueObject>(ErrObj));
+	}
+
+	if (bHasWaitInputRelease && !bReleaseInputSupported)
+	{
+		TSharedPtr<FJsonObject> WarnObj = MakeShared<FJsonObject>();
+		WarnObj->SetStringField(TEXT("type"), TEXT("wait_input_release_requires_release_binding"));
+		WarnObj->SetStringField(TEXT("severity"), TEXT("warning"));
+		WarnObj->SetStringField(TEXT("message"),
+			TEXT("Ability uses WaitInputRelease, but release_input_supported was not true. Validate that project input binding calls AbilitySpecInputReleased on Completed and Canceled."));
+		Warnings.Add(MakeShared<FJsonValueObject>(WarnObj));
 	}
 
 	// Check: missing CommitAbility when cost/cooldown exists
@@ -3874,7 +3951,11 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleValidateAbilityBlueprint
 	Summary->SetBoolField(TEXT("has_activate_ability"), bHasActivateAbility);
 	Summary->SetBoolField(TEXT("has_commit_ability"), bHasCommitAbility);
 	Summary->SetBoolField(TEXT("has_end_ability"), bHasEndAbility);
+	Summary->SetBoolField(TEXT("has_wait_input_release"), bHasWaitInputRelease);
+	Summary->SetBoolField(TEXT("has_wait_delay"), bHasWaitDelay);
+	Summary->SetBoolField(TEXT("release_input_supported"), bReleaseInputSupported);
 	Summary->SetNumberField(TEXT("task_node_count"), TaskNodeCount);
+	Summary->SetNumberField(TEXT("invalid_wait_delay_count"), InvalidWaitDelayCount);
 	Summary->SetNumberField(TEXT("dangling_delegate_count"), AllDanglingDelegates.Num());
 	Summary->SetStringField(TEXT("instancing_policy"), InstancingPolicyToString(InstPolicy));
 	Result->SetObjectField(TEXT("summary"), Summary);
