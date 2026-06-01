@@ -6,17 +6,61 @@
 
 FMonolithActionResult FProjectRiskScoreAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
+	FString Seed;
+	if (Params->HasField(TEXT("asset_path")))
+	{
+		if (!Params->TryGetStringField(TEXT("asset_path"), Seed))
+		{
+			return FMonolithActionResult::Error(TEXT("'asset_path' parameter must be a string"), -32602);
+		}
+		if (Seed.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("'asset_path' parameter cannot be empty"), -32602);
+		}
+	}
+	else if (Params->HasField(TEXT("seed")))
+	{
+		if (!Params->TryGetStringField(TEXT("seed"), Seed))
+		{
+			return FMonolithActionResult::Error(TEXT("'seed' parameter must be a string"), -32602);
+		}
+		if (Seed.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("'seed' parameter cannot be empty"), -32602);
+		}
+	}
+
+	int32 Limit = 20;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = FMath::Clamp(Limit, 1, 1000);
+
+	FString MinTier = TEXT("low");
+	if (Params->HasField(TEXT("min_tier")))
+	{
+		if (!Params->TryGetStringField(TEXT("min_tier"), MinTier))
+		{
+			return FMonolithActionResult::Error(TEXT("'min_tier' parameter must be a string"), -32602);
+		}
+		if (MinTier.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("'min_tier' parameter cannot be empty"), -32602);
+		}
+	}
+
 	UMonolithIndexSubsystem* Subsystem = GEditor ? GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>() : nullptr;
 	FMonolithIndexDatabase* Db = Subsystem ? Subsystem->GetDatabase() : nullptr;
 	if (!Db)
 	{
 		return FMonolithActionResult::Error(TEXT("Index subsystem/database not available"));
 	}
-
-	const FString Seed = FMonolithIndexReview::PStr(Params, TEXT("asset_path"),
-		FMonolithIndexReview::PStr(Params, TEXT("seed")));
-	const int32 Limit = FMonolithIndexReview::PInt(Params, TEXT("limit"), 20);
-	const FString MinTier = FMonolithIndexReview::PStr(Params, TEXT("min_tier"), TEXT("low"));
 
 	TSharedPtr<FJsonObject> Result = FMonolithIndexReview::RiskScore(*Db, Seed, Limit, MinTier);
 	return FMonolithActionResult::Success(Result);
