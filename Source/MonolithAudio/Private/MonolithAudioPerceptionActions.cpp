@@ -483,6 +483,7 @@ FMonolithActionResult FMonolithAudioPerceptionActions::ListPerceptionBoundSounds
 	Registry.GetAssets(Filter, AllSounds);
 
 	TArray<TSharedPtr<FJsonValue>> BindingsArr;
+	// Cannot Reserve properly since it counts conditionally
 	int32 Scanned = 0;
 	int32 Bound = 0;
 	bool bLimitReached = false;

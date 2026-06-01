@@ -1278,6 +1278,7 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ListAvailableMetaSoundNode
 	Metasound::Frontend::INodeClassRegistry& Registry = Metasound::Frontend::INodeClassRegistry::GetChecked();
 
 	TArray<TSharedPtr<FJsonValue>> NodesJson;
+	NodesJson.Reserve(Limit);
 	int32 Count = 0;
 
 	Registry.IterateRegistry(

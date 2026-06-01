@@ -412,6 +412,7 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleListMet
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 
 	TArray<TSharedPtr<FJsonValue>> PagesArray;
+	// IterateGraphPages does not provide a fast count, leaving unreserved.
 	Doc.RootGraph.IterateGraphPages([&](const FMetasoundFrontendGraph& Page)
 	{
 		TSharedPtr<FJsonObject> PageJson = MakeShared<FJsonObject>();
@@ -834,6 +835,7 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleSearchM
 
 	FString QueryLower = Query.ToLower();
 	TArray<TSharedPtr<FJsonValue>> MatchesArray;
+	// Reserve omitted because matches depend on the query string.
 
 	for (const FMetasoundFrontendNode& Node : Graph->Nodes)
 	{
@@ -1093,6 +1095,7 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleValidat
 
 	TArray<TSharedPtr<FJsonValue>> ErrorsArray;
 	TArray<TSharedPtr<FJsonValue>> WarningsArray;
+	// Errors/warnings cannot be accurately pre-reserved as they depend on rule violations.
 
 	const FMetasoundFrontendGraph& Graph = Doc.RootGraph.GetConstDefaultGraph();
 

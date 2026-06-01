@@ -1125,6 +1125,7 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundMix(const TSharedPt
 	Result->SetObjectField(TEXT("eq_settings"), StructToJson(FAudioEQEffect::StaticStruct(), &Asset->EQSettings));
 
 	TArray<TSharedPtr<FJsonValue>> AdjustersArr;
+	AdjustersArr.Reserve(Asset->SoundClassEffects.Num());
 	for (const FSoundClassAdjuster& Adj : Asset->SoundClassEffects)
 	{
 		AdjustersArr.Add(MakeShared<FJsonValueObject>(SoundClassAdjusterToJson(Adj)));
@@ -1159,6 +1160,7 @@ FMonolithActionResult FMonolithAudioAssetActions::GetSoundMixSettings(const TSha
 	Result->SetObjectField(TEXT("eq_settings"), StructToJson(FAudioEQEffect::StaticStruct(), &Asset->EQSettings));
 
 	TArray<TSharedPtr<FJsonValue>> AdjustersArr;
+	AdjustersArr.Reserve(Asset->SoundClassEffects.Num());
 	for (const FSoundClassAdjuster& Adj : Asset->SoundClassEffects)
 	{
 		AdjustersArr.Add(MakeShared<FJsonValueObject>(SoundClassAdjusterToJson(Adj)));
@@ -1281,6 +1283,7 @@ FMonolithActionResult FMonolithAudioAssetActions::SetSoundMixSettings(const TSha
 	Result->SetObjectField(TEXT("eq_settings"), StructToJson(FAudioEQEffect::StaticStruct(), &Asset->EQSettings));
 
 	TArray<TSharedPtr<FJsonValue>> AdjustersArr;
+	AdjustersArr.Reserve(Asset->SoundClassEffects.Num());
 	for (const FSoundClassAdjuster& Adj : Asset->SoundClassEffects)
 	{
 		AdjustersArr.Add(MakeShared<FJsonValueObject>(SoundClassAdjusterToJson(Adj)));
