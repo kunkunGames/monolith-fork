@@ -100,7 +100,13 @@ namespace MonolithBulkFillActionsInternal
 		FBulkFillSpec Spec;
 		Params->TryGetStringField(TEXT("target_namespace"), Spec.TargetNamespace);
 		Params->TryGetStringField(TEXT("target"), Spec.TargetAsset);
-		Spec.Tree = Params->GetObjectField(TEXT("tree"));
+
+		const TSharedPtr<FJsonObject>* TreePtr = nullptr;
+		if (Params->TryGetObjectField(TEXT("tree"), TreePtr) && TreePtr != nullptr)
+		{
+			Spec.Tree = *TreePtr;
+		}
+
 		Params->TryGetBoolField(TEXT("dry_run"), Spec.bDryRun);
 		Params->TryGetBoolField(TEXT("strict"), Spec.bStrict);
 
