@@ -1532,9 +1532,9 @@ FMonolithActionResult FMonolithSourceActions::HandleGetClassHierarchy(const TSha
 	}
 
 	FString ClassName;
-	if (!Params->TryGetStringField(TEXT("symbol"), ClassName) && !Params->TryGetStringField(TEXT("class_name"), ClassName))
+	if (!Params->TryGetStringField(TEXT("symbol"), ClassName))
 	{
-		return FMonolithActionResult::Error(TEXT("\'symbol\' (or \'class_name\') parameter is required and must be a string"));
+		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
 	}
 	if (ClassName.IsEmpty())
 	{
