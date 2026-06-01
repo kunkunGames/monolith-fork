@@ -2476,6 +2476,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetMontageInfo(const TSha
 
 	// Sections
 	TArray<TSharedPtr<FJsonValue>> SectionsArr;
+	SectionsArr.Reserve(Montage->CompositeSections.Num());
 	for (int32 i = 0; i < Montage->CompositeSections.Num(); ++i)
 	{
 		const FCompositeSection& Section = Montage->CompositeSections[i];
@@ -2490,6 +2491,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetMontageInfo(const TSha
 
 	// Slots
 	TArray<TSharedPtr<FJsonValue>> SlotsArr;
+	SlotsArr.Reserve(Montage->SlotAnimTracks.Num());
 	for (int32 i = 0; i < Montage->SlotAnimTracks.Num(); ++i)
 	{
 		TSharedPtr<FJsonObject> SlotObj = MakeShared<FJsonObject>();
@@ -2537,6 +2539,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetBlendSpaceInfo(const T
 	// Samples
 	const TArray<FBlendSample>& Samples = BS->GetBlendSamples();
 	TArray<TSharedPtr<FJsonValue>> SamplesArr;
+	SamplesArr.Reserve(Samples.Num());
 	for (int32 i = 0; i < Samples.Num(); ++i)
 	{
 		const FBlendSample& Sample = Samples[i];
@@ -2588,6 +2591,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetSkeletonSockets(const 
 	Root->SetStringField(TEXT("source_type"), SourceType);
 
 	TArray<TSharedPtr<FJsonValue>> SocketsArr;
+	SocketsArr.Reserve(SocketList.Num());
 	for (USkeletalMeshSocket* Sock : SocketList)
 	{
 		if (!Sock) continue;
@@ -2636,6 +2640,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetSkeletonPreviewAttache
 	Root->SetStringField(TEXT("asset_path"), AssetPath);
 
 	TArray<TSharedPtr<FJsonValue>> AttachedArr;
+	AttachedArr.Reserve(NumAttached);
 	for (int32 i = 0; i < NumAttached; ++i)
 	{
 		const FPreviewAttachedObjectPair& Pair = Container[i];
@@ -2814,6 +2819,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetAbpInfo(const TSharedP
 
 	// Interfaces
 	TArray<TSharedPtr<FJsonValue>> InterfacesArr;
+	InterfacesArr.Reserve(ABP->ImplementedInterfaces.Num());
 	for (const FBPInterfaceDescription& Iface : ABP->ImplementedInterfaces)
 	{
 		if (Iface.Interface)
@@ -4164,6 +4170,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetAbpVariables(const TSh
 	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 
 	TArray<TSharedPtr<FJsonValue>> VarsArr;
+	VarsArr.Reserve(ABP->NewVariables.Num());
 	for (const FBPVariableDescription& Var : ABP->NewVariables)
 	{
 		TSharedPtr<FJsonObject> VarJson = MakeShared<FJsonObject>();
@@ -4410,6 +4417,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetControlRigInfo(const T
 	TArray<FRigElementKey> AllKeys = H->GetAllKeys();
 
 	TArray<TSharedPtr<FJsonValue>> ElementsArr;
+	ElementsArr.Reserve(AllKeys.Num());
 	int32 BoneCount = 0, ControlCount = 0, NullCount = 0, CurveCount = 0, OtherCount = 0;
 	for (const FRigElementKey& Key : AllKeys)
 	{
@@ -4507,6 +4515,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetControlRigVariables(co
 
 	// Part 2 — Blueprint variables (from UBlueprint::NewVariables)
 	TArray<TSharedPtr<FJsonValue>> BpVarsArr;
+	BpVarsArr.Reserve(CRB->NewVariables.Num());
 	for (const FBPVariableDescription& Var : CRB->NewVariables)
 	{
 		TSharedPtr<FJsonObject> VarObj = MakeShared<FJsonObject>();
@@ -4724,6 +4733,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetIKRigInfo(const TShare
 	// Solvers
 	TArray<TSharedPtr<FJsonValue>> SolversArr;
 	const int32 NumSolvers = C->GetNumSolvers();
+	SolversArr.Reserve(NumSolvers);
 	const TArray<FInstancedStruct>& SolverStructs = Asset->GetSolverStructs();
 	for (int32 i = 0; i < NumSolvers; ++i)
 	{
@@ -4747,6 +4757,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetIKRigInfo(const TShare
 	// Goals
 	TArray<TSharedPtr<FJsonValue>> GoalsArr;
 	const TArray<UIKRigEffectorGoal*>& Goals = C->GetAllGoals();
+	GoalsArr.Reserve(Goals.Num());
 	for (const UIKRigEffectorGoal* Goal : Goals)
 	{
 		if (!Goal) continue;
@@ -4762,6 +4773,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetIKRigInfo(const TShare
 	// Retarget chains
 	TArray<TSharedPtr<FJsonValue>> ChainsArr;
 	const TArray<FBoneChain>& Chains = C->GetRetargetChains();
+	ChainsArr.Reserve(Chains.Num());
 	for (const FBoneChain& Chain : Chains)
 	{
 		TSharedPtr<FJsonObject> ChainObj = MakeShared<FJsonObject>();
@@ -4868,6 +4880,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddIKSolver(const TShared
 	}
 
 	TArray<TSharedPtr<FJsonValue>> GoalNamesArr;
+	GoalNamesArr.Reserve(CreatedGoals.Num());
 	for (const FString& GoalName : CreatedGoals)
 	{
 		GoalNamesArr.Add(MakeShared<FJsonValueString>(GoalName));
@@ -4875,6 +4888,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddIKSolver(const TShared
 	Root->SetArrayField(TEXT("created_goals"), GoalNamesArr);
 
 	TArray<TSharedPtr<FJsonValue>> SkippedGoalsArr;
+	SkippedGoalsArr.Reserve(SkippedGoals.Num());
 	for (const FString& Skipped : SkippedGoals)
 	{
 		SkippedGoalsArr.Add(MakeShared<FJsonValueString>(Skipped));
@@ -7718,6 +7732,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetBodyProperties(const T
 	Root->SetStringField(TEXT("bone_name"), BoneName);
 
 	TArray<TSharedPtr<FJsonValue>> ModArr;
+	ModArr.Reserve(ModifiedProps.Num());
 	for (const FString& P : ModifiedProps)
 	{
 		ModArr.Add(MakeShared<FJsonValueString>(P));
