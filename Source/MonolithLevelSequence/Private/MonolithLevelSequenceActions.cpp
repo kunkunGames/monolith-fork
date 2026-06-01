@@ -871,36 +871,7 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectors(const TShared
 		Stmt.SetBindingValueByIndex(1, LikePattern);
 	}
 
-	int64 TotalDirectorCount = 0;
-	{
-		FSQLitePreparedStatement CountStmt;
-		FString CountSQL(TEXT(
-			"SELECT COUNT(*) "
-			"FROM level_sequence_directors"));
-		if (!PathFilter.IsEmpty())
-		{
-			CountSQL += TEXT(" WHERE ls_path LIKE ? ESCAPE '\\'");
-		}
-
-		if (CountStmt.Create(*RawDB, *CountSQL))
-		{
-			if (!PathFilter.IsEmpty())
-			{
-				CountStmt.SetBindingValueByIndex(1, LikePattern);
-			}
-			if (CountStmt.Step() == ESQLitePreparedStatementStepResult::Row)
-			{
-				CountStmt.GetColumnValueByIndex(0, TotalDirectorCount);
-			}
-		}
-		CountStmt.Destroy();
-	}
-
 	TArray<TSharedPtr<FJsonValue>> Directors;
-	if (TotalDirectorCount > 0)
-	{
-		Directors.Reserve(static_cast<int32>(TotalDirectorCount));
-	}
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FString LsPath, DirName;
