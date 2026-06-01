@@ -138,12 +138,14 @@ FMonolithActionResult FMonolithLogicDriverTextGraphActions::HandleGetTextGraphCo
 
 	if (!TargetGuid.IsEmpty())
 	{
+		NodesArr.Reserve(1);
 		UEdGraphNode* Node = MonolithLD::FindNodeByGuid(RootGraph, TargetGuid);
 		if (!Node) return FMonolithActionResult::Error(FString::Printf(TEXT("Node '%s' not found"), *TargetGuid));
 		ProcessNode(Node);
 	}
 	else
 	{
+		NodesArr.Reserve(RootGraph->Nodes.Num());
 		for (UEdGraphNode* Node : RootGraph->Nodes)
 		{
 			if (Node) ProcessNode(Node);

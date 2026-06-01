@@ -875,6 +875,7 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleExplainStateMa
 			}
 		}
 
+		FlowPaths.Reserve(Paths.Num());
 		for (const TArray<FString>& Path : Paths)
 		{
 			FString PathStr = FString::Join(Path, TEXT(" -> "));
@@ -884,6 +885,7 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleExplainStateMa
 
 	// Identify key decisions (states with >1 outgoing transition)
 	TArray<TSharedPtr<FJsonValue>> KeyDecisions;
+	KeyDecisions.Reserve(StatesByGuid.Num());
 	for (const auto& Pair : StatesByGuid)
 	{
 		const FStateData& S = Pair.Value;
