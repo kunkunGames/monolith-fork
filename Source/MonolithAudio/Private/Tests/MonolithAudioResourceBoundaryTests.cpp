@@ -1,6 +1,8 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithAudioQueryActions.h"
+#if WITH_METASOUND
 #include "MonolithAudioMetaSoundActions.h"
+#endif
 #include "MonolithAudioSoundCueActions.h"
 #include "MonolithAudioBatchActions.h"
 #include "MonolithToolRegistry.h"
@@ -296,6 +298,7 @@ bool FMonolithAudioListAudioAssetsLimitTest::RunTest(const FString& Parameters)
 
 
 
+#if WITH_METASOUND
 namespace
 {
 FMonolithActionResult ExecuteListAvailableMetaSoundNodes(const TSharedPtr<FJsonObject>& Params)
@@ -415,6 +418,7 @@ bool FMonolithAudioListAvailableMetaSoundNodesLimitTest::RunTest(const FString& 
 
 	return true;
 }
+#endif // WITH_METASOUND
 
 
 namespace
@@ -507,6 +511,7 @@ bool FMonolithAudioCreateDistanceCrossfadeCueLimitTest::RunTest(const FString& P
 	return true;
 }
 
+#if WITH_METASOUND
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioCreateInteractiveMetaSoundLimitTest, "Monolith.LimitGuard.Audio.CreateInteractiveMetaSoundClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithAudioCreateInteractiveMetaSoundLimitTest::RunTest(const FString& Parameters)
 {
@@ -531,5 +536,6 @@ bool FMonolithAudioCreateInteractiveMetaSoundLimitTest::RunTest(const FString& P
 
 	return true;
 }
+#endif // WITH_METASOUND
 
 #endif // WITH_DEV_AUTOMATION_TESTS
