@@ -240,3 +240,37 @@ bool FMonolithEditorAutomationHistoryNoMatchRun::RunTest(const FString& Paramete
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorGetRecentLogsClampsCount, "Monolith.LimitGuard.MonolithEditor.GetRecentLogsClampsCount", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorGetRecentLogsClampsCount::RunTest(const FString& Parameters)
+{
+	for (int32 Index = 0; Index < 1001; ++Index)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Monolith get_recent_logs clamp seed %d"), Index);
+	}
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetNumberField(TEXT("count"), 5000);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("get_recent_logs"), Params);
+
+	TestTrue(TEXT("Should succeed even with extreme count value"), Result.bSuccess);
+	if (!Result.Result.IsValid())
+	{
+		AddError(TEXT("Result JSON object is invalid"));
+		return true;
+	}
+
+	double CountVal = 0.0;
+	if (Result.Result->TryGetNumberField(TEXT("count"), CountVal))
+	{
+		TestEqual(TEXT("Returned entries count should equal the maximum clamped limit of 1000"), CountVal, 1000.0);
+	}
+	else
+	{
+		AddError(TEXT("Result should expose count"));
+	}
+
+	return true;
+}
