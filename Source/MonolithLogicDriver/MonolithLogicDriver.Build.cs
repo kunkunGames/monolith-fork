@@ -38,7 +38,9 @@ public class MonolithLogicDriver : ModuleRules
 				if (Directory.Exists(MarketplaceDir))
 				{
 					bHasLogicDriver = Directory.Exists(
-						Path.Combine(MarketplaceDir, "LogicDriver"));
+						Path.Combine(MarketplaceDir, "SMSystem"))
+						|| Directory.Exists(
+							Path.Combine(MarketplaceDir, "LogicDriver"));
 
 					if (!bHasLogicDriver)
 					{
