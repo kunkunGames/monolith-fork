@@ -943,6 +943,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("if exist \"%s\\.jules\" xcopy /s /e /i /q /h \"%s\\.jules\" \"%s\\.jules\\\"\r\n")
 		TEXT("if exist \"%s\\.pytest_cache\" xcopy /s /e /i /q /h \"%s\\.pytest_cache\" \"%s\\.pytest_cache\\\"\r\n")
 		TEXT("if exist \"%s\\.ruff_cache\" xcopy /s /e /i /q /h \"%s\\.ruff_cache\" \"%s\\.ruff_cache\\\"\r\n")
+		TEXT("if exist \"%s\\.venv\" xcopy /s /e /i /q /h \"%s\\.venv\" \"%s\\.venv\\\"\r\n")
 		TEXT("rem Preserve Saved/ (contains EngineSource.db, ProjectIndex.db, previews, etc.)\r\n")
 		TEXT("if exist \"%s\\Saved\" (\r\n")
 		TEXT("    echo  Preserving Saved directory...\r\n")
@@ -981,6 +982,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		// Preserve Saved/ from backup
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		// Cleanup
@@ -1009,6 +1011,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("[ -d \"%s/.jules\" ] && cp -r \"%s/.jules\" \"%s/.jules\"\n")
 		TEXT("[ -d \"%s/.pytest_cache\" ] && cp -r \"%s/.pytest_cache\" \"%s/.pytest_cache\"\n")
 		TEXT("[ -d \"%s/.ruff_cache\" ] && cp -r \"%s/.ruff_cache\" \"%s/.ruff_cache\"\n")
+		TEXT("[ -d \"%s/.venv\" ] && cp -r \"%s/.venv\" \"%s/.venv\"\n")
 		TEXT("# Preserve Saved/ (contains EngineSource.db, ProjectIndex.db, previews, etc.)\n")
 		TEXT("[ -d \"%s/Saved\" ] && cp -r \"%s/Saved\" \"%s/Saved\"\n")
 		TEXT("rm -rf \"%s\" \"%s\"\n")
@@ -1020,6 +1023,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*PluginDir,
 		// Preserve .git from backup
+		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
