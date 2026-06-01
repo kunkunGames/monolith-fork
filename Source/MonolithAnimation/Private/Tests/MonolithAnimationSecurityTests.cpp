@@ -25,18 +25,35 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimationSecurityPathTest, "Monolith.S
 
 bool FMonolithAnimationSecurityPathTest::RunTest(const FString& Parameters)
 {
-	// Setup payload with double slash to simulate malformed path
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("asset_path"), TEXT("//Game/MalformedPath/TestBlendSpace"));
-	// skeleton_path is required by create_blend_space
-	Payload->SetStringField(TEXT("skeleton_path"), TEXT("/Game/Anims/MySkeleton"));
+	FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry::Get());
 
-	// Call the action
-	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("create_blend_space"), Payload);
+	TArray<FString> MalformedPaths = {
+		TEXT(""), // Empty path
+		TEXT("//Game/MalformedPath/TestBlendSpace"), // Double leading slash
+		TEXT("Game/MalformedPath/TestBlendSpace"), // Missing leading slash
+		TEXT("/Game/MalformedPath/TestBlendSpace/"), // Trailing slash
+		TEXT("/Game/MalformedPath/TestBlendSpace#Invalid") // Illegal characters
+	};
 
-	// Verify it failed gracefully and returned the validation error
-	TestFalse(TEXT("Action should fail on malformed path"), Result.bSuccess);
-	TestTrue(TEXT("Error should complain about invalid package path"), Result.ErrorMessage.Contains(TEXT("Invalid package path")));
+	for (const FString& Path : MalformedPaths)
+	{
+		// Setup payload
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("asset_path"), Path);
+		// skeleton_path is required by create_blend_space
+		Payload->SetStringField(TEXT("skeleton_path"), TEXT("/Game/Anims/MySkeleton"));
+
+		// Call the action
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("create_blend_space"), Payload);
+
+		// Verify it failed gracefully and returned the validation error
+		TestFalse(*FString::Printf(TEXT("Action should fail on malformed path: %s"), *Path), Result.bSuccess);
+		TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), Result.ErrorMessage.IsEmpty());
+		if (!Path.IsEmpty())
+		{
+			TestTrue(*FString::Printf(TEXT("Error should complain about invalid package path for: %s"), *Path), Result.ErrorMessage.Contains(TEXT("Invalid package path")) || Result.ErrorMessage.Contains(TEXT("Package path")));
+		}
+	}
 
 	return true;
 }
