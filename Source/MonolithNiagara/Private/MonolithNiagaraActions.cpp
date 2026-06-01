@@ -692,7 +692,7 @@ namespace MonolithNiagaraHelpers
 } // namespace MonolithNiagaraHelpers
 
 // Helper: wrap a string result in a FJsonObject for FMonolithActionResult::Success
-static FMonolithActionResult SuccessStr(const FString& Msg)
+static FMonolithActionResult NA_SuccessStr(const FString& Msg)
 {
 	TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetStringField(TEXT("result"), Msg);
@@ -700,13 +700,13 @@ static FMonolithActionResult SuccessStr(const FString& Msg)
 }
 
 // Helper: wrap a pre-built JSON object for Success
-static FMonolithActionResult SuccessObj(const TSharedRef<FJsonObject>& Obj)
+static FMonolithActionResult NA_SuccessObj(const TSharedRef<FJsonObject>& Obj)
 {
 	return FMonolithActionResult::Success(Obj);
 }
 
 // Helper: normalize asset path parameter — accepts "asset_path" (preferred) with "system_path" fallback
-static FString GetAssetPath(const TSharedPtr<FJsonObject>& Params)
+static FString NA_GetAssetPath(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Path;
 	if (!Params->TryGetStringField(TEXT("asset_path"), Path) || Path.IsEmpty())
@@ -2700,7 +2700,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 
 FMonolithActionResult FMonolithNiagaraActions::HandleAddEmitter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	// Accept common alias names for the emitter asset path
 	FString EmitterAssetPath = Params->GetStringField(TEXT("emitter_asset"));
 	if (EmitterAssetPath.IsEmpty()) EmitterAssetPath = Params->GetStringField(TEXT("emitter_path"));
@@ -2806,12 +2806,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddEmitter(const TSharedPtr
 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetStringField(TEXT("handle_id"), NewHandleId.ToString());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveEmitter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -2827,12 +2827,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveEmitter(const TShared
 	GEditor->EndTransaction();
 	System->RequestCompile(false);
 
-	return SuccessStr(TEXT("Emitter removed"));
+	return NA_SuccessStr(TEXT("Emitter removed"));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateEmitter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString SourceHandleId = Params->GetStringField(TEXT("source_emitter"));
 	if (SourceHandleId.IsEmpty()) SourceHandleId = Params->GetStringField(TEXT("emitter"));
 
@@ -2863,12 +2863,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateEmitter(const TSha
 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetStringField(TEXT("handle_id"), NewHandle.GetId().ToString());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetEmitterEnabled(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	bool bEnabled = true;
 	if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
@@ -2888,12 +2888,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetEmitterEnabled(const TSh
 	Handles[Index].SetIsEnabled(bEnabled, *System, true);
 	GEditor->EndTransaction();
 
-	return SuccessStr(bEnabled ? TEXT("Emitter enabled") : TEXT("Emitter disabled"));
+	return NA_SuccessStr(bEnabled ? TEXT("Emitter enabled") : TEXT("Emitter disabled"));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleReorderEmitters(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	const TArray<TSharedPtr<FJsonValue>>* OrderArrPtr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("order"), OrderArrPtr) || !OrderArrPtr)
 		return FMonolithActionResult::Error(TEXT("Missing or invalid required param: order"));
@@ -2923,12 +2923,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleReorderEmitters(const TShar
 	GEditor->EndTransaction();
 	System->RequestCompile(false);
 
-	return SuccessStr(TEXT("Emitters reordered"));
+	return NA_SuccessStr(TEXT("Emitters reordered"));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetEmitterProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString PropertyName = Params->GetStringField(TEXT("property"));
 	if (PropertyName.IsEmpty()) PropertyName = Params->GetStringField(TEXT("property_name"));
@@ -3027,12 +3027,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetEmitterProperty(const TS
 
 	GEditor->EndTransaction();
 	if (bOk) System->RequestCompile(false);
-	return bOk ? SuccessStr(TEXT("Property set")) : FMonolithActionResult::Error(TEXT("Unknown property"));
+	return bOk ? NA_SuccessStr(TEXT("Property set")) : FMonolithActionResult::Error(TEXT("Unknown property"));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleRequestCompile(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
 
@@ -3046,7 +3046,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRequestCompile(const TShare
 	{
 		System->WaitForCompilationComplete();
 	}
-	return SuccessStr(TEXT("Compile requested"));
+	return NA_SuccessStr(TEXT("Compile requested"));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystem(const TSharedPtr<FJsonObject>& Params)
@@ -3072,7 +3072,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystem(const TSharedP
 		IAssetTools& AT = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
 		UObject* Dup = AT.DuplicateAsset(AssetName, PackagePath, Template);
 		if (!Dup) return FMonolithActionResult::Error(TEXT("Failed to duplicate template"));
-		return SuccessStr(Dup->GetPathName());
+		return NA_SuccessStr(Dup->GetPathName());
 	}
 
 	FString PackagePath, AssetName;
@@ -3109,7 +3109,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystem(const TSharedP
 		UPackage::SavePackage(Pkg, NS, *PackageFilename, SaveArgs);
 	}
 
-	return SuccessStr(NS->GetPathName());
+	return NA_SuccessStr(NS->GetPathName());
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleCreateStatelessEmitter(const TSharedPtr<FJsonObject>& Params)
@@ -3163,7 +3163,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateStatelessEmitter(cons
 		UPackage::SavePackage(Pkg, Emitter, *PackageFilename, SaveArgs);
 	}
 
-	return SuccessStr(Emitter->GetPathName());
+	return NA_SuccessStr(Emitter->GetPathName());
 }
 
 // ============================================================================
@@ -3172,7 +3172,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateStatelessEmitter(cons
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetOrderedModules(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ScriptUsage = Params->GetStringField(TEXT("usage"));
 
@@ -3226,12 +3226,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetOrderedModules(const TSh
 			Arr.Add(MakeShared<FJsonValueObject>(M));
 		}
 	}
-	return SuccessStr(JsonArrayToString(Arr));
+	return NA_SuccessStr(JsonArrayToString(Arr));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleInputs(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	if (ModuleNodeGuid.IsEmpty()) ModuleNodeGuid = Params->GetStringField(TEXT("module_name"));
@@ -3372,7 +3372,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleInputs(const TShar
 		}
 	}
 
-	return SuccessStr(JsonArrayToString(Arr));
+	return NA_SuccessStr(JsonArrayToString(Arr));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleGraph(const TSharedPtr<FJsonObject>& Params)
@@ -3422,12 +3422,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleGraph(const TShare
 		NodesArr.Add(MakeShared<FJsonValueObject>(NodeObj));
 	}
 	Res->SetArrayField(TEXT("nodes"), NodesArr);
-	return SuccessObj(Res);
+	return NA_SuccessObj(Res);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleAddModule(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ScriptUsage = Params->GetStringField(TEXT("usage"));
 	FString ModuleScriptPath = Params->GetStringField(TEXT("module_script"));
@@ -3523,12 +3523,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddModule(const TSharedPtr<
 			     "Call set_static_switch_value on InitializeParticle if particles fail to spawn."));
 	}
 
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveModule(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 
@@ -3548,12 +3548,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveModule(const TSharedP
 	GEditor->EndTransaction();
 	System->RequestCompile(false);
 
-	return SuccessStr(TEXT("Module removed"));
+	return NA_SuccessStr(TEXT("Module removed"));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleMoveModule(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	double NewIndex_Double;
@@ -3596,7 +3596,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleMoveModule(const TSharedPtr
 	NewIndex = FMath::Clamp(NewIndex, 0, ModuleCount - 1);
 
 	if (CurIdx == NewIndex)
-		return SuccessStr(TEXT("Already at target index"));
+		return NA_SuccessStr(TEXT("Already at target index"));
 
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "MoveMod", "Move Module"));
 	System->Modify();
@@ -3631,12 +3631,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleMoveModule(const TSharedPtr
 	R->SetNumberField(TEXT("old_index"), CurIdx);
 	R->SetNumberField(TEXT("new_index"), NewIndex);
 	R->SetStringField(TEXT("status"), TEXT("Module moved (overrides preserved)"));
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleEnabled(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	bool bEnabled = true;
@@ -3657,12 +3657,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleEnabled(const TSha
 	GEditor->EndTransaction();
 	System->RequestCompile(false);
 
-	return SuccessStr(bEnabled ? TEXT("Module enabled") : TEXT("Module disabled"));
+	return NA_SuccessStr(bEnabled ? TEXT("Module enabled") : TEXT("Module disabled"));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputValue(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	if (ModuleNodeGuid.IsEmpty()) ModuleNodeGuid = Params->GetStringField(TEXT("module_name"));
@@ -3819,12 +3819,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputValue(const T
 	GEditor->EndTransaction();
 	System->RequestCompile(false);
 
-	return SuccessStr(FString::Printf(TEXT("Set input '%s' = '%s'"), *InputName, *ValStr));
+	return NA_SuccessStr(FString::Printf(TEXT("Set input '%s' = '%s'"), *InputName, *ValStr));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputBinding(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	if (ModuleNodeGuid.IsEmpty()) ModuleNodeGuid = Params->GetStringField(TEXT("module_name"));
@@ -3916,12 +3916,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputBinding(const
 	GEditor->EndTransaction();
 	System->RequestCompile(false);
 
-	return SuccessStr(FString::Printf(TEXT("Bound '%s' to '%s'"), *InputName, *BindingPath));
+	return NA_SuccessStr(FString::Printf(TEXT("Bound '%s' to '%s'"), *InputName, *BindingPath));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputDI(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	if (ModuleNodeGuid.IsEmpty()) ModuleNodeGuid = Params->GetStringField(TEXT("module_name"));
@@ -4287,11 +4287,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputDI(const TSha
 	// Build a descriptive success message
 	if (DIConfig.IsValid() && DIConfig->Values.Num() > 0)
 	{
-		return SuccessStr(FString::Printf(TEXT("DI '%s' set on input '%s'%s"),
+		return NA_SuccessStr(FString::Printf(TEXT("DI '%s' set on input '%s'%s"),
 			*DIUClass->GetName(), *InputName,
 			bCurveConfigApplied ? TEXT(" (curve config applied)") : TEXT(" (config applied, no curve keys matched)")));
 	}
-	return SuccessStr(FString::Printf(TEXT("DI '%s' set on input '%s'"), *DIUClass->GetName(), *InputName));
+	return NA_SuccessStr(FString::Printf(TEXT("DI '%s' set on input '%s'"), *DIUClass->GetName(), *InputName));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::CreateScriptFromHLSL(const TSharedPtr<FJsonObject>& Params, ENiagaraScriptUsage Usage)
@@ -4658,7 +4658,7 @@ FMonolithActionResult FMonolithNiagaraActions::CreateScriptFromHLSL(const TShare
 	Result->SetArrayField(TEXT("input_pins"), InputPinNames);
 	Result->SetArrayField(TEXT("output_pins"), OutputPinNames);
 
-	return SuccessObj(Result);
+	return NA_SuccessObj(Result);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleCreateModuleFromHLSL(const TSharedPtr<FJsonObject>& Params)
@@ -4677,7 +4677,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateFunctionFromHLSL(cons
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetAllParameters(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
 
@@ -4722,12 +4722,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetAllParameters(const TSha
 			CollectParametersFromStore(PS, FullScope, All);
 		}
 	}
-	return SuccessStr(JsonArrayToString(All));
+	return NA_SuccessStr(JsonArrayToString(All));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetUserParameters(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
 
@@ -4736,12 +4736,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetUserParameters(const TSh
 	FNiagaraUserRedirectionParameterStore& US = System->GetExposedParameters();
 	TArray<TSharedPtr<FJsonValue>> Arr;
 	CollectParametersFromStore(US, TEXT("User"), Arr);
-	return SuccessStr(JsonArrayToString(Arr));
+	return NA_SuccessStr(JsonArrayToString(Arr));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetParameterValue(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString ParamName = Params->GetStringField(TEXT("parameter"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -4762,7 +4762,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetParameterValue(const TSh
 			R->SetStringField(TEXT("name"), P.GetName().ToString());
 			R->SetStringField(TEXT("type"), P.GetType().GetName());
 			R->SetStringField(TEXT("value"), SerializeParameterValue(P, US));
-			return SuccessObj(R);
+			return NA_SuccessObj(R);
 		}
 	}
 	return FMonolithActionResult::Error(TEXT("Parameter not found"));
@@ -4782,12 +4782,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetParameterType(const TSha
 	R->SetBoolField(TEXT("is_valid"), TD.IsValid());
 	if (TD.GetStruct()) R->SetStringField(TEXT("struct_name"), TD.GetStruct()->GetName());
 
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleTraceParameterBinding(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString ParamName = Params->GetStringField(TEXT("parameter"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -4819,7 +4819,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleTraceParameterBinding(const
 	if (!bFound)
 	{
 		Trace->SetStringField(TEXT("error"), TEXT("Parameter not found"));
-		return SuccessObj(Trace);
+		return NA_SuccessObj(Trace);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Bindings;
@@ -4861,12 +4861,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleTraceParameterBinding(const
 		}
 	}
 	Trace->SetArrayField(TEXT("bindings"), Bindings);
-	return SuccessObj(Trace);
+	return NA_SuccessObj(Trace);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleAddUserParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	// Accept "name" (canonical) or "parameter_name" (common alias)
 	FString ParamName = FString();
 	if (!Params->TryGetStringField(TEXT("name"), ParamName))
@@ -5119,15 +5119,15 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddUserParameter(const TSha
 	if (DefaultJV.IsValid() && !bDefaultSet)
 	{
 		ResultObj->SetStringField(TEXT("message"), FString::Printf(TEXT("Added user parameter '%s' but failed to set default value — check value format matches type '%s'"), *ParamName, *TypeName));
-		return SuccessObj(ResultObj);
+		return NA_SuccessObj(ResultObj);
 	}
 	ResultObj->SetStringField(TEXT("message"), FString::Printf(TEXT("Added user parameter '%s'%s"), *ParamName, bDefaultSet ? TEXT(" with default") : TEXT("")));
-	return SuccessObj(ResultObj);
+	return NA_SuccessObj(ResultObj);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveUserParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString ParamName = Params->GetStringField(TEXT("name"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -5148,7 +5148,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveUserParameter(const T
 			System->Modify();
 			US.RemoveParameter(P);
 			GEditor->EndTransaction();
-			return SuccessStr(FString::Printf(TEXT("Removed parameter '%s'"), *ParamName));
+			return NA_SuccessStr(FString::Printf(TEXT("Removed parameter '%s'"), *ParamName));
 		}
 	}
 	return FMonolithActionResult::Error(TEXT("Parameter not found"));
@@ -5156,7 +5156,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveUserParameter(const T
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetParameterDefault(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString ParamName = Params->GetStringField(TEXT("parameter"));
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
 	if (!JV.IsValid())
@@ -5285,12 +5285,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetParameterDefault(const T
 		}
 	}
 
-	return bOk ? SuccessStr(TEXT("Default set")) : FMonolithActionResult::Error(TEXT("Unsupported type"));
+	return bOk ? NA_SuccessStr(TEXT("Default set")) : FMonolithActionResult::Error(TEXT("Unsupported type"));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetCurveValue(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleName = Params->GetStringField(TEXT("module_node"));
 	if (ModuleName.IsEmpty()) ModuleName = Params->GetStringField(TEXT("module"));
@@ -5431,7 +5431,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetCurveValue(const TShared
 	GEditor->EndTransaction();
 	System->RequestCompile(false);
 
-	return SuccessStr(FString::Printf(TEXT("Set curve with %d keys"), Keys.Num()));
+	return NA_SuccessStr(FString::Printf(TEXT("Set curve with %d keys"), Keys.Num()));
 }
 
 // ============================================================================
@@ -5440,7 +5440,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetCurveValue(const TShared
 
 FMonolithActionResult FMonolithNiagaraActions::HandleAddRenderer(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString RendererClassStr = Params->GetStringField(TEXT("class"));
 	if (RendererClassStr.IsEmpty()) RendererClassStr = Params->GetStringField(TEXT("renderer_class"));
@@ -5473,12 +5473,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddRenderer(const TSharedPt
 	int32 NewIdx = ED->GetRenderers().Num() - 1;
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetNumberField(TEXT("renderer_index"), NewIdx);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveRenderer(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
@@ -5502,12 +5502,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveRenderer(const TShare
 	GEditor->EndTransaction();
 	System->RequestCompile(false);
 
-	return SuccessStr(TEXT("Renderer removed"));
+	return NA_SuccessStr(TEXT("Renderer removed"));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
@@ -5550,12 +5550,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMaterial(const T
 
 	GEditor->EndTransaction();
 	if (bOk) System->RequestCompile(false);
-	return bOk ? SuccessStr(bClear ? TEXT("Material cleared") : TEXT("Material set")) : FMonolithActionResult::Error(TEXT("Unsupported renderer type"));
+	return bOk ? NA_SuccessStr(bClear ? TEXT("Material cleared") : TEXT("Material set")) : FMonolithActionResult::Error(TEXT("Unsupported renderer type"));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
@@ -5622,12 +5622,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererProperty(const T
 
 	GEditor->EndTransaction();
 	if (bOk) System->RequestCompile(false);
-	return bOk ? SuccessStr(TEXT("Property set")) : FMonolithActionResult::Error(TEXT("Failed to set property"));
+	return bOk ? NA_SuccessStr(TEXT("Property set")) : FMonolithActionResult::Error(TEXT("Failed to set property"));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetRendererBindings(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
@@ -5660,12 +5660,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetRendererBindings(const T
 
 		Arr.Add(MakeShared<FJsonValueObject>(BO));
 	}
-	return SuccessStr(JsonArrayToString(Arr));
+	return NA_SuccessStr(JsonArrayToString(Arr));
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererBinding(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
@@ -5702,7 +5702,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererBinding(const TS
 
 	GEditor->EndTransaction();
 	if (bOk) System->RequestCompile(false);
-	return bOk ? SuccessStr(TEXT("Binding set")) : FMonolithActionResult::Error(TEXT("Failed to set binding"));
+	return bOk ? NA_SuccessStr(TEXT("Binding set")) : FMonolithActionResult::Error(TEXT("Failed to set binding"));
 }
 
 // ============================================================================
@@ -5711,7 +5711,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererBinding(const TS
 
 FMonolithActionResult FMonolithNiagaraActions::HandleBatchExecute(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -5968,7 +5968,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleBatchExecute(const TSharedP
 	Final->SetNumberField(TEXT("succeeded"), Ok);
 	Final->SetNumberField(TEXT("failed"), Fail);
 	Final->SetArrayField(TEXT("results"), Results);
-	return SuccessObj(Final);
+	return NA_SuccessObj(Final);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystemFromSpec(const TSharedPtr<FJsonObject>& Params)
@@ -6043,7 +6043,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystemFromSpec(const 
 			ErrArr.Add(MakeShared<FJsonValueString>(E));
 		Final->SetArrayField(TEXT("errors"), ErrArr);
 	}
-	return SuccessObj(Final);
+	return NA_SuccessObj(Final);
 }
 
 // ============================================================================
@@ -6116,7 +6116,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetDIFunctions(const TShare
 
 		Arr.Add(MakeShared<FJsonValueObject>(SO));
 	}
-	return SuccessStr(JsonArrayToString(Arr));
+	return NA_SuccessStr(JsonArrayToString(Arr));
 }
 
 // ============================================================================
@@ -6125,7 +6125,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetDIFunctions(const TShare
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetCompiledGPUHLSL(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -6170,7 +6170,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetCompiledGPUHLSL(const TS
 	return FMonolithActionResult::Error(TEXT("HLSL only available in editor builds"));
 #endif
 
-	return SuccessStr(HLSL);
+	return NA_SuccessStr(HLSL);
 }
 
 // ============================================================================
@@ -6179,7 +6179,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetCompiledGPUHLSL(const TS
 
 FMonolithActionResult FMonolithNiagaraActions::HandleListEmitters(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -6226,12 +6226,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListEmitters(const TSharedP
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetArrayField(TEXT("emitters"), EmitterArr);
 	R->SetNumberField(TEXT("count"), Handles.Num());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleListRenderers(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -6304,7 +6304,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListRenderers(const TShared
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetArrayField(TEXT("renderers"), RendArr);
 	R->SetNumberField(TEXT("count"), Renderers.Num());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -6313,7 +6313,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListRenderers(const TShared
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetSystemDiagnostics(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
 
@@ -6484,7 +6484,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetSystemDiagnostics(const 
 	R->SetArrayField(TEXT("info"), Info);
 	R->SetArrayField(TEXT("emitter_stats"), EmitterStats);
 	R->SetBoolField(TEXT("has_issues"), Errors.Num() > 0 || Warnings.Num() > 0);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -6617,7 +6617,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListModuleScripts(const TSh
 	{
 		R->SetStringField(TEXT("note"), TEXT("Results truncated. Use 'search' to narrow down, or increase 'limit'."));
 	}
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -6625,7 +6625,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListModuleScripts(const TSh
 // ============================================================================
 FMonolithActionResult FMonolithNiagaraActions::HandleListRendererProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
@@ -6674,7 +6674,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListRendererProperties(cons
 	R->SetStringField(TEXT("renderer_class"), Rend->GetClass()->GetName());
 	R->SetNumberField(TEXT("property_count"), PropArr.Num());
 	R->SetArrayField(TEXT("properties"), PropArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -6696,7 +6696,7 @@ static const TMap<FString, FString> SystemPropertyAliases = {
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetSystemProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString PropertyName = Params->GetStringField(TEXT("property"));
 	if (PropertyName.IsEmpty()) PropertyName = Params->GetStringField(TEXT("property_name"));
 
@@ -6713,14 +6713,14 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetSystemProperty(const TSh
 		TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 		R->SetStringField(TEXT("property"), ResolvedName);
 		R->SetNumberField(TEXT("value"), System->GetWarmupTime());
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 	if (ResolvedName == TEXT("WarmupTickDelta"))
 	{
 		TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 		R->SetStringField(TEXT("property"), ResolvedName);
 		R->SetNumberField(TEXT("value"), System->GetWarmupTickDelta());
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 
 	// Generic reflection readback
@@ -6748,12 +6748,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetSystemProperty(const TSh
 		R->SetStringField(TEXT("value"), ExportedValue);
 	}
 
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetSystemProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString PropertyName = Params->GetStringField(TEXT("property"));
 	if (PropertyName.IsEmpty()) PropertyName = Params->GetStringField(TEXT("property_name"));
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
@@ -6802,7 +6802,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSystemProperty(const TSh
 		System->PostEditChangeProperty(PCE);
 		System->RequestCompile(false);
 	}
-	return bOk ? SuccessStr(TEXT("System property set")) : FMonolithActionResult::Error(
+	return bOk ? NA_SuccessStr(TEXT("System property set")) : FMonolithActionResult::Error(
 		FString::Printf(TEXT("Unknown property '%s'. Supported: WarmupTime, WarmupTickCount, WarmupTickDelta, bFixedTickDelta, FixedTickDeltaTime, bDeterminism, RandomSeed, MaxPoolSize, or any UNiagaraSystem UProperty name."), *PropertyName));
 }
 
@@ -6812,7 +6812,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSystemProperty(const TSh
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetStaticSwitchValue(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	if (ModuleNodeGuid.IsEmpty()) ModuleNodeGuid = Params->GetStringField(TEXT("module_name"));
@@ -6907,7 +6907,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetStaticSwitchValue(const 
 	GEditor->EndTransaction();
 	System->RequestCompile(false);
 
-	return SuccessStr(FString::Printf(TEXT("Static switch '%s' set to '%s'"), *InputName, *ValStr));
+	return NA_SuccessStr(FString::Printf(TEXT("Static switch '%s' set to '%s'"), *InputName, *ValStr));
 }
 
 // ============================================================================
@@ -6916,7 +6916,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetStaticSwitchValue(const 
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetSystemSummary(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
 	EMonolithSemanticDetailLevel DetailLevel = EMonolithSemanticDetailLevel::Compact;
@@ -7046,12 +7046,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetSystemSummary(const TSha
 	R->SetArrayField(TEXT("independent_burst_emitters"), IndependentBurstArr);
 	R->SetNumberField(TEXT("emitter_count"), Handles.Num());
 	R->SetNumberField(TEXT("total_module_count"), TotalModuleCount);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterSummary(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -7131,12 +7131,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterSummary(const TSh
 	}
 	R->SetArrayField(TEXT("renderers"), RendArr);
 
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleListEmitterProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -7169,12 +7169,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListEmitterProperties(const
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetNumberField(TEXT("property_count"), PropArr.Num());
 	R->SetArrayField(TEXT("properties"), PropArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleInputValue(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	FString InputName = Params->GetStringField(TEXT("input"));
@@ -7244,7 +7244,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleInputValue(const T
 			R->SetBoolField(TEXT("is_linked"), false);
 			R->SetBoolField(TEXT("is_dynamic_input"), false);
 			R->SetStringField(TEXT("source"), TEXT("static_switch"));
-			return SuccessObj(R);
+			return NA_SuccessObj(R);
 		}
 	}
 
@@ -7259,7 +7259,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleInputValue(const T
 		R->SetBoolField(TEXT("is_default"), true);
 		R->SetBoolField(TEXT("is_linked"), false);
 		R->SetBoolField(TEXT("is_dynamic_input"), false);
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 
 	if (OP->LinkedTo.Num() > 0)
@@ -7304,7 +7304,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleInputValue(const T
 		R->SetBoolField(TEXT("is_dynamic_input"), false);
 	}
 
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -7370,7 +7370,7 @@ UNiagaraNodeFunctionCall* FMonolithNiagaraActions::FindFunctionCallNode(UNiagara
 
 FMonolithActionResult FMonolithNiagaraActions::HandleConfigureCurveKeys(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	FString InputName = Params->GetStringField(TEXT("input"));
@@ -7591,12 +7591,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureCurveKeys(const TS
 	Result->SetStringField(TEXT("di_class"), DI->GetClass()->GetName());
 	Result->SetNumberField(TEXT("key_count"), Keys.Num());
 	Result->SetBoolField(TEXT("created_override"), bCreatedOverride);
-	return SuccessObj(Result);
+	return NA_SuccessObj(Result);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleConfigureDataInterface(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	FString InputName = Params->GetStringField(TEXT("input"));
@@ -7773,7 +7773,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureDataInterface(cons
 		R->SetArrayField(TEXT("properties_failed"), PropsFailed);
 		if (PropsNotFound.IsEmpty()) R->SetArrayField(TEXT("available_properties"), AvailableProps);
 	}
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -7782,7 +7782,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureDataInterface(cons
 
 FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateSystem(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString SavePath = Params->GetStringField(TEXT("save_path"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: save_path"));
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
@@ -7807,12 +7807,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateSystem(const TShar
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("asset_path"), DupSystem->GetPathName());
 	R->SetNumberField(TEXT("emitter_count"), DupSystem->GetEmitterHandles().Num());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetFixedBounds(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = FString();
 	Params->TryGetStringField(TEXT("emitter"), EmitterHandleId);
 	bool bEnabled = true;
@@ -7875,12 +7875,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetFixedBounds(const TShare
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("level"), Level);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetEffectType(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EffectTypePath = Params->GetStringField(TEXT("effect_type"));
 	if (EffectTypePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: effect_type"));
 
@@ -7906,12 +7906,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetEffectType(const TShared
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("effect_type"), EffectTypePath);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleCreateEmitter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterName = Params->GetStringField(TEXT("name"));
 	FString SimTarget = TEXT("cpu");
 	if (Params->TryGetStringField(TEXT("sim_target"), SimTarget)) SimTarget = SimTarget.ToLower();
@@ -7959,12 +7959,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateEmitter(const TShared
 	R->SetNumberField(TEXT("emitter_index"), EIdx);
 	R->SetStringField(TEXT("handle_id"), EmitterId);
 	if (!GpuWarning.IsEmpty()) R->SetStringField(TEXT("gpu_warning"), GpuWarning);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleExportSystemSpec(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	bool bIncludeValues = true;
 	Params->TryGetBoolField(TEXT("include_values"), bIncludeValues);
 
@@ -8274,7 +8274,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleExportSystemSpec(const TSha
 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetObjectField(TEXT("spec"), Spec);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -8283,7 +8283,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleExportSystemSpec(const TSha
 
 FMonolithActionResult FMonolithNiagaraActions::HandleAddDynamicInput(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	FString InputName = Params->GetStringField(TEXT("input"));
@@ -8416,12 +8416,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddDynamicInput(const TShar
 	R->SetStringField(TEXT("dynamic_input_node_guid"), OutDynNode->NodeGuid.ToString());
 	R->SetStringField(TEXT("dynamic_input_name"), OutDynNode->GetFunctionName());
 	R->SetArrayField(TEXT("inputs"), DynInputsArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetDynamicInputValue(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString DynNodeGuid = Params->GetStringField(TEXT("dynamic_input_node"));
 	FString InputName = Params->GetStringField(TEXT("input"));
@@ -8523,7 +8523,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchDynamicInputs(const T
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetNumberField(TEXT("count"), Results.Num());
 	R->SetArrayField(TEXT("dynamic_inputs"), Results);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -8532,7 +8532,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchDynamicInputs(const T
 
 FMonolithActionResult FMonolithNiagaraActions::HandleAddEventHandler(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString EventName = Params->GetStringField(TEXT("event_name"));
 	FString SourceEmitterStr = FString();
@@ -8609,12 +8609,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddEventHandler(const TShar
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("message"), FString::Printf(TEXT("Added event handler for '%s'"), *EventName));
 	R->SetNumberField(TEXT("handler_index"), ED->EventHandlerScriptProps.Num() - 1);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleValidateSystem(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
 	const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
@@ -8927,12 +8927,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleValidateSystem(const TShare
 	R->SetArrayField(TEXT("errors"), Errors);
 	R->SetArrayField(TEXT("warnings"), Warnings);
 	R->SetArrayField(TEXT("suggestions"), Suggestions);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleAddSimulationStage(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load system '%s'"), *SystemPath));
 
@@ -9003,7 +9003,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddSimulationStage(const TS
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetSpawnShape(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = GetAssetPath(Params);
+	FString AssetPath = NA_GetAssetPath(Params);
 	FString EmitterName = Params->GetStringField(TEXT("emitter"));
 	FString Shape = Params->GetStringField(TEXT("shape"));
 	bool bReplaceExisting = true;
@@ -9119,7 +9119,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSpawnShape(const TShared
 					R->SetBoolField(TEXT("success"), true);
 					R->SetStringField(TEXT("message"), FString::Printf(TEXT("Shape '%s' is already set on emitter '%s' — no changes needed"), *Shape, *EmitterName));
 					R->SetBoolField(TEXT("skipped"), true);
-					return SuccessObj(R);
+					return NA_SuccessObj(R);
 				}
 			}
 		}
@@ -9304,7 +9304,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSpawnShape(const TShared
 // --------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleListDynamicInputs(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 
@@ -9369,7 +9369,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListDynamicInputs(const TSh
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetNumberField(TEXT("count"), DynArr.Num());
 	R->SetArrayField(TEXT("dynamic_inputs"), DynArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // --------------------------------------------------------------------------
@@ -9483,7 +9483,7 @@ namespace
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetDynamicInputTree(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	int32 MaxDepth = 10;
@@ -9502,7 +9502,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetDynamicInputTree(const T
 	TSharedPtr<FJsonObject> Tree = BuildInputTreeNode(MN, System, EmitterIdx, FoundUsage, 0, MaxDepth);
 	if (!Tree.IsValid()) return FMonolithActionResult::Error(TEXT("Failed to build input tree"));
 
-	return SuccessObj(Tree.ToSharedRef());
+	return NA_SuccessObj(Tree.ToSharedRef());
 }
 
 // --------------------------------------------------------------------------
@@ -9596,7 +9596,7 @@ namespace
 
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveDynamicInput(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	FString InputName = Params->GetStringField(TEXT("input"));
@@ -9721,7 +9721,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveDynamicInput(const TS
 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetBoolField(TEXT("success"), true);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // --------------------------------------------------------------------------
@@ -9729,7 +9729,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveDynamicInput(const TS
 // --------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleGetDynamicInputValue(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString DynNodeGuid = Params->GetStringField(TEXT("dynamic_input_node"));
 	FString InputName = Params->GetStringField(TEXT("input"));
@@ -9843,7 +9843,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetDynamicInputValue(const 
 			R->SetBoolField(TEXT("is_default"), true);
 		}
 
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 
 	// Build list of valid input names for the error message
@@ -9916,7 +9916,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetDynamicInputInputs(const
 	R->SetStringField(TEXT("output_type"), OutputType);
 	R->SetNumberField(TEXT("input_count"), InputsArr.Num());
 	R->SetArrayField(TEXT("inputs"), InputsArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -9960,7 +9960,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListAvailableRenderers(cons
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetNumberField(TEXT("count"), Arr.Num());
 	R->SetArrayField(TEXT("renderers"), Arr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // --------------------------------------------------------------------------
@@ -9968,7 +9968,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListAvailableRenderers(cons
 // --------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMesh(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
@@ -10044,7 +10044,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMesh(const TShar
 	R->SetStringField(TEXT("mesh"), MeshPath);
 	R->SetNumberField(TEXT("mesh_index"), MeshIndex);
 	R->SetNumberField(TEXT("total_mesh_slots"), MeshRend->Meshes.Num());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // --------------------------------------------------------------------------
@@ -10052,7 +10052,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetRendererMesh(const TShar
 // --------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleConfigureRibbon(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
@@ -10220,7 +10220,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureRibbon(const TShar
 		R->SetArrayField(TEXT("warnings"), WarnArr);
 	}
 
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // --------------------------------------------------------------------------
@@ -10228,7 +10228,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureRibbon(const TShar
 // --------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleConfigureSubUV(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	double RendererIndex_Double;
 	if (!Params->TryGetNumberField(TEXT("renderer_index"), RendererIndex_Double))
@@ -10374,7 +10374,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureSubUV(const TShare
 		R->SetArrayField(TEXT("warnings"), WarnArr);
 	}
 
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -10383,7 +10383,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureSubUV(const TShare
 
 FMonolithActionResult FMonolithNiagaraActions::HandleRenameEmitter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString NewName = Params->GetStringField(TEXT("name"));
 
@@ -10416,12 +10416,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRenameEmitter(const TShared
 	R->SetStringField(TEXT("requested_name"), NewName);
 	R->SetStringField(TEXT("actual_name"), ActualName);
 	R->SetBoolField(TEXT("name_changed"), OldName != ActualName);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString PropertyName = Params->GetStringField(TEXT("property"));
 	if (PropertyName.IsEmpty()) PropertyName = Params->GetStringField(TEXT("property_name"));
@@ -10445,17 +10445,17 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterProperty(const TS
 	if (PropertyName == TEXT("SimTarget") || PropertyName == TEXT("sim_target"))
 	{
 		R->SetStringField(TEXT("value"), ED->SimTarget == ENiagaraSimTarget::CPUSim ? TEXT("CPU") : TEXT("GPU"));
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 	if (PropertyName == TEXT("bLocalSpace") || PropertyName == TEXT("local_space"))
 	{
 		R->SetBoolField(TEXT("value"), ED->bLocalSpace);
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 	if (PropertyName == TEXT("bDeterminism") || PropertyName == TEXT("determinism"))
 	{
 		R->SetBoolField(TEXT("value"), ED->bDeterminism);
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 	if (PropertyName == TEXT("CalculateBoundsMode") || PropertyName == TEXT("calculate_bounds_mode") || PropertyName == TEXT("bounds_mode"))
 	{
@@ -10468,12 +10468,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterProperty(const TS
 		default: ModeStr = TEXT("Unknown"); break;
 		}
 		R->SetStringField(TEXT("value"), ModeStr);
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 	if (PropertyName == TEXT("RandomSeed") || PropertyName == TEXT("random_seed"))
 	{
 		R->SetNumberField(TEXT("value"), ED->RandomSeed);
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 	if (PropertyName == TEXT("AllocationMode") || PropertyName == TEXT("allocation_mode"))
 	{
@@ -10486,22 +10486,22 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterProperty(const TS
 		default: ModeStr = TEXT("Unknown"); break;
 		}
 		R->SetStringField(TEXT("value"), ModeStr);
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 	if (PropertyName == TEXT("PreAllocationCount") || PropertyName == TEXT("pre_allocation_count"))
 	{
 		R->SetNumberField(TEXT("value"), ED->PreAllocationCount);
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 	if (PropertyName == TEXT("bRequiresPersistentIDs") || PropertyName == TEXT("requires_persistent_ids"))
 	{
 		R->SetBoolField(TEXT("value"), ED->bRequiresPersistentIDs);
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 	if (PropertyName == TEXT("MaxGPUParticlesSpawnPerFrame") || PropertyName == TEXT("max_gpu_particles_spawn_per_frame"))
 	{
 		R->SetNumberField(TEXT("value"), ED->MaxGPUParticlesSpawnPerFrame);
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 
 	// Generic fallback: use reflection on FVersionedNiagaraEmitterData
@@ -10530,7 +10530,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterProperty(const TS
 		R->SetStringField(TEXT("value"), ExportedValue);
 	}
 
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -10608,12 +10608,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateNPC(const TSharedPtr<
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("asset_path"), NPC->GetPathName());
 	R->SetStringField(TEXT("namespace"), Namespace);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetNPC(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = GetAssetPath(Params);
+	FString AssetPath = NA_GetAssetPath(Params);
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
 
 	UNiagaraParameterCollection* NPC = FMonolithAssetUtils::LoadAssetByPath<UNiagaraParameterCollection>(AssetPath);
@@ -10652,12 +10652,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetNPC(const TSharedPtr<FJs
 	R->SetStringField(TEXT("namespace"), NamespaceStr);
 	R->SetNumberField(TEXT("parameter_count"), NPCParams.Num());
 	R->SetArrayField(TEXT("parameters"), ParamArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleAddNPCParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = GetAssetPath(Params);
+	FString AssetPath = NA_GetAssetPath(Params);
 	FString ParamName = Params->GetStringField(TEXT("name"));
 	FString TypeName = Params->GetStringField(TEXT("type"));
 
@@ -10686,12 +10686,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddNPCParameter(const TShar
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("name"), ParamName);
 	R->SetStringField(TEXT("type"), TD.GetName());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveNPCParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = GetAssetPath(Params);
+	FString AssetPath = NA_GetAssetPath(Params);
 	FString ParamName = Params->GetStringField(TEXT("name"));
 
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
@@ -10739,12 +10739,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveNPCParameter(const TS
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("removed"), Found->GetName().ToString());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetNPCDefault(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = GetAssetPath(Params);
+	FString AssetPath = NA_GetAssetPath(Params);
 	FString ParamName = Params->GetStringField(TEXT("name"));
 	TSharedPtr<FJsonValue> ValueJV = Params->TryGetField(TEXT("value"));
 
@@ -10856,7 +10856,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetNPCDefault(const TShared
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("parameter"), Found->GetName().ToString());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -10975,12 +10975,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateEffectType(const TSha
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("asset_path"), ET->GetPathName());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetEffectType(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = GetAssetPath(Params);
+	FString AssetPath = NA_GetAssetPath(Params);
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
 
 	UNiagaraEffectType* ET = FMonolithAssetUtils::LoadAssetByPath<UNiagaraEffectType>(AssetPath);
@@ -11021,12 +11021,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEffectType(const TShared
 	}
 
 	R->SetArrayField(TEXT("properties"), PropsArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetEffectTypeProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = GetAssetPath(Params);
+	FString AssetPath = NA_GetAssetPath(Params);
 	FString PropertyName = Params->GetStringField(TEXT("property"));
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
 
@@ -11092,7 +11092,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetEffectTypeProperty(const
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("property"), PropertyName);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -11101,7 +11101,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetEffectTypeProperty(const
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetAvailableParameters(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterFilter = FString();
 	Params->TryGetStringField(TEXT("emitter"), EmitterFilter);
 	FString UsageFilter = TEXT("all");
@@ -11312,7 +11312,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetAvailableParameters(cons
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetNumberField(TEXT("count"), All.Num());
 	R->SetArrayField(TEXT("parameters"), All);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -11321,7 +11321,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetAvailableParameters(cons
 
 FMonolithActionResult FMonolithNiagaraActions::HandlePreviewSystem(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = GetAssetPath(Params);
+	FString AssetPath = NA_GetAssetPath(Params);
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
 
 	float SeekTime = 1.0f;
@@ -11463,7 +11463,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandlePreviewSystem(const TShared
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetEventHandlers(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -11528,7 +11528,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEventHandlers(const TSha
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetNumberField(TEXT("count"), Handlers.Num());
 	R->SetArrayField(TEXT("event_handlers"), HandlersArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -11537,7 +11537,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEventHandlers(const TSha
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetEventHandlerProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString PropertyName = Params->GetStringField(TEXT("property"));
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
@@ -11662,7 +11662,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetEventHandlerProperty(con
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("property"), PropertyName);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -11671,7 +11671,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetEventHandlerProperty(con
 
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveEventHandler(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 
 	int32 HandlerIndex = -1;
@@ -11736,7 +11736,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveEventHandler(const TS
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("removed_event"), RemovedEventName);
 	R->SetNumberField(TEXT("remaining_handlers"), ED->GetEventHandlers().Num());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -11745,7 +11745,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveEventHandler(const TS
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetSimulationStages(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -11836,7 +11836,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetSimulationStages(const T
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetNumberField(TEXT("count"), Stages.Num());
 	R->SetArrayField(TEXT("simulation_stages"), StagesArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -11845,7 +11845,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetSimulationStages(const T
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSetSimulationStageProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString PropertyName = Params->GetStringField(TEXT("property"));
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
@@ -12002,7 +12002,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSimulationStageProperty(
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("property"), PropertyName);
 	R->SetStringField(TEXT("stage_name"), TargetStage->SimulationStageName.ToString());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -12011,7 +12011,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSimulationStageProperty(
 
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveSimulationStage(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 
 	int32 StageIndex = -1;
@@ -12075,7 +12075,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveSimulationStage(const
 	R->SetBoolField(TEXT("success"), true);
 	R->SetStringField(TEXT("removed_stage"), RemovedName);
 	R->SetNumberField(TEXT("remaining_stages"), ED->GetSimulationStages().Num());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -12084,7 +12084,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveSimulationStage(const
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleOutputParameters(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 
@@ -12138,7 +12138,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleOutputParameters(c
 	R->SetStringField(TEXT("module_node"), MN->NodeGuid.ToString());
 	R->SetNumberField(TEXT("output_count"), OutputsArr.Num());
 	R->SetArrayField(TEXT("outputs"), OutputsArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -12528,7 +12528,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 		&& !Result->HasField(TEXT("emitter_diffs"));
 	Result->SetBoolField(TEXT("identical"), bIdentical);
 
-	return SuccessObj(Result);
+	return NA_SuccessObj(Result);
 }
 
 // ============================================================================
@@ -12537,7 +12537,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSaveEmitterAsTemplate(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString SavePath = Params->GetStringField(TEXT("save_path"));
 
@@ -12623,7 +12623,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveEmitterAsTemplate(const
 	R->SetStringField(TEXT("emitter_name"), NewEmitter->GetName());
 	R->SetStringField(TEXT("source_system"), SystemPath);
 	R->SetStringField(TEXT("source_emitter"), Handle.GetName().ToString());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -12632,7 +12632,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveEmitterAsTemplate(const
 
 FMonolithActionResult FMonolithNiagaraActions::HandleCloneModuleOverrides(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString SrcEmitterId, SrcModuleGuid, TgtEmitterId, TgtModuleGuid;
 	Params->TryGetStringField(TEXT("source_emitter"), SrcEmitterId);
 	Params->TryGetStringField(TEXT("source_module"), SrcModuleGuid);
@@ -12768,7 +12768,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCloneModuleOverrides(const 
 	R->SetNumberField(TEXT("skipped_count"), SkippedCount);
 	R->SetArrayField(TEXT("cloned"), ClonedArr);
 	if (SkippedArr.Num() > 0) R->SetArrayField(TEXT("skipped"), SkippedArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -12782,7 +12782,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCloneModuleOverrides(const 
 
 FMonolithActionResult FMonolithNiagaraActions::HandleSaveSystem(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = GetAssetPath(Params);
+	FString AssetPath = NA_GetAssetPath(Params);
 	if (AssetPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param: asset_path"));
 
@@ -12814,7 +12814,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveSystem(const TSharedPtr
 		ResultJson->SetBoolField(TEXT("was_dirty"), false);
 		ResultJson->SetStringField(TEXT("asset_class"), LoadedAsset->GetClass()->GetName());
 		ResultJson->SetStringField(TEXT("message"), TEXT("Asset not dirty — skipped save"));
-		return SuccessObj(ResultJson);
+		return NA_SuccessObj(ResultJson);
 	}
 
 	FString PackageFilename = FPackageName::LongPackageNameToFilename(Pkg->GetName(), FPackageName::GetAssetPackageExtension());
@@ -12827,7 +12827,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveSystem(const TSharedPtr
 	ResultJson->SetBoolField(TEXT("saved"), bSaved);
 	ResultJson->SetBoolField(TEXT("was_dirty"), bWasDirty);
 	ResultJson->SetStringField(TEXT("asset_class"), LoadedAsset->GetClass()->GetName());
-	return SuccessObj(ResultJson);
+	return NA_SuccessObj(ResultJson);
 }
 
 // ============================================================================
@@ -12837,7 +12837,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveSystem(const TSharedPtr
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetStaticSwitchValue(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
 	if (ModuleNodeGuid.IsEmpty()) ModuleNodeGuid = Params->GetStringField(TEXT("module_name"));
@@ -12886,7 +12886,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetStaticSwitchValue(const 
 		TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 		R->SetNumberField(TEXT("count"), SwitchArr.Num());
 		R->SetArrayField(TEXT("switches"), SwitchArr);
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 
 	// Find specific switch — same name-matching logic as set_static_switch_value
@@ -12934,7 +12934,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetStaticSwitchValue(const 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetStringField(TEXT("name"), MatchedFullName.ToString());
 	R->SetStringField(TEXT("value"), SwitchPin->DefaultValue);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -13188,7 +13188,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 
 FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	if (SystemPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param: asset_path"));
 
@@ -13409,7 +13409,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 			ErrArr.Add(MakeShared<FJsonValueString>(E));
 		Final->SetArrayField(TEXT("errors"), ErrArr);
 	}
-	return SuccessObj(Final);
+	return NA_SuccessObj(Final);
 }
 
 // ============================================================================
@@ -13494,7 +13494,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetDIProperties(const TShar
 	R->SetArrayField(TEXT("properties"), PropArr);
 	R->SetNumberField(TEXT("function_count"), FuncArr.Num());
 	R->SetArrayField(TEXT("functions"), FuncArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -13502,7 +13502,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetDIProperties(const TShar
 // ============================================================================
 FMonolithActionResult FMonolithNiagaraActions::HandleClearEmitterModules(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString UsageFilter = TEXT("all");
 	if (Params->TryGetStringField(TEXT("usage"), UsageFilter)) UsageFilter = UsageFilter.ToLower();
@@ -13554,7 +13554,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleClearEmitterModules(const T
 		TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 		R->SetNumberField(TEXT("removed_count"), 0);
 		R->SetStringField(TEXT("note"), TEXT("No modules found in specified stage(s)"));
-		return SuccessObj(R);
+		return NA_SuccessObj(R);
 	}
 
 	// Remove in REVERSE order to preserve upstream chain integrity
@@ -13585,7 +13585,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleClearEmitterModules(const T
 	}
 	R->SetObjectField(TEXT("per_stage"), Breakdown);
 
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -13687,7 +13687,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleScriptInputs(const
 		R->SetBoolField(TEXT("is_suggested"), ScriptData->bSuggested);
 	}
 
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -13695,7 +13695,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleScriptInputs(const
 // ============================================================================
 FMonolithActionResult FMonolithNiagaraActions::HandleGetScalabilitySettings(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = GetAssetPath(Params);
+	FString AssetPath = NA_GetAssetPath(Params);
 	if (AssetPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param: asset_path"));
 
@@ -13765,7 +13765,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetScalabilitySettings(cons
 
 	R->SetNumberField(TEXT("setting_count"), SettingsArr.Num());
 	R->SetArrayField(TEXT("settings"), SettingsArr);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -13773,7 +13773,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetScalabilitySettings(cons
 // ============================================================================
 FMonolithActionResult FMonolithNiagaraActions::HandleSetScalabilitySettings(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = GetAssetPath(Params);
+	FString AssetPath = NA_GetAssetPath(Params);
 	if (AssetPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param: asset_path"));
 
@@ -13876,7 +13876,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetScalabilitySettings(cons
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetStringField(TEXT("asset_path"), AssetPath);
 	R->SetNumberField(TEXT("setting_count"), NewSettings.Num());
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -13966,7 +13966,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListSystems(const TSharedPt
 	{
 		R->SetStringField(TEXT("note"), TEXT("Results truncated. Use 'search' to narrow down, or increase 'limit'."));
 	}
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -13979,7 +13979,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListSystems(const TSharedPt
 // ============================================================================
 FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString SrcEmitter = Params->GetStringField(TEXT("source_emitter"));
 	FString SrcModuleGuid = Params->GetStringField(TEXT("source_module_node"));
 
@@ -14056,7 +14056,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TShar
 	{
 		R->SetStringField(TEXT("clone_warning"), FString::Printf(TEXT("Module added but override cloning failed: %s"), *CloneResult.ErrorMessage));
 	}
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -14065,7 +14065,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TShar
 // ============================================================================
 FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterParent(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 
 	if (SystemPath.IsEmpty() || EmitterHandleId.IsEmpty())
@@ -14100,7 +14100,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterParent(const TSha
 	{
 		R->SetBoolField(TEXT("has_parent"), false);
 	}
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -14110,7 +14110,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterParent(const TSha
 // ============================================================================
 FMonolithActionResult FMonolithNiagaraActions::HandleRenameUserParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SystemPath = GetAssetPath(Params);
+	FString SystemPath = NA_GetAssetPath(Params);
 	FString OldName = Params->GetStringField(TEXT("old_name"));
 	FString NewName = Params->GetStringField(TEXT("new_name"));
 
@@ -14295,7 +14295,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRenameUserParameter(const T
 		R->SetArrayField(TEXT("warnings"), WarnArr);
 	}
 	R->SetStringField(TEXT("note"), TEXT("Custom HLSL modules referencing 'User.OldName' in string form are NOT automatically updated"));
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ============================================================================
@@ -14458,7 +14458,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByParameter(const TSh
 	R->SetStringField(TEXT("parameter_name"), ParamQuery);
 	R->SetNumberField(TEXT("count"), Results.Num());
 	R->SetArrayField(TEXT("systems"), Results);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ----------------------------------------------------------------------------
@@ -14516,7 +14516,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByDataInterface(const
 	R->SetStringField(TEXT("di_class"), DIQuery);
 	R->SetNumberField(TEXT("count"), Results.Num());
 	R->SetArrayField(TEXT("systems"), Results);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ----------------------------------------------------------------------------
@@ -14642,7 +14642,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedP
 	R->SetStringField(TEXT("query"), QueryString);
 	R->SetNumberField(TEXT("count"), Matches.Num());
 	R->SetArrayField(TEXT("matches"), Matches);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ----------------------------------------------------------------------------
@@ -14655,7 +14655,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedP
 // ----------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleFindSimilarSystems(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString RefPath = GetAssetPath(Params);
+	const FString RefPath = NA_GetAssetPath(Params);
 	if (RefPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
 	const double Threshold = Params->HasField(TEXT("threshold")) ? Params->GetNumberField(TEXT("threshold")) : 0.5;
 	const int32 Limit = ReadLimit(Params, 10);
@@ -14716,7 +14716,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleFindSimilarSystems(const TS
 	R->SetNumberField(TEXT("module_count"), RefModules.Num());
 	R->SetNumberField(TEXT("count"), Matches.Num());
 	R->SetArrayField(TEXT("matches"), Matches);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ----------------------------------------------------------------------------
@@ -14786,7 +14786,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByMaterial(const TSha
 	R->SetStringField(TEXT("material_path"), MaterialPath);
 	R->SetNumberField(TEXT("count"), Results.Num());
 	R->SetArrayField(TEXT("systems"), Results);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ----------------------------------------------------------------------------
@@ -14794,7 +14794,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByMaterial(const TSha
 // ----------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleFindNiagaraReferences(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = GetAssetPath(Params);
+	const FString AssetPath = NA_GetAssetPath(Params);
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
 	const int32 Limit = ReadLimit(Params, 100);
 
@@ -14825,7 +14825,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleFindNiagaraReferences(const
 	R->SetNumberField(TEXT("count"), Results.Num());
 	R->SetNumberField(TEXT("total_referencers"), Referencers.Num());
 	R->SetArrayField(TEXT("referencers"), Results);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }
 
 // ----------------------------------------------------------------------------
@@ -14834,7 +14834,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleFindNiagaraReferences(const
 // ----------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleListSystemDataInterfaces(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = GetAssetPath(Params);
+	const FString AssetPath = NA_GetAssetPath(Params);
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
 
 	UNiagaraSystem* Sys = LoadSystem(AssetPath);
@@ -14871,5 +14871,5 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListSystemDataInterfaces(co
 	R->SetStringField(TEXT("asset_path"), AssetPath);
 	R->SetNumberField(TEXT("count"), DIs.Num());
 	R->SetArrayField(TEXT("data_interfaces"), DIs);
-	return SuccessObj(R);
+	return NA_SuccessObj(R);
 }

@@ -1743,7 +1743,7 @@ FMonolithActionResult FMonolithCoreTools::HandleSetNotificationSettings(const TS
 			bool NewValue = false;
 			if (!Field->TryGetBool(NewValue))
 			{
-				return FMonolithActionResult::Error(FString::Printf(TEXT("Setting '%s' must be a boolean"), *Def.Name), FMonolithJsonUtils::ErrInvalidParams);
+				return FMonolithActionResult::Error(FString::Printf(TEXT("Setting '%s' must be a boolean"), Def.Name), FMonolithJsonUtils::ErrInvalidParams);
 			}
 			PendingSettings.Add({&Def, NewValue});
 		}
