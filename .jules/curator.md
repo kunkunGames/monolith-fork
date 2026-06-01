@@ -70,3 +70,8 @@
 **Learning:** Monolith tool protocols use narrow, explicit lock files (e.g., `*.jsonl.lock` for cross-runtime log appends) that need explicitly targeted ignore rules. Broad `*.lock` ignores create dependency hygiene risks by hiding necessary lockfiles.
 **Prevention:** Add targeted rules like `*.jsonl.lock` and `*.db.rebuild.lock` to `.gitignore`.
 **Avoid:** Using a global `*.lock` rule in `.gitignore` that hides essential dependency lock files.
+## 2026-05-29 - Ignore macOS dSYM bundles
+**Hygiene issue:** macOS debug symbol bundles (`*.dSYM/`) were being explicitly stripped by the `.github/workflows/macos-build.yml` script, but there was no corresponding ignore rule in `.gitignore`.
+**Learning:** Build artifacts generated during compilation on macOS (like `.dSYM` directories, the Apple equivalent to Windows `.pdb` files) leak into git status if standard `.gitignore` rules only target Windows build extensions.
+**Prevention:** Add explicit `*.dSYM/` rule to `.gitignore` to match the existing `*.pdb` ignore rule.
+**Avoid:** Assuming standard UE ignores capture macOS compiler artifacts, especially since UE has native support for cross-compiling.

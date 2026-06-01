@@ -6,6 +6,7 @@ Zen/
 logs/
 Logs/
 *.pdb
+*.dSYM/
 *.exp
 *.obj
 *.sarif
