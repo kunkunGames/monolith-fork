@@ -4,7 +4,20 @@ All notable changes to Monolith will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.18.0] - 2026-06-01
+
+### Added
+
+- **Niagara HLSL direct-editing + simulation-stage / event-handler authoring (PR #65, by @middle233).** Two net-new `niagara` actions and a set of module-stack/script/event enhancements for MCP-driven Niagara workflows:
+  - **`get_custom_hlsl_text`** — reads the HLSL source from a `CustomHlsl` node via public UPROPERTY reflection. Params: `script_path` (required), optional `node_guid` to disambiguate multi-`CustomHlsl`-node scripts.
+  - **`set_custom_hlsl_text`** — overwrites a `CustomHlsl` node's HLSL source under a `Modify()` + transaction with a recompile. Params: `script_path` (required), `hlsl` (required), optional `node_guid`.
+  - **Selector-based stage targeting on the module-stack actions.** `get_ordered_modules` / `add_module` / `move_module` / `duplicate_module` now accept `usage: "particle_simulation_stage"` (selectors `usage_id` / `stage_name` / `stage_index`) and `usage: "particle_event"` (selectors `usage_id` / `handler_index`), letting callers target shared-graph simulation-stage and event scripts directly.
+  - **`add_simulation_stage`** now materializes the matching `particle_simulation_stage` output node in the emitter graph and returns `usage_id`, `stage_id`, and `graph_outputs`.
+  - **`add_event_handler`** now returns `handler_index` + `usage_id` + `usage`, and **rejects unresolved inter-emitter source emitters** instead of silently creating an empty `SourceEmitterID`.
+  - **`create_module_from_hlsl`** now generates a ParameterMap bridge graph (InputMap → ParameterMapGet → CustomHlsl → ParameterMapSet → OutputNode), preserves Data-Interface input types (NeighborGrid3D / Grid3D / ParticleRead), and **strictly validates HLSL input/output types** — unknown types now hard-fail instead of silently degrading to `float`.
+  - **Build gating:** the engine-private NiagaraEditor wizard linkage (used only by the ParameterMap bridge) is gated behind a new `WITH_NIAGARA_WIZARD_PRIVATE` `Build.cs` flag — ON for dev, forced OFF under `MONOLITH_RELEASE_BUILD=1` with an internal fallback path. The two new actions ride public UPROPERTY reflection and are **always available**, gate or not.
+  - Also folded in: a cherry-picked crash fix (detach embedded emitter before `add_emitter`) and an action-duration telemetry log line in the HTTP server.
+  - **Action count:** `niagara` namespace 127 → **129** (+2 in-tree). In-tree and with-siblings totals each gain +2. Docs updated: [`SPEC_MonolithNiagara.md`](Docs/specs/SPEC_MonolithNiagara.md), [`API_REFERENCE.md`](Docs/API_REFERENCE.md), `Skills/unreal-niagara/unreal-niagara.md`.
 
 ### Fixed
 

@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.17.1 (Beta)
+**Version:** 0.18.0 (Beta)
 
 ---
 
@@ -14,7 +14,7 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithNiagaraModule` | Registers 119 Niagara actions (108 baseline in `MonolithNiagaraActions.cpp` + 1 layout in `MonolithNiagaraLayoutActions.cpp` + 9 timing actions in `MonolithNiagaraTimingActions.cpp` + 1 stateless-emitter factory in `MonolithNiagaraActions.cpp`) |
+| `FMonolithNiagaraModule` | Registers 129 Niagara actions (108 baseline in `MonolithNiagaraActions.cpp` + 1 layout in `MonolithNiagaraLayoutActions.cpp` + 9 timing actions in `MonolithNiagaraTimingActions.cpp` + 1 stateless-emitter factory in `MonolithNiagaraActions.cpp` + 7 issue #64 Tranche 2 search/discovery + 2 PR #65 CustomHlsl-text read/write). The 2 CustomHlsl-text actions ride public UPROPERTY reflection and are always registered regardless of `WITH_NIAGARA_WIZARD_PRIVATE` |
 | `FMonolithNiagaraActions` | Static handlers + extensive private helpers |
 | `FMonolithNiagaraLayoutActions` | `auto_layout` formatter fallback for Niagara graphs; uses Blueprint Assist when no built-in Monolith formatter exists and the bridge is available |
 | `MonolithNiagaraHelpers` | 6 reimplemented NiagaraEditor functions (non-exported APIs) |
@@ -30,7 +30,7 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 5. `GetParametersForContext` — System user store params
 6. `GetStackFunctionInputs` — Full input enumeration via engine's `FNiagaraStackGraphUtilities::GetStackFunctionInputs` with `FCompileConstantResolver`. Returns all input types (floats, vectors, colors, data interfaces, enums, bools) — not just static switch pins
 
-### Actions (119 — namespace: "niagara")
+### Actions (129 — namespace: "niagara")
 
 > **Audit note (2026-04-26):** detailed per-category tables below sum to roughly 96 — the remainder are post-design-doc additions (NPC, effect types, scalability, layout, advanced query helpers) that have not yet been threaded into the per-category tables. The header count is the source-of-truth.
 
@@ -41,6 +41,10 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 > **Param name aliases:** The canonical param names registered in schemas are `module_node` and `input`. All module write actions also accept these aliases: `module_node` → `module_name`, `module`; `input` → `input_name`. Use the canonical names when possible — aliases exist for backward compatibility.
 >
 > **Emitter selector matching:** Niagara emitter selectors, including `auto_layout`, do NOT auto-select a single emitter when a specific non-matching name is passed. If a selector is provided it must resolve by GUID, exact/case-insensitive display name, unique instance name, or numeric index string (`"0"`, `"1"`, etc.).
+>
+> **Selector-based stage targeting (PR #65):** `get_ordered_modules`, `add_module`, `move_module`, and `duplicate_module` accept two selector-driven `usage` values for shared-graph stages in addition to the standard stages: `usage: "particle_simulation_stage"` (resolved by `usage_id` / `stage_name` / `stage_index`) and `usage: "particle_event"` (resolved by `usage_id` / `handler_index`). This lets callers target the simulation-stage and event scripts that don't appear under the canonical Emitter/Particle Spawn/Update stages.
+>
+> **Event handler note (PR #65):** `add_event_handler` only creates the event handler and its `ParticleEventScript` container. It does **not** auto-add `ReceiveDeathEvent` / `ReceiveLocationEvent` modules, and it now **rejects** an inter-emitter handler whose `source_emitter` cannot be resolved (instead of creating an empty `SourceEmitterID`). It returns `handler_index` + `usage_id` + `usage`. To consume source payloads such as `Position`, `Velocity`, or `Color`, target the handler with `usage: "particle_event"` plus `usage_id` or `handler_index`, add the matching `Receive<Event>` module, then set the required payload switches to `Apply`. For fireworks and other death-triggered bursts, `Position` usually must be `Apply`.
 
 **System (22)**
 | Action | Description |
@@ -68,15 +72,15 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 | `set_fixed_bounds` | Set explicit bounds on system or emitter for GPU performance |
 | `validate_system` | Pre-compile validation: check for common misconfigurations |
 
-**Module (17)**
+**Module (19)**
 | Action | Description |
 |--------|-------------|
-| `get_ordered_modules` | Get ordered modules in a script stage |
+| `get_ordered_modules` | Get ordered modules in a script stage. Supports standard stages plus `usage: "particle_event"` with `usage_id`/`handler_index` and `usage: "particle_simulation_stage"` with `usage_id`/`stage_name`/`stage_index` (PR #65) |
 | `get_module_inputs` | Get all inputs (floats, vectors, colors, data interfaces, enums, bools) with override values, linked params, and actual DI curve data. Uses engine's `FNiagaraStackGraphUtilities::GetStackFunctionInputs`. Returns short names (no `Module.` prefix). LinearColor/vector defaults deserialized from JSON string if needed |
 | `get_module_graph` | Node graph of a module script |
-| `add_module` | Add module to script stage (uses FNiagaraStackGraphUtilities) |
+| `add_module` | Add module to script stage (uses FNiagaraStackGraphUtilities). Supports `usage: "particle_event"` with `usage_id`/`handler_index` and `usage: "particle_simulation_stage"` with `usage_id`/`stage_name`/`stage_index` (PR #65) |
 | `remove_module` | Remove module from stack |
-| `move_module` | Move module to new index (remove+re-add — **loses input overrides**) |
+| `move_module` | Move module to new index (remove+re-add — **loses input overrides**). Accepts the `particle_event` / `particle_simulation_stage` selector forms (PR #65) |
 | `set_module_enabled` | Enable/disable a module |
 | `duplicate_module` | Duplicate a module within or across emitters (copies script + all overrides) |
 | `get_static_switch_value` | Get static switch value(s) on a module — omit input to list all switches |
@@ -84,10 +88,12 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 | `set_module_input_binding` | Bind input to a parameter |
 | `set_module_input_di` | Set data interface on input. Required: `di_class` (class name — `U` prefix optional, e.g. `NiagaraDataInterfaceCurve` or `UNiagaraDataInterfaceCurve`), optional `config` object (supports FRichCurve keys for curve DIs). Validates input exists and is DataInterface type. Accepts both short names and `Module.`-prefixed names |
 | `set_static_switch_value` | Set a static switch value on a module |
-| `create_module_from_hlsl` | Create a Niagara module script from custom HLSL. Params: `name`, `save_path`, `hlsl` (body), optional `inputs[]`/`outputs[]` (`{name, type}` objects), `description`. **HLSL body rules:** use bare input/output names (no `Module.` prefix — compiler adds `In_`/`Out_` automatically). Write particle attributes via `Particles.X` ParameterMap tokens directly in the body. No swizzle via dot on map variables. |
-| `create_function_from_hlsl` | Create a Niagara function script from custom HLSL. Same params as `create_module_from_hlsl`. Script usage is set to `Function` instead of `Module`. |
+| `create_module_from_hlsl` | Create a Niagara module script from custom HLSL. Params: `name`, `save_path`, `hlsl` (body), optional `inputs[]`/`outputs[]` (`{name, type}` objects), `description`. Generates a **ParameterMap bridge graph** (InputMap → ParameterMapGet → CustomHlsl → ParameterMapSet → OutputNode) and **preserves Data-Interface input types** (NeighborGrid3D / Grid3D / ParticleRead) rather than collapsing them (PR #65). HLSL input/output types are **strictly validated** — an unknown type now hard-fails instead of silently degrading to `float`. **HLSL body rules:** (1) Use bare input/output names (no `Module.` prefix — compiler adds `In_`/`Out_` automatically). (2) **GPU ONLY**: can write particle attributes via `Particles.X` ParameterMap tokens (e.g. `Particles.Velocity`, `Particles.Position`) — MUST wrap in `#if GPU_SIMULATION ... #endif`. CPU simulation does NOT support `Particles.*` syntax; use output parameters instead. (3) CAN access Data Interface functions if a DI is passed as input (e.g. a Grid3D input enables `GetPreviousValueAtIndex`, `SamplePreviousGridVector3Value`). (4) No swizzle via dot on map variables. |
+| `create_function_from_hlsl` | Create a Niagara function script from custom HLSL. Same params and validation as `create_module_from_hlsl`. Script usage is set to `Function` instead of `Module`. |
 | `get_module_input_value` | Read the current override value for a specific module input |
 | `get_module_script_inputs` | Introspect a module script's inputs WITHOUT adding it to an emitter |
+| `get_custom_hlsl_text` | Read the HLSL source from a `CustomHlsl` node in a script via public UPROPERTY reflection. Params: `script_path` (required), optional `node_guid` to disambiguate multi-`CustomHlsl`-node scripts. Always available — does not depend on `WITH_NIAGARA_WIZARD_PRIVATE` (PR #65) |
+| `set_custom_hlsl_text` | Overwrite a `CustomHlsl` node's HLSL source under `Modify()` + transaction with a recompile. Params: `script_path` (required), `hlsl` (required), optional `node_guid`. Always available — does not depend on `WITH_NIAGARA_WIZARD_PRIVATE` (PR #65) |
 
 **Parameter (10)**
 | Action | Description |
@@ -170,6 +176,7 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 **Event Handlers (4)**
 | Action | Description |
 |--------|-------------|
+| `add_event_handler` | Add an event handler. `source_emitter` must resolve for inter-emitter links — **unresolved handlers are now rejected** (PR #65). Returns `handler_index` + `usage_id` + `usage` for the new `ParticleEventScript`. Does NOT auto-add `Receive<Event>` modules |
 | `get_event_handlers` | Get all event handlers on an emitter |
 | `set_event_handler_property` | Set a property on an event handler |
 | `remove_event_handler` | Remove an event handler from an emitter |
@@ -178,6 +185,7 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 **Simulation Stages (4)**
 | Action | Description |
 |--------|-------------|
+| `add_simulation_stage` | Add a generic simulation stage to an emitter. Now **materializes the matching `particle_simulation_stage` output node** in the emitter graph (PR #65) and returns `usage_id`, `stage_id`, and `graph_outputs` so callers can immediately target the stage via the `usage: "particle_simulation_stage"` selector form on the module-stack actions |
 | `get_simulation_stages` | Get all simulation stages on an emitter |
 | `set_simulation_stage_property` | Set a property on a simulation stage |
 | `remove_simulation_stage` | Remove a simulation stage from an emitter |
@@ -333,7 +341,15 @@ System-level reads + writes target `UNiagaraSystem` UPROPERTYs directly. Emitter
 | `FindNiagaraReferences` | `find_niagara_references` | Find all assets referencing a given Niagara asset (Asset Registry referencer graph) |
 | `GetNiagaraDataInterfaces` | `list_system_data_interfaces` | Enumerate DIs actually USED BY a given system (per-system traversal; distinct from CDO-only `get_di_properties`) |
 
-These 7 actions land green (issue #64, Tranche 2). The `niagara` namespace count rises 120 → 127 (see [SPEC_CORE.md §12](../SPEC_CORE.md#12-action-count-summary)).
+These 7 actions land green (issue #64, Tranche 2). The `niagara` namespace count rose 120 → 127. PR #65 (`get_custom_hlsl_text` + `set_custom_hlsl_text`) then brought it 127 → **129** (see [SPEC_CORE.md §12](../SPEC_CORE.md#12-action-count-summary)).
+
+### Build Gating — `WITH_NIAGARA_WIZARD_PRIVATE` (PR #65)
+
+The ParameterMap bridge graph generated by `create_module_from_hlsl` / `create_function_from_hlsl` links against an engine-private NiagaraEditor wizard API. That linkage is gated behind the `WITH_NIAGARA_WIZARD_PRIVATE` flag in `MonolithNiagara.Build.cs`:
+
+- **Dev builds:** ON — the full ParameterMap bridge path is available.
+- **Release builds (`MONOLITH_RELEASE_BUILD=1`):** forced OFF — the wizard linkage is compiled out and an internal fallback path is used so the actions still register and behave gracefully.
+- **`get_custom_hlsl_text` / `set_custom_hlsl_text`** ride public UPROPERTY reflection only and are therefore **always available**, independent of this flag.
 
 ### UE 5.7 Compatibility Fixes (6 sites)
 

@@ -1118,8 +1118,15 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 			FString::Printf(TEXT("Unknown tool: %s — tool must start with monolith_ or end with _query; call tools/list to enumerate."), *ToolName));
 	}
 
+	// Record start time for duration measurement without shadowing the server start timestamp member.
+	double ActionStartTimeSeconds = FPlatformTime::Seconds();
+
 	// Execute via registry
 	FMonolithActionResult ActionResult = FMonolithToolRegistry::Get().ExecuteAction(Namespace, Action, Arguments);
+
+	// Calculate duration
+	double DurationMs = (FPlatformTime::Seconds() - ActionStartTimeSeconds) * 1000.0;
+	UE_LOG(LogMonolith, Verbose, TEXT("Monolith action %s.%s completed in %.2f ms"), *Namespace, *Action, DurationMs);
 
 	// Build MCP tool result
 	const UMonolithSettings* Settings = UMonolithSettings::Get();

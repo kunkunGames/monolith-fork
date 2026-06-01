@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 2,
-	"VersionName": "0.17.1",
+	"VersionName": "0.18.0",
 	"FriendlyName": "Monolith",
 	"Description": "Unified Unreal Engine MCP server — 1634 actions across 51 namespaces (v0.17.1; run `monolith_discover()` for the authoritative live per-namespace catalog). +45 experimental town-gen actions register when `bEnableProceduralTownGen=true`. Framework-level `bulk_fill_query` and `describe_query` route to 12 per-namespace adapters for transacted JSON-tree writes and rich schema introspection. Reflection Intelligence (decision / risk / cppreflect / network / pipeline / reflect) layers deterministic decision-record, git-risk, and UE reflection queries on top of the source index. AI-powered asset creation, inspection, and modification.",
 	"Category": "Editor",
