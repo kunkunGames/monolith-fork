@@ -237,19 +237,31 @@ void FMonolithMeshCityBlockActions::ApplyPresetDefaults(const TSharedPtr<FJsonOb
 	// block_size
 	if (!Params->HasField(TEXT("block_size")) && Preset->HasField(TEXT("block_size")))
 	{
-		Params->SetArrayField(TEXT("block_size"), Preset->GetArrayField(TEXT("block_size")));
+		const TArray<TSharedPtr<FJsonValue>>* BlockSizeArr = nullptr;
+		if (Preset->TryGetArrayField(TEXT("block_size"), BlockSizeArr) && BlockSizeArr)
+		{
+			Params->SetArrayField(TEXT("block_size"), *BlockSizeArr);
+		}
 	}
 
 	// archetypes
 	if (!Params->HasField(TEXT("archetypes")) && Preset->HasField(TEXT("archetypes")))
 	{
-		Params->SetArrayField(TEXT("archetypes"), Preset->GetArrayField(TEXT("archetypes")));
+		const TArray<TSharedPtr<FJsonValue>>* ArchetypesArr = nullptr;
+		if (Preset->TryGetArrayField(TEXT("archetypes"), ArchetypesArr) && ArchetypesArr)
+		{
+			Params->SetArrayField(TEXT("archetypes"), *ArchetypesArr);
+		}
 	}
 
 	// furniture
 	if (!Params->HasField(TEXT("furniture")) && Preset->HasField(TEXT("furniture")))
 	{
-		Params->SetArrayField(TEXT("furniture"), Preset->GetArrayField(TEXT("furniture")));
+		const TArray<TSharedPtr<FJsonValue>>* FurnitureArr = nullptr;
+		if (Preset->TryGetArrayField(TEXT("furniture"), FurnitureArr) && FurnitureArr)
+		{
+			Params->SetArrayField(TEXT("furniture"), *FurnitureArr);
+		}
 	}
 }
 
@@ -1621,7 +1633,11 @@ FMonolithActionResult FMonolithMeshCityBlockActions::CreateCityBlock(const TShar
 			{
 				if (BuildingResult->HasField(TEXT("footprint_polygon")))
 				{
-					RoofParams->SetArrayField(TEXT("footprint_polygon"), BuildingResult->GetArrayField(TEXT("footprint_polygon")));
+					const TArray<TSharedPtr<FJsonValue>>* FootprintArr = nullptr;
+					if (BuildingResult->TryGetArrayField(TEXT("footprint_polygon"), FootprintArr) && FootprintArr)
+					{
+						RoofParams->SetArrayField(TEXT("footprint_polygon"), *FootprintArr);
+					}
 				}
 
 				// Compute roof height from top floor — MUST account for ceiling slab thickness
@@ -1651,7 +1667,11 @@ FMonolithActionResult FMonolithMeshCityBlockActions::CreateCityBlock(const TShar
 				// Pass building location for roof placement
 				if (BuildingResult->HasField(TEXT("world_origin")))
 				{
-					RoofParams->SetArrayField(TEXT("location"), BuildingResult->GetArrayField(TEXT("world_origin")));
+					const TArray<TSharedPtr<FJsonValue>>* LocationArr = nullptr;
+					if (BuildingResult->TryGetArrayField(TEXT("world_origin"), LocationArr) && LocationArr)
+					{
+						RoofParams->SetArrayField(TEXT("location"), *LocationArr);
+					}
 				}
 				if (BuildingResult->HasField(TEXT("building_id")))
 				{

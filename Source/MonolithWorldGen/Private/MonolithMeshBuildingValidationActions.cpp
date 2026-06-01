@@ -715,7 +715,12 @@ FMonolithActionResult FMonolithMeshBuildingValidationActions::ValidateBuilding(
 		ScoreNumerator += Passable;
 		ScoreDenominator += Total;
 
-		int32 FailedCount = DoorResult->GetArrayField(TEXT("failed")).Num();
+		int32 FailedCount = 0;
+		const TArray<TSharedPtr<FJsonValue>>* FailedArr = nullptr;
+		if (DoorResult->TryGetArrayField(TEXT("failed"), FailedArr) && FailedArr)
+		{
+			FailedCount = FailedArr->Num();
+		}
 		if (FailedCount > 0)
 		{
 			auto Issue = MakeShared<FJsonObject>();
@@ -725,7 +730,12 @@ FMonolithActionResult FMonolithMeshBuildingValidationActions::ValidateBuilding(
 			Issues.Add(MakeShared<FJsonValueObject>(Issue));
 		}
 
-		int32 WarningCount = DoorResult->GetArrayField(TEXT("warnings")).Num();
+		int32 WarningCount = 0;
+		const TArray<TSharedPtr<FJsonValue>>* WarningsArr = nullptr;
+		if (DoorResult->TryGetArrayField(TEXT("warnings"), WarningsArr) && WarningsArr)
+		{
+			WarningCount = WarningsArr->Num();
+		}
 		if (WarningCount > 0)
 		{
 			auto Issue = MakeShared<FJsonObject>();
@@ -756,7 +766,12 @@ FMonolithActionResult FMonolithMeshBuildingValidationActions::ValidateBuilding(
 			Issues.Add(MakeShared<FJsonValueObject>(Issue));
 		}
 
-		int32 UnreachableCount = ConnResult->GetArrayField(TEXT("unreachable")).Num();
+		int32 UnreachableCount = 0;
+		const TArray<TSharedPtr<FJsonValue>>* UnreachableArr = nullptr;
+		if (ConnResult->TryGetArrayField(TEXT("unreachable"), UnreachableArr) && UnreachableArr)
+		{
+			UnreachableCount = UnreachableArr->Num();
+		}
 		if (UnreachableCount > 0)
 		{
 			auto Issue = MakeShared<FJsonObject>();
@@ -778,7 +793,12 @@ FMonolithActionResult FMonolithMeshBuildingValidationActions::ValidateBuilding(
 		ScoreNumerator += Open;
 		ScoreDenominator += Total;
 
-		int32 BlockedCount = WindowResult->GetArrayField(TEXT("blocked")).Num();
+		int32 BlockedCount = 0;
+		const TArray<TSharedPtr<FJsonValue>>* BlockedArr = nullptr;
+		if (WindowResult->TryGetArrayField(TEXT("blocked"), BlockedArr) && BlockedArr)
+		{
+			BlockedCount = BlockedArr->Num();
+		}
 		if (BlockedCount > 0)
 		{
 			auto Issue = MakeShared<FJsonObject>();
@@ -800,7 +820,12 @@ FMonolithActionResult FMonolithMeshBuildingValidationActions::ValidateBuilding(
 		ScoreNumerator += ValidCount;
 		ScoreDenominator += Total;
 
-		int32 SteepCount = StairResult->GetArrayField(TEXT("too_steep")).Num();
+		int32 SteepCount = 0;
+		const TArray<TSharedPtr<FJsonValue>>* SteepArr = nullptr;
+		if (StairResult->TryGetArrayField(TEXT("too_steep"), SteepArr) && SteepArr)
+		{
+			SteepCount = SteepArr->Num();
+		}
 		if (SteepCount > 0)
 		{
 			auto Issue = MakeShared<FJsonObject>();
