@@ -428,6 +428,7 @@ FMonolithActionResult FMonolithEditorMapActions::HandleGetModuleStatus(const TSh
 	//    enabled=false / loaded=false / plugin_name="" rather than an error so
 	//    callers can probe optional modules without conditional plumbing.
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(RequestedModules.Num());
 	for (const FString& ModuleNameStr : RequestedModules)
 	{
 		const FName ModuleName(*ModuleNameStr);
@@ -542,6 +543,7 @@ FMonolithActionResult FMonolithEditorMapActions::HandleListLayers(const TSharedP
 	});
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(LayerNames.Num());
 	for (const FName& LayerName : LayerNames)
 	{
 		const TArray<AActor*>* Actors = LayerActors.Find(LayerName);
@@ -554,6 +556,7 @@ FMonolithActionResult FMonolithEditorMapActions::HandleListLayers(const TSharedP
 		if (bIncludeActors && Actors)
 		{
 			TArray<TSharedPtr<FJsonValue>> ActorRows;
+			ActorRows.Reserve(FMath::Min(ActorCount, ActorLimit));
 			for (AActor* Actor : *Actors)
 			{
 				if (ActorRows.Num() >= ActorLimit)
@@ -598,6 +601,7 @@ FMonolithActionResult FMonolithEditorMapActions::HandleListStreamingLevels(const
 	const TArray<ULevelStreaming*>& StreamingLevels = World->GetStreamingLevels();
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(FMath::Min(StreamingLevels.Num(), Limit));
 	for (ULevelStreaming* StreamingLevel : StreamingLevels)
 	{
 		if (Rows.Num() >= Limit)
