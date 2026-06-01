@@ -31,4 +31,4 @@ tumourlove and now unified into this single package:
 - `AnimationMCPReader` — 23 UFUNCTIONs for animation asset introspection
 - `NiagaraMCPBridge` — 39 UFUNCTIONs across 7 classes for Niagara system access
 
-**Total: 231 tools consolidated into 12 MCP tools.**
+**Total: 231 original tools folded in — and vastly expanded since. Monolith today exposes 1,387 actions through 29 namespace-dispatch MCP tools.**

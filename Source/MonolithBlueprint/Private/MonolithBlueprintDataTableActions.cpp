@@ -195,7 +195,7 @@ void FMonolithBlueprintDataTableActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Read a DataTable's full contents plus its inline row schema. Returns the row struct, total_rows, an FSchemaDescriptor-shaped 'schema' array (field type_name, import_text_form, enum_values, range, nested children), and a 'rows' array of {row_name, values}. Supersedes get_data_table_rows by inlining schema with data."),
 		FMonolithActionHandler::CreateStatic(&HandleReadDataTable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),     TEXT("string"),  TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
+			.RequiredAssetPath(TEXT("asset_path"),     TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
 			.Optional(TEXT("include_schema"), TEXT("boolean"), TEXT("Include the inline row-field schema array (default true)."), TEXT("true"))
 			.Optional(TEXT("row_name"),       TEXT("string"),  TEXT("If provided, return only this row. Otherwise return all rows."))
 			.Build());
@@ -204,14 +204,14 @@ void FMonolithBlueprintDataTableActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Return ONLY a DataTable's row schema (no row data). Useful for planning edits to a large table. Returns row_struct, row_struct_path, and an FSchemaDescriptor-shaped 'schema' array."),
 		FMonolithActionHandler::CreateStatic(&HandleDescribeDataTableSchema),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("set_data_table_rows"),
 		TEXT("Bulk add/update DataTable rows in one call. Each row is {row_name, values:{field:value}, mode?}. Mode is upsert (default), add, or update. Supports dry_run (validate only) and strict (promote coercion/unknown-field/enum-miss to hard errors). Returns an FDryRunReport-shaped per-field result {path,current,proposed,ok,reason}. Fires one editor-refresh broadcast at the end."),
 		FMonolithActionHandler::CreateStatic(&HandleSetDataTableRows),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"),  TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
 			.Required(TEXT("rows"),       TEXT("array"),   TEXT("Array of {row_name, values:{field:value}, mode?:\"upsert\"|\"add\"|\"update\"}. Default mode upsert."))
 			.Optional(TEXT("dry_run"),    TEXT("boolean"), TEXT("If true, validate only — emit would-be writes but do not persist."), TEXT("false"))
 			.Optional(TEXT("strict"),     TEXT("boolean"), TEXT("If true, promote silent drops / unknown fields / enum misses to hard errors."), TEXT("false"))
@@ -222,7 +222,7 @@ void FMonolithBlueprintDataTableActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Rename a single DataTable row. Refreshes any open DataTable editor."),
 		FMonolithActionHandler::CreateStatic(&HandleRenameDataTableRow),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"),  TEXT("DataTable asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("DataTable asset path"))
 			.Required(TEXT("old_name"),   TEXT("string"),  TEXT("Existing row name"))
 			.Required(TEXT("new_name"),   TEXT("string"),  TEXT("New row name"))
 			.Optional(TEXT("save"),       TEXT("boolean"), TEXT("If true, save the package after renaming."), TEXT("false"))
@@ -232,7 +232,7 @@ void FMonolithBlueprintDataTableActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Duplicate a DataTable row under a new name. Refreshes any open DataTable editor."),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateDataTableRow),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"),  TEXT("DataTable asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("DataTable asset path"))
 			.Required(TEXT("source_row"), TEXT("string"),  TEXT("Existing row to copy"))
 			.Required(TEXT("new_name"),   TEXT("string"),  TEXT("Name for the duplicated row"))
 			.Optional(TEXT("save"),       TEXT("boolean"), TEXT("If true, save the package after duplicating."), TEXT("false"))
@@ -242,7 +242,7 @@ void FMonolithBlueprintDataTableActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Export an entire DataTable as a JSON or CSV text blob for token-efficient round-trip editing. Returns row_struct, row_struct_path, total_rows, format, and 'text'. By default nested structs export as clean JSON objects (use_json_objects)."),
 		FMonolithActionHandler::CreateStatic(&HandleExportDataTable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),       TEXT("string"),  TEXT("DataTable asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),       TEXT("DataTable asset path"))
 			.Optional(TEXT("format"),           TEXT("string"),  TEXT("\"json\" (default) or \"csv\"."), TEXT("json"))
 			.Optional(TEXT("use_json_objects"), TEXT("boolean"), TEXT("Export nested structs as JSON objects rather than ExportText blobs (JSON only). Default true."), TEXT("true"))
 			.Optional(TEXT("simple_text"),      TEXT("boolean"), TEXT("Export text properties as display strings rather than lossless form. Default false."), TEXT("false"))
@@ -252,7 +252,7 @@ void FMonolithBlueprintDataTableActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Import a JSON or CSV text blob into a DataTable. REPLACES the entire row set (rows not present in the blob are deleted by design). The DataTable must already have a RowStruct set. mode must be \"replace\". Refreshes any open DataTable editor."),
 		FMonolithActionHandler::CreateStatic(&HandleImportDataTable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"),  TEXT("DataTable asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("DataTable asset path"))
 			.Required(TEXT("text"),       TEXT("string"),  TEXT("The JSON or CSV blob to import. REPLACES all existing rows."))
 			.Optional(TEXT("format"),     TEXT("string"),  TEXT("\"json\" (default) or \"csv\"."), TEXT("json"))
 			.Optional(TEXT("mode"),       TEXT("string"),  TEXT("Only \"replace\" is supported (import wipes existing rows first). Must be passed explicitly."), TEXT("replace"))

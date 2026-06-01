@@ -11,6 +11,15 @@
 #include "HAL/PlatformProperties.h"
 #include "Interfaces/IPluginManager.h"
 
+#if WITH_EDITOR
+// `set_developer_setting` (dev-gated write) deps.
+#include "Engine/DeveloperSettings.h"
+#include "UObject/UnrealType.h"
+#include "UObject/UObjectGlobals.h"
+#include "UObject/Class.h"
+#include "Misc/StringOutputDevice.h"
+#endif // WITH_EDITOR
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -98,6 +107,30 @@ void FMonolithConfigActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("prefix (default) or contains"), TEXT("prefix"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max CVars to return"), TEXT("100"))
 			.Build());
+
+#if WITH_EDITOR
+	// DEV-ONLY (write): mutate a UDeveloperSettings CDO at runtime. Never registers
+	// in shipping/runtime builds — wraps both registration AND handler. Solves the
+	// "INI edit + editor restart fights config hierarchy" loop documented in
+	// Docs/plans/2026-05-29-ri-ergonomics-improvements-handover.md (item #7).
+	Registry.RegisterAction(TEXT("config"), TEXT("set_developer_setting"),
+		TEXT("DEV-ONLY (write): set a property on a UDeveloperSettings CDO at runtime. "
+			 "Resolves a settings class by short-name (e.g. 'MonolithReflectionIntelSettings') "
+			 "or full path ('/Script/Module.Class'), parses `value` via UProperty::ImportText_Direct, "
+			 "and optionally persists back to the INI via SaveConfig(). #if WITH_EDITOR-gated."),
+		FMonolithActionHandler::CreateStatic(&FMonolithConfigActions::SetDeveloperSetting),
+		FParamSchemaBuilder()
+			.Required(TEXT("class"), TEXT("string"),
+				TEXT("Settings class short-name (e.g. 'MonolithReflectionIntelSettings') or full path ('/Script/MonolithReflectionIntel.MonolithReflectionIntelSettings')."))
+			.Required(TEXT("property"), TEXT("string"),
+				TEXT("Property name on the CDO (e.g. 'bIndexMarketplacePluginReflection')."))
+			.Required(TEXT("value"), TEXT("string"),
+				TEXT("Value as text — parsed via UProperty::ImportText_Direct. Examples: 'true', '42', '0.75', '(X=1,Y=2)'."))
+			.Optional(TEXT("save_config"), TEXT("boolean"),
+				TEXT("Also write back to the persistent INI via UObject::SaveConfig()."),
+				TEXT("false"))
+			.Build());
+#endif // WITH_EDITOR
 }
 
 // ============================================================================
@@ -1031,3 +1064,166 @@ FMonolithActionResult FMonolithConfigActions::FindCVars(const TSharedPtr<FJsonOb
 	}
 	return FMonolithActionResult::Success(Result);
 }
+
+#if WITH_EDITOR
+// ============================================================================
+// Action: set_developer_setting   (DEV-ONLY, #if WITH_EDITOR gated)
+// Params: { "class": "...", "property": "...", "value": "...", "save_config"?: bool }
+// ============================================================================
+//
+// API verification (per .claude/rules/always/ue57-api.md, editor was down — verified
+// via Grep on UE 5.7 engine source at C:\Program Files (x86)\UE_5.7\Engine\Source):
+//
+//   - `FProperty::ImportText_Direct(const TCHAR* Buffer, void* PropertyPtr,
+//       UObject* OwnerObject, int32 PortFlags, FOutputDevice* ErrorText = (FOutputDevice*)GWarn) const`
+//     — Runtime/CoreUObject/Public/UObject/UnrealType.h:623
+//
+//   - `FProperty::ExportText_Direct(FString& ValueStr, const void* Data, const void* Delta,
+//       UObject* Parent, int32 PortFlags, UObject* ExportRootScope = nullptr) const`
+//     — Runtime/CoreUObject/Public/UObject/UnrealType.h:723
+//
+//   - `EFindFirstObjectOptions::NativeFirst` (enum-class flag, UObject/UObjectGlobals.h:495).
+//     Project pattern (28+ call sites) uses
+//     `FindFirstObject<UClass>(*Name, EFindFirstObjectOptions::NativeFirst)` for short-name
+//     resolution. Full-path resolution uses `FindObject<UClass>(nullptr, *FullPath)` — both
+//     forms are tried here for caller convenience.
+//
+//   - `UDeveloperSettings` (Runtime/DeveloperSettings/Public/Engine/DeveloperSettings.h:23).
+//     Module is `DeveloperSettings` (NOT `Engine`) — added to MonolithConfig.Build.cs.
+//
+//   - `UObject::SaveConfig(uint64 Flags = CPF_Config, const TCHAR* Filename = nullptr, ...)`
+//     — canonical persistence path; respects the class's `config=...` UCLASS meta and writes
+//     to the resolved INI (e.g. `Config/MonolithSettings.ini`).
+// ============================================================================
+
+FMonolithActionResult FMonolithConfigActions::SetDeveloperSetting(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("set_developer_setting: missing params object"));
+	}
+
+	const FString ClassName = Params->GetStringField(TEXT("class"));
+	const FString PropertyName = Params->GetStringField(TEXT("property"));
+	const FString NewValueText = Params->GetStringField(TEXT("value"));
+	bool bSaveConfig = false;
+	Params->TryGetBoolField(TEXT("save_config"), bSaveConfig);
+
+	if (ClassName.IsEmpty() || PropertyName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("set_developer_setting: both 'class' and 'property' are required"));
+	}
+
+	// 1) Resolve class. Try full-path first (works for '/Script/Module.Class'),
+	//    then short-name lookup biased toward native classes.
+	UClass* TargetClass = nullptr;
+	if (ClassName.StartsWith(TEXT("/Script/")) || ClassName.Contains(TEXT(".")))
+	{
+		TargetClass = FindObject<UClass>(nullptr, *ClassName);
+	}
+	if (TargetClass == nullptr)
+	{
+		TargetClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
+	}
+	// Common 'U'-prefix convenience (matches MonolithBlueprint/MonolithAnimation patterns).
+	if (TargetClass == nullptr && !ClassName.StartsWith(TEXT("U")))
+	{
+		TargetClass = FindFirstObject<UClass>(
+			*FString::Printf(TEXT("U%s"), *ClassName), EFindFirstObjectOptions::NativeFirst);
+	}
+
+	if (TargetClass == nullptr)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("set_developer_setting: unknown class '%s' — supply short name "
+				 "like 'MonolithReflectionIntelSettings' or full path "
+				 "'/Script/MonolithReflectionIntel.MonolithReflectionIntelSettings'"),
+			*ClassName));
+	}
+
+	// 2) Verify the class is UDeveloperSettings-derived (or at minimum a UObject with a CDO).
+	//    UDeveloperSettings is enforced because non-developer-settings classes have no
+	//    `config=...` UCLASS meta and SaveConfig() would either no-op or write to a
+	//    surprising file. Lifting this check would be a larger design decision.
+	if (!TargetClass->IsChildOf(UDeveloperSettings::StaticClass()))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("set_developer_setting: class '%s' is not derived from UDeveloperSettings "
+				 "(this action only mutates settings-class CDOs)."),
+			*TargetClass->GetName()));
+	}
+
+	UObject* CDO = TargetClass->GetDefaultObject(/*bCreateIfNeeded=*/true);
+	if (CDO == nullptr)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("set_developer_setting: class '%s' has no CDO"), *TargetClass->GetName()));
+	}
+
+	// 3) Resolve property by name; on miss, surface up to the first 10 property
+	//    names on the class as a did-you-mean hint.
+	FProperty* TargetProperty = TargetClass->FindPropertyByName(*PropertyName);
+	if (TargetProperty == nullptr)
+	{
+		TArray<FString> KnownNames;
+		for (TFieldIterator<FProperty> It(TargetClass); It && KnownNames.Num() < 10; ++It)
+		{
+			KnownNames.Add(It->GetName());
+		}
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("set_developer_setting: unknown property '%s' on class '%s' — known properties (first %d): [%s]"),
+			*PropertyName, *TargetClass->GetName(), KnownNames.Num(), *FString::Join(KnownNames, TEXT(", "))));
+	}
+
+	void* PropertyValuePtr = TargetProperty->ContainerPtrToValuePtr<void>(CDO);
+
+	// 4) Capture old value via ExportText_Direct for the response payload.
+	FString OldValueText;
+	TargetProperty->ExportText_Direct(OldValueText, PropertyValuePtr, PropertyValuePtr, CDO, PPF_None);
+
+	// 5) Parse + set via ImportText_Direct. Returns nullptr on parse failure.
+	//    Suppress the engine's default GWarn output so a malformed `value` doesn't
+	//    spam the log — caller gets a clean error from the action result.
+	FStringOutputDevice ImportErrors;
+	const TCHAR* ImportResult = TargetProperty->ImportText_Direct(
+		*NewValueText, PropertyValuePtr, CDO, PPF_None, &ImportErrors);
+
+	if (ImportResult == nullptr)
+	{
+		// Restore prior value defensively — ImportText_Direct may have partially
+		// mutated the destination on some property kinds before returning null.
+		TargetProperty->ImportText_Direct(*OldValueText, PropertyValuePtr, CDO, PPF_None, &ImportErrors);
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("set_developer_setting: failed to parse value '%s' for property '%s' (type=%s)%s"),
+			*NewValueText, *PropertyName, *TargetProperty->GetCPPType(),
+			ImportErrors.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" — %s"), *ImportErrors)));
+	}
+
+	// 6) Capture the post-import value (canonical text form may differ from input —
+	//    e.g. "1" → "True" for bool, normalized casing for enums).
+	FString NewValueCanonical;
+	TargetProperty->ExportText_Direct(NewValueCanonical, PropertyValuePtr, PropertyValuePtr, CDO, PPF_None);
+
+	// 7) Optional persistence. UCLASS(config=Foo, defaultconfig) determines the
+	//    target INI; SaveConfig() walks UCLASS meta to pick the right file.
+	bool bSaved = false;
+	FString SaveError;
+	if (bSaveConfig)
+	{
+		// SaveConfig is non-const + virtual; UDeveloperSettings inherits the UObject impl.
+		CDO->SaveConfig();
+		bSaved = true;
+	}
+
+	auto ResultJson = MakeShared<FJsonObject>();
+	ResultJson->SetStringField(TEXT("class"), TargetClass->GetName());
+	ResultJson->SetStringField(TEXT("class_path"), TargetClass->GetPathName());
+	ResultJson->SetStringField(TEXT("property"), PropertyName);
+	ResultJson->SetStringField(TEXT("property_type"), TargetProperty->GetCPPType());
+	ResultJson->SetStringField(TEXT("old_value"), OldValueText);
+	ResultJson->SetStringField(TEXT("new_value"), NewValueCanonical);
+	ResultJson->SetBoolField(TEXT("saved"), bSaved);
+	return FMonolithActionResult::Success(ResultJson);
+}
+#endif // WITH_EDITOR

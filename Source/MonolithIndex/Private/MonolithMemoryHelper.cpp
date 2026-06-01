@@ -4,7 +4,6 @@
 #include "UObject/UObjectGlobals.h"
 #include "UObject/GarbageCollection.h"
 #include "Engine/Engine.h"
-#include "Framework/Application/SlateApplication.h"
 #include "MonolithSettings.h"
 
 DEFINE_LOG_CATEGORY(LogMonolithMemory);
@@ -97,11 +96,23 @@ void FMonolithMemoryHelper::YieldToEditor()
 		return;
 	}
 
-	if (FSlateApplication::IsInitialized())
-	{
-		FSlateApplication::Get().PumpMessages();
-		FSlateApplication::Get().Tick();
-	}
+	// Intentional no-op seam (was a nested Slate tick).
+	//
+	// This function previously called FSlateApplication::Get().PumpMessages() +
+	// FSlateApplication::Get().Tick() to keep the editor responsive mid-batch.
+	// That re-entered the engine GC / asset-compiler flow from inside a
+	// worker-blocked game-thread lambda: on high-core-count machines the engine
+	// would spin up parallel GC worker contexts that never got freed across the
+	// nested re-entry, leaking one context per batch until the 64-context cap
+	// asserted ("Exceeded max active GC worker contexts", GarbageCollection.cpp:2133)
+	// during deep indexing of large (~17k-asset) projects.
+	//
+	// Yielding now happens naturally between batches: each batch payload is
+	// dispatched via FMonolithCompilerSafeDispatch's FTSTicker, runs on one real
+	// main-tick, and returns — releasing the worker thread's Event->Wait() and
+	// letting the editor tick normally on the genuine main loop between batches.
+	// The 12 call sites are kept (cheap game-thread guard) so this remains a safe
+	// documented seam for future yield-point needs.
 }
 
 void FMonolithMemoryHelper::LogMemoryStats(const FString& Context)

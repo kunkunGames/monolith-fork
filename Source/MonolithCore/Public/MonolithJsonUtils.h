@@ -56,3 +56,47 @@ public:
 	// provider owns it.
 	static constexpr int32 ErrResourceNotFound = -32020;
 };
+
+/**
+ * Survivor B — universal response-shaping post-filter.
+ *
+ * Reads the opt-in universal params from `Params` and mutates `Response`
+ * in-place. Phase 1 of plan §3.B (2026-05-27-mcp-llm-ergonomics.md):
+ *
+ *  - `_fields:["a","b"]`    — keep only these TOP-LEVEL response keys
+ *  - `_omit:["debug_info"]` — drop these TOP-LEVEL response keys
+ *  - `_compact_json:true`   — drop top-level keys whose value is null/""/{}/[]
+ *
+ * Phase 1.1 — nested-payload shaping (item #3 of the RI ergonomics handover,
+ * 2026-05-29-ri-ergonomics-improvements-handover.md):
+ *
+ *  - `_row_fields:["title","source_path"]`
+ *      When the response has exactly ONE top-level array-of-objects key (the
+ *      "list payload" — e.g., `decisions[]`, `uproperties[]`), filter each row
+ *      to retain only the named keys. If multiple list payloads exist the
+ *      filter is ambiguous and skipped (warning emitted — use `_path_fields`
+ *      instead). Empty `_row_fields:[]` is a no-op (warning emitted).
+ *
+ *  - `_path_fields:["uclass.class_name","uclass.parent_class"]`
+ *      Dotted-path retention. Walks each `a.b.c` path through Response; any
+ *      missing segment causes a clean skip (no warning, just dropped). The
+ *      Response is REPLACED with a freshly-built structure containing only
+ *      the matched leaves. Use when `_row_fields` ambiguity warns or when
+ *      the bulk lives behind a single named envelope (e.g., `uclass.*`).
+ *
+ * Order of operations within ApplyResponseShaping:
+ *   1. _fields / _omit  (top-level whitelist / blacklist; mutually exclusive)
+ *   2. _row_fields      (per-row whitelist on the unique list payload)
+ *   3. _path_fields     (dotted-path retention — rebuilds Response)
+ *   4. _compact_json    (drop top-level keys whose value is null/""/{}/[])
+ *
+ * If both `_fields` and `_omit` are non-empty, `_fields` wins and a warning
+ * is appended. Empty `_fields` is a no-op (does NOT drop everything).
+ *
+ * `Warnings` is APPENDED to, not replaced; caller already owns the
+ * K3 `warnings[]` channel and post-attaches to `ActionResult.Result`.
+ */
+MONOLITHCORE_API void ApplyResponseShaping(
+	TSharedPtr<FJsonObject>& Response,
+	const TSharedPtr<FJsonObject>& Params,
+	TArray<FString>& Warnings);

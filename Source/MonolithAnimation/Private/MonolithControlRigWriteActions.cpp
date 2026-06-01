@@ -27,7 +27,7 @@ void FMonolithControlRigWriteActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Read the full RigVM node graph from a Control Rig Blueprint: nodes, pins, connections"),
 		FMonolithActionHandler::CreateStatic(&HandleGetControlRigGraph),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ControlRigBlueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ControlRigBlueprint asset path"))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name (default: root graph)"))
 			.Build());
 
@@ -36,7 +36,7 @@ void FMonolithControlRigWriteActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Add a rig unit node to a Control Rig graph from a struct path (e.g. RigUnit_SetTransform)"),
 		FMonolithActionHandler::CreateStatic(&HandleAddControlRigNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ControlRigBlueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ControlRigBlueprint asset path"))
 			.Required(TEXT("struct_path"), TEXT("string"), TEXT("Script struct path, e.g. /Script/ControlRig.RigUnit_SetTransform"))
 			.Optional(TEXT("position_x"), TEXT("number"), TEXT("Node X position (default 0)"))
 			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Node Y position (default 0)"))
@@ -50,7 +50,7 @@ void FMonolithControlRigWriteActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Connect two pins in a Control Rig graph using dot-notation paths (e.g. NodeName.PinName)"),
 		FMonolithActionHandler::CreateStatic(&HandleConnectControlRigPins),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ControlRigBlueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ControlRigBlueprint asset path"))
 			.Required(TEXT("source_pin"), TEXT("string"), TEXT("Output pin path, dot-notation: NodeName.PinName"))
 			.Required(TEXT("target_pin"), TEXT("string"), TEXT("Input pin path, dot-notation: NodeName.PinName"))
 			.Build());

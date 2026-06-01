@@ -602,14 +602,14 @@ void FMonolithLevelSequenceActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Get summary information for a single Level Sequence Director: function counts grouped by kind (user / custom_event / sequencer_endpoint), variable count, event-binding counts (total + resolved), and a sample of up to 10 functions for quick orientation."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelSequenceActions::GetDirectorInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Full Level Sequence asset path (e.g., \"/Game/Cinematics/LS_Intro.LS_Intro\")"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Full Level Sequence asset path (e.g., \"/Game/Cinematics/LS_Intro.LS_Intro\")"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("level_sequence"), TEXT("list_director_functions"),
 		TEXT("List a Director's own functions, optionally filtered by kind. Inherited base-class methods and compiler-generated dispatchers are not indexed (own-functions only, matching blueprint_query convention)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelSequenceActions::ListDirectorFunctions),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Full Level Sequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Full Level Sequence asset path"))
 			.Optional(TEXT("kind"), TEXT("string"), TEXT("Filter: \"user\" | \"custom_event\" | \"sequencer_endpoint\" | \"event\" (alias for custom_event+sequencer_endpoint) | \"all\" (default)"))
 			.Build());
 
@@ -617,7 +617,7 @@ void FMonolithLevelSequenceActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("List all event-track bindings inside one Level Sequence, grouped by binding GUID. Each binding entry describes a Possessable (existing level actor), Spawnable (template-spawned), or master track (no GUID), and lists the sections that fire Director functions."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelSequenceActions::ListEventBindings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Full Level Sequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Full Level Sequence asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("level_sequence"), TEXT("find_director_function_callers"),
@@ -632,14 +632,14 @@ void FMonolithLevelSequenceActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("List a Director's variables (name + K2-schema-formatted type) in declaration order. Variables come from DirBP->NewVariables and follow the same own-only convention as functions (no inherited base-class properties)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelSequenceActions::ListDirectorVariables),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Full Level Sequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Full Level Sequence asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("level_sequence"), TEXT("list_bindings"),
 		TEXT("List ALL bindings inside a Level Sequence regardless of event tracks. UE 5.7 stores modern Spawnables as Possessables inside UMovieScene while their real identity (UMovieSceneSpawnableActorBinding etc.) lives on UMovieSceneSequence::GetBindingReferences(); list_event_bindings sees only event-bound rows and would miss them. Each row reports kind (possessable/spawnable/replaceable/custom), bound class, and — for custom bindings — the exact UCLASS name and pretty label. Optional kind filter narrows the result."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelSequenceActions::ListBindings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Full Level Sequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Full Level Sequence asset path"))
 			.Optional(TEXT("kind"), TEXT("string"), TEXT("Filter: possessable | spawnable | replaceable | custom | all (default)"))
 			.Build());
 

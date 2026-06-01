@@ -23,7 +23,7 @@ void FMonolithBlueprintBuildActions::RegisterActions(FMonolithToolRegistry& Regi
 		     "Returns a full summary with ID mapping, connection results, and any warnings."),
 		FMonolithActionHandler::CreateStatic(&HandleBuildBlueprintFromSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),   TEXT("string"),  TEXT("Blueprint asset path (must already exist)"))
+			.RequiredAssetPath(TEXT("asset_path"),   TEXT("Blueprint asset path (must already exist)"))
 			.Optional(TEXT("graph_name"),   TEXT("string"),  TEXT("Target graph name (defaults to EventGraph)"))
 			.Optional(TEXT("variables"),    TEXT("array"),   TEXT("Array of variable descriptors: [{name, type, default_value?, category?, instance_editable?, blueprint_read_only?, expose_on_spawn?, replicated?, transient?}]"))
 			.Optional(TEXT("components"),   TEXT("array"),   TEXT("Array of component descriptors: [{name, class, parent?}]"))

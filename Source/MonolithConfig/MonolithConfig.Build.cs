@@ -20,7 +20,12 @@ public class MonolithConfig : ModuleRules
 			"AssetTools",
 			"Json",
 			"JsonUtilities",
-			"Projects"
+			"Projects",
+			// `DeveloperSettings` is its OWN module (NOT part of Engine) — required
+			// by the dev-gated `set_developer_setting` action which mutates
+			// UDeveloperSettings CDOs at runtime. The header lives at
+			// Engine/DeveloperSettings.h but resolves to this module.
+			"DeveloperSettings"
 		});
 	}
 }

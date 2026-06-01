@@ -23,7 +23,7 @@ void FMonolithBlueprintGraphExportActions::RegisterActions(FMonolithToolRegistry
 			"Output is compatible with build_blueprint_from_spec input format."),
 		FMonolithActionHandler::CreateStatic(&HandleExportGraph),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name (defaults to first event graph)"))
 			.Build());
 
@@ -32,10 +32,10 @@ void FMonolithBlueprintGraphExportActions::RegisterActions(FMonolithToolRegistry
 			"Internal connections are preserved; external connections are silently dropped. Node IDs change on copy."),
 		FMonolithActionHandler::CreateStatic(&HandleCopyNodes),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_asset"), TEXT("string"), TEXT("Source Blueprint asset path"))
+			.RequiredAssetPath(TEXT("source_asset"), TEXT("Source Blueprint asset path"))
 			.Optional(TEXT("source_graph"), TEXT("string"), TEXT("Source graph name (defaults to first event graph)"))
 			.Required(TEXT("node_ids"), TEXT("array"), TEXT("Array of node ID strings to copy"))
-			.Required(TEXT("target_asset"), TEXT("string"), TEXT("Target Blueprint asset path"))
+			.RequiredAssetPath(TEXT("target_asset"), TEXT("Target Blueprint asset path"))
 			.Optional(TEXT("target_graph"), TEXT("string"), TEXT("Target graph name (defaults to first event graph)"))
 			.Build());
 
@@ -44,7 +44,7 @@ void FMonolithBlueprintGraphExportActions::RegisterActions(FMonolithToolRegistry
 			"Only works for function and macro graphs (not event graphs)."),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateGraph),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("graph_name"), TEXT("string"), TEXT("Name of the graph to duplicate"))
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("Name for the duplicated graph"))
 			.Build());

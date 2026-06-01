@@ -423,7 +423,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Create a new UStateTree asset. Optionally set schema class."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateStateTree),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path (e.g. /Game/AI/ST_Enemy)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path (e.g. /Game/AI/ST_Enemy)"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Asset name (derived from save_path if omitted)"))
 			.Optional(TEXT("schema_class"), TEXT("string"), TEXT("Schema class name (e.g. UStateTreeAIComponentSchema)"))
 			.Build());
@@ -433,7 +433,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Full tree structure as JSON: states (recursive), tasks, conditions, transitions, considerations"),
 		FMonolithActionHandler::CreateStatic(&HandleGetStateTree),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Build());
 
 	// 45. list_state_trees
@@ -441,7 +441,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("List all UStateTree assets in the project"),
 		FMonolithActionHandler::CreateStatic(&HandleListStateTrees),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only include assets under this path prefix"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only include assets under this path prefix"))
 			.Build());
 
 	// 46. delete_state_tree
@@ -449,7 +449,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Delete a StateTree asset"),
 		FMonolithActionHandler::CreateStatic(&HandleDeleteStateTree),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path to delete"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path to delete"))
 			.Build());
 
 	// 47. duplicate_state_tree
@@ -457,8 +457,8 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Deep copy a StateTree asset to a new path"),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateStateTree),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Source StateTree asset path"))
-			.Required(TEXT("dest_path"), TEXT("string"), TEXT("Destination asset path for the copy"))
+			.RequiredAssetPath(TEXT("source_path"), TEXT("Source StateTree asset path"))
+			.RequiredAssetPath(TEXT("dest_path"), TEXT("Destination asset path for the copy"))
 			.Build());
 
 	// 48. compile_state_tree
@@ -466,7 +466,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Compile a StateTree via UStateTreeEditingSubsystem. MANDATORY after any edits."),
 		FMonolithActionHandler::CreateStatic(&HandleCompileStateTree),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path to compile"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path to compile"))
 			.Build());
 
 	// 49. set_st_schema
@@ -474,7 +474,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Set schema class and optional context actor class on a StateTree"),
 		FMonolithActionHandler::CreateStatic(&HandleSetSTSchema),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("schema_class"), TEXT("string"), TEXT("Schema class name (e.g. StateTreeAIComponentSchema)"))
 			.Optional(TEXT("context_actor_class"), TEXT("string"), TEXT("Context actor class name for the schema"))
 			.Build());
@@ -485,12 +485,12 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		     "If parent_state_id is supplied but doesn't match a state, returns an error."),
 		FMonolithActionHandler::CreateStatic(&HandleAddSTState),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Name for the new state"))
 			.Optional(TEXT("parent_state_id"), TEXT("string"), TEXT("GUID of parent state (omit/null = add as SubTree root)"), { TEXT("parent_id") })
 			.Optional(TEXT("type"), TEXT("string"), TEXT("State/Group/Linked/LinkedAsset/Subtree (default: State)"))
 			.Optional(TEXT("selection_behavior"), TEXT("string"), TEXT("Selection behavior (default: TrySelectChildrenInOrder)"))
-			.Optional(TEXT("linked_asset_path"), TEXT("string"), TEXT("For LinkedAsset type: path to linked StateTree"))
+			.OptionalAssetPath(TEXT("linked_asset_path"), TEXT("For LinkedAsset type: path to linked StateTree"))
 			.Build());
 
 	// 51. remove_st_state
@@ -498,7 +498,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Remove a state and its children from the StateTree"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveSTState),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state to remove"))
 			.Build());
 
@@ -507,7 +507,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Rename a state in the StateTree"),
 		FMonolithActionHandler::CreateStatic(&HandleRenameSTState),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state to rename"))
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("New name for the state"))
 			.Build());
@@ -517,7 +517,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Reparent a state under a different parent state"),
 		FMonolithActionHandler::CreateStatic(&HandleMoveSTState),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state to move"))
 			.Required(TEXT("new_parent_id"), TEXT("string"), TEXT("GUID of new parent state (empty = move to root)"))
 			.Optional(TEXT("index"), TEXT("number"), TEXT("Index within new parent's children (-1 = append)"))
@@ -528,7 +528,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Set state properties like weight, selection_behavior, tag, enabled"),
 		FMonolithActionHandler::CreateStatic(&HandleSetSTStateProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state"))
 			.Optional(TEXT("weight"), TEXT("number"), TEXT("Utility weight"))
 			.Optional(TEXT("selection_behavior"), TEXT("string"), TEXT("Selection behavior enum"))
@@ -541,7 +541,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Add a task (FInstancedStruct) to a state"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSTTask),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the target state"))
 			.Required(TEXT("task_class"), TEXT("string"), TEXT("Task struct name (e.g. FStateTreeRunParallelTask)"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("JSON object of property_name->value pairs"))
@@ -552,7 +552,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Remove a task from a state by index"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveSTTask),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state owning the task"))
 			.Required(TEXT("task_index"), TEXT("number"), TEXT("Index of the task to remove"))
 			.Build());
@@ -562,7 +562,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Set a property on a task via ImportText_Direct reflection"),
 		FMonolithActionHandler::CreateStatic(&HandleSetSTTaskProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state owning the task"))
 			.Required(TEXT("task_index"), TEXT("number"), TEXT("Index of the task"))
 			.Required(TEXT("property_name"), TEXT("string"), TEXT("Property name to set"))
@@ -574,7 +574,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Add an enter condition to a state"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSTEnterCondition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the target state"))
 			.Required(TEXT("condition_class"), TEXT("string"), TEXT("Condition struct name"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("JSON object of property_name->value pairs"))
@@ -585,7 +585,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Remove an enter condition from a state by index"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveSTEnterCondition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state"))
 			.Required(TEXT("condition_index"), TEXT("number"), TEXT("Index of the condition to remove"))
 			.Build());
@@ -595,7 +595,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Add a transition to a state"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSTTransition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state"))
 			.Required(TEXT("trigger"), TEXT("string"), TEXT("Trigger: OnStateCompleted, OnStateSucceeded, OnStateFailed, OnTick, OnEvent"))
 			.Required(TEXT("target_state"), TEXT("string"), TEXT("Target type: Succeeded, Failed, NextState, NextSelectableState, or a state GUID"))
@@ -608,7 +608,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Remove a transition from a state by index"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveSTTransition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state"))
 			.Required(TEXT("transition_index"), TEXT("number"), TEXT("Index of the transition to remove"))
 			.Build());
@@ -618,7 +618,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Wire a property binding between source and target paths"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSTPropertyBinding),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("source_path"), TEXT("string"), TEXT("Source property path (e.g. StructID.PropertyName)"))
 			.Required(TEXT("target_path"), TEXT("string"), TEXT("Target property path"))
 			.Build());
@@ -628,7 +628,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Remove a property binding by index"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveSTPropertyBinding),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("binding_index"), TEXT("number"), TEXT("Index of the binding to remove"))
 			.Build());
 
@@ -637,7 +637,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("List all property bindings in a StateTree"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSTBindings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Build());
 
 	// 68. get_st_bindable_properties
@@ -645,7 +645,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("List available bindable properties, optionally scoped to a state/task"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSTBindableProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Optional(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state to scope to"))
 			.Optional(TEXT("task_index"), TEXT("number"), TEXT("Task index within the state"))
 			.Build());
@@ -667,7 +667,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Add a condition to an existing transition on a state"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSTTransitionCondition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state owning the transition"))
 			.Required(TEXT("transition_index"), TEXT("number"), TEXT("Index of the transition"))
 			.Required(TEXT("condition_class"), TEXT("string"), TEXT("Condition struct name (e.g. FStateTreeCompareIntCondition)"))
@@ -679,7 +679,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Add a utility consideration to a state"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSTConsideration),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the target state"))
 			.Required(TEXT("consideration_class"), TEXT("string"), TEXT("Consideration struct name (e.g. FStateTreeConstantConsideration)"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("JSON object of property_name->value pairs"))
@@ -690,7 +690,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Configure a consideration's properties on a state (by index)"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureSTConsideration),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state"))
 			.Required(TEXT("consideration_index"), TEXT("number"), TEXT("Index of the consideration"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("JSON object of property_name->value pairs to set on consideration node"))
@@ -702,7 +702,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Validate a StateTree: check unbound inputs, dead-end states, infinite loops, missing tasks"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateStateTree),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Build());
 
 	// 75. list_st_extension_types
@@ -716,7 +716,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Add an extension to a StateTree asset"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSTExtension),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("extension_class"), TEXT("string"), TEXT("Extension class name (e.g. UStateTreeAIExtension)"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("JSON object of property_name->value pairs to set on the extension"))
 			.Build());
@@ -726,7 +726,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Declarative full-tree creation from a JSON spec: creates states, adds tasks, transitions, and compiles"),
 		FMonolithActionHandler::CreateStatic(&HandleBuildStateTreeFromSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path (e.g. /Game/AI/ST_Enemy)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path (e.g. /Game/AI/ST_Enemy)"))
 			.Required(TEXT("spec"), TEXT("object"), TEXT("JSON spec: {schema_class?, root: {name, type?, children: [{name, tasks, transitions}]}}"))
 			.Optional(TEXT("strict_mode"), TEXT("boolean"), TEXT("If true, abort with error (no save) when any task/condition struct fails to resolve"), TEXT("false"))
 			.Build());
@@ -736,7 +736,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Export a StateTree as a JSON spec that can be fed back into build_state_tree_from_spec"),
 		FMonolithActionHandler::CreateStatic(&HandleExportSTSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Build());
 
 	// 74. generate_st_diagram
@@ -744,7 +744,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Generate a Mermaid state diagram from a StateTree"),
 		FMonolithActionHandler::CreateStatic(&HandleGenerateSTDiagram),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Optional(TEXT("format"), TEXT("string"), TEXT("Diagram format: mermaid (default)"))
 			.Build());
 
@@ -753,7 +753,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Auto-layout a StateTree graph using built-in state processing. Blueprint Assist is disabled because this action has a built-in formatter."),
 		FMonolithActionHandler::CreateStatic(&HandleAutoArrangeST),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("StateTree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Optional(TEXT("formatter"), TEXT("string"), TEXT("Formatter to use: 'builtin'. 'blueprint_assist' is disabled for asset mutation."))
 			.Build());
 

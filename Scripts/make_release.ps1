@@ -134,6 +134,61 @@ if (-not $SkipBuild) {
     Write-Host "    WARNING: Ensure you built with MONOLITH_RELEASE_BUILD=1" -ForegroundColor Red
 }
 
+# --- Step 1b: Build the offline CLI fresh + hard-gate offline parity ---
+# The offline tool Binaries/monolith_query.exe is built from tracked source
+# Tools/MonolithQuery/monolith_query.cpp via a standalone cl.exe build (NOT UBT).
+# Binaries/ is gitignored, so without this step the release would ship whatever
+# stale exe happened to sit on disk. Rebuild it here so the shipped exe matches
+# the shipped source, then hard-gate the exe-vs-py parity guard. A drifted exe
+# must never ship -- both the build failure and a parity FAIL abort the release.
+Write-Host "`n  [1b] Building offline CLI fresh + parity gate..." -ForegroundColor Yellow
+
+$ToolDir = Join-Path $PluginDir "Tools\MonolithQuery"
+$ToolBuildBat = Join-Path $ToolDir "build.bat"
+if (-not (Test-Path $ToolBuildBat)) {
+    throw "Offline CLI build script not found at $ToolBuildBat"
+}
+
+# Locate vcvars64.bat via vswhere so cl.exe is on PATH for build.bat.
+$VsWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+if (-not (Test-Path $VsWhere)) {
+    throw "vswhere.exe not found at $VsWhere. Visual Studio is required to build the offline CLI."
+}
+$VsInstallPath = & $VsWhere -latest -property installationPath
+if (-not $VsInstallPath) {
+    throw "vswhere could not locate a Visual Studio installation."
+}
+$VcVars = Join-Path $VsInstallPath "VC\Auxiliary\Build\vcvars64.bat"
+if (-not (Test-Path $VcVars)) {
+    throw "vcvars64.bat not found at $VcVars."
+}
+
+# Run vcvars64.bat then build.bat in a single cmd session so cl.exe is in PATH.
+# build.bat copies the freshly built exe to Plugins/Monolith/Binaries/ (the same
+# Binaries dir the copy step below picks up), so the exe is staged before [3/4].
+Write-Host "    Using VS at $VsInstallPath" -ForegroundColor DarkGray
+Push-Location $ToolDir
+try {
+    & cmd.exe /c "call `"$VcVars`" >nul && call `"$ToolBuildBat`""
+    if ($LASTEXITCODE -ne 0) {
+        throw "Offline CLI build failed with exit code $LASTEXITCODE. Inspect Tools\MonolithQuery\build.bat output."
+    }
+}
+finally {
+    Pop-Location
+}
+Write-Host "    Offline CLI built (fresh exe staged in Binaries/)" -ForegroundColor Green
+
+# Hard-gate: the freshly built exe must deep-equal its Python sibling across all
+# RI actions. A non-zero exit means the two offline tools drifted -- abort.
+Write-Host "    Running offline parity guard (verify_offline_parity.py)..." -ForegroundColor DarkGray
+$ParityScript = Join-Path $PluginDir "Scripts\verify_offline_parity.py"
+& python $ParityScript
+if ($LASTEXITCODE -ne 0) {
+    throw "Offline parity guard FAILED (exit $LASTEXITCODE). The exe drifted from its Python sibling. Refusing to ship a drifted offline CLI."
+}
+Write-Host "    Offline parity guard PASSED" -ForegroundColor Green
+
 # --- Step 2: Copy tracked files ---
 Write-Host "`n  [2/4] Copying tracked files..." -ForegroundColor Yellow
 

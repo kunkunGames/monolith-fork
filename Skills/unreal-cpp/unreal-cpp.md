@@ -92,11 +92,34 @@ config_query({ action: "explain_setting", params: { setting: "r.DefaultFeature.A
 - `CreatePackage` with same path returns existing in-memory package -- use unique names
 - Live Coding: `.cpp` body changes only -- header changes require editor restart + UBT build
 
+## Reflection Intelligence (structural view of your own C++)
+
+`source_query` reads symbol-level engine + project SOURCE. The Reflection Intelligence (RI) namespaces add a higher-level STRUCTURAL view of the reflected surface, mined from UHT artefacts (`*.gen.cpp`) — use these when you want the as-declared UCLASS/UPROPERTY/UFUNCTION shape rather than the raw source text. Scope: project game module + project plugins (default); marketplace plugins gated (`bIndexMarketplacePluginReflection`, off); Epic engine built-ins excluded.
+
+**`cppreflect_query` (6 actions)** — C++ reflection structure:
+
+| Action | Purpose |
+|--------|---------|
+| `get_uclass` | Parent class, specifiers, source path for a UCLASS |
+| `list_uproperties` | UPROPERTY surface of a UCLASS (paginated) |
+| `list_ufunctions` | UFUNCTION surface of a UCLASS (paginated) |
+| `find_interface_impls` | Every UCLASS that implements a UINTERFACE (C++ only — not BP) |
+| `find_class_specifier` | Classes carrying a specifier; token-forgiving (alias map `Blueprintable`->`IsBlueprintBase`, case-insensitive) |
+| `list_class_specifiers` | DISTINCT queryable token vocabulary + per-token counts (no params) |
+
+Call `list_class_specifiers` first to learn what `find_class_specifier` can match — the `flags` column stores UHT metadata keys (`IsBlueprintBase`, `BlueprintType`, `Abstract`), NOT raw C++ specifiers.
+
+**`network_query` (4 actions)** — replication/RPC structure of your C++ (covers project plugins): `list_replicated_classes`, `list_rpc_functions` (specifier-based — `FUNC_NetServer`/`Client`/`Multicast`), `list_onrep_handlers`, `audit_unbalanced_onreps` (catch `ReplicatedUsing=OnRep_X` with no `OnRep_X` handler).
+
+**`reflect_query("rebuild_reflection_index")`** — project-only force-rebuild of the RI `reflect_*` tables. Call it after changing C++ reflection structure (new/renamed UCLASS/UPROPERTY/UFUNCTION) when lazy bootstrap + Live-Coding refresh haven't fired. It does NOT touch `source_query`'s engine source index.
+
 ## Rules
 
 - **Never guess** `#include` paths or signatures -- always verify with `source_query`
 - Search action is `search_source` (not `search`)
 - Source index: engine Runtime/Editor/Developer + plugins + shaders (1M+ symbols)
 - Use `find_callers` for idiomatic usage, `get_symbol_context` for quick definition lookup
+- `cppreflect_query` for the structural reflected view; `source_query` for symbol-level source
+- `cppreflect` `source_line` is `0` (UHT drops it) — round-trip through `source_query("search_source")` for real line numbers
 - Use `config_query("explain_setting")` before changing unfamiliar CVars
 - Non-existent actions: `get_include_path`, `get_function_signature`, `get_deprecation_warnings`

@@ -34,10 +34,10 @@ void FMonolithAIControllerActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Create an AAIController Blueprint, optionally setting default BT and BB"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateAIController),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path (e.g. /Game/AI/BP_EnemyAIController)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path (e.g. /Game/AI/BP_EnemyAIController)"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Asset name (derived from save_path if omitted)"))
-			.Optional(TEXT("bt_path"), TEXT("string"), TEXT("Default Behavior Tree asset path"))
-			.Optional(TEXT("bb_path"), TEXT("string"), TEXT("Default Blackboard asset path"))
+			.OptionalAssetPath(TEXT("bt_path"), TEXT("Default Behavior Tree asset path"))
+			.OptionalAssetPath(TEXT("bb_path"), TEXT("Default Blackboard asset path"))
 			.Build());
 
 	// 94. get_ai_controller
@@ -45,7 +45,7 @@ void FMonolithAIControllerActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Read AI controller config: default BT, BB, perception setup, flags"),
 		FMonolithActionHandler::CreateStatic(&HandleGetAIController),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Build());
 
 	// 95. list_ai_controllers
@@ -53,7 +53,7 @@ void FMonolithAIControllerActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("List all AAIController Blueprint assets in the project"),
 		FMonolithActionHandler::CreateStatic(&HandleListAIControllers),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only include assets under this path prefix"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only include assets under this path prefix"))
 			.Build());
 
 	// 96. set_ai_controller_bt
@@ -61,9 +61,9 @@ void FMonolithAIControllerActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Set default Behavior Tree and optionally Blackboard on an AI controller CDO"),
 		FMonolithActionHandler::CreateStatic(&HandleSetAIControllerBT),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
-			.Required(TEXT("bt_path"), TEXT("string"), TEXT("Behavior Tree asset path"))
-			.Optional(TEXT("bb_path"), TEXT("string"), TEXT("Blackboard asset path (uses BT's BB if omitted)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("bt_path"), TEXT("Behavior Tree asset path"))
+			.OptionalAssetPath(TEXT("bb_path"), TEXT("Blackboard asset path (uses BT's BB if omitted)"))
 			.Build());
 
 	// 100b. set_pawn_ai_controller_class
@@ -71,7 +71,7 @@ void FMonolithAIControllerActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Set AIControllerClass on a Pawn or Character Blueprint CDO"),
 		FMonolithActionHandler::CreateStatic(&HandleSetPawnAIControllerClass),
 		FParamSchemaBuilder()
-			.Required(TEXT("blueprint_path"), TEXT("string"), TEXT("Pawn/Character Blueprint asset path"))
+			.RequiredAssetPath(TEXT("blueprint_path"), TEXT("Pawn/Character Blueprint asset path"))
 			.Required(TEXT("controller_class"), TEXT("string"), TEXT("AIController class or Blueprint path"))
 			.Build());
 
@@ -80,7 +80,7 @@ void FMonolithAIControllerActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Set boolean config flags on an AI controller CDO (wants_player_state, start_ai_on_possess, etc.)"),
 		FMonolithActionHandler::CreateStatic(&HandleSetAIControllerFlags),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Optional(TEXT("wants_player_state"), TEXT("boolean"), TEXT("Whether this controller creates a PlayerState"))
 			.Optional(TEXT("start_ai_on_possess"), TEXT("boolean"), TEXT("Auto-start AI logic when possessing a pawn"))
 			.Optional(TEXT("skip_extra_los_checks"), TEXT("boolean"), TEXT("Skip extra line-of-sight checks (bSkipExtraLOSChecks)"))
@@ -92,7 +92,7 @@ void FMonolithAIControllerActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Set the generic team ID (0-254) on an AI controller CDO for affiliation-based perception"),
 		FMonolithActionHandler::CreateStatic(&HandleSetAITeam),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Required(TEXT("team_id"), TEXT("number"), TEXT("Team ID (0-254, 255 = NoTeam)"))
 			.Build());
 
@@ -101,7 +101,7 @@ void FMonolithAIControllerActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Read the generic team ID from an AI controller CDO"),
 		FMonolithActionHandler::CreateStatic(&HandleGetAITeam),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Build());
 
 	// 103. spawn_ai_actor
@@ -109,11 +109,11 @@ void FMonolithAIControllerActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Spawn an AI pawn/character Blueprint actor in the editor level"),
 		FMonolithActionHandler::CreateStatic(&HandleSpawnAIActor),
 		FParamSchemaBuilder()
-			.Required(TEXT("class_path"), TEXT("string"), TEXT("Blueprint asset path (e.g. /Game/AI/BP_Enemy)"))
+			.RequiredAssetPath(TEXT("class_path"), TEXT("Blueprint asset path (e.g. /Game/AI/BP_Enemy)"))
 			.Required(TEXT("location"), TEXT("object"), TEXT("Spawn location as {x,y,z}"))
 			.Optional(TEXT("rotation"), TEXT("object"), TEXT("Spawn rotation as {pitch,yaw,roll}"))
 			.Optional(TEXT("label"), TEXT("string"), TEXT("Actor label in the Outliner"))
-			.Optional(TEXT("folder_path"), TEXT("string"), TEXT("World Outliner folder (default: AI)"))
+			.OptionalAssetPath(TEXT("folder_path"), TEXT("World Outliner folder (default: AI)"))
 			.Build());
 
 	// 104. get_ai_actors

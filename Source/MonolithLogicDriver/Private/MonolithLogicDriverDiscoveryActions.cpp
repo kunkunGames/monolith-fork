@@ -20,28 +20,28 @@ void FMonolithLogicDriverDiscoveryActions::RegisterActions(FMonolithToolRegistry
 		TEXT("Project scan: count SM Blueprints, Node Blueprints, and component usage across the project"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSMOverview),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only include assets under this path prefix (e.g. /Game/StateMachines)"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only include assets under this path prefix (e.g. /Game/StateMachines)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("validate_state_machine"),
 		TEXT("Validate a state machine for common issues: missing initial state, orphaned states, unreachable nodes"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateStateMachine),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path to validate"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path to validate"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("find_sm_references"),
 		TEXT("Find all Blueprints in the project that reference a given SM Blueprint (via dependencies)"),
 		FMonolithActionHandler::CreateStatic(&HandleFindSMReferences),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path to find references for"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path to find references for"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("visualize_sm_as_text"),
 		TEXT("Generate a text diagram of a state machine in ASCII, Mermaid, or DOT format"),
 		FMonolithActionHandler::CreateStatic(&HandleVisualizeSMAsText),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("format"), TEXT("string"), TEXT("Output format: ascii, mermaid, dot"))
 			.Build());
 
@@ -49,14 +49,14 @@ void FMonolithLogicDriverDiscoveryActions::RegisterActions(FMonolithToolRegistry
 		TEXT("Generate a structured explanation of a state machine: purpose, states, flow paths, key decisions, complexity rating"),
 		FMonolithActionHandler::CreateStatic(&HandleExplainStateMachine),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("find_node_class_usages"),
 		TEXT("Search all SM Blueprints in the project for nodes that use a specific Node Blueprint class"),
 		FMonolithActionHandler::CreateStatic(&HandleFindNodeClassUsages),
 		FParamSchemaBuilder()
-			.Required(TEXT("node_bp_path"), TEXT("string"), TEXT("Node Blueprint asset path to search for"))
+			.RequiredAssetPath(TEXT("node_bp_path"), TEXT("Node Blueprint asset path to search for"))
 			.Build());
 
 	UE_LOG(LogMonolithLDDiscovery, Log, TEXT("MonolithLogicDriver Discovery: registered 6 actions"));

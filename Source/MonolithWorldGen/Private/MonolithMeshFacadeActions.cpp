@@ -56,7 +56,7 @@ void FMonolithMeshFacadeActions::RegisterActions(FMonolithToolRegistry& Registry
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshFacadeActions::GenerateFacade),
 		FParamSchemaBuilder()
 			.Required(TEXT("building_descriptor"), TEXT("object"), TEXT("Full Building Descriptor JSON from create_building_from_grid"))
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the facade mesh (e.g. /Game/CityBlock/Mesh/SM_Facade_01)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the facade mesh (e.g. /Game/CityBlock/Mesh/SM_Facade_01)"))
 			.Optional(TEXT("style"), TEXT("string"), TEXT("Facade style name (loads from FacadeStyles/ presets)"), TEXT("colonial"))
 			.Optional(TEXT("seed"), TEXT("integer"), TEXT("Random seed for variation"), TEXT("0"))
 			.Optional(TEXT("window_width"), TEXT("number"), TEXT("Window width in cm (overrides style)"), TEXT("80"))
@@ -66,7 +66,7 @@ void FMonolithMeshFacadeActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Optional(TEXT("ground_floor_style"), TEXT("string"), TEXT("Ground floor treatment: residential, storefront, entrance"), TEXT("residential"))
 			.Optional(TEXT("location"), TEXT("array"), TEXT("World location [x, y, z]"))
 			.Optional(TEXT("label"), TEXT("string"), TEXT("Actor label"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Allow overwriting existing asset at save_path"), TEXT("false"))
 			.Build());
 
@@ -87,8 +87,8 @@ void FMonolithMeshFacadeActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Optional(TEXT("broken_glass"), TEXT("number"), TEXT("Fraction of windows with broken glass geometry"), TEXT("0.2"))
 			.Optional(TEXT("rust_stains"), TEXT("boolean"), TEXT("Add rust streak marker geometry below windows"), TEXT("true"))
 			.Optional(TEXT("cracks"), TEXT("boolean"), TEXT("Add crack line geometry on wall surface"), TEXT("true"))
-			.Optional(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the damage overlay mesh"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("save_path"), TEXT("Asset path for the damage overlay mesh"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Allow overwriting existing asset"), TEXT("false"))
 			.Build());
 }

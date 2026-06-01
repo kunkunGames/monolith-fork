@@ -19,7 +19,7 @@ void FMonolithBlueprintTemplateActions::RegisterActions(FMonolithToolRegistry& R
 		FMonolithActionHandler::CreateStatic(&HandleApplyTemplate),
 		FParamSchemaBuilder()
 			.Required(TEXT("template_name"), TEXT("string"), TEXT("Template name (use list_templates to see available)"))
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path to apply the template to"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path to apply the template to"))
 			.Optional(TEXT("params"), TEXT("object"), TEXT("Template-specific parameters as JSON object (e.g. {\"max_health\": \"200.0\"})"))
 			.Build());
 

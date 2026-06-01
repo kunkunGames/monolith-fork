@@ -214,7 +214,7 @@ void FMonolithLevelDesignEditingActions::RegisterActions(FMonolithToolRegistry& 
 			.Optional(TEXT("inner_cone_angle"), TEXT("number"), TEXT("Inner cone angle in degrees (spot only)"), TEXT("25"))
 			.Optional(TEXT("outer_cone_angle"), TEXT("number"), TEXT("Outer cone angle in degrees (spot only)"), TEXT("44"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Actor label"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Optional(TEXT("mobility"), TEXT("string"), TEXT("Mobility: Static, Stationary, Movable"), TEXT("Stationary"))
 			.Build());
 
@@ -273,7 +273,7 @@ void FMonolithLevelDesignEditingActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Set per-LOD screen size thresholds on a static mesh asset. Sizes must be monotonically decreasing."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignEditingActions::SetLodScreenSizes),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Static mesh asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Static mesh asset path"))
 			.Required(TEXT("screen_sizes"), TEXT("array"), TEXT("Array of screen size floats per LOD (e.g. [1.0, 0.4, 0.15])"))
 			.Build());
 
@@ -294,7 +294,7 @@ void FMonolithLevelDesignEditingActions::RegisterActions(FMonolithToolRegistry& 
 			.Required(TEXT("mesh"), TEXT("string"), TEXT("Static mesh asset path for the HISM"))
 			.Required(TEXT("actors"), TEXT("array"), TEXT("Array of actor names to convert"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Label for the new HISM actor"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Optional(TEXT("preserve_materials"), TEXT("boolean"), TEXT("Copy material overrides from first actor"), TEXT("true"))
 			.Build());
 

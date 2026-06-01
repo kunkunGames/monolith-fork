@@ -539,7 +539,7 @@ void FMonolithAudioPerceptionActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Stamp a UMonolithSoundPerceptionUserData onto a USoundBase asset (Cue / MetaSoundSource / Wave). Runtime UWorldSubsystem fires AActor::MakeNoise when this sound plays through a UAudioComponent owned by an actor."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioPerceptionActions::BindSoundToPerception),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundBase (e.g. /Game/Audio/SC_Footstep_Heavy)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundBase (e.g. /Game/Audio/SC_Footstep_Heavy)"))
 			.Optional(TEXT("loudness"), TEXT("number"), TEXT("FAINoiseEvent::Loudness multiplier (default 1.0)"))
 			.Optional(TEXT("max_range"), TEXT("number"), TEXT("Per-event max range in cm; 0 = use listener's HearingRange (default 0)"))
 			.Optional(TEXT("tag"), TEXT("string"), TEXT("FName tag for downstream filtering (default empty)"))
@@ -553,14 +553,14 @@ void FMonolithAudioPerceptionActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Remove the UMonolithSoundPerceptionUserData entry from a USoundBase asset (no-op if not bound)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioPerceptionActions::UnbindSoundFromPerception),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundBase"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundBase"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("get_sound_perception_binding"),
 		TEXT("Read the current UMonolithSoundPerceptionUserData binding (if any) from a USoundBase asset."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioPerceptionActions::GetSoundPerceptionBinding),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundBase"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundBase"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("list_perception_bound_sounds"),

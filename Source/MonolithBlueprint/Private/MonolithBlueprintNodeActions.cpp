@@ -442,7 +442,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Add a new node to a Blueprint graph. Supports CallFunction, VariableGet, VariableSet, CustomEvent, Branch, Sequence, MacroInstance, SpawnActorFromClass, DynamicCast, Self, Return, MakeStruct, BreakStruct, SwitchOnEnum, SwitchOnInt, SwitchOnString, FormatText, MakeArray, Select node types. Also supports shorthand aliases: ForEachLoop, ForLoop, ForLoopWithBreak, DoOnce, FlipFlop, Gate (macro shortcuts), IsValid, Delay, RetriggerableDelay (function shortcuts), make_struct, break_struct, switch_enum, switch_int, switch_string, format_text, make_array, select. ComponentBoundEvent (binds an event entry node to a component's BlueprintAssignable multicast delegate; requires component_name + delegate_property_name), AddDelegate (binds an event to a BlueprintAssignable multicast delegate; \"Bind Event to ...\" node), RemoveDelegate (\"Unbind Event from ...\" — removes one previously bound event), ClearDelegate (\"Unbind all Events from ...\" — clears every bound listener), CallDelegate (\"Call ...\" — broadcasts a BP-resident multicast delegate to all listeners)"),
 		FMonolithActionHandler::CreateStatic(&HandleAddNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),       TEXT("string"),  TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),       TEXT("Blueprint asset path"))
 			.Required(TEXT("node_type"),         TEXT("string"),  TEXT("Node type: CallFunction (or 'function'/'call'), VariableGet (or 'get'), VariableSet (or 'set'), CustomEvent (or 'event'), Branch (or 'if'), Sequence, MacroInstance (or 'macro'), SpawnActorFromClass (or 'spawn'), DynamicCast (or 'cast'), Self, Return, MakeStruct (or 'make_struct'), BreakStruct (or 'break_struct'), SwitchOnEnum (or 'switch_enum'), SwitchOnInt (or 'switch_int'), SwitchOnString (or 'switch_string'), FormatText (or 'format_text'), MakeArray (or 'make_array'), Select. Shortcuts: ForEachLoop, ForLoop, DoOnce, FlipFlop, Gate, IsValid, Delay, RetriggerableDelay, ComponentBoundEvent, AddDelegate, RemoveDelegate, ClearDelegate, CallDelegate"))
 			.Optional(TEXT("graph_name"),        TEXT("string"),  TEXT("Graph name (defaults to EventGraph)"))
 			.Optional(TEXT("position"),          TEXT("array"),   TEXT("Node position as [x, y] (default: [0, 0])"), {TEXT("pos")})
@@ -451,7 +451,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("variable_name"),     TEXT("string"),  TEXT("Variable name for VariableGet/VariableSet nodes"))
 			.Optional(TEXT("event_name"),        TEXT("string"),  TEXT("Custom event name for CustomEvent nodes"))
 			.Optional(TEXT("macro_name"),        TEXT("string"),  TEXT("Macro graph name for MacroInstance nodes"))
-			.Optional(TEXT("macro_blueprint"),   TEXT("string"),  TEXT("Blueprint asset path containing the macro (optional for MacroInstance)"))
+			.OptionalAssetPath(TEXT("macro_blueprint"),   TEXT("Blueprint asset path containing the macro (optional for MacroInstance)"))
 			.Optional(TEXT("cast_class"),        TEXT("string"),  TEXT("Class name for DynamicCast nodes (e.g. 'MyPawn'). Accepts A/U prefix or bare name."))
 			.Optional(TEXT("actor_class"),       TEXT("string"),  TEXT("Actor class name for SpawnActorFromClass nodes"))
 			.Optional(TEXT("struct_type"),       TEXT("string"),  TEXT("Struct type for MakeStruct/BreakStruct nodes (e.g. 'Vector', 'Transform', 'FHitResult'). Accepts F prefix or bare name."))
@@ -468,7 +468,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Remove a node from a Blueprint graph by node ID."),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),  TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),  TEXT("Blueprint asset path"))
 			.Required(TEXT("node_id"),     TEXT("string"), TEXT("Node ID (from get_nodes or add_node response)"))
 			.Optional(TEXT("graph_name"),  TEXT("string"), TEXT("Graph name (searches all graphs if omitted)"))
 			.Build());
@@ -477,7 +477,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Connect two pins in a Blueprint graph. Source pin must be an output, target pin must be an input (or vice versa — the schema will sort it out)."),
 		FMonolithActionHandler::CreateStatic(&HandleConnectPins),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),   TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),   TEXT("Blueprint asset path"))
 			.Required(TEXT("source_node"),  TEXT("string"), TEXT("Source node ID"))
 			.Required(TEXT("source_pin"),   TEXT("string"), TEXT("Source pin name"))
 			.Required(TEXT("target_node"),  TEXT("string"), TEXT("Target node ID"))
@@ -489,7 +489,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Disconnect a pin on a Blueprint node. If target_node and target_pin are omitted, all connections on the pin are broken."),
 		FMonolithActionHandler::CreateStatic(&HandleDisconnectPins),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),   TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),   TEXT("Blueprint asset path"))
 			.Required(TEXT("node_id"),      TEXT("string"), TEXT("Node ID containing the pin to disconnect"))
 			.Required(TEXT("pin_name"),     TEXT("string"), TEXT("Pin name to disconnect"))
 			.Optional(TEXT("target_node"),  TEXT("string"), TEXT("Target node ID — if provided, only breaks the connection to this specific node"))
@@ -501,7 +501,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Set the default value of a pin on a Blueprint node."),
 		FMonolithActionHandler::CreateStatic(&HandleSetPinDefault),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),  TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),  TEXT("Blueprint asset path"))
 			.Required(TEXT("node_id"),     TEXT("string"), TEXT("Node ID"))
 			.Required(TEXT("pin_name"),    TEXT("string"), TEXT("Pin name"))
 			.Required(TEXT("value"),       TEXT("string"),
@@ -516,7 +516,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Move a Blueprint graph node to a new position."),
 		FMonolithActionHandler::CreateStatic(&HandleSetNodePosition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),  TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),  TEXT("Blueprint asset path"))
 			.Required(TEXT("node_id"),     TEXT("string"), TEXT("Node ID"))
 			.Required(TEXT("position"),    TEXT("array"),  TEXT("New position as [x, y]"))
 			.Optional(TEXT("graph_name"),  TEXT("string"), TEXT("Graph name (searches all graphs if omitted)"))
@@ -532,7 +532,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("variable_name"),          TEXT("string"), TEXT("Variable name hint for VariableGet/VariableSet (uses wildcard if omitted)"))
 			.Optional(TEXT("replication"),            TEXT("string"), TEXT("Replication mode for CustomEvent: none, multicast, server, client"))
 			.Optional(TEXT("reliable"),               TEXT("bool"),   TEXT("Use reliable replication for CustomEvent"))
-			.Optional(TEXT("asset_path"),             TEXT("string"), TEXT("Blueprint asset path (required for ComponentBoundEvent and AddDelegate / RemoveDelegate / ClearDelegate / CallDelegate self-context dry-runs)"))
+			.OptionalAssetPath(TEXT("asset_path"),             TEXT("Blueprint asset path (required for ComponentBoundEvent and AddDelegate / RemoveDelegate / ClearDelegate / CallDelegate self-context dry-runs)"))
 			.Optional(TEXT("component_name"),         TEXT("string"), TEXT("Component variable name for ComponentBoundEvent dry-run"))
 			.Optional(TEXT("delegate_property_name"), TEXT("string"), TEXT("Multicast delegate name for ComponentBoundEvent / AddDelegate / RemoveDelegate / ClearDelegate / CallDelegate dry-run"))
 			.Build());
@@ -601,7 +601,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Execute multiple Blueprint write operations on a single asset in one transaction. Each operation is { \"op\": \"action_name\", ...action_params_minus_asset_path }. Supported ops: add_node, remove_node, connect_pins, disconnect_pins, set_pin_default, set_node_position, add_variable, remove_variable, rename_variable, set_variable_type, set_variable_defaults, add_local_variable, remove_local_variable, add_component, remove_component, rename_component, reparent_component, set_component_property, duplicate_component, add_function, remove_function, rename_function, add_macro, remove_macro, rename_macro, add_event_dispatcher, set_function_params, implement_interface, remove_interface, scaffold_interface_implementation, add_timeline, add_event_node, add_comment_node, promote_pin_to_variable, add_replicated_variable, save_asset."),
 		FMonolithActionHandler::CreateStatic(&HandleBatchExecute),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),         TEXT("string"),  TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),         TEXT("Blueprint asset path"))
 			.Required(TEXT("operations"),          TEXT("array"),   TEXT("Array of operation objects: { op, ...params }"))
 			.Optional(TEXT("compile_on_complete"), TEXT("boolean"), TEXT("Compile the Blueprint after all operations complete (default: false)"))
 			.Optional(TEXT("stop_on_error"),       TEXT("boolean"), TEXT("Stop processing on first failed operation (default: false)"))
@@ -613,7 +613,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Place multiple nodes in one transaction. Returns a temp_id -> node_id mapping so callers can immediately reference created nodes in connect_pins_bulk. Each entry: { temp_id, node_type, function_name?, target_class?, variable_name?, position? }."),
 		FMonolithActionHandler::CreateStatic(&HandleAddNodesBulk),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),  TEXT("string"),  TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),  TEXT("Blueprint asset path"))
 			.Required(TEXT("nodes"),       TEXT("array"),   TEXT("Array of node descriptors: { temp_id, node_type, function_name?, target_class?, variable_name?, position? }"))
 			.Optional(TEXT("graph_name"),  TEXT("string"),  TEXT("Graph name (defaults to EventGraph)"))
 			.Optional(TEXT("auto_layout"), TEXT("boolean"), TEXT("Auto-position nodes in a 5-column grid (200px horizontal, 100px vertical spacing). Ignored if position is set per node. Default: false."))
@@ -623,7 +623,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Wire multiple pin connections in one transaction. Each entry: { source_node, source_pin, target_node, target_pin }. Returns per-connection success/error."),
 		FMonolithActionHandler::CreateStatic(&HandleConnectPinsBulk),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),   TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),   TEXT("Blueprint asset path"))
 			.Required(TEXT("connections"),  TEXT("array"),  TEXT("Array of connection descriptors: { source_node, source_pin, target_node, target_pin }"))
 			.Optional(TEXT("graph_name"),   TEXT("string"), TEXT("Graph name (searches all graphs if omitted)"))
 			.Build());
@@ -632,7 +632,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Set multiple pin default values in one transaction. Each entry: { node_id, pin_name, value }. Returns per-entry success/error."),
 		FMonolithActionHandler::CreateStatic(&HandleSetPinDefaultsBulk),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("defaults"),   TEXT("array"),  TEXT("Array of pin default descriptors: { node_id, pin_name, value }"))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name (searches all graphs if omitted)"))
 			.Build());
@@ -643,7 +643,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a Timeline node in a Blueprint event graph. Handles both the UTimelineTemplate (data) and UK2Node_Timeline (graph node) creation with GUID linkage validation. Only works in event graphs (ubergraph pages), not function graphs."),
 		FMonolithActionHandler::CreateStatic(&HandleAddTimeline),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),    TEXT("string"),  TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),    TEXT("Blueprint asset path"))
 			.Optional(TEXT("timeline_name"), TEXT("string"),  TEXT("Timeline variable name (auto-generated if omitted)"))
 			.Optional(TEXT("graph_name"),    TEXT("string"),  TEXT("Event graph name (defaults to EventGraph)"))
 			.Optional(TEXT("auto_play"),     TEXT("boolean"), TEXT("Start playing automatically (default: false)"))
@@ -655,7 +655,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Add a native parent or implemented-interface override event node (BeginPlay, Tick, interface BlueprintEvent, etc.) or custom event to a Blueprint event graph. Alias table: BeginPlay->ReceiveBeginPlay, Tick->ReceiveTick, EndPlay->ReceiveEndPlay, BeginOverlap->ReceiveActorBeginOverlap, EndOverlap->ReceiveActorEndOverlap, Hit->ReceiveHit, Destroyed->ReceiveDestroyed, AnyDamage->ReceiveAnyDamage, PointDamage->ReceivePointDamage, RadialDamage->ReceiveRadialDamage."),
 		FMonolithActionHandler::CreateStatic(&HandleAddEventNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),  TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),  TEXT("Blueprint asset path"))
 			.Required(TEXT("event_name"),  TEXT("string"), TEXT("Event name: BeginPlay, Tick, EndPlay, BeginOverlap, EndOverlap, Hit, Destroyed, AnyDamage, PointDamage, RadialDamage, an implemented interface BlueprintEvent, or a custom event name"))
 			.Optional(TEXT("graph_name"),  TEXT("string"), TEXT("Event graph name (defaults to EventGraph)"))
 			.Optional(TEXT("position"),    TEXT("array"),  TEXT("Node position as [x, y] (default: [0, 0])"))
@@ -667,7 +667,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Add a comment box to a Blueprint graph, optionally enclosing a set of nodes. If node_ids is provided, the comment box auto-sizes to contain those nodes with 50px padding."),
 		FMonolithActionHandler::CreateStatic(&HandleAddCommentNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),  TEXT("string"),  TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),  TEXT("Blueprint asset path"))
 			.Required(TEXT("text"),        TEXT("string"),  TEXT("Comment box text"))
 			.Optional(TEXT("graph_name"),  TEXT("string"),  TEXT("Graph name (defaults to EventGraph)"))
 			.Optional(TEXT("node_ids"),    TEXT("array"),   TEXT("Array of node IDs to enclose in the comment box (auto-sizes with 50px padding)"))
@@ -685,7 +685,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		     "Float/vector/color tracks include full keyframe data (time, value, interp_mode). Event tracks include key times."),
 		FMonolithActionHandler::CreateStatic(&HandleGetTimelineData),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),     TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),     TEXT("Blueprint asset path"))
 			.Optional(TEXT("timeline_name"),  TEXT("string"), TEXT("Timeline name to query (returns all timelines if omitted)"))
 			.Build());
 
@@ -694,7 +694,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		     "Creates the backing curve object (UCurveFloat/UCurveVector/UCurveLinearColor) automatically."),
 		FMonolithActionHandler::CreateStatic(&HandleAddTimelineTrack),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),     TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),     TEXT("Blueprint asset path"))
 			.Required(TEXT("timeline_name"),  TEXT("string"), TEXT("Name of the existing timeline"))
 			.Required(TEXT("track_name"),     TEXT("string"), TEXT("Name for the new track"))
 			.Optional(TEXT("track_type"),     TEXT("string"), TEXT("Track type: float (default), vector, event, or color"))
@@ -705,7 +705,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		     "Each key: {time, value, interp_mode?}. interp_mode: linear (default), constant, or cubic."),
 		FMonolithActionHandler::CreateStatic(&HandleSetTimelineKeys),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),     TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),     TEXT("Blueprint asset path"))
 			.Required(TEXT("timeline_name"),  TEXT("string"), TEXT("Name of the timeline"))
 			.Required(TEXT("track_name"),     TEXT("string"), TEXT("Name of the float track"))
 			.Required(TEXT("keys"),           TEXT("array"),  TEXT("Array of keyframes: [{time, value, interp_mode?}]. interp_mode: linear|constant|cubic"))
@@ -719,7 +719,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		     "Container types (Array, Map, Set) are not supported in v1 — use add_variable + manual wiring instead."),
 		FMonolithActionHandler::CreateStatic(&HandlePromotePinToVariable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),     TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),     TEXT("Blueprint asset path"))
 			.Required(TEXT("node_id"),        TEXT("string"), TEXT("Node ID containing the pin to promote"))
 			.Required(TEXT("pin_name"),       TEXT("string"), TEXT("Name of the pin to promote to a variable"))
 			.Optional(TEXT("variable_name"),  TEXT("string"), TEXT("Name for the new variable (defaults to pin_name)"))
@@ -736,7 +736,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 		     "Returns node_id plus value_pin_id and target_pin_id (the object/self input the caller must wire via connect_pins to supply the instance to read/write)."),
 		FMonolithActionHandler::CreateStatic(&HandleAddPropertyAccess),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),  TEXT("string"),  TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),  TEXT("Blueprint asset path"))
 			.Required(TEXT("member_class"), TEXT("string"), TEXT("Class that owns the property (e.g. 'Item', 'UItem', 'AActor'). Resolved by string, native-first; accepts U/A prefix or bare name."), {TEXT("target_class")})
 			.Required(TEXT("member_name"), TEXT("string"),  TEXT("Name of the UPROPERTY to read/write (e.g. 'Icon')"))
 			.Optional(TEXT("graph_name"),  TEXT("string"),  TEXT("Graph name (defaults to EventGraph)"))

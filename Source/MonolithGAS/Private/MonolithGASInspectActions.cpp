@@ -35,11 +35,11 @@ void FMonolithGASInspectActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Optional(TEXT("format"), TEXT("string"), TEXT("Output format: 'json' (default)"), TEXT("json"))
 			.Optional(TEXT("include_relationships"), TEXT("boolean"), TEXT("Include cross-asset references (effect->attribute, ability->effect, cue->effect)"), TEXT("true"))
 			.Optional(TEXT("include_data_asset_profiles"), TEXT("boolean"), TEXT("Include DataAsset-driven GAS profile rows via validate_data_asset_gas_profile"), TEXT("true"))
-			.Optional(TEXT("data_asset_path_filter"), TEXT("string"), TEXT("Optional DataAsset profile path filter; defaults to path_filter or /Game"))
+			.OptionalAssetPath(TEXT("data_asset_path_filter"), TEXT("Optional DataAsset profile path filter; defaults to path_filter or /Game"))
 			.Optional(TEXT("data_asset_profile"), TEXT("object"), TEXT("Optional role -> property candidates map passed to validate_data_asset_gas_profile"))
 			.Optional(TEXT("max_data_asset_profiles"), TEXT("number"), TEXT("Maximum DataAsset profile rows to include (default 500)"), TEXT("500"))
-			.Optional(TEXT("output_path"), TEXT("string"), TEXT("File path to write manifest (default: returns inline)"))
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Restrict to assets under this path"))
+			.OptionalDiskPath(TEXT("output_path"), TEXT("File path to write manifest (default: returns inline)"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Restrict to assets under this path"))
 			.Build());
 
 	// Phase 4: Runtime Debug (PIE required)

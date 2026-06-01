@@ -25,14 +25,14 @@ void FMonolithBlueprintActions::RegisterActions()
 		TEXT("List all graphs in a Blueprint asset"),
 		FMonolithActionHandler::CreateStatic(&HandleListGraphs),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_graph_data"),
 		TEXT("Get full graph data with all nodes, pins, and connections. Optional node_class_filter to include only matching node classes."),
 		FMonolithActionHandler::CreateStatic(&HandleGetGraphData),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name (defaults to first event graph)"))
 			.Optional(TEXT("node_class_filter"), TEXT("string"), TEXT("Only include nodes whose class contains this substring"))
 			.Build());
@@ -41,7 +41,7 @@ void FMonolithBlueprintActions::RegisterActions()
 		TEXT("Get lightweight graph summary with node id/class/title and exec-only connections. Returns all graphs when graph_name is empty."),
 		FMonolithActionHandler::CreateStatic(&HandleGetGraphSummary),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name (returns all graphs when empty)"))
 			.Build());
 
@@ -49,7 +49,7 @@ void FMonolithBlueprintActions::RegisterActions()
 		TEXT("Get all variables defined in a Blueprint. Set include_bind_widgets=true on a Widget Blueprint to also enumerate, under a 'bind_widgets' array, both C++ BindWidget/BindWidgetOptional references (source=bind_widget_meta) and pure-Blueprint tree widgets exposed as variables (source=tree_variable). Neither kind appears in NewVariables."),
 		FMonolithActionHandler::CreateStatic(&HandleGetVariables),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Optional(TEXT("include_bind_widgets"), TEXT("boolean"), TEXT("Widget Blueprints only: also list designer-bound widgets in 'bind_widgets' -- C++ BindWidget refs (source=bind_widget_meta) and bIsVariable tree widgets (source=tree_variable) (default false)"))
 			.Build());
 
@@ -57,7 +57,7 @@ void FMonolithBlueprintActions::RegisterActions()
 		TEXT("Get linearized execution flow from an entry point"),
 		FMonolithActionHandler::CreateStatic(&HandleGetExecutionFlow),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("entry_point"), TEXT("string"), TEXT("Event or function entry point name"))
 			.Build());
 
@@ -65,7 +65,7 @@ void FMonolithBlueprintActions::RegisterActions()
 		TEXT("Search for nodes in a Blueprint by title or function name"),
 		FMonolithActionHandler::CreateStatic(&HandleSearchNodes),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("query"), TEXT("string"), TEXT("Search string to match against node titles and function names"))
 			.Build());
 
@@ -73,14 +73,14 @@ void FMonolithBlueprintActions::RegisterActions()
 		TEXT("Get component hierarchy for a Blueprint — names, classes, parent-child tree, attach sockets"),
 		FMonolithActionHandler::CreateStatic(&HandleGetComponents),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_component_details"),
 		TEXT("Get full property dump for a specific component in a Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleGetComponentDetails),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("component_name"), TEXT("string"), TEXT("Component variable name"))
 			.Build());
 
@@ -88,35 +88,35 @@ void FMonolithBlueprintActions::RegisterActions()
 		TEXT("Get all Blueprint-defined functions with inputs, outputs, metadata, and flags"),
 		FMonolithActionHandler::CreateStatic(&HandleGetFunctions),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_event_dispatchers"),
 		TEXT("Get all event dispatchers (multicast delegates) defined in a Blueprint with their signature pins"),
 		FMonolithActionHandler::CreateStatic(&HandleGetEventDispatchers),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_parent_class"),
 		TEXT("Get parent class info, Blueprint type, and class flags for a Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleGetParentClass),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_interfaces"),
 		TEXT("Get all interfaces implemented by a Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleGetInterfaces),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_construction_script"),
 		TEXT("Get all nodes in the Construction Script graph"),
 		FMonolithActionHandler::CreateStatic(&HandleGetConstructionScript),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("search_functions"),
@@ -134,7 +134,7 @@ void FMonolithBlueprintActions::RegisterActions()
 		TEXT("Get full pin dump for a single node by node_id. Returns same data as get_graph_data for one node, including orphaned pin flag."),
 		FMonolithActionHandler::CreateStatic(&HandleGetNodeDetails),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("node_id"),    TEXT("string"), TEXT("Node ID (from get_graph_data or add_node response)"))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name to narrow search (searches all graphs if omitted)"))
 			.Build());
@@ -152,7 +152,7 @@ void FMonolithBlueprintActions::RegisterActions()
 		TEXT("Get full signature for a single named function: inputs, outputs, flags, local variables, and source (blueprint/native/interface). Use include_inherited to also search parent class native functions."),
 		FMonolithActionHandler::CreateStatic(&HandleGetFunctionSignature),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),         TEXT("string"),  TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),         TEXT("Blueprint asset path"))
 			.Required(TEXT("function_name"),       TEXT("string"),  TEXT("Function name to look up"))
 			.Optional(TEXT("include_inherited"),   TEXT("boolean"), TEXT("Also search inherited native functions on the parent class (default: false)"))
 			.Build());
@@ -161,7 +161,7 @@ void FMonolithBlueprintActions::RegisterActions()
 		TEXT("Get full details for a single event dispatcher: signature pins plus all graph nodes that reference it (CreateDelegate, Call, Bind, Unbind)."),
 		FMonolithActionHandler::CreateStatic(&HandleGetEventDispatcherDetails),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),       TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),       TEXT("Blueprint asset path"))
 			.Required(TEXT("dispatcher_name"),  TEXT("string"), TEXT("Event dispatcher name (without _Signature suffix)"))
 			.Build());
 
@@ -169,7 +169,7 @@ void FMonolithBlueprintActions::RegisterActions()
 		TEXT("Comprehensive Blueprint overview in one call: parent class, graph names, tick/construction script presence, variable/function/component/interface counts, and compile status."),
 		FMonolithActionHandler::CreateStatic(&HandleGetBlueprintInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Build());
 }
 

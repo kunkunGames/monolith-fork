@@ -1355,7 +1355,7 @@ namespace MonolithCommonUIButton
 				 "Override via 'target_class' for project-specific subclasses. Old UButton child is NOT auto-transferred."),
 			FMonolithActionHandler::CreateStatic(&HandleConvertButtonToCommon),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Target Widget Blueprint path"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Target Widget Blueprint path"))
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of the UButton to convert"))
 				.Optional(TEXT("target_class"), TEXT("string"),
 					TEXT("Concrete UCommonButtonBase subclass to construct. Use /Script/Module.ClassName or a loaded class name. "
@@ -1368,7 +1368,7 @@ namespace MonolithCommonUIButton
 			TEXT("Set UCommonButtonBase properties: toggle, hold, dimensions, click method, disabled reason"),
 			FMonolithActionHandler::CreateStatic(&HandleConfigureCommonButton),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path"))
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of the UCommonButtonBase"))
 				.Optional(TEXT("is_toggleable"), TEXT("boolean"), TEXT("Enable toggle behavior"))
 				.Optional(TEXT("requires_hold"), TEXT("boolean"), TEXT("Require hold-to-confirm"))
@@ -1386,7 +1386,7 @@ namespace MonolithCommonUIButton
 			TEXT("Create a UCommonButtonStyle Blueprint class (class-as-data). Properties applied to CDO via reflection. Returns the _C class path for use with apply_style_to_widget."),
 			FMonolithActionHandler::CreateStatic(&HandleCreateCommonButtonStyle),
 			FParamSchemaBuilder()
-				.Required(TEXT("package_path"), TEXT("string"), TEXT("Folder, e.g. /Game/UI/Styles"))
+				.RequiredAssetPath(TEXT("package_path"), TEXT("Folder, e.g. /Game/UI/Styles"))
 				.Required(TEXT("asset_name"), TEXT("string"), TEXT("Asset name"))
 				.Optional(TEXT("properties"), TEXT("object"), TEXT("Initial property values (reflection-assigned)"))
 				.Build(),
@@ -1397,7 +1397,7 @@ namespace MonolithCommonUIButton
 			TEXT("Create a UCommonTextStyle Blueprint class (class-as-data). Properties applied to CDO via reflection. Returns the _C class path for use with apply_style_to_widget."),
 			FMonolithActionHandler::CreateStatic(&HandleCreateCommonTextStyle),
 			FParamSchemaBuilder()
-				.Required(TEXT("package_path"), TEXT("string"), TEXT("Folder path"))
+				.RequiredAssetPath(TEXT("package_path"), TEXT("Folder path"))
 				.Required(TEXT("asset_name"), TEXT("string"), TEXT("Asset name"))
 				.Optional(TEXT("properties"), TEXT("object"), TEXT("Initial property values"))
 				.Build(),
@@ -1408,7 +1408,7 @@ namespace MonolithCommonUIButton
 			TEXT("Create a UCommonBorderStyle Blueprint class (class-as-data). Properties applied to CDO via reflection. Returns the _C class path for use with apply_style_to_widget."),
 			FMonolithActionHandler::CreateStatic(&HandleCreateCommonBorderStyle),
 			FParamSchemaBuilder()
-				.Required(TEXT("package_path"), TEXT("string"), TEXT("Folder path"))
+				.RequiredAssetPath(TEXT("package_path"), TEXT("Folder path"))
 				.Required(TEXT("asset_name"), TEXT("string"), TEXT("Asset name"))
 				.Optional(TEXT("properties"), TEXT("object"), TEXT("Initial property values"))
 				.Build(),
@@ -1419,7 +1419,7 @@ namespace MonolithCommonUIButton
 			TEXT("Assign a UCommonButtonStyle / UCommonTextStyle / UCommonBorderStyle class to a widget in a WBP"),
 			FMonolithActionHandler::CreateStatic(&HandleApplyStyleToWidget),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path"))
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of widget to style"))
 				.Required(TEXT("style_asset"), TEXT("string"), TEXT("Style class path (usually ends with _C)"))
 				.Build(),
@@ -1430,7 +1430,7 @@ namespace MonolithCommonUIButton
 			TEXT("Scan a folder of WBPs and swap one style class reference for another (theme-swap)"),
 			FMonolithActionHandler::CreateStatic(&HandleBatchRetheme),
 			FParamSchemaBuilder()
-				.Required(TEXT("folder_path"), TEXT("string"), TEXT("Folder to scan (e.g. /Game/UI)"))
+				.RequiredAssetPath(TEXT("folder_path"), TEXT("Folder to scan (e.g. /Game/UI)"))
 				.Required(TEXT("old_style"), TEXT("string"), TEXT("Old style class path"))
 				.Required(TEXT("new_style"), TEXT("string"), TEXT("New style class path"))
 				.Build(),
@@ -1441,7 +1441,7 @@ namespace MonolithCommonUIButton
 			TEXT("Configure UCommonTextBlock: wrap, case, line-height, scroll, mobile multiplier"),
 			FMonolithActionHandler::CreateStatic(&HandleConfigureCommonText),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path"))
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of UCommonTextBlock"))
 				.Optional(TEXT("wrap_text_width"), TEXT("number"), TEXT("Wrap width (px)"))
 				.Optional(TEXT("line_height_percentage"), TEXT("number"), TEXT("Line height as fraction (1.0 = default)"))
@@ -1456,7 +1456,7 @@ namespace MonolithCommonUIButton
 			TEXT("Configure UCommonBorder: reduce_padding_by_safezone, minimum_padding"),
 			FMonolithActionHandler::CreateStatic(&HandleConfigureCommonBorder),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path"))
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of UCommonBorder"))
 				.Optional(TEXT("reduce_padding_by_safezone"), TEXT("boolean"), TEXT("Honor platform safe-zone"))
 				.Optional(TEXT("minimum_padding"), TEXT("string"), TEXT("FMargin text format, e.g. '(Left=0,Top=0,Right=0,Bottom=0)'"))
@@ -1476,7 +1476,7 @@ namespace MonolithCommonUIButton
 				 "-32012 with error.data.status='not_implemented' so callers cannot mistake it for a committed binding."),
 			FMonolithActionHandler::CreateStatic(&HandleApplyTokenBinding),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path (alias: asset_path)"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path (alias: asset_path)"))
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Target widget FName"))
 				.Required(TEXT("target_property"), TEXT("string"), TEXT("UPROPERTY name on the widget to drive from the token"))
 				.Required(TEXT("token_key"), TEXT("string"), TEXT("Tokenforge token identifier (e.g. 'color.surface.default')"))
@@ -1495,7 +1495,7 @@ namespace MonolithCommonUIButton
 				 "chain apply_style_to_widget with a UCommonTextStyle reference to complete the rethemed migration."),
 			FMonolithActionHandler::CreateStatic(&HandleConvertTextBlockToCommon),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path"))
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of the UTextBlock to convert"))
 				.Build(),
 			Cat);
@@ -1516,7 +1516,7 @@ namespace MonolithCommonUIButton
 				 "/Script/Module.ClassName path, or registered native class name."),
 			FMonolithActionHandler::CreateStatic(&HandleSetActionBarButtonClass),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path"))
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of the UCommonBoundActionBar"))
 				.Required(TEXT("button_class"), TEXT("string"), TEXT("UCommonButtonBase subclass path (e.g. /Game/UI/BP_MyButton.BP_MyButton_C)"))
 				.Build(),
@@ -1532,7 +1532,7 @@ namespace MonolithCommonUIButton
 				 "is needed. Chain apply_style_to_widget with a UCommonBorderStyle to finish the rethemed migration."),
 			FMonolithActionHandler::CreateStatic(&HandleConvertBorderToCommon),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path (alias: asset_path)"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path (alias: asset_path)"))
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of the UBorder to convert"))
 				.Build(),
 			Cat);
@@ -1548,7 +1548,7 @@ namespace MonolithCommonUIButton
 				 "children onto the new root. new_class must be a concrete UPanelWidget subclass."),
 			FMonolithActionHandler::CreateStatic(&HandleReparentWidgetRoot),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path (alias: asset_path)"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path (alias: asset_path)"))
 				.Required(TEXT("new_class"), TEXT("string"), TEXT("New root class (UPanelWidget subclass) resolved by string"))
 				.Build(),
 			Cat);

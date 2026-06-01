@@ -292,7 +292,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Create a new MetaSound Source asset with standard interfaces"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::CreateMetaSoundSource),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Audio/MS_Gunshot)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path (e.g. /Game/Audio/MS_Gunshot)"))
 			.Optional(TEXT("format"), TEXT("string"), TEXT("Output format: Mono or Stereo"), TEXT("Mono"))
 			.Optional(TEXT("one_shot"), TEXT("boolean"), TEXT("Whether this is a one-shot sound (adds OnFinished)"), TEXT("true"))
 			.Build());
@@ -301,14 +301,14 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Create a new MetaSound Patch asset (processing graph, no audio output)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::CreateMetaSoundPatch),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Audio/MSP_Filter)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path (e.g. /Game/Audio/MSP_Filter)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("add_metasound_node"),
 		TEXT("Add a node to an existing MetaSound by class name"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::AddMetaSoundNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("node_class"), TEXT("array"), TEXT("Node class as [Namespace, Name, Variant], e.g. [\"UE\", \"Sine\", \"Audio\"]"))
 			.Optional(TEXT("node_id"), TEXT("string"), TEXT("User-assigned label. When set, registers an alias so subsequent calls (remove/connect/find_inputs/etc.) can pass this label instead of the GUID."))
 			.Build());
@@ -317,7 +317,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Remove a node from a MetaSound graph"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::RemoveMetaSoundNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("node_id_or_handle"), TEXT("string"), TEXT("Node GUID or user label"))
 			.Build());
 
@@ -325,7 +325,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Connect two nodes in a MetaSound graph by name"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::ConnectMetaSoundNodes),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("from_node"), TEXT("string"), TEXT("Source node GUID or graph input/output name"))
 			.Required(TEXT("from_output"), TEXT("string"), TEXT("Output pin name on source node"))
 			.Required(TEXT("to_node"), TEXT("string"), TEXT("Destination node GUID or graph input/output name"))
@@ -336,7 +336,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Disconnect two nodes in a MetaSound graph"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::DisconnectMetaSoundNodes),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("from_node"), TEXT("string"), TEXT("Source node GUID"))
 			.Required(TEXT("from_output"), TEXT("string"), TEXT("Output pin name"))
 			.Required(TEXT("to_node"), TEXT("string"), TEXT("Destination node GUID"))
@@ -347,7 +347,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Add a graph-level input to a MetaSound"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::AddMetaSoundInput),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Input name"))
 			.Required(TEXT("data_type"), TEXT("string"), TEXT("Data type: Float, Int32, Bool, String, Trigger, Time, Audio, WaveAsset"))
 			.Optional(TEXT("default_value"), TEXT("any"), TEXT("Default value for the input"))
@@ -357,7 +357,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Add a graph-level output to a MetaSound"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::AddMetaSoundOutput),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Output name"))
 			.Required(TEXT("data_type"), TEXT("string"), TEXT("Data type: Float, Int32, Bool, String, Trigger, Time, Audio, WaveAsset"))
 			.Build());
@@ -366,7 +366,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Set the default value of a graph input on a MetaSound"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::SetMetaSoundInputDefault),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("input_name"), TEXT("string"), TEXT("Name of the graph input"))
 			.Required(TEXT("value"), TEXT("any"), TEXT("New default value"))
 			.Build());
@@ -375,7 +375,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Add a standard interface to a MetaSound (e.g. UE.Source, UE.OutputFormat.Mono)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::AddMetaSoundInterface),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("interface_name"), TEXT("string"), TEXT("Interface name (e.g. UE.Source, UE.Source.OneShot, UE.OutputFormat.Mono, UE.OutputFormat.Stereo)"))
 			.Build());
 
@@ -383,14 +383,14 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Get the full graph of a MetaSound as JSON (nodes, edges, inputs, outputs, interfaces)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::GetMetaSoundGraph),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("list_metasound_connections"),
 		TEXT("List all connections in a MetaSound graph"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::ListMetaSoundConnections),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Build());
 
 	// ---- Query & Discovery (5) ----
@@ -415,7 +415,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Get all input pins of a node in a MetaSound graph"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::FindMetaSoundNodeInputs),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("node_id_or_handle"), TEXT("string"), TEXT("Node GUID or graph I/O name"))
 			.Build());
 
@@ -423,7 +423,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Get all output pins of a node in a MetaSound graph"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::FindMetaSoundNodeOutputs),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("node_id_or_handle"), TEXT("string"), TEXT("Node GUID or graph I/O name"))
 			.Build());
 
@@ -431,7 +431,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Get all graph-level input names and types from a MetaSound"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::GetMetaSoundInputNames),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Build());
 
 	// ---- Build & Templates (8) ----
@@ -440,7 +440,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Build a complete MetaSound from a JSON spec (interfaces, inputs, nodes, connections) in one call"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new MetaSound"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new MetaSound"))
 			.Required(TEXT("spec"), TEXT("object"), TEXT("Full MetaSound specification: {type, format, one_shot, interfaces, inputs, outputs, nodes, connections, graph_input_connections, interface_connections}"))
 			.Optional(TEXT("strict_mode"), TEXT("boolean"), TEXT("If true, abort with error (no save) when any node/connection/input is skipped"), TEXT("false"))
 			.Build());
@@ -449,7 +449,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Create a MetaSound preset referencing an existing MetaSound"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::CreateMetaSoundPreset),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new preset"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new preset"))
 			.Required(TEXT("reference_metasound"), TEXT("string"), TEXT("Asset path of the MetaSound to reference"))
 			.Build());
 
@@ -457,7 +457,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Create a simple one-shot MetaSound: WavePlayer -> Audio Output"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::CreateOneShotSfx),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new MetaSound"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new MetaSound"))
 			.Required(TEXT("sound_wave"), TEXT("string"), TEXT("Path to the SoundWave asset"))
 			.Build());
 
@@ -465,7 +465,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Create a looping ambient MetaSound with LFO modulation and random pitch"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::CreateLoopingAmbientMetaSound),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new MetaSound"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new MetaSound"))
 			.Required(TEXT("sound_wave"), TEXT("string"), TEXT("Path to the SoundWave asset"))
 			.Optional(TEXT("lfo_frequency"), TEXT("number"), TEXT("LFO frequency in Hz (default: 0.25)"), TEXT("0.25"))
 			.Optional(TEXT("pitch_range"), TEXT("array"), TEXT("Pitch range [min, max] (default: [0.95, 1.05])"))
@@ -475,7 +475,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Create a synthesized tone MetaSound: Oscillator -> Filter -> ADSR -> Output"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::CreateSynthesizedTone),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new MetaSound"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new MetaSound"))
 			.Optional(TEXT("oscillator_type"), TEXT("string"), TEXT("Oscillator type: Sine, Saw, or Square (default: Sine)"), TEXT("Sine"))
 			.Optional(TEXT("frequency"), TEXT("number"), TEXT("Base frequency in Hz (default: 440.0)"), TEXT("440.0"))
 			.Optional(TEXT("adsr"), TEXT("object"), TEXT("ADSR envelope: {attack, decay, sustain, release} in seconds/level"))
@@ -485,7 +485,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Create a parameter-driven interactive MetaSound with crossfade between sound waves"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::CreateInteractiveMetaSound),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new MetaSound"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new MetaSound"))
 			.Required(TEXT("sound_waves"), TEXT("array"), TEXT("Array of SoundWave asset paths"))
 			.Optional(TEXT("parameter_name"), TEXT("string"), TEXT("Name of the blend parameter (default: BlendAmount)"), TEXT("BlendAmount"))
 			.Optional(TEXT("blend_type"), TEXT("string"), TEXT("Blend type: Crossfade or Switch (default: Crossfade)"), TEXT("Crossfade"))
@@ -495,7 +495,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Add a graph variable to a MetaSound with optional Get/Set nodes"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::AddMetaSoundVariable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Variable name"))
 			.Required(TEXT("data_type"), TEXT("string"), TEXT("Data type: Float, Int32, Bool, String"))
 			.Optional(TEXT("default_value"), TEXT("any"), TEXT("Default value"))
@@ -505,7 +505,7 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Set the visual position of a node in the MetaSound editor graph"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::SetMetaSoundNodeLocation),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("node_id_or_handle"), TEXT("string"), TEXT("Node GUID or graph I/O name"))
 			.Required(TEXT("x"), TEXT("number"), TEXT("X position"))
 			.Required(TEXT("y"), TEXT("number"), TEXT("Y position"))

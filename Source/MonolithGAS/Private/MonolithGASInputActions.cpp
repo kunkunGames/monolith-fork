@@ -28,7 +28,7 @@ void FMonolithGASInputActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Configure how abilities are bound to input on an actor Blueprint. Creates the binding infrastructure for the chosen mode."),
 		FMonolithActionHandler::CreateStatic(&HandleSetupAbilityInputBinding),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_path"), TEXT("string"), TEXT("Blueprint asset path of the actor to configure"))
+			.RequiredAssetPath(TEXT("actor_path"), TEXT("Blueprint asset path of the actor to configure"))
 			.Required(TEXT("binding_mode"), TEXT("string"), TEXT("Binding mode: 'input_id', 'gameplay_tag', or 'enhanced_input'"))
 			.Build());
 
@@ -36,7 +36,7 @@ void FMonolithGASInputActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Bind a gameplay ability to an input action or input ID"),
 		FMonolithActionHandler::CreateStatic(&HandleBindAbilityToInput),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_path"), TEXT("string"), TEXT("Blueprint asset path of the actor"))
+			.RequiredAssetPath(TEXT("actor_path"), TEXT("Blueprint asset path of the actor"))
 			.Required(TEXT("ability_class"), TEXT("string"), TEXT("Path to the GameplayAbility Blueprint class"))
 			.Required(TEXT("input_action"), TEXT("string"), TEXT("UInputAction asset path (for enhanced_input) or integer input ID"))
 			.Optional(TEXT("trigger_event"), TEXT("string"), TEXT("Trigger event: 'started', 'triggered', or 'completed' (default: started)"), TEXT("started"))
@@ -47,7 +47,7 @@ void FMonolithGASInputActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Bind multiple abilities to inputs in a single call. Each binding specifies ability_class, input_action, and optional trigger_event."),
 		FMonolithActionHandler::CreateStatic(&HandleBatchBindAbilities),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_path"), TEXT("string"), TEXT("Blueprint asset path of the actor"))
+			.RequiredAssetPath(TEXT("actor_path"), TEXT("Blueprint asset path of the actor"))
 			.Required(TEXT("bindings"), TEXT("array"), TEXT("Array of binding objects: [{ability_class, input_action, trigger_event?}]"))
 			.Build());
 
@@ -55,14 +55,14 @@ void FMonolithGASInputActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("List all ability-to-input bindings on an actor Blueprint. Inspects the ASC's default ability specs and input-related CDO properties."),
 		FMonolithActionHandler::CreateStatic(&HandleGetAbilityInputBindings),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_path"), TEXT("string"), TEXT("Blueprint asset path of the actor"))
+			.RequiredAssetPath(TEXT("actor_path"), TEXT("Blueprint asset path of the actor"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("gas"), TEXT("scaffold_input_binding_component"),
 		TEXT("Generate a C++ header+source for an AbilityInputBindingComponent that bridges Enhanced Input to ASC activation"),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldInputBindingComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_path"), TEXT("string"), TEXT("Blueprint asset path of the actor (for context)"))
+			.RequiredAssetPath(TEXT("actor_path"), TEXT("Blueprint asset path of the actor (for context)"))
 			.Required(TEXT("input_config"), TEXT("object"), TEXT("Config: { component_name?, module_name?, binding_mode? }"))
 			.Build());
 }

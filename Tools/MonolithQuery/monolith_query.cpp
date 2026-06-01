@@ -25,6 +25,7 @@
 #include <ctime>
 #include <chrono>
 #include <cctype>
+#include <cstdint>
 #include <iomanip>
 #include <mutex>
 #include <stdexcept>
@@ -512,6 +513,82 @@ static json argv_json(int argc, char* argv[]) {
     return redact_json(out);
 }
 
+// ============================================================
+// Fuzzy match — ports MonolithFuzzyMatchDetail::ScoreFuzzyMatches
+// (Source/MonolithCore/Private/MonolithFuzzyMatch.cpp). The live version uses
+// Algo::LevenshteinDistance (a UE dependency this standalone tool cannot link),
+// so the distance is reimplemented inline. Score = 1 - dist/maxLen, top-N
+// descending, stable sort on ties — behaviourally identical to the live matcher
+// and the Python port in monolith_offline.py.
+// ============================================================
+
+static int levenshtein(const std::string& a, const std::string& b) {
+    if (a == b) return 0;
+    if (a.empty()) return (int)b.size();
+    if (b.empty()) return (int)a.size();
+
+    std::vector<int> prev(b.size() + 1);
+    for (size_t j = 0; j <= b.size(); ++j) prev[j] = (int)j;
+
+    for (size_t i = 1; i <= a.size(); ++i) {
+        std::vector<int> cur(b.size() + 1);
+        cur[0] = (int)i;
+        for (size_t j = 1; j <= b.size(); ++j) {
+            int cost = (a[i - 1] == b[j - 1]) ? 0 : 1;
+            cur[j] = std::min({prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost});
+        }
+        prev = std::move(cur);
+    }
+    return prev[b.size()];
+}
+
+// Return up to top_n keys ranked by Levenshtein-normalised score descending.
+static std::vector<std::string> fuzzy_top(const std::string& needle,
+                                          const std::vector<std::string>& keys,
+                                          int top_n = 3) {
+    if (needle.empty() || keys.empty() || top_n <= 0) return {};
+
+    std::vector<std::pair<float, std::string>> scored;
+    scored.reserve(keys.size());
+    for (const auto& k : keys) {
+        int dist = levenshtein(needle, k);
+        int max_len = std::max((int)needle.size(), (int)k.size());
+        float worst = max_len > 0 ? (float)max_len : 1.0f;
+        float score = 1.0f - ((float)dist / worst);
+        scored.emplace_back(score, k);
+    }
+    // Stable sort descending by score — preserves insertion order on ties.
+    std::stable_sort(scored.begin(), scored.end(),
+                     [](const auto& x, const auto& y) { return x.first > y.first; });
+
+    std::vector<std::string> out;
+    int take = std::min(top_n, (int)scored.size());
+    out.reserve(take);
+    for (int i = 0; i < take; ++i) out.push_back(scored[i].second);
+    return out;
+}
+
+static std::string did_you_mean_suffix(const std::string& needle,
+                                       const std::vector<std::string>& keys) {
+    auto sugg = fuzzy_top(needle, keys, 3);
+    if (sugg.empty()) return "";
+    std::string s = " did_you_mean: ";
+    for (size_t i = 0; i < sugg.size(); ++i) {
+        if (i > 0) s += ", ";
+        s += sugg[i];
+    }
+    return s;
+}
+
+// Namespaces this OFFLINE tool can serve from on-disk SQLite. The live MCP
+// server exposes ~29; the rest are LIVE-ONLY (require a running editor).
+static const std::vector<std::string>& offline_namespaces() {
+    static const std::vector<std::string> ns = {
+        "source", "project", "monolith", "cppreflect", "network", "decision", "risk"
+    };
+    return ns;
+}
+
 // FTS5 query escaping — mirrors Python escape_fts() and C++ EscapeFTS()
 static std::string escape_fts(const std::string& query) {
     // Replace :: with space (C++ qualified names)
@@ -727,9 +804,17 @@ private:
     }
 };
 
-// Simple row type: vector of (column_name, value) pairs
+// Simple row type: vector of (column_name, value) pairs.
+//
+// `cols` holds the TEXT rendering of every column (sqlite3_column_text). For
+// REAL/numeric columns we ALSO capture the native double (sqlite3_column_double)
+// in `doubles`, because SQLite's text rendering of a double is only ~15
+// significant digits — e.g. confidence 0.6499999761581421 renders as the lossy
+// "0.649999976158142". get_double() prefers the native double so nlohmann emits
+// the 16-digit shortest-round-trip form that the Python sibling / live produce.
 struct Row {
     std::map<std::string, std::string> cols;
+    std::map<std::string, double> doubles;   // only populated for REAL columns
 
     std::string get(const std::string& key, const std::string& def = "") const {
         auto it = cols.find(key);
@@ -751,6 +836,10 @@ struct Row {
     }
 
     double get_double(const std::string& key, double def = 0.0) const {
+        // Prefer the native double captured from sqlite3_column_double — full
+        // precision, no text round-trip loss.
+        auto dit = doubles.find(key);
+        if (dit != doubles.end()) return dit->second;
         auto it = cols.find(key);
         if (it == cols.end() || it->second.empty()) return def;
         try { return std::stod(it->second); }
@@ -759,6 +848,57 @@ struct Row {
 };
 
 using Rows = std::vector<Row>;
+
+// A single bind parameter that carries its SQLite storage class. Most RI
+// queries bind everything as TEXT (fine: SQLite applies the COLUMN's numeric
+// affinity to coerce the TEXT operand for `col <op> ?` comparisons). BUT when
+// the left side is a no-affinity expression — e.g. the scalar subquery
+// `MAX(c2.last_touched)` in get_release_window_hotspots — SQLite applies NO
+// conversion and compares storage classes directly. An INTEGER column value
+// always sorts BEFORE a TEXT value, so `INTEGER >= '173...'` is ALWAYS false →
+// the prior exe returned 0 rows while the Python sibling / live (which bind an
+// int64) returned the real set (BUG 3). Binding such params as INTEGER fixes it.
+struct Bind {
+    enum class Kind { Text, Int } kind = Kind::Text;
+    std::string text;
+    int64_t i = 0;
+
+    Bind(const std::string& s) : kind(Kind::Text), text(s) {}
+    Bind(const char* s) : kind(Kind::Text), text(s ? s : "") {}
+    static Bind Integer(int64_t v) { Bind b(""); b.kind = Kind::Int; b.i = v; return b; }
+};
+
+static Rows query_typed(Database& db, const std::string& sql, const std::vector<Bind>& params) {
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(db.db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::string err = sqlite3_errmsg(db.db);
+        std::cerr << "[query error] " << err << "\n  SQL: " << sql.substr(0, 200) << std::endl;
+        return {};
+    }
+    for (int i = 0; i < (int)params.size(); ++i) {
+        if (params[i].kind == Bind::Kind::Int)
+            sqlite3_bind_int64(stmt, i + 1, params[i].i);
+        else
+            sqlite3_bind_text(stmt, i + 1, params[i].text.c_str(), -1, SQLITE_TRANSIENT);
+    }
+    Rows rows;
+    int ncols = sqlite3_column_count(stmt);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        Row row;
+        for (int c = 0; c < ncols; ++c) {
+            const char* name = sqlite3_column_name(stmt, c);
+            std::string key = name ? name : "";
+            if (sqlite3_column_type(stmt, c) == SQLITE_FLOAT)
+                row.doubles[key] = sqlite3_column_double(stmt, c);
+            const char* val = (const char*)sqlite3_column_text(stmt, c);
+            row.cols[key] = val ? val : "";
+        }
+        rows.push_back(std::move(row));
+    }
+    sqlite3_finalize(stmt);
+    return rows;
+}
 
 static Rows query(Database& db, const std::string& sql, const std::vector<std::string>& params = {}) {
     sqlite3_stmt* stmt = nullptr;
@@ -779,8 +919,14 @@ static Rows query(Database& db, const std::string& sql, const std::vector<std::s
         Row row;
         for (int c = 0; c < ncols; ++c) {
             const char* name = sqlite3_column_name(stmt, c);
+            std::string key = name ? name : "";
+            // Capture native double for REAL columns BEFORE column_text (which
+            // mutates the column's type via SQLite's type-coercion rules). This
+            // preserves shortest-round-trip precision for confidence/score/etc.
+            if (sqlite3_column_type(stmt, c) == SQLITE_FLOAT)
+                row.doubles[key] = sqlite3_column_double(stmt, c);
             const char* val = (const char*)sqlite3_column_text(stmt, c);
-            row.cols[name ? name : ""] = val ? val : "";
+            row.cols[key] = val ? val : "";
         }
         rows.push_back(std::move(row));
     }
@@ -2992,26 +3138,69 @@ static Args parse_args(int argc, char* argv[]) {
                   << "  diff_snapshots <before> [after] [--before=label-or-id] [--after=label-or-id|current] [--limit=N]\n"
                   << "\nMonolith actions:\n"
                   << "  guide [--section=NAME]   (NAME: onboarding|recipes|decisions|errors|skills_map|gotchas)\n"
+                  << "\nReflection Intelligence (read EngineSource.db reflect_* tables; FULL parity):\n"
+                  << "  cppreflect get_uclass <class_name> [--module_name=M] | list_uproperties [--class_name=C]\n"
+                  << "             [--blueprint_visible_only] | list_ufunctions [--class_name=C] [--blueprint_callable_only]\n"
+                  << "             | find_interface_impls <interface_name> | find_class_specifier <specifier_name>\n"
+                  << "             | list_class_specifiers\n"
+                  << "  network    list_replicated_classes | list_rpc_functions [--class_name=C] [--rpc_kind=K]\n"
+                  << "             | list_onrep_handlers [--class_name=C] | audit_unbalanced_onreps\n"
+                  << "  decision   list_decisions [--path_filter=P] [--min_confidence=N] [--status=S]\n"
+                  << "             | get_decision <decision_id> | list_stale --max_age_days=N [--path_filter=P]\n"
+                  << "             | find_supersession_chain <decision_id> [--depth=N] | find_referent_decisions <decision_id>\n"
+                  << "  risk       get_hotspot_score <file_path> | get_cochange_pairs <file_path>\n"
+                  << "             | get_file_churn <file_path> [--repo_tag=R] | get_release_window_hotspots [--since_unix=N]\n"
+                  << "             | list_conditional_gates [--macro_filter=M] [--path_filter=P]\n"
+                  << "  (all paginated actions accept [--limit=N] [--cursor=B64].  --version prints the build stamp.)\n"
                   << "\nDB options (rare):\n"
                   << "  The default DBs are resolved from the executable location: Saved/EngineSource.db for source,\n"
                   << "  Saved/ProjectIndex.db for project, and both DBs for bridge. Default lookup commands use those paths with no DB override.\n"
                   << "  Overrides accept --db=<SavedDir>, --db <SavedDir>, or a concrete .db file path.\n"
                   << "  Namespace-specific overrides are --source-db=<path> and --project-db=<path>.\n"
-                  << "  source CRG graph overrides are --graph-db=<path>; the default is Saved/graph.db.\n";
+                  << "  source CRG graph overrides are --graph-db=<path>; the default is Saved/graph.db.\n"
+                  << "\nNOTE: only namespaces backed by on-disk SQLite are servable offline. The live\n"
+                  << "MCP server exposes ~29 namespaces; the rest are LIVE-ONLY (need a running editor).\n";
         throw QueryFatal("", 1, true);
     }
 
     args.ns = argv[1];
     args.action = argv[2];
 
+    // Options that take a VALUE. When written in space-separated form
+    // (`--limit 5` rather than `--limit=5`) the NEXT token is the value and
+    // must NOT be misread as a positional. The Python sibling (argparse) and
+    // the live server both accept the space form; the prior exe only handled
+    // `--key=value`, so `--limit 5` silently fell back to the hardcoded
+    // default and `5` leaked into positional[] (BUG 1). Flag-style options
+    // (store_true: --no-header, --blueprint_visible_only, etc.) are NOT in
+    // this set and never consume the following token.
+    static const std::set<std::string> value_options = {
+        // source.*
+        "scope", "limit", "module", "kind", "max_lines", "ref_kind",
+        "direction", "depth", "context_lines", "start", "end",
+        // project.*
+        "offset",
+        // monolith.guide
+        "section",
+        // RI shared
+        "cursor", "module_name", "class_name", "rpc_kind", "path_filter",
+        "min_confidence", "status", "max_age_days", "since_unix", "repo_tag",
+        "macro_filter", "specifier_name", "interface_name", "decision_id",
+        "file_path",
+        // db overrides
+        "db", "source_db", "project_db",
+    };
+
     for (int i = 3; i < argc; ++i) {
         std::string a = argv[i];
         if (a.substr(0, 2) == "--") {
             std::string key, val;
             auto eq = a.find('=');
+            bool had_inline_value = false;
             if (eq != std::string::npos) {
                 key = a.substr(2, eq - 2);
                 val = a.substr(eq + 1);
+                had_inline_value = true;
             } else {
                 key = a.substr(2);
                 // Keep legacy flag-style parsing, but allow DB path options to
@@ -3028,6 +3217,19 @@ static Args parse_args(int argc, char* argv[]) {
             }
             // Normalize hyphens to underscores for consistency
             std::replace(key.begin(), key.end(), '-', '_');
+
+            // Space-separated value form: `--key VALUE`. Only consume the
+            // following token for known value-taking options, and only when
+            // it is not itself another `--option`. This preserves flag-style
+            // options (which legitimately precede a positional arg).
+            if (!had_inline_value && value_options.count(key) &&
+                i + 1 < argc) {
+                std::string nxt = argv[i + 1];
+                if (nxt.substr(0, 2) != "--") {
+                    val = nxt;
+                    ++i;  // consume the value token
+                }
+            }
             args.options[key] = val;
         } else {
             args.positional.push_back(a);
@@ -6902,6 +7104,1435 @@ public:
 };
 
 // ============================================================
+// Reflection Intelligence shared infra — base64, cursor codec, filter hash
+//
+// FULL OFFLINE PARITY (20 RI actions across cppreflect/network/decision/risk).
+// Authoritative reference: Docs/plans/offline-parity-spec.md. Every field NAME,
+// TYPE (bool vs int!), ORDER, wrapper shape, ORDER BY, and default filter is
+// pinned by that spec; a downstream HARD-GATE parity test byte-diffs this exe's
+// output against the Python sibling (Scripts/monolith_offline.py) and the live
+// server. KEY ORDER MATTERS — UE FJsonObject serializes in insertion order, so
+// all RI JSON below uses nlohmann::ordered_json (insertion-order preserving),
+// NOT the default json (which sorts keys alphabetically). The source.* and
+// project.* actions above are intentionally left on default json — out of scope.
+// ============================================================
+
+using ojson = nlohmann::ordered_json;
+
+static std::string to_lower_copy(std::string s) {
+    return lower_copy(s);
+}
+
+// PARITY_SPEC_REV — the agreed parity-rev string. Both this exe and the Python
+// sibling mirror this literal so an external parity guard can assert exe and py
+// report the same rev (and thus implement the same spec snapshot). Bump in BOTH
+// implementers whenever offline-parity-spec.md changes shape.
+static const char* PARITY_SPEC_REV = "2026-05-29.1";
+
+// SOURCE_HASH — optionally injected by the build (e.g. /DSOURCE_HASH="...") so
+// the orchestrator's staleness guard can detect a stale exe vs source. Defaults
+// to "dev" when not injected.
+#ifndef SOURCE_HASH
+#define SOURCE_HASH "dev"
+#endif
+
+// ---- Standard base64 (RFC 4648, '+' '/' '=' padding) — matches UE FBase64. ----
+static const char kB64Chars[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static std::string base64_encode(const std::string& in) {
+    std::string out;
+    out.reserve(((in.size() + 2) / 3) * 4);
+    size_t i = 0;
+    while (i + 2 < in.size()) {
+        unsigned n = (unsigned char)in[i] << 16 | (unsigned char)in[i + 1] << 8 | (unsigned char)in[i + 2];
+        out += kB64Chars[(n >> 18) & 63];
+        out += kB64Chars[(n >> 12) & 63];
+        out += kB64Chars[(n >> 6) & 63];
+        out += kB64Chars[n & 63];
+        i += 3;
+    }
+    size_t rem = in.size() - i;
+    if (rem == 1) {
+        unsigned n = (unsigned char)in[i] << 16;
+        out += kB64Chars[(n >> 18) & 63];
+        out += kB64Chars[(n >> 12) & 63];
+        out += "==";
+    } else if (rem == 2) {
+        unsigned n = (unsigned char)in[i] << 16 | (unsigned char)in[i + 1] << 8;
+        out += kB64Chars[(n >> 18) & 63];
+        out += kB64Chars[(n >> 12) & 63];
+        out += kB64Chars[(n >> 6) & 63];
+        out += '=';
+    }
+    return out;
+}
+
+// Returns false on malformed input (used to flag INVALID_CURSOR).
+static bool base64_decode(const std::string& in, std::string& out) {
+    auto val = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+') return 62;
+        if (c == '/') return 63;
+        return -1;
+    };
+    out.clear();
+    int buf = 0, bits = 0;
+    for (char c : in) {
+        if (c == '=') break;
+        if (c == '\r' || c == '\n') continue;
+        int v = val(c);
+        if (v < 0) return false;
+        buf = (buf << 6) | v;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out += (char)((buf >> bits) & 0xFF);
+        }
+    }
+    return true;
+}
+
+// ---- UE-style string + combine hashing (for ComputeFilterHash). ----
+//
+// The HARD-GATE parity guard byte-diffs `next_cursor`, which embeds the filter
+// hash `qh`. So these MUST be a step-for-step port of the live UE hash funcs
+// (validated against the live editor in offline-byte-parity-addendum.md §3):
+//   GetTypeHash(const FString&) -> FCrc::Strihash_DEPRECATED(Len, *S)  (UnrealString.h.inl:2176)
+//   GetTypeHash(double)         -> (uint32)v + ((uint32)(v>>32))*23
+//   HashCombine(A, C)           -> full Bob-Jenkins mix (TypeHash.h:36-52)
+//
+// ROOT-CAUSE FIX (addendum §3): GetTypeHash(FString) is NOT FCrc::StrCrc32
+// (reflected CRC-32). It is FCrc::Strihash_DEPRECATED — a CASE-INSENSITIVE hash
+// over WIDECHAR using a FORWARD (non-reflected) CRC-32 table (CRCTable_DEPRECATED,
+// poly 0x04C11DB7), processing each UTF-16 code unit as lo-byte THEN hi-byte,
+// with ToUpper applied per char. The prior StrCrc32 port produced wrong `qh`
+// values. ue_hash_combine and ue_hash_double were already correct and are kept.
+
+// FCrc::CRCTable_DEPRECATED[256] (Crc.cpp:40) — the FORWARD CRC-32 table:
+//   c = i << 24; repeat 8x: c = (c<<1) ^ (poly if top bit set, else 0).
+// Sanity (addendum §3): t[0]=0x00000000, t[1]=0x04C11DB7, t[255]=0xB1F740B4.
+static const uint32_t (&strihash_table())[256] {
+    static uint32_t t[256];
+    static bool init = false;
+    if (!init) {
+        for (uint32_t i = 0; i < 256; ++i) {
+            uint32_t c = (i << 24) & 0xFFFFFFFFu;
+            for (int k = 0; k < 8; ++k)
+                c = (c & 0x80000000u) ? (((c << 1) ^ 0x04C11DB7u) & 0xFFFFFFFFu)
+                                      : ((c << 1) & 0xFFFFFFFFu);
+            t[i] = c;
+        }
+        init = true;
+    }
+    return t;
+}
+
+// ASCII ToUpper over a 16-bit code unit (UE FChar::ToUpper for BMP a-z; the RI
+// filter inputs — class names, paths, stringified ints, "0"/"1"/"__stale__" —
+// are all ASCII, so case-folding only matters in the a-z range here).
+static uint16_t widechar_to_upper(uint16_t cu) {
+    if (cu >= (uint16_t)'a' && cu <= (uint16_t)'z') return (uint16_t)(cu - 32);
+    return cu;
+}
+
+// FCrc::Strihash_DEPRECATED(Len, *S) over WIDECHAR (Crc.h:195) ==
+// GetTypeHash(const FString&). Case-insensitive (ToUpper per char), each UTF-16
+// code unit fed lo-byte THEN hi-byte through the forward table. Empty -> 0.
+// ASCII bytes map 1:1 to UTF-16 code units (value == byte), matching the live
+// FString contents for all RI filter inputs. Validated qh values in addendum §3:
+// Strihash("ALeviathanCharacterBase") chain -> 2954246778; Strihash("Blueprintable")
+// -> 1087131954 (== "blueprintable", proving case-insensitivity).
+static uint32_t ue_str_crc32(const std::string& s) {
+    const auto& t = strihash_table();
+    uint32_t h = 0;
+    for (unsigned char b : s) {
+        uint16_t cu = widechar_to_upper((uint16_t)b);
+        uint16_t lo = cu & 0xFF;
+        h = ((h >> 8) & 0x00FFFFFFu) ^ t[(h ^ lo) & 0xFFu];
+        uint16_t hi = (cu >> 8) & 0xFF;
+        h = ((h >> 8) & 0x00FFFFFFu) ^ t[(h ^ hi) & 0xFFu];
+    }
+    return h & 0xFFFFFFFFu;
+}
+
+// UE HashCombine (TypeHash.h:36-52) — the full Bob-Jenkins mixing variant
+// (NOT HashCombineFast). Ported step-for-step from the Python sibling's
+// _hash_combine(a, c).
+static uint32_t ue_hash_combine(uint32_t a, uint32_t c) {
+    uint32_t b = 0x9e3779b9u;
+    a += b;
+
+    a -= b; a -= c; a ^= (c >> 13);
+    b -= c; b -= a; b ^= (a << 8);
+    c -= a; c -= b; c ^= (b >> 13);
+    a -= b; a -= c; a ^= (c >> 12);
+    b -= c; b -= a; b ^= (a << 16);
+    c -= a; c -= b; c ^= (b >> 5);
+    a -= b; a -= c; a ^= (c >> 3);
+    b -= c; b -= a; b ^= (a << 10);
+    c -= a; c -= b; c ^= (b >> 15);
+    return c;
+}
+
+// GetTypeHash(double) -> GetTypeHash(*(uint64*)&d) -> (uint32)v + ((uint32)(v>>32))*23.
+static uint32_t ue_hash_double(double d) {
+    uint64_t bits;
+    std::memcpy(&bits, &d, sizeof(bits));
+    return (uint32_t)bits + (uint32_t)(bits >> 32) * 23u;
+}
+
+// ComputeFilterHash over an ordered list of string parts (initializer-list form).
+static uint32_t compute_filter_hash(const std::vector<std::string>& parts) {
+    uint32_t h = 0;
+    for (const auto& p : parts)
+        h = ue_hash_combine(h, ue_str_crc32(p));
+    return h;
+}
+
+// ---- Cursor codec. Encodes {qh,p,tc} as UE pretty-printed JSON, then base64. ----
+// CRITICAL (addendum §2): the live cursor is FBase64::Encode of the DEFAULT
+// TJsonWriterFactory<> output — pretty-print policy = CRLF newlines + single-TAB
+// indent + one space after each colon, key order qh,p,tc. The exact decoded
+// bytes are:
+//     {\r\n\t"qh": <qh>,\r\n\t"p": <p>,\r\n\t"tc": <tc>\r\n}
+// nlohmann's dump() cannot reproduce this exact whitespace (no CRLF, no
+// space-after-colon-without-newline control), so the byte sequence is HAND-BUILT
+// here, then base64-encoded. Integer values are plain (qh/p/tc are integral and
+// in-range, so WriteDouble("%.17g") yields the same digits as plain int — see
+// addendum §2 "Numbers inside the cursor are also %.17g"). tc may be -1.
+// Verified samples (addendum §2): list_uproperties qh=2954246778,p=1,tc=17 ->
+//   ew0KCSJxaCI6IDI5NTQyNDY3NzgsDQoJInAiOiAxLA0KCSJ0YyI6IDE3DQp9
+static std::string encode_cursor(uint32_t query_hash, int32_t page, int32_t cached_total) {
+    std::string body;
+    body += "{\r\n\t\"qh\": ";
+    body += std::to_string((uint32_t)query_hash);
+    body += ",\r\n\t\"p\": ";
+    body += std::to_string((int32_t)page);
+    body += ",\r\n\t\"tc\": ";
+    body += std::to_string((int32_t)cached_total);
+    body += "\r\n}";
+    return base64_encode(body);
+}
+
+// ---- %.17g float-field sentinel mechanism (addendum §1). ----
+// Live RI numeric fields are written by UE via SetNumberField -> serialized by
+// TJsonPrintPolicy::WriteDouble = FString::Printf(TEXT("%.17g"), Value). nlohmann
+// dump() emits shortest-round-trip and offers NO %.17g hook, so for the genuine-
+// fractional REAL fields we store a unique SENTINEL STRING in the ojson, then run
+// a string pass over the dumped output replacing the QUOTED sentinel with the RAW
+// unquoted number. Integer-valued doubles (total_estimate, counts, line numbers,
+// unix timestamps) print identically as plain ints, so they are left as-is per
+// the addendum ("integer-valued doubles print clean").
+//
+// REAL columns are stored float32 in the indexer; when read into a C++ double
+// they widen. The live server formats THAT widened value. So we MUST float32-
+// round-trip (double -> float -> double) before %.17g, e.g. 0.65 -> the float32
+// nearest -> widened -> "0.64999997615814209" (== live confidence), NOT the
+// double "0.6499999761581421".
+//
+// The sentinel uses the 0x01 control byte as a fence; 0x01 cannot appear in any
+// emitted RI JSON value (all are class/property/path/snippet text + numbers),
+// and the quoted form "\x01FLT:<digits>\x01" cannot collide with real data.
+static const char kFltSentinelByte = '\x01';
+
+// Produce the sentinel STRING for a genuine-float REAL field. Caller assigns it
+// to an ojson string value; finalize_float_sentinels() later substitutes the raw
+// number. Formats %.17g of the RAW double exactly as read from
+// sqlite3_column_double (NO float32 round-trip): the stored doubles are already
+// correct. confidence is float32-origin so still prints 0.64999997615814209,
+// while genuine doubles like normalised_churn print 0.65714285714285714.
+static std::string flt_sentinel(double real_value) {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%.17g", real_value);
+    std::string s;
+    s += kFltSentinelByte;
+    s += "FLT:";
+    s += buf;
+    s += kFltSentinelByte;
+    return s;
+}
+
+// After ojson::dump(): replace every  "\x01FLT:<digits>\x01"  (a QUOTED sentinel,
+// exactly as nlohmann renders a string value) with  <digits>  (raw JSON number,
+// no quotes). nlohmann does not escape 0x01 inside strings with the default dump,
+// but to be defensive we also handle the  escaped form. Returns the patched
+// string ready for stdout.
+static std::string finalize_float_sentinels(const std::string& dumped) {
+    std::string out = dumped;
+    // Two possible renderings of the fence byte by nlohmann: raw 0x01 or .
+    const std::string fences[] = { std::string(1, kFltSentinelByte), "\\u0001" };
+    for (const std::string& fence : fences) {
+        const std::string open = "\"" + fence + "FLT:";   // opening quote + fence + tag
+        const std::string close = fence + "\"";           // fence + closing quote
+        size_t pos = 0;
+        while ((pos = out.find(open, pos)) != std::string::npos) {
+            size_t digits_start = pos + open.size();
+            size_t close_pos = out.find(close, digits_start);
+            if (close_pos == std::string::npos) break;     // malformed; leave as-is
+            std::string digits = out.substr(digits_start, close_pos - digits_start);
+            out.replace(pos, (close_pos + close.size()) - pos, digits);
+            pos += digits.size();
+        }
+    }
+    return out;
+}
+
+// Emit an RI ojson with the float-sentinel finalize pass applied. ALL RI actions
+// route their final output through this so the %.17g substitution is uniform.
+static void emit_ri(const ojson& out) {
+    std::cout << finalize_float_sentinels(out.dump(2)) << std::endl;
+}
+
+struct CursorState {
+    uint32_t query_hash = 0;
+    int32_t page = 0;
+    int32_t cached_total = -1;
+};
+
+// Returns true on a valid cursor; false sets out_reason to the spec message.
+static bool decode_cursor(const std::string& cursor, CursorState& out, std::string& out_reason) {
+    std::string jsonStr;
+    if (!base64_decode(cursor, jsonStr)) {
+        out_reason = "Cursor decode failed; restart pagination without `cursor`.";
+        return false;
+    }
+    ojson o = ojson::parse(jsonStr, nullptr, false);
+    if (o.is_discarded() || !o.is_object()) {
+        out_reason = "Cursor decode failed; restart pagination without `cursor`.";
+        return false;
+    }
+    if (!o.contains("qh") || !o.contains("p") || !o.contains("tc") ||
+        !o["qh"].is_number() || !o["p"].is_number() || !o["tc"].is_number()) {
+        out_reason = "Cursor decode failed; restart pagination without `cursor`.";
+        return false;
+    }
+    double qh = o["qh"].get<double>();
+    double p = o["p"].get<double>();
+    double tc = o["tc"].get<double>();
+    if (p < 0 || qh < 0 || qh > 4294967295.0) {
+        out_reason = "Cursor decode failed; restart pagination without `cursor`.";
+        return false;
+    }
+    out.query_hash = (uint32_t)qh;
+    out.page = (int32_t)p;
+    out.cached_total = (int32_t)tc;
+    return true;
+}
+
+// Emit the INVALID_CURSOR error envelope and return.
+static void emit_invalid_cursor(const std::string& reason) {
+    ojson out;
+    out["success"] = false;
+    out["error"] = reason;
+    out["error_code"] = "INVALID_CURSOR";
+    std::cout << out.dump(2) << std::endl;
+}
+
+// Emit a generic missing-required / bad-param error.
+static void emit_param_error(const std::string& message) {
+    ojson out;
+    out["success"] = false;
+    out["error"] = message;
+    std::cout << out.dump(2) << std::endl;
+}
+
+// Emit a missing-table error per spec §0.7.
+static void emit_missing_table(const std::string& table) {
+    ojson out;
+    out["success"] = false;
+    out["error"] = table + " not in EngineSource.db. Build the project + rebuild_reflection_index in-editor.";
+    std::cout << out.dump(2) << std::endl;
+}
+
+// Clamp limit per spec §0.3: default 50, [1,200].
+static int clamp_limit(const Args& args) {
+    int limit = args.opt_int("limit", 50);
+    if (limit < 1) limit = 1;
+    if (limit > 200) limit = 200;
+    return limit;
+}
+
+// COUNT(*) helper.
+static int64_t scalar_count(Database& db, const std::string& sql, const std::vector<std::string>& params) {
+    auto rows = query(db, sql, params);
+    return rows.empty() ? 0 : rows[0].get_int64(rows[0].cols.begin()->first);
+}
+
+// Does a table exist?
+static bool table_exists(Database& db, const std::string& name) {
+    auto rows = query(db,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1", {name});
+    return !rows.empty();
+}
+
+// ============================================================
+// Reflection Intelligence actions (read-only, EngineSource.db reflect_* tables)
+//
+// Implements all 20 RI actions to Docs/plans/offline-parity-spec.md. The live
+// F*QueryAdapter.cpp handlers + *Schema.cpp CREATE TABLE statements are the
+// upstream source of truth; the spec distilled them. Offline output is shaped to
+// be byte-identical to the Python sibling and the live server.
+// ============================================================
+
+class ReflectionActions {
+    Database db;
+
+    // Resolve pagination page from an optional cursor. On a cursor present:
+    // decode + validate filter hash; on mismatch/decode-fail emit INVALID_CURSOR
+    // and signal abort via return false. On no cursor: page 0. CachedTotal is
+    // carried out for actions that forward it (unused for total-less actions).
+    bool resolve_page(const Args& args, uint32_t expected_hash,
+                      int32_t& out_page, int32_t& out_cached_total, bool& has_cursor) {
+        std::string cursor = args.opt("cursor");
+        has_cursor = !cursor.empty();
+        if (!has_cursor) { out_page = 0; out_cached_total = -1; return true; }
+        CursorState st;
+        std::string reason;
+        if (!decode_cursor(cursor, st, reason)) { emit_invalid_cursor(reason); return false; }
+        if (st.query_hash != expected_hash) {
+            emit_invalid_cursor("Cursor filter mismatch; restart pagination without `cursor`.");
+            return false;
+        }
+        out_page = st.page;
+        out_cached_total = st.cached_total;
+        return true;
+    }
+
+    // Per-function source-line join (list_ufunctions). Returns 0 on miss.
+    int lookup_function_source_line(const std::string& function_name, const std::string& owning_class) {
+        if (function_name.empty()) return 0;
+        if (!owning_class.empty()) {
+            auto rows = query(db,
+                "SELECT s.line_start FROM symbols s JOIN symbols p ON p.id = s.parent_symbol_id "
+                "WHERE s.name = ? AND s.kind IN ('function','method') "
+                "AND p.name = ? AND p.kind IN ('class','struct') LIMIT 1",
+                {function_name, owning_class});
+            return rows.empty() ? 0 : rows[0].get_int("line_start");
+        }
+        auto rows = query(db,
+            "SELECT line_start FROM symbols WHERE name = ? AND kind IN ('function','method') LIMIT 1",
+            {function_name});
+        return rows.empty() ? 0 : rows[0].get_int("line_start");
+    }
+
+    // Class source-line auto-join (get_uclass). Returns 0 on miss.
+    int lookup_class_source_line(const std::string& class_name) {
+        if (class_name.empty()) return 0;
+        auto rows = query(db,
+            "SELECT s.line_start FROM symbols s WHERE s.name = ? "
+            "AND s.kind IN ('class','struct') LIMIT 1", {class_name});
+        return rows.empty() ? 0 : rows[0].get_int("line_start");
+    }
+
+    // Class source-path auto-join (get_uclass). Returns "" on miss.
+    std::string lookup_class_source_path(const std::string& class_name) {
+        if (class_name.empty()) return "";
+        auto rows = query(db,
+            "SELECT f.path FROM symbols s JOIN files f ON f.id = s.file_id "
+            "WHERE s.name = ? AND s.kind IN ('class','struct') LIMIT 1", {class_name});
+        return rows.empty() ? "" : rows[0].get("path");
+    }
+
+public:
+    void open(const std::string& path) { db.open(path); }
+
+    // ========================================================
+    // NAMESPACE: cppreflect (6)
+    // ========================================================
+
+    // --- cppreflect get_uclass ---  (NOT paginated)
+    void get_uclass(const Args& args) {
+        std::string class_name = args.opt("class_name");
+        if (class_name.empty() && !args.positional.empty()) class_name = args.positional[0];
+        if (class_name.empty()) { emit_param_error("`class_name` is required."); return; }
+        std::string module = args.opt("module");
+        if (module.empty()) module = args.opt("module_name");
+
+        if (!table_exists(db, "reflect_uclasses")) { emit_missing_table("reflect_uclasses"); return; }
+
+        std::string sql = "SELECT class_name, module_name, parent_class, source_path, source_line, flags "
+                          "FROM reflect_uclasses WHERE class_name = ?";
+        std::vector<std::string> params = {class_name};
+        if (!module.empty()) { sql += " AND module_name = ?"; params.push_back(module); }
+        sql += " LIMIT 1";
+
+        auto rows = query(db, sql, params);
+        if (rows.empty()) {
+            ojson out;
+            out["success"] = true;
+            out["uclass"] = nullptr;   // live miss shape: { uclass: null }
+            std::cout << out.dump(2) << std::endl;
+            return;
+        }
+
+        auto& r = rows[0];
+        std::string cn = r.get("class_name");
+        std::string mn = r.get("module_name");
+
+        int src_line = r.get_int("source_line");
+        std::string src_path = r.get("source_path");
+        if (src_line == 0) src_line = lookup_class_source_line(cn);
+        if (src_path.empty()) src_path = lookup_class_source_path(cn);
+
+        ojson uclass;
+        uclass["class_name"] = cn;
+        uclass["module_name"] = mn;
+        uclass["parent_class"] = r.get("parent_class");
+        uclass["source_path"] = src_path;
+        uclass["source_line"] = src_line;
+        uclass["flags"] = r.get("flags");
+
+        // Parent chain: iterative, cap 16.
+        ojson chain = ojson::array();
+        {
+            std::string cur = r.get("parent_class");
+            std::string last_appended;
+            int guard = 0;
+            while (!cur.empty() && guard < 16) {
+                chain.push_back(cur);
+                last_appended = cur;
+                auto prow = query(db,
+                    "SELECT parent_class FROM reflect_uclasses WHERE class_name = ? LIMIT 1", {cur});
+                if (prow.empty()) break;            // engine class outside index → stop
+                std::string next = prow[0].get("parent_class");
+                if (next == last_appended) break;   // cycle guard
+                cur = next;
+                ++guard;
+                if (cur.empty()) break;
+            }
+        }
+        uclass["parent_chain"] = chain;
+
+        // UPROPERTYs (module filter only when module passed).
+        {
+            std::string psql = "SELECT property_name, property_type, cpp_module, blueprint_visibility, specifiers "
+                               "FROM reflect_uproperties WHERE owning_class = ?";
+            std::vector<std::string> pp = {cn};
+            if (!module.empty()) { psql += " AND cpp_module = ?"; pp.push_back(module); }
+            psql += " ORDER BY property_name";
+            auto props = query(db, psql, pp);
+            ojson jprops = ojson::array();
+            for (auto& p : props) {
+                ojson o;
+                o["property_name"] = p.get("property_name");
+                o["property_type"] = p.get("property_type");
+                o["cpp_module"] = p.get("cpp_module");
+                o["blueprint_visibility"] = p.get("blueprint_visibility");
+                o["specifiers"] = p.get("specifiers");
+                jprops.push_back(o);
+            }
+            uclass["uproperties"] = jprops;
+        }
+
+        // UFUNCTIONs (module filter only when module passed). No source join here.
+        {
+            std::string fsql = "SELECT function_name, return_type, blueprint_callable, cpp_module, specifiers "
+                               "FROM reflect_ufunctions WHERE owning_class = ?";
+            std::vector<std::string> fp = {cn};
+            if (!module.empty()) { fsql += " AND cpp_module = ?"; fp.push_back(module); }
+            fsql += " ORDER BY function_name";
+            auto funcs = query(db, fsql, fp);
+            ojson jfuncs = ojson::array();
+            for (auto& f : funcs) {
+                ojson o;
+                o["function_name"] = f.get("function_name");
+                o["return_type"] = f.get("return_type");
+                o["blueprint_callable"] = f.get_int("blueprint_callable") != 0;
+                o["cpp_module"] = f.get("cpp_module");
+                o["specifiers"] = f.get("specifiers");
+                jfuncs.push_back(o);
+            }
+            uclass["ufunctions"] = jfuncs;
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["uclass"] = uclass;
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // --- cppreflect list_uproperties ---  (paginated, total_estimate)
+    void list_uproperties(const Args& args) {
+        if (!table_exists(db, "reflect_uproperties")) { emit_missing_table("reflect_uproperties"); return; }
+        // Precedence: --class_name flag wins, else the positional arg (mirrors
+        // get_uclass and the Python sibling: Args::opt then positional[0]).
+        // The prior exe read ONLY opt("class_name"), so a positional class name
+        // (`list_uproperties ALeviathanCharacterBase`) was dropped and the query
+        // scanned the ENTIRE table (BUG 2).
+        std::string class_name = args.opt("class_name");
+        if (class_name.empty() && !args.positional.empty()) class_name = args.positional[0];
+        bool bp_only = args.opt_bool("blueprint_visible_only", false);
+        int limit = clamp_limit(args);
+
+        uint32_t qh = compute_filter_hash({class_name, bp_only ? "1" : "0"});
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
+
+        std::string where = " WHERE 1=1";
+        std::vector<std::string> binds;
+        if (!class_name.empty()) { where += " AND owning_class = ?"; binds.push_back(class_name); }
+        if (bp_only) where += " AND blueprint_visibility IS NOT NULL AND blueprint_visibility <> ''";
+
+        std::string sql = "SELECT owning_class, property_name, property_type, cpp_module, "
+                          "blueprint_visibility, specifiers FROM reflect_uproperties" + where +
+                          " ORDER BY owning_class, property_name LIMIT ? OFFSET ?";
+        std::vector<std::string> params = binds;
+        params.push_back(std::to_string(limit));
+        params.push_back(std::to_string(page * limit));
+        auto rows = query(db, sql, params);
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) {
+            ojson o;
+            o["owning_class"] = r.get("owning_class");
+            o["property_name"] = r.get("property_name");
+            o["property_type"] = r.get("property_type");
+            o["cpp_module"] = r.get("cpp_module");
+            o["blueprint_visibility"] = r.get("blueprint_visibility");
+            o["specifiers"] = r.get("specifiers");
+            arr.push_back(o);
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["uproperties"] = arr;
+        int64_t total = -1;
+        if (!has_cursor) {
+            total = scalar_count(db, "SELECT COUNT(*) FROM reflect_uproperties" + where, binds);
+            out["total_estimate"] = total;
+        }
+        if ((int)rows.size() == limit)
+            out["next_cursor"] = encode_cursor(qh, page + 1, has_cursor ? cached_total : (int32_t)total);
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // --- cppreflect list_ufunctions ---  (paginated, total_estimate, source join)
+    void list_ufunctions(const Args& args) {
+        if (!table_exists(db, "reflect_ufunctions")) { emit_missing_table("reflect_ufunctions"); return; }
+        // Precedence: --class_name flag wins, else the positional arg (mirrors
+        // get_uclass and the Python sibling: Args::opt then positional[0]). See
+        // list_uproperties for the BUG 2 root-cause note.
+        std::string class_name = args.opt("class_name");
+        if (class_name.empty() && !args.positional.empty()) class_name = args.positional[0];
+        bool bp_only = args.opt_bool("blueprint_callable_only", false);
+        int limit = clamp_limit(args);
+
+        uint32_t qh = compute_filter_hash({class_name, bp_only ? "1" : "0"});
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
+
+        std::string where = " WHERE 1=1";
+        std::vector<std::string> binds;
+        if (!class_name.empty()) { where += " AND owning_class = ?"; binds.push_back(class_name); }
+        if (bp_only) where += " AND blueprint_callable = 1";
+
+        std::string sql = "SELECT owning_class, function_name, return_type, blueprint_callable, "
+                          "cpp_module, specifiers, source_line FROM reflect_ufunctions" + where +
+                          " ORDER BY owning_class, function_name LIMIT ? OFFSET ?";
+        std::vector<std::string> params = binds;
+        params.push_back(std::to_string(limit));
+        params.push_back(std::to_string(page * limit));
+        auto rows = query(db, sql, params);
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) {
+            int sl = r.get_int("source_line");
+            if (sl == 0) sl = lookup_function_source_line(r.get("function_name"), r.get("owning_class"));
+            ojson o;
+            o["owning_class"] = r.get("owning_class");
+            o["function_name"] = r.get("function_name");
+            o["return_type"] = r.get("return_type");
+            o["blueprint_callable"] = r.get_int("blueprint_callable") != 0;
+            o["cpp_module"] = r.get("cpp_module");
+            o["specifiers"] = r.get("specifiers");
+            o["source_line"] = sl;
+            arr.push_back(o);
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["ufunctions"] = arr;
+        int64_t total = -1;
+        if (!has_cursor) {
+            total = scalar_count(db, "SELECT COUNT(*) FROM reflect_ufunctions" + where, binds);
+            out["total_estimate"] = total;
+        }
+        if ((int)rows.size() == limit)
+            out["next_cursor"] = encode_cursor(qh, page + 1, has_cursor ? cached_total : (int32_t)total);
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // --- cppreflect find_interface_impls ---  (NOT paginated)
+    void find_interface_impls(const Args& args) {
+        std::string iface = args.opt("interface_name");
+        if (iface.empty() && !args.positional.empty()) iface = args.positional[0];
+        if (iface.empty()) { emit_param_error("`interface_name` is required."); return; }
+        if (!table_exists(db, "reflect_uinterface_impls")) { emit_missing_table("reflect_uinterface_impls"); return; }
+
+        auto rows = query(db,
+            "SELECT impl.implementing_class, impl.cpp_module, cls.source_path "
+            "FROM reflect_uinterface_impls impl "
+            "LEFT JOIN reflect_uclasses cls ON cls.class_name = impl.implementing_class "
+            "AND cls.module_name = impl.cpp_module "
+            "WHERE impl.interface_name = ? "
+            "ORDER BY impl.cpp_module, impl.implementing_class", {iface});
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) {
+            ojson o;
+            o["implementing_class"] = r.get("implementing_class");
+            o["cpp_module"] = r.get("cpp_module");
+            o["source_path"] = r.get("source_path");
+            arr.push_back(o);
+        }
+        ojson out;
+        out["success"] = true;
+        out["interface_name"] = iface;
+        out["implementers"] = arr;
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // Build the token universe (token,count) for known_tokens / list_class_specifiers.
+    std::vector<std::pair<std::string, int>> build_token_universe() {
+        std::map<std::string, int> counts;
+        auto rows = query(db,
+            "SELECT flags FROM reflect_uclasses WHERE flags IS NOT NULL AND flags <> ''");
+        for (auto& r : rows) {
+            std::string flags = r.get("flags");
+            std::set<std::string> seen_this_row;
+            std::string token;
+            std::istringstream ss(flags);
+            // split on ':' culling empty, trimming each
+            size_t start = 0;
+            while (start <= flags.size()) {
+                size_t pos = flags.find(':', start);
+                std::string tok = (pos == std::string::npos)
+                    ? flags.substr(start) : flags.substr(start, pos - start);
+                tok = trim_copy(tok);
+                if (!tok.empty()) seen_this_row.insert(tok);
+                if (pos == std::string::npos) break;
+                start = pos + 1;
+            }
+            for (const auto& t : seen_this_row) counts[t]++;
+        }
+        std::vector<std::pair<std::string, int>> out(counts.begin(), counts.end());
+        std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) {
+            if (a.second != b.second) return a.second > b.second;  // count desc
+            return a.first < b.first;                              // token asc
+        });
+        return out;
+    }
+
+    // --- cppreflect find_class_specifier ---  (paginated, NO total)
+    void find_class_specifier(const Args& args) {
+        std::string spec = args.opt("specifier_name");
+        if (spec.empty() && !args.positional.empty()) spec = args.positional[0];
+        if (spec.empty()) { emit_param_error("`specifier_name` is required."); return; }
+        if (!table_exists(db, "reflect_uclasses")) { emit_missing_table("reflect_uclasses"); return; }
+
+        int limit = clamp_limit(args);
+        uint32_t qh = compute_filter_hash({spec});
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
+
+        std::string spec_lower = to_lower_copy(spec);
+
+        // DROPPED tokens: no SQL, immediate note + known_tokens.
+        if (spec_lower == "minimalapi" || spec_lower == "notblueprintable") {
+            auto universe = build_token_universe();
+            ojson known = ojson::array();
+            for (auto& kv : universe) {
+                ojson o; o["token"] = kv.first; o["count"] = kv.second; known.push_back(o);
+            }
+            ojson out;
+            out["success"] = true;
+            out["specifier_name"] = spec;
+            out["uclasses"] = ojson::array();
+            out["token_stored"] = false;
+            out["note"] = "\"" + spec + "\" is a C++ UCLASS specifier that UHT does not store in the "
+                          "metadata-key vocabulary (the `flags` column), so it can never match. Call "
+                          "list_class_specifiers to see the tokens that are queryable.";
+            out["known_tokens"] = known;
+            std::cout << out.dump(2) << std::endl;
+            return;
+        }
+
+        // ALIAS.
+        std::string effective = spec;
+        if (spec_lower == "blueprintable") effective = "IsBlueprintBase";
+
+        std::string sql =
+            "SELECT class_name, module_name, parent_class, source_path, flags FROM reflect_uclasses "
+            "WHERE flags = ? COLLATE NOCASE OR flags LIKE ? OR flags LIKE ? OR flags LIKE ? "
+            "ORDER BY module_name, class_name LIMIT ? OFFSET ?";
+        std::vector<std::string> params = {
+            effective,
+            effective + ":%",
+            "%:" + effective + ":%",
+            "%:" + effective,
+            std::to_string(limit),
+            std::to_string(page * limit)
+        };
+        auto rows = query(db, sql, params);
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) {
+            ojson o;
+            o["class_name"] = r.get("class_name");
+            o["module_name"] = r.get("module_name");
+            o["parent_class"] = r.get("parent_class");
+            o["source_path"] = r.get("source_path");
+            o["flags"] = r.get("flags");
+            arr.push_back(o);
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["specifier_name"] = spec;
+        if (effective != spec) out["effective_token"] = effective;
+        out["uclasses"] = arr;
+        if (rows.empty() && !has_cursor) {
+            auto universe = build_token_universe();
+            ojson known = ojson::array();
+            for (auto& kv : universe) {
+                ojson o; o["token"] = kv.first; o["count"] = kv.second; known.push_back(o);
+            }
+            out["known_tokens"] = known;
+        }
+        if ((int)rows.size() == limit)
+            out["next_cursor"] = encode_cursor(qh, page + 1, -1);  // tc always -1
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // --- cppreflect list_class_specifiers ---  (NOT paginated)
+    void list_class_specifiers(const Args&) {
+        if (!table_exists(db, "reflect_uclasses")) { emit_missing_table("reflect_uclasses"); return; }
+        auto universe = build_token_universe();
+        ojson arr = ojson::array();
+        for (auto& kv : universe) {
+            ojson o; o["token"] = kv.first; o["count"] = kv.second; arr.push_back(o);
+        }
+        ojson out;
+        out["success"] = true;
+        out["specifiers"] = arr;
+        out["distinct_count"] = (int)universe.size();
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // ========================================================
+    // NAMESPACE: network (4)
+    // ========================================================
+
+    // --- network list_replicated_classes ---  (paginated, total_estimate)
+    void list_replicated_classes(const Args& args) {
+        if (!table_exists(db, "reflect_replicated_properties")) {
+            emit_missing_table("reflect_replicated_properties"); return;
+        }
+        int limit = clamp_limit(args);
+        uint32_t qh = compute_filter_hash({});   // empty parts → 0
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
+
+        auto rows = query(db,
+            "SELECT owning_class, cpp_module, COUNT(*) AS prop_count "
+            "FROM reflect_replicated_properties GROUP BY owning_class, cpp_module "
+            "ORDER BY cpp_module, owning_class LIMIT ? OFFSET ?",
+            {std::to_string(limit), std::to_string(page * limit)});
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) {
+            ojson o;
+            o["owning_class"] = r.get("owning_class");
+            o["cpp_module"] = r.get("cpp_module");
+            o["replicated_property_count"] = r.get_int("prop_count");
+            arr.push_back(o);
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["classes"] = arr;
+        int64_t total = -1;
+        if (!has_cursor) {
+            total = scalar_count(db,
+                "SELECT COUNT(*) FROM (SELECT 1 FROM reflect_replicated_properties "
+                "GROUP BY owning_class, cpp_module)", {});
+            out["total_estimate"] = total;
+        }
+        if ((int)rows.size() == limit)
+            out["next_cursor"] = encode_cursor(qh, page + 1, has_cursor ? cached_total : (int32_t)total);
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // --- network list_rpc_functions ---  (paginated, NO total, post-fetch filter)
+    void list_rpc_functions(const Args& args) {
+        if (!table_exists(db, "reflect_ufunctions")) { emit_missing_table("reflect_ufunctions"); return; }
+        std::string class_name = args.opt("class_name");
+        std::string rpc_kind = args.opt("rpc_kind");
+        int limit = clamp_limit(args);
+
+        uint32_t qh = compute_filter_hash({class_name, rpc_kind});
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
+
+        std::string where = " WHERE (specifiers LIKE '%Server%' OR specifiers LIKE '%Client%' "
+                            "OR specifiers LIKE '%NetMulticast%')";
+        std::vector<std::string> binds;
+        if (!class_name.empty()) { where += " AND owning_class = ?"; binds.push_back(class_name); }
+
+        std::string sql = "SELECT owning_class, function_name, cpp_module, blueprint_callable, specifiers "
+                          "FROM reflect_ufunctions" + where +
+                          " ORDER BY cpp_module, owning_class, function_name LIMIT ? OFFSET ?";
+        std::vector<std::string> params = binds;
+        params.push_back(std::to_string(limit));
+        params.push_back(std::to_string(page * limit));
+        auto rows = query(db, sql, params);
+
+        std::string rpc_kind_lower = to_lower_copy(rpc_kind);
+        ojson arr = ojson::array();
+        int emitted = 0;
+        for (auto& r : rows) {
+            std::string specs = r.get("specifiers");
+            std::string kind;
+            if (specs.find("Server") != std::string::npos) kind = "Server";
+            else if (specs.find("Client") != std::string::npos) kind = "Client";
+            else if (specs.find("NetMulticast") != std::string::npos) kind = "Multicast";
+            else kind = "";
+
+            if (!rpc_kind.empty() && to_lower_copy(kind) != rpc_kind_lower) continue;
+
+            ojson o;
+            o["owning_class"] = r.get("owning_class");
+            o["function_name"] = r.get("function_name");
+            o["cpp_module"] = r.get("cpp_module");
+            o["rpc_kind"] = kind;
+            o["specifiers"] = specs;
+            o["blueprint_callable"] = r.get_int("blueprint_callable") != 0;
+            arr.push_back(o);
+            ++emitted;
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["rpcs"] = arr;
+        if (emitted == limit)
+            out["next_cursor"] = encode_cursor(qh, page + 1, -1);
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // --- network list_onrep_handlers ---  (paginated, NO total)
+    void list_onrep_handlers(const Args& args) {
+        if (!table_exists(db, "reflect_ufunctions")) { emit_missing_table("reflect_ufunctions"); return; }
+        std::string class_name = args.opt("class_name");
+        int limit = clamp_limit(args);
+
+        uint32_t qh = compute_filter_hash({class_name});
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
+
+        std::string where = " WHERE function_name LIKE 'OnRep_%'";
+        std::vector<std::string> binds;
+        if (!class_name.empty()) { where += " AND owning_class = ?"; binds.push_back(class_name); }
+
+        std::string sql = "SELECT owning_class, function_name, cpp_module FROM reflect_ufunctions" + where +
+                          " ORDER BY cpp_module, owning_class, function_name LIMIT ? OFFSET ?";
+        std::vector<std::string> params = binds;
+        params.push_back(std::to_string(limit));
+        params.push_back(std::to_string(page * limit));
+        auto rows = query(db, sql, params);
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) {
+            ojson o;
+            o["owning_class"] = r.get("owning_class");
+            o["function_name"] = r.get("function_name");
+            o["cpp_module"] = r.get("cpp_module");
+            arr.push_back(o);
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["handlers"] = arr;
+        if ((int)rows.size() == limit)
+            out["next_cursor"] = encode_cursor(qh, page + 1, -1);
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // --- network audit_unbalanced_onreps ---  (paginated, NO total)
+    void audit_unbalanced_onreps(const Args& args) {
+        if (!table_exists(db, "reflect_replicated_properties")) {
+            emit_missing_table("reflect_replicated_properties"); return;
+        }
+        int limit = clamp_limit(args);
+        uint32_t qh = compute_filter_hash({});
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
+
+        auto rows = query(db,
+            "SELECT rp.owning_class, rp.property_name, rp.cpp_module, rp.rep_notify_func "
+            "FROM reflect_replicated_properties rp "
+            "LEFT JOIN reflect_ufunctions uf ON uf.owning_class = rp.owning_class "
+            "AND uf.function_name = rp.rep_notify_func AND uf.cpp_module = rp.cpp_module "
+            "WHERE rp.rep_kind = 'ReplicatedUsing' "
+            "AND rp.rep_notify_func IS NOT NULL AND rp.rep_notify_func <> '' "
+            "AND uf.function_name IS NULL "
+            "ORDER BY rp.cpp_module, rp.owning_class, rp.property_name LIMIT ? OFFSET ?",
+            {std::to_string(limit), std::to_string(page * limit)});
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) {
+            ojson o;
+            o["owning_class"] = r.get("owning_class");
+            o["property_name"] = r.get("property_name");
+            o["cpp_module"] = r.get("cpp_module");
+            o["missing_function"] = r.get("rep_notify_func");
+            o["violation"] = "UPROPERTY(ReplicatedUsing) references an OnRep_ UFUNCTION that does not "
+                             "exist on this class.";
+            arr.push_back(o);
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["violations"] = arr;
+        if ((int)rows.size() == limit)
+            out["next_cursor"] = encode_cursor(qh, page + 1, -1);
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // ========================================================
+    // NAMESPACE: decision (5)
+    // ========================================================
+
+    // Shared RowToJson for decision_records (8 cols → 8 keys, ordered).
+    ojson decision_row_to_json(const Row& r) {
+        ojson o;
+        o["decision_id"] = r.get("decision_id");
+        o["title"] = r.get("title");
+        o["status"] = r.get("status");
+        o["source_path"] = r.get("source_path");
+        o["source_line"] = r.get_int("source_line");
+        // confidence is a genuine REAL (float32 upstream) -> %.17g via sentinel.
+        o["confidence"] = flt_sentinel(r.get_double("confidence"));
+        o["rationale"] = r.get("rationale");
+        o["source_mtime"] = r.get_int64("source_mtime");
+        return o;
+    }
+
+    static const char* decision_columns() {
+        return "decision_id, title, status, source_path, source_line, confidence, rationale, source_mtime";
+    }
+
+    // 3-arg decision filter hash form (path_filter, min_confidence/double, status-or-marker).
+    uint32_t decision_filter_hash(const std::string& path_filter, double conf_or_age, const std::string& status) {
+        uint32_t h = ue_str_crc32(path_filter);
+        h = ue_hash_combine(h, ue_hash_double(conf_or_age));
+        h = ue_hash_combine(h, ue_str_crc32(status));
+        return h;
+    }
+
+    // --- decision list_decisions ---  (paginated, total_estimate, default conf 0.6)
+    void list_decisions(const Args& args) {
+        if (!table_exists(db, "decision_records")) { emit_missing_table("decision_records"); return; }
+        std::string path_filter = args.opt("path_filter");
+        double min_conf = 0.6;
+        {
+            auto it = args.options.find("min_confidence");
+            if (it != args.options.end() && !it->second.empty()) {
+                try { min_conf = std::stod(it->second); } catch (...) {}
+            }
+        }
+        std::string status = args.opt("status");
+        int limit = clamp_limit(args);
+
+        uint32_t qh = decision_filter_hash(path_filter, min_conf, status);
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
+
+        std::string where = " WHERE confidence >= ?";
+        std::vector<std::string> binds;
+        // bind min_confidence as text; SQLite coerces for the numeric comparison.
+        {
+            std::ostringstream ss; ss << min_conf; binds.push_back(ss.str());
+        }
+        if (!path_filter.empty()) { where += " AND source_path LIKE ?"; binds.push_back("%" + path_filter + "%"); }
+        if (!status.empty()) { where += " AND status = ?"; binds.push_back(status); }
+
+        std::string sql = std::string("SELECT ") + decision_columns() + " FROM decision_records" + where +
+                          " ORDER BY source_path, source_line LIMIT ? OFFSET ?";
+        std::vector<std::string> params = binds;
+        params.push_back(std::to_string(limit));
+        params.push_back(std::to_string(page * limit));
+        auto rows = query(db, sql, params);
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) arr.push_back(decision_row_to_json(r));
+
+        ojson out;
+        out["success"] = true;
+        out["decisions"] = arr;
+        int64_t total = -1;
+        if (!has_cursor) {
+            total = scalar_count(db, "SELECT COUNT(*) FROM decision_records" + where, binds);
+            out["total_estimate"] = total;
+        }
+        if ((int)rows.size() == limit)
+            out["next_cursor"] = encode_cursor(qh, page + 1, has_cursor ? cached_total : (int32_t)total);
+        emit_ri(out);   // %.17g float-sentinel finalize (confidence)
+    }
+
+    // --- decision get_decision ---  (NOT paginated)
+    void get_decision(const Args& args) {
+        std::string did = args.opt("decision_id");
+        if (did.empty() && !args.positional.empty()) did = args.positional[0];
+        if (did.empty()) { emit_param_error("`decision_id` is required."); return; }
+        if (!table_exists(db, "decision_records")) { emit_missing_table("decision_records"); return; }
+
+        auto rows = query(db,
+            std::string("SELECT ") + decision_columns() + " FROM decision_records WHERE decision_id = ? LIMIT 1",
+            {did});
+        ojson out;
+        out["success"] = true;
+        out["decision"] = rows.empty() ? ojson(nullptr) : decision_row_to_json(rows[0]);
+        emit_ri(out);   // %.17g float-sentinel finalize (confidence)
+    }
+
+    // --- decision list_stale ---  (paginated, NO total, cutoff_unix)
+    void list_stale(const Args& args) {
+        if (!table_exists(db, "decision_records")) { emit_missing_table("decision_records"); return; }
+        // max_age_days required + positive.
+        auto it = args.options.find("max_age_days");
+        std::string raw = (it != args.options.end()) ? it->second : "";
+        if (raw.empty() && !args.positional.empty()) raw = args.positional[0];
+        int max_age_days = 0;
+        try { max_age_days = std::stoi(raw); } catch (...) { max_age_days = 0; }
+        if (max_age_days <= 0) { emit_param_error("`max_age_days` must be positive."); return; }
+
+        std::string path_filter = args.opt("path_filter");
+        int limit = clamp_limit(args);
+
+        int64_t now_unix = (int64_t)std::time(nullptr);
+        int64_t cutoff_unix = now_unix - (int64_t)max_age_days * 86400;
+
+        uint32_t qh = decision_filter_hash(path_filter, (double)max_age_days, "__stale__");
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
+
+        std::string where = " WHERE source_mtime > 0 AND source_mtime < ?";
+        std::vector<std::string> binds = {std::to_string(cutoff_unix)};
+        if (!path_filter.empty()) { where += " AND source_path LIKE ?"; binds.push_back("%" + path_filter + "%"); }
+
+        std::string sql = std::string("SELECT ") + decision_columns() + " FROM decision_records" + where +
+                          " ORDER BY source_mtime ASC LIMIT ? OFFSET ?";
+        std::vector<std::string> params = binds;
+        params.push_back(std::to_string(limit));
+        params.push_back(std::to_string(page * limit));
+        auto rows = query(db, sql, params);
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) arr.push_back(decision_row_to_json(r));
+
+        ojson out;
+        out["success"] = true;
+        out["stale_decisions"] = arr;
+        out["cutoff_unix"] = cutoff_unix;
+        if ((int)rows.size() == limit)
+            out["next_cursor"] = encode_cursor(qh, page + 1, -1);
+        emit_ri(out);   // %.17g float-sentinel finalize (confidence)
+    }
+
+    // --- decision find_supersession_chain ---  (NOT paginated, BFS)
+    void find_supersession_chain(const Args& args) {
+        std::string start = args.opt("decision_id");
+        if (start.empty() && !args.positional.empty()) start = args.positional[0];
+        if (start.empty()) { emit_param_error("`decision_id` is required."); return; }
+        if (!table_exists(db, "decision_supersedes")) { emit_missing_table("decision_supersedes"); return; }
+
+        int depth = args.opt_int("depth", 10);
+        if (depth < 1) depth = 1;
+        if (depth > 50) depth = 50;
+
+        std::set<std::string> visited;
+        visited.insert(start);
+        std::vector<std::string> frontier = {start};
+        ojson chain = ojson::array();
+        int cur_depth = 0;
+        bool truncated = false;
+
+        while (!frontier.empty()) {
+            if (cur_depth == depth) { truncated = true; break; }
+            std::vector<std::string> next;
+            for (const auto& from : frontier) {
+                auto rows = query(db,
+                    "SELECT to_decision_id FROM decision_supersedes WHERE from_decision_id = ?", {from});
+                for (auto& r : rows) {
+                    std::string to = r.get("to_decision_id");
+                    if (visited.count(to)) continue;
+                    visited.insert(to);
+                    ojson edge;
+                    edge["from"] = from;
+                    edge["to"] = to;
+                    edge["depth"] = cur_depth + 1;
+                    chain.push_back(edge);
+                    next.push_back(to);
+                }
+            }
+            frontier = std::move(next);
+            ++cur_depth;
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["start"] = start;
+        out["chain"] = chain;
+        out["truncated"] = truncated;
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // --- decision find_referent_decisions ---  (NOT paginated)
+    void find_referent_decisions(const Args& args) {
+        std::string did = args.opt("decision_id");
+        if (did.empty() && !args.positional.empty()) did = args.positional[0];
+        if (did.empty()) { emit_param_error("`decision_id` is required."); return; }
+        if (!table_exists(db, "decision_supersedes")) { emit_missing_table("decision_supersedes"); return; }
+
+        auto rows = query(db,
+            "SELECT r.decision_id, r.title, r.status, r.source_path, r.source_line, "
+            "r.confidence, r.rationale, r.source_mtime "
+            "FROM decision_supersedes s JOIN decision_records r ON r.decision_id = s.from_decision_id "
+            "WHERE s.to_decision_id = ? ORDER BY r.source_path, r.source_line", {did});
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) arr.push_back(decision_row_to_json(r));
+
+        ojson out;
+        out["success"] = true;
+        out["decision_id"] = did;
+        out["referent_decisions"] = arr;
+        emit_ri(out);   // %.17g float-sentinel finalize (confidence)
+    }
+
+    // ========================================================
+    // NAMESPACE: risk (5)
+    // ========================================================
+
+    // CanonPath: backslash → forward-slash ONLY (no lowercasing).
+    static std::string canon_path(const std::string& p) {
+        std::string out = p;
+        std::replace(out.begin(), out.end(), '\\', '/');
+        return out;
+    }
+
+    // --- risk get_hotspot_score ---  (NOT paginated)
+    void get_hotspot_score(const Args& args) {
+        std::string fp = args.opt("file_path");
+        if (fp.empty() && !args.positional.empty()) fp = args.positional[0];
+        if (fp.empty()) { emit_param_error("`file_path` is required."); return; }
+        if (!table_exists(db, "risk_hotspot_scores")) { emit_missing_table("risk_hotspot_scores"); return; }
+
+        std::string cp = canon_path(fp);
+        auto rows = query(db,
+            "SELECT file_path, churn, complexity_proxy, normalised_churn, normalised_complexity, score "
+            "FROM risk_hotspot_scores WHERE file_path = ? LIMIT 1", {cp});
+
+        ojson out;
+        out["success"] = true;
+        if (rows.empty()) {
+            out["hotspot"] = nullptr;
+        } else {
+            auto& r = rows[0];
+            ojson h;
+            h["file_path"] = r.get("file_path");
+            h["churn"] = r.get_int("churn");
+            h["complexity_proxy"] = r.get_int("complexity_proxy");
+            // normalised_churn / normalised_complexity / score are genuine REAL
+            // (float32 upstream) -> %.17g via sentinel.
+            h["normalised_churn"] = flt_sentinel(r.get_double("normalised_churn"));
+            h["normalised_complexity"] = flt_sentinel(r.get_double("normalised_complexity"));
+            h["score"] = flt_sentinel(r.get_double("score"));
+            out["hotspot"] = h;
+        }
+        emit_ri(out);   // %.17g float-sentinel finalize (score/normalised_*)
+    }
+
+    // --- risk get_cochange_pairs ---  (paginated, total_estimate)
+    void get_cochange_pairs(const Args& args) {
+        std::string fp = args.opt("file_path");
+        if (fp.empty() && !args.positional.empty()) fp = args.positional[0];
+        if (fp.empty()) { emit_param_error("`file_path` is required."); return; }
+        if (!table_exists(db, "git_cochange_pairs")) { emit_missing_table("git_cochange_pairs"); return; }
+
+        std::string cp = canon_path(fp);
+        int limit = clamp_limit(args);
+        uint32_t qh = compute_filter_hash({cp});
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
+
+        auto rows = query(db,
+            "SELECT repo_tag, CASE WHEN file_a = ? THEN file_b ELSE file_a END AS partner, count "
+            "FROM git_cochange_pairs WHERE file_a = ? OR file_b = ? "
+            "ORDER BY count DESC, partner ASC LIMIT ? OFFSET ?",
+            {cp, cp, cp, std::to_string(limit), std::to_string(page * limit)});
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) {
+            ojson o;
+            o["repo_tag"] = r.get("repo_tag");
+            o["partner"] = r.get("partner");
+            o["count"] = r.get_int("count");
+            arr.push_back(o);
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["file_path"] = cp;
+        out["partners"] = arr;
+        int64_t total = -1;
+        if (!has_cursor) {
+            total = scalar_count(db,
+                "SELECT COUNT(*) FROM git_cochange_pairs WHERE file_a = ? OR file_b = ?", {cp, cp});
+            out["total_estimate"] = total;
+        }
+        if ((int)rows.size() == limit)
+            out["next_cursor"] = encode_cursor(qh, page + 1, has_cursor ? cached_total : (int32_t)total);
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // --- risk get_file_churn ---  (NOT paginated)
+    void get_file_churn(const Args& args) {
+        std::string fp = args.opt("file_path");
+        if (fp.empty() && !args.positional.empty()) fp = args.positional[0];
+        if (fp.empty()) { emit_param_error("`file_path` is required."); return; }
+        if (!table_exists(db, "git_file_churn")) { emit_missing_table("git_file_churn"); return; }
+
+        std::string cp = canon_path(fp);
+        std::string repo_tag = args.opt("repo_tag");
+
+        std::string sql = "SELECT repo_tag, commit_count, last_touched FROM git_file_churn WHERE file_path = ?";
+        std::vector<std::string> binds = {cp};
+        if (!repo_tag.empty()) { sql += " AND repo_tag = ?"; binds.push_back(repo_tag); }
+        auto rows = query(db, sql, binds);
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) {
+            ojson o;
+            o["repo_tag"] = r.get("repo_tag");
+            o["commit_count"] = r.get_int("commit_count");
+            o["last_touched_unix"] = r.get_int64("last_touched");
+            arr.push_back(o);
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["file_path"] = cp;
+        out["churn_by_repo"] = arr;
+        std::cout << out.dump(2) << std::endl;
+    }
+
+    // --- risk get_release_window_hotspots ---  (paginated, NO total, since_unix)
+    void get_release_window_hotspots(const Args& args) {
+        if (!table_exists(db, "risk_hotspot_scores")) { emit_missing_table("risk_hotspot_scores"); return; }
+        int64_t now_unix = (int64_t)std::time(nullptr);
+        // Spec §risk.get_release_window_hotspots default window = now - 30 days.
+        // int64 arithmetic throughout to match the Python sibling exactly.
+        int64_t since = now_unix - (int64_t)30 * 86400;
+        {
+            auto it = args.options.find("since_unix");
+            if (it != args.options.end() && !it->second.empty()) {
+                try { since = std::stoll(it->second); } catch (...) {}
+            }
+        }
+        int limit = clamp_limit(args);
+
+        // FilterHash part: stringified int value used.
+        uint32_t qh = compute_filter_hash({std::to_string(since)});
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
+
+        // BUG 3: `since` MUST bind as INTEGER. The WHERE-side is a scalar
+        // subquery aggregate (MAX) with NO column affinity, so SQLite will not
+        // coerce a TEXT-bound param to numeric — it would compare storage
+        // classes (INTEGER always < TEXT) and match nothing. The live adapter
+        // (FRiskQueryAdapter::HandleGetReleaseWindowHotspots) and the Python
+        // sibling both bind an int64 here; query_typed mirrors that.
+        auto rows = query_typed(db,
+            "SELECT h.file_path, h.score, h.churn, h.complexity_proxy, "
+            "(SELECT MAX(c.last_touched) FROM git_file_churn c WHERE c.file_path = h.file_path) AS last_touched "
+            "FROM risk_hotspot_scores h "
+            "WHERE (SELECT MAX(c2.last_touched) FROM git_file_churn c2 WHERE c2.file_path = h.file_path) >= ? "
+            "ORDER BY h.score DESC LIMIT ? OFFSET ?",
+            {Bind::Integer(since), Bind::Integer(limit), Bind::Integer((int64_t)page * limit)});
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) {
+            ojson o;
+            o["file_path"] = r.get("file_path");
+            // score is a genuine REAL (float32 upstream) -> %.17g via sentinel.
+            o["score"] = flt_sentinel(r.get_double("score"));
+            o["churn"] = r.get_int("churn");
+            o["complexity_proxy"] = r.get_int("complexity_proxy");
+            o["last_touched_unix"] = r.get_int64("last_touched");
+            arr.push_back(o);
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["since_unix"] = since;
+        out["hotspots"] = arr;
+        if ((int)rows.size() == limit)
+            out["next_cursor"] = encode_cursor(qh, page + 1, -1);
+        emit_ri(out);   // %.17g float-sentinel finalize (score)
+    }
+
+    // --- risk list_conditional_gates ---  (paginated, NO total)
+    void list_conditional_gates(const Args& args) {
+        if (!table_exists(db, "reflect_conditional_gates")) {
+            emit_missing_table("reflect_conditional_gates"); return;
+        }
+        std::string macro_filter = args.opt("macro_filter");
+        std::string path_filter = args.opt("path_filter");
+        int limit = clamp_limit(args);
+
+        uint32_t qh = compute_filter_hash({macro_filter, path_filter});
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
+
+        std::string where = " WHERE 1=1";
+        std::vector<std::string> binds;
+        if (!macro_filter.empty()) { where += " AND macro_name LIKE ?"; binds.push_back("%" + macro_filter + "%"); }
+        if (!path_filter.empty()) { where += " AND source_path LIKE ?"; binds.push_back("%" + path_filter + "%"); }
+
+        std::string sql = "SELECT id, source_path, source_line, macro_name, gate_kind, context_snippet "
+                          "FROM reflect_conditional_gates" + where +
+                          " ORDER BY source_path, source_line LIMIT ? OFFSET ?";
+        std::vector<std::string> params = binds;
+        params.push_back(std::to_string(limit));
+        params.push_back(std::to_string(page * limit));
+        auto rows = query(db, sql, params);
+
+        ojson arr = ojson::array();
+        for (auto& r : rows) {
+            ojson o;
+            o["id"] = r.get_int("id");
+            o["source_path"] = r.get("source_path");
+            o["source_line"] = r.get_int("source_line");
+            o["macro_name"] = r.get("macro_name");
+            o["gate_kind"] = r.get("gate_kind");
+            o["context_snippet"] = r.get("context_snippet");
+            arr.push_back(o);
+        }
+
+        ojson out;
+        out["success"] = true;
+        out["gates"] = arr;
+        if ((int)rows.size() == limit)
+            out["next_cursor"] = encode_cursor(qh, page + 1, -1);
+        std::cout << out.dump(2) << std::endl;
+    }
+};
+
+// ============================================================
 // DB path resolution
 // ============================================================
 
@@ -7217,6 +8848,22 @@ public:
 // ============================================================
 
 int main(int argc, char* argv[]) {
+    // --version / -v: print the build stamp before the 3-arg usage gate fires.
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--version" || a == "-v") {
+            fs::path plugin_root = resolve_plugin_root();
+            std::string version = parse_uplugin_version(plugin_root);
+            ojson out;
+            out["tool"] = "monolith_query";
+            out["plugin_version"] = version;
+            out["parity_spec_rev"] = PARITY_SPEC_REV;
+            out["source_hash"] = SOURCE_HASH;
+            std::cout << out.dump(2) << std::endl;
+            return 0;
+        }
+    }
+
     const std::string start_time = iso_local_now();
     const auto start_clock = std::chrono::steady_clock::now();
     Args args;
@@ -7373,8 +9020,93 @@ int main(int argc, char* argv[]) {
             it->second(ma, args);
             action_exec_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
+        } else if (args.ns == "cppreflect" || args.ns == "network" ||
+                   args.ns == "decision" || args.ns == "risk") {
+            phase_start = std::chrono::steady_clock::now();
+            std::string db_path = resolve_namespace_db_path(
+                args.opt("source_db"), db_arg, db_dir, "EngineSource.db");
+            db_paths.push_back(db_path);
+            db_resolve_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
+
+            ReflectionActions ra;
+            phase_start = std::chrono::steady_clock::now();
+            ra.open(db_path);
+            db_open_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
+
+            using RIFn = std::function<void(ReflectionActions&, const Args&)>;
+            static const std::map<std::string, std::map<std::string, RIFn>> ns_actions = {
+                {"cppreflect", {
+                    {"get_uclass",             [](ReflectionActions& r, const Args& a){ r.get_uclass(a); }},
+                    {"list_uproperties",       [](ReflectionActions& r, const Args& a){ r.list_uproperties(a); }},
+                    {"list_ufunctions",        [](ReflectionActions& r, const Args& a){ r.list_ufunctions(a); }},
+                    {"find_interface_impls",   [](ReflectionActions& r, const Args& a){ r.find_interface_impls(a); }},
+                    {"find_class_specifier",   [](ReflectionActions& r, const Args& a){ r.find_class_specifier(a); }},
+                    {"list_class_specifiers",  [](ReflectionActions& r, const Args& a){ r.list_class_specifiers(a); }},
+                }},
+                {"network", {
+                    {"list_replicated_classes", [](ReflectionActions& r, const Args& a){ r.list_replicated_classes(a); }},
+                    {"list_rpc_functions",      [](ReflectionActions& r, const Args& a){ r.list_rpc_functions(a); }},
+                    {"list_onrep_handlers",     [](ReflectionActions& r, const Args& a){ r.list_onrep_handlers(a); }},
+                    {"audit_unbalanced_onreps", [](ReflectionActions& r, const Args& a){ r.audit_unbalanced_onreps(a); }},
+                }},
+                {"decision", {
+                    {"list_decisions",          [](ReflectionActions& r, const Args& a){ r.list_decisions(a); }},
+                    {"get_decision",            [](ReflectionActions& r, const Args& a){ r.get_decision(a); }},
+                    {"list_stale",              [](ReflectionActions& r, const Args& a){ r.list_stale(a); }},
+                    {"find_supersession_chain", [](ReflectionActions& r, const Args& a){ r.find_supersession_chain(a); }},
+                    {"find_referent_decisions", [](ReflectionActions& r, const Args& a){ r.find_referent_decisions(a); }},
+                }},
+                {"risk", {
+                    {"get_hotspot_score",           [](ReflectionActions& r, const Args& a){ r.get_hotspot_score(a); }},
+                    {"get_cochange_pairs",          [](ReflectionActions& r, const Args& a){ r.get_cochange_pairs(a); }},
+                    {"get_file_churn",              [](ReflectionActions& r, const Args& a){ r.get_file_churn(a); }},
+                    {"get_release_window_hotspots", [](ReflectionActions& r, const Args& a){ r.get_release_window_hotspots(a); }},
+                    {"list_conditional_gates",      [](ReflectionActions& r, const Args& a){ r.list_conditional_gates(a); }},
+                }},
+            };
+
+            const auto& table = ns_actions.at(args.ns);
+            auto it = table.find(args.action);
+            if (it == table.end()) {
+                std::vector<std::string> known;
+                for (const auto& kv : table) known.push_back(kv.first);
+                auto sugg = fuzzy_top(args.action, known, 3);
+                std::string suffix;
+                if (!sugg.empty()) {
+                    suffix = " Did you mean: ";
+                    for (size_t i = 0; i < sugg.size(); ++i) {
+                        if (i) suffix += ", ";
+                        suffix += sugg[i];
+                    }
+                    suffix += "?";
+                }
+                ojson out;
+                out["success"] = false;
+                out["error"] = "Unknown action: " + args.ns + "." + args.action +
+                               " \xE2\x80\x94 call monolith_discover(\"" + args.ns +
+                               "\") to enumerate valid actions in this namespace." + suffix;
+                std::cout << out.dump(2) << std::endl;
+                throw QueryFatal("", 0, true);
+            }
+
+            phase_start = std::chrono::steady_clock::now();
+            it->second(ra, args);
+            action_exec_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
+
         } else {
-            die("Unknown namespace: " + args.ns + " (expected 'source', 'project', 'bridge', or 'monolith')");
+            const auto& ns = offline_namespaces();
+            std::string ns_list;
+            for (size_t i = 0; i < ns.size(); ++i) {
+                if (i > 0) ns_list += ", ";
+                ns_list += "'" + ns[i] + "'";
+            }
+            std::cerr << "ERROR: Unknown namespace: " << args.ns
+                      << " (offline-servable: " << ns_list << ")"
+                      << did_you_mean_suffix(args.ns, ns) << std::endl;
+            std::cerr << "NOTE: this offline tool serves only namespaces backed by on-disk SQLite. "
+                         "The live MCP server exposes ~29 namespaces; the rest are LIVE-ONLY "
+                         "(require a running editor + UObject reflection)." << std::endl;
+            throw QueryFatal("", 2, true);
         }
     } catch (const QueryFatal& e) {
         exit_code = e.code;

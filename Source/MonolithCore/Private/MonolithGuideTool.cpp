@@ -52,6 +52,13 @@ void FMonolithGuideTool::RegisterAll()
 		FMonolithActionHandler::CreateStatic(&FMonolithGuideTool::HandleGuide),
 		Schema
 	);
+
+	// Survivor A (plan §3.A) — read-only + idempotent. The guide is
+	// hand-authored markdown overlaid with a live registry read; no
+	// side effects, repeated calls return identical content.
+	Registry.SetActionAnnotations(TEXT("monolith"), TEXT("guide"),
+		/*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true,
+		TEXT("Monolith usage guide"));
 }
 
 bool FMonolithGuideTool::LoadGuideMarkdown(FString& OutMarkdown, FString& OutErrorMessage)

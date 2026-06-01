@@ -517,7 +517,7 @@ void FMonolithGASUIBindingActions::RegisterActions(FMonolithToolRegistry& Regist
     auto BuildBindSchema = []()
     {
         return FParamSchemaBuilder()
-            .Required(TEXT("wbp_path"),         TEXT("string"),  TEXT("Widget Blueprint asset path (e.g. /Game/UI/WBP_HUD)"), { TEXT("asset_path") })
+            .RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint asset path (e.g. /Game/UI/WBP_HUD)"), { TEXT("asset_path") })
             .Required(TEXT("widget_name"),      TEXT("string"),  TEXT("Widget tree variable name (e.g. HealthBar)"))
             .Required(TEXT("target_property"),  TEXT("string"),  TEXT("Property on the widget (Percent, Text, ColorAndOpacity, RenderOpacity, Visibility, Value, BrushColor, CheckedState)"))
             .Required(TEXT("attribute"),        TEXT("string"),  TEXT("Attribute as ClassName.PropertyName (e.g. ULeviathanVitalsSet.Health)"), { TEXT("attribute_name") })
@@ -532,7 +532,7 @@ void FMonolithGASUIBindingActions::RegisterActions(FMonolithToolRegistry& Regist
     auto BuildUnbindSchema = []()
     {
         return FParamSchemaBuilder()
-            .Required(TEXT("wbp_path"),        TEXT("string"), TEXT("Widget Blueprint asset path"), { TEXT("asset_path") })
+            .RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint asset path"), { TEXT("asset_path") })
             .Required(TEXT("widget_name"),     TEXT("string"), TEXT("Widget tree variable name"))
             .Required(TEXT("target_property"), TEXT("string"), TEXT("Property on the widget"))
             .Build();
@@ -541,14 +541,14 @@ void FMonolithGASUIBindingActions::RegisterActions(FMonolithToolRegistry& Regist
     auto BuildListSchema = []()
     {
         return FParamSchemaBuilder()
-            .Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint asset path"), { TEXT("asset_path") })
+            .RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint asset path"), { TEXT("asset_path") })
             .Build();
     };
 
     auto BuildClearSchema = []()
     {
         return FParamSchemaBuilder()
-            .Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint asset path"), { TEXT("asset_path") })
+            .RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint asset path"), { TEXT("asset_path") })
             .Build();
     };
 

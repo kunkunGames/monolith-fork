@@ -546,7 +546,7 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a new USoundAttenuation asset with optional initial settings"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::CreateSoundAttenuation),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Audio/SA_MyAttenuation)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path (e.g. /Game/Audio/SA_MyAttenuation)"))
 			.Optional(TEXT("settings"), TEXT("object"), TEXT("FSoundAttenuationSettings fields to set on creation"))
 			.Build());
 
@@ -554,14 +554,14 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Get all FSoundAttenuationSettings fields from a USoundAttenuation asset"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::GetAttenuationSettings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundAttenuation"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundAttenuation"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("set_attenuation_settings"),
 		TEXT("Set FSoundAttenuationSettings fields on a USoundAttenuation (partial update)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::SetAttenuationSettings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundAttenuation"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundAttenuation"))
 			.Required(TEXT("settings"), TEXT("object"), TEXT("FSoundAttenuationSettings fields to update"))
 			.Build());
 
@@ -570,7 +570,7 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a new USoundClass asset with optional parent and properties"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::CreateSoundClass),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Audio/SC_Ambient)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path (e.g. /Game/Audio/SC_Ambient)"))
 			.Optional(TEXT("parent_class"), TEXT("string"), TEXT("Asset path of parent USoundClass for hierarchy"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("FSoundClassProperties fields to set on creation"))
 			.Build());
@@ -579,14 +579,14 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Get FSoundClassProperties + parent/children from a USoundClass asset"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::GetSoundClassProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundClass"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundClass"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("set_sound_class_properties"),
 		TEXT("Set FSoundClassProperties fields on a USoundClass (partial update). Optionally reparent."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::SetSoundClassProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundClass"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundClass"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("FSoundClassProperties fields to update"))
 			.Optional(TEXT("parent_class"), TEXT("string"), TEXT("Asset path of new parent USoundClass (empty to clear)"))
 			.Build());
@@ -596,7 +596,7 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a new USoundMix asset with optional EQ settings and class adjusters"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::CreateSoundMix),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Audio/Mix_Combat)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path (e.g. /Game/Audio/Mix_Combat)"))
 			.Optional(TEXT("eq_settings"), TEXT("object"), TEXT("FAudioEQEffect fields (4-band EQ)"))
 			.Optional(TEXT("class_effects"), TEXT("array"), TEXT("Array of FSoundClassAdjuster objects"))
 			.Optional(TEXT("initial_delay"), TEXT("number"), TEXT("Delay before mix takes effect"))
@@ -609,14 +609,14 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Get EQ bands, class adjusters, and timing from a USoundMix asset"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::GetSoundMixSettings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundMix"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundMix"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("set_sound_mix_settings"),
 		TEXT("Set EQ settings, class adjusters, or timing on a USoundMix (partial update)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::SetSoundMixSettings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundMix"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundMix"))
 			.Optional(TEXT("eq_settings"), TEXT("object"), TEXT("FAudioEQEffect fields to update"))
 			.Optional(TEXT("class_effects"), TEXT("array"), TEXT("Array of FSoundClassAdjuster objects (replaces existing)"))
 			.Optional(TEXT("initial_delay"), TEXT("number"), TEXT("Delay before mix takes effect"))
@@ -630,7 +630,7 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a new USoundConcurrency asset with optional settings"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::CreateSoundConcurrency),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Audio/Conc_Default)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path (e.g. /Game/Audio/Conc_Default)"))
 			.Optional(TEXT("settings"), TEXT("object"), TEXT("FSoundConcurrencySettings fields"))
 			.Build());
 
@@ -638,14 +638,14 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Get FSoundConcurrencySettings fields from a USoundConcurrency asset"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::GetConcurrencySettings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundConcurrency"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundConcurrency"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("set_concurrency_settings"),
 		TEXT("Set FSoundConcurrencySettings fields on a USoundConcurrency (partial update)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::SetConcurrencySettings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundConcurrency"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundConcurrency"))
 			.Required(TEXT("settings"), TEXT("object"), TEXT("FSoundConcurrencySettings fields to update"))
 			.Build());
 
@@ -654,7 +654,7 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a new USoundSubmix asset with optional parent and effect chain"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::CreateSoundSubmix),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Audio/Submix_Reverb)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path (e.g. /Game/Audio/Submix_Reverb)"))
 			.Optional(TEXT("parent_submix"), TEXT("string"), TEXT("Asset path of parent USoundSubmix"))
 			.Build());
 
@@ -662,14 +662,14 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Get effect chain, volume, parent/children from a USoundSubmix asset"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::GetSubmixProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundSubmix"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundSubmix"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("set_submix_properties"),
 		TEXT("Set properties on a USoundSubmix (partial update)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::SetSubmixProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundSubmix"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundSubmix"))
 			.Required(TEXT("properties"), TEXT("object"), TEXT("USoundSubmix properties to update"))
 			.Build());
 
@@ -678,7 +678,7 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Procedurally synthesize a 16-bit mono sine-tone USoundWave (no asset deps). Useful for tests requiring a disposable wave."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::CreateTestWave),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Destination asset path under /Game/ (e.g. /Game/Tests/Monolith/Audio/SW_Test_Sine_440)"), { TEXT("path") })
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Destination asset path under /Game/ (e.g. /Game/Tests/Monolith/Audio/SW_Test_Sine_440)"), { TEXT("path") })
 			.Optional(TEXT("frequency_hz"), TEXT("number"), TEXT("Sine frequency in Hz (20.0 to 20000.0, default 440.0)"))
 			.Optional(TEXT("duration_seconds"), TEXT("number"), TEXT("Clip length in seconds (0.05 to 5.0, default 0.5)"))
 			.Optional(TEXT("sample_rate"), TEXT("integer"), TEXT("Sample rate in Hz; allowlist {22050, 44100, 48000} (default 44100)"))

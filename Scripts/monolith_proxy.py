@@ -17,8 +17,8 @@ Requirements: Python 3.8+ (stdlib only, no pip install needed)
 # parse on Python 3.8/3.9 too (macOS ships 3.9 by default via Xcode).
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import os
 import sys
 import threading
@@ -26,7 +26,7 @@ import time
 import tempfile
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime
 from io import TextIOWrapper
 from pathlib import Path
 
@@ -67,6 +67,13 @@ _SENSITIVE_KEY_FRAGMENTS = (
 _DEFAULT_MAX_LOG_FIELD_BYTES = 256 * 1024
 _REPEAT_LOG_WINDOW_SECONDS = 15.0
 
+# Call-log state (Phase 4 / survivor F)
+#
+# NOTE: Saved/Logs/MonolithCalls.jsonl is project-root-relative and excluded
+# from crash zip generation by UE's crash reporter (Saved/Logs/ tail capture
+# only includes editor logs, not arbitrary jsonl). If a crash collector pattern
+# elsewhere DOES sweep Saved/Logs/*, the user should add MonolithCalls.jsonl to
+# the exclusion list. Single-user local dev tool; no phone-home.
 CORE_QUERY_TOOLS = [
     "blueprint_query",
     "material_query",
@@ -713,13 +720,45 @@ def _query_tool_schema() -> dict:
                 "type": "object",
                 "description": "Parameters for the selected action.",
             },
+            "_fields": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit.",
+            },
+            "_omit": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields.",
+            },
+            "_compact_json": {
+                "type": "boolean",
+                "description": "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object.",
+            },
         },
         "required": ["action"],
     }
 
 
 def _empty_object_schema() -> dict:
-    return {"type": "object", "properties": {}}
+    return {
+        "type": "object",
+        "properties": {
+            "_fields": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit.",
+            },
+            "_omit": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields.",
+            },
+            "_compact_json": {
+                "type": "boolean",
+                "description": "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object.",
+            },
+        },
+    }
 
 
 def _make_tool(name: str, description: str, schema: dict) -> dict:
@@ -744,6 +783,20 @@ def _seed_tools() -> list[dict]:
             "properties": {
                 "namespace": {"type": "string", "description": "Optional: filter to a specific namespace"},
                 "category": {"type": "string", "description": "Optional: filter actions within the namespace by category"},
+                "_fields": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit.",
+                },
+                "_omit": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields.",
+                },
+                "_compact_json": {
+                    "type": "boolean",
+                    "description": "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object.",
+                },
             },
         },
     ))
@@ -762,7 +815,21 @@ def _seed_tools() -> list[dict]:
                     "type": "string",
                     "description": "'check' to compare versions, 'install' to download and stage update",
                     "default": "check",
-                }
+                },
+                "_fields": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit.",
+                },
+                "_omit": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields.",
+                },
+                "_compact_json": {
+                    "type": "boolean",
+                    "description": "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object.",
+                },
             },
         },
     ))
@@ -890,6 +957,7 @@ def handle_ping(msg: dict) -> str:
 def handle_tools_list(msg: dict) -> str:
     """Forward tools/list to Monolith. Stable cached/seed list if down."""
     resp = _post_monolith(json.dumps(msg))
+
     if resp:
         _write_tools_cache(resp)
         return resp
@@ -1003,6 +1071,7 @@ def main() -> None:
         else:
             # Forward unknown methods to Monolith
             resp = _post_monolith(json.dumps(msg))
+
             if resp:
                 response = resp
             elif msg_id is not None:

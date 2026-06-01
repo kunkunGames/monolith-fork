@@ -38,7 +38,7 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Add UAIPerceptionComponent to an AI controller Blueprint via SCS"),
 		FMonolithActionHandler::CreateStatic(&HandleAddPerceptionComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Optional(TEXT("dominant_sense"), TEXT("string"), TEXT("Dominant sense type: Sight, Hearing, Damage, Touch, Team, Prediction"))
 			.Build());
 
@@ -47,7 +47,7 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Read all perception senses, params, and affiliation filters from an AI controller Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleGetPerceptionConfig),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Build());
 
 	// 111. configure_sight_sense
@@ -55,7 +55,7 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Configure sight sense on a perception component (creates if absent). Reflection-writes to UAISenseConfig_Sight + base UAISenseConfig (MaxAge, bStartsEnabled)."),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureSightSense),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Required(TEXT("radius"), TEXT("number"), TEXT("Sight radius (cm)"))
 			.Optional(TEXT("lose_radius"), TEXT("number"), TEXT("Lose-sight radius (cm, default: radius * 1.1)"))
 			.Optional(TEXT("peripheral_angle"), TEXT("number"), TEXT("Peripheral vision half-angle in degrees (default: 90)"))
@@ -73,7 +73,7 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Configure hearing sense on a perception component (creates if absent). Reflection-writes to UAISenseConfig_Hearing + base UAISenseConfig (MaxAge, bStartsEnabled)."),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureHearingSense),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Required(TEXT("range"), TEXT("number"), TEXT("Hearing range (cm)"))
 			.Optional(TEXT("affiliation"), TEXT("object"), TEXT("Detection affiliation: {enemies: bool, neutrals: bool, friendlies: bool}"))
 			.Optional(TEXT("max_age"), TEXT("number"), TEXT("Stimulus max age in seconds (0 = never expires). Reflection-write to UAISenseConfig::MaxAge."))
@@ -85,7 +85,7 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Configure damage sense on a perception component (creates if absent). Reflection-writes to UAISenseConfig_Damage + base UAISenseConfig (MaxAge, bStartsEnabled)."),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureDamageSense),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Optional(TEXT("implementation"), TEXT("string"), TEXT("Custom damage sense implementation class"))
 			.Optional(TEXT("max_age"), TEXT("number"), TEXT("Stimulus max age in seconds (0 = never expires). Reflection-write to UAISenseConfig::MaxAge."))
 			.Optional(TEXT("starts_enabled"), TEXT("boolean"), TEXT("Whether sense fires immediately on creation (default: true). Reflection-write to UAISenseConfig::bStartsEnabled bitfield."))
@@ -96,7 +96,7 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Configure touch sense on a perception component (creates if absent). Reflection-writes to UAISenseConfig_Touch + base UAISenseConfig (MaxAge, bStartsEnabled). Note: UAISenseConfig_Touch has no Implementation UPROPERTY in UE 5.7 — class is hardcoded."),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureTouchSense),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Optional(TEXT("affiliation"), TEXT("object"), TEXT("Detection affiliation: {enemies: bool, neutrals: bool, friendlies: bool}"))
 			.Optional(TEXT("max_age"), TEXT("number"), TEXT("Stimulus max age in seconds (0 = never expires). Reflection-write to UAISenseConfig::MaxAge."))
 			.Optional(TEXT("starts_enabled"), TEXT("boolean"), TEXT("Whether sense fires immediately on creation (default: true). Reflection-write to UAISenseConfig::bStartsEnabled bitfield."))
@@ -107,7 +107,7 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Remove a sense configuration from a perception component"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveSense),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Required(TEXT("sense_type"), TEXT("string"), TEXT("Sense type to remove: Sight, Hearing, Damage, Touch, Team, Prediction"))
 			.Build());
 
@@ -116,7 +116,7 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Add UAIPerceptionStimuliSourceComponent to any actor Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleAddStimuliSourceComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Actor Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Actor Blueprint asset path"))
 			.Required(TEXT("register_as_source_for"), TEXT("array"), TEXT("Array of sense types to register as source for: [\"Sight\", \"Hearing\"]"))
 			.Optional(TEXT("auto_register"), TEXT("boolean"), TEXT("Auto-register as source on BeginPlay (default: true)"))
 			.Build());
@@ -126,7 +126,7 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Configure which senses a stimuli source component registers for"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureStimuliSource),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Actor Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Actor Blueprint asset path"))
 			.Required(TEXT("sense_types"), TEXT("array"), TEXT("Array of sense types to register for: [\"Sight\", \"Hearing\"]"))
 			.Optional(TEXT("auto_register"), TEXT("boolean"), TEXT("Auto-register as source on BeginPlay"))
 			.Build());
@@ -136,7 +136,7 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Validate perception setup: senses configured, affiliation set, dominant sense assigned"),
 		FMonolithActionHandler::CreateStatic(&HandleValidatePerceptionSetup),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Build());
 
 	// 218. get_ai_system_config

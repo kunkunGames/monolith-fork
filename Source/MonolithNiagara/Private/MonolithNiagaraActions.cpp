@@ -1775,40 +1775,40 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("add_emitter"), TEXT("Add an emitter to a Niagara system"),
 		FMonolithActionHandler::CreateStatic(&HandleAddEmitter),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter_asset"), TEXT("string"), TEXT("Emitter asset path to add"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Custom name for the emitter"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("remove_emitter"), TEXT("Remove an emitter from a Niagara system"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveEmitter),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name to remove"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("duplicate_emitter"), TEXT("Duplicate an emitter within a Niagara system"),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateEmitter),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("source_emitter"), TEXT("string"), TEXT("Name of emitter to duplicate"))
 			.Optional(TEXT("new_name"), TEXT("string"), TEXT("Name for the duplicated emitter"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_emitter_enabled"), TEXT("Enable or disable an emitter"),
 		FMonolithActionHandler::CreateStatic(&HandleSetEmitterEnabled),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("enabled"), TEXT("bool"), TEXT("Whether to enable the emitter"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("reorder_emitters"), TEXT("Reorder emitters in a system"),
 		FMonolithActionHandler::CreateStatic(&HandleReorderEmitters),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("order"), TEXT("array"), TEXT("Array of emitter names in desired order"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_emitter_property"), TEXT("Set an emitter property"),
 		FMonolithActionHandler::CreateStatic(&HandleSetEmitterProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("property"), TEXT("string"), TEXT("Property name"))
 			.Required(TEXT("value"), TEXT("string"), TEXT("Property value"))
@@ -1816,41 +1816,46 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("request_compile"), TEXT("Request compilation of a Niagara system"),
 		FMonolithActionHandler::CreateStatic(&HandleRequestCompile),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Optional(TEXT("force"), TEXT("bool"), TEXT("Force compilation"), TEXT("false"))
 			.Optional(TEXT("synchronous"), TEXT("bool"), TEXT("Wait for compilation to complete"), TEXT("false"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("create_system"), TEXT("Create a new Niagara system"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateSystem),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Path to save the new system"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Path to save the new system"))
 			.Optional(TEXT("template"), TEXT("string"), TEXT("Template system to base on"))
+			.Build());
+	Registry.RegisterAction(TEXT("niagara"), TEXT("create_stateless_emitter"), TEXT("**Phase 0 stub.** Create a standalone UNiagaraStatelessEmitter (Lightweight Emitter) asset. Not yet implemented."),
+		FMonolithActionHandler::CreateStatic(&HandleCreateStatelessEmitter),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Path where the new Lightweight Emitter asset will be saved"))
 			.Build());
 
 	// Module (12)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_ordered_modules"), TEXT("Get ordered modules in a script stage"),
 		FMonolithActionHandler::CreateStatic(&HandleGetOrderedModules),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Optional(TEXT("usage"), TEXT("string"), TEXT("Script usage filter (e.g. Spawn, Update, Event)"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_module_inputs"), TEXT("Get inputs for a module node"),
 		FMonolithActionHandler::CreateStatic(&HandleGetModuleInputs),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node name"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_module_graph"), TEXT("Get the node graph of a module script"),
 		FMonolithActionHandler::CreateStatic(&HandleGetModuleGraph),
 		FParamSchemaBuilder()
-			.Required(TEXT("script_path"), TEXT("string"), TEXT("Module script asset path"))
+			.RequiredAssetPath(TEXT("script_path"), TEXT("Module script asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("add_module"), TEXT("Add a module to a script stage"),
 		FMonolithActionHandler::CreateStatic(&HandleAddModule),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("usage"), TEXT("string"), TEXT("Script usage (Spawn, Update, Event)"))
 			.Required(TEXT("module_script"), TEXT("string"), TEXT("Module script asset path"))
@@ -1859,14 +1864,14 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("remove_module"), TEXT("Remove a module from a script stage"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveModule),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node name to remove"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("move_module"), TEXT("Move a module to a new index"),
 		FMonolithActionHandler::CreateStatic(&HandleMoveModule),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node name"))
 			.Required(TEXT("new_index"), TEXT("integer"), TEXT("New position index"))
@@ -1874,7 +1879,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_module_enabled"), TEXT("Enable or disable a module"),
 		FMonolithActionHandler::CreateStatic(&HandleSetModuleEnabled),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node name"))
 			.Required(TEXT("enabled"), TEXT("bool"), TEXT("Whether to enable the module"))
@@ -1882,7 +1887,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_module_input_value"), TEXT("Set a module input value"),
 		FMonolithActionHandler::CreateStatic(&HandleSetModuleInputValue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node name"))
 			.Required(TEXT("input"), TEXT("string"), TEXT("Input parameter name"))
@@ -1891,7 +1896,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_module_input_binding"), TEXT("Bind a module input to a parameter"),
 		FMonolithActionHandler::CreateStatic(&HandleSetModuleInputBinding),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node name"))
 			.Required(TEXT("input"), TEXT("string"), TEXT("Input parameter name"))
@@ -1900,7 +1905,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_module_input_di"), TEXT("Set a data interface on a module input"),
 		FMonolithActionHandler::CreateStatic(&HandleSetModuleInputDI),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node name"))
 			.Required(TEXT("input"), TEXT("string"), TEXT("Input parameter name"))
@@ -1911,7 +1916,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleCreateModuleFromHLSL),
 		FParamSchemaBuilder()
 			.Required(TEXT("name"), TEXT("string"), TEXT("Display name for the module"))
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path to save (e.g. /Game/VFX/Modules/MyModule)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path to save (e.g. /Game/VFX/Modules/MyModule)"))
 			.Required(TEXT("hlsl"), TEXT("string"), TEXT("HLSL code body"))
 			.Optional(TEXT("inputs"), TEXT("array"), TEXT("Array of {name, type} objects for input parameters"))
 			.Optional(TEXT("outputs"), TEXT("array"), TEXT("Array of {name, type} objects for output parameters"))
@@ -1921,7 +1926,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleCreateFunctionFromHLSL),
 		FParamSchemaBuilder()
 			.Required(TEXT("name"), TEXT("string"), TEXT("Display name for the function"))
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path to save (e.g. /Game/VFX/Functions/MyFunc)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path to save (e.g. /Game/VFX/Functions/MyFunc)"))
 			.Required(TEXT("hlsl"), TEXT("string"), TEXT("HLSL code body"))
 			.Optional(TEXT("inputs"), TEXT("array"), TEXT("Array of {name, type} objects for input parameters"))
 			.Optional(TEXT("outputs"), TEXT("array"), TEXT("Array of {name, type} objects for output parameters"))
@@ -1932,19 +1937,19 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_all_parameters"), TEXT("Get all parameters in a system"),
 		FMonolithActionHandler::CreateStatic(&HandleGetAllParameters),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Optional(TEXT("emitter"), TEXT("string"), TEXT("Filter to a specific emitter by name"))
 			.Optional(TEXT("scope"), TEXT("string"), TEXT("Filter by scope (e.g. 'User', 'ParticleSpawn', emitter name)"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_user_parameters"), TEXT("Get user-exposed parameters"),
 		FMonolithActionHandler::CreateStatic(&HandleGetUserParameters),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_parameter_value"), TEXT("Get a parameter value"),
 		FMonolithActionHandler::CreateStatic(&HandleGetParameterValue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("parameter"), TEXT("string"), TEXT("Parameter name"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_parameter_type"), TEXT("Get info about a Niagara type"),
@@ -1955,13 +1960,13 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("trace_parameter_binding"), TEXT("Trace where a parameter is used"),
 		FMonolithActionHandler::CreateStatic(&HandleTraceParameterBinding),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("parameter"), TEXT("string"), TEXT("Parameter name to trace"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("add_user_parameter"), TEXT("Add a user parameter"),
 		FMonolithActionHandler::CreateStatic(&HandleAddUserParameter),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Parameter name"))
 			.Required(TEXT("type"), TEXT("string"), TEXT("Niagara type name"))
 			.Optional(TEXT("default"), TEXT("string"), TEXT("Default value"))
@@ -1969,20 +1974,20 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("remove_user_parameter"), TEXT("Remove a user parameter"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveUserParameter),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Parameter name to remove"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_parameter_default"), TEXT("Set a parameter default value"),
 		FMonolithActionHandler::CreateStatic(&HandleSetParameterDefault),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("parameter"), TEXT("string"), TEXT("Parameter name"))
 			.Required(TEXT("value"), TEXT("string"), TEXT("Default value to set"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_curve_value"), TEXT("Set curve keys on a module input"),
 		FMonolithActionHandler::CreateStatic(&HandleSetCurveValue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node name"))
 			.Required(TEXT("input"), TEXT("string"), TEXT("Input parameter name"))
@@ -1993,21 +1998,21 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("add_renderer"), TEXT("Add a renderer to an emitter"),
 		FMonolithActionHandler::CreateStatic(&HandleAddRenderer),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("class"), TEXT("string"), TEXT("Renderer class (e.g. Sprite, Mesh, Ribbon)"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("remove_renderer"), TEXT("Remove a renderer from an emitter"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveRenderer),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("renderer_index"), TEXT("integer"), TEXT("Index of the renderer to remove"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_renderer_material"), TEXT("Set renderer material"),
 		FMonolithActionHandler::CreateStatic(&HandleSetRendererMaterial),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("renderer_index"), TEXT("integer"), TEXT("Renderer index"))
 			.Required(TEXT("material"), TEXT("string"), TEXT("Material asset path"))
@@ -2015,7 +2020,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_renderer_property"), TEXT("Set a renderer property"),
 		FMonolithActionHandler::CreateStatic(&HandleSetRendererProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("renderer_index"), TEXT("integer"), TEXT("Renderer index"))
 			.Required(TEXT("property"), TEXT("string"), TEXT("Property name"))
@@ -2024,14 +2029,14 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_renderer_bindings"), TEXT("Get renderer attribute bindings"),
 		FMonolithActionHandler::CreateStatic(&HandleGetRendererBindings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("renderer_index"), TEXT("integer"), TEXT("Renderer index"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_renderer_binding"), TEXT("Set a renderer attribute binding"),
 		FMonolithActionHandler::CreateStatic(&HandleSetRendererBinding),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("renderer_index"), TEXT("integer"), TEXT("Renderer index"))
 			.Required(TEXT("binding_name"), TEXT("string"), TEXT("Binding property name"))
@@ -2042,12 +2047,12 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("list_emitters"), TEXT("List all emitters in a Niagara system"),
 		FMonolithActionHandler::CreateStatic(&HandleListEmitters),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("list_renderers"), TEXT("List all renderers on a specific emitter"),
 		FMonolithActionHandler::CreateStatic(&HandleListRenderers),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Build());
 
@@ -2063,7 +2068,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("list_renderer_properties"), TEXT("List editable properties on a renderer"),
 		FMonolithActionHandler::CreateStatic(&HandleListRendererProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("renderer_index"), TEXT("integer"), TEXT("Renderer index (from list_renderers)"))
 			.Build());
@@ -2072,13 +2077,13 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("batch_execute"), TEXT("Execute multiple operations in one transaction"),
 		FMonolithActionHandler::CreateStatic(&HandleBatchExecute),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("operations"), TEXT("array"), TEXT("Array of operation objects to execute"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("create_system_from_spec"), TEXT("Create a full system from JSON spec"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateSystemFromSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path, e.g. /Game/VFX/NS_MySystem"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path, e.g. /Game/VFX/NS_MySystem"))
 			.Required(TEXT("spec"), TEXT("object"), TEXT("System specification (emitters, modules, renderers, user_parameters)"))
 			.Build());
 
@@ -2093,7 +2098,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_compiled_gpu_hlsl"), TEXT("Get compiled GPU HLSL for an emitter"),
 		FMonolithActionHandler::CreateStatic(&HandleGetCompiledGPUHLSL),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Build());
 
@@ -2101,7 +2106,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_system_diagnostics"), TEXT("Get compile errors, warnings, renderer issues, and script stats"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSystemDiagnostics),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Optional(TEXT("compile_first"), TEXT("boolean"), TEXT("Force synchronous compile before collecting diagnostics (default: true)"))
 			.Build());
 
@@ -2109,13 +2114,13 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_system_property"), TEXT("Read a system-level property (WarmupTime, bDeterminism, RandomSeed, etc.)"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSystemProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("property"), TEXT("string"), TEXT("Property name or snake_case alias: warmup_time, determinism, random_seed, max_pool_size, etc."))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_system_property"), TEXT("Set a system-level property (WarmupTime, bDeterminism, etc.)"),
 		FMonolithActionHandler::CreateStatic(&HandleSetSystemProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("property"), TEXT("string"), TEXT("Property: WarmupTime, WarmupTickCount, WarmupTickDelta, bFixedTickDelta, FixedTickDeltaTime, bDeterminism, RandomSeed, bSupportLargeWorldCoordinates, bNeedsSortedSignificanceHandling, SignificanceHandlerLink, MaxPoolSize"))
 			.Required(TEXT("value"), TEXT("string"), TEXT("Property value"))
 			.Build());
@@ -2124,7 +2129,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_static_switch_value"), TEXT("Set a static switch value on a module"),
 		FMonolithActionHandler::CreateStatic(&HandleSetStaticSwitchValue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node name"))
 			.Required(TEXT("input"), TEXT("string"), TEXT("Static switch input name"))
@@ -2135,26 +2140,26 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_system_summary"), TEXT("One-call overview of an entire Niagara system, including emitter topology, event flow, location semantics, role hints, params, renderers, and module counts. AI guidance: start with compact for orientation; if emitters may be linked by events, switch to full before reasoning about where particles spawn or explode."),
 		FMonolithActionHandler::CreateStatic(&HandleGetSystemSummary),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("Response verbosity: compact (default) or full. Compact returns topology and role hints without deep per-edge semantic payloads. If emitter-to-emitter event links may matter, prefer full."))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_emitter_summary"), TEXT("Deep view of a single emitter, including modules per stage, renderers, event flow, spawn-location semantics, and role hints. AI guidance: use full when this emitter may send or receive Niagara events from other emitters."),
 		FMonolithActionHandler::CreateStatic(&HandleGetEmitterSummary),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name or GUID"))
 			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("Response verbosity: compact (default) or full. Compact keeps semantic fields shallow; full includes event/link and location-module details. If this emitter may participate in an event chain, prefer full."))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("list_emitter_properties"), TEXT("List all editable properties on FVersionedNiagaraEmitterData with current values"),
 		FMonolithActionHandler::CreateStatic(&HandleListEmitterProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_module_input_value"), TEXT("Read the current override value for a specific module input"),
 		FMonolithActionHandler::CreateStatic(&HandleGetModuleInputValue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node GUID or name"))
 			.Required(TEXT("input"), TEXT("string"), TEXT("Input name (bare or Module. prefixed)"))
@@ -2164,7 +2169,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("configure_curve_keys"), TEXT("Set keys on a DataInterface curve input (NiagaraDataInterfaceCurve/ColorCurve). For plain float inputs use set_curve_value instead"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureCurveKeys),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node GUID or name"))
 			.Required(TEXT("input"), TEXT("string"), TEXT("Input name that has a curve DI"))
@@ -2174,7 +2179,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("configure_data_interface"), TEXT("Set arbitrary properties on a DI attached to a module input via reflection"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureDataInterface),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node GUID or name"))
 			.Required(TEXT("input"), TEXT("string"), TEXT("Input name"))
@@ -2185,13 +2190,13 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("duplicate_system"), TEXT("Clone an entire Niagara system to a new path"),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateSystem),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Source system asset path"))
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Destination path (e.g. /Game/VFX/NS_Fire_Copy)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Source system asset path"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Destination path (e.g. /Game/VFX/NS_Fire_Copy)"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_fixed_bounds"), TEXT("Set explicit bounds on system or emitter for GPU performance"),
 		FMonolithActionHandler::CreateStatic(&HandleSetFixedBounds),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Optional(TEXT("emitter"), TEXT("string"), TEXT("Emitter name (omit for system-level bounds)"))
 			.Required(TEXT("min"), TEXT("array"), TEXT("Min bounds [x, y, z]"))
 			.Required(TEXT("max"), TEXT("array"), TEXT("Max bounds [x, y, z]"))
@@ -2200,20 +2205,20 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_effect_type"), TEXT("Assign a UNiagaraEffectType for scalability and cull distance"),
 		FMonolithActionHandler::CreateStatic(&HandleSetEffectType),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("effect_type"), TEXT("string"), TEXT("Effect type asset path, or 'none' to clear"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("create_emitter"), TEXT("Add a minimal empty emitter to a system (no template needed)"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateEmitter),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Emitter name"))
 			.Optional(TEXT("sim_target"), TEXT("string"), TEXT("cpu or gpu (default: cpu)"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("export_system_spec"), TEXT("Reverse-engineer an existing system into create_system_from_spec-compatible JSON"),
 		FMonolithActionHandler::CreateStatic(&HandleExportSystemSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Optional(TEXT("include_values"), TEXT("bool"), TEXT("Include current input override values (default: true)"))
 			.Build());
 
@@ -2221,7 +2226,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("add_dynamic_input"), TEXT("Attach a dynamic input script to a module input pin"),
 		FMonolithActionHandler::CreateStatic(&HandleAddDynamicInput),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node GUID or name"))
 			.Required(TEXT("input"), TEXT("string"), TEXT("Target module input name"))
@@ -2230,7 +2235,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_dynamic_input_value"), TEXT("Set an input value on a dynamic input node"),
 		FMonolithActionHandler::CreateStatic(&HandleSetDynamicInputValue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("dynamic_input_node"), TEXT("string"), TEXT("GUID of the dynamic input node (from add_dynamic_input)"))
 			.Required(TEXT("input"), TEXT("string"), TEXT("Input name on the dynamic input"))
@@ -2248,7 +2253,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("add_event_handler"), TEXT("Add an inter-emitter event handler (death, collision, location events)"),
 		FMonolithActionHandler::CreateStatic(&HandleAddEventHandler),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Target emitter that receives the event"))
 			.Required(TEXT("event_name"), TEXT("string"), TEXT("Event name (CollisionEvent, DeathEvent, LocationEvent)"))
 			.Optional(TEXT("source_emitter"), TEXT("string"), TEXT("Source emitter (omit for self-events)"))
@@ -2259,12 +2264,12 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("validate_system"), TEXT("Pre-compile validation: check common misconfigurations plus inter-emitter event-chain, spawn-location, and persistent-id issues"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateSystem),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("add_simulation_stage"), TEXT("Add a simulation stage to an emitter"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSimulationStage),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Stage name"))
 			.Optional(TEXT("iteration_source"), TEXT("string"), TEXT("particles or data_interface (default: particles)"))
@@ -2276,7 +2281,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a spawn shape (Cylinder, Sphere, Box, Cone, Torus) to an emitter with automatic switch setup"),
 		FMonolithActionHandler::CreateStatic(&HandleSetSpawnShape),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("shape"), TEXT("string"), TEXT("Shape type: Cylinder, Sphere, Box, Cone, Torus"))
 			.Optional(TEXT("params"), TEXT("object"), TEXT("Shape parameters (radius, height, surface_only, etc.)"))
@@ -2287,14 +2292,14 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("list_dynamic_inputs"), TEXT("List dynamic inputs attached to a module's inputs"),
 		FMonolithActionHandler::CreateStatic(&HandleListDynamicInputs),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node GUID"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_dynamic_input_tree"), TEXT("Get recursive tree of all inputs on a module showing dynamic input structure"),
 		FMonolithActionHandler::CreateStatic(&HandleGetDynamicInputTree),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node GUID"))
 			.Optional(TEXT("max_depth"), TEXT("integer"), TEXT("Max recursion depth (default: 10)"))
@@ -2302,7 +2307,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("remove_dynamic_input"), TEXT("Remove a dynamic input from a module pin, cleaning up sub-nodes"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveDynamicInput),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Optional(TEXT("module_node"), TEXT("string"), TEXT("Module node GUID (required with input)"))
 			.Optional(TEXT("input"), TEXT("string"), TEXT("Input name on the module (required with module_node)"))
@@ -2311,7 +2316,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_dynamic_input_value"), TEXT("Read a value from a dynamic input sub-pin"),
 		FMonolithActionHandler::CreateStatic(&HandleGetDynamicInputValue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("dynamic_input_node"), TEXT("string"), TEXT("GUID of the dynamic input node"))
 			.Required(TEXT("input"), TEXT("string"), TEXT("Input name on the dynamic input"))
@@ -2319,21 +2324,21 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_dynamic_input_inputs"), TEXT("Discover inputs on an unattached dynamic input script"),
 		FMonolithActionHandler::CreateStatic(&HandleGetDynamicInputInputs),
 		FParamSchemaBuilder()
-			.Required(TEXT("script_path"), TEXT("string"), TEXT("Asset path to the dynamic input script"))
+			.RequiredAssetPath(TEXT("script_path"), TEXT("Asset path to the dynamic input script"))
 			.Build());
 
 	// --- Phase 4: Module & Emitter Management (2 new) ---
 	Registry.RegisterAction(TEXT("niagara"), TEXT("rename_emitter"), TEXT("Rename an emitter in a system"),
 		FMonolithActionHandler::CreateStatic(&HandleRenameEmitter),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Current emitter name or handle ID"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("New emitter name"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_emitter_property"), TEXT("Read a single emitter property by name"),
 		FMonolithActionHandler::CreateStatic(&HandleGetEmitterProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("property"), TEXT("string"), TEXT("Property name or snake_case alias (sim_target, local_space, determinism, bounds_mode, random_seed, allocation_mode, pre_allocation_count, requires_persistent_ids, max_gpu_particles_spawn_per_frame)"))
 			.Build());
@@ -2346,7 +2351,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_renderer_mesh"), TEXT("Assign a StaticMesh to a MeshRenderer slot with optional scale/rotation/pivot"),
 		FMonolithActionHandler::CreateStatic(&HandleSetRendererMesh),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("renderer_index"), TEXT("integer"), TEXT("Renderer index"))
 			.Required(TEXT("mesh"), TEXT("string"), TEXT("StaticMesh asset path"))
@@ -2358,7 +2363,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("configure_ribbon"), TEXT("High-level ribbon/trail/beam setup with presets (trail, beam, lightning, tube)"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureRibbon),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("renderer_index"), TEXT("integer"), TEXT("Ribbon renderer index"))
 			.Optional(TEXT("preset"), TEXT("string"), TEXT("Preset: trail, beam, lightning, tube"))
@@ -2376,7 +2381,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("configure_subuv"), TEXT("Set up SubUV/flipbook animation on a sprite renderer"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureSubUV),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name"))
 			.Required(TEXT("renderer_index"), TEXT("integer"), TEXT("Sprite renderer index"))
 			.Required(TEXT("columns"), TEXT("integer"), TEXT("Number of columns in the flipbook"))
@@ -2392,13 +2397,13 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_event_handlers"), TEXT("Read all event handlers on an emitter with full properties"),
 		FMonolithActionHandler::CreateStatic(&HandleGetEventHandlers),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name or handle ID"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_event_handler_property"), TEXT("Modify an event handler property (ExecutionMode, SpawnNumber, MaxEventsPerFrame, SourceEventName, etc.)"),
 		FMonolithActionHandler::CreateStatic(&HandleSetEventHandlerProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name or handle ID"))
 			.Required(TEXT("property"), TEXT("string"), TEXT("Property: ExecutionMode, SpawnNumber, MaxEventsPerFrame, SourceEventName, bRandomSpawnNumber, MinSpawnNumber, UpdateAttributeInitialValues"))
 			.Required(TEXT("value"), TEXT("any"), TEXT("Value to set"))
@@ -2408,7 +2413,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("remove_event_handler"), TEXT("Remove an event handler from an emitter"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveEventHandler),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name or handle ID"))
 			.Optional(TEXT("handler_index"), TEXT("integer"), TEXT("Event handler index"))
 			.Optional(TEXT("usage_id"), TEXT("string"), TEXT("Event handler script usage ID (alternative to handler_index)"))
@@ -2416,13 +2421,13 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_simulation_stages"), TEXT("Read all simulation stages on an emitter with full properties"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSimulationStages),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name or handle ID"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_simulation_stage_property"), TEXT("Modify a simulation stage property (IterationSource, NumIterations, SimulationStageName, etc.)"),
 		FMonolithActionHandler::CreateStatic(&HandleSetSimulationStageProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name or handle ID"))
 			.Required(TEXT("property"), TEXT("string"), TEXT("Property name (UProperty or snake_case alias)"))
 			.Required(TEXT("value"), TEXT("any"), TEXT("Value to set"))
@@ -2432,7 +2437,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("remove_simulation_stage"), TEXT("Remove a simulation stage from an emitter"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveSimulationStage),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name or handle ID"))
 			.Optional(TEXT("stage_index"), TEXT("integer"), TEXT("Simulation stage index"))
 			.Optional(TEXT("stage_name"), TEXT("string"), TEXT("Simulation stage name (alternative to stage_index)"))
@@ -2440,7 +2445,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_module_output_parameters"), TEXT("Discover what particle attributes a module writes to (output variables)"),
 		FMonolithActionHandler::CreateStatic(&HandleGetModuleOutputParameters),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name or handle ID"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node GUID"))
 			.Build());
@@ -2449,31 +2454,31 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("create_npc"), TEXT("Create a Niagara Parameter Collection (NPC) asset"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateNPC),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Path to save the NPC (e.g. /Game/VFX/NPC_Global)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Path to save the NPC (e.g. /Game/VFX/NPC_Global)"))
 			.Required(TEXT("namespace"), TEXT("string"), TEXT("FName namespace for the collection"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_npc"), TEXT("Read all parameters and defaults from a Niagara Parameter Collection"),
 		FMonolithActionHandler::CreateStatic(&HandleGetNPC),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("NPC asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("NPC asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("add_npc_parameter"), TEXT("Add a parameter to a Niagara Parameter Collection"),
 		FMonolithActionHandler::CreateStatic(&HandleAddNPCParameter),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("NPC asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("NPC asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Parameter name"))
 			.Required(TEXT("type"), TEXT("string"), TEXT("Parameter type (float, int, bool, vec2, vec3, vec4, color, position)"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("remove_npc_parameter"), TEXT("Remove a parameter from a Niagara Parameter Collection"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveNPCParameter),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("NPC asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("NPC asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Parameter name to remove"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_npc_default"), TEXT("Set the default value for a parameter in a Niagara Parameter Collection"),
 		FMonolithActionHandler::CreateStatic(&HandleSetNPCDefault),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("NPC asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("NPC asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Parameter name"))
 			.Required(TEXT("value"), TEXT("any"), TEXT("Default value (number, bool, or {x,y,z}/{r,g,b,a} object)"))
 			.Build());
@@ -2482,7 +2487,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("create_effect_type"), TEXT("Create a UNiagaraEffectType asset with optional initial settings"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateEffectType),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Path to save the effect type (e.g. /Game/VFX/ET_Ambient)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Path to save the effect type (e.g. /Game/VFX/ET_Ambient)"))
 			.Optional(TEXT("cull_reaction"), TEXT("string"), TEXT("Deactivate, DeactivateImmediate, DeactivateResume, PauseResume (default: Deactivate)"))
 			.Optional(TEXT("update_frequency"), TEXT("string"), TEXT("Continuous, Low, Medium, High (default: Continuous)"))
 			.Optional(TEXT("max_distance"), TEXT("number"), TEXT("Significance max distance (default: 0 = no limit)"))
@@ -2490,12 +2495,12 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_effect_type"), TEXT("Read all settings from a UNiagaraEffectType asset"),
 		FMonolithActionHandler::CreateStatic(&HandleGetEffectType),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Effect type asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Effect type asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_effect_type_property"), TEXT("Set a property on a UNiagaraEffectType via reflection"),
 		FMonolithActionHandler::CreateStatic(&HandleSetEffectTypeProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Effect type asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Effect type asset path"))
 			.Required(TEXT("property"), TEXT("string"), TEXT("Property name (CullReaction, UpdateFrequency, SignificanceHandler, etc.)"))
 			.Required(TEXT("value"), TEXT("any"), TEXT("Property value"))
 			.Build());
@@ -2504,7 +2509,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_available_parameters"), TEXT("List all parameters available for binding in a system (user, engine, particle, emitter, system attributes)"),
 		FMonolithActionHandler::CreateStatic(&HandleGetAvailableParameters),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Optional(TEXT("emitter"), TEXT("string"), TEXT("Emitter name (to include particle/emitter-scoped attributes)"))
 			.Optional(TEXT("usage"), TEXT("string"), TEXT("Filter by context: user, engine, particle, emitter, system, or all (default: all)"))
 			.Build());
@@ -2513,10 +2518,10 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("preview_system"), TEXT("Capture a preview screenshot of a Niagara system via editor preview scene"),
 		FMonolithActionHandler::CreateStatic(&HandlePreviewSystem),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Optional(TEXT("seek_time"), TEXT("number"), TEXT("Simulation time to seek to before capture (default: 1.0)"))
 			.Optional(TEXT("resolution"), TEXT("string"), TEXT("Resolution as WxH string (default: 512x512)"))
-			.Optional(TEXT("output_path"), TEXT("string"), TEXT("Absolute output file path (default: auto-generated in Saved/Screenshots/Monolith)"))
+			.OptionalDiskPath(TEXT("output_path"), TEXT("Absolute output file path (default: auto-generated in Saved/Screenshots/Monolith)"))
 			.Optional(TEXT("camera_angle"), TEXT("string"), TEXT("Camera preset: front, top, three_quarter, side (default: three_quarter)"))
 			.Optional(TEXT("background_color"), TEXT("array"), TEXT("Background color [R,G,B,A] in 0-1 range (default: [0,0,0,1])"))
 			.Optional(TEXT("auto_fit"), TEXT("bool"), TEXT("Auto-compute camera distance from system bounds (default: true)"))
@@ -2526,21 +2531,21 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("diff_systems"), TEXT("Compare two Niagara systems and return structured diff of emitters, modules, inputs, renderers, parameters, properties"),
 		FMonolithActionHandler::CreateStatic(&HandleDiffSystems),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path_a"), TEXT("string"), TEXT("First Niagara system asset path"))
-			.Required(TEXT("asset_path_b"), TEXT("string"), TEXT("Second Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path_a"), TEXT("First Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path_b"), TEXT("Second Niagara system asset path"))
 			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("summary or full (default: full)"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("save_emitter_as_template"), TEXT("Extract a configured emitter from a system and save as standalone emitter asset"),
 		FMonolithActionHandler::CreateStatic(&HandleSaveEmitterAsTemplate),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Source Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Source Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name or handle ID to extract"))
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Target asset path for standalone emitter (e.g. /Game/VFX/Templates/E_MyTemplate)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Target asset path for standalone emitter (e.g. /Game/VFX/Templates/E_MyTemplate)"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("clone_module_overrides"), TEXT("Copy inline value overrides and bindings from one module to another (same script required)"),
 		FMonolithActionHandler::CreateStatic(&HandleCloneModuleOverrides),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("source_emitter"), TEXT("string"), TEXT("Source emitter name or handle ID"))
 			.Required(TEXT("source_module"), TEXT("string"), TEXT("Source module node GUID"))
 			.Required(TEXT("target_emitter"), TEXT("string"), TEXT("Target emitter name or handle ID"))
@@ -2551,13 +2556,13 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("save_system"), TEXT("Save a Niagara asset (system, script, NPC, effect type) to disk"),
 		FMonolithActionHandler::CreateStatic(&HandleSaveSystem),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara asset path to save"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara asset path to save"))
 			.Optional(TEXT("only_if_dirty"), TEXT("bool"), TEXT("Only save if the asset has unsaved changes (default: true)"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_static_switch_value"), TEXT("Get static switch value(s) on a module — omit input to list all switches"),
 		FMonolithActionHandler::CreateStatic(&HandleGetStaticSwitchValue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name or handle ID"))
 			.Required(TEXT("module_node"), TEXT("string"), TEXT("Module node GUID"))
 			.Optional(TEXT("input"), TEXT("string"), TEXT("Static switch name — omit to list all"))
@@ -2565,7 +2570,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("import_system_spec"), TEXT("Overwrite an existing Niagara system with a JSON spec (removes all emitters/params, applies spec fresh)"),
 		FMonolithActionHandler::CreateStatic(&HandleImportSystemSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Existing Niagara system to overwrite"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Existing Niagara system to overwrite"))
 			.Required(TEXT("spec"), TEXT("object"), TEXT("System spec JSON (same format as create_system_from_spec)"))
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("Import mode: overwrite or merge"))
 			.Build());
@@ -2579,31 +2584,31 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("clear_emitter_modules"), TEXT("Remove all modules from an emitter, optionally filtered by stage"),
 		FMonolithActionHandler::CreateStatic(&HandleClearEmitterModules),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name or handle ID"))
 			.Optional(TEXT("usage"), TEXT("string"), TEXT("Stage filter: particle_update, particle_spawn, emitter_update, emitter_spawn, or all (default: all)"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_module_script_inputs"), TEXT("Introspect a module script's inputs WITHOUT adding it to an emitter"),
 		FMonolithActionHandler::CreateStatic(&HandleGetModuleScriptInputs),
 		FParamSchemaBuilder()
-			.Required(TEXT("script_path"), TEXT("string"), TEXT("Module script asset path (e.g. /Niagara/Modules/Update/Forces/Gravity.Gravity)"))
+			.RequiredAssetPath(TEXT("script_path"), TEXT("Module script asset path (e.g. /Niagara/Modules/Update/Forces/Gravity.Gravity)"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_scalability_settings"), TEXT("Read scalability settings from a NiagaraEffectType asset"),
 		FMonolithActionHandler::CreateStatic(&HandleGetScalabilitySettings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("NiagaraEffectType asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("NiagaraEffectType asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_scalability_settings"), TEXT("Set scalability settings on a NiagaraEffectType asset"),
 		FMonolithActionHandler::CreateStatic(&HandleSetScalabilitySettings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("NiagaraEffectType asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("NiagaraEffectType asset path"))
 			.Required(TEXT("settings"), TEXT("array"), TEXT("Array of scalability configs: [{quality_levels:[0,1,...], max_distance, max_instances, max_system_instances}]"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("list_systems"), TEXT("Search/list Niagara system assets in the project"),
 		FMonolithActionHandler::CreateStatic(&HandleListSystems),
 		FParamSchemaBuilder()
 			.Optional(TEXT("search"), TEXT("string"), TEXT("Keyword filter (tokenized, case-insensitive)"))
-			.Optional(TEXT("path"), TEXT("string"), TEXT("Content path filter (e.g. /Game/VFX)"))
+			.OptionalAssetPath(TEXT("path"), TEXT("Content path filter (e.g. /Game/VFX)"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max results (default: 50)"))
 			.Build());
 
@@ -2611,7 +2616,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("duplicate_module"), TEXT("Duplicate a module within or across emitters (copies script + all overrides)"),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateModule),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("source_emitter"), TEXT("string"), TEXT("Source emitter name or handle ID"))
 			.Required(TEXT("source_module_node"), TEXT("string"), TEXT("Source module node GUID to duplicate"))
 			.Optional(TEXT("target_emitter"), TEXT("string"), TEXT("Target emitter (default: same as source)"))
@@ -2621,13 +2626,13 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("get_emitter_parent"), TEXT("Get the parent emitter asset of an emitter in a system (read-only)"),
 		FMonolithActionHandler::CreateStatic(&HandleGetEmitterParent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("emitter"), TEXT("string"), TEXT("Emitter name or handle ID"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("rename_user_parameter"), TEXT("Rename a user parameter and update all module bindings that reference it"),
 		FMonolithActionHandler::CreateStatic(&HandleRenameUserParameter),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Required(TEXT("old_name"), TEXT("string"), TEXT("Current parameter name (with or without User. prefix)"))
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("New parameter name (with or without User. prefix)"))
 			.Build());
@@ -3042,6 +3047,57 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystem(const TSharedP
 	}
 
 	return SuccessStr(NS->GetPathName());
+}
+
+FMonolithActionResult FMonolithNiagaraActions::HandleCreateStatelessEmitter(const TSharedPtr<FJsonObject>& Params)
+{
+	// Phase 1 — create a standalone Lightweight (stateless) Emitter asset.
+	//
+	// IRON LAW 1 NOTE: the plan flagged `UNiagaraStatelessEmitterFactoryNew` as an
+	// unverified convention guess. source_query confirms NO such factory exists in
+	// UE 5.7 — only `UNiagaraStatelessEmitterTemplateFactoryNew` (a different class,
+	// creates `UNiagaraStatelessEmitterTemplate`, gated by a console var). In the
+	// engine, `UNiagaraStatelessEmitter` is always created via direct `NewObject` as
+	// a sub-object of a `UNiagaraSystem` (NiagaraEmitterHandle.cpp:219,
+	// NiagaraSystemViewModel.cpp:653/:672). We mirror `HandleCreateSystem`'s
+	// package + NewObject pattern to author a standalone .uasset whose top-level
+	// object is the stateless emitter itself.
+	FString SavePath = Params->GetStringField(TEXT("save_path"));
+
+	FString PackagePath, AssetName;
+	int32 LastSlash;
+	if (!SavePath.FindLastChar('/', LastSlash)) return FMonolithActionResult::Error(TEXT("Invalid save path"));
+	PackagePath = SavePath.Left(LastSlash);
+	AssetName = SavePath.Mid(LastSlash + 1);
+
+	FString FullPath = PackagePath / AssetName;
+	UPackage* Pkg = CreatePackage(*FullPath);
+	if (!Pkg) return FMonolithActionResult::Error(TEXT("Failed to create package"));
+
+	// Resolve UNiagaraStatelessEmitter's UClass at runtime via FindObject — its
+	// header lives under Niagara/Internal/ which is intentionally not exposed to
+	// dependent modules. Standard UE pattern for cross-plugin private-type access.
+	UClass* StatelessClass = FindObject<UClass>(nullptr, TEXT("/Script/Niagara.NiagaraStatelessEmitter"));
+	if (!StatelessClass) return FMonolithActionResult::Error(TEXT("UNiagaraStatelessEmitter UClass not found - Niagara plugin may not be loaded"));
+
+	UObject* Emitter = NewObject<UObject>(
+		Pkg, StatelessClass, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
+	if (!Emitter) return FMonolithActionResult::Error(TEXT("Failed to create stateless emitter"));
+
+	FAssetRegistryModule::AssetCreated(Emitter);
+	Pkg->MarkPackageDirty();
+
+	// Save to disk immediately so the .uasset file exists. Mirrors HandleCreateSystem.
+	FString PackageFilename;
+	if (FPackageName::TryConvertLongPackageNameToFilename(Pkg->GetName(), PackageFilename, FPackageName::GetAssetPackageExtension()))
+	{
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		SaveArgs.Error = GError;
+		UPackage::SavePackage(Pkg, Emitter, *PackageFilename, SaveArgs);
+	}
+
+	return SuccessStr(Emitter->GetPathName());
 }
 
 // ============================================================================

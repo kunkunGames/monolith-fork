@@ -344,7 +344,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			"With building_context: auto-orients to wall normal and emits wall_openings (french_door)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshArchFeatureActions::CreateBalcony),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Town/SM_Balcony_01)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path (e.g. /Game/Town/SM_Balcony_01)"))
 			.Required(TEXT("width"), TEXT("number"), TEXT("Balcony width along the wall (cm)"))
 			.Required(TEXT("depth"), TEXT("number"), TEXT("How far it extends from the wall (cm)"))
 			.Optional(TEXT("floor_thickness"), TEXT("number"), TEXT("Slab thickness (cm)"), TEXT("15"))
@@ -359,7 +359,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("rotation"), TEXT("number"), TEXT("Yaw rotation in degrees"))
 			.Optional(TEXT("building_context"), TEXT("object"), BuildingContextDesc)
 			.Optional(TEXT("label"), TEXT("string"), TEXT("Actor label"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Overwrite existing asset"), TEXT("false"))
 			.Build());
 
@@ -370,7 +370,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			"With building_context: auto-orients, aligns porch floor to building floor, emits wall_openings (door)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshArchFeatureActions::CreatePorch),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Town/SM_Porch_01)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path (e.g. /Game/Town/SM_Porch_01)"))
 			.Required(TEXT("width"), TEXT("number"), TEXT("Porch width (cm)"))
 			.Required(TEXT("depth"), TEXT("number"), TEXT("Porch depth (cm)"))
 			.Optional(TEXT("height"), TEXT("number"), TEXT("Porch roof height from ground (cm)"), TEXT("270"))
@@ -391,7 +391,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("rotation"), TEXT("number"), TEXT("Yaw rotation in degrees"))
 			.Optional(TEXT("building_context"), TEXT("object"), BuildingContextDesc)
 			.Optional(TEXT("label"), TEXT("string"), TEXT("Actor label"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Overwrite existing asset"), TEXT("false"))
 			.Build());
 
@@ -402,7 +402,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			"With building_context: auto-orients to wall, aligns landings to floor heights, emits wall_openings (windows)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshArchFeatureActions::CreateFireEscape),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Town/SM_FireEscape_01)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path (e.g. /Game/Town/SM_FireEscape_01)"))
 			.Required(TEXT("floor_count"), TEXT("number"), TEXT("Number of floors to span"))
 			.Required(TEXT("floor_height"), TEXT("number"), TEXT("Height per floor (cm)"))
 			.Optional(TEXT("landing_width"), TEXT("number"), TEXT("Landing platform width (cm)"), TEXT("150"))
@@ -418,7 +418,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("rotation"), TEXT("number"), TEXT("Yaw rotation in degrees"))
 			.Optional(TEXT("building_context"), TEXT("object"), BuildingContextDesc)
 			.Optional(TEXT("label"), TEXT("string"), TEXT("Actor label"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Overwrite existing asset"), TEXT("false"))
 			.Build());
 
@@ -429,7 +429,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			"With building_context: auto-orients to wall and emits wall_openings (door at top)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshArchFeatureActions::CreateRampConnector),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Town/SM_Ramp_01)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path (e.g. /Game/Town/SM_Ramp_01)"))
 			.Required(TEXT("rise"), TEXT("number"), TEXT("Total height change (cm)"))
 			.Optional(TEXT("width"), TEXT("number"), TEXT("Ramp width (cm)"), TEXT("120"))
 			.Optional(TEXT("slope_ratio"), TEXT("number"), TEXT("Rise-to-run ratio (1/12 for ADA)"), TEXT("0.0833"))
@@ -444,7 +444,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("rotation"), TEXT("number"), TEXT("Yaw rotation in degrees"))
 			.Optional(TEXT("building_context"), TEXT("object"), BuildingContextDesc)
 			.Optional(TEXT("label"), TEXT("string"), TEXT("Actor label"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Overwrite existing asset"), TEXT("false"))
 			.Build());
 
@@ -455,7 +455,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			"With building_context: auto-orients to wall normal for placement."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshArchFeatureActions::CreateRailing),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Town/SM_Railing_01)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path (e.g. /Game/Town/SM_Railing_01)"))
 			.Required(TEXT("points"), TEXT("array"), TEXT("Array of [x,y,z] points defining the railing path"))
 			.Optional(TEXT("height"), TEXT("number"), TEXT("Railing height (cm)"), TEXT("100"))
 			.Optional(TEXT("style"), TEXT("string"), TEXT("simple, bars, or solid"), TEXT("bars"))
@@ -470,7 +470,7 @@ void FMonolithMeshArchFeatureActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("location"), TEXT("array"), TEXT("World location [x,y,z]"))
 			.Optional(TEXT("building_context"), TEXT("object"), BuildingContextDesc)
 			.Optional(TEXT("label"), TEXT("string"), TEXT("Actor label"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Overwrite existing asset"), TEXT("false"))
 			.Build());
 }

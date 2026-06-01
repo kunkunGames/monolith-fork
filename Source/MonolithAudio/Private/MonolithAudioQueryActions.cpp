@@ -111,7 +111,7 @@ void FMonolithAudioQueryActions::RegisterActions(FMonolithToolRegistry& Registry
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioQueryActions::ListAudioAssets),
 		FParamSchemaBuilder()
 			.Required(TEXT("type"), TEXT("string"), TEXT("Asset type: SoundWave, SoundCue, MetaSoundSource, SoundClass, SoundAttenuation, SoundSubmix, SoundConcurrency, SoundMix, or All"))
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only return assets under this content path (e.g. /Game/Audio)"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only return assets under this content path (e.g. /Game/Audio)"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum number of results (default: 100)"), TEXT("100"))
 			.Build());
 
@@ -128,7 +128,7 @@ void FMonolithAudioQueryActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Get detailed properties of a USoundWave asset"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioQueryActions::GetSoundWaveInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SoundWave asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SoundWave asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("get_sound_class_hierarchy"),
@@ -149,7 +149,7 @@ void FMonolithAudioQueryActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Find assets that reference or are depended on by a given audio asset"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioQueryActions::FindAudioReferences),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Audio asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Audio asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("find_unused_audio"),
@@ -157,7 +157,7 @@ void FMonolithAudioQueryActions::RegisterActions(FMonolithToolRegistry& Registry
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioQueryActions::FindUnusedAudio),
 		FParamSchemaBuilder()
 			.Optional(TEXT("type"), TEXT("string"), TEXT("Filter by audio type (default: All)"), TEXT("All"))
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only scan assets under this content path"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only scan assets under this content path"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum results to prevent timeout (default: 100)"), TEXT("100"))
 			.Build());
 
@@ -165,7 +165,7 @@ void FMonolithAudioQueryActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Find SoundBase-derived assets that have no SoundClass assigned"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioQueryActions::FindSoundsWithoutClass),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only scan assets under this content path"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only scan assets under this content path"))
 			.Optional(TEXT("limit"), TEXT("number"), TEXT("Max results to return (default: 100)"), TEXT("100"))
 			.Build());
 
@@ -173,7 +173,7 @@ void FMonolithAudioQueryActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Find SoundBase-derived assets with no attenuation configured"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioQueryActions::FindUnattenuatedSounds),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only scan assets under this content path"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only scan assets under this content path"))
 			.Optional(TEXT("limit"), TEXT("number"), TEXT("Max results to return (default: 100)"), TEXT("100"))
 			.Build());
 

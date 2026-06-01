@@ -264,7 +264,7 @@ namespace MonolithCommonUIAudit
 			TEXT("Lint a single WBP for CommonUI best-practice violations (missing style, unbound action widget, etc.)"),
 			FMonolithActionHandler::CreateStatic(&HandleAuditCommonUIWidget),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint to audit"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint to audit"))
 				.Build(),
 			Cat);
 
@@ -273,7 +273,7 @@ namespace MonolithCommonUIAudit
 			TEXT("Project-wide CommonUI audit: counts of activatable widgets, buttons (styled/unstyled), action widgets (bound/unbound), styling + binding coverage ratios"),
 			FMonolithActionHandler::CreateStatic(&HandleExportCommonUIReport),
 			FParamSchemaBuilder()
-				.Optional(TEXT("folder_path"), TEXT("string"), TEXT("Folder to scan (default: /Game)"))
+				.OptionalAssetPath(TEXT("folder_path"), TEXT("Folder to scan (default: /Game)"))
 				.Build(),
 			Cat);
 

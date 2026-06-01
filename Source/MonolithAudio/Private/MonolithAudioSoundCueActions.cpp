@@ -620,7 +620,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a new USoundCue asset. Optionally provide sound_waves[] to auto-create WavePlayers (+ Random node if multiple)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::CreateSoundCue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Audio/SC_MyCue)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path (e.g. /Game/Audio/SC_MyCue)"))
 			.Optional(TEXT("sound_waves"), TEXT("array"), TEXT("Array of SoundWave asset paths to auto-populate"))
 			.Build());
 
@@ -628,14 +628,14 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Get the full Sound Cue graph as JSON: nodes[], connections[], first_node, properties"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::GetSoundCueGraph),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundCue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundCue"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("add_sound_cue_node"),
 		TEXT("Add a sound node to a Sound Cue. Returns the auto-assigned node_id."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::AddSoundCueNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundCue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundCue"))
 			.Required(TEXT("node_type"), TEXT("string"), TEXT("Node type name (e.g. WavePlayer, Random, Mixer, Delay, Modulator, etc.)"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("Property values to set on the new node"))
 			.Build());
@@ -644,7 +644,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Remove a sound node from a Sound Cue by node_id"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::RemoveSoundCueNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundCue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundCue"))
 			.Required(TEXT("node_id"), TEXT("string"), TEXT("Node ID to remove"))
 			.Build());
 
@@ -652,7 +652,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Connect two sound nodes: from_node becomes a child of to_node at child_index"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::ConnectSoundCueNodes),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundCue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundCue"))
 			.Required(TEXT("from_node_id"), TEXT("string"), TEXT("Source node (child) ID"))
 			.Required(TEXT("to_node_id"), TEXT("string"), TEXT("Destination node (parent) ID"))
 			.Optional(TEXT("child_index"), TEXT("number"), TEXT("Child slot index on the parent (auto-appends if omitted)"))
@@ -662,7 +662,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Set the FirstNode (root) of a Sound Cue"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::SetSoundCueFirstNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundCue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundCue"))
 			.Required(TEXT("node_id"), TEXT("string"), TEXT("Node ID to set as FirstNode"))
 			.Build());
 
@@ -670,7 +670,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Set a property on a sound node via reflection. Special case: SoundWave on WavePlayer uses SetSoundWave()."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::SetSoundCueNodeProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundCue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundCue"))
 			.Required(TEXT("node_id"), TEXT("string"), TEXT("Node ID"))
 			.Required(TEXT("property_name"), TEXT("string"), TEXT("Property name"))
 			.Required(TEXT("value"), TEXT("any"), TEXT("Property value"))
@@ -685,14 +685,14 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Find all SoundWave references in a Sound Cue (WavePlayer nodes)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::FindSoundWavesInCue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundCue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundCue"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("validate_sound_cue"),
 		TEXT("Validate a Sound Cue: check null FirstNode, disconnected nodes, missing SoundWaves"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::ValidateSoundCue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundCue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundCue"))
 			.Build());
 
 	// --- Build & Templates ---
@@ -701,7 +701,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Build a complete Sound Cue from a JSON spec: nodes, connections, first_node, properties. The crown jewel."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::BuildSoundCueFromSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new Sound Cue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new Sound Cue"))
 			.Required(TEXT("spec"), TEXT("object"), TEXT("JSON spec: {nodes: [{id, type, properties?}], connections: [{from, to, child_index?}], first_node, properties?}"))
 			.Build());
 
@@ -709,7 +709,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a Sound Cue with N WavePlayers feeding a Random node, with optional weights"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::CreateRandomSoundCue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new Sound Cue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new Sound Cue"))
 			.Required(TEXT("sound_waves"), TEXT("array"), TEXT("Array of SoundWave asset paths"))
 			.Optional(TEXT("weights"), TEXT("array"), TEXT("Array of float weights (same length as sound_waves)"))
 			.Build());
@@ -718,7 +718,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a Sound Cue with N WavePlayers feeding a Mixer node, with optional per-input volumes"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::CreateLayeredSoundCue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new Sound Cue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new Sound Cue"))
 			.Required(TEXT("sound_waves"), TEXT("array"), TEXT("Array of SoundWave asset paths"))
 			.Optional(TEXT("volumes"), TEXT("array"), TEXT("Array of float volumes per input (same length as sound_waves)"))
 			.Build());
@@ -727,7 +727,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a looping ambient Sound Cue: Looping -> Delay -> Random -> WavePlayers"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::CreateLoopingAmbientCue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new Sound Cue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new Sound Cue"))
 			.Required(TEXT("sound_waves"), TEXT("array"), TEXT("Array of SoundWave asset paths"))
 			.Optional(TEXT("delay_min"), TEXT("number"), TEXT("Minimum delay between loops (default 0.1)"))
 			.Optional(TEXT("delay_max"), TEXT("number"), TEXT("Maximum delay between loops (default 1.0)"))
@@ -737,7 +737,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a Sound Cue with a DistanceCrossFade node and N distance bands"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new Sound Cue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new Sound Cue"))
 			.Required(TEXT("bands"), TEXT("array"), TEXT("Array of {sound_wave, fade_in_distance_start, fade_in_distance_end, fade_out_distance_start, fade_out_distance_end, volume}"))
 			.Build());
 
@@ -745,7 +745,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a Sound Cue with a Switch node and N WavePlayer variants"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::CreateSwitchSoundCue),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new Sound Cue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new Sound Cue"))
 			.Required(TEXT("parameter_name"), TEXT("string"), TEXT("Switch parameter name (FName)"))
 			.Required(TEXT("sound_waves"), TEXT("array"), TEXT("Array of SoundWave asset paths — one per switch value"))
 			.Build());
@@ -756,22 +756,22 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Duplicate a Sound Cue to a new path"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::DuplicateSoundCue),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Source Sound Cue asset path"))
-			.Required(TEXT("dest_path"), TEXT("string"), TEXT("Destination asset path"))
+			.RequiredAssetPath(TEXT("source_path"), TEXT("Source Sound Cue asset path"))
+			.RequiredAssetPath(TEXT("dest_path"), TEXT("Destination asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("delete_audio_asset"),
 		TEXT("Delete any audio asset (SoundCue, SoundWave, SoundAttenuation, etc.)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::DeleteAudioAsset),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to delete"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path to delete"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("preview_sound"),
 		TEXT("Preview a sound asset in the editor (plays via GEditor)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::PreviewSound),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of any USoundBase"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of any USoundBase"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("stop_preview"),
@@ -783,7 +783,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Get the cached duration of a Sound Cue"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::GetSoundCueDuration),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the USoundCue"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundCue"))
 			.Build());
 }
 

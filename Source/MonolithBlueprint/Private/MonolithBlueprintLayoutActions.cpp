@@ -27,7 +27,7 @@ void FMonolithBlueprintLayoutActions::RegisterActions(FMonolithToolRegistry& Reg
 			"Supports full, new-only, and selected-node modes."),
 		FMonolithActionHandler::CreateStatic(&HandleAutoLayout),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name (default: EventGraph)"))
 			.Optional(TEXT("horizontal_spacing"), TEXT("integer"), TEXT("Horizontal spacing between layers in pixels"), TEXT("350"))
 			.Optional(TEXT("vertical_spacing"), TEXT("integer"), TEXT("Vertical spacing between nodes in pixels"), TEXT("80"))

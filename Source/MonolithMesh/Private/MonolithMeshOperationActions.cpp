@@ -144,7 +144,7 @@ void FMonolithMeshOperationActions::RegisterActions(FMonolithToolRegistry& Regis
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshOperationActions::SaveHandle),
 		FParamSchemaBuilder()
 			.Required(TEXT("handle"), TEXT("string"), TEXT("Handle name to save"))
-			.Required(TEXT("target_path"), TEXT("string"), TEXT("Asset path for the new StaticMesh (e.g. /Game/Meshes/SM_Result)"))
+			.RequiredAssetPath(TEXT("target_path"), TEXT("Asset path for the new StaticMesh (e.g. /Game/Meshes/SM_Result)"))
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Allow overwriting existing asset"), TEXT("false"))
 			.Optional(TEXT("collision"), TEXT("string"), TEXT("Collision mode: auto, box, convex, complex_as_simple, none"), TEXT("auto"))
 			.Optional(TEXT("max_hulls"), TEXT("integer"), TEXT("Max convex hulls for decomposition (auto/convex modes)"), TEXT("4"))

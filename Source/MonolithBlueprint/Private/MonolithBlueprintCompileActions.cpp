@@ -33,21 +33,21 @@ void FMonolithBlueprintCompileActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Compile a Blueprint asset and return errors, warnings, and compile status."),
 		FMonolithActionHandler::CreateStatic(&HandleCompileBlueprint),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("validate_blueprint"),
 		TEXT("Validate a Blueprint without compiling — returns unused variables, disconnected nodes, and compiler messages already stored on nodes."),
 		FMonolithActionHandler::CreateStatic(&HandleValidateBlueprint),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("create_blueprint"),
 		TEXT("Create a new Blueprint asset at the given save path with the specified parent class and blueprint type."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateBlueprint),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"),      TEXT("string"),  TEXT("Asset save path, e.g. /Game/Test/BP_MyActor"))
+			.RequiredAssetPath(TEXT("save_path"),      TEXT("Asset save path, e.g. /Game/Test/BP_MyActor"))
 			.Required(TEXT("parent_class"),   TEXT("string"),  TEXT("Parent class name, e.g. Actor, Pawn, Character"))
 			.Optional(TEXT("blueprint_type"), TEXT("string"),  TEXT("Blueprint type: Normal, Const, MacroLibrary, Interface, FunctionLibrary (default: Normal)"), TEXT("Normal"))
 			.Optional(TEXT("skip_save"),      TEXT("boolean"), TEXT("Skip the synchronous package save — Blueprint exists in-memory and can be saved later (default: false)"), TEXT("false"))
@@ -57,15 +57,15 @@ void FMonolithBlueprintCompileActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Duplicate an existing Blueprint asset to a new path."),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateBlueprint),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Source Blueprint asset path"))
-			.Required(TEXT("new_path"),   TEXT("string"), TEXT("Destination asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Source Blueprint asset path"))
+			.RequiredAssetPath(TEXT("new_path"),   TEXT("Destination asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_dependencies"),
 		TEXT("Get asset dependencies for a Blueprint using the Asset Registry. Reports what the Blueprint depends on and/or what references it."),
 		FMonolithActionHandler::CreateStatic(&HandleGetDependencies),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Optional(TEXT("direction"),  TEXT("string"), TEXT("depends_on, referenced_by, or both (default: both)"), TEXT("both"))
 			.Build());
 
@@ -73,14 +73,14 @@ void FMonolithBlueprintCompileActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Save a loaded asset to disk. Works on any asset type, not just Blueprints."),
 		FMonolithActionHandler::CreateStatic(&HandleSaveAsset),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to save"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path to save"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("save_dirty_assets"),
 		TEXT("Save ALL currently-dirty Blueprint and Widget Blueprint packages in one sweep (closes the data-loss window after a batch of edit actions that dirty but do not persist packages). Filter with path_prefix (default /Game). Returns saved[], failed[], count."),
 		FMonolithActionHandler::CreateStatic(&HandleSaveDirtyAssets),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_prefix"), TEXT("string"), TEXT("Only save assets whose package path starts with this prefix (default: /Game). Pass empty string to save all dirty Blueprint/Widget packages regardless of path."), TEXT("/Game"))
+			.OptionalAssetPathWithDefault(TEXT("path_prefix"), TEXT("Only save assets whose package path starts with this prefix (default: /Game). Pass empty string to save all dirty Blueprint/Widget packages regardless of path."), TEXT("/Game"))
 			.Build());
 }
 

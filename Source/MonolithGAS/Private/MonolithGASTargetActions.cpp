@@ -37,7 +37,7 @@ void FMonolithGASTargetActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create a GameplayAbilityTargetActor Blueprint. Supports sphere, line, ground, and custom targeting types."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateTargetActor),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path (e.g. '/Game/GAS/Targeting/TA_Hitscan')"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path (e.g. '/Game/GAS/Targeting/TA_Hitscan')"))
 			.Required(TEXT("targeting_type"), TEXT("string"), TEXT("Targeting type: 'line' (SingleLineTrace), 'sphere' (Radius), 'ground' (GroundTrace), 'custom' (base TargetActor)"))
 			.Optional(TEXT("trace_channel"), TEXT("string"), TEXT("Trace channel name (e.g. 'Visibility', 'Camera')"))
 			.Optional(TEXT("max_range"), TEXT("number"), TEXT("Maximum targeting range in units"))
@@ -48,7 +48,7 @@ void FMonolithGASTargetActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Configure a TargetActor Blueprint: trace channel, range, radius, filters"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureTargetActor),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("TargetActor Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("TargetActor Blueprint asset path"))
 			.Optional(TEXT("trace_channel"), TEXT("string"), TEXT("Trace channel name"))
 			.Optional(TEXT("max_range"), TEXT("number"), TEXT("Maximum range"))
 			.Optional(TEXT("radius"), TEXT("number"), TEXT("Radius for sphere/ground targeting"))
@@ -61,7 +61,7 @@ void FMonolithGASTargetActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Wire a WaitTargetData task into an ability Blueprint graph"),
 		FMonolithActionHandler::CreateStatic(&HandleAddTargetingToAbility),
 		FParamSchemaBuilder()
-			.Required(TEXT("ability_path"), TEXT("string"), TEXT("Ability Blueprint asset path"))
+			.RequiredAssetPath(TEXT("ability_path"), TEXT("Ability Blueprint asset path"))
 			.Optional(TEXT("target_actor_class"), TEXT("string"), TEXT("TargetActor class path to use (default: auto-detect from project)"))
 			.Optional(TEXT("confirm_type"), TEXT("string"), TEXT("Confirmation mode: 'instant', 'custom', 'custom_multi' (default: instant)"), TEXT("instant"))
 			.Build());
@@ -70,18 +70,18 @@ void FMonolithGASTargetActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("FPS convenience: scaffold targeting flow for hitscan, projectile, melee_sweep, or aoe"),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldFPSTargeting),
 		FParamSchemaBuilder()
-			.Required(TEXT("ability_path"), TEXT("string"), TEXT("Ability Blueprint asset path"))
+			.RequiredAssetPath(TEXT("ability_path"), TEXT("Ability Blueprint asset path"))
 			.Required(TEXT("mode"), TEXT("string"), TEXT("Targeting mode: 'hitscan', 'projectile', 'melee_sweep', 'aoe'"))
 			.Optional(TEXT("range"), TEXT("number"), TEXT("Max range in units (default: 10000 hitscan, 500 melee, 300 aoe)"))
 			.Optional(TEXT("radius"), TEXT("number"), TEXT("Radius for aoe/melee_sweep (default: 150 melee, 300 aoe)"))
-			.Optional(TEXT("save_path"), TEXT("string"), TEXT("Override save path for auto-created TargetActor (default: sibling folder)"))
+			.OptionalAssetPath(TEXT("save_path"), TEXT("Override save path for auto-created TargetActor (default: sibling folder)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("gas"), TEXT("validate_targeting"),
 		TEXT("Validate targeting setup: check TargetActor class exists, WaitTargetData is present, flow is complete"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateTargeting),
 		FParamSchemaBuilder()
-			.Required(TEXT("ability_path"), TEXT("string"), TEXT("Ability Blueprint asset path"))
+			.RequiredAssetPath(TEXT("ability_path"), TEXT("Ability Blueprint asset path"))
 			.Build());
 }
 

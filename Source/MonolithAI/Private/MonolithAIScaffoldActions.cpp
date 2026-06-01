@@ -350,7 +350,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("ONE-CALL onboarding: creates Character BP + Controller + BT (patrol 3 waypoints) + BB + Perception (sight+hearing) + team. Returns all paths."),
 		FMonolithActionHandler::CreateStatic(&HandleHelloWorldAI),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets (e.g. /Game/AI/HelloWorld)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets (e.g. /Game/AI/HelloWorld)"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Name prefix for all assets (default: HelloWorldAI)"))
 			.Optional(TEXT("location"), TEXT("string"), TEXT("Spawn location as 'X,Y,Z' — also places NavMeshBoundsVolume"))
 			.Build());
@@ -360,7 +360,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Full AI stack: Character BP + Controller + BT + BB + Perception + Team, all wired together"),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldCompleteAICharacter),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets (e.g. /Game/AI/Enemy)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets (e.g. /Game/AI/Enemy)"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Name for the AI character (used as prefix)"))
 			.Optional(TEXT("mesh"), TEXT("string"), TEXT("Skeletal mesh asset path for the character"))
 			.Optional(TEXT("bt_template"), TEXT("string"), TEXT("BT template: patrol, chase_attack, flee, search_area, guard_post"))
@@ -373,8 +373,8 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Wire perception events to blackboard keys (creates BB keys if needed). Note: configures perception senses and BB keys for the perception→BB bridge pattern."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldPerceptionToBlackboard),
 		FParamSchemaBuilder()
-			.Required(TEXT("controller_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
-			.Required(TEXT("bb_path"), TEXT("string"), TEXT("Blackboard asset path"))
+			.RequiredAssetPath(TEXT("controller_path"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("bb_path"), TEXT("Blackboard asset path"))
 			.Optional(TEXT("mappings"), TEXT("array"), TEXT("Array of {sense, bb_key} objects, e.g. [{\"sense\":\"Sight\",\"bb_key\":\"TargetActor\"},{\"sense\":\"Hearing\",\"bb_key\":\"HeardLocation\"}]"))
 			.Build());
 
@@ -383,7 +383,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Full team setup: create team attitude DataTable with specified teams and attitudes"),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldTeamSystem),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Save path for team DataTable (e.g. /Game/AI/DT_TeamAttitudes)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Save path for team DataTable (e.g. /Game/AI/DT_TeamAttitudes)"))
 			.Required(TEXT("teams"), TEXT("array"), TEXT("Array of team objects: [{\"id\": 0, \"name\": \"Player\"}, {\"id\": 1, \"name\": \"Enemy\"}]"))
 			.Optional(TEXT("attitudes"), TEXT("array"), TEXT("Array of attitude definitions: [{\"from\": 0, \"to\": 1, \"attitude\": \"Hostile\"}, ...]. Default: all teams hostile to each other, friendly to self."))
 			.Build());
@@ -393,7 +393,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Guard AI scaffold: patrol→hear→investigate→search→return. Full Character+Controller+BT+BB+Perception stack."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldPatrolInvestigateAI),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Name prefix for all assets"))
 			.Optional(TEXT("patrol_type"), TEXT("string"), TEXT("Patrol type: loop, pingpong, random (default: loop)"))
 			.Optional(TEXT("investigation_radius"), TEXT("number"), TEXT("Investigation search radius in cm (default: 500)"))
@@ -404,7 +404,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Basic enemy scaffold with chase+attack behavior. Archetype determines BT structure."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldEnemyAI),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Name for the enemy"))
 			.Required(TEXT("archetype"), TEXT("string"), TEXT("Enemy archetype: melee, ranged, charger"))
 			.Optional(TEXT("team_id"), TEXT("number"), TEXT("Team ID (default: 1)"))
@@ -415,9 +415,9 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Convenience: add a RunEQS→store→MoveTo sequence to an existing BT"),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldEQSMoveSequence),
 		FParamSchemaBuilder()
-			.Required(TEXT("bt_path"), TEXT("string"), TEXT("Behavior Tree asset path"))
+			.RequiredAssetPath(TEXT("bt_path"), TEXT("Behavior Tree asset path"))
 			.Optional(TEXT("parent_id"), TEXT("string"), TEXT("GUID of parent composite node (null = root)"))
-			.Required(TEXT("eqs_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("eqs_path"), TEXT("EQS query asset path"))
 			.Required(TEXT("bb_key"), TEXT("string"), TEXT("Blackboard key for EQS result + MoveTo target"))
 			.Build());
 
@@ -426,7 +426,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a Behavior Tree from a named template with standard BB keys"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateBTFromTemplate),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path (e.g. /Game/AI/BT_Patrol)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path (e.g. /Game/AI/BT_Patrol)"))
 			.Required(TEXT("template"), TEXT("string"), TEXT("Template name: patrol, chase_attack, flee, search_area, guard_post"))
 			.Build());
 
@@ -435,7 +435,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a State Tree from a named template (requires StateTree plugin)"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateSTFromTemplate),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path (e.g. /Game/AI/ST_Patrol)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path (e.g. /Game/AI/ST_Patrol)"))
 			.Required(TEXT("template"), TEXT("string"), TEXT("Template name: patrol, combat, investigation, ambient"))
 			.Build());
 
@@ -446,7 +446,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		     "Otherwise scans the project (filtered by 'path_filter' if set)."),
 		FMonolithActionHandler::CreateStatic(&HandleBatchValidateAIAssets),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only validate assets under this path prefix (full-scan mode)"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only validate assets under this path prefix (full-scan mode)"))
 			.Optional(TEXT("asset_paths"), TEXT("array"), TEXT("Optional explicit list of asset paths to validate. When set, full scan is skipped and only these paths are checked."))
 			.Build());
 
@@ -455,7 +455,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Validate an AI controller: check BT/BB refs, perception configured, team set"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateAIController),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AIController Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AIController Blueprint asset path"))
 			.Build());
 
 	// 106. scaffold_ai_controller_blueprint
@@ -463,9 +463,9 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Full AI controller setup in one call: create controller BP + link BT/BB + perception + team"),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldAIControllerBlueprint),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Save path for the AI controller Blueprint"))
-			.Required(TEXT("bt_path"), TEXT("string"), TEXT("Behavior Tree asset path"))
-			.Required(TEXT("bb_path"), TEXT("string"), TEXT("Blackboard asset path"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Save path for the AI controller Blueprint"))
+			.RequiredAssetPath(TEXT("bt_path"), TEXT("Behavior Tree asset path"))
+			.RequiredAssetPath(TEXT("bb_path"), TEXT("Blackboard asset path"))
 			.Optional(TEXT("perception_preset"), TEXT("string"), TEXT("Perception preset: sight, hearing, sight_hearing, full"))
 			.Optional(TEXT("team_id"), TEXT("number"), TEXT("Team ID (0-254)"))
 			.Build());
@@ -475,7 +475,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Friendly companion AI: follows player, optionally fights alongside. Full Character+Controller+BT+BB+Perception stack."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldCompanionAI),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Name for the companion"))
 			.Optional(TEXT("follow_distance"), TEXT("number"), TEXT("Follow distance in cm (default: 300)"))
 			.Optional(TEXT("combat_behavior"), TEXT("string"), TEXT("Combat behavior: passive, defensive, aggressive (default: defensive)"))
@@ -486,7 +486,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Multi-phase boss AI with health-threshold phase transitions. Full AI stack with phase-aware BT."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldBossAI),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Boss name"))
 			.Optional(TEXT("phases"), TEXT("array"), TEXT("Array of phase objects: [{\"name\":\"Phase1\",\"health_threshold\":0.75}, ...]. Default: 3 phases at 75/50/25%."))
 			.Build());
@@ -496,7 +496,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Ambient civilian NPC with Smart Object interactions and wander behavior."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldAmbientNPC),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("NPC name"))
 			.Optional(TEXT("smart_objects"), TEXT("array"), TEXT("Array of SO activity tag strings (e.g. [\"Activity.Sit\", \"Activity.Read\"])"))
 			.Optional(TEXT("wander_radius"), TEXT("number"), TEXT("Wander radius in cm (default: 1000)"))
@@ -507,7 +507,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Horror stalker AI: follows player at distance, closes in during dark/vulnerability. For survival horror."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldHorrorStalker),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Stalker name"))
 			.Optional(TEXT("stalk_distance"), TEXT("number"), TEXT("Distance to maintain while stalking in cm (default: 1500)"))
 			.Optional(TEXT("attack_conditions"), TEXT("string"), TEXT("When to close in: darkness, low_health, alone (default: darkness)"))
@@ -518,7 +518,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Horror ambush AI: dormant until triggered, burst attack, then retreat. Jump-scare archetype."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldHorrorAmbush),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Ambusher name"))
 			.Optional(TEXT("trigger_type"), TEXT("string"), TEXT("Trigger: proximity, sound, line_of_sight, interact (default: proximity)"))
 			.Optional(TEXT("attack_pattern"), TEXT("string"), TEXT("Attack pattern: lunge, grab, scream_then_attack (default: lunge)"))
@@ -529,7 +529,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Invisible horror presence: no physical form, manipulates environment (lights, doors, sounds). Psychological horror."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldHorrorPresence),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Presence name"))
 			.Optional(TEXT("effects"), TEXT("array"), TEXT("Array of effect strings: flicker_lights, open_doors, whispers, cold_breath, move_objects (default: all)"))
 			.Build());
@@ -539,7 +539,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Horror mimic AI: disguises as a static object, attacks when player gets close. Classic mimic."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldHorrorMimic),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Mimic name"))
 			.Optional(TEXT("disguise_mesh"), TEXT("string"), TEXT("Static mesh path for disguise form"))
 			.Optional(TEXT("reveal_conditions"), TEXT("string"), TEXT("When to reveal: proximity, interact, damage (default: proximity)"))
@@ -550,7 +550,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Stealth game AI with detection meter and multi-state alert cascade (unaware→suspicious→searching→alert→combat)."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldStealthGameAI),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Guard name"))
 			.Optional(TEXT("detection_meter"), TEXT("boolean"), TEXT("Enable gradual detection meter (default: true)"))
 			.Optional(TEXT("alert_states"), TEXT("string"), TEXT("Alert states: simple (unaware/alert), standard (unaware/suspicious/alert), full (unaware/suspicious/searching/alert/combat). Default: standard"))
@@ -561,7 +561,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Stationary turret AI with detection cone and engagement range. Does not move."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldTurretAI),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Turret name"))
 			.Optional(TEXT("detection_cone"), TEXT("number"), TEXT("Detection half-angle in degrees (default: 45)"))
 			.Optional(TEXT("engagement_range"), TEXT("number"), TEXT("Max engagement range in cm (default: 3000)"))
@@ -572,7 +572,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Squad coordinator AI that assigns tactical roles (flanker, suppressor, rusher) to group members."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldGroupCoordinator),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Squad name"))
 			.Optional(TEXT("roles"), TEXT("array"), TEXT("Array of role strings (default: [\"flanker\", \"suppressor\", \"rusher\"])"))
 			.Build());
@@ -582,7 +582,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Flying AI with 3D navigation and altitude management. Uses flying movement mode."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldFlyingAI),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base directory for assets"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base directory for assets"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Flying AI name"))
 			.Optional(TEXT("altitude_range"), TEXT("string"), TEXT("Altitude range as 'min,max' in cm (default: 500,2000)"))
 			.Build());

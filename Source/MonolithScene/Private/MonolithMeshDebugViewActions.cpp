@@ -90,7 +90,7 @@ void FMonolithMeshDebugViewActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("floor_index"), TEXT("integer"), TEXT("Which floor to capture"), TEXT("0"))
 			.Optional(TEXT("block_id"), TEXT("string"), TEXT("Block ID for spatial registry"), TEXT("default"))
 			.Optional(TEXT("resolution"), TEXT("integer"), TEXT("Image resolution in pixels"), TEXT("1024"))
-			.Optional(TEXT("output_path"), TEXT("string"), TEXT("Full file path for PNG (default: auto-generated in Saved/Monolith/Captures/)"))
+			.OptionalDiskPath(TEXT("output_path"), TEXT("Full file path for PNG (default: auto-generated in Saved/Monolith/Captures/)"))
 			.Optional(TEXT("padding"), TEXT("number"), TEXT("Extra padding around building bounds in cm"), TEXT("100"))
 			.Optional(TEXT("hide_ceiling"), TEXT("boolean"), TEXT("Auto-hide ceilings before capture"), TEXT("true"))
 			.Optional(TEXT("orthographic"), TEXT("boolean"), TEXT("Use orthographic projection"), TEXT("true"))
@@ -137,7 +137,7 @@ void FMonolithMeshDebugViewActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Required(TEXT("building_id"), TEXT("string"), TEXT("Building ID in spatial registry"))
 			.Optional(TEXT("block_id"), TEXT("string"), TEXT("Block ID for spatial registry"), TEXT("default"))
 			.Optional(TEXT("resolution"), TEXT("integer"), TEXT("Image resolution in pixels (square)"), TEXT("512"))
-			.Optional(TEXT("output_dir"), TEXT("string"), TEXT("Directory for PNG output (default: Saved/Monolith/Captures/)"))
+			.OptionalDiskPath(TEXT("output_dir"), TEXT("Directory for PNG output (default: Saved/Monolith/Captures/)"))
 			.Optional(TEXT("hide_ceiling"), TEXT("boolean"), TEXT("Auto-hide ceilings/roofs for floor_plan view"), TEXT("true"))
 			.Optional(TEXT("padding"), TEXT("number"), TEXT("Extra padding around building bounds in cm"), TEXT("100"))
 			.Build());

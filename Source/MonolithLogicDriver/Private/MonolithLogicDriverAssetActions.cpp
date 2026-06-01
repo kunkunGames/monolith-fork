@@ -63,7 +63,7 @@ void FMonolithLogicDriverAssetActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Create a new Logic Driver State Machine Blueprint via USMBlueprintFactory"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateStateMachine),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new SM Blueprint (e.g. /Game/AI/SM_EnemyBehavior)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new SM Blueprint (e.g. /Game/AI/SM_EnemyBehavior)"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Override asset name (extracted from save_path if omitted)"))
 			.Optional(TEXT("parent_class"), TEXT("string"), TEXT("Parent USMInstance class name (default: SMInstance)"))
 			.Build());
@@ -72,29 +72,29 @@ void FMonolithLogicDriverAssetActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Get full JSON dump of a state machine's structure: states, transitions, conduits, nested SMs"),
 		FMonolithActionHandler::CreateStatic(&HandleGetStateMachine),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("list_state_machines"),
 		TEXT("List all Logic Driver State Machine Blueprints in the project via AssetRegistry"),
 		FMonolithActionHandler::CreateStatic(&HandleListStateMachines),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Filter by path prefix (e.g. /Game/AI)"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Filter by path prefix (e.g. /Game/AI)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("delete_state_machine"),
 		TEXT("Delete a Logic Driver State Machine Blueprint asset"),
 		FMonolithActionHandler::CreateStatic(&HandleDeleteStateMachine),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path to delete"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path to delete"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("duplicate_state_machine"),
 		TEXT("Deep copy a Logic Driver State Machine Blueprint to a new path"),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateStateMachine),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Source SM Blueprint asset path"))
-			.Required(TEXT("dest_path"), TEXT("string"), TEXT("Destination asset path for the copy"))
+			.RequiredAssetPath(TEXT("source_path"), TEXT("Source SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("dest_path"), TEXT("Destination asset path for the copy"))
 			.Build());
 
 	// ── Node Blueprint CRUD (Phase 2) ──
@@ -103,7 +103,7 @@ void FMonolithLogicDriverAssetActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Create a new Logic Driver Node Blueprint (custom state, transition, conduit, or state machine node class)"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateNodeBlueprint),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new Node Blueprint (e.g. /Game/AI/Nodes/NBP_CustomState)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new Node Blueprint (e.g. /Game/AI/Nodes/NBP_CustomState)"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Asset name"))
 			.Required(TEXT("node_type"), TEXT("string"), TEXT("Node type: state, transition, conduit, state_machine"))
 			.Optional(TEXT("parent_class"), TEXT("string"), TEXT("Parent node instance class name (default: auto from node_type)"))
@@ -113,14 +113,14 @@ void FMonolithLogicDriverAssetActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Get info about a Logic Driver Node Blueprint: class hierarchy, node type, properties"),
 		FMonolithActionHandler::CreateStatic(&HandleGetNodeBlueprint),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Node Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Node Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("list_node_blueprints"),
 		TEXT("List all Logic Driver Node Blueprints in the project"),
 		FMonolithActionHandler::CreateStatic(&HandleListNodeBlueprints),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Filter by path prefix (e.g. /Game/AI/Nodes)"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Filter by path prefix (e.g. /Game/AI/Nodes)"))
 			.Optional(TEXT("node_type"), TEXT("string"), TEXT("Filter by node type: state, transition, conduit, state_machine"))
 			.Build());
 

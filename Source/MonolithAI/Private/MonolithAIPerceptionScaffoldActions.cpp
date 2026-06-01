@@ -65,7 +65,7 @@ void FMonolithAIPerceptionScaffoldActions::RegisterActions(FMonolithToolRegistry
 		TEXT("Add UAIPerceptionComponent to ANY Actor BP (not just AIControllers) and configure senses in one call. Senses v1: Sight, Hearing, Damage. Optional sight_radius (default 1500) for Sight, hearing_range (default 3000) for Hearing."),
 		FMonolithActionHandler::CreateStatic(&HandleAddPerceptionToActor),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_bp_path"), TEXT("string"), TEXT("Actor Blueprint asset path (e.g. /Game/Tests/BP_TestActor)"))
+			.RequiredAssetPath(TEXT("actor_bp_path"), TEXT("Actor Blueprint asset path (e.g. /Game/Tests/BP_TestActor)"))
 			.Required(TEXT("senses"), TEXT("array"), TEXT("Array of sense names. Supported: [\"Sight\", \"Hearing\", \"Damage\"]."))
 			.Optional(TEXT("sight_radius"), TEXT("number"), TEXT("Sight radius (cm). Only applied to Sight sense if present."), TEXT("1500"))
 			.Optional(TEXT("hearing_range"), TEXT("number"), TEXT("Hearing range (cm). Only applied to Hearing sense if present."), TEXT("3000"))

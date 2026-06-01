@@ -253,7 +253,7 @@ void FMonolithEditorMapActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create a fully blank UWorld asset at the given /Game/... path. Saves immediately. Default template is 'blank' (zero actors)."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateEmptyMap),
 		FParamSchemaBuilder()
-			.Required(TEXT("path"), TEXT("string"), TEXT("Asset path under /Game/... where the new UWorld is saved (e.g. /Game/Tests/Monolith/Audio/Map_Test)"))
+			.RequiredAssetPath(TEXT("path"), TEXT("Asset path under /Game/... where the new UWorld is saved (e.g. /Game/Tests/Monolith/Audio/Map_Test)"))
 			.Optional(TEXT("map_template"), TEXT("string"), TEXT("Template variant: 'blank' (default). Reserved: 'vr_basic', 'thirdperson_basic' — return error in v1; UE 5.7 templates are populated client-side, not via UWorldFactory."), TEXT("blank"))
 			.Build());
 

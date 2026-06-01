@@ -29,15 +29,15 @@ void FMonolithLogicDriverSpecActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Export a state machine's full structure as JSON. Optionally write to a file on disk"),
 		FMonolithActionHandler::CreateStatic(&HandleExportSMJson),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
-			.Optional(TEXT("output_path"), TEXT("string"), TEXT("File path to write JSON to (e.g. C:/Temp/sm_export.json). If omitted, returns JSON in response"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
+			.OptionalDiskPath(TEXT("output_path"), TEXT("File path to write JSON to (e.g. C:/Temp/sm_export.json). If omitted, returns JSON in response"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("build_sm_from_spec"),
 		TEXT("Create a complete state machine from a JSON spec in one call. The crown jewel — states, transitions, conduits, nested SMs, initial/end markers, all wired and compiled"),
 		FMonolithActionHandler::CreateStatic(&HandleBuildSMFromSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new SM (e.g. /Game/StateMachines/SM_MyMachine)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new SM (e.g. /Game/StateMachines/SM_MyMachine)"))
 			.Required(TEXT("spec"), TEXT("object"), TEXT("Spec object: {states: [{name, is_initial?, is_end?}], transitions: [{from, to}], conduits?: [{name}], nested_sms?: [{name, sm_path?}]}"))
 			.Build());
 
@@ -45,14 +45,14 @@ void FMonolithLogicDriverSpecActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Export a state machine as a spec JSON (same format as build_sm_from_spec input). Inverse of build_sm_from_spec"),
 		FMonolithActionHandler::CreateStatic(&HandleExportSMSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("import_sm_json"),
 		TEXT("Import a state machine from a JSON spec — either a file path or inline JSON string. Parses and delegates to build_sm_from_spec logic"),
 		FMonolithActionHandler::CreateStatic(&HandleImportSMJson),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path to create the SM at"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path to create the SM at"))
 			.Required(TEXT("json_path_or_data"), TEXT("string"), TEXT("File path (containing / or \\) to read JSON from, or inline JSON string"))
 			.Build());
 
@@ -60,8 +60,8 @@ void FMonolithLogicDriverSpecActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Compare two state machines structurally: diff states, transitions, and topology by name"),
 		FMonolithActionHandler::CreateStatic(&HandleCompareStateMachines),
 		FParamSchemaBuilder()
-			.Required(TEXT("path_a"), TEXT("string"), TEXT("Asset path for the first SM Blueprint"))
-			.Required(TEXT("path_b"), TEXT("string"), TEXT("Asset path for the second SM Blueprint"))
+			.RequiredAssetPath(TEXT("path_a"), TEXT("Asset path for the first SM Blueprint"))
+			.RequiredAssetPath(TEXT("path_b"), TEXT("Asset path for the second SM Blueprint"))
 			.Build());
 
 	UE_LOG(LogMonolithLDSpec, Log, TEXT("MonolithLogicDriver Spec: registered 5 actions"));

@@ -106,7 +106,7 @@ void FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Required(TEXT("strategy"), TEXT("string"), TEXT("Foundation type: flat, cut_and_fill, stepped, piers, walkout_basement"))
 			.Required(TEXT("footprint_polygon"), TEXT("array"), TEXT("Building footprint [[x,y], ...] in world space"))
 			.Required(TEXT("terrain_samples"), TEXT("object"), TEXT("Output from sample_terrain_grid"))
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the foundation mesh"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the foundation mesh"))
 			.Optional(TEXT("pad_z"), TEXT("number"), TEXT("Target Z for the building pad (auto-computed if omitted)"))
 			.Optional(TEXT("floor_height"), TEXT("number"), TEXT("Building floor height in cm"), TEXT("270"))
 			.Optional(TEXT("pier_diameter"), TEXT("number"), TEXT("Pier column diameter (pier strategy)"), TEXT("30"))
@@ -115,7 +115,7 @@ void FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Optional(TEXT("material_pier"), TEXT("string"), TEXT("Material asset path for pier columns"))
 			.Optional(TEXT("location"), TEXT("array"), TEXT("World location [x, y, z]"))
 			.Optional(TEXT("label"), TEXT("string"), TEXT("Actor label"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Optional(TEXT("overwrite"), TEXT("boolean"), TEXT("Allow overwriting existing asset"), TEXT("false"))
 			.Build());
 
@@ -128,13 +128,13 @@ void FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Required(TEXT("start"), TEXT("array"), TEXT("Wall start point [x, y, z]"))
 			.Required(TEXT("end"), TEXT("array"), TEXT("Wall end point [x, y, z]"))
 			.Required(TEXT("terrain_samples"), TEXT("object"), TEXT("Output from sample_terrain_grid"))
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the retaining wall mesh"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the retaining wall mesh"))
 			.Optional(TEXT("thickness"), TEXT("number"), TEXT("Wall base thickness in cm"), TEXT("20"))
 			.Optional(TEXT("cap_height"), TEXT("number"), TEXT("Height above terrain at the cap"), TEXT("10"))
 			.Optional(TEXT("material"), TEXT("string"), TEXT("Material asset path"))
 			.Optional(TEXT("location"), TEXT("array"), TEXT("World location [x, y, z]"))
 			.Optional(TEXT("label"), TEXT("string"), TEXT("Actor label"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Build());
 
 	// ---- place_building_on_terrain ----
@@ -144,11 +144,11 @@ void FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry& Registr
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTerrainActions::PlaceBuildingOnTerrain),
 		FParamSchemaBuilder()
 			.Required(TEXT("building_descriptor"), TEXT("object"), TEXT("Full Building Descriptor JSON from create_building_from_grid"))
-			.Required(TEXT("save_path_prefix"), TEXT("string"), TEXT("Base asset path for generated foundation/retaining wall meshes"))
+			.RequiredAssetPath(TEXT("save_path_prefix"), TEXT("Base asset path for generated foundation/retaining wall meshes"))
 			.Optional(TEXT("terrain_samples"), TEXT("object"), TEXT("Pre-computed terrain samples (auto-sampled if omitted)"))
 			.Optional(TEXT("hospice_mode"), TEXT("boolean"), TEXT("Generate ADA-compliant ramps"), TEXT("false"))
 			.Optional(TEXT("create_retaining_walls"), TEXT("boolean"), TEXT("Auto-create retaining walls for cut sites"), TEXT("true"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Optional(TEXT("seed"), TEXT("integer"), TEXT("Random seed for any procedural variation"))
 			.Build());
 }

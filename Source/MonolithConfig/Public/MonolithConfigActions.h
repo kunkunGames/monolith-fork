@@ -5,7 +5,8 @@
 
 /**
  * Config/INI domain action handlers for Monolith.
- * 6 actions using GConfig/FConfigCacheIni for config hierarchy resolution.
+ * 6 read actions using GConfig/FConfigCacheIni for config hierarchy resolution,
+ * plus 1 dev-gated (#if WITH_EDITOR) write action — `set_developer_setting`.
  */
 class FMonolithConfigActions
 {
@@ -24,6 +25,14 @@ public:
 	static FMonolithActionResult GetPlugin(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult GetCVar(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult FindCVars(const TSharedPtr<FJsonObject>& Params);
+
+#if WITH_EDITOR
+	/**
+	 * DEV-ONLY (write): set a property on a UDeveloperSettings CDO at runtime.
+	 * Gated #if WITH_EDITOR — never registered in shipping/runtime builds.
+	 */
+	static FMonolithActionResult SetDeveloperSetting(const TSharedPtr<FJsonObject>& Params);
+#endif // WITH_EDITOR
 
 private:
 	/** Map shortname (e.g. "DefaultEngine") to full file path */

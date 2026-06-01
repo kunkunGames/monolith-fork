@@ -935,7 +935,7 @@ namespace MonolithCommonUITemplate
                  "{wbp_path, widgets_created[], compile_status, errors[], warnings[]}."),
             FMonolithActionHandler::CreateStatic(&HandleScaffoldMainMenu),
             FParamSchemaBuilder()
-                .Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path, e.g. /Game/UI/WBP_MainMenu"))
+                .RequiredAssetPath(TEXT("save_path"), TEXT("Asset path, e.g. /Game/UI/WBP_MainMenu"))
                 .Optional(TEXT("button_names"), TEXT("array"),
                     TEXT("Array of button FNames (default [\"Continue\",\"NewGame\",\"Options\",\"Quit\"])"))
                 .Optional(TEXT("parent_class"), TEXT("string"),
@@ -961,7 +961,7 @@ namespace MonolithCommonUITemplate
                  "Returns {wbp_path, widgets_created[], tab_count, compile_status, errors[], warnings[]}."),
             FMonolithActionHandler::CreateStatic(&HandleScaffoldSettingsPanelWithTabs),
             FParamSchemaBuilder()
-                .Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path, e.g. /Game/UI/WBP_Settings"))
+                .RequiredAssetPath(TEXT("save_path"), TEXT("Asset path, e.g. /Game/UI/WBP_Settings"))
                 .Optional(TEXT("tab_names"), TEXT("array"),
                     TEXT("Array of tab FName tokens (default [\"Gameplay\",\"Audio\",\"Video\",\"Accessibility\",\"Controls\"])"))
                 .Optional(TEXT("parent_class"), TEXT("string"),
@@ -985,7 +985,7 @@ namespace MonolithCommonUITemplate
                  "widgets_created[], quit_requires_hold, compile_status, errors[], warnings[]}."),
             FMonolithActionHandler::CreateStatic(&HandleScaffoldPauseMenu),
             FParamSchemaBuilder()
-                .Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path, e.g. /Game/UI/WBP_PauseMenu"))
+                .RequiredAssetPath(TEXT("save_path"), TEXT("Asset path, e.g. /Game/UI/WBP_PauseMenu"))
                 .Required(TEXT("action_table"), TEXT("string"),
                     TEXT("UDataTable path of FCommonInputActionDataBase rows for the bottom action-bar (recorded in manifest)"))
                 .Optional(TEXT("button_names"), TEXT("array"),

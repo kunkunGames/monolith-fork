@@ -1,11 +1,12 @@
 #include "MonolithToolRegistry.h"
-#include "MonolithFuzzyMatch.h"
+#include "../Public/MonolithFuzzyMatch.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithCrashBreadcrumb.h"
 #include "MonolithToolInvocationLogger.h"
 #include "MonolithToolProfileManager.h"
 #include "HAL/PlatformMisc.h"
+#include "Dom/JsonValue.h"
 
 // =============================================================================
 //  File-local helpers. FindSimilarActions edit distance now lives in
@@ -250,6 +251,20 @@ TArray<FString> FMonolithParamSchema::FindUnknownKeys(
 
 	// Legacy wbp_path/asset_path back-compat: allow asset_path everywhere.
 	Allowed.Add(TEXT("asset_path"));
+
+	// Survivor B (plan §3.B) — universal response-shaping params. Allow these
+	// on EVERY action so the K3 STRICT_PARAMS=1 path does not hard-fail on
+	// `_fields` / `_omit` / `_compact_json`. The post-filter at the bottom
+	// of ExecuteAction consumes + acts on them.
+	Allowed.Add(TEXT("_fields"));
+	Allowed.Add(TEXT("_omit"));
+	Allowed.Add(TEXT("_compact_json"));
+	// Phase 1.1 (RI ergonomics handover #3) — nested-payload shaping params.
+	// `_row_fields` filters each row of the unique top-level list payload;
+	// `_path_fields` retains only matching dotted leaves. Same allowlist
+	// treatment as the original three.
+	Allowed.Add(TEXT("_row_fields"));
+	Allowed.Add(TEXT("_path_fields"));
 
 	for (const auto& Pair : Params->Values)
 	{
@@ -801,6 +816,71 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		}
 	}
 
+	// Survivor D (plan §3.D) — schema-tagged path-kind handling.
+	// Runs AFTER K2 alias rewrite (so the key the schema sees matches the
+	// param name in EffectiveParams) and BEFORE K3 unknown-key check.
+	//
+	//   - Kind == AssetPath: `\` rewritten to `/` (silent fix-up + warning).
+	//   - Kind == DiskPath:  backslash detected → warning, NO rewrite.
+	//                        (Per RI ergonomics handover #5, 2026-05-29: the
+	//                        DiskPath indexes store paths with forward slashes,
+	//                        but DiskPath legitimately COULD address a real OS
+	//                        path so we never silently rewrite — we just warn
+	//                        loudly. The trap was silent-empty-on-backslash.)
+	//   - All other Kinds (Other, GameplayTag) pass through untouched.
+	//
+	// Warnings appended to the same K3 warnings[] channel by the post-handler
+	// block below.
+	TArray<FString> PathParamWarnings;
+	if (ActionInfo.ParamSchema.IsValid())
+	{
+		for (const auto& SchemaPair : ActionInfo.ParamSchema->Values)
+		{
+			const TSharedPtr<FJsonObject>* ParamDefPtr = nullptr;
+			if (!SchemaPair.Value->TryGetObject(ParamDefPtr) || !ParamDefPtr || !ParamDefPtr->IsValid())
+			{
+				continue;
+			}
+			FString KindStr;
+			if (!(*ParamDefPtr)->TryGetStringField(TEXT("kind"), KindStr))
+			{
+				continue; // No kind tag → Other (default) → no rewrite.
+			}
+			const EMonolithParamKind Kind = MonolithParamKind::FromString(KindStr);
+			if (Kind != EMonolithParamKind::AssetPath && Kind != EMonolithParamKind::DiskPath)
+			{
+				continue;
+			}
+
+			const FString& ParamName = SchemaPair.Key;
+			FString Value;
+			if (!EffectiveParams->TryGetStringField(ParamName, Value))
+			{
+				continue;
+			}
+			if (!Value.Contains(TEXT("\\")))
+			{
+				continue;
+			}
+
+			if (Kind == EMonolithParamKind::AssetPath)
+			{
+				FString Rewritten = Value.Replace(TEXT("\\"), TEXT("/"));
+				EffectiveParams->SetStringField(ParamName, Rewritten);
+				PathParamWarnings.Add(FString::Printf(
+					TEXT("Normalised backslashes in 'asset_path' param '%s' — future calls should use forward slashes."),
+					*ParamName));
+			}
+			else // DiskPath
+			{
+				FString Suggested = Value.Replace(TEXT("\\"), TEXT("/"));
+				PathParamWarnings.Add(FString::Printf(
+					TEXT("DiskPath param '%s' contains backslashes — paths in this index are stored with forward slashes ('/'), so a query for '%s' will likely return zero results. Convert to '%s'."),
+					*ParamName, *Value, *Suggested));
+			}
+		}
+	}
+
 	// K3 — unknown-key detection (after required-check, before dispatch).
 	TArray<FString> Unknown;
 	if (ActionInfo.ParamSchema.IsValid())
@@ -880,21 +960,42 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	FMonolithActionResult ActionResult = HandlerCopy.Execute(EffectiveParams);
 	SetPhaseMs(TEXT("handler_ms"), HandlerStartSeconds);
 
-	// On success, append `warnings` array for unknown params (K3 soft-warn mode).
-	if (ActionResult.bSuccess && Unknown.Num() > 0 && ActionResult.Result.IsValid())
+	// Collect ALL post-handler warnings into a single channel, then attach once.
+	// Sources, in order:
+	//   1. K3 unknown-param soft-warn (pre-existing behaviour)
+	//   2. Survivor D — AssetPath \→/ rewrite warnings (plan §3.D)
+	//   3. Survivor B — response-shaping warnings (plan §3.B, e.g. _fields/_omit collision)
+	if (ActionResult.bSuccess && ActionResult.Result.IsValid())
 	{
-		TArray<TSharedPtr<FJsonValue>> Existing;
-		const TArray<TSharedPtr<FJsonValue>>* Found = nullptr;
-		if (ActionResult.Result->TryGetArrayField(TEXT("warnings"), Found) && Found)
-		{
-			Existing = *Found;
-		}
+		TArray<FString> AllWarnings;
+		AllWarnings.Append(PathParamWarnings);
 		for (const FString& K : Unknown)
 		{
-			Existing.Add(MakeShared<FJsonValueString>(
-				FString::Printf(TEXT("Unknown param '%s' for action '%s:%s'"), *K, *Namespace, *Action)));
+			AllWarnings.Add(FString::Printf(TEXT("Unknown param '%s' for action '%s:%s'"), *K, *Namespace, *Action));
 		}
-		ActionResult.Result->SetArrayField(TEXT("warnings"), Existing);
+
+		// Survivor B post-filter — mutates ActionResult.Result in-place and may
+		// append its own warnings (e.g., mutually-exclusive _fields + _omit).
+		// Runs BEFORE attaching the warnings array so its warnings get included
+		// in the final emit; runs AFTER warning collection so the filter cannot
+		// strip the warnings[] key out from under us via _fields whitelist.
+		// (We attach warnings to ActionResult.Result AFTER ApplyResponseShaping.)
+		ApplyResponseShaping(ActionResult.Result, EffectiveParams, AllWarnings);
+
+		if (AllWarnings.Num() > 0 && ActionResult.Result.IsValid())
+		{
+			TArray<TSharedPtr<FJsonValue>> Existing;
+			const TArray<TSharedPtr<FJsonValue>>* Found = nullptr;
+			if (ActionResult.Result->TryGetArrayField(TEXT("warnings"), Found) && Found)
+			{
+				Existing = *Found;
+			}
+			for (const FString& W : AllWarnings)
+			{
+				Existing.Add(MakeShared<FJsonValueString>(W));
+			}
+			ActionResult.Result->SetArrayField(TEXT("warnings"), Existing);
+		}
 	}
 
 	const double PostEditStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
@@ -1163,4 +1264,41 @@ TArray<FString> FMonolithToolRegistry::FindSimilarActions(const FString& Namespa
 		Result.Add(Scored[i].Name);
 	}
 	return Result;
+}
+
+void FMonolithToolRegistry::SetDispatcherAnnotations(
+	const FString& Namespace,
+	const FMonolithDispatcherAnnotations& Annotations)
+{
+	FScopeLock Lock(&RegistryLock);
+	DispatcherAnnotations.Add(Namespace, Annotations);
+}
+
+FMonolithDispatcherAnnotations FMonolithToolRegistry::GetDispatcherAnnotations(const FString& Namespace) const
+{
+	FScopeLock Lock(&RegistryLock);
+	if (const FMonolithDispatcherAnnotations* Found = DispatcherAnnotations.Find(Namespace))
+	{
+		return *Found;
+	}
+	return FMonolithDispatcherAnnotations{};
+}
+
+void FMonolithToolRegistry::SetActionAnnotations(
+	const FString& Namespace,
+	const FString& Action,
+	bool bReadOnly,
+	bool bDestructive,
+	bool bIdempotent,
+	const FString& Title)
+{
+	FScopeLock Lock(&RegistryLock);
+	FString Key = MakeKey(Namespace, Action);
+	if (FRegisteredAction* RegAction = Actions.Find(Key))
+	{
+		RegAction->Info.bReadOnlyHint = bReadOnly;
+		RegAction->Info.bDestructiveHint = bDestructive;
+		RegAction->Info.bIdempotentHint = bIdempotent;
+		RegAction->Info.Title = Title;
+	}
 }

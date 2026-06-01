@@ -29,12 +29,14 @@
 #include <thread>
 #include <mutex>
 #include <chrono>
+#include <ctime>
 #include <set>
 #include <map>
 #include <unordered_map>
 #include <algorithm>
 #include <optional>
 #include <cstdlib>
+#include <cstdio>
 #include <fstream>
 #include <vector>
 #include <filesystem>
@@ -42,6 +44,8 @@
 #include <stdexcept>
 
 #include <nlohmann/json.hpp>
+
+#pragma comment(lib, "bcrypt.lib")
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -98,6 +102,17 @@ static std::set<std::string> g_editor_action_denylist;
 static std::optional<bool> g_monolith_was_up; // nullopt = unknown
 static std::mutex g_stdout_lock;
 static std::unordered_map<std::string, double> g_recent_tool_calls;
+
+// Call-log state (Phase 4 / survivor F)
+//
+// NOTE: Saved/Logs/MonolithCalls.jsonl is project-root-relative and excluded
+// from crash zip generation by UE's crash reporter (Saved/Logs/ tail capture
+// only includes editor logs, not arbitrary jsonl). If a crash collector pattern
+// elsewhere DOES sweep Saved/Logs/*, the user should add MonolithCalls.jsonl to
+// the exclusion list. Single-user local dev tool; no phone-home.
+static bool      g_call_log_enabled = false;     // resolved once at startup
+static HANDLE    g_call_log_handle  = INVALID_HANDLE_VALUE;
+static std::mutex g_call_log_lock;
 
 static const std::vector<std::string> CORE_QUERY_TOOLS = {
     "ai_query",
@@ -879,6 +894,330 @@ static double now_seconds()
 }
 
 // ============================================================================
+// JSONL call log (Phase 4 / survivor F)
+//
+// One line per upstream HTTP roundtrip:
+//   {"ts":"2026-05-27T18:14:56Z","namespace":"editor","action":"get_build_errors",
+//    "params_hash":"<40-char-sha1-hex>","duration_ms":42.5,"ok":true,
+//    "error_code":null,"result_bytes":1834}
+//
+// Path: <project-root>/Saved/Logs/MonolithCalls.jsonl
+// Opt-out: env var MONOLITH_CALL_LOG=0
+// Append semantics on Win32: CreateFile w/ FILE_APPEND_DATA — OS guarantees
+// atomic end-of-file positioning for writes < 4KB. Never seek before write.
+// ============================================================================
+
+static std::string sha1_hex(const std::string& data)
+{
+    BCRYPT_ALG_HANDLE hAlg = nullptr;
+    if (BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA1_ALGORITHM, nullptr, 0) != 0)
+        return std::string();
+
+    DWORD hashObjSize = 0;
+    DWORD cb = 0;
+    if (BCryptGetProperty(hAlg, BCRYPT_OBJECT_LENGTH,
+            reinterpret_cast<PUCHAR>(&hashObjSize), sizeof(DWORD), &cb, 0) != 0)
+    {
+        BCryptCloseAlgorithmProvider(hAlg, 0);
+        return std::string();
+    }
+
+    std::vector<UCHAR> hashObj(hashObjSize);
+    BCRYPT_HASH_HANDLE hHash = nullptr;
+    if (BCryptCreateHash(hAlg, &hHash, hashObj.data(), hashObjSize, nullptr, 0, 0) != 0)
+    {
+        BCryptCloseAlgorithmProvider(hAlg, 0);
+        return std::string();
+    }
+
+    if (BCryptHashData(hHash,
+            reinterpret_cast<PUCHAR>(const_cast<char*>(data.data())),
+            static_cast<ULONG>(data.size()), 0) != 0)
+    {
+        BCryptDestroyHash(hHash);
+        BCryptCloseAlgorithmProvider(hAlg, 0);
+        return std::string();
+    }
+
+    UCHAR digest[20] = {0};
+    if (BCryptFinishHash(hHash, digest, sizeof(digest), 0) != 0)
+    {
+        BCryptDestroyHash(hHash);
+        BCryptCloseAlgorithmProvider(hAlg, 0);
+        return std::string();
+    }
+
+    BCryptDestroyHash(hHash);
+    BCryptCloseAlgorithmProvider(hAlg, 0);
+
+    static const char* kHex = "0123456789abcdef";
+    std::string out(40, '0');
+    for (size_t i = 0; i < 20; ++i)
+    {
+        out[i * 2]     = kHex[(digest[i] >> 4) & 0x0F];
+        out[i * 2 + 1] = kHex[digest[i]        & 0x0F];
+    }
+    return out;
+}
+
+static std::string iso8601_utc_now()
+{
+    // Second-precision ISO-8601 UTC, e.g. "2026-05-27T18:14:56Z".
+    std::time_t t = std::time(nullptr);
+    std::tm tm_buf;
+    gmtime_s(&tm_buf, &t);
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02dZ",
+        tm_buf.tm_year + 1900, tm_buf.tm_mon + 1, tm_buf.tm_mday,
+        tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec);
+    return std::string(buf);
+}
+
+// Resolve <project-root>/Saved/Logs/MonolithCalls.jsonl
+// Priority:
+//   1. MONOLITH_PROJECT_ROOT env var (explicit override)
+//   2. Current working directory (proxy CWD is the project root when launched
+//      by Claude Code's MCP config)
+static std::string resolve_call_log_path()
+{
+    std::string root = get_env("MONOLITH_PROJECT_ROOT");
+    if (root.empty())
+    {
+        char cwd_buf[MAX_PATH];
+        DWORD n = GetCurrentDirectoryA(MAX_PATH, cwd_buf);
+        if (n > 0 && n < MAX_PATH)
+            root = std::string(cwd_buf, n);
+        else
+            root = ".";
+    }
+
+    // Strip any trailing slash so we can append uniformly
+    while (!root.empty() && (root.back() == '\\' || root.back() == '/'))
+        root.pop_back();
+
+    std::string saved   = root + "\\Saved";
+    std::string logsdir = saved + "\\Logs";
+
+    CreateDirectoryA(saved.c_str(), nullptr);    // OK if already exists
+    CreateDirectoryA(logsdir.c_str(), nullptr);
+
+    return logsdir + "\\MonolithCalls.jsonl";
+}
+
+static void init_call_log()
+{
+    // Default-enabled; only "0" disables. Read once at startup, cache the bool.
+    g_call_log_enabled = get_env("MONOLITH_CALL_LOG", "1") != "0";
+    if (!g_call_log_enabled)
+    {
+        log_msg("Call log disabled (MONOLITH_CALL_LOG=0)");
+        return;
+    }
+
+    std::string path = resolve_call_log_path();
+    g_call_log_handle = CreateFileA(
+        path.c_str(),
+        FILE_APPEND_DATA | FILE_WRITE_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr,
+        OPEN_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+
+    if (g_call_log_handle == INVALID_HANDLE_VALUE)
+    {
+        log_msg("Failed to open call log at " + path + " -- logging disabled");
+        g_call_log_enabled = false;
+        return;
+    }
+
+    log_msg("Call log: " + path);
+}
+
+// Canonicalised JSON over a params-style object: sorted keys, no whitespace.
+// Matches Python json.dumps(sort_keys=True, separators=(",",":")).
+static std::string canonical_json(const json& value)
+{
+    // nlohmann::json's underlying object is std::map (alphabetically sorted by
+    // key); dump(-1) emits compact form (no spaces). For nested objects, the
+    // library walks std::map-order recursively. This matches the sorted-keys
+    // contract for hashing purposes.
+    if (value.is_null())
+        return "{}";
+    return value.dump(-1);
+}
+
+// Extract (namespace, action) from a JSON-RPC message.
+//   - tools/call w/ name matching "*_query": namespace = prefix, action = args.action
+//   - tools/call w/ name matching "monolith_*": namespace = "monolith", action = suffix
+//   - tools/call other: namespace = name, action = ""
+//   - non-tools/call (initialize, ping, tools/list): namespace = method, action = ""
+static void extract_namespace_action(const json& msg, std::string& ns, std::string& action)
+{
+    std::string method = msg.value("method", "");
+    if (method != "tools/call")
+    {
+        ns = method;
+        action = "";
+        return;
+    }
+
+    auto params_it = msg.find("params");
+    if (params_it == msg.end() || !params_it->is_object())
+    {
+        ns = "tools/call";
+        action = "";
+        return;
+    }
+
+    std::string name = params_it->value("name", "");
+    const std::string query_suffix = "_query";
+    if (name.size() > query_suffix.size() &&
+        name.compare(name.size() - query_suffix.size(), query_suffix.size(), query_suffix) == 0)
+    {
+        ns = name.substr(0, name.size() - query_suffix.size());
+        json args = params_it->value("arguments", json::object());
+        if (args.is_object())
+            action = args.value("action", "");
+        else
+            action = "";
+        return;
+    }
+
+    const std::string monolith_prefix = "monolith_";
+    if (name.rfind(monolith_prefix, 0) == 0)
+    {
+        ns = "monolith";
+        action = name.substr(monolith_prefix.size());
+        return;
+    }
+
+    ns = name;
+    action = "";
+}
+
+// Extract params dict for hashing. For tools/call, that's params.arguments;
+// for other methods, that's the whole params object.
+static json extract_params_for_hash(const json& msg)
+{
+    std::string method = msg.value("method", "");
+    auto params_it = msg.find("params");
+    if (params_it == msg.end() || !params_it->is_object())
+        return json::object();
+
+    if (method == "tools/call")
+    {
+        json args = params_it->value("arguments", json::object());
+        if (!args.is_object())
+            return json::object();
+        return args;
+    }
+    return *params_it;
+}
+
+// Inspect a forwarded HTTP response to extract (ok, error_code, result_bytes).
+//   - ok = true iff response is valid JSON-RPC AND has no top-level "error"
+//   - error_code = response.error.code if present, else null
+//   - result_bytes = length of serialised result payload (or full response if no result)
+static void inspect_response(const std::string& resp, bool& ok,
+    std::optional<int>& error_code, size_t& result_bytes)
+{
+    ok = false;
+    error_code.reset();
+    result_bytes = 0;
+
+    if (resp.empty())
+        return;
+
+    try
+    {
+        json parsed = json::parse(resp);
+        auto err_it = parsed.find("error");
+        if (err_it != parsed.end() && err_it->is_object())
+        {
+            ok = false;
+            auto code_it = err_it->find("code");
+            if (code_it != err_it->end() && code_it->is_number_integer())
+                error_code = code_it->get<int>();
+        }
+        else
+        {
+            ok = true;
+        }
+
+        auto result_it = parsed.find("result");
+        if (result_it != parsed.end())
+            result_bytes = result_it->dump(-1).size();
+        else
+            result_bytes = resp.size();
+    }
+    catch (...)
+    {
+        // Unparseable -- treat as failure with no error_code; record full body size
+        ok = false;
+        result_bytes = resp.size();
+    }
+}
+
+static void write_call_log_line(const json& msg, const std::string& resp, double duration_ms)
+{
+    if (!g_call_log_enabled || g_call_log_handle == INVALID_HANDLE_VALUE)
+        return;
+
+    try
+    {
+        std::string ns;
+        std::string action;
+        extract_namespace_action(msg, ns, action);
+
+        json params_for_hash = extract_params_for_hash(msg);
+        std::string canonical = canonical_json(params_for_hash);
+        std::string params_hash = sha1_hex(canonical);
+
+        bool ok = false;
+        std::optional<int> error_code;
+        size_t result_bytes = 0;
+        inspect_response(resp, ok, error_code, result_bytes);
+
+        json line;
+        line["ts"]           = iso8601_utc_now();
+        line["namespace"]    = ns;
+        line["action"]       = action;
+        line["params_hash"]  = params_hash;
+        line["duration_ms"]  = duration_ms;
+        line["ok"]           = ok;
+        if (error_code.has_value())
+            line["error_code"] = error_code.value();
+        else
+            line["error_code"] = nullptr;
+        line["result_bytes"] = static_cast<int64_t>(result_bytes);
+
+        std::string serialised = line.dump(-1);
+        serialised.push_back('\n');
+
+        // FILE_APPEND_DATA guarantees the kernel positions writes at EOF
+        // atomically; single WriteFile call keeps the line indivisible up to
+        // PIPE_BUF / 4KB. Mutex guards our handle from cross-thread races
+        // (defence in depth -- only the dispatcher main thread writes today).
+        std::lock_guard<std::mutex> lock(g_call_log_lock);
+        DWORD written = 0;
+        WriteFile(g_call_log_handle,
+            serialised.data(),
+            static_cast<DWORD>(serialised.size()),
+            &written,
+            nullptr);
+    }
+    catch (const std::exception& e)
+    {
+        log_msg(std::string("Call-log write failed: ") + e.what());
+    }
+    catch (...)
+    {
+        // never let logging crash the proxy
+    }
+}
+
+// ============================================================================
 // WinHTTP client
 // ============================================================================
 
@@ -1078,6 +1417,20 @@ static json make_query_tool_schema()
             {"params", {
                 {"type", "object"},
                 {"description", "Parameters for the selected action."}
+            }},
+            {"_fields", {
+                {"type", "array"},
+                {"items", {{"type", "string"}}},
+                {"description", "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit."}
+            }},
+            {"_omit", {
+                {"type", "array"},
+                {"items", {{"type", "string"}}},
+                {"description", "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields."}
+            }},
+            {"_compact_json", {
+                {"type", "boolean"},
+                {"description", "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object."}
             }}
         }},
         {"required", json::array({"action"})}
@@ -1088,7 +1441,22 @@ static json make_empty_object_schema()
 {
     return {
         {"type", "object"},
-        {"properties", json::object()}
+        {"properties", {
+            {"_fields", {
+                {"type", "array"},
+                {"items", {{"type", "string"}}},
+                {"description", "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit."}
+            }},
+            {"_omit", {
+                {"type", "array"},
+                {"items", {{"type", "string"}}},
+                {"description", "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields."}
+            }},
+            {"_compact_json", {
+                {"type", "boolean"},
+                {"description", "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object."}
+            }}
+        }}
     };
 }
 
@@ -1134,6 +1502,20 @@ static json make_seed_tools()
                 {"category", {
                     {"type", "string"},
                     {"description", "Optional: filter actions within the namespace by category"}
+                }},
+                {"_fields", {
+                    {"type", "array"},
+                    {"items", {{"type", "string"}}},
+                    {"description", "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit."}
+                }},
+                {"_omit", {
+                    {"type", "array"},
+                    {"items", {{"type", "string"}}},
+                    {"description", "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields."}
+                }},
+                {"_compact_json", {
+                    {"type", "boolean"},
+                    {"description", "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object."}
                 }}
             }}
         }));
@@ -1153,6 +1535,20 @@ static json make_seed_tools()
                     {"type", "string"},
                     {"description", "'check' to compare versions, 'install' to download and stage update"},
                     {"default", "check"}
+                }},
+                {"_fields", {
+                    {"type", "array"},
+                    {"items", {{"type", "string"}}},
+                    {"description", "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit."}
+                }},
+                {"_omit", {
+                    {"type", "array"},
+                    {"items", {{"type", "string"}}},
+                    {"description", "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields."}
+                }},
+                {"_compact_json", {
+                    {"type", "boolean"},
+                    {"description", "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object."}
                 }}
             }}
         }));
@@ -1368,7 +1764,10 @@ static std::string handle_ping(const json& msg)
 
 static std::string handle_tools_list(const json& msg)
 {
+    double t0 = now_seconds();
     std::string resp = post_monolith(msg.dump());
+    double duration_ms = (now_seconds() - t0) * 1000.0;
+    write_call_log_line(msg, resp, duration_ms);
 
     if (!resp.empty())
     {
@@ -1628,6 +2027,8 @@ int main()
 
     log_msg(std::string("Started. Forwarding to ") + g_monolith_url);
 
+    init_call_log();
+
     // Start background health poll thread (detached = daemon)
     std::thread poller(health_poll_thread);
     poller.detach();
@@ -1684,7 +2085,11 @@ int main()
         else
         {
             // Forward unknown methods to Monolith
+            double t0 = now_seconds();
             std::string resp = post_monolith(msg.dump());
+            double duration_ms = (now_seconds() - t0) * 1000.0;
+            write_call_log_line(msg, resp, duration_ms);
+
             if (!resp.empty())
             {
                 response = resp;

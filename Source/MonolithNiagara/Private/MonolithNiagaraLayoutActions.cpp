@@ -27,7 +27,7 @@ void FMonolithNiagaraLayoutActions::RegisterActions(FMonolithToolRegistry& Regis
 			"Asset must be open in the editor. No built-in Monolith formatter exists for Niagara graphs."),
 		FMonolithActionHandler::CreateStatic(&HandleAutoLayout),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("NiagaraSystem asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("NiagaraSystem asset path"))
 			.Optional(TEXT("emitter"), TEXT("string"), TEXT("Filter to a specific emitter's graph by name, handle ID, or list_emitters index"))
 			.Optional(TEXT("script_usage"), TEXT("string"),
 				TEXT("Script usage filter: 'system', 'emitter', 'particle'. "

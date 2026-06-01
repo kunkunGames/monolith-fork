@@ -299,7 +299,7 @@ namespace MonolithCommonUIAccessibility
 			TEXT("Audit buttons in a folder: report UCommonButtonBase widgets without a style asset. Recommendation for hospice-accessibility focus ring (≥3px)."),
 			FMonolithActionHandler::CreateStatic(&HandleEnforceFocusRing),
 			FParamSchemaBuilder()
-				.Required(TEXT("folder_path"), TEXT("string"), TEXT("Folder to scan (e.g. /Game/UI)"))
+				.RequiredAssetPath(TEXT("folder_path"), TEXT("Folder to scan (e.g. /Game/UI)"))
 				.Build(),
 			Cat);
 
@@ -308,7 +308,7 @@ namespace MonolithCommonUIAccessibility
 			TEXT("Stamp bRespectReduceMotion=true on WBP CDOs in a folder. WBPs must expose the property + gate animation-triggers on UAccessibilitySubsystem::IsReduceMotionEnabled()."),
 			FMonolithActionHandler::CreateStatic(&HandleWrapWithReduceMotionGate),
 			FParamSchemaBuilder()
-				.Required(TEXT("folder_path"), TEXT("string"), TEXT("Folder to scan"))
+				.RequiredAssetPath(TEXT("folder_path"), TEXT("Folder to scan"))
 				.Build(),
 			Cat);
 
@@ -317,7 +317,7 @@ namespace MonolithCommonUIAccessibility
 			TEXT("Stamp bHonorAccessibilityTextScale=true on WBP CDOs containing UCommonTextBlock widgets. WBPs must multiply font size by accessibility text scale."),
 			FMonolithActionHandler::CreateStatic(&HandleSetTextScaleBinding),
 			FParamSchemaBuilder()
-				.Required(TEXT("folder_path"), TEXT("string"), TEXT("Folder to scan"))
+				.RequiredAssetPath(TEXT("folder_path"), TEXT("Folder to scan"))
 				.Build(),
 			Cat);
 
@@ -326,7 +326,7 @@ namespace MonolithCommonUIAccessibility
 			TEXT("Swap a normal style class for a high-contrast variant across a folder of WBPs (theme-swap for accessibility mode)"),
 			FMonolithActionHandler::CreateStatic(&HandleApplyHighContrastVariant),
 			FParamSchemaBuilder()
-				.Required(TEXT("folder_path"), TEXT("string"), TEXT("Folder to scan"))
+				.RequiredAssetPath(TEXT("folder_path"), TEXT("Folder to scan"))
 				.Required(TEXT("normal_style"), TEXT("string"), TEXT("Class path of normal style to replace"))
 				.Required(TEXT("high_contrast_style"), TEXT("string"), TEXT("Class path of high-contrast replacement style"))
 				.Build(),

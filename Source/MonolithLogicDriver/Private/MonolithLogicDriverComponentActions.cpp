@@ -139,7 +139,7 @@ void FMonolithLogicDriverComponentActions::RegisterActions(FMonolithToolRegistry
 		TEXT("Read SM component configuration on an actor Blueprint: state machine class, auto-start, tick interval, network config, and all SM-specific properties"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSMComponentConfig),
 		FParamSchemaBuilder()
-			.Required(TEXT("blueprint_path"), TEXT("string"), TEXT("Actor Blueprint asset path (e.g. /Game/Enemies/BP_EnemyBase)"))
+			.RequiredAssetPath(TEXT("blueprint_path"), TEXT("Actor Blueprint asset path (e.g. /Game/Enemies/BP_EnemyBase)"))
 			.Optional(TEXT("component_name"), TEXT("string"), TEXT("Specific SM component name; if omitted, returns first SM component found"))
 			.Build());
 
@@ -147,8 +147,8 @@ void FMonolithLogicDriverComponentActions::RegisterActions(FMonolithToolRegistry
 		TEXT("Add a Logic Driver SM component to an actor Blueprint via SimpleConstructionScript"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSMComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("blueprint_path"), TEXT("string"), TEXT("Actor Blueprint asset path"))
-			.Optional(TEXT("sm_path"), TEXT("string"), TEXT("SM Blueprint path to assign as StateMachineClass"))
+			.RequiredAssetPath(TEXT("blueprint_path"), TEXT("Actor Blueprint asset path"))
+			.OptionalAssetPath(TEXT("sm_path"), TEXT("SM Blueprint path to assign as StateMachineClass"))
 			.Optional(TEXT("component_name"), TEXT("string"), TEXT("Component variable name (default: StateMachineComponent)"))
 			.Build());
 
@@ -156,7 +156,7 @@ void FMonolithLogicDriverComponentActions::RegisterActions(FMonolithToolRegistry
 		TEXT("Set SM component properties on an actor Blueprint: auto_start, tick_interval, network_config via reflection"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureSMComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("blueprint_path"), TEXT("string"), TEXT("Actor Blueprint asset path"))
+			.RequiredAssetPath(TEXT("blueprint_path"), TEXT("Actor Blueprint asset path"))
 			.Optional(TEXT("component_name"), TEXT("string"), TEXT("SM component name (if multiple)"))
 			.Optional(TEXT("auto_start"), TEXT("boolean"), TEXT("Enable/disable auto-start"))
 			.Optional(TEXT("tick_interval"), TEXT("number"), TEXT("Tick interval in seconds"))

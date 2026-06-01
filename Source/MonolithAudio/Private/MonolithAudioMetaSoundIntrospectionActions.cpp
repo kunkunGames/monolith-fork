@@ -301,14 +301,14 @@ void FMonolithAudioMetaSoundIntrospectionActions::RegisterActions(FMonolithToolR
 		TEXT("List all graph pages in a MetaSound asset's on-disk document"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundIntrospectionActions::HandleListMetaSoundDocuments),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("get_metasound_document"),
 		TEXT("Get the full graph data (nodes, edges, variables) for one MetaSound document page"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundIntrospectionActions::HandleGetMetaSoundDocument),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Optional(TEXT("page_id"), TEXT("string"), TEXT("Page GUID (default: default page)"))
 			.Build());
 
@@ -316,7 +316,7 @@ void FMonolithAudioMetaSoundIntrospectionActions::RegisterActions(FMonolithToolR
 		TEXT("Get lightweight node summaries (no pin details) for a MetaSound document page"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundIntrospectionActions::HandleGetMetaSoundSummary),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Optional(TEXT("page_id"), TEXT("string"), TEXT("Page GUID (default: default page)"))
 			.Build());
 
@@ -324,7 +324,7 @@ void FMonolithAudioMetaSoundIntrospectionActions::RegisterActions(FMonolithToolR
 		TEXT("Get full per-instance pin dump and incoming/outgoing edges for one node by ID or name"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundIntrospectionActions::HandleInspectMetaSoundNodeInstance),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Optional(TEXT("node_id"), TEXT("string"), TEXT("Node GUID"))
 			.Optional(TEXT("node_name"), TEXT("string"), TEXT("Node name"))
 			.Optional(TEXT("page_id"), TEXT("string"), TEXT("Page GUID (default: default page)"))
@@ -334,7 +334,7 @@ void FMonolithAudioMetaSoundIntrospectionActions::RegisterActions(FMonolithToolR
 		TEXT("Get all on-disk edges for a node or for the full document graph"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundIntrospectionActions::HandleGetMetaSoundDocumentConnections),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Optional(TEXT("node_id"), TEXT("string"), TEXT("Filter by node GUID"))
 			.Optional(TEXT("page_id"), TEXT("string"), TEXT("Page GUID (default: default page)"))
 			.Build());
@@ -343,7 +343,7 @@ void FMonolithAudioMetaSoundIntrospectionActions::RegisterActions(FMonolithToolR
 		TEXT("Get graph-local variables on a MetaSound document page"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundIntrospectionActions::HandleGetMetaSoundDocumentVariables),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Optional(TEXT("page_id"), TEXT("string"), TEXT("Page GUID (default: default page)"))
 			.Build());
 
@@ -351,14 +351,14 @@ void FMonolithAudioMetaSoundIntrospectionActions::RegisterActions(FMonolithToolR
 		TEXT("Get document-level input/output parameters (user-exposed) with defaults and metadata"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundIntrospectionActions::HandleGetMetaSoundUserParameters),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("search_metasound_document_nodes"),
 		TEXT("Find nodes by class name or node name substring in a MetaSound document page"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundIntrospectionActions::HandleSearchMetaSoundDocumentNodes),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Required(TEXT("query"), TEXT("string"), TEXT("Search string (matches class or node name, case-insensitive)"))
 			.Optional(TEXT("page_id"), TEXT("string"), TEXT("Page GUID (default: default page)"))
 			.Build());
@@ -367,21 +367,21 @@ void FMonolithAudioMetaSoundIntrospectionActions::RegisterActions(FMonolithToolR
 		TEXT("Get MetaSound asset overview (type, class, version, default-graph counts)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundIntrospectionActions::HandleGetMetaSoundInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("get_metasound_dependencies"),
 		TEXT("Get referenced node-class dependencies and subgraphs for a MetaSound document"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundIntrospectionActions::HandleGetMetaSoundDependencies),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("validate_metasound"),
 		TEXT("Validate a MetaSound document for errors (duplicate node IDs, dangling edges) and warnings (unconnected inputs)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundIntrospectionActions::HandleValidateMetaSound),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MetaSound asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MetaSound asset path"))
 			.Build());
 }
 

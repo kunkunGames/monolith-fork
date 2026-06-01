@@ -10,7 +10,7 @@ void FMonolithUISlotActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("Set a slot property on a widget (anchors, offsets, padding, alignment, z-order)"),
         FMonolithActionHandler::CreateStatic(&HandleSetSlotProperty),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("Target widget name"))
             .Optional(TEXT("anchors"), TEXT("object"), TEXT("Canvas anchors: {\"min_x\":0, \"min_y\":0, \"max_x\":1, \"max_y\":1}"))
             .Optional(TEXT("offsets"), TEXT("object"), TEXT("Canvas offsets: {\"left\":0, \"top\":0, \"right\":0, \"bottom\":0}"))
@@ -31,7 +31,7 @@ void FMonolithUISlotActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("Set anchor to a named preset (center, top_left, stretch_fill, etc.)"),
         FMonolithActionHandler::CreateStatic(&HandleSetAnchorPreset),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("Target widget name"))
             .Required(TEXT("preset"), TEXT("string"), TEXT("Preset name: top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right, stretch_horizontal, stretch_vertical, stretch_fill, stretch_top, stretch_bottom, stretch_left, stretch_right"))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile after setting"), TEXT("false"))
@@ -43,7 +43,7 @@ void FMonolithUISlotActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("Move a widget to a different parent panel"),
         FMonolithActionHandler::CreateStatic(&HandleMoveWidget),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("Widget to move"))
             .Required(TEXT("new_parent_name"), TEXT("string"), TEXT("New parent panel name"))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile after moving"), TEXT("true"))

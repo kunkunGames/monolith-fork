@@ -238,23 +238,53 @@ namespace MonolithBulkFillActionsInternal
 	// this just reads it back by (namespace, action). Closes the cause behind gaps #4/#12/#13.
 	static TSharedPtr<FJsonObject> BuildDescribeActionSchemaSchema()
 	{
+		// RI ergonomics handover #6 (2026-05-29): canonical param is now
+		// `target_action` for naming symmetry with `target_namespace`. The
+		// historical name `action` is kept as a K2 alias so callers that
+		// passed `{target_namespace, action}` still work — the registry's
+		// ApplyAliases pass rewrites `action` → `target_action` before
+		// the required-param check fires.
 		return FParamSchemaBuilder()
 			.Required(TEXT("target_namespace"), TEXT("string"), TEXT("Namespace that owns the action (e.g. \"blueprint\", \"ui\")"))
-			.Required(TEXT("action"), TEXT("string"), TEXT("Action name whose param schema to return (e.g. \"add_nodes_bulk\")"))
+			.Required(TEXT("target_action"), TEXT("string"),
+				TEXT("Action name whose param schema to return (e.g. \"add_nodes_bulk\"). Alias: `action`."),
+				{ TEXT("action") })
 			.Build();
 	}
 
 	static FMonolithActionResult HandleDescribeActionSchema(const TSharedPtr<FJsonObject>& Params)
 	{
-		FString TargetNamespace;
-		if (!Params->TryGetStringField(TEXT("target_namespace"), TargetNamespace) || TargetNamespace.IsEmpty())
+		// The registry's required-param validation already lists ALL missing
+		// required params at once (MonolithToolRegistry.cpp ~line 319-349), so
+		// callers see both `target_namespace` and `target_action` reported
+		// together rather than one round-trip at a time. The handler itself
+		// only re-reads the (now guaranteed) params from EffectiveParams.
+		// `action` (the legacy name) has already been rewritten to
+		// `target_action` by ApplyAliases — but we still fall back to
+		// reading it directly as belt-and-braces back-compat in case any
+		// future code path bypasses the alias rewrite.
+		if (!Params.IsValid())
 		{
-			return FMonolithActionResult::Error(TEXT("missing required parameter: target_namespace"));
+			return FMonolithActionResult::Error(TEXT("describe.action_schema requires params"));
 		}
+		FString TargetNamespace;
+		Params->TryGetStringField(TEXT("target_namespace"), TargetNamespace);
 		FString ActionName;
-		if (!Params->TryGetStringField(TEXT("action"), ActionName) || ActionName.IsEmpty())
+		if (!Params->TryGetStringField(TEXT("target_action"), ActionName) || ActionName.IsEmpty())
 		{
-			return FMonolithActionResult::Error(TEXT("missing required parameter: action"));
+			Params->TryGetStringField(TEXT("action"), ActionName);
+		}
+		if (TargetNamespace.IsEmpty() || ActionName.IsEmpty())
+		{
+			// Defensive: registry's required-param check should have caught this
+			// already. Kept as a safety net in case the schema is bypassed.
+			TArray<FString> Missing;
+			if (TargetNamespace.IsEmpty()) Missing.Add(TEXT("target_namespace"));
+			if (ActionName.IsEmpty())      Missing.Add(TEXT("target_action"));
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("missing required parameter(s): [%s]"),
+				*FString::Join(Missing, TEXT(", "))),
+				FMonolithJsonUtils::ErrInvalidParams);
 		}
 
 		FMonolithToolRegistry& Reg = FMonolithToolRegistry::Get();

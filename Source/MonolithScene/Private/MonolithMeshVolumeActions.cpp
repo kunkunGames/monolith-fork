@@ -184,7 +184,7 @@ void FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Optional(TEXT("extent"), TEXT("array"), TEXT("Half-extents [x, y, z]"), TEXT("[500,500,300]"))
 			.Optional(TEXT("rotation"), TEXT("array"), TEXT("Rotation [pitch, yaw, roll]"), TEXT("[0,0,0]"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Optional label for the volume actor"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Actor folder path in the outliner"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Actor folder path in the outliner"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("Type-specific properties (e.g. damage_per_sec for pain, reverb_effect for audio)"))
 			.Build());
 

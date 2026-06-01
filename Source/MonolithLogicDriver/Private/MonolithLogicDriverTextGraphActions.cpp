@@ -91,7 +91,7 @@ void FMonolithLogicDriverTextGraphActions::RegisterActions(FMonolithToolRegistry
 		TEXT("Read FSMTextGraphProperty content (dialogue text, speaker names) from state nodes"),
 		FMonolithActionHandler::CreateStatic(&HandleGetTextGraphContent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Optional(TEXT("node_guid"), TEXT("string"), TEXT("Specific node GUID; if omitted reads all nodes"))
 			.Build());
 
@@ -99,7 +99,7 @@ void FMonolithLogicDriverTextGraphActions::RegisterActions(FMonolithToolRegistry
 		TEXT("Walk entire SM and extract dialogue flow: speakers, lines, choices, branching paths"),
 		FMonolithActionHandler::CreateStatic(&HandleGetDialogueFlow),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Build());
 
 	UE_LOG(LogMonolithLDTextGraph, Log, TEXT("MonolithLogicDriver TextGraph: registered 2 actions"));

@@ -100,7 +100,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a section to an animation montage"),
 		FMonolithActionHandler::CreateStatic(&HandleAddMontageSection),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Montage asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Montage asset path"))
 			.Required(TEXT("section_name"), TEXT("string"), TEXT("Name for the new section"))
 			.Required(TEXT("start_time"), TEXT("number"), TEXT("Start time in seconds"))
 			.Build());
@@ -108,14 +108,14 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Delete a section from an animation montage by index"),
 		FMonolithActionHandler::CreateStatic(&HandleDeleteMontageSection),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Montage asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Montage asset path"))
 			.Required(TEXT("section_index"), TEXT("integer"), TEXT("Index of the section to delete"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_section_next"),
 		TEXT("Set the next section for a montage section"),
 		FMonolithActionHandler::CreateStatic(&HandleSetSectionNext),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Montage asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Montage asset path"))
 			.Required(TEXT("section_name"), TEXT("string"), TEXT("Name of the section"))
 			.Required(TEXT("next_section_name"), TEXT("string"), TEXT("Name of the next section to play"))
 			.Build());
@@ -123,7 +123,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set the start time of a montage section"),
 		FMonolithActionHandler::CreateStatic(&HandleSetSectionTime),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Montage asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Montage asset path"))
 			.Required(TEXT("section_name"), TEXT("string"), TEXT("Name of the section"))
 			.Required(TEXT("new_time"), TEXT("number"), TEXT("New start time in seconds"))
 			.Build());
@@ -133,8 +133,8 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a sample to a blend space"),
 		FMonolithActionHandler::CreateStatic(&HandleAddBlendSpaceSample),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("BlendSpace asset path"))
-			.Required(TEXT("anim_path"), TEXT("string"), TEXT("Animation sequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("BlendSpace asset path"))
+			.RequiredAssetPath(TEXT("anim_path"), TEXT("Animation sequence asset path"))
 			.Required(TEXT("x"), TEXT("number"), TEXT("X axis value"))
 			.Required(TEXT("y"), TEXT("number"), TEXT("Y axis value"))
 			.Build());
@@ -142,17 +142,17 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Edit a blend space sample position and optionally its animation"),
 		FMonolithActionHandler::CreateStatic(&HandleEditBlendSpaceSample),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("BlendSpace asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("BlendSpace asset path"))
 			.Required(TEXT("sample_index"), TEXT("integer"), TEXT("Index of the sample to edit"))
 			.Required(TEXT("x"), TEXT("number"), TEXT("New X axis value"))
 			.Required(TEXT("y"), TEXT("number"), TEXT("New Y axis value"))
-			.Optional(TEXT("anim_path"), TEXT("string"), TEXT("New animation sequence asset path"))
+			.OptionalAssetPath(TEXT("anim_path"), TEXT("New animation sequence asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("delete_blendspace_sample"),
 		TEXT("Delete a sample from a blend space by index"),
 		FMonolithActionHandler::CreateStatic(&HandleDeleteBlendSpaceSample),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("BlendSpace asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("BlendSpace asset path"))
 			.Required(TEXT("sample_index"), TEXT("integer"), TEXT("Index of the sample to delete"))
 			.Build());
 
@@ -161,13 +161,13 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Get all state machines in an animation blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleGetStateMachines),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_state_info"),
 		TEXT("Get detailed info about a state in a state machine"),
 		FMonolithActionHandler::CreateStatic(&HandleGetStateInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Required(TEXT("machine_name"), TEXT("string"), TEXT("State machine name"))
 			.Required(TEXT("state_name"), TEXT("string"), TEXT("State name"))
 			.Build());
@@ -175,33 +175,33 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Get all transitions in a state machine"),
 		FMonolithActionHandler::CreateStatic(&HandleGetTransitions),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Optional(TEXT("machine_name"), TEXT("string"), TEXT("Filter to a specific state machine"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_blend_nodes"),
 		TEXT("Get blend nodes in an animation blueprint graph"),
 		FMonolithActionHandler::CreateStatic(&HandleGetBlendNodes),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Filter to a specific graph"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_linked_layers"),
 		TEXT("Get linked animation layers in an animation blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleGetLinkedLayers),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_graphs"),
 		TEXT("Get all graphs in an animation blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleGetGraphs),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_nodes"),
 		TEXT("Get animation nodes with optional class filter"),
 		FMonolithActionHandler::CreateStatic(&HandleGetNodes),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Optional(TEXT("node_class_filter"), TEXT("string"), TEXT("Only include nodes whose class contains this substring"))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Filter to a specific graph"))
 			.Build());
@@ -211,7 +211,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set the trigger time of an animation notify"),
 		FMonolithActionHandler::CreateStatic(&HandleSetNotifyTime),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation asset path"))
 			.Required(TEXT("notify_index"), TEXT("integer"), TEXT("Index of the notify"))
 			.Required(TEXT("new_time"), TEXT("number"), TEXT("New trigger time in seconds"))
 			.Build());
@@ -219,7 +219,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set the duration of a state animation notify"),
 		FMonolithActionHandler::CreateStatic(&HandleSetNotifyDuration),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation asset path"))
 			.Required(TEXT("notify_index"), TEXT("integer"), TEXT("Index of the notify"))
 			.Required(TEXT("new_duration"), TEXT("number"), TEXT("New duration in seconds"))
 			.Build());
@@ -229,7 +229,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set position, rotation, and scale keys on a bone track"),
 		FMonolithActionHandler::CreateStatic(&HandleSetBoneTrackKeys),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation sequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation sequence asset path"))
 			.Required(TEXT("bone_name"), TEXT("string"), TEXT("Bone name"))
 			.Required(TEXT("positions_json"), TEXT("string"), TEXT("JSON array of position keys"))
 			.Required(TEXT("rotations_json"), TEXT("string"), TEXT("JSON array of rotation keys"))
@@ -239,14 +239,14 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a bone track to an animation sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleAddBoneTrack),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation sequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation sequence asset path"))
 			.Required(TEXT("bone_name"), TEXT("string"), TEXT("Bone name to add"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("remove_bone_track"),
 		TEXT("Remove a bone track from an animation sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveBoneTrack),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation sequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation sequence asset path"))
 			.Required(TEXT("bone_name"), TEXT("string"), TEXT("Bone name to remove"))
 			.Optional(TEXT("include_children"), TEXT("bool"), TEXT("Also remove child bone tracks"), TEXT("false"))
 			.Build());
@@ -255,8 +255,8 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Copy evaluated bone transforms (track + ref pose fallback) from a source AnimSequence at a given time to a destination AnimSequence as keys"),
 		FMonolithActionHandler::CreateStatic(&HandleCopyBonePoseBetweenSequences),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Source AnimSequence asset path"))
-			.Required(TEXT("dest_path"), TEXT("string"), TEXT("Destination AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("source_path"), TEXT("Source AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("dest_path"), TEXT("Destination AnimSequence asset path"))
 			.Required(TEXT("bone_names"), TEXT("array"), TEXT("Array of bone names to copy"))
 			.Optional(TEXT("source_time"), TEXT("number"), TEXT("Time in seconds on source to evaluate (default 0.0)"), TEXT("0.0"))
 			.Optional(TEXT("apply_to_all_dest_frames"), TEXT("bool"), TEXT("If true, write same value to every destination frame (static pose). If false, write only frame 0."), TEXT("true"))
@@ -267,7 +267,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a virtual bone to a skeleton"),
 		FMonolithActionHandler::CreateStatic(&HandleAddVirtualBone),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton asset path"))
 			.Required(TEXT("source_bone"), TEXT("string"), TEXT("Source bone name"))
 			.Required(TEXT("target_bone"), TEXT("string"), TEXT("Target bone name"))
 			.Build());
@@ -275,7 +275,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remove virtual bones from a skeleton"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveVirtualBones),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton asset path"))
 			.Required(TEXT("bone_names"), TEXT("array"), TEXT("Array of virtual bone names to remove"))
 			.Build());
 
@@ -284,13 +284,13 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Get skeleton bone hierarchy and virtual bones"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSkeletonInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_skeletal_mesh_info"),
 		TEXT("Get skeletal mesh info including morph targets, sockets, LODs, and materials"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSkeletalMeshInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeletal mesh asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeletal mesh asset path"))
 			.Build());
 
 	// Wave 1 — Read Actions
@@ -298,19 +298,19 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Get animation sequence metadata (duration, frames, root motion, compression, etc.)"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSequenceInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_sequence_notifies"),
 		TEXT("Get all notifies on an animation asset"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSequenceNotifies),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation asset path (sequence, montage, composite)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation asset path (sequence, montage, composite)"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_bone_track_keys"),
 		TEXT("Get position/rotation/scale keys for a bone track"),
 		FMonolithActionHandler::CreateStatic(&HandleGetBoneTrackKeys),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Required(TEXT("bone_name"), TEXT("string"), TEXT("Bone name to read"))
 			.Optional(TEXT("start_frame"), TEXT("integer"), TEXT("Start frame (default 0)"), TEXT("0"))
 			.Optional(TEXT("end_frame"), TEXT("integer"), TEXT("End frame (default -1 = all)"), TEXT("-1"))
@@ -319,50 +319,50 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("List all bone names that have tracks (animated bones) in an AnimSequence"),
 		FMonolithActionHandler::CreateStatic(&HandleListBoneTracks),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_sequence_curves"),
 		TEXT("Get float and transform curves on an animation sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSequenceCurves),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_montage_info"),
 		TEXT("Get montage metadata including sections, slots, blend settings"),
 		FMonolithActionHandler::CreateStatic(&HandleGetMontageInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Montage asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Montage asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_blend_space_info"),
 		TEXT("Get blend space samples and axis settings"),
 		FMonolithActionHandler::CreateStatic(&HandleGetBlendSpaceInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("BlendSpace asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("BlendSpace asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_skeleton_sockets"),
 		TEXT("Get sockets from a skeleton or skeletal mesh"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSkeletonSockets),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton or SkeletalMesh asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton or SkeletalMesh asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_skeleton_preview_attached_assets"),
 		TEXT("Get assets attached to a skeleton's preview scene (Persona [Preview Only] entries: socket + asset path per pair)"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSkeletonPreviewAttachedAssets),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_bone_ref_pose"),
 		TEXT("Get reference (bind) pose transforms of bones on a Skeleton or SkeletalMesh — returns parent-relative AND component-space transforms without spawning an actor"),
 		FMonolithActionHandler::CreateStatic(&HandleGetBoneRefPose),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton or SkeletalMesh asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton or SkeletalMesh asset path"))
 			.Optional(TEXT("bone_names"), TEXT("array"), TEXT("Specific bone names to query (default: all bones)"), TEXT("[]"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_abp_info"),
 		TEXT("Get animation blueprint overview (skeleton, graphs, state machines, variables, interfaces)"),
 		FMonolithActionHandler::CreateStatic(&HandleGetAbpInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_livelink_status"),
 		TEXT("Report optional LiveLink module/type availability without mutating the active session"),
@@ -374,7 +374,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a point notify to an animation asset"),
 		FMonolithActionHandler::CreateStatic(&HandleAddNotify),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation asset path"))
 			.Required(TEXT("notify_class"), TEXT("string"), TEXT("Notify class name (e.g. AnimNotify_PlaySound)"))
 			.Required(TEXT("time"), TEXT("number"), TEXT("Trigger time in seconds"))
 			.Optional(TEXT("track_name"), TEXT("string"), TEXT("Notify track name"), TEXT("1"))
@@ -383,7 +383,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a state notify (with duration) to an animation asset"),
 		FMonolithActionHandler::CreateStatic(&HandleAddNotifyState),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation asset path"))
 			.Required(TEXT("notify_class"), TEXT("string"), TEXT("NotifyState class name (e.g. AnimNotifyState_Trail)"))
 			.Required(TEXT("time"), TEXT("number"), TEXT("Start time in seconds"))
 			.Required(TEXT("duration"), TEXT("number"), TEXT("Duration in seconds"))
@@ -393,14 +393,14 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remove a notify by index from an animation asset"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveNotify),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation asset path"))
 			.Required(TEXT("notify_index"), TEXT("integer"), TEXT("Index of notify to remove"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_notify_track"),
 		TEXT("Move a notify to a different track"),
 		FMonolithActionHandler::CreateStatic(&HandleSetNotifyTrack),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation asset path"))
 			.Required(TEXT("notify_index"), TEXT("integer"), TEXT("Index of notify to move"))
 			.Required(TEXT("track_index"), TEXT("integer"), TEXT("Target track index"))
 			.Build());
@@ -410,14 +410,14 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("List all animation curves on a sequence (float and transform)"),
 		FMonolithActionHandler::CreateStatic(&HandleListCurves),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Optional(TEXT("include_keys"), TEXT("bool"), TEXT("Include key data in response"), TEXT("false"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("add_curve"),
 		TEXT("Add a float or transform curve to an animation sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleAddCurve),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Required(TEXT("curve_name"), TEXT("string"), TEXT("Name for the new curve"))
 			.Optional(TEXT("curve_type"), TEXT("string"), TEXT("Float or Transform (default Float)"), TEXT("Float"))
 			.Build());
@@ -425,7 +425,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remove a curve from an animation sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveCurve),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Required(TEXT("curve_name"), TEXT("string"), TEXT("Name of curve to remove"))
 			.Optional(TEXT("curve_type"), TEXT("string"), TEXT("Float or Transform (default Float)"), TEXT("Float"))
 			.Build());
@@ -433,7 +433,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set keys on a float curve (replaces existing keys)"),
 		FMonolithActionHandler::CreateStatic(&HandleSetCurveKeys),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Required(TEXT("curve_name"), TEXT("string"), TEXT("Curve name"))
 			.Required(TEXT("keys_json"), TEXT("string"), TEXT("JSON array: [{\"time\":0.0,\"value\":1.0,\"interp\":\"cubic\"}, ...]"))
 			.Build());
@@ -441,7 +441,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Get all keys from a float curve"),
 		FMonolithActionHandler::CreateStatic(&HandleGetCurveKeys),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Required(TEXT("curve_name"), TEXT("string"), TEXT("Curve name"))
 			.Build());
 
@@ -450,7 +450,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a socket to a skeleton"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSocket),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton asset path"))
 			.Required(TEXT("bone_name"), TEXT("string"), TEXT("Parent bone name"))
 			.Required(TEXT("socket_name"), TEXT("string"), TEXT("Name for the new socket"))
 			.Optional(TEXT("location"), TEXT("array"), TEXT("[x, y, z] relative location"))
@@ -461,14 +461,14 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remove a socket from a skeleton"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveSocket),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton asset path"))
 			.Required(TEXT("socket_name"), TEXT("string"), TEXT("Socket name to remove"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_socket_transform"),
 		TEXT("Set the transform of a skeleton socket"),
 		FMonolithActionHandler::CreateStatic(&HandleSetSocketTransform),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton asset path"))
 			.Required(TEXT("socket_name"), TEXT("string"), TEXT("Socket name"))
 			.Optional(TEXT("location"), TEXT("array"), TEXT("[x, y, z] relative location"))
 			.Optional(TEXT("rotation"), TEXT("array"), TEXT("[pitch, yaw, roll] relative rotation"))
@@ -478,13 +478,13 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Get all registered animation curve names from a skeleton"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSkeletonCurves),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_blend_space_axis"),
 		TEXT("Configure a blend space axis (name, range, grid divisions)"),
 		FMonolithActionHandler::CreateStatic(&HandleSetBlendSpaceAxis),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("BlendSpace asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("BlendSpace asset path"))
 			.Required(TEXT("axis"), TEXT("string"), TEXT("X or Y"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Display name for the axis"))
 			.Optional(TEXT("min"), TEXT("number"), TEXT("Minimum axis value"))
@@ -497,7 +497,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Configure root motion settings on an animation sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleSetRootMotionSettings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Optional(TEXT("enable_root_motion"), TEXT("bool"), TEXT("Enable/disable root motion"))
 			.Optional(TEXT("root_motion_lock"), TEXT("string"), TEXT("AnimFirstFrame, Zero, or RefPose"))
 			.Optional(TEXT("force_root_lock"), TEXT("bool"), TEXT("Force root lock even without root motion"))
@@ -508,28 +508,28 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create a new empty animation sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateSequence),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new sequence (e.g. /Game/Anims/MyAnim)"))
-			.Required(TEXT("skeleton_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new sequence (e.g. /Game/Anims/MyAnim)"))
+			.RequiredAssetPath(TEXT("skeleton_path"), TEXT("Skeleton asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("duplicate_sequence"),
 		TEXT("Duplicate an animation sequence to a new path"),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateSequence),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Source animation asset path"))
-			.Required(TEXT("dest_path"), TEXT("string"), TEXT("Destination asset path"))
+			.RequiredAssetPath(TEXT("source_path"), TEXT("Source animation asset path"))
+			.RequiredAssetPath(TEXT("dest_path"), TEXT("Destination asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("create_montage"),
 		TEXT("Create a new animation montage with skeleton"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateMontage),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new montage"))
-			.Required(TEXT("skeleton_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new montage"))
+			.RequiredAssetPath(TEXT("skeleton_path"), TEXT("Skeleton asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_montage_blend"),
 		TEXT("Set blend in/out times and auto blend out on a montage"),
 		FMonolithActionHandler::CreateStatic(&HandleSetMontageBlend),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Montage asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Montage asset path"))
 			.Optional(TEXT("blend_in_time"), TEXT("number"), TEXT("Blend in duration in seconds"))
 			.Optional(TEXT("blend_out_time"), TEXT("number"), TEXT("Blend out duration in seconds"))
 			.Optional(TEXT("blend_out_trigger_time"), TEXT("number"), TEXT("Time before end to trigger blend out"))
@@ -539,14 +539,14 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a slot track to a montage"),
 		FMonolithActionHandler::CreateStatic(&HandleAddMontageSlot),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Montage asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Montage asset path"))
 			.Required(TEXT("slot_name"), TEXT("string"), TEXT("Slot name (e.g. DefaultSlot)"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_montage_slot"),
 		TEXT("Rename a slot track on a montage by index"),
 		FMonolithActionHandler::CreateStatic(&HandleSetMontageSlot),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Montage asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Montage asset path"))
 			.Required(TEXT("slot_index"), TEXT("integer"), TEXT("Index of the slot track"))
 			.Required(TEXT("slot_name"), TEXT("string"), TEXT("New slot name"))
 			.Build());
@@ -556,27 +556,27 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Apply an animation modifier class to a sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleApplyAnimModifier),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Required(TEXT("modifier_class"), TEXT("string"), TEXT("Modifier class name (e.g. UAnimationModifier_CreateCurve)"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("list_anim_modifiers"),
 		TEXT("List animation modifiers applied to a sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleListAnimModifiers),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_composite_info"),
 		TEXT("Get segments and metadata from an animation composite"),
 		FMonolithActionHandler::CreateStatic(&HandleGetCompositeInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimComposite asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimComposite asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("add_composite_segment"),
 		TEXT("Add a segment to an animation composite"),
 		FMonolithActionHandler::CreateStatic(&HandleAddCompositeSegment),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimComposite asset path"))
-			.Required(TEXT("anim_path"), TEXT("string"), TEXT("Animation sequence to add"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimComposite asset path"))
+			.RequiredAssetPath(TEXT("anim_path"), TEXT("Animation sequence to add"))
 			.Optional(TEXT("start_pos"), TEXT("number"), TEXT("Start position in composite timeline"), TEXT("0.0"))
 			.Optional(TEXT("play_rate"), TEXT("number"), TEXT("Playback rate"), TEXT("1.0"))
 			.Optional(TEXT("looping_count"), TEXT("integer"), TEXT("Number of loops"), TEXT("1"))
@@ -585,7 +585,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remove a segment from an animation composite by index"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveCompositeSegment),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimComposite asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimComposite asset path"))
 			.Required(TEXT("segment_index"), TEXT("integer"), TEXT("Index of the segment to remove"))
 			.Build());
 
@@ -594,13 +594,13 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Get IK Rig asset info: solvers, goals, retarget chains, and skeleton overview"),
 		FMonolithActionHandler::CreateStatic(&HandleGetIKRigInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("IKRig asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("IKRig asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("add_ik_solver"),
 		TEXT("Add a solver to an IK Rig asset, optionally setting a root bone and goals"),
 		FMonolithActionHandler::CreateStatic(&HandleAddIKSolver),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("IKRig asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("IKRig asset path"))
 			.Required(TEXT("solver_type"), TEXT("string"), TEXT("Solver type (e.g. FullBodyIKSolver or /Script/IKRig.FullBodyIKSolver)"))
 			.Optional(TEXT("root_bone"), TEXT("string"), TEXT("Root bone name for the solver"))
 			.Optional(TEXT("goals"), TEXT("array"), TEXT("Array of {name, bone} goal objects to create and connect"))
@@ -609,13 +609,13 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Get IK Retargeter asset info: source/target rigs, preview meshes, and chain mappings"),
 		FMonolithActionHandler::CreateStatic(&HandleGetRetargeterInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("IKRetargeter asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("IKRetargeter asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_retarget_chain_mapping"),
 		TEXT("Set chain mappings on an IK Retargeter via auto-map or manual source/target pair"),
 		FMonolithActionHandler::CreateStatic(&HandleSetRetargetChainMapping),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("IKRetargeter asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("IKRetargeter asset path"))
 			.Optional(TEXT("auto_map"), TEXT("string"), TEXT("Auto-map mode: exact, fuzzy, or clear"))
 			.Optional(TEXT("source_chain"), TEXT("string"), TEXT("Source chain name for manual mapping"))
 			.Optional(TEXT("target_chain"), TEXT("string"), TEXT("Target chain name for manual mapping"))
@@ -626,14 +626,14 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Get Control Rig hierarchy info: elements by type with parents, control settings, and counts"),
 		FMonolithActionHandler::CreateStatic(&HandleGetControlRigInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ControlRigBlueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ControlRigBlueprint asset path"))
 			.Optional(TEXT("element_type"), TEXT("string"), TEXT("Filter: bone, control, null, curve, all (default: all)"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_control_rig_variables"),
 		TEXT("Get animatable controls and blueprint variables from a Control Rig asset"),
 		FMonolithActionHandler::CreateStatic(&HandleGetControlRigVariables),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ControlRigBlueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ControlRigBlueprint asset path"))
 			.Build());
 
 	// Wave 8c — Control Rig Write
@@ -641,7 +641,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a bone, control, or null element to a Control Rig hierarchy"),
 		FMonolithActionHandler::CreateStatic(&HandleAddControlRigElement),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ControlRigBlueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ControlRigBlueprint asset path"))
 			.Required(TEXT("element_type"), TEXT("string"), TEXT("Element type: bone, control, or null"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Name for the new element"))
 			.Optional(TEXT("parent"), TEXT("string"), TEXT("Parent element name"))
@@ -656,7 +656,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a state node to an existing state machine in an animation blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleAddStateToMachine),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Required(TEXT("machine_name"), TEXT("string"), TEXT("State machine name (exact, as shown in get_state_machines)"))
 			.Required(TEXT("state_name"), TEXT("string"), TEXT("Name for the new state"))
 			.Optional(TEXT("position_x"), TEXT("integer"), TEXT("Node X position (default: 200)"), TEXT("200"))
@@ -666,7 +666,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a transition between two states in a state machine"),
 		FMonolithActionHandler::CreateStatic(&HandleAddTransition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Required(TEXT("machine_name"), TEXT("string"), TEXT("State machine name"))
 			.Required(TEXT("from_state"), TEXT("string"), TEXT("Source state name"))
 			.Required(TEXT("to_state"), TEXT("string"), TEXT("Destination state name"))
@@ -675,7 +675,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Wire a boolean variable as the condition for a state machine transition"),
 		FMonolithActionHandler::CreateStatic(&HandleSetTransitionRule),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Required(TEXT("machine_name"), TEXT("string"), TEXT("State machine name"))
 			.Required(TEXT("from_state"), TEXT("string"), TEXT("Source state name"))
 			.Required(TEXT("to_state"), TEXT("string"), TEXT("Destination state name"))
@@ -687,13 +687,13 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("List all variables in an animation blueprint with types and defaults"),
 		FMonolithActionHandler::CreateStatic(&HandleGetAbpVariables),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_abp_linked_assets"),
 		TEXT("Find all animation assets referenced by an animation blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleGetAbpLinkedAssets),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Build());
 
 	// Skeleton Compatibility — required for legacy UE4 anims on UE5 mannequin etc.
@@ -701,13 +701,13 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("List skeletons declared compatible with the given Skeleton (USkeleton::CompatibleSkeletons)"),
 		FMonolithActionHandler::CreateStatic(&HandleGetCompatibleSkeletons),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("add_compatible_skeleton"),
 		TEXT("Declare another Skeleton as compatible — lets anims authored on the other skeleton play on this one without retargeting"),
 		FMonolithActionHandler::CreateStatic(&HandleAddCompatibleSkeleton),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path (the one being declared compatible)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton asset path (the one being declared compatible)"))
 			.Required(TEXT("compatible_with"), TEXT("string"), TEXT("Skeleton asset path to add to the compatibility list"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the modified skeleton asset (default true)"), TEXT("true"))
 			.Build());
@@ -715,7 +715,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remove a skeleton from another's CompatibleSkeletons array"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveCompatibleSkeleton),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton asset path"))
 			.Required(TEXT("compatible_with"), TEXT("string"), TEXT("Skeleton asset path to remove from the compatibility list"))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the modified skeleton asset (default true)"), TEXT("true"))
 			.Build());
@@ -725,8 +725,8 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create a new 2D BlendSpace asset with skeleton and optional axis config"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateBlendSpace),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new BlendSpace (e.g. /Game/Anims/BS_Locomotion)"))
-			.Required(TEXT("skeleton_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new BlendSpace (e.g. /Game/Anims/BS_Locomotion)"))
+			.RequiredAssetPath(TEXT("skeleton_path"), TEXT("Skeleton asset path"))
 			.Optional(TEXT("axis_x_name"), TEXT("string"), TEXT("X axis display name (default: None)"))
 			.Optional(TEXT("axis_x_min"), TEXT("number"), TEXT("X axis minimum value (default: 0)"))
 			.Optional(TEXT("axis_x_max"), TEXT("number"), TEXT("X axis maximum value (default: 100)"))
@@ -738,8 +738,8 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create a new 1D BlendSpace asset with skeleton and optional axis config"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateBlendSpace1D),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new BlendSpace1D"))
-			.Required(TEXT("skeleton_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new BlendSpace1D"))
+			.RequiredAssetPath(TEXT("skeleton_path"), TEXT("Skeleton asset path"))
 			.Optional(TEXT("axis_name"), TEXT("string"), TEXT("Axis display name (default: None)"))
 			.Optional(TEXT("axis_min"), TEXT("number"), TEXT("Axis minimum value (default: 0)"))
 			.Optional(TEXT("axis_max"), TEXT("number"), TEXT("Axis maximum value (default: 100)"))
@@ -748,8 +748,8 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create a new 2D AimOffset asset with Yaw/Pitch axis defaults"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateAimOffset),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new AimOffset"))
-			.Required(TEXT("skeleton_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new AimOffset"))
+			.RequiredAssetPath(TEXT("skeleton_path"), TEXT("Skeleton asset path"))
 			.Optional(TEXT("axis_x_name"), TEXT("string"), TEXT("X axis display name (default: Yaw)"))
 			.Optional(TEXT("axis_x_min"), TEXT("number"), TEXT("X axis minimum (default: -180)"))
 			.Optional(TEXT("axis_x_max"), TEXT("number"), TEXT("X axis maximum (default: 180)"))
@@ -761,8 +761,8 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create a new 1D AimOffset asset with Yaw axis default"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateAimOffset1D),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new AimOffset1D"))
-			.Required(TEXT("skeleton_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new AimOffset1D"))
+			.RequiredAssetPath(TEXT("skeleton_path"), TEXT("Skeleton asset path"))
 			.Optional(TEXT("axis_name"), TEXT("string"), TEXT("Axis display name (default: Yaw)"))
 			.Optional(TEXT("axis_min"), TEXT("number"), TEXT("Axis minimum (default: -180)"))
 			.Optional(TEXT("axis_max"), TEXT("number"), TEXT("Axis maximum (default: 180)"))
@@ -771,15 +771,15 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create a new AnimComposite asset with skeleton"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateComposite),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new composite"))
-			.Required(TEXT("skeleton_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new composite"))
+			.RequiredAssetPath(TEXT("skeleton_path"), TEXT("Skeleton asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("create_anim_blueprint"),
 		TEXT("Create a new Animation Blueprint asset with skeleton"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateAnimBlueprint),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new ABP (e.g. /Game/ABP/ABP_Character)"))
-			.Required(TEXT("skeleton_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new ABP (e.g. /Game/ABP/ABP_Character)"))
+			.RequiredAssetPath(TEXT("skeleton_path"), TEXT("Skeleton asset path"))
 			.Optional(TEXT("parent_class"), TEXT("string"), TEXT("Parent class name (default: AnimInstance)"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("compare_skeletons"),
@@ -795,7 +795,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set playback properties on an AnimSequence (rate_scale, loop, interpolation)"),
 		FMonolithActionHandler::CreateStatic(&HandleSetSequenceProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Optional(TEXT("rate_scale"), TEXT("number"), TEXT("Playback rate scale (default 1.0)"))
 			.Optional(TEXT("loop"), TEXT("bool"), TEXT("Whether the sequence loops"))
 			.Optional(TEXT("interpolation"), TEXT("string"), TEXT("Interpolation type: Linear or Step"))
@@ -804,7 +804,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Configure additive animation settings on a sequence (triggers DDC rebuild)"),
 		FMonolithActionHandler::CreateStatic(&HandleSetAdditiveSettings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Optional(TEXT("additive_anim_type"), TEXT("string"), TEXT("NoAdditive, LocalSpace, or MeshSpace"))
 			.Optional(TEXT("ref_pose_type"), TEXT("string"), TEXT("RefPose, AnimScaled, AnimFrame, or LocalAnimFrame"))
 			.Optional(TEXT("ref_frame_index"), TEXT("integer"), TEXT("Reference frame index for AnimFrame/LocalAnimFrame modes"))
@@ -814,7 +814,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Assign bone and/or curve compression settings assets to a sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleSetCompressionSettings),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Optional(TEXT("bone_compression"), TEXT("string"), TEXT("Bone compression settings asset path"))
 			.Optional(TEXT("curve_compression"), TEXT("string"), TEXT("Curve compression settings asset path"))
 			.Build());
@@ -822,13 +822,13 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Read all authored sync markers from an animation sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSyncMarkers),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("add_sync_marker"),
 		TEXT("Add an authored sync marker to a sequence"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSyncMarker),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Required(TEXT("marker_name"), TEXT("string"), TEXT("Sync marker name (e.g. FootDown)"))
 			.Required(TEXT("time"), TEXT("number"), TEXT("Time in seconds"))
 			.Optional(TEXT("track_index"), TEXT("integer"), TEXT("Track index (default 0)"), TEXT("0"))
@@ -837,7 +837,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remove sync markers by name (all with that name) or by index"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveSyncMarker),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Optional(TEXT("marker_name"), TEXT("string"), TEXT("Remove all markers with this name"))
 			.Optional(TEXT("marker_index"), TEXT("integer"), TEXT("Remove specific marker by index"))
 			.Build());
@@ -845,7 +845,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Rename all sync markers with a given name to a new name"),
 		FMonolithActionHandler::CreateStatic(&HandleRenameSyncMarker),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("AnimSequence asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Required(TEXT("old_name"), TEXT("string"), TEXT("Current marker name"))
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("New marker name"))
 			.Build());
@@ -862,8 +862,8 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add an animation segment to a montage slot track"),
 		FMonolithActionHandler::CreateStatic(&HandleAddMontageAnimSegment),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Montage asset path"))
-			.Required(TEXT("anim_path"), TEXT("string"), TEXT("AnimSequence to reference"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Montage asset path"))
+			.RequiredAssetPath(TEXT("anim_path"), TEXT("AnimSequence to reference"))
 			.Optional(TEXT("slot_index"), TEXT("integer"), TEXT("Slot track index (default 0)"))
 			.Optional(TEXT("start_pos"), TEXT("number"), TEXT("Position in montage timeline (default: auto-append after last segment)"))
 			.Optional(TEXT("anim_start_time"), TEXT("number"), TEXT("Clip start time within source anim (default 0.0)"))
@@ -875,8 +875,8 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Copy all notifies from one animation asset to another with optional time scaling"),
 		FMonolithActionHandler::CreateStatic(&HandleCloneNotifySetup),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Source animation asset path"))
-			.Required(TEXT("target_path"), TEXT("string"), TEXT("Target animation asset path"))
+			.RequiredAssetPath(TEXT("source_path"), TEXT("Source animation asset path"))
+			.RequiredAssetPath(TEXT("target_path"), TEXT("Target animation asset path"))
 			.Optional(TEXT("time_scale"), TEXT("number"), TEXT("Manual time scale factor (default 1.0)"))
 			.Optional(TEXT("auto_scale"), TEXT("boolean"), TEXT("Auto-compute scale from duration ratio (default false)"))
 			.Optional(TEXT("replace_existing"), TEXT("boolean"), TEXT("Clear target notifies first (default false)"))
@@ -896,8 +896,8 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create a montage with slot, anim segments, sections, blend, and notifies in one call"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateMontageFromSections),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new montage"))
-			.Required(TEXT("skeleton_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new montage"))
+			.RequiredAssetPath(TEXT("skeleton_path"), TEXT("Skeleton asset path"))
 			.Optional(TEXT("slot_name"), TEXT("string"), TEXT("Slot name (default 'DefaultSlot')"))
 			.Optional(TEXT("sections"), TEXT("array"), TEXT("Array of {name, anim_path, start_time?, next_section?}"))
 			.Optional(TEXT("blend"), TEXT("object"), TEXT("{blend_in_time?, blend_out_time?, blend_out_trigger_time?, enable_auto_blend_out?}"))
@@ -907,8 +907,8 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Build an AnimSequence from per-frame bone transforms using IAnimationDataController"),
 		FMonolithActionHandler::CreateStatic(&HandleBuildSequenceFromPoses),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Target AnimSequence path (created if missing)"))
-			.Required(TEXT("skeleton_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Target AnimSequence path (created if missing)"))
+			.RequiredAssetPath(TEXT("skeleton_path"), TEXT("Skeleton asset path"))
 			.Required(TEXT("frames"), TEXT("array"), TEXT("Array of {bones: [{name, location:[x,y,z], rotation:[x,y,z,w], scale:[x,y,z]}, ...]}"))
 			.Optional(TEXT("frame_rate"), TEXT("number"), TEXT("Frame rate (default 30)"))
 			.Build());
@@ -918,7 +918,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set UPROPERTY values on a notify object using reflection (ImportText_Direct). Works on both instant and state notifies."),
 		FMonolithActionHandler::CreateStatic(&HandleSetNotifyProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation asset path (sequence, montage, composite)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation asset path (sequence, montage, composite)"))
 			.Required(TEXT("notify_index"), TEXT("integer"), TEXT("Index of the notify in the Notifies array"))
 			.Required(TEXT("properties"), TEXT("object"), TEXT("Object of property_name:value pairs. Values use UE text import format (same as Details panel copy/paste)."))
 			.Build());
@@ -928,13 +928,13 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Read all bodies, constraints, profiles, and solver settings from a physics asset"),
 		FMonolithActionHandler::CreateStatic(&HandleGetPhysicsAssetInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Physics asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Physics asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_body_properties"),
 		TEXT("Modify mass, physics type, collision, damping on a physics body identified by bone name"),
 		FMonolithActionHandler::CreateStatic(&HandleSetBodyProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Physics asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Physics asset path"))
 			.Required(TEXT("bone_name"), TEXT("string"), TEXT("Bone name identifying the body"))
 			.Optional(TEXT("mass"), TEXT("number"), TEXT("Mass override in kg (enables bOverrideMass)"))
 			.Optional(TEXT("physics_type"), TEXT("string"), TEXT("Default, Kinematic, or Simulated"))
@@ -948,7 +948,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Modify angular/linear limits on a physics constraint by index or bone pair"),
 		FMonolithActionHandler::CreateStatic(&HandleSetConstraintProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Physics asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Physics asset path"))
 			.Optional(TEXT("constraint_index"), TEXT("integer"), TEXT("Constraint index (alternative to bone pair)"))
 			.Optional(TEXT("bone_1"), TEXT("string"), TEXT("Child bone name (with bone_2, alternative to constraint_index)"))
 			.Optional(TEXT("bone_2"), TEXT("string"), TEXT("Parent bone name (with bone_1, alternative to constraint_index)"))
@@ -964,7 +964,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a retarget chain to an IK Rig asset"),
 		FMonolithActionHandler::CreateStatic(&HandleAddRetargetChain),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("IK Rig asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("IK Rig asset path"))
 			.Required(TEXT("chain_name"), TEXT("string"), TEXT("Name for the chain"))
 			.Required(TEXT("start_bone"), TEXT("string"), TEXT("Start bone name"))
 			.Required(TEXT("end_bone"), TEXT("string"), TEXT("End bone name"))
@@ -974,14 +974,14 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remove a retarget chain from an IK Rig asset"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveRetargetChain),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("IK Rig asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("IK Rig asset path"))
 			.Required(TEXT("chain_name"), TEXT("string"), TEXT("Name of the chain to remove"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_retarget_chain_bones"),
 		TEXT("Update start/end bones of an existing retarget chain in an IK Rig"),
 		FMonolithActionHandler::CreateStatic(&HandleSetRetargetChainBones),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("IK Rig asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("IK Rig asset path"))
 			.Required(TEXT("chain_name"), TEXT("string"), TEXT("Name of the chain to modify"))
 			.Optional(TEXT("start_bone"), TEXT("string"), TEXT("New start bone name"))
 			.Optional(TEXT("end_bone"), TEXT("string"), TEXT("New end bone name"))

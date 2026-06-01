@@ -1270,7 +1270,7 @@ void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
              "{ bSuccess, asset_path, request_id?, validation, node_counts, errors?, warnings?, diff? }."),
         FMonolithActionHandler::CreateStatic(&HandleBuildUIFromSpec),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Long-package asset path, e.g. /Game/UI/MyMenu"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Long-package asset path, e.g. /Game/UI/MyMenu"))
             .Required(TEXT("spec"),       TEXT("object"), TEXT("FUISpecDocument JSON. Use ui::dump_ui_spec_schema for the shape."))
             .Optional(TEXT("overwrite"),  TEXT("boolean"), TEXT("Replace an existing WBP at asset_path. Default true."), TEXT("true"))
             .Optional(TEXT("dry_run"),    TEXT("boolean"), TEXT("Validate + walk + report a diff but do not commit. Default false."), TEXT("false"))
@@ -1304,7 +1304,7 @@ void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
              "spec, errors?, warnings? } where `spec` is the FUISpecDocument JSON ready for build."),
         FMonolithActionHandler::CreateStatic(&HandleDumpUISpec),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Long-package asset path of the WBP to read, e.g. /Game/UI/MyMenu"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Long-package asset path of the WBP to read, e.g. /Game/UI/MyMenu"))
             .Optional(TEXT("emit_defaults"), TEXT("boolean"), TEXT("Include fields that match engine defaults. Default false."), TEXT("false"))
             .Optional(TEXT("request_id"), TEXT("string"), TEXT("Caller-supplied UUID echoed back in the response."))
             .Build());

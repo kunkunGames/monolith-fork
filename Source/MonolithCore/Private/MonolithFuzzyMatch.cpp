@@ -1,5 +1,8 @@
 // Copyright tumourlove. All Rights Reserved.
+#include "../Public/MonolithFuzzyMatch.h"
 #include "MonolithFuzzyMatch.h"
+#include "Algo/LevenshteinDistance.h"
+#include "Algo/StableSort.h"
 
 namespace
 {
@@ -299,4 +302,50 @@ FMonolithFuzzyScore FMonolithFuzzyMatch::ScoreCandidate(
 	}
 
 	return Result;
+}
+
+namespace MonolithFuzzyMatchDetail
+{
+	TArray<FFuzzyCandidate> ScoreFuzzyMatches(
+		const FString& Needle,
+		const TArray<FString>& KeysSnapshot,
+		int32 TopN)
+	{
+		TArray<FFuzzyCandidate> Result;
+
+		if (Needle.IsEmpty() || KeysSnapshot.Num() == 0 || TopN <= 0)
+		{
+			return Result;
+		}
+
+		TArray<FFuzzyCandidate> All;
+		All.Reserve(KeysSnapshot.Num());
+
+		for (const FString& Key : KeysSnapshot)
+		{
+			const int32 Distance = Algo::LevenshteinDistance(Needle, Key);
+			const int32 MaxLen = FMath::Max(Needle.Len(), Key.Len());
+			const float WorstCase = MaxLen > 0 ? static_cast<float>(MaxLen) : 1.0f;
+			const float Score = 1.0f - (static_cast<float>(Distance) / WorstCase);
+
+			FFuzzyCandidate Candidate;
+			Candidate.Key = Key;
+			Candidate.Score = Score;
+			All.Add(MoveTemp(Candidate));
+		}
+
+		Algo::StableSort(All, [](const FFuzzyCandidate& Left, const FFuzzyCandidate& Right)
+		{
+			return Left.Score > Right.Score;
+		});
+
+		const int32 Take = FMath::Min(TopN, All.Num());
+		Result.Reserve(Take);
+		for (int32 Index = 0; Index < Take; ++Index)
+		{
+			Result.Add(All[Index]);
+		}
+
+		return Result;
+	}
 }

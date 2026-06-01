@@ -34,7 +34,7 @@ void FMonolithBlueprintCDOActions::RegisterActions(FMonolithToolRegistry& Regist
 			 "and any asset whose config is stored as UPROPERTY defaults rather than Blueprint graph nodes."),
 		FMonolithActionHandler::CreateStatic(&HandleGetCDOProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path (e.g. /Game/Blueprints/BP_MyActor or /Game/Data/DA_MyData)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path (e.g. /Game/Blueprints/BP_MyActor or /Game/Data/DA_MyData)"))
 			.Optional(TEXT("category_filter"), TEXT("string"), TEXT("Only include properties whose category contains this string"))
 			.Optional(TEXT("include_parent_defaults"), TEXT("boolean"), TEXT("If true, include properties inherited from native parent class (default: true)"))
 			.Optional(TEXT("owner_class_filter"), TEXT("string"), TEXT("Only include properties whose owner_class name contains this string (case-insensitive). Lets you skip everything inherited from AActor/APawn/ACharacter when only project-level props matter."))
@@ -48,7 +48,7 @@ void FMonolithBlueprintCDOActions::RegisterActions(FMonolithToolRegistry& Regist
 			 "and any type that supports ImportText."),
 		FMonolithActionHandler::CreateStatic(&HandleSetCDOProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint or UObject asset path (e.g. /Game/Data/DA_MyData)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint or UObject asset path (e.g. /Game/Data/DA_MyData)"))
 			.Required(TEXT("property_name"), TEXT("string"), TEXT("Property name to set (case-insensitive fallback)"))
 			.Required(TEXT("value"), TEXT("any"), TEXT("New value — string, number, bool, or ImportText format for structs (e.g. \"(X=1.0,Y=2.0,Z=3.0)\")"))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("If true, validate only — emit the would-be write but do not persist. Phase 1."), TEXT("false"))
@@ -65,7 +65,7 @@ void FMonolithBlueprintCDOActions::RegisterActions(FMonolithToolRegistry& Regist
 			 "Supports dry_run + strict. Phase 1 pilot of the bulk_fill framework."),
 		FMonolithActionHandler::CreateStatic(&MonolithCDOPhase1Internal::HandleSetCDOProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint or UObject asset path (e.g. /Game/Data/DA_MyData)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint or UObject asset path (e.g. /Game/Data/DA_MyData)"))
 			.Required(TEXT("properties"), TEXT("object"), TEXT("Nested JSON object — keys are property names, values are scalars / structs / arrays / maps / sets per UPROPERTY layout."))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("If true, validate only — emit the would-be writes but do not persist."), TEXT("false"))
 			.Optional(TEXT("strict"), TEXT("boolean"), TEXT("If true, promote silent drops / clamps / unknown-fields to hard errors."), TEXT("false"))
@@ -80,7 +80,7 @@ void FMonolithBlueprintCDOActions::RegisterActions(FMonolithToolRegistry& Regist
 			 "Use to discover legal types, ImportText forms, enum-value lists, clamp ranges, and nested struct/array/map children before calling set_cdo_property or set_cdo_properties."),
 		FMonolithActionHandler::CreateStatic(&MonolithCDOPhase1Internal::HandleDescribeCDOSchema),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint or UObject asset path (e.g. /Game/Data/DA_MyData)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint or UObject asset path (e.g. /Game/Data/DA_MyData)"))
 			.Build());
 }
 

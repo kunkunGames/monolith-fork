@@ -14,7 +14,7 @@
 #include "Async/Async.h"
 #include "Editor.h"
 #include "Interfaces/IPluginManager.h"
-#include "Framework/Application/SlateApplication.h"
+#include "HAL/IConsoleManager.h"
 
 // Indexers
 #include "Indexers/BlueprintIndexer.h"
@@ -35,6 +35,99 @@
 #include "Indexers/MeshCatalogIndexer.h"
 #include "Indexers/GASIndexer.h"
 #include "Indexers/MetaSoundIndexer.h"
+
+// ============================================================
+// Incremental-reachability GC override (RAII)
+// ============================================================
+// UE 5.7's INCREMENTAL reachability GC (gc.AllowIncrementalReachability=1,
+// gc.IncrementalReachabilityTimeLimit=0.002 by editor default) leaks GC
+// worker-context bits from the process-global GWorkerIndices bitmask: when an
+// incremental pass hits its 2ms budget it SUSPENDS and retains its worker
+// contexts across frames; ReleaseAsyncProcessingContexts only frees them when
+// no pass is suspended (GarbageCollection.cpp:7310-7313). The deep-index run
+// drives GC continuously (forced collects per batch + per-asset GetAsset() ->
+// LoadPackage -> FlushAsyncLoading), so suspended passes accumulate and exhaust
+// the 64-slot pool -> "Exceeded max active GC worker contexts" assert.
+//
+// Forcing gc.AllowIncrementalReachability=0 for the run's duration makes every
+// GC a BLOCKING collection, which always runs ReleaseAsyncProcessingContexts to
+// completion in a single call -> worker bits are always freed -> the leak is
+// structurally impossible. The original value is captured at run start and
+// restored on the dtor (game thread), covering normal completion, error, and
+// abort/cancel because all of those converge on OnIndexingFinished() (and the
+// editor-shutdown-mid-index path resets it in Deinitialize()).
+//
+// File-static + single-flight (bIsIndexing) means at most one override is ever
+// live, so a file-static TUniquePtr is a safe owner and keeps the fix .cpp-only.
+namespace
+{
+	class FIncrementalReachabilityGCOverride
+	{
+	public:
+		FIncrementalReachabilityGCOverride()
+		{
+			CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("gc.AllowIncrementalReachability"));
+			if (CVar)
+			{
+				OriginalValue = CVar->GetInt();
+				CVar->Set(0, ECVF_SetByCode);
+				UE_LOG(LogMonolithIndex, Log,
+					TEXT("Deep index: forced gc.AllowIncrementalReachability=0 (was %d) to prevent GC worker-context leak"),
+					OriginalValue);
+			}
+			else
+			{
+				UE_LOG(LogMonolithIndex, Warning,
+					TEXT("Deep index: gc.AllowIncrementalReachability CVar not found — cannot disable incremental reachability GC"));
+			}
+		}
+
+		~FIncrementalReachabilityGCOverride()
+		{
+			if (CVar)
+			{
+				CVar->Set(OriginalValue, ECVF_SetByCode);
+				UE_LOG(LogMonolithIndex, Log,
+					TEXT("Deep index: restored gc.AllowIncrementalReachability=%d"), OriginalValue);
+			}
+		}
+
+	private:
+		IConsoleVariable* CVar = nullptr;
+		int32 OriginalValue = 1;
+	};
+
+	// At most one full-index run is live at a time (guarded by bIsIndexing), so a
+	// single file-static owner is sufficient. Reset on the game thread only.
+	static TUniquePtr<FIncrementalReachabilityGCOverride> GIncrementalGCOverride;
+}
+
+// Manual trigger for a full project index. Primary use: when bDeferFirstTimeIndex
+// is set, the DB starts empty and the user kicks the index with this command.
+// File-static FAutoConsoleCommand (self-unregistering at module unload) keeps the
+// fix .cpp-only — no header member required. Resolves the live editor subsystem at
+// invoke time so it stays valid across editor lifecycle.
+static FAutoConsoleCommand GMonolithStartIndexCommand(
+	TEXT("Monolith.StartIndex"),
+	TEXT("Starts a full Monolith project index. Use after bDeferFirstTimeIndex skipped the automatic first-time index."),
+	FConsoleCommandDelegate::CreateLambda([]()
+	{
+		if (!GEditor)
+		{
+			UE_LOG(LogMonolithIndex, Warning, TEXT("Monolith.StartIndex: GEditor not available — cannot start index"));
+			return;
+		}
+
+		UMonolithIndexSubsystem* Subsystem = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>();
+		if (!Subsystem)
+		{
+			UE_LOG(LogMonolithIndex, Warning, TEXT("Monolith.StartIndex: MonolithIndex subsystem not available — cannot start index"));
+			return;
+		}
+
+		UE_LOG(LogMonolithIndex, Log, TEXT("Monolith.StartIndex: manual full index requested"));
+		Subsystem->StartFullIndex();
+	}));
 
 void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -59,10 +152,27 @@ void UMonolithIndexSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	RegisterDefaultIndexers();
 
+	// bEnableIndex gates only the indexing RUN, not action registration — query
+	// actions stay registered so project_query keeps answering from an existing DB.
+	if (!GetDefault<UMonolithSettings>()->bEnableIndex)
+	{
+		UE_LOG(LogMonolithIndex, Log, TEXT("MonolithIndex: indexing disabled via bEnableIndex=false; skipping index run"));
+		return;
+	}
+
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 
 	if (ShouldAutoIndex())
 	{
+		// First-time index can be deferred for very large projects — leaves the DB
+		// empty until 'Monolith.StartIndex' is run manually (escape hatch for the
+		// GC worker-context crash class on huge / high-core-count environments).
+		if (GetDefault<UMonolithSettings>()->bDeferFirstTimeIndex)
+		{
+			UE_LOG(LogMonolithIndex, Log, TEXT("MonolithIndex: first-time index deferred via bDeferFirstTimeIndex; run Monolith.StartIndex to begin"));
+			return;
+		}
+
 		UE_LOG(LogMonolithIndex, Log, TEXT("First launch — deferring full index until AR ready"));
 		if (AR.IsLoadingAssets())
 			AR.OnFilesLoaded().AddUObject(this, &UMonolithIndexSubsystem::OnAssetRegistryFilesLoaded);
@@ -132,6 +242,10 @@ void UMonolithIndexSubsystem::Deinitialize()
 	}
 
 	bIsIndexing = false;
+
+	// Restore GC setting if the editor is shutting down mid-index (this abort
+	// path force-stops the worker without routing through OnIndexingFinished).
+	GIncrementalGCOverride.Reset();
 
 	TaskNotification.Reset();
 
@@ -212,6 +326,12 @@ void UMonolithIndexSubsystem::StartFullIndex()
 	}
 
 	bIsIndexing = true;
+
+	// Force blocking (non-incremental) reachability GC for the whole run so the
+	// engine cannot leak GC worker-context bits across suspended incremental
+	// passes. Restored in OnIndexingFinished() (all worker exit paths) and
+	// defensively in Deinitialize() (editor shutdown mid-index). Game thread.
+	GIncrementalGCOverride = MakeUnique<FIncrementalReachabilityGCOverride>();
 
 	// Reset the database for a full re-index
 	Database->ResetDatabase();
@@ -1101,6 +1221,11 @@ void UMonolithIndexSubsystem::OnIndexingFinished(bool bSuccess)
 {
 	bIsIndexing = false;
 	IndexingStatusMessage.Empty();
+
+	// Restore the incremental-reachability GC setting captured at run start. This
+	// is the single completion point for ALL worker exit paths (normal, DB-open
+	// failure, and bShouldStop cancel/abort), so the dtor always runs here.
+	GIncrementalGCOverride.Reset();
 
 	if (IndexingThread)
 	{

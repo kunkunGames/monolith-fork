@@ -16,7 +16,7 @@ void FMonolithBlueprintVariableActions::RegisterActions(FMonolithToolRegistry& R
 		TEXT("Add a new member variable to a Blueprint. Supports all primitive types, structs, enums, objects, and container types (array:, set:, map:)."),
 		FMonolithActionHandler::CreateStatic(&HandleAddVariable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),        TEXT("string"),  TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),        TEXT("Blueprint asset path"))
 			.Required(TEXT("name"),               TEXT("string"),  TEXT("Variable name"))
 			.Required(TEXT("type"),               TEXT("string"),  TEXT("Pin type string (e.g. bool, int, float, string, struct:Vector, object:Actor, array:float)"))
 			.Optional(TEXT("default_value"),      TEXT("string"),  TEXT("Default value as string"))
@@ -32,7 +32,7 @@ void FMonolithBlueprintVariableActions::RegisterActions(FMonolithToolRegistry& R
 		TEXT("Remove a member variable from a Blueprint by name."),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveVariable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("name"),       TEXT("string"), TEXT("Variable name to remove"))
 			.Build());
 
@@ -40,7 +40,7 @@ void FMonolithBlueprintVariableActions::RegisterActions(FMonolithToolRegistry& R
 		TEXT("Rename a member variable in a Blueprint, updating all references in graphs."),
 		FMonolithActionHandler::CreateStatic(&HandleRenameVariable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("old_name"),   TEXT("string"), TEXT("Current variable name"))
 			.Required(TEXT("new_name"),   TEXT("string"), TEXT("New variable name"))
 			.Build());
@@ -49,7 +49,7 @@ void FMonolithBlueprintVariableActions::RegisterActions(FMonolithToolRegistry& R
 		TEXT("Change the type of an existing member variable. All graph nodes referencing the variable will be refreshed."),
 		FMonolithActionHandler::CreateStatic(&HandleSetVariableType),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("name"),       TEXT("string"), TEXT("Variable name"))
 			.Required(TEXT("type"),       TEXT("string"), TEXT("New pin type string (e.g. bool, float, struct:Vector, array:int)"))
 			.Build());
@@ -58,7 +58,7 @@ void FMonolithBlueprintVariableActions::RegisterActions(FMonolithToolRegistry& R
 		TEXT("Update metadata and flags on an existing Blueprint variable. Only provided fields are changed."),
 		FMonolithActionHandler::CreateStatic(&HandleSetVariableDefaults),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),        TEXT("string"),  TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),        TEXT("Blueprint asset path"))
 			.Required(TEXT("name"),               TEXT("string"),  TEXT("Variable name"))
 			.Optional(TEXT("default_value"),      TEXT("string"),  TEXT("New default value as string"))
 			.Optional(TEXT("category"),           TEXT("string"),  TEXT("New category"))
@@ -74,7 +74,7 @@ void FMonolithBlueprintVariableActions::RegisterActions(FMonolithToolRegistry& R
 		TEXT("Add a local variable to a Blueprint function graph."),
 		FMonolithActionHandler::CreateStatic(&HandleAddLocalVariable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),    TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),    TEXT("Blueprint asset path"))
 			.Required(TEXT("function_name"), TEXT("string"), TEXT("Function graph name"))
 			.Required(TEXT("name"),          TEXT("string"), TEXT("Local variable name"))
 			.Required(TEXT("type"),          TEXT("string"), TEXT("Pin type string"))
@@ -85,7 +85,7 @@ void FMonolithBlueprintVariableActions::RegisterActions(FMonolithToolRegistry& R
 		TEXT("Remove a local variable from a Blueprint function graph."),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveLocalVariable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),    TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),    TEXT("Blueprint asset path"))
 			.Required(TEXT("function_name"), TEXT("string"), TEXT("Function graph name"))
 			.Required(TEXT("name"),          TEXT("string"), TEXT("Local variable name to remove"))
 			.Build());
@@ -97,7 +97,7 @@ void FMonolithBlueprintVariableActions::RegisterActions(FMonolithToolRegistry& R
 		     "Optionally creates an OnRep_ notification function. Requires the Blueprint's parent class to support replication."),
 		FMonolithActionHandler::CreateStatic(&HandleAddReplicatedVariable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),            TEXT("string"),  TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),            TEXT("Blueprint asset path"))
 			.Required(TEXT("variable_name"),         TEXT("string"),  TEXT("Variable name"))
 			.Required(TEXT("type"),                  TEXT("string"),  TEXT("Pin type string (e.g. bool, int, float, object:Actor)"))
 			.Optional(TEXT("replication_condition"), TEXT("string"),  TEXT("ELifetimeCondition: None, InitialOnly, OwnerOnly, SkipOwner, SimulatedOnly, AutonomousOnly, SimulatedOrPhysics, InitialOrOwner, Custom (default: None)"), TEXT("None"))

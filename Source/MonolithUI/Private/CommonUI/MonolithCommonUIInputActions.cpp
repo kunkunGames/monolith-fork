@@ -419,7 +419,7 @@ namespace MonolithCommonUIInput
 			TEXT("Create a UDataTable of FCommonInputActionDataBase rows (Accept/Back/Navigate etc.)"),
 			FMonolithActionHandler::CreateStatic(&HandleCreateInputActionDataTable),
 			FParamSchemaBuilder()
-				.Required(TEXT("package_path"), TEXT("string"), TEXT("Folder path"))
+				.RequiredAssetPath(TEXT("package_path"), TEXT("Folder path"))
 				.Required(TEXT("asset_name"), TEXT("string"), TEXT("Asset name"))
 				.Build(),
 			Cat);
@@ -429,7 +429,7 @@ namespace MonolithCommonUIInput
 			TEXT("Add a FCommonInputActionDataBase row to an input-action DataTable. Struct fields use UE text format."),
 			FMonolithActionHandler::CreateStatic(&HandleAddInputActionRow),
 			FParamSchemaBuilder()
-				.Required(TEXT("table_path"), TEXT("string"), TEXT("Input-action DataTable path"))
+				.RequiredAssetPath(TEXT("table_path"), TEXT("Input-action DataTable path"))
 				.Required(TEXT("row_name"), TEXT("string"), TEXT("Row name (FName)"))
 				.Required(TEXT("display_name"), TEXT("string"), TEXT("User-facing display text"))
 				.Optional(TEXT("hold_display_name"), TEXT("string"), TEXT("Display when hold-variant used"))
@@ -445,9 +445,9 @@ namespace MonolithCommonUIInput
 			TEXT("Configure a UCommonActionWidget in a WBP to point at a DataTable row (glyph + hold behavior)"),
 			FMonolithActionHandler::CreateStatic(&HandleBindCommonActionWidget),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path"))
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of UCommonActionWidget"))
-				.Required(TEXT("table_path"), TEXT("string"), TEXT("Input-action DataTable path"))
+				.RequiredAssetPath(TEXT("table_path"), TEXT("Input-action DataTable path"))
 				.Required(TEXT("row_name"), TEXT("string"), TEXT("Row name (FName)"))
 				.Build(),
 			Cat);
@@ -457,7 +457,7 @@ namespace MonolithCommonUIInput
 			TEXT("Add a UCommonBoundActionBar to an existing WBP's tree (auto-populated action glyph bar). Writes ActionButtonClass = action_button_class (default: MonolithDefaultCommonButton_C) so the blueprint compiles cleanly — bare bars fail validation in UCommonBoundActionBar::ValidateCompiledDefaults."),
 			FMonolithActionHandler::CreateStatic(&HandleCreateBoundActionBar),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Target Widget Blueprint path"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Target Widget Blueprint path"))
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name to assign the bar"))
 				.Optional(TEXT("parent_widget"), TEXT("string"), TEXT("Parent panel (default: root)"))
 				.Optional(TEXT("action_button_class"), TEXT("string"), TEXT("Path to a UCommonButtonBase subclass with _C suffix (default: /Game/Monolith/CommonUI/MonolithDefaultCommonButton.MonolithDefaultCommonButton_C). Required to be a UCommonButtonBase subclass."))

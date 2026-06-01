@@ -250,7 +250,7 @@ void FMonolithMeshDecalActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("random_rotation"), TEXT("boolean"), TEXT("Randomize decal roll/spin"), TEXT("true"))
 			.Optional(TEXT("min_spacing"), TEXT("number"), TEXT("Minimum distance between Poisson-scattered decals (cm)"), TEXT("60"))
 			.Optional(TEXT("seed"), TEXT("number"), TEXT("Random seed for reproducible placement (0 = random)"), TEXT("0"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder for spawned decals"), TEXT("Decals"))
+			.OptionalAssetPathWithDefault(TEXT("folder"), TEXT("Outliner folder for spawned decals"), TEXT("Decals"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("scene"), TEXT("place_along_path"),
@@ -263,7 +263,7 @@ void FMonolithMeshDecalActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("pattern"), TEXT("string"), TEXT("Built-in pattern: blood_drips, footprints, drag_marks"))
 			.Optional(TEXT("size"), TEXT("array"), TEXT("Decal size [depth, width, height] or prop scale [x,y,z]"))
 			.Optional(TEXT("seed"), TEXT("number"), TEXT("Random seed (0 = random)"), TEXT("0"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder"), TEXT("PathDecals"))
+			.OptionalAssetPathWithDefault(TEXT("folder"), TEXT("Outliner folder"), TEXT("PathDecals"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("scene"), TEXT("analyze_prop_density"),
@@ -285,7 +285,7 @@ void FMonolithMeshDecalActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("intensity"), TEXT("number"), TEXT("Scene intensity 0.0-1.0 (scales count, radius)"), TEXT("0.5"))
 			.Optional(TEXT("direction"), TEXT("array"), TEXT("Scene direction [x, y, z] for directional patterns like dragged (default: +X)"))
 			.Optional(TEXT("seed"), TEXT("number"), TEXT("Random seed (0 = random)"), TEXT("0"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder"), TEXT("Storytelling"))
+			.OptionalAssetPathWithDefault(TEXT("folder"), TEXT("Outliner folder"), TEXT("Storytelling"))
 			.Build());
 }
 

@@ -18,7 +18,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Add a new function graph to a Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleAddFunction),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Function name"), {TEXT("function_name")})
 			.Optional(TEXT("is_pure"), TEXT("bool"), TEXT("Mark as pure (no exec pins)"), TEXT("false"))
 			.Optional(TEXT("is_const"), TEXT("bool"), TEXT("Mark as const"), TEXT("false"))
@@ -35,7 +35,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Author a Blueprint override of an overridable parent function (BlueprintImplementableEvent / BlueprintNativeEvent), including those that RETURN a value (e.g. UCommonActivatableWidget::BP_GetDesiredFocusTarget -> UWidget*). add_function cannot do this and the event-node form has no ReturnValue pin. Declaring class is resolved generically by name. Returns graph_name, entry_node_id, return_pin_id/name, override_class, has_return_value."),
 		FMonolithActionHandler::CreateStatic(&HandleOverrideParentFunction),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("parent_function_name"), TEXT("string"), TEXT("Name of the overridable parent function"))
 			.Build());
 
@@ -43,7 +43,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Remove a function graph from a Blueprint by name"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveFunction),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Function name to remove"))
 			.Build());
 
@@ -51,7 +51,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Rename an existing function graph in a Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleRenameFunction),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("old_name"), TEXT("string"), TEXT("Current function name"))
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("New function name"))
 			.Build());
@@ -60,7 +60,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Add a new macro graph to a Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleAddMacro),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Macro name"))
 			.Build());
 
@@ -68,7 +68,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Remove a macro graph from a Blueprint by name"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveMacro),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("macro_name"), TEXT("string"), TEXT("Macro name to remove"))
 			.Build());
 
@@ -76,7 +76,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Rename an existing macro graph in a Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleRenameMacro),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("old_name"), TEXT("string"), TEXT("Current macro name"))
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("New macro name"))
 			.Build());
@@ -85,7 +85,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Add a new event dispatcher (multicast delegate) to a Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleAddEventDispatcher),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Event dispatcher name"))
 			.Build());
 
@@ -93,7 +93,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Add input/output parameters to a Blueprint function"),
 		FMonolithActionHandler::CreateStatic(&HandleSetFunctionParams),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("function_name"), TEXT("string"), TEXT("Function graph name"))
 			.Optional(TEXT("inputs"), TEXT("array"), TEXT("Array of {name, type} objects for inputs"))
 			.Optional(TEXT("outputs"), TEXT("array"), TEXT("Array of {name, type} objects for outputs"))
@@ -103,7 +103,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Add an interface to a Blueprint's implemented interface list"),
 		FMonolithActionHandler::CreateStatic(&HandleImplementInterface),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("interface_class"), TEXT("string"), TEXT("Interface class name (e.g. IMyInterface)"))
 			.Build());
 
@@ -111,7 +111,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Remove an interface from a Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveInterface),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("interface_class"), TEXT("string"), TEXT("Interface class name to remove"))
 			.Optional(TEXT("preserve_functions"), TEXT("bool"), TEXT("Keep stub functions after removal"), TEXT("false"))
 			.Build());
@@ -120,7 +120,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Change the parent class of a Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleReparentBlueprint),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("new_parent_class"), TEXT("string"), TEXT("New parent class name"))
 			.Build());
 
@@ -130,7 +130,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Remove an event dispatcher (multicast delegate) from a Blueprint. Warns if any graph nodes still reference it."),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveEventDispatcher),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),      TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),      TEXT("Blueprint asset path"))
 			.Required(TEXT("dispatcher_name"), TEXT("string"), TEXT("Event dispatcher name (without _Signature suffix)"))
 			.Build());
 
@@ -138,7 +138,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Set (replace) the signature parameters on an event dispatcher. Existing params are cleared and replaced with the new list."),
 		FMonolithActionHandler::CreateStatic(&HandleSetEventDispatcherParams),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),      TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),      TEXT("Blueprint asset path"))
 			.Required(TEXT("dispatcher_name"), TEXT("string"), TEXT("Event dispatcher name (without _Signature suffix)"))
 			.Required(TEXT("params"),          TEXT("array"),  TEXT("Array of {name, type} objects for the new signature"))
 			.Build());
@@ -149,7 +149,7 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Add an interface to a Blueprint AND create all stub function graphs in one call. Returns the interface name and list of created graphs. Much more useful than implement_interface alone — this one actually wires up the stubs."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldInterfaceImplementation),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),       TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),       TEXT("Blueprint asset path"))
 			.Required(TEXT("interface_class"),   TEXT("string"), TEXT("Interface class name (e.g. BPI_Interactable or IBpi_Interactable)"))
 			.Build());
 }

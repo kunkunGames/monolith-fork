@@ -2,7 +2,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
-#include "MonolithFuzzyMatch.h"
+#include "../../Public/MonolithFuzzyMatch.h"
 
 // =============================================================================
 //  FMonolithFuzzyMatch — shared fuzzy/distance engine unit tests.

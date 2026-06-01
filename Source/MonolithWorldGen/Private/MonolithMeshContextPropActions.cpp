@@ -342,7 +342,7 @@ void FMonolithMeshContextPropActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Required(TEXT("location"), TEXT("array"), TEXT("World location [x, y, z]"))
 			.Optional(TEXT("rotation"), TEXT("array"), TEXT("Rotation [pitch, yaw, roll]"), TEXT("[0,0,0]"))
 			.Optional(TEXT("seed"), TEXT("integer"), TEXT("Random seed (0 = random)"), TEXT("0"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Actor folder path in the outliner"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Actor folder path in the outliner"))
 			.Optional(TEXT("validate_placement"), TEXT("boolean"), TEXT("Validate each item with overlap check before spawning"), TEXT("true"))
 			.Build());
 

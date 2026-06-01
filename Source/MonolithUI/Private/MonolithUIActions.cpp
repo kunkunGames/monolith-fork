@@ -52,7 +52,7 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("Create a UWidgetBlueprint at save_path. parent_class accepts /Script/Module.Class form OR short name ('TokenforgeActivatableWidget', 'CommonActivatableWidget', 'UserWidget') — short name resolves via UClass::FindClassByName."),
         FMonolithActionHandler::CreateStatic(&HandleCreateWidgetBlueprint),
         FParamSchemaBuilder()
-            .Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path, e.g. /Game/UI/WBP_MyWidget"))
+            .RequiredAssetPath(TEXT("save_path"), TEXT("Asset path, e.g. /Game/UI/WBP_MyWidget"))
             .Optional(TEXT("parent_class"), TEXT("string"), TEXT("Parent class name (default: UserWidget)"), TEXT("UserWidget"))
             .Optional(TEXT("root_widget"), TEXT("string"), TEXT("Root widget type (default: CanvasPanel)"), TEXT("CanvasPanel"))
             .Optional(TEXT("skip_save"), TEXT("boolean"), TEXT("Skip saving to disk"), TEXT("false"))
@@ -64,7 +64,7 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("Get the full widget hierarchy of a Widget Blueprint as JSON"),
         FMonolithActionHandler::CreateStatic(&HandleGetWidgetTree),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Build()
     );
 
@@ -73,7 +73,7 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("Add a widget to a parent panel in a Widget Blueprint"),
         FMonolithActionHandler::CreateStatic(&HandleAddWidget),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("widget_class"), TEXT("string"), TEXT("Widget class: TextBlock, Image, Button, VerticalBox, etc."))
             .Optional(TEXT("widget_name"), TEXT("string"), TEXT("Name for the new widget (auto-generated if omitted)"))
             .Optional(TEXT("parent_name"), TEXT("string"), TEXT("Parent widget name (default: root widget)"))
@@ -93,7 +93,7 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("Remove a widget from a Widget Blueprint"),
         FMonolithActionHandler::CreateStatic(&HandleRemoveWidget),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of the widget to remove"))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile after removing"), TEXT("true"))
             .Build()
@@ -104,7 +104,7 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("Set a property on a widget (text, color, opacity, visibility, etc.). Default mode gates writes through the per-type curated allowlist; pass raw_mode=true to bypass the gate (legacy compat). The new value can be supplied as `value` OR the alias `property_value` (Bug #6 fix)."),
         FMonolithActionHandler::CreateStatic(&HandleSetWidgetProperty),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("Target widget name"))
             .Required(TEXT("property_name"), TEXT("string"), TEXT("Property path. Dotted segments allowed (e.g. 'Padding.Left'). Allowlist-gated unless raw_mode=true."))
             .Required(TEXT("value"), TEXT("string"), TEXT("Property value (alias: 'property_value'). Strings, numbers, booleans, JSON arrays/objects all accepted; struct types (Vector2D/LinearColor/Margin/Vector4/SlateColor) accept multiple shapes."))
@@ -118,7 +118,7 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("Compile a Widget Blueprint. Response includes errors[] and warnings[] arrays populated when status=BS_Error (added v0.14.11)."),
         FMonolithActionHandler::CreateStatic(&HandleCompileWidget),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Build()
     );
 
@@ -141,7 +141,7 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
              "Uniqueness check runs against the full WidgetTree before the rename — colliding new_name returns -32602."),
         FMonolithActionHandler::CreateStatic(&MonolithUIActionsPhase2::HandleRenameWidget),
         FParamSchemaBuilder()
-            .Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path (alias: asset_path)"))
+            .RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path (alias: asset_path)"))
             .Required(TEXT("old_name"), TEXT("string"), TEXT("Current widget FName"))
             .Required(TEXT("new_name"), TEXT("string"), TEXT("Target widget FName (must be unique in tree)"))
             .Build(),
@@ -162,7 +162,7 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
              "UBlueprint paths — the action sniffs the type and reads ::Status accordingly."),
         FMonolithActionHandler::CreateStatic(&MonolithUIActionsPhase2::HandleDumpBlueprintCompileLog),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint or Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint or Widget Blueprint asset path"))
             .Build(),
         TEXT("WidgetCRUD")
     );

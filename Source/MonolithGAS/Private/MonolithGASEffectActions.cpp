@@ -679,7 +679,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create a new GameplayEffect Blueprint asset with the specified duration policy"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateGameplayEffect),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path, e.g. /Game/GAS/Effects/GE_Damage"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path, e.g. /Game/GAS/Effects/GE_Damage"))
 			.Required(TEXT("duration_policy"), TEXT("string"), TEXT("Duration type: instant, has_duration, infinite"))
 			.Optional(TEXT("parent_class"), TEXT("string"), TEXT("Parent class (default: GameplayEffect)"))
 			.Build());
@@ -689,7 +689,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Read all configuration from a GameplayEffect: duration, modifiers, components, stacking, cues, executions"),
 		FMonolithActionHandler::CreateStatic(&HandleGetGameplayEffect),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Build());
 
 	// 3. list_gameplay_effects
@@ -697,7 +697,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Find GameplayEffect Blueprints matching filters via AssetRegistry"),
 		FMonolithActionHandler::CreateStatic(&HandleListGameplayEffects),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Content path prefix to search, e.g. /Game/GAS/Effects"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Content path prefix to search, e.g. /Game/GAS/Effects"))
 			.Optional(TEXT("duration_policy"), TEXT("string"), TEXT("Filter by duration: instant, has_duration, infinite"))
 			.Optional(TEXT("tag_filter"), TEXT("string"), TEXT("Filter by asset tag (substring match)"))
 			.Optional(TEXT("attribute_filter"), TEXT("string"), TEXT("Filter by modifier attribute (substring match)"))
@@ -708,7 +708,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add an attribute modifier to a GameplayEffect"),
 		FMonolithActionHandler::CreateStatic(&HandleAddModifier),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Required(TEXT("attribute"), TEXT("string"), TEXT("Attribute as ClassName.PropertyName"))
 			.Required(TEXT("operation"), TEXT("string"), TEXT("Modifier op: Add, Multiply, MultiplyCompound, Divide, Override, AddFinal"))
 			.Required(TEXT("magnitude"), TEXT("object"), TEXT("Magnitude config: {type, value?, tag?, source_attribute?, calculation_class?}"))
@@ -719,7 +719,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Update an existing modifier by index"),
 		FMonolithActionHandler::CreateStatic(&HandleSetModifier),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Required(TEXT("modifier_index"), TEXT("integer"), TEXT("Index of the modifier to update"))
 			.Optional(TEXT("attribute"), TEXT("string"), TEXT("New attribute as ClassName.PropertyName"))
 			.Optional(TEXT("operation"), TEXT("string"), TEXT("New modifier op"))
@@ -731,7 +731,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remove a modifier by index or by attribute name"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveModifier),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Optional(TEXT("modifier_index"), TEXT("integer"), TEXT("Index of the modifier to remove"))
 			.Optional(TEXT("attribute"), TEXT("string"), TEXT("Remove first modifier matching this attribute"))
 			.Build());
@@ -741,7 +741,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("List all modifiers on a GameplayEffect with attribute, operation, and magnitude details"),
 		FMonolithActionHandler::CreateStatic(&HandleListModifiers),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Build());
 
 	// 8. add_ge_component
@@ -749,7 +749,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a GE component (asset_tags, target_tags, block_abilities, etc.) to a GameplayEffect"),
 		FMonolithActionHandler::CreateStatic(&HandleAddGEComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Required(TEXT("component_type"), TEXT("string"), TEXT("Component type: asset_tags, target_tags, block_abilities, cancel_abilities, target_tag_requirements, additional_effects, immunity, remove_other, chance_to_apply, custom_can_apply, grant_abilities"))
 			.Required(TEXT("config"), TEXT("object"), TEXT("Type-specific configuration (e.g. {tags: [...]} for tag components)"))
 			.Build());
@@ -759,7 +759,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Update an existing GE component's configuration"),
 		FMonolithActionHandler::CreateStatic(&HandleSetGEComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Required(TEXT("component_type"), TEXT("string"), TEXT("Component type to update"))
 			.Required(TEXT("config"), TEXT("object"), TEXT("New configuration"))
 			.Optional(TEXT("index"), TEXT("integer"), TEXT("Index if multiple of same type (default: 0)"))
@@ -770,7 +770,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Configure stacking behavior for a GameplayEffect"),
 		FMonolithActionHandler::CreateStatic(&HandleSetEffectStacking),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Required(TEXT("stacking_type"), TEXT("string"), TEXT("none, aggregate_by_source, aggregate_by_target"))
 			.Optional(TEXT("stack_limit"), TEXT("integer"), TEXT("Maximum stack count (0 or -1 for unlimited)"))
 			.Optional(TEXT("stack_duration_refresh_policy"), TEXT("string"), TEXT("RefreshOnSuccessfulApplication or NeverRefresh"))
@@ -783,7 +783,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set the duration policy and optional duration magnitude of a GameplayEffect"),
 		FMonolithActionHandler::CreateStatic(&HandleSetDuration),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Required(TEXT("duration_policy"), TEXT("string"), TEXT("instant, has_duration, infinite"))
 			.Optional(TEXT("duration_magnitude"), TEXT("number"), TEXT("Duration in seconds (for has_duration)"))
 			.Build());
@@ -793,7 +793,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set the periodic execution interval for a GameplayEffect"),
 		FMonolithActionHandler::CreateStatic(&HandleSetPeriod),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Required(TEXT("period"), TEXT("number"), TEXT("Period in seconds (0 to disable)"))
 			.Optional(TEXT("execute_on_application"), TEXT("boolean"), TEXT("Execute once immediately on application (default: false)"))
 			.Build());
@@ -805,7 +805,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create a GameplayEffect from a named survival horror template with all modifiers, tags, stacking, and components pre-configured."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateEffectFromTemplate),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new GE Blueprint"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new GE Blueprint"))
 			.Required(TEXT("template"), TEXT("string"), TEXT("Template: instant_damage, dot_damage, heal_instant, heal_over_time, status_burning, status_frozen, status_bleeding, status_poisoned, fear_spike, sanity_drain, cooldown, stamina_cost, difficulty_preset, accessibility_override"))
 			.Optional(TEXT("overrides"), TEXT("object"), TEXT("Override template values: {duration?, period?, magnitude?, stacking?, tags?: {asset_tags?, target_tags?}}"))
 			.Build());
@@ -815,7 +815,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create a fully-configured GameplayEffect from a declarative specification in one call."),
 		FMonolithActionHandler::CreateStatic(&HandleBuildEffectFromSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new GE Blueprint"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new GE Blueprint"))
 			.Required(TEXT("spec"), TEXT("object"), TEXT("Full GE spec: {duration_policy, duration_magnitude?, period?, execute_on_application?, modifiers: [{attribute, operation, magnitude}], stacking?: {type, limit?, ...}, components?: [{type, config}]}"))
 			.Build());
 
@@ -832,7 +832,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a UGameplayEffectExecutionCalculation to a GameplayEffect with optional scoped modifiers."),
 		FMonolithActionHandler::CreateStatic(&HandleAddExecution),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Required(TEXT("calculation_class"), TEXT("string"), TEXT("Execution calculation class name or path"))
 			.Optional(TEXT("scoped_modifiers"), TEXT("array"), TEXT("Array of {attribute, operation, magnitude} captured for the execution calc"))
 			.Build());
@@ -842,8 +842,8 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Clone an existing GameplayEffect Blueprint with optional modifications."),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateGameplayEffect),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Source GE Blueprint asset path"))
-			.Required(TEXT("dest_path"), TEXT("string"), TEXT("Destination asset path for the clone"))
+			.RequiredAssetPath(TEXT("source_path"), TEXT("Source GE Blueprint asset path"))
+			.RequiredAssetPath(TEXT("dest_path"), TEXT("Destination asset path for the clone"))
 			.Optional(TEXT("overrides"), TEXT("object"), TEXT("Override fields: {duration_policy?, modifiers?: [{attribute, operation, magnitude}]}"))
 			.Build());
 
@@ -852,7 +852,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Delete a GameplayEffect Blueprint asset after checking for references."),
 		FMonolithActionHandler::CreateStatic(&HandleDeleteGameplayEffect),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path to delete"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path to delete"))
 			.Optional(TEXT("force"), TEXT("boolean"), TEXT("Force delete even if references exist (default: false)"))
 			.Build());
 
@@ -862,7 +862,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Validate a GameplayEffect for common issues: period on instant, stacking on instant, missing attributes, missing SetByCaller tags, deprecated flat tag properties."),
 		FMonolithActionHandler::CreateStatic(&HandleValidateEffect),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("gas"), TEXT("get_effect_interaction_matrix"),
@@ -876,7 +876,7 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remove a GE component by type and optional index."),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveGEComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayEffect Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayEffect Blueprint asset path"))
 			.Required(TEXT("component_type"), TEXT("string"), TEXT("Component type: asset_tags, target_tags, block_abilities, etc."))
 			.Optional(TEXT("index"), TEXT("integer"), TEXT("Index if multiple of same type exist (default: 0)"))
 			.Build());

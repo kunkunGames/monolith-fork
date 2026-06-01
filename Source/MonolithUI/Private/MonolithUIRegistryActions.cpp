@@ -562,7 +562,7 @@ void FMonolithUIRegistryActions::RegisterActions(FMonolithToolRegistry& Registry
              "the editor's 'add variable' affordance."),
         FMonolithActionHandler::CreateStatic(&MonolithUIRegistryPhase2::HandleAddWidgetVariable),
         FParamSchemaBuilder()
-            .Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path (alias: asset_path)"))
+            .RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path (alias: asset_path)"))
             .Required(TEXT("var_name"), TEXT("string"), TEXT("New variable FName (uniqueness enforced by AddMemberVariable)"))
             .Required(TEXT("var_type"), TEXT("string"), TEXT("Type token. See action description for grammar."))
             .Optional(TEXT("default_value"), TEXT("string"), TEXT("Default value as UE text format (engine ImportText grammar)"))
@@ -581,7 +581,7 @@ void FMonolithUIRegistryActions::RegisterActions(FMonolithToolRegistry& Registry
              "Returns {widget_name, is_variable, changed}."),
         FMonolithActionHandler::CreateStatic(&MonolithUIRegistryPhase2::HandleSetWidgetIsVariable),
         FParamSchemaBuilder()
-            .Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path"), {TEXT("asset_path")})
+            .RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path"), {TEXT("asset_path")})
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of the widget in the WBP's WidgetTree"))
             .Required(TEXT("is_variable"), TEXT("bool"), TEXT("New bIsVariable value (true = expose as named variable)"))
             .Build(),
@@ -596,7 +596,7 @@ void FMonolithUIRegistryActions::RegisterActions(FMonolithToolRegistry& Registry
              "Use this to discover the legal value set for set_widget_property writes that target enum fields."),
         FMonolithActionHandler::CreateStatic(&MonolithUIRegistryPhase2::HandleListWidgetPropertyEnums),
         FParamSchemaBuilder()
-            .Optional(TEXT("wbp_path"), TEXT("string"), TEXT("Resolve via this WBP's generated class (highest priority)"))
+            .OptionalAssetPath(TEXT("wbp_path"), TEXT("Resolve via this WBP's generated class (highest priority)"))
             .Optional(TEXT("widget_class"), TEXT("string"), TEXT("Token form (e.g. 'TextBlock', 'CommonButtonBase')"))
             .Optional(TEXT("property_name"), TEXT("string"), TEXT("Optional case-insensitive filter; returns only the named property"))
             .Build(),

@@ -546,7 +546,7 @@ void FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Create the BP_MonolithBlockoutVolume Blueprint asset in the project. One-time setup — creates /Game/Monolith/Blockout/BP_MonolithBlockoutVolume with editable RoomType, BlockoutTags, Density, physics, wall/ceiling properties. Drag into levels for blockout volumes with proper Details panel UX."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshBlockoutActions::CreateBlockoutBlueprint),
 		FParamSchemaBuilder()
-			.Optional(TEXT("save_path"), TEXT("string"), TEXT("Asset path to save the Blueprint"), TEXT("/Game/Monolith/Blockout/BP_MonolithBlockoutVolume"))
+			.OptionalAssetPathWithDefault(TEXT("save_path"), TEXT("Asset path to save the Blueprint"), TEXT("/Game/Monolith/Blockout/BP_MonolithBlockoutVolume"))
 			.Optional(TEXT("force"), TEXT("boolean"), TEXT("Recreate even if already exists"), TEXT("false"))
 			.Build());
 }

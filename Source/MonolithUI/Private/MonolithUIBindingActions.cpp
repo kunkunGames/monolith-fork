@@ -14,7 +14,7 @@ void FMonolithUIBindingActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("List all bindable events on widgets in a Widget Blueprint"),
         FMonolithActionHandler::CreateStatic(&HandleListWidgetEvents),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Optional(TEXT("widget_name"), TEXT("string"), TEXT("Specific widget name (omit for all widgets)"))
             .Build()
     );
@@ -24,7 +24,7 @@ void FMonolithUIBindingActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("List all settable properties on a widget"),
         FMonolithActionHandler::CreateStatic(&HandleListWidgetProperties),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("Target widget name"))
             .Build()
     );
@@ -34,7 +34,7 @@ void FMonolithUIBindingActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("Configure a ListView or TileView with entry widget class and dimensions"),
         FMonolithActionHandler::CreateStatic(&HandleSetupListView),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("list_widget_name"), TEXT("string"), TEXT("Name of the ListView or TileView widget"))
             .Required(TEXT("entry_widget_class"), TEXT("string"), TEXT("Asset path to the entry Widget Blueprint"))
             .Optional(TEXT("entry_height"), TEXT("number"), TEXT("Entry height in pixels (default: 50)"), TEXT("50"))
@@ -47,7 +47,7 @@ void FMonolithUIBindingActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("Get all property bindings (data binding) on a Widget Blueprint"),
         FMonolithActionHandler::CreateStatic(&HandleGetWidgetBindings),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Build()
     );
 }

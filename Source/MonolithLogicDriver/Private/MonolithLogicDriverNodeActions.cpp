@@ -163,7 +163,7 @@ void FMonolithLogicDriverNodeActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Set state node configuration flags (always_update, disable_tick_transition, exclude_from_any_state) via reflection"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureState),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("State node GUID"))
 			.Optional(TEXT("always_update"), TEXT("boolean"), TEXT("Force state to update every tick"), TEXT(""))
 			.Optional(TEXT("disable_tick_transition"), TEXT("boolean"), TEXT("Disable tick-based transition evaluation"), TEXT(""))
@@ -175,7 +175,7 @@ void FMonolithLogicDriverNodeActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Set transition properties (priority, color, eval_mode, can_eval_with_start_state) via reflection"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureTransition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("Transition node GUID"))
 			.Optional(TEXT("priority"), TEXT("number"), TEXT("Transition priority order (lower = higher priority)"), TEXT(""))
 			.Optional(TEXT("color"), TEXT("string"), TEXT("Transition color as 'R,G,B,A' (0-1 floats)"), TEXT(""))
@@ -188,7 +188,7 @@ void FMonolithLogicDriverNodeActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Set conduit properties (eval_with_transitions, conduit_as_state) via reflection"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureConduit),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("Conduit node GUID"))
 			.Optional(TEXT("eval_with_transitions"), TEXT("boolean"), TEXT("Evaluate conduit with transitions"), TEXT(""))
 			.Optional(TEXT("conduit_as_state"), TEXT("boolean"), TEXT("Treat conduit as a state"), TEXT(""))
@@ -199,7 +199,7 @@ void FMonolithLogicDriverNodeActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Set transition condition type: always_true, time_delay, event_based, or tag_check. Sets properties via reflection (no graph rewiring)."),
 		FMonolithActionHandler::CreateStatic(&HandleSetTransitionCondition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("transition_guid"), TEXT("string"), TEXT("Transition node GUID"))
 			.Required(TEXT("condition_type"), TEXT("string"), TEXT("Condition type: always_true, time_delay, event_based, tag_check"))
 			.Optional(TEXT("params"), TEXT("object"), TEXT("Condition-specific params: {duration}, {event_name}, {tag, match_type}"), TEXT(""))
@@ -210,7 +210,7 @@ void FMonolithLogicDriverNodeActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Set gameplay tags on a state node. Clears existing tags and applies the provided array."),
 		FMonolithActionHandler::CreateStatic(&HandleSetStateTags),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("State node GUID"))
 			.Required(TEXT("gameplay_tags"), TEXT("array"), TEXT("Array of gameplay tag strings (e.g. ['State.Combat.Attacking'])"))
 			.Build());
@@ -220,7 +220,7 @@ void FMonolithLogicDriverNodeActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Read all exposed graph properties on SM nodes — FSMGraphProperty variables visible in the graph editor"),
 		FMonolithActionHandler::CreateStatic(&HandleGetExposedProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Optional(TEXT("node_guid"), TEXT("string"), TEXT("Specific node GUID; if omitted, reads all nodes"))
 			.Build());
 
@@ -229,7 +229,7 @@ void FMonolithLogicDriverNodeActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Set an exposed property value on an SM node by name via reflection"),
 		FMonolithActionHandler::CreateStatic(&HandleSetExposedProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("Node GUID"))
 			.Required(TEXT("property_name"), TEXT("string"), TEXT("Property name to set"))
 			.Required(TEXT("value"), TEXT("string"), TEXT("New value (imported via reflection)"))
@@ -240,7 +240,7 @@ void FMonolithLogicDriverNodeActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Configure a nested state machine node: reuse behavior, independent tick, and other settings"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureStateMachineNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("Nested SM node GUID"))
 			.Optional(TEXT("reuse_if_not_end_state"), TEXT("boolean"), TEXT("Reuse the SM if it hasn't reached an end state"))
 			.Optional(TEXT("reuse_current_state"), TEXT("boolean"), TEXT("Reuse current state on re-entry"))

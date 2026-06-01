@@ -484,21 +484,21 @@ void FMonolithComboGraphActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Find all ComboGraph assets in the project with optional path filter"),
 		FMonolithActionHandler::CreateStatic(&HandleListComboGraphs),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only include assets under this path prefix (e.g. /Game/Combat)"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only include assets under this path prefix (e.g. /Game/Combat)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("combograph"), TEXT("get_combo_graph_info"),
 		TEXT("Read full structure of a ComboGraph: nodes, edges, transitions, animation refs"),
 		FMonolithActionHandler::CreateStatic(&HandleGetComboGraphInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ComboGraph asset path (e.g. /Game/Combat/CG_MeleeCombo)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ComboGraph asset path (e.g. /Game/Combat/CG_MeleeCombo)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("combograph"), TEXT("get_combo_node_effects"),
 		TEXT("Read GAS effect and cue containers on a specific combo graph node"),
 		FMonolithActionHandler::CreateStatic(&HandleGetComboNodeEffects),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ComboGraph asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ComboGraph asset path"))
 			.Required(TEXT("node_index"), TEXT("number"), TEXT("Index of the node in AllNodes array"))
 			.Build());
 
@@ -506,7 +506,7 @@ void FMonolithComboGraphActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Validate a combo graph: check for orphan nodes, missing animations, broken edges"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateComboGraph),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ComboGraph asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ComboGraph asset path"))
 			.Build());
 
 	// ── Create/Modify ──
@@ -515,14 +515,14 @@ void FMonolithComboGraphActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a new ComboGraph asset via UComboGraphFactory"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateComboGraph),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new ComboGraph (e.g. /Game/Combat/CG_MeleeCombo)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new ComboGraph (e.g. /Game/Combat/CG_MeleeCombo)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("combograph"), TEXT("add_combo_node"),
 		TEXT("Add a montage or sequence animation node to a combo graph"),
 		FMonolithActionHandler::CreateStatic(&HandleAddComboNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ComboGraph asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ComboGraph asset path"))
 			.Required(TEXT("animation_asset"), TEXT("string"), TEXT("Path to AnimMontage or AnimSequence asset"))
 			.Optional(TEXT("node_type"), TEXT("string"), TEXT("Node type: 'montage' (default) or 'sequence'"), TEXT("montage"))
 			.Optional(TEXT("parent_node_index"), TEXT("number"), TEXT("Index of the parent node to connect from (-1 or omit for none)"))
@@ -533,7 +533,7 @@ void FMonolithComboGraphActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Connect two combo graph nodes with a transition edge"),
 		FMonolithActionHandler::CreateStatic(&HandleAddComboEdge),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ComboGraph asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ComboGraph asset path"))
 			.Required(TEXT("from_node_index"), TEXT("number"), TEXT("Index of the source node"))
 			.Required(TEXT("to_node_index"), TEXT("number"), TEXT("Index of the target node"))
 			.Optional(TEXT("input_action"), TEXT("string"), TEXT("InputAction asset path for transition trigger"))
@@ -545,7 +545,7 @@ void FMonolithComboGraphActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Configure GAS gameplay effect containers on a combo node via EffectsContainerMap"),
 		FMonolithActionHandler::CreateStatic(&HandleSetComboNodeEffects),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ComboGraph asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ComboGraph asset path"))
 			.Required(TEXT("node_index"), TEXT("number"), TEXT("Index of the node in AllNodes"))
 			.Required(TEXT("effects"), TEXT("object"), TEXT("Map of gameplay tag -> effect container config: {\"Tag.Name\": {\"effect_classes\": [\"/Game/GE\"], \"use_set_by_caller\": true, \"set_by_caller_tag\": \"Tag\", \"set_by_caller_magnitude\": 25.0}}"))
 			.Build());
@@ -554,7 +554,7 @@ void FMonolithComboGraphActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Configure gameplay cue containers on a combo node via CuesContainerMap"),
 		FMonolithActionHandler::CreateStatic(&HandleSetComboNodeCues),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ComboGraph asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ComboGraph asset path"))
 			.Required(TEXT("node_index"), TEXT("number"), TEXT("Index of the node in AllNodes"))
 			.Required(TEXT("cues"), TEXT("object"), TEXT("Map of gameplay tag -> cue container: {\"GameplayCue.Hit\": {\"definitions\": [{\"gameplay_cue_tags\": [\"Tag\"], \"source_type\": \"Niagara\", \"source_asset\": \"/Game/VFX/NS\"}]}}"))
 			.Build());
@@ -565,7 +565,7 @@ void FMonolithComboGraphActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a GameplayAbility Blueprint pre-wired with a ComboGraphAbilityTask_StartGraph node"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateComboAbility),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new ability BP"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new ability BP"))
 			.Optional(TEXT("combo_graph"), TEXT("string"), TEXT("ComboGraph asset path to wire as default"))
 			.Optional(TEXT("initial_input"), TEXT("string"), TEXT("InputAction path for initial combo trigger"))
 			.Optional(TEXT("parent_class"), TEXT("string"), TEXT("Parent ability class (default: GameplayAbility)"), TEXT("GameplayAbility"))
@@ -575,7 +575,7 @@ void FMonolithComboGraphActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Wire or update a StartComboGraph ability task node on an existing ability Blueprint"),
 		FMonolithActionHandler::CreateStatic(&HandleLinkAbilityToComboGraph),
 		FParamSchemaBuilder()
-			.Required(TEXT("ability_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("ability_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Required(TEXT("combo_graph"), TEXT("string"), TEXT("ComboGraph asset path to link"))
 			.Build());
 
@@ -583,7 +583,7 @@ void FMonolithComboGraphActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Auto-build a complete combo graph from an ordered list of animation montages"),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldComboFromMontages),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new ComboGraph"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new ComboGraph"))
 			.Required(TEXT("montages"), TEXT("array"), TEXT("Ordered array of AnimMontage asset paths"))
 			.Optional(TEXT("input_action"), TEXT("string"), TEXT("InputAction to use for all transitions"))
 			.Optional(TEXT("transition_behavior"), TEXT("string"), TEXT("Transition behavior for all edges (default: Immediately)"), TEXT("Immediately"))
@@ -595,7 +595,7 @@ void FMonolithComboGraphActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Auto-layout nodes in a combo graph. Arranges nodes left-to-right following the combo chain, with branches spreading vertically."),
 		FMonolithActionHandler::CreateStatic(&HandleLayoutComboGraph),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("ComboGraph asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("ComboGraph asset path"))
 			.Optional(TEXT("horizontal_spacing"), TEXT("integer"), TEXT("Horizontal spacing between nodes (default 300)"), TEXT("300"))
 			.Optional(TEXT("vertical_spacing"), TEXT("integer"), TEXT("Vertical spacing between branch nodes (default 200)"), TEXT("200"))
 			.Build());

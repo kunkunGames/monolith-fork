@@ -19,7 +19,7 @@ void FMonolithBlueprintComponentActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Add a new component to a Blueprint's construction script. Returns variable_name, class, and parent."),
 		FMonolithActionHandler::CreateStatic(&HandleAddComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("component_class"), TEXT("string"), TEXT("Component class name (e.g. 'StaticMeshComponent')"))
 			.Optional(TEXT("component_name"), TEXT("string"), TEXT("Variable name for the new component"))
 			.Optional(TEXT("parent"), TEXT("string"), TEXT("Parent component variable name (attach as child)"))
@@ -30,7 +30,7 @@ void FMonolithBlueprintComponentActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Remove a component from a Blueprint's construction script. Optionally promotes children to the removed node's parent."),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("component_name"), TEXT("string"), TEXT("Component variable name to remove"))
 			.Optional(TEXT("promote_children"), TEXT("boolean"), TEXT("Reparent children to removed node's parent (default: true)"))
 			.Build());
@@ -39,7 +39,7 @@ void FMonolithBlueprintComponentActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Rename a component variable in a Blueprint."),
 		FMonolithActionHandler::CreateStatic(&HandleRenameComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("component_name"), TEXT("string"), TEXT("Current component variable name"))
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("New variable name"))
 			.Build());
@@ -48,7 +48,7 @@ void FMonolithBlueprintComponentActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Change the parent of a component in a Blueprint. Pass empty string for new_parent to make it a root component."),
 		FMonolithActionHandler::CreateStatic(&HandleReparentComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("component_name"), TEXT("string"), TEXT("Component variable name to reparent"))
 			.Required(TEXT("new_parent"), TEXT("string"), TEXT("New parent component variable name, or empty string to attach to root"))
 			.Optional(TEXT("attach_socket"), TEXT("string"), TEXT("Socket name on new parent to attach to"))
@@ -58,7 +58,7 @@ void FMonolithBlueprintComponentActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Set a property on a component template in a Blueprint via text import."),
 		FMonolithActionHandler::CreateStatic(&HandleSetComponentProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("component_name"), TEXT("string"), TEXT("Component variable name"))
 			.Required(TEXT("property_name"), TEXT("string"), TEXT("Property name on the component"))
 			.Required(TEXT("value"), TEXT("string"), TEXT("Value as text (same format as copy/paste in Details panel)"))
@@ -68,7 +68,7 @@ void FMonolithBlueprintComponentActions::RegisterActions(FMonolithToolRegistry& 
 		TEXT("Duplicate a component in a Blueprint. The copy is attached to the same parent as the original."),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
 			.Required(TEXT("component_name"), TEXT("string"), TEXT("Component variable name to duplicate"))
 			.Optional(TEXT("new_name"), TEXT("string"), TEXT("Variable name for the duplicated component"))
 			.Build());

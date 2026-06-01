@@ -312,7 +312,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a new GameplayAbility Blueprint asset"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateAbility),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path to save the new ability (e.g. /Game/Abilities/GA_MyAbility)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path to save the new ability (e.g. /Game/Abilities/GA_MyAbility)"))
 			.Optional(TEXT("parent_class"), TEXT("string"), TEXT("Parent class name (default: GameplayAbility)"), TEXT("GameplayAbility"))
 			.Optional(TEXT("display_name"), TEXT("string"), TEXT("Display name for the ability"))
 			.Build());
@@ -321,14 +321,14 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Read all CDO properties for a GameplayAbility: tags, policies, cost, cooldown, triggers, flags"),
 		FMonolithActionHandler::CreateStatic(&HandleGetAbilityInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("gas"), TEXT("list_abilities"),
 		TEXT("Find all GameplayAbility Blueprints in project with optional filters"),
 		FMonolithActionHandler::CreateStatic(&HandleListAbilities),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only include assets under this path prefix"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only include assets under this path prefix"))
 			.Optional(TEXT("tag_filter"), TEXT("string"), TEXT("Only include abilities with this tag in AbilityTags"))
 			.Optional(TEXT("parent_class_filter"), TEXT("string"), TEXT("Only include abilities inheriting from this class"))
 			.Build());
@@ -337,14 +337,14 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Compile a GameplayAbility Blueprint and return errors/warnings"),
 		FMonolithActionHandler::CreateStatic(&HandleCompileAbility),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("gas"), TEXT("set_ability_tags"),
 		TEXT("Set, add, or remove tags on any of the 10 tag containers on a GameplayAbility"),
 		FMonolithActionHandler::CreateStatic(&HandleSetAbilityTags),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Required(TEXT("container"), TEXT("string"), TEXT("Tag container name: AbilityTags, CancelAbilitiesWithTag, BlockAbilitiesWithTag, ActivationOwnedTags, ActivationRequiredTags, ActivationBlockedTags, SourceRequiredTags, SourceBlockedTags, TargetRequiredTags, TargetBlockedTags"))
 			.Required(TEXT("tags"), TEXT("array"), TEXT("Array of gameplay tag strings"))
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("set (replace), add, or remove (default: set)"), TEXT("set"))
@@ -354,7 +354,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Read tag containers from a GameplayAbility. Returns one or all containers."),
 		FMonolithActionHandler::CreateStatic(&HandleGetAbilityTags),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Optional(TEXT("container"), TEXT("string"), TEXT("Specific container name to read (returns all if omitted)"))
 			.Build());
 
@@ -362,7 +362,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Set instancing, net execution, and/or net security policies on a GameplayAbility"),
 		FMonolithActionHandler::CreateStatic(&HandleSetAbilityPolicy),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Optional(TEXT("instancing_policy"), TEXT("string"), TEXT("NonInstanced, InstancedPerActor, or InstancedPerExecution"))
 			.Optional(TEXT("net_execution_policy"), TEXT("string"), TEXT("LocalPredicted, LocalOnly, ServerInitiated, or ServerOnly"))
 			.Optional(TEXT("net_security_policy"), TEXT("string"), TEXT("ClientOrServer, ServerOnlyExecution, ServerOnlyTermination, or ServerOnly"))
@@ -372,7 +372,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Set the CostGameplayEffectClass on a GameplayAbility"),
 		FMonolithActionHandler::CreateStatic(&HandleSetAbilityCost),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Required(TEXT("cost_effect_class"), TEXT("string"), TEXT("GameplayEffect class/asset path for the cost (or empty to clear)"))
 			.Build());
 
@@ -380,7 +380,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Set the CooldownGameplayEffectClass on a GameplayAbility"),
 		FMonolithActionHandler::CreateStatic(&HandleSetAbilityCooldown),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Required(TEXT("cooldown_effect_class"), TEXT("string"), TEXT("GameplayEffect class/asset path for the cooldown (or empty to clear)"))
 			.Build());
 
@@ -388,7 +388,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Replace the AbilityTriggers array on a GameplayAbility"),
 		FMonolithActionHandler::CreateStatic(&HandleSetAbilityTriggers),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Required(TEXT("triggers"), TEXT("array"), TEXT("Array of {tag, trigger_source} objects. trigger_source: GameplayEvent, OwnedTagAdded, OwnedTagPresent"))
 			.Build());
 
@@ -396,7 +396,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Set boolean behavior flags on a GameplayAbility"),
 		FMonolithActionHandler::CreateStatic(&HandleSetAbilityFlags),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Optional(TEXT("replicate_input_directly"), TEXT("boolean"), TEXT("bReplicateInputDirectly"))
 			.Optional(TEXT("retrigger_instanced_ability"), TEXT("boolean"), TEXT("bRetriggerInstancedAbility"))
 			.Optional(TEXT("server_respects_remote_ability_cancellation"), TEXT("boolean"), TEXT("bServerRespectsRemoteAbilityCancellation"))
@@ -408,7 +408,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Place a UK2Node_LatentAbilityCall in an ability Blueprint graph"),
 		FMonolithActionHandler::CreateStatic(&HandleAddAbilityTaskNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Required(TEXT("task_class"), TEXT("string"), TEXT("UAbilityTask subclass name (e.g. UAbilityTask_WaitGameplayEvent)"))
 			.Optional(TEXT("factory_function"), TEXT("string"), TEXT("Static factory function name (auto-detected if omitted)"))
 			.Optional(TEXT("position"), TEXT("object"), TEXT("{ x, y } node position"))
@@ -418,7 +418,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Scaffold CommitAbility -> Branch -> EndAbility boilerplate in an ability graph"),
 		FMonolithActionHandler::CreateStatic(&HandleAddCommitAndEndFlow),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph name (default: EventGraph)"))
 			.Optional(TEXT("position"), TEXT("object"), TEXT("{ x, y } start position for the flow"))
 			.Build());
@@ -427,7 +427,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Add ApplyGameplayEffectToOwner or ApplyGameplayEffectToTarget node pre-wired"),
 		FMonolithActionHandler::CreateStatic(&HandleAddEffectApplication),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Required(TEXT("effect_class"), TEXT("string"), TEXT("GameplayEffect class or asset path"))
 			.Optional(TEXT("target"), TEXT("string"), TEXT("'self' or 'target' (default: self)"), TEXT("self"))
 			.Optional(TEXT("position"), TEXT("object"), TEXT("{ x, y } node position"))
@@ -437,7 +437,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Add a GameplayCue Execute/Add/Remove invocation node"),
 		FMonolithActionHandler::CreateStatic(&HandleAddGameplayCueNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Required(TEXT("cue_tag"), TEXT("string"), TEXT("GameplayCue tag (e.g. GameplayCue.Combat.Hit)"))
 			.Required(TEXT("type"), TEXT("string"), TEXT("'execute', 'add', or 'remove'"))
 			.Optional(TEXT("position"), TEXT("object"), TEXT("{ x, y } node position"))
@@ -449,7 +449,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a fully-configured ability from a named template (ability_instant, ability_montage, etc.)"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateAbilityFromTemplate),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path to save the new ability"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path to save the new ability"))
 			.Required(TEXT("template"), TEXT("string"), TEXT("Template name: ability_instant, ability_montage, ability_channeled, ability_passive, ability_toggle, ability_heal_self"))
 			.Optional(TEXT("overrides"), TEXT("object"), TEXT("Override template defaults: { instancing_policy, net_execution_policy, ability_tags[], ... }"))
 			.Build());
@@ -458,7 +458,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Declarative one-shot: create an ability from a full spec defining tags, policies, and graph flow"),
 		FMonolithActionHandler::CreateStatic(&HandleBuildAbilityFromSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path to save the new ability"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path to save the new ability"))
 			.Required(TEXT("spec"), TEXT("object"), TEXT("Full ability spec: { parent_class?, display_name?, instancing_policy?, net_execution_policy?, net_security_policy?, tags: { AbilityTags:[], ... }, cost_effect_class?, cooldown_effect_class?, triggers:[], flags:{} }"))
 			.Build());
 
@@ -473,8 +473,8 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Deep-copy a GameplayAbility Blueprint with optional tag renaming"),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateAbility),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Source GameplayAbility Blueprint asset path"))
-			.Required(TEXT("new_path"), TEXT("string"), TEXT("Destination asset path for the copy"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Source GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("new_path"), TEXT("Destination asset path for the copy"))
 			.Optional(TEXT("rename_tags"), TEXT("object"), TEXT("Tag rename map: { \"old.tag\": \"new.tag\", ... }"))
 			.Build());
 
@@ -498,7 +498,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Connect a task delegate output pin to a target exec pin"),
 		FMonolithActionHandler::CreateStatic(&HandleWireAbilityTaskDelegate),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Required(TEXT("node_id"), TEXT("string"), TEXT("Task node ID (from add_ability_task_node response)"))
 			.Required(TEXT("delegate_name"), TEXT("string"), TEXT("Delegate output pin name (e.g. OnCompleted, OnCancelled)"))
 			.Required(TEXT("target_node_id"), TEXT("string"), TEXT("Target node ID to wire the delegate exec to"))
@@ -509,7 +509,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Analyze ability graph: detect pattern type, missing EndAbility/CommitAbility, dangling delegates"),
 		FMonolithActionHandler::CreateStatic(&HandleGetAbilityGraphFlow),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Graph to analyze (default: EventGraph)"))
 			.Build());
 
@@ -519,7 +519,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Deep validation: CommitAbility reachable, EndAbility reachable, tag conflicts, missing cost/cooldown refs, contradictory tags, NonInstanced with state"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateAbility),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("GameplayAbility Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("GameplayAbility Blueprint asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("gas"), TEXT("find_abilities_by_tag"),
@@ -541,7 +541,7 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Check for unhandled delegates, missing EndAbility, WaitInputRelease/WaitDelay policy issues, tasks in wrong BP type, NonInstanced misuse"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateAbilityBlueprint),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path to validate"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path to validate"))
 			.Optional(TEXT("release_input_supported"), TEXT("boolean"), TEXT("Set true when project input binding is known to call AbilitySpecInputReleased for release/cancel paths"), TEXT("false"))
 			.Build());
 

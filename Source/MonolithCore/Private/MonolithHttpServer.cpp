@@ -720,6 +720,28 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 				}
 				CoreTool->SetObjectField(TEXT("inputSchema"), InputSchema);
 
+				// Survivor A (plan §3.A) — MCP-spec tool annotations. Only emit
+				// the `annotations` block when at least one hint is non-default;
+				// avoids bloating the wire with default-false annotations on every
+				// individually-registered top-level tool. Spec ref:
+				// modelcontextprotocol.io/specification/2025-06-18/server/tools
+				const bool bAnyHint = ActionInfo.bReadOnlyHint
+					|| ActionInfo.bDestructiveHint
+					|| ActionInfo.bIdempotentHint
+					|| !ActionInfo.Title.IsEmpty();
+				if (bAnyHint)
+				{
+					TSharedPtr<FJsonObject> Ann = MakeShared<FJsonObject>();
+					Ann->SetBoolField(TEXT("readOnlyHint"), ActionInfo.bReadOnlyHint);
+					Ann->SetBoolField(TEXT("destructiveHint"), ActionInfo.bDestructiveHint);
+					Ann->SetBoolField(TEXT("idempotentHint"), ActionInfo.bIdempotentHint);
+					if (!ActionInfo.Title.IsEmpty())
+					{
+						Ann->SetStringField(TEXT("title"), ActionInfo.Title);
+					}
+					CoreTool->SetObjectField(TEXT("annotations"), Ann);
+				}
+
 				ToolsArray.Add(MakeShared<FJsonValueObject>(CoreTool));
 			}
 		}
@@ -798,6 +820,26 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 			InputSchema->SetArrayField(TEXT("required"), {MakeShared<FJsonValueString>(TEXT("action"))});
 
 			Tool->SetObjectField(TEXT("inputSchema"), InputSchema);
+
+			// Survivor A (plan §3.A) — MCP-spec dispatcher annotations. Pulled
+			// from the registry's per-namespace dispatcher map (set via
+			// FMonolithToolRegistry::SetDispatcherAnnotations at module init).
+			// Untagged dispatchers leave IsAnyNonDefault()==false → no
+			// `annotations` block on the wire.
+			const FMonolithDispatcherAnnotations DispatcherAnn = Registry.GetDispatcherAnnotations(Namespace);
+			if (DispatcherAnn.IsAnyNonDefault())
+			{
+				TSharedPtr<FJsonObject> Ann = MakeShared<FJsonObject>();
+				Ann->SetBoolField(TEXT("readOnlyHint"), DispatcherAnn.bReadOnlyHint);
+				Ann->SetBoolField(TEXT("destructiveHint"), DispatcherAnn.bDestructiveHint);
+				Ann->SetBoolField(TEXT("idempotentHint"), DispatcherAnn.bIdempotentHint);
+				if (!DispatcherAnn.Title.IsEmpty())
+				{
+					Ann->SetStringField(TEXT("title"), DispatcherAnn.Title);
+				}
+				Tool->SetObjectField(TEXT("annotations"), Ann);
+			}
+
 			ToolsArray.Add(MakeShared<FJsonValueObject>(Tool));
 		}
 	}
@@ -926,6 +968,64 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		// Core tool: monolith_discover -> namespace="monolith", action="discover"
 		Namespace = TEXT("monolith");
 		Action = ToolName.Mid(9);
+
+		// Symmetric string-unwrap + top-level-extras merge (mirrors the *_query
+		// branch below). Some MCP clients (Claude Code) serialize the "params"
+		// object as a JSON-encoded string; others nest a real object; others
+		// scatter optional shaping flags (_fields/_omit/_compact_json) at the
+		// top level alongside the tool-specific args. Normalise all shapes
+		// so the dispatched action handler sees a single flat params object.
+		TSharedPtr<FJsonObject> TopLevelExtras = MakeShared<FJsonObject>();
+		for (const auto& Pair : Arguments->Values)
+		{
+			if (Pair.Key != TEXT("params"))
+			{
+				TopLevelExtras->SetField(Pair.Key, Pair.Value);
+			}
+		}
+
+		const TSharedPtr<FJsonObject>* NestedParams = nullptr;
+		TSharedPtr<FJsonObject> ParsedParamsObj; // lifetime holder for string-parsed params
+		bool bHasNestedParams = false;
+
+		if (Arguments->TryGetObjectField(TEXT("params"), NestedParams) && NestedParams)
+		{
+			bHasNestedParams = true;
+		}
+		else
+		{
+			// Try parsing "params" as a JSON string (Claude Code serializes objects to strings)
+			FString ParamsStr;
+			if (Arguments->TryGetStringField(TEXT("params"), ParamsStr) && !ParamsStr.IsEmpty())
+			{
+				TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ParamsStr);
+				if (FJsonSerializer::Deserialize(Reader, ParsedParamsObj) && ParsedParamsObj.IsValid())
+				{
+					NestedParams = &ParsedParamsObj;
+					bHasNestedParams = true;
+				}
+			}
+		}
+
+		if (bHasNestedParams && NestedParams)
+		{
+			Arguments = MakeShared<FJsonObject>();
+			// Start with top-level extras (lower priority)
+			for (const auto& Pair : TopLevelExtras->Values)
+			{
+				Arguments->SetField(Pair.Key, Pair.Value);
+			}
+			// Overlay nested params (higher priority)
+			for (const auto& Pair : (*NestedParams)->Values)
+			{
+				Arguments->SetField(Pair.Key, Pair.Value);
+			}
+		}
+		else
+		{
+			// No nested "params" — use top-level fields as params directly
+			Arguments = TopLevelExtras;
+		}
 	}
 	else if (ToolName.EndsWith(TEXT("_query")) || ToolName.EndsWith(TEXT(".query")))
 	{

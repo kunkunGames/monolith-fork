@@ -30,7 +30,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a new USmartObjectDefinition data asset"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateSmartObjectDefinition),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path (e.g. /Game/AI/SmartObjects/SO_HideSpot)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path (e.g. /Game/AI/SmartObjects/SO_HideSpot)"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Asset name (derived from save_path if omitted)"))
 			.Build());
 
@@ -39,7 +39,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Full dump of a Smart Object definition: slots, tags, behaviors, shapes"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSmartObjectDefinition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Smart Object Definition asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Smart Object Definition asset path"))
 			.Build());
 
 	// 129. list_smart_object_definitions
@@ -47,7 +47,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("List all USmartObjectDefinition assets in the project"),
 		FMonolithActionHandler::CreateStatic(&HandleListSmartObjectDefinitions),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only include assets under this path prefix"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only include assets under this path prefix"))
 			.Build());
 
 	// 130. delete_smart_object_definition
@@ -55,7 +55,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Delete a Smart Object Definition asset"),
 		FMonolithActionHandler::CreateStatic(&HandleDeleteSmartObjectDefinition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Smart Object Definition asset path to delete"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Smart Object Definition asset path to delete"))
 			.Build());
 
 	// 131. add_so_slot
@@ -63,7 +63,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Add a slot to a Smart Object definition"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSOSlot),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Smart Object Definition asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Smart Object Definition asset path"))
 			.Optional(TEXT("offset"), TEXT("object"), TEXT("Slot offset {x, y, z} relative to parent"))
 			.Optional(TEXT("rotation"), TEXT("object"), TEXT("Slot rotation {pitch, yaw, roll}"))
 			.Optional(TEXT("activity_tags"), TEXT("array"), TEXT("Activity gameplay tags (e.g. [\"SmartObject.Activity.Sit\"])"))
@@ -76,7 +76,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Remove a slot from a Smart Object definition by index"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveSOSlot),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Smart Object Definition asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Smart Object Definition asset path"))
 			.Required(TEXT("slot_index"), TEXT("integer"), TEXT("Index of the slot to remove"))
 			.Build());
 
@@ -85,7 +85,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Edit properties of an existing slot on a Smart Object definition"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureSOSlot),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Smart Object Definition asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Smart Object Definition asset path"))
 			.Required(TEXT("slot_index"), TEXT("integer"), TEXT("Index of the slot to configure"))
 			.Optional(TEXT("offset"), TEXT("object"), TEXT("Slot offset {x, y, z} relative to parent"))
 			.Optional(TEXT("rotation"), TEXT("object"), TEXT("Slot rotation {pitch, yaw, roll}"))
@@ -100,7 +100,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Add a behavior definition to a Smart Object slot"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSOBehaviorDefinition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Smart Object Definition asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Smart Object Definition asset path"))
 			.Required(TEXT("slot_index"), TEXT("integer"), TEXT("Index of the slot"))
 			.Required(TEXT("behavior_class"), TEXT("string"), TEXT("Behavior definition class name (e.g. USmartObjectGameplayBehaviorDefinition)"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("Optional properties to set on the behavior definition"))
@@ -111,7 +111,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Remove a behavior definition from a Smart Object slot"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveSOBehaviorDefinition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Smart Object Definition asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Smart Object Definition asset path"))
 			.Required(TEXT("slot_index"), TEXT("integer"), TEXT("Index of the slot"))
 			.Required(TEXT("behavior_index"), TEXT("integer"), TEXT("Index of the behavior definition to remove"))
 			.Build());
@@ -121,7 +121,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Set definition-level activity tags and user tag filter on a Smart Object"),
 		FMonolithActionHandler::CreateStatic(&HandleSetSOTags),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Smart Object Definition asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Smart Object Definition asset path"))
 			.Optional(TEXT("activity_tags"), TEXT("array"), TEXT("Definition-level activity tags"))
 			.Optional(TEXT("user_tags"), TEXT("array"), TEXT("Definition-level user tag filter tags"))
 			.Build());
@@ -131,8 +131,8 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Add USmartObjectComponent to an actor Blueprint via SCS"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSmartObjectComponent),
 		FParamSchemaBuilder()
-			.Required(TEXT("blueprint_path"), TEXT("string"), TEXT("Actor Blueprint asset path"))
-			.Required(TEXT("definition_path"), TEXT("string"), TEXT("Smart Object Definition asset path to assign"))
+			.RequiredAssetPath(TEXT("blueprint_path"), TEXT("Actor Blueprint asset path"))
+			.RequiredAssetPath(TEXT("definition_path"), TEXT("Smart Object Definition asset path to assign"))
 			.Build());
 
 	// 138. place_smart_object_actor
@@ -140,10 +140,10 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Spawn an actor with USmartObjectComponent in the current level"),
 		FMonolithActionHandler::CreateStatic(&HandlePlaceSmartObjectActor),
 		FParamSchemaBuilder()
-			.Required(TEXT("definition_path"), TEXT("string"), TEXT("Smart Object Definition asset path"))
+			.RequiredAssetPath(TEXT("definition_path"), TEXT("Smart Object Definition asset path"))
 			.Required(TEXT("location"), TEXT("object"), TEXT("World location {x, y, z}"))
 			.Optional(TEXT("rotation"), TEXT("object"), TEXT("World rotation {pitch, yaw, roll}"))
-			.Optional(TEXT("folder_path"), TEXT("string"), TEXT("World Outliner folder (default: AI/SmartObjects)"))
+			.OptionalAssetPath(TEXT("folder_path"), TEXT("World Outliner folder (default: AI/SmartObjects)"))
 			.Build());
 
 	// 139. find_smart_objects_in_level
@@ -161,7 +161,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Validate a Smart Object definition: slots have behaviors, tags valid, etc."),
 		FMonolithActionHandler::CreateStatic(&HandleValidateSmartObjectDefinition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Smart Object Definition asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Smart Object Definition asset path"))
 			.Build());
 
 	// 141. create_so_from_template
@@ -169,7 +169,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a Smart Object definition from a preset template (hide_spot, sit_chair, workstation, door_interaction, pickup_item)"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateSOFromTemplate),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path"))
 			.Required(TEXT("template"), TEXT("string"), TEXT("Template name: hide_spot, sit_chair, workstation, door_interaction, pickup_item"))
 			.Build());
 
@@ -178,8 +178,8 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Deep copy a Smart Object definition to a new path"),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateSmartObjectDefinition),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Source definition asset path"))
-			.Required(TEXT("dest_path"), TEXT("string"), TEXT("Destination asset path for the copy"))
+			.RequiredAssetPath(TEXT("source_path"), TEXT("Source definition asset path"))
+			.RequiredAssetPath(TEXT("dest_path"), TEXT("Destination asset path for the copy"))
 			.Build());
 
 #endif // WITH_SMARTOBJECTS

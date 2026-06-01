@@ -542,7 +542,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create an empty UEnvQuery data asset"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateEQSQuery),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path (e.g. /Game/AI/EQS_FindCover)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path (e.g. /Game/AI/EQS_FindCover)"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Asset name (derived from save_path if omitted)"))
 			.Build());
 
@@ -551,7 +551,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Full JSON: options, generators, tests, scoring config"),
 		FMonolithActionHandler::CreateStatic(&HandleGetEQSQuery),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("EQS query asset path"))
 			.Build());
 
 	// 73. list_eqs_queries
@@ -559,7 +559,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("List all UEnvQuery assets in the project"),
 		FMonolithActionHandler::CreateStatic(&HandleListEQSQueries),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only include assets under this path prefix"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only include assets under this path prefix"))
 			.Build());
 
 	// 74. delete_eqs_query
@@ -567,7 +567,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Delete an EQS query asset"),
 		FMonolithActionHandler::CreateStatic(&HandleDeleteEQSQuery),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("EQS query asset path to delete"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("EQS query asset path to delete"))
 			.Build());
 
 	// 75. duplicate_eqs_query
@@ -575,8 +575,8 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Deep copy an EQS query asset to a new path"),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateEQSQuery),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Source EQS query asset path"))
-			.Required(TEXT("dest_path"), TEXT("string"), TEXT("Destination asset path for the copy"))
+			.RequiredAssetPath(TEXT("source_path"), TEXT("Source EQS query asset path"))
+			.RequiredAssetPath(TEXT("dest_path"), TEXT("Destination asset path for the copy"))
 			.Build());
 
 	// 76. add_eqs_generator
@@ -584,7 +584,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a new option with a generator to an EQS query"),
 		FMonolithActionHandler::CreateStatic(&HandleAddEQSGenerator),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("EQS query asset path"))
 			.Required(TEXT("generator_class"), TEXT("string"), TEXT("Generator class name (e.g. EnvQueryGenerator_SimpleGrid)"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("JSON object of property_name→value pairs to set on the generator"))
 			.Build());
@@ -594,7 +594,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remove an option (generator + its tests) at the given index"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveEQSGenerator),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("EQS query asset path"))
 			.Required(TEXT("option_index"), TEXT("number"), TEXT("Index of the option to remove"))
 			.Build());
 
@@ -603,7 +603,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set properties on a generator in an EQS query option"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureEQSGenerator),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("EQS query asset path"))
 			.Required(TEXT("option_index"), TEXT("number"), TEXT("Index of the option containing the generator"))
 			.Required(TEXT("properties"), TEXT("object"), TEXT("JSON object of property_name→value pairs"))
 			.Build());
@@ -613,7 +613,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a test to an EQS query option"),
 		FMonolithActionHandler::CreateStatic(&HandleAddEQSTest),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("EQS query asset path"))
 			.Required(TEXT("option_index"), TEXT("number"), TEXT("Index of the option to add the test to"))
 			.Required(TEXT("test_class"), TEXT("string"), TEXT("Test class name (e.g. EnvQueryTest_Distance)"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("JSON object of property_name→value pairs to set on the test"))
@@ -624,7 +624,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Remove a test from an EQS query option"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveEQSTest),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("EQS query asset path"))
 			.Required(TEXT("option_index"), TEXT("number"), TEXT("Index of the option"))
 			.Required(TEXT("test_index"), TEXT("number"), TEXT("Index of the test to remove"))
 			.Build());
@@ -634,7 +634,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set properties on a test in an EQS query option"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureEQSTest),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("EQS query asset path"))
 			.Required(TEXT("option_index"), TEXT("number"), TEXT("Index of the option"))
 			.Required(TEXT("test_index"), TEXT("number"), TEXT("Index of the test"))
 			.Required(TEXT("properties"), TEXT("object"), TEXT("JSON object of property_name→value pairs"))
@@ -645,7 +645,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Configure scoring on a test: purpose, equation, factor, clamp, normalization"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureEQSScoring),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("EQS query asset path"))
 			.Required(TEXT("option_index"), TEXT("number"), TEXT("Index of the option"))
 			.Required(TEXT("test_index"), TEXT("number"), TEXT("Index of the test"))
 			.Optional(TEXT("purpose"), TEXT("string"), TEXT("EEnvTestPurpose: Filter, Score, FilterAndScore"))
@@ -665,7 +665,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Configure filter on a test: filter type, min/max, bool match"),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureEQSFilter),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("EQS query asset path"))
 			.Required(TEXT("option_index"), TEXT("number"), TEXT("Index of the option"))
 			.Required(TEXT("test_index"), TEXT("number"), TEXT("Index of the test"))
 			.Optional(TEXT("filter_type"), TEXT("string"), TEXT("EEnvTestFilterType: Minimum, Maximum, Range, Match"))
@@ -697,7 +697,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Validate an EQS query: check empty options, missing contexts, item type mismatches"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateEQSQuery),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("EQS query asset path"))
 			.Build());
 
 	// 84. reorder_eqs_tests
@@ -705,7 +705,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Reorder tests within an EQS query option"),
 		FMonolithActionHandler::CreateStatic(&HandleReorderEQSTests),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("EQS query asset path"))
 			.Required(TEXT("option_index"), TEXT("number"), TEXT("Index of the option"))
 			.Required(TEXT("new_order"), TEXT("array"), TEXT("Array of test indices in desired order, e.g. [2, 0, 1]"))
 			.Build());
@@ -715,7 +715,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Declarative full-query creation from a JSON spec with options, generators, and tests"),
 		FMonolithActionHandler::CreateStatic(&HandleBuildEQSQueryFromSpec),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path for the new EQS query"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path for the new EQS query"))
 			.Required(TEXT("spec"), TEXT("object"), TEXT("Full query spec: {options: [{generator: {class, properties?}, tests: [{class, properties?, scoring?, filter?}]}]}"))
 			.Build());
 
@@ -724,7 +724,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Create an EQS query from a preset template: find_cover, find_flank, find_patrol_point, find_nearest_item"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateEQSFromTemplate),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path for the new EQS query"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path for the new EQS query"))
 			.Required(TEXT("template"), TEXT("string"), TEXT("Template name: find_cover, find_flank, find_patrol_point, find_nearest_item"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("Override template defaults (e.g. {GridSize: 2000, SpaceBetween: 300})"))
 			.Build());

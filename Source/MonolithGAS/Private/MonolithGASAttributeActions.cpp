@@ -36,7 +36,7 @@ void FMonolithGASAttributeActions::RegisterActions(FMonolithToolRegistry& Regist
 		     "In 'cpp' mode, generates C++ header and source files for a UAttributeSet subclass."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateAttributeSet),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("For blueprint mode: asset path (e.g. /Game/GAS/Attributes/AS_Health). For cpp mode: class name (e.g. ULeviathanHealthAttributeSet)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("For blueprint mode: asset path (e.g. /Game/GAS/Attributes/AS_Health). For cpp mode: class name (e.g. ULeviathanHealthAttributeSet)"))
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("Creation mode: 'cpp' or 'blueprint' (default: 'blueprint')"), TEXT("blueprint"))
 			.Optional(TEXT("parent_class"), TEXT("string"), TEXT("Parent class name (default: UAttributeSet for cpp, UGBAAttributeSetBlueprintBase for blueprint)"))
 			.Optional(TEXT("attributes"), TEXT("array"), TEXT("Array of attribute definitions: [{name, default_value?, replicated?}]"))
@@ -97,7 +97,7 @@ void FMonolithGASAttributeActions::RegisterActions(FMonolithToolRegistry& Regist
 		FMonolithActionHandler::CreateStatic(&HandleCreateAttributeSetFromTemplate),
 		FParamSchemaBuilder()
 			.Required(TEXT("template"), TEXT("string"), TEXT("Template name: survival_horror_vitals, survival_horror_stamina, survival_horror_horror, enemy_vitals, enemy_resistance, world_state"))
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("For blueprint mode: asset path. For cpp mode: class name"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("For blueprint mode: asset path. For cpp mode: class name"))
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("Creation mode: 'cpp' or 'blueprint' (default: cpp)"))
 			.Optional(TEXT("overrides"), TEXT("object"), TEXT("Override template defaults: {add_attributes: [{name, default_value?, replicated?}], remove_attributes: [name], defaults: {attr: value}}"))
 			.Build());
@@ -107,7 +107,7 @@ void FMonolithGASAttributeActions::RegisterActions(FMonolithToolRegistry& Regist
 		FMonolithActionHandler::CreateStatic(&HandleCreateAttributeInitDataTable),
 		FParamSchemaBuilder()
 			.Required(TEXT("attribute_set"), TEXT("string"), TEXT("AttributeSet class name or asset path"))
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("DataTable asset path (e.g. /Game/GAS/Data/DT_PlayerVitals)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("DataTable asset path (e.g. /Game/GAS/Data/DT_PlayerVitals)"))
 			.Optional(TEXT("rows"), TEXT("array"), TEXT("Array of {attribute, base_value, min_value?, max_value?} — if omitted, auto-generates from set defaults"))
 			.Build());
 
@@ -116,7 +116,7 @@ void FMonolithGASAttributeActions::RegisterActions(FMonolithToolRegistry& Regist
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateAttributeSet),
 		FParamSchemaBuilder()
 			.Required(TEXT("source"), TEXT("string"), TEXT("Source AttributeSet asset path or class name"))
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Destination path for blueprint mode, or class name for cpp mode"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Destination path for blueprint mode, or class name for cpp mode"))
 			.Optional(TEXT("remove_attributes"), TEXT("array"), TEXT("Array of attribute names to remove from the clone"))
 			.Optional(TEXT("add_attributes"), TEXT("array"), TEXT("Array of attribute definitions to add: [{name, default_value?, replicated?}]"))
 			.Build());

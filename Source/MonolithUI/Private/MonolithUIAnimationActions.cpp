@@ -157,7 +157,7 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
         TEXT("List all UWidgetAnimation assets on a Widget Blueprint"),
         FMonolithActionHandler::CreateStatic(&HandleListAnimations),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Build()
     );
 
@@ -166,7 +166,7 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
         TEXT("Get tracks and keyframes for a specific animation on a Widget Blueprint"),
         FMonolithActionHandler::CreateStatic(&HandleGetAnimationDetails),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("animation_name"), TEXT("string"), TEXT("Name of the UWidgetAnimation"))
             .Build()
     );
@@ -176,7 +176,7 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
         TEXT("[DEPRECATED -- use ui::create_animation_v2 instead] Create a new UWidgetAnimation with tracks and keyframes on a Widget Blueprint. Scheduled for removal one major release out (Phase L marker, 2026-04-26). Response payload is tagged {deprecated: true, use_action: \"ui::create_animation_v2\"}; the v2 surface supports multi-track + cubic / weighted-tangent interpolation that v1 cannot express."),
         FMonolithActionHandler::CreateStatic(&HandleCreateAnimation),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("animation_name"), TEXT("string"), TEXT("Name for the new animation"))
             .Required(TEXT("duration"), TEXT("number"), TEXT("Animation duration in seconds"))
             .Optional(TEXT("tracks"), TEXT("array"), TEXT("Array of track definitions: [{\"widget_name\": \"MyWidget\", \"property\": \"opacity|transform|color\", \"keyframes\": [{\"time\": 0.0, \"value\": 1.0}]}]"))
@@ -188,7 +188,7 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
         TEXT("[DEPRECATED -- use ui::create_animation_v2 (multi-key authoring) or ui::add_bezier_eased_segment instead] Add a single keyframe to an existing animation track. Scheduled for removal one major release out (Phase L marker, 2026-04-26). Response payload is tagged {deprecated: true, use_action: \"ui::create_animation_v2\"}; the v2 surface authors entire tracks at once and supports the cubic / weighted-tangent shapes that v1 cannot express."),
         FMonolithActionHandler::CreateStatic(&HandleAddAnimationKeyframe),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("animation_name"), TEXT("string"), TEXT("Name of the UWidgetAnimation"))
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("Target widget name"))
             .Required(TEXT("property"), TEXT("string"), TEXT("Property: opacity, transform, color"))
@@ -203,7 +203,7 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
         TEXT("Remove a UWidgetAnimation from a Widget Blueprint"),
         FMonolithActionHandler::CreateStatic(&HandleRemoveAnimation),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("animation_name"), TEXT("string"), TEXT("Name of the animation to remove"))
             .Build()
     );

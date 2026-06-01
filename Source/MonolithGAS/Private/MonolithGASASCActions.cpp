@@ -29,7 +29,7 @@ void FMonolithGASASCActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Add a UAbilitySystemComponent to a Blueprint actor. Supports 'self' (component on actor) or 'player_state' (ASC on PlayerState for multiplayer)."),
 		FMonolithActionHandler::CreateStatic(&HandleAddASCToActor),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path for the actor"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path for the actor"))
 			.Optional(TEXT("asc_class"), TEXT("string"), TEXT("ASC class name (default: AbilitySystemComponent)"))
 			.Optional(TEXT("location"), TEXT("string"), TEXT("Where to add the ASC: 'self' (on actor) or 'player_state' (on PlayerState). Default: 'self'"))
 			.Build());
@@ -38,7 +38,7 @@ void FMonolithGASASCActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Configure ASC settings: replication mode, default abilities, effects, and attribute sets. Warns if Minimal mode is used with PlayerState ASC (breaks prediction)."),
 		FMonolithActionHandler::CreateStatic(&HandleConfigureASC),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path containing the ASC"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path containing the ASC"))
 			.Optional(TEXT("replication_mode"), TEXT("string"), TEXT("Replication mode: 'full' (legacy), 'mixed' (players/PlayerState), 'minimal' (AI/cheapest)"))
 			.Optional(TEXT("default_abilities"), TEXT("array"), TEXT("Array of ability class paths to grant on startup"))
 			.Optional(TEXT("default_effects"), TEXT("array"), TEXT("Array of gameplay effect class paths to apply on startup"))
@@ -49,7 +49,7 @@ void FMonolithGASASCActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Wire InitAbilityActorInfo in the correct lifecycle event. For 'self': PossessedBy (server) + OnRep_PlayerState (client). For 'player_state': routes through PlayerState."),
 		FMonolithActionHandler::CreateStatic(&HandleSetupASCInit),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path for the actor/pawn"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path for the actor/pawn"))
 			.Required(TEXT("location"), TEXT("string"), TEXT("ASC location: 'self' or 'player_state'"))
 			.Build());
 
@@ -57,7 +57,7 @@ void FMonolithGASASCActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Generate C++ implementing IAbilitySystemInterface (cannot be done in Blueprint). Creates a .h/.cpp pair with GetAbilitySystemComponent() that routes correctly based on ASC location."),
 		FMonolithActionHandler::CreateStatic(&HandleSetupAbilitySystemInterface),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blueprint asset path (used to derive class name and parent class)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path (used to derive class name and parent class)"))
 			.Required(TEXT("asc_location"), TEXT("string"), TEXT("ASC location: 'self' (ASC is a component on this actor) or 'player_state' (ASC lives on PlayerState)"))
 			.Optional(TEXT("class_name"), TEXT("string"), TEXT("C++ class name to generate (default: derived from Blueprint name)"))
 			.Optional(TEXT("parent_class"), TEXT("string"), TEXT("Parent C++ class (default: derived from Blueprint's parent)"))
@@ -69,7 +69,7 @@ void FMonolithGASASCActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Apply a named template to configure an actor's ASC with appropriate replication mode, attribute sets, abilities, and effects."),
 		FMonolithActionHandler::CreateStatic(&HandleApplyASCTemplate),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_path"), TEXT("string"), TEXT("Blueprint asset path for the actor"))
+			.RequiredAssetPath(TEXT("actor_path"), TEXT("Blueprint asset path for the actor"))
 			.Required(TEXT("template"), TEXT("string"), TEXT("Template: player_character, enemy_common, enemy_boss, interactable, world_state"))
 			.Optional(TEXT("overrides"), TEXT("object"), TEXT("Override template: {replication_mode?, attribute_sets?, abilities?, effects?}"))
 			.Build());
@@ -78,7 +78,7 @@ void FMonolithGASASCActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Configure the list of auto-granted abilities on an actor's ASC."),
 		FMonolithActionHandler::CreateStatic(&HandleSetDefaultAbilities),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_path"), TEXT("string"), TEXT("Blueprint asset path containing the ASC"))
+			.RequiredAssetPath(TEXT("actor_path"), TEXT("Blueprint asset path containing the ASC"))
 			.Required(TEXT("abilities"), TEXT("array"), TEXT("Array of ability class paths or names"))
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("'set' (replace all), 'add' (append), 'remove' (remove listed). Default: set"))
 			.Build());
@@ -87,7 +87,7 @@ void FMonolithGASASCActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Configure startup GameplayEffects applied when the ASC initializes."),
 		FMonolithActionHandler::CreateStatic(&HandleSetDefaultEffects),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_path"), TEXT("string"), TEXT("Blueprint asset path containing the ASC"))
+			.RequiredAssetPath(TEXT("actor_path"), TEXT("Blueprint asset path containing the ASC"))
 			.Required(TEXT("effects"), TEXT("array"), TEXT("Array of GE class paths or asset paths"))
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("'set' (replace all), 'add' (append), 'remove' (remove listed). Default: set"))
 			.Build());
@@ -96,7 +96,7 @@ void FMonolithGASASCActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Configure which AttributeSets are spawned with the ASC."),
 		FMonolithActionHandler::CreateStatic(&HandleSetDefaultAttributeSets),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_path"), TEXT("string"), TEXT("Blueprint asset path containing the ASC"))
+			.RequiredAssetPath(TEXT("actor_path"), TEXT("Blueprint asset path containing the ASC"))
 			.Required(TEXT("attribute_sets"), TEXT("array"), TEXT("Array of {class, init_datatable?} objects"))
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("'set' (replace all), 'add' (append), 'remove' (remove listed). Default: set"))
 			.Build());
@@ -105,7 +105,7 @@ void FMonolithGASASCActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set the replication mode on an actor's ASC with validation warnings for misconfigurations."),
 		FMonolithActionHandler::CreateStatic(&HandleSetASCReplicationMode),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_path"), TEXT("string"), TEXT("Blueprint asset path containing the ASC"))
+			.RequiredAssetPath(TEXT("actor_path"), TEXT("Blueprint asset path containing the ASC"))
 			.Required(TEXT("mode"), TEXT("string"), TEXT("Replication mode: 'full', 'mixed', or 'minimal'"))
 			.Build());
 
@@ -115,7 +115,7 @@ void FMonolithGASASCActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Validate an actor's ASC setup: missing IAbilitySystemInterface, wrong replication mode, missing InitAbilityActorInfo, duplicate attribute sets."),
 		FMonolithActionHandler::CreateStatic(&HandleValidateASCSetup),
 		FParamSchemaBuilder()
-			.Required(TEXT("actor_path"), TEXT("string"), TEXT("Blueprint asset path for the actor"))
+			.RequiredAssetPath(TEXT("actor_path"), TEXT("Blueprint asset path for the actor"))
 			.Build());
 
 	// ---- Phase 4: Runtime ----

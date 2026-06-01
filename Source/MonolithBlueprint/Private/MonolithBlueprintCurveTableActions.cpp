@@ -142,7 +142,7 @@ void FMonolithBlueprintCurveTableActions::RegisterActions(FMonolithToolRegistry&
 		TEXT("Read a CurveTable's curves. Returns mode (\"rich\"|\"simple\"|\"empty\"), total_rows, and a 'rows' array of {row_name, keys:[{time,value,...}]}. Rich curves include per-key interp_mode + arrive/leave tangents; simple curves carry a curve-wide interp_mode and time/value keys only. Pass row_name to read a single curve."),
 		FMonolithActionHandler::CreateStatic(&HandleReadCurveTable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("CurveTable asset path, e.g. /Game/Data/CT_Damage"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("CurveTable asset path, e.g. /Game/Data/CT_Damage"))
 			.Optional(TEXT("row_name"),   TEXT("string"), TEXT("If provided, return only this curve row. Otherwise return all rows."))
 			.Build());
 
@@ -150,7 +150,7 @@ void FMonolithBlueprintCurveTableActions::RegisterActions(FMonolithToolRegistry&
 		TEXT("Write keys into a CurveTable curve row, creating the row if needed. interp_mode picks rich-vs-simple (cubic -> rich; linear/constant -> simple). mode \"replace\" (default) clears existing keys first; \"merge\" keeps them. A fresh table is mode-empty and the FIRST write locks rich-vs-simple permanently — mismatched later writes are rejected. Returns {row_name, keys_written, created_row, mode, saved}."),
 		FMonolithActionHandler::CreateStatic(&HandleSetCurveTableKeys),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),  TEXT("string"),  TEXT("CurveTable asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),  TEXT("CurveTable asset path"))
 			.Required(TEXT("row_name"),    TEXT("string"),  TEXT("Curve row name to write"))
 			.Required(TEXT("keys"),        TEXT("array"),   TEXT("Array of {time:number, value:number}."))
 			.Optional(TEXT("mode"),        TEXT("string"),  TEXT("\"replace\" (default, clears keys first) or \"merge\" (adds without clearing)."), TEXT("replace"))
@@ -162,7 +162,7 @@ void FMonolithBlueprintCurveTableActions::RegisterActions(FMonolithToolRegistry&
 		TEXT("Add an empty curve row to a CurveTable. interp_mode picks rich-vs-simple on the FIRST row of a fresh table (which locks the table mode). Returns {row_name, created}."),
 		FMonolithActionHandler::CreateStatic(&HandleAddCurveTableRow),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),  TEXT("string"),  TEXT("CurveTable asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),  TEXT("CurveTable asset path"))
 			.Required(TEXT("row_name"),    TEXT("string"),  TEXT("New curve row name"))
 			.Optional(TEXT("interp_mode"), TEXT("string"),  TEXT("\"linear\" (default)/\"constant\" -> simple, \"cubic\" -> rich. Determines the locked table mode for a fresh table."), TEXT("linear"))
 			.Optional(TEXT("save"),        TEXT("boolean"), TEXT("If true, save the package after adding."), TEXT("false"))
@@ -172,7 +172,7 @@ void FMonolithBlueprintCurveTableActions::RegisterActions(FMonolithToolRegistry&
 		TEXT("Remove a curve row from a CurveTable. Refreshes any open CurveTable editor. Returns {row_name, removed}."),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveCurveTableRow),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"),  TEXT("CurveTable asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),  TEXT("CurveTable asset path"))
 			.Required(TEXT("row_name"),   TEXT("string"),  TEXT("Curve row name to remove"))
 			.Optional(TEXT("save"),       TEXT("boolean"), TEXT("If true, save the package after removing."), TEXT("false"))
 			.Build());
@@ -181,7 +181,7 @@ void FMonolithBlueprintCurveTableActions::RegisterActions(FMonolithToolRegistry&
 		TEXT("Rename a curve row in a CurveTable. Refreshes any open CurveTable editor. Returns {old_name, new_name, renamed}."),
 		FMonolithActionHandler::CreateStatic(&HandleRenameCurveTableRow),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"),  TEXT("CurveTable asset path"))
+			.RequiredAssetPath(TEXT("asset_path"),  TEXT("CurveTable asset path"))
 			.Required(TEXT("old_name"),   TEXT("string"),  TEXT("Existing curve row name"))
 			.Required(TEXT("new_name"),   TEXT("string"),  TEXT("New curve row name"))
 			.Optional(TEXT("save"),       TEXT("boolean"), TEXT("If true, save the package after renaming."), TEXT("false"))

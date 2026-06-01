@@ -69,7 +69,7 @@ void FMonolithMeshAutoVolumeActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Optional(TEXT("reverb_preset_large"), TEXT("string"), TEXT("Reverb preset name for large rooms (>40 m^2)"), TEXT("LargeHall"))
 			.Optional(TEXT("reverb_preset_corridor"), TEXT("string"), TEXT("Reverb preset name for corridors"), TEXT("Corridor"))
 			.Optional(TEXT("trigger_tag"), TEXT("string"), TEXT("Tag to apply to trigger volumes"), TEXT("BuildingEntrance"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder (default: auto from building)"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder (default: auto from building)"))
 			.Optional(TEXT("build_navmesh"), TEXT("boolean"), TEXT("Trigger navmesh rebuild after spawning"), TEXT("false"))
 			.Build());
 
@@ -81,7 +81,7 @@ void FMonolithMeshAutoVolumeActions::RegisterActions(FMonolithToolRegistry& Regi
 		FParamSchemaBuilder()
 			.Optional(TEXT("block_id"), TEXT("string"), TEXT("Block ID (default: 'default')"), TEXT("default"))
 			.Optional(TEXT("build_navmesh"), TEXT("boolean"), TEXT("Trigger navmesh rebuild after all volumes"), TEXT("true"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder base"), TEXT("CityBlock/Volumes"))
+			.OptionalAssetPathWithDefault(TEXT("folder"), TEXT("Outliner folder base"), TEXT("CityBlock/Volumes"))
 			.Optional(TEXT("spawn_navmesh"), TEXT("boolean"), TEXT("Spawn NavMeshBoundsVolumes per building"), TEXT("true"))
 			.Optional(TEXT("spawn_audio"), TEXT("boolean"), TEXT("Spawn AudioVolumes per room"), TEXT("true"))
 			.Optional(TEXT("spawn_triggers"), TEXT("boolean"), TEXT("Spawn TriggerVolumes at entrances"), TEXT("true"))
@@ -103,7 +103,7 @@ void FMonolithMeshAutoVolumeActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Required(TEXT("end"), TEXT("array"), TEXT("End point [x, y, z] in world space"))
 			.Optional(TEXT("bidirectional"), TEXT("boolean"), TEXT("Two-way link (default: true)"), TEXT("true"))
 			.Optional(TEXT("label"), TEXT("string"), TEXT("Actor label for the NavLinkProxy"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Build());
 }
 

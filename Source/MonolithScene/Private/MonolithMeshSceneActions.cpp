@@ -120,7 +120,7 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("rotation"), TEXT("array"), TEXT("Rotation [pitch, yaw, roll]"), TEXT("[0,0,0]"))
 			.Optional(TEXT("scale"), TEXT("array"), TEXT("Scale [x, y, z]"), TEXT("[1,1,1]"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Optional label for the spawned actor"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Actor folder path in the outliner"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Actor folder path in the outliner"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("scene"), TEXT("move_actor"),
@@ -200,8 +200,8 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshSceneActions::ManageFolders),
 		FParamSchemaBuilder()
 			.Required(TEXT("sub_action"), TEXT("string"), TEXT("Action: list, delete, rename, move"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Target folder path (for delete/rename/move)"))
-			.Optional(TEXT("new_folder"), TEXT("string"), TEXT("New folder path (for rename/move destination)"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Target folder path (for delete/rename/move)"))
+			.OptionalAssetPath(TEXT("new_folder"), TEXT("New folder path (for rename/move destination)"))
 			.Optional(TEXT("include_subfolders"), TEXT("boolean"), TEXT("Include actors in subfolders"), TEXT("true"))
 			.Build());
 }

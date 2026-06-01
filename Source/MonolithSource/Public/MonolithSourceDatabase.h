@@ -104,6 +104,39 @@ public:
 	void Close();
 	bool IsOpen() const;
 
+	/**
+	 * Borrowable access to the underlying open SQLite handle.
+	 *
+	 * MonolithReflectionIntel's read-only query adapters (decision / risk /
+	 * cppreflect / network — ~25 actions) borrow THIS handle instead of opening
+	 * a SECOND handle on the same EngineSource.db file. UE 5.7 builds SQLite with
+	 * a custom `unreal-fs` VFS that permits only ONE open of a given file per
+	 * process (and grabs a write reservation even on a "ReadOnly" open), so a
+	 * second open in the same process is rejected with SQLITE_IOERR
+	 * ("disk I/O error"). Routing the read-only SELECTs through the subsystem's
+	 * already-open ReadWrite handle sidesteps the single-open VFS entirely — a
+	 * read-only SELECT rides a ReadWrite handle perfectly well.
+	 *
+	 * Returns nullptr when the DB is not open (e.g. before the first index, or
+	 * while a reindex has the handle closed). Callers MUST null-check and surface
+	 * a clean "not yet indexed — run source.trigger_reindex" state, never crash.
+	 *
+	 * THREAD SAFETY: the returned raw pointer is NOT self-synchronising. A caller
+	 * that prepares/steps statements on it MUST hold this database's lock for the
+	 * duration of the borrow — take it via GetLock() / FScopeLock. All of this
+	 * class's own query/write methods already lock the same FCriticalSection, so
+	 * a borrower that locks correctly is serialised against them.
+	 */
+	FSQLiteDatabase* GetRawHandle() const;
+
+	/**
+	 * Expose the database lock so an external borrower of GetRawHandle() can
+	 * serialise its statement use against this class's own locked methods.
+	 * Hold an FScopeLock on this for the full borrow (handle fetch through the
+	 * last Step()/Destroy() on the prepared statement).
+	 */
+	FCriticalSection& GetLock() const { return DbLock; }
+
 	// --- Symbol queries ---
 	TArray<FMonolithSourceSymbol> SearchSymbolsFTS(const FString& Query, int32 Limit = 20);
 	TArray<FMonolithSourceSymbol> GetSymbolsByName(const FString& Name, const FString& Kind = TEXT(""), int32 Limit = 0);
@@ -132,6 +165,16 @@ public:
 	TArray<FMonolithSourceChunk> SearchSourceFTS(const FString& Query, const FString& Scope = TEXT("all"), int32 Limit = 20);
 	TArray<FMonolithSourceChunk> SearchSourceFTSFiltered(const FString& Query, const FString& Scope, const FString& Module, const FString& PathFilter, int32 Limit);
 	TArray<FMonolithSourceSymbol> SearchSymbolsFTSFiltered(const FString& Query, const FString& Kind, const FString& Module, const FString& PathFilter, int32 Limit);
+
+	// --- FTS COUNT(*) helpers (Survivor E, plan §3.E) ---
+	// Issued ONLY on page 0 of cursor-paginated search_source so subsequent
+	// pages can thread the cached total. Each helper issues a single
+	// `SELECT COUNT(*) FROM <fts_table> WHERE <fts_table> MATCH ?` plus the
+	// same JOIN/WHERE filters used by SearchSymbolsFTSFiltered /
+	// SearchSourceFTSFiltered respectively. Dominant cost is ~50-200ms cold
+	// cache per audit; warm cache is sub-ms.
+	int32 CountSymbolsFTSFiltered(const FString& Query, const FString& Kind, const FString& Module, const FString& PathFilter);
+	int32 CountSourceFTSFiltered(const FString& Query, const FString& Scope, const FString& Module, const FString& PathFilter);
 
 	// --- FTS helper ---
 	static FString EscapeFTS(const FString& Query);

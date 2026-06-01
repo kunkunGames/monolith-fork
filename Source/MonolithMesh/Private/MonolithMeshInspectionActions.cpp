@@ -34,42 +34,42 @@ void FMonolithMeshInspectionActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Get comprehensive info for a StaticMesh or SkeletalMesh (tri count, bounds, materials, LODs, collision, Nanite)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::GetMeshInfo),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the mesh"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the mesh"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("mesh"), TEXT("get_mesh_bounds"),
 		TEXT("Get detailed bounding box info for a mesh (AABB, volume, surface area, sphere radius)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::GetMeshBounds),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the mesh"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the mesh"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("mesh"), TEXT("get_mesh_materials"),
 		TEXT("Get material slot info with per-section triangle counts"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::GetMeshMaterials),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the mesh"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the mesh"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("mesh"), TEXT("get_mesh_lods"),
 		TEXT("Get LOD details (tri/vert counts, section count, screen size per LOD)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::GetMeshLods),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the mesh"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the mesh"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("mesh"), TEXT("get_mesh_collision"),
 		TEXT("Get collision setup details (simple shapes, complex, trace flag)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::GetMeshCollision),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the mesh"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the mesh"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("mesh"), TEXT("get_mesh_uvs"),
 		TEXT("Get UV channel info with island count and overlap detection"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::GetMeshUvs),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the mesh"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the mesh"))
 			.Optional(TEXT("lod_index"), TEXT("integer"), TEXT("LOD index to inspect"), TEXT("0"))
 			.Optional(TEXT("uv_channel"), TEXT("integer"), TEXT("Specific UV channel (-1 = all)"), TEXT("-1"))
 			.Build());
@@ -78,29 +78,29 @@ void FMonolithMeshInspectionActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Quality analysis for a SkeletalMesh (bone weights, degenerate tris, UV quality, LOD delta)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::AnalyzeSkeletalMesh),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the SkeletalMesh"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the SkeletalMesh"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("mesh"), TEXT("analyze_mesh_quality"),
 		TEXT("Deep quality analysis for a StaticMesh (non-manifold edges, degenerate tris, loose verts, UV overlap)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::AnalyzeMeshQuality),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the StaticMesh"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the StaticMesh"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("mesh"), TEXT("compare_meshes"),
 		TEXT("Compare two meshes side-by-side (triangle, vertex, bounds, material, LOD deltas)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::CompareMeshes),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path_a"), TEXT("string"), TEXT("First mesh asset path"))
-			.Required(TEXT("asset_path_b"), TEXT("string"), TEXT("Second mesh asset path"))
+			.RequiredAssetPath(TEXT("asset_path_a"), TEXT("First mesh asset path"))
+			.RequiredAssetPath(TEXT("asset_path_b"), TEXT("Second mesh asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("mesh"), TEXT("get_vertex_data"),
 		TEXT("Get raw vertex positions and normals (paginated, max 5000 per call)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::GetVertexData),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the mesh"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the mesh"))
 			.Optional(TEXT("lod_index"), TEXT("integer"), TEXT("LOD index"), TEXT("0"))
 			.Optional(TEXT("offset"), TEXT("integer"), TEXT("Vertex offset"), TEXT("0"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max vertices to return (hard max 5000)"), TEXT("1000"))

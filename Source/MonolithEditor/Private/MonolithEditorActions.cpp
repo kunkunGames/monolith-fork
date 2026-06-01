@@ -456,15 +456,15 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		TEXT("Capture a screenshot of an asset (Niagara, material, static_mesh, skeletal_mesh, widget) rendered in a preview scene"),
 		FMonolithActionHandler::CreateStatic(&HandleCaptureScenePreview),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to preview"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path to preview"))
 			.Required(TEXT("asset_type"), TEXT("string"), TEXT("niagara | material | static_mesh | skeletal_mesh | widget"))
 			.Optional(TEXT("preview_mesh"), TEXT("string"), TEXT("Mesh for materials: plane, sphere, cube"), TEXT("plane"))
 			.Optional(TEXT("seek_time"), TEXT("number"), TEXT("Advance Niagara sim or skeletal animation to this time (seconds)"), TEXT("0.0"))
-			.Optional(TEXT("animation_path"), TEXT("string"), TEXT("skeletal_mesh only: UAnimSequence to pose with at seek_time"))
+			.OptionalAssetPath(TEXT("animation_path"), TEXT("skeletal_mesh only: UAnimSequence to pose with at seek_time"))
 			.Optional(TEXT("scale"), TEXT("number"), TEXT("widget only: DPI multiplier (>=0.01)"), TEXT("1.0"))
 			.Optional(TEXT("camera"), TEXT("object"), TEXT("{location:[x,y,z], rotation:[p,y,r], fov:60}"))
 			.Optional(TEXT("resolution"), TEXT("array"), TEXT("[width, height]"), TEXT("[512,512]"))
-			.Optional(TEXT("output_path"), TEXT("string"), TEXT("Output PNG path (absolute or relative to project)"))
+			.OptionalDiskPath(TEXT("output_path"), TEXT("Output PNG path (absolute or relative to project)"))
 			.Build());
 
 	// --- Inspect actions (Phase 2: 2026-05-26-monolith-editor-preview-expansion plan) ---
@@ -475,16 +475,16 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		TEXT("Inspect a UMaterialInterface's PBR parameter set. Returns scalar/vector/texture parameter lists plus heuristic classification of base color / normal / roughness / metallic textures and ORM / ARM / MRA channel-packing detection. Pure reflection — no render, no thumbnail. Use this when capture_scene_preview's pixel output isn't enough and you need the actual parameter values."),
 		FMonolithActionHandler::CreateStatic(&HandleInspectMaterialPBR),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("UMaterialInterface asset path (e.g. /Game/Materials/M_Foo or /Game/Materials/MI_Foo)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("UMaterialInterface asset path (e.g. /Game/Materials/M_Foo or /Game/Materials/MI_Foo)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("inspect_texture_channels"),
 		TEXT("Inspect a UTexture2D's R/G/B/A channel statistics (min/max/mean per channel) plus format/dimensions/sRGB/alpha. Optional per-channel split PNGs for visual debugging. Reads source mip 0 directly — bypasses runtime mip selection and compression. Useful for ORM/ARM channel-packing audits, alpha-coverage checks, and verifying source authoring against runtime appearance."),
 		FMonolithActionHandler::CreateStatic(&HandleInspectTextureChannels),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("UTexture2D asset path (e.g. /Game/Textures/T_Foo)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("UTexture2D asset path (e.g. /Game/Textures/T_Foo)"))
 			.Optional(TEXT("emit_splits"), TEXT("bool"), TEXT("If true, emit 4 grayscale PNGs (R/G/B/A) under output_dir. Default false (stats only)."), TEXT("false"))
-			.Optional(TEXT("output_dir"), TEXT("string"), TEXT("Output directory for split PNGs (default: Saved/Tests/Monolith/InspectTexture/<TextureName>/)"))
+			.OptionalDiskPath(TEXT("output_dir"), TEXT("Output directory for split PNGs (default: Saved/Tests/Monolith/InspectTexture/<TextureName>/)"))
 			.Build());
 
 	// --- Composite-capture actions (Phase 3: 2026-05-26-monolith-editor-preview-expansion plan) ---
@@ -496,7 +496,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FMonolithActionHandler::CreateStatic(&HandleCaptureMaterialGrid),
 		FParamSchemaBuilder()
 			.Required(TEXT("material_paths"), TEXT("array"), TEXT("Array of UMaterialInterface asset paths (1..16). Each becomes one grid cell."))
-			.Optional(TEXT("output_path"), TEXT("string"), TEXT("Output PNG path. Default: Saved/Screenshots/Monolith/CaptureMaterialGrid/<timestamp>.png"))
+			.OptionalDiskPath(TEXT("output_path"), TEXT("Output PNG path. Default: Saved/Screenshots/Monolith/CaptureMaterialGrid/<timestamp>.png"))
 			.Optional(TEXT("resolution"), TEXT("array"), TEXT("[width, height] total grid PNG size. Default [1024, 1024]."), TEXT("[1024,1024]"))
 			.Optional(TEXT("columns"), TEXT("integer"), TEXT("Grid columns. Default: ceil(sqrt(material_count))."))
 			.Optional(TEXT("preview_mesh"), TEXT("string"), TEXT("Mesh per cell: plane | sphere | cube. Default sphere."), TEXT("sphere"))
@@ -507,9 +507,9 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		TEXT("Render a static mesh with an FEngineShowFlags overlay (wireframe | normals | uv_density | lightmap_density | shader_complexity). Useful for visual debugging — overdraw audits, UV-density checks, lightmap-density layout review, shader-complexity heatmaps. Static-mesh only in v1 (skeletal/material flavours can be added later)."),
 		FMonolithActionHandler::CreateStatic(&HandleCaptureWithOverlay),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("UStaticMesh asset path (e.g. /Engine/BasicShapes/Cube)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("UStaticMesh asset path (e.g. /Engine/BasicShapes/Cube)"))
 			.Required(TEXT("mode"), TEXT("string"), TEXT("Overlay: wireframe | normals | uv_density | lightmap_density | shader_complexity"))
-			.Optional(TEXT("output_path"), TEXT("string"), TEXT("Output PNG path. Default: Saved/Screenshots/Monolith/CaptureWithOverlay/<timestamp>.png"))
+			.OptionalDiskPath(TEXT("output_path"), TEXT("Output PNG path. Default: Saved/Screenshots/Monolith/CaptureWithOverlay/<timestamp>.png"))
 			.Optional(TEXT("resolution"), TEXT("array"), TEXT("[width, height]. Default [512, 512]."), TEXT("[512,512]"))
 			.Optional(TEXT("camera"), TEXT("object"), TEXT("{location:[x,y,z], rotation:[p,y,r], fov:60}"))
 			.Build());
@@ -518,12 +518,12 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		TEXT("Capture multiple frames of an animated effect at specified timestamps"),
 		FMonolithActionHandler::CreateStatic(&HandleCaptureSequenceFrames),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to preview"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path to preview"))
 			.Required(TEXT("asset_type"), TEXT("string"), TEXT("niagara"))
 			.Required(TEXT("timestamps"), TEXT("array"), TEXT("Array of capture times in seconds (Max: 1000)"))
 			.Optional(TEXT("camera"), TEXT("object"), TEXT("{location:[x,y,z], rotation:[p,y,r], fov:60}"))
 			.Optional(TEXT("resolution"), TEXT("array"), TEXT("[width, height]"), TEXT("[512,512]"))
-			.Optional(TEXT("output_dir"), TEXT("string"), TEXT("Output directory for frame PNGs"))
+			.OptionalDiskPath(TEXT("output_dir"), TEXT("Output directory for frame PNGs"))
 			.Optional(TEXT("filename_prefix"), TEXT("string"), TEXT("Prefix for frame files"), TEXT("frame"))
 			.Optional(TEXT("persistent"), TEXT("bool"), TEXT("Use persistent component (preserves ribbons/accumulation). Default: false (per-frame recreate)."))
 			.Build());
@@ -533,7 +533,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FMonolithActionHandler::CreateStatic(&HandleStitchFlipbook),
 		FParamSchemaBuilder()
 			.Required(TEXT("frame_paths"), TEXT("array"), TEXT("Ordered array of absolute file paths to frame PNGs"))
-			.Required(TEXT("dest_path"), TEXT("string"), TEXT("UE asset path for the output texture (e.g. /Game/AgentTraining/Textures/T_FB_001)"))
+			.RequiredAssetPath(TEXT("dest_path"), TEXT("UE asset path for the output texture (e.g. /Game/AgentTraining/Textures/T_FB_001)"))
 			.Required(TEXT("grid"), TEXT("array"), TEXT("[columns, rows] grid layout (e.g. [4, 4] for 16 frames)"))
 			.Optional(TEXT("srgb"), TEXT("bool"), TEXT("sRGB color space (true for color, false for masks)"), TEXT("true"))
 			.Optional(TEXT("no_mipmaps"), TEXT("bool"), TEXT("Disable mipmap generation to prevent atlas bleed"), TEXT("true"))
@@ -584,11 +584,11 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		TEXT("Capture a Niagara system as a sequence of PNG frames with optional GIF encoding via ffmpeg or python"),
 		FMonolithActionHandler::CreateStatic(&HandleCaptureSystemGif),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Niagara system asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Optional(TEXT("duration_seconds"), TEXT("number"), TEXT("Capture duration in seconds (default: 2.0)"))
 			.Optional(TEXT("fps"), TEXT("integer"), TEXT("Frames per second (default: 15)"))
 			.Optional(TEXT("resolution"), TEXT("integer"), TEXT("Output resolution width/height in pixels (default: 256)"))
-			.Optional(TEXT("output_path"), TEXT("string"), TEXT("Output directory (default: Saved/Screenshots/Monolith/GIF_<timestamp>)"))
+			.OptionalDiskPath(TEXT("output_path"), TEXT("Output directory (default: Saved/Screenshots/Monolith/GIF_<timestamp>)"))
 			.Optional(TEXT("encoder"), TEXT("string"), TEXT("frames_only (default), ffmpeg, or python — opt-in GIF encoding"))
 			.Build());
 
@@ -663,7 +663,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		TEXT("Close the current persistent level (without saving) and load the specified level by /Game/... asset path. Wraps ULevelEditorSubsystem::LoadLevel."),
 		FMonolithActionHandler::CreateStatic(&HandleLoadLevel),
 		FParamSchemaBuilder()
-			.Required(TEXT("path"), TEXT("string"), TEXT("Asset path of the level to load (e.g. /Game/Maps/L_Backyard). Must exist."))
+			.RequiredAssetPath(TEXT("path"), TEXT("Asset path of the level to load (e.g. /Game/Maps/L_Backyard). Must exist."))
 			.Build());
 
 	InitLiveCodingDelegate();

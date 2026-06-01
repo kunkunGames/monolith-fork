@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.14.10 (Beta)
+**Version:** 0.17.1 (Beta)
 
 ---
 
@@ -14,7 +14,7 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithNiagaraModule` | Registers 109 Niagara actions (108 baseline in `MonolithNiagaraActions.cpp` + 1 layout in `MonolithNiagaraLayoutActions.cpp`) |
+| `FMonolithNiagaraModule` | Registers 119 Niagara actions (108 baseline in `MonolithNiagaraActions.cpp` + 1 layout in `MonolithNiagaraLayoutActions.cpp` + 9 timing actions in `MonolithNiagaraTimingActions.cpp` + 1 stateless-emitter factory in `MonolithNiagaraActions.cpp`) |
 | `FMonolithNiagaraActions` | Static handlers + extensive private helpers |
 | `FMonolithNiagaraLayoutActions` | `auto_layout` formatter fallback for Niagara graphs; uses Blueprint Assist when no built-in Monolith formatter exists and the bridge is available |
 | `MonolithNiagaraHelpers` | 6 reimplemented NiagaraEditor functions (non-exported APIs) |
@@ -30,7 +30,7 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 5. `GetParametersForContext` — System user store params
 6. `GetStackFunctionInputs` — Full input enumeration via engine's `FNiagaraStackGraphUtilities::GetStackFunctionInputs` with `FCompileConstantResolver`. Returns all input types (floats, vectors, colors, data interfaces, enums, bools) — not just static switch pins
 
-### Actions (109 — namespace: "niagara")
+### Actions (119 — namespace: "niagara")
 
 > **Audit note (2026-04-26):** detailed per-category tables below sum to roughly 96 — the remainder are post-design-doc additions (NPC, effect types, scalability, layout, advanced query helpers) that have not yet been threaded into the per-category tables. The header count is the source-of-truth.
 
@@ -182,6 +182,32 @@ These exist because Epic's `FNiagaraStackGraphUtilities` functions lack `NIAGARA
 | `set_simulation_stage_property` | Set a property on a simulation stage |
 | `remove_simulation_stage` | Remove a simulation stage from an emitter |
 | `add_simulation_stage` | Add a simulation stage to an emitter |
+
+**Temporal Control (9 — added 2026-05-28, Phases 1-4 of `plans/2026-05-28-niagara-timing-actions.md`)**
+
+The temporal-control surface collapses the existing scattered timing edits (per-property `set_system_property` + `set_simulation_stage_property` + `set_module_input_value` against `EmitterState` / `InitializeParticle`) into composite, intent-named writers. Design rationale: `plans/2026-05-28-niagara-timing-actions-design.md`. Plan: `plans/2026-05-28-niagara-timing-actions.md`.
+
+System-level reads + writes target `UNiagaraSystem` UPROPERTYs directly. Emitter-loop writes dispatch internally to `set_static_switch_value` (Loop Behavior, UseLoopDelay) and `set_module_input_value` (Loop Duration / Delay / Count) against the emitter's `EmitterState` module. For standalone `UNiagaraStatelessEmitter` assets (Lightweight Emitters — see § Stateless Emitters below), `set_emitter_loop_profile` and `get_emitter_timing_summary` instead dispatch into a reflection-based read/write against the protected `EmitterState` UPROPERTY (`FNiagaraEmitterStateData`) and tag responses with `stateless: true`. Sim-stage aliases reuse the `stage_index` / `stage_name` selector convention from PR #65's `set_simulation_stage_property`. `set_particle_lifetime` resolves to Direct mode (min only) or Random mode (min + max) on the `InitializeParticle` module.
+
+| Action | Description |
+|--------|-------------|
+| `get_system_timing` | Bundled read of `WarmupTime`, `WarmupTickCount`, `WarmupTickDelta`, `bFixedTickDelta`, `FixedTickDeltaTime`, `bRequireCurrentFrameData`. One call replaces six `get_system_property` round-trips |
+| `set_warmup_profile` | Composite write of `warmup_time` + `warmup_tick_delta`. Calls `UNiagaraSystem::SetWarmupTime` + `SetWarmupTickDelta` (the exposed setters internally call `ResolveWarmupTickCount`). Response returns the engine-resolved `(WarmupTime, WarmupTickCount, WarmupTickDelta)` triple so callers observe the snap |
+| `set_fixed_tick_delta` | Toggle `bFixedTickDelta` with optional `fixed_delta_time` value (sets `FixedTickDeltaTime` when supplied) |
+| `set_require_current_frame_data` | Toggle `bRequireCurrentFrameData` |
+| `set_emitter_loop_profile` | Composite write of EmitterState loop topology: `loop_behavior` (Once / Infinite / Multiple), `loop_duration`, `loop_delay`, `loop_count`, `loop_delay_enabled`, plus optional `loop_duration_mode` (`"Fixed"` / `"Infinite"`, maps to `ENiagaraLoopDurationMode` — meaningful only on stateless emitters; stateful path warns if supplied). **Stateful systems:** internally dispatches `set_static_switch_value` (Loop Behavior, UseLoopDelay) + `set_module_input_value` (Loop Duration, Loop Delay, Loop Count) against the emitter's `EmitterState` module. **Standalone `UNiagaraStatelessEmitter` assets:** detected via `StaticLoadObject` + class-name match, dispatches into `WriteStatelessLoopProfile` (reflection-based UPROPERTY write on the protected `EmitterState` `FNiagaraEmitterStateData`). Response includes `stateless: true` flag on the stateless branch |
+| `get_emitter_timing_summary` | Read aggregator: loop topology + `sim_stages[]` (name, `NumIterations`, `ExecuteBehavior`) + `InitializeParticle` lifetime fields, in one call. Optional `emitter` filter; omit for all emitters. **Standalone `UNiagaraStatelessEmitter` assets:** dispatches into the stateless reader — response includes `stateless: true`, all 4 `InitializeParticle` lifetime fields are `null`, and `sim_stages: []` (stateless emitters have no sim stages by design) |
+| `set_sim_stage_iteration_count` | Alias over `set_simulation_stage_property` with `property=NumIterations`. Reuses `stage_index` / `stage_name` selectors. Internally formats the int as the FNiagaraParameterBindingWithValue struct-literal `(Value=N)` |
+| `set_sim_stage_execute_behavior` | Alias for `set_simulation_stage_property` with `property=ExecuteBehavior`. Accepts `Always` / `OnSimulationReset` / `NotOnSimulationReset` |
+| `set_particle_lifetime` | Convenience write to the `InitializeParticle` module. `min` only → Direct mode with constant `Lifetime`. `min` + `max` → Random mode with `Lifetime Min` + `Lifetime Max` |
+
+**Stateless Emitters (1 — added 2026-05-28, Phases 0-3 of `plans/2026-05-28-niagara-stateless-timer.md`)**
+
+`UNiagaraStatelessEmitter` (Lightweight Emitter) is a standalone emitter storage class distinct from the system-owned `UNiagaraEmitter` graph. The class lives behind `Engine/Plugins/FX/Niagara/Source/Niagara/Internal/Stateless/NiagaraStatelessEmitter.h` and is intentionally not exposed to dependent modules. To avoid a hard build-time coupling, asset creation uses `FindObject<UClass>(nullptr, "/Script/Niagara.NiagaraStatelessEmitter")` + a type-erased `NewObject` factory call. The existing `set_emitter_loop_profile` and `get_emitter_timing_summary` actions detect standalone stateless assets via `StaticLoadObject` + class-name match and dispatch into reflection-based read/write paths against the protected `EmitterState` (`FNiagaraEmitterStateData`) UPROPERTY — see the Temporal Control section above.
+
+| Action | Description |
+|--------|-------------|
+| `create_stateless_emitter` | Creates a standalone `UNiagaraStatelessEmitter` (Lightweight Emitter) asset at `save_path`. Returns the asset path on success. Pairs with the stateless-aware branches of `set_emitter_loop_profile` (with optional `loop_duration_mode`) and `get_emitter_timing_summary` for programmatic Lightweight Emitter authoring without going through the Niagara System wrapper |
 
 **Module Outputs (1)**
 | Action | Description |

@@ -291,7 +291,7 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Create a new Blackboard Data asset"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateBlackboard),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path (e.g. /Game/AI/BB_Enemy)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path (e.g. /Game/AI/BB_Enemy)"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Asset name (derived from save_path if omitted)"))
 			.Optional(TEXT("parent_bb"), TEXT("string"), TEXT("Parent blackboard asset path for key inheritance"))
 			.Build());
@@ -301,7 +301,7 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Full JSON dump of all blackboard keys with types; inherited keys marked"),
 		FMonolithActionHandler::CreateStatic(&HandleGetBlackboard),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blackboard asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blackboard asset path"))
 			.Build());
 
 	// 3. list_blackboards
@@ -309,7 +309,7 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("List all UBlackboardData assets in the project"),
 		FMonolithActionHandler::CreateStatic(&HandleListBlackboards),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only include assets under this path prefix"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only include assets under this path prefix"))
 			.Build());
 
 	// 4. delete_blackboard
@@ -317,7 +317,7 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Delete a Blackboard Data asset"),
 		FMonolithActionHandler::CreateStatic(&HandleDeleteBlackboard),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blackboard asset path to delete"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blackboard asset path to delete"))
 			.Build());
 
 	// 5. duplicate_blackboard
@@ -325,8 +325,8 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Deep copy a Blackboard Data asset to a new path"),
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateBlackboard),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Source blackboard asset path"))
-			.Required(TEXT("dest_path"), TEXT("string"), TEXT("Destination asset path for the copy"))
+			.RequiredAssetPath(TEXT("source_path"), TEXT("Source blackboard asset path"))
+			.RequiredAssetPath(TEXT("dest_path"), TEXT("Destination asset path for the copy"))
 			.Build());
 
 	// 6. add_bb_key
@@ -334,7 +334,7 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Add a key to a Blackboard (Bool/Int/Float/String/Name/Vector/Rotator/Object/Class/Enum/NativeEnum)"),
 		FMonolithActionHandler::CreateStatic(&HandleAddBBKey),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blackboard asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blackboard asset path"))
 			.Required(TEXT("key_name"), TEXT("string"), TEXT("Name for the new key"))
 			.Required(TEXT("key_type"), TEXT("string"), TEXT("Key type: Bool, Int, Float, String, Name, Vector, Rotator, Object, Class, Enum, NativeEnum"))
 			.Optional(TEXT("description"), TEXT("string"), TEXT("Optional description for the key"))
@@ -348,7 +348,7 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Remove a key from a Blackboard"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveBBKey),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blackboard asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blackboard asset path"))
 			.Required(TEXT("key_name"), TEXT("string"), TEXT("Key name to remove"))
 			.Build());
 
@@ -357,7 +357,7 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Rename a key in a Blackboard"),
 		FMonolithActionHandler::CreateStatic(&HandleRenameBBKey),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blackboard asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blackboard asset path"))
 			.Required(TEXT("old_name"), TEXT("string"), TEXT("Current key name"))
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("New key name"))
 			.Build());
@@ -367,7 +367,7 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Detailed info for a single blackboard key (type, base class filter, allowed types, etc.)"),
 		FMonolithActionHandler::CreateStatic(&HandleGetBBKeyDetails),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blackboard asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blackboard asset path"))
 			.Required(TEXT("key_name"), TEXT("string"), TEXT("Key name to inspect"))
 			.Build());
 
@@ -376,7 +376,7 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Add multiple keys to a Blackboard at once"),
 		FMonolithActionHandler::CreateStatic(&HandleBatchAddBBKeys),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blackboard asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blackboard asset path"))
 			.Required(TEXT("keys"), TEXT("array"), TEXT("Array of key objects, each with: name (string), type (string), description? (string), base_class? (string), enum_type? (string)"))
 			.Build());
 
@@ -385,8 +385,8 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Set or change the parent Blackboard for key inheritance"),
 		FMonolithActionHandler::CreateStatic(&HandleSetBBParent),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Blackboard asset path"))
-			.Required(TEXT("parent_path"), TEXT("string"), TEXT("Parent blackboard path (empty string to clear parent)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blackboard asset path"))
+			.RequiredAssetPath(TEXT("parent_path"), TEXT("Parent blackboard path (empty string to clear parent)"))
 			.Build());
 
 	// 12. compare_blackboards
@@ -394,8 +394,8 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		TEXT("Diff two Blackboards: added, removed, and changed keys"),
 		FMonolithActionHandler::CreateStatic(&HandleCompareBlackboards),
 		FParamSchemaBuilder()
-			.Required(TEXT("path_a"), TEXT("string"), TEXT("First blackboard asset path"))
-			.Required(TEXT("path_b"), TEXT("string"), TEXT("Second blackboard asset path"))
+			.RequiredAssetPath(TEXT("path_a"), TEXT("First blackboard asset path"))
+			.RequiredAssetPath(TEXT("path_b"), TEXT("Second blackboard asset path"))
 			.Build());
 }
 

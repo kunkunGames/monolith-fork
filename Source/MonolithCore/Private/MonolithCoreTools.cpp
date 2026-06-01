@@ -1,7 +1,7 @@
 #include "MonolithCoreTools.h"
 #include "MonolithGuideTool.h"
 #include "MonolithCoreModule.h"
-#include "MonolithFuzzyMatch.h"
+#include "../Public/MonolithFuzzyMatch.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithHttpServer.h"
 #include "MonolithMcpSessionTracker.h"
@@ -616,6 +616,10 @@ void FMonolithCoreTools::RegisterAll()
 				.Enum(TEXT("mode"), { TEXT("summary"), TEXT("actions"), TEXT("schema") })
 				.Build()
 		);
+		// Survivor A (plan §3.A) — read-only + idempotent enumeration.
+		Registry.SetActionAnnotations(TEXT("monolith"), TEXT("discover"),
+			/*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true,
+			TEXT("Discover Monolith actions"));
 	}
 
 	// monolith_status
@@ -628,6 +632,10 @@ void FMonolithCoreTools::RegisterAll()
 				.EnableValidation()
 				.Build()
 		);
+		// Survivor A (plan §3.A) — pure server-health probe; read-only + idempotent.
+		Registry.SetActionAnnotations(TEXT("monolith"), TEXT("status"),
+			/*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true,
+			TEXT("Monolith server status"));
 	}
 
 	// monolith_update
@@ -642,6 +650,9 @@ void FMonolithCoreTools::RegisterAll()
 				.Enum(TEXT("action"), { TEXT("check"), TEXT("install") })
 				.Build()
 		);
+		// Survivor A (plan §3.A) — DELIBERATELY UNANNOTATED. The 'install'
+		// action variant modifies plugin source on disk and is not safely
+		// read-only. Per plan §3.A: "DO NOT annotate monolith_update".
 	}
 
 	// monolith_reindex
@@ -655,6 +666,12 @@ void FMonolithCoreTools::RegisterAll()
 				.Optional(TEXT("force"), TEXT("boolean"), TEXT("If true, performs a full wipe and rebuild instead of an incremental delta update."), TEXT("false"))
 				.Build()
 		);
+		// Survivor A (plan §3.A) — destructive of cache state, but functionally
+		// idempotent (re-running yields the same on-disk index). Conservative
+		// honest values per plan guidance.
+		Registry.SetActionAnnotations(TEXT("monolith"), TEXT("reindex"),
+			/*bReadOnly=*/false, /*bDestructive=*/false, /*bIdempotent=*/true,
+			TEXT("Rebuild Monolith index"));
 	}
 
 	// monolith_guide — editorial cross-namespace workflow guide (separate tool file,

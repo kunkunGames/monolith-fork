@@ -28,7 +28,7 @@ void FMonolithGASTagActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleAddGameplayTags),
 		FParamSchemaBuilder()
 			.Required(TEXT("tags"), TEXT("array"), TEXT("Array of tag strings (e.g. [\"Ability.Combat.Melee\", \"State.Dead\"])"))
-			.Optional(TEXT("table_path"), TEXT("string"), TEXT("Path to a GameplayTagTableRow DataTable. If omitted, tags go to DefaultGameplayTags.ini"))
+			.OptionalAssetPath(TEXT("table_path"), TEXT("Path to a GameplayTagTableRow DataTable. If omitted, tags go to DefaultGameplayTags.ini"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("gas"), TEXT("get_tag_hierarchy"),
@@ -54,7 +54,7 @@ void FMonolithGASTagActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldTagHierarchy),
 		FParamSchemaBuilder()
 			.Required(TEXT("preset"), TEXT("string"), TEXT("Preset name: 'survival_horror'"))
-			.Optional(TEXT("save_path"), TEXT("string"), TEXT("DataTable path to save to. If omitted, tags go to DefaultGameplayTags.ini"))
+			.OptionalAssetPath(TEXT("save_path"), TEXT("DataTable path to save to. If omitted, tags go to DefaultGameplayTags.ini"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("gas"), TEXT("rename_tag"),
@@ -78,7 +78,7 @@ void FMonolithGASTagActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Validate tag consistency: find orphan tags, undefined references, contradictory blocking/required tags on abilities"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateTagConsistency),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Restrict validation to assets under this path (e.g. '/Game/GAS')"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Restrict validation to assets under this path (e.g. '/Game/GAS')"))
 			.Build());
 
 	// ── Phase 3: Advanced ──
@@ -95,14 +95,14 @@ void FMonolithGASTagActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleExportTagHierarchy),
 		FParamSchemaBuilder()
 			.Optional(TEXT("format"), TEXT("string"), TEXT("Export format: 'json', 'csv', or 'text' (default: json)"), TEXT("json"))
-			.Optional(TEXT("output_path"), TEXT("string"), TEXT("File path to write (default: returns inline)"))
+			.OptionalDiskPath(TEXT("output_path"), TEXT("File path to write (default: returns inline)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("gas"), TEXT("import_tag_hierarchy"),
 		TEXT("Import gameplay tags from a file (JSON array or CSV)"),
 		FMonolithActionHandler::CreateStatic(&HandleImportTagHierarchy),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Absolute file path to import from"))
+			.RequiredDiskPath(TEXT("source_path"), TEXT("Absolute file path to import from"))
 			.Optional(TEXT("merge_mode"), TEXT("string"), TEXT("'replace' (clear existing, add imported) or 'merge' (add imported, keep existing). Default: merge"), TEXT("merge"))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("If true, report what would change without modifying"), TEXT("false"))
 			.Build());

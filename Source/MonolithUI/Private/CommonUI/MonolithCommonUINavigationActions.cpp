@@ -902,7 +902,7 @@ namespace MonolithCommonUINavigation
 			TEXT("Set a UWidget's navigation rule for a direction (Up/Down/Left/Right/Next/Previous)"),
 			FMonolithActionHandler::CreateStatic(&HandleSetWidgetNavigation),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path"))
 				.Required(TEXT("widget_name"), TEXT("string"), TEXT("Name of widget whose nav to set"))
 				.Required(TEXT("direction"), TEXT("string"), TEXT("Up|Down|Left|Right|Next|Previous"))
 				.Required(TEXT("rule"), TEXT("string"), TEXT("Escape|Stop|Wrap|Explicit|Custom|CustomBoundary"))
@@ -917,7 +917,7 @@ namespace MonolithCommonUINavigation
 				 "in 'failed'; valid writes still apply. Returns {written, failed[], compiled_once}."),
 			FMonolithActionHandler::CreateStatic(&HandleSetWidgetNavigationBulk),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path (alias: asset_path)"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path (alias: asset_path)"))
 				.Required(TEXT("entries"), TEXT("array"), TEXT("[{widget_name, direction(Up|Down|Left|Right|Next|Previous), rule(Escape|Stop|Wrap|Explicit|Custom|CustomBoundary), explicit_target?}]"))
 				.Optional(TEXT("save"), TEXT("boolean"), TEXT("Also save the package after the single compile (default false)"))
 				.Build(),
@@ -930,7 +930,7 @@ namespace MonolithCommonUINavigation
 				 "Pass widget_name to filter to a single widget. Does not modify or compile the WBP."),
 			FMonolithActionHandler::CreateStatic(&HandleDumpWidgetNavigation),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path (alias: asset_path)"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path (alias: asset_path)"))
 				.Optional(TEXT("widget_name"), TEXT("string"), TEXT("Filter to a single widget's nav rules"))
 				.Build(),
 			Cat);
@@ -940,7 +940,7 @@ namespace MonolithCommonUINavigation
 			TEXT("Store DesiredFocusTargetName FName UPROPERTY on a UCommonActivatableWidget CDO. WBP must expose this UPROPERTY and override NativeGetDesiredFocusTarget. Satisfying parent classes: UTokenforgeActivatableWidget, UMonolithReduceMotionAwareWidget. If parent doesn't expose the UPROPERTY, use ui::add_widget_variable to add it first."),
 			FMonolithActionHandler::CreateStatic(&HandleSetInitialFocusTarget),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("UCommonActivatableWidget blueprint path"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("UCommonActivatableWidget blueprint path"))
 				.Required(TEXT("target_widget"), TEXT("string"), TEXT("FName of widget to focus when screen activates"))
 				.Build(),
 			Cat);
@@ -985,7 +985,7 @@ namespace MonolithCommonUINavigation
 				 "(or InitialFocusTargetName) as an FName UPROPERTY."),
 			FMonolithActionHandler::CreateStatic(&HandleAuditFocusChain),
 			FParamSchemaBuilder()
-				.Required(TEXT("wbp_path"), TEXT("string"), TEXT("Widget Blueprint path (alias: asset_path)"))
+				.RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path (alias: asset_path)"))
 				.Build(),
 			Cat);
 	}

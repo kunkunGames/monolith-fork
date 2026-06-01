@@ -10,7 +10,7 @@ void FMonolithUITemplateActions::RegisterActions(FMonolithToolRegistry& Registry
         TEXT("Create a pre-built HUD element widget hierarchy (crosshair, health bar, ammo counter, etc.)"),
         FMonolithActionHandler::CreateStatic(&HandleCreateHudElement),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path to modify"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path to modify"))
             .Required(TEXT("element_type"), TEXT("string"), TEXT("Element type: crosshair, health_bar, ammo_counter, stamina_bar, interaction_prompt, damage_indicator, compass, subtitles, flashlight_battery"))
             .Optional(TEXT("widget_name_prefix"), TEXT("string"), TEXT("Prefix for generated widget names (default: element type)"))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile after creating"), TEXT("true"))
@@ -22,7 +22,7 @@ void FMonolithUITemplateActions::RegisterActions(FMonolithToolRegistry& Registry
         TEXT("Create a menu widget blueprint (main menu, pause, death screen, credits)"),
         FMonolithActionHandler::CreateStatic(&HandleCreateMenu),
         FParamSchemaBuilder()
-            .Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new Widget Blueprint"))
+            .RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new Widget Blueprint"))
             .Required(TEXT("menu_type"), TEXT("string"), TEXT("Menu type: main_menu, pause_menu, death_screen, credits"))
             .Optional(TEXT("buttons"), TEXT("array"), TEXT("Array of button label strings"))
             .Build()
@@ -33,7 +33,7 @@ void FMonolithUITemplateActions::RegisterActions(FMonolithToolRegistry& Registry
         TEXT("Create a tabbed settings panel with Apply/Revert/Back"),
         FMonolithActionHandler::CreateStatic(&HandleCreateSettingsPanel),
         FParamSchemaBuilder()
-            .Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new Widget Blueprint"))
+            .RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new Widget Blueprint"))
             .Optional(TEXT("tabs"), TEXT("array"), TEXT("Tab names: graphics, audio, controls, gameplay, accessibility (defaults to all)"))
             .Build()
     );
@@ -43,7 +43,7 @@ void FMonolithUITemplateActions::RegisterActions(FMonolithToolRegistry& Registry
         TEXT("Create a confirmation dialog widget"),
         FMonolithActionHandler::CreateStatic(&HandleCreateDialog),
         FParamSchemaBuilder()
-            .Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new Widget Blueprint"))
+            .RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new Widget Blueprint"))
             .Optional(TEXT("title"), TEXT("string"), TEXT("Dialog title text"), TEXT("Confirm"))
             .Optional(TEXT("body"), TEXT("string"), TEXT("Dialog body text"), TEXT("Are you sure?"))
             .Optional(TEXT("confirm_text"), TEXT("string"), TEXT("Confirm button text"), TEXT("Yes"))
@@ -56,7 +56,7 @@ void FMonolithUITemplateActions::RegisterActions(FMonolithToolRegistry& Registry
         TEXT("Create a notification toast widget"),
         FMonolithActionHandler::CreateStatic(&HandleCreateNotificationToast),
         FParamSchemaBuilder()
-            .Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new Widget Blueprint"))
+            .RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new Widget Blueprint"))
             .Optional(TEXT("position"), TEXT("string"), TEXT("Position: top_right, bottom_right, top_left, bottom_left, top_center"), TEXT("top_right"))
             .Build()
     );
@@ -66,7 +66,7 @@ void FMonolithUITemplateActions::RegisterActions(FMonolithToolRegistry& Registry
         TEXT("Create a loading screen widget"),
         FMonolithActionHandler::CreateStatic(&HandleCreateLoadingScreen),
         FParamSchemaBuilder()
-            .Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new Widget Blueprint"))
+            .RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new Widget Blueprint"))
             .Optional(TEXT("show_progress"), TEXT("boolean"), TEXT("Include a progress bar"), TEXT("true"))
             .Optional(TEXT("show_tips"), TEXT("boolean"), TEXT("Include a tips text block"), TEXT("true"))
             .Optional(TEXT("show_spinner"), TEXT("boolean"), TEXT("Include a loading spinner image"), TEXT("true"))
@@ -78,7 +78,7 @@ void FMonolithUITemplateActions::RegisterActions(FMonolithToolRegistry& Registry
         TEXT("Create an inventory grid layout widget"),
         FMonolithActionHandler::CreateStatic(&HandleCreateInventoryGrid),
         FParamSchemaBuilder()
-            .Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new Widget Blueprint"))
+            .RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new Widget Blueprint"))
             .Optional(TEXT("columns"), TEXT("integer"), TEXT("Number of columns"), TEXT("5"))
             .Optional(TEXT("rows"), TEXT("integer"), TEXT("Number of rows"), TEXT("4"))
             .Optional(TEXT("slot_size"), TEXT("integer"), TEXT("Slot size in pixels"), TEXT("64"))
@@ -90,7 +90,7 @@ void FMonolithUITemplateActions::RegisterActions(FMonolithToolRegistry& Registry
         TEXT("Create a save slot selector widget"),
         FMonolithActionHandler::CreateStatic(&HandleCreateSaveSlotList),
         FParamSchemaBuilder()
-            .Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new Widget Blueprint"))
+            .RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new Widget Blueprint"))
             .Optional(TEXT("max_slots"), TEXT("integer"), TEXT("Number of save slots to create"), TEXT("3"))
             .Build()
     );

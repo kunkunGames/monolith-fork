@@ -149,6 +149,14 @@ The index covers these types for `find_by_type`:
 - `Texture2D`, `StaticMesh`, `SkeletalMesh`
 - `DataTable`, `CurveTable`, `SoundWave`
 
+## Project-Intelligence Search Complements
+
+`project_query` and `source_query` search assets and source symbols. The Reflection Intelligence (RI) namespaces are deterministic, $0-LLM search complements that answer higher-level structural and historical questions about the project's own artefacts. Scope: project game module + project plugins (marketplace gated, Epic engine built-ins excluded).
+
+- **`cppreflect_query`** — search the C++ reflection graph: `find_class_specifier` (every UCLASS carrying a specifier — token-forgiving, alias-maps `Blueprintable`->`IsBlueprintBase`, case-insensitive; pair with `list_class_specifiers` to discover the queryable token vocabulary), `find_interface_impls` (every C++ UCLASS implementing a UINTERFACE), plus `get_uclass` / `list_uproperties` / `list_ufunctions` for a specific class.
+- **`decision_query`** — find architectural decision records mined from the markdown corpus: `list_decisions` (filter by `path_filter` / `status` / `min_confidence`), `get_decision`, `find_supersession_chain`, `find_referent_decisions`, `list_stale`.
+- **`risk_query`** — find git-derived hotspots and co-change relationships: `get_release_window_hotspots`, `get_hotspot_score`, `get_cochange_pairs`, `get_file_churn`, `list_conditional_gates`.
+
 ## Tips
 
 - The index is built on first launch and auto-updates — use `monolith_reindex()` to force rebuild
@@ -157,4 +165,6 @@ The index covers these types for `find_by_type`:
 - Use `find_references` to understand dependency chains before deleting or renaming assets
 - Combine with domain-specific tools: search first, then inspect with `blueprint_query`, `material_query`, etc.
 - `health` reports FTS parity and stale index symptoms; if stale, run `repair_fts execute=true` or trigger `monolith_reindex()` depending on the warning
+- `get_stats` shows last index time — if stale, trigger `monolith_reindex()`
+- RI reflection tables refresh on Live Coding / lazy first-call; force a project-only rebuild with `reflect_query("rebuild_reflection_index")`
 - Call `monolith_discover('namespace')` to see required/optional params for every action

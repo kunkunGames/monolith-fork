@@ -1,10 +1,10 @@
 # Monolith API Reference
 
-**Version:** v0.15.0 · **Last updated:** 2026-05-26
+**Version:** v0.17.1 · **Last updated:** 2026-06-01
 
-**Live full-project snapshot (2026-05-26):** `monolith_status()` reported **1584 registered actions across 45 namespaces** in this Go checkout, and MCP `tools/list` exposed **77 client tools**, including **44 `_query` namespace dispatch tools**. This live total includes loaded sibling/private plugins and conditional namespaces present in the project. Exact current schemas come from runtime `monolith_find`, `monolith_discover`, and `describe`, not from static prose.
+**In-tree action total:** v0.17.x registers the public Monolith surface across **25 in-tree namespaces**. The Reflection Intelligence layer adds `decision`, `risk`, `cppreflect`, `network`, `pipeline`, and `reflect`, plus cross-namespace audit actions registered onto `source`, `material`, `niagara`, `blueprint`, and `project`. The `monolith_*` meta-tools plus `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count.
 
-The table below is a curated public/in-tree reference. It intentionally excludes sibling-plugin actions (`MonolithISX`, `MonolithSteamBridge`, `MonolithSubstance`, `MonolithClaudeDesignBridge`, and project-private bridges) that ship in their own repos or distributions. When the live project snapshot and the curated table differ, treat that as a documented conditional delta unless this file explicitly says otherwise.
+**Live full-project snapshot caveat:** the 2026-05-26 Go checkout reported **1584 registered actions across 45 namespaces** with sibling/private plugins loaded. The curated public table below intentionally excludes sibling-plugin actions (`MonolithISX`, `MonolithSteamBridge`, `MonolithSubstance`, `MonolithClaudeDesignBridge`, and project-private bridges) that ship in their own repos or distributions. Exact current schemas come from runtime `monolith_find`, `monolith_discover`, and `describe`, not from static prose.
 
 Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
 
@@ -24,7 +24,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [blueprint](#blueprint) | 111 | Blueprint read/write, variable/component/graph CRUD, node ops, compile, auto-layout, spawn actors, dataset read/edit pack (DataTable/CurveTable/StringTable + `seed_data_asset`), cross-class property access, parent-function overrides |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs (incl. custom anim-graph nodes), montages, skeletons, PoseSearch, IKRig, Control Rig |
-| [niagara](#niagara) | 109 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning) |
+| [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [config](#config) | 6 | INI config inspection and search |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
@@ -37,9 +37,15 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD + document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
 | [level_sequence](#level_sequence) | 8 | Level Sequence inspection: binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
-| [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 11 in-tree adapters, plus optional sibling adapters when present (`apply`, `list_namespaces`) |
-| [describe](#describe) | 3 | Read-only schema introspection for the same adapter registry (`schema`, optional `list_targets`, `action_schema`) |
-| **Curated in-tree subtotal** | **1373** | Static public/in-tree reference from the curated body below; the 2026-05-26 fully loaded Go project reports 1584 live actions / 45 namespaces. |
+| [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 12 per-namespace adapters (`apply`, `list_namespaces`) |
+| [describe](#describe) | 3 | Read-only schema introspection for the same 12 adapters (`schema`, `list_targets`, `action_schema`) |
+| [decision](#decision) | 5 | **New v0.17.0.** Reflection Intelligence — architectural decision records mined from markdown corpora |
+| [risk](#risk) | 5 | **New v0.17.0.** Reflection Intelligence — git-churn / co-change / hotspot signals + conditional-gate inventory |
+| [cppreflect](#cppreflect) | 6 | **New v0.17.0.** Reflection Intelligence — UE 5.7 UHT reflection-edge queries (UCLASS / UPROPERTY / UFUNCTION / UINTERFACE + cpp↔asset edges + specifier discovery) |
+| [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
+| [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
+| [reflect](#reflect) | 1 | **New [Unreleased].** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
+| **Curated in-tree subtotal** | **v0.17.x public surface** | Static public/in-tree reference from the curated body below; fully loaded local projects may report additional sibling/private plugin actions. |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
 
 ---
@@ -386,7 +392,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
 
 ## niagara
 
-Niagara VFX system editing — emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types. **109 actions** (108 baseline + 1 layout).
+Niagara VFX system editing — emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types, temporal control, stateless-emitter factory. **119 actions** (108 baseline + 1 layout + 9 temporal-control + 1 stateless-emitter factory).
 
 > For full param schemas, call `monolith_discover("niagara")` at runtime.
 
@@ -407,6 +413,11 @@ Niagara VFX system editing — emitters, modules, params, renderers, HLSL, dynam
 | Data interfaces | 4 | `get_di_functions`, `get_compiled_gpu_hlsl`, `configure_data_interface`, `get_di_properties` |
 | Compile / preview | 4 | `request_compile`, `preview_system`, `diff_systems`, `get_scalability_settings`, `set_scalability_settings` |
 | Curves / spec | 5 | `configure_curve_keys`, `import_system_spec`, `export_system_spec`, `batch_execute`, `auto_layout` |
+| Temporal control (system) | 4 | `get_system_timing` (bundled read of `WarmupTime` / `WarmupTickCount` / `WarmupTickDelta` / `bFixedTickDelta` / `FixedTickDeltaTime` / `bRequireCurrentFrameData`), `set_warmup_profile` (composite write returning the engine-resolved triple after `ResolveWarmupTickCount` snap), `set_fixed_tick_delta`, `set_require_current_frame_data` |
+| Temporal control (emitter) | 2 | `set_emitter_loop_profile` (composite write of EmitterState loop topology — `loop_behavior` / `loop_duration` / `loop_delay` / `loop_count` / `loop_delay_enabled`; optional `loop_duration_mode` for stateless; native dispatch to `UNiagaraStatelessEmitter` standalone assets), `get_emitter_timing_summary` (read aggregator: loop topology + `sim_stages[]` + `InitializeParticle` lifetime fields; stateless branch returns `stateless: true` with `null` lifetime + empty `sim_stages`) |
+| Temporal control (sim stage) | 2 | `set_sim_stage_iteration_count`, `set_sim_stage_execute_behavior` (both alias atop `set_simulation_stage_property` with PR #65's `stage_index` / `stage_name` selector convention) |
+| Temporal control (particle) | 1 | `set_particle_lifetime` (`min` only → Direct mode constant `Lifetime`; `min` + `max` → Random mode `Lifetime Min` / `Lifetime Max`) |
+| Stateless emitter factory | 1 | `create_stateless_emitter` (standalone `UNiagaraStatelessEmitter` / Lightweight Emitter asset; pairs with the stateless-aware branches of `set_emitter_loop_profile` + `get_emitter_timing_summary`) |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithNiagara.md`.
 
@@ -450,14 +461,16 @@ Get last crash/ensure context. *No parameters.*
 
 ### `editor.capture_scene_preview`
 
-Render a Niagara system or material in a preview scene and screenshot it.
+Render an asset in a preview scene and screenshot it. Supported `asset_type` values are `niagara`, `material`, `static_mesh`, `skeletal_mesh`, and `widget`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `asset_path` | string | **required** | Asset to preview |
-| `asset_type` | string | **required** | `niagara` or `material` |
+| `asset_type` | string | **required** | `niagara`, `material`, `static_mesh`, `skeletal_mesh`, or `widget` |
 | `preview_mesh` | string | optional | For materials: `plane`, `sphere`, `cube`. Default: `plane` |
-| `seek_time` | number | optional | Niagara sim time (seconds). Default: `0.0` |
+| `animation_path` | string | optional | Skeletal mesh only: animation sequence used for posed capture |
+| `seek_time` | number | optional | Niagara sim time or skeletal animation seek time in seconds. Default: `0.0` |
+| `scale` | number | optional | Widget only: DPI multiplier. Default: `1.0` |
 | `camera` | object | optional | `{location:[x,y,z], rotation:[p,y,r], fov:60}` |
 | `resolution` | array | optional | `[width, height]`. Default: `[512, 512]` |
 | `output_path` | string | optional | Output PNG path |
@@ -687,7 +700,7 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 
 ## source
 
-Unreal Engine C++ source code navigation. 1M+ symbols indexed. **11 actions.**
+Unreal Engine C++ source code navigation. 1M+ symbols indexed. **12 actions** (11 navigation + 1 Reflection Intelligence audit registered cross-namespace in v0.17.0).
 
 ### `source.read_source`
 
@@ -750,6 +763,19 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **11 actions.**
 ### `source.trigger_reindex` · `source.trigger_project_reindex`
 
 `trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*.
+
+### `source.audit_module_dep_reality`
+
+**New v0.17.0 (Reflection Intelligence, Phase 2).** Catches the LNK2019 bug class where a UPROPERTY (or any reflection-touching declaration) references a foreign-module type whose owning module is missing from the declaring module's `Build.cs` `Private/PublicDependencyModuleNames`. UHT generates `Z_Construct_*_NoRegister` calls that link against the foreign module's API macro at link time, so the failure surfaces as a confusing unresolved external. The audit regex-parses every `*.Build.cs` for declared deps, extracts type-bearing reflection declarations from every `*.h` / `*.cpp`, resolves each type against `EngineSource.db`'s symbol → owning-module mapping, and emits a violation when the owning module isn't declared and isn't on the implicit-deps whitelist (`Core`, `CoreUObject`, `Engine`, `Projects`, `RHI`, `RenderCore`). Read-only, idempotent, cursor-paginated. Owned by `MonolithReflectionIntel` but registered onto `source` for caller ergonomics.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `module_filter` | string | optional | Substring match against the **declaring** module's name. Empty scans all. Default: `""` |
+| `include_whitelist` | bool | optional | When `true`, also reports references to whitelisted implicit-dep modules (debug aid). Default: `false` |
+| `limit` | integer | optional | Page size. Hard cap `500`. Default: `100` |
+| `cursor` | string | optional | Opaque base64+JSON cursor from a prior `next_cursor` |
+
+**Returns:** `{ "violations": [ { "declaring_module", "source_path", "source_line", "used_type", "missing_dep" } ], "scanned_modules": N, "scanned_declarations": N, "next_cursor": "<opaque>" }`. Violations are sorted by `(declaring_module, source_path, source_line)`. Multi-argument templates extract only the first argument and typedef aliases aren't chased to the underlying type — both are documented heuristics.
 
 ---
 
@@ -1117,6 +1143,389 @@ See the per-system SPECs' "Bulk Fill & Describe Surface" sections for each adapt
 
 ---
 
+## decision
+
+**New v0.17.0 (Reflection Intelligence, Phase 1).** Architectural decision records mined from the project's markdown corpora (specs, plans, `CHANGELOG.md`, `.claude/rules/`) into `decision_records` + `decision_supersedes` SQLite tables on `EngineSource.db`. Zero LLM calls, zero network. Three heuristic tiers with distinct confidence floors: YAML frontmatter `decision: true` / `status:` (0.90), `## ADR-N` / `## Architectural Decision` headers (0.85), and a markdown header followed within 8 lines by a paragraph containing `because` / `rationale` / `evidence` / `decision:` (0.65). All 5 actions are read-only + idempotent and participate in universal response shaping (`_fields` / `_omit` / `_compact_json`). **5 actions.**
+
+> RI does NOT open its own handle to `EngineSource.db`. UE 5.7's SQLite is built with `SQLITE_OS_OTHER=1` and a custom `unreal-fs` VFS that allows only ONE open of a file per process; a second open returns `SQLITE_IOERR`. RI borrows `UMonolithSourceSubsystem`'s already-open handle (`FMonolithSourceDatabase::GetRawHandle()` / `GetLock()`): read-path adapters borrow it under a game-thread-only contract, write-path bootstrap indexers run under `FScopeLock`.
+
+### `decision_query.list_decisions`
+
+List architectural decisions filtered by source-path substring and minimum heuristic confidence. Cursor-paginated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path_filter` | string | optional | Substring match against `source_path` (project-relative). `\` → `/` rewritten by dispatcher with a surfaced warning. Default: `""` |
+| `min_confidence` | number | optional | Floor in `[0, 1]`. Per-call value wins over the settings default (`0.6`). Default: `0.6` |
+| `status` | string | optional | Exact match — `open`, `accepted`, `superseded`, `deprecated`, `draft`. Default: `""` |
+| `limit` | integer | optional | Page size. Hard cap `200`. Default: `50` |
+| `cursor` | string | optional | Opaque base64+JSON cursor |
+
+**Returns:** `{ "decisions": [ { "decision_id", "title", "status", "source_path", "source_line", "confidence", "rationale", "source_mtime" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. `total_estimate` is emitted on page 0 only.
+
+### `decision_query.get_decision`
+
+Fetch one record by stable id.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `decision_id` | string | **required** | Stable id of the form `<forward-slashed-path>#<header-anchor>` |
+
+**Returns:** `{ "decision": <row-or-null> }` — `null` when the id is unknown.
+
+### `decision_query.list_stale`
+
+List decisions whose source markdown hasn't been modified within `max_age_days`. Useful for spec-drift detection. Cursor-paginated, ordered oldest-mtime-first.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `max_age_days` | integer | **required** | Positive only. Compared against source-file mtime in UTC |
+| `path_filter` | string | optional | Substring match. Default: `""` |
+| `limit` | integer | optional | Hard cap `200`. Default: `50` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "stale_decisions": [ /* row objects */ ], "cutoff_unix": N, "next_cursor": "<opaque>" }`. Rows with `source_mtime = 0` (mtime unavailable) are excluded.
+
+### `decision_query.find_supersession_chain`
+
+Walk supersedes edges outward from a starting decision — the ordered chain of decisions the start id transitively supersedes. Cycle-protected.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `decision_id` | string | **required** | Start of the walk |
+| `depth` | integer | optional | Max traversal depth. Hard cap `50`. Default: `10` |
+
+**Returns:** `{ "start": "<id>", "chain": [ { "from", "to", "depth" } ], "truncated": false }`. `truncated: true` means the walk hit `depth` with frontier nodes remaining.
+
+### `decision_query.find_referent_decisions`
+
+Inverse of `find_supersession_chain` — list decisions that explicitly supersede the given id.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `decision_id` | string | **required** | The decision whose referents to list |
+
+**Returns:** `{ "decision_id": "<id>", "referent_decisions": [ /* full row objects */ ] }`. Rows ordered by `source_path, source_line`.
+
+---
+
+## risk
+
+**New v0.17.0 (Reflection Intelligence, Phase 2).** Repo-level risk signals mined from git history + LOC sweeps + conditional-gate regex scans across up to six nested git repos. Deterministic — no LLM, no embeddings, no network. Writes into `git_file_churn`, `git_cochange_pairs`, `risk_hotspot_scores`, and `reflect_conditional_gates` on `EngineSource.db`. Hotspot score is a traceable blend: `0.6 * normalised_churn + 0.4 * normalised_loc`, normalised per-repo. All 5 actions are read-only + idempotent. **5 actions.** (The Module-Dep Reality Audit also shipped in Phase 2 — it's registered under `source` as `source_query("audit_module_dep_reality")`, documented in the [source](#source) section.)
+
+### `risk_query.get_hotspot_score`
+
+Fetch the hotspot score for a single file path.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `file_path` | string | **required** | Project-relative or repo-relative path. `\` → `/` rewritten with a surfaced warning |
+| `repo_path` | string | optional | When omitted, searches all indexed repos and returns the first match. Default: `""` |
+
+**Returns:** `{ "score": <number-or-null>, "normalised_churn", "normalised_loc", "loc", "repo_path" }` — `score` is `null` when the file isn't in the index.
+
+### `risk_query.get_cochange_pairs`
+
+List files that frequently change in the same commits as the given file. Cursor-paginated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `file_path` | string | **required** | Anchor file |
+| `repo_path` | string | optional | Optional repo scope. Default: `""` |
+| `min_commits` | integer | optional | Lower bound on `commit_count` per pair (filters one-off co-touches). Default: `2` |
+| `limit` | integer | optional | Hard cap `200`. Default: `50` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "anchor": "<path>", "pairs": [ { "partner", "commit_count" } ], "total_estimate": N, "next_cursor": "<opaque>" }`.
+
+### `risk_query.get_file_churn`
+
+Per-file churn record — commit count and line-delta totals.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `file_path` | string | **required** | Target file |
+| `repo_path` | string | optional | Optional repo scope |
+
+**Returns:** `{ "churn": <row-or-null> }` — row includes `commit_count`, `lines_added`, `lines_deleted`, `first_commit_ts`, `last_commit_ts`.
+
+### `risk_query.get_release_window_hotspots`
+
+List files whose hotspot score exceeds a threshold, descending. Designed for release-readiness queries. Cursor-paginated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `threshold` | number | optional | Floor in `[0, 1]`. Default: `0.7` |
+| `repo_path` | string | optional | Optional repo scope. Default: `""` |
+| `limit` | integer | optional | Hard cap `200`. Default: `50` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "hotspots": [ { "file_path", "score", "normalised_churn", "normalised_loc", "loc", "repo_path" } ], "total_estimate": N, "next_cursor": "<opaque>" }`.
+
+### `risk_query.list_conditional_gates`
+
+List `#if WITH_*` macros, `bHas*` 3-location probe variables, and `MONOLITH_RELEASE_BUILD` bypass branches across the project. Cursor-paginated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `module_filter` | string | optional | Substring match against module name. Default: `""` |
+| `gate_kind` | string | optional | Exact match — `with_macro`, `bhas_probe`, `release_bypass`. Default: `""` |
+| `limit` | integer | optional | Hard cap `500`. Default: `100` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "gates": [ { "module_name", "gate_name", "gate_kind", "source_path", "source_line", "probe_arity" } ], "total_estimate": N, "next_cursor": "<opaque>" }`.
+
+---
+
+## cppreflect
+
+**New v0.17.0 (Reflection Intelligence, Phase 3a).** UE 5.7 reflection-edge queries driven by a regex sweep over UHT artefacts (`Intermediate/Build/Win64/.../Inc/<Module>/UHT/*.gen.cpp`) cross-joined with `IAssetRegistry::GetDependencies`. No tree-sitter dependency, no ThirdParty vendoring. Writes into `reflect_uclasses`, `reflect_uproperties`, `reflect_ufunctions`, `reflect_uinterfaces`, `reflect_uinterface_impls`, and `cpp_asset_edges` on `EngineSource.db`. All 6 actions are read-only + idempotent. **6 actions** (5 shipped in v0.17.0 Phase 3a; `list_class_specifiers` added [Unreleased]).
+
+> **Scan scope ([Unreleased]):** the indexers scan your project plugins (InventorySystemX, CarnageFX, etc.) by default, not just the game module. Scope follows a game-module → project-plugin → marketplace ladder driven by `IPluginManager::GetEnabledPlugins()`: `bIndexProjectPluginReflection` (default `true`) walks enabled `LoadedFrom == Project` plugins; `bIndexMarketplacePluginReflection` (default `false`) also walks enabled engine-installed marketplace plugins (LogicDriver/SMSystem, GASCompanion); Epic engine built-ins stay excluded (`bIndexEnginePluginReflection`, default off).
+
+> **Phase 3a caller-contract notes:** `source_path` is UHT's `ModuleRelativePath` (not project-relative); `source_line` is `0` everywhere (UHT discards the original-header line — pair with `source_query("search_source")` for per-line precision); `reflect_uproperties.blueprint_visibility` / `.specifiers` are empty strings (Phase 3b populates them); `cpp_asset_edges.edge_kind` is the coarse `'package_dep'`.
+
+### `cppreflect_query.get_uclass`
+
+Fetch the UHT-derived UCLASS record — parent class, specifiers, source path/line.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `class_name` | string | **required** | Bare class name |
+| `module_name` | string | optional | Disambiguates classes sharing a name across modules. Default: `""` |
+
+**Returns:** `{ "uclass": <row-or-null> }` — row includes `class_name`, `module_name`, `parent_class`, `class_specifiers`, `source_path`, `source_line`.
+
+### `cppreflect_query.list_uproperties`
+
+Enumerate the UPROPERTY surface for a UCLASS. Cursor-paginated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `class_name` | string | **required** | Bare class name |
+| `module_name` | string | optional | Optional disambiguator. Default: `""` |
+| `limit` | integer | optional | Hard cap `200`. Default: `50` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "properties": [ { "property_name", "property_type", "blueprint_visibility", "specifiers", "source_path", "source_line" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. `blueprint_visibility` and `specifiers` are empty in Phase 3a.
+
+### `cppreflect_query.list_ufunctions`
+
+Enumerate the UFUNCTION surface for a UCLASS. Cursor-paginated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `class_name` | string | **required** | Bare class name |
+| `module_name` | string | optional | Optional disambiguator. Default: `""` |
+| `limit` | integer | optional | Hard cap `200`. Default: `50` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "functions": [ { "function_name", "function_flags", "return_type", "params_json", "source_path", "source_line" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. `function_flags` is the raw `EFunctionFlags` bitfield as emitted by UHT.
+
+### `cppreflect_query.find_interface_impls`
+
+List every C++ UCLASS that implements the given UINTERFACE. Blueprint implementations are NOT in this set (use `cpp_asset_edges` for the BP side). Cursor-paginated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `interface_name` | string | **required** | UINTERFACE name |
+| `limit` | integer | optional | Hard cap `500`. Default: `100` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "interface_name": "<name>", "implementations": [ { "impl_class_name", "impl_module_name" } ], "total_estimate": N, "next_cursor": "<opaque>" }`.
+
+### `cppreflect_query.find_class_specifier`
+
+Find every UCLASS carrying a given specifier — substring match against the `flags` column of `reflect_uclasses`. Cursor-paginated. The `flags` column stores UHT metadata keys (`IsBlueprintBase`, `BlueprintType`, `Abstract`, etc.), NOT raw C++ UCLASS specifiers, so matching is forgiving ([Unreleased] enhancements): an alias map translates well-known C++ specifiers (`Blueprintable` → `IsBlueprintBase`); specifiers UHT drops entirely (`MinimalAPI`, `NotBlueprintable`) return an explicit not-captured note rather than a silent empty result; matching is case-insensitive. Call `list_class_specifiers` to discover the queryable token universe.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `specifier` | string | **required** | Substring match against the stored token, case-insensitive — `"BlueprintType"` matches both `BlueprintType` and `IsBlueprintBase:BlueprintType,...`. Well-known C++ specifiers (`Blueprintable`) are alias-mapped to the stored token |
+| `module_filter` | string | optional | Optional module-name substring. Default: `""` |
+| `limit` | integer | optional | Hard cap `500`. Default: `100` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "classes": [ { "class_name", "module_name", "parent_class", "class_specifiers", "source_path", "source_line" } ], "effective_token": "<translated-token>", "total_estimate": N, "next_cursor": "<opaque>" }`. For specifiers UHT drops (`MinimalAPI` / `NotBlueprintable`), the response carries a not-captured note and refers you to `list_class_specifiers`.
+
+### `cppreflect_query.list_class_specifiers`
+
+**New [Unreleased].** Return the DISTINCT universe of tokens stored in the `flags` column of `reflect_uclasses`, each with a per-token class count. The `flags` column stores UHT metadata keys (e.g. `IsBlueprintBase`, `BlueprintType`, `Abstract`), NOT raw C++ UCLASS specifiers. Use this to discover what `find_class_specifier` can actually match. No params.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| _(none)_ | — | — | Takes no params |
+
+**Returns:** `{ "specifiers": [ { "token": "IsBlueprintBase", "class_count": 142 }, ... ], "total_estimate": N }` — tokens ordered by `class_count` descending.
+
+---
+
+## network
+
+**New v0.17.0 (Reflection Intelligence, Phase 4a).** UE 5.7 replication inspection driven by a second UHT-artefact regex sweep (independent of Phase 3a's reader) over per-property `MetaData` blocks plus the `CPF_Net` property-flag emission. Cross-joins against Phase 3a's `reflect_ufunctions`. Writes into `reflect_replicated_properties` on `EngineSource.db`. All 4 actions are read-only + idempotent. **4 actions.**
+
+> **Status notes ([Unreleased] network-completeness workstream):**
+> - The indexer now scans project plugins by default (the scan-scope ladder — see the `cppreflect` header note), so replicated classes and RPCs declared in plugins like InventorySystemX are in scope, not just the game module.
+> - `list_replicated_classes` now captures bare `UPROPERTY(Replicated)` + `DOREPLIFETIME` (via `CPF_Net`) in addition to `ReplicatedUsing` — verified end-to-end (returned `ALeviathanCharacterBase` + `ULeviathanVitalsSet`).
+> - `list_rpc_functions` switched to specifier-based detection (`reflect_ufunctions.specifiers` from `EFunctionFlags`) instead of name-prefix, and with project plugins in scope it now returns the project's actual RPCs — verified E2E (the InventorySystemX `UInventoryComponent` / `UWeaponBase_ISX` Server RPCs). The prior "empty because game-module-only" status is resolved.
+> - `COND_*` replication conditions still aren't surfaced.
+
+### `network_query.list_replicated_classes`
+
+Enumerate UCLASSes carrying at least one replicated property, sorted by replicated-property count. As of the [Unreleased] network-completeness workstream this captures bare `UPROPERTY(Replicated)` + `DOREPLIFETIME` (via `CPF_Net`) in addition to `ReplicatedUsing` — verified E2E. Cursor-paginated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `module_filter` | string | optional | Substring match against `module_name`. Default: `""` |
+| `limit` | integer | optional | Hard cap `200`. Default: `50` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "classes": [ { "class_name", "module_name", "replicated_property_count" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. Sorted by `replicated_property_count DESC, class_name ASC`.
+
+### `network_query.list_rpc_functions`
+
+Filter `reflect_ufunctions` by replication specifier (`reflect_ufunctions.specifiers` parsed from `EFunctionFlags` — `FUNC_NetServer` / `FUNC_NetClient` / `FUNC_NetMulticast`) to surface the project's RPC surface. As of the [Unreleased] network-completeness workstream this is specifier-based, not name-prefix-based, and the scan covers project plugins by default (see the scan-scope note in the `cppreflect` header). The project's actual RPCs — which live in project plugins like InventorySystemX — are therefore in scope; E2E returned 28 RPCs including `UInventoryComponent` / `UWeaponBase_ISX` Server RPCs. Cursor-paginated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `rpc_kind` | string | optional | Exact match — `server`, `client`, `multicast`, `netmulticast`. Empty returns all four. Default: `""` |
+| `class_name` | string | optional | Optional UCLASS filter. Default: `""` |
+| `module_filter` | string | optional | Substring match against module name. Default: `""` |
+| `limit` | integer | optional | Hard cap `500`. Default: `100` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "rpcs": [ { "class_name", "module_name", "function_name", "rpc_kind", "function_flags", "return_type", "source_path", "source_line" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. `rpc_kind` is derived from the replication specifier (`EFunctionFlags`) at query time. With project plugins in scope by default the array populates from project-plugin RPCs — e.g. the InventorySystemX Server RPCs.
+
+### `network_query.list_onrep_handlers`
+
+List every `OnRep_*` UFUNCTION paired with the property it covers (joined via `reflect_replicated_properties.rep_notify_func == function_name`). Cursor-paginated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `class_name` | string | optional | Optional UCLASS filter. Default: `""` |
+| `module_filter` | string | optional | Substring match. Default: `""` |
+| `limit` | integer | optional | Hard cap `500`. Default: `100` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "handlers": [ { "class_name", "module_name", "function_name", "covered_property", "source_path", "source_line" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. `covered_property` is empty when the handler is orphaned (no matching `ReplicatedUsing`).
+
+### `network_query.audit_unbalanced_onreps`
+
+Find `ReplicatedUsing=OnRep_X` declarations whose `OnRep_X` function does NOT exist in the same class's reflected UFUNCTION surface — catches typos and rename drift. Cursor-paginated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `module_filter` | string | optional | Substring match. Default: `""` |
+| `limit` | integer | optional | Hard cap `500`. Default: `100` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "violations": [ { "class_name", "module_name", "property_name", "missing_handler" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. Sorted by `(module_name, class_name, property_name)`.
+
+---
+
+## pipeline
+
+**New v0.17.0 (Reflection Intelligence, Phase 4a).** Two read-only composer actions that fan out other registered Monolith actions serially on the game thread and assemble the results into a single payload. They never mutate state — every action they invoke is itself read-only. No `ParallelFor`, no async dispatch. **2 actions.**
+
+### `pipeline_query.pr_review`
+
+Bundle the most common PR-review reads into a single call against a list of changed files (typically the output of `git diff --name-only`). For each path, fans out `risk_query("get_hotspot_score")`, `risk_query("get_cochange_pairs")`, `decision_query("list_decisions", path_filter=path)`, `source_query("audit_module_dep_reality")`, and (when `include_drift`) `blueprint_query("audit_cdo_drift")`, aggregated per-path.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `changed_files` | string[] | **required** | Array of project-relative paths. Hard cap 100 paths per call |
+| `include_drift` | bool | optional | Include the CDO drift check. Default: `true` |
+
+**Returns:** `{ "files": [ { "path", "hotspot_score", "cochange_partners", "decisions", "module_dep_violations", "cdo_drifts" } ], "summary": { "files_above_hotspot_threshold", "total_decisions_touched", "violation_count" } }`.
+
+### `pipeline_query.release_readiness`
+
+Release-gate composer. Bundles `monolith_status()`, `decision_query("list_stale")`, `risk_query("get_release_window_hotspots")`, plus the sentinel-list audit and CHANGELOG completeness audit specced in `.claude/rules/scoped/monolith-release.md`. Read-only end-to-end. No required params.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `stale_decision_days` | integer | optional | Forwarded to `decision_query("list_stale")`. Default: `90` |
+| `hotspot_threshold` | number | optional | Forwarded to `risk_query("get_release_window_hotspots")`. Default: `0.7` |
+
+**Returns:** `{ "status": { /* monolith_status payload */ }, "stale_decisions": [...], "release_window_hotspots": [...], "sentinel_audit": {...}, "changelog_completeness": {...} }`.
+
+---
+
+## Reflection Intelligence — Cross-Namespace Audit Actions
+
+Four additional read-only audit actions ship with Reflection Intelligence Phase 4a. Each is owned by `MonolithReflectionIntel` but registered onto an **existing** host namespace's adapter for caller ergonomics (agents already discover the host namespace first). All four are cursor-paginated; `path_prefix` carries `AssetPath` semantics (`\` → `/` rewrite with a surfaced warning). Together with `source_query("audit_module_dep_reality")` these are the 5 cross-namespace RI audits.
+
+### `material_query.audit_orphan_materials`
+
+Identify materials with zero inbound references in the asset graph (orphans from deleted Blueprint owners or refactored material chains).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path_prefix` | string | optional | `/Game/...` path prefix to scope the scan. Default: `"/Game/"` |
+| `limit` | integer | optional | Hard cap `500`. Default: `100` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "orphans": [ { "asset_path", "asset_class" } ], "total_estimate": N, "next_cursor": "<opaque>" }`.
+
+### `niagara_query.audit_cross_asset_refs`
+
+Find broken or stale asset references inside Niagara systems / emitters — referenced assets that no longer exist or whose class has shifted. Joins against Phase 3a's `cpp_asset_edges`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path_prefix` | string | optional | `/Game/...` path prefix to scope the scan. Default: `"/Game/"` |
+| `limit` | integer | optional | Hard cap `500`. Default: `100` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "broken_refs": [ { "owning_asset", "missing_or_stale_ref", "expected_class", "actual_class_or_null" } ], "total_estimate": N, "next_cursor": "<opaque>" }`.
+
+### `blueprint_query.audit_cdo_drift`
+
+Detect Blueprint child classes whose CDO has overridden a native C++ parent's default value — useful when a native default changes upstream and BP children silently keep the stale override.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path_prefix` | string | optional | `/Game/...` path prefix to scope the scan. Default: `"/Game/"` |
+| `class_filter` | string | optional | Substring match against the parent C++ class name. Default: `""` |
+| `limit` | integer | optional | Hard cap `500`. Default: `100` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "drifts": [ { "bp_asset_path", "parent_class", "property_name", "parent_default", "bp_override" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. Sorted by `(bp_asset_path, property_name)`.
+
+### `project_query.audit_orphan_assets`
+
+Project-wide zero-reference scan across all asset classes (the general form; `material_query("audit_orphan_materials")` is the type-scoped sibling). Cross-validates against Phase 3a's `cpp_asset_edges` to surface assets referenced only from C++ but not from the BP/asset graph.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path_prefix` | string | optional | `/Game/...` path prefix to scope the scan. Default: `"/Game/"` |
+| `asset_class_filter` | string | optional | Substring match against asset class name. Default: `""` |
+| `limit` | integer | optional | Hard cap `500`. Default: `100` |
+| `cursor` | string | optional | Opaque cursor |
+
+**Returns:** `{ "orphans": [ { "asset_path", "asset_class" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. An asset is orphaned only when both the asset-graph and C++-edge reference sets are empty.
+
+---
+
+## reflect
+
+**New [Unreleased] (Reflection Intelligence, network-completeness workstream).** One WRITE/maintenance action for repopulating the RI reflection tables. **1 action.**
+
+### `reflect_query.rebuild_reflection_index`
+
+Force-rebuild the RI reflection tables from PROJECT UHT artefacts — `reflect_uclasses`, `reflect_uproperties`, `reflect_ufunctions`, `reflect_uinterfaces`, `reflect_uinterface_impls`, `cpp_asset_edges`, and `reflect_replicated_properties`. Re-runs the RI indexers (`FCppReflectIndexer` + `FNetworkIndexer`) over the project's on-disk UHT artefacts. Scope is PROJECT only (Epic engine built-ins excluded) — and, as of the [Unreleased] scan-scope ladder, "project" includes enabled `LoadedFrom == Project` plugins by default (and marketplace plugins when enabled), so a rebuild repopulates project-plugin reflection.
+
+Exists because after an RI indexer code change there's no other clean repopulation trigger — the lazy bootstrap only fires on table-absence, `OnReloadComplete` only on Live Coding, and `source_query("trigger_reindex")` is the heavyweight full-engine reindex.
+
+**WRITE / maintenance action — NOT read-only.** Idempotent (wipe-and-rewrite per indexer inside a single transaction) and non-destructive (regenerates deterministically from on-disk artefacts; never touches source or non-RI tables).
+
+*No parameters.*
+
+**Returns:** a per-table row-count summary — `{ "ok": true, "rebuilt": { "reflect_uclasses": N, "reflect_uproperties": N, "reflect_ufunctions": N, "reflect_uinterfaces": N, "reflect_uinterface_impls": N, "cpp_asset_edges": N, "reflect_replicated_properties": N } }`.
+
+> Note: with the [Unreleased] scan-scope ladder, a rebuild repopulates project-plugin reflection by default — so `network_query("list_rpc_functions")` returns the project's RPCs (the InventorySystemX Server RPCs) after a rebuild (see the `network` namespace status notes).
+
+---
+
 <a id="sibling-plugins"></a>
 
 ## Sibling Plugins
@@ -1225,10 +1634,14 @@ Before writing any client code:
 
 When the editor is closed but you still need to query Monolith:
 
-- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool, read-only. Same actions for read-only namespaces (project, source, config).
-- **`python Plugins/Monolith/Saved/monolith_offline.py`** — same actions, stdlib-only.
+- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool, read-only. The canonical offline path. Serves the read-only `project` / `source` / `config` namespaces plus the full **20-action Reflection Intelligence surface**.
+- **`python Plugins/Monolith/Scripts/monolith_offline.py`** — stdlib-only dev fallback, kept byte-for-byte in lockstep with the exe.
 
 Both invoke the same SQLite indexes the live MCP uses.
+
+**Reflection Intelligence offline parity.** All four RI namespaces are now fully servable offline — `cppreflect` (6 actions), `network` (4), `decision` (5), `risk` (5) — and emit JSON **byte-identical to the live MCP server** (same field names, types, ordering, row data, `%.17g` float formatting, and base64 cursor tokens). Earlier builds covered only 4 of the 20 with divergent shapes; the phantom `risk.list_hotspots` action has been removed. Two intentional, documented differences from the live payload remain (not bugs): the offline CLI adds a top-level `success` flag (its in-band status channel — the live MCP carries success/error out-of-band, so live has no `success` key; the nested DATA payload is byte-identical), and wall-clock fields (`cutoff_unix` / `since_unix` and the `risk.get_release_window_hotspots` cursor whose filter-hash includes them) differ by the run-time gap across process invocations on both live and offline.
+
+`Scripts/verify_offline_parity.py` byte-diffs exe vs py across all 20 RI actions as a ship-blocking gate in `make_release.ps1`; `Scripts/check_offline_exe_fresh.py` flags a stale exe by comparing its `--version` `source_hash` against a fresh hash of `monolith_query.cpp`.
 
 ---
 

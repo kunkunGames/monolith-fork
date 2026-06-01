@@ -158,7 +158,7 @@ void FMonolithLevelDesignPlacementActions::RegisterActions(FMonolithToolRegistry
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::ManageSublevel),
 		FParamSchemaBuilder()
 			.Required(TEXT("sub_action"), TEXT("string"), TEXT("Action: create, add, remove, move_actors"))
-			.Optional(TEXT("level_path"), TEXT("string"), TEXT("Level asset path (e.g. /Game/Maps/Sublevel_Basement). Required for create/add/remove."))
+			.OptionalAssetPath(TEXT("level_path"), TEXT("Level asset path (e.g. /Game/Maps/Sublevel_Basement). Required for create/add/remove."))
 			.Optional(TEXT("streaming_class"), TEXT("string"), TEXT("Streaming class: LevelStreamingDynamic or LevelStreamingAlwaysLoaded"), TEXT("LevelStreamingDynamic"))
 			.Optional(TEXT("actor_names"), TEXT("array"), TEXT("Actor names to move (for move_actors sub_action)"))
 			.Optional(TEXT("dest_level"), TEXT("string"), TEXT("Destination level name or path (for move_actors)"))
@@ -175,7 +175,7 @@ void FMonolithLevelDesignPlacementActions::RegisterActions(FMonolithToolRegistry
 			.Optional(TEXT("scale"), TEXT("array"), TEXT("Scale [x, y, z]"), TEXT("[1,1,1]"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("Property name->value pairs to set via reflection"))
 			.Optional(TEXT("label"), TEXT("string"), TEXT("Actor label in the outliner"))
-			.Optional(TEXT("folder"), TEXT("string"), TEXT("Outliner folder path"))
+			.OptionalAssetPath(TEXT("folder"), TEXT("Outliner folder path"))
 			.Build());
 
 	// 3. place_spline
@@ -184,7 +184,7 @@ void FMonolithLevelDesignPlacementActions::RegisterActions(FMonolithToolRegistry
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::PlaceSpline),
 		FParamSchemaBuilder()
 			.Required(TEXT("points"), TEXT("array"), TEXT("Array of [x,y,z] spline points (minimum 2)"))
-			.Optional(TEXT("mesh_path"), TEXT("string"), TEXT("Static mesh path for spline mesh segments"))
+			.OptionalAssetPath(TEXT("mesh_path"), TEXT("Static mesh path for spline mesh segments"))
 			.Optional(TEXT("forward_axis"), TEXT("string"), TEXT("Mesh forward axis: X, Y, or Z"), TEXT("X"))
 			.Optional(TEXT("point_type"), TEXT("string"), TEXT("Spline point type: Linear, Curve, Constant, CurveClamped, CurveCustomTangent"), TEXT("Curve"))
 			.Optional(TEXT("scale"), TEXT("array"), TEXT("Mesh segment scale [x, y]"), TEXT("[1,1]"))
@@ -200,7 +200,7 @@ void FMonolithLevelDesignPlacementActions::RegisterActions(FMonolithToolRegistry
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::CreatePrefab),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor_names"), TEXT("array"), TEXT("Actor names to include in the prefab"))
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Save path for the level (e.g. /Game/Prefabs/PF_DoorFrame)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Save path for the level (e.g. /Game/Prefabs/PF_DoorFrame)"))
 			.Optional(TEXT("type"), TEXT("string"), TEXT("Level instance type: LevelInstance or PackedLevelActor"), TEXT("LevelInstance"))
 			.Build());
 
@@ -211,7 +211,7 @@ void FMonolithLevelDesignPlacementActions::RegisterActions(FMonolithToolRegistry
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::CreateBlueprintPrefab),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor_names"), TEXT("array"), TEXT("Actor names to include in the prefab"))
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Blueprint save path (e.g. /Game/Prefabs/BP_FurnitureSet)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Blueprint save path (e.g. /Game/Prefabs/BP_FurnitureSet)"))
 			.Optional(TEXT("center_pivot"), TEXT("boolean"), TEXT("Recenter components to group centroid"), TEXT("true"))
 			.Optional(TEXT("keep_source_actors"), TEXT("boolean"), TEXT("Keep original actors (don't delete)"), TEXT("true"))
 			.Build());
@@ -221,7 +221,7 @@ void FMonolithLevelDesignPlacementActions::RegisterActions(FMonolithToolRegistry
 		TEXT("Spawn a Level Instance (prefab) at a location."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelDesignPlacementActions::SpawnPrefab),
 		FParamSchemaBuilder()
-			.Required(TEXT("prefab_path"), TEXT("string"), TEXT("Level asset path (e.g. /Game/Prefabs/PF_DoorFrame)"))
+			.RequiredAssetPath(TEXT("prefab_path"), TEXT("Level asset path (e.g. /Game/Prefabs/PF_DoorFrame)"))
 			.Required(TEXT("location"), TEXT("array"), TEXT("World location [x, y, z]"))
 			.Optional(TEXT("rotation"), TEXT("array"), TEXT("Rotation [pitch, yaw, roll]"), TEXT("[0,0,0]"))
 			.Optional(TEXT("scale"), TEXT("array"), TEXT("Scale [x, y, z]"), TEXT("[1,1,1]"))

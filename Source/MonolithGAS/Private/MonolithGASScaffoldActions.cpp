@@ -59,7 +59,7 @@ void FMonolithGASScaffoldActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Generate ExecCalc + damage GEs + meta attribute flow for a complete damage pipeline. Creates GE Blueprints for each damage type with SetByCaller magnitudes."),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldDamagePipeline),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Base path for generated assets (e.g. '/Game/GAS/Effects/Damage')"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Base path for generated assets (e.g. '/Game/GAS/Effects/Damage')"))
 			.Required(TEXT("damage_types"), TEXT("array"), TEXT("Array of damage type names (e.g. ['Ballistic', 'Fire', 'Explosive'])"))
 			.Build());
 
@@ -67,7 +67,7 @@ void FMonolithGASScaffoldActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Generate a DOT/buff/debuff GameplayEffect with stacking, periodic damage, and optional cue tag"),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldStatusEffect),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the new GE (e.g. '/Game/GAS/Effects/Status/GE_Status_Burning')"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the new GE (e.g. '/Game/GAS/Effects/Status/GE_Status_Burning')"))
 			.Required(TEXT("name"), TEXT("string"), TEXT("Status effect name (e.g. 'Burning')"))
 			.Required(TEXT("config"), TEXT("object"), TEXT("Configuration object: { duration?, period?, stacking_type?, stack_limit?, damage_per_tick?, attribute?, status_tag?, cue_tag?, removes_tags?[] }"))
 			.Build());
@@ -76,7 +76,7 @@ void FMonolithGASScaffoldActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Generate a weapon ability Blueprint with fire mode handling (single, burst, auto) and reload support"),
 		FMonolithActionHandler::CreateStatic(&HandleScaffoldWeaponAbility),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset path for the ability Blueprint"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset path for the ability Blueprint"))
 			.Required(TEXT("weapon_type"), TEXT("string"), TEXT("Weapon type: 'pistol', 'rifle', 'shotgun', 'smg', 'melee'"))
 			.Optional(TEXT("fire_mode"), TEXT("string"), TEXT("Fire mode: 'single', 'burst', 'auto' (default: single)"), TEXT("single"))
 			.Build());
@@ -91,8 +91,8 @@ void FMonolithGASScaffoldActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Author-time: append a GameplayAbility class to a pawn BP's ASC startup-abilities array. Requires the ASC subclass to expose a TArray<TSubclassOf<UGameplayAbility>> UPROPERTY whose name contains 'Ability' (StartupAbilities, DefaultAbilities, etc.)."),
 		FMonolithActionHandler::CreateStatic(&HandleGrantAbilityToPawn),
 		FParamSchemaBuilder()
-			.Required(TEXT("pawn_bp_path"), TEXT("string"), TEXT("Pawn Blueprint asset path (e.g. /Game/Tests/BP_TestPawn) — must contain a UAbilitySystemComponent"))
-			.Required(TEXT("ability_class_path"), TEXT("string"), TEXT("GameplayAbility class path — Blueprint asset path or class name"))
+			.RequiredAssetPath(TEXT("pawn_bp_path"), TEXT("Pawn Blueprint asset path (e.g. /Game/Tests/BP_TestPawn) — must contain a UAbilitySystemComponent"))
+			.RequiredAssetPath(TEXT("ability_class_path"), TEXT("GameplayAbility class path — Blueprint asset path or class name"))
 			.Optional(TEXT("level"), TEXT("integer"), TEXT("Ability level (default 1, stored alongside class — only used if ASC array is FGameplayAbilitySpec-shaped, otherwise ignored)"), TEXT("1"))
 			.Optional(TEXT("input_id"), TEXT("integer"), TEXT("Input ID (default -1, only used if ASC array is FGameplayAbilitySpec-shaped, otherwise ignored)"), TEXT("-1"))
 			.Build());

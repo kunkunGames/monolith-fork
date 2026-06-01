@@ -1440,6 +1440,16 @@ bool FMonolithSourceDatabase::IsOpen() const
 	return Database != nullptr && Database->IsValid();
 }
 
+FSQLiteDatabase* FMonolithSourceDatabase::GetRawHandle() const
+{
+	// Deliberately NOT locked here: the borrower (MonolithReflectionIntel) holds
+	// GetLock() across the whole fetch-prepare-step sequence, so taking DbLock
+	// here too would either deadlock (non-recursive FCriticalSection) or give a
+	// false sense of safety for a pointer that outlives this call. Return the
+	// raw pointer only when the handle is genuinely open; the borrower locks.
+	return (Database != nullptr && Database->IsValid()) ? Database : nullptr;
+}
+
 // ============================================================
 // FTS escape — mirrors Python _escape_fts()
 // ============================================================
@@ -2228,6 +2238,148 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::SearchSymbolsFTSFiltered(
 		Result.Add(ReadSymbolFromStatement(Stmt));
 	}
 	return Result;
+}
+
+// ============================================================
+// FTS COUNT(*) helpers (Survivor E — plan §3.E)
+//
+// Issued ONLY on page 0 of cursor-paginated search_source. Mirrors the
+// JOIN / WHERE clauses of SearchSymbolsFTSFiltered / SearchSourceFTSFiltered
+// so the COUNT matches what the paged result would surface across the full
+// rerun. ORDER BY / LIMIT are intentionally omitted — COUNT short-circuits.
+// ============================================================
+
+int32 FMonolithSourceDatabase::CountSymbolsFTSFiltered(const FString& Query, const FString& Kind, const FString& Module, const FString& PathFilter)
+{
+	FScopeLock Lock(&DbLock);
+	if (!Database || !Database->IsValid()) return 0;
+
+	const FString FTSQuery = EscapeFTS(Query);
+
+	FString SQL = TEXT("SELECT COUNT(*) FROM symbols_fts f JOIN symbols s ON s.id = f.rowid ");
+	TArray<FString> Conditions;
+	Conditions.Add(TEXT("symbols_fts MATCH ?"));
+
+	if (!Module.IsEmpty() || !PathFilter.IsEmpty())
+	{
+		SQL += TEXT("JOIN files fi ON fi.id = s.file_id ");
+	}
+	if (!Module.IsEmpty())
+	{
+		SQL += TEXT("JOIN modules m ON m.id = fi.module_id ");
+		Conditions.Add(TEXT("m.name = ?"));
+	}
+	if (!Kind.IsEmpty())
+	{
+		Conditions.Add(TEXT("s.kind = ?"));
+	}
+	if (!PathFilter.IsEmpty())
+	{
+		Conditions.Add(TEXT("fi.path LIKE ?"));
+	}
+
+	SQL += TEXT("WHERE ") + FString::Join(Conditions, TEXT(" AND "));
+	SQL += TEXT(";");
+
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database, *SQL);
+
+	int32 BindIdx = 1;
+	Stmt.SetBindingValueByIndex(BindIdx++, FTSQuery);
+	if (!Module.IsEmpty())
+	{
+		Stmt.SetBindingValueByIndex(BindIdx++, Module);
+	}
+	if (!Kind.IsEmpty())
+	{
+		Stmt.SetBindingValueByIndex(BindIdx++, Kind);
+	}
+	if (!PathFilter.IsEmpty())
+	{
+		Stmt.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s%%"), *PathFilter));
+	}
+
+	int32 Count = 0;
+	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		int64 C64 = 0;
+		Stmt.GetColumnValueByIndex(0, C64);
+		Count = static_cast<int32>(C64);
+	}
+	return Count;
+}
+
+int32 FMonolithSourceDatabase::CountSourceFTSFiltered(const FString& Query, const FString& Scope, const FString& Module, const FString& PathFilter)
+{
+	FScopeLock Lock(&DbLock);
+	if (!Database || !Database->IsValid()) return 0;
+
+	const FString FTSQuery = EscapeFTS(Query);
+
+	// Fast path: no joins needed when neither module nor path filter is set
+	// AND scope is "all" — single FTS COUNT(*).
+	if (Scope == TEXT("all") && Module.IsEmpty() && PathFilter.IsEmpty())
+	{
+		FSQLitePreparedStatement Stmt;
+		Stmt.Create(*Database, TEXT("SELECT COUNT(*) FROM source_fts WHERE source_fts MATCH ?;"));
+		Stmt.SetBindingValueByIndex(1, FTSQuery);
+
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			int64 C64 = 0;
+			Stmt.GetColumnValueByIndex(0, C64);
+			return static_cast<int32>(C64);
+		}
+		return 0;
+	}
+
+	FString SQL = TEXT("SELECT COUNT(*) FROM source_fts sf JOIN files fi ON fi.id = sf.file_id ");
+	TArray<FString> Conditions;
+	Conditions.Add(TEXT("source_fts MATCH ?"));
+
+	if (!Module.IsEmpty())
+	{
+		SQL += TEXT("JOIN modules m ON m.id = fi.module_id ");
+		Conditions.Add(TEXT("m.name = ?"));
+	}
+	if (Scope != TEXT("all"))
+	{
+		Conditions.Add(TEXT("fi.file_type = ?"));
+	}
+	if (!PathFilter.IsEmpty())
+	{
+		Conditions.Add(TEXT("fi.path LIKE ?"));
+	}
+
+	SQL += TEXT("WHERE ") + FString::Join(Conditions, TEXT(" AND "));
+	SQL += TEXT(";");
+
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database, *SQL);
+
+	int32 BindIdx = 1;
+	Stmt.SetBindingValueByIndex(BindIdx++, FTSQuery);
+	if (!Module.IsEmpty())
+	{
+		Stmt.SetBindingValueByIndex(BindIdx++, Module);
+	}
+	if (Scope != TEXT("all"))
+	{
+		Stmt.SetBindingValueByIndex(BindIdx++, Scope);
+	}
+	if (!PathFilter.IsEmpty())
+	{
+		Stmt.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s%%"), *PathFilter));
+	}
+
+	int32 Count = 0;
+	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		int64 C64 = 0;
+		Stmt.GetColumnValueByIndex(0, C64);
+		Count = static_cast<int32>(C64);
+	}
+	return Count;
 }
 
 // ============================================================

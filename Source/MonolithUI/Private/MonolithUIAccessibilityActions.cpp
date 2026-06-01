@@ -42,7 +42,7 @@ void FMonolithUIAccessibilityActions::RegisterActions(FMonolithToolRegistry& Reg
         TEXT("Audit a Widget Blueprint for accessibility issues: small fonts, missing focus, navigation, tooltips"),
         FMonolithActionHandler::CreateStatic(&HandleAuditAccessibility),
         FParamSchemaBuilder()
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Widget Blueprint asset path"))
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Build()
     );
 

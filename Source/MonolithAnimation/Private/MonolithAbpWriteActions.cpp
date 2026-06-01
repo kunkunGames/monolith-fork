@@ -50,7 +50,7 @@ void FMonolithAbpWriteActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Place an animation graph node in a state or the main AnimGraph. node_type accepts built-in aliases; node_class accepts any loaded non-abstract UAnimGraphNode_Base subclass by path or name."),
 		FMonolithActionHandler::CreateStatic(&HandleAddAnimGraphNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Optional(TEXT("node_type"), TEXT("string"), TEXT("Alias or UAnimGraphNode_Base class path/name. Aliases: SequencePlayer, BlendSpacePlayer, TwoWayBlend, BlendListByBool, LayeredBoneBlend, MotionMatching, TwoBoneIK, ModifyBone, LocalToComponentSpace, ComponentToLocalSpace"))
 			.Optional(TEXT("node_class"), TEXT("string"), TEXT("UAnimGraphNode_Base subclass path or name, e.g. /Script/AnimGraph.AnimGraphNode_TwoBoneIK. Use this instead of node_type when not using an alias."))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name — 'AnimGraph' for top-level, or a state name for state inner graphs (default: AnimGraph)"), TEXT("AnimGraph"))
@@ -70,7 +70,7 @@ void FMonolithAbpWriteActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Wire two node pins together in an ABP anim graph. Use after add_anim_graph_node to connect pose outputs to inputs."),
 		FMonolithActionHandler::CreateStatic(&HandleConnectAnimGraphPins),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Required(TEXT("source_node"), TEXT("string"), TEXT("Source node name (UObject name from add_anim_graph_node response, or class-based like AnimGraphNode_SequencePlayer_0)"))
 			.Required(TEXT("source_pin"), TEXT("string"), TEXT("Source pin name, e.g. 'Pose' (output pin)"))
 			.Required(TEXT("target_node"), TEXT("string"), TEXT("Target node name"))
@@ -85,10 +85,10 @@ void FMonolithAbpWriteActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("High-level shortcut: set which animation a state plays by spawning the right player node and wiring it to the state result. Handles SequencePlayer vs BlendSpacePlayer automatically."),
 		FMonolithActionHandler::CreateStatic(&HandleSetStateAnimation),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Required(TEXT("machine_name"), TEXT("string"), TEXT("State machine name (as shown in get_state_machines)"))
 			.Required(TEXT("state_name"), TEXT("string"), TEXT("State name to set animation for"))
-			.Required(TEXT("anim_asset_path"), TEXT("string"), TEXT("AnimSequence or BlendSpace asset path"))
+			.RequiredAssetPath(TEXT("anim_asset_path"), TEXT("AnimSequence or BlendSpace asset path"))
 			.Optional(TEXT("loop"), TEXT("bool"), TEXT("Set loop flag on the player node"), TEXT("false"))
 			.Optional(TEXT("clear_existing"), TEXT("bool"), TEXT("Remove existing animation nodes wired to the state result (default: true)"), TEXT("true"))
 			.Build());
@@ -98,7 +98,7 @@ void FMonolithAbpWriteActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Place a variable Get node (K2Node_VariableGet) in the AnimGraph — used to drive AnimGraph pins from AnimInstance members."),
 		FMonolithActionHandler::CreateStatic(&HandleAddVariableGet),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Required(TEXT("variable_name"), TEXT("string"), TEXT("Variable name as exposed on the AnimInstance (C++ UPROPERTY or BP variable)"))
 			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: AnimGraph)"), TEXT("AnimGraph"))
 			.Optional(TEXT("state_name"), TEXT("string"), TEXT("Optional state name to scope the search to a state inner graph"))
@@ -115,7 +115,7 @@ void FMonolithAbpWriteActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Mutate a property on an existing anim graph node's internal FAnimNode struct (e.g. ModifyBone.BoneToModify.BoneName, ModifyBone.RotationMode, TwoBoneIK.EffectorLocationSpace). Persists across compile — writes to the source UAnimGraphNode, not the CDO."),
 		FMonolithActionHandler::CreateStatic(&HandleSetAnimGraphNodeProperty),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Required(TEXT("node_id"), TEXT("string"), TEXT("Node UObject name (e.g. 'AnimGraphNode_ModifyBone_7') — same id surfaced by get_graph_summary / add_anim_graph_node response"))
 			.Required(TEXT("property_path"), TEXT("string"), TEXT("Dotted property path inside the node's inner FAnimNode struct (e.g. 'BoneToModify.BoneName', 'RotationMode', 'EffectorLocationSpace', 'Alpha'). Do NOT prefix with 'Node.'."))
 			.Required(TEXT("value"), TEXT("string"), TEXT("Value as text — same format as ImportText in the Details panel. Enums: bare name (e.g. 'BMM_Additive', 'BCS_ComponentSpace'). FName: bare name. Struct: '(Field=Value,...)'."))

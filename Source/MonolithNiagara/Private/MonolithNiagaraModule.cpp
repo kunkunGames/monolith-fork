@@ -2,6 +2,7 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithNiagaraActions.h"
 #include "MonolithNiagaraLayoutActions.h"
+#include "MonolithNiagaraTimingActions.h"
 #include "MonolithNiagaraBulkFillAdapter.h"
 #include "MonolithToolRegistry.h"
 
@@ -12,6 +13,7 @@ void FMonolithNiagaraModule::StartupModule()
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 	FMonolithNiagaraActions::RegisterActions(Registry);
 	FMonolithNiagaraLayoutActions::RegisterActions(Registry);
+	FMonolithNiagaraTimingActions::RegisterActions(Registry);
 
 	// Phase 5 Step 2 (MCP Ergonomics, 2026-05-11) — register the niagara adapter.
 	// No WITH_* gate (Niagara is a core engine plugin, always-on). Body rejects

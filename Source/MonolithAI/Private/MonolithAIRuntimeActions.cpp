@@ -288,7 +288,7 @@ void FMonolithAIRuntimeActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleRuntimeStartBT),
 		FParamSchemaBuilder()
 			.Required(TEXT("actor"), TEXT("string"), TEXT("Actor label, name, or path in PIE"))
-			.Optional(TEXT("bt_path"), TEXT("string"), TEXT("BehaviorTree asset path (uses controller default if omitted)"))
+			.OptionalAssetPath(TEXT("bt_path"), TEXT("BehaviorTree asset path (uses controller default if omitted)"))
 			.Optional(TEXT("run_mode"), TEXT("string"), TEXT("'looped' (default) or 'single_run'"))
 			.Build());
 
@@ -370,7 +370,7 @@ void FMonolithAIRuntimeActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleRuntimeRunEQSQuery),
 		FParamSchemaBuilder()
 			.Required(TEXT("querier_actor"), TEXT("string"), TEXT("Actor to use as querier (label/name/path)"))
-			.Required(TEXT("query_path"), TEXT("string"), TEXT("EQS query asset path (e.g. /Game/AI/EQS/EQS_FindCover)"))
+			.RequiredAssetPath(TEXT("query_path"), TEXT("EQS query asset path (e.g. /Game/AI/EQS/EQS_FindCover)"))
 			.Optional(TEXT("max_results"), TEXT("number"), TEXT("Max results to return (default 10)"))
 			.Build());
 }

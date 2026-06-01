@@ -25,7 +25,7 @@ void FMonolithAnimLayoutActions::RegisterActions(FMonolithToolRegistry& Registry
 			 "Asset must be open in the editor. No built-in Monolith formatter exists for animation graphs."),
 		FMonolithActionHandler::CreateStatic(&HandleAutoLayout),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Animation Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Optional(TEXT("graph_name"), TEXT("string"),
 				TEXT("Graph to layout: 'AnimGraph' (default), state machine name, or 'all' for every graph"), TEXT("AnimGraph"))
 			.Optional(TEXT("formatter"), TEXT("string"),

@@ -113,8 +113,8 @@ void FMonolithMeshTechArtActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Export a UStaticMesh or USkeletalMesh asset to FBX on disk via UAssetExportTask + the engine's built-in FBX exporter."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::ExportMesh),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the mesh to export (StaticMesh or SkeletalMesh)"))
-			.Required(TEXT("file_path"), TEXT("string"), TEXT("Absolute output file path (must end in .fbx)"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the mesh to export (StaticMesh or SkeletalMesh)"))
+			.RequiredDiskPath(TEXT("file_path"), TEXT("Absolute output file path (must end in .fbx)"))
 			.Optional(TEXT("replace_existing"), TEXT("boolean"), TEXT("Overwrite an existing file"), TEXT("true"))
 			.Build());
 
@@ -123,7 +123,7 @@ void FMonolithMeshTechArtActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Auto-fix mesh quality issues: weld edges, remove degenerates, remove small components, fix normals. GeometryScript required."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::FixMeshQuality),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the StaticMesh"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the StaticMesh"))
 			.Optional(TEXT("operations"), TEXT("array"), TEXT("Operations to apply: remove_degenerates, weld_edges, remove_small_components, fix_normals (default: all)"))
 			.Optional(TEXT("weld_tolerance"), TEXT("number"), TEXT("Weld tolerance in cm"), TEXT("0.01"))
 			.Build());
@@ -133,7 +133,7 @@ void FMonolithMeshTechArtActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("One-shot LOD generation: simplify via GeometryScript and write back to UStaticMesh source models with screen sizes."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::AutoGenerateLods),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the StaticMesh"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the StaticMesh"))
 			.Optional(TEXT("lod_count"), TEXT("integer"), TEXT("Number of LODs to generate (excluding LOD0)"), TEXT("3"))
 			.Optional(TEXT("reduction_per_lod"), TEXT("number"), TEXT("Triangle reduction ratio per LOD step (0.0-1.0)"), TEXT("0.5"))
 			.Optional(TEXT("screen_sizes"), TEXT("array"), TEXT("Screen size array [LOD0, LOD1, ...]. Auto-generated if omitted."))
@@ -169,7 +169,7 @@ void FMonolithMeshTechArtActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Set collision on a static mesh asset. Supports simple shapes, complex-as-simple, and auto-convex decomposition."),
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshTechArtActions::SetMeshCollision),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the StaticMesh"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the StaticMesh"))
 			.Required(TEXT("collision_type"), TEXT("string"), TEXT("Collision type: simple_box, simple_sphere, simple_capsule, complex_as_simple, use_complex, use_default"))
 			.Optional(TEXT("auto_convex"), TEXT("object"), TEXT("Auto-convex params: { hull_count: 4, max_verts: 32 }"))
 			.Build());

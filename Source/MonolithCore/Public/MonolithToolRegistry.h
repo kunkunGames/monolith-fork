@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
 
 /** Result of an action execution */
 struct FMonolithActionResult
@@ -110,6 +111,39 @@ struct FMonolithActionInfo
 	FMonolithActionExecutionPolicy ExecutionPolicy;
 	FMonolithActionSearchMetadata SearchMetadata;
 	TSharedPtr<FJsonObject> ParamSchema;  // JSON Schema for parameter validation
+
+	// Survivor A (plan §3.A) — MCP-spec tool annotation hints. Only emitted on
+	// `tools/list` when at least one is non-default; per-call runtime cost is zero.
+	// For individually-registered tools (`monolith_*`) the hints are read from the
+	// action's own info. For namespace dispatcher tools (`*_query`) the hints come
+	// from FMonolithToolRegistry::GetDispatcherAnnotations() — see that path for
+	// the rationale (sibling actions in the same dispatcher can disagree on
+	// destructive/read-only, so the dispatcher-level annotation is authoritative).
+	bool bReadOnlyHint   = false;
+	bool bDestructiveHint = false;
+	bool bIdempotentHint = false;
+	FString Title;
+};
+
+/**
+ * Survivor A (plan §3.A) — per-namespace dispatcher annotations.
+ * Used for namespace dispatcher tools (`source_query` etc.) where the four MCP
+ * hint fields apply to the WHOLE dispatcher rather than any single action. Held
+ * separately from FMonolithActionInfo because the dispatcher is not a
+ * registered action — it is synthesised inside HandleToolsList at serialize time.
+ */
+struct FMonolithDispatcherAnnotations
+{
+	bool bReadOnlyHint   = false;
+	bool bDestructiveHint = false;
+	bool bIdempotentHint = false;
+	FString Title;
+
+	/** Helper: true iff any hint is non-default. Drives "do we emit annotations on the wire?" */
+	bool IsAnyNonDefault() const
+	{
+		return bReadOnlyHint || bDestructiveHint || bIdempotentHint || !Title.IsEmpty();
+	}
 };
 
 /**
@@ -198,6 +232,41 @@ public:
 	 */
 	TArray<FString> FindSimilarActions(const FString& Namespace, const FString& ActionName, int32 MaxResults = 5) const;
 
+	/**
+	 * Survivor A (plan §3.A) — Set MCP hint annotations for a namespace dispatcher
+	 * tool (e.g. `source_query`). These are serialized into `tools/list` under the
+	 * dispatcher tool's `annotations` sub-object. Only namespaces whose dispatcher
+	 * is audited as safe (read-only / idempotent) should call this. Defaults are
+	 * preserved when no call is made — so untagged dispatchers stay defaulted.
+	 *
+	 * Thread-safe: takes RegistryLock internally.
+	 */
+	void SetDispatcherAnnotations(const FString& Namespace, const FMonolithDispatcherAnnotations& Annotations);
+
+	/**
+	 * Survivor A — Look up dispatcher annotations for a namespace. Returns a
+	 * default-constructed (all-false / empty-title) struct if the namespace was
+	 * never annotated. Used by HandleToolsList to decide whether to emit the
+	 * MCP `annotations` block.
+	 */
+	FMonolithDispatcherAnnotations GetDispatcherAnnotations(const FString& Namespace) const;
+
+	/**
+	 * Survivor A (plan §3.A) — Set MCP hint annotations on an already-registered
+	 * action. Used for individually-registered top-level tools (`monolith_discover`,
+	 * `monolith_status`, etc.). No-op if the action is not registered (safe to
+	 * call defensively at module init order boundaries).
+	 *
+	 * Thread-safe: takes RegistryLock internally.
+	 */
+	void SetActionAnnotations(
+		const FString& Namespace,
+		const FString& Action,
+		bool bReadOnly,
+		bool bDestructive,
+		bool bIdempotent,
+		const FString& Title);
+
 private:
 	FMonolithToolRegistry() = default;
 
@@ -218,6 +287,9 @@ private:
 	TArray<FString> RegistrationOwnerStack;
 
 	bool UnregisterActionByKey_NoLock(const FString& Key);
+
+	/** Survivor A — Map of namespace → dispatcher-level MCP hint annotations. */
+	TMap<FString, FMonolithDispatcherAnnotations> DispatcherAnnotations;
 
 	static FString MakeKey(const FString& Namespace, const FString& Action)
 	{

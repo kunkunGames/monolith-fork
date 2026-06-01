@@ -41,7 +41,7 @@ void FMonolithBlueprintStringTableActions::RegisterActions(FMonolithToolRegistry
 		TEXT("Read a StringTable's entries plus its namespace. Returns {asset_path, namespace, total_entries, entries:[{key, source_string, meta?:{id:value}}]}."),
 		FMonolithActionHandler::CreateStatic(&HandleReadStringTable),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"),    TEXT("string"),  TEXT("StringTable asset path, e.g. /Game/Localization/ST_UI"))
+			.RequiredAssetPath(TEXT("asset_path"),    TEXT("StringTable asset path, e.g. /Game/Localization/ST_UI"))
 			.Optional(TEXT("include_meta"),  TEXT("boolean"), TEXT("Include per-entry meta-data (default false)."), TEXT("false"))
 			.Build());
 
@@ -49,7 +49,7 @@ void FMonolithBlueprintStringTableActions::RegisterActions(FMonolithToolRegistry
 		TEXT("Add/update StringTable entries. Each entry is {key, source_string}; SetSourceString is natively an upsert. mode \"upsert\" (default) keeps existing entries; \"replace\" clears the table first. Optional namespace sets the table-wide namespace. Returns {entries_written, removed, namespace, saved}."),
 		FMonolithActionHandler::CreateStatic(&HandleSetStringTableEntries),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"),  TEXT("StringTable asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StringTable asset path"))
 			.Required(TEXT("entries"),    TEXT("array"),   TEXT("Array of {key:string, source_string:string}."))
 			.Optional(TEXT("mode"),       TEXT("string"),  TEXT("\"upsert\" (default) or \"replace\" (clears all entries first)."), TEXT("upsert"))
 			.Optional(TEXT("namespace"),  TEXT("string"),  TEXT("If provided, set the table-wide namespace used by all entries."))
@@ -60,7 +60,7 @@ void FMonolithBlueprintStringTableActions::RegisterActions(FMonolithToolRegistry
 		TEXT("Remove a single entry (and its meta-data) from a StringTable by key. Returns {key, removed}."),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveStringTableEntry),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"),  TEXT("StringTable asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("StringTable asset path"))
 			.Required(TEXT("key"),        TEXT("string"),  TEXT("Entry key to remove"))
 			.Optional(TEXT("save"),       TEXT("boolean"), TEXT("If true, save the package after removing."), TEXT("false"))
 			.Build());

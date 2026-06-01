@@ -32,7 +32,7 @@ void FMonolithBlueprintStructActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Create a new User Defined Struct asset with the specified fields. Each field has a name, type (same type strings as add_variable), and optional default_value."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateUserDefinedStruct),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path, e.g. /Game/Data/S_MyStruct"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path, e.g. /Game/Data/S_MyStruct"))
 			.Required(TEXT("fields"),    TEXT("array"),  TEXT("Array of field objects: [{name, type, default_value?}]. Type uses same strings as add_variable (bool, int, float, string, name, text, Vector, Rotator, Transform, object:ClassName, etc.)"))
 			.Build());
 
@@ -40,7 +40,7 @@ void FMonolithBlueprintStructActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Create a new User Defined Enum asset with the specified enumerator values."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateUserDefinedEnum),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path, e.g. /Game/Data/E_MyEnum"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path, e.g. /Game/Data/E_MyEnum"))
 			.Required(TEXT("values"),    TEXT("array"),  TEXT("Array of enumerator display name strings, e.g. [\"Idle\", \"Running\", \"Jumping\"]"))
 			.Build());
 
@@ -49,7 +49,7 @@ void FMonolithBlueprintStructActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Create a new DataTable asset backed by the specified row struct (UScriptStruct). The struct must already exist (native or user-defined)."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateDataTable),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"),  TEXT("string"), TEXT("Asset save path, e.g. /Game/Data/DT_Weapons"))
+			.RequiredAssetPath(TEXT("save_path"),  TEXT("Asset save path, e.g. /Game/Data/DT_Weapons"))
 			.Required(TEXT("row_struct"), TEXT("string"), TEXT("Name of the row struct, e.g. FMyRowStruct, MyRowStruct, or a full path like /Script/MyModule.MyRowStruct"))
 			.Build());
 
@@ -57,7 +57,7 @@ void FMonolithBlueprintStructActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Add a row to an existing DataTable. Values are a JSON object mapping column names to values (uses ImportText per field)."),
 		FMonolithActionHandler::CreateStatic(&HandleAddDataTableRow),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
 			.Required(TEXT("row_name"),   TEXT("string"), TEXT("Row name / key"))
 			.Required(TEXT("values"),     TEXT("object"), TEXT("JSON object of {column_name: value, ...}. Values are converted via ImportText."))
 			.Build());
@@ -66,7 +66,7 @@ void FMonolithBlueprintStructActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Read rows from a DataTable. Returns all rows, or a single row if row_name is specified."),
 		FMonolithActionHandler::CreateStatic(&HandleGetDataTableRows),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("DataTable asset path, e.g. /Game/Data/DT_Weapons"))
 			.Optional(TEXT("row_name"),   TEXT("string"), TEXT("If provided, return only this row. Otherwise return all rows."))
 			.Build());
 
@@ -115,7 +115,7 @@ void FMonolithBlueprintStructActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Create a raw UObject asset (NOT a Blueprint). Use for DataAssets, MaterialParameterCollections, PhysicalMaterials, CurveFloats, and any UObject-derived class that needs to exist as a direct instance rather than a Blueprint-generated class. Resolves class_name via FindFirstObject with U/A prefix fallback. Rejects abstract, deprecated, Actor-derived, and Blueprint classes."),
 		FMonolithActionHandler::CreateStatic(&HandleCreateDataAsset),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"),  TEXT("string"),  TEXT("Asset save path, e.g. /Game/Data/DA_ResponseMap"))
+			.RequiredAssetPath(TEXT("save_path"),  TEXT("Asset save path, e.g. /Game/Data/DA_ResponseMap"))
 			.Required(TEXT("class_name"), TEXT("string"),  TEXT("UObject class name, e.g. CarnageFXResponseMap, MaterialParameterCollection, PhysicalMaterial, CurveFloat. Can also use full path /Script/Module.ClassName for disambiguation"))
 			.Optional(TEXT("skip_save"),  TEXT("boolean"), TEXT("Skip synchronous package save (default: false)"), TEXT("false"))
 			.Build());
@@ -124,7 +124,7 @@ void FMonolithBlueprintStructActions::RegisterActions(FMonolithToolRegistry& Reg
 		TEXT("Create AND populate a UObject DataAsset in one call: create_data_asset's body plus a reflection-walker fill of the supplied property 'tree'. Supports dry_run (validate before creating) and strict. Returns asset_path, actual_class, and FDryRunReport-shaped field_writes."),
 		FMonolithActionHandler::CreateStatic(&HandleSeedDataAsset),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"),  TEXT("string"),  TEXT("Asset save path, e.g. /Game/Data/DA_HealingPotion"))
+			.RequiredAssetPath(TEXT("save_path"),  TEXT("Asset save path, e.g. /Game/Data/DA_HealingPotion"))
 			.Required(TEXT("class_name"), TEXT("string"),  TEXT("UObject class name (same resolution as create_data_asset)."))
 			.Required(TEXT("tree"),       TEXT("object"),  TEXT("Nested JSON object of properties to walk against the new asset's reflection schema."))
 			.Optional(TEXT("dry_run"),    TEXT("boolean"), TEXT("If true, validate the tree against the class WITHOUT creating the asset."), TEXT("false"))

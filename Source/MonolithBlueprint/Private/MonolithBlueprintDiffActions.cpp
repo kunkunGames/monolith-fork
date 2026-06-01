@@ -18,8 +18,8 @@ void FMonolithBlueprintDiffActions::RegisterActions(FMonolithToolRegistry& Regis
 		     "Useful for reviewing changes between versions or comparing similar Blueprints."),
 		FMonolithActionHandler::CreateStatic(&HandleCompareBlueprints),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path_a"), TEXT("string"), TEXT("First Blueprint asset path"))
-			.Required(TEXT("asset_path_b"), TEXT("string"), TEXT("Second Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path_a"), TEXT("First Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path_b"), TEXT("Second Blueprint asset path"))
 			.Build());
 }
 

@@ -92,7 +92,7 @@ void FMonolithAIAdvancedActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("List all UMassEntityConfigAsset assets in the project"),
 		FMonolithActionHandler::CreateStatic(&HandleListMassEntityConfigs),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only include assets under this path prefix"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only include assets under this path prefix"))
 			.Build());
 
 	// 220. get_mass_entity_config
@@ -100,7 +100,7 @@ void FMonolithAIAdvancedActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Inspect a MassEntityConfigAsset: traits, fragments, parent config"),
 		FMonolithActionHandler::CreateStatic(&HandleGetMassEntityConfig),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MassEntityConfigAsset asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MassEntityConfigAsset asset path"))
 			.Build());
 
 	// 221. create_mass_entity_config
@@ -108,7 +108,7 @@ void FMonolithAIAdvancedActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a new MassEntityConfigAsset"),
 		FMonolithActionHandler::CreateStatic(&HandleCreateMassEntityConfig),
 		FParamSchemaBuilder()
-			.Required(TEXT("save_path"), TEXT("string"), TEXT("Asset save path (e.g. /Game/AI/Mass/MEC_Zombie)"))
+			.RequiredAssetPath(TEXT("save_path"), TEXT("Asset save path (e.g. /Game/AI/Mass/MEC_Zombie)"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Asset name (derived from save_path if omitted)"))
 			.Optional(TEXT("parent_config"), TEXT("string"), TEXT("Parent config asset path to inherit from"))
 			.Build());
@@ -118,7 +118,7 @@ void FMonolithAIAdvancedActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Add a trait to a MassEntityConfigAsset"),
 		FMonolithActionHandler::CreateStatic(&HandleAddMassTrait),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MassEntityConfigAsset asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MassEntityConfigAsset asset path"))
 			.Required(TEXT("trait_class"), TEXT("string"), TEXT("Trait class name (e.g. UMassMovementTrait)"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("JSON object of property_name->value pairs to set on the trait"))
 			.Build());
@@ -128,7 +128,7 @@ void FMonolithAIAdvancedActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Remove a trait from a MassEntityConfigAsset"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveMassTrait),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MassEntityConfigAsset asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MassEntityConfigAsset asset path"))
 			.Required(TEXT("trait_class"), TEXT("string"), TEXT("Trait class name to remove"))
 			.Build());
 
@@ -149,7 +149,7 @@ void FMonolithAIAdvancedActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Validate a MassEntityConfigAsset: check trait compatibility, missing fragments, duplicates"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateMassEntityConfig),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("MassEntityConfigAsset asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("MassEntityConfigAsset asset path"))
 			.Build());
 
 	// 230. get_mass_entity_stats

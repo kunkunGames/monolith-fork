@@ -64,22 +64,22 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Get PoseSearch schema configuration including skeleton, sample rate, and channels"),
 		FMonolithActionHandler::CreateStatic(&HandleGetPoseSearchSchema),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("PoseSearchSchema asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("PoseSearchSchema asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_pose_search_database"),
 		TEXT("Get PoseSearch database contents including schema reference and animation asset list"),
 		FMonolithActionHandler::CreateStatic(&HandleGetPoseSearchDatabase),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("PoseSearchDatabase asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("PoseSearchDatabase asset path"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("animation"), TEXT("add_database_sequence"),
 		TEXT("Add an animation asset to a PoseSearch database"),
 		FMonolithActionHandler::CreateStatic(&HandleAddDatabaseSequence),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("PoseSearchDatabase asset path"))
-			.Required(TEXT("anim_path"), TEXT("string"), TEXT("Animation asset to add"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("PoseSearchDatabase asset path"))
+			.RequiredAssetPath(TEXT("anim_path"), TEXT("Animation asset to add"))
 			.Optional(TEXT("enabled"), TEXT("boolean"), TEXT("Enable for search (default true)"))
 			.Build());
 
@@ -87,7 +87,7 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Remove an animation asset from a PoseSearch database by index"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveDatabaseSequence),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("PoseSearchDatabase asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("PoseSearchDatabase asset path"))
 			.Required(TEXT("sequence_index"), TEXT("integer"), TEXT("Index of the animation asset to remove"))
 			.Build());
 
@@ -95,7 +95,7 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Get PoseSearch database statistics including sequence count, schema, and search index info"),
 		FMonolithActionHandler::CreateStatic(&HandleGetDatabaseStats),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("PoseSearchDatabase asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("PoseSearchDatabase asset path"))
 			.Build());
 
 	// Wave 11 — PoseSearch Creation
@@ -103,8 +103,8 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a new PoseSearch schema with skeleton and default channels"),
 		FMonolithActionHandler::CreateStatic(&HandleCreatePoseSearchSchema),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new schema (e.g. /Game/PoseSearch/PS_Schema)"))
-			.Required(TEXT("skeleton_path"), TEXT("string"), TEXT("Skeleton asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new schema (e.g. /Game/PoseSearch/PS_Schema)"))
+			.RequiredAssetPath(TEXT("skeleton_path"), TEXT("Skeleton asset path"))
 			.Optional(TEXT("sample_rate"), TEXT("integer"), TEXT("Sample rate in Hz (default: 30)"))
 			.Optional(TEXT("add_default_channels"), TEXT("boolean"), TEXT("Add default Pose+Trajectory channels (default: true)"))
 			.Build());
@@ -112,8 +112,8 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a new PoseSearch database and assign a schema"),
 		FMonolithActionHandler::CreateStatic(&HandleCreatePoseSearchDatabase),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path for the new database"))
-			.Required(TEXT("schema_path"), TEXT("string"), TEXT("PoseSearchSchema asset path to assign"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new database"))
+			.RequiredAssetPath(TEXT("schema_path"), TEXT("PoseSearchSchema asset path to assign"))
 			.Build());
 
 	// Wave 14 — PoseSearch Writes
@@ -121,7 +121,7 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Set per-entry properties on a PoseSearch database animation asset (enabled, mirror, sampling range)"),
 		FMonolithActionHandler::CreateStatic(&HandleSetDatabaseSequenceProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("PoseSearchDatabase asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("PoseSearchDatabase asset path"))
 			.Required(TEXT("sequence_index"), TEXT("integer"), TEXT("Index of the animation entry"))
 			.Optional(TEXT("enabled"), TEXT("boolean"), TEXT("Enable/disable for search"))
 			.Optional(TEXT("mirror_option"), TEXT("string"), TEXT("UnmirroredOnly, MirroredOnly, or UnmirroredAndMirrored"))
@@ -134,7 +134,7 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Add a feature channel to a PoseSearch schema (Position, Velocity, Heading, Pose, Trajectory, Phase, Distance, Curve, Group)"),
 		FMonolithActionHandler::CreateStatic(&HandleAddSchemaChannel),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("PoseSearchSchema asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("PoseSearchSchema asset path"))
 			.Required(TEXT("channel_type"), TEXT("string"), TEXT("Channel type: Position, Velocity, Heading, Pose, Trajectory, Phase, Distance, Curve, Group"))
 			.Optional(TEXT("weight"), TEXT("number"), TEXT("Channel weight (default 1.0)"))
 			.Optional(TEXT("bone"), TEXT("string"), TEXT("Bone name for Position/Velocity/Heading channels"))
@@ -144,7 +144,7 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Remove a feature channel from a PoseSearch schema by index (from authored channels)"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveSchemaChannel),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("PoseSearchSchema asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("PoseSearchSchema asset path"))
 			.Required(TEXT("channel_index"), TEXT("integer"), TEXT("Index into the authored Channels array"))
 			.Build());
 
@@ -152,7 +152,7 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Set the weight on a PoseSearch schema channel by index"),
 		FMonolithActionHandler::CreateStatic(&HandleSetChannelWeight),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("PoseSearchSchema asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("PoseSearchSchema asset path"))
 			.Required(TEXT("channel_index"), TEXT("integer"), TEXT("Index into the authored Channels array"))
 			.Required(TEXT("weight"), TEXT("number"), TEXT("New weight value"))
 			.Build());
@@ -161,7 +161,7 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Trigger async rebuild of a PoseSearch database search index"),
 		FMonolithActionHandler::CreateStatic(&HandleRebuildPoseSearchIndex),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("PoseSearchDatabase asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("PoseSearchDatabase asset path"))
 			.Optional(TEXT("wait"), TEXT("boolean"), TEXT("Block until rebuild completes (default false)"))
 			.Build());
 
@@ -169,7 +169,7 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Configure search algorithm and cost bias settings on a PoseSearch database"),
 		FMonolithActionHandler::CreateStatic(&HandleSetDatabaseSearchMode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("PoseSearchDatabase asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("PoseSearchDatabase asset path"))
 			.Optional(TEXT("pose_search_mode"), TEXT("string"), TEXT("BruteForce, PCAKDTree, VPTree, or EventOnly"))
 			.Optional(TEXT("kd_tree_query_num_neighbors"), TEXT("integer"), TEXT("Number of KNN neighbors (1-600, default 200)"))
 			.Optional(TEXT("number_of_principal_components"), TEXT("integer"), TEXT("PCA dimensions (1-64, default 4)"))

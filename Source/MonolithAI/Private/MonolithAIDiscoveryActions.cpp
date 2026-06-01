@@ -49,7 +49,7 @@ void FMonolithAIDiscoveryActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Scan project: count BTs, BBs, STs, EQS queries, Smart Objects, AI Controllers"),
 		FMonolithActionHandler::CreateStatic(&HandleGetAIOverview),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only scan assets under this path prefix"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only scan assets under this path prefix"))
 			.Build());
 
 	// 204. list_ai_node_types
@@ -75,7 +75,7 @@ void FMonolithAIDiscoveryActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Trace full data flow for an AI Controller: BB keys vs BT refs, EQS->BB, Perception config"),
 		FMonolithActionHandler::CreateStatic(&HandleValidateAIDataFlow),
 		FParamSchemaBuilder()
-			.Required(TEXT("controller_path"), TEXT("string"), TEXT("AI Controller Blueprint asset path"))
+			.RequiredAssetPath(TEXT("controller_path"), TEXT("AI Controller Blueprint asset path"))
 			.Build());
 
 	// 214. find_eqs_references
@@ -83,7 +83,7 @@ void FMonolithAIDiscoveryActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Find which BTs, STs, and Blueprints reference a given EQS query"),
 		FMonolithActionHandler::CreateStatic(&HandleFindEQSReferences),
 		FParamSchemaBuilder()
-			.Required(TEXT("eqs_path"), TEXT("string"), TEXT("EQS query asset path"))
+			.RequiredAssetPath(TEXT("eqs_path"), TEXT("EQS query asset path"))
 			.Build());
 
 	// 215. find_so_references
@@ -91,7 +91,7 @@ void FMonolithAIDiscoveryActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Find which BTs, STs, and levels reference a given Smart Object definition"),
 		FMonolithActionHandler::CreateStatic(&HandleFindSOReferences),
 		FParamSchemaBuilder()
-			.Required(TEXT("so_path"), TEXT("string"), TEXT("Smart Object definition asset path"))
+			.RequiredAssetPath(TEXT("so_path"), TEXT("Smart Object definition asset path"))
 			.Build());
 
 	// 207. lint_behavior_tree
@@ -99,7 +99,7 @@ void FMonolithAIDiscoveryActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Style lint a Behavior Tree: unreachable branches, redundant decorators, single-child composites, unnamed nodes"),
 		FMonolithActionHandler::CreateStatic(&HandleLintBehaviorTree),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Behavior Tree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Behavior Tree asset path"))
 			.Build());
 
 	// 208. lint_state_tree
@@ -107,7 +107,7 @@ void FMonolithAIDiscoveryActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Style lint a State Tree: no-task states, self-transitions without delay, dead-end states"),
 		FMonolithActionHandler::CreateStatic(&HandleLintStateTree),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("State Tree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("State Tree asset path"))
 			.Build());
 
 	// 209. detect_ai_circular_references
@@ -115,7 +115,7 @@ void FMonolithAIDiscoveryActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Check BT RunBehavior chains, ST linked assets, BB parent chains for circular references"),
 		FMonolithActionHandler::CreateStatic(&HandleDetectAICircularReferences),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only scan assets under this path prefix"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only scan assets under this path prefix"))
 			.Build());
 
 	// 210. export_ai_manifest
@@ -123,7 +123,7 @@ void FMonolithAIDiscoveryActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Full project AI manifest with cross-references — JSON or Markdown table"),
 		FMonolithActionHandler::CreateStatic(&HandleExportAIManifest),
 		FParamSchemaBuilder()
-			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Only include assets under this path prefix"))
+			.OptionalAssetPath(TEXT("path_filter"), TEXT("Only include assets under this path prefix"))
 			.Optional(TEXT("format"), TEXT("string"), TEXT("Output format: json (default) or markdown"))
 			.Build());
 
@@ -132,7 +132,7 @@ void FMonolithAIDiscoveryActions::RegisterActions(FMonolithToolRegistry& Registr
 		TEXT("Structured JSON summary of a BT or ST: flow paths, decision points, key BB dependencies"),
 		FMonolithActionHandler::CreateStatic(&HandleGetAIBehaviorSummary),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Behavior Tree or State Tree asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Behavior Tree or State Tree asset path"))
 			.Build());
 }
 

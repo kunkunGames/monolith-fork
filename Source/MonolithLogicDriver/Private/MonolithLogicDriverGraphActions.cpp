@@ -23,7 +23,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Get hierarchical JSON structure of an entire state machine: states, transitions, conduits, nested SMs, GUIDs"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSMStructure),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Optional(TEXT("depth"), TEXT("number"), TEXT("Max nesting depth (-1 = unlimited)"), TEXT("-1"))
 			.Build());
 
@@ -31,7 +31,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Get detailed info for a specific node including all UPROPERTY values and connections"),
 		FMonolithActionHandler::CreateStatic(&HandleGetNodeDetails),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("Node GUID to inspect"))
 			.Build());
 
@@ -39,7 +39,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("List all inbound and outbound transitions for a node"),
 		FMonolithActionHandler::CreateStatic(&HandleGetNodeConnections),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("Node GUID to query connections for"))
 			.Build());
 
@@ -47,7 +47,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Find all nodes of a given type (state/transition/conduit/any_state/state_machine) in the SM"),
 		FMonolithActionHandler::CreateStatic(&HandleFindNodesByType),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_type"), TEXT("string"), TEXT("Node type: state, transition, conduit, any_state, state_machine"))
 			.Build());
 
@@ -57,7 +57,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Add a state node to a Logic Driver state machine graph"),
 		FMonolithActionHandler::CreateStatic(&HandleAddState),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("State name"))
 			.Optional(TEXT("position_x"), TEXT("number"), TEXT("X position in graph"), TEXT("0"))
 			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Y position in graph"), TEXT("0"))
@@ -67,7 +67,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Add a transition between two nodes in a Logic Driver state machine"),
 		FMonolithActionHandler::CreateStatic(&HandleAddTransition),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("source_guid"), TEXT("string"), TEXT("Source node GUID"))
 			.Required(TEXT("target_guid"), TEXT("string"), TEXT("Target node GUID"))
 			.Optional(TEXT("priority"), TEXT("number"), TEXT("Transition priority"), TEXT("0"))
@@ -77,7 +77,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Add a conduit node to a Logic Driver state machine graph"),
 		FMonolithActionHandler::CreateStatic(&HandleAddConduit),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Conduit name"))
 			.Optional(TEXT("position_x"), TEXT("number"), TEXT("X position in graph"), TEXT("0"))
 			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Y position in graph"), TEXT("0"))
@@ -87,9 +87,9 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Add a nested state machine node to a Logic Driver state machine graph"),
 		FMonolithActionHandler::CreateStatic(&HandleAddStateMachineNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Optional(TEXT("name"), TEXT("string"), TEXT("Nested SM name"))
-			.Optional(TEXT("reference_path"), TEXT("string"), TEXT("Path to existing SM Blueprint to reference"))
+			.OptionalAssetPath(TEXT("reference_path"), TEXT("Path to existing SM Blueprint to reference"))
 			.Optional(TEXT("position_x"), TEXT("number"), TEXT("X position in graph"), TEXT("0"))
 			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Y position in graph"), TEXT("0"))
 			.Build());
@@ -98,7 +98,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Add an Any State node to a Logic Driver state machine graph"),
 		FMonolithActionHandler::CreateStatic(&HandleAddAnyStateNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Optional(TEXT("position_x"), TEXT("number"), TEXT("X position in graph"), TEXT("0"))
 			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Y position in graph"), TEXT("0"))
 			.Build());
@@ -107,7 +107,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Remove a node from a Logic Driver state machine graph (breaks all connections first)"),
 		FMonolithActionHandler::CreateStatic(&HandleRemoveNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("GUID of node to remove"))
 			.Build());
 
@@ -115,7 +115,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Set UPROPERTY values on a Logic Driver node via reflection"),
 		FMonolithActionHandler::CreateStatic(&HandleSetNodeProperties),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("Node GUID"))
 			.Required(TEXT("properties"), TEXT("object"), TEXT("Key-value pairs of property names to values"))
 			.Build());
@@ -124,7 +124,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Set a state as the initial state by rewiring the entry node"),
 		FMonolithActionHandler::CreateStatic(&HandleSetInitialState),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("GUID of state to make initial"))
 			.Build());
 
@@ -132,7 +132,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Set or clear the end state flag on a state node"),
 		FMonolithActionHandler::CreateStatic(&HandleSetEndState),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("Node GUID"))
 			.Required(TEXT("is_end_state"), TEXT("boolean"), TEXT("Whether this state is an end state"))
 			.Build());
@@ -141,16 +141,16 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Set the custom node class (NodeInstanceClass) on a Logic Driver node via reflection"),
 		FMonolithActionHandler::CreateStatic(&HandleSetNodeClass),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("Node GUID"))
-			.Required(TEXT("class_path"), TEXT("string"), TEXT("Full class path for the node instance class"))
+			.RequiredAssetPath(TEXT("class_path"), TEXT("Full class path for the node instance class"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("logicdriver"), TEXT("rename_node"),
 		TEXT("Rename a node in a Logic Driver state machine"),
 		FMonolithActionHandler::CreateStatic(&HandleRenameNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("Node GUID"))
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("New name for the node"))
 			.Build());
@@ -161,7 +161,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Compile a Logic Driver State Machine Blueprint and return success/failure with error messages"),
 		FMonolithActionHandler::CreateStatic(&HandleCompileStateMachine),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path to compile"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path to compile"))
 			.Build());
 
 	// ── Advanced Read (Phase 2C) ──
@@ -170,7 +170,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Find all nodes whose class name matches a given string (full or partial match)"),
 		FMonolithActionHandler::CreateStatic(&HandleFindNodesByClass),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("class_name"), TEXT("string"), TEXT("Full or partial class name to match against node classes"))
 			.Build());
 
@@ -178,7 +178,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Get statistics for a state machine: state/transition/conduit/nested SM counts, max depth, total nodes"),
 		FMonolithActionHandler::CreateStatic(&HandleGetSMStatistics),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Build());
 
 	// ── Layout (Phase 4) ──
@@ -187,7 +187,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Move a node to a specific position in the graph editor"),
 		FMonolithActionHandler::CreateStatic(&HandleMoveNode),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Required(TEXT("node_guid"), TEXT("string"), TEXT("Node GUID to move"))
 			.Required(TEXT("position_x"), TEXT("number"), TEXT("New X position"))
 			.Required(TEXT("position_y"), TEXT("number"), TEXT("New Y position"))
@@ -197,7 +197,7 @@ void FMonolithLogicDriverGraphActions::RegisterActions(FMonolithToolRegistry& Re
 		TEXT("Auto-arrange all nodes in a state machine graph using built-in BFS layout. Blueprint Assist is disabled for asset mutation."),
 		FMonolithActionHandler::CreateStatic(&HandleAutoArrangeGraph),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SM Blueprint asset path"))
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("SM Blueprint asset path"))
 			.Optional(TEXT("formatter"), TEXT("string"), TEXT("Formatter to use: default or builtin. blueprint_assist is disabled for asset mutation."), TEXT("default"))
 			.Build());
 
