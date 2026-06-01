@@ -183,7 +183,7 @@ static USCS_Node* FindASCNode(UBlueprint* BP)
 }
 
 /** Resolve a component class by name, trying bare and U-prefixed. */
-static UClass* ResolveComponentClass(const FString& ClassName, FString& OutError)
+static UClass* ResolveComponentClass_ASC(const FString& ClassName, FString& OutError)
 {
 	UClass* CompClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
 	if (!CompClass)
@@ -264,7 +264,7 @@ FMonolithActionResult FMonolithGASASCActions::HandleAddASCToActor(const TSharedP
 	UClass* ASCClass = nullptr;
 	{
 		FString ClassError;
-		ASCClass = ResolveComponentClass(ASCClassName, ClassError);
+		ASCClass = ResolveComponentClass_ASC(ASCClassName, ClassError);
 		if (!ASCClass)
 		{
 			return FMonolithActionResult::Error(ClassError);

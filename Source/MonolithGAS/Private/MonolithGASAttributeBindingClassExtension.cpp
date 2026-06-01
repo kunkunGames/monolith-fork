@@ -37,7 +37,7 @@
 
 namespace
 {
-    UClass* ResolveAttributeSetClass(const FString& Path)
+    UClass* ResolveAttributeSetClass_AttrBinding(const FString& Path)
     {
         if (Path.IsEmpty()) return nullptr;
         // Try as full object path first (Blueprint _C or native)
@@ -116,7 +116,7 @@ namespace
 FGameplayAttribute UMonolithGASAttributeBindingClassExtension::ResolveAttribute(const FString& AttrSetClassPath, FName PropertyName)
 {
     if (PropertyName.IsNone()) return FGameplayAttribute();
-    UClass* AttrClass = ResolveAttributeSetClass(AttrSetClassPath);
+    UClass* AttrClass = ResolveAttributeSetClass_AttrBinding(AttrSetClassPath);
     if (!AttrClass) return FGameplayAttribute();
     FProperty* Prop = FindFProperty<FProperty>(AttrClass, PropertyName);
     if (!Prop) return FGameplayAttribute();

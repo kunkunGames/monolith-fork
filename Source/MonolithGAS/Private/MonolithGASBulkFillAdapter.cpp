@@ -70,7 +70,7 @@ namespace MonolithGASBulkFillInternal
 	// Determine if an asset path looks like a Blueprint path (starts with /) vs a
 	// C++ class name. Mirrors the helper at
 	// MonolithGASAttributeActions.cpp:217-220 (private to that TU).
-	static bool LooksLikeBlueprintPath(const FString& Path)
+	static bool LooksLikeBlueprintPath_BulkFill(const FString& Path)
 	{
 		return Path.StartsWith(TEXT("/"));
 	}
@@ -78,7 +78,7 @@ namespace MonolithGASBulkFillInternal
 	// Find a C++ UAttributeSet subclass by name. Mirrors the helper at
 	// MonolithGASAttributeActions.cpp:455-478 (private to that TU). Accepts both
 	// "ULeviathanVitalsSet" and "LeviathanVitalsSet" forms.
-	static UClass* FindAttributeSetClass(const FString& ClassName)
+	static UClass* FindAttributeSetClass_BulkFill(const FString& ClassName)
 	{
 		FString SearchName = ClassName;
 		if (!SearchName.StartsWith(TEXT("U")))
@@ -107,7 +107,7 @@ namespace MonolithGASBulkFillInternal
 	static UClass* ResolveAttributeSetClass(const FString& AttrSet)
 	{
 		if (AttrSet.IsEmpty()) return nullptr;
-		if (LooksLikeBlueprintPath(AttrSet))
+		if (LooksLikeBlueprintPath_BulkFill(AttrSet))
 		{
 			UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(AttrSet);
 			if (UBlueprint* BP = Cast<UBlueprint>(Asset))
@@ -119,7 +119,7 @@ namespace MonolithGASBulkFillInternal
 			}
 			return nullptr;
 		}
-		return FindAttributeSetClass(AttrSet);
+		return FindAttributeSetClass_BulkFill(AttrSet);
 	}
 
 	// Resolve an attribute column-name (e.g. "MaxHealth") to its FProperty on the
