@@ -2154,6 +2154,11 @@ FMonolithActionResult FMonolithAudioSoundCueActions::DuplicateSoundCue(const TSh
 		return FMonolithActionResult::Error(TEXT("source_path and dest_path are required"));
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(DestPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	IAssetTools& AssetTools = FAssetToolsModule::GetModule().Get();
 	UObject* Source = FMonolithAssetUtils::LoadAssetByPath(SourcePath);
 	if (!Source) { return FMonolithActionResult::Error(FString::Printf(TEXT("Source asset not found: '%s'"), *SourcePath)); }
