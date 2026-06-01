@@ -35,7 +35,16 @@ bool FMonolithBAFormatterImpl::FormatGraph(
 		return false;
 	}
 
-	// 1. Find BA's handler for this graph
+	// 1. Check if this graph type is supported
+	if (!SupportsGraph(Graph))
+	{
+		OutErrorMessage = FString::Printf(
+			TEXT("BA does not have formatter settings for graph type '%s'"),
+			*Graph->GetClass()->GetName());
+		return false;
+	}
+
+	// 2. Find BA's handler for this graph
 	TSharedPtr<FBAGraphHandler> Handler = FindHandlerForGraph(Graph);
 	if (!Handler.IsValid())
 	{
@@ -44,20 +53,11 @@ bool FMonolithBAFormatterImpl::FormatGraph(
 		return false;
 	}
 
-	// 2. Check if BA is still caching node sizes
+	// 3. Check if BA is still caching node sizes
 	if (Handler->IsCalculatingNodeSize())
 	{
 		OutErrorMessage = TEXT("Blueprint Assist is still caching node sizes. "
 			"Try again in a moment.");
-		return false;
-	}
-
-	// 3. Check if this graph type is supported
-	if (!SupportsGraph(Graph))
-	{
-		OutErrorMessage = FString::Printf(
-			TEXT("BA formatting is not supported or is disabled for graph type '%s'"),
-			*Graph->GetClass()->GetName());
 		return false;
 	}
 
