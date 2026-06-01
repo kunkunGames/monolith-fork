@@ -12787,8 +12787,9 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 	const TArray<TSharedPtr<FJsonValue>>* EmittersArray = nullptr;
 	if (Spec->TryGetArrayField(TEXT("emitters"), EmittersArray))
 	{
-		for (const TSharedPtr<FJsonValue>& EV : *EmittersArray)
+		for (int32 EmitterIndex = 0; EmitterIndex < EmittersArray->Num(); ++EmitterIndex)
 		{
+			const TSharedPtr<FJsonValue>& EV = (*EmittersArray)[EmitterIndex];
 			TSharedPtr<FJsonObject> EO = EV->AsObject();
 			if (!EO) continue;
 
@@ -12796,7 +12797,16 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 			AEP->SetStringField(TEXT("system_path"), SystemPath);
 			AEP->SetStringField(TEXT("emitter_asset"), EO->GetStringField(TEXT("asset")));
 			FString EOName;
-			if (EO->TryGetStringField(TEXT("name"), EOName)) AEP->SetStringField(TEXT("name"), EOName);
+			if (EO->HasField(TEXT("name")))
+			{
+				if (!EO->TryGetStringField(TEXT("name"), EOName))
+				{
+					OutErrors.Add(FString::Printf(TEXT("spec.emitters[%d].name must be a string"), EmitterIndex));
+					FailCount++;
+					continue;
+				}
+				AEP->SetStringField(TEXT("name"), EOName);
+			}
 			FMonolithActionResult AER = HandleAddEmitter(AEP);
 			if (!AER.bSuccess) { OutErrors.Add(FString::Printf(TEXT("add_emitter: %s"), *AER.ErrorMessage)); FailCount++; continue; }
 
@@ -13087,11 +13097,17 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 			// For merge, we only apply emitters whose names don't already exist
 			TSharedRef<FJsonObject> FilteredSpec = MakeShared<FJsonObject>();
 			TArray<TSharedPtr<FJsonValue>> NewEmitters;
-			for (const TSharedPtr<FJsonValue>& EVal : *EmittersArrPtr)
+			for (int32 EmitterIndex = 0; EmitterIndex < EmittersArrPtr->Num(); ++EmitterIndex)
 			{
+				const TSharedPtr<FJsonValue>& EVal = (*EmittersArrPtr)[EmitterIndex];
 				const TSharedPtr<FJsonObject>* EObj = nullptr;
 				if (!EVal->TryGetObject(EObj) || !(*EObj).IsValid()) continue;
-				FString EmitterName = (*EObj)->GetStringField(TEXT("name"));
+				FString EmitterName;
+				if ((*EObj)->HasField(TEXT("name")) && !(*EObj)->TryGetStringField(TEXT("name"), EmitterName))
+				{
+					return FMonolithActionResult::Error(
+						FString::Printf(TEXT("spec.emitters[%d].name must be a string"), EmitterIndex));
+				}
 				if (!ExistingEmitterNames.Contains(EmitterName))
 				{
 					NewEmitters.Add(EVal);

@@ -1,7 +1,13 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithNiagaraActions.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Misc/Guid.h"
+#include "Modules/ModuleManager.h"
+#include "NiagaraSystem.h"
+#include "NiagaraSystemFactoryNew.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "UObject/Package.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardImportSystemSpecTest, "Monolith.ParamGuard.Niagara.ImportSystemSpec", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -34,4 +40,80 @@ bool FMonolithNiagaraParamGuardImportSystemSpecTest::RunTest(const FString& Para
     }
 
     return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardImportSystemSpecMalformedTypeTest, "Monolith.Security.Niagara.ImportSystemSpecMalformedType", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithNiagaraParamGuardImportSystemSpecMalformedTypeTest::RunTest(const FString& Parameters)
+{
+	const FString SystemPath = FString::Printf(TEXT("/Game/MonolithTests/Niagara/ParamGuard/NS_MalformedName_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Short));
+	const int32 LastSlash = SystemPath.Find(TEXT("/"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+	const FString AssetName = LastSlash != INDEX_NONE ? SystemPath.Mid(LastSlash + 1) : SystemPath;
+
+	UPackage* Package = CreatePackage(*SystemPath);
+	TestNotNull(TEXT("Test Niagara package should be created"), Package);
+	if (!Package)
+	{
+		return true;
+	}
+
+	UNiagaraSystem* System = NewObject<UNiagaraSystem>(Package, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
+	TestNotNull(TEXT("Test Niagara system should be created"), System);
+	if (!System)
+	{
+		return true;
+	}
+
+	UNiagaraSystemFactoryNew::InitializeSystem(System, true);
+	FAssetRegistryModule::AssetCreated(System);
+	Package->MarkPackageDirty();
+
+	TSharedRef<FJsonObject> Spec = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> EmittersArray;
+	TSharedRef<FJsonObject> EmitterObj = MakeShared<FJsonObject>();
+	EmitterObj->SetStringField(TEXT("asset"), TEXT("/Game/MonolithTests/Niagara/ParamGuard/MissingEmitter"));
+	EmitterObj->SetBoolField(TEXT("name"), true);
+	EmittersArray.Add(MakeShared<FJsonValueObject>(EmitterObj));
+	Spec->SetArrayField(TEXT("emitters"), EmittersArray);
+
+	{
+		TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), SystemPath);
+		Params->SetObjectField(TEXT("spec"), Spec);
+
+		FMonolithActionResult Result = FMonolithNiagaraActions::HandleImportSystemSpec(Params);
+
+		TestTrue(TEXT("Overwrite import should return structured result after rejecting malformed emitter name"), Result.bSuccess);
+		if (!Result.Result.IsValid())
+		{
+			AddError(TEXT("Import result JSON object is invalid"));
+			return true;
+		}
+
+		TestFalse(TEXT("Import result should mark malformed emitter name as failed"), Result.Result->GetBoolField(TEXT("success")));
+		TestEqual(TEXT("Malformed emitter name should count as one failed step"), Result.Result->GetNumberField(TEXT("failed_steps")), 1.0);
+		const TArray<TSharedPtr<FJsonValue>>* Errors = nullptr;
+		if (Result.Result->TryGetArrayField(TEXT("errors"), Errors) && Errors && Errors->Num() > 0)
+		{
+			TestTrue(TEXT("Failure should mention malformed emitter name"), (*Errors)[0]->AsString().Contains(TEXT("name")));
+		}
+		else
+		{
+			AddError(TEXT("Import result should include malformed-name failure details"));
+		}
+	}
+
+	{
+		TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), SystemPath);
+		Params->SetStringField(TEXT("mode"), TEXT("merge"));
+		Params->SetObjectField(TEXT("spec"), Spec);
+
+		FMonolithActionResult Result = FMonolithNiagaraActions::HandleImportSystemSpec(Params);
+
+		TestFalse(TEXT("Merge import should reject malformed emitter name before filtering"), Result.bSuccess);
+		TestTrue(TEXT("Merge import error should mention malformed emitter name"), Result.ErrorMessage.Contains(TEXT("name")));
+	}
+
+	return true;
 }
