@@ -694,7 +694,10 @@ FMonolithActionResult FMonolithEditorActions::HandleTriggerBuild(const TSharedPt
 	bool bWait = false;
 	if (Params->HasField(TEXT("wait")))
 	{
-		bWait = Params->GetBoolField(TEXT("wait"));
+		if (!Params->TryGetBoolField(TEXT("wait"), bWait))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'wait' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	LastCompileTimestamp = FPlatformTime::Seconds();
@@ -750,7 +753,11 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildErrors(const TShared
 	double SinceTimestamp = LastCompileTimestamp; // Default: since last compile
 	if (Params->HasField(TEXT("since")))
 	{
-		double SecondsAgo = Params->GetNumberField(TEXT("since"));
+		double SecondsAgo = 0.0;
+		if (!Params->TryGetNumberField(TEXT("since"), SecondsAgo))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'since' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		SinceTimestamp = FPlatformTime::Seconds() - SecondsAgo;
 	}
 
@@ -759,7 +766,10 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildErrors(const TShared
 	bool bCompileOnly = false;
 	if (Params->HasField(TEXT("compile_only")))
 	{
-		bCompileOnly = Params->GetBoolField(TEXT("compile_only"));
+		if (!Params->TryGetBoolField(TEXT("compile_only"), bCompileOnly))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'compile_only' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	if (bCompileOnly)
 	{
@@ -769,7 +779,12 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildErrors(const TShared
 	}
 	else if (Params->HasField(TEXT("category")))
 	{
-		CategoryFilter.Add(FName(*Params->GetStringField(TEXT("category"))));
+		FString Category;
+		if (!Params->TryGetStringField(TEXT("category"), Category))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'category' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		CategoryFilter.Add(FName(*Category));
 	}
 
 	if (CachedLogCapture)
