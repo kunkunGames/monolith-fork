@@ -1400,14 +1400,15 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleSetAbilityTriggers(const
 				FString::Printf(TEXT("triggers[%d] is not a valid object"), i));
 		}
 
-		FString TagStr = (*TrigObj)->GetStringField(TEXT("tag"));
-		FString SourceStr = (*TrigObj)->GetStringField(TEXT("trigger_source"));
-
-		if (TagStr.IsEmpty())
+		FString TagStr;
+		if (!(*TrigObj)->TryGetStringField(TEXT("tag"), TagStr) || TagStr.IsEmpty())
 		{
 			return FMonolithActionResult::Error(
-				FString::Printf(TEXT("triggers[%d].tag is missing or empty"), i));
+				FString::Printf(TEXT("triggers[%d].tag is missing, empty, or not a string"), i));
 		}
+
+		FString SourceStr;
+		(*TrigObj)->TryGetStringField(TEXT("trigger_source"), SourceStr);
 
 		FGameplayTag Tag = MonolithGAS::StringToTag(TagStr);
 		if (!Tag.IsValid())
@@ -2453,12 +2454,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleBatchCreateAbilities(con
 			continue;
 		}
 
-		FString SavePath = (*AbilitySpec)->GetStringField(TEXT("save_path"));
-		if (SavePath.IsEmpty())
+		FString SavePath;
+		if (!(*AbilitySpec)->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 		{
 			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
 			ErrObj->SetNumberField(TEXT("index"), i);
-			ErrObj->SetStringField(TEXT("error"), TEXT("Missing save_path"));
+			ErrObj->SetStringField(TEXT("error"), TEXT("Missing or invalid save_path"));
 			Results.Add(MakeShared<FJsonValueObject>(ErrObj));
 			FailCount++;
 			continue;
@@ -2466,11 +2467,12 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleBatchCreateAbilities(con
 
 		FMonolithActionResult AbilityResult;
 
-		if ((*AbilitySpec)->HasField(TEXT("spec")))
+		const TSharedPtr<FJsonObject>* SpecObj = nullptr;
+		if ((*AbilitySpec)->TryGetObjectField(TEXT("spec"), SpecObj))
 		{
 			TSharedPtr<FJsonObject> BuildParams = MakeShared<FJsonObject>();
 			BuildParams->SetStringField(TEXT("save_path"), SavePath);
-			BuildParams->SetObjectField(TEXT("spec"), (*AbilitySpec)->GetObjectField(TEXT("spec")));
+			BuildParams->SetObjectField(TEXT("spec"), *SpecObj);
 			AbilityResult = HandleBuildAbilityFromSpec(BuildParams);
 		}
 		else if ((*AbilitySpec)->HasField(TEXT("template")))
