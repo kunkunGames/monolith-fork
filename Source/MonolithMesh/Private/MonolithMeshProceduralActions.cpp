@@ -2635,11 +2635,43 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreatePipeNetwork(const TS
 		return FMonolithActionResult::Error(TEXT("'path_points' must be an array of at least 2 [x, y, z] points"));
 	}
 
-	float Radius      = Params->HasField(TEXT("radius"))             ? static_cast<float>(Params->GetNumberField(TEXT("radius")))             : 10.0f;
-	int32 Segments     = Params->HasField(TEXT("segments"))           ? static_cast<int32>(Params->GetNumberField(TEXT("segments")))            : 12;
-	float MiterLimit   = Params->HasField(TEXT("miter_limit"))        ? static_cast<float>(Params->GetNumberField(TEXT("miter_limit")))        : 2.0f;
-	bool bBallJoints   = Params->HasField(TEXT("ball_joints"))        ? Params->GetBoolField(TEXT("ball_joints")) : false;
-	float JointScale   = Params->HasField(TEXT("joint_radius_scale")) ? static_cast<float>(Params->GetNumberField(TEXT("joint_radius_scale"))) : 1.3f;
+	float Radius = 10.0f;
+	if (Params->HasField(TEXT("radius")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("radius"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'radius'. Expected number."));
+		Radius = static_cast<float>(TempVal);
+	}
+
+	int32 Segments = 12;
+	if (Params->HasField(TEXT("segments")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("segments"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'segments'. Expected number."));
+		Segments = static_cast<int32>(TempVal);
+	}
+
+	float MiterLimit = 2.0f;
+	if (Params->HasField(TEXT("miter_limit")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("miter_limit"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'miter_limit'. Expected number."));
+		MiterLimit = static_cast<float>(TempVal);
+	}
+
+	bool bBallJoints = false;
+	if (Params->HasField(TEXT("ball_joints")) && !Params->TryGetBoolField(TEXT("ball_joints"), bBallJoints))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'ball_joints'. Expected boolean."));
+	}
+
+	float JointScale = 1.3f;
+	if (Params->HasField(TEXT("joint_radius_scale")))
+	{
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("joint_radius_scale"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'joint_radius_scale'. Expected number."));
+		JointScale = static_cast<float>(TempVal);
+	}
 
 	Segments = FMath::Clamp(Segments, 3, 64);
 
