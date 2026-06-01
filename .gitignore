@@ -74,8 +74,12 @@ ProjectIndex.db
 graph.db
 *.db-wal
 *.db-shm
+*.db.rebuild.lock
 .code-review-graph/
 compile_commands.json
+
+# Generated tool lockfiles
+*.jsonl.lock
 
 # Release artifacts
 Monolith-*-Linux.zip
