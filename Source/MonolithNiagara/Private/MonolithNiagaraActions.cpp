@@ -12315,8 +12315,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDiffSystems(const TSharedPt
 						if (!RA || !RB) continue;
 						FString ClassA = RA->GetStringField(TEXT("class"));
 						FString ClassB = RB->GetStringField(TEXT("class"));
-						FString MatA = RA->HasField(TEXT("material")) ? RA->GetStringField(TEXT("material")) : TEXT("");
-						FString MatB = RB->HasField(TEXT("material")) ? RB->GetStringField(TEXT("material")) : TEXT("");
+						FString MatA;
+						RA->TryGetStringField(TEXT("material"), MatA);
+						FString MatB;
+						RB->TryGetStringField(TEXT("material"), MatB);
 						if (ClassA != ClassB || MatA != MatB)
 						{
 							TSharedRef<FJsonObject> RD = MakeShared<FJsonObject>();
@@ -12793,7 +12795,8 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 			TSharedRef<FJsonObject> AEP = MakeShared<FJsonObject>();
 			AEP->SetStringField(TEXT("system_path"), SystemPath);
 			AEP->SetStringField(TEXT("emitter_asset"), EO->GetStringField(TEXT("asset")));
-			if (EO->HasField(TEXT("name"))) AEP->SetStringField(TEXT("name"), EO->GetStringField(TEXT("name")));
+			FString EOName;
+			if (EO->TryGetStringField(TEXT("name"), EOName)) AEP->SetStringField(TEXT("name"), EOName);
 			FMonolithActionResult AER = HandleAddEmitter(AEP);
 			if (!AER.bSuccess) { OutErrors.Add(FString::Printf(TEXT("add_emitter: %s"), *AER.ErrorMessage)); FailCount++; continue; }
 
