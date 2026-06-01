@@ -6817,10 +6817,16 @@ FMonolithActionResult FMonolithAnimationActions::HandleBulkAddNotify(const TShar
 	bool bIsNormalized = TimeMode.Equals(TEXT("normalized"), ESearchCase::IgnoreCase);
 
 	float Duration = 0.f;
-	bool bIsState = Params->HasField(TEXT("duration"));
-	if (bIsState)
+	bool bIsState = false;
+	if (Params->HasField(TEXT("duration")))
 	{
-		Duration = static_cast<float>(Params->GetNumberField(TEXT("duration")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("duration"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'duration' must be a number"));
+		}
+		Duration = static_cast<float>(TempVal);
+		bIsState = true;
 	}
 
 	FString TrackName = TEXT("1");
