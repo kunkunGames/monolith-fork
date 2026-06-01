@@ -593,7 +593,7 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Recompile multiple materials and return per-material instruction counts"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMaterialActions::BatchRecompile),
 		FParamSchemaBuilder()
-			.Required(TEXT("asset_paths"), TEXT("array"), TEXT("Array of material asset paths to recompile"))
+			.Required(TEXT("asset_paths"), TEXT("array"), TEXT("Array of material asset paths to recompile (Max: 200)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("material"), TEXT("import_texture"),
@@ -7685,6 +7685,11 @@ FMonolithActionResult FMonolithMaterialActions::BatchRecompile(const TSharedPtr<
 	if (AssetPaths.Num() == 0)
 	{
 		return FMonolithActionResult::Error(TEXT("asset_paths array is empty"));
+	}
+
+	if (AssetPaths.Num() > 200)
+	{
+		return FMonolithActionResult::Error(TEXT("asset_paths array exceeds maximum allowed size (200)"));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ResultsArray;

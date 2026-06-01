@@ -94,7 +94,7 @@ description: Use when creating, editing, or inspecting Unreal Engine materials v
 | Action | Key Params | Purpose |
 |--------|-----------|---------|
 | `batch_set_material_property` | `asset_paths`, `properties` | Same props to multiple materials |
-| `batch_recompile` | `asset_paths` | Recompile multiple, returns instruction counts |
+| `batch_recompile` | `asset_paths` (Max: 200) | Recompile multiple, returns instruction counts |
 | `import_texture` | `source_file`, `dest_path`, `compression`?, `srgb`?, `max_size`? | Import from disk |
 | `preview_textures` | `asset_paths[]`, `per_texture_size`?, `output_path`? | Contact sheet of multiple textures |
 
