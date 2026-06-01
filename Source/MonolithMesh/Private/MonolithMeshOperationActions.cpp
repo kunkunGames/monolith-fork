@@ -58,8 +58,8 @@ namespace
 		FString& OutHandleName,
 		FString& OutError)
 	{
-		const FString SourceHandle = Params->GetStringField(TEXT("handle"));
-		if (SourceHandle.IsEmpty())
+		FString SourceHandle;
+		if (!Params->TryGetStringField(TEXT("handle"), SourceHandle) || SourceHandle.IsEmpty())
 		{
 			OutError = TEXT("'handle' is required");
 			return nullptr;
@@ -289,10 +289,10 @@ FMonolithActionResult FMonolithMeshOperationActions::CreateHandle(const TSharedP
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	FString Source = Params->GetStringField(TEXT("source"));
-	FString HandleName = Params->GetStringField(TEXT("handle"));
+	FString Source;
+	FString HandleName;
 
-	if (Source.IsEmpty() || HandleName.IsEmpty())
+	if (!Params->TryGetStringField(TEXT("source"), Source) || !Params->TryGetStringField(TEXT("handle"), HandleName) || Source.IsEmpty() || HandleName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Both 'source' and 'handle' are required"));
 	}
