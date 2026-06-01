@@ -632,6 +632,46 @@ function makeTool(name, description, schema) {
   return { name, description, inputSchema: schema };
 }
 
+function sanitizeCachePart(value) {
+  return value.replace(/[^a-zA-Z0-9-_]/g, "_");
+}
+
+function getToolsCachePath() {
+  const base = process.env.LOCALAPPDATA || os.tmpdir();
+  const cacheDir = path.join(base, "Monolith");
+  fs.mkdirSync(cacheDir, { recursive: true });
+
+  let hostPort = MONOLITH_HEALTH.replace(/^https?:\/\//, "");
+  hostPort = hostPort.split("/")[0];
+  return path.join(cacheDir, `monolith_proxy_tools_${sanitizeCachePart(hostPort)}.json`);
+}
+
+function writeToolsCache(respStr) {
+  try {
+    const payload = JSON.parse(respStr);
+    const tools = payload?.result?.tools;
+    if (Array.isArray(tools) && tools.length > 0) {
+      fs.writeFileSync(getToolsCachePath(), JSON.stringify(tools), "utf8");
+    }
+  } catch (e) {
+    log(`Failed to write tools/list cache: ${e}`);
+  }
+}
+
+function readToolsCache() {
+  try {
+    const p = getToolsCachePath();
+    if (!fs.existsSync(p)) return null;
+    const tools = JSON.parse(fs.readFileSync(p, "utf8"));
+    if (Array.isArray(tools) && tools.length > 0) {
+      return tools;
+    }
+  } catch (e) {
+    log(`Failed to read tools/list cache: ${e}`);
+  }
+  return null;
+}
+
 function queryToolSchema() {
   return {
     type: "object",
@@ -722,11 +762,23 @@ function handleInitialize(message) {
   });
 }
 
-async function handleToolsList(message) {
-  const response = await postMonolith(JSON.stringify(message));
-  if (response) return response;
+function fallbackToolsList(message) {
+  const cached = readToolsCache();
+  if (cached) {
+    log("Monolith down during tools/list - returning cached tools");
+    return result(message.id, { tools: cached });
+  }
   log("Monolith down during tools/list - returning seed tools");
   return result(message.id, { tools: seedTools() });
+}
+
+async function handleToolsList(message) {
+  const response = await postMonolith(JSON.stringify(message));
+  if (response) {
+    writeToolsCache(response);
+    return response;
+  }
+  return fallbackToolsList(message);
 }
 
 async function handleToolsCall(message) {
