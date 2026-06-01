@@ -7,6 +7,55 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
+#include "MonolithSourceActions.h"
+
+namespace
+{
+	void EnsureSourceActionsRegistered()
+	{
+		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+		if (!Registry.HasAction(TEXT("source"), TEXT("search_source"))
+			|| !Registry.HasAction(TEXT("source"), TEXT("search_crg_graph")))
+		{
+			FMonolithSourceActions::RegisterAll();
+		}
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceSearchHandlesEmptyQueryTest, "Monolith.IndexGuard.Source.SearchHandlesEmptyQuery", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceSearchHandlesEmptyQueryTest::RunTest(const FString& Parameters)
+{
+	EnsureSourceActionsRegistered();
+
+	auto Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("query"), TEXT(""));
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("source"), TEXT("search_source"), Params);
+
+	TestFalse(TEXT("Search action should reject empty query"), Result.bSuccess);
+	TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceSearchCrgGraphHandlesEmptyQueryTest, "Monolith.IndexGuard.Source.SearchCrgGraphHandlesEmptyQuery", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceSearchCrgGraphHandlesEmptyQueryTest::RunTest(const FString& Parameters)
+{
+	EnsureSourceActionsRegistered();
+
+	auto Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("query"), TEXT(""));
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("source"), TEXT("search_crg_graph"), Params);
+
+	TestFalse(TEXT("Search action should reject empty query"), Result.bSuccess);
+	TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceSearchSymbolsClampsLimitTest, "Monolith.IndexGuard.Source.SearchSymbolsClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FSourceSearchSymbolsClampsLimitTest::RunTest(const FString& Parameters)

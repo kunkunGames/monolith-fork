@@ -1375,17 +1375,23 @@ FMonolithActionResult FMonolithSourceActions::HandleFindCallees(const TSharedPtr
 
 FMonolithActionResult FMonolithSourceActions::HandleSearchSource(const TSharedPtr<FJsonObject>& Params)
 {
+	FString Query;
+	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("query"), Query))
+	{
+		return FMonolithActionResult::Error(TEXT("'query' parameter is required and must be a non-empty string"), -32602);
+	}
+	Query.TrimStartAndEndInline();
+	if (Query.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("'query' parameter is required and must be a non-empty string"), -32602);
+	}
+
 	FMonolithSourceDatabase* DB = GetDB();
 	if (!DB || !DB->IsOpen())
 	{
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available."));
 	}
 
-	FString Query;
-	if (!Params->TryGetStringField(TEXT("query"), Query) || Query.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("\'query\' parameter is required and must be a string"));
-	}
 	FString Scope = TEXT("all");
 	Params->TryGetStringField(TEXT("scope"), Scope);
 	int32 Limit = 20;
