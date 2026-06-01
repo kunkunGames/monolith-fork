@@ -130,6 +130,7 @@ namespace MonolithBulkFillActionsInternal
 		const TArray<FString> Namespaces = FMonolithBulkFillRegistry::Get().GetRegisteredNamespaces();
 
 		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Reserve(Namespaces.Num());
 		for (const FString& Ns : Namespaces)
 		{
 			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
@@ -206,6 +207,7 @@ namespace MonolithBulkFillActionsInternal
 
 		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
 		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Reserve(Targets.Num());
 		for (const FString& T : Targets) { Arr.Add(MakeShared<FJsonValueString>(T)); }
 		Out->SetArrayField(TEXT("targets"), Arr);
 		Out->SetStringField(TEXT("namespace"), TargetNamespace);
