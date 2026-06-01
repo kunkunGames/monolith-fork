@@ -877,6 +877,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleGetStateTree(const TSha
 
 	// Evaluators
 	TArray<TSharedPtr<FJsonValue>> EvalArr;
+	EvalArr.Reserve(EditorData->Evaluators.Num());
 	for (int32 i = 0; i < EditorData->Evaluators.Num(); ++i)
 	{
 		const FStateTreeEditorNode& EvalNode = EditorData->Evaluators[i];
@@ -896,6 +897,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleGetStateTree(const TSha
 
 	// Global tasks
 	TArray<TSharedPtr<FJsonValue>> GlobalTaskArr;
+	GlobalTaskArr.Reserve(EditorData->GlobalTasks.Num());
 	for (int32 i = 0; i < EditorData->GlobalTasks.Num(); ++i)
 	{
 		const FStateTreeEditorNode& GTaskNode = EditorData->GlobalTasks[i];
@@ -927,6 +929,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleListStateTrees(const TS
 	AR.GetAssetsByClass(UStateTree::StaticClass()->GetClassPathName(), Assets);
 
 	TArray<TSharedPtr<FJsonValue>> ResultArr;
+	ResultArr.Reserve(Assets.Num());
 	for (const FAssetData& Asset : Assets)
 	{
 		FString AssetPathStr = Asset.GetObjectPathString();
@@ -2018,6 +2021,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleGetSTBindings(const TSh
 	TConstArrayView<FStateTreePropertyPathBinding> AllBindings = Bindings->GetBindings();
 
 	TArray<TSharedPtr<FJsonValue>> BindingArr;
+	BindingArr.Reserve(AllBindings.Num());
 	for (int32 i = 0; i < AllBindings.Num(); ++i)
 	{
 		const FStateTreePropertyPathBinding& Binding = AllBindings[i];
@@ -2565,6 +2569,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleValidateStateTree(const
 	Result->SetNumberField(TEXT("subtree_count"), EditorData->SubTrees.Num());
 
 	TArray<TSharedPtr<FJsonValue>> ErrArr;
+	ErrArr.Reserve(Errors.Num());
 	for (const FString& E : Errors)
 	{
 		ErrArr.Add(MakeShared<FJsonValueString>(E));
@@ -2572,6 +2577,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleValidateStateTree(const
 	Result->SetArrayField(TEXT("errors"), ErrArr);
 
 	TArray<TSharedPtr<FJsonValue>> WarnArr;
+	WarnArr.Reserve(Warnings.Num());
 	for (const FString& W : Warnings)
 	{
 		WarnArr.Add(MakeShared<FJsonValueString>(W));
@@ -2602,6 +2608,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleListSTExtensionTypes(co
 
 	TArray<UClass*> DerivedClasses;
 	GetDerivedClasses(UStateTreeExtension::StaticClass(), DerivedClasses, /*bRecursive=*/true);
+	TypeArr.Reserve(DerivedClasses.Num());
 
 	for (UClass* Cls : DerivedClasses)
 	{
