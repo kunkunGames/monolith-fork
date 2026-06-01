@@ -1074,6 +1074,7 @@ FMonolithActionResult FMonolithGASEffectActions::HandleGetGameplayEffect(const T
 	// Modifiers
 	{
 		TArray<TSharedPtr<FJsonValue>> ModArr;
+		ModArr.Reserve(GE->Modifiers.Num());
 		for (int32 i = 0; i < GE->Modifiers.Num(); ++i)
 		{
 			ModArr.Add(MakeShared<FJsonValueObject>(ModifierToJson(GE->Modifiers[i], i)));
@@ -1084,6 +1085,7 @@ FMonolithActionResult FMonolithGASEffectActions::HandleGetGameplayEffect(const T
 	// Executions
 	{
 		TArray<TSharedPtr<FJsonValue>> ExecArr;
+		ExecArr.Reserve(GE->Executions.Num());
 		for (const FGameplayEffectExecutionDefinition& Exec : GE->Executions)
 		{
 			TSharedPtr<FJsonObject> ExecObj = MakeShared<FJsonObject>();
@@ -1098,8 +1100,10 @@ FMonolithActionResult FMonolithGASEffectActions::HandleGetGameplayEffect(const T
 
 	// Components
 	{
+		TArray<UGameplayEffectComponent*> Comps = GetGEComponents(GE);
 		TArray<TSharedPtr<FJsonValue>> CompArr;
-		for (UGameplayEffectComponent* Comp : GetGEComponents(GE))
+		CompArr.Reserve(Comps.Num());
+		for (UGameplayEffectComponent* Comp : Comps)
 		{
 			CompArr.Add(MakeShared<FJsonValueObject>(GEComponentToJson(Comp)));
 		}
@@ -1155,6 +1159,7 @@ FMonolithActionResult FMonolithGASEffectActions::HandleGetGameplayEffect(const T
 	// Gameplay Cues
 	{
 		TArray<TSharedPtr<FJsonValue>> CueArr;
+		CueArr.Reserve(GE->GameplayCues.Num());
 		for (const FGameplayEffectCue& Cue : GE->GameplayCues)
 		{
 			TSharedPtr<FJsonObject> CueObj = MakeShared<FJsonObject>();
@@ -1524,6 +1529,7 @@ FMonolithActionResult FMonolithGASEffectActions::HandleListModifiers(const TShar
 	if (!LoadGEFromParams(Params, BP, GE, AssetPath, Err)) return Err;
 
 	TArray<TSharedPtr<FJsonValue>> ModArr;
+	ModArr.Reserve(GE->Modifiers.Num());
 	for (int32 i = 0; i < GE->Modifiers.Num(); ++i)
 	{
 		ModArr.Add(MakeShared<FJsonValueObject>(ModifierToJson(GE->Modifiers[i], i)));
@@ -3919,6 +3925,7 @@ FMonolithActionResult FMonolithGASEffectActions::HandleGetActiveEffects(const TS
 
 		// Modifiers summary
 		TArray<TSharedPtr<FJsonValue>> ModArr;
+		ModArr.Reserve(AGE.Spec.Def->Modifiers.Num());
 		for (int32 ModIdx = 0; ModIdx < AGE.Spec.Def->Modifiers.Num(); ModIdx++)
 		{
 			const FGameplayModifierInfo& Mod = AGE.Spec.Def->Modifiers[ModIdx];
