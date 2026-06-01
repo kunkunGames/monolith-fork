@@ -72,7 +72,7 @@ Most MCP integrations register every action as a separate tool, which floods the
 - **Project search (7 actions)** — SQLite FTS5 across all indexed assets including marketplace/Fab content, reference tracing, 15 deep indexers
 - **Engine source (11 actions)** — Native C++ indexer over 1M+ symbols, call graphs, class hierarchy, offline — no Python required. Auto-reindex on hot-reload (Phase J F17)
 - **Standalone C++ tools** — `monolith_proxy.exe` (MCP proxy) and `monolith_query.exe` (offline DB queries) — zero Python, zero UE dependency, instant startup
-- **Auto-updater** — Off by default as of v0.14.6. When enabled, checks GitHub Releases on editor startup, verifies SHA256 against the release notes marker, downloads and stages updates, auto-swaps on exit
+- **Auto-updater** — Off by default as of v0.14.6. When enabled, checks GitHub Releases on editor startup, verifies SHA256 against the platform-specific release notes marker (`Monolith-SHA256:`, `Monolith-macOS-SHA256:`, or `Monolith-Linux-SHA256:`), downloads and stages updates, auto-swaps on exit
 - **MCP auto-reconnect proxy** — stdio-to-HTTP proxy keeps Claude Code sessions alive across editor restarts. Available as native exe (zero dependencies) or Python script (fallback)
 - **Optional module system** — Extend Monolith with new MCP namespaces for third-party plugins (GeometryScripting, BlueprintAssist, GBA, ComboGraph, Logic Driver, MetaSound) without breaking the build for users who don't own them. The sibling-plugin pattern lets you ship your own integration plugin alongside Monolith — see `Docs/SIBLING_PLUGIN_GUIDE.md`
 - **Claude Code skills** — 16 domain-specific workflow guides bundled with the plugin
@@ -279,7 +279,7 @@ Monolith.uplugin
 
 ## Auto-updater
 
-Off by default as of v0.14.6. Opt in via **Auto Update Enabled** in Editor Preferences > Plugins > Monolith — checks GitHub Releases on editor startup, verifies the downloaded zip's SHA256 against the release-notes marker, swaps the plugin on editor exit (after a Y/N prompt). See [Auto-Updater wiki](https://github.com/tumourlove/monolith/wiki/Auto-Updater).
+Off by default as of v0.14.6. Opt in via **Auto Update Enabled** in Editor Preferences > Plugins > Monolith — checks GitHub Releases on editor startup, verifies the downloaded zip's SHA256 against the platform-specific release notes marker (`Monolith-SHA256:`, `Monolith-macOS-SHA256:`, or `Monolith-Linux-SHA256:`), swaps the plugin on editor exit (after a Y/N prompt). See [Auto-Updater wiki](https://github.com/tumourlove/monolith/wiki/Auto-Updater).
 
 ---
 
