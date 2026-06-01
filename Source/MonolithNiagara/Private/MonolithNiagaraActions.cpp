@@ -10041,11 +10041,26 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureRibbon(const TShar
 
 	// Binding overrides
 	if (Params->HasField(TEXT("width_binding")))
-		SetBinding(TEXT("RibbonWidthBinding"), Params->GetStringField(TEXT("width_binding")));
+	{
+		FString WidthBinding;
+		if (!Params->TryGetStringField(TEXT("width_binding"), WidthBinding))
+			return FMonolithActionResult::Error(TEXT("Invalid param 'width_binding': must be a string"));
+		SetBinding(TEXT("RibbonWidthBinding"), WidthBinding);
+	}
 	if (Params->HasField(TEXT("link_order_binding")))
-		SetBinding(TEXT("RibbonLinkOrderBinding"), Params->GetStringField(TEXT("link_order_binding")));
+	{
+		FString LinkOrderBinding;
+		if (!Params->TryGetStringField(TEXT("link_order_binding"), LinkOrderBinding))
+			return FMonolithActionResult::Error(TEXT("Invalid param 'link_order_binding': must be a string"));
+		SetBinding(TEXT("RibbonLinkOrderBinding"), LinkOrderBinding);
+	}
 	if (Params->HasField(TEXT("ribbon_id_binding")))
-		SetBinding(TEXT("RibbonIdBinding"), Params->GetStringField(TEXT("ribbon_id_binding")));
+	{
+		FString RibbonIdBinding;
+		if (!Params->TryGetStringField(TEXT("ribbon_id_binding"), RibbonIdBinding))
+			return FMonolithActionResult::Error(TEXT("Invalid param 'ribbon_id_binding': must be a string"));
+		SetBinding(TEXT("RibbonIdBinding"), RibbonIdBinding);
+	}
 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetBoolField(TEXT("success"), true);
@@ -10153,34 +10168,43 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureSubUV(const TShare
 			{
 				if (Params->HasField(TEXT("playback_mode")))
 				{
+					FString PlaybackMode;
+					if (!Params->TryGetStringField(TEXT("playback_mode"), PlaybackMode))
+						return FMonolithActionResult::Error(TEXT("Invalid param 'playback_mode': must be a string"));
 					TSharedRef<FJsonObject> SetParams = MakeShared<FJsonObject>();
 					SetParams->SetStringField(TEXT("asset_path"), SystemPath);
 					SetParams->SetStringField(TEXT("emitter"), EmitterHandleId);
 					SetParams->SetStringField(TEXT("module_node"), AnimModuleNodeGuid);
 					SetParams->SetStringField(TEXT("input"), TEXT("Playback Mode"));
-					SetParams->SetStringField(TEXT("value"), Params->GetStringField(TEXT("playback_mode")));
+					SetParams->SetStringField(TEXT("value"), PlaybackMode);
 					FMonolithActionResult R = HandleSetStaticSwitchValue(SetParams);
 					if (!R.bSuccess) Warnings.Add(FString::Printf(TEXT("Failed to set Playback Mode: %s"), *R.ErrorMessage));
 				}
 				if (Params->HasField(TEXT("start_frame")))
 				{
+					double StartFrame;
+					if (!Params->TryGetNumberField(TEXT("start_frame"), StartFrame))
+						return FMonolithActionResult::Error(TEXT("Invalid param 'start_frame': must be a number"));
 					TSharedRef<FJsonObject> SetParams = MakeShared<FJsonObject>();
 					SetParams->SetStringField(TEXT("asset_path"), SystemPath);
 					SetParams->SetStringField(TEXT("emitter"), EmitterHandleId);
 					SetParams->SetStringField(TEXT("module_node"), AnimModuleNodeGuid);
 					SetParams->SetStringField(TEXT("input"), TEXT("Start Frame"));
-					SetParams->SetStringField(TEXT("value"), FString::SanitizeFloat(Params->GetNumberField(TEXT("start_frame"))));
+					SetParams->SetStringField(TEXT("value"), FString::SanitizeFloat(StartFrame));
 					FMonolithActionResult R = HandleSetModuleInputValue(SetParams);
 					if (!R.bSuccess) Warnings.Add(FString::Printf(TEXT("Failed to set Start Frame: %s"), *R.ErrorMessage));
 				}
 				if (Params->HasField(TEXT("end_frame")))
 				{
+					double EndFrame;
+					if (!Params->TryGetNumberField(TEXT("end_frame"), EndFrame))
+						return FMonolithActionResult::Error(TEXT("Invalid param 'end_frame': must be a number"));
 					TSharedRef<FJsonObject> SetParams = MakeShared<FJsonObject>();
 					SetParams->SetStringField(TEXT("asset_path"), SystemPath);
 					SetParams->SetStringField(TEXT("emitter"), EmitterHandleId);
 					SetParams->SetStringField(TEXT("module_node"), AnimModuleNodeGuid);
 					SetParams->SetStringField(TEXT("input"), TEXT("End Frame"));
-					SetParams->SetStringField(TEXT("value"), FString::SanitizeFloat(Params->GetNumberField(TEXT("end_frame"))));
+					SetParams->SetStringField(TEXT("value"), FString::SanitizeFloat(EndFrame));
 					FMonolithActionResult R = HandleSetModuleInputValue(SetParams);
 					if (!R.bSuccess) Warnings.Add(FString::Printf(TEXT("Failed to set End Frame: %s"), *R.ErrorMessage));
 				}
@@ -10755,12 +10779,18 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateEffectType(const TSha
 
 	if (Params->HasField(TEXT("cull_reaction")))
 	{
-		SetEnumProp(TEXT("CullReaction"), Params->GetStringField(TEXT("cull_reaction")));
+		FString CullReaction;
+		if (!Params->TryGetStringField(TEXT("cull_reaction"), CullReaction))
+			return FMonolithActionResult::Error(TEXT("Invalid param 'cull_reaction': must be a string"));
+		SetEnumProp(TEXT("CullReaction"), CullReaction);
 	}
 
 	if (Params->HasField(TEXT("update_frequency")))
 	{
-		SetEnumProp(TEXT("UpdateFrequency"), Params->GetStringField(TEXT("update_frequency")));
+		FString UpdateFrequency;
+		if (!Params->TryGetStringField(TEXT("update_frequency"), UpdateFrequency))
+			return FMonolithActionResult::Error(TEXT("Invalid param 'update_frequency': must be a string"));
+		SetEnumProp(TEXT("UpdateFrequency"), UpdateFrequency);
 	}
 
 	if (Params->HasField(TEXT("max_distance")))
@@ -11189,7 +11219,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandlePreviewSystem(const TShared
 	FString OutputPath;
 	if (Params->HasField(TEXT("output_path")))
 	{
-		OutputPath = Params->GetStringField(TEXT("output_path"));
+		if (!Params->TryGetStringField(TEXT("output_path"), OutputPath))
+			return FMonolithActionResult::Error(TEXT("Invalid param 'output_path': must be a string"));
 	}
 
 	// Camera angle presets
@@ -13068,7 +13099,15 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 				AddParams->SetStringField(TEXT("name"), ParamName);
 				AddParams->SetStringField(TEXT("type"), (*PObj)->GetStringField(TEXT("type")));
 				if ((*PObj)->HasField(TEXT("default_value")))
-					AddParams->SetStringField(TEXT("default_value"), (*PObj)->GetStringField(TEXT("default_value")));
+				{
+					FString DefaultValue;
+					if (!(*PObj)->TryGetStringField(TEXT("default_value"), DefaultValue))
+					{
+						return FMonolithActionResult::Error(
+							FString::Printf(TEXT("spec.parameters default_value for '%s' must be a string"), *ParamName));
+					}
+					AddParams->SetStringField(TEXT("default_value"), DefaultValue);
+				}
 				FMonolithActionResult R = HandleAddUserParameter(AddParams);
 				if (!R.bSuccess)
 				{
@@ -13559,9 +13598,6 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetScalabilitySettings(cons
 	if (SettingsJsonArr.Num() == 0)
 		return FMonolithActionResult::Error(TEXT("'settings' array is empty"));
 
-	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "SetScalability", "Set Scalability Settings"));
-	EffectType->Modify();
-
 	TArray<FNiagaraSystemScalabilitySettings> NewSettings;
 	for (const TSharedPtr<FJsonValue>& SettingVal : SettingsJsonArr)
 	{
@@ -13589,7 +13625,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetScalabilitySettings(cons
 		}
 		else if (SO->HasField(TEXT("quality_level_mask")))
 		{
-			S.Platforms = FNiagaraPlatformSet((int32)SO->GetNumberField(TEXT("quality_level_mask")));
+			double QualityLevelMask;
+			if (!SO->TryGetNumberField(TEXT("quality_level_mask"), QualityLevelMask))
+				return FMonolithActionResult::Error(TEXT("Invalid setting 'quality_level_mask': must be a number"));
+			S.Platforms = FNiagaraPlatformSet(static_cast<int32>(QualityLevelMask));
 		}
 		else
 		{
@@ -13599,27 +13638,41 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetScalabilitySettings(cons
 
 		if (SO->HasField(TEXT("max_distance")))
 		{
+			double MaxDistance;
+			if (!SO->TryGetNumberField(TEXT("max_distance"), MaxDistance))
+				return FMonolithActionResult::Error(TEXT("Invalid setting 'max_distance': must be a number"));
 			S.bCullByDistance = true;
-			S.MaxDistance = (float)SO->GetNumberField(TEXT("max_distance"));
+			S.MaxDistance = static_cast<float>(MaxDistance);
 		}
 		if (SO->HasField(TEXT("max_instances")))
 		{
+			double MaxInstances;
+			if (!SO->TryGetNumberField(TEXT("max_instances"), MaxInstances))
+				return FMonolithActionResult::Error(TEXT("Invalid setting 'max_instances': must be a number"));
 			S.bCullMaxInstanceCount = true;
-			S.MaxInstances = (int32)SO->GetNumberField(TEXT("max_instances"));
+			S.MaxInstances = static_cast<int32>(MaxInstances);
 		}
 		if (SO->HasField(TEXT("max_system_instances")))
 		{
+			double MaxSystemInstances;
+			if (!SO->TryGetNumberField(TEXT("max_system_instances"), MaxSystemInstances))
+				return FMonolithActionResult::Error(TEXT("Invalid setting 'max_system_instances': must be a number"));
 			S.bCullPerSystemMaxInstanceCount = true;
-			S.MaxSystemInstances = (int32)SO->GetNumberField(TEXT("max_system_instances"));
+			S.MaxSystemInstances = static_cast<int32>(MaxSystemInstances);
 		}
 		if (SO->HasField(TEXT("max_system_proxies")))
 		{
-			S.MaxSystemProxies = (int32)SO->GetNumberField(TEXT("max_system_proxies"));
+			double MaxSystemProxies;
+			if (!SO->TryGetNumberField(TEXT("max_system_proxies"), MaxSystemProxies))
+				return FMonolithActionResult::Error(TEXT("Invalid setting 'max_system_proxies': must be a number"));
+			S.MaxSystemProxies = static_cast<int32>(MaxSystemProxies);
 		}
 
 		NewSettings.Add(S);
 	}
 
+	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "SetScalability", "Set Scalability Settings"));
+	EffectType->Modify();
 	EffectType->SystemScalabilitySettings.Settings = NewSettings;
 
 	GEditor->EndTransaction();
