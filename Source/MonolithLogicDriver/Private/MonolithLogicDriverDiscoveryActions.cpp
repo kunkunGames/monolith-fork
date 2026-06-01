@@ -69,7 +69,10 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleGetSMOverview(
 	FString PathFilter;
 	if (Params.IsValid() && Params->HasField(TEXT("path_filter")))
 	{
-		Params->TryGetStringField(TEXT("path_filter"), PathFilter);
+		if (!Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'path_filter' must be a string"));
+		}
 	}
 
 	// ── 1. SM Blueprints (USMBlueprint) ──

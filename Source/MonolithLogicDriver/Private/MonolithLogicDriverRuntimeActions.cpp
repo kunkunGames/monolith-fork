@@ -37,7 +37,8 @@ namespace
 		}
 
 		FString ComponentName;
-		if (Params->HasField(TEXT("component_name")))
+		const bool bHasComponentName = Params->HasField(TEXT("component_name"));
+		if (bHasComponentName)
 		{
 			if (!Params->TryGetStringField(TEXT("component_name"), ComponentName))
 			{
@@ -398,7 +399,8 @@ FMonolithActionResult FMonolithLogicDriverRuntimeActions::HandleRuntimeGetStateH
 	if (!Lookup.bSuccess) return Lookup.Error;
 
 	int32 Limit = 50;
-	if (Params->HasField(TEXT("limit")))
+	const bool bHasLimit = Params->HasField(TEXT("limit"));
+	if (bHasLimit)
 	{
 		double TmpLimit = 0.0;
 		if (!Params->TryGetNumberField(TEXT("limit"), TmpLimit))

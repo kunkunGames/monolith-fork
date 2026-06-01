@@ -634,7 +634,8 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddState(const TSh
 
 	int32 PosX = 0;
 	double TmpX = 0.0;
-	if (Params->HasField(TEXT("position_x")))
+	const bool bHasPosX = Params->HasField(TEXT("position_x"));
+	if (bHasPosX)
 	{
 		if (!Params->TryGetNumberField(TEXT("position_x"), TmpX))
 		{
@@ -644,7 +645,8 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddState(const TSh
 	}
 	int32 PosY = 0;
 	double TmpY = 0.0;
-	if (Params->HasField(TEXT("position_y")))
+	const bool bHasPosY = Params->HasField(TEXT("position_y"));
+	if (bHasPosY)
 	{
 		if (!Params->TryGetNumberField(TEXT("position_y"), TmpY))
 		{
@@ -727,7 +729,8 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddTransition(cons
 	if (TransOutPin && TargetInPin) TransOutPin->MakeLinkTo(TargetInPin);
 
 	// Set priority if specified
-	if (Params->HasField(TEXT("priority")))
+	const bool bHasPriority = Params->HasField(TEXT("priority"));
+	if (bHasPriority)
 	{
 		double TmpPriority = 0.0;
 		if (!Params->TryGetNumberField(TEXT("priority"), TmpPriority))
@@ -765,7 +768,8 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddConduit(const T
 
 	int32 PosX = 0;
 	double TmpX = 0.0;
-	if (Params->HasField(TEXT("position_x")))
+	const bool bHasPosX = Params->HasField(TEXT("position_x"));
+	if (bHasPosX)
 	{
 		if (!Params->TryGetNumberField(TEXT("position_x"), TmpX))
 		{
@@ -775,7 +779,8 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddConduit(const T
 	}
 	int32 PosY = 0;
 	double TmpY = 0.0;
-	if (Params->HasField(TEXT("position_y")))
+	const bool bHasPosY = Params->HasField(TEXT("position_y"));
+	if (bHasPosY)
 	{
 		if (!Params->TryGetNumberField(TEXT("position_y"), TmpY))
 		{
@@ -816,7 +821,8 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddStateMachineNod
 
 	int32 PosX = 0;
 	double TmpX = 0.0;
-	if (Params->HasField(TEXT("position_x")))
+	const bool bHasPosX = Params->HasField(TEXT("position_x"));
+	if (bHasPosX)
 	{
 		if (!Params->TryGetNumberField(TEXT("position_x"), TmpX))
 		{
@@ -826,7 +832,8 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddStateMachineNod
 	}
 	int32 PosY = 0;
 	double TmpY = 0.0;
-	if (Params->HasField(TEXT("position_y")))
+	const bool bHasPosY = Params->HasField(TEXT("position_y"));
+	if (bHasPosY)
 	{
 		if (!Params->TryGetNumberField(TEXT("position_y"), TmpY))
 		{
@@ -1121,7 +1128,8 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleSetEndState(const 
 	if (NodeGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'node_guid'"));
 
 	bool bIsEndState = true;
-	if (Params->HasField(TEXT("is_end_state")))
+	const bool bHasIsEndState = Params->HasField(TEXT("is_end_state"));
+	if (bHasIsEndState)
 	{
 		if (!Params->TryGetBoolField(TEXT("is_end_state"), bIsEndState))
 		{
@@ -1341,7 +1349,8 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAutoArrangeGraph(c
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString FormatterMode = TEXT("default");
-	if (Params->HasField(TEXT("formatter")))
+	const bool bHasFormatter = Params->HasField(TEXT("formatter"));
+	if (bHasFormatter)
 	{
 		FString TmpStr;
 		if (!Params->TryGetStringField(TEXT("formatter"), TmpStr))

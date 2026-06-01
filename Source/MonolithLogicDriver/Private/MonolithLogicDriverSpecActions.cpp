@@ -177,11 +177,12 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 	TSharedPtr<FJsonObject> Spec = *SpecPtr;
 
 	const TArray<TSharedPtr<FJsonValue>>* StatesPtr = nullptr;
-	if (Spec->HasField(TEXT("states")) && !Spec->TryGetArrayField(TEXT("states"), StatesPtr))
+	const bool bHasStates = Spec->HasField(TEXT("states"));
+	if (bHasStates && !Spec->TryGetArrayField(TEXT("states"), StatesPtr))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param: 'states' must be an array"));
 	}
-	if (StatesPtr)
+	if (bHasStates && StatesPtr)
 	{
 		for (const TSharedPtr<FJsonValue>& StateVal : *StatesPtr)
 		{
@@ -192,11 +193,13 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 			}
 			const TSharedPtr<FJsonObject>& StateObj = *StateObjPtr;
 			bool bFlag = false;
-			if (StateObj->HasField(TEXT("is_initial")) && !StateObj->TryGetBoolField(TEXT("is_initial"), bFlag))
+			const bool bHasIsInitial = StateObj->HasField(TEXT("is_initial"));
+			if (bHasIsInitial && !StateObj->TryGetBoolField(TEXT("is_initial"), bFlag))
 			{
 				return FMonolithActionResult::Error(TEXT("Invalid param: 'is_initial' must be a boolean"));
 			}
-			if (StateObj->HasField(TEXT("is_end")) && !StateObj->TryGetBoolField(TEXT("is_end"), bFlag))
+			const bool bHasIsEnd = StateObj->HasField(TEXT("is_end"));
+			if (bHasIsEnd && !StateObj->TryGetBoolField(TEXT("is_end"), bFlag))
 			{
 				return FMonolithActionResult::Error(TEXT("Invalid param: 'is_end' must be a boolean"));
 			}
@@ -207,7 +210,8 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 	for (const TCHAR* FieldName : ArrayFieldNames)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* ArrayPtr = nullptr;
-		if (Spec->HasField(FieldName) && !Spec->TryGetArrayField(FieldName, ArrayPtr))
+		const bool bHasField = Spec->HasField(FieldName);
+		if (bHasField && !Spec->TryGetArrayField(FieldName, ArrayPtr))
 		{
 			return FMonolithActionResult::Error(
 				FString::Printf(TEXT("Invalid param: '%s' must be an array"), FieldName));
@@ -318,11 +322,12 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 	int32 PosX = 300;
 
 	const TArray<TSharedPtr<FJsonValue>>* StatesPtr2 = nullptr;
-	if (Spec->HasField(TEXT("states")) && !Spec->TryGetArrayField(TEXT("states"), StatesPtr2))
+	const bool bHasStates2 = Spec->HasField(TEXT("states"));
+	if (bHasStates2 && !Spec->TryGetArrayField(TEXT("states"), StatesPtr2))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param: 'states' must be an array"));
 	}
-	if (StatesPtr2)
+	if (bHasStates2 && StatesPtr2)
 	{
 		const TArray<TSharedPtr<FJsonValue>>& States = *StatesPtr2;
 		for (const TSharedPtr<FJsonValue>& StateVal : States)
@@ -339,7 +344,8 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 			if (!StateNode) continue;
 
 			// Initial state: connect from entry
-			if (StateObj->HasField(TEXT("is_initial")))
+			const bool bHasIsInitialNode = StateObj->HasField(TEXT("is_initial"));
+			if (bHasIsInitialNode)
 			{
 				bool bIsInitial = false;
 				if (!StateObj->TryGetBoolField(TEXT("is_initial"), bIsInitial))
@@ -350,7 +356,8 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 			}
 
 			// End state
-			if (StateObj->HasField(TEXT("is_end")))
+			const bool bHasIsEndNode = StateObj->HasField(TEXT("is_end"));
+			if (bHasIsEndNode)
 			{
 				bool bIsEnd = false;
 				if (!StateObj->TryGetBoolField(TEXT("is_end"), bIsEnd))
@@ -371,11 +378,12 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 
 	// ── 3. Create conduits ──
 	const TArray<TSharedPtr<FJsonValue>>* ConduitsPtr = nullptr;
-	if (ConduitClass && Spec->HasField(TEXT("conduits")) && !Spec->TryGetArrayField(TEXT("conduits"), ConduitsPtr))
+	const bool bHasConduits = Spec->HasField(TEXT("conduits"));
+	if (ConduitClass && bHasConduits && !Spec->TryGetArrayField(TEXT("conduits"), ConduitsPtr))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param: 'conduits' must be an array"));
 	}
-	if (ConduitClass && ConduitsPtr)
+	if (ConduitClass && bHasConduits && ConduitsPtr)
 	{
 		const TArray<TSharedPtr<FJsonValue>>& Conduits = *ConduitsPtr;
 		for (const TSharedPtr<FJsonValue>& CV : Conduits)
@@ -397,11 +405,12 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 
 	// ── 4. Create nested SMs ──
 	const TArray<TSharedPtr<FJsonValue>>* NestedSMsPtr = nullptr;
-	if (SMNodeClass && Spec->HasField(TEXT("nested_sms")) && !Spec->TryGetArrayField(TEXT("nested_sms"), NestedSMsPtr))
+	const bool bHasNestedSMs = Spec->HasField(TEXT("nested_sms"));
+	if (SMNodeClass && bHasNestedSMs && !Spec->TryGetArrayField(TEXT("nested_sms"), NestedSMsPtr))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param: 'nested_sms' must be an array"));
 	}
-	if (SMNodeClass && NestedSMsPtr)
+	if (SMNodeClass && bHasNestedSMs && NestedSMsPtr)
 	{
 		const TArray<TSharedPtr<FJsonValue>>& NestedSMs = *NestedSMsPtr;
 		for (const TSharedPtr<FJsonValue>& NV : NestedSMs)
@@ -417,10 +426,14 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 			if (!SMNode) continue;
 
 			// If sm_path given, try to set the referenced SM class
-			if (NO->HasField(TEXT("sm_path")))
+			const bool bHasSMPath = NO->HasField(TEXT("sm_path"));
+			if (bHasSMPath)
 			{
 				FString SMPath;
-				NO->TryGetStringField(TEXT("sm_path"), SMPath);
+				if (!NO->TryGetStringField(TEXT("sm_path"), SMPath))
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'sm_path' must be a string"));
+				}
 				FString LoadError;
 				UBlueprint* RefBP = MonolithLD::LoadSMBlueprint(SMPath, LoadError);
 				if (RefBP && RefBP->GeneratedClass)
@@ -443,11 +456,12 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 	// ── 5. Wire transitions ──
 	int32 TransitionsCreated = 0;
 	const TArray<TSharedPtr<FJsonValue>>* TransitionsPtr = nullptr;
-	if (Spec->HasField(TEXT("transitions")) && !Spec->TryGetArrayField(TEXT("transitions"), TransitionsPtr))
+	const bool bHasTransitions = Spec->HasField(TEXT("transitions"));
+	if (bHasTransitions && !Spec->TryGetArrayField(TEXT("transitions"), TransitionsPtr))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param: 'transitions' must be an array"));
 	}
-	if (TransitionsPtr)
+	if (bHasTransitions && TransitionsPtr)
 	{
 		const TArray<TSharedPtr<FJsonValue>>& Transitions = *TransitionsPtr;
 		for (const TSharedPtr<FJsonValue>& TV : Transitions)

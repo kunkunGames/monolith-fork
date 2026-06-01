@@ -488,11 +488,12 @@ FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldDialogu
 	TArray<FScaffoldTransitionDesc> Transitions;
 
 	const TArray<TSharedPtr<FJsonValue>>* DialogueNodesPtr = nullptr;
-	if (Params->HasField(TEXT("dialogue_nodes")) && !Params->TryGetArrayField(TEXT("dialogue_nodes"), DialogueNodesPtr))
+	const bool bHasDialogueNodes = Params->HasField(TEXT("dialogue_nodes"));
+	if (bHasDialogueNodes && !Params->TryGetArrayField(TEXT("dialogue_nodes"), DialogueNodesPtr))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param 'dialogue_nodes': must be an array"));
 	}
-	if (DialogueNodesPtr)
+	if (bHasDialogueNodes && DialogueNodesPtr)
 	{
 
 		const TArray<TSharedPtr<FJsonValue>>& DialogueNodes = *DialogueNodesPtr;
@@ -528,11 +529,12 @@ FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldDialogu
 
 			// Check for choices
 			const TArray<TSharedPtr<FJsonValue>>* ChoicesPtr = nullptr;
-			if (DN->HasField(TEXT("choices")) && !DN->TryGetArrayField(TEXT("choices"), ChoicesPtr))
+			const bool bHasChoices = DN->HasField(TEXT("choices"));
+			if (bHasChoices && !DN->TryGetArrayField(TEXT("choices"), ChoicesPtr))
 			{
 				return FMonolithActionResult::Error(TEXT("Invalid param 'choices' in dialogue_node: must be an array"));
 			}
-			if (ChoicesPtr)
+			if (bHasChoices && ChoicesPtr)
 			{
 
 				const TArray<TSharedPtr<FJsonValue>>& Choices = *ChoicesPtr;
@@ -607,11 +609,12 @@ FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldQuestSM
 	// Collect objectives
 	TArray<FString> Objectives;
 	const TArray<TSharedPtr<FJsonValue>>* ObjArrPtr = nullptr;
-	if (Params->HasField(TEXT("objectives")) && !Params->TryGetArrayField(TEXT("objectives"), ObjArrPtr))
+	const bool bHasObjectives = Params->HasField(TEXT("objectives"));
+	if (bHasObjectives && !Params->TryGetArrayField(TEXT("objectives"), ObjArrPtr))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param 'objectives': must be an array"));
 	}
-	if (ObjArrPtr)
+	if (bHasObjectives && ObjArrPtr)
 	{
 
 		const TArray<TSharedPtr<FJsonValue>>& ObjArr = *ObjArrPtr;
@@ -680,11 +683,12 @@ FMonolithActionResult FMonolithLogicDriverScaffoldActions::HandleScaffoldInterac
 	// Collect state names
 	TArray<FString> StateNames;
 	const TArray<TSharedPtr<FJsonValue>>* StatesArrPtr = nullptr;
-	if (Params->HasField(TEXT("states")) && !Params->TryGetArrayField(TEXT("states"), StatesArrPtr))
+	const bool bHasStates = Params->HasField(TEXT("states"));
+	if (bHasStates && !Params->TryGetArrayField(TEXT("states"), StatesArrPtr))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param 'states': must be an array"));
 	}
-	if (StatesArrPtr)
+	if (bHasStates && StatesArrPtr)
 	{
 
 		const TArray<TSharedPtr<FJsonValue>>& StatesArr = *StatesArrPtr;
