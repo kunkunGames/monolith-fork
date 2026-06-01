@@ -35,6 +35,10 @@ public:
 	bool IsDryRun() const { return bDryRun; }
 	bool IsStrict() const { return bStrict; }
 
+	/** Return true if a parameter was present but of the wrong type. */
+	bool HasParseError() const { return bHasParseError; }
+	const FString& GetParseError() const { return ParseErrorMsg; }
+
 	/** Build a success-shaped JSON-RPC response carrying the report payload. */
 	FMonolithActionResult MakeDryRunResponse(const FDryRunReport& Report) const;
 
@@ -44,4 +48,6 @@ public:
 private:
 	bool bDryRun = false;
 	bool bStrict = false;
+	bool bHasParseError = false;
+	FString ParseErrorMsg;
 };

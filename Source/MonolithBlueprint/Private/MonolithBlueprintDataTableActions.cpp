@@ -393,6 +393,10 @@ FMonolithActionResult FMonolithBlueprintDataTableActions::HandleSetDataTableRows
 	UScriptStruct* RowStruct = const_cast<UScriptStruct*>(RowStructConst);
 
 	FMonolithDryRunGuard Guard(Params);
+	if (Guard.HasParseError())
+	{
+		return FMonolithActionResult::Error(Guard.GetParseError(), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	const bool bDryRun = Guard.IsDryRun();
 	const bool bStrict = Guard.IsStrict();
 

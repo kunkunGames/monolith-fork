@@ -13,8 +13,18 @@ FMonolithDryRunGuard::FMonolithDryRunGuard(const TSharedPtr<FJsonObject>& Params
 	{
 		return;
 	}
-	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
-	Params->TryGetBoolField(TEXT("strict"), bStrict);
+	if (Params->HasField(TEXT("dry_run")) && !Params->TryGetBoolField(TEXT("dry_run"), bDryRun))
+	{
+		bHasParseError = true;
+		ParseErrorMsg = TEXT("Parameter 'dry_run' must be a boolean");
+		return;
+	}
+	if (Params->HasField(TEXT("strict")) && !Params->TryGetBoolField(TEXT("strict"), bStrict))
+	{
+		bHasParseError = true;
+		ParseErrorMsg = TEXT("Parameter 'strict' must be a boolean");
+		return;
+	}
 }
 
 TSharedPtr<FJsonObject> FMonolithDryRunGuard::ReportToJson(const FDryRunReport& Report)

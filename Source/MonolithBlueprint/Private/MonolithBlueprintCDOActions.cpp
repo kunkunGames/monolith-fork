@@ -444,6 +444,10 @@ FMonolithActionResult FMonolithBlueprintCDOActions::HandleSetCDOProperty(const T
 	// and return the FDryRunReport without entering the engine edit cradle. The
 	// guard pulls dry_run + strict from Params per FMonolithDryRunGuard contract.
 	FMonolithDryRunGuard DryRunGuard(Params);
+	if (DryRunGuard.HasParseError())
+	{
+		return FMonolithActionResult::Error(DryRunGuard.GetParseError(), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (DryRunGuard.IsDryRun())
 	{
 		// Bind the single-property tree the walker expects.
