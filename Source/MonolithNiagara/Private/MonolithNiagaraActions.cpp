@@ -2814,7 +2814,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetEmitterEnabled(const TSh
 {
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	bool bEnabled = Params->GetBoolField(TEXT("enabled"));
+	bool bEnabled = true;
+	if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required bool field: enabled"));
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -3573,7 +3577,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleEnabled(const TSha
 	FString SystemPath = GetAssetPath(Params);
 	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
 	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
-	bool bEnabled = Params->GetBoolField(TEXT("enabled"));
+	bool bEnabled = true;
+	if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required bool field: enabled"));
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -6237,7 +6245,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetSystemDiagnostics(const 
 	bool bCompileFirst = true;
 	if (Params->HasField(TEXT("compile_first")))
 	{
-		bCompileFirst = Params->GetBoolField(TEXT("compile_first"));
+		if (!Params->TryGetBoolField(TEXT("compile_first"), bCompileFirst))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid boolean field: compile_first"));
+		}
 	}
 	if (bCompileFirst)
 	{
