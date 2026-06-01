@@ -340,6 +340,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetPoseSearchSchema(cons
 
 		// All roled skeletons
 		TArray<TSharedPtr<FJsonValue>> SkeletonArray;
+		SkeletonArray.Reserve(RoledSkeletons.Num());
 		for (int32 i = 0; i < RoledSkeletons.Num(); ++i)
 		{
 			TSharedPtr<FJsonObject> SkelObj = MakeShared<FJsonObject>();
@@ -358,6 +359,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetPoseSearchSchema(cons
 	// Channels
 	TConstArrayView<TObjectPtr<UPoseSearchFeatureChannel>> Channels = Schema->GetChannels();
 	TArray<TSharedPtr<FJsonValue>> ChannelArray;
+	ChannelArray.Reserve(Channels.Num());
 	for (int32 i = 0; i < Channels.Num(); ++i)
 	{
 		const UPoseSearchFeatureChannel* Channel = Channels[i];
@@ -402,6 +404,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetPoseSearchDatabase(co
 	Root->SetNumberField(TEXT("sequence_count"), NumAssets);
 
 	TArray<TSharedPtr<FJsonValue>> SeqArray;
+	SeqArray.Reserve(NumAssets);
 	for (int32 i = 0; i < NumAssets; ++i)
 	{
 		const FPoseSearchDatabaseAnimationAsset* AnimAsset = Database->GetDatabaseAnimationAsset(i);
@@ -573,6 +576,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetDatabaseStats(const T
 	if (Database->Tags.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> TagArray;
+		TagArray.Reserve(Database->Tags.Num());
 		for (const FName& Tag : Database->Tags)
 		{
 			TagArray.Add(MakeShared<FJsonValueString>(Tag.ToString()));
