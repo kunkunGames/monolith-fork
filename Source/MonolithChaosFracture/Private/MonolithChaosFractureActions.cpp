@@ -109,10 +109,12 @@ FMonolithActionResult FMonolithChaosFractureActions::GetStatus(const TSharedPtr<
 	Result->SetStringField(TEXT("sample_utc"), FDateTime::UtcNow().ToIso8601());
 	Result->SetBoolField(TEXT("chaos_fracture_namespace_registered"), FMonolithToolRegistry::Get().HasNamespace(TEXT("chaos_fracture")));
 
+	const TArray<FString> ModuleNames = MonolithChaosFracture::GetModuleNames();
 	TArray<TSharedPtr<FJsonValue>> ModuleRows;
+	ModuleRows.Reserve(ModuleNames.Num());
 	bool bAnyModuleExists = false;
 	bool bAnyModuleLoaded = false;
-	for (const FString& ModuleName : MonolithChaosFracture::GetModuleNames())
+	for (const FString& ModuleName : ModuleNames)
 	{
 		TSharedPtr<FJsonObject> Row = MonolithChaosFracture::BuildModuleStatusRow(ModuleName);
 		bAnyModuleExists |= Row->GetBoolField(TEXT("exists"));
@@ -132,6 +134,7 @@ FMonolithActionResult FMonolithChaosFractureActions::GetStatus(const TSharedPtr<
 		TEXT("/Script/GeometryCollectionEngine.GeometryCollectionCache"),
 		TEXT("/Script/FractureEditor.FractureModeSettings")
 	};
+	ReflectedTypes.Reserve(UE_ARRAY_COUNT(TypePaths));
 	for (const TCHAR* TypePath : TypePaths)
 	{
 		ReflectedTypes.Add(MakeShared<FJsonValueObject>(MonolithChaosFracture::BuildReflectedTypeRow(TypePath)));
@@ -139,12 +142,14 @@ FMonolithActionResult FMonolithChaosFractureActions::GetStatus(const TSharedPtr<
 	Result->SetArrayField(TEXT("reflected_types"), ReflectedTypes);
 
 	TArray<TSharedPtr<FJsonValue>> CurrentActions;
+	CurrentActions.Reserve(3);
 	CurrentActions.Add(MakeShared<FJsonValueString>(TEXT("chaos_fracture.get_status")));
 	CurrentActions.Add(MakeShared<FJsonValueString>(TEXT("chaos_fracture.list_geometry_collection_assets")));
 	CurrentActions.Add(MakeShared<FJsonValueString>(TEXT("chaos_fracture.list_geometry_collection_components")));
 	Result->SetArrayField(TEXT("current_actions"), CurrentActions);
 
 	TArray<TSharedPtr<FJsonValue>> FutureActions;
+	FutureActions.Reserve(5);
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("chaos_fracture.get_fracture_info")));
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("chaos_fracture.validate_fracture_asset")));
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("chaos_fracture.fracture_uniform")));
@@ -153,6 +158,7 @@ FMonolithActionResult FMonolithChaosFractureActions::GetStatus(const TSharedPtr<
 	Result->SetArrayField(TEXT("future_actions"), FutureActions);
 
 	TArray<TSharedPtr<FJsonValue>> Notes;
+	Notes.Reserve(2);
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("This first milestone reports visibility only; it does not load Fracture modules, run fracture tools, or mutate Geometry Collections.")));
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Destructive fracture recipes must remain future work with duplicate-target defaults, confirm=true, transactions, and operation limits.")));
 	Result->SetArrayField(TEXT("notes"), Notes);
