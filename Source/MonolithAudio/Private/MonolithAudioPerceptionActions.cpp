@@ -456,8 +456,22 @@ FMonolithActionResult FMonolithAudioPerceptionActions::GetSoundPerceptionBinding
 // Action: list_perception_bound_sounds
 // ============================================================================
 
-FMonolithActionResult FMonolithAudioPerceptionActions::ListPerceptionBoundSounds(const TSharedPtr<FJsonObject>& /*Params*/)
+FMonolithActionResult FMonolithAudioPerceptionActions::ListPerceptionBoundSounds(const TSharedPtr<FJsonObject>& Params)
 {
+
+	// Action previously unbounded. Use a conservative local max of 1000 to prevent editor stalls/OOM on huge project asset counts.
+	int32 Limit = 1000;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = FMath::Clamp(Limit, 0, 1000);
+
 	IAssetRegistry& Registry = IAssetRegistry::GetChecked();
 
 	// Filter to USoundBase descendants — registry indexes class hierarchy so this catches Cue, MetaSoundSource, Wave.
@@ -468,10 +482,10 @@ FMonolithActionResult FMonolithAudioPerceptionActions::ListPerceptionBoundSounds
 	TArray<FAssetData> AllSounds;
 	Registry.GetAssets(Filter, AllSounds);
 
-	auto Result = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> BindingsArr;
 	int32 Scanned = 0;
 	int32 Bound = 0;
+	bool bLimitReached = false;
 
 	for (const FAssetData& AssetData : AllSounds)
 	{
@@ -492,6 +506,12 @@ FMonolithActionResult FMonolithAudioPerceptionActions::ListPerceptionBoundSounds
 			continue;
 		}
 
+		if (Bound >= Limit)
+		{
+			bLimitReached = true;
+			break;
+		}
+
 		++Bound;
 		auto Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("asset_path"), Sound->GetPathName());
@@ -500,8 +520,10 @@ FMonolithActionResult FMonolithAudioPerceptionActions::ListPerceptionBoundSounds
 		BindingsArr.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 
+	auto Result = MakeShared<FJsonObject>();
 	Result->SetNumberField(TEXT("scanned"), Scanned);
 	Result->SetNumberField(TEXT("bound"), Bound);
+	Result->SetBoolField(TEXT("limit_reached"), bLimitReached);
 	Result->SetArrayField(TEXT("bindings"), BindingsArr);
 	return FMonolithActionResult::Success(Result);
 }
@@ -543,5 +565,7 @@ void FMonolithAudioPerceptionActions::RegisterActions(FMonolithToolRegistry& Reg
 	Registry.RegisterAction(TEXT("audio"), TEXT("list_perception_bound_sounds"),
 		TEXT("Scan the AssetRegistry for every USoundBase carrying a Monolith perception binding."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioPerceptionActions::ListPerceptionBoundSounds),
-		FParamSchemaBuilder().Build());
+		FParamSchemaBuilder()
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum results (default: 1000, max: 1000)"), TEXT("1000"))
+			.Build());
 }

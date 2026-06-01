@@ -538,4 +538,104 @@ bool FMonolithAudioCreateInteractiveMetaSoundLimitTest::RunTest(const FString& P
 }
 #endif // WITH_METASOUND
 
+
+namespace
+{
+FMonolithActionResult ExecuteListPerceptionBoundSounds(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithAudioPerceptionActions::RegisterActions(FMonolithToolRegistry::Get());
+	return FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("list_perception_bound_sounds"), Params);
+}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioListPerceptionBoundSoundsLimitTest, "Monolith.LimitGuard.Audio.ListPerceptionBoundSoundsClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAudioListPerceptionBoundSoundsLimitTest::RunTest(const FString& Parameters)
+{
+	// Test malformed limit type
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("limit"), TEXT("not_a_number"));
+		FMonolithActionResult Result = ExecuteListPerceptionBoundSounds(Params);
+		TestFalse(TEXT("String limit should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention limit"), Result.ErrorMessage.Contains(TEXT("limit")));
+	}
+
+	// Test omitted value uses existing default
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = ExecuteListPerceptionBoundSounds(Params);
+		if (!Result.bSuccess || !Result.Result.IsValid())
+		{
+			AddError(TEXT("Action failed without limit"));
+		}
+		else
+		{
+			const TArray<TSharedPtr<FJsonValue>>* BindingsArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("bindings"), BindingsArray))
+			{
+				if (BindingsArray->Num() > 1000)
+				{
+					AddError(FString::Printf(TEXT("Default limit of 1000 was not respected. Count was %d"), BindingsArray->Num()));
+				}
+			}
+		}
+	}
+
+	// Test normal value is preserved
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 5.0);
+		FMonolithActionResult Result = ExecuteListPerceptionBoundSounds(Params);
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* BindingsArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("bindings"), BindingsArray))
+			{
+				if (BindingsArray->Num() > 5)
+				{
+					AddError(FString::Printf(TEXT("Explicit limit of 5 was not respected. Count was %d"), BindingsArray->Num()));
+				}
+			}
+		}
+	}
+
+	// Test negative value is handled (clamped to 0)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), -10.0);
+		FMonolithActionResult Result = ExecuteListPerceptionBoundSounds(Params);
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* BindingsArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("bindings"), BindingsArray))
+			{
+				if (BindingsArray->Num() > 0)
+				{
+					AddError(FString::Printf(TEXT("Negative limit was not clamped to 0. Count was %d"), BindingsArray->Num()));
+				}
+			}
+		}
+	}
+
+	// Test extreme value is clamped (to 1000)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 1000000.0);
+		FMonolithActionResult Result = ExecuteListPerceptionBoundSounds(Params);
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* BindingsArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("bindings"), BindingsArray))
+			{
+				if (BindingsArray->Num() > 1000)
+				{
+					AddError(FString::Printf(TEXT("Huge limit was not clamped to 1000. Count was %d"), BindingsArray->Num()));
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
