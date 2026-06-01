@@ -174,7 +174,7 @@ TSharedPtr<FBAGraphHandler> FMonolithBAFormatterImpl::FindHandlerForGraph(UEdGra
 		UEdGraph* HGraph = Handler->GetFocusedEdGraph();
 		if (HGraph
 			&& HGraph->GetOuter() == Graph->GetOuter()
-			&& HGraph->GetName() == Graph->GetName())
+			&& HGraph->GetFName() == Graph->GetFName())
 		{
 			return Handler;
 		}
