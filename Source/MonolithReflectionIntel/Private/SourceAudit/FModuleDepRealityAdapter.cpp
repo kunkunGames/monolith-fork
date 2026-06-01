@@ -18,6 +18,7 @@
 #include "SourceAudit/FModuleDepRealityAdapter.h"
 #include "MonolithReflectionIntelModule.h"
 #include "Shared/RICursorCodec.h"
+#include "Shared/RIPathUtils.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -82,20 +83,9 @@ namespace
 		TSet<FString> DeclaredDeps;   // Public + Private DependencyModuleNames union
 	};
 
-	FString ToProjectRelative(const FString& AbsPath, const FString& ProjectRoot)
-	{
-		FString Full = FPaths::ConvertRelativePathToFull(AbsPath);
-		FString RootFull = FPaths::ConvertRelativePathToFull(ProjectRoot);
-		Full.ReplaceInline(TEXT("\\"), TEXT("/"));
-		RootFull.ReplaceInline(TEXT("\\"), TEXT("/"));
-		if (Full.StartsWith(RootFull, ESearchCase::IgnoreCase))
-		{
-			FString Rel = Full.Mid(RootFull.Len());
-			while (!Rel.IsEmpty() && Rel[0] == TEXT('/')) { Rel.RightChopInline(1); }
-			return Rel;
-		}
-		return Full;
-	}
+	// ToProjectRelative hoisted to Private/Shared/RIPathUtils.{h,cpp}
+	// (RIToProjectRelative) to avoid unity-build collisions across the three
+	// indexers that carried a byte-identical copy. Behaviour unchanged.
 
 	/**
 	 * Parse a `.Build.cs` file and extract:
@@ -422,7 +412,7 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleAuditModuleDepReality(cons
 					if (Mod.DeclaredDeps.Contains(OwningModule)) { continue; }
 
 					FViolationRow V2;
-					V2.File = ToProjectRelative(SrcFile, ProjectRoot);
+					V2.File = RIToProjectRelative(SrcFile, ProjectRoot);
 					V2.Line = i + 1;
 					V2.Symbol = Candidate;
 					V2.ExpectedModule = OwningModule;

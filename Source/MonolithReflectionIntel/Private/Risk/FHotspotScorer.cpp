@@ -26,8 +26,14 @@
 
 namespace
 {
-	/** Convert any input path to project-relative forward-slashed form. */
-	FString ToProjectRelative(const FString& Path, const FString& ProjectRoot)
+	// NOTE: Deliberately NOT the shared RIToProjectRelative (Private/Shared/
+	// RIPathUtils.h). This variant operates on the RAW input path and does NOT
+	// call FPaths::ConvertRelativePathToFull — the hotspot join needs the path
+	// shapes left as the DB / git-churn rows stored them, not resolved to full
+	// absolute paths. Unifying with the shared helper would change behaviour.
+	// File-unique name clears the unity-build collision with the three indexers.
+	/** Convert any input path to project-relative forward-slashed form (raw, no full-path resolve). */
+	FString HotspotToProjectRelative(const FString& Path, const FString& ProjectRoot)
 	{
 		FString Full = Path;
 		Full.ReplaceInline(TEXT("\\"), TEXT("/"));
@@ -150,7 +156,7 @@ bool FHotspotScorer::LoadComplexity(FSQLiteDatabase& DB, TMap<FString, FFileSign
 		Stmt.GetColumnValueByIndex(0, AbsPath);
 		Stmt.GetColumnValueByIndex(1, LineCount);
 
-		const FString Rel = ToProjectRelative(AbsPath, ProjectRoot);
+		const FString Rel = HotspotToProjectRelative(AbsPath, ProjectRoot);
 		// Only retain rows under the project tree — engine files have no
 		// project-relative path and we don't score engine churn.
 		if (Rel.IsEmpty() || Rel.StartsWith(TEXT("/"))) { continue; }

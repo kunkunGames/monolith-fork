@@ -48,26 +48,10 @@
 
 namespace
 {
-	/** Forward-slash project-relative path resolver — mirrors the Phase 2 helper. */
-	FString ToProjectRelative(const FString& AbsPath, const FString& ProjectRoot)
-	{
-		FString Full = FPaths::ConvertRelativePathToFull(AbsPath);
-		FString RootFull = FPaths::ConvertRelativePathToFull(ProjectRoot);
-		Full.ReplaceInline(TEXT("\\"), TEXT("/"));
-		RootFull.ReplaceInline(TEXT("\\"), TEXT("/"));
-		if (Full.StartsWith(RootFull, ESearchCase::IgnoreCase))
-		{
-			FString Rel = Full.Mid(RootFull.Len());
-			while (!Rel.IsEmpty() && (Rel[0] == TEXT('/') || Rel[0] == TEXT('\\')))
-			{
-				Rel.RightChopInline(1);
-			}
-			return Rel;
-		}
-		// Not under project root (engine plugin scan) — return forward-slashed
-		// absolute. Cppreflect queries that ship in v0.17.0 still match cleanly.
-		return Full;
-	}
+	// A project-relative path resolver formerly lived here (anon-namespace copy of
+	// the Phase 2 helper) but was never referenced in this TU. It collided under
+	// unity with the identical copies in the other indexers; removed. If a future
+	// edit needs it, include "Shared/RIPathUtils.h" and call RIToProjectRelative.
 
 	/**
 	 * Convert UPPER_SNAKE_CASE module-API tag (e.g. "LEVIATHAN", "INVENTORYSYSTEMX")
