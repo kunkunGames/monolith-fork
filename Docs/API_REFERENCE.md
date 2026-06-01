@@ -640,6 +640,7 @@ Full-text search across all indexed project assets, nodes, variables, and parame
 |-----------|------|----------|-------------|
 | `query` | string | **required** | FTS5 search query (supports `AND`, `OR`, `NOT`, `prefix*`) |
 | `limit` | integer | optional | Default: `50` |
+| `include_content` | boolean | optional | Include variable/parameter/DataTable/actor/supplemental matches for discovery only. Default: `true` |
 
 ### `project.find_references`
 
