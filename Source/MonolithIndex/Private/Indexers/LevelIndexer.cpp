@@ -8,6 +8,7 @@
 #include "Engine/Level.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/WorldSettings.h"
+#include "EngineUtils.h"
 #include "Components/ActorComponent.h"
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
@@ -143,21 +144,45 @@ bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset
 			// landscape actor's PostRegisterAllComponents lazily creates + Initialize()s a ULandscapeSubsystem on
 			// this never-InitWorld'd world. If we then tear the world down (TryUnloadPackage + GC), the GC destroys
 			// the world while ULandscapeSubsystem is still bInitialized -> handled-but-noisy ensure at
-			// WorldSubsystem.cpp:158 (issue #67). The obvious "fix" (UWorld::CleanupWorld) is FATAL here: its
-			// SubsystemCollection.Deinitialize() drives ULandscapeSubsystem::Deinitialize() which frees
-			// Nanite/grass/streaming builders that assume a fully InitWorld'd render scene -> access violation
-			// (the rejected approach, see issue #67 plan). So for landscape worlds we instead SKIP teardown and
-			// leave the world resident (RF_Standalone intact) so it is never GC'd during this index run - no
-			// Deinitialize crash, no GC-time ensure. Cost: this world stays in memory for the session.
+			// WorldSubsystem.cpp:158 (issue #67).
+			//
+			// The shipped fix kept landscape worlds resident (RF_Standalone intact) to dodge both the ensure and a
+			// fatal crash in ULandscapeSubsystem::Deinitialize (its grass-builder destructor dereferences the null
+			// World->Scene on a no-render-scene Inactive world). That avoided ~80 resident UWorlds per reindex.
+			//
+			// Issue #67 optimization (this branch): tear the landscape world down safely instead of leaving it
+			// resident, by UNREGISTERING every landscape proxy's components FIRST, then driving CleanupWorld:
+			//   1. UnregisterAllComponents() on each ALandscapeProxy cascades to ULandscapeComponent::OnUnregister ->
+			//      ULandscapeSubsystem::UnregisterComponent (Landscape.cpp:2360) -> FLandscapeGrassMapsBuilder::
+			//      UnregisterComponent (LandscapeGrassMapsBuilder.cpp:806-820), which NULLs each FComponentState
+			//      (State->Component = nullptr) and touches NO render scene.
+			//   2. World->CleanupWorld() then Deinitialize()s the WHOLE world subsystem collection. ULandscapeSubsystem::
+			//      Deinitialize deletes the grass builder; its destructor's evict loop now early-exits on every
+			//      Component==nullptr state (the bCancelAndEvictAllImmediately/Component==nullptr branch) and never
+			//      reaches CanCurrentlyRender()/World->Scene -> no crash. Super::Deinitialize clears bInitialized ->
+			//      no GC-time ensure. CleanupWorld also clears RF_Standalone (a superset of TryUnloadPackage) and
+			//      drives WorldPartition uninit, so the landscape branch needs NEITHER the separate WP-uninit NOR
+			//      TryUnloadPackage that the non-landscape branch below still uses.
+			// This is the key reversal vs. the shipped fix: CleanupWorld was previously FATAL precisely because it ran
+			// Deinitialize while grass states still held live components; unregister-first makes it safe.
+			//
+			// RESIDUAL RISK (accepted, covered by the runtime acceptance gate + rollback, NOT pre-guarded here per
+			// issue #67 plan section 6): CleanupWorld drives Deinitialize on EVERY world subsystem, not just landscape.
+			// We cannot call ULandscapeSubsystem::Deinitialize directly (it is private), so full CleanupWorld is the
+			// only lever. Another auto-initialized world subsystem could, in its own Deinitialize, deref the null
+			// World->Scene on this no-render-scene world and crash. If the acceptance gate crashes, roll back to the
+			// shipped resident-skip behavior (do not regress the 0-ensure / 0-crash guarantee for the memory win).
 			//
 			// We detect the ULandscapeSubsystem itself rather than scanning for an ALandscapeProxy actor, because the
 			// subsystem is the thing that ensures at GC, and in World Partition / streaming worlds the landscape actor
 			// can live in a streaming sublevel or as an external WP actor that is NOT present in PersistentLevel->Actors
-			// (issue #67 refinement: LVL_NiagaraDestructionDriver_Demo_Cube still tripped the ensure with the actor
-			// scan because its landscape lives outside the persistent level, but its ULandscapeSubsystem was
-			// initialized). Resolve the subsystem class by script path so we avoid a Landscape Build.cs dependency
-			// (which would force a full rebuild + hard link); if the class can't be resolved (Landscape module not
-			// loaded) there can be no landscape subsystem, so we safely fall back to the original teardown.
+			// (issue #67 refinement: LVL_NiagaraDestructionDriver_Demo_Cube still tripped the ensure with a persistent-
+			// level-only actor scan because its landscape lives outside the persistent level, but its ULandscapeSubsystem
+			// was initialized). For the same reason the unregister pass below uses a world-wide TActorIterator (which
+			// covers PersistentLevel + all streaming sublevels) rather than scanning PersistentLevel->Actors only.
+			// Resolve both the subsystem class and the proxy class by script path so we avoid a Landscape Build.cs
+			// dependency (which would force a full rebuild + hard link); if a class can't be resolved (Landscape module
+			// not loaded) there can be no landscape subsystem, so we safely fall back to the original teardown.
 			// GetSubsystemBase(TSubclassOf<UWorldSubsystem>) performs the lookup against the world's subsystem
 			// collection without a compile-time type dependency and returns non-null iff the subsystem instance exists.
 			bool bContainsLandscape = false;
@@ -178,14 +203,36 @@ bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset
 			{
 				if (bContainsLandscape)
 				{
-					// Keep the landscape world resident for the rest of the session: do NOT uninit WorldPartition and
-					// do NOT TryUnloadPackage. Leaving RF_Standalone intact keeps the world referenced so GC never
-					// destroys it while ULandscapeSubsystem is bInitialized (no ensure) and we never deinitialize the
-					// half-initialized landscape subsystem (no fatal crash). Cost: this world stays in memory for the
-					// session. The number of landscape levels is finite, so this is a bounded, acceptable cost.
+					// Unregister every landscape proxy's components BEFORE teardown so the grass-builder destructor
+					// (driven by CleanupWorld below) never dereferences the null World->Scene. See the block comment
+					// above for the full mechanism. World-wide iteration (persistent level + all streaming sublevels)
+					// is required because landscape proxies can live outside PersistentLevel->Actors in WP/streaming
+					// worlds. The proxy class is resolved by script path to avoid a Landscape Build.cs dependency.
+					int32 UnregisteredProxies = 0;
+					static UClass* LandscapeProxyClass = FindObject<UClass>(nullptr, TEXT("/Script/Landscape.LandscapeProxy"));
+					if (LandscapeProxyClass)
+					{
+						for (TActorIterator<AActor> It(World); It; ++It)
+						{
+							AActor* Actor = *It;
+							if (Actor && Actor->IsA(LandscapeProxyClass))
+							{
+								Actor->UnregisterAllComponents();
+								++UnregisteredProxies;
+							}
+						}
+					}
+
+					// Now safe: the grass FComponentStates are all NULLed, so ULandscapeSubsystem::Deinitialize's
+					// destructor early-exits without touching the render scene, and Super::Deinitialize clears
+					// bInitialized (no GC-time ensure). CleanupWorld also drives WorldPartition uninit and clears
+					// RF_Standalone (superset of TryUnloadPackage), so no separate WP-uninit / TryUnloadPackage is
+					// needed for landscape worlds.
+					World->CleanupWorld();
+
 					UE_LOG(LogMonolithIndex, Verbose,
-						TEXT("LevelIndexer: '%s' has a landscape subsystem - keeping the world resident (skipping teardown) to avoid the ULandscapeSubsystem teardown ensure/crash (issue #67)."),
-						*WorldData.PackageName.ToString());
+						TEXT("LevelIndexer: '%s' has a landscape subsystem - unregistered %d landscape proxies and cleaned up the world (issue #67 optimization)."),
+						*WorldData.PackageName.ToString(), UnregisteredProxies);
 				}
 				else
 				{
