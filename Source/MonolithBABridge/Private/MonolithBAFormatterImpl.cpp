@@ -29,6 +29,9 @@ bool FMonolithBAFormatterImpl::FormatGraph(
 	int32& OutNodesFormatted,
 	FString& OutErrorMessage)
 {
+	OutNodesFormatted = 0;
+	OutErrorMessage.Empty();
+
 	if (!Graph)
 	{
 		OutErrorMessage = TEXT("Graph is null");
