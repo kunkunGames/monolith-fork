@@ -129,7 +129,7 @@ namespace
         return FString::Printf(TEXT("%s.%s"), *ShortClass, *PropertyName.ToString());
     }
 
-    UClass* ResolveAttributeSetClass(const FString& Path)
+    UClass* ResolveAttributeSetClass_UIBinding(const FString& Path)
     {
         if (Path.IsEmpty()) return nullptr;
         if (UClass* C = LoadObject<UClass>(nullptr, *Path)) return C;
@@ -152,7 +152,7 @@ namespace
             return false;
         }
         // L might be a class name OR a full path. Resolve into class then return its full path.
-        UClass* C = ResolveAttributeSetClass(L);
+        UClass* C = ResolveAttributeSetClass_UIBinding(L);
         if (!C)
         {
             OutError = FString::Printf(TEXT("AttributeSet class not found: %s"), *L);

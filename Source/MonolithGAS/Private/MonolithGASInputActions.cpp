@@ -72,7 +72,7 @@ void FMonolithGASInputActions::RegisterActions(FMonolithToolRegistry& Registry)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Find the ASC component node in the Blueprint's SimpleConstructionScript */
-static USCS_Node* FindASCNode(UBlueprint* BP)
+static USCS_Node* FindASCNode_Input(UBlueprint* BP)
 {
 	if (!BP || !BP->SimpleConstructionScript)
 	{
@@ -564,7 +564,7 @@ FMonolithActionResult FMonolithGASInputActions::HandleGetAbilityInputBindings(co
 	Result->SetBoolField(TEXT("has_asc"), bHasASC);
 
 	// Find the ASC node to check for default abilities
-	USCS_Node* ASCNode = FindASCNode(BP);
+	USCS_Node* ASCNode = FindASCNode_Input(BP);
 	TArray<TSharedPtr<FJsonValue>> Bindings;
 
 	if (ASCNode)
