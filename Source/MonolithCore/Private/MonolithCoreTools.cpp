@@ -2052,6 +2052,7 @@ FMonolithActionResult FMonolithCoreTools::HandleListDomains(const TSharedPtr<FJs
 	if (bIncludeOptional)
 	{
 		TSet<FString> RegisteredNamespaces;
+		RegisteredNamespaces.Reserve(Namespaces.Num());
 		for (const FString& Namespace : Namespaces)
 		{
 			RegisteredNamespaces.Add(Namespace);

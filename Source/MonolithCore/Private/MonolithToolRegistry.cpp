@@ -224,6 +224,7 @@ TArray<FString> FMonolithParamSchema::FindUnknownKeys(
 
 	// Build the set of allowed keys: canonical names + their declared aliases.
 	TSet<FString> Allowed;
+	Allowed.Reserve(Schema->Values.Num());
 	for (const auto& Pair : Schema->Values)
 	{
 		Allowed.Add(Pair.Key);
@@ -763,6 +764,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 				if ((*MissDef)->TryGetArrayField(TEXT("aliases"), AliasArr) && AliasArr && AliasArr->Num() > 0)
 				{
 					TArray<FString> Aliases;
+					Aliases.Reserve(AliasArr->Num());
 					for (const TSharedPtr<FJsonValue>& AV : *AliasArr)
 					{
 						FString A;
@@ -906,6 +908,7 @@ TArray<FString> FMonolithToolRegistry::GetNamespaces() const
 {
 	FScopeLock Lock(&RegistryLock);
 	TArray<FString> Result;
+	Result.Reserve(NamespaceActions.Num());
 	FMonolithToolProfileManager& Profiles = FMonolithToolProfileManager::Get();
 	for (const auto& Pair : NamespaceActions)
 	{
