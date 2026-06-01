@@ -397,6 +397,7 @@ static FMonolithActionResult ScaffoldGeneric(
 
 	// 3. Create state nodes
 	TArray<UEdGraphNode*> StateNodes;
+	StateNodes.Reserve(StateDescs.Num());
 	TSharedPtr<FJsonObject> NodeGuids = MakeShared<FJsonObject>();
 
 	for (const FScaffoldStateDesc& Desc : StateDescs)
