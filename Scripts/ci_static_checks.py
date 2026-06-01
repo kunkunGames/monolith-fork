@@ -334,9 +334,12 @@ def check_text_hygiene(ctx: CheckContext) -> None:
     line_ending_allowlist = list(text_config.get("line_ending_allowlist", []))
     line_ending_severity = ctx.config.get("severity", {}).get("line_endings", "advisory")
     for path in ctx.tracked_files():
+        rel = ctx.rel(path)
+        parts = rel.split("/")
+        if "Binaries" in parts or "Intermediate" in parts or "Saved" in parts or "DerivedDataCache" in parts:
+            continue
         if extensions and path.suffix.lower() not in extensions:
             continue
-        rel = ctx.rel(path)
         data = path.read_bytes()
         if b"\0" in data:
             ctx.block("text-hygiene", "NUL byte found in text-scanned file", path)
