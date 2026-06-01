@@ -1083,7 +1083,11 @@ FMonolithActionResult FMonolithAINavigationActions::HandleConfigureNavLink(const
 
 	if (Params->HasField(TEXT("enabled")))
 	{
-		bool bEnabled = Params->GetBoolField(TEXT("enabled"));
+		bool bEnabled = false;
+		if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"));
+		}
 
 		// Phase F #36: SetSmartLinkEnabled toggles the runtime activity flag on
 		// INavLinkCustomInterface, but the link only registers as a smart link with

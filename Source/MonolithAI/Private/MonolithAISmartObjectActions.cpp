@@ -578,7 +578,12 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleAddSOSlot(const TShar
 	// Enabled
 	if (Params->HasField(TEXT("enabled")))
 	{
-		NewSlot.bEnabled = Params->GetBoolField(TEXT("enabled"));
+		bool bEnabled = false;
+		if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"));
+		}
+		NewSlot.bEnabled = bEnabled;
 	}
 
 #if WITH_EDITORONLY_DATA
@@ -719,7 +724,12 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleConfigureSOSlot(const
 	// Enabled
 	if (Params->HasField(TEXT("enabled")))
 	{
-		Slot.bEnabled = Params->GetBoolField(TEXT("enabled"));
+		bool bEnabled = false;
+		if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"));
+		}
+		Slot.bEnabled = bEnabled;
 	}
 
 	// Slot name (editor-only data — FSmartObjectSlotDefinition::Name is gated on WITH_EDITORONLY_DATA).
