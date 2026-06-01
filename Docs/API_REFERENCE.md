@@ -210,11 +210,17 @@ The crown jewel — author an entire Blueprint (parent class, variables, compone
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `blueprint_path` | string | **required** | Package path of the Blueprint to spawn |
-| `location` | array | optional | `[x, y, z]` world location |
-| `rotation` | array | optional | `[pitch, yaw, roll]` |
-| `scale` | array | optional | `[x, y, z]` |
-| `folder_path` | string | optional | Outliner folder. **Recommended** — all spawned actors should set a folder path |
+| `blueprint` | string | **required** | Blueprint asset path (e.g. /Game/Blueprints/BP_Lamp) |
+| `location` | array\|object | optional | Spawn location [x,y,z] or {x,y,z} |
+| `rotation` | array\|object | optional | Spawn rotation [pitch,yaw,roll] |
+| `scale` | array\|object | optional | Spawn scale [x,y,z] |
+| `label` | string | optional | Actor label (display name) |
+| `folder` | string | optional | Outliner folder path |
+| `properties` | object | optional | Properties to set via reflection {name: value} |
+| `tags` | array | optional | Array of string tags to add to actor |
+| `sublevel` | string | optional | Target streaming sublevel name |
+| `mobility` | string | optional | Root component mobility: static, stationary, movable |
+| `select` | boolean | optional | Select actor after spawn |
 
 ### Dataset read/edit pack (0.15.0)
 
