@@ -52,6 +52,51 @@ bool FMonolithEditorCaptureSequenceFramesRejectsOversizedTimestamps::RunTest(con
 }
 
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorTailLogClampsCountTest, "Monolith.LimitGuard.MonolithEditor.TailLogClampsCountLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorTailLogClampsCountTest::RunTest(const FString& Parameters)
+{
+	// Seed 501 logs to ensure we have enough to test the clamp
+	for (int32 i = 0; i < 501; ++i)
+	{
+		UE_LOG(LogTemp, Log, TEXT("MonolithEditorTailLogClampsCountTest Seed Log %d"), i);
+	}
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetNumberField(TEXT("count"), 10000.0);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("tail_log"), Params);
+
+	TestTrue(TEXT("Should succeed since it executes the action"), Result.bSuccess);
+	if (Result.Result.IsValid())
+	{
+		TestTrue(TEXT("Result JSON should contain the count field"), Result.Result->HasField(TEXT("count")));
+		TestEqual(TEXT("Should clamp count to exactly 500"), Result.Result->GetNumberField(TEXT("count")), 500.0);
+
+		const TArray<TSharedPtr<FJsonValue>>* LinesArray = nullptr;
+		TestTrue(TEXT("Result JSON should contain the lines array"), Result.Result->TryGetArrayField(TEXT("lines"), LinesArray));
+		if (LinesArray)
+		{
+			TestEqual(TEXT("Lines array should have exactly 500 elements"), LinesArray->Num(), 500);
+		}
+	}
+	else
+	{
+		AddError(TEXT("Result JSON object is invalid"));
+	}
+
+	// Test that an invalid type string returns an error
+	TSharedPtr<FJsonObject> InvalidParams = MakeShared<FJsonObject>();
+	InvalidParams->SetStringField(TEXT("count"), TEXT("10000"));
+
+	FMonolithActionResult InvalidResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("tail_log"), InvalidParams);
+	TestFalse(TEXT("Should fail on string count type"), InvalidResult.bSuccess);
+	TestTrue(TEXT("Should return an invalid param error"), InvalidResult.ErrorMessage.Contains(TEXT("Invalid param")));
+
+	return true;
+}
+
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorSearchBuildOutputClampsLimit, "Monolith.LimitGuard.MonolithEditor.SearchBuildOutputClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithEditorSearchBuildOutputClampsLimit::RunTest(const FString& Parameters)
