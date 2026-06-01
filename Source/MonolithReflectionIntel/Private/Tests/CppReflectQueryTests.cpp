@@ -81,7 +81,7 @@ namespace MonolithCppReflectTestDetail
 	/**
 	 * Stage the `.gen.cpp.fixture` into a transient dir laid out as
 	 *   <work>/Inc/<ModuleName>/UHT/<File>.gen.cpp
-	 * so that FUHTArtefactReader::ModuleNameFromArtefactDir() can resolve the
+	 * so that FUHTArtefactReader's UHTModuleNameFromArtefactDir() helper can resolve the
 	 * module name from the directory path. Returns the absolute path to the
 	 * `<work>` root, OR empty FString on failure.
 	 */

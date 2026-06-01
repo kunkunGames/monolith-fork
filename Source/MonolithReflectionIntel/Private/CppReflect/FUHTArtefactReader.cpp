@@ -93,7 +93,7 @@ namespace
 
 	/** Walk up an absolute artefact path and return the `<Module>` segment that
 	 *  appears between `/Inc/` and `/UHT/`. Returns FString() on failure. */
-	FString ModuleNameFromArtefactDir(const FString& AbsArtefactPath)
+	FString UHTModuleNameFromArtefactDir(const FString& AbsArtefactPath)
 	{
 		FString Norm = AbsArtefactPath;
 		Norm.ReplaceInline(TEXT("\\"), TEXT("/"));
@@ -419,7 +419,7 @@ void FUHTArtefactReader::CollectArtefacts(
 			{
 				return true;
 			}
-			const FString Module = ModuleNameFromArtefactDir(Norm);
+			const FString Module = UHTModuleNameFromArtefactDir(Norm);
 			if (Module.IsEmpty()) { return true; }
 			Out.Emplace(Module, Norm);
 			return true;

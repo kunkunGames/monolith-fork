@@ -20,6 +20,7 @@
 #include "Decision/FDecisionQueryAdapter.h"
 #include "MonolithReflectionIntelModule.h"
 #include "MonolithRIMetaTable.h"
+#include "Shared/RICursorCodec.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -38,57 +39,18 @@
 
 namespace
 {
-	// ---------------------------------------------------------------------
-	// Lightweight cursor codec — same shape as MonolithSource's
-	// MonolithCursorCodec (private to that module, not include-reachable from
-	// here without a private-include-path hack). Pattern is identical:
-	// base64(JSON{qh:uint32, p:int32, tc:int32}).
-	// ---------------------------------------------------------------------
-
-	struct FDecisionCursorState
-	{
-		uint32 QueryHash = 0;            // GetTypeHash of (filter set) — cursor-reuse detector
-		int32  Page = 0;                 // 0-indexed page over the result set
-		int32  CachedTotalEstimate = -1; // -1 = unknown; >=0 = COUNT(*) from page 0
-	};
-
-	FString EncodeCursor(const FDecisionCursorState& S)
-	{
-		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-		O->SetNumberField(TEXT("qh"), static_cast<double>(S.QueryHash));
-		O->SetNumberField(TEXT("p"),  S.Page);
-		O->SetNumberField(TEXT("tc"), S.CachedTotalEstimate);
-
-		FString Js;
-		TSharedRef<TJsonWriter<>> W = TJsonWriterFactory<>::Create(&Js);
-		FJsonSerializer::Serialize(O.ToSharedRef(), W);
-		return FBase64::Encode(Js);
-	}
-
-	bool DecodeCursor(const FString& Enc, FDecisionCursorState& Out)
-	{
-		Out = FDecisionCursorState();
-		if (Enc.IsEmpty()) { return false; }
-
-		FString Js;
-		if (!FBase64::Decode(Enc, Js)) { return false; }
-
-		TSharedPtr<FJsonObject> O;
-		TSharedRef<TJsonReader<>> R = TJsonReaderFactory<>::Create(Js);
-		if (!FJsonSerializer::Deserialize(R, O) || !O.IsValid()) { return false; }
-
-		double Qh = 0.0, P = 0.0, Tc = -1.0;
-		if (!O->TryGetNumberField(TEXT("qh"), Qh)) { return false; }
-		if (!O->TryGetNumberField(TEXT("p"),  P))  { return false; }
-		if (!O->TryGetNumberField(TEXT("tc"), Tc)) { return false; }
-		if (P < 0.0) { return false; }
-		if (Qh < 0.0 || Qh > static_cast<double>(TNumericLimits<uint32>::Max())) { return false; }
-
-		Out.QueryHash = static_cast<uint32>(Qh);
-		Out.Page = static_cast<int32>(P);
-		Out.CachedTotalEstimate = static_cast<int32>(Tc);
-		return true;
-	}
+	// Cursor codec (struct + Encode/Decode + InvalidCursorError) hoisted to
+	// Private/Shared/RICursorCodec.{h,cpp} to avoid unity-build collisions across
+	// the six query adapters. See that header for rationale. Wire format /
+	// behaviour unchanged.
+	//
+	// NOTE: this adapter's ComputeFilterHash takes (FString, double, FString) —
+	// a DIFFERENT signature from the four adapters that took an
+	// initializer_list<FString> (now RIComputeFilterHash in RICursorCodec).
+	// It is intentionally kept file-local (not hoisted)
+	// because unifying the two signatures would change behaviour. After the codec
+	// hoist this is the only ComputeFilterHash in the module, so it no longer
+	// collides under unity.
 
 	uint32 ComputeFilterHash(const FString& PathFilter, double MinConfidence, const FString& Status)
 	{
@@ -96,15 +58,6 @@ namespace
 		H = HashCombine(H, GetTypeHash(MinConfidence));
 		H = HashCombine(H, GetTypeHash(Status));
 		return H;
-	}
-
-	// Helper: return INVALID_CURSOR error with structured data payload.
-	FMonolithActionResult InvalidCursorError(const FString& Reason)
-	{
-		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
-		Data->SetStringField(TEXT("error_code"), TEXT("INVALID_CURSOR"));
-		return FMonolithActionResult::Error(Reason, FMonolithJsonUtils::ErrInvalidParams)
-			.WithErrorData(Data);
 	}
 
 	// Marshal a SQLite row into a JSON object matching the standard envelope.
@@ -376,14 +329,14 @@ FMonolithActionResult FDecisionQueryAdapter::HandleListDecisions(const TSharedPt
 	const bool bHasCursor = !CursorIn.IsEmpty();
 	if (bHasCursor)
 	{
-		FDecisionCursorState State;
-		if (!DecodeCursor(CursorIn, State))
+		FRICursorState State;
+		if (!DecodeRICursor(CursorIn, State))
 		{
-			return InvalidCursorError(TEXT("Cursor decode failed; restart pagination without `cursor`."));
+			return RIInvalidCursorError(TEXT("Cursor decode failed; restart pagination without `cursor`."));
 		}
 		if (State.QueryHash != FilterHash)
 		{
-			return InvalidCursorError(TEXT("Cursor filter mismatch; restart pagination without `cursor`."));
+			return RIInvalidCursorError(TEXT("Cursor filter mismatch; restart pagination without `cursor`."));
 		}
 		Page = State.Page;
 		CachedTotal = State.CachedTotalEstimate;
@@ -461,11 +414,11 @@ FMonolithActionResult FDecisionQueryAdapter::HandleListDecisions(const TSharedPt
 	const bool bShortPage = Rows.Num() < Limit;
 	if (!bShortPage)
 	{
-		FDecisionCursorState Out;
+		FRICursorState Out;
 		Out.QueryHash = FilterHash;
 		Out.Page = Page + 1;
 		Out.CachedTotalEstimate = CachedTotal;
-		ResultObj->SetStringField(TEXT("next_cursor"), EncodeCursor(Out));
+		ResultObj->SetStringField(TEXT("next_cursor"), EncodeRICursor(Out));
 	}
 
 	return FMonolithActionResult::Success(ResultObj);
@@ -551,14 +504,14 @@ FMonolithActionResult FDecisionQueryAdapter::HandleListStale(const TSharedPtr<FJ
 	int32 Page = 0;
 	if (!CursorIn.IsEmpty())
 	{
-		FDecisionCursorState State;
-		if (!DecodeCursor(CursorIn, State))
+		FRICursorState State;
+		if (!DecodeRICursor(CursorIn, State))
 		{
-			return InvalidCursorError(TEXT("Cursor decode failed; restart pagination without `cursor`."));
+			return RIInvalidCursorError(TEXT("Cursor decode failed; restart pagination without `cursor`."));
 		}
 		if (State.QueryHash != FilterHash)
 		{
-			return InvalidCursorError(TEXT("Cursor filter mismatch; restart pagination without `cursor`."));
+			return RIInvalidCursorError(TEXT("Cursor filter mismatch; restart pagination without `cursor`."));
 		}
 		Page = State.Page;
 	}
@@ -598,11 +551,11 @@ FMonolithActionResult FDecisionQueryAdapter::HandleListStale(const TSharedPtr<FJ
 
 	if (Rows.Num() == Limit)
 	{
-		FDecisionCursorState OutCursor;
+		FRICursorState OutCursor;
 		OutCursor.QueryHash = FilterHash;
 		OutCursor.Page = Page + 1;
 		OutCursor.CachedTotalEstimate = -1;
-		Out->SetStringField(TEXT("next_cursor"), EncodeCursor(OutCursor));
+		Out->SetStringField(TEXT("next_cursor"), EncodeRICursor(OutCursor));
 	}
 
 	return FMonolithActionResult::Success(Out);

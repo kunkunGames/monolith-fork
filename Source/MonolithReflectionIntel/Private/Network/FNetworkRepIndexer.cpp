@@ -42,7 +42,7 @@ namespace
 	 *  appears between `/Inc/` and `/UHT/`. Returns FString() on failure.
 	 *  Duplicated from FUHTArtefactReader.cpp on purpose — consolidation is
 	 *  Phase 5+ work. */
-	FString ModuleNameFromArtefactDir(const FString& AbsArtefactPath)
+	FString RepModuleNameFromArtefactDir(const FString& AbsArtefactPath)
 	{
 		FString Norm = AbsArtefactPath;
 		Norm.ReplaceInline(TEXT("\\"), TEXT("/"));
@@ -269,7 +269,7 @@ void FNetworkRepIndexer::CollectArtefacts(
 			{
 				return true;
 			}
-			const FString Module = ModuleNameFromArtefactDir(Norm);
+			const FString Module = RepModuleNameFromArtefactDir(Norm);
 			if (Module.IsEmpty()) { return true; }
 			Out.Emplace(Module, Norm);
 			return true;
