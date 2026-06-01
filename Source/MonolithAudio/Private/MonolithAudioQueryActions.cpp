@@ -209,6 +209,7 @@ FMonolithActionResult FMonolithAudioQueryActions::ListAudioAssets(const TSharedP
 
 	// Determine which classes to query
 	TArray<UClass*> ClassesToQuery;
+	ClassesToQuery.Reserve(8);
 	if (TypeStr.Equals(TEXT("All"), ESearchCase::IgnoreCase))
 	{
 		ClassesToQuery.Add(USoundWave::StaticClass());
@@ -305,6 +306,7 @@ FMonolithActionResult FMonolithAudioQueryActions::SearchAudioAssets(const TShare
 
 	// Determine which classes to search
 	TArray<UClass*> ClassesToSearch;
+	ClassesToSearch.Reserve(8);
 	if (TypeStr.Equals(TEXT("All"), ESearchCase::IgnoreCase))
 	{
 		ClassesToSearch.Add(USoundWave::StaticClass());
@@ -758,6 +760,7 @@ FMonolithActionResult FMonolithAudioQueryActions::FindUnusedAudio(const TSharedP
 
 	// Determine which classes to scan
 	TArray<UClass*> ClassesToScan;
+	ClassesToScan.Reserve(8);
 	if (TypeStr.Equals(TEXT("All"), ESearchCase::IgnoreCase))
 	{
 		ClassesToScan.Add(USoundWave::StaticClass());
