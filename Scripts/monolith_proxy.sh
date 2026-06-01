@@ -17,7 +17,9 @@ fi
 
 # Prefer python3 (standard on macOS 12+ and most Linux distros), fall back to python.
 if [ -f "$PROXY_PY" ] && command -v python3 >/dev/null 2>&1; then
-	exec python3 "$PROXY_PY" "$@"
+	if python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then
+		exec python3 "$PROXY_PY" "$@"
+	fi
 fi
 
 if [ -f "$PROXY_PY" ] && command -v python >/dev/null 2>&1; then
@@ -29,7 +31,7 @@ fi
 
 # Fallback to Node.js when Python is unavailable or broken.
 if command -v node >/dev/null 2>&1; then
-	if node --version >/dev/null 2>&1; then
+	if node -e 'process.exit(parseInt(process.versions.node) >= 18 ? 0 : 1)' >/dev/null 2>&1; then
 		if [ -f "$PROXY_JS" ]; then
 			exec node "$PROXY_JS" "$@"
 		fi

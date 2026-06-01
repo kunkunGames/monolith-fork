@@ -39,7 +39,7 @@ if %errorlevel% equ 0 (
 :: Fallback to Node.js when Python is unavailable or broken.
 where node >nul 2>&1
 if %errorlevel% equ 0 (
-    node --version >nul 2>&1
+    node -e "process.exit(parseInt(process.versions.node) >= 18 ? 0 : 1)" >nul 2>&1
     if %errorlevel% equ 0 (
         if exist "%~dp0monolith_proxy.js" (
             node "%~dp0monolith_proxy.js" %*
