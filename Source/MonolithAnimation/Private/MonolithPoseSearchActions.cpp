@@ -318,7 +318,8 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleListClothingAssets(const
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleGetPoseSearchSchema(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
 
 	UPoseSearchSchema* Schema = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchSchema>(AssetPath);
 	if (!Schema)
@@ -384,7 +385,8 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetPoseSearchSchema(cons
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleGetPoseSearchDatabase(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
 
 	UPoseSearchDatabase* Database = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchDatabase>(AssetPath);
 	if (!Database)
@@ -443,8 +445,10 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetPoseSearchDatabase(co
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleAddDatabaseSequence(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString AnimPath = Params->GetStringField(TEXT("anim_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+	FString AnimPath;
+	if (!Params->TryGetStringField(TEXT("anim_path"), AnimPath)) return FMonolithActionResult::Error(TEXT("Parameter 'anim_path' must be a string"));
 	bool bEnabled = true;
 	Params->TryGetBoolField(TEXT("enabled"), bEnabled);
 
@@ -489,8 +493,11 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleAddDatabaseSequence(cons
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleRemoveDatabaseSequence(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 SequenceIndex = static_cast<int32>(Params->GetNumberField(TEXT("sequence_index")));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+	double TempSeqIdx;
+	if (!Params->TryGetNumberField(TEXT("sequence_index"), TempSeqIdx)) return FMonolithActionResult::Error(TEXT("Parameter 'sequence_index' must be a number"));
+	int32 SequenceIndex = static_cast<int32>(TempSeqIdx);
 
 	UPoseSearchDatabase* Database = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchDatabase>(AssetPath);
 	if (!Database)
@@ -531,7 +538,8 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleRemoveDatabaseSequence(c
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleGetDatabaseStats(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
 
 	UPoseSearchDatabase* Database = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchDatabase>(AssetPath);
 	if (!Database)
@@ -593,8 +601,10 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetDatabaseStats(const T
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleCreatePoseSearchSchema(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString SkeletonPath = Params->GetStringField(TEXT("skeleton_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+	FString SkeletonPath;
+	if (!Params->TryGetStringField(TEXT("skeleton_path"), SkeletonPath)) return FMonolithActionResult::Error(TEXT("Parameter 'skeleton_path' must be a string"));
 
 	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton) return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
@@ -660,8 +670,10 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleCreatePoseSearchSchema(c
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleCreatePoseSearchDatabase(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString SchemaPath = Params->GetStringField(TEXT("schema_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+	FString SchemaPath;
+	if (!Params->TryGetStringField(TEXT("schema_path"), SchemaPath)) return FMonolithActionResult::Error(TEXT("Parameter 'schema_path' must be a string"));
 
 	UPoseSearchSchema* Schema = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchSchema>(SchemaPath);
 	if (!Schema) return FMonolithActionResult::Error(FString::Printf(TEXT("PoseSearchSchema not found: %s"), *SchemaPath));
@@ -759,8 +771,11 @@ static UClass* ResolveChannelClass(const FString& TypeStr)
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequenceProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 SeqIndex = static_cast<int32>(Params->GetNumberField(TEXT("sequence_index")));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+	double TempSeqIdx;
+	if (!Params->TryGetNumberField(TEXT("sequence_index"), TempSeqIdx)) return FMonolithActionResult::Error(TEXT("Parameter 'sequence_index' must be a number"));
+	int32 SeqIndex = static_cast<int32>(TempSeqIdx);
 
 	UPoseSearchDatabase* Database = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchDatabase>(AssetPath);
 	if (!Database)
@@ -861,8 +876,10 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleAddSchemaChannel(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ChannelType = Params->GetStringField(TEXT("channel_type"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+	FString ChannelType;
+	if (!Params->TryGetStringField(TEXT("channel_type"), ChannelType)) return FMonolithActionResult::Error(TEXT("Parameter 'channel_type' must be a string"));
 
 	UPoseSearchSchema* Schema = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchSchema>(AssetPath);
 	if (!Schema)
@@ -941,8 +958,11 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleAddSchemaChannel(const T
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleRemoveSchemaChannel(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 ChannelIndex = static_cast<int32>(Params->GetNumberField(TEXT("channel_index")));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+	double TempChanIdx;
+	if (!Params->TryGetNumberField(TEXT("channel_index"), TempChanIdx)) return FMonolithActionResult::Error(TEXT("Parameter 'channel_index' must be a number"));
+	int32 ChannelIndex = static_cast<int32>(TempChanIdx);
 
 	UPoseSearchSchema* Schema = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchSchema>(AssetPath);
 	if (!Schema)
@@ -985,9 +1005,14 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleRemoveSchemaChannel(cons
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleSetChannelWeight(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 ChannelIndex = static_cast<int32>(Params->GetNumberField(TEXT("channel_index")));
-	float NewWeight = static_cast<float>(Params->GetNumberField(TEXT("weight")));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+	double TempChanIdx;
+	if (!Params->TryGetNumberField(TEXT("channel_index"), TempChanIdx)) return FMonolithActionResult::Error(TEXT("Parameter 'channel_index' must be a number"));
+	int32 ChannelIndex = static_cast<int32>(TempChanIdx);
+	double TempWeight;
+	if (!Params->TryGetNumberField(TEXT("weight"), TempWeight)) return FMonolithActionResult::Error(TEXT("Parameter 'weight' must be a number"));
+	float NewWeight = static_cast<float>(TempWeight);
 
 	UPoseSearchSchema* Schema = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchSchema>(AssetPath);
 	if (!Schema)
@@ -1048,7 +1073,8 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetChannelWeight(const T
 FMonolithActionResult FMonolithPoseSearchActions::HandleRebuildPoseSearchIndex(const TSharedPtr<FJsonObject>& Params)
 {
 #if WITH_EDITOR
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
 
 	UPoseSearchDatabase* Database = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchDatabase>(AssetPath);
 	if (!Database)
@@ -1096,7 +1122,8 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleRebuildPoseSearchIndex(c
 
 FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSearchMode(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
 
 	UPoseSearchDatabase* Database = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchDatabase>(AssetPath);
 	if (!Database)
