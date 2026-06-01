@@ -181,26 +181,46 @@ public class MonolithAI : ModuleRules
 		bool bHasMassEntity = false;
 		if (!bReleaseBuild)
 		{
-			string[] MassSearchDirs = new string[]
+			bool bHasMassEntityPlugin = false;
+			bool bHasMassGameplayPlugin = false;
+
+			if (Target.ProjectFile != null)
 			{
-				EnginePluginsDir,
-				Path.Combine(EnginePluginsDir, "Runtime"),
-				Path.Combine(EnginePluginsDir, "AI")
-			};
-			foreach (string Dir in MassSearchDirs)
+				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
+				bHasMassEntityPlugin = HasProjectPluginDirectory(ProjectPluginsDir, "MassEntity");
+				bHasMassGameplayPlugin = HasProjectPluginDirectory(ProjectPluginsDir, "MassGameplay");
+			}
+
+			if (!bHasMassEntityPlugin || !bHasMassGameplayPlugin)
 			{
-				if (Directory.Exists(Dir) &&
-					Directory.Exists(Path.Combine(Dir, "MassEntity")))
+				string[] MassSearchDirs = new string[]
 				{
-					bHasMassEntity = true;
-					break;
+					EnginePluginsDir,
+					Path.Combine(EnginePluginsDir, "Runtime"),
+					Path.Combine(EnginePluginsDir, "AI")
+				};
+				foreach (string Dir in MassSearchDirs)
+				{
+					if (!Directory.Exists(Dir))
+					{
+						continue;
+					}
+
+					bHasMassEntityPlugin = bHasMassEntityPlugin || Directory.Exists(Path.Combine(Dir, "MassEntity"));
+					bHasMassGameplayPlugin = bHasMassGameplayPlugin || Directory.Exists(Path.Combine(Dir, "MassGameplay"));
+					if (bHasMassEntityPlugin && bHasMassGameplayPlugin)
+					{
+						break;
+					}
 				}
 			}
+
+			bHasMassEntity = bHasMassEntityPlugin && bHasMassGameplayPlugin;
 		}
 
 		if (bHasMassEntity)
 		{
-			// MassGameplayEditor lives in Runtime/MassGameplay — assumed co-installed with MassEntity
+			// MassGameplayEditor lives in the MassGameplay plugin and is required by this dependency set.
 			PrivateDependencyModuleNames.AddRange(new string[] { "MassEntity", "MassSpawner", "MassGameplayEditor" });
 			PublicDefinitions.Add("WITH_MASSENTITY=1");
 		}
@@ -213,19 +233,28 @@ public class MonolithAI : ModuleRules
 		bool bHasZoneGraph = false;
 		if (!bReleaseBuild)
 		{
-			string[] ZoneSearchDirs = new string[]
+			if (Target.ProjectFile != null)
 			{
-				EnginePluginsDir,
-				Path.Combine(EnginePluginsDir, "Runtime"),
-				Path.Combine(EnginePluginsDir, "Experimental")
-			};
-			foreach (string Dir in ZoneSearchDirs)
+				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
+				bHasZoneGraph = HasProjectPluginDirectory(ProjectPluginsDir, "ZoneGraph");
+			}
+
+			if (!bHasZoneGraph)
 			{
-				if (Directory.Exists(Dir) &&
-					Directory.Exists(Path.Combine(Dir, "ZoneGraph")))
+				string[] ZoneSearchDirs = new string[]
 				{
-					bHasZoneGraph = true;
-					break;
+					EnginePluginsDir,
+					Path.Combine(EnginePluginsDir, "Runtime"),
+					Path.Combine(EnginePluginsDir, "Experimental")
+				};
+				foreach (string Dir in ZoneSearchDirs)
+				{
+					if (Directory.Exists(Dir) &&
+						Directory.Exists(Path.Combine(Dir, "ZoneGraph")))
+					{
+						bHasZoneGraph = true;
+						break;
+					}
 				}
 			}
 		}
@@ -239,5 +268,28 @@ public class MonolithAI : ModuleRules
 		{
 			PublicDefinitions.Add("WITH_ZONEGRAPH=0");
 		}
+	}
+
+	private static bool HasProjectPluginDirectory(string ProjectPluginsDir, string PluginName)
+	{
+		if (!Directory.Exists(ProjectPluginsDir))
+		{
+			return false;
+		}
+
+		if (Directory.Exists(Path.Combine(ProjectPluginsDir, PluginName)))
+		{
+			return true;
+		}
+
+		foreach (string Dir in Directory.GetDirectories(ProjectPluginsDir))
+		{
+			if (Directory.Exists(Path.Combine(Dir, PluginName)))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 }
