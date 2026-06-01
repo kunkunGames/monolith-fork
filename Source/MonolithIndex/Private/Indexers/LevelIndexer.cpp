@@ -12,6 +12,8 @@
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
 #include "UObject/Package.h"
+#include "WorldPartition/WorldPartition.h"
+#include "Subsystems/WorldSubsystem.h"
 
 namespace
 {
@@ -26,6 +28,14 @@ namespace
 		if (World == EditorWorld)
 		{
 			return false;
+		}
+
+		if (UWorldPartition* WP = World->GetWorldPartition())
+		{
+			if (WP->IsInitialized())
+			{
+				WP->Uninitialize();
+			}
 		}
 
 		if (World->IsInitialized())
@@ -129,7 +139,59 @@ bool FLevelIndexer::IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset
 			ULevel* Level = World->PersistentLevel;
 			ActorsInserted += IndexActorsInLevel(Level, DB, LevelAssetId);
 
-			TeardownLoadedWorldForIndexing(World, Package);
+			// Detect whether this world has a landscape subsystem. LoadPackage never calls UWorld::InitWorld, but a
+			// landscape actor's PostRegisterAllComponents lazily creates + Initialize()s a ULandscapeSubsystem on
+			// this never-InitWorld'd world. If we then tear the world down (TryUnloadPackage + GC), the GC destroys
+			// the world while ULandscapeSubsystem is still bInitialized -> handled-but-noisy ensure at
+			// WorldSubsystem.cpp:158 (issue #67). The obvious "fix" (UWorld::CleanupWorld) is FATAL here: its
+			// SubsystemCollection.Deinitialize() drives ULandscapeSubsystem::Deinitialize() which frees
+			// Nanite/grass/streaming builders that assume a fully InitWorld'd render scene -> access violation
+			// (the rejected approach, see issue #67 plan). So for landscape worlds we instead SKIP teardown and
+			// leave the world resident (RF_Standalone intact) so it is never GC'd during this index run - no
+			// Deinitialize crash, no GC-time ensure. Cost: this world stays in memory for the session.
+			//
+			// We detect the ULandscapeSubsystem itself rather than scanning for an ALandscapeProxy actor, because the
+			// subsystem is the thing that ensures at GC, and in World Partition / streaming worlds the landscape actor
+			// can live in a streaming sublevel or as an external WP actor that is NOT present in PersistentLevel->Actors
+			// (issue #67 refinement: LVL_NiagaraDestructionDriver_Demo_Cube still tripped the ensure with the actor
+			// scan because its landscape lives outside the persistent level, but its ULandscapeSubsystem was
+			// initialized). Resolve the subsystem class by script path so we avoid a Landscape Build.cs dependency
+			// (which would force a full rebuild + hard link); if the class can't be resolved (Landscape module not
+			// loaded) there can be no landscape subsystem, so we safely fall back to the original teardown.
+			// GetSubsystemBase(TSubclassOf<UWorldSubsystem>) performs the lookup against the world's subsystem
+			// collection without a compile-time type dependency and returns non-null iff the subsystem instance exists.
+			bool bContainsLandscape = false;
+			{
+				static UClass* LandscapeSubsystemClass = FindObject<UClass>(nullptr, TEXT("/Script/Landscape.LandscapeSubsystem"));
+				if (LandscapeSubsystemClass)
+				{
+					if (World->GetSubsystemBase(LandscapeSubsystemClass) != nullptr)
+					{
+						bContainsLandscape = true;
+					}
+				}
+			}
+
+			// Skip teardown if this is the world currently open in the editor - uninit would stop viewport WP cell streaming and unload would close the level
+			UWorld* EditorWorld = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+			if (World != EditorWorld)
+			{
+				if (bContainsLandscape)
+				{
+					// Keep the landscape world resident for the rest of the session: do NOT uninit WorldPartition and
+					// do NOT TryUnloadPackage. Leaving RF_Standalone intact keeps the world referenced so GC never
+					// destroys it while ULandscapeSubsystem is bInitialized (no ensure) and we never deinitialize the
+					// half-initialized landscape subsystem (no fatal crash). Cost: this world stays in memory for the
+					// session. The number of landscape levels is finite, so this is a bounded, acceptable cost.
+					UE_LOG(LogMonolithIndex, Verbose,
+						TEXT("LevelIndexer: '%s' has a landscape subsystem - keeping the world resident (skipping teardown) to avoid the ULandscapeSubsystem teardown ensure/crash (issue #67)."),
+						*WorldData.PackageName.ToString());
+				}
+				else
+				{
+					TeardownLoadedWorldForIndexing(World, Package);
+				}
+			}
 
 			LevelsProcessed++;
 		}
