@@ -5,6 +5,7 @@
 #include "MonolithAIControllerActions.h"
 #include "MonolithAIScaffoldActions.h"
 #include "MonolithAIStateTreeActions.h"
+#include "MonolithAINavigationActions.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -74,6 +75,28 @@ bool FMonolithAIScaffoldPatrolInvestigateParamGuardTest::RunTest(const FString& 
 
     TestFalse(TEXT("scaffold_patrol_investigate_ai should fail if investigation_radius is wrong type"), Result.bSuccess);
     TestTrue(TEXT("scaffold_patrol_investigate_ai error should mention investigation_radius"), Result.ErrorMessage.Contains(TEXT("investigation_radius")));
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAIConfigureNavLinkParamGuardTest, "Monolith.ParamGuard.AI.ConfigureNavLink", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAIConfigureNavLinkParamGuardTest::RunTest(const FString& Parameters)
+{
+    FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+    if (!Registry.HasAction(TEXT("ai"), TEXT("configure_nav_link")))
+    {
+        FMonolithAINavigationActions::RegisterActions(Registry);
+    }
+
+    TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+    Payload->SetStringField(TEXT("actor_path"), TEXT("SomeNavProxy"));
+    Payload->SetStringField(TEXT("enabled"), TEXT("NotABool")); // Malformed
+
+    FMonolithActionResult Result = Registry.ExecuteAction(TEXT("ai"), TEXT("configure_nav_link"), Payload);
+
+    TestFalse(TEXT("configure_nav_link should fail if enabled is wrong type"), Result.bSuccess);
+    TestTrue(TEXT("configure_nav_link error should indicate wrong parameter type for enabled"), Result.ErrorMessage.Contains(TEXT("enabled")));
 
     return true;
 }

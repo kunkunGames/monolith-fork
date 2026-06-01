@@ -1054,6 +1054,27 @@ FMonolithActionResult FMonolithAINavigationActions::HandleConfigureNavLink(const
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: actor_path"));
 	}
 
+	const bool bHasEnabled = Params->HasField(TEXT("enabled"));
+	bool bEnabled = false;
+	if (bHasEnabled && !Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'enabled'. Expected boolean."));
+	}
+
+	const bool bHasAreaClass = Params->HasField(TEXT("area_class"));
+	FString AreaClassName;
+	if (bHasAreaClass && !Params->TryGetStringField(TEXT("area_class"), AreaClassName))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'area_class'. Expected string."));
+	}
+
+	const bool bHasDirection = Params->HasField(TEXT("direction"));
+	FString Dir;
+	if (bHasDirection && !Params->TryGetStringField(TEXT("direction"), Dir))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'direction'. Expected string."));
+	}
+
 	UWorld* World = GetNavWorld();
 	if (!World)
 	{
@@ -1081,14 +1102,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleConfigureNavLink(const
 
 	int32 ChangedCount = 0;
 
-	if (Params->HasField(TEXT("enabled")))
+	if (bHasEnabled)
 	{
-		bool bEnabled = false;
-		if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"));
-		}
-
 		// Phase F #36: SetSmartLinkEnabled toggles the runtime activity flag on
 		// INavLinkCustomInterface, but the link only registers as a smart link with
 		// the navmesh when bSmartLinkIsRelevant=true. Toggle BOTH so 'enabled' is
@@ -1104,9 +1119,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleConfigureNavLink(const
 		ChangedCount++;
 	}
 
-	if (Params->HasField(TEXT("area_class")))
+	if (bHasAreaClass)
 	{
-		FString AreaClassName = Params->GetStringField(TEXT("area_class"));
 		UClass* AreaClass = FindFirstObject<UClass>(*AreaClassName, EFindFirstObjectOptions::EnsureIfAmbiguous);
 		if (!AreaClass)
 		{
@@ -1122,9 +1136,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleConfigureNavLink(const
 		}
 	}
 
-	if (Params->HasField(TEXT("direction")))
+	if (bHasDirection)
 	{
-		FString Dir = Params->GetStringField(TEXT("direction"));
 		ENavLinkDirection::Type DirType = ENavLinkDirection::BothWays;
 		if (Dir.Equals(TEXT("left_to_right"), ESearchCase::IgnoreCase))
 			DirType = ENavLinkDirection::LeftToRight;
