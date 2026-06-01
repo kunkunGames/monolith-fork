@@ -525,10 +525,17 @@ Stitch frame PNGs into a flipbook atlas. Used by the VFX training harness.
 
 Delete UE assets by path. **Experimental.** Use the `allowed_prefixes` safety guard.
 
+Runs non-interactively: each target's package dirty flag is cleared and any open asset editor is closed before deletion, and the delete itself runs inside an unattended-script guard so the engine never raises a blocking "asset in use" / "save changes" modal (which would freeze an unattended MCP session).
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `asset_paths` | array | **required** | UE asset paths to delete |
 | `allowed_prefixes` | array | optional | Restrict to paths starting with one of these (e.g. `["/Game/AgentTraining/"]`) |
+| `force` | bool | optional | `false` (default): soft-delete after closing editors. `true`: `ForceDeleteObjects`, nulling referencers |
+
+**Result:** any assets that could not be deleted are returned in a `failed_to_delete` array rather than aborting the call.
+
+> **Known limitation.** A NiagaraScript created and compiled in the same session can't be deleted until its compile state clears — a transient compilation graph holds a reference (the engine's own Content Browser hits the same wall). It becomes deletable after the state clears, e.g. on editor restart.
 
 ### `editor.get_viewport_info`
 
