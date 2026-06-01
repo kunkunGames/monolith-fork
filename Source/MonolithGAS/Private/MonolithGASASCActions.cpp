@@ -2099,6 +2099,7 @@ FMonolithActionResult FMonolithGASASCActions::HandleGetASCSnapshot(const TShared
 	if (bIncludeAbilities)
 	{
 		TArray<TSharedPtr<FJsonValue>> AbilityArr;
+		AbilityArr.Reserve(ASC->GetActivatableAbilities().Num());
 		for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 		{
 			if (!Spec.Ability) continue;
@@ -2128,6 +2129,7 @@ FMonolithActionResult FMonolithGASASCActions::HandleGetASCSnapshot(const TShared
 		TArray<TSharedPtr<FJsonValue>> EffectArr;
 		FGameplayEffectQuery AllQuery;
 		TArray<FActiveGameplayEffectHandle> EffectHandles = ASC->GetActiveEffects(AllQuery);
+		EffectArr.Reserve(EffectHandles.Num());
 
 		for (int32 Idx = 0; Idx < EffectHandles.Num(); Idx++)
 		{
@@ -2267,6 +2269,7 @@ FMonolithActionResult FMonolithGASASCActions::HandleGetASCSnapshot(const TShared
 	if (bIncludeCooldowns)
 	{
 		TArray<TSharedPtr<FJsonValue>> CooldownArr;
+		CooldownArr.Reserve(ASC->GetActivatableAbilities().Num());
 		for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 		{
 			if (!Spec.Ability) continue;
