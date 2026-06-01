@@ -407,6 +407,13 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleConfigureSMCom
 		return FMonolithActionResult::Error(TEXT("Malformed parameter: tick_interval must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
+	FString NetConfig;
+	const bool bHasNetworkConfig = Params->HasField(TEXT("network_config"));
+	if (bHasNetworkConfig && !Params->TryGetStringField(TEXT("network_config"), NetConfig))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: network_config must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FMonolithActionResult LoadError;
 	UBlueprint* BP = LoadActorBlueprintForSM(BPPath, LoadError);
 	if (!BP)
@@ -472,8 +479,7 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleConfigureSMCom
 	}
 
 	// network_config
-	FString NetConfig;
-	if (Params->TryGetStringField(TEXT("network_config"), NetConfig) && !NetConfig.IsEmpty())
+	if (bHasNetworkConfig && !NetConfig.IsEmpty())
 	{
 		FProperty* NetProp = FoundComponent->GetClass()->FindPropertyByName(TEXT("NetworkTickConfiguration"));
 		if (!NetProp)
