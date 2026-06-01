@@ -357,6 +357,7 @@ void FMonolithModelGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 FMonolithActionResult FMonolithModelGenActions::ListModelGenerationProviders(const TSharedPtr<FJsonObject>&)
 {
 	TArray<TSharedPtr<FJsonValue>> Providers;
+	Providers.Reserve(2);
 
 	TSharedPtr<FJsonObject> Local = MakeShared<FJsonObject>();
 	Local->SetStringField(TEXT("provider"), TEXT("local_deterministic"));
@@ -601,6 +602,7 @@ FMonolithActionResult FMonolithModelGenActions::ImportGeneratedModel(const TShar
 
 	TSharedPtr<FJsonObject> ImportParams = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Files;
+	Files.Reserve(1);
 	Files.Add(MakeShared<FJsonValueString>(FilePath));
 	ImportParams->SetArrayField(TEXT("files"), Files);
 	ImportParams->SetStringField(TEXT("destination"), Destination);
@@ -662,6 +664,7 @@ FMonolithActionResult FMonolithModelGenActions::ImportGeneratedModel(const TShar
 	TArray<TSharedPtr<FJsonValue>> GeneratedMeshes;
 	if (ImportResult.Result->TryGetArrayField(TEXT("imported"), ImportedArray) && ImportedArray)
 	{
+		GeneratedMeshes.Reserve(ImportedArray->Num());
 		for (const TSharedPtr<FJsonValue>& ImportedValue : *ImportedArray)
 		{
 			const TSharedPtr<FJsonObject>* ImportedObj = nullptr;
