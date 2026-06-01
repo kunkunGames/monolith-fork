@@ -1236,7 +1236,7 @@ Both invoke the same SQLite indexes the live MCP uses.
 - Claude Code's MCP transport is `"http"`, not `"streamableHttp"`.
 - Some clients serialize nested `params` objects to a JSON **string** instead of a nested object — detect and deserialize back.
 - The HTTP server lives on `http://localhost:<port>`. Port is published in `monolith_status` output.
-- For Claude Code specifically, the **MCP auto-reconnect proxy** at `Scripts/monolith_proxy.py` survives editor restarts. See `Plugins/Monolith/Docs/Installation.md` for setup.
+- For Claude Code specifically, the **MCP auto-reconnect proxy** at `Scripts/monolith_proxy.py` survives editor restarts. See [README.md](../README.md) for setup.
 
 ---
 
