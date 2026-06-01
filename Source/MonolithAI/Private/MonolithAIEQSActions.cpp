@@ -2032,6 +2032,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleBuildEQSQueryFromSpec(const T
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings)
 		{
 			WarnArr.Add(MakeShared<FJsonValueString>(W));

@@ -2743,6 +2743,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTExtension(const TS
 	if (PropWarnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(PropWarnings.Num());
 		for (const FString& W : PropWarnings)
 		{
 			WarnArr.Add(MakeShared<FJsonValueString>(W));
@@ -3144,6 +3145,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleBuildStateTreeFromSpec(
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings)
 		{
 			WarnArr.Add(MakeShared<FJsonValueString>(W));
