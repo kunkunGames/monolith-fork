@@ -1013,7 +1013,7 @@ Sound Cue + MetaSound graph CRUD + on-disk document introspection, attenuation/c
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `path` | string | **required** | Destination asset path under `/Game/` |
+| `asset_path` | string | **required** | Destination asset path under `/Game/` (Alias: `path`) |
 | `frequency_hz` | number | optional | Sine frequency (20.0 to 20000.0). Default: `440.0` |
 | `duration_seconds` | number | optional | Clip length (0.05 to 5.0). Default: `0.5` |
 | `sample_rate` | integer | optional | Allowlist `{22050, 44100, 48000}`. Default: `44100` |

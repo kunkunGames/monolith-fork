@@ -678,8 +678,7 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Procedurally synthesize a 16-bit mono sine-tone USoundWave (no asset deps). Useful for tests requiring a disposable wave."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::CreateTestWave),
 		FParamSchemaBuilder()
-			.Optional(TEXT("asset_path"), TEXT("string"), TEXT("Destination asset path under /Game/ (e.g. /Game/Tests/Monolith/Audio/SW_Test_Sine_440)"))
-			.Optional(TEXT("path"), TEXT("string"), TEXT("Legacy alias for asset_path"))
+			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Destination asset path under /Game/ (e.g. /Game/Tests/Monolith/Audio/SW_Test_Sine_440)"), { TEXT("path") })
 			.Optional(TEXT("frequency_hz"), TEXT("number"), TEXT("Sine frequency in Hz (20.0 to 20000.0, default 440.0)"))
 			.Optional(TEXT("duration_seconds"), TEXT("number"), TEXT("Clip length in seconds (0.05 to 5.0, default 0.5)"))
 			.Optional(TEXT("sample_rate"), TEXT("integer"), TEXT("Sample rate in Hz; allowlist {22050, 44100, 48000} (default 44100)"))

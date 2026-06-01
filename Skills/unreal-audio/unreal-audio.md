@@ -34,7 +34,7 @@ description: Use when creating, editing, or inspecting Unreal Engine audio asset
 | `create_sound_submix` | `asset_path`, `parent_submix?`, `effect_chain?` | Create USoundSubmix |
 | `get_submix_properties` | `asset_path` | Read effect chain, volume, hierarchy |
 | `set_submix_properties` | `asset_path`, `properties` | Update submix |
-| `create_test_wave` | `asset_path`, `frequency_hz?`, `duration_seconds?`, `sample_rate?`, `amplitude?` | Synthesize a 16-bit mono sine USoundWave for tests |
+| `create_test_wave` | `asset_path` (alias: `path`), `frequency_hz?`, `duration_seconds?`, `sample_rate?`, `amplitude?` | Synthesize a 16-bit mono sine USoundWave for tests |
 
 ### Query & Search (10)
 
