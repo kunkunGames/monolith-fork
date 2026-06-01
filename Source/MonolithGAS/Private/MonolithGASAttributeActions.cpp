@@ -320,7 +320,8 @@ namespace
 			if (!AttrVal->TryGetObject(AttrObjPtr)) continue;
 			const TSharedPtr<FJsonObject>& AttrObj = *AttrObjPtr;
 
-			FString Name = AttrObj->GetStringField(TEXT("name"));
+			FString Name;
+			AttrObj->TryGetStringField(TEXT("name"), Name);
 			bool bReplicated = false;
 			AttrObj->TryGetBoolField(TEXT("replicated"), bReplicated);
 
@@ -364,7 +365,8 @@ namespace
 			if (!AttrVal->TryGetObject(AttrObjPtr)) continue;
 			const TSharedPtr<FJsonObject>& AttrObj = *AttrObjPtr;
 
-			FString Name = AttrObj->GetStringField(TEXT("name"));
+			FString Name;
+			AttrObj->TryGetStringField(TEXT("name"), Name);
 			double DefaultValue = 0.0;
 			AttrObj->TryGetNumberField(TEXT("default_value"), DefaultValue);
 			if (DefaultValue != 0.0)
@@ -387,7 +389,8 @@ namespace
 			AttrObj->TryGetBoolField(TEXT("replicated"), bReplicated);
 			if (bReplicated)
 			{
-				FString Name = AttrObj->GetStringField(TEXT("name"));
+				FString Name;
+				AttrObj->TryGetStringField(TEXT("name"), Name);
 				Source += FString::Printf(TEXT("\tDOREPLIFETIME_CONDITION_NOTIFY(%s, %s, COND_None, REPNOTIFY_Always);\n"), *ClassName, *Name);
 			}
 		}
@@ -404,7 +407,8 @@ namespace
 			AttrObj->TryGetBoolField(TEXT("replicated"), bReplicated);
 			if (bReplicated)
 			{
-				FString Name = AttrObj->GetStringField(TEXT("name"));
+				FString Name;
+				AttrObj->TryGetStringField(TEXT("name"), Name);
 				Source += FString::Printf(TEXT("void %s::OnRep_%s(const FGameplayAttributeData& Old%s)\n{\n"), *ClassName, *Name, *Name);
 				Source += FString::Printf(TEXT("\tGAMEPLAYATTRIBUTE_REPNOTIFY(%s, %s, Old%s);\n"), *ClassName, *Name, *Name);
 				Source += TEXT("}\n\n");
@@ -492,7 +496,10 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleCreateAttributeSet(con
 	// Most callers want a Blueprint AttributeSet asset; cpp mode requires a C++ build.
 	if (Params->HasField(TEXT("mode")))
 	{
-		Mode = Params->GetStringField(TEXT("mode"));
+		if (!Params->TryGetStringField(TEXT("mode"), Mode))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid parameter: mode must be a string"));
+		}
 	}
 	if (Mode.IsEmpty())
 	{
@@ -505,7 +512,11 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleCreateAttributeSet(con
 		return FMonolithActionResult::Error(TEXT("mode must be 'cpp' or 'blueprint'"));
 	}
 
-	FString ParentClass = Params->GetStringField(TEXT("parent_class"));
+	FString ParentClass;
+	if (Params->HasField(TEXT("parent_class")) && !Params->TryGetStringField(TEXT("parent_class"), ParentClass))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameter: parent_class must be a string"));
+	}
 
 	// Parse attributes array
 	TArray<TSharedPtr<FJsonValue>> Attributes;
@@ -513,6 +524,22 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleCreateAttributeSet(con
 	if (Params->TryGetArrayField(TEXT("attributes"), AttrsArray))
 	{
 		Attributes = *AttrsArray;
+	}
+	for (int32 AttrIndex = 0; AttrIndex < Attributes.Num(); ++AttrIndex)
+	{
+		const TSharedPtr<FJsonObject>* AttrObjPtr;
+		if (!Attributes[AttrIndex]->TryGetObject(AttrObjPtr) || !AttrObjPtr || !(*AttrObjPtr).IsValid())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: attributes[%d] must be an object"), AttrIndex));
+		}
+
+		FString AttrName;
+		if (!(*AttrObjPtr)->TryGetStringField(TEXT("name"), AttrName) || AttrName.IsEmpty())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: attributes[%d].name must be a non-empty string"), AttrIndex));
+		}
 	}
 
 	// ---- Blueprint mode ----
@@ -600,7 +627,8 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleCreateAttributeSet(con
 			if (!AttrVal->TryGetObject(AttrObjPtr)) continue;
 			const TSharedPtr<FJsonObject>& AttrObj = *AttrObjPtr;
 
-			FString AttrName = AttrObj->GetStringField(TEXT("name"));
+			FString AttrName;
+			AttrObj->TryGetStringField(TEXT("name"), AttrName);
 			if (AttrName.IsEmpty()) continue;
 
 			// Use FGBAGameplayClampedAttributeData for clamping support
@@ -655,7 +683,8 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleCreateAttributeSet(con
 					if (!AttrVal->TryGetObject(AttrObjPtr) || !(*AttrObjPtr).IsValid()) continue;
 					const TSharedPtr<FJsonObject>& AttrObj = *AttrObjPtr;
 
-					FString AttrName = AttrObj->GetStringField(TEXT("name"));
+					FString AttrName;
+					AttrObj->TryGetStringField(TEXT("name"), AttrName);
 					double DefaultValue = 0;
 					if (AttrObj->TryGetNumberField(TEXT("default_value"), DefaultValue) && DefaultValue != 0)
 					{
@@ -1461,7 +1490,8 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleConfigureAttributeClam
 			if (!RuleVal->TryGetObject(RuleObjPtr)) continue;
 			const TSharedPtr<FJsonObject>& RuleObj = *RuleObjPtr;
 
-			FString AttrName = RuleObj->GetStringField(TEXT("attribute"));
+			FString AttrName;
+			RuleObj->TryGetStringField(TEXT("attribute"), AttrName);
 			if (AttrName.IsEmpty())
 			{
 				Errors.Add(TEXT("Clamp rule missing 'attribute' field"));
@@ -1489,7 +1519,8 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleConfigureAttributeClam
 
 			// Configure min
 			double MinValue;
-			FString MinAttribute = RuleObj->GetStringField(TEXT("min_attribute"));
+			FString MinAttribute;
+			RuleObj->TryGetStringField(TEXT("min_attribute"), MinAttribute);
 			if (!MinAttribute.IsEmpty())
 			{
 				ClampedData->MinValue.ClampType = EGBAClampingType::AttributeBased;
@@ -1508,7 +1539,8 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleConfigureAttributeClam
 
 			// Configure max
 			double MaxValue;
-			FString MaxAttribute = RuleObj->GetStringField(TEXT("max_attribute"));
+			FString MaxAttribute;
+			RuleObj->TryGetStringField(TEXT("max_attribute"), MaxAttribute);
 			if (!MaxAttribute.IsEmpty())
 			{
 				ClampedData->MaxValue.ClampType = EGBAClampingType::AttributeBased;
@@ -1580,20 +1612,38 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleConfigureAttributeClam
 	FString PreAttrChangeBody;
 	FString PostExecuteBody;
 
-	for (const auto& RuleVal : *ClampRulesArr)
+	for (int32 RuleIndex = 0; RuleIndex < ClampRulesArr->Num(); ++RuleIndex)
 	{
 		const TSharedPtr<FJsonObject>* RuleObjPtr;
-		if (!RuleVal->TryGetObject(RuleObjPtr)) continue;
+		if (!(*ClampRulesArr)[RuleIndex]->TryGetObject(RuleObjPtr) || !RuleObjPtr || !(*RuleObjPtr).IsValid())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: clamp_rules[%d] must be an object"), RuleIndex));
+		}
 		const TSharedPtr<FJsonObject>& RuleObj = *RuleObjPtr;
 
-		FString AttrName = RuleObj->GetStringField(TEXT("attribute"));
-		if (AttrName.IsEmpty()) continue;
+		FString AttrName;
+		if (!RuleObj->TryGetStringField(TEXT("attribute"), AttrName) || AttrName.IsEmpty())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: clamp_rules[%d].attribute must be a non-empty string"), RuleIndex));
+		}
 
 		// Build clamp expression
 		FString MinExpr, MaxExpr;
 		double MinValue, MaxValue;
-		FString MinAttribute = RuleObj->GetStringField(TEXT("min_attribute"));
-		FString MaxAttribute = RuleObj->GetStringField(TEXT("max_attribute"));
+		FString MinAttribute;
+		if (RuleObj->HasField(TEXT("min_attribute")) && !RuleObj->TryGetStringField(TEXT("min_attribute"), MinAttribute))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: clamp_rules[%d].min_attribute must be a string"), RuleIndex));
+		}
+		FString MaxAttribute;
+		if (RuleObj->HasField(TEXT("max_attribute")) && !RuleObj->TryGetStringField(TEXT("max_attribute"), MaxAttribute))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: clamp_rules[%d].max_attribute must be a string"), RuleIndex));
+		}
 
 		if (!MinAttribute.IsEmpty())
 		{
@@ -1707,6 +1757,29 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleConfigureMetaAttribute
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: meta_attributes (array)"));
 	}
+	for (int32 MetaIndex = 0; MetaIndex < MetaArray->Num(); ++MetaIndex)
+	{
+		const TSharedPtr<FJsonObject>* MetaObjPtr;
+		if (!(*MetaArray)[MetaIndex]->TryGetObject(MetaObjPtr) || !MetaObjPtr || !(*MetaObjPtr).IsValid())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: meta_attributes[%d] must be an object"), MetaIndex));
+		}
+
+		FString Name;
+		if (!(*MetaObjPtr)->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: meta_attributes[%d].name must be a non-empty string"), MetaIndex));
+		}
+
+		FString DispatchesTo;
+		if (!(*MetaObjPtr)->TryGetStringField(TEXT("dispatches_to"), DispatchesTo) || DispatchesTo.IsEmpty())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: meta_attributes[%d].dispatches_to must be a non-empty string"), MetaIndex));
+		}
+	}
 
 	// Meta attributes are a C++ pattern — for BP mode we describe what to do, for C++ we generate code
 	if (LooksLikeBlueprintPath(AttrSet))
@@ -1732,8 +1805,10 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleConfigureMetaAttribute
 			if (!MetaVal->TryGetObject(MetaObjPtr)) continue;
 			const TSharedPtr<FJsonObject>& MetaObj = *MetaObjPtr;
 
-			FString Name = MetaObj->GetStringField(TEXT("name"));
-			FString DispatchesTo = MetaObj->GetStringField(TEXT("dispatches_to"));
+			FString Name;
+			MetaObj->TryGetStringField(TEXT("name"), Name);
+			FString DispatchesTo;
+			MetaObj->TryGetStringField(TEXT("dispatches_to"), DispatchesTo);
 			if (Name.IsEmpty()) continue;
 
 			FName VarName(*Name);
@@ -1814,7 +1889,8 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleConfigureMetaAttribute
 		if (!MetaVal->TryGetObject(MetaObjPtr)) continue;
 		const TSharedPtr<FJsonObject>& MetaObj = *MetaObjPtr;
 
-		FString Name = MetaObj->GetStringField(TEXT("name"));
+		FString Name;
+		MetaObj->TryGetStringField(TEXT("name"), Name);
 		if (Name.IsEmpty()) continue;
 
 		// Check if property already exists in header
@@ -1850,8 +1926,10 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleConfigureMetaAttribute
 		if (!MetaVal->TryGetObject(MetaObjPtr)) continue;
 		const TSharedPtr<FJsonObject>& MetaObj = *MetaObjPtr;
 
-		FString Name = MetaObj->GetStringField(TEXT("name"));
-		FString DispatchesTo = MetaObj->GetStringField(TEXT("dispatches_to"));
+		FString Name;
+		MetaObj->TryGetStringField(TEXT("name"), Name);
+		FString DispatchesTo;
+		MetaObj->TryGetStringField(TEXT("dispatches_to"), DispatchesTo);
 		if (Name.IsEmpty() || DispatchesTo.IsEmpty()) continue;
 
 		DispatchBody += FString::Printf(
@@ -2106,7 +2184,11 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleCreateAttributeSetFrom
 	TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
 	CreateParams->SetStringField(TEXT("save_path"), SavePath);
 
-	FString Mode = Params->GetStringField(TEXT("mode"));
+	FString Mode;
+	if (Params->HasField(TEXT("mode")) && !Params->TryGetStringField(TEXT("mode"), Mode))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameter: mode must be a string"));
+	}
 	if (Mode.IsEmpty()) Mode = TEXT("cpp");
 	CreateParams->SetStringField(TEXT("mode"), Mode);
 	CreateParams->SetArrayField(TEXT("attributes"), TemplateDefsToJsonArray(TemplateDefs));
@@ -2189,11 +2271,23 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleCreateAttributeInitDat
 
 	if (bHasCustomRows)
 	{
-		for (const auto& RowVal : *RowsArray)
+		for (int32 RowIndex = 0; RowIndex < RowsArray->Num(); ++RowIndex)
 		{
 			const TSharedPtr<FJsonObject>* RowObjPtr;
-			if (!RowVal->TryGetObject(RowObjPtr)) continue;
-			RowEntries.Add(RowVal);
+			if (!(*RowsArray)[RowIndex]->TryGetObject(RowObjPtr) || !RowObjPtr || !(*RowObjPtr).IsValid())
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Invalid parameter: rows[%d] must be an object"), RowIndex));
+			}
+
+			FString AttrName;
+			if (!(*RowObjPtr)->TryGetStringField(TEXT("attribute"), AttrName) || AttrName.IsEmpty())
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Invalid parameter: rows[%d].attribute must be a non-empty string"), RowIndex));
+			}
+
+			RowEntries.Add((*RowsArray)[RowIndex]);
 		}
 	}
 	else
@@ -2261,7 +2355,8 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleCreateAttributeInitDat
 		if (!RowVal->TryGetObject(RowObjPtr)) continue;
 		const TSharedPtr<FJsonObject>& RowObj = *RowObjPtr;
 
-		FString AttrName = RowObj->GetStringField(TEXT("attribute"));
+		FString AttrName;
+		RowObj->TryGetStringField(TEXT("attribute"), AttrName);
 		if (AttrName.IsEmpty()) continue;
 
 		// Row name format: ClassName.AttributeName
@@ -2457,6 +2552,29 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleConfigureAttributeRepl
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: replication (array)"));
 	}
+	for (int32 RepIndex = 0; RepIndex < RepArray->Num(); ++RepIndex)
+	{
+		const TSharedPtr<FJsonObject>* RepObjPtr;
+		if (!(*RepArray)[RepIndex]->TryGetObject(RepObjPtr) || !RepObjPtr || !(*RepObjPtr).IsValid())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: replication[%d] must be an object"), RepIndex));
+		}
+
+		FString AttrName;
+		if (!(*RepObjPtr)->TryGetStringField(TEXT("attribute"), AttrName) || AttrName.IsEmpty())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: replication[%d].attribute must be a non-empty string"), RepIndex));
+		}
+
+		FString Condition;
+		if ((*RepObjPtr)->HasField(TEXT("condition")) && !(*RepObjPtr)->TryGetStringField(TEXT("condition"), Condition))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: replication[%d].condition must be a string"), RepIndex));
+		}
+	}
 
 	// ---- Blueprint mode ----
 	if (LooksLikeBlueprintPath(AttrSet))
@@ -2474,7 +2592,8 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleConfigureAttributeRepl
 			if (!RepVal->TryGetObject(RepObjPtr)) continue;
 			const TSharedPtr<FJsonObject>& RepObj = *RepObjPtr;
 
-			FString AttrName = RepObj->GetStringField(TEXT("attribute"));
+			FString AttrName;
+			RepObj->TryGetStringField(TEXT("attribute"), AttrName);
 			if (AttrName.IsEmpty()) continue;
 
 			bool bReplicated = false;
@@ -2552,13 +2671,15 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleConfigureAttributeRepl
 		if (!RepVal->TryGetObject(RepObjPtr)) continue;
 		const TSharedPtr<FJsonObject>& RepObj = *RepObjPtr;
 
-		FString AttrName = RepObj->GetStringField(TEXT("attribute"));
+		FString AttrName;
+		RepObj->TryGetStringField(TEXT("attribute"), AttrName);
 		if (AttrName.IsEmpty()) continue;
 
 		bool bReplicated = false;
 		RepObj->TryGetBoolField(TEXT("replicated"), bReplicated);
 
-		FString Condition = RepObj->GetStringField(TEXT("condition"));
+		FString Condition;
+		RepObj->TryGetStringField(TEXT("condition"), Condition);
 		if (Condition.IsEmpty()) Condition = TEXT("COND_None");
 
 		// Check if the attribute exists in the header
@@ -2695,6 +2816,29 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleLinkDataTableToASC(con
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: entries (array of {attribute_set_class, datatable_path})"));
 	}
+	for (int32 EntryIndex = 0; EntryIndex < EntriesArray->Num(); ++EntryIndex)
+	{
+		const TSharedPtr<FJsonObject>* EntryObjPtr;
+		if (!(*EntriesArray)[EntryIndex]->TryGetObject(EntryObjPtr) || !EntryObjPtr || !(*EntryObjPtr).IsValid())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: entries[%d] must be an object"), EntryIndex));
+		}
+
+		FString SetClassName;
+		if (!(*EntryObjPtr)->TryGetStringField(TEXT("attribute_set_class"), SetClassName) || SetClassName.IsEmpty())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: entries[%d].attribute_set_class must be a non-empty string"), EntryIndex));
+		}
+
+		FString DTPath;
+		if (!(*EntryObjPtr)->TryGetStringField(TEXT("datatable_path"), DTPath) || DTPath.IsEmpty())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid parameter: entries[%d].datatable_path must be a non-empty string"), EntryIndex));
+		}
+	}
 
 	// Load the Blueprint containing the ASC
 	FString Error;
@@ -2752,8 +2896,10 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleLinkDataTableToASC(con
 		if (!EntryVal->TryGetObject(EntryObjPtr)) continue;
 		const TSharedPtr<FJsonObject>& EntryObj = *EntryObjPtr;
 
-		FString SetClassName = EntryObj->GetStringField(TEXT("attribute_set_class"));
-		FString DTPath = EntryObj->GetStringField(TEXT("datatable_path"));
+		FString SetClassName;
+		EntryObj->TryGetStringField(TEXT("attribute_set_class"), SetClassName);
+		FString DTPath;
+		EntryObj->TryGetStringField(TEXT("datatable_path"), DTPath);
 
 		if (SetClassName.IsEmpty() || DTPath.IsEmpty())
 		{
@@ -2832,8 +2978,10 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleBulkEditAttributes(con
 		if (!(*OpsArray)[i]->TryGetObject(OpObjPtr)) continue;
 		const TSharedPtr<FJsonObject>& OpObj = *OpObjPtr;
 
-		FString AttrSet = OpObj->GetStringField(TEXT("attribute_set"));
-		FString Action = OpObj->GetStringField(TEXT("action"));
+		FString AttrSet;
+		OpObj->TryGetStringField(TEXT("attribute_set"), AttrSet);
+		FString Action;
+		OpObj->TryGetStringField(TEXT("action"), Action);
 
 		if (AttrSet.IsEmpty() || Action.IsEmpty())
 		{
@@ -2848,7 +2996,9 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleBulkEditAttributes(con
 		{
 			TSharedPtr<FJsonObject> AddParams = MakeShared<FJsonObject>();
 			AddParams->SetStringField(TEXT("attribute_set"), AttrSet);
-			AddParams->SetStringField(TEXT("name"), OpObj->GetStringField(TEXT("name")));
+			FString TempOpName;
+			OpObj->TryGetStringField(TEXT("name"), TempOpName);
+			AddParams->SetStringField(TEXT("name"), TempOpName);
 			double DefaultVal = 0.0;
 			OpObj->TryGetNumberField(TEXT("default_value"), DefaultVal);
 			AddParams->SetNumberField(TEXT("default_value"), DefaultVal);
@@ -2862,7 +3012,13 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleBulkEditAttributes(con
 			TSharedPtr<FJsonObject> DefaultParams = MakeShared<FJsonObject>();
 			DefaultParams->SetStringField(TEXT("attribute_set"), AttrSet);
 			TSharedPtr<FJsonObject> Defaults = MakeShared<FJsonObject>();
-			FString AttrName = OpObj->GetStringField(TEXT("name"));
+			FString AttrName;
+			if (!OpObj->TryGetStringField(TEXT("name"), AttrName) || AttrName.IsEmpty())
+			{
+				Errors.Add(MakeShared<FJsonValueString>(
+					FString::Printf(TEXT("Operation %d: name must be a non-empty string for set_default"), i)));
+				continue;
+			}
 			double Value = 0.0;
 			OpObj->TryGetNumberField(TEXT("value"), Value);
 			Defaults->SetNumberField(AttrName, Value);
@@ -2875,11 +3031,19 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleBulkEditAttributes(con
 			RepParams->SetStringField(TEXT("attribute_set"), AttrSet);
 			TArray<TSharedPtr<FJsonValue>> RepArr;
 			TSharedPtr<FJsonObject> RepEntry = MakeShared<FJsonObject>();
-			RepEntry->SetStringField(TEXT("attribute"), OpObj->GetStringField(TEXT("name")));
+			FString TempOpName;
+			if (!OpObj->TryGetStringField(TEXT("name"), TempOpName) || TempOpName.IsEmpty())
+			{
+				Errors.Add(MakeShared<FJsonValueString>(
+					FString::Printf(TEXT("Operation %d: name must be a non-empty string for set_replication"), i)));
+				continue;
+			}
+			RepEntry->SetStringField(TEXT("attribute"), TempOpName);
 			bool bRep = false;
 			OpObj->TryGetBoolField(TEXT("replicated"), bRep);
 			RepEntry->SetBoolField(TEXT("replicated"), bRep);
-			FString Condition = OpObj->GetStringField(TEXT("condition"));
+			FString Condition;
+			OpObj->TryGetStringField(TEXT("condition"), Condition);
 			if (!Condition.IsEmpty()) RepEntry->SetStringField(TEXT("condition"), Condition);
 			RepArr.Add(MakeShared<FJsonValueObject>(RepEntry));
 			RepParams->SetArrayField(TEXT("replication"), RepArr);
