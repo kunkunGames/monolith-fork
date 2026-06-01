@@ -54,6 +54,10 @@ The `RunDecisionIndexerOnce` entry point is idempotent — calling it repeatedly
 
 `ShutdownModule` unbinds the reload delegate and calls `FMonolithToolRegistry::UnregisterNamespace("decision")` so dispatcher state stays clean on editor exit.
 
+### Shared internal helpers (unity-safe)
+
+The cursor-pagination codec and project-relative path helper were duplicated per-adapter across the six query adapters (each `.cpp` carried its own anonymous-namespace copy), which collided under full unity builds (same-module `.cpp`s concatenate into one translation unit). They are now consolidated into module-internal shared units — `Private/Shared/RICursorCodec.{h,cpp}` (`FRICursorState` + `Encode`/`DecodeRICursor` + `RIComputeFilterHash` + `RIInvalidCursorError`) and `Private/Shared/RIPathUtils.{h,cpp}` (`RIToProjectRelative`) — landing the "Phase 5+" codec consolidation the per-adapter source comments had flagged. Internal linkage only; no namespace or action-surface change.
+
 ---
 
 ## 3. Decision Intelligence (Phase 1 — SHIPPED v0.17.0)

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **From-scratch unity editor builds failed to compile** due to duplicated file-local helpers (anonymous-namespace types/functions + file-`static`s) colliding across `.cpp`s in the same module in `MonolithReflectionIntel`, `MonolithNiagara`, `MonolithGAS`, and `MonolithBlueprint`. UE adaptive unity concatenates same-module `.cpp` into one translation unit, so these internal-linkage symbols clashed (C2084/C2011/C2668). Masked from releases by `make_release.ps1`'s `-DisableUnity`, and masked locally because adaptive unity excludes recently-edited files — so it only bit fresh-clone / full-unity (end-user first-compile) builds. Helpers are now unity-safe: the duplicated RI cursor-codec + path helpers are hoisted into shared module-internal units (`Private/Shared/RICursorCodec.{h,cpp}`, `Private/Shared/RIPathUtils.{h,cpp}`), and the remaining collisions use file-unique names. Behaviour-preserving (renames + pure extracts); no `.Build.cs`, action, or API-surface change. A full non-adaptive unity build is the acceptance gate. (#68)
+
 ## [0.17.1] - 2026-05-29
 
 ### Fixed

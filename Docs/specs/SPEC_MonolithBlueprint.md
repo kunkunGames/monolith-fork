@@ -18,6 +18,8 @@
 | `FMonolithBlueprintActions` | Static handlers. Uses `FMonolithAssetUtils::LoadAssetByPath<UBlueprint>` |
 | `MonolithBlueprintInternal` | Helpers: AddGraphArray, FindGraphByName, PinTypeToString, SerializePin/Node, TraceExecFlow, FindEntryNode |
 
+> **Unity-safe file-local helpers (#68).** Internal-linkage helpers (anonymous-namespace functions/types, file-`static`s) must carry file-unique names or live in per-file named namespaces — matching the MonolithUI model — so they don't collide when adaptive/full unity concatenates same-module `.cpp`s into one translation unit. (The previously-global `InterpModeToString` in `MonolithBlueprintNodeActions.cpp` is now `NodeInterpModeToString`.)
+
 ### Actions (121 — namespace: "blueprint")
 
 > **Count note (2026-05-27):** current static registry scan reports 121 unique `blueprint` actions after removing a duplicate `remove_data_table_row` registration. The table below remains a focused contract summary; use `monolith_discover("blueprint")` for the exhaustive live action schema.

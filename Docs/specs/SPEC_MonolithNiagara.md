@@ -342,6 +342,10 @@ All marked with "UE 5.7 FIX" comments:
 2-5. `GetOrCreateStackFunctionInputOverridePin` uses 5-param version (two FGuid params)
 6. `RapidIterationParameters` accessed via direct UPROPERTY (no getter)
 
+### Unity-safe file-local helpers (#68)
+
+Internal-linkage helpers (anonymous-namespace functions/types, file-`static`s) must carry file-unique names or live in per-file named namespaces — matching the MonolithUI model — so they don't collide when adaptive/full unity concatenates same-module `.cpp`s into one translation unit. (The previously-global `SuccessObj`/`GetAssetPath`/`SuccessStr` in `MonolithNiagaraActions.cpp` now use the `NA_` prefix.)
+
 ---
 
 **Composite (1)**
