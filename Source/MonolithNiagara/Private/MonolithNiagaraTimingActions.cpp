@@ -1116,6 +1116,7 @@ FMonolithActionResult FMonolithNiagaraTimingActions::HandleGetEmitterTimingSumma
 	const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
 
 	TArray<TSharedPtr<FJsonValue>> EmittersArr;
+	EmittersArr.Reserve(Handles.Num());
 	for (int32 i = 0; i < Handles.Num(); ++i)
 	{
 		const FNiagaraEmitterHandle& H = Handles[i];
@@ -1213,6 +1214,7 @@ FMonolithActionResult FMonolithNiagaraTimingActions::HandleGetEmitterTimingSumma
 		if (FVersionedNiagaraEmitterData* ED = H.GetEmitterData())
 		{
 			const TArray<UNiagaraSimulationStageBase*>& Stages = ED->GetSimulationStages();
+			StagesArr.Reserve(Stages.Num());
 			for (int32 SI = 0; SI < Stages.Num(); ++SI)
 			{
 				UNiagaraSimulationStageBase* Stage = Stages[SI];
