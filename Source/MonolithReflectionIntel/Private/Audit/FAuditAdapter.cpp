@@ -132,7 +132,14 @@ namespace
 }
 
 // ============================================================================
-// Registration — registers 4 actions ACROSS 4 existing namespaces.
+// Registration — registers 4 actions ACROSS 4 existing namespaces
+// (material / niagara / blueprint / project). This cross-namespace registration is
+// INTENTIONAL and idiomatic in Monolith: namespaces are logical action groupings,
+// deliberately decoupled from module ownership. Many modules contribute actions to
+// namespaces they do not "own" (e.g. MonolithLevelDesign -> mesh/scene/level_instance,
+// MonolithGAS -> ui/input, MonolithEditor -> scene). Each audit lives beside its
+// domain namespace for discoverability; FMonolithToolRegistry de-dups and detects
+// any namespace/action clash, so removing this module simply removes these 4 actions.
 // ============================================================================
 
 void FAuditAdapter::RegisterActions(FMonolithToolRegistry& Registry)

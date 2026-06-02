@@ -3,7 +3,7 @@
 	"Version": 2,
 	"VersionName": "0.17.1",
 	"FriendlyName": "Monolith",
-	"Description": "Unified Unreal Engine MCP server — 1387 actions across 25 in-tree namespaces (Blueprint 112, Material 64, Animation 125, Niagara 120, Mesh 194, Editor 33, Config 7, Source 12, Project 8, UI 138, GAS 135, ComboGraph 13, AI 221, LogicDriver 66, Audio 98, LevelSequence 8, monolith meta 5, bulk_fill 2, describe 3, decision 5, risk 5, cppreflect 6, network 4, pipeline 2, reflect 1). +45 experimental town-gen actions register when `bEnableProceduralTownGen=true`. Framework-level `bulk_fill_query` and `describe_query` route to 12 per-namespace adapters for transacted JSON-tree writes and rich schema introspection. Reflection Intelligence (decision / risk / cppreflect / network / pipeline / reflect) layers deterministic decision-record, git-risk, and UE reflection queries on top of the source index. AI-powered asset creation, inspection, and modification.",
+	"Description": "Unified Unreal Engine MCP server — 1634 actions across 51 namespaces (v0.17.1; run `monolith_discover()` for the authoritative live per-namespace catalog). +45 experimental town-gen actions register when `bEnableProceduralTownGen=true`. Framework-level `bulk_fill_query` and `describe_query` route to 12 per-namespace adapters for transacted JSON-tree writes and rich schema introspection. Reflection Intelligence (decision / risk / cppreflect / network / pipeline / reflect) layers deterministic decision-record, git-risk, and UE reflection queries on top of the source index. AI-powered asset creation, inspection, and modification.",
 	"Category": "Editor",
 	"CreatedBy": "tumourlove",
 	"CreatedByURL": "https://github.com/tumourlove/monolith",

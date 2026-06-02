@@ -6,6 +6,14 @@ Stdlib-only offline DEV FALLBACK for the canonical monolith_query.exe.
   actions (cppreflect, network, decision, risk), read-only against the on-disk SQLite.
   No UE installation, no build, no editor required.
 
+  WHY TWO IMPLEMENTATIONS (cross-platform parity pair, NOT redundant duplication):
+  monolith_query.exe is built ONLY by Tools/MonolithQuery/build.bat via MSVC cl.exe,
+  i.e. a Windows-only binary. This stdlib-only Python module is the portable path for
+  Linux/macOS (CI and scheduled-agent VMs that have no Windows runtime and cannot run
+  the .exe). The two are held in byte-lockstep by the ship-blocking parity guard
+  Scripts/verify_offline_parity.py, so behavior has a single source of truth even
+  though there are two host runtimes.
+
 Monolith Offline CLI — query EngineSource.db and ProjectIndex.db without the editor.
 
 Usage:
