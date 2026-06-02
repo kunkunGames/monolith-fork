@@ -97,20 +97,6 @@ def load_config(config_arg: str) -> tuple[Path, dict[str, Any], Path]:
 
 
 def discover_repo_root(config_path: Path) -> Path:
-    try:
-        out = subprocess.check_output(
-            ["git", "-C", str(config_path.parent), "rev-parse", "--show-toplevel"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-        return Path(out.strip())
-    except (OSError, subprocess.CalledProcessError):
-        pass
-
-    for parent in [config_path.parent, *config_path.parents]:
-        if (parent / ".git").exists():
-            return parent
-
     if config_path.parent.name == ".github":
         return config_path.parent.parent
     return config_path.parent
@@ -387,7 +373,7 @@ def check_agent_tools(ctx: CheckContext) -> None:
             ctx.advisory("agent-tools", message, agents_dir)
         return
 
-    dispatcher_re = re.compile(re.escape(dispatcher_prefix) + r"[A-Za-z_][A-Za-z0-9_]*")
+    dispatcher_re = re.compile(re.escape(dispatcher_prefix) + r"[A-Za-z0-9_-]+")
     for path in sorted(agents_dir.glob("*.md")):
         text = read_text(path)
         tools = parse_agent_tools_frontmatter(text)
