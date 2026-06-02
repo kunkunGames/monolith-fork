@@ -62,6 +62,6 @@ Read-only schema introspection companion to `bulk_fill`. Uses the same adapter r
 |--------|----------|-------------|
 | `schema` | `describe_query` | Return the rich `FSchemaDescriptor` tree for `target_namespace`, optionally scoped to `target`. Params: `target_namespace` (required string), `target` (optional asset path or action/class identifier). Omitting `target` returns the namespace-level writable-shape descriptor. Output includes ImportText sample forms, `range_min` / `range_max`, `enum_values`, `conditional_on` discriminators for tagged-union fields. Authoritative input source for authoring valid `bulk_fill.apply` payloads. |
 | `list_targets` | `describe_query` | Optional inventory for a namespace adapter. Params: `target_namespace` (string). Adapters may return `inventory_supported=false` / `optional_inventory_not_implemented`; use `bulk_fill.list_namespaces` plus `describe.schema` to confirm adapter support. |
-| `action_schema` | `describe_query` | Return a registered ACTION's param schema (names, types, required, defaults, aliases, descriptions) by `(target_namespace, action)`. Params: `target_namespace` (string), `action` (string). Closes param-name discoverability so callers stop trial-and-erroring param names. |
+| `action_schema` | `describe_query` | Return a registered ACTION's param schema (names, types, required, defaults, aliases, descriptions) by `(target_namespace, target_action)`. Params: `target_namespace` (string), `target_action` (string). Closes param-name discoverability so callers stop trial-and-erroring param names. |
 
 ---

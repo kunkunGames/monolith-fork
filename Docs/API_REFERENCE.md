@@ -1143,7 +1143,7 @@ Return a registered ACTION's param schema (names, types, required, defaults, ali
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `target_namespace` | string | **required** | Namespace that owns the action (e.g. `blueprint`, `ui`) |
-| `action` | string | **required** | Action name whose param schema to return (e.g. `add_nodes_bulk`) |
+| `target_action` | string | **required** | Action name whose param schema to return (e.g. `add_nodes_bulk`). Alias: `action` |
 
 See the per-system SPECs' "Bulk Fill & Describe Surface" sections for each adapter's `fill_kind` catalogue.
 
