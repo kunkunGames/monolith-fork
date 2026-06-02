@@ -39,13 +39,14 @@ FMonolithSourceDatabase* GetSourceDatabase()
 bool GetOptionalInt(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, int32 DefaultValue, int32& OutValue, FString& OutError)
 {
 	OutValue = DefaultValue;
-	if (!Params->HasField(Field))
+	TSharedPtr<FJsonValue> JsonField = Params->TryGetField(Field);
+	if (!JsonField.IsValid())
 	{
 		return true;
 	}
 
 	double NumberValue = 0.0;
-	if (!Params->TryGetNumberField(Field, NumberValue))
+	if (!JsonField->TryGetNumber(NumberValue))
 	{
 		OutError = FString::Printf(TEXT("'%s' parameter must be a number"), Field);
 		return false;
@@ -57,12 +58,13 @@ bool GetOptionalInt(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, i
 bool GetOptionalBool(const TSharedPtr<FJsonObject>& Params, const TCHAR* Field, bool DefaultValue, bool& OutValue, FString& OutError)
 {
 	OutValue = DefaultValue;
-	if (!Params->HasField(Field))
+	TSharedPtr<FJsonValue> JsonField = Params->TryGetField(Field);
+	if (!JsonField.IsValid())
 	{
 		return true;
 	}
 
-	if (!Params->TryGetBoolField(Field, OutValue))
+	if (!JsonField->TryGetBool(OutValue))
 	{
 		OutError = FString::Printf(TEXT("'%s' parameter must be a boolean"), Field);
 		return false;
@@ -391,7 +393,8 @@ FMonolithActionResult BuildAssetAttachment(const FString& AssetPath, int32 MaxCh
 	}
 
 	TSharedPtr<FJsonObject> Details = ProjectIndex->GetAssetDetails(AssetPath);
-	if (!Details.IsValid() || !Details->HasField(TEXT("asset_name")))
+	FString DummyAssetName;
+	if (!Details.IsValid() || !Details->TryGetStringField(TEXT("asset_name"), DummyAssetName))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset '%s' was not found in the project index"), *AssetPath));
 	}
@@ -603,7 +606,8 @@ FMonolithActionResult FMonolithSourceContextActions::HandleGetIndexStatus(const 
 FMonolithActionResult FMonolithSourceContextActions::HandleStartIndexing(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Scope = TEXT("all");
-	if (Params->HasField(TEXT("scope")) && !Params->TryGetStringField(TEXT("scope"), Scope))
+	TSharedPtr<FJsonValue> ScopeField = Params->TryGetField(TEXT("scope"));
+	if (ScopeField.IsValid() && !ScopeField->TryGetString(Scope))
 	{
 		return FMonolithActionResult::Error(TEXT("'scope' must be a string"), -32602);
 	}
@@ -872,11 +876,13 @@ FMonolithActionResult FMonolithSourceContextActions::HandleSearchAssetSymbols(co
 {
 	FString AssetPath;
 	FString SymbolSeed;
-	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	TSharedPtr<FJsonValue> AssetPathField = Params->TryGetField(TEXT("asset_path"));
+	if (AssetPathField.IsValid() && !AssetPathField->TryGetString(AssetPath))
 	{
 		return FMonolithActionResult::Error(TEXT("'asset_path' must be a string"), -32602);
 	}
-	if (Params->HasField(TEXT("symbol")) && !Params->TryGetStringField(TEXT("symbol"), SymbolSeed))
+	TSharedPtr<FJsonValue> SymbolField = Params->TryGetField(TEXT("symbol"));
+	if (SymbolField.IsValid() && !SymbolField->TryGetString(SymbolSeed))
 	{
 		return FMonolithActionResult::Error(TEXT("'symbol' must be a string"), -32602);
 	}
@@ -896,7 +902,8 @@ FMonolithActionResult FMonolithSourceContextActions::HandleSearchAssetSymbols(co
 	Limit = FMath::Clamp(Limit, 1, MaxSearchLimit);
 
 	FString DetailLevel = TEXT("minimal");
-	if (Params->HasField(TEXT("detail_level")) && !Params->TryGetStringField(TEXT("detail_level"), DetailLevel))
+	TSharedPtr<FJsonValue> DetailLevelField = Params->TryGetField(TEXT("detail_level"));
+	if (DetailLevelField.IsValid() && !DetailLevelField->TryGetString(DetailLevel))
 	{
 		return FMonolithActionResult::Error(TEXT("'detail_level' must be a string"), -32602);
 	}
@@ -940,7 +947,8 @@ FMonolithActionResult FMonolithSourceContextActions::HandleSearchAssetSymbols(co
 		if (ProjectIndex && !ProjectIndex->IsIndexing())
 		{
 			Details = ProjectIndex->GetAssetDetails(AssetPath);
-			if (!Details.IsValid() || !Details->HasField(TEXT("asset_name")))
+			FString DummyAssetName;
+			if (!Details.IsValid() || !Details->TryGetStringField(TEXT("asset_name"), DummyAssetName))
 			{
 				WarningStrings.Add(FString::Printf(TEXT("asset '%s' was not found in the project index"), *AssetPath));
 			}

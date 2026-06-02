@@ -1428,10 +1428,11 @@ FMonolithActionResult FMonolithSourceActions::HandleSearchSource(const TSharedPt
 	FString Scope = TEXT("all");
 	Params->TryGetStringField(TEXT("scope"), Scope);
 	int32 RequestedLimit = 20;
-	double RawLimit = 0;
-	if (Params->HasField(TEXT("limit")))
+	TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
+	if (LimitField.IsValid())
 	{
-		if (!Params->TryGetNumberField(TEXT("limit"), RawLimit))
+		double RawLimit = 0;
+		if (!LimitField->TryGetNumber(RawLimit))
 		{
 			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
 		}
