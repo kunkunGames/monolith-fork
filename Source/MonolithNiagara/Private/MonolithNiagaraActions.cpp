@@ -17,8 +17,6 @@
 #include "NiagaraNodeCustomHlsl.h"
 #include "NiagaraNodeInput.h"
 #include "NiagaraNodeWithDynamicPins.h"
-#include "NiagaraNodeParameterMapGet.h"
-#include "NiagaraNodeParameterMapSet.h"
 #include "NiagaraDataInterface.h"
 // Tranche 2 (#64): per-system DI enumeration. Verified UE 5.7 (offline source index):
 // FNiagaraDataInterfaceUtilities::ForEachDataInterface(const UNiagaraSystem*, TFunction<bool(const FDataInterfaceUsageContext&)>)
@@ -80,6 +78,13 @@
 DEFINE_LOG_CATEGORY_STATIC(LogMonolithNiagara, Log, All);
 
 #if WITH_NIAGARA_WIZARD_PRIVATE
+// Engine-PRIVATE NiagaraEditor node headers — resolvable only when WITH_NIAGARA_WIZARD_PRIVATE=1
+// widens PrivateIncludePaths into NiagaraEditor/Private (see MonolithNiagara.Build.cs). The
+// ParameterMap bridge below instantiates FGraphNodeCreator<> on these concrete types, which needs
+// the complete definition -- a forward declaration is insufficient.
+#include "NiagaraNodeParameterMapGet.h"
+#include "NiagaraNodeParameterMapSet.h"
+
 // Forward-declarations for engine-PRIVATE NiagaraEditor symbols. These are defined only in
 // NiagaraEditor/Private/Widgets/DataChannel/NiagaraDataChannelWizard.cpp — there is NO public
 // header. We reach the definitions by widening PrivateIncludePaths into NiagaraEditor/Private
