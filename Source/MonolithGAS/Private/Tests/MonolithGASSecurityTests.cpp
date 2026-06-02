@@ -3,6 +3,9 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithGASAbilityActions.h"
 #include "MonolithGASCueActions.h"
+#include "MonolithGASEffectActions.h"
+#include "MonolithGASScaffoldActions.h"
+#include "MonolithGASTargetActions.h"
 #include "Dom/JsonObject.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -16,6 +19,9 @@ namespace
         {
             FMonolithGASAbilityActions::RegisterActions(Registry);
             FMonolithGASCueActions::RegisterActions(Registry);
+            FMonolithGASEffectActions::RegisterActions(Registry);
+            FMonolithGASScaffoldActions::RegisterActions(Registry);
+            FMonolithGASTargetActions::RegisterActions(Registry);
         }
 
         return Registry.ExecuteAction(TEXT("gas"), Action, Params);
@@ -86,6 +92,114 @@ bool FMonolithGASCueSecurityPathTest::RunTest(const FString& Parameters)
         if (!Path.IsEmpty())
         {
             TestTrue(*FString::Printf(TEXT("Error should complain about invalid cue save_path for: %s"), *Path),
+                Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
+                Result.ErrorMessage.Contains(TEXT("Package path")) ||
+                Result.ErrorMessage.Contains(TEXT("save_path")) ||
+                Result.ErrorMessage.Contains(Path));
+        }
+    }
+
+    return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithGASEffectSecurityPathTest, "Monolith.Security.GAS.ValidatePackagePath.Effect", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithGASEffectSecurityPathTest::RunTest(const FString& Parameters)
+{
+    TArray<FString> MalformedPaths = {
+        TEXT(""), // Empty path
+        TEXT("//Game/MalformedPath/GE_Test"), // Double leading slash
+        TEXT("Game/MalformedPath/GE_Test"), // Missing leading slash
+        TEXT("/Game/MalformedPath/GE_Test/"), // Trailing slash
+        TEXT("/Game/MalformedPath/GE_Test#Invalid") // Illegal characters
+    };
+
+    for (const FString& Path : MalformedPaths)
+    {
+        TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+        Payload->SetStringField(TEXT("save_path"), Path);
+        Payload->SetStringField(TEXT("parent_class"), TEXT("GameplayEffect"));
+        Payload->SetStringField(TEXT("duration_policy"), TEXT("instant"));
+
+        FMonolithActionResult Result = ExecuteGASAction(TEXT("create_gameplay_effect"), Payload);
+
+        TestFalse(*FString::Printf(TEXT("Action should fail on malformed path: %s"), *Path), Result.bSuccess);
+        TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), Result.ErrorMessage.IsEmpty());
+        if (!Path.IsEmpty())
+        {
+            TestTrue(*FString::Printf(TEXT("Error should complain about invalid save_path for: %s"), *Path),
+                Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
+                Result.ErrorMessage.Contains(TEXT("Package path")) ||
+                Result.ErrorMessage.Contains(TEXT("save_path")) ||
+                Result.ErrorMessage.Contains(Path));
+        }
+    }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithGASScaffoldSecurityPathTest, "Monolith.Security.GAS.ValidatePackagePath.Scaffold", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithGASScaffoldSecurityPathTest::RunTest(const FString& Parameters)
+{
+    TArray<FString> MalformedPaths = {
+        TEXT(""), // Empty path
+        TEXT("//Game/MalformedPath/GE_Test"), // Double leading slash
+        TEXT("Game/MalformedPath/GE_Test"), // Missing leading slash
+        TEXT("/Game/MalformedPath/GE_Test/"), // Trailing slash
+        TEXT("/Game/MalformedPath/GE_Test#Invalid") // Illegal characters
+    };
+
+    for (const FString& Path : MalformedPaths)
+    {
+        TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+        Payload->SetStringField(TEXT("save_path"), Path);
+        Payload->SetStringField(TEXT("name"), TEXT("MyStatusEffect"));
+        Payload->SetObjectField(TEXT("config"), MakeShared<FJsonObject>());
+
+        FMonolithActionResult Result = ExecuteGASAction(TEXT("scaffold_status_effect"), Payload);
+
+        TestFalse(*FString::Printf(TEXT("Action should fail on malformed path: %s"), *Path), Result.bSuccess);
+        TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), Result.ErrorMessage.IsEmpty());
+        if (!Path.IsEmpty())
+        {
+            TestTrue(*FString::Printf(TEXT("Error should complain about invalid save_path for: %s"), *Path),
+                Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
+                Result.ErrorMessage.Contains(TEXT("Package path")) ||
+                Result.ErrorMessage.Contains(TEXT("save_path")) ||
+                Result.ErrorMessage.Contains(Path));
+        }
+    }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithGASTargetSecurityPathTest, "Monolith.Security.GAS.ValidatePackagePath.Target", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithGASTargetSecurityPathTest::RunTest(const FString& Parameters)
+{
+    TArray<FString> MalformedPaths = {
+        TEXT(""), // Empty path
+        TEXT("//Game/MalformedPath/TA_Test"), // Double leading slash
+        TEXT("Game/MalformedPath/TA_Test"), // Missing leading slash
+        TEXT("/Game/MalformedPath/TA_Test/"), // Trailing slash
+        TEXT("/Game/MalformedPath/TA_Test#Invalid") // Illegal characters
+    };
+
+    for (const FString& Path : MalformedPaths)
+    {
+        TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+        Payload->SetStringField(TEXT("save_path"), Path);
+        Payload->SetStringField(TEXT("targeting_type"), TEXT("Line"));
+
+        FMonolithActionResult Result = ExecuteGASAction(TEXT("create_target_actor"), Payload);
+
+        TestFalse(*FString::Printf(TEXT("Action should fail on malformed path: %s"), *Path), Result.bSuccess);
+        TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), Result.ErrorMessage.IsEmpty());
+        if (!Path.IsEmpty())
+        {
+            TestTrue(*FString::Printf(TEXT("Error should complain about invalid save_path for: %s"), *Path),
                 Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
                 Result.ErrorMessage.Contains(TEXT("Package path")) ||
                 Result.ErrorMessage.Contains(TEXT("save_path")) ||
