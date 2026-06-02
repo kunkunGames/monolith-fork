@@ -295,15 +295,43 @@ if (-not (Test-Path $VcVars)) {
 # build.bat copies the freshly built exe to Plugins/Monolith/Binaries/ (the same
 # Binaries dir the copy step below picks up), so the exe is staged before [3/4].
 Write-Host "    Using VS at $VsInstallPath" -ForegroundColor DarkGray
+# Three robustness measures, learned the hard way during the v0.18.0 release:
+#   1. Prepend the VS *Installer* dir to PATH. vcvars64.bat calls 'vswhere' by bare
+#      name (expecting it on PATH); where the Installer dir is NOT on PATH it prints
+#      "'vswhere.exe' is not recognized" to STDERR. vcvars still recovers and inits
+#      x64 fine -- but that stray STDERR line is what bites under measure #3.
+#   2. Redirect the cmd subprocess STDERR into STDOUT (2>&1) and capture to a log so any
+#      real build failure is diagnosable from the captured tail.
+#   3. THE ACTUAL FIX: relax $ErrorActionPreference to 'Continue' around the native call.
+#      This script runs under EAP='Stop'. Under Stop, PS 5.1 promotes ANY native-command
+#      STDERR to a TERMINATING error -- EVEN through a 2>&1 merge (verified: Stop throws on
+#      the vswhere line, Continue exits 0) -- aborting the release BEFORE the $LASTEXITCODE
+#      gate, even though build.bat itself exits 0. Foreground/interactive hosts default to
+#      Continue, which masked this for every prior release. With EAP relaxed, the exit code
+#      is the sole arbiter; restore the prior preference immediately after.
+$VsInstallerDir = Split-Path $VsWhere -Parent
+$CliBuildLog = Join-Path $env:TEMP "Monolith_OfflineCLIBuild_$Version.log"
+$PrevEAP = $ErrorActionPreference
 Push-Location $ToolDir
 try {
-    & cmd.exe /c "call `"$VcVars`" >nul && call `"$ToolBuildBat`""
-    if ($LASTEXITCODE -ne 0) {
-        throw "Offline CLI build failed with exit code $LASTEXITCODE. Inspect Tools\MonolithQuery\build.bat output."
+    $env:PATH = "$VsInstallerDir;$env:PATH"
+    $ErrorActionPreference = 'Continue'
+    & cmd.exe /c "call `"$VcVars`" && call `"$ToolBuildBat`"" 2>&1 |
+        Tee-Object -FilePath $CliBuildLog | Out-Null
+    $CliExit = $LASTEXITCODE
+    $ErrorActionPreference = $PrevEAP
+    if ($CliExit -ne 0) {
+        if (Test-Path $CliBuildLog) {
+            Write-Host "    --- offline CLI build log (tail) ---" -ForegroundColor Yellow
+            Get-Content $CliBuildLog -Tail 20 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+        }
+        throw "Offline CLI build failed with exit code $CliExit. See $CliBuildLog."
     }
 }
 finally {
+    $ErrorActionPreference = $PrevEAP
     Pop-Location
+    Remove-Item $CliBuildLog -Force -ErrorAction SilentlyContinue
 }
 Write-Host "    Offline CLI built (fresh exe staged in Binaries/)" -ForegroundColor Green
 
