@@ -5936,12 +5936,15 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystemFromSpec(const 
 
 	// Accept save_path at top-level params (intuitive) or inside spec (legacy)
 	FString SavePath;
-	if (Params->HasField(TEXT("save_path")))
-		SavePath = Params->GetStringField(TEXT("save_path"));
-	if (SavePath.IsEmpty() && Spec->HasField(TEXT("save_path")))
-		SavePath = Spec->GetStringField(TEXT("save_path"));
+	TSharedPtr<FJsonValue> SavePathField = Params->TryGetField(TEXT("save_path"));
+	if (SavePathField.IsValid() && !SavePathField->TryGetString(SavePath))
+		return FMonolithActionResult::Error(TEXT("Invalid save_path parameter type, must be string"));
+	TSharedPtr<FJsonValue> SpecSavePathField = Spec->TryGetField(TEXT("save_path"));
+	if (SavePath.IsEmpty() && SpecSavePathField.IsValid() && !SpecSavePathField->TryGetString(SavePath))
+		return FMonolithActionResult::Error(TEXT("Invalid spec.save_path parameter type, must be string"));
 	FString Template;
-	if (Spec->HasField(TEXT("template")) && !Spec->TryGetStringField(TEXT("template"), Template))
+	TSharedPtr<FJsonValue> TemplateField = Spec->TryGetField(TEXT("template"));
+	if (TemplateField.IsValid() && !TemplateField->TryGetString(Template))
 		return FMonolithActionResult::Error(TEXT("Invalid template parameter type, must be string"));
 	if (SavePath.IsEmpty()) return FMonolithActionResult::Error(TEXT("save_path required (provide at params root or inside spec)"));
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
@@ -12913,9 +12916,10 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 			AEP->SetStringField(TEXT("system_path"), SystemPath);
 			AEP->SetStringField(TEXT("emitter_asset"), EO->GetStringField(TEXT("asset")));
 			FString EOName;
-			if (EO->HasField(TEXT("name")))
+			TSharedPtr<FJsonValue> EONameField = EO->TryGetField(TEXT("name"));
+			if (EONameField.IsValid())
 			{
-				if (!EO->TryGetStringField(TEXT("name"), EOName))
+				if (!EONameField->TryGetString(EOName))
 				{
 					OutErrors.Add(FString::Printf(TEXT("spec.emitters[%d].name must be a string"), EmitterIndex));
 					FailCount++;
@@ -13130,7 +13134,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 	}
 
 	FString Mode = TEXT("overwrite");
-	if (Params->HasField(TEXT("mode")) && !Params->TryGetStringField(TEXT("mode"), Mode))
+	TSharedPtr<FJsonValue> ModeField = Params->TryGetField(TEXT("mode"));
+	if (ModeField.IsValid() && !ModeField->TryGetString(Mode))
 		return FMonolithActionResult::Error(TEXT("Invalid mode parameter type, must be string"));
 	if (!Mode.Equals(TEXT("overwrite"), ESearchCase::IgnoreCase) && !Mode.Equals(TEXT("merge"), ESearchCase::IgnoreCase))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Unsupported mode '%s' — use 'overwrite' or 'merge'"), *Mode));
@@ -13183,10 +13188,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 				AddParams->SetStringField(TEXT("asset_path"), SystemPath);
 				AddParams->SetStringField(TEXT("name"), ParamName);
 				AddParams->SetStringField(TEXT("type"), (*PObj)->GetStringField(TEXT("type")));
-				if ((*PObj)->HasField(TEXT("default_value")))
+				TSharedPtr<FJsonValue> DefaultValueField = (*PObj)->TryGetField(TEXT("default_value"));
+				if (DefaultValueField.IsValid())
 				{
 					FString DefaultValue;
-					if (!(*PObj)->TryGetStringField(TEXT("default_value"), DefaultValue))
+					if (!DefaultValueField->TryGetString(DefaultValue))
 					{
 						return FMonolithActionResult::Error(
 							FString::Printf(TEXT("spec.parameters default_value for '%s' must be a string"), *ParamName));
@@ -13227,7 +13233,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 				const TSharedPtr<FJsonObject>* EObj = nullptr;
 				if (!EVal->TryGetObject(EObj) || !(*EObj).IsValid()) continue;
 				FString EmitterName;
-				if ((*EObj)->HasField(TEXT("name")) && !(*EObj)->TryGetStringField(TEXT("name"), EmitterName))
+				TSharedPtr<FJsonValue> EmitterNameField = (*EObj)->TryGetField(TEXT("name"));
+				if (EmitterNameField.IsValid() && !EmitterNameField->TryGetString(EmitterName))
 				{
 					return FMonolithActionResult::Error(
 						FString::Printf(TEXT("spec.emitters[%d].name must be a string"), EmitterIndex));
