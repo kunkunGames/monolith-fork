@@ -389,6 +389,7 @@ namespace
 	void SetVectorParam(const TSharedPtr<FJsonObject>& Obj, const FString& Key, const FVector& V)
 	{
 		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Reserve(3);
 		Arr.Add(MakeShared<FJsonValueNumber>(V.X));
 		Arr.Add(MakeShared<FJsonValueNumber>(V.Y));
 		Arr.Add(MakeShared<FJsonValueNumber>(V.Z));
@@ -654,6 +655,7 @@ FMonolithActionResult FMonolithLevelDesignEncounterActions::DesignEncounter(cons
 	// ---- 5. Generate patrol route for the encounter ----
 	// Use the sub-action helper logic directly
 	TArray<TSharedPtr<FJsonValue>> PatrolRouteArr;
+	PatrolRouteArr.Reserve(SelectedSpawns.Num() * 2);
 	if (SelectedSpawns.Num() > 0)
 	{
 		// Build a simple patrol connecting spawn points
@@ -681,6 +683,7 @@ FMonolithActionResult FMonolithLevelDesignEncounterActions::DesignEncounter(cons
 
 	// ---- 6. Find player escape routes ----
 	TArray<TSharedPtr<FJsonValue>> EscapeRouteArr;
+	EscapeRouteArr.Reserve(8);
 	{
 		FNavAgentProperties AgentProps;
 		AgentProps.AgentRadius = 42.0f;
@@ -765,6 +768,7 @@ FMonolithActionResult FMonolithLevelDesignEncounterActions::DesignEncounter(cons
 
 	// Build spawn points JSON
 	TArray<TSharedPtr<FJsonValue>> SpawnArr;
+	SpawnArr.Reserve(SelectedSpawns.Num());
 	for (const FSpawnCandidate& S : SelectedSpawns)
 	{
 		auto Obj = MakeShared<FJsonObject>();
@@ -1000,6 +1004,7 @@ FMonolithActionResult FMonolithLevelDesignEncounterActions::SuggestPatrolRoute(c
 
 	// Build route JSON
 	TArray<TSharedPtr<FJsonValue>> WaypointArr;
+	WaypointArr.Reserve(OrderedWaypoints.Num());
 	float TotalDist = 0.0f;
 	float TotalExposure = 0.0f;
 
@@ -1214,6 +1219,7 @@ FMonolithActionResult FMonolithLevelDesignEncounterActions::AnalyzeAiTerritory(c
 	// Build heatmap (capped to 100 entries)
 	Heatmap.Sort([](const FHeatmapCell& A, const FHeatmapCell& B) { return A.TerritoryScore > B.TerritoryScore; });
 	TArray<TSharedPtr<FJsonValue>> HeatmapArr;
+	HeatmapArr.Reserve(FMath::Min(Heatmap.Num(), 100));
 	int32 HeatmapLimit = FMath::Min(Heatmap.Num(), 100);
 	for (int32 i = 0; i < HeatmapLimit; ++i)
 	{
@@ -1422,6 +1428,7 @@ FMonolithActionResult FMonolithLevelDesignEncounterActions::EvaluateSafeRoom(con
 
 	// Build entrances JSON
 	TArray<TSharedPtr<FJsonValue>> EntranceArr;
+	EntranceArr.Reserve(Entrances.Num());
 	for (const FEntranceInfo& Ent : Entrances)
 	{
 		auto Obj = MakeShared<FJsonObject>();
@@ -1706,6 +1713,7 @@ FMonolithActionResult FMonolithLevelDesignEncounterActions::AnalyzeLevelPacingSt
 
 	// Build pacing curve
 	TArray<TSharedPtr<FJsonValue>> CurveArr;
+	CurveArr.Reserve(Samples.Num());
 	for (const FPacingSample& S : Samples)
 	{
 		auto Obj = MakeShared<FJsonObject>();
@@ -1956,6 +1964,7 @@ FMonolithActionResult FMonolithLevelDesignEncounterActions::GenerateScareSequenc
 
 	// Build result
 	TArray<TSharedPtr<FJsonValue>> EventsArr;
+	EventsArr.Reserve(Events.Num());
 	for (int32 i = 0; i < Events.Num(); ++i)
 	{
 		const FScareEvent& E = Events[i];
@@ -2238,6 +2247,7 @@ FMonolithActionResult FMonolithLevelDesignEncounterActions::ValidateHorrorIntens
 	// Count severities
 	int32 CriticalCount = 0, WarningCount = 0;
 	TArray<TSharedPtr<FJsonValue>> ViolArr;
+	ViolArr.Reserve(Violations.Num());
 	for (const FViolation& V : Violations)
 	{
 		if (V.Severity == TEXT("critical")) ++CriticalCount;
@@ -2550,6 +2560,7 @@ FMonolithActionResult FMonolithLevelDesignEncounterActions::GenerateHospiceRepor
 	// ============================================
 	{
 		TArray<TSharedPtr<FJsonValue>> ProfileArr;
+		ProfileArr.Reserve(Profiles.Num());
 		for (const FString& P : Profiles)
 		{
 			auto PObj = MakeShared<FJsonObject>();
