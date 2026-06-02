@@ -17,7 +17,6 @@
 #include "NiagaraNodeCustomHlsl.h"
 #include "NiagaraNodeInput.h"
 #include "NiagaraNodeWithDynamicPins.h"
-#include "NiagaraNodeEmitter.h"
 #include "NiagaraNodeParameterMapGet.h"
 #include "NiagaraNodeParameterMapSet.h"
 #include "NiagaraDataInterface.h"
