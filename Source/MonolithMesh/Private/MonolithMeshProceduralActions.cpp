@@ -2922,13 +2922,61 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateTerrainPatch(const T
 		SizeY = static_cast<float>((*SizeArr)[1]->AsNumber());
 	}
 
-	int32 Resolution  = Params->HasField(TEXT("resolution"))  ? static_cast<int32>(Params->GetNumberField(TEXT("resolution")))   : 32;
-	float Amplitude   = Params->HasField(TEXT("amplitude"))   ? static_cast<float>(Params->GetNumberField(TEXT("amplitude")))    : 100.0f;
-	float Frequency   = Params->HasField(TEXT("frequency"))   ? static_cast<float>(Params->GetNumberField(TEXT("frequency")))    : 0.01f;
-	int32 Octaves     = Params->HasField(TEXT("octaves"))     ? static_cast<int32>(Params->GetNumberField(TEXT("octaves")))      : 4;
-	float Persistence = Params->HasField(TEXT("persistence")) ? static_cast<float>(Params->GetNumberField(TEXT("persistence")))  : 0.5f;
-	float Lacunarity  = Params->HasField(TEXT("lacunarity"))  ? static_cast<float>(Params->GetNumberField(TEXT("lacunarity")))   : 2.0f;
-	int32 Seed        = Params->HasField(TEXT("seed"))        ? static_cast<int32>(Params->GetNumberField(TEXT("seed")))         : 0;
+	int32 Resolution = 32;
+	if (TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("resolution")))
+	{
+		double Val;
+		if (!Field->TryGetNumber(Val)) return FMonolithActionResult::Error(TEXT("Parameter 'resolution' must be a number"));
+		Resolution = static_cast<int32>(Val);
+	}
+
+	float Amplitude = 100.0f;
+	if (TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("amplitude")))
+	{
+		double Val;
+		if (!Field->TryGetNumber(Val)) return FMonolithActionResult::Error(TEXT("Parameter 'amplitude' must be a number"));
+		Amplitude = static_cast<float>(Val);
+	}
+
+	float Frequency = 0.01f;
+	if (TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("frequency")))
+	{
+		double Val;
+		if (!Field->TryGetNumber(Val)) return FMonolithActionResult::Error(TEXT("Parameter 'frequency' must be a number"));
+		Frequency = static_cast<float>(Val);
+	}
+
+	int32 Octaves = 4;
+	if (TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("octaves")))
+	{
+		double Val;
+		if (!Field->TryGetNumber(Val)) return FMonolithActionResult::Error(TEXT("Parameter 'octaves' must be a number"));
+		Octaves = static_cast<int32>(Val);
+	}
+
+	float Persistence = 0.5f;
+	if (TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("persistence")))
+	{
+		double Val;
+		if (!Field->TryGetNumber(Val)) return FMonolithActionResult::Error(TEXT("Parameter 'persistence' must be a number"));
+		Persistence = static_cast<float>(Val);
+	}
+
+	float Lacunarity = 2.0f;
+	if (TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("lacunarity")))
+	{
+		double Val;
+		if (!Field->TryGetNumber(Val)) return FMonolithActionResult::Error(TEXT("Parameter 'lacunarity' must be a number"));
+		Lacunarity = static_cast<float>(Val);
+	}
+
+	int32 Seed = 0;
+	if (TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("seed")))
+	{
+		double Val;
+		if (!Field->TryGetNumber(Val)) return FMonolithActionResult::Error(TEXT("Parameter 'seed' must be a number"));
+		Seed = static_cast<int32>(Val);
+	}
 
 	Resolution = FMath::Clamp(Resolution, 2, 256);
 	Octaves = FMath::Clamp(Octaves, 1, 8);
