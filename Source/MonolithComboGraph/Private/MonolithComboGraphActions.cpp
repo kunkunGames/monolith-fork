@@ -1049,10 +1049,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 	if (NodeType.IsEmpty()) NodeType = TEXT("montage");
 
 	float PlayRate = 1.0f;
-	double PlayRateVal;
-	if (Params->HasField(TEXT("play_rate")))
+	TSharedPtr<FJsonValue> PlayRateField = Params->TryGetField(TEXT("play_rate"));
+	if (PlayRateField.IsValid())
 	{
-		if (!Params->TryGetNumberField(TEXT("play_rate"), PlayRateVal))
+		double PlayRateVal;
+		if (!PlayRateField->TryGetNumber(PlayRateVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for param 'play_rate', expected number"));
 		}
@@ -1060,10 +1061,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 	}
 
 	int32 ParentNodeIndex = -1;
-	double ParentNodeIndexVal;
-	if (Params->HasField(TEXT("parent_node_index")))
+	TSharedPtr<FJsonValue> ParentNodeIndexField = Params->TryGetField(TEXT("parent_node_index"));
+	if (ParentNodeIndexField.IsValid())
 	{
-		if (!Params->TryGetNumberField(TEXT("parent_node_index"), ParentNodeIndexVal))
+		double ParentNodeIndexVal;
+		if (!ParentNodeIndexField->TryGetNumber(ParentNodeIndexVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for param 'parent_node_index', expected number"));
 		}
@@ -2172,20 +2174,22 @@ FMonolithActionResult FMonolithComboGraphActions::HandleLayoutComboGraph(const T
 	}
 
 	int32 HSpacing = 300;
-	if (Params->HasField(TEXT("horizontal_spacing")))
+	TSharedPtr<FJsonValue> HSpacingField = Params->TryGetField(TEXT("horizontal_spacing"));
+	if (HSpacingField.IsValid())
 	{
 		double Val;
-		if (!Params->TryGetNumberField(TEXT("horizontal_spacing"), Val))
+		if (!HSpacingField->TryGetNumber(Val))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for param 'horizontal_spacing', expected number"));
 		}
 		HSpacing = static_cast<int32>(Val);
 	}
 	int32 VSpacing = 200;
-	if (Params->HasField(TEXT("vertical_spacing")))
+	TSharedPtr<FJsonValue> VSpacingField = Params->TryGetField(TEXT("vertical_spacing"));
+	if (VSpacingField.IsValid())
 	{
 		double Val;
-		if (!Params->TryGetNumberField(TEXT("vertical_spacing"), Val))
+		if (!VSpacingField->TryGetNumber(Val))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for param 'vertical_spacing', expected number"));
 		}
