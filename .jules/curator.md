@@ -75,3 +75,9 @@
 **Learning:** Build artifacts generated during compilation on macOS (like `.dSYM` directories, the Apple equivalent to Windows `.pdb` files) leak into git status if standard `.gitignore` rules only target Windows build extensions.
 **Prevention:** Add explicit `*.dSYM/` rule to `.gitignore` to match the existing `*.pdb` ignore rule.
 **Avoid:** Assuming standard UE ignores capture macOS compiler artifacts, especially since UE has native support for cross-compiling.
+
+## 2026-06-02 - Ignore proxy tools cache
+**Hygiene issue:** The MCP proxy (Node, Python, C++) creates a schema cache file (`monolith_proxy_tools_*.json`) in `%LOCALAPPDATA%\Monolith` or the system temporary directory. If the environment directs temporary files into the repository workspace, this artifact leaks into the working tree.
+**Learning:** Proxy cache artifacts fallback to environment-defined directories like `$TMPDIR` or `%TEMP%`, which aren't predictably outside the repository in all setups or CI environments.
+**Prevention:** Add an explicit `monolith_proxy_tools_*.json` rule to `.gitignore`.
+**Avoid:** Assuming system temporary directories never overlap with the workspace.

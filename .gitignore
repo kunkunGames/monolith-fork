@@ -81,6 +81,7 @@ compile_commands.json
 
 # Generated tool lockfiles
 *.jsonl.lock
+monolith_proxy_tools_*.json
 
 # Release artifacts
 Monolith-*-Linux.zip
