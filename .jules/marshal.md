@@ -130,3 +130,9 @@
 **Learning:** Secondary coordination files are often missed by agents unless they are explicitly referenced in the primary global configuration file (`AGENTS.md`).
 **Prevention:** Updated `AGENTS.md` Single Responsibility section to explicitly refer agents to `.jules/agent-coordination.md` for domain boundaries.
 **Avoid:** Creating supplementary coordination documentation without linking it from the primary `AGENTS.md` document.
+
+## 2026-06-02 - Mandate diff-level PR collision checks
+**Coordination issue:** Agents were missing collisions when multiple PRs from different tracks touched the exact same file, because they only compared PR titles and branch prefixes.
+**Learning:** PR titles and branch names do not guarantee isolated work. File-level collisions happen when agents in different tracks overlap on shared helpers, specs, or action handlers.
+**Prevention:** Updated `AGENTS.md` to require checking `gh pr diff <PR_NUMBER> --name-only` for file-level overlap, and to fall back to isolated targets or no-op if PR visibility tools like `gh` are unavailable.
+**Avoid:** Trusting branch name prefixes alone; failing to inspect the actual diff of related open PRs.
