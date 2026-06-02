@@ -340,11 +340,32 @@ FMonolithActionResult FDecisionQueryAdapter::HandleListDecisions(const TSharedPt
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString PathFilter   = Params->HasField(TEXT("path_filter"))    ? Params->GetStringField(TEXT("path_filter"))    : FString();
-	const double  MinConfidence = Params->HasField(TEXT("min_confidence")) ? Params->GetNumberField(TEXT("min_confidence")) : 0.6;
-	const FString StatusFilter = Params->HasField(TEXT("status"))         ? Params->GetStringField(TEXT("status"))         : FString();
-	const int32   ReqLimit     = Params->HasField(TEXT("limit"))          ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
-	const FString CursorIn     = Params->HasField(TEXT("cursor"))         ? Params->GetStringField(TEXT("cursor"))         : FString();
+	FString PathFilter;
+	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("`path_filter` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	double MinConfidence = 0.6;
+	if (Params->HasField(TEXT("min_confidence")) && !Params->TryGetNumberField(TEXT("min_confidence"), MinConfidence))
+	{
+		return FMonolithActionResult::Error(TEXT("`min_confidence` must be a number."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString StatusFilter;
+	if (Params->HasField(TEXT("status")) && !Params->TryGetStringField(TEXT("status"), StatusFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("`status` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	double LimitDouble = 50.0;
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("`limit` must be a number."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+	FString CursorIn;
+	if (Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("`cursor` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	constexpr int32 HARD_CAP = 200;
 	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
@@ -490,19 +511,33 @@ FMonolithActionResult FDecisionQueryAdapter::HandleListStale(const TSharedPtr<FJ
 	FSQLiteDatabase* DB = GetRawDB();
 	if (!DB) { return FMonolithActionResult::Error(TEXT("EngineSource.db not available.")); }
 
-	const int32 MaxAgeDays = Params->HasField(TEXT("max_age_days"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("max_age_days"))) : 0;
+	double MaxAgeDaysDouble = 0.0;
+	if (Params->HasField(TEXT("max_age_days")) && !Params->TryGetNumberField(TEXT("max_age_days"), MaxAgeDaysDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("`max_age_days` must be a number."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int32 MaxAgeDays = static_cast<int32>(MaxAgeDaysDouble);
 	if (MaxAgeDays <= 0)
 	{
 		return FMonolithActionResult::Error(TEXT("`max_age_days` must be positive."),
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
-	const FString PathFilter = Params->HasField(TEXT("path_filter"))
-		? Params->GetStringField(TEXT("path_filter")) : FString();
-	const int32 ReqLimit = Params->HasField(TEXT("limit"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
-	const FString CursorIn = Params->HasField(TEXT("cursor"))
-		? Params->GetStringField(TEXT("cursor")) : FString();
+	FString PathFilter;
+	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("`path_filter` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	double LimitDouble = 50.0;
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("`limit` must be a number."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+	FString CursorIn;
+	if (Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("`cursor` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	constexpr int32 HARD_CAP = 200;
 	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
@@ -584,8 +619,12 @@ FMonolithActionResult FDecisionQueryAdapter::HandleFindSupersessionChain(const T
 		return FMonolithActionResult::Error(TEXT("`decision_id` is required."),
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
-	const int32 ReqDepth = Params->HasField(TEXT("depth"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("depth"))) : 10;
+	double DepthDouble = 10.0;
+	if (Params->HasField(TEXT("depth")) && !Params->TryGetNumberField(TEXT("depth"), DepthDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("`depth` must be a number."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int32 ReqDepth = static_cast<int32>(DepthDouble);
 	const int32 MaxDepth = FMath::Clamp(ReqDepth, 1, 50);
 
 	FSQLitePreparedStatement Stmt;
