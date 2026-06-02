@@ -656,4 +656,74 @@ bool FMonolithEditorPreviewCaptureWithOverlayShaderComplexityTest::RunTest(const
 		*this, TEXT("shader_complexity"), TEXT("overlay_shader_complexity.png"));
 }
 
+// ============================================================================
+// ParamGuard Tests (Malformed inputs)
+// ============================================================================
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithEditorPreviewMalformedCameraArrayTest,
+	"Monolith.ParamGuard.EditorPreview.MalformedCameraArray",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorPreviewMalformedCameraArrayTest::RunTest(const FString& /*Parameters*/)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> MaterialPaths;
+	MaterialPaths.Add(MakeShared<FJsonValueString>(TEXT("/Engine/BasicShapes/BasicShapeMaterial")));
+	Params->SetArrayField(TEXT("material_paths"), MaterialPaths);
+
+	TSharedPtr<FJsonObject> CameraObj = MakeShared<FJsonObject>();
+	CameraObj->SetStringField(TEXT("location"), TEXT("not_an_array"));
+	Params->SetObjectField(TEXT("camera"), CameraObj);
+
+	const FMonolithActionResult Result = FMonolithEditorActions::HandleCaptureMaterialGrid(Params);
+	TestFalse(TEXT("Malformed camera.location returns an error"), Result.bSuccess);
+	TestTrue(TEXT("Error message mentions camera.location"),
+		Result.ErrorMessage.Contains(TEXT("camera.location")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithEditorPreviewMalformedResolutionTest,
+	"Monolith.ParamGuard.EditorPreview.MalformedResolution",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorPreviewMalformedResolutionTest::RunTest(const FString& /*Parameters*/)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> MaterialPaths;
+	MaterialPaths.Add(MakeShared<FJsonValueString>(TEXT("/Engine/BasicShapes/BasicShapeMaterial")));
+	Params->SetArrayField(TEXT("material_paths"), MaterialPaths);
+	Params->SetStringField(TEXT("resolution"), TEXT("not_an_array"));
+
+	const FMonolithActionResult Result = FMonolithEditorActions::HandleCaptureMaterialGrid(Params);
+	TestFalse(TEXT("Malformed resolution returns an error"), Result.bSuccess);
+	TestTrue(TEXT("Error message mentions resolution"),
+		Result.ErrorMessage.Contains(TEXT("resolution")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithEditorPreviewMalformedColumnsTest,
+	"Monolith.ParamGuard.EditorPreview.MalformedColumns",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorPreviewMalformedColumnsTest::RunTest(const FString& /*Parameters*/)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> MaterialPaths;
+	MaterialPaths.Add(MakeShared<FJsonValueString>(TEXT("/Engine/BasicShapes/BasicShapeMaterial")));
+	Params->SetArrayField(TEXT("material_paths"), MaterialPaths);
+	Params->SetBoolField(TEXT("columns"), true);
+
+	const FMonolithActionResult Result = FMonolithEditorActions::HandleCaptureMaterialGrid(Params);
+	TestFalse(TEXT("Malformed columns returns an error"), Result.bSuccess);
+	TestTrue(TEXT("Error message mentions columns"),
+		Result.ErrorMessage.Contains(TEXT("columns")));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
