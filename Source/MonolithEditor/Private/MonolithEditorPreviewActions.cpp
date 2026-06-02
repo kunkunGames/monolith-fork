@@ -73,17 +73,18 @@ namespace
 	}
 
 	/** Parse optional {location, rotation, fov} camera object (or string-serialized variant). */
-	static void ParseCameraObject(
+	static bool ParseCameraObject(
 		const TSharedPtr<FJsonObject>& Params,
 		FVector& OutLocation,
 		FRotator& OutRotation,
 		float& OutFOV,
-		bool& bOutCameraProvided)
+		bool& bOutCameraProvided,
+		FString& OutError)
 	{
 		bOutCameraProvided = false;
 		if (!Params->HasField(TEXT("camera")))
 		{
-			return;
+			return true;
 		}
 
 		const TSharedPtr<FJsonObject>* CameraObj = nullptr;
@@ -101,51 +102,93 @@ namespace
 
 		if (!CameraObj || !(*CameraObj).IsValid())
 		{
-			return;
+			OutError = TEXT("Invalid param: 'camera' must be an object or JSON string");
+			return false;
 		}
 
-		bOutCameraProvided = true;
+		bool bHasCameraTransform = false;
 
 		if ((*CameraObj)->HasField(TEXT("location")))
 		{
-			const TArray<TSharedPtr<FJsonValue>>& Loc = (*CameraObj)->GetArrayField(TEXT("location"));
-			if (Loc.Num() >= 3)
+			const TArray<TSharedPtr<FJsonValue>>* Loc = nullptr;
+			if (!(*CameraObj)->TryGetArrayField(TEXT("location"), Loc) || !Loc || Loc->Num() < 3)
 			{
-				OutLocation = FVector(Loc[0]->AsNumber(), Loc[1]->AsNumber(), Loc[2]->AsNumber());
+				OutError = TEXT("Invalid param: 'camera.location' must be an array with at least 3 numbers");
+				return false;
 			}
+			double X = 0.0, Y = 0.0, Z = 0.0;
+			if (!(*Loc)[0]->TryGetNumber(X) || !(*Loc)[1]->TryGetNumber(Y) || !(*Loc)[2]->TryGetNumber(Z))
+			{
+				OutError = TEXT("Invalid param: 'camera.location' elements must be numbers");
+				return false;
+			}
+			OutLocation = FVector(X, Y, Z);
+			bHasCameraTransform = true;
 		}
 		if ((*CameraObj)->HasField(TEXT("rotation")))
 		{
-			const TArray<TSharedPtr<FJsonValue>>& Rot = (*CameraObj)->GetArrayField(TEXT("rotation"));
-			if (Rot.Num() >= 3)
+			const TArray<TSharedPtr<FJsonValue>>* Rot = nullptr;
+			if (!(*CameraObj)->TryGetArrayField(TEXT("rotation"), Rot) || !Rot || Rot->Num() < 3)
 			{
-				OutRotation = FRotator(Rot[0]->AsNumber(), Rot[1]->AsNumber(), Rot[2]->AsNumber());
+				OutError = TEXT("Invalid param: 'camera.rotation' must be an array with at least 3 numbers");
+				return false;
 			}
+			double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
+			if (!(*Rot)[0]->TryGetNumber(Pitch) || !(*Rot)[1]->TryGetNumber(Yaw) || !(*Rot)[2]->TryGetNumber(Roll))
+			{
+				OutError = TEXT("Invalid param: 'camera.rotation' elements must be numbers");
+				return false;
+			}
+			OutRotation = FRotator(Pitch, Yaw, Roll);
+			bHasCameraTransform = true;
 		}
 		if ((*CameraObj)->HasField(TEXT("fov")))
 		{
-			OutFOV = (float)(*CameraObj)->GetNumberField(TEXT("fov"));
+			double TempFOV = 0.0;
+			if (!(*CameraObj)->TryGetNumberField(TEXT("fov"), TempFOV))
+			{
+				OutError = TEXT("Invalid param: 'camera.fov' must be a number");
+				return false;
+			}
+			OutFOV = (float)TempFOV;
 		}
+
+		bOutCameraProvided = bHasCameraTransform;
+		return true;
 	}
 
-	/** Parse [w, h] array; returns true if a usable pair was extracted. */
+	/** Parse optional [w, h] array; absent field keeps defaults, malformed field returns false. */
 	static bool ParseResolutionArray(
 		const TSharedPtr<FJsonObject>& Params,
 		const TCHAR* FieldName,
 		int32& OutW,
-		int32& OutH)
+		int32& OutH,
+		FString& OutError)
 	{
 		if (!Params->HasField(FieldName))
 		{
-			return false;
+			return true;
 		}
-		const TArray<TSharedPtr<FJsonValue>>& Arr = Params->GetArrayField(FieldName);
-		if (Arr.Num() < 2)
+
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (!Params->TryGetArrayField(FieldName, Arr) || !Arr)
 		{
+			OutError = FString::Printf(TEXT("Invalid param: '%s' must be an array"), FieldName);
 			return false;
 		}
-		OutW = FMath::Max(1, (int32)Arr[0]->AsNumber());
-		OutH = FMath::Max(1, (int32)Arr[1]->AsNumber());
+		if (Arr->Num() < 2)
+		{
+			OutError = FString::Printf(TEXT("Invalid param: '%s' must contain width and height"), FieldName);
+			return false;
+		}
+		double W = 0.0, H = 0.0;
+		if (!(*Arr)[0]->TryGetNumber(W) || !(*Arr)[1]->TryGetNumber(H))
+		{
+			OutError = FString::Printf(TEXT("Invalid param: '%s' elements must be numbers"), FieldName);
+			return false;
+		}
+		OutW = FMath::Max(1, (int32)W);
+		OutH = FMath::Max(1, (int32)H);
 		return true;
 	}
 
@@ -158,20 +201,29 @@ namespace
 	}
 
 	/** Resolve user-supplied or default output path, normalizing relative paths. */
-	static FString ResolveOutputPath(
+	static bool ResolveOutputPath(
 		const TSharedPtr<FJsonObject>& Params,
-		const TCHAR* DefaultBucket)
+		const TCHAR* DefaultBucket,
+		FString& OutPath,
+		FString& OutError)
 	{
-		FString OutputPath;
-		if (Params->TryGetStringField(TEXT("output_path"), OutputPath))
+		if (Params->HasField(TEXT("output_path")))
 		{
+			FString OutputPath;
+			if (!Params->TryGetStringField(TEXT("output_path"), OutputPath) || OutputPath.IsEmpty())
+			{
+				OutError = TEXT("Invalid param: 'output_path' must be a non-empty string");
+				return false;
+			}
 			if (FPaths::IsRelative(OutputPath))
 			{
 				OutputPath = FPaths::ProjectDir() / OutputPath;
 			}
-			return OutputPath;
+			OutPath = OutputPath;
+			return true;
 		}
-		return DefaultOutputPath(DefaultBucket);
+		OutPath = DefaultOutputPath(DefaultBucket);
+		return true;
 	}
 }
 
@@ -234,22 +286,37 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureMaterialGrid(
 
 	// resolution — default 1024x1024.
 	int32 ResX = 1024, ResY = 1024;
-	ParseResolutionArray(Params, TEXT("resolution"), ResX, ResY);
+	FString ParamError;
+	if (!ParseResolutionArray(Params, TEXT("resolution"), ResX, ResY, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// columns — default ceil(sqrt(N)) per resolved open question #5.
 	const int32 MaterialCount = Materials.Num();
 	int32 Columns = (int32)FMath::CeilToInt32(FMath::Sqrt((float)MaterialCount));
 	if (Params->HasField(TEXT("columns")))
 	{
-		double ColsD = (double)Columns;
-		Params->TryGetNumberField(TEXT("columns"), ColsD);
+		double ColsD = 0.0;
+		if (!Params->TryGetNumberField(TEXT("columns"), ColsD))
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Invalid param: 'columns' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		Columns = FMath::Max(1, (int32)ColsD);
 	}
 	const int32 Rows = (int32)FMath::CeilToInt32((float)MaterialCount / (float)Columns);
 
 	// preview_mesh — default "sphere" for the grid (better material readout than plane).
 	FString PreviewMeshKind = TEXT("sphere");
-	Params->TryGetStringField(TEXT("preview_mesh"), PreviewMeshKind);
+	if (Params->HasField(TEXT("preview_mesh")))
+	{
+		if (!Params->TryGetStringField(TEXT("preview_mesh"), PreviewMeshKind))
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Invalid param: 'preview_mesh' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 	const FString PreviewMeshPath = ResolvePreviewMeshPath(PreviewMeshKind);
 
 	UStaticMesh* PreviewMesh = LoadObject<UStaticMesh>(nullptr, *PreviewMeshPath);
@@ -273,10 +340,13 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureMaterialGrid(
 	// Camera default: frame the whole grid from -X looking +X.
 	// Distance derived from grid extents + FOV (60 deg default) so all cells fit.
 	float FOV = 60.0f;
-	FVector CameraLocation;
-	FRotator CameraRotation;
+	FVector CameraLocation(0.0f, 0.0f, 0.0f);
+	FRotator CameraRotation(0.0f, 0.0f, 0.0f);
 	bool bCameraProvided = false;
-	ParseCameraObject(Params, CameraLocation, CameraRotation, FOV, bCameraProvided);
+	if (!ParseCameraObject(Params, CameraLocation, CameraRotation, FOV, bCameraProvided, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (!bCameraProvided)
 	{
@@ -289,7 +359,11 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureMaterialGrid(
 	}
 
 	// Output path.
-	const FString OutputPath = ResolveOutputPath(Params, TEXT("CaptureMaterialGrid"));
+	FString OutputPath;
+	if (!ResolveOutputPath(Params, TEXT("CaptureMaterialGrid"), OutputPath, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	check(IsInGameThread());
 	const double StartTime = FPlatformTime::Seconds();
@@ -406,18 +480,18 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureWithOverlay(
 	}
 
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	FString Mode;
-	Params->TryGetStringField(TEXT("mode"), Mode);
-
-	if (AssetPath.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
-	}
-	if (Mode.IsEmpty())
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(
-			TEXT("mode is required (wireframe | normals | uv_density | lightmap_density | shader_complexity)"));
+			TEXT("asset_path is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString Mode;
+	if (!Params->TryGetStringField(TEXT("mode"), Mode) || Mode.IsEmpty())
+	{
+		return FMonolithActionResult::Error(
+			TEXT("mode is required (wireframe | normals | uv_density | lightmap_density | shader_complexity)"),
+			FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// Validate mode upfront so we error before allocating any RHI resources.
@@ -431,7 +505,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureWithOverlay(
 	{
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Unsupported mode '%s' (supported: wireframe, normals, uv_density, lightmap_density, shader_complexity)"),
-			*Mode));
+			*Mode), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *AssetPath);
@@ -442,16 +516,27 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureWithOverlay(
 	}
 
 	int32 ResX = 512, ResY = 512;
-	ParseResolutionArray(Params, TEXT("resolution"), ResX, ResY);
+	FString ParamError;
+	if (!ParseResolutionArray(Params, TEXT("resolution"), ResX, ResY, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Camera default: -X 200 units, looking +X.
 	FVector CameraLocation(200.0f, 0.0f, 100.0f);
 	FRotator CameraRotation(0.0f, 180.0f, 0.0f);
 	float FOV = 60.0f;
 	bool bCameraProvided = false;
-	ParseCameraObject(Params, CameraLocation, CameraRotation, FOV, bCameraProvided);
+	if (!ParseCameraObject(Params, CameraLocation, CameraRotation, FOV, bCameraProvided, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
-	const FString OutputPath = ResolveOutputPath(Params, TEXT("CaptureWithOverlay"));
+	FString OutputPath;
+	if (!ResolveOutputPath(Params, TEXT("CaptureWithOverlay"), OutputPath, ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	check(IsInGameThread());
 	const double StartTime = FPlatformTime::Seconds();
