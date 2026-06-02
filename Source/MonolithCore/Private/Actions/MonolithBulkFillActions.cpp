@@ -107,11 +107,13 @@ namespace MonolithBulkFillActionsInternal
 			Spec.Tree = *TreePtr;
 		}
 
-		if (Params->HasField(TEXT("dry_run")) && !Params->TryGetBoolField(TEXT("dry_run"), Spec.bDryRun))
+		TSharedPtr<FJsonValue> DryrunField = Params->TryGetField(TEXT("dry_run"));
+		if (DryrunField.IsValid() && !DryrunField->TryGetBool(Spec.bDryRun))
 		{
 			return FMonolithActionResult::Error(TEXT("Parameter 'dry_run' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
-		if (Params->HasField(TEXT("strict")) && !Params->TryGetBoolField(TEXT("strict"), Spec.bStrict))
+		TSharedPtr<FJsonValue> StrictField = Params->TryGetField(TEXT("strict"));
+		if (StrictField.IsValid() && !StrictField->TryGetBool(Spec.bStrict))
 		{
 			return FMonolithActionResult::Error(TEXT("Parameter 'strict' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
