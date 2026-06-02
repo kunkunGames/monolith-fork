@@ -1037,6 +1037,7 @@ FMonolithActionResult FMonolithMeshVolumeActions::SelectActors(const TSharedPtr<
 	// Build result with current selection
 	USelection* SelectedActors = GEditor->GetSelectedActors();
 	TArray<TSharedPtr<FJsonValue>> SelectedArr;
+	SelectedArr.Reserve(SelectedActors->Num());
 	for (FSelectionIterator It(*SelectedActors); It; ++It)
 	{
 		AActor* Actor = Cast<AActor>(*It);
@@ -1127,6 +1128,7 @@ FMonolithActionResult FMonolithMeshVolumeActions::SnapToSurface(const TSharedPtr
 	VolumeActionHelpers::FScopedMeshTransaction Transaction(FText::FromString(TEXT("Monolith: Snap to Surface")));
 
 	TArray<TSharedPtr<FJsonValue>> ResultArr;
+	ResultArr.Reserve(Actors.Num());
 	int32 Snapped = 0;
 	int32 Missed = 0;
 

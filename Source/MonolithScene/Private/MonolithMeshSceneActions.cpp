@@ -1016,6 +1016,7 @@ FMonolithActionResult FMonolithMeshSceneActions::AlignActors(const TSharedPtr<FJ
 	SceneActionHelpers::FScopedMeshTransaction Transaction(FText::FromString(TEXT("Monolith: Align Actors")));
 
 	TArray<TSharedPtr<FJsonValue>> ResultArr;
+	ResultArr.Reserve(Actors.Num());
 
 	if (ModeStr == TEXT("distribute"))
 	{
@@ -1122,6 +1123,7 @@ FMonolithActionResult FMonolithMeshSceneActions::SnapToFloor(const TSharedPtr<FJ
 	SceneActionHelpers::FScopedMeshTransaction Transaction(FText::FromString(TEXT("Monolith: Snap to Floor")));
 
 	TArray<TSharedPtr<FJsonValue>> ResultArr;
+	ResultArr.Reserve(Actors.Num());
 	int32 Snapped = 0;
 	int32 Missed = 0;
 
@@ -1216,6 +1218,7 @@ FMonolithActionResult FMonolithMeshSceneActions::ManageFolders(const TSharedPtr<
 		}
 
 		TArray<TSharedPtr<FJsonValue>> FolderArr;
+		FolderArr.Reserve(FolderCounts.Num());
 		FolderCounts.KeySort([](const FString& A, const FString& B) { return A < B; });
 		for (const auto& Pair : FolderCounts)
 		{
