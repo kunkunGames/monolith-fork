@@ -856,6 +856,7 @@ FMonolithActionResult FMonolithGASCueActions::HandleSetCueParameters(const TShar
 		FString::Printf(TEXT("Set %d properties on cue"), SetProperties.Num()));
 
 	TArray<TSharedPtr<FJsonValue>> PropsArr;
+	PropsArr.Reserve(SetProperties.Num());
 	for (const FString& S : SetProperties) PropsArr.Add(MakeShared<FJsonValueString>(S));
 	Result->SetArrayField(TEXT("set_properties"), PropsArr);
 

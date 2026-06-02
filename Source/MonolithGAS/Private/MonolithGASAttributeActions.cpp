@@ -1568,6 +1568,7 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleConfigureAttributeClam
 		if (Errors.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> ErrArr;
+			ErrArr.Reserve(Errors.Num());
 			for (const FString& E : Errors) ErrArr.Add(MakeShared<FJsonValueString>(E));
 			Result->SetArrayField(TEXT("errors"), ErrArr);
 		}

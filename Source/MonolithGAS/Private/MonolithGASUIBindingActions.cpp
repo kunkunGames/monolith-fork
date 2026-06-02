@@ -735,6 +735,7 @@ FMonolithActionResult FMonolithGASUIBindingActions::HandleBindWidgetToAttribute(
     if (Warnings.Num() > 0)
     {
         TArray<TSharedPtr<FJsonValue>> Arr;
+        Arr.Reserve(Warnings.Num());
         for (const FString& W : Warnings) Arr.Add(MakeShared<FJsonValueString>(W));
         Result->SetArrayField(TEXT("warnings"), Arr);
     }
@@ -823,6 +824,7 @@ FMonolithActionResult FMonolithGASUIBindingActions::HandleListAttributeBindings(
     TArray<TSharedPtr<FJsonValue>> Arr;
     if (Ext)
     {
+        Arr.Reserve(Ext->Bindings.Num());
         for (int32 i = 0; i < Ext->Bindings.Num(); ++i)
         {
             Arr.Add(MakeShared<FJsonValueObject>(SerializeBindingRow(Ext->Bindings[i], i, WBP)));

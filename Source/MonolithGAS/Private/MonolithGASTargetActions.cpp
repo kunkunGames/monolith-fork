@@ -328,6 +328,7 @@ FMonolithActionResult FMonolithGASTargetActions::HandleCreateTargetActor(const T
 	if (ConfiguredProps.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> PropsArr;
+		PropsArr.Reserve(ConfiguredProps.Num());
 		for (const FString& S : ConfiguredProps) PropsArr.Add(MakeShared<FJsonValueString>(S));
 		Result->SetArrayField(TEXT("configured_properties"), PropsArr);
 	}
@@ -491,6 +492,7 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 		FString::Printf(TEXT("Configured %d properties on TargetActor"), SetProps.Num()));
 
 	TArray<TSharedPtr<FJsonValue>> PropsArr;
+	PropsArr.Reserve(SetProps.Num());
 	for (const FString& S : SetProps) PropsArr.Add(MakeShared<FJsonValueString>(S));
 	Result->SetArrayField(TEXT("set_properties"), PropsArr);
 
