@@ -906,7 +906,8 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildSummary(const TShare
 
 FMonolithActionResult FMonolithEditorActions::HandleSearchBuildOutput(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Pattern = Params->GetStringField(TEXT("pattern"));
+	FString Pattern;
+	Params->TryGetStringField(TEXT("pattern"), Pattern);
 	if (Pattern.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: pattern"));
@@ -1183,9 +1184,12 @@ FMonolithActionResult FMonolithEditorActions::HandleGetRecentLogs(const TSharedP
 
 FMonolithActionResult FMonolithEditorActions::HandleSearchLogs(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Pattern = Params->GetStringField(TEXT("pattern"));
-	FString Category = Params->GetStringField(TEXT("category"));
-	FString VerbosityStr = Params->GetStringField(TEXT("verbosity"));
+	FString Pattern;
+	Params->TryGetStringField(TEXT("pattern"), Pattern);
+	FString Category;
+	Params->TryGetStringField(TEXT("category"), Category);
+	FString VerbosityStr;
+	Params->TryGetStringField(TEXT("verbosity"), VerbosityStr);
 	ELogVerbosity::Type MaxVerbosity = VerbosityStr.IsEmpty() ? ELogVerbosity::VeryVerbose : StringToVerbosity(VerbosityStr);
 
 	int32 Limit = 200;
@@ -1801,8 +1805,10 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 	const TSharedPtr<FJsonObject>& Params)
 {
 	// Parse required params
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString AssetType = Params->GetStringField(TEXT("asset_type"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString AssetType;
+	Params->TryGetStringField(TEXT("asset_type"), AssetType);
 
 	if (AssetPath.IsEmpty() || AssetType.IsEmpty())
 	{
@@ -2081,7 +2087,8 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 		UAnimSequence* AnimSeq = nullptr;
 		if (Params->HasField(TEXT("animation_path")))
 		{
-			FString AnimPath = Params->GetStringField(TEXT("animation_path"));
+			FString AnimPath;
+			Params->TryGetStringField(TEXT("animation_path"), AnimPath);
 			if (!AnimPath.IsEmpty())
 			{
 				AnimSeq = LoadObject<UAnimSequence>(nullptr, *AnimPath);
@@ -2300,8 +2307,10 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 	const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString AssetType = Params->GetStringField(TEXT("asset_type"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString AssetType;
+	Params->TryGetStringField(TEXT("asset_type"), AssetType);
 
 	if (AssetPath.IsEmpty() || AssetType.IsEmpty())
 	{
@@ -2621,7 +2630,8 @@ FMonolithActionResult FMonolithEditorActions::HandleStitchFlipbook(
 	const TSharedPtr<FJsonObject>& Params)
 {
 	// --- Extract required params ---
-	FString DestPath = Params->GetStringField(TEXT("dest_path"));
+	FString DestPath;
+	Params->TryGetStringField(TEXT("dest_path"), DestPath);
 	if (DestPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("dest_path is required"));
@@ -3392,7 +3402,8 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAssetThumbnail(const 
 FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 	const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 
@@ -3479,7 +3490,8 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 			const TSharedPtr<FJsonObject> FrameObj = FV->AsObject();
 			if (FrameObj.IsValid())
 			{
-				FString FilePath = FrameObj->GetStringField(TEXT("file"));
+				FString FilePath;
+				FrameObj->TryGetStringField(TEXT("file"), FilePath);
 				if (!FilePath.IsEmpty())
 					FramePaths.Add(FilePath);
 			}

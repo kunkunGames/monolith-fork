@@ -82,3 +82,10 @@
 **Learning:** Optional string extraction should not depend on `GetStringField`; if a supplied JSON value has the wrong type, the handler should keep the default or return a controlled error instead of relying on assertion-prone accessors.
 **Reuse rule:** For optional string properties that default to empty strings, initialize an `FString` and use `TryGetStringField`.
 **Avoid:** Avoid the ternary `HasField` + `GetStringField` pattern for optional user-supplied JSON fields.
+
+## 2026-05-13 - Replace GetStringField with TryGetStringField in MonolithEditor actions
+
+**Pattern:** Unsafe calls to `GetStringField` for optional or required string parameters across multiple handlers in `MonolithEditorActions.cpp` and `MonolithEditorPreviewActions.cpp` which can crash the editor if fields are missing.
+**Learning:** Monolith C++ handlers must prefer `TryGetStringField` over direct `GetStringField` calls. When a field is known optional or required but missing from JSON payload, the former securely falls back to the default or enables an explicit error return.
+**Reuse rule:** Initialize an `FString` and use `Params->TryGetStringField` instead of using `GetStringField`. Maintain `const` semantics only if the string is inherently constant and properly initialized.
+**Avoid:** Using `GetStringField` directly on the `Params` object, especially without a preceding type and existence guarantee.

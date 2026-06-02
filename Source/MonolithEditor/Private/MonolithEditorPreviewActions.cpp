@@ -91,8 +91,8 @@ namespace
 
 		if (!Params->TryGetObjectField(TEXT("camera"), CameraObj))
 		{
-			FString CameraStr = Params->GetStringField(TEXT("camera"));
-			if (!CameraStr.IsEmpty())
+			FString CameraStr;
+			if (Params->TryGetStringField(TEXT("camera"), CameraStr) && !CameraStr.IsEmpty())
 			{
 				ParsedCamera = FMonolithJsonUtils::Parse(CameraStr);
 				CameraObj = &ParsedCamera;
@@ -162,9 +162,9 @@ namespace
 		const TSharedPtr<FJsonObject>& Params,
 		const TCHAR* DefaultBucket)
 	{
-		if (Params->HasField(TEXT("output_path")))
+		FString OutputPath;
+		if (Params->TryGetStringField(TEXT("output_path"), OutputPath))
 		{
-			FString OutputPath = Params->GetStringField(TEXT("output_path"));
 			if (FPaths::IsRelative(OutputPath))
 			{
 				OutputPath = FPaths::ProjectDir() / OutputPath;
@@ -249,10 +249,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureMaterialGrid(
 
 	// preview_mesh — default "sphere" for the grid (better material readout than plane).
 	FString PreviewMeshKind = TEXT("sphere");
-	if (Params->HasField(TEXT("preview_mesh")))
-	{
-		PreviewMeshKind = Params->GetStringField(TEXT("preview_mesh"));
-	}
+	Params->TryGetStringField(TEXT("preview_mesh"), PreviewMeshKind);
 	const FString PreviewMeshPath = ResolvePreviewMeshPath(PreviewMeshKind);
 
 	UStaticMesh* PreviewMesh = LoadObject<UStaticMesh>(nullptr, *PreviewMeshPath);
@@ -408,8 +405,10 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureWithOverlay(
 		return FMonolithActionResult::Error(TEXT("Params object is null"));
 	}
 
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString Mode = Params->GetStringField(TEXT("mode"));
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString Mode;
+	Params->TryGetStringField(TEXT("mode"), Mode);
 
 	if (AssetPath.IsEmpty())
 	{
