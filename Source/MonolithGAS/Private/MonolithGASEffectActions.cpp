@@ -2062,22 +2062,24 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetPeriod(const TSharedPt
 	FMonolithActionResult Err;
 	if (!LoadGEFromParams(Params, BP, GE, AssetPath, Err)) return Err;
 
-	if (!Params->HasField(TEXT("period")))
+	TSharedPtr<FJsonValue> PeriodField = Params->TryGetField(TEXT("period"));
+	if (!PeriodField.IsValid())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: period"));
 	}
 
 	double PeriodValue = 0.0;
-	if (!Params->TryGetNumberField(TEXT("period"), PeriodValue))
+	if (!PeriodField->TryGetNumber(PeriodValue))
 	{
 		return FMonolithActionResult::Error(TEXT("period must be a number"));
 	}
 	GE->Period = FScalableFloat(PeriodValue);
 
-	if (Params->HasField(TEXT("execute_on_application")))
+	TSharedPtr<FJsonValue> ExecField = Params->TryGetField(TEXT("execute_on_application"));
+	if (ExecField.IsValid())
 	{
 		bool bExecute = false;
-		if (!Params->TryGetBoolField(TEXT("execute_on_application"), bExecute))
+		if (!ExecField->TryGetBool(bExecute))
 		{
 			return FMonolithActionResult::Error(TEXT("execute_on_application must be a boolean"));
 		}
@@ -2690,22 +2692,28 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 	}
 
 	double ValidationNumber = 0.0;
-	if (DurationPolicy == EGameplayEffectDurationType::HasDuration &&
-		Spec->HasField(TEXT("duration_magnitude")) &&
-		!Spec->TryGetNumberField(TEXT("duration_magnitude"), ValidationNumber))
+	if (DurationPolicy == EGameplayEffectDurationType::HasDuration)
 	{
-		return FMonolithActionResult::Error(TEXT("spec.duration_magnitude must be a number"));
+		TSharedPtr<FJsonValue> DurField = Spec->TryGetField(TEXT("duration_magnitude"));
+		if (DurField.IsValid() && !DurField->TryGetNumber(ValidationNumber))
+		{
+			return FMonolithActionResult::Error(TEXT("spec.duration_magnitude must be a number"));
+		}
 	}
-	if (Spec->HasField(TEXT("period")) && !Spec->TryGetNumberField(TEXT("period"), ValidationNumber))
+
+	TSharedPtr<FJsonValue> SpecPeriodField = Spec->TryGetField(TEXT("period"));
+	if (SpecPeriodField.IsValid() && !SpecPeriodField->TryGetNumber(ValidationNumber))
 	{
 		return FMonolithActionResult::Error(TEXT("spec.period must be a number"));
 	}
+
 	bool bValidationBool = false;
-	if (Spec->HasField(TEXT("execute_on_application")) &&
-		!Spec->TryGetBoolField(TEXT("execute_on_application"), bValidationBool))
+	TSharedPtr<FJsonValue> SpecExecField = Spec->TryGetField(TEXT("execute_on_application"));
+	if (SpecExecField.IsValid() && !SpecExecField->TryGetBool(bValidationBool))
 	{
 		return FMonolithActionResult::Error(TEXT("spec.execute_on_application must be a boolean"));
 	}
+
 	const TArray<TSharedPtr<FJsonValue>>* ValidationModArray = nullptr;
 	if (Spec->TryGetArrayField(TEXT("modifiers"), ValidationModArray))
 	{
@@ -2716,21 +2724,23 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 			{
 				continue;
 			}
-			if ((*ModObjPtr)->HasField(TEXT("value")) &&
-				!(*ModObjPtr)->TryGetNumberField(TEXT("value"), ValidationNumber))
+			TSharedPtr<FJsonValue> ValField = (*ModObjPtr)->TryGetField(TEXT("value"));
+			if (ValField.IsValid() && !ValField->TryGetNumber(ValidationNumber))
 			{
 				return FMonolithActionResult::Error(
 					FString::Printf(TEXT("spec.modifiers[%d].value must be a number"), i));
 			}
 		}
 	}
+
 	const TSharedPtr<FJsonObject>* ValidationStackPtr = nullptr;
-	if (Spec->TryGetObjectField(TEXT("stacking"), ValidationStackPtr) &&
-		ValidationStackPtr && (*ValidationStackPtr).IsValid() &&
-		(*ValidationStackPtr)->HasField(TEXT("limit")) &&
-		!(*ValidationStackPtr)->TryGetNumberField(TEXT("limit"), ValidationNumber))
+	if (Spec->TryGetObjectField(TEXT("stacking"), ValidationStackPtr) && ValidationStackPtr && (*ValidationStackPtr).IsValid())
 	{
-		return FMonolithActionResult::Error(TEXT("spec.stacking.limit must be a number"));
+		TSharedPtr<FJsonValue> LimitField = (*ValidationStackPtr)->TryGetField(TEXT("limit"));
+		if (LimitField.IsValid() && !LimitField->TryGetNumber(ValidationNumber))
+		{
+			return FMonolithActionResult::Error(TEXT("spec.stacking.limit must be a number"));
+		}
 	}
 
 	// Create the GE
@@ -2743,9 +2753,10 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 
 	// Duration magnitude
 	double DurationMagVal = 0.0;
-	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && Spec->HasField(TEXT("duration_magnitude")))
+	TSharedPtr<FJsonValue> DurField2 = Spec->TryGetField(TEXT("duration_magnitude"));
+	if (DurationPolicy == EGameplayEffectDurationType::HasDuration && DurField2.IsValid())
 	{
-		if (!Spec->TryGetNumberField(TEXT("duration_magnitude"), DurationMagVal))
+		if (!DurField2->TryGetNumber(DurationMagVal))
 		{
 			return FMonolithActionResult::Error(TEXT("spec.duration_magnitude must be a number"));
 		}
@@ -2753,18 +2764,21 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 	}
 
 	// Period
-	if (Spec->HasField(TEXT("period")))
+	TSharedPtr<FJsonValue> PeriodField2 = Spec->TryGetField(TEXT("period"));
+	if (PeriodField2.IsValid())
 	{
 		double PeriodVal = 0.0;
-		if (!Spec->TryGetNumberField(TEXT("period"), PeriodVal))
+		if (!PeriodField2->TryGetNumber(PeriodVal))
 		{
 			return FMonolithActionResult::Error(TEXT("spec.period must be a number"));
 		}
 		GE->Period = FScalableFloat(static_cast<float>(PeriodVal));
-		if (Spec->HasField(TEXT("execute_on_application")))
+
+		TSharedPtr<FJsonValue> ExecField2 = Spec->TryGetField(TEXT("execute_on_application"));
+		if (ExecField2.IsValid())
 		{
 			bool bExecuteOnApplication = false;
-			if (!Spec->TryGetBoolField(TEXT("execute_on_application"), bExecuteOnApplication))
+			if (!ExecField2->TryGetBool(bExecuteOnApplication))
 			{
 				return FMonolithActionResult::Error(TEXT("spec.execute_on_application must be a boolean"));
 			}

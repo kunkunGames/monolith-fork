@@ -219,13 +219,11 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleBootstrapGASFoundation(
 	}
 
 	FString ProjectName = ModuleInfo.ModuleName;
-	if (Params.IsValid() && Params->HasField(TEXT("project_name")))
+	FString ParamError;
+	if (!MonolithGAS::TryReadOptionalStringParam(
+		Params, TEXT("project_name"), ProjectName, ParamError, TEXT("project_name"), false))
 	{
-		FMonolithActionResult ErrorResult;
-		if (!MonolithGAS::RequireStringParam(Params, TEXT("project_name"), ProjectName, ErrorResult))
-		{
-			return ErrorResult;
-		}
+		return FMonolithActionResult::Error(ParamError);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Checklist;
@@ -1211,53 +1209,36 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleScaffoldStatusEffect(co
 	// Parse config with sane defaults for DOT effects
 	FString ParamError;
 	float Duration = 5.0f;
-	if (Config->HasField(TEXT("duration")))
-	{
-		double TempVal = 0.0;
-		if (!MonolithGAS::TryReadOptionalNumberParam(Config, TEXT("duration"), TempVal, ParamError, TEXT("config.duration"))) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.duration must be a number"));
-		Duration = static_cast<float>(TempVal);
-	}
+	double TempValDuration = 5.0;
+	if (!MonolithGAS::TryReadOptionalNumberParam(Config, TEXT("duration"), TempValDuration, ParamError, TEXT("config.duration"))) return FMonolithActionResult::Error(ParamError);
+	Duration = static_cast<float>(TempValDuration);
+
 	float Period = 1.0f;
-	if (Config->HasField(TEXT("period")))
-	{
-		double TempVal = 0.0;
-		if (!MonolithGAS::TryReadOptionalNumberParam(Config, TEXT("period"), TempVal, ParamError, TEXT("config.period"))) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.period must be a number"));
-		Period = static_cast<float>(TempVal);
-	}
+	double TempValPeriod = 1.0;
+	if (!MonolithGAS::TryReadOptionalNumberParam(Config, TEXT("period"), TempValPeriod, ParamError, TEXT("config.period"))) return FMonolithActionResult::Error(ParamError);
+	Period = static_cast<float>(TempValPeriod);
+
 	FString StackingType = TEXT("aggregate_by_target");
-	if (Config->HasField(TEXT("stacking_type")))
-	{
-		if (!MonolithGAS::TryReadOptionalStringParam(Config, TEXT("stacking_type"), StackingType, ParamError, TEXT("config.stacking_type"))) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.stacking_type must be a string"));
-	}
+	if (!MonolithGAS::TryReadOptionalStringParam(Config, TEXT("stacking_type"), StackingType, ParamError, TEXT("config.stacking_type"))) return FMonolithActionResult::Error(ParamError);
+
 	int32 StackLimit = 5;
-	if (Config->HasField(TEXT("stack_limit")))
-	{
-		double TempVal = 0.0;
-		if (!MonolithGAS::TryReadOptionalNumberParam(Config, TEXT("stack_limit"), TempVal, ParamError, TEXT("config.stack_limit"))) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.stack_limit must be a number"));
-		StackLimit = FMath::Clamp(static_cast<int32>(TempVal), 0, 1000);
-	}
+	double TempValStackLimit = 5.0;
+	if (!MonolithGAS::TryReadOptionalNumberParam(Config, TEXT("stack_limit"), TempValStackLimit, ParamError, TEXT("config.stack_limit"))) return FMonolithActionResult::Error(ParamError);
+	StackLimit = FMath::Clamp(static_cast<int32>(TempValStackLimit), 0, 1000);
+
 	float DamagePerTick = 0.0f;
-	if (Config->HasField(TEXT("damage_per_tick")))
-	{
-		double TempVal = 0.0;
-		if (!MonolithGAS::TryReadOptionalNumberParam(Config, TEXT("damage_per_tick"), TempVal, ParamError, TEXT("config.damage_per_tick"))) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.damage_per_tick must be a number"));
-		DamagePerTick = static_cast<float>(TempVal);
-	}
+	double TempValDamagePerTick = 0.0;
+	if (!MonolithGAS::TryReadOptionalNumberParam(Config, TEXT("damage_per_tick"), TempValDamagePerTick, ParamError, TEXT("config.damage_per_tick"))) return FMonolithActionResult::Error(ParamError);
+	DamagePerTick = static_cast<float>(TempValDamagePerTick);
+
 	FString Attribute;
-	if (Config->HasField(TEXT("attribute")))
-	{
-		if (!MonolithGAS::TryReadOptionalStringParam(Config, TEXT("attribute"), Attribute, ParamError, TEXT("config.attribute"))) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.attribute must be a string"));
-	}
+	if (!MonolithGAS::TryReadOptionalStringParam(Config, TEXT("attribute"), Attribute, ParamError, TEXT("config.attribute"))) return FMonolithActionResult::Error(ParamError);
+
 	FString StatusTag;
-	if (Config->HasField(TEXT("status_tag")))
-	{
-		if (!MonolithGAS::TryReadOptionalStringParam(Config, TEXT("status_tag"), StatusTag, ParamError, TEXT("config.status_tag"))) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.status_tag must be a string"));
-	}
+	if (!MonolithGAS::TryReadOptionalStringParam(Config, TEXT("status_tag"), StatusTag, ParamError, TEXT("config.status_tag"))) return FMonolithActionResult::Error(ParamError);
+
 	FString CueTag;
-	if (Config->HasField(TEXT("cue_tag")))
-	{
-		if (!MonolithGAS::TryReadOptionalStringParam(Config, TEXT("cue_tag"), CueTag, ParamError, TEXT("config.cue_tag"))) return FMonolithActionResult::Error(TEXT("Malformed parameter: config.cue_tag must be a string"));
-	}
+	if (!MonolithGAS::TryReadOptionalStringParam(Config, TEXT("cue_tag"), CueTag, ParamError, TEXT("config.cue_tag"))) return FMonolithActionResult::Error(ParamError);
 	TArray<FString> RemovesTags = MonolithGAS::ParseStringArray(Config, TEXT("removes_tags"));
 
 	// Extract asset name
@@ -1471,17 +1452,14 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleScaffoldWeaponAbility(c
 	if (!MonolithGAS::RequireStringParam(Params, TEXT("weapon_type"), WeaponType, Err)) return Err;
 
 	FString FireMode = TEXT("single");
-	if (Params->HasField(TEXT("fire_mode")))
+	FString ParamError;
+	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("fire_mode"), FireMode, ParamError))
 	{
-		FString ParamError;
-		if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("fire_mode"), FireMode, ParamError))
-		{
-			return FMonolithActionResult::Error(TEXT("Malformed parameter: fire_mode must be a string"));
-		}
-		if (FireMode.IsEmpty())
-		{
-			FireMode = TEXT("single");
-		}
+		return FMonolithActionResult::Error(ParamError);
+	}
+	if (FireMode.IsEmpty())
+	{
+		FireMode = TEXT("single");
 	}
 
 	// Validate inputs
@@ -1772,22 +1750,16 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleGrantAbilityToPawn(cons
 	if (!MonolithGAS::RequireStringParam(Params, TEXT("pawn_bp_path"), PawnPath, Err)) return Err;
 	if (!MonolithGAS::RequireStringParam(Params, TEXT("ability_class_path"), AbilityClassId, Err)) return Err;
 
+	FString ParamError;
 	int32 Level = 1;
-	if (Params->HasField(TEXT("level")))
-	{
-		FString ParamError;
-		double TempVal = 0.0;
-		if (!MonolithGAS::TryReadOptionalNumberParam(Params, TEXT("level"), TempVal, ParamError)) return FMonolithActionResult::Error(TEXT("Malformed parameter: level must be a number"));
-		Level = static_cast<int32>(TempVal);
-	}
+	double TempValLevel = 1.0;
+	if (!MonolithGAS::TryReadOptionalNumberParam(Params, TEXT("level"), TempValLevel, ParamError)) return FMonolithActionResult::Error(ParamError);
+	Level = static_cast<int32>(TempValLevel);
+
 	int32 InputID = -1;
-	if (Params->HasField(TEXT("input_id")))
-	{
-		FString ParamError;
-		double TempVal = 0.0;
-		if (!MonolithGAS::TryReadOptionalNumberParam(Params, TEXT("input_id"), TempVal, ParamError)) return FMonolithActionResult::Error(TEXT("Malformed parameter: input_id must be a number"));
-		InputID = static_cast<int32>(TempVal);
-	}
+	double TempValInputID = -1.0;
+	if (!MonolithGAS::TryReadOptionalNumberParam(Params, TEXT("input_id"), TempValInputID, ParamError)) return FMonolithActionResult::Error(ParamError);
+	InputID = static_cast<int32>(TempValInputID);
 
 	// Load BP via the centralized 4-tier resolver. We skip
 	// MonolithGAS::LoadBlueprintFromParams because it expects the legacy

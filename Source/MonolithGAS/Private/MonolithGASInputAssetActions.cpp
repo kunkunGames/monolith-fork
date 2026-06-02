@@ -517,7 +517,9 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 	}
 
 	const bool bWillCreate = Action == nullptr;
-	const bool bApplyValueType = Params->HasField(TEXT("value_type")) || bWillCreate;
+
+	TSharedPtr<FJsonValue> ValueTypeField = Params->TryGetField(TEXT("value_type"));
+	const bool bApplyValueType = ValueTypeField.IsValid() || bWillCreate;
 	EInputActionValueType ValueType = EInputActionValueType::Boolean;
 	if (bApplyValueType)
 	{
@@ -533,28 +535,28 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 	}
 
 	FString Description;
-	bool bHasDescription = Params->HasField(TEXT("description"));
+	bool bHasDescription = Params->TryGetField(TEXT("description")).IsValid();
 	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("description"), Description, Error))
 	{
 		return FMonolithActionResult::Error(Error);
 	}
 
 	bool bConsumeInput = false;
-	bool bHasConsumeInput = Params->HasField(TEXT("consume_input"));
+	bool bHasConsumeInput = Params->TryGetField(TEXT("consume_input")).IsValid();
 	if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("consume_input"), bConsumeInput, Error))
 	{
 		return FMonolithActionResult::Error(Error);
 	}
 
 	bool bTriggerWhenPaused = false;
-	bool bHasTriggerWhenPaused = Params->HasField(TEXT("trigger_when_paused"));
+	bool bHasTriggerWhenPaused = Params->TryGetField(TEXT("trigger_when_paused")).IsValid();
 	if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("trigger_when_paused"), bTriggerWhenPaused, Error))
 	{
 		return FMonolithActionResult::Error(Error);
 	}
 
 	EInputActionAccumulationBehavior AccumulationBehavior = EInputActionAccumulationBehavior::TakeHighestAbsoluteValue;
-	const bool bHasAccumulation = Params->HasField(TEXT("accumulation"));
+	const bool bHasAccumulation = Params->TryGetField(TEXT("accumulation")).IsValid();
 	if (bHasAccumulation)
 	{
 		FString Accumulation;
