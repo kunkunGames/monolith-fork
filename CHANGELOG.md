@@ -6,7 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.18.0] - 2026-06-01
 
+> **Action count:** public **1396** in-tree actions across **25** in-tree namespaces (the release headline; sibling plugins excluded). Live `monolith_discover()` with all siblings installed returns **1619** = 1396 in-tree + 223 sibling (inventory 158 + steam 28 + substance 26 + claudedesign 11) — the 223 sibling actions are advisory only and never part of the public headline. The `niagara` namespace is **129** this release (was 120), a net **+9**: issue #64 Tranche 2 (+7) and PR #65 HLSL (+2).
+
 ### Added
+
+- **Niagara search & discovery actions (issue #64 Tranche 2) — +7 read-only `niagara` dispatcher actions.** Read-only search / discovery over Niagara systems and emitters, all backed by Asset Registry and per-system traversal (no PIE, no mutation):
+  - **`search_by_parameter`** — find systems exposing a User parameter by case-insensitive substring name, with an optional type filter.
+  - **`search_by_data_interface`** — find systems using a Data Interface whose class name matches (per-system `ForEachDataInterface` traversal).
+  - **`query_niagara`** — structured-filter DSL over all systems (AND-joined conditions: `emitters >/</= N`, `sim_target=GPU|CPU`, `has_renderer=<name>`).
+  - **`find_similar_systems`** — rank systems by structural similarity to a reference (weighted: emitter-count proximity + renderer-class Jaccard + module-name Jaccard; self = 1.0).
+  - **`search_by_material`** — find systems whose emitter renderers reference a given material.
+  - **`find_niagara_references`** — find all assets referencing a given Niagara asset (Asset Registry referencer graph).
+  - **`list_system_data_interfaces`** — enumerate the Data Interfaces actually USED BY a given system (per-system traversal; distinct from the CDO-only `get_di_properties`).
+  - **Action count:** `niagara` namespace 120 → **127** (+7 in-tree). Combined with PR #65's +2 HLSL actions below, the namespace lands at **129** for this release; public in-tree total now **1396** across **25** namespaces. Each Tranche 2 action also has a Blueprint-callable wrapper node on `UMonolithNiagaraQueryLibrary` (see Tranche 1 below). Docs: [`SPEC_MonolithNiagara.md`](Docs/specs/SPEC_MonolithNiagara.md) § Blueprint-Callable Surface. (issue #64 Tranche 2)
+
+- **`UMonolithNiagaraQueryLibrary` — Blueprint-callable Niagara inspection/search surface (issue #64 Tranche 1).** A new `UBlueprintFunctionLibrary` in the **editor-only** `MonolithNiagara` module that exposes existing read-only `niagara` dispatcher actions as Blueprint-callable nodes for Blueprint utilities and Editor Utility Widgets. Each node is a thin forwarder over `FMonolithToolRegistry::ExecuteAction("niagara", …)` returning a JSON `FString` plus `bSuccess` / `OutError` out-params. **Zero new dispatcher actions** (pure wrappers) and **zero cost in packaged / runtime builds** (the module is editor-only). Tranche 1 ships 17 wrapper nodes over already-shipped read actions; Tranche 2's +7 search/discovery actions add 7 more wrappers (24 nodes total). (issue #64 Tranche 1)
 
 - **Niagara HLSL direct-editing + simulation-stage / event-handler authoring (PR #65, by @middle233).** Two net-new `niagara` actions and a set of module-stack/script/event enhancements for MCP-driven Niagara workflows:
   - **`get_custom_hlsl_text`** — reads the HLSL source from a `CustomHlsl` node via public UPROPERTY reflection. Params: `script_path` (required), optional `node_guid` to disambiguate multi-`CustomHlsl`-node scripts.
@@ -17,7 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **`create_module_from_hlsl`** now generates a ParameterMap bridge graph (InputMap → ParameterMapGet → CustomHlsl → ParameterMapSet → OutputNode), preserves Data-Interface input types (NeighborGrid3D / Grid3D / ParticleRead), and **strictly validates HLSL input/output types** — unknown types now hard-fail instead of silently degrading to `float`.
   - **Build gating:** the engine-private NiagaraEditor wizard linkage (used only by the ParameterMap bridge) is gated behind a new `WITH_NIAGARA_WIZARD_PRIVATE` `Build.cs` flag — ON for dev, forced OFF under `MONOLITH_RELEASE_BUILD=1` with an internal fallback path. The two new actions ride public UPROPERTY reflection and are **always available**, gate or not.
   - Also folded in: a cherry-picked crash fix (detach embedded emitter before `add_emitter`) and an action-duration telemetry log line in the HTTP server.
-  - **Action count:** `niagara` namespace 127 → **129** (+2 in-tree). In-tree and with-siblings totals each gain +2. Docs updated: [`SPEC_MonolithNiagara.md`](Docs/specs/SPEC_MonolithNiagara.md), [`API_REFERENCE.md`](Docs/API_REFERENCE.md), `Skills/unreal-niagara/unreal-niagara.md`.
+  - **Action count:** `niagara` namespace 127 → **129** (+2 in-tree, on top of issue #64 Tranche 2's +7 above — net +9 for the namespace this release, 120 → 129). Public in-tree total now **1396** across **25** namespaces; live `monolith_discover()` with siblings **1619**. Docs updated: [`SPEC_MonolithNiagara.md`](Docs/specs/SPEC_MonolithNiagara.md), [`API_REFERENCE.md`](Docs/API_REFERENCE.md), `Skills/unreal-niagara/unreal-niagara.md`.
 
 ### Fixed
 
@@ -26,6 +40,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Handled-but-noisy ensure during full level indexing on landscape-heavy projects** (`WorldSubsystem.cpp:158`). `FLevelIndexer` loads each World via `LoadPackage` purely to enumerate placed actors — this never calls `UWorld::InitWorld`, but a placed landscape actor lazily creates and initializes a `ULandscapeSubsystem`. Tearing that world down then lets GC destroy it while the subsystem is still `bInitialized`, tripping the ensure. A bare `UWorld::CleanupWorld` (without unregistering proxy components first) is unsafe — it deinitializes the landscape subsystem while a grass-builder component still references the null render scene, crashing with an access violation; that ordering was tried and rejected. **Fix:** for a landscape world the indexer now unregisters every landscape proxy's components (`AActor::UnregisterAllComponents`, world-wide), nulling the grass-builder state so the subsystem's `Deinitialize` no longer dereferences a null render scene, and then drives `UWorld::CleanupWorld` — which clears the world subsystem collection's `bInitialized` (no GC ensure) and tears the world down normally; non-landscape worlds keep the existing WorldPartition-uninit + unload path. Runtime-verified on a landscape-heavy project: a full reindex with level indexing enabled completes with zero ensures, zero crashes, and all ~80 landscape worlds torn down with no residency cost. (#67, reported by @likeitlotlot-commits)
 
 - **From-scratch unity editor builds failed to compile** due to duplicated file-local helpers (anonymous-namespace types/functions + file-`static`s) colliding across `.cpp`s in the same module in `MonolithReflectionIntel`, `MonolithNiagara`, `MonolithGAS`, and `MonolithBlueprint`. UE adaptive unity concatenates same-module `.cpp` into one translation unit, so these internal-linkage symbols clashed (C2084/C2011/C2668). Masked from releases by `make_release.ps1`'s `-DisableUnity`, and masked locally because adaptive unity excludes recently-edited files — so it only bit fresh-clone / full-unity (end-user first-compile) builds. Helpers are now unity-safe: the duplicated RI cursor-codec + path helpers are hoisted into shared module-internal units (`Private/Shared/RICursorCodec.{h,cpp}`, `Private/Shared/RIPathUtils.{h,cpp}`), and the remaining collisions use file-unique names. Behaviour-preserving (renames + pure extracts); no `.Build.cs`, action, or API-surface change. A full non-adaptive unity build is the acceptance gate. (#68, reported by @likeitlotlot-commits)
+
+### Internal
+
+- **`make_release.ps1` gained a forced-full-unity collision gate (issue #68 defense).** A second UBT pass under forced full unity (temporarily flips `bUseAdaptiveUnityBuild=false`, always restored) ship-blocks on Monolith-path symbol collisions (C2084/C2011/C2086/C2668 …) that the existing `-DisableUnity` pass is structurally blind to. Build tooling only — end users never invoke it. (commit 6539c71)
 
 ## [0.17.1] - 2026-05-29
 

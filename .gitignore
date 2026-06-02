@@ -132,3 +132,8 @@ ehthumbs.db
 Monolith_Release_*/
 dist/
 .hatch/
+
+# Release housekeeping - internal planning scrolls + transient release-rite debris (never shipped)
+Docs/pcg/
+release_body*.md
+pr*.diff
