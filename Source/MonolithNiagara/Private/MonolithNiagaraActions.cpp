@@ -3026,6 +3026,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystem(const TSharedP
 	AssetName = SavePath.Mid(LastSlash + 1);
 
 	FString FullPath = PackagePath / AssetName;
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(FullPath); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
+
 	UPackage* Pkg = CreatePackage(*FullPath);
 	if (!Pkg) return FMonolithActionResult::Error(TEXT("Failed to create package"));
 
@@ -3075,6 +3078,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateStatelessEmitter(cons
 	AssetName = SavePath.Mid(LastSlash + 1);
 
 	FString FullPath = PackagePath / AssetName;
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(FullPath); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
+
 	UPackage* Pkg = CreatePackage(*FullPath);
 	if (!Pkg) return FMonolithActionResult::Error(TEXT("Failed to create package"));
 
@@ -4334,6 +4340,9 @@ FMonolithActionResult FMonolithNiagaraActions::CreateScriptFromHLSL(const TShare
 	AssetName = SavePath.Mid(LastSlash + 1);
 
 	FString FullPath = PackagePath / AssetName;
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(FullPath); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
+
 	UPackage* Pkg = CreatePackage(*FullPath);
 	if (!Pkg) return FMonolithActionResult::Error(TEXT("Failed to create package"));
 
@@ -10485,6 +10494,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateNPC(const TSharedPtr<
 		return FMonolithActionResult::Error(FString::Printf(TEXT("NPC already exists at '%s'"), *FullPath));
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(FullPath); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
+
 	UPackage* Pkg = CreatePackage(*FullPath);
 	if (!Pkg) return FMonolithActionResult::Error(TEXT("Failed to create package"));
 
@@ -10804,6 +10816,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateEffectType(const TSha
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Effect type already exists at '%s'"), *FullPath));
 	}
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(FullPath); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
 
 	UPackage* Pkg = CreatePackage(*FullPath);
 	if (!Pkg) return FMonolithActionResult::Error(TEXT("Failed to create package"));
@@ -12497,6 +12512,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSaveEmitterAsTemplate(const
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at: %s"), *PackageName));
 
 	// Create the package
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackageName); !ValidationError.IsEmpty())
+		return FMonolithActionResult::Error(ValidationError);
+
 	UPackage* NewPackage = CreatePackage(*PackageName);
 	if (!NewPackage) return FMonolithActionResult::Error(TEXT("Failed to create package"));
 

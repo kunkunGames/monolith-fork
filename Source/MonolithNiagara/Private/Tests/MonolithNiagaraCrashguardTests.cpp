@@ -19,3 +19,20 @@ bool FMonolithNiagaraCrashguardPathTest::RunTest(const FString& Parameters)
 
     return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithCrashguardNiagaraCreateStatelessEmitterPathTest, "Monolith.Crashguard.Niagara.HandleCreateStatelessEmitterPathValidation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithCrashguardNiagaraCreateStatelessEmitterPathTest::RunTest(const FString& Parameters)
+{
+	// Ensure that create actions fail cleanly with malformed paths without crashing
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("save_path"), TEXT("//Game/MalformedPath_Emitter"));
+
+	FMonolithActionResult Result = FMonolithNiagaraActions::HandleCreateStatelessEmitter(Params);
+
+	TestFalse(TEXT("Malformed path should fail cleanly"), Result.bSuccess);
+	TestFalse(TEXT("Malformed path should include an error message"), Result.ErrorMessage.IsEmpty());
+
+	return true;
+}
