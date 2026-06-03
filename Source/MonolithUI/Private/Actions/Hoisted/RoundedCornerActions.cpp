@@ -4,6 +4,7 @@
 // Monolith registry
 #include "MonolithParamSchema.h"
 #include "MonolithToolRegistry.h"
+#include "MonolithAssetUtils.h"
 
 // JSON
 #include "Dom/JsonObject.h"
@@ -214,7 +215,7 @@ FMonolithActionResult MonolithUI::FRoundedCornerActions::HandleSetRoundedCorners
     bool bCompile = true;
     Params->TryGetBoolField(TEXT("compile"), bCompile);
 
-    UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+    UWidgetBlueprint* WBP = FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(AssetPath);
     if (!WBP)
     {
         return FMonolithActionResult::Error(

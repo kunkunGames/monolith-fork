@@ -4,6 +4,7 @@
 // Monolith registry
 #include "MonolithParamSchema.h"
 #include "MonolithToolRegistry.h"
+#include "MonolithAssetUtils.h"
 
 // JSON
 #include "Dom/JsonObject.h"
@@ -365,7 +366,7 @@ FMonolithActionResult MonolithUI::FAnimationCoreActions::HandleCreateAnimationV2
     bool bCompileOnce = true;
     Params->TryGetBoolField(TEXT("compile_once"), bCompileOnce);
 
-    UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+    UWidgetBlueprint* WBP = FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(AssetPath);
     if (!WBP)
     {
         return FMonolithActionResult::Error(
@@ -596,7 +597,7 @@ FMonolithActionResult MonolithUI::FAnimationCoreActions::HandleAddBezierEasedSeg
     const double X2 = (*BezierArr)[2]->AsNumber();
     const double Y2 = (*BezierArr)[3]->AsNumber();
 
-    UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+    UWidgetBlueprint* WBP = FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(AssetPath);
     if (!WBP)
     {
         return FMonolithActionResult::Error(
@@ -768,7 +769,7 @@ FMonolithActionResult MonolithUI::FAnimationCoreActions::HandleBakeSpringAnimati
     bool bCompileOnce = true;
     Params->TryGetBoolField(TEXT("compile_once"), bCompileOnce);
 
-    UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+    UWidgetBlueprint* WBP = FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(AssetPath);
     if (!WBP)
     {
         return FMonolithActionResult::Error(

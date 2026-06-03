@@ -5,6 +5,7 @@
 #include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
 #include "MonolithToolRegistry.h"
+#include "MonolithAssetUtils.h"
 
 // JSON
 #include "Dom/JsonObject.h"
@@ -202,7 +203,7 @@ FMonolithActionResult MonolithUI::FGradientActions::HandleCreateGradientMidFromS
     bool bSave = true;
     Params->TryGetBoolField(TEXT("save"), bSave);
 
-    UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, *ParentPath);
+    UMaterialInterface* Parent = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(ParentPath);
     if (!Parent)
     {
         return FMonolithActionResult::Error(

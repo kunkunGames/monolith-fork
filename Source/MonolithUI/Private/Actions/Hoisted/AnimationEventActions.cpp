@@ -4,6 +4,7 @@
 // Monolith registry
 #include "MonolithParamSchema.h"
 #include "MonolithToolRegistry.h"
+#include "MonolithAssetUtils.h"
 
 // JSON
 #include "Dom/JsonObject.h"
@@ -89,7 +90,7 @@ FMonolithActionResult MonolithUI::FAnimationEventActions::HandleAddAnimationEven
         return FMonolithActionResult::Error(TEXT("events must be a non-empty array"), -32602);
     }
 
-    UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+    UWidgetBlueprint* WBP = FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(AssetPath);
     if (!WBP)
     {
         return FMonolithActionResult::Error(
@@ -257,7 +258,7 @@ FMonolithActionResult MonolithUI::FAnimationEventActions::HandleBindAnimationToE
             -32602);
     }
 
-    UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+    UWidgetBlueprint* WBP = FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(AssetPath);
     if (!WBP)
     {
         return FMonolithActionResult::Error(
