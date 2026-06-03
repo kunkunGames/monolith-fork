@@ -176,8 +176,13 @@ namespace
 			Risk->SetStringField(TEXT("tier"), TierFor(Score));
 			Risk->SetArrayField(TEXT("reasons"), Reasons);
 
-			TSharedPtr<FJsonObject> RawCounts = Risk->GetObjectField(TEXT("raw_counts"));
-			if (!RawCounts.IsValid())
+			const TSharedPtr<FJsonObject>* RawCountsPtr;
+			TSharedPtr<FJsonObject> RawCounts;
+			if (Risk->TryGetObjectField(TEXT("raw_counts"), RawCountsPtr) && RawCountsPtr && RawCountsPtr->IsValid())
+			{
+				RawCounts = *RawCountsPtr;
+			}
+			else
 			{
 				RawCounts = MakeShared<FJsonObject>();
 			}
@@ -185,9 +190,10 @@ namespace
 			RawCounts->SetNumberField(TEXT("overridden_parents"), OverrideParents.Num());
 			Risk->SetObjectField(TEXT("raw_counts"), RawCounts);
 
-			TSharedPtr<FJsonObject> Cache = Risk->GetObjectField(TEXT("cache"));
-			if (Cache.IsValid())
+			const TSharedPtr<FJsonObject>* CachePtr;
+			if (Risk->TryGetObjectField(TEXT("cache"), CachePtr) && CachePtr && CachePtr->IsValid())
 			{
+				TSharedPtr<FJsonObject> Cache = *CachePtr;
 				Cache->SetBoolField(TEXT("override_augmented"), true);
 				Risk->SetObjectField(TEXT("cache"), Cache);
 			}
