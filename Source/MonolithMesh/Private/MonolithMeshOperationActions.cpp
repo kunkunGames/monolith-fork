@@ -323,10 +323,10 @@ FMonolithActionResult FMonolithMeshOperationActions::ReleaseHandle(const TShared
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	FString HandleName = Params->GetStringField(TEXT("handle"));
-	if (HandleName.IsEmpty())
+	FString HandleName;
+	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'handle' is required"));
+		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
 	}
 
 	if (!Pool->ReleaseHandle(HandleName))
@@ -434,15 +434,19 @@ FMonolithActionResult FMonolithMeshOperationActions::MeshBoolean(const TSharedPt
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	FString HandleA = Params->GetStringField(TEXT("handle_a"));
-	FString HandleB = Params->GetStringField(TEXT("handle_b"));
-	FString Operation = Params->GetStringField(TEXT("operation")).ToLower();
-	FString ResultHandle = Params->GetStringField(TEXT("result_handle"));
+	FString HandleA;
+	FString HandleB;
+	FString Operation;
+	FString ResultHandle;
 
-	if (HandleA.IsEmpty() || HandleB.IsEmpty() || Operation.IsEmpty() || ResultHandle.IsEmpty())
+	if (!Params->TryGetStringField(TEXT("handle_a"), HandleA) || HandleA.IsEmpty() ||
+		!Params->TryGetStringField(TEXT("handle_b"), HandleB) || HandleB.IsEmpty() ||
+		!Params->TryGetStringField(TEXT("operation"), Operation) || Operation.IsEmpty() ||
+		!Params->TryGetStringField(TEXT("result_handle"), ResultHandle) || ResultHandle.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("handle_a, handle_b, operation, and result_handle are all required"));
+		return FMonolithActionResult::Error(TEXT("handle_a, handle_b, operation, and result_handle are all required and must be strings"));
 	}
+	Operation = Operation.ToLower();
 
 	FString ErrorA, ErrorB;
 	UDynamicMesh* MeshA = Pool->GetHandle(HandleA, ErrorA);
@@ -509,10 +513,10 @@ FMonolithActionResult FMonolithMeshOperationActions::MeshSimplify(const TSharedP
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	FString HandleName = Params->GetStringField(TEXT("handle"));
-	if (HandleName.IsEmpty())
+	FString HandleName;
+	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'handle' is required"));
+		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
 	}
 
 	FString Error;
@@ -579,10 +583,10 @@ FMonolithActionResult FMonolithMeshOperationActions::MeshRemesh(const TSharedPtr
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	FString HandleName = Params->GetStringField(TEXT("handle"));
-	if (HandleName.IsEmpty())
+	FString HandleName;
+	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'handle' is required"));
+		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
 	}
 
 	double TargetEdgeLength;
@@ -624,15 +628,22 @@ FMonolithActionResult FMonolithMeshOperationActions::GenerateCollision(const TSh
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	FString HandleName = Params->GetStringField(TEXT("handle"));
-	if (HandleName.IsEmpty())
+	FString HandleName;
+	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'handle' is required"));
+		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
 	}
 
-	FString Method = Params->HasField(TEXT("method"))
-		? Params->GetStringField(TEXT("method")).ToLower()
-		: TEXT("convex_decomp");
+	FString Method = TEXT("convex_decomp");
+	if (Params->HasField(TEXT("method")))
+	{
+		FString Tmp;
+		if (!Params->TryGetStringField(TEXT("method"), Tmp))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'method'. Expected string."));
+		}
+		Method = Tmp.ToLower();
+	}
 
 	double TempMaxHulls = 4.0;
 	if (Params->HasField(TEXT("max_hulls")) && !Params->TryGetNumberField(TEXT("max_hulls"), TempMaxHulls))
@@ -708,10 +719,10 @@ FMonolithActionResult FMonolithMeshOperationActions::GenerateLods(const TSharedP
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	FString HandleName = Params->GetStringField(TEXT("handle"));
-	if (HandleName.IsEmpty())
+	FString HandleName;
+	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'handle' is required"));
+		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
 	}
 
 	double TempLodCount = 0.0;
@@ -793,10 +804,10 @@ FMonolithActionResult FMonolithMeshOperationActions::FillHoles(const TSharedPtr<
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	FString HandleName = Params->GetStringField(TEXT("handle"));
-	if (HandleName.IsEmpty())
+	FString HandleName;
+	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'handle' is required"));
+		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
 	}
 
 	FString Error;
@@ -830,15 +841,22 @@ FMonolithActionResult FMonolithMeshOperationActions::ComputeUvs(const TSharedPtr
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	FString HandleName = Params->GetStringField(TEXT("handle"));
-	if (HandleName.IsEmpty())
+	FString HandleName;
+	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'handle' is required"));
+		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
 	}
 
-	FString Method = Params->HasField(TEXT("method"))
-		? Params->GetStringField(TEXT("method")).ToLower()
-		: TEXT("auto_unwrap");
+	FString Method = TEXT("auto_unwrap");
+	if (Params->HasField(TEXT("method")))
+	{
+		FString Tmp;
+		if (!Params->TryGetStringField(TEXT("method"), Tmp))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'method'. Expected string."));
+		}
+		Method = Tmp.ToLower();
+	}
 
 	double TempUVChannel = 0.0;
 	if (Params->HasField(TEXT("uv_channel")) && !Params->TryGetNumberField(TEXT("uv_channel"), TempUVChannel))
@@ -895,19 +913,28 @@ FMonolithActionResult FMonolithMeshOperationActions::MirrorMesh(const TSharedPtr
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	FString HandleName = Params->GetStringField(TEXT("handle"));
-	if (HandleName.IsEmpty())
+	FString HandleName;
+	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'handle' is required"));
+		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
 	}
 
-	FString Axis = Params->GetStringField(TEXT("axis")).ToUpper();
+	FString Axis;
+	if (!Params->TryGetStringField(TEXT("axis"), Axis))
+	{
+		return FMonolithActionResult::Error(TEXT("'axis' must be a string (X, Y, or Z)"));
+	}
+	Axis = Axis.ToUpper();
 	if (Axis != TEXT("X") && Axis != TEXT("Y") && Axis != TEXT("Z"))
 	{
 		return FMonolithActionResult::Error(TEXT("'axis' must be X, Y, or Z"));
 	}
 
-	bool bWeld = Params->HasField(TEXT("weld")) ? Params->GetBoolField(TEXT("weld")) : true;
+	bool bWeld = true;
+	if (Params->HasField(TEXT("weld")) && !Params->TryGetBoolField(TEXT("weld"), bWeld))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'weld'. Expected boolean."));
+	}
 
 	FString Error;
 	UDynamicMesh* Mesh = Pool->GetHandle(HandleName, Error);
@@ -959,18 +986,23 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometryPlaneCut(const TSha
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	FString WorkingHandle;
-	FString Error;
-	UDynamicMesh* Mesh = GetWorkingMeshForOperation(Pool, Params, TEXT("geometry_plane_cut"), WorkingHandle, Error);
-	if (!Mesh)
+	FString Mode = TEXT("cut");
+	if (Params->HasField(TEXT("mode")))
 	{
-		return FMonolithActionResult::Error(Error);
+		FString Tmp;
+		if (!Params->TryGetStringField(TEXT("mode"), Tmp))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'mode'. Expected string."));
+		}
+		Mode = Tmp.ToLower();
+	}
+	if (Mode != TEXT("cut") && Mode != TEXT("slice") && Mode != TEXT("mirror"))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Unknown mode '%s'. Valid: cut, slice, mirror"), *Mode));
 	}
 
-	const FString Mode = Params->HasField(TEXT("mode"))
-		? Params->GetStringField(TEXT("mode")).ToLower()
-		: TEXT("cut");
-
+	FString Error;
 	FVector Origin = FVector::ZeroVector;
 	FVector Normal = FVector::UpVector;
 	if (!ReadVectorArray(Params, TEXT("origin"), Origin, Error) ||
@@ -985,8 +1017,23 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometryPlaneCut(const TSha
 		return FMonolithActionResult::Error(TEXT("'normal' must not be zero length"));
 	}
 
-	const bool bFillHoles = !Params->HasField(TEXT("fill_holes")) || Params->GetBoolField(TEXT("fill_holes"));
-	const bool bWeld = !Params->HasField(TEXT("weld")) || Params->GetBoolField(TEXT("weld"));
+	bool bFillHoles = true;
+	if (Params->HasField(TEXT("fill_holes")) && !Params->TryGetBoolField(TEXT("fill_holes"), bFillHoles))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'fill_holes'. Expected boolean."));
+	}
+	bool bWeld = true;
+	if (Params->HasField(TEXT("weld")) && !Params->TryGetBoolField(TEXT("weld"), bWeld))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'weld'. Expected boolean."));
+	}
+
+	FString WorkingHandle;
+	UDynamicMesh* Mesh = GetWorkingMeshForOperation(Pool, Params, TEXT("geometry_plane_cut"), WorkingHandle, Error);
+	if (!Mesh)
+	{
+		return FMonolithActionResult::Error(Error);
+	}
 	const int32 OriginalTris = Mesh->GetTriangleCount();
 
 	FTransform CutFrame(FQuat::FindBetweenNormals(FVector::UpVector, Normal), Origin);
@@ -1009,11 +1056,6 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometryPlaneCut(const TSha
 		MirrorOptions.bWeldAlongPlane = bWeld;
 		UGeometryScriptLibrary_MeshBooleanFunctions::ApplyMeshMirror(Mesh, CutFrame, MirrorOptions);
 	}
-	else
-	{
-		return FMonolithActionResult::Error(
-			FString::Printf(TEXT("Unknown mode '%s'. Valid: cut, slice, mirror"), *Mode));
-	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("handle"), WorkingHandle);
@@ -1033,6 +1075,28 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometryRecomputeNormals(co
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
+	FString Mode = TEXT("recompute");
+	if (Params->HasField(TEXT("mode")))
+	{
+		FString Tmp;
+		if (!Params->TryGetStringField(TEXT("mode"), Tmp))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'mode'. Expected string."));
+		}
+		Mode = Tmp.ToLower();
+	}
+	if (Mode != TEXT("recompute") && Mode != TEXT("split") && Mode != TEXT("per_vertex") && Mode != TEXT("per_face"))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Unknown normals mode '%s'. Valid: recompute, split, per_vertex, per_face"), *Mode));
+	}
+
+	double TempAngle = 15.0;
+	if (Mode == TEXT("split") && Params->HasField(TEXT("split_angle")) && !Params->TryGetNumberField(TEXT("split_angle"), TempAngle))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'split_angle'. Expected number."));
+	}
+
 	FString WorkingHandle;
 	FString Error;
 	UDynamicMesh* Mesh = GetWorkingMeshForOperation(Pool, Params, TEXT("geometry_recompute_normals"), WorkingHandle, Error);
@@ -1041,10 +1105,6 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometryRecomputeNormals(co
 		return FMonolithActionResult::Error(Error);
 	}
 
-	const FString Mode = Params->HasField(TEXT("mode"))
-		? Params->GetStringField(TEXT("mode")).ToLower()
-		: TEXT("recompute");
-
 	if (Mode == TEXT("recompute"))
 	{
 		FGeometryScriptCalculateNormalsOptions NormalOptions;
@@ -1052,12 +1112,6 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometryRecomputeNormals(co
 	}
 	else if (Mode == TEXT("split"))
 	{
-		double TempAngle = 15.0;
-		if (Params->HasField(TEXT("split_angle")) && !Params->TryGetNumberField(TEXT("split_angle"), TempAngle))
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'split_angle'. Expected number."));
-		}
-
 		FGeometryScriptSplitNormalsOptions SplitOptions;
 		SplitOptions.OpeningAngleDeg = static_cast<float>(TempAngle);
 		FGeometryScriptCalculateNormalsOptions NormalOptions;
@@ -1070,11 +1124,6 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometryRecomputeNormals(co
 	else if (Mode == TEXT("per_face"))
 	{
 		UGeometryScriptLibrary_MeshNormalsFunctions::SetPerFaceNormals(Mesh);
-	}
-	else
-	{
-		return FMonolithActionResult::Error(
-			FString::Printf(TEXT("Unknown normals mode '%s'. Valid: recompute, split, per_vertex, per_face"), *Mode));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1093,6 +1142,29 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometrySubdivide(const TSh
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
+	FString Method = TEXT("uniform");
+	if (Params->HasField(TEXT("method")))
+	{
+		FString Tmp;
+		if (!Params->TryGetStringField(TEXT("method"), Tmp))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'method'. Expected string."));
+		}
+		Method = Tmp.ToLower();
+	}
+	if (Method != TEXT("uniform") && Method != TEXT("pn"))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Unknown subdivide method '%s'. Valid: uniform, pn"), *Method));
+	}
+
+	double TempLevel = 1.0;
+	if (Params->HasField(TEXT("level")) && !Params->TryGetNumberField(TEXT("level"), TempLevel))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'level'. Expected number."));
+	}
+	const int32 Level = FMath::Clamp(static_cast<int32>(TempLevel), 1, 5);
+
 	FString WorkingHandle;
 	FString Error;
 	UDynamicMesh* Mesh = GetWorkingMeshForOperation(Pool, Params, TEXT("geometry_subdivide"), WorkingHandle, Error);
@@ -1100,16 +1172,6 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometrySubdivide(const TSh
 	{
 		return FMonolithActionResult::Error(Error);
 	}
-
-	const FString Method = Params->HasField(TEXT("method"))
-		? Params->GetStringField(TEXT("method")).ToLower()
-		: TEXT("uniform");
-	double TempLevel = 1.0;
-	if (Params->HasField(TEXT("level")) && !Params->TryGetNumberField(TEXT("level"), TempLevel))
-	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'level'. Expected number."));
-	}
-	const int32 Level = FMath::Clamp(static_cast<int32>(TempLevel), 1, 5);
 	const int32 OriginalTris = Mesh->GetTriangleCount();
 
 	if (Method == TEXT("uniform"))
@@ -1120,11 +1182,6 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometrySubdivide(const TSh
 	{
 		FGeometryScriptPNTessellateOptions Options;
 		UGeometryScriptLibrary_MeshSubdivideFunctions::ApplyPNTessellation(Mesh, Options, Level);
-	}
-	else
-	{
-		return FMonolithActionResult::Error(
-			FString::Printf(TEXT("Unknown subdivide method '%s'. Valid: uniform, pn"), *Method));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1145,10 +1202,55 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometryMaterialIds(const T
 		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
 	}
 
-	const FString Verb = Params->GetStringField(TEXT("verb")).ToLower();
-	if (Verb.IsEmpty())
+	FString Verb;
+	if (!Params->TryGetStringField(TEXT("verb"), Verb) || Verb.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'verb' is required"));
+		return FMonolithActionResult::Error(TEXT("'verb' is required and must be a string"));
+	}
+	Verb = Verb.ToLower();
+	if (Verb != TEXT("info") && Verb != TEXT("remap") && Verb != TEXT("clear") && Verb != TEXT("delete_by_id"))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Unknown material ID verb '%s'. Valid: info, remap, clear, delete_by_id"), *Verb));
+	}
+
+	int32 FromId = 0;
+	int32 ToId = 0;
+	int32 ClearValue = 0;
+	int32 MaterialId = 0;
+	if (Verb == TEXT("remap"))
+	{
+		double TempFromId = 0.0;
+		if (Params->HasField(TEXT("from_id")) && !Params->TryGetNumberField(TEXT("from_id"), TempFromId))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'from_id'. Expected number."));
+		}
+		FromId = static_cast<int32>(TempFromId);
+
+		double TempToId = 0.0;
+		if (Params->HasField(TEXT("to_id")) && !Params->TryGetNumberField(TEXT("to_id"), TempToId))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'to_id'. Expected number."));
+		}
+		ToId = static_cast<int32>(TempToId);
+	}
+	else if (Verb == TEXT("clear"))
+	{
+		double TempClearValue = 0.0;
+		if (Params->HasField(TEXT("clear_value")) && !Params->TryGetNumberField(TEXT("clear_value"), TempClearValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'clear_value'. Expected number."));
+		}
+		ClearValue = static_cast<int32>(TempClearValue);
+	}
+	else if (Verb == TEXT("delete_by_id"))
+	{
+		double TempMaterialId = 0.0;
+		if (Params->HasField(TEXT("material_id")) && !Params->TryGetNumberField(TEXT("material_id"), TempMaterialId))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'material_id'. Expected number."));
+		}
+		MaterialId = static_cast<int32>(TempMaterialId);
 	}
 
 	FString WorkingHandle;
@@ -1157,10 +1259,10 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometryMaterialIds(const T
 
 	if (Verb == TEXT("info"))
 	{
-		const FString HandleName = Params->GetStringField(TEXT("handle"));
-		if (HandleName.IsEmpty())
+		FString HandleName;
+		if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
 		{
-			return FMonolithActionResult::Error(TEXT("'handle' is required"));
+			return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
 		}
 
 		Mesh = Pool->GetHandle(HandleName, Error);
@@ -1193,54 +1295,21 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometryMaterialIds(const T
 	}
 	else if (Verb == TEXT("remap"))
 	{
-		double TempFromId = 0.0;
-		if (Params->HasField(TEXT("from_id")) && !Params->TryGetNumberField(TEXT("from_id"), TempFromId))
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'from_id'. Expected number."));
-		}
-		const int32 FromId = static_cast<int32>(TempFromId);
-
-		double TempToId = 0.0;
-		if (Params->HasField(TEXT("to_id")) && !Params->TryGetNumberField(TEXT("to_id"), TempToId))
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'to_id'. Expected number."));
-		}
-		const int32 ToId = static_cast<int32>(TempToId);
-
 		UGeometryScriptLibrary_MeshMaterialFunctions::RemapMaterialIDs(Mesh, FromId, ToId);
 		Result->SetNumberField(TEXT("from_id"), FromId);
 		Result->SetNumberField(TEXT("to_id"), ToId);
 	}
 	else if (Verb == TEXT("clear"))
 	{
-		double TempClearValue = 0.0;
-		if (Params->HasField(TEXT("clear_value")) && !Params->TryGetNumberField(TEXT("clear_value"), TempClearValue))
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'clear_value'. Expected number."));
-		}
-		const int32 ClearValue = static_cast<int32>(TempClearValue);
-
 		UGeometryScriptLibrary_MeshMaterialFunctions::ClearMaterialIDs(Mesh, ClearValue);
 		Result->SetNumberField(TEXT("clear_value"), ClearValue);
 	}
 	else if (Verb == TEXT("delete_by_id"))
 	{
-		double TempMaterialId = 0.0;
-		if (Params->HasField(TEXT("material_id")) && !Params->TryGetNumberField(TEXT("material_id"), TempMaterialId))
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'material_id'. Expected number."));
-		}
-		const int32 MaterialId = static_cast<int32>(TempMaterialId);
-
 		int32 NumDeleted = 0;
 		UGeometryScriptLibrary_MeshMaterialFunctions::DeleteTrianglesByMaterialID(Mesh, MaterialId, NumDeleted);
 		Result->SetNumberField(TEXT("material_id"), MaterialId);
 		Result->SetNumberField(TEXT("deleted_triangles"), NumDeleted);
-	}
-	else
-	{
-		return FMonolithActionResult::Error(
-			FString::Printf(TEXT("Unknown material ID verb '%s'. Valid: info, remap, clear, delete_by_id"), *Verb));
 	}
 
 	Result->SetNumberField(TEXT("original_triangles"), OriginalTris);
