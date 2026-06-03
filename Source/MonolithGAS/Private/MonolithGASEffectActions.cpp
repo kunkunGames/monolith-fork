@@ -349,9 +349,10 @@ bool ConfigureMagnitude(
 	{
 		float Value = 0.f;
 		double TempValue = 0.0;
-		if (MagObj->HasField(TEXT("value")))
+		TSharedPtr<FJsonValue> ValueValPtr = MagObj->TryGetField(TEXT("value"));
+		if (ValueValPtr.IsValid())
 		{
-			if (MagObj->TryGetNumberField(TEXT("value"), TempValue))
+			if (ValueValPtr->Type == EJson::Number && ValueValPtr->TryGetNumber(TempValue))
 			{
 				Value = static_cast<float>(TempValue);
 			}
@@ -401,19 +402,22 @@ bool ConfigureMagnitude(
 			}
 		}
 		double TempVal = 0.0;
-		if (MagObj->HasField(TEXT("coefficient")))
+		TSharedPtr<FJsonValue> CoeffValPtr = MagObj->TryGetField(TEXT("coefficient"));
+		if (CoeffValPtr.IsValid())
 		{
-			if (!MagObj->TryGetNumberField(TEXT("coefficient"), TempVal)) { OutError = TEXT("coefficient must be a number"); return false; }
+			if (CoeffValPtr->Type != EJson::Number || !CoeffValPtr->TryGetNumber(TempVal)) { OutError = TEXT("coefficient must be a number"); return false; }
 			ABF.Coefficient = FScalableFloat(static_cast<float>(TempVal));
 		}
-		if (MagObj->HasField(TEXT("pre_multiply_additive_value")))
+		TSharedPtr<FJsonValue> PreMultValPtr = MagObj->TryGetField(TEXT("pre_multiply_additive_value"));
+		if (PreMultValPtr.IsValid())
 		{
-			if (!MagObj->TryGetNumberField(TEXT("pre_multiply_additive_value"), TempVal)) { OutError = TEXT("pre_multiply_additive_value must be a number"); return false; }
+			if (PreMultValPtr->Type != EJson::Number || !PreMultValPtr->TryGetNumber(TempVal)) { OutError = TEXT("pre_multiply_additive_value must be a number"); return false; }
 			ABF.PreMultiplyAdditiveValue = FScalableFloat(static_cast<float>(TempVal));
 		}
-		if (MagObj->HasField(TEXT("post_multiply_additive_value")))
+		TSharedPtr<FJsonValue> PostMultValPtr = MagObj->TryGetField(TEXT("post_multiply_additive_value"));
+		if (PostMultValPtr.IsValid())
 		{
-			if (!MagObj->TryGetNumberField(TEXT("post_multiply_additive_value"), TempVal)) { OutError = TEXT("post_multiply_additive_value must be a number"); return false; }
+			if (PostMultValPtr->Type != EJson::Number || !PostMultValPtr->TryGetNumber(TempVal)) { OutError = TEXT("post_multiply_additive_value must be a number"); return false; }
 			ABF.PostMultiplyAdditiveValue = FScalableFloat(static_cast<float>(TempVal));
 		}
 		OutMag = FGameplayEffectModifierMagnitude(ABF);
@@ -438,9 +442,10 @@ bool ConfigureMagnitude(
 			CCF.CalculationClassMagnitude = CalcClass;
 		}
 		double TempVal = 0.0;
-		if (MagObj->HasField(TEXT("coefficient")))
+		TSharedPtr<FJsonValue> CCFCoeffValPtr = MagObj->TryGetField(TEXT("coefficient"));
+		if (CCFCoeffValPtr.IsValid())
 		{
-			if (!MagObj->TryGetNumberField(TEXT("coefficient"), TempVal)) { OutError = TEXT("coefficient must be a number"); return false; }
+			if (CCFCoeffValPtr->Type != EJson::Number || !CCFCoeffValPtr->TryGetNumber(TempVal)) { OutError = TEXT("coefficient must be a number"); return false; }
 			CCF.Coefficient = FScalableFloat(static_cast<float>(TempVal));
 		}
 		OutMag = FGameplayEffectModifierMagnitude(CCF);
@@ -1441,22 +1446,22 @@ FMonolithActionResult FMonolithGASEffectActions::HandleRemoveModifier(const TSha
 	if (!LoadGEFromParams(Params, BP, GE, AssetPath, Err)) return Err;
 
 	double RemoveIndexVal = 0.0;
-	const bool bHasIndexField = Params->HasField(TEXT("modifier_index"));
+	TSharedPtr<FJsonValue> IndexValPtr = Params->TryGetField(TEXT("modifier_index"));
 	bool bHasIndex = false;
-	if (bHasIndexField)
+	if (IndexValPtr.IsValid())
 	{
-		if (!Params->TryGetNumberField(TEXT("modifier_index"), RemoveIndexVal))
+		if (IndexValPtr->Type != EJson::Number || !IndexValPtr->TryGetNumber(RemoveIndexVal))
 		{
 			return FMonolithActionResult::Error(TEXT("modifier_index must be a number when provided"));
 		}
 		bHasIndex = true;
 	}
 	FString AttrStr;
-	const bool bHasAttrField = Params->HasField(TEXT("attribute"));
+	TSharedPtr<FJsonValue> AttrValPtr = Params->TryGetField(TEXT("attribute"));
 	bool bHasAttr = false;
-	if (bHasAttrField)
+	if (AttrValPtr.IsValid())
 	{
-		if (!Params->TryGetStringField(TEXT("attribute"), AttrStr) || AttrStr.IsEmpty())
+		if (AttrValPtr->Type != EJson::String || !AttrValPtr->TryGetString(AttrStr) || AttrStr.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("attribute must be a non-empty string when provided"));
 		}
@@ -1655,10 +1660,11 @@ FMonolithActionResult FMonolithGASEffectActions::HandleAddGEComponent(const TSha
 	{
 		UChanceToApplyGameplayEffectComponent* Comp = CastChecked<UChanceToApplyGameplayEffectComponent>(NewComp);
 		float Chance = 1.0f;
-		if (Config->HasField(TEXT("chance")))
+		TSharedPtr<FJsonValue> ChanceValPtr = Config->TryGetField(TEXT("chance"));
+		if (ChanceValPtr.IsValid())
 		{
 			double TempVal = 0.0;
-			if (!Config->TryGetNumberField(TEXT("chance"), TempVal))
+			if (ChanceValPtr->Type != EJson::Number || !ChanceValPtr->TryGetNumber(TempVal))
 			{
 				return FMonolithActionResult::Error(TEXT("chance must be a number"));
 			}
@@ -1669,10 +1675,11 @@ FMonolithActionResult FMonolithGASEffectActions::HandleAddGEComponent(const TSha
 	else if (ComponentType == TEXT("additional_effects"))
 	{
 		UAdditionalEffectsGameplayEffectComponent* Comp = CastChecked<UAdditionalEffectsGameplayEffectComponent>(NewComp);
-		if (Config->HasField(TEXT("copy_data_from_original_spec")))
+		TSharedPtr<FJsonValue> CopyDataValPtr = Config->TryGetField(TEXT("copy_data_from_original_spec"));
+		if (CopyDataValPtr.IsValid())
 		{
 			bool bCopy = false;
-			if (!Config->TryGetBoolField(TEXT("copy_data_from_original_spec"), bCopy))
+			if (CopyDataValPtr->Type != EJson::Boolean || !CopyDataValPtr->TryGetBool(bCopy))
 			{
 				return FMonolithActionResult::Error(TEXT("copy_data_from_original_spec must be a boolean"));
 			}
@@ -1758,10 +1765,11 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetGEComponent(const TSha
 
 	// Find existing component of this type
 	int32 TargetIndex = 0;
-	if (Params->HasField(TEXT("index")))
+	TSharedPtr<FJsonValue> IndexValPtr = Params->TryGetField(TEXT("index"));
+	if (IndexValPtr.IsValid())
 	{
 		double TempVal = 0.0;
-		if (!Params->TryGetNumberField(TEXT("index"), TempVal))
+		if (IndexValPtr->Type != EJson::Number || !IndexValPtr->TryGetNumber(TempVal))
 		{
 			return FMonolithActionResult::Error(TEXT("index must be a number"));
 		}
@@ -1828,26 +1836,27 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetGEComponent(const TSha
 	{
 		UTargetTagRequirementsGameplayEffectComponent* Comp = CastChecked<UTargetTagRequirementsGameplayEffectComponent>(FoundComp);
 		// F.7b — collect dropped tags per field, surface as warnings on the response.
-		if (Config->HasField(TEXT("application_require_tags")))
+		if (Config->TryGetField(TEXT("application_require_tags")).IsValid())
 			Comp->ApplicationTagRequirements.RequireTags = MonolithGAS::ParseTagContainer(Config, TEXT("application_require_tags"), SkippedAppRequire);
-		if (Config->HasField(TEXT("application_ignore_tags")))
+		if (Config->TryGetField(TEXT("application_ignore_tags")).IsValid())
 			Comp->ApplicationTagRequirements.IgnoreTags  = MonolithGAS::ParseTagContainer(Config, TEXT("application_ignore_tags"),  SkippedAppIgnore);
-		if (Config->HasField(TEXT("ongoing_require_tags")))
+		if (Config->TryGetField(TEXT("ongoing_require_tags")).IsValid())
 			Comp->OngoingTagRequirements.RequireTags     = MonolithGAS::ParseTagContainer(Config, TEXT("ongoing_require_tags"),     SkippedOngoingRequire);
-		if (Config->HasField(TEXT("ongoing_ignore_tags")))
+		if (Config->TryGetField(TEXT("ongoing_ignore_tags")).IsValid())
 			Comp->OngoingTagRequirements.IgnoreTags      = MonolithGAS::ParseTagContainer(Config, TEXT("ongoing_ignore_tags"),      SkippedOngoingIgnore);
-		if (Config->HasField(TEXT("removal_require_tags")))
+		if (Config->TryGetField(TEXT("removal_require_tags")).IsValid())
 			Comp->RemovalTagRequirements.RequireTags     = MonolithGAS::ParseTagContainer(Config, TEXT("removal_require_tags"),     SkippedRemovalRequire);
-		if (Config->HasField(TEXT("removal_ignore_tags")))
+		if (Config->TryGetField(TEXT("removal_ignore_tags")).IsValid())
 			Comp->RemovalTagRequirements.IgnoreTags      = MonolithGAS::ParseTagContainer(Config, TEXT("removal_ignore_tags"),      SkippedRemovalIgnore);
 	}
 	else if (ComponentType == TEXT("chance_to_apply"))
 	{
 		UChanceToApplyGameplayEffectComponent* Comp = CastChecked<UChanceToApplyGameplayEffectComponent>(FoundComp);
-		if (Config->HasField(TEXT("chance")))
+		TSharedPtr<FJsonValue> ChanceValPtr = Config->TryGetField(TEXT("chance"));
+		if (ChanceValPtr.IsValid())
 		{
 			double TempVal = 0.0;
-			if (!Config->TryGetNumberField(TEXT("chance"), TempVal))
+			if (ChanceValPtr->Type != EJson::Number || !ChanceValPtr->TryGetNumber(TempVal))
 			{
 				return FMonolithActionResult::Error(TEXT("chance must be a number"));
 			}
@@ -1857,10 +1866,11 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetGEComponent(const TSha
 	else if (ComponentType == TEXT("additional_effects"))
 	{
 		UAdditionalEffectsGameplayEffectComponent* Comp = CastChecked<UAdditionalEffectsGameplayEffectComponent>(FoundComp);
-		if (Config->HasField(TEXT("copy_data_from_original_spec")))
+		TSharedPtr<FJsonValue> CopyDataValPtr = Config->TryGetField(TEXT("copy_data_from_original_spec"));
+		if (CopyDataValPtr.IsValid())
 		{
 			bool bCopy = false;
-			if (!Config->TryGetBoolField(TEXT("copy_data_from_original_spec"), bCopy))
+			if (CopyDataValPtr->Type != EJson::Boolean || !CopyDataValPtr->TryGetBool(bCopy))
 			{
 				return FMonolithActionResult::Error(TEXT("copy_data_from_original_spec must be a boolean"));
 			}
@@ -1925,9 +1935,10 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetEffectStacking(const T
 	SetGameplayEffectStackingTypeValue(GE, StackType);
 
 	double StackLimitVal = 0.0;
-	if (Params->HasField(TEXT("stack_limit")))
+	TSharedPtr<FJsonValue> StackLimitValPtr = Params->TryGetField(TEXT("stack_limit"));
+	if (StackLimitValPtr.IsValid())
 	{
-		if (!Params->TryGetNumberField(TEXT("stack_limit"), StackLimitVal))
+		if (StackLimitValPtr->Type != EJson::Number || !StackLimitValPtr->TryGetNumber(StackLimitVal))
 		{
 			return FMonolithActionResult::Error(TEXT("stack_limit must be a number"));
 		}
@@ -1996,7 +2007,7 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetEffectStacking(const T
 
 	TSharedPtr<FJsonObject> Result = MonolithGAS::MakeAssetResult(AssetPath, TEXT("Stacking configuration updated"));
 	Result->SetStringField(TEXT("stacking_type"), StackTypeStr);
-	if (Params->HasField(TEXT("stack_limit")))
+	if (Params->TryGetField(TEXT("stack_limit")).IsValid())
 	{
 		Result->SetNumberField(TEXT("stack_limit"), GE->StackLimitCount);
 	}
@@ -2029,8 +2040,9 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetDuration(const TShared
 
 	// Set duration magnitude for HasDuration
 	double DurationValue = 0.0;
-	const bool bHasDurationMagnitude = Params->HasField(TEXT("duration_magnitude"));
-	if (bHasDurationMagnitude && !Params->TryGetNumberField(TEXT("duration_magnitude"), DurationValue))
+	TSharedPtr<FJsonValue> DurationMagValPtr = Params->TryGetField(TEXT("duration_magnitude"));
+	const bool bHasDurationMagnitude = DurationMagValPtr.IsValid();
+	if (bHasDurationMagnitude && (DurationMagValPtr->Type != EJson::Number || !DurationMagValPtr->TryGetNumber(DurationValue)))
 	{
 		return FMonolithActionResult::Error(TEXT("duration_magnitude must be a number"));
 	}
@@ -2836,11 +2848,11 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 						FString::Printf(TEXT("Modifier %d magnitude: %s"), i, *MagError)));
 				}
 			}
-			else if (ModObj->HasField(TEXT("value")))
+			else if (TSharedPtr<FJsonValue> ValPtr = ModObj->TryGetField(TEXT("value")); ValPtr.IsValid())
 			{
 				// Simple shorthand: just a value
 				double Value = 0.0;
-				if (!ModObj->TryGetNumberField(TEXT("value"), Value))
+				if (ValPtr->Type != EJson::Number || !ValPtr->TryGetNumber(Value))
 				{
 					return FMonolithActionResult::Error(
 						FString::Printf(TEXT("spec.modifiers[%d].value must be a number"), i));
@@ -2859,9 +2871,10 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 		FString StackType = (*StackPtr)->GetStringField(TEXT("type"));
 		int32 StackLimit = 0;
 		double StackLimitVal = 0.0;
-		if ((*StackPtr)->HasField(TEXT("limit")))
+		TSharedPtr<FJsonValue> StackLimitValPtr = (*StackPtr)->TryGetField(TEXT("limit"));
+		if (StackLimitValPtr.IsValid())
 		{
-			if (!(*StackPtr)->TryGetNumberField(TEXT("limit"), StackLimitVal))
+			if (StackLimitValPtr->Type != EJson::Number || !StackLimitValPtr->TryGetNumber(StackLimitVal))
 			{
 				return FMonolithActionResult::Error(TEXT("spec.stacking.limit must be a number"));
 			}
@@ -3159,7 +3172,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleDuplicateGameplayEffect(c
 	if (!LoadGEFromParams(SourceParams, SourceBP, SourceGE, SourceAssetPath, LoadErr)) return LoadErr;
 
 	const TSharedPtr<FJsonObject>* OverridesPtr = nullptr;
-	if (Params->HasField(TEXT("overrides")))
+	TSharedPtr<FJsonValue> OverridesValPtr = Params->TryGetField(TEXT("overrides"));
+	if (OverridesValPtr.IsValid())
 	{
 		if (!Params->TryGetObjectField(TEXT("overrides"), OverridesPtr) || !OverridesPtr || !(*OverridesPtr).IsValid())
 		{
@@ -3178,8 +3192,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleDuplicateGameplayEffect(c
 				}
 
 				double Value = 0.0;
-				if ((*ModObjPtr)->HasField(TEXT("value")) &&
-					!(*ModObjPtr)->TryGetNumberField(TEXT("value"), Value))
+				TSharedPtr<FJsonValue> ModValueValPtr = (*ModObjPtr)->TryGetField(TEXT("value"));
+				if (ModValueValPtr.IsValid() && (ModValueValPtr->Type != EJson::Number || !ModValueValPtr->TryGetNumber(Value)))
 				{
 					return FMonolithActionResult::Error(TEXT("overrides.modifiers.value must be a number"));
 				}
@@ -3266,10 +3280,10 @@ FMonolithActionResult FMonolithGASEffectActions::HandleDuplicateGameplayEffect(c
 					FString MagError;
 					ConfigureMagnitude(*MagObjPtr, NewMod.ModifierMagnitude, MagError);
 				}
-				else if (ModObj->HasField(TEXT("value")))
+				else if (TSharedPtr<FJsonValue> ModValPtr = ModObj->TryGetField(TEXT("value")); ModValPtr.IsValid())
 				{
 					double Value = 0.0;
-					if (!ModObj->TryGetNumberField(TEXT("value"), Value))
+					if (ModValPtr->Type != EJson::Number || !ModValPtr->TryGetNumber(Value))
 					{
 						return FMonolithActionResult::Error(TEXT("overrides.modifiers.value must be a number"));
 					}

@@ -657,13 +657,14 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleSetInputActionPropert
 	const FScopedTransaction Transaction(NSLOCTEXT("Monolith", "SetInputActionProperties", "Set Input Action Properties"));
 	Action->Modify();
 
-	if (Params->HasField(TEXT("value_type")))
+	TSharedPtr<FJsonValue> ValueTypeValPtr = Params->TryGetField(TEXT("value_type"));
+	if (ValueTypeValPtr.IsValid())
 	{
 		EInputActionValueType ValueType;
 		FString ValueTypeString;
-		if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("value_type"), ValueTypeString, Error))
+		if (ValueTypeValPtr->Type != EJson::String || !ValueTypeValPtr->TryGetString(ValueTypeString))
 		{
-			return FMonolithActionResult::Error(Error);
+			return FMonolithActionResult::Error(TEXT("Invalid parameter: value_type must be a string"));
 		}
 		if (!ParseValueType(ValueTypeString, ValueType))
 		{
@@ -671,58 +672,64 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleSetInputActionPropert
 		}
 		Action->ValueType = ValueType;
 	}
-	if (Params->HasField(TEXT("description")))
+	TSharedPtr<FJsonValue> DescriptionValPtr = Params->TryGetField(TEXT("description"));
+	if (DescriptionValPtr.IsValid())
 	{
 		FString Description;
-		if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("description"), Description, Error))
+		if (DescriptionValPtr->Type != EJson::String || !DescriptionValPtr->TryGetString(Description))
 		{
-			return FMonolithActionResult::Error(Error);
+			return FMonolithActionResult::Error(TEXT("Invalid parameter: description must be a string"));
 		}
 		Action->ActionDescription = FText::FromString(Description);
 	}
-	if (Params->HasField(TEXT("consume_input")))
+	TSharedPtr<FJsonValue> ConsumeInputValPtr = Params->TryGetField(TEXT("consume_input"));
+	if (ConsumeInputValPtr.IsValid())
 	{
 		bool bConsumeInput = false;
-		if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("consume_input"), bConsumeInput, Error))
+		if (ConsumeInputValPtr->Type != EJson::Boolean || !ConsumeInputValPtr->TryGetBool(bConsumeInput))
 		{
-			return FMonolithActionResult::Error(Error);
+			return FMonolithActionResult::Error(TEXT("Invalid parameter: consume_input must be a boolean"));
 		}
 		Action->bConsumeInput = bConsumeInput;
 	}
-	if (Params->HasField(TEXT("consume_legacy_mappings")))
+	TSharedPtr<FJsonValue> ConsumeLegacyValPtr = Params->TryGetField(TEXT("consume_legacy_mappings"));
+	if (ConsumeLegacyValPtr.IsValid())
 	{
 		bool bConsumeLegacy = false;
-		if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("consume_legacy_mappings"), bConsumeLegacy, Error))
+		if (ConsumeLegacyValPtr->Type != EJson::Boolean || !ConsumeLegacyValPtr->TryGetBool(bConsumeLegacy))
 		{
-			return FMonolithActionResult::Error(Error);
+			return FMonolithActionResult::Error(TEXT("Invalid parameter: consume_legacy_mappings must be a boolean"));
 		}
 		Action->bConsumesActionAndAxisMappings = bConsumeLegacy;
 	}
-	if (Params->HasField(TEXT("trigger_when_paused")))
+	TSharedPtr<FJsonValue> TriggerPausedValPtr = Params->TryGetField(TEXT("trigger_when_paused"));
+	if (TriggerPausedValPtr.IsValid())
 	{
 		bool bTriggerWhenPaused = false;
-		if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("trigger_when_paused"), bTriggerWhenPaused, Error))
+		if (TriggerPausedValPtr->Type != EJson::Boolean || !TriggerPausedValPtr->TryGetBool(bTriggerWhenPaused))
 		{
-			return FMonolithActionResult::Error(Error);
+			return FMonolithActionResult::Error(TEXT("Invalid parameter: trigger_when_paused must be a boolean"));
 		}
 		Action->bTriggerWhenPaused = bTriggerWhenPaused;
 	}
-	if (Params->HasField(TEXT("reserve_all_mappings")))
+	TSharedPtr<FJsonValue> ReserveMappingsValPtr = Params->TryGetField(TEXT("reserve_all_mappings"));
+	if (ReserveMappingsValPtr.IsValid())
 	{
 		bool bReserveMappings = false;
-		if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("reserve_all_mappings"), bReserveMappings, Error))
+		if (ReserveMappingsValPtr->Type != EJson::Boolean || !ReserveMappingsValPtr->TryGetBool(bReserveMappings))
 		{
-			return FMonolithActionResult::Error(Error);
+			return FMonolithActionResult::Error(TEXT("Invalid parameter: reserve_all_mappings must be a boolean"));
 		}
 		Action->bReserveAllMappings = bReserveMappings;
 	}
-	if (Params->HasField(TEXT("accumulation")))
+	TSharedPtr<FJsonValue> AccumulationValPtr = Params->TryGetField(TEXT("accumulation"));
+	if (AccumulationValPtr.IsValid())
 	{
 		EInputActionAccumulationBehavior Behavior;
 		FString Accumulation;
-		if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("accumulation"), Accumulation, Error))
+		if (AccumulationValPtr->Type != EJson::String || !AccumulationValPtr->TryGetString(Accumulation))
 		{
-			return FMonolithActionResult::Error(Error);
+			return FMonolithActionResult::Error(TEXT("Invalid parameter: accumulation must be a string"));
 		}
 		if (!ParseAccumulation(Accumulation, Behavior))
 		{
@@ -826,10 +833,11 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 	}
 
 	FString Description;
-	bool bHasDescription = Params->HasField(TEXT("description"));
-	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("description"), Description, Error))
+	TSharedPtr<FJsonValue> DescValPtr = Params->TryGetField(TEXT("description"));
+	bool bHasDescription = DescValPtr.IsValid();
+	if (bHasDescription && (DescValPtr->Type != EJson::String || !DescValPtr->TryGetString(Description)))
 	{
-		return FMonolithActionResult::Error(Error);
+		return FMonolithActionResult::Error(TEXT("Invalid parameter: description must be a string"));
 	}
 
 	bool bCreated = false;

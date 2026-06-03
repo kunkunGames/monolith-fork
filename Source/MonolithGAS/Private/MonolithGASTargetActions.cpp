@@ -210,15 +210,18 @@ FMonolithActionResult FMonolithGASTargetActions::HandleCreateTargetActor(const T
 	}
 
 	FString ParamError;
-	const bool bHasMaxRange = Params->HasField(TEXT("max_range"));
 	double MaxRangeVal = 0.0;
-	if (!MonolithGAS::TryReadOptionalNumberParam(Params, TEXT("max_range"), MaxRangeVal, ParamError))
+	TSharedPtr<FJsonValue> MaxRangeValPtr = Params->TryGetField(TEXT("max_range"));
+	const bool bHasMaxRange = MaxRangeValPtr.IsValid();
+	if (bHasMaxRange && (MaxRangeValPtr->Type != EJson::Number || !MaxRangeValPtr->TryGetNumber(MaxRangeVal)))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for max_range. Expected a number."));
 	}
-	const bool bHasRadius = Params->HasField(TEXT("radius"));
+
 	double RadiusVal = 0.0;
-	if (!MonolithGAS::TryReadOptionalNumberParam(Params, TEXT("radius"), RadiusVal, ParamError))
+	TSharedPtr<FJsonValue> RadiusValPtr = Params->TryGetField(TEXT("radius"));
+	const bool bHasRadius = RadiusValPtr.IsValid();
+	if (bHasRadius && (RadiusValPtr->Type != EJson::Number || !RadiusValPtr->TryGetNumber(RadiusVal)))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for radius. Expected a number."));
 	}
@@ -349,33 +352,42 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 	if (!MonolithGAS::RequireStringParam(Params, TEXT("asset_path"), AssetPath, Err)) return Err;
 
 	FString ParamError;
-	const bool bHasMaxRange = Params->HasField(TEXT("max_range"));
 	double MaxRangeVal = 0.0;
-	if (!MonolithGAS::TryReadOptionalNumberParam(Params, TEXT("max_range"), MaxRangeVal, ParamError))
+	TSharedPtr<FJsonValue> MaxRangeValPtr = Params->TryGetField(TEXT("max_range"));
+	const bool bHasMaxRange = MaxRangeValPtr.IsValid();
+	if (bHasMaxRange && (MaxRangeValPtr->Type != EJson::Number || !MaxRangeValPtr->TryGetNumber(MaxRangeVal)))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for max_range. Expected a number."));
 	}
-	const bool bHasRadius = Params->HasField(TEXT("radius"));
+
 	double RadiusVal = 0.0;
-	if (!MonolithGAS::TryReadOptionalNumberParam(Params, TEXT("radius"), RadiusVal, ParamError))
+	TSharedPtr<FJsonValue> RadiusValPtr = Params->TryGetField(TEXT("radius"));
+	const bool bHasRadius = RadiusValPtr.IsValid();
+	if (bHasRadius && (RadiusValPtr->Type != EJson::Number || !RadiusValPtr->TryGetNumber(RadiusVal)))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for radius. Expected a number."));
 	}
-	const bool bHasShouldProduce = Params->HasField(TEXT("should_produce_target_data_on_server"));
+
 	bool bShouldProduce = false;
-	if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("should_produce_target_data_on_server"), bShouldProduce, ParamError))
+	TSharedPtr<FJsonValue> ShouldProduceValPtr = Params->TryGetField(TEXT("should_produce_target_data_on_server"));
+	const bool bHasShouldProduce = ShouldProduceValPtr.IsValid();
+	if (bHasShouldProduce && (ShouldProduceValPtr->Type != EJson::Boolean || !ShouldProduceValPtr->TryGetBool(bShouldProduce)))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for should_produce_target_data_on_server. Expected a boolean."));
 	}
-	const bool bHasDebugDraw = Params->HasField(TEXT("debug_draw"));
+
 	bool bDebugDraw = false;
-	if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("debug_draw"), bDebugDraw, ParamError))
+	TSharedPtr<FJsonValue> DebugDrawValPtr = Params->TryGetField(TEXT("debug_draw"));
+	const bool bHasDebugDraw = DebugDrawValPtr.IsValid();
+	if (bHasDebugDraw && (DebugDrawValPtr->Type != EJson::Boolean || !DebugDrawValPtr->TryGetBool(bDebugDraw)))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for debug_draw. Expected a boolean."));
 	}
-	const bool bHasStartLocationType = Params->HasField(TEXT("start_location_type"));
+
 	FString LocType;
-	if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("start_location_type"), LocType, ParamError))
+	TSharedPtr<FJsonValue> LocTypeValPtr = Params->TryGetField(TEXT("start_location_type"));
+	const bool bHasStartLocationType = LocTypeValPtr.IsValid();
+	if (bHasStartLocationType && (LocTypeValPtr->Type != EJson::String || !LocTypeValPtr->TryGetString(LocType)))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for start_location_type. Expected a string."));
 	}
@@ -522,10 +534,10 @@ FMonolithActionResult FMonolithGASTargetActions::HandleAddTargetingToAbility(con
 	}
 
 	FString ConfirmTypeStr;
-	if (Params->HasField(TEXT("confirm_type")))
+	TSharedPtr<FJsonValue> ConfirmTypeValPtr = Params->TryGetField(TEXT("confirm_type"));
+	if (ConfirmTypeValPtr.IsValid())
 	{
-		FString ParamError;
-		if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("confirm_type"), ConfirmTypeStr, ParamError))
+		if (ConfirmTypeValPtr->Type != EJson::String || !ConfirmTypeValPtr->TryGetString(ConfirmTypeStr))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for confirm_type. Expected a string."));
 		}
@@ -533,10 +545,10 @@ FMonolithActionResult FMonolithGASTargetActions::HandleAddTargetingToAbility(con
 	if (ConfirmTypeStr.IsEmpty()) ConfirmTypeStr = TEXT("instant");
 
 	FString TargetActorClassPath;
-	if (Params->HasField(TEXT("target_actor_class")))
+	TSharedPtr<FJsonValue> TargetActorClassValPtr = Params->TryGetField(TEXT("target_actor_class"));
+	if (TargetActorClassValPtr.IsValid())
 	{
-		FString ParamError;
-		if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("target_actor_class"), TargetActorClassPath, ParamError))
+		if (TargetActorClassValPtr->Type != EJson::String || !TargetActorClassValPtr->TryGetString(TargetActorClassPath))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for target_actor_class. Expected a string."));
 		}
@@ -665,10 +677,11 @@ FMonolithActionResult FMonolithGASTargetActions::HandleScaffoldFPSTargeting(cons
 
 	float Range = DefaultRange;
 	FString ParamError;
-	if (Params->HasField(TEXT("range")))
+	TSharedPtr<FJsonValue> RangeValPtr = Params->TryGetField(TEXT("range"));
+	if (RangeValPtr.IsValid())
 	{
 		double RangeVal = 0.0;
-		if (!MonolithGAS::TryReadOptionalNumberParam(Params, TEXT("range"), RangeVal, ParamError))
+		if (RangeValPtr->Type != EJson::Number || !RangeValPtr->TryGetNumber(RangeVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for range. Expected a number."));
 		}
@@ -676,10 +689,11 @@ FMonolithActionResult FMonolithGASTargetActions::HandleScaffoldFPSTargeting(cons
 	}
 
 	float Radius = DefaultRadius;
-	if (Params->HasField(TEXT("radius")))
+	TSharedPtr<FJsonValue> RadiusValPtr2 = Params->TryGetField(TEXT("radius"));
+	if (RadiusValPtr2.IsValid())
 	{
 		double RadiusVal = 0.0;
-		if (!MonolithGAS::TryReadOptionalNumberParam(Params, TEXT("radius"), RadiusVal, ParamError))
+		if (RadiusValPtr2->Type != EJson::Number || !RadiusValPtr2->TryGetNumber(RadiusVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for radius. Expected a number."));
 		}
@@ -687,9 +701,10 @@ FMonolithActionResult FMonolithGASTargetActions::HandleScaffoldFPSTargeting(cons
 	}
 
 	FString TASavePath;
-	if (Params->HasField(TEXT("save_path")))
+	TSharedPtr<FJsonValue> SavePathValPtr = Params->TryGetField(TEXT("save_path"));
+	if (SavePathValPtr.IsValid())
 	{
-		if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("save_path"), TASavePath, ParamError))
+		if (SavePathValPtr->Type != EJson::String || !SavePathValPtr->TryGetString(TASavePath))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for save_path. Expected a string."));
 		}
