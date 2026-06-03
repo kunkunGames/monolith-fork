@@ -418,7 +418,7 @@ if (Test-Path $OutputZip) {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "SHA256: $Hash" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "Paste this exact line into the GitHub Release notes body:" -ForegroundColor Yellow
+    Write-Host "Paste this exact line into the GitHub Release notes body (include all platform markers if multi-platform):" -ForegroundColor Yellow
     Write-Host ""
     $MarkerPrefix = if ($IsMacOS) { "Monolith-macOS-SHA256" } elseif ($IsLinux) { "Monolith-Linux-SHA256" } else { "Monolith-SHA256" }
     Write-Host "  ${MarkerPrefix}: $Hash" -ForegroundColor White
