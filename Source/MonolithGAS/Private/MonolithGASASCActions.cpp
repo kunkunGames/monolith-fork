@@ -413,6 +413,7 @@ FMonolithActionResult FMonolithGASASCActions::HandleConfigureASC(const TSharedPt
 	if (AbilityPaths.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> ValidatedAbilities;
+		ValidatedAbilities.Reserve(AbilityPaths.Num());
 		for (const FString& AbilityPath : AbilityPaths)
 		{
 			// Validate the class exists and is a GameplayAbility
@@ -457,6 +458,7 @@ FMonolithActionResult FMonolithGASASCActions::HandleConfigureASC(const TSharedPt
 	if (EffectPaths.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> ValidatedEffects;
+		ValidatedEffects.Reserve(EffectPaths.Num());
 		for (const FString& EffectPath : EffectPaths)
 		{
 			UClass* EffectClass = FindFirstObject<UClass>(*EffectPath, EFindFirstObjectOptions::NativeFirst);
@@ -494,6 +496,7 @@ FMonolithActionResult FMonolithGASASCActions::HandleConfigureASC(const TSharedPt
 	if (Params->TryGetArrayField(TEXT("default_attribute_sets"), AttrSetArray))
 	{
 		TArray<TSharedPtr<FJsonValue>> ValidatedSets;
+		ValidatedSets.Reserve(AttrSetArray->Num());
 		for (const TSharedPtr<FJsonValue>& Val : *AttrSetArray)
 		{
 			const TSharedPtr<FJsonObject>* SetObj;
