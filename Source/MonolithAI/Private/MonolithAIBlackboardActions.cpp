@@ -506,6 +506,7 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleGetBlackboard(const TS
 
 #if WITH_EDITORONLY_DATA
 	BB->UpdateParentKeys();
+	AllKeys.Reserve(BB->ParentKeys.Num() + BB->Keys.Num());
 	for (const FBlackboardEntry& Entry : BB->ParentKeys)
 	{
 		AllKeys.Add(MakeShared<FJsonValueObject>(EntryToJson(Entry, /*bIsInherited=*/true)));
@@ -682,6 +683,7 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleDuplicateBlackboard(co
 	// (e.g. KeyType class unloaded or invalid). StaticDuplicateObject is atomic, so
 	// individual key drops only happen in pathological cases — we still report them.
 	TArray<TSharedPtr<FJsonValue>> SkippedKeys;
+	SkippedKeys.Reserve(SourceKeyCount);
 	{
 		TSet<FName> DestNames;
 		for (const FBlackboardEntry& E : NewBB->Keys)
