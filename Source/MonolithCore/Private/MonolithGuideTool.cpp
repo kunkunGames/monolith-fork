@@ -172,6 +172,7 @@ TSharedPtr<FJsonObject> FMonolithGuideTool::BuildLiveOverlay()
 	Namespaces.Sort();
 
 	TArray<TSharedPtr<FJsonValue>> NsArray;
+	NsArray.Reserve(Namespaces.Num());
 	for (const FString& Ns : Namespaces)
 	{
 		TSharedPtr<FJsonObject> NsObj = MakeShared<FJsonObject>();
@@ -238,6 +239,7 @@ FMonolithActionResult FMonolithGuideTool::HandleGuide(const TSharedPtr<FJsonObje
 		// next_sections = the other canonical sections (so the agent can chain
 		// follow-up pulls without re-fetching the index).
 		TArray<TSharedPtr<FJsonValue>> NextSections;
+		NextSections.Reserve(CanonicalOrder.Num());
 		for (const FString& Name : CanonicalOrder)
 		{
 			if (!Name.Equals(RequestedSection) && Sections.Contains(Name))
@@ -262,6 +264,7 @@ FMonolithActionResult FMonolithGuideTool::HandleGuide(const TSharedPtr<FJsonObje
 
 	// sections = ordered list of the canonical section names that are present.
 	TArray<TSharedPtr<FJsonValue>> SectionNames;
+	SectionNames.Reserve(CanonicalOrder.Num());
 	TSharedPtr<FJsonObject> ContentObj = MakeShared<FJsonObject>();
 	for (const FString& Name : CanonicalOrder)
 	{
