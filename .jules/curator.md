@@ -81,3 +81,9 @@
 **Learning:** Proxy cache artifacts fallback to environment-defined directories like `$TMPDIR` or `%TEMP%`, which aren't predictably outside the repository in all setups or CI environments.
 **Prevention:** Add an explicit `monolith_proxy_tools_*.json` rule to `.gitignore`.
 **Avoid:** Assuming system temporary directories never overlap with the workspace.
+
+## 2026-06-03 - Ignore python build distribution directory
+**Hygiene issue:** Building python distributions (e.g., using hatch in `MCP/`) generates a `dist/` directory that leaks into the working tree.
+**Learning:** Python packaging tools generate a standard `dist/` directory for wheels and sdists that is not captured by other python-related ignore rules.
+**Prevention:** Add an explicit `dist/` ignore rule to `.gitignore`.
+**Avoid:** Assuming standard `.venv/` or `__pycache__/` ignores will cover build outputs like wheels and source distributions.
