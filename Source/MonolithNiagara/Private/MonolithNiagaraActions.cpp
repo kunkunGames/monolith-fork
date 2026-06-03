@@ -12888,14 +12888,30 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 	const TArray<TSharedPtr<FJsonValue>>* UserParamsArray = nullptr;
 	if (Spec->TryGetArrayField(TEXT("user_parameters"), UserParamsArray))
 	{
-		for (const TSharedPtr<FJsonValue>& PV : *UserParamsArray)
+		for (int32 ParamIndex = 0; ParamIndex < UserParamsArray->Num(); ++ParamIndex)
 		{
+			const TSharedPtr<FJsonValue>& PV = (*UserParamsArray)[ParamIndex];
 			TSharedPtr<FJsonObject> PO = PV->AsObject();
 			if (!PO) continue;
+
+			FString POName;
+			TSharedPtr<FJsonValue> PONameField = PO->TryGetField(TEXT("name"));
+			if (PONameField.IsValid())
+			{
+				if (!PONameField->TryGetString(POName))
+				{
+					OutErrors.Add(FString::Printf(TEXT("spec.user_parameters[%d].name must be a string"), ParamIndex));
+					FailCount++;
+					continue;
+				}
+			}
+
 			TSharedRef<FJsonObject> AP = MakeShared<FJsonObject>();
 			AP->SetStringField(TEXT("system_path"), SystemPath);
-			AP->SetStringField(TEXT("name"), PO->GetStringField(TEXT("name")));
-			AP->SetStringField(TEXT("type"), PO->GetStringField(TEXT("type")));
+			AP->SetStringField(TEXT("name"), POName);
+			FString POType;
+			if (!PO->TryGetStringField(TEXT("type"), POType)) POType = TEXT("");
+			AP->SetStringField(TEXT("type"), POType);
 			if (PO->HasField(TEXT("default"))) AP->SetField(TEXT("default"), PO->TryGetField(TEXT("default")));
 			FMonolithActionResult AUP = HandleAddUserParameter(AP);
 			if (!AUP.bSuccess) { OutErrors.Add(FString::Printf(TEXT("add_user_parameter: %s"), *AUP.ErrorMessage)); FailCount++; }
@@ -13170,12 +13186,29 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 			}
 
 			const TArray<TSharedPtr<FJsonValue>>& ParamArr = *ParamArrPtr;
-			for (const TSharedPtr<FJsonValue>& PVal : ParamArr)
+			for (int32 ParamIndex = 0; ParamIndex < ParamArr.Num(); ++ParamIndex)
 			{
+				const TSharedPtr<FJsonValue>& PVal = ParamArr[ParamIndex];
 				const TSharedPtr<FJsonObject>* PObj = nullptr;
 				if (!PVal->TryGetObject(PObj) || !(*PObj).IsValid()) continue;
 
-				FString ParamName = (*PObj)->GetStringField(TEXT("name"));
+				FString ParamName;
+				TSharedPtr<FJsonValue> ParamNameField = (*PObj)->TryGetField(TEXT("name"));
+				if (!ParamNameField.IsValid())
+				{
+					return FMonolithActionResult::Error(
+						FString::Printf(TEXT("spec.user_parameters[%d].name is required"), ParamIndex));
+				}
+				if (!ParamNameField->TryGetString(ParamName))
+				{
+					return FMonolithActionResult::Error(
+						FString::Printf(TEXT("spec.user_parameters[%d].name must be a string"), ParamIndex));
+				}
+				if (ParamName.IsEmpty())
+				{
+					return FMonolithActionResult::Error(
+						FString::Printf(TEXT("spec.user_parameters[%d].name is required"), ParamIndex));
+				}
 				if (!ParamName.StartsWith(TEXT("User."))) ParamName = TEXT("User.") + ParamName;
 
 				if (ExistingNames.Contains(ParamName))
@@ -13187,7 +13220,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 				TSharedRef<FJsonObject> AddParams = MakeShared<FJsonObject>();
 				AddParams->SetStringField(TEXT("asset_path"), SystemPath);
 				AddParams->SetStringField(TEXT("name"), ParamName);
-				AddParams->SetStringField(TEXT("type"), (*PObj)->GetStringField(TEXT("type")));
+				FString ParamType;
+				if (!(*PObj)->TryGetStringField(TEXT("type"), ParamType)) ParamType = TEXT("");
+				AddParams->SetStringField(TEXT("type"), ParamType);
 				TSharedPtr<FJsonValue> DefaultValueField = (*PObj)->TryGetField(TEXT("default_value"));
 				if (DefaultValueField.IsValid())
 				{
