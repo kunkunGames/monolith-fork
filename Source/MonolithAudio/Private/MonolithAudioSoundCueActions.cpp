@@ -49,8 +49,6 @@
 #include "UObject/SavePackage.h"
 #include "UObject/UnrealType.h"
 
-#include "MonolithPackagePathValidator.h"
-
 // JSON
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -103,6 +101,12 @@ UClass* FMonolithAudioSoundCueActions::ResolveNodeType(const FString& TypeName)
 
 USoundCue* FMonolithAudioSoundCueActions::LoadSoundCue(const FString& AssetPath, FString& OutError)
 {
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		OutError = ValidationError;
+		return nullptr;
+	}
+
 	USoundCue* Cue = FMonolithAssetUtils::LoadAssetByPath<USoundCue>(AssetPath);
 	if (!Cue)
 	{

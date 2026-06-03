@@ -152,4 +152,33 @@ bool FMonolithAudioSecurityDuplicateSoundCuePathTest::RunTest(const FString& Par
 	return true;
 }
 
+
+// ---------------------------------------------------------------------------
+// FMonolithAudioSoundCueActions::GetSoundCueGraph (Validates path parameter)
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioSecuritySoundCueGetGraphPathTest, "Monolith.Security.MonolithAudio.GetSoundCueGraph.RejectsMalformedPath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAudioSecuritySoundCueGetGraphPathTest::RunTest(const FString& Parameters)
+{
+	TArray<FString> MalformedPaths = {
+		TEXT(""), // Empty path
+		TEXT("//Game/Audio/SC_GraphBadPath"), // Double leading slash
+		TEXT("Game/Audio/SC_GraphBadPath"), // Missing leading slash
+		TEXT("/Game/Audio/SC_GraphBadPath/"), // Trailing slash
+		TEXT("/Game/Audio/SC_GraphBadPath#Invalid") // Illegal characters
+	};
+
+	for (const FString& Path : MalformedPaths)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), Path);
+
+		FMonolithActionResult Result = ExecuteAudioSecurityAction(TEXT("get_sound_cue_graph"), Params);
+
+		TestFalse(*FString::Printf(TEXT("GetSoundCueGraph with malformed path '%s' should return Error"), *Path), Result.bSuccess);
+		TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path '%s'"), *Path), Result.ErrorMessage.IsEmpty());
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
