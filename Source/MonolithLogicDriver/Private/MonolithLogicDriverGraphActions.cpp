@@ -655,11 +655,15 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddState(const TSh
 		PosY = static_cast<int32>(TmpY);
 	}
 
+	FString Name;
+	if (Params->HasField(TEXT("name")) && !Params->TryGetStringField(TEXT("name"), Name))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'name' must be a string"), -32602);
+	}
+
 	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, StateClass, PosX, PosY);
 	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create state node"));
 
-	FString Name;
-	Params->TryGetStringField(TEXT("name"), Name);
 	TrySetNodeName(NewNode, Name);
 
 	MarkModified(BP);
@@ -697,6 +701,19 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddTransition(cons
 	UClass* TransClass = MonolithLD::GetSMGraphNodeTransitionClass();
 	if (!TransClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_TransitionEdge class not found"));
 
+	// Validate optional priority before creating the transition node.
+	int32 Priority = 0;
+	const bool bHasPriority = Params->HasField(TEXT("priority"));
+	if (bHasPriority)
+	{
+		double TmpPriority = 0.0;
+		if (!Params->TryGetNumberField(TEXT("priority"), TmpPriority))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'priority' must be a number"), -32602);
+		}
+		Priority = static_cast<int32>(TmpPriority);
+	}
+
 	// Position transition midway between source and target
 	int32 PosX = (SourceNode->NodePosX + TargetNode->NodePosX) / 2;
 	int32 PosY = (SourceNode->NodePosY + TargetNode->NodePosY) / 2;
@@ -729,15 +746,8 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddTransition(cons
 	if (TransOutPin && TargetInPin) TransOutPin->MakeLinkTo(TargetInPin);
 
 	// Set priority if specified
-	const bool bHasPriority = Params->HasField(TEXT("priority"));
 	if (bHasPriority)
 	{
-		double TmpPriority = 0.0;
-		if (!Params->TryGetNumberField(TEXT("priority"), TmpPriority))
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid param: 'priority' must be a number"), -32602);
-		}
-		const int32 Priority = static_cast<int32>(TmpPriority);
 		SetPropertyByName(TransNode, TEXT("PriorityOrder"), FString::FromInt(Priority));
 	}
 
@@ -789,11 +799,15 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddConduit(const T
 		PosY = static_cast<int32>(TmpY);
 	}
 
+	FString Name;
+	if (Params->HasField(TEXT("name")) && !Params->TryGetStringField(TEXT("name"), Name))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'name' must be a string"), -32602);
+	}
+
 	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, ConduitClass, PosX, PosY);
 	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create conduit node"));
 
-	FString Name;
-	Params->TryGetStringField(TEXT("name"), Name);
 	TrySetNodeName(NewNode, Name);
 
 	MarkModified(BP);
@@ -842,16 +856,23 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddStateMachineNod
 		PosY = static_cast<int32>(TmpY);
 	}
 
-	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, SMNodeClass, PosX, PosY);
-	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create state machine node"));
-
 	FString Name;
-	Params->TryGetStringField(TEXT("name"), Name);
-	TrySetNodeName(NewNode, Name);
+	if (Params->HasField(TEXT("name")) && !Params->TryGetStringField(TEXT("name"), Name))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'name' must be a string"), -32602);
+	}
 
 	// If a reference_path is provided, try to set it via reflection
 	FString ReferencePath;
-	Params->TryGetStringField(TEXT("reference_path"), ReferencePath);
+	if (Params->HasField(TEXT("reference_path")) && !Params->TryGetStringField(TEXT("reference_path"), ReferencePath))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'reference_path' must be a string"), -32602);
+	}
+
+	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, SMNodeClass, PosX, PosY);
+	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create state machine node"));
+
+	TrySetNodeName(NewNode, Name);
 	if (!ReferencePath.IsEmpty())
 	{
 		// Try setting ReferencedStateMachine or similar property

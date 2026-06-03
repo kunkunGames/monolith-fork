@@ -175,7 +175,10 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleGetSMComponent
 	}
 
 	FString ComponentName;
-	Params->TryGetStringField(TEXT("component_name"), ComponentName);
+	if (Params->HasField(TEXT("component_name")) && !Params->TryGetStringField(TEXT("component_name"), ComponentName))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: component_name must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	FMonolithActionResult LoadError;
 	UBlueprint* BP = LoadActorBlueprintForSM(BPPath, LoadError);
@@ -289,9 +292,16 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleAddSMComponent
 
 	FString CompName = TEXT("StateMachineComponent");
 	FString CustomCompName;
-	if (Params->TryGetStringField(TEXT("component_name"), CustomCompName) && !CustomCompName.IsEmpty())
+	if (Params->HasField(TEXT("component_name")))
 	{
-		CompName = CustomCompName;
+		if (!Params->TryGetStringField(TEXT("component_name"), CustomCompName))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: component_name must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (!CustomCompName.IsEmpty())
+		{
+			CompName = CustomCompName;
+		}
 	}
 
 	FMonolithActionResult LoadError;
@@ -318,6 +328,13 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleAddSMComponent
 		}
 	}
 
+	// Validate optional SM reference before mutating the SCS.
+	FString SMPath;
+	if (Params->HasField(TEXT("sm_path")) && !Params->TryGetStringField(TEXT("sm_path"), SMPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: sm_path must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	// Create SCS node
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(SMCompClass, FName(*CompName));
 	if (!NewNode)
@@ -327,9 +344,6 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleAddSMComponent
 	BP->SimpleConstructionScript->AddNode(NewNode);
 
 	// If sm_path provided, set StateMachineClass on the component template
-	FString SMPath;
-	Params->TryGetStringField(TEXT("sm_path"), SMPath);
-
 	if (!SMPath.IsEmpty() && NewNode->ComponentTemplate)
 	{
 		// Load the SM Blueprint to get its GeneratedClass
@@ -391,7 +405,10 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleConfigureSMCom
 	}
 
 	FString ComponentName;
-	Params->TryGetStringField(TEXT("component_name"), ComponentName);
+	if (Params->HasField(TEXT("component_name")) && !Params->TryGetStringField(TEXT("component_name"), ComponentName))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: component_name must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	bool bAutoStart = false;
 	const bool bHasAutoStart = Params->HasField(TEXT("auto_start"));
