@@ -815,6 +815,11 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateSoundCue(const TShare
 	const TArray<TSharedPtr<FJsonValue>>* WavesArray = nullptr;
 	if (Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) && WavesArray && WavesArray->Num() > 0)
 	{
+		if (WavesArray->Num() > 100)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Requested %d wave players, which exceeds the maximum allowed (100)"), WavesArray->Num()));
+		}
+
 		TArray<FString> WavePaths;
 		WavePaths.Reserve(WavesArray->Num());
 		for (const auto& Val : *WavesArray)
@@ -1703,6 +1708,11 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateRandomSoundCue(const 
 		return FMonolithActionResult::Error(TEXT("sound_waves array is required and must not be empty"));
 	}
 
+	if (WavesArray->Num() > 100)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("sound_waves array contains %d entries, which exceeds the maximum allowed (100)"), WavesArray->Num()));
+	}
+
 	TArray<FString> WavePaths;
 	WavePaths.Reserve(WavesArray->Num());
 	for (const auto& Val : *WavesArray)
@@ -1789,6 +1799,11 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateLayeredSoundCue(const
 		return FMonolithActionResult::Error(TEXT("sound_waves array is required and must not be empty"));
 	}
 
+	if (WavesArray->Num() > 100)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("sound_waves array contains %d entries, which exceeds the maximum allowed (100)"), WavesArray->Num()));
+	}
+
 	TArray<FString> WavePaths;
 	WavePaths.Reserve(WavesArray->Num());
 	for (const auto& Val : *WavesArray)
@@ -1872,6 +1887,11 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateLoopingAmbientCue(con
 	if (!Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) || !WavesArray || WavesArray->Num() == 0)
 	{
 		return FMonolithActionResult::Error(TEXT("sound_waves array is required and must not be empty"));
+	}
+
+	if (WavesArray->Num() > 100)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("sound_waves array contains %d entries, which exceeds the maximum allowed (100)"), WavesArray->Num()));
 	}
 
 	double DelayMin = 0.1, DelayMax = 1.0;
@@ -2106,6 +2126,11 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateSwitchSoundCue(const 
 	if (!Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) || !WavesArray || WavesArray->Num() == 0)
 	{
 		return FMonolithActionResult::Error(TEXT("sound_waves array is required and must not be empty"));
+	}
+
+	if (WavesArray->Num() > 100)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("sound_waves array contains %d entries, which exceeds the maximum allowed (100)"), WavesArray->Num()));
 	}
 
 	TArray<FString> WavePaths;
