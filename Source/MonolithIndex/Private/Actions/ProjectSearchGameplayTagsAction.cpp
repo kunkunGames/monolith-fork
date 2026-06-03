@@ -29,7 +29,18 @@ FMonolithActionResult FProjectSearchGameplayTagsAction::Execute(const TSharedPtr
 		}
 		Limit = static_cast<int32>(LimitValue);
 	}
+	int32 Offset = 0;
+	if (Params->HasField(TEXT("offset")))
+	{
+		double OffsetValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("offset"), OffsetValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'offset' parameter must be a number"), -32602);
+		}
+		Offset = static_cast<int32>(OffsetValue);
+	}
 	Limit = FMath::Clamp(Limit, 1, 1000);
+	Offset = FMath::Max(0, Offset);
 
 	UMonolithIndexSubsystem* Subsystem = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>();
 	if (!Subsystem)
@@ -60,13 +71,14 @@ FMonolithActionResult FProjectSearchGameplayTagsAction::Execute(const TSharedPtr
 		"WHERE t.tag_name LIKE ? ESCAPE '\\' "
 		"GROUP BY t.id "
 		"ORDER BY t.reference_count DESC, t.tag_name "
-		"LIMIT ?;"
+		"LIMIT ? OFFSET ?;"
 	));
 
 	FString EscapedQuery = Query.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
 	FString LikePattern = TEXT("%") + EscapedQuery + TEXT("%");
 	Stmt.SetBindingValueByIndex(1, LikePattern);
 	Stmt.SetBindingValueByIndex(2, static_cast<int64>(Limit));
+	Stmt.SetBindingValueByIndex(3, static_cast<int64>(Offset));
 
 	TArray<TSharedPtr<FJsonValue>> TagsArr;
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
@@ -112,6 +124,7 @@ FMonolithActionResult FProjectSearchGameplayTagsAction::Execute(const TSharedPtr
 	Result->SetNumberField(TEXT("count"), TagsArr.Num());
 	Result->SetStringField(TEXT("query"), Query);
 	Result->SetNumberField(TEXT("limit"), Limit);
+	Result->SetNumberField(TEXT("offset"), Offset);
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -120,5 +133,6 @@ TSharedPtr<FJsonObject> FProjectSearchGameplayTagsAction::GetSchema()
 	return FParamSchemaBuilder()
 		.Required(TEXT("query"), TEXT("string"), TEXT("Substring to search for in tag names (e.g. 'Damage', 'Weapon')"))
 		.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum tags to return"), TEXT("100"))
+		.Optional(TEXT("offset"), TEXT("integer"), TEXT("Pagination offset"), TEXT("0"))
 		.Build();
 }

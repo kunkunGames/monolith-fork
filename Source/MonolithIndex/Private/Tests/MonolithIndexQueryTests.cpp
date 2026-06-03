@@ -10,6 +10,23 @@
 
 
 #include "Actions/ProjectSearchAction.h"
+#include "Actions/ProjectSearchGameplayTagsAction.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSearchTagsOffsetRejectsWrongTypeTest, "Monolith.IndexGuard.Project.SearchTagsOffsetRejectsWrongType", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectSearchTagsOffsetRejectsWrongTypeTest::RunTest(const FString& Parameters)
+{
+	auto Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("query"), TEXT("Weapon"));
+	Params->SetStringField(TEXT("offset"), TEXT("NotANumber")); // Malformed input
+
+	FMonolithActionResult Result = FProjectSearchGameplayTagsAction::Execute(Params);
+
+	TestFalse(TEXT("Search tags action should reject wrong offset type"), Result.bSuccess);
+	TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+
+	return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSearchHandlesEmptyQueryTest, "Monolith.IndexGuard.Project.SearchHandlesEmptyQuery", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 

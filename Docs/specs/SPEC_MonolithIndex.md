@@ -44,7 +44,7 @@
 | `get_stats` | none | Row counts for all 14 authoritative tables + asset class breakdown (top 20) |
 | `get_asset_details` | `asset_path` (required) | Deep inspection: nodes, variables, references for a single asset |
 | `list_gameplay_tags` | `prefix`, `limit`, `offset` (optional) | List indexed gameplay tags, optionally filtered by prefix |
-| `search_gameplay_tags` | `query` (required) | Search gameplay tags and return referencing assets |
+| `search_gameplay_tags` | `query` (required), `limit` (100), `offset` (0) | Search gameplay tags and return referencing assets |
 | `impact_radius` | `asset_path` (required), `direction` (both), `max_depth` (2), `max_results` (200), `dependency_type` | Bounded BFS over `dependencies`: who is impacted within N hops (cycle-safe, `truncated` flag) |
 | `health` | `include_counts` (true) | Read-only diagnostics: v2 schema, 21 FTS triggers, row parity for all project FTS tables, orphan deps, CRG projection table/index/parity checks, journal mode |
 | `repair_fts` | `target` (all\|assets\|nodes\|variables\|parameters\|datatable_rows\|actors\|asset_search_values), `execute` (false) | Rebuild project FTS tables. Dry-run unless `execute=true` (sole write gate); refused while `IsIndexing()` |
