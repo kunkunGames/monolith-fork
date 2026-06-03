@@ -554,6 +554,7 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleValidateMassEntityConfig
 	TConstArrayView<UMassEntityTraitBase*> Traits = EntityConfig.GetTraits();
 
 	TArray<TSharedPtr<FJsonValue>> Issues;
+	Issues.Reserve(Traits.Num() + 2);
 	int32 Score = 100;
 
 	// Check for duplicate trait types
