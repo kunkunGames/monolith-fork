@@ -2,6 +2,7 @@
 #include "MonolithNiagaraLayoutActions.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithParamUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithPackagePathValidator.h"
 
@@ -3436,49 +3437,64 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 	Registry.RegisterAction(TEXT("niagara"), TEXT("search_by_parameter"), TEXT("Find Niagara systems exposing a user parameter whose name (case-insensitive) contains the query. Optional type filter."),
 		FMonolithActionHandler::CreateStatic(&HandleSearchByParameter),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("parameter_name"), TEXT("string"), TEXT("Parameter name substring to match (case-insensitive, partial)"))
 			.Optional(TEXT("parameter_type"), TEXT("string"), TEXT("Optional type filter (e.g. float, Vector, LinearColor) matched against the parameter's type name"))
 			.OptionalAssetPath(TEXT("folder"), TEXT("Content path to restrict the scan (e.g. /Game/VFX)"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max matching systems (default: 50)"))
+			.Range(TEXT("limit"), 1, 1000)
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("search_by_data_interface"), TEXT("Find Niagara systems using a Data Interface whose class name (case-insensitive) contains the query. Per-system traversal via FNiagaraDataInterfaceUtilities::ForEachDataInterface."),
 		FMonolithActionHandler::CreateStatic(&HandleSearchByDataInterface),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("di_class"), TEXT("string"), TEXT("Data interface class-name substring (e.g. NiagaraDataInterfaceCurve, Curve, Grid2D)"))
 			.OptionalAssetPath(TEXT("folder"), TEXT("Content path to restrict the scan (e.g. /Game/VFX)"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max matching systems (default: 50). NOTE: this action loads each system — limit + folder are the cost governors."))
+			.Range(TEXT("limit"), 1, 1000)
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("query_niagara"), TEXT("Structured-filter query over all systems. Conditions joined by AND, comma- or AND-separated: emitters>N / emitters<N / emitters=N, sim_target=GPU|CPU, has_renderer=<name>. Deterministic DSL, NOT natural language."),
 		FMonolithActionHandler::CreateStatic(&HandleQueryNiagara),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.Required(TEXT("query_string"), TEXT("string"), TEXT("e.g. 'emitters=2, sim_target=GPU' or 'emitters>1 AND has_renderer=Mesh'"))
 			.OptionalAssetPath(TEXT("folder"), TEXT("Content path to restrict the scan (e.g. /Game/VFX)"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max matching systems (default: 50)"))
+			.Range(TEXT("limit"), 1, 1000)
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("find_similar_systems"), TEXT("Rank systems by structural similarity to a reference system. Score = weighted blend of emitter-count proximity, renderer-class-set Jaccard, and module-name-set Jaccard. Reference scores 1.0 against itself."),
 		FMonolithActionHandler::CreateStatic(&HandleFindSimilarSystems),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("asset_path"), TEXT("Reference Niagara system asset path"))
+			.EnableValidation()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Reference Niagara system asset path"), { TEXT("system_path") })
+			.OptionalAssetPath(TEXT("folder"), TEXT("Content path to restrict the comparison scan (e.g. /Game/VFX)"))
 			.Optional(TEXT("threshold"), TEXT("number"), TEXT("Minimum similarity score to include (0..1, default: 0.5)"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max ranked matches (default: 10)"))
+			.Range(TEXT("threshold"), 0, 1)
+			.Range(TEXT("limit"), 1, 1000)
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("search_by_material"), TEXT("Find Niagara systems whose emitter renderers reference a given material. Walks each system's emitters' renderers' material bindings (Sprite/Ribbon/Mesh)."),
 		FMonolithActionHandler::CreateStatic(&HandleSearchByMaterial),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.RequiredAssetPath(TEXT("material_path"), TEXT("Material / MaterialInterface asset path to find users of"))
 			.OptionalAssetPath(TEXT("folder"), TEXT("Content path to restrict the scan (e.g. /Game/VFX)"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max matching systems (default: 50). Loads each system — limit + folder are the cost governors."))
+			.Range(TEXT("limit"), 1, 1000)
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("find_niagara_references"), TEXT("Find all assets that reference a given Niagara asset, via the Asset Registry referencer graph (IAssetRegistry::GetReferencers)."),
 		FMonolithActionHandler::CreateStatic(&HandleFindNiagaraReferences),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara asset path to find referencers of"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max referencers returned (default: 100)"))
+			.Range(TEXT("limit"), 1, 1000)
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("list_system_data_interfaces"), TEXT("Enumerate the Data Interfaces actually USED BY a given system (per-system traversal via FNiagaraDataInterfaceUtilities::ForEachDataInterface). Distinct from get_di_properties (CDO-class reflection only)."),
 		FMonolithActionHandler::CreateStatic(&HandleListSystemDataInterfaces),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
+			.EnableValidation()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"), { TEXT("system_path") })
 			.Build());
 }
 
@@ -15864,28 +15880,42 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRenameUserParameter(const T
 
 namespace
 {
-	// Build the AR + ARFilter for NiagaraSystem assets, optionally restricted to a content folder.
-	IAssetRegistry& GetNiagaraSystemFilter(const FString& FolderFilter, FARFilter& OutFilter)
+	FMonolithActionResult InvalidNiagaraParam(const FString& Error)
 	{
-		IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-		OutFilter.ClassPaths.Add(UNiagaraSystem::StaticClass()->GetClassPathName());
-		OutFilter.bRecursiveClasses = true;
-		OutFilter.bRecursivePaths = true;
-		if (!FolderFilter.IsEmpty())
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	bool ReadFolderFilter(const TSharedPtr<FJsonObject>& Params, FString& OutFolder, FString& OutError)
+	{
+		return MonolithParamUtils::GetOptionalStringParam(Params, TEXT("folder"), OutFolder, OutError);
+	}
+
+	bool ReadLimit(const TSharedPtr<FJsonObject>& Params, int32 Default, int32 Max, int32& OutLimit, FString& OutError)
+	{
+		return MonolithParamUtils::GetOptionalClampedIntParam(Params, TEXT("limit"), OutLimit, OutError, Default, 1, Max);
+	}
+
+	TArray<FAssetData> GetNiagaraSystemAssets(const FString& FolderFilter)
+	{
+		return FMonolithAssetUtils::GetAssetsByClass(UNiagaraSystem::StaticClass()->GetClassPathName(), FolderFilter);
+	}
+
+	bool ForEachNiagaraSystem(const FString& FolderFilter, TFunctionRef<bool(const FString&, UNiagaraSystem*)> Visitor)
+	{
+		for (const FAssetData& Asset : GetNiagaraSystemAssets(FolderFilter))
 		{
-			OutFilter.PackagePaths.Add(FName(*FolderFilter));
+			const FString PackagePath = Asset.GetSoftObjectPath().ToString();
+			UNiagaraSystem* Sys = FMonolithAssetUtils::LoadAssetByPath<UNiagaraSystem>(PackagePath);
+			if (!Sys)
+			{
+				continue;
+			}
+			if (!Visitor(PackagePath, Sys))
+			{
+				return false;
+			}
 		}
-		return AR;
-	}
-
-	FString ReadFolderFilter(const TSharedPtr<FJsonObject>& Params)
-	{
-		return Params->HasField(TEXT("folder")) ? Params->GetStringField(TEXT("folder")) : TEXT("");
-	}
-
-	int32 ReadLimit(const TSharedPtr<FJsonObject>& Params, int32 Default)
-	{
-		return Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : Default;
+		return true;
 	}
 
 	// Extract the material referenced by a renderer-properties object at asset time (no runtime instance).
@@ -15962,24 +15992,31 @@ namespace
 // ----------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleSearchByParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString ParamQuery = Params->HasField(TEXT("parameter_name")) ? Params->GetStringField(TEXT("parameter_name")) : TEXT("");
-	if (ParamQuery.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: parameter_name"));
-	const FString TypeQuery = Params->HasField(TEXT("parameter_type")) ? Params->GetStringField(TEXT("parameter_type")) : TEXT("");
-	const FString Folder = ReadFolderFilter(Params);
-	const int32 Limit = ReadLimit(Params, 50);
-
-	FARFilter Filter;
-	IAssetRegistry& AR = GetNiagaraSystemFilter(Folder, Filter);
-	TArray<FAssetData> Assets;
-	AR.GetAssets(Filter, Assets);
+	FString Error;
+	FString ParamQuery;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("parameter_name"), ParamQuery, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	FString TypeQuery;
+	if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("parameter_type"), TypeQuery, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	FString Folder;
+	if (!ReadFolderFilter(Params, Folder, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	int32 Limit = 50;
+	if (!ReadLimit(Params, 50, 1000, Limit, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Results;
-	for (const FAssetData& Asset : Assets)
+	ForEachNiagaraSystem(Folder, [&ParamQuery, &TypeQuery, &Limit, &Results](const FString& PackagePath, UNiagaraSystem* Sys) -> bool
 	{
-		const FString PackagePath = Asset.GetSoftObjectPath().ToString();
-		UNiagaraSystem* Sys = LoadObject<UNiagaraSystem>(nullptr, *PackagePath);
-		if (!Sys) continue;
-
 		FNiagaraUserRedirectionParameterStore& US = Sys->GetExposedParameters();
 		TArrayView<const FNiagaraVariableWithOffset> Vars = US.ReadParameterVariables();
 		for (const FNiagaraVariableWithOffset& VWO : Vars)
@@ -15998,8 +16035,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByParameter(const TSh
 			Results.Add(MakeShared<FJsonValueObject>(Entry));
 			break; // one hit per system is enough
 		}
-		if (Results.Num() >= Limit) break;
-	}
+		return Results.Num() < Limit;
+	});
 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetStringField(TEXT("parameter_name"), ParamQuery);
@@ -16013,23 +16050,26 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByParameter(const TSh
 // ----------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleSearchByDataInterface(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString DIQuery = Params->HasField(TEXT("di_class")) ? Params->GetStringField(TEXT("di_class")) : TEXT("");
-	if (DIQuery.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: di_class"));
-	const FString Folder = ReadFolderFilter(Params);
-	const int32 Limit = ReadLimit(Params, 50);
-
-	FARFilter Filter;
-	IAssetRegistry& AR = GetNiagaraSystemFilter(Folder, Filter);
-	TArray<FAssetData> Assets;
-	AR.GetAssets(Filter, Assets);
+	FString Error;
+	FString DIQuery;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("di_class"), DIQuery, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	FString Folder;
+	if (!ReadFolderFilter(Params, Folder, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	int32 Limit = 50;
+	if (!ReadLimit(Params, 50, 1000, Limit, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Results;
-	for (const FAssetData& Asset : Assets)
+	ForEachNiagaraSystem(Folder, [&DIQuery, &Limit, &Results](const FString& PackagePath, UNiagaraSystem* Sys) -> bool
 	{
-		const FString PackagePath = Asset.GetSoftObjectPath().ToString();
-		UNiagaraSystem* Sys = LoadObject<UNiagaraSystem>(nullptr, *PackagePath);
-		if (!Sys) continue;
-
 		bool bMatched = false;
 		FString MatchedClass;
 		// Asset-time overload (NiagaraDataInterfaceUtilities.h:43). Return false to stop early.
@@ -16056,8 +16096,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByDataInterface(const
 			Entry->SetStringField(TEXT("di_class"), MatchedClass);
 			Results.Add(MakeShared<FJsonValueObject>(Entry));
 		}
-		if (Results.Num() >= Limit) break;
-	}
+		return Results.Num() < Limit;
+	});
 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetStringField(TEXT("di_class"), DIQuery);
@@ -16073,10 +16113,22 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByDataInterface(const
 // ----------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString QueryString = Params->HasField(TEXT("query_string")) ? Params->GetStringField(TEXT("query_string")) : TEXT("");
-	if (QueryString.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: query_string"));
-	const FString Folder = ReadFolderFilter(Params);
-	const int32 Limit = ReadLimit(Params, 50);
+	FString Error;
+	FString QueryString;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("query_string"), QueryString, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	FString Folder;
+	if (!ReadFolderFilter(Params, Folder, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	int32 Limit = 50;
+	if (!ReadLimit(Params, 50, 1000, Limit, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
 
 	// Parse conditions. Normalize "AND" to comma, then split on comma.
 	FString Normalized = QueryString;
@@ -16085,7 +16137,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedP
 	TArray<FString> RawConds;
 	Normalized.ParseIntoArray(RawConds, TEXT(","), true);
 
-	struct FCond { FString Key; FString Op; FString Value; };
+	struct FCond { FString Key; FString Op; FString Value; int32 IntValue = 0; };
 	TArray<FCond> Conds;
 	for (FString Raw : RawConds)
 	{
@@ -16108,6 +16160,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedP
 		C.Key = Raw.Left(OpIdx).TrimStartAndEnd().ToLower();
 		C.Op = Op;
 		C.Value = Raw.Mid(OpIdx + Op.Len()).TrimStartAndEnd();
+		if (C.Key == TEXT("emitters") &&
+			!MonolithParamUtils::TryParseStrictInt(C.Value, C.IntValue, Error, FString::Printf(TEXT("query condition '%s'"), *Raw)))
+		{
+			return InvalidNiagaraParam(Error);
+		}
 		Conds.Add(C);
 	}
 
@@ -16116,18 +16173,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedP
 		return FMonolithActionResult::Error(TEXT("No valid conditions parsed. Supported: emitters>N / emitters<N / emitters=N, sim_target=GPU|CPU, has_renderer=<name>"));
 	}
 
-	FARFilter Filter;
-	IAssetRegistry& AR = GetNiagaraSystemFilter(Folder, Filter);
-	TArray<FAssetData> Assets;
-	AR.GetAssets(Filter, Assets);
-
 	TArray<TSharedPtr<FJsonValue>> Matches;
-	for (const FAssetData& Asset : Assets)
+	ForEachNiagaraSystem(Folder, [&Conds, &Limit, &Matches](const FString& PackagePath, UNiagaraSystem* Sys) -> bool
 	{
-		const FString PackagePath = Asset.GetSoftObjectPath().ToString();
-		UNiagaraSystem* Sys = LoadObject<UNiagaraSystem>(nullptr, *PackagePath);
-		if (!Sys) continue;
-
 		const int32 EmitterCount = Sys->GetEmitterHandles().Num();
 		bool bHasGPU = false, bHasCPU = false;
 		TSet<FString> RendererClasses;
@@ -16148,12 +16196,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedP
 			bool bThis = false;
 			if (C.Key == TEXT("emitters"))
 			{
-				const int32 N = FCString::Atoi(*C.Value);
-				if (C.Op == TEXT("=")) bThis = (EmitterCount == N);
-				else if (C.Op == TEXT(">")) bThis = (EmitterCount > N);
-				else if (C.Op == TEXT("<")) bThis = (EmitterCount < N);
-				else if (C.Op == TEXT(">=")) bThis = (EmitterCount >= N);
-				else if (C.Op == TEXT("<=")) bThis = (EmitterCount <= N);
+				if (C.Op == TEXT("=")) bThis = (EmitterCount == C.IntValue);
+				else if (C.Op == TEXT(">")) bThis = (EmitterCount > C.IntValue);
+				else if (C.Op == TEXT("<")) bThis = (EmitterCount < C.IntValue);
+				else if (C.Op == TEXT(">=")) bThis = (EmitterCount >= C.IntValue);
+				else if (C.Op == TEXT("<=")) bThis = (EmitterCount <= C.IntValue);
 			}
 			else if (C.Key == TEXT("sim_target"))
 			{
@@ -16182,8 +16229,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedP
 			Entry->SetArrayField(TEXT("sim_targets"), SimTargets);
 			Matches.Add(MakeShared<FJsonValueObject>(Entry));
 		}
-		if (Matches.Num() >= Limit) break;
-	}
+		return Matches.Num() < Limit;
+	});
 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetStringField(TEXT("query"), QueryString);
@@ -16202,10 +16249,27 @@ FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedP
 // ----------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleFindSimilarSystems(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString RefPath = NA_GetAssetPath(Params);
-	if (RefPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
-	const double Threshold = Params->HasField(TEXT("threshold")) ? Params->GetNumberField(TEXT("threshold")) : 0.5;
-	const int32 Limit = ReadLimit(Params, 10);
+	FString Error;
+	FString RefPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), RefPath, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	double Threshold = 0.5;
+	if (!MonolithParamUtils::GetOptionalClampedDoubleParam(Params, TEXT("threshold"), Threshold, Error, 0.5, 0.0, 1.0))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	FString Folder;
+	if (!ReadFolderFilter(Params, Folder, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	int32 Limit = 10;
+	if (!ReadLimit(Params, 10, 1000, Limit, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
 
 	UNiagaraSystem* RefSys = LoadSystem(RefPath);
 	if (!RefSys) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load reference system '%s'"), *RefPath));
@@ -16215,18 +16279,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleFindSimilarSystems(const TS
 	TSet<FString> RefModules; CollectSystemModulePaths(RefSys, RefModules);
 	const FString RefPackagePath = RefSys->GetPathName();
 
-	FARFilter Filter;
-	IAssetRegistry& AR = GetNiagaraSystemFilter(TEXT(""), Filter);
-	TArray<FAssetData> Assets;
-	AR.GetAssets(Filter, Assets);
-
 	struct FScored { FString Path; double Score; };
 	TArray<FScored> Scored;
-	for (const FAssetData& Asset : Assets)
+	ForEachNiagaraSystem(Folder, [&RefSys, &RefPackagePath, RefEmitters, &RefRenderers, &RefModules, Threshold, &Scored](const FString& PackagePath, UNiagaraSystem* Sys) -> bool
 	{
-		const FString PackagePath = Asset.GetSoftObjectPath().ToString();
-		UNiagaraSystem* Sys = LoadObject<UNiagaraSystem>(nullptr, *PackagePath);
-		if (!Sys) continue;
 		const bool bIsSelf = (Sys == RefSys) || (Sys->GetPathName() == RefPackagePath);
 
 		const int32 Emitters = Sys->GetEmitterHandles().Num();
@@ -16243,7 +16299,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleFindSimilarSystems(const TS
 		{
 			Scored.Add({ PackagePath, bIsSelf ? 1.0 : Score });
 		}
-	}
+		return true;
+	});
 
 	Scored.Sort([](const FScored& A, const FScored& B) { return A.Score > B.Score; });
 
@@ -16271,10 +16328,22 @@ FMonolithActionResult FMonolithNiagaraActions::HandleFindSimilarSystems(const TS
 // ----------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleSearchByMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-	FString MaterialPath = Params->HasField(TEXT("material_path")) ? Params->GetStringField(TEXT("material_path")) : TEXT("");
-	if (MaterialPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: material_path"));
-	const FString Folder = ReadFolderFilter(Params);
-	const int32 Limit = ReadLimit(Params, 50);
+	FString Error;
+	FString MaterialPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("material_path"), MaterialPath, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	FString Folder;
+	if (!ReadFolderFilter(Params, Folder, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	int32 Limit = 50;
+	if (!ReadLimit(Params, 50, 1000, Limit, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
 
 	// Normalize: compare on package-path prefix so /Game/M_Foo and /Game/M_Foo.M_Foo both match.
 	FString TargetObjPath = MaterialPath;
@@ -16284,18 +16353,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByMaterial(const TSha
 		TargetObjPath = TargetObjPath.Left(DotIdx);
 	}
 
-	FARFilter Filter;
-	IAssetRegistry& AR = GetNiagaraSystemFilter(Folder, Filter);
-	TArray<FAssetData> Assets;
-	AR.GetAssets(Filter, Assets);
-
 	TArray<TSharedPtr<FJsonValue>> Results;
-	for (const FAssetData& Asset : Assets)
+	ForEachNiagaraSystem(Folder, [&TargetObjPath, &Limit, &Results](const FString& PackagePath, UNiagaraSystem* Sys) -> bool
 	{
-		const FString PackagePath = Asset.GetSoftObjectPath().ToString();
-		UNiagaraSystem* Sys = LoadObject<UNiagaraSystem>(nullptr, *PackagePath);
-		if (!Sys) continue;
-
 		bool bMatched = false;
 		FString MatchedEmitter;
 		for (const FNiagaraEmitterHandle& Handle : Sys->GetEmitterHandles())
@@ -16326,8 +16386,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByMaterial(const TSha
 			Entry->SetStringField(TEXT("emitter"), MatchedEmitter);
 			Results.Add(MakeShared<FJsonValueObject>(Entry));
 		}
-		if (Results.Num() >= Limit) break;
-	}
+		return Results.Num() < Limit;
+	});
 
 	TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 	R->SetStringField(TEXT("material_path"), MaterialPath);
@@ -16341,9 +16401,17 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByMaterial(const TSha
 // ----------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleFindNiagaraReferences(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = NA_GetAssetPath(Params);
-	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
-	const int32 Limit = ReadLimit(Params, 100);
+	FString Error;
+	FString AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
+	int32 Limit = 100;
+	if (!ReadLimit(Params, 100, 1000, Limit, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
 
 	// Convert object path (/Game/VFX/NS_Foo or /Game/VFX/NS_Foo.NS_Foo) to long package name (/Game/VFX/NS_Foo).
 	FString PackageName = AssetPath;
@@ -16381,8 +16449,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleFindNiagaraReferences(const
 // ----------------------------------------------------------------------------
 FMonolithActionResult FMonolithNiagaraActions::HandleListSystemDataInterfaces(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = NA_GetAssetPath(Params);
-	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
+	FString Error;
+	FString AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, Error))
+	{
+		return InvalidNiagaraParam(Error);
+	}
 
 	UNiagaraSystem* Sys = LoadSystem(AssetPath);
 	if (!Sys) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load system '%s'"), *AssetPath));

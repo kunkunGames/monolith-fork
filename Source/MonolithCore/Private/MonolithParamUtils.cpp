@@ -8,6 +8,202 @@
 namespace MonolithParamUtils
 {
 
+namespace
+{
+FString ParamTypeError(const FString& Key, const TCHAR* ExpectedType)
+{
+	return FString::Printf(TEXT("Parameter '%s' must be %s"), *Key, ExpectedType);
+}
+
+FString MissingParamError(const FString& Key)
+{
+	return FString::Printf(TEXT("Missing required field: %s"), *Key);
+}
+
+FString NonEmptyParamError(const FString& Key)
+{
+	return FString::Printf(TEXT("Parameter '%s' must be a non-empty string"), *Key);
+}
+}
+
+bool GetRequiredStringParam(const TSharedPtr<FJsonObject>& Params, const FString& Key, FString& OutValue, FString& OutError, bool bTrim)
+{
+	OutValue.Reset();
+	if (!Params.IsValid())
+	{
+		OutError = MissingParamError(Key);
+		return false;
+	}
+	const TSharedPtr<FJsonValue> Value = Params->TryGetField(Key);
+	if (!Value.IsValid())
+	{
+		OutError = MissingParamError(Key);
+		return false;
+	}
+	if (!Value->TryGetString(OutValue))
+	{
+		OutError = ParamTypeError(Key, TEXT("a string"));
+		return false;
+	}
+	if (bTrim)
+	{
+		OutValue.TrimStartAndEndInline();
+	}
+	if (OutValue.IsEmpty())
+	{
+		OutError = NonEmptyParamError(Key);
+		return false;
+	}
+	return true;
+}
+
+bool GetOptionalStringParam(const TSharedPtr<FJsonObject>& Params, const FString& Key, FString& OutValue, FString& OutError, const FString& DefaultValue, bool bTrim)
+{
+	OutValue = DefaultValue;
+	if (!Params.IsValid())
+	{
+		return true;
+	}
+	const TSharedPtr<FJsonValue> Value = Params->TryGetField(Key);
+	if (!Value.IsValid())
+	{
+		return true;
+	}
+	if (!Value->TryGetString(OutValue))
+	{
+		OutError = ParamTypeError(Key, TEXT("a string"));
+		return false;
+	}
+	if (bTrim)
+	{
+		OutValue.TrimStartAndEndInline();
+	}
+	return true;
+}
+
+bool GetOptionalClampedIntParam(const TSharedPtr<FJsonObject>& Params, const FString& Key, int32& OutValue, FString& OutError, int32 DefaultValue, int32 MinValue, int32 MaxValue)
+{
+	const int32 Lo = FMath::Min(MinValue, MaxValue);
+	const int32 Hi = FMath::Max(MinValue, MaxValue);
+	OutValue = FMath::Clamp(DefaultValue, Lo, Hi);
+	if (!Params.IsValid())
+	{
+		return true;
+	}
+	const TSharedPtr<FJsonValue> Value = Params->TryGetField(Key);
+	if (!Value.IsValid())
+	{
+		return true;
+	}
+	double Raw = 0.0;
+	if (!Value->TryGetNumber(Raw))
+	{
+		OutError = ParamTypeError(Key, TEXT("an integer"));
+		return false;
+	}
+	const double Rounded = FMath::RoundToDouble(Raw);
+	if (!FMath::IsNearlyEqual(Raw, Rounded))
+	{
+		OutError = FString::Printf(TEXT("Parameter '%s' must be an integer, got %g"), *Key, Raw);
+		return false;
+	}
+	OutValue = FMath::Clamp(static_cast<int32>(Rounded), Lo, Hi);
+	return true;
+}
+
+bool GetOptionalClampedDoubleParam(const TSharedPtr<FJsonObject>& Params, const FString& Key, double& OutValue, FString& OutError, double DefaultValue, double MinValue, double MaxValue)
+{
+	const double Lo = FMath::Min(MinValue, MaxValue);
+	const double Hi = FMath::Max(MinValue, MaxValue);
+	OutValue = FMath::Clamp(DefaultValue, Lo, Hi);
+	if (!Params.IsValid())
+	{
+		return true;
+	}
+	const TSharedPtr<FJsonValue> Value = Params->TryGetField(Key);
+	if (!Value.IsValid())
+	{
+		return true;
+	}
+	double Raw = 0.0;
+	if (!Value->TryGetNumber(Raw))
+	{
+		OutError = ParamTypeError(Key, TEXT("a number"));
+		return false;
+	}
+	OutValue = FMath::Clamp(Raw, Lo, Hi);
+	return true;
+}
+
+bool GetOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const FString& Key, bool& OutValue, FString& OutError, bool DefaultValue)
+{
+	OutValue = DefaultValue;
+	if (!Params.IsValid())
+	{
+		return true;
+	}
+	const TSharedPtr<FJsonValue> Value = Params->TryGetField(Key);
+	if (!Value.IsValid())
+	{
+		return true;
+	}
+	if (!Value->TryGetBool(OutValue))
+	{
+		OutError = ParamTypeError(Key, TEXT("a boolean"));
+		return false;
+	}
+	return true;
+}
+
+bool GetOptionalStringArrayParam(const TSharedPtr<FJsonObject>& Params, const FString& Key, TArray<FString>& OutValues, FString& OutError, const TArray<FString>& DefaultValues)
+{
+	OutValues = DefaultValues;
+	if (!Params.IsValid())
+	{
+		return true;
+	}
+	const TSharedPtr<FJsonValue> Value = Params->TryGetField(Key);
+	if (!Value.IsValid())
+	{
+		return true;
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+	if (!Value->TryGetArray(Values) || !Values)
+	{
+		OutError = ParamTypeError(Key, TEXT("an array of strings"));
+		return false;
+	}
+	OutValues.Reset();
+	OutValues.Reserve(Values->Num());
+	for (int32 Index = 0; Index < Values->Num(); ++Index)
+	{
+		FString Item;
+		if (!(*Values)[Index].IsValid() || !(*Values)[Index]->TryGetString(Item))
+		{
+			OutError = FString::Printf(TEXT("Parameter '%s[%d]' must be a string"), *Key, Index);
+			return false;
+		}
+		OutValues.Add(Item);
+	}
+	return true;
+}
+
+bool TryParseStrictInt(const FString& Text, int32& OutValue, FString& OutError, const FString& Context)
+{
+	const FString Trimmed = Text.TrimStartAndEnd();
+	if (Trimmed.IsEmpty())
+	{
+		OutError = FString::Printf(TEXT("Invalid integer for %s: value is empty"), *Context);
+		return false;
+	}
+	if (!LexTryParseString(OutValue, *Trimmed))
+	{
+		OutError = FString::Printf(TEXT("Invalid integer for %s: '%s'"), *Context, *Trimmed);
+		return false;
+	}
+	return true;
+}
+
 bool ParseVector(const TSharedPtr<FJsonObject>& Params, const FString& Key, FVector& Out)
 {
 	// Try array format: [x, y, z]

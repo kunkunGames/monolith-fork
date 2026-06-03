@@ -10,8 +10,11 @@ You have access to **Monolith** with 129 Niagara actions via `niagara_query()`.
 ## Discovery
 
 ```
-monolith_discover({ namespace: "niagara" })
+monolith_find("find niagara systems that use a material")
+monolith_discover({ namespace: "niagara", action: "search_by_material", mode: "schema" })
 ```
+
+Use focused schema discovery before calls when parameter names, aliases, or ranges matter. Broad `monolith_discover({ namespace: "niagara" })` is useful for browsing, but the Niagara surface is large.
 
 ## Asset Path Conventions
 
@@ -85,6 +88,19 @@ These selectors work on `get_ordered_modules`, `add_module`, `move_module`, and 
 | `get_module_input_value` | `asset_path`, `emitter`, `module_node`, `input` | Read current override value (literal, bound, DI, or dynamic input) |
 | `get_module_script_inputs` | `script_path` | Pre-add introspection: query module inputs, valid stages, metadata WITHOUT adding |
 | `validate_system` | `asset_path` | Pre-compile validation: GPU+Light error, missing materials, bounds warnings |
+
+### Search / Discovery (7)
+These actions may load or inspect multiple systems, so use `folder` and `limit` as cost governors when the schema exposes them. `limit` is range-checked from 1 to 1000; `threshold` on similarity search is range-checked from 0.0 to 1.0. `query_niagara` rejects malformed integer clauses such as `emitters=abc` instead of silently treating them as zero.
+
+| Action | Key Params | Purpose |
+|--------|-----------|---------|
+| `search_by_parameter` | `parameter_name`, `parameter_type`?, `folder`?, `limit`? | Find systems that expose or reference a Niagara parameter |
+| `search_by_data_interface` | `di_class`, `folder`?, `limit`? | Find systems that use a matching Niagara data interface |
+| `query_niagara` | `query_string`, `folder`?, `limit`? | DSL-style system query with strict integer parsing |
+| `find_similar_systems` | `asset_path`/`system_path`, `folder`?, `threshold`?, `limit`? | Find systems similar to a reference system |
+| `search_by_material` | `material_path`, `folder`?, `limit`? | Find systems whose renderers reference a material |
+| `find_niagara_references` | `asset_path`, `limit`? | Find assets that reference a Niagara asset |
+| `list_system_data_interfaces` | `asset_path`/`system_path` | List data interfaces used by one system |
 
 ### System Management (9 + 5 new)
 | Action | Key Params | Purpose |
@@ -459,8 +475,9 @@ When creating fire+light effects, do NOT put the Light Renderer on a GPU emitter
 
 ## Rules
 
-- Use `monolith_discover("niagara")` to see per-action param schemas — there are 129 actions
+- Use focused `monolith_discover({ namespace: "niagara", action: "...", mode: "schema" })` to see exact per-action param schemas
 - The primary asset param is `asset_path`, NOT `system` or `asset`
+- Search/discovery actions validate JSON types and ranges before running; fix the payload instead of relying on implicit coercion
 - Module actions require `module_node` (a GUID) — get it from `get_ordered_modules`
 - Module stages: `Emitter Spawn`, `Emitter Update`, `Particle Spawn`, `Particle Update`, `Render`
 - User parameters are the main interface for Blueprint/C++ control of effects

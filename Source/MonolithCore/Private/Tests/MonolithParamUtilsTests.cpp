@@ -73,6 +73,84 @@ bool FMonolithParamUtilsNormalizePathTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamUtilsScalarJsonParamsTest,
+	"Monolith.Core.ParamUtils.ScalarJsonParams",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamUtilsScalarJsonParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("  /Game/VFX/NS_Test.NS_Test  "));
+	Params->SetNumberField(TEXT("limit"), 5000);
+	Params->SetNumberField(TEXT("fractional_limit"), 1.5);
+	Params->SetStringField(TEXT("string_limit"), TEXT("10"));
+	Params->SetNumberField(TEXT("threshold"), 1.5);
+	Params->SetBoolField(TEXT("dry_run"), true);
+	Params->SetStringField(TEXT("bad_bool"), TEXT("true"));
+
+	TArray<TSharedPtr<FJsonValue>> Tags;
+	Tags.Add(MakeShared<FJsonValueString>(TEXT("fx")));
+	Tags.Add(MakeShared<FJsonValueString>(TEXT("gpu")));
+	Params->SetArrayField(TEXT("tags"), Tags);
+
+	TArray<TSharedPtr<FJsonValue>> BadTags;
+	BadTags.Add(MakeShared<FJsonValueString>(TEXT("ok")));
+	BadTags.Add(MakeShared<FJsonValueNumber>(7));
+	Params->SetArrayField(TEXT("bad_tags"), BadTags);
+
+	FString Error;
+	FString AssetPath;
+	TestTrue(TEXT("Required string accepts and trims valid values"),
+		MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, Error));
+	TestEqual(TEXT("Required string is trimmed"), AssetPath, TEXT("/Game/VFX/NS_Test.NS_Test"));
+
+	Params->SetStringField(TEXT("blank"), TEXT("   "));
+	TestFalse(TEXT("Required string rejects blank values"),
+		MonolithParamUtils::GetRequiredStringParam(Params, TEXT("blank"), AssetPath, Error));
+	TestTrue(TEXT("Required string reports non-empty error"), Error.Contains(TEXT("non-empty")));
+
+	int32 Limit = 0;
+	TestTrue(TEXT("Optional integer clamps out-of-range values"),
+		MonolithParamUtils::GetOptionalClampedIntParam(Params, TEXT("limit"), Limit, Error, 50, 1, 1000));
+	TestEqual(TEXT("Optional integer clamp result"), Limit, 1000);
+
+	TestFalse(TEXT("Optional integer rejects fractional numbers"),
+		MonolithParamUtils::GetOptionalClampedIntParam(Params, TEXT("fractional_limit"), Limit, Error, 50, 1, 1000));
+	TestTrue(TEXT("Optional integer fractional error mentions integer"), Error.Contains(TEXT("integer")));
+
+	TestFalse(TEXT("Optional integer rejects strings"),
+		MonolithParamUtils::GetOptionalClampedIntParam(Params, TEXT("string_limit"), Limit, Error, 50, 1, 1000));
+
+	double Threshold = 0.0;
+	TestTrue(TEXT("Optional double clamps out-of-range values"),
+		MonolithParamUtils::GetOptionalClampedDoubleParam(Params, TEXT("threshold"), Threshold, Error, 0.5, 0.0, 1.0));
+	TestEqual(TEXT("Optional double clamp result"), Threshold, 1.0);
+
+	bool bDryRun = false;
+	TestTrue(TEXT("Optional bool accepts booleans"),
+		MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("dry_run"), bDryRun, Error, false));
+	TestTrue(TEXT("Optional bool value"), bDryRun);
+	TestFalse(TEXT("Optional bool rejects strings"),
+		MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("bad_bool"), bDryRun, Error, false));
+
+	TArray<FString> ParsedTags;
+	TestTrue(TEXT("Optional string array accepts strings"),
+		MonolithParamUtils::GetOptionalStringArrayParam(Params, TEXT("tags"), ParsedTags, Error));
+	TestEqual(TEXT("Optional string array count"), ParsedTags.Num(), 2);
+	TestEqual(TEXT("Optional string array first value"), ParsedTags[0], TEXT("fx"));
+	TestFalse(TEXT("Optional string array rejects non-string elements"),
+		MonolithParamUtils::GetOptionalStringArrayParam(Params, TEXT("bad_tags"), ParsedTags, Error));
+
+	int32 ParsedInt = 0;
+	TestTrue(TEXT("Strict int accepts signed integers"),
+		MonolithParamUtils::TryParseStrictInt(TEXT("-12"), ParsedInt, Error, TEXT("test")));
+	TestEqual(TEXT("Strict int parsed value"), ParsedInt, -12);
+	TestFalse(TEXT("Strict int rejects malformed text"),
+		MonolithParamUtils::TryParseStrictInt(TEXT("12abc"), ParsedInt, Error, TEXT("test")));
+
+	return true;
+}
+
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParseVectorTest,
 	"Monolith.Core.ParamUtils.ParseVector",

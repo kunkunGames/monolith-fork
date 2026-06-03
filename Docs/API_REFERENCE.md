@@ -82,6 +82,9 @@ These releases added the `level_sequence` namespace, the `bulk_fill` / `describe
 | `describe_query("schema" / "list_targets" / "action_schema")` | **NEW namespace** (0.15.0) | Read-only schema introspection for the same adapter registry; `schema` supports namespace-level descriptors without `target`, `list_targets` is optional inventory, and `action_schema` returns a registered action's full param schema. |
 | `monolith_discover` | Params added (0.15.0 compact merge) | Adds optional `action` and `mode` (`summary`, `actions`, `schema`) so callers can request one exact action schema without dumping a whole namespace. |
 | `monolith.guide` | **NEW** (0.15.0) | Section-keyed onboarding guide for AI agents (onboarding / recipes / decisions / errors / skills_map / gotchas) with a live registry overlay. |
+| Niagara Tranche 2 search/discovery hardening | Hardened ([Unreleased]) | `search_by_parameter`, `search_by_data_interface`, `query_niagara`, `find_similar_systems`, `search_by_material`, `find_niagara_references`, and `list_system_data_interfaces` now use typed schema validation, shared system enumeration/loading, range-checked cost governors, and strict integer parsing for the query DSL. |
+| `FMonolithActionJsonBridge` | Core helper ([Unreleased]) | Shared registry-to-JSON bridge for Blueprint wrapper libraries. It preserves successful action payloads and emits the existing parseable `{success:false,error,code}` failure envelope. |
+| `FMonolithToolInvocationLogger::FScopedTrace` | Export fixed ([Unreleased]) | The scoped trace/routing-context helper is now exported from `MonolithCore`, so sibling Monolith modules can verify or carry trace context across registry-dispatched action calls. |
 | `blueprint` dataset pack (17 actions) | **NEW** (0.15.0) | DataTable (8), CurveTable (5), StringTable (3), `seed_data_asset` (1) — read with row-struct schema inline, bulk upsert with dry-run, row CRUD, JSON/CSV import/export. |
 | `blueprint.add_property_access` / `override_parent_function` / `save_dirty_assets` | **NEW** (0.15.0) | Cross-class UPROPERTY get/set, value-returning parent-function override, batch save of dirty BP/Widget packages. |
 | `ui` scaffolders + gap-closure (Tier 2/3/4 + Phase 3/4) | **NEW** (0.15.0) | `scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu`, `build_menu_from_spec`, `rename_widget`, `audit_focus_chain`, `set_widget_navigation_bulk`, `dump_widget_navigation`, `convert_border_to_common`, `reparent_widget_root`, `set_widget_is_variable`, and more. |
@@ -400,7 +403,9 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
 
 Niagara VFX system editing — emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, NPC, effect types, temporal control, stateless-emitter factory. **129 actions** (108 baseline + 1 layout + 9 temporal-control + 1 stateless-emitter factory + 7 issue #64 Tranche 2 search + 2 PR #65 CustomHlsl-text read/write).
 
-> For full param schemas, call `monolith_discover("niagara")` at runtime.
+> For full param schemas, prefer focused `monolith_discover({ "namespace": "niagara", "action": "<action>", "mode": "schema" })` at runtime.
+
+The Tranche 2 search/discovery actions are backed by strict `FParamSchemaBuilder` validation and a shared Niagara system enumeration/load helper. Use `folder` and `limit` as cost governors where the focused schema exposes them (`limit` range: 1..1000). `find_similar_systems` additionally range-checks `threshold` from 0..1. `query_niagara` rejects malformed integer DSL clauses instead of silently converting them to zero. `find_similar_systems` and `list_system_data_interfaces` accept `system_path` as an alias for `asset_path`. Focused `monolith_discover(..., mode:"schema")` and `describe_query("action_schema", ...)` expose matching params for these actions. Blueprint JSON wrapper libraries route through the Core `FMonolithActionJsonBridge` so successful payloads stay unchanged while failures keep the existing parseable envelope.
 
 **Action categories:**
 
@@ -409,6 +414,7 @@ Niagara VFX system editing — emitters, modules, params, renderers, HLSL, dynam
 | Systems | 11 | `create_system`, `create_system_from_spec`, `duplicate_system`, `validate_system`, `save_system`, `set_system_property`, `get_system_property`, `get_system_summary`, `get_system_diagnostics`, `set_fixed_bounds`, `set_effect_type`, `list_systems` |
 | Emitters | 12 | `add_emitter`, `remove_emitter`, `duplicate_emitter`, `set_emitter_enabled`, `reorder_emitters`, `set_emitter_property`, `get_emitter_property`, `get_emitter_summary`, `list_emitters`, `list_emitter_properties`, `create_emitter`, `rename_emitter`, `save_emitter_as_template`, `clear_emitter_modules`, `get_emitter_parent` |
 | Modules | 10 | `add_module`, `remove_module`, `move_module`, `set_module_enabled`, `get_ordered_modules`, `get_module_inputs`, `get_module_graph`, `get_module_input_value`, `get_module_output_parameters`, `get_module_script_inputs`, `set_module_input_value`, `set_module_input_binding`, `set_module_input_di`, `clone_module_overrides`, `duplicate_module`, `list_module_scripts` |
+| Search / discovery | 7 | `search_by_parameter`, `search_by_data_interface`, `query_niagara`, `find_similar_systems`, `search_by_material`, `find_niagara_references`, `list_system_data_interfaces` |
 
 `get_ordered_modules` / `add_module` / `move_module` / `duplicate_module` support selector-based stages (PR #65): `usage: "particle_event"` with `usage_id` or `handler_index`, and `usage: "particle_simulation_stage"` with `usage_id`, `stage_name`, or `stage_index`.
 

@@ -7,7 +7,7 @@
 class MONOLITHCORE_API FMonolithToolInvocationLogger
 {
 public:
-	class FScopedTrace
+	class MONOLITHCORE_API FScopedTrace
 	{
 	public:
 		explicit FScopedTrace(

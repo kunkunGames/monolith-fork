@@ -1,35 +1,10 @@
 #include "MonolithNiagaraQueryLibrary.h"
 
-#include "MonolithToolRegistry.h"
+#include "MonolithActionJsonBridge.h"
 #include "Dom/JsonObject.h"
-#include "Serialization/JsonSerializer.h"
-#include "Serialization/JsonWriter.h"
 
 namespace
 {
-	/** Serialize a JSON object to a compact FString (matches the in-module idiom at MonolithNiagaraActions.cpp:1303). */
-	FString JsonObjectToString(const TSharedPtr<FJsonObject>& Obj)
-	{
-		FString Out;
-		if (!Obj.IsValid())
-		{
-			return Out;
-		}
-		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Out);
-		FJsonSerializer::Serialize(Obj.ToSharedRef(), Writer);
-		return Out;
-	}
-
-	/** Build a parseable JSON error envelope so callers never receive an empty string on failure. */
-	FString MakeErrorEnvelope(const FString& Message, int32 Code)
-	{
-		const TSharedPtr<FJsonObject> Env = MakeShared<FJsonObject>();
-		Env->SetBoolField(TEXT("success"), false);
-		Env->SetStringField(TEXT("error"), Message);
-		Env->SetNumberField(TEXT("code"), Code);
-		return JsonObjectToString(Env);
-	}
-
 	/** Set a string field only when non-empty, so empty inputs fall through to the action's own default. */
 	void SetOptionalString(const TSharedPtr<FJsonObject>& Params, const FString& Field, const FString& Value)
 	{
@@ -61,40 +36,12 @@ static FString ExecuteNiagaraActionAsJson(
 	bool& bOutSuccess,
 	FString& OutError)
 {
-	bOutSuccess = false;
-	OutError.Reset();
-
-	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
-
-	// MUST-FIX A (a)+(b): registry not yet populated, unknown namespace, or unknown action.
-	if (!Registry.HasAction(TEXT("niagara"), Action))
-	{
-		OutError = FString::Printf(
-			TEXT("Niagara action '%s' is not registered (registry not yet populated or unknown action)."), *Action);
-		return MakeErrorEnvelope(OutError, -32601 /* method not found */);
-	}
-
-	const TSharedPtr<FJsonObject> SafeParams = Params.IsValid() ? Params : MakeShared<FJsonObject>();
-	const FMonolithActionResult Result = Registry.ExecuteAction(TEXT("niagara"), Action, SafeParams);
-
-	if (!Result.bSuccess)
-	{
-		OutError = Result.ErrorMessage.IsEmpty()
-			? FString::Printf(TEXT("Niagara action '%s' failed with no error message."), *Action)
-			: Result.ErrorMessage;
-		return MakeErrorEnvelope(OutError, Result.ErrorCode);
-	}
-
-	// MUST-FIX A (c): success reported but Result payload is null — do NOT dereference into a crash.
-	if (!Result.Result.IsValid())
-	{
-		OutError = FString::Printf(
-			TEXT("Niagara action '%s' reported success but returned a null result payload."), *Action);
-		return MakeErrorEnvelope(OutError, -32603 /* internal error */);
-	}
-
-	bOutSuccess = true;
-	return JsonObjectToString(Result.Result);
+	return FMonolithActionJsonBridge::ExecuteActionAsJson(
+		TEXT("niagara"),
+		Action,
+		Params,
+		bOutSuccess,
+		OutError);
 }
 
 // =====================================================================================

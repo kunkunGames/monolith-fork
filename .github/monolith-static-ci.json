@@ -88,6 +88,21 @@
     "dispatcher_prefix": "mcp__monolith__",
     "missing_agents_dir_is_error": false
   },
+  "routing_hygiene": {
+    "enabled": true,
+    "scan_extensions": [".cpp", ".h", ".hpp"],
+    "high_risk_actions": {
+      "niagara": [
+        "search_by_parameter",
+        "search_by_data_interface",
+        "query_niagara",
+        "find_similar_systems",
+        "search_by_material",
+        "find_niagara_references",
+        "list_system_data_interfaces"
+      ]
+    }
+  },
   "proxy_smoke": {
     "enabled": true,
     "script": "Scripts/monolith_proxy.py",

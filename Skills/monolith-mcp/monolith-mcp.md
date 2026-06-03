@@ -70,6 +70,8 @@ The CLI is the MCP-free equivalent of `source_query` / `project_query` / `bridge
 
 - Route through the **live catalog** before calling actions; action names can change between versions.
 - Prefer `monolith_find` → `monolith_discover(..., mode:"schema")` over guessing parameters.
+- Treat the runtime registry as authoritative for sibling/custom actions too; static docs and skills are workflow guidance, not an exhaustive loaded-action roster.
+- For high-risk actions, use focused schema discovery because strict validation may reject wrong JSON types, missing required fields, malformed query fragments, or out-of-range values before the handler runs.
 - After indexing completes, the matching CRG projection/cache rebuilds automatically; run `project repair_crg_cache --execute` or `source repair_crg_cache --execute` only when health reports stale parity.
 - `source repair_crg_cache --execute` rebuilds EngineSource `crg_*` metrics plus the signature-aware `source_override_edges` cache used by `find_overrides`, `impact_radius`, `risk_score`, `review_context`, and `review_hotspots --kind=override`. Use `source repair_crg_cache --scope=override_edges --execute` when only the override edge cache/version is stale.
 - When project search looks stale, run `project health` first; `project repair_fts --target=all --execute` rebuilds all seven project FTS tables.

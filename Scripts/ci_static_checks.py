@@ -290,6 +290,156 @@ def check_action_registry_duplicates(ctx: CheckContext) -> None:
         )
 
 
+def find_matching_brace(text: str, open_index: int) -> int:
+    depth = 0
+    in_string = False
+    escape = False
+    index = open_index
+    while index < len(text):
+        char = text[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+        else:
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return index
+        index += 1
+    return -1
+
+
+def extract_action_registrations(text: str) -> list[dict[str, Any]]:
+    register_re = re.compile(
+        r"RegisterAction\s*\(\s*TEXT\(\"([^\"]+)\"\)\s*,\s*TEXT\(\"([^\"]+)\"\)",
+        re.MULTILINE | re.DOTALL,
+    )
+    registrations: list[dict[str, Any]] = []
+    for match in register_re.finditer(text):
+        open_index = text.find("(", match.start())
+        if open_index == -1:
+            continue
+        # RegisterAction calls are parenthesized, not braced; scan parentheses
+        # separately so nested FParamSchemaBuilder calls are included.
+        depth = 0
+        in_string = False
+        escape = False
+        end_index = -1
+        index = open_index
+        while index < len(text):
+            char = text[index]
+            if in_string:
+                if escape:
+                    escape = False
+                elif char == "\\":
+                    escape = True
+                elif char == '"':
+                    in_string = False
+            else:
+                if char == '"':
+                    in_string = True
+                elif char == "(":
+                    depth += 1
+                elif char == ")":
+                    depth -= 1
+                    if depth == 0:
+                        end_index = index + 1
+                        break
+            index += 1
+        if end_index == -1:
+            continue
+        block = text[match.start():end_index]
+        handler_match = re.search(r"CreateStatic\s*\(\s*&([A-Za-z_][A-Za-z0-9_:]*)\s*\)", block)
+        registrations.append({
+            "namespace": match.group(1),
+            "action": match.group(2),
+            "block": block,
+            "line": text.count("\n", 0, match.start()) + 1,
+            "handler": handler_match.group(1).split("::")[-1] if handler_match else "",
+        })
+    return registrations
+
+
+def extract_function_body(text: str, function_name: str) -> str:
+    if not function_name:
+        return ""
+    match = re.search(rf"\b{re.escape(function_name)}\s*\([^)]*\)\s*(?:const\s*)?\{{", text)
+    if not match:
+        return ""
+    open_index = text.find("{", match.end() - 1)
+    if open_index == -1:
+        return ""
+    close_index = find_matching_brace(text, open_index)
+    if close_index == -1:
+        return ""
+    return text[open_index:close_index + 1]
+
+
+def check_action_registry_hygiene(ctx: CheckContext) -> None:
+    config = ctx.config.get("routing_hygiene", {})
+    if config.get("enabled", True) is False:
+        return
+
+    high_risk_config = config.get("high_risk_actions", {})
+    high_risk_actions: set[tuple[str, str]] = set()
+    if isinstance(high_risk_config, dict):
+        for namespace, actions in high_risk_config.items():
+            if isinstance(actions, list):
+                high_risk_actions.update((str(namespace), str(action)) for action in actions)
+
+    if not high_risk_actions:
+        return
+
+    source_dir = ctx.path(str(ctx.config.get("source_dir", "Source")))
+    extensions = set(config.get("scan_extensions", [".cpp", ".h", ".hpp"]))
+    registrations: dict[tuple[str, str], tuple[Path, dict[str, Any], str]] = {}
+
+    for path in ctx.tracked_files():
+        if path.suffix not in extensions:
+            continue
+        try:
+            path.resolve().relative_to(source_dir)
+        except ValueError:
+            continue
+        text = read_text(path)
+        for registration in extract_action_registrations(text):
+            key = (registration["namespace"], registration["action"])
+            if key in high_risk_actions:
+                registrations[key] = (path, registration, text)
+
+    for namespace, action in sorted(high_risk_actions):
+        found = registrations.get((namespace, action))
+        if not found:
+            ctx.advisory(
+                "action-registry-hygiene",
+                f"Configured high-risk action registration not found: {namespace}.{action}",
+            )
+            continue
+
+        path, registration, text = found
+        block = registration["block"]
+        action_id = f"{namespace}.{action}"
+        if "FParamSchemaBuilder" not in block or ".Build()" not in block:
+            ctx.block("action-registry-hygiene", f"High-risk action lacks param schema: {action_id}", path)
+        elif "EnableValidation()" not in block:
+            ctx.block("action-registry-hygiene", f"High-risk action schema lacks EnableValidation(): {action_id}", path)
+
+        body = extract_function_body(text, str(registration.get("handler", "")))
+        if body:
+            if re.search(r"\bParams\s*->\s*Get(?:String|Number)Field\s*\(", body):
+                ctx.advisory("action-registry-hygiene", f"High-risk handler uses raw Params getter: {action_id}", path)
+            if "LoadObject<UNiagaraSystem>" in body:
+                ctx.advisory("action-registry-hygiene", f"High-risk handler directly loads Niagara systems instead of shared helper: {action_id}", path)
+
+
 def check_generated_h_include_order(ctx: CheckContext) -> None:
     for path in ctx.tracked_files():
         if path.suffix not in {".h", ".hpp"}:
@@ -635,6 +785,7 @@ def run_checks(ctx: CheckContext) -> list[Finding]:
     check_uplugin_and_modules(ctx)
     check_automation_test_names(ctx)
     check_action_registry_duplicates(ctx)
+    check_action_registry_hygiene(ctx)
     check_generated_h_include_order(ctx)
     check_text_hygiene(ctx)
     check_repo_hygiene(ctx)
@@ -702,6 +853,12 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
         },
         "text_hygiene": {"scan_extensions": [".uplugin", ".cs", ".cpp", ".h", ".md", ".txt", ".yml"]},
         "agent_tools": {"agents_dir": ".claude/agents", "missing_agents_dir_is_error": False},
+        "routing_hygiene": {
+            "enabled": True,
+            "high_risk_actions": {
+                "foo": ["high_risk"],
+            },
+        },
         "proxy_smoke": {"enabled": False},
         "workflow": {
             "hosted_static_workflow": ".github/workflows/ci.yml",
@@ -729,6 +886,17 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
     )
     (root / "Source/Foo/Private/FooModule.cpp").write_text(
         "#include \"Modules/ModuleManager.h\"\nIMPLEMENT_MODULE(FFooModule, Foo)\n",
+        encoding="utf-8",
+    )
+    (root / "Source/Foo/Private/HygieneActions.cpp").write_text(
+        "void Register(FRegistry& Registry) {\n"
+        "    Registry.RegisterAction(TEXT(\"foo\"), TEXT(\"high_risk\"), TEXT(\"schema ok\"), "
+        "FMonolithActionHandler::CreateStatic(&HandleHighRisk), "
+        "FParamSchemaBuilder().EnableValidation().Required(TEXT(\"query\"), TEXT(\"string\"), TEXT(\"Query\")).Build());\n"
+        "}\n"
+        "FMonolithActionResult HandleHighRisk(const TSharedPtr<FJsonObject>& Params) {\n"
+        "    return FMonolithActionResult::Success(MakeShared<FJsonObject>());\n"
+        "}\n",
         encoding="utf-8",
     )
     (root / ".claude/agents/good.md").write_text(
@@ -803,6 +971,16 @@ def run_selftest() -> int:
                 "void Register(FRegistry& Registry) {\n"
                 "    Registry.RegisterAction(TEXT(\"foo\"), TEXT(\"bar\"), TEXT(\"one\"), Handler);\n"
                 "    Registry.RegisterAction(TEXT(\"foo\"), TEXT(\"bar\"), TEXT(\"two\"), Handler);\n"
+                "}\n",
+                encoding="utf-8",
+            ),
+        ),
+        (
+            "high-risk action missing schema validation",
+            "action-registry-hygiene",
+            lambda root: (root / "Source/Foo/Private/HygieneActions.cpp").write_text(
+                "void Register(FRegistry& Registry) {\n"
+                "    Registry.RegisterAction(TEXT(\"foo\"), TEXT(\"high_risk\"), TEXT(\"missing schema\"), Handler);\n"
                 "}\n",
                 encoding="utf-8",
             ),
