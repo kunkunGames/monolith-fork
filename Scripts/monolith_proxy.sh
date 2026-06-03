@@ -10,6 +10,29 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 PROXY_PY="$SCRIPT_DIR/monolith_proxy.py"
 PROXY_JS="$SCRIPT_DIR/monolith_proxy.js"
 
+case "${1:-}" in
+	--help|-h|help)
+		cat <<'EOF'
+Usage:
+  monolith_proxy.sh --help
+  monolith_proxy.sh --version
+  monolith_proxy.sh
+
+Role:
+  Thin POSIX launcher for Scripts/monolith_proxy.py or Scripts/monolith_proxy.js.
+  The selected script is a stdio-to-HTTP MCP bridge for MONOLITH_URL.
+
+Runtime selection:
+  Prefers Python 3.8+, then python, then Node.js 18+.
+  Help exits before probing runtimes; version is forwarded to the selected runtime.
+
+Offline fallback:
+  Use Binaries/monolith_query.exe for read-only source/project/bridge queries when the editor or MCP server is unavailable.
+EOF
+		exit 0
+		;;
+esac
+
 if [ ! -f "$PROXY_PY" ] && [ ! -f "$PROXY_JS" ]; then
 	echo "[monolith-proxy] ERROR: proxy scripts not found at $SCRIPT_DIR" 1>&2
 	exit 1

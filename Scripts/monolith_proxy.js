@@ -858,7 +858,57 @@ async function handleMessage(message) {
   return hasId ? jsonrpcError(message.id, -32601, `Method not found: ${method}`) : null;
 }
 
+function printHelp() {
+  process.stdout.write(`Usage:
+  node monolith_proxy.js --help
+  node monolith_proxy.js --version
+  node monolith_proxy.js
+
+Role:
+  Stdio-to-HTTP MCP bridge for the editor-hosted Monolith server.
+  Default target: MONOLITH_URL=http://localhost:9316/mcp
+
+Environment:
+  MONOLITH_URL                         Editor MCP endpoint.
+  MONOLITH_TOOL_LOG_ENABLED            Set 0 to disable daily proxy logs.
+  MONOLITH_TOOL_LOG_DIR                Redirect Logs/yyyyMMdd/proxy.jsonl.
+  MONOLITH_TOOL_LOG_MAX_FIELD_BYTES    Bound captured log fields.
+  LOCALAPPDATA / temp directory        Used for script-proxy tool cache fallback paths.
+
+Runtime support notes:
+  MONOLITH_SPLIT_EDITOR_QUERY, MONOLITH_EDITOR_ACTION_ALLOWLIST, and
+  MONOLITH_EDITOR_ACTION_DENYLIST are native C++ proxy controls.
+  MONOLITH_CALL_LOG and MONOLITH_PROJECT_ROOT control the native C++ proxy call log.
+
+MCP config example:
+  {"mcpServers":{"monolith":{"command":"node","args":["D:/P4/game/Plugins/Monolith/Scripts/monolith_proxy.js"]}}}
+
+Offline fallback:
+  Use Binaries/monolith_query.exe for read-only source/project/bridge queries when the editor or MCP server is unavailable.
+`);
+}
+
+function printVersion() {
+  process.stdout.write(`${JSON.stringify({ tool: PROXY_NAME, version: PROXY_VERSION, runtime: "node" }, null, 2)}\n`);
+}
+
+function handleHelpOrVersion() {
+  for (const arg of process.argv.slice(2)) {
+    if (arg === "--help" || arg === "-h" || arg === "help") {
+      printHelp();
+      return true;
+    }
+    if (arg === "--version" || arg === "-v" || arg === "version") {
+      printVersion();
+      return true;
+    }
+  }
+  return false;
+}
+
 function main() {
+  if (handleHelpOrVersion()) return;
+
   log(`Started. Forwarding to ${MONOLITH_URL}`);
   startHealthPoll();
 

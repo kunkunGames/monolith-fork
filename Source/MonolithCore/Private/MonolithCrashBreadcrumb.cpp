@@ -12,9 +12,23 @@
 #include "HAL/PlatformFileManager.h"
 #include "ScopedTransaction.h"
 
-#ifndef MONOLITH_VERSION
-#define MONOLITH_VERSION TEXT("0.0.0")
-#endif
+namespace
+{
+FString GetMonolithCrashBreadcrumbVersion()
+{
+	TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Monolith"));
+	if (Plugin.IsValid())
+	{
+		const FString VersionName = Plugin->GetDescriptor().VersionName;
+		if (!VersionName.IsEmpty())
+		{
+			return VersionName;
+		}
+	}
+
+	return TEXT("0.0.0");
+}
+}
 
 FMonolithCrashBreadcrumb& FMonolithCrashBreadcrumb::Get()
 {
@@ -175,7 +189,7 @@ namespace
 		Obj->SetStringField(TEXT("tool"), Namespace);
 		Obj->SetStringField(TEXT("action"), Action);
 		Obj->SetStringField(TEXT("params"), ParamsSerialized);
-		Obj->SetStringField(TEXT("monolith_version"), MONOLITH_VERSION);
+		Obj->SetStringField(TEXT("monolith_version"), GetMonolithCrashBreadcrumbVersion());
 		Obj->SetStringField(TEXT("engine_version"),
 			FEngineVersion::Current().ToString());
 		Obj->SetStringField(TEXT("session_id"), SessionId);

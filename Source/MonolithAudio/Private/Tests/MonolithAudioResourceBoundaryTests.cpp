@@ -5,6 +5,7 @@
 #endif
 #include "MonolithAudioSoundCueActions.h"
 #include "MonolithAudioBatchActions.h"
+#include "MonolithAudioPerceptionActions.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 

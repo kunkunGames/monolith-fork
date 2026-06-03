@@ -6,6 +6,10 @@
 
 setlocal
 
+if /I "%~1"=="--help" goto :help
+if /I "%~1"=="-h" goto :help
+if /I "%~1"=="help" goto :help
+
 if not exist "%~dp0monolith_proxy.py" if not exist "%~dp0monolith_proxy.js" (
     echo [monolith-proxy] ERROR: proxy scripts not found at %~dp0 1>&2
     exit /b 1
@@ -63,3 +67,21 @@ if %errorlevel% equ 0 (
 
 echo [monolith-proxy] ERROR: Python 3.8+ or Node.js not found. Install Python 3.8+ or Node.js 18+. 1>&2
 exit /b 1
+
+:help
+echo Usage:
+echo   monolith_proxy.bat --help
+echo   monolith_proxy.bat --version
+echo   monolith_proxy.bat
+echo.
+echo Role:
+echo   Thin Windows launcher for Scripts\monolith_proxy.py or Scripts\monolith_proxy.js.
+echo   The selected script is a stdio-to-HTTP MCP bridge for MONOLITH_URL.
+echo.
+echo Runtime selection:
+echo   Prefers Python 3.8+, then python3, then Node.js 18+, then py -3.
+echo   Help exits before probing runtimes; version is forwarded to the selected runtime.
+echo.
+echo Offline fallback:
+echo   Use Binaries\monolith_query.exe for read-only source/project/bridge queries when the editor or MCP server is unavailable.
+exit /b 0

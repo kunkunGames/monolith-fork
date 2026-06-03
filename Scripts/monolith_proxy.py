@@ -1019,7 +1019,57 @@ def handle_tools_call(msg: dict) -> str:
     return response
 
 
+def _print_help() -> None:
+    print(
+        """Usage:
+  python monolith_proxy.py --help
+  python monolith_proxy.py --version
+  python monolith_proxy.py
+
+Role:
+  Stdio-to-HTTP MCP bridge for the editor-hosted Monolith server.
+  Default target: MONOLITH_URL=http://localhost:9316/mcp
+
+Environment:
+  MONOLITH_URL                         Editor MCP endpoint.
+  MONOLITH_TOOL_LOG_ENABLED            Set 0 to disable daily proxy logs.
+  MONOLITH_TOOL_LOG_DIR                Redirect Logs/yyyyMMdd/proxy.jsonl.
+  MONOLITH_TOOL_LOG_MAX_FIELD_BYTES    Bound captured log fields.
+  LOCALAPPDATA / temp directory        Used for script-proxy tool cache fallback paths.
+
+Runtime support notes:
+  MONOLITH_SPLIT_EDITOR_QUERY, MONOLITH_EDITOR_ACTION_ALLOWLIST, and
+  MONOLITH_EDITOR_ACTION_DENYLIST are native C++ proxy controls.
+  MONOLITH_CALL_LOG and MONOLITH_PROJECT_ROOT control the native C++ proxy call log.
+
+MCP config example:
+  {"mcpServers":{"monolith":{"command":"python","args":["D:/P4/game/Plugins/Monolith/Scripts/monolith_proxy.py"]}}}
+
+Offline fallback:
+  Use Binaries/monolith_query.exe for read-only source/project/bridge queries when the editor or MCP server is unavailable.
+"""
+    )
+
+
+def _print_version() -> None:
+    print(json.dumps({"tool": PROXY_NAME, "version": PROXY_VERSION, "runtime": "python"}, indent=2))
+
+
+def _handle_help_or_version() -> bool:
+    for arg in sys.argv[1:]:
+        if arg in ("--help", "-h", "help"):
+            _print_help()
+            return True
+        if arg in ("--version", "-v", "version"):
+            _print_version()
+            return True
+    return False
+
+
 def main() -> None:
+    if _handle_help_or_version():
+        return
+
     # Use binary-safe IO for Windows compatibility
     stdin = TextIOWrapper(sys.stdin.buffer, encoding="utf-8", newline="\n")
     stdout = TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="\n")

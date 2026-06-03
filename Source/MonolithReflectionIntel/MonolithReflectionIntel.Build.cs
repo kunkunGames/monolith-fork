@@ -17,6 +17,7 @@ public class MonolithReflectionIntel : ModuleRules
 	public MonolithReflectionIntel(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+		bUseUnity = false;
 
 		PublicDependencyModuleNames.AddRange(new string[]
 		{

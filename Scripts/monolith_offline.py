@@ -1,24 +1,26 @@
 #!/usr/bin/env python3
 """
-Stdlib-only offline DEV FALLBACK for the canonical monolith_query.exe.
-  Kept byte-identical to the exe by Scripts/verify_offline_parity.py.
-  Serves source / project / monolith subcommands plus all 20 Reflection-Intelligence
-  actions (cppreflect, network, decision, risk), read-only against the on-disk SQLite.
-  No UE installation, no build, no editor required.
+Stdlib-only LIMITED LEGACY offline fallback for Monolith.
 
-  WHY TWO IMPLEMENTATIONS (cross-platform parity pair, NOT redundant duplication):
-  monolith_query.exe is built ONLY by Tools/MonolithQuery/build.bat via MSVC cl.exe,
-  i.e. a Windows-only binary. This stdlib-only Python module is the portable path for
-  Linux/macOS (CI and scheduled-agent VMs that have no Windows runtime and cannot run
-  the .exe). The two are held in byte-lockstep by the ship-blocking parity guard
-  Scripts/verify_offline_parity.py, so behavior has a single source of truth even
-  though there are two host runtimes.
+Canonical current offline path:
+  Binaries/monolith_query.exe
 
-Monolith Offline CLI — query EngineSource.db and ProjectIndex.db without the editor.
+This Python script remains useful for portable developer fallback and RI parity
+checks, but it is not byte-identical to the current native executable. It serves
+legacy source/project discovery actions plus all 20 Reflection-Intelligence
+actions (cppreflect, network, decision, risk), read-only against on-disk SQLite.
+
+It does NOT implement the current native bridge namespace, monolith guide,
+source/project review actions, CRG graph actions, repair actions, snapshots, or
+the expanded project content search surface. Use Binaries/monolith_query.exe for
+those current agent workflows.
+
+Monolith Offline CLI - limited fallback for EngineSource.db and ProjectIndex.db.
 
 Usage:
     python monolith_offline.py source <action> [params...]
     python monolith_offline.py project <action> [params...]
+    python monolith_offline.py cppreflect|network|decision|risk <action> [params...]
     python monolith_offline.py --version
 
 Source actions:
@@ -64,11 +66,10 @@ FULL offline parity with the live RI adapters (Source/MonolithReflectionIntel/Pr
     risk       get_release_window_hotspots [--since_unix T] [--limit N] [--cursor B64]
     risk       list_conditional_gates [--macro_filter M] [--path_filter P] [--limit N] [--cursor B64]
 
-NOTE: Only namespaces backed by on-disk SQLite are servable offline (source,
-project, and the read-side RI namespaces above). The live MCP server exposes
-~29 namespaces; the rest require a running editor + UObject reflection and CANNOT
-be served by this tool. `monolith guide` stays exe-only (it depends on runtime
-state the Python fallback does not reconstruct).
+NOTE: This limited fallback serves only source, project, cppreflect, network,
+decision, and risk. For bridge, monolith guide, source review, project review,
+CRG graph, repair, snapshot, and current project content search workflows, use:
+    Binaries/monolith_query.exe <namespace> <action> ...
 """
 
 import sys
@@ -79,6 +80,14 @@ import base64
 import time
 import argparse
 from pathlib import Path
+
+
+def configure_text_output() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure:
+            reconfigure(encoding="utf-8", errors="replace")
+
 
 # Parity revision string. MUST match the C++ exe sibling (Tools/MonolithQuery)
 # so the HARD-GATE parity guard can assert both report the same rev.
@@ -1832,7 +1841,7 @@ def _add_paginated(p):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Monolith Offline CLI — query source/project/RI databases without the editor",
+        description="Monolith Offline CLI - limited legacy fallback for source/project/RI databases without the editor",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
@@ -2015,18 +2024,48 @@ def build_parser():
     return parser
 
 
+def _is_help_token(value: str) -> bool:
+    return value in ("--help", "-h", "help")
+
+
+def _print_limited_namespace_help(namespace: str) -> None:
+    print(
+        f"""monolith_offline.py limited fallback
+
+Namespace '{namespace}' is not implemented by this Python fallback.
+
+Supported namespaces:
+  source, project, cppreflect, network, decision, risk
+
+Use the native current offline executable for this workflow:
+  Binaries\\monolith_query.exe {namespace} --help
+
+The native executable covers bridge, monolith guide, source/project review,
+CRG graph, repair, snapshot, and expanded project content search workflows.
+"""
+    )
+
+
 def main():
+    configure_text_output()
+
     # --version short-circuit.
     if "--version" in sys.argv[1:]:
         print(PARITY_SPEC_REV)
         return
+
+    if len(sys.argv) >= 3 and _is_help_token(sys.argv[2]) and not sys.argv[1].startswith("-"):
+        requested_ns = sys.argv[1]
+        if requested_ns not in OFFLINE_NAMESPACES:
+            _print_limited_namespace_help(requested_ns)
+            return
 
     # Unknown-namespace interception (before argparse) to emit the live error format.
     if len(sys.argv) >= 2 and not sys.argv[1].startswith("-"):
         requested_ns = sys.argv[1]
         if requested_ns not in OFFLINE_NAMESPACES:
             suffix = did_you_mean_suffix(requested_ns, OFFLINE_NAMESPACES + ["monolith"])
-            msg = (f"Unknown namespace: {requested_ns} — call monolith_discover() "
+            msg = (f"Unknown namespace: {requested_ns} - call monolith_discover() "
                    f"to enumerate valid namespaces.{suffix}")
             emit_error(msg)
             sys.exit(2)
@@ -2037,7 +2076,7 @@ def main():
         act = sys.argv[2]
         if act not in ACTIONS_BY_NS[ns]:
             suffix = did_you_mean_suffix(act, ACTIONS_BY_NS[ns])
-            msg = (f"Unknown action: {ns}.{act} — call monolith_discover(\"{ns}\") "
+            msg = (f"Unknown action: {ns}.{act} - call monolith_discover(\"{ns}\") "
                    f"to enumerate valid actions in this namespace.{suffix}")
             emit_error(msg)
             sys.exit(2)

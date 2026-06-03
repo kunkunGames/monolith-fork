@@ -255,7 +255,9 @@ def discover_chain_inputs():
 def build_actions(chain):
     """
     The 20 RI actions with deterministic representative args.
-    Each entry: (label, namespace, action, [args]).
+    Each entry: (label, namespace, action, [args] or None).
+    None means the current corpus lacks a deterministic required input; the
+    action is reported as SKIP rather than a parity failure.
     """
     cls = chain["uclass"]
     did = chain["decision_id"]
@@ -281,12 +283,12 @@ def build_actions(chain):
 
         # ---- decision (5) ----
         ("decision.list_decisions", "decision", "list_decisions", ["--limit", "5"]),
-        ("decision.get_decision", "decision", "get_decision", [did] if did else []),
+        ("decision.get_decision", "decision", "get_decision", [did] if did else None),
         ("decision.list_stale", "decision", "list_stale", ["3650", "--limit", "5"]),
         ("decision.find_supersession_chain", "decision", "find_supersession_chain",
-         [did] if did else []),
+         [did] if did else None),
         ("decision.find_referent_decisions", "decision", "find_referent_decisions",
-         [did] if did else []),
+         [did] if did else None),
 
         # ---- risk (5) ----
         ("risk.get_hotspot_score", "risk", "get_hotspot_score", [rpath]),
@@ -354,6 +356,11 @@ def run_action(label, ns, action, args, ignore_cursor_bytes):
     res["warnings"] = warnings
     res["status"] = "MATCH" if not diffs else "DIFF"
     return res
+
+
+def skipped_action(label, reason):
+    return {"label": label, "args": [], "status": "SKIP",
+            "diffs": [], "warnings": [], "error": reason}
 
 
 # ------------------------------------------------------------------ version
@@ -434,15 +441,20 @@ def main():
     actions = build_actions(chain)
     results = []
     for label, ns, action, aargs in actions:
-        results.append(run_action(label, ns, action, aargs, args.ignore_cursor_bytes))
+        if aargs is None:
+            results.append(skipped_action(label, "current DB corpus has no decision_id input"))
+        else:
+            results.append(run_action(label, ns, action, aargs, args.ignore_cursor_bytes))
 
     n_match = sum(1 for r in results if r["status"] == "MATCH")
     n_diff = sum(1 for r in results if r["status"] == "DIFF")
     n_err = sum(1 for r in results if r["status"] == "ERROR")
+    n_skip = sum(1 for r in results if r["status"] == "SKIP")
+    comparable = len(results) - n_skip
 
     # Summary table.
     print("=" * 72)
-    print(f"SUMMARY: {n_match}/{len(results)} MATCH | {n_diff} DIFF | {n_err} ERROR")
+    print(f"SUMMARY: {n_match}/{comparable} MATCH | {n_diff} DIFF | {n_err} ERROR | {n_skip} SKIP")
     print("=" * 72)
     print(f"{'ACTION':<40} {'STATUS':<8} {'#DIFF':>6} {'#WARN':>6}")
     print("-" * 72)
@@ -452,12 +464,15 @@ def main():
     print("-" * 72)
 
     # Detailed diffs.
-    if n_diff or n_err:
+    if n_diff or n_err or n_skip:
         print("\nDETAILS")
         print("=" * 72)
         for r in results:
             if r["status"] == "ERROR":
                 print(f"\n[ERROR] {r['label']}  args={r['args']}")
+                print(f"        {r['error']}")
+            elif r["status"] == "SKIP":
+                print(f"\n[SKIP] {r['label']}")
                 print(f"        {r['error']}")
             elif r["status"] == "DIFF":
                 print(f"\n[DIFF] {r['label']}  args={r['args']}")

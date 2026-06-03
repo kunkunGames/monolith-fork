@@ -5,18 +5,11 @@ REM Run from a VS Developer Command Prompt, or let this script find vcvars64.bat
 
 cd /d "%~dp0"
 
-REM Compute a SHA256 of the source and inject its first 16 hex chars as
+REM Compute a SHA256 of the source inputs and inject its first 16 hex chars as
 REM /DSOURCE_HASH so --version reports a hash the staleness guard can match.
-REM certutil is built into Windows; its second output line is the bare hash.
-REM Statements are kept un-nested so plain (non-delayed) %VAR% expansion works.
+REM Include header-only helper modules because they contribute to the binary.
 set SOURCE_HASH=dev
-set SRCHASH_RAW=
-for /f "skip=1 tokens=*" %%H in ('certutil -hashfile monolith_query.cpp SHA256') do if not defined SRCHASH_RAW set SRCHASH_RAW=%%H
-if not defined SRCHASH_RAW goto :hashdone
-REM Strip spaces certutil may insert between hex byte groups, take first 16 chars.
-set SRCHASH_NOSPACE=%SRCHASH_RAW: =%
-set SOURCE_HASH=%SRCHASH_NOSPACE:~0,16%
-:hashdone
+for /f "usebackq tokens=*" %%H in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$files=@('monolith_query.cpp','monolith_query_tool_log.h','monolith_query_crg.h','monolith_query_review_ranges.h','monolith_query_bridge.h','monolith_query_help.h'); $ms=New-Object IO.MemoryStream; foreach($f in $files){ $b=[IO.File]::ReadAllBytes((Resolve-Path $f)); $ms.Write($b,0,$b.Length) }; $hash=[Security.Cryptography.SHA256]::Create().ComputeHash($ms.ToArray()); (($hash | ForEach-Object { $_.ToString('x2') }) -join '').Substring(0,16)"`) do set SOURCE_HASH=%%H
 echo Source hash: %SOURCE_HASH%
 
 where cl >nul 2>&1
