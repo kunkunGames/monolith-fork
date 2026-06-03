@@ -1847,8 +1847,16 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 		{
 			if (ResArray->Num() >= 2)
 			{
-				ResX = (int32)(*ResArray)[0]->AsNumber();
-				ResY = (int32)(*ResArray)[1]->AsNumber();
+				double TempX = 0.0, TempY = 0.0;
+				if ((*ResArray)[0]->TryGetNumber(TempX) && (*ResArray)[1]->TryGetNumber(TempY))
+				{
+					ResX = (int32)TempX;
+					ResY = (int32)TempY;
+				}
+				else
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'resolution' elements must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+				}
 			}
 		}
 		else
@@ -1894,7 +1902,15 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 				{
 					if (Loc->Num() >= 3)
 					{
-						CameraLocation = FVector((*Loc)[0]->AsNumber(), (*Loc)[1]->AsNumber(), (*Loc)[2]->AsNumber());
+						double TempX = 0.0, TempY = 0.0, TempZ = 0.0;
+						if ((*Loc)[0]->TryGetNumber(TempX) && (*Loc)[1]->TryGetNumber(TempY) && (*Loc)[2]->TryGetNumber(TempZ))
+						{
+							CameraLocation = FVector(TempX, TempY, TempZ);
+						}
+						else
+						{
+							return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.location' elements must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+						}
 					}
 				}
 				else
@@ -1909,7 +1925,15 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 				{
 					if (Rot->Num() >= 3)
 					{
-						CameraRotation = FRotator((*Rot)[0]->AsNumber(), (*Rot)[1]->AsNumber(), (*Rot)[2]->AsNumber());
+						double TempPitch = 0.0, TempYaw = 0.0, TempRoll = 0.0;
+						if ((*Rot)[0]->TryGetNumber(TempPitch) && (*Rot)[1]->TryGetNumber(TempYaw) && (*Rot)[2]->TryGetNumber(TempRoll))
+						{
+							CameraRotation = FRotator(TempPitch, TempYaw, TempRoll);
+						}
+						else
+						{
+							return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.rotation' elements must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+						}
 					}
 				}
 				else
@@ -2350,8 +2374,16 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 		{
 			if (ResArray->Num() >= 2)
 			{
-				ResX = (int32)(*ResArray)[0]->AsNumber();
-				ResY = (int32)(*ResArray)[1]->AsNumber();
+				double TempX = 0.0, TempY = 0.0;
+				if ((*ResArray)[0]->TryGetNumber(TempX) && (*ResArray)[1]->TryGetNumber(TempY))
+				{
+					ResX = (int32)TempX;
+					ResY = (int32)TempY;
+				}
+				else
+				{
+					return FMonolithActionResult::Error(TEXT("Invalid param: 'resolution' elements must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+				}
 			}
 		}
 		else
@@ -2391,7 +2423,18 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 				const TArray<TSharedPtr<FJsonValue>>* Loc = nullptr;
 				if ((*CameraObj)->TryGetArrayField(TEXT("location"), Loc) && Loc)
 				{
-					if (Loc->Num() >= 3) CameraLocation = FVector((*Loc)[0]->AsNumber(), (*Loc)[1]->AsNumber(), (*Loc)[2]->AsNumber());
+					if (Loc->Num() >= 3)
+					{
+						double TempX = 0.0, TempY = 0.0, TempZ = 0.0;
+						if ((*Loc)[0]->TryGetNumber(TempX) && (*Loc)[1]->TryGetNumber(TempY) && (*Loc)[2]->TryGetNumber(TempZ))
+						{
+							CameraLocation = FVector(TempX, TempY, TempZ);
+						}
+						else
+						{
+							return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.location' elements must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+						}
+					}
 				}
 				else
 				{
@@ -2403,7 +2446,18 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 				const TArray<TSharedPtr<FJsonValue>>* Rot = nullptr;
 				if ((*CameraObj)->TryGetArrayField(TEXT("rotation"), Rot) && Rot)
 				{
-					if (Rot->Num() >= 3) CameraRotation = FRotator((*Rot)[0]->AsNumber(), (*Rot)[1]->AsNumber(), (*Rot)[2]->AsNumber());
+					if (Rot->Num() >= 3)
+					{
+						double TempPitch = 0.0, TempYaw = 0.0, TempRoll = 0.0;
+						if ((*Rot)[0]->TryGetNumber(TempPitch) && (*Rot)[1]->TryGetNumber(TempYaw) && (*Rot)[2]->TryGetNumber(TempRoll))
+						{
+							CameraRotation = FRotator(TempPitch, TempYaw, TempRoll);
+						}
+						else
+						{
+							return FMonolithActionResult::Error(TEXT("Invalid param: 'camera.rotation' elements must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+						}
+					}
 				}
 				else
 				{

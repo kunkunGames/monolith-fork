@@ -726,4 +726,53 @@ bool FMonolithEditorPreviewMalformedColumnsTest::RunTest(const FString& /*Parame
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithEditorCaptureScenePreviewMalformedResolutionTest,
+	"Monolith.ParamGuard.EditorPreview.CaptureScenePreviewMalformedResolution",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorCaptureScenePreviewMalformedResolutionTest::RunTest(const FString& /*Parameters*/)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Engine/BasicShapes/Cube"));
+	Params->SetStringField(TEXT("asset_type"), TEXT("StaticMesh"));
+	TArray<TSharedPtr<FJsonValue>> ResArray;
+	ResArray.Add(MakeShared<FJsonValueString>(TEXT("not_a_number")));
+	ResArray.Add(MakeShared<FJsonValueNumber>(512));
+	Params->SetArrayField(TEXT("resolution"), ResArray);
+
+	const FMonolithActionResult Result = FMonolithEditorActions::HandleCaptureScenePreview(Params);
+	TestFalse(TEXT("Malformed resolution elements returns an error"), Result.bSuccess);
+	TestTrue(TEXT("Error message mentions resolution"),
+		Result.ErrorMessage.Contains(TEXT("resolution")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithEditorCaptureScenePreviewMalformedCameraTest,
+	"Monolith.ParamGuard.EditorPreview.CaptureScenePreviewMalformedCamera",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorCaptureScenePreviewMalformedCameraTest::RunTest(const FString& /*Parameters*/)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Engine/BasicShapes/Cube"));
+	Params->SetStringField(TEXT("asset_type"), TEXT("StaticMesh"));
+
+	TSharedPtr<FJsonObject> CameraObj = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> LocArray;
+	LocArray.Add(MakeShared<FJsonValueString>(TEXT("not_a_number")));
+	LocArray.Add(MakeShared<FJsonValueNumber>(0));
+	LocArray.Add(MakeShared<FJsonValueNumber>(0));
+	CameraObj->SetArrayField(TEXT("location"), LocArray);
+	Params->SetObjectField(TEXT("camera"), CameraObj);
+
+	const FMonolithActionResult Result = FMonolithEditorActions::HandleCaptureScenePreview(Params);
+	TestFalse(TEXT("Malformed camera.location elements returns an error"), Result.bSuccess);
+	TestTrue(TEXT("Error message mentions camera.location"),
+		Result.ErrorMessage.Contains(TEXT("camera.location")));
+
+	return true;
+}
 #endif // WITH_DEV_AUTOMATION_TESTS
