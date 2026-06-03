@@ -1654,6 +1654,12 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 	const TArray<TSharedPtr<FJsonValue>>* PreNodesArray = nullptr;
 	if (Spec->TryGetArrayField(TEXT("nodes"), PreNodesArray) && PreNodesArray)
 	{
+		// 500 is a conservative local maximum to prevent excessive iterations/allocations during Spec processing.
+		if (PreNodesArray->Num() > 500)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("nodes array contains %d entries, which exceeds the maximum allowed (500)"), PreNodesArray->Num()));
+		}
+
 		for (const auto& NodeVal : *PreNodesArray)
 		{
 			const TSharedPtr<FJsonObject>& NodeObj = NodeVal->AsObject();
@@ -1678,6 +1684,12 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 	const TArray<TSharedPtr<FJsonValue>>* PreConnsArray = nullptr;
 	if (Spec->TryGetArrayField(TEXT("connections"), PreConnsArray) && PreConnsArray)
 	{
+		// 1000 is a conservative local maximum to prevent excessive iterations/allocations during Spec processing.
+		if (PreConnsArray->Num() > 1000)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("connections array contains %d entries, which exceeds the maximum allowed (1000)"), PreConnsArray->Num()));
+		}
+
 		for (const auto& ConnVal : *PreConnsArray)
 		{
 			const TSharedPtr<FJsonObject>& ConnObj = ConnVal->AsObject();

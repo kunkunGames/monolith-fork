@@ -1471,6 +1471,26 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 		}
 	}
 
+	const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
+	if (Spec->TryGetArrayField(TEXT("nodes"), NodesArray) && NodesArray)
+	{
+		// 500 is a conservative local maximum to prevent excessive iterations/allocations during Spec processing.
+		if (NodesArray->Num() > 500)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("nodes array contains %d entries, which exceeds the maximum allowed (500)"), NodesArray->Num()));
+		}
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* ConnsArray = nullptr;
+	if (Spec->TryGetArrayField(TEXT("connections"), ConnsArray) && ConnsArray)
+	{
+		// 1000 is a conservative local maximum to prevent excessive iterations/allocations during Spec processing.
+		if (ConnsArray->Num() > 1000)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("connections array contains %d entries, which exceeds the maximum allowed (1000)"), ConnsArray->Num()));
+		}
+	}
+
 	// Create the cue
 	FString Error;
 	USoundCue* Cue = CreateEmptySoundCue(AssetPath, Error);
@@ -1481,8 +1501,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 
 	// Step 1: Create all nodes, map string IDs -> USoundNode*
 	TMap<FString, USoundNode*> NodeMap;
-	const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
-	if (Spec->TryGetArrayField(TEXT("nodes"), NodesArray) && NodesArray)
+	if (NodesArray)
 	{
 		for (const auto& NodeVal : *NodesArray)
 		{
@@ -1545,8 +1564,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 
 	// Step 3: Wire connections
 	int32 ConnectionCount = 0;
-	const TArray<TSharedPtr<FJsonValue>>* ConnsArray = nullptr;
-	if (Spec->TryGetArrayField(TEXT("connections"), ConnsArray) && ConnsArray)
+	if (ConnsArray)
 	{
 		for (const auto& ConnVal : *ConnsArray)
 		{

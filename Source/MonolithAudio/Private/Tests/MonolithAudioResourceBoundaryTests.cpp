@@ -603,6 +603,56 @@ bool FMonolithAudioCreateDistanceCrossfadeCueLimitTest::RunTest(const FString& P
 }
 
 #if WITH_METASOUND
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioBuildMetaSoundFromSpecLimitTest, "Monolith.LimitGuard.Audio.BuildMetaSoundFromSpecClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAudioBuildMetaSoundFromSpecLimitTest::RunTest(const FString& Parameters)
+{
+	// Test oversized nodes array is rejected
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/TestLimitSpecMetaSound"));
+
+		TSharedPtr<FJsonObject> SpecObj = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> OversizedNodesArray;
+		for (int32 i = 0; i < 501; ++i)
+		{
+			TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+			OversizedNodesArray.Add(MakeShared<FJsonValueObject>(NodeObj));
+		}
+		SpecObj->SetArrayField(TEXT("nodes"), OversizedNodesArray);
+		Params->SetObjectField(TEXT("spec"), SpecObj);
+
+		FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry::Get());
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("build_metasound_from_spec"), Params);
+
+		TestFalse(TEXT("Oversized nodes array should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention maximum allowed"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed")));
+	}
+
+	// Test oversized connections array is rejected
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/TestLimitSpecMetaSound"));
+
+		TSharedPtr<FJsonObject> SpecObj = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> OversizedConnsArray;
+		for (int32 i = 0; i < 1001; ++i)
+		{
+			TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
+			OversizedConnsArray.Add(MakeShared<FJsonValueObject>(ConnObj));
+		}
+		SpecObj->SetArrayField(TEXT("connections"), OversizedConnsArray);
+		Params->SetObjectField(TEXT("spec"), SpecObj);
+
+		FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry::Get());
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("build_metasound_from_spec"), Params);
+
+		TestFalse(TEXT("Oversized connections array should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention maximum allowed"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed")));
+	}
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioCreateInteractiveMetaSoundLimitTest, "Monolith.LimitGuard.Audio.CreateInteractiveMetaSoundClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithAudioCreateInteractiveMetaSoundLimitTest::RunTest(const FString& Parameters)
 {
@@ -629,6 +679,55 @@ bool FMonolithAudioCreateInteractiveMetaSoundLimitTest::RunTest(const FString& P
 }
 #endif // WITH_METASOUND
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioBuildSoundCueFromSpecLimitTest, "Monolith.LimitGuard.Audio.BuildSoundCueFromSpecClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAudioBuildSoundCueFromSpecLimitTest::RunTest(const FString& Parameters)
+{
+	// Test oversized nodes array is rejected
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/TestLimitSpecCue"));
+
+		TSharedPtr<FJsonObject> SpecObj = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> OversizedNodesArray;
+		for (int32 i = 0; i < 501; ++i)
+		{
+			TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+			OversizedNodesArray.Add(MakeShared<FJsonValueObject>(NodeObj));
+		}
+		SpecObj->SetArrayField(TEXT("nodes"), OversizedNodesArray);
+		Params->SetObjectField(TEXT("spec"), SpecObj);
+
+		FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry::Get());
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("build_sound_cue_from_spec"), Params);
+
+		TestFalse(TEXT("Oversized nodes array should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention maximum allowed"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed")));
+	}
+
+	// Test oversized connections array is rejected
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/TestLimitSpecCue"));
+
+		TSharedPtr<FJsonObject> SpecObj = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> OversizedConnsArray;
+		for (int32 i = 0; i < 1001; ++i)
+		{
+			TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
+			OversizedConnsArray.Add(MakeShared<FJsonValueObject>(ConnObj));
+		}
+		SpecObj->SetArrayField(TEXT("connections"), OversizedConnsArray);
+		Params->SetObjectField(TEXT("spec"), SpecObj);
+
+		FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry::Get());
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("build_sound_cue_from_spec"), Params);
+
+		TestFalse(TEXT("Oversized connections array should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention maximum allowed"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed")));
+	}
+
+	return true;
+}
 
 namespace
 {
