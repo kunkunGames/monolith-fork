@@ -42,10 +42,17 @@ public class MonolithDataflow : ModuleRules
 				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
 				string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
 
+				string ExperimentalDir = Path.Combine(EnginePluginsDir, "Experimental", "Dataflow");
+				string RuntimeDir = Path.Combine(EnginePluginsDir, "Runtime", "Dataflow");
+				string RootDir = Path.Combine(EnginePluginsDir, "Dataflow");
+
 				bHasDataflowRuntime =
-					Directory.Exists(Path.Combine(EnginePluginsDir, "Experimental", "Dataflow"))
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "Dataflow"))
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Dataflow"))
+					Directory.Exists(ExperimentalDir)
+					|| Directory.Exists(RuntimeDir)
+					|| Directory.Exists(RootDir)
+					|| (Directory.Exists(Path.Combine(EnginePluginsDir, "Experimental")) && Directory.GetDirectories(Path.Combine(EnginePluginsDir, "Experimental"), "Dataflow_*", SearchOption.TopDirectoryOnly).Length > 0)
+					|| (Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime")) && Directory.GetDirectories(Path.Combine(EnginePluginsDir, "Runtime"), "Dataflow_*", SearchOption.TopDirectoryOnly).Length > 0)
+					|| (Directory.Exists(EnginePluginsDir) && Directory.GetDirectories(EnginePluginsDir, "Dataflow_*", SearchOption.TopDirectoryOnly).Length > 0)
 					|| (Directory.Exists(Path.Combine(EngineDir, "Source", "Runtime", "Experimental", "Dataflow", "Core"))
 						&& Directory.Exists(Path.Combine(EngineDir, "Source", "Runtime", "Experimental", "Dataflow", "Engine")));
 			}
