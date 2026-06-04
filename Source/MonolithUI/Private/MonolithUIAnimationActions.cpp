@@ -425,7 +425,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
         return ParamError;
     }
     double Duration = 0.0;
-    Params->TryGetNumberField(TEXT("duration"), Duration);
+    if (Params->HasField(TEXT("duration")) && !Params->TryGetNumberField(TEXT("duration"), Duration))
+    {
+        return FMonolithActionResult::Error(TEXT("duration must be a number"), -32602);
+    }
 
     if (Duration <= 0.0)
     {
