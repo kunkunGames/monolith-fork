@@ -198,8 +198,8 @@ FMonolithActionResult FMonolithMeshTechArtActions::ImportMesh(const TSharedPtr<F
 		return FMonolithActionResult::Error(TEXT("'files' array is required and must not be empty"));
 	}
 
-	FString Destination = Params->GetStringField(TEXT("destination"));
-	if (Destination.IsEmpty())
+	FString Destination;
+	if (!Params->TryGetStringField(TEXT("destination"), Destination) || Destination.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("'destination' is required"));
 	}
@@ -267,8 +267,15 @@ FMonolithActionResult FMonolithMeshTechArtActions::ImportMesh(const TSharedPtr<F
 		}
 
 		// Material import
-		FString MatImport = Params->HasField(TEXT("material_import"))
-			? Params->GetStringField(TEXT("material_import")).ToLower() : TEXT("create_new");
+		FString MatImport = TEXT("create_new");
+		if (Params->HasField(TEXT("material_import")))
+		{
+			if (!Params->TryGetStringField(TEXT("material_import"), MatImport))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'material_import'. Expected string."));
+			}
+			MatImport = MatImport.ToLower();
+		}
 		if (MatImport == TEXT("skip"))
 		{
 			FbxUI->bImportMaterials = false;
@@ -345,9 +352,10 @@ FMonolithActionResult FMonolithMeshTechArtActions::ImportMesh(const TSharedPtr<F
 
 FMonolithActionResult FMonolithMeshTechArtActions::ExportMesh(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString FilePath = Params->GetStringField(TEXT("file_path"));
-	if (AssetPath.IsEmpty() || FilePath.IsEmpty())
+	FString AssetPath;
+	FString FilePath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty() ||
+		!Params->TryGetStringField(TEXT("file_path"), FilePath) || FilePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("'asset_path' and 'file_path' are required"));
 	}
@@ -435,8 +443,8 @@ FMonolithActionResult FMonolithMeshTechArtActions::FixMeshQuality(const TSharedP
 		return FMonolithActionResult::Error(TEXT("GeometryScript handle pool not available"));
 	}
 
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("'asset_path' is required"));
 	}
@@ -585,8 +593,8 @@ FMonolithActionResult FMonolithMeshTechArtActions::AutoGenerateLods(const TShare
 		return FMonolithActionResult::Error(TEXT("GeometryScript handle pool not available"));
 	}
 
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("'asset_path' is required"));
 	}
@@ -818,8 +826,14 @@ FMonolithActionResult FMonolithMeshTechArtActions::AnalyzeTexelDensity(const TSh
 
 	if (Params->HasField(TEXT("actor_name")))
 	{
+		FString ActorName;
+		if (!Params->TryGetStringField(TEXT("actor_name"), ActorName))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'actor_name'. Expected string."));
+		}
+
 		FString Error;
-		AActor* Actor = MonolithMeshUtils::FindActorByName(Params->GetStringField(TEXT("actor_name")), Error);
+		AActor* Actor = MonolithMeshUtils::FindActorByName(ActorName, Error);
 		if (!Actor)
 		{
 			return FMonolithActionResult::Error(Error);
@@ -1183,17 +1197,18 @@ FMonolithActionResult FMonolithMeshTechArtActions::AnalyzeMaterialCostInRegion(c
 
 FMonolithActionResult FMonolithMeshTechArtActions::SetMeshCollision(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("'asset_path' is required"));
 	}
 
-	FString CollisionType = Params->GetStringField(TEXT("collision_type")).ToLower();
-	if (CollisionType.IsEmpty())
+	FString CollisionType;
+	if (!Params->TryGetStringField(TEXT("collision_type"), CollisionType) || CollisionType.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("'collision_type' is required"));
 	}
+	CollisionType = CollisionType.ToLower();
 
 	FString Error;
 	UStaticMesh* SM = MonolithMeshUtils::LoadStaticMesh(AssetPath, Error);
@@ -1382,8 +1397,14 @@ FMonolithActionResult FMonolithMeshTechArtActions::AnalyzeLightmapDensity(const 
 
 	if (Params->HasField(TEXT("actor_name")))
 	{
+		FString ActorName;
+		if (!Params->TryGetStringField(TEXT("actor_name"), ActorName))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'actor_name'. Expected string."));
+		}
+
 		FString Error;
-		AActor* Actor = MonolithMeshUtils::FindActorByName(Params->GetStringField(TEXT("actor_name")), Error);
+		AActor* Actor = MonolithMeshUtils::FindActorByName(ActorName, Error);
 		if (!Actor)
 		{
 			return FMonolithActionResult::Error(Error);

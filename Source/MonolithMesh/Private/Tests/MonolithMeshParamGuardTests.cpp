@@ -3,7 +3,10 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithMeshInspectionActions.h"
 #include "MonolithMeshOperationActions.h"
+#include "MonolithMeshTechArtActions.h"
 #include "Dom/JsonObject.h"
+#include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
 #include "MonolithMeshProceduralActions.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshInspectionMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.InspectionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -42,6 +45,32 @@ bool FMonolithParamGuardMeshOperationMalformedParamsTest::RunTest(const FString&
         TestTrue(TEXT("GeometrySmooth reports the validation error"), Result.ErrorMessage.Contains(TEXT("Invalid type for parameter 'iterations'. Expected number.")));
     }
 
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshTechArtMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.TechArtRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardMeshTechArtMalformedParamsTest::RunTest(const FString& Parameters)
+{
+    FMonolithMeshTechArtActions::RegisterActions(FMonolithToolRegistry::Get());
+    TestTrue(TEXT("import_mesh action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("import_mesh")));
+
+    const FString TempFbxPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithParamGuard"), TEXT(".fbx"));
+    TestTrue(TEXT("temporary FBX file is created"), FFileHelper::SaveStringToFile(TEXT("placeholder"), *TempFbxPath));
+
+    TArray<TSharedPtr<FJsonValue>> Files;
+    Files.Add(MakeShared<FJsonValueString>(TempFbxPath));
+
+    TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+    Params->SetArrayField(TEXT("files"), Files);
+    Params->SetStringField(TEXT("destination"), TEXT("/Game/Temp"));
+    Params->SetNumberField(TEXT("material_import"), 1);
+
+    FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("import_mesh"), Params);
+    TestFalse(TEXT("ImportMesh rejects malformed material_import parameter"), Result.bSuccess);
+    TestTrue(TEXT("ImportMesh reports the validation error"), Result.ErrorMessage.Contains(TEXT("Invalid type for parameter 'material_import'. Expected string.")));
+
+    IFileManager::Get().Delete(*TempFbxPath);
     return true;
 }
 
