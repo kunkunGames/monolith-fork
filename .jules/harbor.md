@@ -51,3 +51,9 @@
 **Learning:** Monolith's standard `.gitignore` rule for Python caches is `__pycache__/`, which does not cover tool-specific cache folders like `.pytest_cache/` or `.ruff_cache/`. Likewise, `make_release.ps1` explicitly checks for many local developer folders but may miss new tool caches.
 **Prevention:** Ensure tool caches like `.pytest_cache/` and `.ruff_cache/` are explicitly ignored in `.gitignore`, and excluded in `Scripts/make_release.ps1` hygiene checks. Also, preserve them in the updater scripts (`monolith_swap.bat` and `monolith_swap.sh`) so dev state isn't wiped during auto-updates.
 **Avoid:** Trusting standard language ignores to cover tool-specific generated folders that might pollute release artifacts or source control.
+
+## 2026-05-24 - Preserve IDE directories in auto-updater
+**Release risk:** Developer workspaces using `.vscode`, `.vs`, or `.idea` can be completely destroyed during a Monolith auto-update because the auto-updater blindly swaps the folder, dropping local directories that weren't explicitly preserved.
+**Learning:** Monolith's C++ updater uses a destructive swap script (`monolith_swap.bat`/`.sh`) that moves the old plugin folder to backup, and copies only explicitly listed developer directories back to the new folder.
+**Prevention:** Add explicit rules to preserve IDE directories (`.vscode`, `.vs`, `.idea`) in `monolith_swap.bat` and `monolith_swap.sh`.
+**Avoid:** Deleting untracked workspace and developer settings during an auto-update.
