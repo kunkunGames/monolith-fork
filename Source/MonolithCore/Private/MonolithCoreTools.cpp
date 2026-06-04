@@ -1728,6 +1728,27 @@ FMonolithActionResult FMonolithCoreTools::HandleSetNotificationSettings(const TS
 		return FMonolithActionResult::Error(TEXT("settings object is required"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
+	struct FPendingNotificationBoolSetting
+	{
+		const FNotificationBoolSetting* Definition = nullptr;
+		bool Value = false;
+	};
+
+	TArray<FPendingNotificationBoolSetting> PendingSettings;
+	for (const FNotificationBoolSetting& Def : GetNotificationSettings())
+	{
+		TSharedPtr<FJsonValue> Field = (*SettingsObj)->TryGetField(Def.Name);
+		if (Field.IsValid())
+		{
+			bool NewValue = false;
+			if (!Field->TryGetBool(NewValue))
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("Setting '%s' must be a boolean"), *Def.Name), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			PendingSettings.Add({&Def, NewValue});
+		}
+	}
+
 	UMonolithSettings* Settings = GetMutableDefault<UMonolithSettings>();
 	if (!Settings)
 	{
@@ -1735,14 +1756,11 @@ FMonolithActionResult FMonolithCoreTools::HandleSetNotificationSettings(const TS
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Changed;
-	for (const FNotificationBoolSetting& Def : GetNotificationSettings())
+	for (const FPendingNotificationBoolSetting& Pending : PendingSettings)
 	{
-		bool NewValue = false;
-		if ((*SettingsObj)->TryGetBoolField(Def.Name, NewValue))
-		{
-			Settings->*(Def.Member) = NewValue;
-			Changed.Add(MakeShared<FJsonValueString>(Def.Name));
-		}
+		const FNotificationBoolSetting& Def = *Pending.Definition;
+		Settings->*(Def.Member) = Pending.Value;
+		Changed.Add(MakeShared<FJsonValueString>(Def.Name));
 	}
 
 	Settings->SaveConfig();

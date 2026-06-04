@@ -289,7 +289,16 @@ bool FMonolithParamSchema::ValidateTypedParams(
 	}
 
 	bool bValidateTypes = false;
-	if (!Schema->TryGetBoolField(TEXT("_validate_types"), bValidateTypes) || !bValidateTypes)
+	TSharedPtr<FJsonValue> ValidateTypesField = Schema->TryGetField(TEXT("_validate_types"));
+	if (ValidateTypesField.IsValid())
+	{
+		if (!ValidateTypesField->TryGetBool(bValidateTypes))
+		{
+			return false;
+		}
+	}
+
+	if (!bValidateTypes)
 	{
 		return true;
 	}
