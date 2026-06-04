@@ -258,6 +258,7 @@ FMonolithActionResult FMonolithLogicDriverTextGraphActions::HandleGetDialogueFlo
 
 	// BFS from initial nodes
 	TArray<FString> Queue;
+	Queue.Reserve(16);
 	for (const auto& Pair : Nodes)
 	{
 		if (Pair.Value.bIsInitial) Queue.Add(Pair.Key);

@@ -716,7 +716,9 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleExplainStateMa
 	};
 
 	TMap<FString, FStateData> StatesByGuid;  // guid -> data
+	StatesByGuid.Reserve(RootGraph->Nodes.Num());
 	TMap<FString, FString> GuidToName;
+	GuidToName.Reserve(RootGraph->Nodes.Num());
 	int32 TransitionCount = 0;
 
 	// First pass: collect states
@@ -821,7 +823,9 @@ FMonolithActionResult FMonolithLogicDriverDiscoveryActions::HandleExplainStateMa
 		// BFS to build the primary path and branching paths
 		TArray<TArray<FString>> Paths;
 		TArray<TArray<FString>> Queue;
+		Queue.Reserve(16);
 		TSet<FString> Visited;
+		Visited.Reserve(StatesByGuid.Num());
 
 		TArray<FString> StartPath;
 		FString* StartName = GuidToName.Find(InitialGuid);

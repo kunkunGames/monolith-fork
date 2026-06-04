@@ -693,6 +693,9 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleCompareStateMachine
 	auto CollectInfo = [](UEdGraph* Graph) -> FGraphInfo
 	{
 		FGraphInfo Info;
+		Info.StateNames.Reserve(Graph->Nodes.Num());
+		Info.Transitions.Reserve(Graph->Nodes.Num());
+		Info.GuidToName.Reserve(Graph->Nodes.Num());
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
 			if (!Node) continue;
