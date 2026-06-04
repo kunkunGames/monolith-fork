@@ -1094,9 +1094,13 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 	bool bIncludeHeader = true;
 	Params->TryGetBoolField(TEXT("include_header"), bIncludeHeader);
 	int32 MaxLines = 0;
-	double RawMaxLines = 0;
-	if (Params->TryGetNumberField(TEXT("max_lines"), RawMaxLines))
+	if (Params->HasField(TEXT("max_lines")))
 	{
+		double RawMaxLines = 0;
+		if (!Params->TryGetNumberField(TEXT("max_lines"), RawMaxLines))
+		{
+			return FMonolithActionResult::Error(TEXT("'max_lines' parameter must be a number"), -32602);
+		}
 		MaxLines = FMath::Clamp(static_cast<int32>(RawMaxLines), 1, 1000);
 	}
 	bool bMembersOnly = false;
