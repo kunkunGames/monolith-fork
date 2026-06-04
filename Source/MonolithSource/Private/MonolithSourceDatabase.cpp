@@ -2275,7 +2275,7 @@ int32 FMonolithSourceDatabase::CountSymbolsFTSFiltered(const FString& Query, con
 	}
 	if (!PathFilter.IsEmpty())
 	{
-		Conditions.Add(TEXT("fi.path LIKE ?"));
+		Conditions.Add(TEXT("fi.path LIKE ? ESCAPE '\\'"));
 	}
 
 	SQL += TEXT("WHERE ") + FString::Join(Conditions, TEXT(" AND "));
@@ -2296,7 +2296,8 @@ int32 FMonolithSourceDatabase::CountSymbolsFTSFiltered(const FString& Query, con
 	}
 	if (!PathFilter.IsEmpty())
 	{
-		Stmt.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s%%"), *PathFilter));
+		FString EscapedPathFilter = PathFilter.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
+		Stmt.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s%%"), *EscapedPathFilter));
 	}
 
 	int32 Count = 0;
@@ -2348,7 +2349,7 @@ int32 FMonolithSourceDatabase::CountSourceFTSFiltered(const FString& Query, cons
 	}
 	if (!PathFilter.IsEmpty())
 	{
-		Conditions.Add(TEXT("fi.path LIKE ?"));
+		Conditions.Add(TEXT("fi.path LIKE ? ESCAPE '\\'"));
 	}
 
 	SQL += TEXT("WHERE ") + FString::Join(Conditions, TEXT(" AND "));
@@ -2369,7 +2370,8 @@ int32 FMonolithSourceDatabase::CountSourceFTSFiltered(const FString& Query, cons
 	}
 	if (!PathFilter.IsEmpty())
 	{
-		Stmt.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s%%"), *PathFilter));
+		FString EscapedPathFilter = PathFilter.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
+		Stmt.SetBindingValueByIndex(BindIdx++, FString::Printf(TEXT("%%%s%%"), *EscapedPathFilter));
 	}
 
 	int32 Count = 0;

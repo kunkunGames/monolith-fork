@@ -22,6 +22,37 @@ namespace
 	}
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceCountFTSFilteredEscapesPathWildcardsTest, "Monolith.IndexGuard.Source.CountFTSFilteredEscapesPathWildcards", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceCountFTSFilteredEscapesPathWildcardsTest::RunTest(const FString& Parameters)
+{
+	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithCountFTSEscape"), TEXT(".sqlite"));
+	FMonolithSourceDatabase DB;
+
+	TestTrue(TEXT("Temporary DB opens for writing"), DB.OpenForWriting(DbPath));
+	TestTrue(TEXT("Temporary DB creates schema"), DB.CreateTablesIfNeeded());
+
+	// Add a module and file
+	int64 ModId = DB.InsertModule(TEXT("Mod"), TEXT("Path/Mod"), TEXT("Runtime"));
+	int64 FileId1 = DB.InsertFile(TEXT("Path/Mod/Foo_Bar.cpp"), ModId, TEXT("cpp"), 100, 0);
+	int64 FileId2 = DB.InsertFile(TEXT("Path/Mod/FooXBar.cpp"), ModId, TEXT("cpp"), 100, 0);
+
+	DB.InsertSourceChunks(FileId1, { TEXT("ChunkA") });
+	DB.InsertSourceChunks(FileId2, { TEXT("ChunkB") });
+
+	int32 Count1 = DB.CountSourceFTSFiltered(TEXT("Chunk"), TEXT("all"), TEXT("Mod"), TEXT("Foo_Bar.cpp"));
+	int32 Count2 = DB.CountSourceFTSFiltered(TEXT("Chunk"), TEXT("all"), TEXT("Mod"), TEXT("FooXBar.cpp"));
+
+	TestEqual(TEXT("Underscore in PathFilter escapes correctly"), Count1, 1);
+	TestEqual(TEXT("Underscore in PathFilter escapes correctly 2"), Count2, 1);
+
+	DB.Close();
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*DbPath);
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-wal")));
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-shm")));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceSearchHandlesEmptyQueryTest, "Monolith.IndexGuard.Source.SearchHandlesEmptyQuery", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FSourceSearchHandlesEmptyQueryTest::RunTest(const FString& Parameters)
