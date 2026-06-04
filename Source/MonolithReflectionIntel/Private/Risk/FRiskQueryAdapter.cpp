@@ -252,12 +252,13 @@ FMonolithActionResult FRiskQueryAdapter::HandleGetHotspotScore(const TSharedPtr<
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString FilePath = CanonPath(Params->GetStringField(TEXT("file_path")));
-	if (FilePath.IsEmpty())
+	FString RawFilePath;
+	if (!Params->TryGetStringField(TEXT("file_path"), RawFilePath) || RawFilePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("`file_path` is required."),
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
+	const FString FilePath = CanonPath(RawFilePath);
 
 	FSQLitePreparedStatement Stmt;
 	if (!Stmt.Create(*DB, TEXT(
@@ -302,17 +303,28 @@ FMonolithActionResult FRiskQueryAdapter::HandleGetCoChangePairs(const TSharedPtr
 	FSQLiteDatabase* DB = GetRawDB();
 	if (!DB) { return FMonolithActionResult::Error(TEXT("EngineSource.db not available.")); }
 
-	const FString FilePath = CanonPath(Params->GetStringField(TEXT("file_path")));
-	if (FilePath.IsEmpty())
+	FString RawFilePath;
+	if (!Params->TryGetStringField(TEXT("file_path"), RawFilePath) || RawFilePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("`file_path` is required."),
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
+	const FString FilePath = CanonPath(RawFilePath);
 
-	const int32 ReqLimit = Params->HasField(TEXT("limit"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
-	const FString CursorIn = Params->HasField(TEXT("cursor"))
-		? Params->GetStringField(TEXT("cursor")) : FString();
+	double LimitDouble = 50.0;
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("`limit` must be a number."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+
+	FString CursorIn;
+	if (Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("`cursor` must be a string."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	constexpr int32 HARD_CAP = 200;
 	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
@@ -412,14 +424,20 @@ FMonolithActionResult FRiskQueryAdapter::HandleGetFileChurn(const TSharedPtr<FJs
 	FSQLiteDatabase* DB = GetRawDB();
 	if (!DB) { return FMonolithActionResult::Error(TEXT("EngineSource.db not available.")); }
 
-	const FString FilePath = CanonPath(Params->GetStringField(TEXT("file_path")));
-	if (FilePath.IsEmpty())
+	FString RawFilePath;
+	if (!Params->TryGetStringField(TEXT("file_path"), RawFilePath) || RawFilePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("`file_path` is required."),
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
-	const FString RepoTag = Params->HasField(TEXT("repo_tag"))
-		? Params->GetStringField(TEXT("repo_tag")) : FString();
+	const FString FilePath = CanonPath(RawFilePath);
+
+	FString RepoTag;
+	if (Params->HasField(TEXT("repo_tag")) && !Params->TryGetStringField(TEXT("repo_tag"), RepoTag))
+	{
+		return FMonolithActionResult::Error(TEXT("`repo_tag` must be a string."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	FString Sql = TEXT("SELECT repo_tag, commit_count, last_touched FROM git_file_churn WHERE file_path = ?");
 	if (!RepoTag.IsEmpty()) { Sql += TEXT(" AND repo_tag = ?"); }
@@ -464,13 +482,29 @@ FMonolithActionResult FRiskQueryAdapter::HandleGetReleaseWindowHotspots(const TS
 
 	const int64 DefaultSince =
 		FDateTime::UtcNow().ToUnixTimestamp() - (30LL * 24LL * 60LL * 60LL);
-	const int64 Since = Params->HasField(TEXT("since_unix"))
-		? static_cast<int64>(Params->GetNumberField(TEXT("since_unix"))) : DefaultSince;
 
-	const int32 ReqLimit = Params->HasField(TEXT("limit"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
-	const FString CursorIn = Params->HasField(TEXT("cursor"))
-		? Params->GetStringField(TEXT("cursor")) : FString();
+	double SinceDouble = static_cast<double>(DefaultSince);
+	if (Params->HasField(TEXT("since_unix")) && !Params->TryGetNumberField(TEXT("since_unix"), SinceDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("`since_unix` must be a number."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int64 Since = static_cast<int64>(SinceDouble);
+
+	double LimitDouble = 50.0;
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("`limit` must be a number."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+
+	FString CursorIn;
+	if (Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("`cursor` must be a string."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	constexpr int32 HARD_CAP = 200;
 	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
@@ -552,14 +586,34 @@ FMonolithActionResult FRiskQueryAdapter::HandleListConditionalGates(const TShare
 	FSQLiteDatabase* DB = GetRawDB();
 	if (!DB) { return FMonolithActionResult::Error(TEXT("EngineSource.db not available.")); }
 
-	const FString MacroFilter = Params->HasField(TEXT("macro_filter"))
-		? Params->GetStringField(TEXT("macro_filter")) : FString();
-	const FString PathFilter = Params->HasField(TEXT("path_filter"))
-		? Params->GetStringField(TEXT("path_filter")) : FString();
-	const int32 ReqLimit = Params->HasField(TEXT("limit"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
-	const FString CursorIn = Params->HasField(TEXT("cursor"))
-		? Params->GetStringField(TEXT("cursor")) : FString();
+	FString MacroFilter;
+	if (Params->HasField(TEXT("macro_filter")) && !Params->TryGetStringField(TEXT("macro_filter"), MacroFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("`macro_filter` must be a string."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString PathFilter;
+	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("`path_filter` must be a string."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	double LimitDouble = 50.0;
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("`limit` must be a number."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+
+	FString CursorIn;
+	if (Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("`cursor` must be a string."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	constexpr int32 HARD_CAP = 200;
 	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
