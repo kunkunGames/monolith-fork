@@ -131,3 +131,4 @@ desktop.ini
 ehthumbs.db
 Monolith_Release_*/
 dist/
+.hatch/
