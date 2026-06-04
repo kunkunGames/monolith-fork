@@ -65,3 +65,8 @@ Prevention: Replace `HasField` + `Get*Field` with `HasField` + `TryGet*Field`. I
 Malformed input pattern: An optional field (`uv_tiling`, `background_color`) is present with the wrong JSON type in `HandleCaptureScenePreview`.
 Learning: Using `HasField` followed by `GetNumberField` or `GetArrayField` will crash or assert if the type doesn't match the client input. Validation schema wasn't enough.
 Prevention: If an optional field is present, use `TryGetNumberField` or `TryGetArrayField`. If the `TryGet` fails, return an invalid-param error instead of falling back to default or crashing.
+
+## 2026-05-13 - Do not crash on optional string fields in MonolithGASInputActions
+**Malformed input pattern:** `trigger_event` on bind actions and nested properties inside `bindings` arrays or `input_config` were read using `GetStringField` without type checks.
+**Learning:** `GetStringField` on optional/nested untrusted parameters will crash if the user provides the wrong type (e.g., number instead of string) or misses it and the tool doesn't gracefully fall back.
+**Prevention:** Use `TryGetStringField` paired with `HasField` to check if a provided field is of the correct type, and return an error before the crash. Defaults are only valid when the field is completely absent.
