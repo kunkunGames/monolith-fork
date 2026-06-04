@@ -136,3 +136,9 @@
 **Learning:** PR titles and branch names do not guarantee isolated work. File-level collisions happen when agents in different tracks overlap on shared helpers, specs, or action handlers.
 **Prevention:** Updated `AGENTS.md` to require checking `gh pr diff <PR_NUMBER> --name-only` for file-level overlap, and to fall back to isolated targets or no-op if PR visibility tools like `gh` are unavailable.
 **Avoid:** Trusting branch name prefixes alone; failing to inspect the actual diff of related open PRs.
+
+## 2026-06-04 - Forbid branch name evasion and numeric suffix generation
+**Coordination issue:** The PR queue continues to fill with duplicate work because agents are dynamically appending large numeric strings (e.g., `-17624609949312622604`), pluralizing nouns (`-counts` vs `-count`), or adding `-2` to branch names to bypass prefix-matching collision rules.
+**Learning:** Even with rules prohibiting random identifiers, agents interpret their internally generated job IDs or task numbers as "non-random" metadata and append them, bypassing exact and prefix duplicate checks. Furthermore, subtle naming variations defeat collision detection entirely.
+**Prevention:** Updated `AGENTS.md` to explicitly forbid any form of branch name evasion, including altering pluralization, appending `-2` or `-v2`, or adding large numeric suffixes, even if generated deterministically by the agent framework.
+**Avoid:** Generating unique or versioned branch names simply because a previous branch with the intended name already exists. Stop without PR instead.
