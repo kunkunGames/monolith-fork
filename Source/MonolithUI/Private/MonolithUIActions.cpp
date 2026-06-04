@@ -836,6 +836,9 @@ FMonolithActionResult FMonolithUIActions::HandleCompileWidget(const TSharedPtr<F
     TArray<TSharedPtr<FJsonValue>> ErrorArr;
     TArray<TSharedPtr<FJsonValue>> WarnArr;
     TArray<TSharedPtr<FJsonValue>> NoteArr;
+    ErrorArr.Reserve(Results.Messages.Num());
+    WarnArr.Reserve(Results.Messages.Num());
+    NoteArr.Reserve(Results.Messages.Num());
     for (const TSharedRef<FTokenizedMessage>& Msg : Results.Messages)
     {
         TSharedPtr<FJsonObject> MsgObj = MakeShared<FJsonObject>();
@@ -1190,6 +1193,9 @@ namespace MonolithUIActionsPhase2
         TArray<TSharedPtr<FJsonValue>> ErrorArr;
         TArray<TSharedPtr<FJsonValue>> WarnArr;
         TArray<TSharedPtr<FJsonValue>> NoteArr;
+        ErrorArr.Reserve(Results.Messages.Num());
+        WarnArr.Reserve(Results.Messages.Num());
+        NoteArr.Reserve(Results.Messages.Num());
         for (const TSharedRef<FTokenizedMessage>& Msg : Results.Messages)
         {
             TSharedPtr<FJsonObject> MsgObj = MakeShared<FJsonObject>();
