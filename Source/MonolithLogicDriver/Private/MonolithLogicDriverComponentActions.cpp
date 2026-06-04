@@ -304,6 +304,13 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleAddSMComponent
 		}
 	}
 
+	// Validate optional SM reference before mutating the SCS.
+	FString SMPath;
+	if (Params->HasField(TEXT("sm_path")) && !Params->TryGetStringField(TEXT("sm_path"), SMPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: sm_path must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FMonolithActionResult LoadError;
 	UBlueprint* BP = LoadActorBlueprintForSM(BPPath, LoadError);
 	if (!BP)
@@ -326,13 +333,6 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleAddSMComponent
 			return FMonolithActionResult::Error(
 				FString::Printf(TEXT("Component named '%s' already exists in Blueprint '%s'"), *CompName, *BPPath));
 		}
-	}
-
-	// Validate optional SM reference before mutating the SCS.
-	FString SMPath;
-	if (Params->HasField(TEXT("sm_path")) && !Params->TryGetStringField(TEXT("sm_path"), SMPath))
-	{
-		return FMonolithActionResult::Error(TEXT("Malformed parameter: sm_path must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// Create SCS node
