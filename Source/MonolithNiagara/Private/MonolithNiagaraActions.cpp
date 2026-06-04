@@ -704,8 +704,11 @@ static FMonolithActionResult SuccessObj(const TSharedRef<FJsonObject>& Obj)
 // Helper: normalize asset path parameter — accepts "asset_path" (preferred) with "system_path" fallback
 static FString GetAssetPath(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Path = Params->GetStringField(TEXT("asset_path"));
-	if (Path.IsEmpty()) Path = Params->GetStringField(TEXT("system_path"));
+	FString Path;
+	if (!Params->TryGetStringField(TEXT("asset_path"), Path) || Path.IsEmpty())
+	{
+		Params->TryGetStringField(TEXT("system_path"), Path);
+	}
 	return Path;
 }
 
