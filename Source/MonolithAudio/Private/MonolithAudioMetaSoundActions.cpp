@@ -1708,6 +1708,12 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 	const TArray<TSharedPtr<FJsonValue>>* PreGraphInConns = nullptr;
 	if (Spec->TryGetArrayField(TEXT("graph_input_connections"), PreGraphInConns) && PreGraphInConns)
 	{
+		// 1000 is a conservative local maximum to prevent excessive iterations/allocations during Spec processing.
+		if (PreGraphInConns->Num() > 1000)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("graph_input_connections array contains %d entries, which exceeds the maximum allowed (1000)"), PreGraphInConns->Num()));
+		}
+
 		for (const auto& ConnVal : *PreGraphInConns)
 		{
 			const TSharedPtr<FJsonObject>& ConnObj = ConnVal->AsObject();

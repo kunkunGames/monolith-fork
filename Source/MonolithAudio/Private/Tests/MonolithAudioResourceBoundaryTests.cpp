@@ -650,6 +650,28 @@ bool FMonolithAudioBuildMetaSoundFromSpecLimitTest::RunTest(const FString& Param
 		TestTrue(TEXT("Error should mention maximum allowed"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed")));
 	}
 
+	// Test oversized graph_input_connections array is rejected
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/TestLimitSpecMetaSound"));
+
+		TSharedPtr<FJsonObject> SpecObj = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> OversizedGraphInputConnsArray;
+		for (int32 i = 0; i < 1001; ++i)
+		{
+			TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
+			OversizedGraphInputConnsArray.Add(MakeShared<FJsonValueObject>(ConnObj));
+		}
+		SpecObj->SetArrayField(TEXT("graph_input_connections"), OversizedGraphInputConnsArray);
+		Params->SetObjectField(TEXT("spec"), SpecObj);
+
+		FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry::Get());
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("build_metasound_from_spec"), Params);
+
+		TestFalse(TEXT("Oversized graph_input_connections array should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention maximum allowed"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed")));
+	}
+
 	return true;
 }
 
