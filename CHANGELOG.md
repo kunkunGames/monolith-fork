@@ -400,7 +400,7 @@ Public responsible-disclosure response to a security audit by @playtabegg. The C
 - **CORS restricted to localhost origins** — the previous wildcard CORS header allowed any browser tab on any origin to hit the localhost MCP listener while the editor was open. Now strictly checks `Origin` against `localhost` / `127.0.0.1` / `[::1]` patterns.
 - **MCP HTTP server kill-switch** (`bMcpServerEnabled`) — settable via `Project Settings → Plugins → Monolith` or environment variable. When false, the in-process HTTP listener never binds; the rest of the plugin still works (offline `monolith_query.exe` etc.). Default `true` to preserve existing behaviour.
 - **Auto-update opt-in default `false`** (`bAutoUpdateEnabled`) — closes a small window where the C++ default (`true`) was used before the shipped INI default (`false`) loaded, allowing auto-update to fire without explicit opt-in on a fresh project.
-- **SHA256 verification of auto-update tarballs** — auto-update path now hashes the downloaded tarball against the release manifest before extraction. Previously the tarball was trusted on download.
+- **SHA256 verification of auto-update tarballs** — auto-update path now hashes the downloaded tarball against the release manifest before extraction (assuming the marker is present). Previously the tarball was trusted on download.
 - **`SECURITY.md` disclosure policy** — published. Future findings via private email rather than public issue comments.
 - **README MCP-exposure section** — explicit documentation of what the MCP HTTP server exposes, what it does NOT expose, and how to disable.
 
