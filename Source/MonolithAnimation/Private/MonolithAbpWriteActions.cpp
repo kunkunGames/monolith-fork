@@ -593,7 +593,8 @@ TArray<TSharedPtr<FJsonValue>> BuildPinList(UEdGraphNode* Node)
 
 FMonolithActionResult FMonolithAbpWriteActions::HandleAddAnimGraphNode(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	FString NodeType;
 	Params->TryGetStringField(TEXT("node_type"), NodeType);
 	FString NodeClassSpecifier;
@@ -769,11 +770,16 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddAnimGraphNode(const TSh
 
 FMonolithActionResult FMonolithAbpWriteActions::HandleConnectAnimGraphPins(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath  = Params->GetStringField(TEXT("asset_path"));
-	FString SourceNode = Params->GetStringField(TEXT("source_node"));
-	FString SourcePin  = Params->GetStringField(TEXT("source_pin"));
-	FString TargetNode = Params->GetStringField(TEXT("target_node"));
-	FString TargetPin  = Params->GetStringField(TEXT("target_pin"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+	FString SourceNode;
+	if (!Params->TryGetStringField(TEXT("source_node"), SourceNode)) return FMonolithActionResult::Error(TEXT("Missing required parameter: source_node"));
+	FString SourcePin;
+	if (!Params->TryGetStringField(TEXT("source_pin"), SourcePin)) return FMonolithActionResult::Error(TEXT("Missing required parameter: source_pin"));
+	FString TargetNode;
+	if (!Params->TryGetStringField(TEXT("target_node"), TargetNode)) return FMonolithActionResult::Error(TEXT("Missing required parameter: target_node"));
+	FString TargetPin;
+	if (!Params->TryGetStringField(TEXT("target_pin"), TargetPin)) return FMonolithActionResult::Error(TEXT("Missing required parameter: target_pin"));
 	FString GraphName = TEXT("");
 	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	FString StateName = TEXT("");
@@ -903,10 +909,14 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleConnectAnimGraphPins(const
 
 FMonolithActionResult FMonolithAbpWriteActions::HandleSetStateAnimation(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath    = Params->GetStringField(TEXT("asset_path"));
-	FString MachineName  = Params->GetStringField(TEXT("machine_name"));
-	FString StateName    = Params->GetStringField(TEXT("state_name"));
-	FString AnimAssetPath = Params->GetStringField(TEXT("anim_asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+	FString MachineName;
+	if (!Params->TryGetStringField(TEXT("machine_name"), MachineName)) return FMonolithActionResult::Error(TEXT("Missing required parameter: machine_name"));
+	FString StateName;
+	if (!Params->TryGetStringField(TEXT("state_name"), StateName)) return FMonolithActionResult::Error(TEXT("Missing required parameter: state_name"));
+	FString AnimAssetPath;
+	if (!Params->TryGetStringField(TEXT("anim_asset_path"), AnimAssetPath)) return FMonolithActionResult::Error(TEXT("Missing required parameter: anim_asset_path"));
 
 	bool bLoop = false;
 	if (Params->HasField(TEXT("loop")))
@@ -1086,8 +1096,10 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetStateAnimation(const TS
 
 FMonolithActionResult FMonolithAbpWriteActions::HandleAddVariableGet(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString VarName   = Params->GetStringField(TEXT("variable_name"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+	FString VarName;
+	if (!Params->TryGetStringField(TEXT("variable_name"), VarName)) return FMonolithActionResult::Error(TEXT("Missing required parameter: variable_name"));
 	FString GraphName = TEXT("AnimGraph");
 	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	FString StateName = TEXT("");
@@ -1212,10 +1224,14 @@ bool ResolvePropertyPath(UStruct* StructType, void* StructAddr, const FString& P
 
 FMonolithActionResult FMonolithAbpWriteActions::HandleSetAnimGraphNodeProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath    = Params->GetStringField(TEXT("asset_path"));
-	FString NodeId       = Params->GetStringField(TEXT("node_id"));
-	FString PropertyPath = Params->GetStringField(TEXT("property_path"));
-	FString Value        = Params->GetStringField(TEXT("value"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+	FString NodeId;
+	if (!Params->TryGetStringField(TEXT("node_id"), NodeId)) return FMonolithActionResult::Error(TEXT("Missing required parameter: node_id"));
+	FString PropertyPath;
+	if (!Params->TryGetStringField(TEXT("property_path"), PropertyPath)) return FMonolithActionResult::Error(TEXT("Missing required parameter: property_path"));
+	FString Value;
+	if (!Params->TryGetStringField(TEXT("value"), Value)) return FMonolithActionResult::Error(TEXT("Missing required parameter: value"));
 	FString GraphName = TEXT("");
 	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	FString StateName = TEXT("");

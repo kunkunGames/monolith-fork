@@ -214,7 +214,8 @@ TSharedPtr<FJsonObject> FormatSingleGraph(const FString& GraphLabel, UEdGraph* G
 
 FMonolithActionResult FMonolithAnimLayoutActions::HandleAutoLayout(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	FString GraphName = TEXT("AnimGraph");
 	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	FString Formatter = TEXT("auto");

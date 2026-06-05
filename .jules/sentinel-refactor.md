@@ -89,3 +89,10 @@
 **Learning:** Monolith C++ handlers must prefer `TryGetStringField` over direct `GetStringField` calls. When a field is known optional or required but missing from JSON payload, the former securely falls back to the default or enables an explicit error return.
 **Reuse rule:** Initialize an `FString` and use `Params->TryGetStringField` instead of using `GetStringField`. Maintain `const` semantics only if the string is inherently constant and properly initialized.
 **Avoid:** Using `GetStringField` directly on the `Params` object, especially without a preceding type and existence guarantee.
+
+## 2024-05-14 - Replace GetStringField with TryGetStringField across Anim Actions
+
+**Pattern:** Unsafe `GetStringField` usage in `MonolithAnimationActions`, `MonolithAbpWriteActions`, and `MonolithAnimLayoutActions` for extracting required parameters.
+**Learning:** Hard crashes or silent logic failures occur when FJsonObject fails to find a field using `GetStringField` and we try to consume the invalid value. Using `TryGetStringField` gracefully checks presence. We must check the return value and explicitly return a `FMonolithActionResult::Error` if a required field is missing.
+**Reuse rule:** Future animation action handlers should always prefer `TryGetStringField` with an explicit fallback or error return rather than directly calling `GetStringField()`.
+**Avoid:** Avoid using `GetStringField` unless field existence is fully guaranteed, and never use `TryGetStringField` without checking its boolean return value.
