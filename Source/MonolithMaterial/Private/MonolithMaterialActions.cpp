@@ -8448,6 +8448,11 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString ParentPath = Params->GetStringField(TEXT("parent"));
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	// Check if asset already exists
 	UObject* Existing = UEditorAssetLibrary::LoadAsset(AssetPath);
 	if (Existing)
@@ -8470,12 +8475,6 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 	if (!ParentFunc)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load parent function at '%s'"), *ParentPath));
-	}
-
-	// Create package
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	UPackage* Pkg = CreatePackage(*AssetPath);
