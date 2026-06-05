@@ -435,6 +435,7 @@ FMonolithActionResult FMonolithAINavigationActions::HandleGetNavMeshConfig(const
 
 	// Multi-resolution params (Low/Default/High)
 	TArray<TSharedPtr<FJsonValue>> ResParams;
+	ResParams.Reserve(3);
 	const TCHAR* ResNames[] = { TEXT("Low"), TEXT("Default"), TEXT("High") };
 	for (int32 i = 0; i < 3; ++i)
 	{
