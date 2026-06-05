@@ -57,3 +57,9 @@
 **Learning:** Monolith's C++ updater uses a destructive swap script (`monolith_swap.bat`/`.sh`) that moves the old plugin folder to backup, and copies only explicitly listed developer directories back to the new folder.
 **Prevention:** Add explicit rules to preserve IDE directories (`.vscode`, `.vs`, `.idea`) in `monolith_swap.bat` and `monolith_swap.sh`.
 **Avoid:** Deleting untracked workspace and developer settings during an auto-update.
+
+## 2026-05-30 - Preserve AI developer directories in auto-updater
+**Release risk:** Developer workspaces using AI tooling like `.claude` or `.jules` can be completely destroyed during a Monolith auto-update because the auto-updater blindly swaps the folder, dropping local directories that weren't explicitly preserved.
+**Learning:** Monolith's C++ updater uses a destructive swap script (`monolith_swap.bat`/`.sh`) that moves the old plugin folder to backup, and copies only explicitly listed developer directories back to the new folder.
+**Prevention:** Add explicit rules to preserve AI tooling directories (`.claude`, `.jules`) in `monolith_swap.bat` and `monolith_swap.sh`.
+**Avoid:** Deleting untracked workspace and developer settings during an auto-update.
