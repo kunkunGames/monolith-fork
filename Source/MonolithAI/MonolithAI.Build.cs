@@ -277,16 +277,62 @@ public class MonolithAI : ModuleRules
 			return false;
 		}
 
-		if (Directory.Exists(Path.Combine(ProjectPluginsDir, PluginName)))
+		if (IsProjectPluginDirectory(Path.Combine(ProjectPluginsDir, PluginName), PluginName))
 		{
 			return true;
 		}
 
-		foreach (string Dir in Directory.GetDirectories(ProjectPluginsDir))
+		foreach (string CandidateDir in Directory.GetDirectories(ProjectPluginsDir, PluginName + "_*", SearchOption.TopDirectoryOnly))
 		{
-			if (Directory.Exists(Path.Combine(Dir, PluginName)))
+			if (IsProjectPluginDirectory(CandidateDir, PluginName))
 			{
 				return true;
+			}
+		}
+
+		foreach (string Dir in Directory.GetDirectories(ProjectPluginsDir))
+		{
+			if (IsProjectPluginDirectory(Path.Combine(Dir, PluginName), PluginName))
+			{
+				return true;
+			}
+
+			foreach (string CandidateDir in Directory.GetDirectories(Dir, PluginName + "_*", SearchOption.TopDirectoryOnly))
+			{
+				if (IsProjectPluginDirectory(CandidateDir, PluginName))
+				{
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	private static bool IsProjectPluginDirectory(string PluginDir, string ModuleName)
+	{
+		if (!Directory.Exists(PluginDir))
+		{
+			return false;
+		}
+
+		foreach (string DescriptorPath in Directory.GetFiles(PluginDir, "*.uplugin", SearchOption.TopDirectoryOnly))
+		{
+			try
+			{
+				string Descriptor = File.ReadAllText(DescriptorPath)
+					.Replace(" ", "")
+					.Replace("\t", "")
+					.Replace("\r", "")
+					.Replace("\n", "");
+
+				if (Descriptor.Contains("\"Modules\"") && Descriptor.Contains("\"Name\":\"" + ModuleName + "\""))
+				{
+					return true;
+				}
+			}
+			catch
+			{
 			}
 		}
 
