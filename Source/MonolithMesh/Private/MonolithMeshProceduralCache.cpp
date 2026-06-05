@@ -277,8 +277,8 @@ bool FMonolithMeshProceduralCache::TryGetCached(const FString& Hash, FString& Ou
 		return false;
 	}
 
-	const FString AssetPath = (*EntryPtr)->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!(*EntryPtr)->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		// Malformed entry — remove it
 		Entries->RemoveField(Hash);
@@ -407,8 +407,8 @@ int32 FMonolithMeshProceduralCache::ValidateCache()
 			continue;
 		}
 		const TSharedPtr<FJsonObject> Entry = Pair.Value->AsObject();
-		const FString AssetPath = Entry->GetStringField(TEXT("asset_path"));
-		if (AssetPath.IsEmpty() || !FPackageName::DoesPackageExist(AssetPath))
+		FString AssetPath;
+		if (!Entry->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty() || !FPackageName::DoesPackageExist(AssetPath))
 		{
 			StaleHashes.Add(Pair.Key);
 		}
@@ -463,7 +463,8 @@ int32 FMonolithMeshProceduralCache::ClearCache(const FString& TypeFilter)
 			continue;
 		}
 		const TSharedPtr<FJsonObject> Entry = Pair.Value->AsObject();
-		if (Entry->GetStringField(TEXT("type")).Equals(TypeFilter, ESearchCase::IgnoreCase))
+		FString Type;
+		if (Entry->TryGetStringField(TEXT("type"), Type) && Type.Equals(TypeFilter, ESearchCase::IgnoreCase))
 		{
 			ToRemove.Add(Pair.Key);
 		}
@@ -510,8 +511,11 @@ TSharedPtr<FJsonObject> FMonolithMeshProceduralCache::GetStats()
 			continue;
 		}
 		const TSharedPtr<FJsonObject> Entry = Pair.Value->AsObject();
-		const FString Type = Entry->GetStringField(TEXT("type"));
-		TypeCounts.FindOrAdd(Type, 0)++;
+		FString Type;
+		if (Entry->TryGetStringField(TEXT("type"), Type))
+		{
+			TypeCounts.FindOrAdd(Type, 0)++;
+		}
 	}
 
 	Result->SetNumberField(TEXT("total_entries"), Entries->Values.Num());
@@ -565,7 +569,8 @@ TSharedPtr<FJsonObject> FMonolithMeshProceduralCache::ListEntries(const FString&
 		// Apply type filter if specified
 		if (!TypeFilter.IsEmpty())
 		{
-			if (!Entry->GetStringField(TEXT("type")).Equals(TypeFilter, ESearchCase::IgnoreCase))
+			FString Type;
+			if (!Entry->TryGetStringField(TEXT("type"), Type) || !Type.Equals(TypeFilter, ESearchCase::IgnoreCase))
 			{
 				continue;
 			}
