@@ -2148,10 +2148,12 @@ void DiffStringArrays(
 	TSet<FString> SetA, SetB;
 	if (ArrA)
 	{
+		SetA.Reserve(ArrA->Num());
 		for (const TSharedPtr<FJsonValue>& V : *ArrA) SetA.Add(V->AsString());
 	}
 	if (ArrB)
 	{
+		SetB.Reserve(ArrB->Num());
 		for (const TSharedPtr<FJsonValue>& V : *ArrB) SetB.Add(V->AsString());
 	}
 
