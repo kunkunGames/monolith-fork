@@ -6,6 +6,7 @@
 #include "MonolithLogicDriverNodeActions.h"
 #include "MonolithLogicDriverScaffoldActions.h"
 #include "MonolithLogicDriverSpecActions.h"
+#include "MonolithLogicDriverGraphActions.h"
 
 #if WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
 
@@ -398,6 +399,39 @@ bool FMonolithParamGuardLogicDriverNodeRejectsMalformedFieldsTest::RunTest(const
 		TestTrue(TEXT("Malformed priority should return error"), !Result.bSuccess);
 		TestTrue(TEXT("Error message should mention priority number"), Result.ErrorMessage.Contains(TEXT("priority")) && Result.ErrorMessage.Contains(TEXT("number")));
 	}
+
+	return true;
+}
+
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverAddAnyStateNodeRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.AddAnyStateNodeRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverAddAnyStateNodeRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("add_any_state_node")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// position_x as string instead of number
+	TSharedPtr<FJsonObject> BadXParams = MakeShared<FJsonObject>();
+	BadXParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadXParams->SetStringField(TEXT("position_x"), TEXT("100"));
+
+	FMonolithActionResult Result1 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_any_state_node"), BadXParams);
+	TestTrue(TEXT("add_any_state_node rejects string position_x"), !Result1.bSuccess);
+	TestTrue(TEXT("error mentions position_x must be a number"), Result1.ErrorMessage.Contains(TEXT("position_x")) && Result1.ErrorMessage.Contains(TEXT("must be a number")));
+
+	// position_y as bool instead of number
+	TSharedPtr<FJsonObject> BadYParams = MakeShared<FJsonObject>();
+	BadYParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadYParams->SetNumberField(TEXT("position_x"), 100);
+	BadYParams->SetBoolField(TEXT("position_y"), true);
+
+	FMonolithActionResult Result2 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_any_state_node"), BadYParams);
+	TestTrue(TEXT("add_any_state_node rejects bool position_y"), !Result2.bSuccess);
+	TestTrue(TEXT("error mentions position_y must be a number"), Result2.ErrorMessage.Contains(TEXT("position_y")) && Result2.ErrorMessage.Contains(TEXT("must be a number")));
 
 	return true;
 }

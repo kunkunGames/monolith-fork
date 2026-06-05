@@ -893,6 +893,29 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddAnyStateNode(co
 	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
+	int32 PosX = 0;
+	double TmpX = 0.0;
+	const bool bHasPosX = Params->HasField(TEXT("position_x"));
+	if (bHasPosX)
+	{
+		if (!Params->TryGetNumberField(TEXT("position_x"), TmpX))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'position_x' must be a number"), -32602);
+		}
+		PosX = static_cast<int32>(TmpX);
+	}
+	int32 PosY = 0;
+	double TmpY = 0.0;
+	const bool bHasPosY = Params->HasField(TEXT("position_y"));
+	if (bHasPosY)
+	{
+		if (!Params->TryGetNumberField(TEXT("position_y"), TmpY))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'position_y' must be a number"), -32602);
+		}
+		PosY = static_cast<int32>(TmpY);
+	}
+
 	FString LoadError;
 	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
 	if (!BP) return FMonolithActionResult::Error(LoadError);
@@ -902,19 +925,6 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddAnyStateNode(co
 
 	UClass* AnyStateClass = MonolithLD::GetSMGraphNodeAnyStateClass();
 	if (!AnyStateClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_AnyStateNode class not found"));
-
-	int32 PosX = 0;
-	double TmpX = 0.0;
-	if (Params->TryGetNumberField(TEXT("position_x"), TmpX))
-	{
-		PosX = static_cast<int32>(TmpX);
-	}
-	int32 PosY = 0;
-	double TmpY = 0.0;
-	if (Params->TryGetNumberField(TEXT("position_y"), TmpY))
-	{
-		PosY = static_cast<int32>(TmpY);
-	}
 
 	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, AnyStateClass, PosX, PosY);
 	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create Any State node"));
