@@ -195,6 +195,7 @@ namespace
 FMonolithActionResult FMonolithBlueprintTemplateActions::HandleListTemplates(const TSharedPtr<FJsonObject>& Params)
 {
 	TArray<TSharedPtr<FJsonValue>> TemplatesArr;
+	TemplatesArr.Reserve(GetTemplateDefinitions().Num());
 
 	for (const FTemplateDefinition& T : GetTemplateDefinitions())
 	{
@@ -203,6 +204,7 @@ FMonolithActionResult FMonolithBlueprintTemplateActions::HandleListTemplates(con
 		TObj->SetStringField(TEXT("description"), T.Description);
 
 		TArray<TSharedPtr<FJsonValue>> ParamsArr;
+		ParamsArr.Reserve(T.ParamDescriptions.Num());
 		for (const auto& P : T.ParamDescriptions)
 		{
 			TSharedPtr<FJsonObject> PObj = MakeShared<FJsonObject>();

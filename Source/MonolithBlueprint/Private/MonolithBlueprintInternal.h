@@ -625,6 +625,7 @@ namespace MonolithBlueprintInternal
 	{
 		if (!Node) return TEXT("(none)");
 		TArray<FString> Names;
+		Names.Reserve(Node->Pins.Num());
 		for (const UEdGraphPin* Pin : Node->Pins)
 		{
 			if (!Pin || Pin->bHidden) continue;
