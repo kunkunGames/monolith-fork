@@ -1190,10 +1190,16 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetSectionTime(const TSha
 
 FMonolithActionResult FMonolithAnimationActions::HandleAddBlendSpaceSample(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString AnimPath = Params->GetStringField(TEXT("anim_path"));
-	float X = static_cast<float>(Params->GetNumberField(TEXT("x")));
-	float Y = static_cast<float>(Params->GetNumberField(TEXT("y")));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+	FString AnimPath;
+	if (!Params->TryGetStringField(TEXT("anim_path"), AnimPath)) return FMonolithActionResult::Error(TEXT("Parameter 'anim_path' must be a string"));
+	double TempX;
+	if (!Params->TryGetNumberField(TEXT("x"), TempX)) return FMonolithActionResult::Error(TEXT("Parameter 'x' must be a number"));
+	float X = static_cast<float>(TempX);
+	double TempY;
+	if (!Params->TryGetNumberField(TEXT("y"), TempY)) return FMonolithActionResult::Error(TEXT("Parameter 'y' must be a number"));
+	float Y = static_cast<float>(TempY);
 
 	UBlendSpace* BS = FMonolithAssetUtils::LoadAssetByPath<UBlendSpace>(AssetPath);
 	if (!BS) return FMonolithActionResult::Error(FString::Printf(TEXT("BlendSpace not found: %s"), *AssetPath));
