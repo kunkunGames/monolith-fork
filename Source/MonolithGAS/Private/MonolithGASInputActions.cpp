@@ -71,6 +71,28 @@ void FMonolithGASInputActions::RegisterActions(FMonolithToolRegistry& Registry)
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+static bool TryReadOptionalStringFieldStrict(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, FString& OutValue, FString& OutError, const TCHAR* DisplayName = nullptr)
+{
+	if (!Params.IsValid())
+	{
+		return true;
+	}
+
+	const FString Field(FieldName);
+	if (!Params->HasField(Field))
+	{
+		return true;
+	}
+
+	TSharedPtr<FJsonValue> Value = Params->TryGetField(Field);
+	if (!Value.IsValid() || Value->Type != EJson::String || !Value->TryGetString(OutValue))
+	{
+		OutError = FString::Printf(TEXT("Invalid %s: must be a string"), DisplayName ? DisplayName : FieldName);
+		return false;
+	}
+	return true;
+}
+
 /** Find the ASC component node in the Blueprint's SimpleConstructionScript */
 static USCS_Node* FindASCNode_Input(UBlueprint* BP)
 {
@@ -299,9 +321,10 @@ FMonolithActionResult FMonolithGASInputActions::HandleBindAbilityToInput(const T
 	FString TriggerEvent = TEXT("started");
 	if (Params->HasField(TEXT("trigger_event")))
 	{
-		if (!Params->TryGetStringField(TEXT("trigger_event"), TriggerEvent))
+		FString ParamError;
+		if (!TryReadOptionalStringFieldStrict(Params, TEXT("trigger_event"), TriggerEvent, ParamError))
 		{
-			return FMonolithActionResult::Error(TEXT("Invalid trigger_event: must be a string"));
+			return FMonolithActionResult::Error(ParamError);
 		}
 		if (TriggerEvent.IsEmpty()) TriggerEvent = TEXT("started");
 	}
@@ -444,24 +467,25 @@ FMonolithActionResult FMonolithGASInputActions::HandleBatchBindAbilities(const T
 		const TSharedPtr<FJsonObject>& BindingObj = *BindingObjPtr;
 
 		FString AbilityClass;
-		if (BindingObj->HasField(TEXT("ability_class")) && !BindingObj->TryGetStringField(TEXT("ability_class"), AbilityClass))
+		FString ParamError;
+		if (!TryReadOptionalStringFieldStrict(BindingObj, TEXT("ability_class"), AbilityClass, ParamError))
 		{
 			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
 			ErrObj->SetNumberField(TEXT("index"), i);
 			ErrObj->SetBoolField(TEXT("success"), false);
-			ErrObj->SetStringField(TEXT("error"), TEXT("Invalid ability_class: must be a string"));
+			ErrObj->SetStringField(TEXT("error"), ParamError);
 			Results.Add(MakeShared<FJsonValueObject>(ErrObj));
 			ErrorCount++;
 			continue;
 		}
 
 		FString InputAction;
-		if (BindingObj->HasField(TEXT("input_action")) && !BindingObj->TryGetStringField(TEXT("input_action"), InputAction))
+		if (!TryReadOptionalStringFieldStrict(BindingObj, TEXT("input_action"), InputAction, ParamError))
 		{
 			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
 			ErrObj->SetNumberField(TEXT("index"), i);
 			ErrObj->SetBoolField(TEXT("success"), false);
-			ErrObj->SetStringField(TEXT("error"), TEXT("Invalid input_action: must be a string"));
+			ErrObj->SetStringField(TEXT("error"), ParamError);
 			Results.Add(MakeShared<FJsonValueObject>(ErrObj));
 			ErrorCount++;
 			continue;
@@ -470,12 +494,12 @@ FMonolithActionResult FMonolithGASInputActions::HandleBatchBindAbilities(const T
 		FString TriggerEvent = TEXT("started");
 		if (BindingObj->HasField(TEXT("trigger_event")))
 		{
-			if (!BindingObj->TryGetStringField(TEXT("trigger_event"), TriggerEvent))
+			if (!TryReadOptionalStringFieldStrict(BindingObj, TEXT("trigger_event"), TriggerEvent, ParamError))
 			{
 				TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
 				ErrObj->SetNumberField(TEXT("index"), i);
 				ErrObj->SetBoolField(TEXT("success"), false);
-				ErrObj->SetStringField(TEXT("error"), TEXT("Invalid trigger_event: must be a string"));
+				ErrObj->SetStringField(TEXT("error"), ParamError);
 				Results.Add(MakeShared<FJsonValueObject>(ErrObj));
 				ErrorCount++;
 				continue;
@@ -670,9 +694,10 @@ FMonolithActionResult FMonolithGASInputActions::HandleScaffoldInputBindingCompon
 	FString ComponentName = TEXT("AbilityInputBindingComponent");
 	if (Config->HasField(TEXT("component_name")))
 	{
-		if (!Config->TryGetStringField(TEXT("component_name"), ComponentName))
+		FString ParamError;
+		if (!TryReadOptionalStringFieldStrict(Config, TEXT("component_name"), ComponentName, ParamError, TEXT("input_config.component_name")))
 		{
-			return FMonolithActionResult::Error(TEXT("Invalid input_config.component_name: must be a string"));
+			return FMonolithActionResult::Error(ParamError);
 		}
 		if (ComponentName.IsEmpty()) ComponentName = TEXT("AbilityInputBindingComponent");
 	}
@@ -680,9 +705,10 @@ FMonolithActionResult FMonolithGASInputActions::HandleScaffoldInputBindingCompon
 	FString ModuleName = FApp::GetProjectName();
 	if (Config->HasField(TEXT("module_name")))
 	{
-		if (!Config->TryGetStringField(TEXT("module_name"), ModuleName))
+		FString ParamError;
+		if (!TryReadOptionalStringFieldStrict(Config, TEXT("module_name"), ModuleName, ParamError, TEXT("input_config.module_name")))
 		{
-			return FMonolithActionResult::Error(TEXT("Invalid input_config.module_name: must be a string"));
+			return FMonolithActionResult::Error(ParamError);
 		}
 		if (ModuleName.IsEmpty()) ModuleName = FApp::GetProjectName();
 	}
@@ -690,9 +716,10 @@ FMonolithActionResult FMonolithGASInputActions::HandleScaffoldInputBindingCompon
 	FString BindingMode = TEXT("gameplay_tag");
 	if (Config->HasField(TEXT("binding_mode")))
 	{
-		if (!Config->TryGetStringField(TEXT("binding_mode"), BindingMode))
+		FString ParamError;
+		if (!TryReadOptionalStringFieldStrict(Config, TEXT("binding_mode"), BindingMode, ParamError, TEXT("input_config.binding_mode")))
 		{
-			return FMonolithActionResult::Error(TEXT("Invalid input_config.binding_mode: must be a string"));
+			return FMonolithActionResult::Error(ParamError);
 		}
 		if (BindingMode.IsEmpty()) BindingMode = TEXT("gameplay_tag");
 	}

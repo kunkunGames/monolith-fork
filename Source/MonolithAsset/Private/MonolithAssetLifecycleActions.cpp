@@ -7,8 +7,10 @@
 
 #include "AssetImportTask.h"
 #include "AssetToolsModule.h"
+#include "CoreGlobals.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Editor.h"
 #include "EditorAssetLibrary.h"
 #include "Engine/Texture2D.h"
 #include "HAL/PlatformFileManager.h"
@@ -18,6 +20,8 @@
 #include "Modules/ModuleManager.h"
 #include "ObjectTools.h"
 #include "PixelFormat.h"
+#include "Subsystems/AssetEditorSubsystem.h"
+#include "UObject/Package.h"
 
 namespace
 {
@@ -226,6 +230,7 @@ void FMonolithAssetLifecycleActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Required(TEXT("asset_paths"), TEXT("array"), TEXT("Array of UE asset paths to delete"))
 			.Optional(TEXT("allowed_prefixes"), TEXT("array"), TEXT("Only paths starting with these prefixes may be deleted"))
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Validate and report targets without deleting"), TEXT("false"))
+			.Optional(TEXT("force"), TEXT("bool"), TEXT("Force-delete referenced assets after closing open editors. Default false"), TEXT("false"))
 			.Build());
 }
 
@@ -467,9 +472,42 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 	bool bDryRun = false;
 	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
 
+	bool bForce = false;
+	Params->TryGetBoolField(TEXT("force"), bForce);
+
+	TArray<FString> AttemptedPaths;
+	AttemptedPaths.Reserve(ObjectsToDelete.Num());
+	for (UObject* Asset : ObjectsToDelete)
+	{
+		if (!Asset)
+		{
+			continue;
+		}
+
+		AttemptedPaths.Add(Asset->GetPathName());
+
+		if (UPackage* Package = Asset->GetOutermost())
+		{
+			Package->SetDirtyFlag(false);
+		}
+		if (GEditor)
+		{
+			if (UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
+			{
+				AssetEditorSubsystem->CloseAllEditorsForAsset(Asset);
+			}
+		}
+	}
+
 	const int32 NumDeleted = (bDryRun || ObjectsToDelete.Num() == 0)
 		? 0
-		: ObjectTools::DeleteObjects(ObjectsToDelete, /*bShowConfirmation=*/false);
+		: [&ObjectsToDelete, bForce]()
+		{
+			TGuardValue<bool> UnattendedGuard(GIsRunningUnattendedScript, true);
+			return bForce
+				? ObjectTools::ForceDeleteObjects(ObjectsToDelete, /*ShowConfirmation=*/false)
+				: ObjectTools::DeleteObjects(ObjectsToDelete, /*bShowConfirmation=*/false);
+		}();
 
 	TArray<TSharedPtr<FJsonValue>> NotFoundArray;
 	for (const FString& Path : NotFound)
@@ -480,9 +518,19 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), bDryRun ? NotFound.Num() == 0 : (NumDeleted == ObjectsToDelete.Num() && NotFound.Num() == 0));
 	Result->SetBoolField(TEXT("dry_run"), bDryRun);
+	Result->SetBoolField(TEXT("force"), bForce);
 	Result->SetNumberField(TEXT("deleted"), NumDeleted);
 	Result->SetNumberField(TEXT("requested"), AssetPaths.Num());
 	Result->SetNumberField(TEXT("found"), ObjectsToDelete.Num());
 	Result->SetArrayField(TEXT("not_found"), NotFoundArray);
+	if (!bDryRun && NumDeleted < ObjectsToDelete.Num())
+	{
+		TArray<TSharedPtr<FJsonValue>> FailedArray;
+		for (const FString& Path : AttemptedPaths)
+		{
+			FailedArray.Add(MakeShared<FJsonValueString>(Path));
+		}
+		Result->SetArrayField(TEXT("failed_to_delete"), FailedArray);
+	}
 	return FMonolithActionResult::Success(Result);
 }

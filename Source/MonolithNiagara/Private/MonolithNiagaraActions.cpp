@@ -14527,14 +14527,23 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 
 			FString POName;
 			TSharedPtr<FJsonValue> PONameField = PO->TryGetField(TEXT("name"));
-			if (PONameField.IsValid())
+			if (!PONameField.IsValid())
 			{
-				if (!PONameField->TryGetString(POName))
-				{
-					OutErrors.Add(FString::Printf(TEXT("spec.user_parameters[%d].name must be a string"), ParamIndex));
-					FailCount++;
-					continue;
-				}
+				OutErrors.Add(FString::Printf(TEXT("spec.user_parameters[%d].name is required"), ParamIndex));
+				FailCount++;
+				continue;
+			}
+			if (PONameField->Type != EJson::String || !PONameField->TryGetString(POName))
+			{
+				OutErrors.Add(FString::Printf(TEXT("spec.user_parameters[%d].name must be a string"), ParamIndex));
+				FailCount++;
+				continue;
+			}
+			if (POName.IsEmpty())
+			{
+				OutErrors.Add(FString::Printf(TEXT("spec.user_parameters[%d].name is required"), ParamIndex));
+				FailCount++;
+				continue;
 			}
 
 			TSharedRef<FJsonObject> AP = MakeShared<FJsonObject>();
@@ -14566,7 +14575,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 			TSharedPtr<FJsonValue> EONameField = EO->TryGetField(TEXT("name"));
 			if (EONameField.IsValid())
 			{
-				if (!EONameField->TryGetString(EOName))
+				if (EONameField->Type != EJson::String || !EONameField->TryGetString(EOName))
 				{
 					OutErrors.Add(FString::Printf(TEXT("spec.emitters[%d].name must be a string"), EmitterIndex));
 					FailCount++;
@@ -14830,7 +14839,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 					return FMonolithActionResult::Error(
 						FString::Printf(TEXT("spec.user_parameters[%d].name is required"), ParamIndex));
 				}
-				if (!ParamNameField->TryGetString(ParamName))
+				if (ParamNameField->Type != EJson::String || !ParamNameField->TryGetString(ParamName))
 				{
 					return FMonolithActionResult::Error(
 						FString::Printf(TEXT("spec.user_parameters[%d].name must be a string"), ParamIndex));
@@ -14900,7 +14909,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 				if (!EVal->TryGetObject(EObj) || !(*EObj).IsValid()) continue;
 				FString EmitterName;
 				TSharedPtr<FJsonValue> EmitterNameField = (*EObj)->TryGetField(TEXT("name"));
-				if (EmitterNameField.IsValid() && !EmitterNameField->TryGetString(EmitterName))
+				if (EmitterNameField.IsValid() && (EmitterNameField->Type != EJson::String || !EmitterNameField->TryGetString(EmitterName)))
 				{
 					return FMonolithActionResult::Error(
 						FString::Printf(TEXT("spec.emitters[%d].name must be a string"), EmitterIndex));

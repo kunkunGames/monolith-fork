@@ -527,7 +527,7 @@ Stitch frame PNGs into a flipbook atlas. Used by the VFX training harness.
 
 > **Experimental flag.** Designed for the VFX training harness. Treat as best-effort.
 
-### `editor.delete_assets`
+### `asset.delete_assets`
 
 Delete UE assets by path. **Experimental.** Use the `allowed_prefixes` safety guard.
 

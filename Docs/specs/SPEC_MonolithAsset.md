@@ -31,7 +31,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | `import_font_family` | `MonolithAsset::FFontIngestActions` | Import one or more TTF files as a composite `UFont` plus `UFontFace` assets. |
 | `import_texture_from_file` | `FMonolithAssetLifecycleActions` | Import an external image file as a `UTexture2D` with optional compression, sRGB, tiling, max-size, and LOD-group settings. |
 | `save_asset` | `FMonolithAssetLifecycleActions` | Save any loaded asset package to disk. |
-| `delete_assets` | `FMonolithAssetLifecycleActions` | Delete assets by path with optional prefix guard and dry-run validation. |
+| `delete_assets` | `FMonolithAssetLifecycleActions` | Delete assets by path with optional prefix guard, dry-run validation, non-interactive editor closing, and optional force deletion. |
 | `validate_naming_conventions` | `FMonolithAssetHygieneActions` | Scan assets under a content path and report prefix-rule violations. |
 | `list_supported_asset_enrichers` | `FMonolithAssetInspectionActions` | List specialized read-only enrichers supported by `inspect_asset`. |
 | `inspect_asset` | `FMonolithAssetInspectionActions` | Inspect one asset with specialized enrichment and optional reflected references. |
@@ -47,13 +47,17 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | Public | `Core`, `CoreUObject`, `Engine`, `MonolithCore` |
 | Private | `UnrealEd`, `Json`, `JsonUtilities`, `AssetRegistry`, `AssetTools`, `EditorScriptingUtilities`, `ImageWrapper`, `ImageCore`, `RenderCore`, `RHI`, `SlateCore` |
 
-## 5. Settings
+## 5. Lifecycle Delete Contract
+
+`asset.delete_assets` runs non-interactively. For each loaded target it clears the package dirty flag and closes open asset editors before deleting under an unattended-script guard. `force=false` uses `ObjectTools::DeleteObjects`; `force=true` uses `ObjectTools::ForceDeleteObjects` for referenced assets. Failed deletion attempts are reported in `failed_to_delete[]` without aborting the response.
+
+## 6. Settings
 
 | Setting | Default | Effect |
 |---------|---------|--------|
 | `bEnableAsset` | `true` | Enables `MonolithAsset` startup registration for `asset` actions. Restart required after changing. |
 
-## 6. Action Groups
+## 7. Action Groups
 
 | Group | Files | Notes |
 |-------|-------|-------|
@@ -64,7 +68,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | Inspection | `Public/MonolithAssetInspectionActions.h`, `Private/MonolithAssetInspectionActions.cpp` | Former specialized asset inspection surface, now independent from `MonolithMaterial`. |
 | Find | `Public/MonolithAssetFindActions.h`, `Private/MonolithAssetFindActions.cpp` | Fuzzy live-`AssetRegistry` search (`asset.find_assets`); thin consumer of MonolithCore `FMonolithFuzzyMatch`, owns its own corpus/fields/weights and the `allow_transposition` option. Distinct from exact-name `FMonolithAssetUtils::FindAssetCandidates` and offline `project` FTS search. |
 
-## 7. Texture Role Pipeline
+## 8. Texture Role Pipeline
 
 `asset.import_texture_from_bytes` accepts `texture_role` (or `role`) for Unreal-specific import behavior. Role presets apply before explicit `settings`; caller-provided `settings` fields remain the final override.
 
@@ -83,7 +87,7 @@ For opaque-background generated images, alpha extraction first classifies pixels
 
 The action result includes `texture_role`, `settings_applied`, and `validation`. Validation is non-destructive and returns warnings instead of failing the import unless normal parameter validation fails. `settings.alpha_from_edge_background=false` disables generated alpha extraction, `settings.tile_seam_harmonize=false` disables world-tile seam harmonization, and `return_processed_png=true` returns the imported post-processing result as `processed_png_b64`. `asset.inspect_asset` and `asset.validate_specialized_asset` recognize `Texture2D` assets and report generated texture-role settings from `Monolith.Generated.texture_role` metadata.
 
-## 8. Verification
+## 9. Verification
 
 | Gate | Requirement |
 |------|-------------|
