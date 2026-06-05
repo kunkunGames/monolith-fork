@@ -26,7 +26,7 @@ namespace
         FModuleManager::Get().LoadModule(TEXT("MonolithImageGen"));
     }
 
-    bool JsonArrayHasString(const TArray<TSharedPtr<FJsonValue>>& Values, const FString& Expected)
+    bool TextureRoleJsonArrayHasString(const TArray<TSharedPtr<FJsonValue>>& Values, const FString& Expected)
     {
         for (const TSharedPtr<FJsonValue>& Value : Values)
         {
@@ -245,7 +245,7 @@ bool FMonolithImageGenTextureRolesDefaultsTest::RunTest(const FString& Parameter
         for (const FString& ExpectedRole : ExpectedRoles)
         {
             TestTrue(FString::Printf(TEXT("texture_roles contains %s"), *ExpectedRole),
-                JsonArrayHasString(*Roles, ExpectedRole));
+                TextureRoleJsonArrayHasString(*Roles, ExpectedRole));
         }
     }
 
@@ -264,7 +264,7 @@ bool FMonolithImageGenTextureRolesDefaultsTest::RunTest(const FString& Parameter
         for (const FString& ExpectedField : ExpectedFields)
         {
             TestTrue(FString::Printf(TEXT("reference_input_fields contains %s"), *ExpectedField),
-                JsonArrayHasString(*ReferenceFields, ExpectedField));
+                TextureRoleJsonArrayHasString(*ReferenceFields, ExpectedField));
         }
     }
 
@@ -273,9 +273,9 @@ bool FMonolithImageGenTextureRolesDefaultsTest::RunTest(const FString& Parameter
         Defaults.Result->TryGetArrayField(TEXT("ima2_formats"), Ima2Formats) && Ima2Formats);
     if (Ima2Formats)
     {
-        TestTrue(TEXT("ima2_formats contains png"), JsonArrayHasString(*Ima2Formats, TEXT("png")));
-        TestFalse(TEXT("ima2_formats excludes unsupported jpeg"), JsonArrayHasString(*Ima2Formats, TEXT("jpeg")));
-        TestFalse(TEXT("ima2_formats excludes unsupported webp"), JsonArrayHasString(*Ima2Formats, TEXT("webp")));
+        TestTrue(TEXT("ima2_formats contains png"), TextureRoleJsonArrayHasString(*Ima2Formats, TEXT("png")));
+        TestFalse(TEXT("ima2_formats excludes unsupported jpeg"), TextureRoleJsonArrayHasString(*Ima2Formats, TEXT("jpeg")));
+        TestFalse(TEXT("ima2_formats excludes unsupported webp"), TextureRoleJsonArrayHasString(*Ima2Formats, TEXT("webp")));
     }
 
     bool bComposePrompt = false;

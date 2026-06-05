@@ -21,7 +21,8 @@ public class MonolithImageGen : ModuleRules
 			"HTTP",
 			"ImageWrapper",
 			"Json",
-			"JsonUtilities"
+			"JsonUtilities",
+			"XmlParser"
 		});
 	}
 }

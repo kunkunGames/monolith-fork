@@ -151,7 +151,7 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.3 | MonolithMaterial | [specs/SPEC_MonolithMaterial.md](specs/SPEC_MonolithMaterial.md) | Material inspection + graph editing + CRUD + function suite (63 actions) |
 | 3.4 | MonolithAnimation | [specs/SPEC_MonolithAnimation.md](specs/SPEC_MonolithAnimation.md) | Animation sequences, montages, ABPs, curves, notifies, skeletons, PoseSearch, ABP write, ControlRig (119 actions) |
 | 3.5 | MonolithNiagara | [specs/SPEC_MonolithNiagara.md](specs/SPEC_MonolithNiagara.md) | Niagara particle systems, HLSL module/function, DI config, event handlers, sim stages, layout, temporal control, stateless-emitter factory (119 actions) |
-| 3.6 | MonolithEditor | [specs/SPEC_MonolithEditor.md](specs/SPEC_MonolithEditor.md) | Build triggers, live compile, log capture, crash context, scene capture (20 actions) |
+| 3.6 | MonolithEditor | [specs/SPEC_MonolithEditor.md](specs/SPEC_MonolithEditor.md) | Build triggers, live compile, log capture, crash context, scene capture, temporal GIF encoding (60 actions) |
 | 3.7 | MonolithConfig | [specs/SPEC_MonolithConfig.md](specs/SPEC_MonolithConfig.md) | Config/INI resolution and search (6 actions) |
 | 3.8 | MonolithIndex | [specs/SPEC_MonolithIndex.md](specs/SPEC_MonolithIndex.md) | SQLite FTS5 deep project indexer (7 MCP actions, 18 internal indexers incl. v0.14.10 [Unreleased] `FMetaSoundIndexer` from PR #18 by @alakangas) |
 | 3.9 | MonolithSource | [specs/SPEC_MonolithSource.md](specs/SPEC_MonolithSource.md) | Engine source + API lookup (11 actions) |
@@ -395,20 +395,29 @@ YourProject/Plugins/Monolith/
   Plans/
     Phase6_Skills_Templates_Polish.md
   Skills/
-    unreal-animation/unreal-animation.md
-    unreal-blueprints/unreal-blueprints.md
-    unreal-build/unreal-build.md
-    unreal-cpp/unreal-cpp.md
-    unreal-debugging/unreal-debugging.md
-    unreal-materials/unreal-materials.md
-    unreal-niagara/unreal-niagara.md
-    unreal-performance/unreal-performance.md
-    unreal-project-search/unreal-project-search.md
-    unreal-ui/unreal-ui.md
+    unreal-animation/SKILL.md
+    unreal-blueprints/SKILL.md
+    unreal-build/SKILL.md
+    unreal-cpp/SKILL.md
+    unreal-debugging/SKILL.md
+    unreal-materials/SKILL.md
+    unreal-niagara/SKILL.md
+    unreal-performance/SKILL.md
+    unreal-project-search/SKILL.md
+    unreal-ui/SKILL.md
   Templates/
     .mcp.json.example
     .mcp.json.proxy.example
+    Onboarding/
+      Onboarding.md
+      codex.json
+      claude.json
+      generic-mcp.json
+      README.md
   Scripts/
+    onboard_monolith.ps1
+    install_monolith_skills.ps1
+    validate_monolith_skills.ps1
     source_indexer/                (LEGACY: Python tree-sitter indexer — superseded by C++ indexer in MonolithSource)
       db/schema.py
       ...
@@ -481,9 +490,9 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
 ### Installation (for other projects)
 
 1. Clone to `YourProject/Plugins/Monolith`
-2. Copy `Templates/.mcp.json.example` to project root as `.mcp.json`
+2. Configure Monolith MCP through the target agent's global MCP config. Use project `.mcp.json` only for clients that require project-scoped config.
 3. Launch editor — Monolith auto-starts and indexes
-4. Optionally copy `Skills/*` to `~/.claude/skills/`
+4. Follow `Templates/Onboarding/Onboarding.md` and run `Scripts/onboard_monolith.ps1 -Targets Codex,Claude -Plan` to configure MCP, project instructions, and linked global skills
 
 ---
 
@@ -509,6 +518,8 @@ Actor->MarkPackageDirty();         // once all components are added
 The `editor::` namespace exposes a tight family of capture and inspect actions that let AI agents introspect Unreal assets at higher fidelity than the default 256² thumbnail. Four new actions land alongside three extensions to the existing `editor::capture_scene_preview`. **Extended `asset_type` enum values:** `static_mesh`, `skeletal_mesh` (with optional `animation_path` + `seek_time` for posed-frame capture), and `widget` (UMG via `FWidgetRenderer` with `scale` DPI multiplier) join the prior `material` / `niagara`. **New actions:** `editor::capture_material_grid` (N material instances side-by-side under shared lighting, auto-grid via `ceil(sqrt(N))` with optional `columns` override); `editor::capture_with_overlay` (single-asset capture under one of five engine debug-view show flags — `wireframe`, `normals`, `uv_density`, `lightmap_density`, `shader_complexity`); `editor::inspect_material_pbr` (reflective walk of a material's texture parameter list, classifying each by PBR slot and detecting ORM / ARM / MRA channel-packing — pure JSON, no rendering); `editor::inspect_texture_channels` (per-channel R/G/B/A min/max/mean statistics + optional per-channel split PNGs via `emit_splits`). All seven are editor-only and live in `MonolithEditor`.
 
 The canonical pattern for the capture-style actions is `FAdvancedPreviewScene` + `USceneCaptureComponent2D` + `UTextureRenderTarget2D` + `FImageUtils::SaveImageAutoFormat` (mirrors the existing `HandleCaptureScenePreview` recipe — game-thread invoke, render-thread enqueue via `CaptureScene()`, readback via `GameThread_GetRenderTargetResource()->ReadPixels()`). The widget path additionally uses `FWidgetRenderer::DrawWidget` against the same RT (guard with `FApp::CanEverRender()` — headless commandlets and `-nullrhi` will return a clear error). The inspect-style actions skip the render path entirely: `inspect_material_pbr` walks `UMaterialEditingLibrary::GetTextureParameterNames` + `GetTextureParameterValue` then routes each through a small PBR classifier; `inspect_texture_channels` locks the source mip via `FTextureSource::LockMipReadOnly`, computes statistics in a single pass, and writes split PNGs only when `emit_splits=true`.
+
+Temporal capture follows the same evidence-first philosophy: a still PNG proves framing and a representative pose, while ordered frame PNGs plus an inspected GIF prove timing, easing, cadence, and motion readability. `editor::capture_system_gif` treats 60 fps as the default target, then degrades adaptively to 30 fps and 20 fps when machine memory, resolution, duration, or the 1000-frame action cap would make 60 fps impractical. `editor::encode_frame_sequence_gif` applies the same policy to already-captured PNG frame directories or explicit frame lists, preserving source duration while downsampling when needed. Frame PNGs remain the durable source evidence even when GIF encoding falls back from ffmpeg to python or reports an encoder blocker.
 
 Source-of-truth files: `Source/MonolithEditor/Private/MonolithEditorActions.cpp` (the `asset_type` enum extension lives inside `HandleCaptureScenePreview`), `Source/MonolithEditor/Private/MonolithEditorPreviewActions.cpp` (`capture_material_grid` + `capture_with_overlay`), `Source/MonolithEditor/Private/MonolithEditorInspectActions.cpp` (`inspect_material_pbr` + `inspect_texture_channels`). Header surface lives in `Source/MonolithEditor/Public/MonolithEditorActions.h` (four new static handler declarations alongside the existing capture handler).
 
@@ -573,7 +584,7 @@ The live full-project snapshot was re-verified on 2026-05-26: `monolith_status()
 | MonolithAnimation | animation | 125 | Includes 5 ABP write actions (`add_anim_graph_node`, `connect_anim_graph_pins`, `set_state_animation`, `add_variable_get`, `set_anim_graph_node_property`), 3 ControlRig write, 1 layout, plus 103 baseline (96 + 1 v0.14.9 `copy_bone_pose_between_sequences` — PR #51 by @MaxenceEpitech + 1 v0.14.10 `list_bone_tracks` — PR #54 by @MaxenceEpitech + 2 v0.14.10 PR #55 by @MaxenceEpitech: `get_skeleton_preview_attached_assets`, `get_bone_ref_pose` + 3 v0.14.10 PR #56 by @MaxenceEpitech: `{get,add,remove}_compatible_skeleton`) + 13 PoseSearch |
 | MonolithNiagara | niagara | 120 | 108 baseline + 1 layout (`auto_layout`) + 9 temporal-control (`get_system_timing`, `set_warmup_profile`, `set_fixed_tick_delta`, `set_require_current_frame_data`, `set_emitter_loop_profile`, `get_emitter_timing_summary`, `set_sim_stage_iteration_count`, `set_sim_stage_execute_behavior`, `set_particle_lifetime` — see [`specs/SPEC_MonolithNiagara.md` § Temporal Control](specs/SPEC_MonolithNiagara.md#temporal-control-9--added-2026-05-28-phases-1-4-of-plans2026-05-28-niagara-timing-actionsmd)) + 1 stateless-emitter factory (`create_stateless_emitter`, 2026-05-28 — also extends `set_emitter_loop_profile` + `get_emitter_timing_summary` with stateless-aware branches; see [`specs/SPEC_MonolithNiagara.md` § Stateless Emitters](specs/SPEC_MonolithNiagara.md#stateless-emitters-1--added-2026-05-28-phases-0-3-of-plans2026-05-28-niagara-stateless-timermd)) + 1 (v0.17.0 Phase 4a, registered cross-module from `MonolithReflectionIntel`) `audit_cross_asset_refs` — broken/stale asset reference scan over Niagara systems/emitters joined against Phase 3a `cpp_asset_edges` |
 | MonolithMesh | mesh | 239 (194 core + 45 experimental town gen) | Town gen registered only when `bEnableProceduralTownGen=true` (default false) |
-| MonolithEditor | editor | 59 | 55 existing editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, module-status, asset-context, crash-report, and metadata toolsets + 4 v0.16.0 preview & inspection (`capture_material_grid`, `capture_with_overlay`, `inspect_material_pbr`, `inspect_texture_channels`) |
+| MonolithEditor | editor | 60 | 55 existing editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, module-status, asset-context, crash-report, and metadata toolsets + 4 v0.16.0 preview & inspection (`capture_material_grid`, `capture_with_overlay`, `inspect_material_pbr`, `inspect_texture_channels`) + 1 temporal GIF encoding action (`encode_frame_sequence_gif`) |
 | MonolithConfig | config | 6 | |
 | MonolithIndex | project | 8 | 7 baseline + 1 (v0.17.0 Phase 4a, registered cross-module from `MonolithReflectionIntel`) `audit_orphan_assets` — project-wide zero-reference scan across `IAssetRegistry::GetReferencers` cross-validated against Phase 3a `cpp_asset_edges` |
 | MonolithSource | source | 12 | 11 baseline + 1 v0.17.0 Phase 2 audit action `audit_module_dep_reality` registered cross-module from `MonolithReflectionIntel` (catches UPROPERTY / API-symbol references whose owning module is missing from the declaring module's `Build.cs` deps). The audit handler lives in `MonolithReflectionIntel`; registration onto the `source` namespace is for caller ergonomics — agents already discover `source_query` first. |
@@ -610,6 +621,8 @@ Dataset ergonomics added 17 public in-tree `blueprint` namespace actions:
 ZERO new module deps across all 17 (`MonolithBlueprint.Build.cs` unchanged). `MonolithBlueprintModule.cpp` startup log strings are not treated as action-count authority; live registry/discover counts are.
 
 **2026-05-27 — v0.16.0 (+4 editor, preview & inspection surface expansion):** Editor namespace gains 4 new in-tree actions — `capture_material_grid` and `capture_with_overlay` (composite-capture rendering pass), `inspect_material_pbr` and `inspect_texture_channels` (pure structural-data reads, no rendering). The Editor row above is updated 55 -> 59 for the current merged tree. The existing `capture_scene_preview` is additionally **extended** with three new `asset_type` enum values (`static_mesh`, `skeletal_mesh`, `widget`) — schema widening only, no count delta. All 4 new actions are PUBLIC, in-tree `MonolithEditor`-namespace — **zero sibling-plugin actions** (per `monolith-release.md` Action Count Discipline). Plus 1 schema-only widening of MCP `initialize` instructions (`HandleInitialize` + Python proxy point agents at `monolith_discover` / `describe_query("action_schema")` / `monolith_guide` — Issue #62 by @middle233) — no count delta. Plus persistence fixes across 3 existing actions (`mesh.convert_to_hism`, `mesh.place_spline`, `ai.place_smart_object_actor` — Issue #63 by @Heiselisha) — no count delta. The aggregate figures in the **Total** row (in-tree, distinct, the conditional `WITH_*` variants, and live) shift +4 from the previous verified snapshot and are deferred together to the next holistic count-audit. The `.uplugin` Description and `SPEC_MonolithEditor.md` per-module figures have been updated in this commit to match.
+
+**2026-06-05 — temporal proof (+1 editor):** Editor namespace gains `encode_frame_sequence_gif`, an in-tree `MonolithEditor` action that encodes already-captured PNG frame lists or frame directories into GIFs using the same 60 fps target, 30/20 fps fallback, hard frame cap, and ffmpeg/python encoder policy as `capture_system_gif`. The Editor row above is updated 59 -> 60; holistic aggregate count auditing is deferred to the next catalog-wide pass.
 
 **2026-05-28 — niagara temporal-control surface (+9 niagara, Phases 1-4 of `plans/2026-05-28-niagara-timing-actions.md`):** Niagara namespace gains 9 new in-tree actions covering system warmup / fixed-tick / current-frame-data, emitter loop topology, sim-stage iteration count + execute behavior, particle-lifetime convenience writes, and bundled read aggregators (`get_system_timing` + `get_emitter_timing_summary`). The Niagara row above is updated 109 → 118. Composite writes — `set_warmup_profile`, `set_emitter_loop_profile`, `set_particle_lifetime` — replace the prior scattered `set_system_property` + `set_static_switch_value` + `set_module_input_value` round-trips with intent-named single-call surfaces. Sim-stage aliases (`set_sim_stage_iteration_count`, `set_sim_stage_execute_behavior`) reuse PR #65's `stage_index` / `stage_name` selector convention atop `set_simulation_stage_property`. Stateless emitters early-out from `set_emitter_loop_profile` with a hint rather than erroring. All 9 are PUBLIC, in-tree `MonolithNiagara`-namespace — **zero sibling-plugin actions** (per `monolith-release.md` Action Count Discipline). Design: `plans/2026-05-28-niagara-timing-actions-design.md`. The aggregate figures in the **Total** row (in-tree, distinct, the conditional `WITH_*` variants, and live) each shift a further +9 on top of the deferred +1/+3/+4/+1/+17/+4 above and are deferred together to the next holistic count-audit. Live `monolith_discover("niagara")` post-Phase-5 returns 118 actions — count verified 2026-05-28.
 

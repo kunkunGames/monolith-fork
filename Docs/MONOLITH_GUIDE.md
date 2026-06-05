@@ -110,26 +110,30 @@ Monolith ships a set of Claude Code **skills** — task-scoped instruction files
 
 | Namespace | Skill | Path |
 |-----------|-------|------|
-| blueprint | unreal-blueprints | `Skills/unreal-blueprints/unreal-blueprints.md` |
-| material | unreal-materials | `Skills/unreal-materials/unreal-materials.md` |
-| material (reference) | material-reference | `Skills/material-reference/material-reference.md` |
-| animation | unreal-animation | `Skills/unreal-animation/unreal-animation.md` |
-| niagara | unreal-niagara | `Skills/unreal-niagara/unreal-niagara.md` |
-| niagara (reference) | niagara-reference | `Skills/niagara-reference/niagara-reference.md` |
-| mesh | unreal-mesh | `Skills/unreal-mesh/unreal-mesh.md` |
-| editor (diagnostics) | unreal-debugging | `Skills/unreal-debugging/unreal-debugging.md` |
-| editor (build) | unreal-build | `Skills/unreal-build/unreal-build.md` |
-| source + config | unreal-cpp | `Skills/unreal-cpp/unreal-cpp.md` |
-| project | unreal-project-search | `Skills/unreal-project-search/unreal-project-search.md` |
-| gas | unreal-gas | `Skills/unreal-gas/unreal-gas.md` |
-| combograph | unreal-combograph | `Skills/unreal-combograph/unreal-combograph.md` |
-| logicdriver | unreal-logicdriver | `Skills/unreal-logicdriver/unreal-logicdriver.md` |
-| audio | unreal-audio | `Skills/unreal-audio/unreal-audio.md` |
-| ui | unreal-ui | `Skills/unreal-ui/unreal-ui.md` |
-| level_sequence | unreal-level-sequences | `Skills/unreal-level-sequences/unreal-level-sequences.md` |
-| cross-domain (config/material/mesh) | unreal-performance | `Skills/unreal-performance/unreal-performance.md` |
+| blueprint | unreal-blueprints | `Skills/unreal-blueprints/SKILL.md` |
+| material | unreal-materials | `Skills/unreal-materials/SKILL.md` |
+| material (reference) | material-reference | `Skills/material-reference/SKILL.md` |
+| schema writes | monolith-schema | `Skills/monolith-schema/SKILL.md` |
+| animation | unreal-animation | `Skills/unreal-animation/SKILL.md` |
+| niagara | unreal-niagara | `Skills/unreal-niagara/SKILL.md` |
+| niagara (reference) | niagara-reference | `Skills/niagara-reference/SKILL.md` |
+| asset | unreal-asset | `Skills/unreal-asset/SKILL.md` |
+| mesh | unreal-mesh | `Skills/unreal-mesh/SKILL.md` |
+| editor (diagnostics) | unreal-debugging | `Skills/unreal-debugging/SKILL.md` |
+| editor (build) | unreal-build | `Skills/unreal-build/SKILL.md` |
+| source + config | unreal-cpp | `Skills/unreal-cpp/SKILL.md` |
+| reflection intelligence | unreal-reflection-intel | `Skills/unreal-reflection-intel/SKILL.md` |
+| project | unreal-project-search | `Skills/unreal-project-search/SKILL.md` |
+| gas | unreal-gas | `Skills/unreal-gas/SKILL.md` |
+| combograph | unreal-combograph | `Skills/unreal-combograph/SKILL.md` |
+| logicdriver | unreal-logicdriver | `Skills/unreal-logicdriver/SKILL.md` |
+| audio | unreal-audio | `Skills/unreal-audio/SKILL.md` |
+| ui | unreal-ui | `Skills/unreal-ui/SKILL.md` |
+| sprite | unreal-sprite | `Skills/unreal-sprite/SKILL.md` |
+| level_sequence | unreal-level-sequences | `Skills/unreal-level-sequences/SKILL.md` |
+| cross-domain (config/material/mesh) | unreal-performance | `Skills/unreal-performance/SKILL.md` |
 
-18 skills total. `unreal-performance` spans namespaces (config audit, material shader stats, mesh draw-call analysis) rather than mapping one-to-one.
+22 mapped skills shown here. `unreal-performance` spans namespaces (config audit, material shader stats, mesh draw-call analysis) rather than mapping one-to-one. The full repository skill set lives under `Skills/<skill>/SKILL.md`.
 
 ## gotchas
 

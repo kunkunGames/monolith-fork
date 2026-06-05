@@ -1,7 +1,6 @@
 ---
 name: niagara-reference
 description: Index of Niagara VFX reference documents. Provides quick-reference sim rules, particle budgets, and gotchas. Points to detailed docs on demand. Use when creating, optimizing, or debugging Niagara effects.
-type: skill
 ---
 
 # Niagara Reference Library

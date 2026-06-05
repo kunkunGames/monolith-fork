@@ -5,7 +5,7 @@ description: Use for AI image/texture generation workflows exposed by Monolith M
 
 # unreal-imagegen
 
-**6 actions** via `imagegen_query(action, params)`. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
+**10 actions** via `imagegen_query(action, params)`. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
 
 ## Discovery
 
@@ -16,16 +16,20 @@ monolith_discover({ namespace: "imagegen", action: "<action>", mode: "schema" })
 
 ## Action Reference
 
-### generation (6)
+### generation (10)
 
 | Action | Purpose |
 |--------|---------|
 | `generate_image` | Generate a deterministic local PNG placeholder image from a prompt and import it as a Texture2D. Supports optional explicit `resolution` and `texture_role`; does not call remote providers or read API keys. |
 | `generate_image_via_ima2` | Call the configured ima2/imag2-gen server, import the first generated PNG as a Texture2D, and attach redacted provenance. Defaults to `http://192.168.1.147:3333` with `provider="oauth"` and `model="gpt-5.5"`; Monolith sends no API key. Supports `size`/`resolution`, `background=auto|opaque` provider output, `compose_prompt`, `texture_role`, and reference image paths/base64. |
+| `generate_msdf_from_svg` | Convert a validated `msdf_source` SVG into a generated MSDF PNG/Texture2D. Applies MSDF-safe texture settings, verifies pixel/channel samples, and can create/render an unlit masked MSDF material preview. |
+| `generate_svg` | Generate a deterministic sanitized SVG source from `svg_spec` or prompt placeholder metadata. Writes `.svg` plus `.monolith.json` sidecar only; no Texture2D import and no runtime SVG rendering. |
 | `get_generated_asset_provenance` | Read redacted generation provenance (model, prompt hash, timestamp) from a Texture2D asset's metadata. |
 | `get_image_generation_defaults` | Return default image generation settings, accepted aspect ratios, destination path, ima2 bridge settings, and provenance policy. |
 | `import_generated_image` | Import externally generated image bytes as a Texture2D and attach redacted generation provenance. This is the safe remote-provider boundary. |
+| `import_generated_svg` | Import externally generated SVG text, base64 bytes, or a local `.svg` file through the SVG sanitizer/provenance boundary. This is the safe provider boundary for generated vector source. |
 | `list_image_models` | List Monolith-native, ima2 bridge, and external import providers. |
+| `validate_svg` | Validate SVG source without writing files. Reports sanitizer removals, geometry/topology summary, and `msdf_ready` blockers for `msdf_source`. |
 
 ## Notes
 
@@ -38,6 +42,12 @@ monolith_discover({ namespace: "imagegen", action: "<action>", mode: "schema" })
 - Do not depend on provider `background="transparent"` for `ui_icon`, `sprite`, or `decal`; use role-aware prompt composition and PNG import postprocessing instead. Do not request transparent backgrounds for `world_tile`, `normal`, `orm_mask`, or `height`.
 - For world/material textures, prefer `texture_role="basecolor"` or `texture_role="world_tile"` for generated color maps, `texture_role="normal"` only when the source really is a valid tangent-space normal map, and `texture_role="orm_mask"` for packed AO/Roughness/Metallic-style data. Role validation warns about likely non-tileable edges, suspicious normal data, non-power-of-two dimensions, and wrong data-texture settings.
 - If no asset destination is provided, generated Texture2D assets go under `/Game/GeneratedImages`. Reference image inputs are archived as PNG files under the project root `GeneratedImages` folder before being forwarded to ima2.
+- Use `generate_svg` and `import_generated_svg` for source/vector workflows. They write sanitized `.svg` files and sidecars under `<ProjectDir>/GeneratedImages/Vector`; they do not import SVG as `UTexture2D`, rasterize previews, or parse SVG at gameplay runtime.
+- For SVG intended for MSDF, use `profile="msdf_source"` and call `validate_svg` before depending on the source. `msdf_ready=true` requires closed, non-self-intersecting, non-overlapping filled contours with explicit geometry; text, gradients, strokes, unflattened transforms, `evenodd` ambiguity, and unsupported path grammar become blockers.
+- Use `generate_msdf_from_svg` as the explicit SVG-to-runtime-resource conversion boundary. It imports the baked PNG through the generated Texture2D path and applies `TC_Masks`, `sRGB=false`, `TMGS_NoMipmaps`, UI LOD group, clamp addressing, `NeverStream=true`, and max texture size matching the MSDF output.
+- Keep `verify_samples=true` for generated MSDF unless you are doing a diagnostic-only run. The action samples representative inside, outside, and edge pixels and fails if median/channel-spread checks indicate the output is not a useful MSDF.
+- Use `create_material=true` plus `verify_material_render=true` when validating a new MSDF asset visually; this creates an unlit masked material and decodes a rendered preview PNG to prove the graph is non-empty and non-uniform.
+- Keep generated SVG simple: prefer filled paths, `rect`, and `polygon` primitives with stable `viewBox`; avoid filters, masks, CSS, animation, images, external references, `use`/symbols, and decorative stroke semantics unless a later conversion step can flatten and revalidate them.
 
 ## Unreal Sprite Sheet Workflow Notes
 

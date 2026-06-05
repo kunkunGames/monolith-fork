@@ -73,6 +73,7 @@ class CheckContext:
                 stderr=subprocess.DEVNULL,
             )
             files = [self.root / line for line in out.splitlines() if line]
+            files = [path for path in files if path.is_file()]
         except (OSError, subprocess.CalledProcessError):
             files = [
                 path

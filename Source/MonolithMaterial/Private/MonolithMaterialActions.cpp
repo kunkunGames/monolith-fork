@@ -2633,9 +2633,8 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<
 		return FMonolithActionResult::Error(TEXT("Asset name is empty"));
 	}
 
-	// Check if asset already exists
-	UObject* Existing = UEditorAssetLibrary::LoadAsset(AssetPath);
-	if (Existing)
+	// Check if asset already exists without emitting LoadAsset errors for the expected missing-asset path.
+	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}

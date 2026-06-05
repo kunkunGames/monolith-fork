@@ -66,6 +66,7 @@ public:
 	static FMonolithActionResult HandleCaptureScenePreview(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCaptureSequenceFrames(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCaptureSystemGif(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleEncodeFrameSequenceGif(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetViewportInfo(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleListOpenViewports(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCaptureLevelViewport(const TSharedPtr<FJsonObject>& Params);

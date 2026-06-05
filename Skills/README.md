@@ -1,8 +1,10 @@
 # Monolith Skills
 
 Agent-facing skills that route Unreal Engine editor work through the **Monolith MCP** server.
-Each subfolder is one skill (`<name>/<name>.md`) with YAML frontmatter (`name`, `description`)
-and an action reference for one Monolith namespace.
+Each subfolder is one skill (`<name>/SKILL.md`) with YAML frontmatter (`name`, `description`)
+and an action reference for one or more Monolith namespaces. Link these directories into
+Codex or Claude global skill roots with `Scripts/install_monolith_skills.ps1`; see
+`Templates/Onboarding/Onboarding.md` for setup.
 
 ## Start here
 
@@ -26,6 +28,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | Skill | Namespace | ~Actions | Use for |
 |-------|-----------|---------:|---------|
 | `monolith-mcp` | `monolith` | 39 | Discover & route Monolith, server status, profiles, audit, readiness |
+| `monolith-schema` | `describe`/`bulk_fill` | — | Schema-first discovery and validated reflected batch writes |
 
 ### Code & project
 | Skill | Namespace | ~Actions | Use for |
@@ -33,6 +36,8 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-cpp` | `source` | 27 | C++ symbol/text search, references, hierarchy, risk/review/impact |
 | `unreal-project-search` | `project` | ~20 | Asset search, references, type filter, gameplay tags, review/snapshots |
 | `unreal-bridge` | `bridge` | 5 | Map assets/Blueprint nodes to their backing C++ symbols |
+| `unreal-asset` | `asset` | 12 | Generic asset ingest, save/delete, inspection, live find, naming, batch rename |
+| `unreal-reflection-intel` | `cppreflect`/`network`/`decision`/`risk`/`reflect` | 20+ | Reflection Intelligence, replication audit, decision records, risk signals |
 | `unreal-build` | `editor` | 57* | Build, hot reload, compile errors |
 | `unreal-debugging` | `editor` | 57* | Logs, crash context, output log |
 | `unreal-performance` | `editor`/`mesh` | — | Profiling, triangle/draw-call/shadow budgets |
@@ -72,6 +77,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-metahuman` | `metahuman` | 2 | MetaHuman setup & layout |
 | `unreal-slate` | `slate` | 6 | Editor Slate / Editor Utility Widgets |
 | `unreal-paper2d` | `paper2d` | 3 | Sprites, flipbooks, tile maps |
+| `unreal-sprite` | `sprite` | — | Sprite production contracts, sheets, icon atlases, metadata, handoff |
 | `unreal-chaos-fracture` | `chaos_fracture` | 3 | Chaos destruction, Geometry Collections |
 | `unreal-cloth` | `cloth` | 2 | Chaos Cloth simulation |
 | `unreal-dataflow` | `dataflow` | 8 | Dataflow node graphs |

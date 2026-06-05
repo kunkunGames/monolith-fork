@@ -13,6 +13,7 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithPackagePathValidator.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformMemory.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
@@ -581,15 +582,30 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("capture_system_gif"),
-		TEXT("Capture a Niagara system as a sequence of PNG frames with optional GIF encoding via ffmpeg or python"),
+		TEXT("Capture a Niagara system as a sequence of PNG frames with adaptive 60 fps GIF encoding via ffmpeg or python"),
 		FMonolithActionHandler::CreateStatic(&HandleCaptureSystemGif),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
 			.Optional(TEXT("duration_seconds"), TEXT("number"), TEXT("Capture duration in seconds (default: 2.0)"))
-			.Optional(TEXT("fps"), TEXT("integer"), TEXT("Frames per second (default: 15)"))
+			.Optional(TEXT("fps"), TEXT("integer"), TEXT("Target frames per second (default: 60, auto-degrades to 30/20 under resource limits, quality minimum: 20)"))
 			.Optional(TEXT("resolution"), TEXT("integer"), TEXT("Output resolution width/height in pixels (default: 256)"))
 			.OptionalDiskPath(TEXT("output_path"), TEXT("Output directory (default: Saved/Screenshots/Monolith/GIF_<timestamp>)"))
-			.Optional(TEXT("encoder"), TEXT("string"), TEXT("frames_only (default), ffmpeg, or python — opt-in GIF encoding"))
+			.Optional(TEXT("encoder"), TEXT("string"), TEXT("auto (default), frames_only, ffmpeg, or python"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("encode_frame_sequence_gif"),
+		TEXT("Encode an existing ordered PNG frame sequence to a GIF with adaptive 60 fps target, 30/20 fps fallback, and ffmpeg/python encoders"),
+		FMonolithActionHandler::CreateStatic(&HandleEncodeFrameSequenceGif),
+		FParamSchemaBuilder()
+			.Optional(TEXT("frame_paths"), TEXT("array"), TEXT("Ordered absolute or project-relative PNG frame paths"))
+			.OptionalDiskPath(TEXT("frame_dir"), TEXT("Directory containing PNG frames; sorted lexically when frame_paths is omitted or combined"))
+			.Optional(TEXT("pattern"), TEXT("string"), TEXT("Filename glob for frame_dir"), TEXT("*.png"))
+			.OptionalDiskPath(TEXT("output_path"), TEXT("Output GIF path. Defaults beside frame_dir or under Saved/Screenshots/Monolith."))
+			.Optional(TEXT("fps"), TEXT("integer"), TEXT("Target GIF frames per second (default: 60, auto-degrades to 30/20 under resource limits, quality minimum: 20)"))
+			.Optional(TEXT("source_fps"), TEXT("integer"), TEXT("FPS represented by the input frames; defaults to fps and preserves duration when downsampling"))
+			.Optional(TEXT("max_frames"), TEXT("integer"), TEXT("Optional caller cap for encoded frames, clamped to the 1000-frame hard cap"))
+			.Optional(TEXT("scale_width"), TEXT("integer"), TEXT("Optional GIF output width. Requires ffmpeg; default preserves source frame size."))
+			.Optional(TEXT("encoder"), TEXT("string"), TEXT("auto (default), frames_only, ffmpeg, or python"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("list_automation_tests"),
@@ -3194,6 +3210,481 @@ namespace
 		}
 		return TEXT("png");
 	}
+
+	constexpr int32 GifMinFPS = 20;
+	constexpr int32 GifDefaultFPS = 60;
+	constexpr int32 GifMaxPreferredFPS = 60;
+	constexpr int32 GifHardFrameCap = 1000;
+
+	const TCHAR* GetGifFpsPolicyText()
+	{
+		return TEXT("60 fps default target when affordable; 30 fps and 20 fps fallback tiers under resource limits; 20 fps quality minimum unless the hard frame cap forces degradation");
+	}
+
+	int32 GetAdaptiveGifFrameBudget(int32 Width)
+	{
+		int32 FrameBudget = 240; // 60 fps for 4s, 30 fps for 8s at small preview sizes.
+		if (Width >= 1024)
+		{
+			FrameBudget = 120;
+		}
+		else if (Width >= 512)
+		{
+			FrameBudget = 180;
+		}
+
+		const FPlatformMemoryStats MemoryStats = FPlatformMemory::GetStats();
+		constexpr uint64 OneGiB = 1024ull * 1024ull * 1024ull;
+		if (MemoryStats.AvailablePhysical > 0 && MemoryStats.AvailablePhysical < 2ull * OneGiB)
+		{
+			FrameBudget = FMath::Min(FrameBudget, 120);
+		}
+		if (MemoryStats.AvailablePhysical > 0 && MemoryStats.AvailablePhysical < OneGiB)
+		{
+			FrameBudget = FMath::Min(FrameBudget, 80);
+		}
+
+		return FMath::Clamp(FrameBudget, 1, GifHardFrameCap);
+	}
+
+	bool ReadIntegerParam(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* FieldName,
+		int32& InOutValue,
+		FString& OutError,
+		int32 MinValue,
+		int32 MaxValue)
+	{
+		if (!Params.IsValid() || !Params->HasField(FieldName))
+		{
+			return true;
+		}
+
+		double Number = 0.0;
+		if (!Params->TryGetNumberField(FieldName, Number)
+			|| Number < static_cast<double>(MinValue)
+			|| Number > static_cast<double>(MaxValue)
+			|| static_cast<double>(static_cast<int64>(Number)) != Number)
+		{
+			OutError = FString::Printf(TEXT("%s must be an integer between %d and %d."), FieldName, MinValue, MaxValue);
+			return false;
+		}
+
+		InOutValue = static_cast<int32>(Number);
+		return true;
+	}
+
+	FString NormalizeFrameDiskPath(FString Path)
+	{
+		Path.TrimStartAndEndInline();
+		if (FPaths::IsRelative(Path))
+		{
+			Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), Path);
+		}
+		FPaths::NormalizeFilename(Path);
+		return Path;
+	}
+
+	bool AddUniquePngFramePath(
+		const FString& RawPath,
+		TArray<FString>& OutFramePaths,
+		TSet<FString>& InOutSeen,
+		FString& OutError)
+	{
+		const FString FramePath = NormalizeFrameDiskPath(RawPath);
+		if (FramePath.IsEmpty())
+		{
+			OutError = TEXT("frame_paths contains an empty path.");
+			return false;
+		}
+
+		if (!FPaths::GetExtension(FramePath).Equals(TEXT("png"), ESearchCase::IgnoreCase))
+		{
+			OutError = FString::Printf(TEXT("Only PNG frames are supported: %s"), *FramePath);
+			return false;
+		}
+
+		if (!IFileManager::Get().FileExists(*FramePath))
+		{
+			OutError = FString::Printf(TEXT("Frame PNG does not exist: %s"), *FramePath);
+			return false;
+		}
+
+		if (!InOutSeen.Contains(FramePath))
+		{
+			InOutSeen.Add(FramePath);
+			OutFramePaths.Add(FramePath);
+		}
+		return true;
+	}
+
+	bool ResolveFrameSequencePaths(
+		const TSharedPtr<FJsonObject>& Params,
+		TArray<FString>& OutFramePaths,
+		FString& OutFrameDir,
+		FString& OutError)
+	{
+		TSet<FString> SeenPaths;
+		const TArray<TSharedPtr<FJsonValue>>* FrameValues = nullptr;
+		if (Params.IsValid() && Params->TryGetArrayField(TEXT("frame_paths"), FrameValues))
+		{
+			for (int32 Index = 0; Index < FrameValues->Num(); ++Index)
+			{
+				const TSharedPtr<FJsonValue>& Value = (*FrameValues)[Index];
+				if (!Value.IsValid() || Value->Type != EJson::String)
+				{
+					OutError = FString::Printf(TEXT("frame_paths[%d] must be a string."), Index);
+					return false;
+				}
+				if (!AddUniquePngFramePath(Value->AsString(), OutFramePaths, SeenPaths, OutError))
+				{
+					return false;
+				}
+			}
+		}
+
+		FString FrameDir;
+		if (Params.IsValid() && Params->TryGetStringField(TEXT("frame_dir"), FrameDir) && !FrameDir.IsEmpty())
+		{
+			FrameDir = NormalizeFrameDiskPath(FrameDir);
+			if (!IFileManager::Get().DirectoryExists(*FrameDir))
+			{
+				OutError = FString::Printf(TEXT("frame_dir does not exist: %s"), *FrameDir);
+				return false;
+			}
+
+			FString Pattern = TEXT("*.png");
+			Params->TryGetStringField(TEXT("pattern"), Pattern);
+			Pattern.TrimStartAndEndInline();
+			if (Pattern.IsEmpty())
+			{
+				Pattern = TEXT("*.png");
+			}
+			if (!FPaths::GetPath(Pattern).IsEmpty())
+			{
+				OutError = TEXT("pattern must be a filename glob, not a path.");
+				return false;
+			}
+
+			TArray<FString> FoundNames;
+			IFileManager::Get().FindFiles(FoundNames, *(FrameDir / Pattern), true, false);
+			FoundNames.Sort();
+			for (const FString& Name : FoundNames)
+			{
+				if (!AddUniquePngFramePath(FrameDir / Name, OutFramePaths, SeenPaths, OutError))
+				{
+					return false;
+				}
+			}
+			OutFrameDir = FrameDir;
+		}
+		else if (Params.IsValid() && Params->HasField(TEXT("frame_dir")))
+		{
+			OutError = TEXT("frame_dir must be a non-empty string when provided.");
+			return false;
+		}
+
+		if (OutFramePaths.Num() == 0)
+		{
+			OutError = TEXT("Provide frame_paths or frame_dir containing at least one PNG frame.");
+			return false;
+		}
+
+		if (OutFrameDir.IsEmpty())
+		{
+			OutFrameDir = FPaths::GetPath(OutFramePaths[0]);
+		}
+
+		return true;
+	}
+
+	bool ReadPngFrameDimensions(const FString& FramePath, FIntPoint& OutSize)
+	{
+		OutSize = FIntPoint::ZeroValue;
+
+		TArray<uint8> CompressedData;
+		if (!FFileHelper::LoadFileToArray(CompressedData, *FramePath) || CompressedData.Num() == 0)
+		{
+			return false;
+		}
+
+		IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName(TEXT("ImageWrapper")));
+		const TSharedPtr<IImageWrapper> ImageWrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+		if (!ImageWrapper.IsValid() || !ImageWrapper->SetCompressed(CompressedData.GetData(), CompressedData.Num()))
+		{
+			return false;
+		}
+
+		OutSize = FIntPoint(ImageWrapper->GetWidth(), ImageWrapper->GetHeight());
+		return OutSize.X > 0 && OutSize.Y > 0;
+	}
+
+	FString ResolveGifOutputPath(
+		const TSharedPtr<FJsonObject>& Params,
+		const FString& BaseDir,
+		FString& OutError)
+	{
+		FString OutputPath;
+		if (Params.IsValid() && Params->HasField(TEXT("output_path")))
+		{
+			if (!Params->TryGetStringField(TEXT("output_path"), OutputPath))
+			{
+				OutError = TEXT("output_path must be a string.");
+				return FString();
+			}
+		}
+
+		if (OutputPath.IsEmpty())
+		{
+			const FString Timestamp = FDateTime::UtcNow().ToString(TEXT("%Y%m%d_%H%M%S"));
+			const FString OutputDir = BaseDir.IsEmpty()
+				? (FPaths::ProjectSavedDir() / TEXT("Screenshots/Monolith"))
+				: BaseDir;
+			OutputPath = OutputDir / FString::Printf(TEXT("FrameSequence_%s.gif"), *Timestamp);
+		}
+		else if (FPaths::IsRelative(OutputPath))
+		{
+			OutputPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), OutputPath);
+		}
+
+		FPaths::NormalizeFilename(OutputPath);
+		if (!FPaths::GetExtension(OutputPath).Equals(TEXT("gif"), ESearchCase::IgnoreCase))
+		{
+			OutputPath = FPaths::SetExtension(OutputPath, TEXT("gif"));
+		}
+
+		const FString OutputDir = FPaths::GetPath(OutputPath);
+		if (!IFileManager::Get().MakeDirectory(*OutputDir, true))
+		{
+			OutError = FString::Printf(TEXT("Failed to create output directory: %s"), *OutputDir);
+			return FString();
+		}
+
+		return OutputPath;
+	}
+
+	void BuildSampledFrameList(const TArray<FString>& InputFrames, int32 DesiredCount, TArray<FString>& OutFrames)
+	{
+		OutFrames.Reset();
+		if (InputFrames.Num() == 0 || DesiredCount <= 0)
+		{
+			return;
+		}
+
+		if (DesiredCount >= InputFrames.Num())
+		{
+			OutFrames = InputFrames;
+			return;
+		}
+
+		OutFrames.Reserve(DesiredCount);
+		if (DesiredCount == 1)
+		{
+			OutFrames.Add(InputFrames[0]);
+			return;
+		}
+
+		const double LastInputIndex = static_cast<double>(InputFrames.Num() - 1);
+		const double LastOutputIndex = static_cast<double>(DesiredCount - 1);
+		int32 PreviousIndex = -1;
+		for (int32 Index = 0; Index < DesiredCount; ++Index)
+		{
+			int32 SourceIndex = FMath::RoundToInt((static_cast<double>(Index) / LastOutputIndex) * LastInputIndex);
+			SourceIndex = FMath::Clamp(SourceIndex, 0, InputFrames.Num() - 1);
+			if (SourceIndex <= PreviousIndex)
+			{
+				SourceIndex = FMath::Min(PreviousIndex + 1, InputFrames.Num() - 1);
+			}
+			OutFrames.Add(InputFrames[SourceIndex]);
+			PreviousIndex = SourceIndex;
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> MakeStringArray(const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Array;
+		Array.Reserve(Values.Num());
+		for (const FString& Value : Values)
+		{
+			Array.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Array;
+	}
+
+	FString EscapePythonSingleQuotedString(FString Value)
+	{
+		Value.ReplaceInline(TEXT("\\"), TEXT("/"));
+		Value.ReplaceInline(TEXT("'"), TEXT("\\'"));
+		Value.ReplaceInline(TEXT("\n"), TEXT("\\n"));
+		Value.ReplaceInline(TEXT("\r"), TEXT("\\r"));
+		return Value;
+	}
+
+	struct FMonolithGifEncodeResult
+	{
+		bool bEncoded = false;
+		FString EncoderUsed = TEXT("frames_only");
+		FString Error;
+	};
+
+	bool TryEncodeGifWithFFmpeg(
+		const TArray<FString>& FramePaths,
+		const FString& GifPath,
+		int32 FPS,
+		int32 ScaleWidth,
+		FString& OutError)
+	{
+		const FString OutputDir = FPaths::GetPath(GifPath);
+		const FString SafeBaseName = MakeCaptureSafeFileName(FPaths::GetBaseFilename(GifPath));
+		const FString FrameListPath = OutputDir / FString::Printf(TEXT("%s_ffmpeg_frames.txt"), *SafeBaseName);
+		FString FrameList;
+		const double FrameDuration = 1.0 / static_cast<double>(FPS);
+		for (const FString& Path : FramePaths)
+		{
+			FString Escaped = Path.Replace(TEXT("\\"), TEXT("/"));
+			Escaped.ReplaceInline(TEXT("'"), TEXT("'\\''"));
+			FrameList += FString::Printf(TEXT("file '%s'\n"), *Escaped);
+			FrameList += FString::Printf(TEXT("duration %.8f\n"), FrameDuration);
+		}
+
+		if (FramePaths.Num() > 0)
+		{
+			FString LastFrame = FramePaths.Last().Replace(TEXT("\\"), TEXT("/"));
+			LastFrame.ReplaceInline(TEXT("'"), TEXT("'\\''"));
+			FrameList += FString::Printf(TEXT("file '%s'\n"), *LastFrame);
+		}
+
+		if (!FFileHelper::SaveStringToFile(FrameList, *FrameListPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			OutError = FString::Printf(TEXT("failed to write ffmpeg concat list: %s"), *FrameListPath);
+			return false;
+		}
+
+		const FString Filter = ScaleWidth > 0
+			? FString::Printf(TEXT("fps=%d,scale=%d:-1:flags=lanczos"), FPS, ScaleWidth)
+			: FString::Printf(TEXT("fps=%d"), FPS);
+		const FString FFmpegArgs = FString::Printf(
+			TEXT("-y -f concat -safe 0 -i \"%s\" -vf \"%s\" -loop 0 \"%s\""),
+			*FrameListPath, *Filter, *GifPath);
+
+		int32 ReturnCode = -1;
+		FString StdOut;
+		FString StdErr;
+		const bool bLaunched = FPlatformProcess::ExecProcess(TEXT("ffmpeg"), *FFmpegArgs, &ReturnCode, &StdOut, &StdErr);
+		if (bLaunched && ReturnCode == 0 && IFileManager::Get().FileExists(*GifPath))
+		{
+			return true;
+		}
+
+		OutError = FString::Printf(TEXT("ffmpeg failed (code %d). Ensure ffmpeg is in PATH. stderr: %s"),
+			ReturnCode, *StdErr.Left(500));
+		return false;
+	}
+
+	bool TryEncodeGifWithPython(
+		const TArray<FString>& FramePaths,
+		const FString& GifPath,
+		int32 FPS,
+		int32 ScaleWidth,
+		FString& OutError)
+	{
+		if (ScaleWidth > 0)
+		{
+			OutError = TEXT("python imageio fallback does not support scale_width; use ffmpeg or omit scale_width.");
+			return false;
+		}
+
+		FString FrameListStr;
+		for (const FString& Path : FramePaths)
+		{
+			if (!FrameListStr.IsEmpty())
+			{
+				FrameListStr += TEXT(",");
+			}
+			FrameListStr += FString::Printf(TEXT("'%s'"), *EscapePythonSingleQuotedString(Path));
+		}
+
+		const FString NormalizedGifPath = EscapePythonSingleQuotedString(GifPath);
+		const FString PyScript = FString::Printf(
+			TEXT("import imageio.v2 as imageio; frames=[imageio.imread(p) for p in [%s]]; imageio.mimsave('%s',frames,duration=%f,loop=0)"),
+			*FrameListStr,
+			*NormalizedGifPath,
+			1.0 / static_cast<double>(FPS));
+
+		const FString PythonArgs = FString::Printf(TEXT("-c \"%s\""), *PyScript);
+
+		int32 ReturnCode = -1;
+		FString StdOut;
+		FString StdErr;
+		const bool bLaunched = FPlatformProcess::ExecProcess(TEXT("python"), *PythonArgs, &ReturnCode, &StdOut, &StdErr);
+		if (bLaunched && ReturnCode == 0 && IFileManager::Get().FileExists(*GifPath))
+		{
+			return true;
+		}
+
+		OutError = FString::Printf(TEXT("python imageio failed (code %d). Ensure python + imageio are installed. stderr: %s"),
+			ReturnCode, *StdErr.Left(500));
+		return false;
+	}
+
+	FMonolithGifEncodeResult EncodeGifFromPngFrames(
+		const TArray<FString>& FramePaths,
+		const FString& GifPath,
+		int32 FPS,
+		int32 ScaleWidth,
+		const FString& Encoder)
+	{
+		FMonolithGifEncodeResult Result;
+		if (Encoder == TEXT("frames_only"))
+		{
+			return Result;
+		}
+		if (FramePaths.Num() == 0)
+		{
+			Result.Error = TEXT("No PNG frames were provided for GIF encoding.");
+			return Result;
+		}
+
+		FString FfmpegError;
+		FString PythonError;
+		if (Encoder == TEXT("ffmpeg"))
+		{
+			Result.bEncoded = TryEncodeGifWithFFmpeg(FramePaths, GifPath, FPS, ScaleWidth, FfmpegError);
+			Result.EncoderUsed = Result.bEncoded ? TEXT("ffmpeg") : TEXT("frames_only");
+			Result.Error = FfmpegError;
+			return Result;
+		}
+
+		if (Encoder == TEXT("python"))
+		{
+			Result.bEncoded = TryEncodeGifWithPython(FramePaths, GifPath, FPS, ScaleWidth, PythonError);
+			Result.EncoderUsed = Result.bEncoded ? TEXT("python") : TEXT("frames_only");
+			Result.Error = PythonError;
+			return Result;
+		}
+
+		if (Encoder == TEXT("auto"))
+		{
+			if (TryEncodeGifWithFFmpeg(FramePaths, GifPath, FPS, ScaleWidth, FfmpegError))
+			{
+				Result.bEncoded = true;
+				Result.EncoderUsed = TEXT("ffmpeg");
+				return Result;
+			}
+			if (TryEncodeGifWithPython(FramePaths, GifPath, FPS, ScaleWidth, PythonError))
+			{
+				Result.bEncoded = true;
+				Result.EncoderUsed = TEXT("python");
+				return Result;
+			}
+
+			Result.Error = FString::Printf(TEXT("auto encoding failed. ffmpeg: %s | python: %s"), *FfmpegError, *PythonError);
+			return Result;
+		}
+
+		Result.Error = FString::Printf(TEXT("Unknown encoder '%s'. Valid: auto, frames_only, ffmpeg, python"), *Encoder);
+		return Result;
+	}
 }
 
 FMonolithActionResult FMonolithEditorActions::HandleListOpenViewports(const TSharedPtr<FJsonObject>& Params)
@@ -3450,12 +3941,18 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAssetThumbnail(const 
 // ============================================================================
 // Action: capture_system_gif
 // Captures a Niagara system as a sequence of PNG frames with optional GIF encoding.
-// Default mode: frames_only — returns array of PNG paths (always works, no deps).
-// Optional: encoder: "ffmpeg" or "python" for GIF encoding.
+// Default mode: auto — returns PNG frame paths and tries ffmpeg, then python imageio.
+// FPS policy: 60 by default when affordable, 30/20 fallback tiers unless
+// the hard 1000-frame capture_sequence_frames cap forces a lower degraded rate.
 // ============================================================================
 FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 	const TSharedPtr<FJsonObject>& Params)
 {
+	constexpr int32 MinGifFPS = GifMinFPS;
+	constexpr int32 DefaultGifFPS = GifDefaultFPS;
+	constexpr int32 MaxPreferredGifFPS = GifMaxPreferredFPS;
+	constexpr int32 HardFrameCap = GifHardFrameCap;
+
 	FString AssetPath;
 	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty())
@@ -3463,19 +3960,100 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 
 	double DurationSeconds = 2.0;
 	Params->TryGetNumberField(TEXT("duration_seconds"), DurationSeconds);
-	double FpsDouble = 15.0;
+	double FpsDouble = static_cast<double>(DefaultGifFPS);
 	Params->TryGetNumberField(TEXT("fps"), FpsDouble);
-	int32 FPS = static_cast<int32>(FpsDouble);
+	int32 RequestedFPS = FMath::RoundToInt(FpsDouble);
 	double ResDouble = 256.0;
 	Params->TryGetNumberField(TEXT("resolution"), ResDouble);
 	int32 Resolution = static_cast<int32>(ResDouble);
-	FString Encoder = TEXT("frames_only");
+	FString Encoder = TEXT("auto");
 	Params->TryGetStringField(TEXT("encoder"), Encoder);
 	Encoder = Encoder.ToLower();
 
-	if (FPS <= 0) FPS = 15;
+	if (RequestedFPS <= 0) RequestedFPS = DefaultGifFPS;
+	int32 FPS = FMath::Clamp(RequestedFPS, MinGifFPS, MaxPreferredGifFPS);
 	if (Resolution <= 0) Resolution = 256;
 	if (DurationSeconds <= 0) DurationSeconds = 2.0;
+
+	FString FpsAdjustment;
+	if (FPS != RequestedFPS)
+	{
+		FpsAdjustment = FString::Printf(TEXT("clamped requested fps %d to %d (allowed quality range %d-%d)"),
+			RequestedFPS, FPS, MinGifFPS, MaxPreferredGifFPS);
+	}
+
+	int32 FrameBudget = 240; // 60 fps for 4s, 30 fps for 8s at small preview sizes.
+	if (Resolution >= 1024)
+	{
+		FrameBudget = 120;
+	}
+	else if (Resolution >= 512)
+	{
+		FrameBudget = 180;
+	}
+
+	const FPlatformMemoryStats MemoryStats = FPlatformMemory::GetStats();
+	constexpr uint64 OneGiB = 1024ull * 1024ull * 1024ull;
+	if (MemoryStats.AvailablePhysical > 0 && MemoryStats.AvailablePhysical < 2ull * OneGiB)
+	{
+		FrameBudget = FMath::Min(FrameBudget, 120);
+	}
+	if (MemoryStats.AvailablePhysical > 0 && MemoryStats.AvailablePhysical < OneGiB)
+	{
+		FrameBudget = FMath::Min(FrameBudget, 80);
+	}
+
+	int32 FrameCount = FMath::Max(1, FMath::FloorToInt(DurationSeconds * static_cast<double>(FPS)));
+	if (FrameCount > FrameBudget)
+	{
+		const int32 BudgetFPS = FMath::FloorToInt(static_cast<double>(FrameBudget) / DurationSeconds);
+		const int32 AdjustedFPS = FMath::Clamp(BudgetFPS, MinGifFPS, FPS);
+		if (AdjustedFPS < FPS)
+		{
+			if (!FpsAdjustment.IsEmpty())
+			{
+				FpsAdjustment += TEXT("; ");
+			}
+			FpsAdjustment += FString::Printf(TEXT("reduced fps %d to %d for frame budget %d at %dpx"),
+				FPS, AdjustedFPS, FrameBudget, Resolution);
+			FPS = AdjustedFPS;
+			FrameCount = FMath::Max(1, FMath::FloorToInt(DurationSeconds * static_cast<double>(FPS)));
+		}
+	}
+
+	bool bBelowMinimumDueToHardCap = false;
+	if (FrameCount > HardFrameCap)
+	{
+		const int32 HardCapFPS = FMath::Max(1, FMath::FloorToInt(static_cast<double>(HardFrameCap) / DurationSeconds));
+		const int32 AdjustedFPS = FMath::Min(FPS, HardCapFPS);
+		if (AdjustedFPS < FPS)
+		{
+			if (!FpsAdjustment.IsEmpty())
+			{
+				FpsAdjustment += TEXT("; ");
+			}
+			if (AdjustedFPS < MinGifFPS)
+			{
+				bBelowMinimumDueToHardCap = true;
+				FpsAdjustment += FString::Printf(TEXT("degraded below %d fps to %d because duration %.2fs would exceed the %d-frame action cap"),
+					MinGifFPS, AdjustedFPS, DurationSeconds, HardFrameCap);
+			}
+			else
+			{
+				FpsAdjustment += FString::Printf(TEXT("reduced fps %d to %d to stay within the %d-frame action cap"),
+					FPS, AdjustedFPS, HardFrameCap);
+			}
+			FPS = AdjustedFPS;
+			FrameCount = FMath::Max(1, FMath::FloorToInt(DurationSeconds * static_cast<double>(FPS)));
+		}
+	}
+
+	if (FrameCount > HardFrameCap)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("capture_system_gif would require %d frames, exceeding the hard %d-frame cap. Reduce duration_seconds."),
+			FrameCount, HardFrameCap));
+	}
 
 	// Output directory
 	FString OutputDir;
@@ -3501,7 +4079,6 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load Niagara system: %s"), *AssetPath));
 
 	// Generate timestamps
-	int32 FrameCount = FMath::Max(1, static_cast<int32>(DurationSeconds * FPS));
 	TArray<float> Timestamps;
 	for (int32 i = 0; i < FrameCount; i++)
 	{
@@ -3558,89 +4135,214 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 	Result->SetNumberField(TEXT("frame_count"), FramePaths.Num());
 	Result->SetNumberField(TEXT("duration"), DurationSeconds);
 	Result->SetNumberField(TEXT("fps"), FPS);
+	Result->SetNumberField(TEXT("requested_fps"), RequestedFPS);
+	Result->SetNumberField(TEXT("min_quality_fps"), MinGifFPS);
+	Result->SetNumberField(TEXT("max_preferred_fps"), MaxPreferredGifFPS);
+	Result->SetNumberField(TEXT("frame_budget"), FrameBudget);
+	Result->SetBoolField(TEXT("fps_adjusted"), !FpsAdjustment.IsEmpty());
+	Result->SetBoolField(TEXT("fps_below_quality_minimum"), bBelowMinimumDueToHardCap);
+	Result->SetStringField(TEXT("fps_policy"), GetGifFpsPolicyText());
+	if (!FpsAdjustment.IsEmpty())
+	{
+		Result->SetStringField(TEXT("fps_adjustment"), FpsAdjustment);
+	}
 	Result->SetNumberField(TEXT("resolution"), Resolution);
 	Result->SetStringField(TEXT("output_dir"), OutputDir);
 
 	// Always include frame paths
-	TArray<TSharedPtr<FJsonValue>> PathArr;
-	PathArr.Reserve(FramePaths.Num());
-	for (const FString& P : FramePaths)
-		PathArr.Add(MakeShared<FJsonValueString>(P));
-	Result->SetArrayField(TEXT("frame_paths"), PathArr);
+	Result->SetArrayField(TEXT("frame_paths"), MakeStringArray(FramePaths));
 
 	// Optional GIF encoding
 	if (Encoder != TEXT("frames_only") && FramePaths.Num() > 0)
 	{
-		FString GifPath = OutputDir / TEXT("output.gif");
-
-		if (Encoder == TEXT("ffmpeg"))
+		const FString GifPath = OutputDir / TEXT("output.gif");
+		const FMonolithGifEncodeResult EncodeResult = EncodeGifFromPngFrames(FramePaths, GifPath, FPS, 0, Encoder);
+		Result->SetStringField(TEXT("encoder_used"), EncodeResult.EncoderUsed);
+		if (EncodeResult.bEncoded)
 		{
-			FString InputPattern = OutputDir / TEXT("gif_frame_%04d.png");
-			FString FFmpegArgs = FString::Printf(
-				TEXT("-y -framerate %d -i \"%s\" -vf \"scale=%d:-1:flags=lanczos\" -loop 0 \"%s\""),
-				FPS, *InputPattern, Resolution, *GifPath);
+			Result->SetStringField(TEXT("gif_path"), GifPath);
+		}
+		else if (!EncodeResult.Error.IsEmpty())
+		{
+			Result->SetStringField(TEXT("encoder_error"), EncodeResult.Error);
+		}
+	}
 
-			FString FFmpegPath = TEXT("ffmpeg");
-			int32 ReturnCode = -1;
-			FString StdOut, StdErr;
+	return FMonolithActionResult::Success(Result);
+}
 
-			// Try to run ffmpeg
-			bool bLaunched = FPlatformProcess::ExecProcess(*FFmpegPath, *FFmpegArgs, &ReturnCode, &StdOut, &StdErr);
+// ============================================================================
+// Action: encode_frame_sequence_gif
+// Encodes already-captured PNG frames to GIF without recapturing editor content.
+// ============================================================================
+FMonolithActionResult FMonolithEditorActions::HandleEncodeFrameSequenceGif(
+	const TSharedPtr<FJsonObject>& Params)
+{
+	TArray<FString> InputFramePaths;
+	FString FrameDir;
+	FString Error;
+	if (!ResolveFrameSequencePaths(Params, InputFramePaths, FrameDir, Error))
+	{
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
-			if (bLaunched && ReturnCode == 0 && IFileManager::Get().FileExists(*GifPath))
+	FString Encoder = TEXT("auto");
+	if (Params.IsValid() && Params->HasField(TEXT("encoder")) && !Params->TryGetStringField(TEXT("encoder"), Encoder))
+	{
+		return FMonolithActionResult::Error(TEXT("encoder must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	Encoder = Encoder.ToLower();
+	if (Encoder != TEXT("auto") && Encoder != TEXT("frames_only") && Encoder != TEXT("ffmpeg") && Encoder != TEXT("python"))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Unknown encoder '%s'. Valid: auto, frames_only, ffmpeg, python"), *Encoder),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	int32 RequestedFPS = GifDefaultFPS;
+	if (!ReadIntegerParam(Params, TEXT("fps"), RequestedFPS, Error, 1, GifHardFrameCap))
+	{
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	int32 SourceFPS = RequestedFPS;
+	if (!ReadIntegerParam(Params, TEXT("source_fps"), SourceFPS, Error, 1, GifHardFrameCap))
+	{
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	int32 ScaleWidth = 0;
+	if (!ReadIntegerParam(Params, TEXT("scale_width"), ScaleWidth, Error, 0, 8192))
+	{
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FIntPoint SourceFrameSize = FIntPoint::ZeroValue;
+	ReadPngFrameDimensions(InputFramePaths[0], SourceFrameSize);
+	const int32 BudgetWidth = ScaleWidth > 0 ? ScaleWidth : (SourceFrameSize.X > 0 ? SourceFrameSize.X : 256);
+	int32 FrameBudget = GetAdaptiveGifFrameBudget(BudgetWidth);
+	int32 CallerFrameCap = GifHardFrameCap;
+	if (!ReadIntegerParam(Params, TEXT("max_frames"), CallerFrameCap, Error, 1, GifHardFrameCap))
+	{
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FrameBudget = FMath::Clamp(FMath::Min(FrameBudget, CallerFrameCap), 1, GifHardFrameCap);
+
+	int32 FPS = FMath::Clamp(RequestedFPS, GifMinFPS, GifMaxPreferredFPS);
+	FString FpsAdjustment;
+	if (FPS != RequestedFPS)
+	{
+		FpsAdjustment = FString::Printf(TEXT("clamped requested fps %d to %d (allowed quality range %d-%d)"),
+			RequestedFPS, FPS, GifMinFPS, GifMaxPreferredFPS);
+	}
+
+	const double SourceDurationSeconds = FMath::Max(
+		1.0 / static_cast<double>(SourceFPS),
+		static_cast<double>(InputFramePaths.Num()) / static_cast<double>(SourceFPS));
+	int32 DesiredFrameCount = FMath::Clamp(
+		FMath::RoundToInt(SourceDurationSeconds * static_cast<double>(FPS)),
+		1,
+		InputFramePaths.Num());
+
+	bool bBelowMinimumDueToHardCap = false;
+	if (DesiredFrameCount > FrameBudget)
+	{
+		const int32 BudgetFPS = FMath::FloorToInt(static_cast<double>(FrameBudget) / SourceDurationSeconds);
+		const int32 AdjustedFPS = FMath::Min(FPS, FMath::Max(1, BudgetFPS));
+		if (AdjustedFPS < FPS)
+		{
+			if (!FpsAdjustment.IsEmpty())
 			{
-				Result->SetStringField(TEXT("gif_path"), GifPath);
-				Result->SetStringField(TEXT("encoder_used"), TEXT("ffmpeg"));
+				FpsAdjustment += TEXT("; ");
+			}
+			if (AdjustedFPS < GifMinFPS)
+			{
+				bBelowMinimumDueToHardCap = true;
+				FpsAdjustment += FString::Printf(TEXT("degraded below %d fps to %d because %.2fs of source frames would exceed the %d-frame budget"),
+					GifMinFPS, AdjustedFPS, SourceDurationSeconds, FrameBudget);
 			}
 			else
 			{
-				Result->SetStringField(TEXT("encoder_error"),
-					FString::Printf(TEXT("ffmpeg failed (code %d). Ensure ffmpeg is in PATH. stderr: %s"),
-						ReturnCode, *StdErr.Left(500)));
+				FpsAdjustment += FString::Printf(TEXT("reduced fps %d to %d for frame budget %d"),
+					FPS, AdjustedFPS, FrameBudget);
 			}
+
+			FPS = AdjustedFPS;
+			DesiredFrameCount = FMath::Clamp(
+				FMath::FloorToInt(SourceDurationSeconds * static_cast<double>(FPS)),
+				1,
+				InputFramePaths.Num());
 		}
-		else if (Encoder == TEXT("python"))
+	}
+
+	if (DesiredFrameCount > FrameBudget)
+	{
+		bBelowMinimumDueToHardCap = true;
+		if (!FpsAdjustment.IsEmpty())
 		{
-			// Build a quick python one-liner using imageio
-			FString FrameListStr;
-			for (const FString& P : FramePaths)
-			{
-				if (!FrameListStr.IsEmpty()) FrameListStr += TEXT(",");
-				FString Escaped = P;
-				Escaped.ReplaceInline(TEXT("\\"), TEXT("/"));
-				FrameListStr += FString::Printf(TEXT("'%s'"), *Escaped);
-			}
-
-			FString PyScript = FString::Printf(
-				TEXT("import imageio; frames=[imageio.imread(p) for p in [%s]]; imageio.mimsave('%s',frames,duration=%f,loop=0)"),
-				*FrameListStr,
-				*GifPath.Replace(TEXT("\\"), TEXT("/")),
-				1.0 / FPS);
-
-			FString PythonPath = TEXT("python");
-			FString PythonArgs = FString::Printf(TEXT("-c \"%s\""), *PyScript);
-
-			int32 ReturnCode = -1;
-			FString StdOut, StdErr;
-			bool bLaunched = FPlatformProcess::ExecProcess(*PythonPath, *PythonArgs, &ReturnCode, &StdOut, &StdErr);
-
-			if (bLaunched && ReturnCode == 0 && IFileManager::Get().FileExists(*GifPath))
-			{
-				Result->SetStringField(TEXT("gif_path"), GifPath);
-				Result->SetStringField(TEXT("encoder_used"), TEXT("python"));
-			}
-			else
-			{
-				Result->SetStringField(TEXT("encoder_error"),
-					FString::Printf(TEXT("python imageio failed (code %d). Ensure python + imageio are installed. stderr: %s"),
-						ReturnCode, *StdErr.Left(500)));
-			}
+			FpsAdjustment += TEXT("; ");
 		}
-		else
-		{
-			Result->SetStringField(TEXT("encoder_error"),
-				FString::Printf(TEXT("Unknown encoder '%s'. Valid: frames_only, ffmpeg, python"), *Encoder));
-		}
+		FpsAdjustment += FString::Printf(TEXT("sampled encoded frames from %d to %d because 1 fps would still exceed the frame budget"),
+			DesiredFrameCount, FrameBudget);
+		DesiredFrameCount = FrameBudget;
+	}
+
+	TArray<FString> EncodedFramePaths;
+	BuildSampledFrameList(InputFramePaths, DesiredFrameCount, EncodedFramePaths);
+
+	FString OutputPath = ResolveGifOutputPath(Params, FrameDir, Error);
+	if (OutputPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FMonolithGifEncodeResult EncodeResult;
+	if (Encoder != TEXT("frames_only"))
+	{
+		EncodeResult = EncodeGifFromPngFrames(EncodedFramePaths, OutputPath, FPS, ScaleWidth, Encoder);
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), Encoder == TEXT("frames_only") || EncodeResult.bEncoded);
+	Result->SetStringField(TEXT("status"), EncodeResult.bEncoded ? TEXT("encoded") : (Encoder == TEXT("frames_only") ? TEXT("frames_only") : TEXT("encode_failed")));
+	Result->SetStringField(TEXT("output_path"), OutputPath);
+	Result->SetStringField(TEXT("gif_path"), EncodeResult.bEncoded ? OutputPath : FString());
+	Result->SetStringField(TEXT("encoder_requested"), Encoder);
+	Result->SetStringField(TEXT("encoder_used"), EncodeResult.EncoderUsed);
+	Result->SetNumberField(TEXT("input_frame_count"), InputFramePaths.Num());
+	Result->SetNumberField(TEXT("encoded_frame_count"), EncodedFramePaths.Num());
+	Result->SetNumberField(TEXT("frame_count"), EncodedFramePaths.Num());
+	Result->SetNumberField(TEXT("source_fps"), SourceFPS);
+	Result->SetNumberField(TEXT("requested_fps"), RequestedFPS);
+	Result->SetNumberField(TEXT("fps"), FPS);
+	Result->SetNumberField(TEXT("min_quality_fps"), GifMinFPS);
+	Result->SetNumberField(TEXT("max_preferred_fps"), GifMaxPreferredFPS);
+	Result->SetNumberField(TEXT("source_duration_seconds"), SourceDurationSeconds);
+	Result->SetNumberField(TEXT("gif_duration_seconds"), static_cast<double>(EncodedFramePaths.Num()) / static_cast<double>(FPS));
+	Result->SetNumberField(TEXT("frame_budget"), FrameBudget);
+	Result->SetBoolField(TEXT("fps_adjusted"), !FpsAdjustment.IsEmpty());
+	Result->SetBoolField(TEXT("fps_below_quality_minimum"), bBelowMinimumDueToHardCap);
+	Result->SetStringField(TEXT("fps_policy"), GetGifFpsPolicyText());
+	Result->SetStringField(TEXT("frame_dir"), FrameDir);
+	Result->SetNumberField(TEXT("source_width"), SourceFrameSize.X);
+	Result->SetNumberField(TEXT("source_height"), SourceFrameSize.Y);
+	Result->SetNumberField(TEXT("scale_width"), ScaleWidth);
+	Result->SetArrayField(TEXT("frame_paths"), MakeStringArray(InputFramePaths));
+	Result->SetArrayField(TEXT("encoded_frame_paths"), MakeStringArray(EncodedFramePaths));
+	if (!FpsAdjustment.IsEmpty())
+	{
+		Result->SetStringField(TEXT("fps_adjustment"), FpsAdjustment);
+	}
+	if (!EncodeResult.Error.IsEmpty())
+	{
+		Result->SetStringField(TEXT("encoder_error"), EncodeResult.Error);
+	}
+
+	if (Encoder != TEXT("frames_only") && !EncodeResult.bEncoded)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("GIF encoding failed: %s"), *EncodeResult.Error))
+			.WithErrorData(Result);
 	}
 
 	return FMonolithActionResult::Success(Result);

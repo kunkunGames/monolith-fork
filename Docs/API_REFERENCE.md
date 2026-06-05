@@ -449,7 +449,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithNiagara.md`.
 
 ## editor
 
-Live Coding builds, compile output capture, editor log capture, scene capture, texture import, asset deletion, viewport info, GIF capture, **map creation** and **module status** (Phase J F8), plus the **PIE / console / Python automation** verbs (`run_console_command`, `start_pie`, `stop_pie`, `run_python`, `load_level` — v0.14.9/v0.14.10). **29 actions.**
+Live Coding builds, compile output capture, editor log capture, scene capture, texture import, asset deletion, viewport info, GIF capture and already-captured PNG sequence GIF encoding, **map creation** and **module status** (Phase J F8), plus the **PIE / console / Python automation** verbs (`run_console_command`, `start_pie`, `stop_pie`, `run_python`, `load_level` — v0.14.9/v0.14.10). **60 actions.**
 
 ### `editor.trigger_build` / `editor.live_compile`
 
@@ -549,16 +549,32 @@ Current editor viewport camera position, rotation, FOV, resolution. *No paramete
 
 ### `editor.capture_system_gif`
 
-Capture a Niagara system as a sequence of PNG frames with optional GIF encoding via ffmpeg or python.
+Capture a Niagara system as ordered PNG frames and, by default, encode a GIF by trying ffmpeg first and python imageio second. The action records the actual fps, any adaptive degradation, all frame paths, and GIF/encoder status.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `asset_path` | string | **required** | Niagara system asset path |
 | `duration_seconds` | number | optional | Default: `2.0` |
-| `fps` | integer | optional | Default: `15` |
+| `fps` | integer | optional | Target fps. Default: `60`; adaptively degrades to `30` and then `20` under resource limits; `20` is the quality floor unless the hard frame cap forces degradation. |
 | `resolution` | integer | optional | Default: `256` |
 | `output_path` | string | optional | Default: `Saved/Screenshots/Monolith/GIF_<timestamp>` |
-| `encoder` | string | optional | `frames_only` (default), `ffmpeg`, or `python` |
+| `encoder` | string | optional | `auto` (default), `frames_only`, `ffmpeg`, or `python` |
+
+### `editor.encode_frame_sequence_gif`
+
+Encode already-captured ordered PNG frames into a GIF without recapturing editor content. Use this for PIE screenshot/frame automation after the PNG frames already exist. The default target is 60 fps; the action preserves source duration while downsampling frames and degrades under resource pressure to 30 fps, 20 fps, or a lower reported rate only when the hard frame budget requires it.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `frame_paths` | array | optional | Ordered absolute or project-relative PNG frame paths. Required when `frame_dir` is omitted. |
+| `frame_dir` | string | optional | Directory containing PNG frames; matched files are sorted lexically and may be combined with `frame_paths`. |
+| `pattern` | string | optional | Filename glob for `frame_dir`. Default: `*.png`. |
+| `output_path` | string | optional | Output GIF path. Default: beside `frame_dir` or under `Saved/Screenshots/Monolith`. |
+| `fps` | integer | optional | Target GIF fps. Default: `60`; adaptively degrades to `30` and then `20` under resource limits. |
+| `source_fps` | integer | optional | FPS represented by the input frames. Defaults to `fps`; set this when converting a higher-rate PNG capture to a lower-rate GIF while preserving duration. |
+| `max_frames` | integer | optional | Caller frame cap, clamped to the 1000-frame hard cap and the adaptive resource budget. |
+| `scale_width` | integer | optional | Optional GIF output width. Requires ffmpeg; omitted preserves source frame size. |
+| `encoder` | string | optional | `auto` (default), `frames_only`, `ffmpeg`, or `python` |
 
 ### `editor.create_empty_map` · NEW in Phase J F8
 

@@ -1,7 +1,6 @@
 ---
 name: material-reference
 description: Index of material reference documents. Provides quick-reference PBR rules, HLSL gotchas, and performance budgets. Points to detailed docs on demand. Use when creating, optimizing, or debugging materials.
-type: skill
 ---
 
 # Material Reference Library

@@ -1,6 +1,7 @@
 // Copyright tumourlove. All Rights Reserved.
 #include "MonolithImageGenActions.h"
 
+#include "MonolithImageGenSvgSourceActions.h"
 #include "MonolithAssetTextureIngestActions.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
@@ -2213,6 +2214,105 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Image"));
 
 	Registry.RegisterAction(
+		TEXT("imagegen"), TEXT("generate_svg"),
+		TEXT("Generate a deterministic sanitized SVG source from svg_spec or prompt placeholder metadata. Writes source .svg and provenance sidecar only; no runtime SVG rendering or Texture2D import."),
+		FMonolithActionHandler::CreateStatic(&MonolithImageGen::SvgSource::HandleGenerateSvg),
+		FParamSchemaBuilder()
+			.Optional(TEXT("svg_spec"), TEXT("object"), TEXT("Deterministic vector description with paths, rects, polygons, viewBox/view_box, width, and height. Required unless prompt placeholder mode is used."))
+			.Optional(TEXT("prompt"), TEXT("string"), TEXT("Prompt metadata for deterministic placeholder and provenance hash only. Raw prompt text is not persisted."))
+			.Optional(TEXT("profile"), TEXT("string"), TEXT("web, editor, or msdf_source"), TEXT("editor"))
+			.OptionalAssetPathWithDefault(TEXT("asset_path"), TEXT("Logical /Game folder used to derive the source SVG path."), TEXT("/Game/GeneratedImages/Vector"))
+			.Optional(TEXT("asset_name"), TEXT("string"), TEXT("Optional SVG source basename. V_ prefix is added when absent."))
+			.OptionalAssetPath(TEXT("destination"), TEXT("Full /Game/... logical source path. Overrides asset_path + asset_name."))
+			.Optional(TEXT("overwrite_policy"), TEXT("string"), TEXT("unique or fail"), TEXT("unique"))
+			.Optional(TEXT("view_box"), TEXT("array|string|object"), TEXT("Optional viewBox override accepted by svg_spec generation."))
+			.Optional(TEXT("width"), TEXT("number"), TEXT("Optional display width for generated SVG root."))
+			.Optional(TEXT("height"), TEXT("number"), TEXT("Optional display height for generated SVG root."))
+			.Optional(TEXT("return_svg"), TEXT("bool"), TEXT("Include sanitized SVG text in the result. Defaults false when saved, true when save=false."))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Write .svg and .monolith.json sidecar under <ProjectDir>/GeneratedImages."), TEXT("true"))
+			.Optional(TEXT("strict"), TEXT("bool"), TEXT("Treat sanitizer warnings as errors. Defaults true for writing msdf_source, false otherwise."))
+			.Optional(TEXT("geometry_policy"), TEXT("string"), TEXT("sanitize_only, validate, or normalize"), TEXT("validate"))
+			.Optional(TEXT("fill_rule_policy"), TEXT("string"), TEXT("preserve, nonzero, or reject_evenodd"))
+			.Optional(TEXT("margin"), TEXT("number"), TEXT("Additional source-space margin reserved for future raster/MSDF framing."))
+			.Build(),
+		TEXT("Image"));
+
+	Registry.RegisterAction(
+		TEXT("imagegen"), TEXT("import_generated_svg"),
+		TEXT("Import externally generated SVG text, base64 bytes, or a local .svg file through the sanitizer/provenance boundary. Writes source .svg and sidecar only."),
+		FMonolithActionHandler::CreateStatic(&MonolithImageGen::SvgSource::HandleImportGeneratedSvg),
+		FParamSchemaBuilder()
+			.Optional(TEXT("svg_text"), TEXT("string"), TEXT("Inline SVG text. Required unless bytes_b64 or file_path/path is supplied."))
+			.Optional(TEXT("bytes_b64"), TEXT("string"), TEXT("Base64 SVG bytes, optionally with data:image/svg+xml;base64 prefix."))
+			.OptionalDiskPath(TEXT("file_path"), TEXT("Local SVG file path."))
+			.OptionalDiskPath(TEXT("path"), TEXT("Alias for file_path."))
+			.Optional(TEXT("format_hint"), TEXT("string"), TEXT("svg or svg+xml when present."))
+			.Optional(TEXT("prompt"), TEXT("string"), TEXT("External prompt metadata for provenance hash only. Raw prompt text is not persisted."))
+			.Optional(TEXT("provider"), TEXT("string"), TEXT("External provider id for provenance."), TEXT("external"))
+			.Optional(TEXT("model"), TEXT("string"), TEXT("External model id for provenance."), TEXT("unknown"))
+			.Optional(TEXT("profile"), TEXT("string"), TEXT("web, editor, or msdf_source"), TEXT("editor"))
+			.OptionalAssetPathWithDefault(TEXT("asset_path"), TEXT("Logical /Game folder used to derive the source SVG path."), TEXT("/Game/GeneratedImages/Vector"))
+			.Optional(TEXT("asset_name"), TEXT("string"), TEXT("Optional SVG source basename. V_ prefix is added when absent."))
+			.OptionalAssetPath(TEXT("destination"), TEXT("Full /Game/... logical source path. Overrides asset_path + asset_name."))
+			.Optional(TEXT("overwrite_policy"), TEXT("string"), TEXT("unique or fail"), TEXT("unique"))
+			.Optional(TEXT("return_svg"), TEXT("bool"), TEXT("Include sanitized SVG text in the result. Defaults false when saved, true when save=false."))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Write .svg and .monolith.json sidecar under <ProjectDir>/GeneratedImages."), TEXT("true"))
+			.Optional(TEXT("strict"), TEXT("bool"), TEXT("Treat sanitizer warnings as errors. Defaults true for writing msdf_source, false otherwise."))
+			.Optional(TEXT("geometry_policy"), TEXT("string"), TEXT("sanitize_only, validate, or normalize"), TEXT("validate"))
+			.Optional(TEXT("fill_rule_policy"), TEXT("string"), TEXT("preserve, nonzero, or reject_evenodd"))
+			.Optional(TEXT("margin"), TEXT("number"), TEXT("Additional source-space margin reserved for future raster/MSDF framing."))
+			.Build(),
+		TEXT("Image"));
+
+	Registry.RegisterAction(
+		TEXT("imagegen"), TEXT("validate_svg"),
+		TEXT("Validate and summarize SVG source without writing files. Reports sanitizer removals, geometry topology, and msdf_ready blockers."),
+		FMonolithActionHandler::CreateStatic(&MonolithImageGen::SvgSource::HandleValidateSvg),
+		FParamSchemaBuilder()
+			.Optional(TEXT("svg_text"), TEXT("string"), TEXT("Inline SVG text. Required unless bytes_b64 or file_path/path is supplied."))
+			.Optional(TEXT("bytes_b64"), TEXT("string"), TEXT("Base64 SVG bytes, optionally with data:image/svg+xml;base64 prefix."))
+			.OptionalDiskPath(TEXT("file_path"), TEXT("Local SVG file path."))
+			.OptionalDiskPath(TEXT("path"), TEXT("Alias for file_path."))
+			.Optional(TEXT("profile"), TEXT("string"), TEXT("web, editor, or msdf_source"), TEXT("editor"))
+			.Optional(TEXT("strict"), TEXT("bool"), TEXT("Treat sanitizer warnings as errors. Defaults false for validation."))
+			.Optional(TEXT("return_sanitized_svg"), TEXT("bool"), TEXT("Include sanitized SVG text in the result."), TEXT("false"))
+			.Optional(TEXT("geometry_policy"), TEXT("string"), TEXT("sanitize_only, validate, or normalize"), TEXT("validate"))
+			.Optional(TEXT("fill_rule_policy"), TEXT("string"), TEXT("preserve, nonzero, or reject_evenodd"))
+			.Build(),
+		TEXT("Image"));
+
+	Registry.RegisterAction(
+		TEXT("imagegen"), TEXT("generate_msdf_from_svg"),
+		TEXT("Generate a deterministic MSDF PNG from msdf_ready SVG source, import it as a data Texture2D, sample its channels, and optionally create/render a masked unlit preview material."),
+		FMonolithActionHandler::CreateStatic(&MonolithImageGen::SvgSource::HandleGenerateMsdfFromSvg),
+		FParamSchemaBuilder()
+			.Optional(TEXT("svg_spec"), TEXT("object"), TEXT("Deterministic vector description with paths, rects, polygons, viewBox/view_box, width, and height. Required unless svg_text/bytes_b64/file_path/path or prompt placeholder mode is used."))
+			.Optional(TEXT("svg_text"), TEXT("string"), TEXT("Inline SVG text. Required unless svg_spec, bytes_b64, file_path/path, or prompt placeholder mode is supplied."))
+			.Optional(TEXT("bytes_b64"), TEXT("string"), TEXT("Base64 SVG bytes, optionally with data:image/svg+xml;base64 prefix."))
+			.OptionalDiskPath(TEXT("file_path"), TEXT("Local SVG file path."))
+			.OptionalDiskPath(TEXT("path"), TEXT("Alias for file_path."))
+			.Optional(TEXT("prompt"), TEXT("string"), TEXT("Prompt metadata for deterministic placeholder and provenance hash only. Raw prompt text is not persisted."))
+			.Optional(TEXT("size"), TEXT("integer"), TEXT("Square MSDF Texture2D resolution in pixels."), TEXT("128"))
+			.Optional(TEXT("resolution"), TEXT("integer"), TEXT("Alias for size."))
+			.Optional(TEXT("pixel_range"), TEXT("integer"), TEXT("Signed-distance range in pixels encoded around 0.5."), TEXT("8"))
+			.OptionalAssetPathWithDefault(TEXT("asset_path"), TEXT("Destination folder for the generated MSDF Texture2D."), TEXT("/Game/GeneratedImages/MSDF"))
+			.Optional(TEXT("asset_name"), TEXT("string"), TEXT("Optional Texture2D asset basename. T_ prefix is added when absent."))
+			.OptionalAssetPath(TEXT("destination"), TEXT("Full /Game/... Texture2D package path. Overrides asset_path + asset_name."))
+			.Optional(TEXT("overwrite_policy"), TEXT("string"), TEXT("unique or fail"), TEXT("unique"))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported MSDF Texture2D package."), TEXT("true"))
+			.Optional(TEXT("save_source_png"), TEXT("bool"), TEXT("Save the generated MSDF PNG mirror under <ProjectDir>/GeneratedImages. Defaults to save."))
+			.Optional(TEXT("return_png"), TEXT("bool"), TEXT("Include generated MSDF PNG base64 in the action result."), TEXT("false"))
+			.Optional(TEXT("verify_samples"), TEXT("bool"), TEXT("Fail if center/outside/edge samples or channel spread do not match an MSDF texture."), TEXT("true"))
+			.Optional(TEXT("create_material"), TEXT("bool"), TEXT("Create a masked unlit material sampling the MSDF Texture2D."), TEXT("true"))
+			.Optional(TEXT("verify_material_render"), TEXT("bool"), TEXT("Render and decode a material preview PNG after material graph creation."), TEXT("true"))
+			.OptionalAssetPath(TEXT("material_destination"), TEXT("Full /Game/... material package path. Overrides material_asset_path + material_asset_name."))
+			.OptionalAssetPath(TEXT("material_asset_path"), TEXT("Destination folder for the generated material. Defaults beside the Texture2D."))
+			.Optional(TEXT("material_asset_name"), TEXT("string"), TEXT("Optional material basename. M_ prefix is added when absent."))
+			.Optional(TEXT("material_overwrite_policy"), TEXT("string"), TEXT("unique or fail"), TEXT("unique"))
+			.Build(),
+		TEXT("Image"));
+
+	Registry.RegisterAction(
 		TEXT("imagegen"), TEXT("get_generated_asset_provenance"),
 		TEXT("Read redacted generation provenance (model, prompt hash, timestamp) from a Texture2D asset's metadata."),
 		FMonolithActionHandler::CreateStatic(&HandleGetGeneratedAssetProvenance),
@@ -2267,6 +2367,8 @@ FMonolithActionResult FMonolithImageGenActions::HandleListImageModels(const TSha
 	ImageGenerationInternal::AddStringArray(Ima2, TEXT("reference_input_fields"), ImageGenerationInternal::SupportedReferenceInputFields());
 	Models.Add(MakeShared<FJsonValueObject>(Ima2));
 
+	MonolithImageGen::SvgSource::AddSvgModelEntries(Models);
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetArrayField(TEXT("models"), Models);
 	Result->SetStringField(TEXT("default_provider"), TEXT("ima2-gen"));
@@ -2306,6 +2408,7 @@ FMonolithActionResult FMonolithImageGenActions::HandleGetImageGenerationDefaults
 	Result->SetStringField(TEXT("reference_png_dir"), ImageGenerationInternal::ResolveReferenceImageDirectory());
 	Result->SetStringField(TEXT("source_png_dir"), ImageGenerationInternal::ResolveReferenceImageDirectory());
 	Result->SetBoolField(TEXT("save_source_png"), true);
+	MonolithImageGen::SvgSource::AddSvgDefaults(Result);
 	ImageGenerationInternal::AddStringArray(Result, TEXT("reference_input_fields"), ImageGenerationInternal::SupportedReferenceInputFields());
 	TSharedPtr<FJsonObject> Local = MakeShared<FJsonObject>();
 	Local->SetStringField(TEXT("provider"), TEXT("local_deterministic"));

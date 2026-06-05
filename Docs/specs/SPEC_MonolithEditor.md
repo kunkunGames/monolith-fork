@@ -14,14 +14,14 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 59 editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, module-status, asset-context, crash-report, metadata, and v0.16.0 preview/inspection toolsets, and owns editor PIE transaction-buffer cleanup |
+| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 60 editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, module-status, asset-context, crash-report, metadata, temporal GIF encoding, and v0.16.0 preview/inspection toolsets, and owns editor PIE transaction-buffer cleanup |
 | `FMonolithLogCapture` | FOutputDevice subclass. Ring buffer (10,000 entries max). Thread-safe. Tracks counts by verbosity |
 | `FMonolithEditorActions` | Static handlers for build and log operations. Hooks into `ILiveCodingModule::GetOnPatchCompleteDelegate()` to capture compile results and timestamps |
 | `FMonolithSettingsCustomization` | IDetailCustomization for UMonolithSettings. Adds re-index buttons for project and source databases in Project Settings UI |
 
-### Actions (59 — namespace: "editor")
+### Actions (60 — namespace: "editor")
 
-**Base (22 — v0.14.7 baseline + Phase J F8)**
+**Base (23 — v0.14.7 baseline + Phase J F8 + temporal GIF encoding)**
 
 | Action | Description |
 |--------|-------------|
@@ -40,7 +40,7 @@
 | `get_live_coding_diagnostics` | Read-only Live Coding diagnostics summary. Returns availability/enabled/started flags, normalized compile result, diagnostic freshness, bounded compile log excerpts, error/warning counts, and an explicit empty `ubt_diagnostics` array because UBT artifact scraping is not part of this editor-session action. |
 | `get_crash_context` | CrashContext.runtime-xml + Ensures.log + 20 recent errors. Truncated at 4096 chars |
 | `capture_scene_preview` | Capture screenshot of Niagara or material asset in preview scene. Params: `asset_path`, `asset_type`, `seek_time`, `camera`, `resolution`, `output_path` |
-| `capture_sequence_frames` | Multi-frame temporal capture at specified timestamps. Returns array of frame PNGs. Params: `asset_path`, `timestamps[]` (Max: 1000), `camera`, `resolution` |
+| `capture_sequence_frames` | Multi-frame temporal capture at specified timestamps. Returns array of frame PNGs. Params: `asset_path`, `timestamps[]` (Max: 1000), `camera`, `resolution`. Frame PNGs are the source-of-truth evidence for temporal proof; GIFs are review artifacts built from those frames. |
 | `stitch_flipbook` | Stitch multiple texture assets into a flipbook atlas. Params: `frames[]`, `columns`, `save_path` |
 | `get_viewport_info` | Get active editor viewport camera location, rotation, FOV, resolution, realtime state |
 | `list_open_viewports` | List level editor viewport capture sources and report visual-capture availability for asset-editor, widget-designer, and thumbnail paths. |
@@ -57,7 +57,8 @@
 | `get_selected_actors` | Get stable metadata for actors selected in the Level Viewport or World Outliner |
 | `get_selected_assets` | Get FAssetData-derived metadata for assets selected in the Content Browser |
 | `get_active_asset_editor` | Get the active or unambiguous open asset editor with explicit fallback source |
-| `capture_system_gif` | Capture a Niagara system as a sequence of PNG frames with optional GIF encoding via ffmpeg or python |
+| `capture_system_gif` | Capture a Niagara system as ordered PNG frames and, by default, try GIF encoding via ffmpeg then python imageio. FPS policy: 60 fps default target, adaptive 30 fps and 20 fps fallback tiers when resolution/duration/memory pressure would overrun the frame budget, and a 20 fps quality floor unless the hard frame cap forces degradation. Returns actual fps, frame paths, and GIF/encoder status. |
+| `encode_frame_sequence_gif` | Encode already-captured PNG frames into a GIF without recapturing editor content. Params: ordered `frame_paths` or `frame_dir` + `pattern`, `output_path`, `fps` (default 60), `source_fps`, `max_frames`, optional ffmpeg-only `scale_width`, and `encoder` (`auto`, `frames_only`, `ffmpeg`, `python`). Preserves source duration when downsampling, adaptively lowers fps under frame-budget pressure, and returns input/encoded frame paths plus actual fps and encoder status. |
 | `list_automation_tests` | List all registered automation tests, optionally filtered by prefix |
 | `run_automation_tests` | Run automation tests by prefix in the running editor (no PIE, no separate process). `max_tests` limit defaults to 200 (hard max 1000). Returns run id, state, progress, success/passed/failed counts, per-test errors, and the applied `max_tests`. Records compact history for later inspection. |
 | `get_automation_run_status` | Return the current Monolith automation run state when active, last run summary when idle, history count/capacity, and explicit `can_stop=false` / `stop_status="unsupported_cancel"` because this runner executes synchronously. |
@@ -87,6 +88,12 @@ Plus `capture_scene_preview` (in Base section above) was **extended** in v0.16.0
 `capture_asset_thumbnail` is the implemented fallback for PRD 34 visual verification when an actual asset-editor viewport cannot be identified. The caller must pass `thumbnail_fallback=true`; otherwise the action errors so clients do not mistake thumbnail output for viewport output. Supported `output_path` extensions (`png`, `jpg`/`jpeg`, `bmp`, `exr`, `tga`, `hdr`) select the image encoder; unknown or missing extensions are normalized to `.png`, and the response `output_path` and `format` fields report the normalized file path and actual encoder used. Asset-editor and widget-designer viewport captures remain explicit `unavailable` responses until Monolith can name the captured viewport source.
 
 Generic asset lifecycle operations are owned by `MonolithAsset`: use `asset.import_texture_from_file`, `asset.save_asset`, and `asset.delete_assets` instead of editor-owned generic asset mutation verbs.
+
+---
+
+### Temporal Capture Contract
+
+Still PNG captures prove framing, composition, material state, and representative poses. Continuous presentations - easing curves, Niagara timing, animation loops, death flashes, UI transitions, camera moves, and spawn/despawn beats - require ordered frame PNGs plus an inspected GIF so reviewers can judge motion and cadence. Use 60 fps as the default target, then degrade to 30 fps and finally the 20 fps quality floor when local machine load, memory, capture resolution, duration, or encoder availability prevents the preferred rate. `capture_system_gif` records the actual fps and degradation reason while preserving the PNG frame directory as the durable proof, and `encode_frame_sequence_gif` applies the same fps policy to already-captured PIE PNG sequences. The default `encoder="auto"` path attempts ffmpeg first, then python imageio; `encoder="frames_only"` is reserved for environments where GIF encoding is intentionally unavailable.
 
 ---
 

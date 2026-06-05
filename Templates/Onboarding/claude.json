@@ -1,0 +1,15 @@
+{
+  "id": "Claude",
+  "displayName": "Claude",
+  "skillRoot": "%USERPROFILE%\\.claude\\skills",
+  "instructionFiles": [
+    "CLAUDE.md"
+  ],
+  "supportsSkills": true,
+  "supportsInstructions": true,
+  "supportsMcpConfig": true,
+  "mcpConfigKind": "claude-cli",
+  "mcpServerName": "monolith",
+  "mcpUrl": "http://localhost:9316/mcp",
+  "mcpScope": "user"
+}

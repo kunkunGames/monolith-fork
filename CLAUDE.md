@@ -122,3 +122,8 @@ When creating execution plans, agents must adhere to the following rules to ensu
 - **Groundedness and Specificity:** Never guess or assume function names, variable names, or the presence/absence of specific code blocks based solely on `grep` snippets. Always read the exact target file contents to confirm the precise code structure before drafting steps. Steps must be specific, actionable directives (e.g., 'Edit <file> to add <code snippet>'). Avoid vague phrasing like 'Analyze the issue' or 'Implement the change'.
 - **Completeness:** Execution plans must explicitly include a step to run the project's static checks (`python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json --github check`) and a verification stage (e.g., `git diff --check` and `git status --short`) before the final pre-commit step.
 - **Pre-commit Description:** The final pre-commit step description must be exactly: 'Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done.'
+
+## 17. Monolith Onboarding and Skills
+Use `Templates\Onboarding\Onboarding.md` and `Scripts/onboard_monolith.ps1` for global Monolith MCP client setup, project instruction setup, and global skill-link installation. In-repo skills live at `Skills/<skill>/SKILL.md`; do not refresh global skills by copying files. Use `Scripts/install_monolith_skills.ps1` only for direct skill-link repair, and `Scripts/validate_monolith_skills.ps1` to validate repository and installed skill roots.
+
+When changing MCP setup, project instructions, or skill distribution, update `Templates\Onboarding\Onboarding.md` and `Docs/specs/SPEC_MonolithSkillsSymlinkDistribution.md` in the same change.

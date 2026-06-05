@@ -1,6 +1,18 @@
 ﻿# Monolith — TODO
 
-Last updated: 2026-05-21 (Tool invocation log v3 data collection implemented and verified; analyzer implementation remains deferred)
+Last updated: 2026-06-05 (MonolithImageGen SVG source P1 implemented and verified; Tool invocation log analyzer remains deferred)
+
+---
+
+### MonolithImageGen — SVG Source and Future MSDF Pipeline (2026-06-05)
+
+Spec: [specs/SPEC_MonolithImageGen.md](specs/SPEC_MonolithImageGen.md#8-svg--vector-source-extension). The feature extends `imagegen` with sanitized SVG source generation/import/validation for web and Unreal editor source assets plus explicit editor-time Multi-channel Signed Distance Field Texture2D conversion. SVG source actions write source `.svg` files and provenance sidecars only; `generate_msdf_from_svg` is the conversion boundary for precomputed runtime-ready MSDF textures/materials.
+
+- [x] **P1 SVG source actions** — Added `imagegen.generate_svg`, `imagegen.import_generated_svg`, and `imagegen.validate_svg` with bounded XML/SVG sanitizer, `web|editor|msdf_source` profiles, redacted prompt provenance, deterministic source mirroring under `GeneratedImages/Vector`, and sidecar metadata.
+- [x] **P1 verification** — Added sanitizer, geometry, deterministic generation, import round-trip, profile readiness, and `msdf_ready` fixture coverage. Evidence: `Saved/Automation/MonolithImageGenSvgSource_20260605/index.json` reports 6/6 `MonolithImageGen.SvgSource` tests passing with no warnings or failures.
+- [x] **P3 MSDF Texture2D pipeline** — Added `imagegen.generate_msdf_from_svg` with validated `msdf_source` input, local CPU MSDF PNG baking, Texture2D import/settings (`TC_Masks`, `sRGB=false`, no mipmaps, UI group, clamp, `NeverStream`, max texture size), source PNG mirror/provenance, pixel/channel sample validation, and optional material preview render verification.
+- [x] **P3 verification** — Evidence: `Saved/Automation/MonolithImageGenSvgSourceMsdf_20260605/index.json` reports 9/9 `MonolithImageGen.SvgSource` tests passing with no warnings or failures, including Texture2D settings, MSDF pixel/channel samples, invalid-source rejection, and rendered material preview decoding.
+- [ ] **P2 raster preview decision** — Choose and verify a deterministic SVG rasterizer before registering `imagegen.rasterize_svg_to_texture`; conversion output must enter Unreal through PNG bytes and `asset.import_texture_from_bytes`.
 
 ---
 
