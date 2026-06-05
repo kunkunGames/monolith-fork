@@ -254,18 +254,6 @@ void FMonolithLogicDriverNodeActions::RegisterActions(FMonolithToolRegistry& Reg
 
 FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureState(const TSharedPtr<FJsonObject>& Params)
 {
-	FNodeLookupResult Lookup = LoadAndFindNode(Params);
-	if (!Lookup.bSuccess) return Lookup.Error;
-
-	UEdGraphNode* Node = Lookup.Node;
-
-	// Verify it's a state node
-	FString NodeType = MonolithLD::GetNodeType(Node);
-	if (NodeType != TEXT("state") && NodeType != TEXT("any_state"))
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Node is type '%s', expected 'state' or 'any_state'"), *NodeType));
-	}
-
 	// Validate inputs first
 	bool bAlwaysUpdate = false;
 	const bool bHasAlwaysUpdate = Params->HasField(TEXT("always_update"));
@@ -286,6 +274,18 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureState(cons
 	if (bHasExcludeFromAnyState && !Params->TryGetBoolField(TEXT("exclude_from_any_state"), bExcludeFromAnyState))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param: exclude_from_any_state must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FNodeLookupResult Lookup = LoadAndFindNode(Params);
+	if (!Lookup.bSuccess) return Lookup.Error;
+
+	UEdGraphNode* Node = Lookup.Node;
+
+	// Verify it's a state node
+	FString NodeType = MonolithLD::GetNodeType(Node);
+	if (NodeType != TEXT("state") && NodeType != TEXT("any_state"))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Node is type '%s', expected 'state' or 'any_state'"), *NodeType));
 	}
 
 	// Apply mutations
@@ -340,17 +340,6 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureState(cons
 
 FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureTransition(const TSharedPtr<FJsonObject>& Params)
 {
-	FNodeLookupResult Lookup = LoadAndFindNode(Params);
-	if (!Lookup.bSuccess) return Lookup.Error;
-
-	UEdGraphNode* Node = Lookup.Node;
-
-	FString NodeType = MonolithLD::GetNodeType(Node);
-	if (NodeType != TEXT("transition"))
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Node is type '%s', expected 'transition'"), *NodeType));
-	}
-
 	// Validate inputs first
 	double Priority = 0.0;
 	const bool bHasPriority = Params->HasField(TEXT("priority"));
@@ -364,6 +353,17 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleConfigureTransition
 	if (bHasCanEvalWithStartState && !Params->TryGetBoolField(TEXT("can_eval_with_start_state"), bCanEvalWithStartState))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param: can_eval_with_start_state must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FNodeLookupResult Lookup = LoadAndFindNode(Params);
+	if (!Lookup.bSuccess) return Lookup.Error;
+
+	UEdGraphNode* Node = Lookup.Node;
+
+	FString NodeType = MonolithLD::GetNodeType(Node);
+	if (NodeType != TEXT("transition"))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Node is type '%s', expected 'transition'"), *NodeType));
 	}
 
 	// Apply mutations
