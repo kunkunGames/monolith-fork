@@ -28,6 +28,7 @@ namespace
 		{
 			Parts.Add(Raw);
 		}
+		Out.Reserve(Out.Num() + Parts.Num());
 		for (FString Part : Parts)
 		{
 			Part.TrimStartAndEndInline();
@@ -47,6 +48,7 @@ namespace
 		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
 		if (Params->TryGetArrayField(Key, Arr) && Arr)
 		{
+			Out.Reserve(Out.Num() + Arr->Num());
 			for (const TSharedPtr<FJsonValue>& Value : *Arr)
 			{
 				if (Value.IsValid())

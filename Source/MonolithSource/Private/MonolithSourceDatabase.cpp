@@ -705,6 +705,7 @@ bool FMonolithSourceDatabase::Open(const FString& DbPath)
 static void AddNextActions(const TSharedPtr<FJsonObject>& Root, std::initializer_list<const TCHAR*> Actions)
 {
 	TArray<TSharedPtr<FJsonValue>> Arr;
+	Arr.Reserve(Actions.size());
 	for (const TCHAR* Action : Actions)
 	{
 		Arr.Add(MakeShared<FJsonValueString>(FString(Action)));
