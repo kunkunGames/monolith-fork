@@ -6,8 +6,22 @@
 
 FMonolithActionResult FProjectImpactRadiusAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = FMonolithIndexReview::PStr(Params, TEXT("asset_path"),
-		FMonolithIndexReview::PStr(Params, TEXT("package_path")));
+	FString AssetPath;
+	if (Params->HasField(TEXT("asset_path")))
+	{
+		if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+		{
+			return FMonolithActionResult::Error(TEXT("'asset_path' parameter must be a string"), -32602);
+		}
+	}
+	else if (Params->HasField(TEXT("package_path")))
+	{
+		if (!Params->TryGetStringField(TEXT("package_path"), AssetPath))
+		{
+			return FMonolithActionResult::Error(TEXT("'package_path' parameter must be a string"), -32602);
+		}
+	}
+
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("'asset_path' parameter is required"), -32602);
@@ -20,10 +34,20 @@ FMonolithActionResult FProjectImpactRadiusAction::Execute(const TSharedPtr<FJson
 		return FMonolithActionResult::Error(TEXT("Index subsystem/database not available"));
 	}
 
-	const FString Direction = FMonolithIndexReview::PStr(Params, TEXT("direction"), TEXT("both"));
+	FString Direction = TEXT("both");
+	if (Params->HasField(TEXT("direction")) && !Params->TryGetStringField(TEXT("direction"), Direction))
+	{
+		return FMonolithActionResult::Error(TEXT("'direction' parameter must be a string"), -32602);
+	}
+
 	const int32 MaxDepth = FMonolithIndexReview::PInt(Params, TEXT("max_depth"), 2);
 	const int32 MaxResults = FMonolithIndexReview::PInt(Params, TEXT("max_results"), 200);
-	const FString DepType = FMonolithIndexReview::PStr(Params, TEXT("dependency_type"));
+
+	FString DepType;
+	if (Params->HasField(TEXT("dependency_type")) && !Params->TryGetStringField(TEXT("dependency_type"), DepType))
+	{
+		return FMonolithActionResult::Error(TEXT("'dependency_type' parameter must be a string"), -32602);
+	}
 
 	TSharedPtr<FJsonObject> Result =
 		FMonolithIndexReview::ImpactRadius(*Db, AssetPath, Direction, MaxDepth, MaxResults, DepType);
