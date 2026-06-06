@@ -242,7 +242,8 @@ FMonolithActionResult FMonolithGASASCActions::HandleAddASCToActor(const TSharedP
 	}
 
 	// Parse location
-	FString Location = Params->GetStringField(TEXT("location"));
+	FString Location;
+	Params->TryGetStringField(TEXT("location"), Location);
 	if (Location.IsEmpty())
 	{
 		Location = TEXT("self");
@@ -255,7 +256,8 @@ FMonolithActionResult FMonolithGASASCActions::HandleAddASCToActor(const TSharedP
 	}
 
 	// Resolve ASC class
-	FString ASCClassName = Params->GetStringField(TEXT("asc_class"));
+	FString ASCClassName;
+	Params->TryGetStringField(TEXT("asc_class"), ASCClassName);
 	if (ASCClassName.IsEmpty())
 	{
 		ASCClassName = TEXT("AbilitySystemComponent");
@@ -378,7 +380,8 @@ FMonolithActionResult FMonolithGASASCActions::HandleConfigureASC(const TSharedPt
 	TArray<TSharedPtr<FJsonValue>> Applied;
 
 	// --- Replication mode ---
-	FString RepModeStr = Params->GetStringField(TEXT("replication_mode"));
+	FString RepModeStr;
+	Params->TryGetStringField(TEXT("replication_mode"), RepModeStr);
 	if (!RepModeStr.IsEmpty())
 	{
 		int32 ModeVal = ParseReplicationMode(RepModeStr);
@@ -507,8 +510,10 @@ FMonolithActionResult FMonolithGASASCActions::HandleConfigureASC(const TSharedPt
 				continue;
 			}
 
-			FString SetClassName = (*SetObj)->GetStringField(TEXT("class"));
-			FString InitDT = (*SetObj)->GetStringField(TEXT("init_datatable"));
+			FString SetClassName;
+			(*SetObj)->TryGetStringField(TEXT("class"), SetClassName);
+			FString InitDT;
+			(*SetObj)->TryGetStringField(TEXT("init_datatable"), InitDT);
 
 			if (SetClassName.IsEmpty())
 			{
@@ -749,7 +754,8 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetupAbilitySystemInterface(
 	bool bIsSelf = ASCLocation.Equals(TEXT("self"), ESearchCase::IgnoreCase);
 
 	// Derive class name
-	FString ClassName = Params->GetStringField(TEXT("class_name"));
+	FString ClassName;
+	Params->TryGetStringField(TEXT("class_name"), ClassName);
 	if (ClassName.IsEmpty())
 	{
 		// Derive from Blueprint name (strip BP_ prefix if present)
@@ -767,7 +773,8 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetupAbilitySystemInterface(
 	}
 
 	// Derive parent class
-	FString ParentClass = Params->GetStringField(TEXT("parent_class"));
+	FString ParentClass;
+	Params->TryGetStringField(TEXT("parent_class"), ParentClass);
 	if (ParentClass.IsEmpty())
 	{
 		if (BP->ParentClass)
@@ -1125,7 +1132,8 @@ FMonolithActionResult FMonolithGASASCActions::HandleApplyASCTemplate(const TShar
 	{
 		const TSharedPtr<FJsonObject>& Ov = *OverridesPtr;
 
-		FString RepMode = Ov->GetStringField(TEXT("replication_mode"));
+		FString RepMode;
+		Ov->TryGetStringField(TEXT("replication_mode"), RepMode);
 		if (!RepMode.IsEmpty()) Def.ReplicationMode = RepMode;
 
 		TArray<FString> OvAttrSets = MonolithGAS::ParseStringArray(Ov, TEXT("attribute_sets"));
@@ -1254,7 +1262,8 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetDefaultAbilities(const TS
 		return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: abilities (array)"));
 	}
 
-	FString Mode = Params->GetStringField(TEXT("mode"));
+	FString Mode;
+	Params->TryGetStringField(TEXT("mode"), Mode);
 	if (Mode.IsEmpty()) Mode = TEXT("set");
 	Mode = Mode.ToLower();
 
@@ -1333,7 +1342,8 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetDefaultEffects(const TSha
 		return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: effects (array)"));
 	}
 
-	FString Mode = Params->GetStringField(TEXT("mode"));
+	FString Mode;
+	Params->TryGetStringField(TEXT("mode"), Mode);
 	if (Mode.IsEmpty()) Mode = TEXT("set");
 	Mode = Mode.ToLower();
 
@@ -1410,7 +1420,8 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetDefaultAttributeSets(cons
 		return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: attribute_sets (array)"));
 	}
 
-	FString Mode = Params->GetStringField(TEXT("mode"));
+	FString Mode;
+	Params->TryGetStringField(TEXT("mode"), Mode);
 	if (Mode.IsEmpty()) Mode = TEXT("set");
 	Mode = Mode.ToLower();
 
@@ -1437,7 +1448,7 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetDefaultAttributeSets(cons
 
 		if (SetVal->TryGetObject(SetObjPtr))
 		{
-			SetClassName = (*SetObjPtr)->GetStringField(TEXT("class"));
+			(*SetObjPtr)->TryGetStringField(TEXT("class"), SetClassName);
 		}
 		else
 		{
@@ -1480,7 +1491,8 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetDefaultAttributeSets(cons
 		// Optional init datatable
 		if (SetObjPtr && (*SetObjPtr).IsValid())
 		{
-			FString InitDT = (*SetObjPtr)->GetStringField(TEXT("init_datatable"));
+			FString InitDT;
+			(*SetObjPtr)->TryGetStringField(TEXT("init_datatable"), InitDT);
 			if (!InitDT.IsEmpty())
 			{
 				ValidEntry->SetStringField(TEXT("init_datatable"), InitDT);

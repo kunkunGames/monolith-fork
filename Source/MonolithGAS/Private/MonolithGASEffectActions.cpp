@@ -51,7 +51,7 @@ bool LoadGEFromParams(
 	FMonolithActionResult& OutError)
 {
 	FString Error;
-	OutAssetPath = Params->GetStringField(TEXT("asset_path"));
+	Params->TryGetStringField(TEXT("asset_path"), OutAssetPath);
 	if (OutAssetPath.IsEmpty())
 	{
 		OutError = FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
@@ -339,7 +339,8 @@ bool ConfigureMagnitude(
 	FGameplayEffectModifierMagnitude& OutMag,
 	FString& OutError)
 {
-	FString TypeStr = MagObj->GetStringField(TEXT("type"));
+	FString TypeStr;
+	MagObj->TryGetStringField(TEXT("type"), TypeStr);
 	if (TypeStr.IsEmpty())
 	{
 		TypeStr = TEXT("scalable_float");
@@ -367,7 +368,8 @@ bool ConfigureMagnitude(
 	else if (TypeStr == TEXT("set_by_caller"))
 	{
 		FSetByCallerFloat SBC;
-		FString TagStr = MagObj->GetStringField(TEXT("tag"));
+		FString TagStr;
+		MagObj->TryGetStringField(TEXT("tag"), TagStr);
 		if (!TagStr.IsEmpty())
 		{
 			SBC.DataTag = FGameplayTag::RequestGameplayTag(FName(*TagStr), false);
@@ -377,7 +379,8 @@ bool ConfigureMagnitude(
 				return false;
 			}
 		}
-		FString DataName = MagObj->GetStringField(TEXT("data_name"));
+		FString DataName;
+		MagObj->TryGetStringField(TEXT("data_name"), DataName);
 		if (!DataName.IsEmpty())
 		{
 			SBC.DataName = FName(*DataName);
@@ -387,7 +390,8 @@ bool ConfigureMagnitude(
 	else if (TypeStr == TEXT("attribute_based"))
 	{
 		FAttributeBasedFloat ABF;
-		FString SourceAttr = MagObj->GetStringField(TEXT("source_attribute"));
+		FString SourceAttr;
+		MagObj->TryGetStringField(TEXT("source_attribute"), SourceAttr);
 		if (!SourceAttr.IsEmpty())
 		{
 			FString AttrError;
@@ -425,7 +429,8 @@ bool ConfigureMagnitude(
 	else if (TypeStr == TEXT("custom_calculation"))
 	{
 		FCustomCalculationBasedFloat CCF;
-		FString CalcClassPath = MagObj->GetStringField(TEXT("calculation_class"));
+		FString CalcClassPath;
+		MagObj->TryGetStringField(TEXT("calculation_class"), CalcClassPath);
 		if (!CalcClassPath.IsEmpty())
 		{
 			UClass* CalcClass = FindFirstObject<UClass>(*CalcClassPath, EFindFirstObjectOptions::NativeFirst);
@@ -954,7 +959,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleCreateGameplayEffect(cons
 	}
 
 	// Resolve parent class
-	FString ParentClassName = Params->GetStringField(TEXT("parent_class"));
+	FString ParentClassName;
+	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
 	UClass* ParentClass = UGameplayEffect::StaticClass();
 	if (!ParentClassName.IsEmpty())
 	{
@@ -1187,10 +1193,14 @@ FMonolithActionResult FMonolithGASEffectActions::HandleListGameplayEffects(const
 {
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
-	FString DurationFilter = Params->GetStringField(TEXT("duration_policy"));
-	FString TagFilter = Params->GetStringField(TEXT("tag_filter"));
-	FString AttributeFilter = Params->GetStringField(TEXT("attribute_filter"));
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
+	FString DurationFilter;
+	Params->TryGetStringField(TEXT("duration_policy"), DurationFilter);
+	FString TagFilter;
+	Params->TryGetStringField(TEXT("tag_filter"), TagFilter);
+	FString AttributeFilter;
+	Params->TryGetStringField(TEXT("attribute_filter"), AttributeFilter);
 
 	// Search for all Blueprint assets
 	FARFilter Filter;
@@ -1387,7 +1397,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetModifier(const TShared
 	FGameplayModifierInfo& Mod = GE->Modifiers[Index];
 
 	// Update attribute if provided
-	FString AttrStr = Params->GetStringField(TEXT("attribute"));
+	FString AttrStr;
+	Params->TryGetStringField(TEXT("attribute"), AttrStr);
 	if (!AttrStr.IsEmpty())
 	{
 		FString AttrError;
@@ -1400,7 +1411,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetModifier(const TShared
 	}
 
 	// Update operation if provided
-	FString OpStr = Params->GetStringField(TEXT("operation"));
+	FString OpStr;
+	Params->TryGetStringField(TEXT("operation"), OpStr);
 	if (!OpStr.IsEmpty())
 	{
 		EGameplayModOp::Type Op;
@@ -1945,7 +1957,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetEffectStacking(const T
 		GE->StackLimitCount = FMath::Clamp(static_cast<int32>(StackLimitVal), 0, 1000);
 	}
 
-	FString DurRefreshStr = Params->GetStringField(TEXT("stack_duration_refresh_policy"));
+	FString DurRefreshStr;
+	Params->TryGetStringField(TEXT("stack_duration_refresh_policy"), DurRefreshStr);
 	if (!DurRefreshStr.IsEmpty())
 	{
 		if (DurRefreshStr.Equals(TEXT("RefreshOnSuccessfulApplication"), ESearchCase::IgnoreCase))
@@ -1963,7 +1976,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetEffectStacking(const T
 		}
 	}
 
-	FString PeriodResetStr = Params->GetStringField(TEXT("stack_period_reset_policy"));
+	FString PeriodResetStr;
+	Params->TryGetStringField(TEXT("stack_period_reset_policy"), PeriodResetStr);
 	if (!PeriodResetStr.IsEmpty())
 	{
 		if (PeriodResetStr.Equals(TEXT("ResetOnSuccessfulApplication"), ESearchCase::IgnoreCase))
@@ -1981,7 +1995,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSetEffectStacking(const T
 		}
 	}
 
-	FString ExpirationStr = Params->GetStringField(TEXT("stack_expiration_policy"));
+	FString ExpirationStr;
+	Params->TryGetStringField(TEXT("stack_expiration_policy"), ExpirationStr);
 	if (!ExpirationStr.IsEmpty())
 	{
 		if (ExpirationStr.Equals(TEXT("ClearEntireStack"), ESearchCase::IgnoreCase))
@@ -2586,7 +2601,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleCreateEffectFromTemplate(
 		{
 			Def.Modifiers[0].Value = MagVal;
 		}
-		FString StackOverride = Ov->GetStringField(TEXT("stacking"));
+		FString StackOverride;
+		Ov->TryGetStringField(TEXT("stacking"), StackOverride);
 		if (!StackOverride.IsEmpty()) Def.StackingType = StackOverride;
 
 		const TSharedPtr<FJsonObject>* TagsPtr = nullptr;
@@ -2690,7 +2706,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 	const TSharedPtr<FJsonObject>& Spec = *SpecPtr;
 
 	// Duration policy (required in spec)
-	FString DurationStr = Spec->GetStringField(TEXT("duration_policy"));
+	FString DurationStr;
+	Spec->TryGetStringField(TEXT("duration_policy"), DurationStr);
 	if (DurationStr.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("spec.duration_policy is required"));
@@ -2811,7 +2828,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 			FGameplayModifierInfo NewMod;
 
 			// Attribute
-			FString AttrStr = ModObj->GetStringField(TEXT("attribute"));
+			FString AttrStr;
+			ModObj->TryGetStringField(TEXT("attribute"), AttrStr);
 			if (!AttrStr.IsEmpty())
 			{
 				FString AttrError;
@@ -2824,7 +2842,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 			}
 
 			// Operation
-			FString OpStr = ModObj->GetStringField(TEXT("operation"));
+			FString OpStr;
+			ModObj->TryGetStringField(TEXT("operation"), OpStr);
 			if (!OpStr.IsEmpty())
 			{
 				FString OpError;
@@ -2868,7 +2887,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 	const TSharedPtr<FJsonObject>* StackPtr = nullptr;
 	if (Spec->TryGetObjectField(TEXT("stacking"), StackPtr) && StackPtr && (*StackPtr).IsValid())
 	{
-		FString StackType = (*StackPtr)->GetStringField(TEXT("type"));
+		FString StackType;
+		(*StackPtr)->TryGetStringField(TEXT("type"), StackType);
 		int32 StackLimit = 0;
 		double StackLimitVal = 0.0;
 		TSharedPtr<FJsonValue> StackLimitValPtr = (*StackPtr)->TryGetField(TEXT("limit"));
@@ -2893,7 +2913,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBuildEffectFromSpec(const
 			if (!CompVal->TryGetObject(CompObjPtr)) continue;
 			const TSharedPtr<FJsonObject>& CompObj = *CompObjPtr;
 
-			FString CompType = CompObj->GetStringField(TEXT("type"));
+			FString CompType;
+			CompObj->TryGetStringField(TEXT("type"), CompType);
 			if (CompType.IsEmpty()) continue;
 
 			// Delegate to add_ge_component logic by building params
@@ -2986,7 +3007,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBatchCreateEffects(const 
 		if (!(*EffectsArray)[i]->TryGetObject(EffObjPtr)) continue;
 		const TSharedPtr<FJsonObject>& EffObj = *EffObjPtr;
 
-		FString SavePath = EffObj->GetStringField(TEXT("save_path"));
+		FString SavePath;
+		EffObj->TryGetStringField(TEXT("save_path"), SavePath);
 		if (SavePath.IsEmpty())
 		{
 			Errors.Add(MakeShared<FJsonValueString>(
@@ -2994,7 +3016,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleBatchCreateEffects(const 
 			continue;
 		}
 
-		FString TemplateName = EffObj->GetStringField(TEXT("template"));
+		FString TemplateName;
+		EffObj->TryGetStringField(TEXT("template"), TemplateName);
 		FMonolithActionResult EffResult;
 
 		if (!TemplateName.IsEmpty())
@@ -3108,7 +3131,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleAddExecution(const TShare
 
 			FGameplayEffectExecutionScopedModifierInfo ScopedMod;
 
-			FString AttrStr = ScopedObj->GetStringField(TEXT("attribute"));
+			FString AttrStr;
+			ScopedObj->TryGetStringField(TEXT("attribute"), AttrStr);
 			if (!AttrStr.IsEmpty())
 			{
 				FString AttrError;
@@ -3121,7 +3145,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleAddExecution(const TShare
 					false);
 			}
 
-			FString OpStr = ScopedObj->GetStringField(TEXT("operation"));
+			FString OpStr;
+			ScopedObj->TryGetStringField(TEXT("operation"), OpStr);
 			if (!OpStr.IsEmpty())
 			{
 				FString OpError;
@@ -3235,7 +3260,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleDuplicateGameplayEffect(c
 		const TSharedPtr<FJsonObject>& Ov = *OverridesPtr;
 
 		// Override duration policy
-		FString DurStr = Ov->GetStringField(TEXT("duration_policy"));
+		FString DurStr;
+		Ov->TryGetStringField(TEXT("duration_policy"), DurStr);
 		if (!DurStr.IsEmpty())
 		{
 			EGameplayEffectDurationType NewPolicy;
@@ -3259,14 +3285,16 @@ FMonolithActionResult FMonolithGASEffectActions::HandleDuplicateGameplayEffect(c
 
 				FGameplayModifierInfo NewMod;
 
-				FString AttrStr = ModObj->GetStringField(TEXT("attribute"));
+				FString AttrStr;
+				ModObj->TryGetStringField(TEXT("attribute"), AttrStr);
 				if (!AttrStr.IsEmpty())
 				{
 					FString AttrError;
 					NewMod.Attribute = ParseAttribute(AttrStr, AttrError);
 				}
 
-				FString OpStr = ModObj->GetStringField(TEXT("operation"));
+				FString OpStr;
+				ModObj->TryGetStringField(TEXT("operation"), OpStr);
 				if (!OpStr.IsEmpty())
 				{
 					FString OpError;

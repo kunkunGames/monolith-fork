@@ -264,7 +264,8 @@ FMonolithActionResult FMonolithGASCueActions::HandleCreateGameplayCueNotify(cons
 	if (!MonolithGAS::RequireStringParam(Params, TEXT("save_path"), SavePath, Err)) return Err;
 	if (!MonolithGAS::RequireStringParam(Params, TEXT("cue_tag"), CueTag, Err)) return Err;
 
-	FString TypeStr = Params->GetStringField(TEXT("type"));
+	FString TypeStr;
+	Params->TryGetStringField(TEXT("type"), TypeStr);
 	if (TypeStr.IsEmpty()) TypeStr = TEXT("burst");
 
 	// Validate cue tag starts with GameplayCue.
@@ -639,8 +640,10 @@ FMonolithActionResult FMonolithGASCueActions::HandleGetCueInfo(const TSharedPtr<
 
 FMonolithActionResult FMonolithGASCueActions::HandleListGameplayCues(const TSharedPtr<FJsonObject>& Params)
 {
-	FString TagPrefix = Params->GetStringField(TEXT("tag_prefix"));
-	FString TypeFilter = Params->GetStringField(TEXT("type_filter"));
+	FString TagPrefix;
+	Params->TryGetStringField(TEXT("tag_prefix"), TagPrefix);
+	FString TypeFilter;
+	Params->TryGetStringField(TEXT("type_filter"), TypeFilter);
 	if (TypeFilter.IsEmpty()) TypeFilter = TEXT("all");
 
 	IAssetRegistry& AssetRegistry =
@@ -770,7 +773,8 @@ FMonolithActionResult FMonolithGASCueActions::HandleSetCueParameters(const TShar
 
 	for (const FParamMapping& Mapping : Mappings)
 	{
-		FString ParamValue = Params->GetStringField(Mapping.ParamName);
+		FString ParamValue;
+		Params->TryGetStringField(Mapping.ParamName, ParamValue);
 		if (ParamValue.IsEmpty()) continue;
 
 		bool bSet = false;
@@ -976,7 +980,8 @@ FMonolithActionResult FMonolithGASCueActions::HandleFindCueTriggers(const TShare
 
 FMonolithActionResult FMonolithGASCueActions::HandleValidateCueCoverage(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 	bool bIncludeRegisteredTagsWithoutNotifies = false;
 	Params->TryGetBoolField(TEXT("include_registered_tags_without_notifies"), bIncludeRegisteredTagsWithoutNotifies);
 
@@ -1140,10 +1145,16 @@ FMonolithActionResult FMonolithGASCueActions::HandleBatchCreateCues(const TShare
 
 		// Delegate to create_gameplay_cue_notify
 		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
-		CreateParams->SetStringField(TEXT("save_path"), (*CueObj)->GetStringField(TEXT("save_path")));
-		CreateParams->SetStringField(TEXT("cue_tag"), (*CueObj)->GetStringField(TEXT("cue_tag")));
+		FString CueSavePath;
+		(*CueObj)->TryGetStringField(TEXT("save_path"), CueSavePath);
+		CreateParams->SetStringField(TEXT("save_path"), CueSavePath);
 
-		FString Type = (*CueObj)->GetStringField(TEXT("type"));
+		FString CueTagStr;
+		(*CueObj)->TryGetStringField(TEXT("cue_tag"), CueTagStr);
+		CreateParams->SetStringField(TEXT("cue_tag"), CueTagStr);
+
+		FString Type;
+		(*CueObj)->TryGetStringField(TEXT("type"), Type);
 		if (!Type.IsEmpty())
 		{
 			CreateParams->SetStringField(TEXT("type"), Type);
@@ -1152,8 +1163,8 @@ FMonolithActionResult FMonolithGASCueActions::HandleBatchCreateCues(const TShare
 		FMonolithActionResult CreateResult = HandleCreateGameplayCueNotify(CreateParams);
 
 		TSharedPtr<FJsonObject> EntryResult = MakeShared<FJsonObject>();
-		EntryResult->SetStringField(TEXT("save_path"), (*CueObj)->GetStringField(TEXT("save_path")));
-		EntryResult->SetStringField(TEXT("cue_tag"), (*CueObj)->GetStringField(TEXT("cue_tag")));
+		EntryResult->SetStringField(TEXT("save_path"), CueSavePath);
+		EntryResult->SetStringField(TEXT("cue_tag"), CueTagStr);
 		EntryResult->SetBoolField(TEXT("success"), CreateResult.bSuccess);
 		if (!CreateResult.bSuccess)
 		{

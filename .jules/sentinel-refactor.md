@@ -96,3 +96,10 @@
 **Learning:** Hard crashes or silent logic failures occur when FJsonObject fails to find a field using `GetStringField` and we try to consume the invalid value. Using `TryGetStringField` gracefully checks presence. We must check the return value and explicitly return a `FMonolithActionResult::Error` if a required field is missing.
 **Reuse rule:** Future animation action handlers should always prefer `TryGetStringField` with an explicit fallback or error return rather than directly calling `GetStringField()`.
 **Avoid:** Avoid using `GetStringField` unless field existence is fully guaranteed, and never use `TryGetStringField` without checking its boolean return value.
+
+## 2026-06-06 - Replace GetStringField with TryGetStringField across GAS Actions
+
+**Pattern:** Unsafe `GetStringField` usage in `MonolithGASASCActions`, `MonolithGASCueActions`, and `MonolithGASEffectActions` for extracting optional parameters or when fields might be missing.
+**Learning:** Hard crashes or warning spam occur when FJsonObject fails to find a field using `GetStringField`. Using `TryGetStringField` gracefully checks presence and is safer.
+**Reuse rule:** Future GAS action handlers should always prefer `TryGetStringField` with a fallback initialization rather than directly chaining `GetStringField()`.
+**Avoid:** Avoid using `GetStringField` unless field existence is fully guaranteed.
