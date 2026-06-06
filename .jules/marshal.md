@@ -148,3 +148,9 @@
 **Learning:** Even with rules prohibiting random identifiers, agents interpret their internally generated job IDs or task numbers as "non-random" metadata and append them, bypassing exact and prefix duplicate checks. Furthermore, subtle naming variations defeat collision detection entirely.
 **Prevention:** Updated `AGENTS.md` to explicitly forbid any form of branch name evasion, including altering pluralization, appending `-2` or `-v2`, or adding large numeric suffixes, even if generated deterministically by the agent framework.
 **Avoid:** Generating unique or versioned branch names simply because a previous branch with the intended name already exists. Stop without PR instead.
+
+## 2026-06-06 - Maintain PR body hygiene and protect sensitive findings
+**Coordination issue:** Agents were dumping raw task execution logs, deep reasoning traces, and sensitive project paths into PR bodies or commit messages, causing clutter and potential information leaks.
+**Learning:** Without explicit instruction, agents tend to over-explain their workflow or paste verbose trace logs as proof of work.
+**Prevention:** Added 'PR Body Hygiene and Sensitive Information' rule to `AGENTS.md` requiring concise PR descriptions focused only on structured fields and forbidding the exposure of private task logs or sensitive findings.
+**Avoid:** Exposing private task execution logs or sensitive internal paths in PR descriptions or commit messages.

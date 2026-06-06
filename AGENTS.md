@@ -53,6 +53,9 @@ Passing static CI is not enough to make a scheduled PR worth merging; a PR must 
 ## 10a. Forbid Style-Only Prompt Changes
 Agents must avoid creating PRs that only contain style, formatting, or trivial wording changes to prompt and coordination files like `AGENTS.md` and files in `.jules/`. If the intended modification does not fundamentally change an actionable rule or behavior, **stop without PR**.
 
+## 10b. PR Body Hygiene and Sensitive Information
+Agents must keep PR descriptions focused and professional. Do not dump raw task execution logs, internal agent reasoning traces, or sensitive project findings into PR bodies or commit messages. Only include the required structured fields (like WorkFingerprint and Duplicate check) and a concise summary of the change.
+
 ## 11. External CI Limits
 If a GitHub Actions CI check fails with a billing-related error (e.g., "recent account payments have failed" or "spending limit needs to be increased"), recognize that this is an external repository limit, not a code defect. Do not attempt to fix it via code changes; simply inform the user.
 
