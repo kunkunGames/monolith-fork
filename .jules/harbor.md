@@ -63,3 +63,9 @@
 **Learning:** Monolith's C++ updater uses a destructive swap script (`monolith_swap.bat`/`.sh`) that moves the old plugin folder to backup, and copies only explicitly listed developer directories back to the new folder.
 **Prevention:** Add explicit rules to preserve AI tooling directories (`.claude`, `.jules`) in `monolith_swap.bat` and `monolith_swap.sh`.
 **Avoid:** Deleting untracked workspace and developer settings during an auto-update.
+
+## 2026-06-05 - Preserve .code-review-graph directory in auto-updater
+**Release risk:** Developer workspaces using the Code Review Graph tool have their `.code-review-graph/` directory destroyed during a Monolith auto-update because the auto-updater blindly swaps the folder, dropping local directories that weren't explicitly preserved.
+**Learning:** Monolith's C++ updater uses a destructive swap script (`monolith_swap.bat`/`.sh`) that moves the old plugin folder to backup, and copies only explicitly listed developer directories back to the new folder.
+**Prevention:** Added explicit rules to preserve the `.code-review-graph/` directory in `monolith_swap.bat` and `monolith_swap.sh`, and excluded it from public release zips in `make_release.ps1`.
+**Avoid:** Deleting untracked workspace tools and developer settings during an auto-update.
