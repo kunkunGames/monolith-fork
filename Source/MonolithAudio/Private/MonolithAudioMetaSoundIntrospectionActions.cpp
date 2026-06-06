@@ -295,6 +295,7 @@ void FMonolithAudioMetaSoundIntrospectionActions::RegisterActions(FMonolithToolR
 		FParamSchemaBuilder()
 			.Optional(TEXT("filter"), TEXT("string"), TEXT("Filter by name substring"))
 			.Optional(TEXT("type"), TEXT("string"), TEXT("Filter by type: Source, Patch, or All"), TEXT("All"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum results (default: 1000, max: 1000)"), TEXT("1000"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("list_metasound_documents"),
@@ -1010,6 +1011,21 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleListMet
 	FString TypeFilter = TEXT("All");
 	Params->TryGetStringField(TEXT("type"), TypeFilter);
 
+	int32 Limit = 1000;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be a number"));
+		}
+		if (!FMath::IsFinite(LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'limit': must be finite"));
+		}
+		Limit = static_cast<int32>(FMath::Clamp(LimitValue, 0.0, 1000.0));
+	}
+
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
 	TArray<FAssetData> SourceAssets;
@@ -1033,9 +1049,10 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleListMet
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> AssetsArray;
-	AssetsArray.Reserve(AllAssets.Num());
+	AssetsArray.Reserve(FMath::Min(AllAssets.Num(), Limit));
 
 	FString FilterLower = Filter.ToLower();
+	bool bLimitReached = false;
 
 	for (const FAssetData& AssetData : AllAssets)
 	{
@@ -1044,6 +1061,12 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleListMet
 		if (!Filter.IsEmpty() && !AssetName.ToLower().Contains(FilterLower))
 		{
 			continue;
+		}
+
+		if (AssetsArray.Num() >= Limit)
+		{
+			bLimitReached = true;
+			break;
 		}
 
 		TSharedPtr<FJsonObject> AssetJson = MakeShared<FJsonObject>();
@@ -1065,6 +1088,8 @@ FMonolithActionResult FMonolithAudioMetaSoundIntrospectionActions::HandleListMet
 
 	Result->SetArrayField(TEXT("assets"), AssetsArray);
 	Result->SetNumberField(TEXT("count"), AssetsArray.Num());
+	Result->SetNumberField(TEXT("limit"), Limit);
+	Result->SetBoolField(TEXT("limit_reached"), bLimitReached);
 	Result->SetStringField(TEXT("filter"), Filter);
 	Result->SetStringField(TEXT("type_filter"), TypeFilter);
 
