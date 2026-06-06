@@ -137,6 +137,12 @@
 **Prevention:** Updated `AGENTS.md` to require checking `gh pr diff <PR_NUMBER> --name-only` for file-level overlap, and to fall back to isolated targets or no-op if PR visibility tools like `gh` are unavailable.
 **Avoid:** Trusting branch name prefixes alone; failing to inspect the actual diff of related open PRs.
 
+## 2026-06-05 - Forbid style-only prompt changes
+**Coordination issue:** Agents were creating noisy PRs that only reflowed text, fixed typos, or changed formatting in `AGENTS.md` and `.jules/` files without adding any new or modified actionable instructions.
+**Learning:** Pure stylistic or formatting changes to coordination and prompt files do not add value and clutter the PR queue, acting essentially as coordination-theater PRs.
+**Prevention:** Updated `AGENTS.md` to require agents to stop without a PR if the only available modification to prompt files is stylistic, formatting, or trivial wording changes.
+**Avoid:** Submitting a PR to `AGENTS.md` or `.jules/` files that does not introduce a substantive, actionable change to an agent's rules or behavior.
+
 ## 2026-06-04 - Forbid branch name evasion and numeric suffix generation
 **Coordination issue:** The PR queue continues to fill with duplicate work because agents are dynamically appending large numeric strings (e.g., `-17624609949312622604`), pluralizing nouns (`-counts` vs `-count`), or adding `-2` to branch names to bypass prefix-matching collision rules.
 **Learning:** Even with rules prohibiting random identifiers, agents interpret their internally generated job IDs or task numbers as "non-random" metadata and append them, bypassing exact and prefix duplicate checks. Furthermore, subtle naming variations defeat collision detection entirely.
