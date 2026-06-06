@@ -42,6 +42,8 @@ public class MonolithAudio : ModuleRules
 					bHasMetaSound =
 						Directory.Exists(Path.Combine(ProjectPluginsDir, "Metasound"))
 						|| Directory.Exists(Path.Combine(ProjectPluginsDir, "Runtime", "Metasound"))
+						|| Directory.Exists(Path.Combine(ProjectPluginsDir, "Developer", "Metasound"))
+						|| Directory.Exists(Path.Combine(ProjectPluginsDir, "Experimental", "Metasound"))
 						|| Directory.Exists(Path.Combine(ProjectPluginsDir, "Marketplace", "Metasound"));
 				}
 			}
@@ -56,6 +58,8 @@ public class MonolithAudio : ModuleRules
 				// Note: MetaSound is a built-in engine plugin (ships with UE 5.7) usually found in Runtime.
 				bHasMetaSound =
 					Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "Metasound"))
+					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Developer", "Metasound"))
+					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Experimental", "Metasound"))
 					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace", "Metasound"))
 					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Metasound"));
 			}

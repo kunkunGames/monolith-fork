@@ -94,8 +94,9 @@ public class MonolithUI : ModuleRules
 
                 if (!bHasCommonUI)
                 {
-                    string RuntimeDir = Path.Combine(EngineDir, "Plugins", "Runtime", "CommonUI");
-                    bHasCommonUI = Directory.Exists(RuntimeDir);
+                    bHasCommonUI = Directory.Exists(Path.Combine(EngineDir, "Plugins", "Runtime", "CommonUI"))
+                        || Directory.Exists(Path.Combine(EngineDir, "Plugins", "Developer", "CommonUI"))
+                        || Directory.Exists(Path.Combine(EngineDir, "Plugins", "Experimental", "CommonUI"));
                 }
             }
         }

@@ -197,6 +197,9 @@ public class MonolithAI : ModuleRules
 				{
 					EnginePluginsDir,
 					Path.Combine(EnginePluginsDir, "Runtime"),
+					Path.Combine(EnginePluginsDir, "Developer"),
+					Path.Combine(EnginePluginsDir, "Experimental"),
+					Path.Combine(EnginePluginsDir, "Marketplace"),
 					Path.Combine(EnginePluginsDir, "AI")
 				};
 				foreach (string Dir in MassSearchDirs)
@@ -245,7 +248,9 @@ public class MonolithAI : ModuleRules
 				{
 					EnginePluginsDir,
 					Path.Combine(EnginePluginsDir, "Runtime"),
-					Path.Combine(EnginePluginsDir, "Experimental")
+					Path.Combine(EnginePluginsDir, "Developer"),
+					Path.Combine(EnginePluginsDir, "Experimental"),
+					Path.Combine(EnginePluginsDir, "Marketplace")
 				};
 				foreach (string Dir in ZoneSearchDirs)
 				{
