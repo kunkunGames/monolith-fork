@@ -22,11 +22,6 @@ namespace MonolithWater
 		return Arr;
 	}
 
-	int32 ClampWaterLimit(double LimitValue)
-	{
-		return FMath::Clamp(static_cast<int32>(LimitValue), 1, 500);
-	}
-
 	bool IsWaterLikeClass(const UClass* Class)
 	{
 		if (!Class)
@@ -75,6 +70,11 @@ namespace MonolithWater
 		Status->SetBoolField(TEXT("loaded"), ModuleManager.IsModuleLoaded(ModuleName));
 		return Status;
 	}
+}
+
+int32 FMonolithWaterActions::ClampWaterLimit(double LimitValue)
+{
+	return FMath::Clamp(static_cast<int32>(LimitValue), 1, 500);
 }
 
 void FMonolithWaterActions::RegisterActions(FMonolithToolRegistry& Registry)
@@ -163,7 +163,7 @@ FMonolithActionResult FMonolithWaterActions::ListBodies(const TSharedPtr<FJsonOb
 
 	double LimitValue = 100.0;
 	Params->TryGetNumberField(TEXT("limit"), LimitValue);
-	const int32 Limit = MonolithWater::ClampWaterLimit(LimitValue);
+	const int32 Limit = FMonolithWaterActions::ClampWaterLimit(LimitValue);
 
 	FString NameFilter;
 	Params->TryGetStringField(TEXT("actor_name_filter"), NameFilter);
