@@ -68,6 +68,38 @@ bool FMonolithLevelDesignSecurityPathTest::RunTest(const FString& Parameters)
 				AudioResult.ErrorMessage.Contains(TEXT("Invalid package path")) ||
 				AudioResult.ErrorMessage.Contains(TEXT("Package path")));
 		}
+
+		// Test scene.manage_sublevel (create)
+		TSharedPtr<FJsonObject> ManageSublevelCreatePayload = MakeShared<FJsonObject>();
+		ManageSublevelCreatePayload->SetStringField(TEXT("sub_action"), TEXT("create"));
+		ManageSublevelCreatePayload->SetStringField(TEXT("level_path"), Path);
+
+		FMonolithActionResult ManageSublevelCreateResult = ExecuteLevelDesignAction(TEXT("scene"), TEXT("manage_sublevel"), ManageSublevelCreatePayload);
+
+		TestFalse(*FString::Printf(TEXT("manage_sublevel(create) should fail on malformed path: %s"), *Path), ManageSublevelCreateResult.bSuccess);
+		TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), ManageSublevelCreateResult.ErrorMessage.IsEmpty());
+		if (!Path.IsEmpty() && !ManageSublevelCreateResult.ErrorMessage.Contains(TEXT("No editor world available")))
+		{
+			TestTrue(*FString::Printf(TEXT("Error should complain about invalid package path for: %s"), *Path),
+				ManageSublevelCreateResult.ErrorMessage.Contains(TEXT("Invalid package path")) ||
+				ManageSublevelCreateResult.ErrorMessage.Contains(TEXT("Package path")));
+		}
+
+		// Test scene.manage_sublevel (add)
+		TSharedPtr<FJsonObject> ManageSublevelAddPayload = MakeShared<FJsonObject>();
+		ManageSublevelAddPayload->SetStringField(TEXT("sub_action"), TEXT("add"));
+		ManageSublevelAddPayload->SetStringField(TEXT("level_path"), Path);
+
+		FMonolithActionResult ManageSublevelAddResult = ExecuteLevelDesignAction(TEXT("scene"), TEXT("manage_sublevel"), ManageSublevelAddPayload);
+
+		TestFalse(*FString::Printf(TEXT("manage_sublevel(add) should fail on malformed path: %s"), *Path), ManageSublevelAddResult.bSuccess);
+		TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), ManageSublevelAddResult.ErrorMessage.IsEmpty());
+		if (!Path.IsEmpty() && !ManageSublevelAddResult.ErrorMessage.Contains(TEXT("No editor world available")))
+		{
+			TestTrue(*FString::Printf(TEXT("Error should complain about invalid package path for: %s"), *Path),
+				ManageSublevelAddResult.ErrorMessage.Contains(TEXT("Invalid package path")) ||
+				ManageSublevelAddResult.ErrorMessage.Contains(TEXT("Package path")));
+		}
 	}
 
 	// Test valid path handling (should not complain about ValidatePackagePath)
@@ -91,6 +123,24 @@ bool FMonolithLevelDesignSecurityPathTest::RunTest(const FString& Parameters)
 	FMonolithActionResult ValidAudioResult = ExecuteLevelDesignAction(TEXT("leveldesign"), TEXT("create_surface_datatable"), ValidAudioPayload);
 	TestFalse(*FString::Printf(TEXT("create_surface_datatable valid path '%s' should not report 'Invalid package path'"), *ValidPath),
 		ValidAudioResult.ErrorMessage.Contains(TEXT("Invalid package path")));
+
+	// Test scene.manage_sublevel (create) valid path
+	TSharedPtr<FJsonObject> ValidManageSublevelCreatePayload = MakeShared<FJsonObject>();
+	ValidManageSublevelCreatePayload->SetStringField(TEXT("sub_action"), TEXT("create"));
+	ValidManageSublevelCreatePayload->SetStringField(TEXT("level_path"), ValidPath);
+
+	FMonolithActionResult ValidManageSublevelCreateResult = ExecuteLevelDesignAction(TEXT("scene"), TEXT("manage_sublevel"), ValidManageSublevelCreatePayload);
+	TestFalse(*FString::Printf(TEXT("manage_sublevel(create) valid path '%s' should not report 'Invalid package path'"), *ValidPath),
+		ValidManageSublevelCreateResult.ErrorMessage.Contains(TEXT("Invalid package path")));
+
+	// Test scene.manage_sublevel (add) valid path
+	TSharedPtr<FJsonObject> ValidManageSublevelAddPayload = MakeShared<FJsonObject>();
+	ValidManageSublevelAddPayload->SetStringField(TEXT("sub_action"), TEXT("add"));
+	ValidManageSublevelAddPayload->SetStringField(TEXT("level_path"), ValidPath);
+
+	FMonolithActionResult ValidManageSublevelAddResult = ExecuteLevelDesignAction(TEXT("scene"), TEXT("manage_sublevel"), ValidManageSublevelAddPayload);
+	TestFalse(*FString::Printf(TEXT("manage_sublevel(add) valid path '%s' should not report 'Invalid package path'"), *ValidPath),
+		ValidManageSublevelAddResult.ErrorMessage.Contains(TEXT("Invalid package path")));
 
 	return true;
 }

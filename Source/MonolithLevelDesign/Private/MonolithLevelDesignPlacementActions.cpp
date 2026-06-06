@@ -309,6 +309,12 @@ FMonolithActionResult FMonolithLevelDesignPlacementActions::ManageSublevel(const
 
 		AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(NSLOCTEXT("Monolith", "CreateSublevel", "Monolith: Create Sublevel"));
 
+		if (const FString ValidationError = MonolithCore::ValidatePackagePath(LevelPath); !ValidationError.IsEmpty())
+		{
+			Transaction.Cancel();
+			return FMonolithActionResult::Error(ValidationError);
+		}
+
 		ULevelStreaming* NewLevel = UEditorLevelUtils::CreateNewStreamingLevelForWorld(
 			*World, StreamingClass, LevelPath, /*bMoveSelectedActorsIntoNewLevel=*/false);
 
@@ -336,6 +342,12 @@ FMonolithActionResult FMonolithLevelDesignPlacementActions::ManageSublevel(const
 		}
 
 		AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(NSLOCTEXT("Monolith", "AddSublevel", "Monolith: Add Sublevel"));
+
+		if (const FString ValidationError = MonolithCore::ValidatePackagePath(LevelPath); !ValidationError.IsEmpty())
+		{
+			Transaction.Cancel();
+			return FMonolithActionResult::Error(ValidationError);
+		}
 
 		TSubclassOf<ULevelStreaming> AddStreamingClass = ULevelStreamingDynamic::StaticClass();
 		ULevelStreaming* AddedLevel = UEditorLevelUtils::AddLevelToWorld(
