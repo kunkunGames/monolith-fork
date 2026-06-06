@@ -1240,7 +1240,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleEditBlendSpaceSample(cons
 	float X = static_cast<float>(Params->GetNumberField(TEXT("x")));
 	float Y = static_cast<float>(Params->GetNumberField(TEXT("y")));
 	FString AnimPath;
-	Params->TryGetStringField(TEXT("anim_path"), AnimPath);
+	if (Params->HasField(TEXT("anim_path")) && !Params->TryGetStringField(TEXT("anim_path"), AnimPath)) return FMonolithActionResult::Error(TEXT("Parameter \'anim_path\' must be a string"));
 
 	UBlendSpace* BS = FMonolithAssetUtils::LoadAssetByPath<UBlendSpace>(AssetPath);
 	if (!BS) return FMonolithActionResult::Error(FString::Printf(TEXT("BlendSpace not found: %s"), *AssetPath));
@@ -1381,7 +1381,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveBoneTrack(const TSh
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString BoneName = Params->GetStringField(TEXT("bone_name"));
 	bool bIncludeChildren = false;
-	Params->TryGetBoolField(TEXT("include_children"), bIncludeChildren);
+	if (Params->HasField(TEXT("include_children")) && !Params->TryGetBoolField(TEXT("include_children"), bIncludeChildren)) return FMonolithActionResult::Error(TEXT("Parameter \'include_children\' must be a boolean"));
 
 	UAnimSequence* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
@@ -2035,7 +2035,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetBlendNodes(const TShar
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString GraphName;
-	Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName)) return FMonolithActionResult::Error(TEXT("Parameter \'graph_name\' must be a string"));
 
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
@@ -2122,9 +2122,9 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetNodes(const TSharedPtr
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString NodeClassFilter;
-	Params->TryGetStringField(TEXT("node_class_filter"), NodeClassFilter);
+	if (Params->HasField(TEXT("node_class_filter")) && !Params->TryGetStringField(TEXT("node_class_filter"), NodeClassFilter)) return FMonolithActionResult::Error(TEXT("Parameter \'node_class_filter\' must be a string"));
 	FString GraphFilter;
-	Params->TryGetStringField(TEXT("graph_name"), GraphFilter);
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphFilter)) return FMonolithActionResult::Error(TEXT("Parameter \'graph_name\' must be a string"));
 
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
@@ -2849,7 +2849,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddNotify(const TSharedPt
 	FString NotifyClassName = Params->GetStringField(TEXT("notify_class"));
 	float Time = static_cast<float>(Params->GetNumberField(TEXT("time")));
 	FString TrackName = TEXT("1");
-	Params->TryGetStringField(TEXT("track_name"), TrackName);
+	if (Params->HasField(TEXT("track_name")) && !Params->TryGetStringField(TEXT("track_name"), TrackName)) return FMonolithActionResult::Error(TEXT("Parameter \'track_name\' must be a string"));
 
 	UAnimSequenceBase* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequenceBase>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("Animation asset not found: %s"), *AssetPath));
@@ -2893,7 +2893,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddNotifyState(const TSha
 	float Time = static_cast<float>(Params->GetNumberField(TEXT("time")));
 	float Duration = static_cast<float>(Params->GetNumberField(TEXT("duration")));
 	FString TrackName = TEXT("1");
-	Params->TryGetStringField(TEXT("track_name"), TrackName);
+	if (Params->HasField(TEXT("track_name")) && !Params->TryGetStringField(TEXT("track_name"), TrackName)) return FMonolithActionResult::Error(TEXT("Parameter \'track_name\' must be a string"));
 
 	UAnimSequenceBase* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequenceBase>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("Animation asset not found: %s"), *AssetPath));
@@ -3097,7 +3097,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddCurve(const TSharedPtr
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString CurveName = Params->GetStringField(TEXT("curve_name"));
 	FString CurveTypeStr = TEXT("Float");
-	Params->TryGetStringField(TEXT("curve_type"), CurveTypeStr);
+	if (Params->HasField(TEXT("curve_type")) && !Params->TryGetStringField(TEXT("curve_type"), CurveTypeStr)) return FMonolithActionResult::Error(TEXT("Parameter \'curve_type\' must be a string"));
 
 	UAnimSequence* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
@@ -3134,7 +3134,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveCurve(const TShared
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString CurveName = Params->GetStringField(TEXT("curve_name"));
 	FString CurveTypeStr = TEXT("Float");
-	Params->TryGetStringField(TEXT("curve_type"), CurveTypeStr);
+	if (Params->HasField(TEXT("curve_type")) && !Params->TryGetStringField(TEXT("curve_type"), CurveTypeStr)) return FMonolithActionResult::Error(TEXT("Parameter \'curve_type\' must be a string"));
 
 	UAnimSequence* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
@@ -4304,7 +4304,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddCompatibleSkeleton(con
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	const FString CompatPath = Params->GetStringField(TEXT("compatible_with"));
 	bool bSave = true;
-	Params->TryGetBoolField(TEXT("save"), bSave);
+	if (Params->HasField(TEXT("save")) && !Params->TryGetBoolField(TEXT("save"), bSave)) return FMonolithActionResult::Error(TEXT("Parameter \'save\' must be a boolean"));
 
 	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(AssetPath);
 	if (!Skeleton)
@@ -4352,7 +4352,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveCompatibleSkeleton(
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	const FString CompatPath = Params->GetStringField(TEXT("compatible_with"));
 	bool bSave = true;
-	Params->TryGetBoolField(TEXT("save"), bSave);
+	if (Params->HasField(TEXT("save")) && !Params->TryGetBoolField(TEXT("save"), bSave)) return FMonolithActionResult::Error(TEXT("Parameter \'save\' must be a boolean"));
 
 	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(AssetPath);
 	if (!Skeleton)
@@ -4410,7 +4410,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetControlRigInfo(const T
 
 	// Optional element type filter
 	FString FilterStr;
-	bool bHasFilter = Params->TryGetStringField(TEXT("element_type"), FilterStr);
+	bool bHasFilter = false; if (Params->HasField(TEXT("element_type"))) { if (!Params->TryGetStringField(TEXT("element_type"), FilterStr)) return FMonolithActionResult::Error(TEXT("Parameter \'element_type\' must be a string")); bHasFilter = true; }
 	FilterStr.ToLowerInline();
 
 	auto TypeMatchesFilter = [&](ERigElementType Type) -> bool
@@ -4558,17 +4558,27 @@ static ERigElementType ParseRigElementType(const FString& Str)
 	return ERigElementType::Bone;
 }
 
+static bool TryParseRigControlType(const FString& Str, ERigControlType& OutType)
+{
+	if (Str.Equals(TEXT("Float"),      ESearchCase::IgnoreCase)) { OutType = ERigControlType::Float; return true; }
+	if (Str.Equals(TEXT("Integer"),    ESearchCase::IgnoreCase)) { OutType = ERigControlType::Integer; return true; }
+	if (Str.Equals(TEXT("Bool"),       ESearchCase::IgnoreCase)) { OutType = ERigControlType::Bool; return true; }
+	if (Str.Equals(TEXT("Transform"),  ESearchCase::IgnoreCase)) { OutType = ERigControlType::Transform; return true; }
+	if (Str.Equals(TEXT("Rotator"),    ESearchCase::IgnoreCase)) { OutType = ERigControlType::Rotator; return true; }
+	if (Str.Equals(TEXT("Position"),   ESearchCase::IgnoreCase)) { OutType = ERigControlType::Position; return true; }
+	if (Str.Equals(TEXT("Scale"),      ESearchCase::IgnoreCase)) { OutType = ERigControlType::Scale; return true; }
+	if (Str.Equals(TEXT("ScaleFloat"), ESearchCase::IgnoreCase)) { OutType = ERigControlType::ScaleFloat; return true; }
+	if (Str.Equals(TEXT("Vector2D"),   ESearchCase::IgnoreCase)) { OutType = ERigControlType::Vector2D; return true; }
+	return false;
+}
+
 static ERigControlType ParseRigControlType(const FString& Str)
 {
-	if (Str.Equals(TEXT("Float"),      ESearchCase::IgnoreCase)) return ERigControlType::Float;
-	if (Str.Equals(TEXT("Integer"),    ESearchCase::IgnoreCase)) return ERigControlType::Integer;
-	if (Str.Equals(TEXT("Bool"),       ESearchCase::IgnoreCase)) return ERigControlType::Bool;
-	if (Str.Equals(TEXT("Transform"),  ESearchCase::IgnoreCase)) return ERigControlType::Transform;
-	if (Str.Equals(TEXT("Rotator"),    ESearchCase::IgnoreCase)) return ERigControlType::Rotator;
-	if (Str.Equals(TEXT("Position"),   ESearchCase::IgnoreCase)) return ERigControlType::Position;
-	if (Str.Equals(TEXT("Scale"),      ESearchCase::IgnoreCase)) return ERigControlType::Scale;
-	if (Str.Equals(TEXT("ScaleFloat"), ESearchCase::IgnoreCase)) return ERigControlType::ScaleFloat;
-	if (Str.Equals(TEXT("Vector2D"),   ESearchCase::IgnoreCase)) return ERigControlType::Vector2D;
+	ERigControlType ParsedType = ERigControlType::Transform;
+	if (TryParseRigControlType(Str, ParsedType))
+	{
+		return ParsedType;
+	}
 	return ERigControlType::Transform;
 }
 
@@ -4618,14 +4628,40 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddControlRigElement(cons
 	if (Params->TryGetObjectField(TEXT("transform"), XformObj) && XformObj && (*XformObj)->Values.Num() > 0)
 	{
 		double TX = 0, TY = 0, TZ = 0, RX = 0, RY = 0, RZ = 0;
-		(*XformObj)->TryGetNumberField(TEXT("tx"), TX);
-		(*XformObj)->TryGetNumberField(TEXT("ty"), TY);
-		(*XformObj)->TryGetNumberField(TEXT("tz"), TZ);
-		(*XformObj)->TryGetNumberField(TEXT("rx"), RX);
-		(*XformObj)->TryGetNumberField(TEXT("ry"), RY);
-		(*XformObj)->TryGetNumberField(TEXT("rz"), RZ);
+		if ((*XformObj)->HasField(TEXT("tx")) && !(*XformObj)->TryGetNumberField(TEXT("tx"), TX)) return FMonolithActionResult::Error(TEXT("Parameter \'tx\' must be a number"));
+		if ((*XformObj)->HasField(TEXT("ty")) && !(*XformObj)->TryGetNumberField(TEXT("ty"), TY)) return FMonolithActionResult::Error(TEXT("Parameter \'ty\' must be a number"));
+		if ((*XformObj)->HasField(TEXT("tz")) && !(*XformObj)->TryGetNumberField(TEXT("tz"), TZ)) return FMonolithActionResult::Error(TEXT("Parameter \'tz\' must be a number"));
+		if ((*XformObj)->HasField(TEXT("rx")) && !(*XformObj)->TryGetNumberField(TEXT("rx"), RX)) return FMonolithActionResult::Error(TEXT("Parameter \'rx\' must be a number"));
+		if ((*XformObj)->HasField(TEXT("ry")) && !(*XformObj)->TryGetNumberField(TEXT("ry"), RY)) return FMonolithActionResult::Error(TEXT("Parameter \'ry\' must be a number"));
+		if ((*XformObj)->HasField(TEXT("rz")) && !(*XformObj)->TryGetNumberField(TEXT("rz"), RZ)) return FMonolithActionResult::Error(TEXT("Parameter \'rz\' must be a number"));
 		Xform.SetTranslation(FVector(TX, TY, TZ));
 		Xform.SetRotation(FQuat(FRotator(RX, RY, RZ)));
+	}
+
+	FString ControlTypeStr = TEXT("Transform");
+	bool bAnimatable = true;
+	ERigControlType ControlType = ERigControlType::Transform;
+	if (ElementTypeStr == TEXT("control"))
+	{
+		if (Params->HasField(TEXT("control_type")))
+		{
+			if (!Params->TryGetStringField(TEXT("control_type"), ControlTypeStr))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter \'control_type\' must be a string"));
+			}
+			if (ControlTypeStr.IsEmpty())
+			{
+				ControlTypeStr = TEXT("Transform");
+			}
+		}
+		if (!TryParseRigControlType(ControlTypeStr, ControlType))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid control_type — use Float, Integer, Bool, Transform, Rotator, Position, Scale, ScaleFloat, or Vector2D"));
+		}
+		if (Params->HasField(TEXT("animatable")) && !Params->TryGetBoolField(TEXT("animatable"), bAnimatable))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter \'animatable\' must be a boolean"));
+		}
 	}
 
 	GEditor->BeginTransaction(FText::FromString(TEXT("Add Control Rig Element")));
@@ -4645,17 +4681,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddControlRigElement(cons
 	}
 	else // control
 	{
-		// Parse control_type
-		FString ControlTypeStr;
-		if (!Params->TryGetStringField(TEXT("control_type"), ControlTypeStr) || ControlTypeStr.IsEmpty())
-			ControlTypeStr = TEXT("Transform");
-
-		// Parse animatable flag
-		bool bAnimatable = true;
-		Params->TryGetBoolField(TEXT("animatable"), bAnimatable);
-
 		FRigControlSettings Settings;
-		Settings.ControlType = ParseRigControlType(ControlTypeStr);
+		Settings.ControlType = ControlType;
 		Settings.AnimationType = bAnimatable
 			? ERigControlAnimationType::AnimationControl
 			: ERigControlAnimationType::ProxyControl;
@@ -4703,9 +4730,6 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddControlRigElement(cons
 	Root->SetStringField(TEXT("asset_path"),   AssetPath);
 	if (ElementTypeStr == TEXT("control"))
 	{
-		FString ControlTypeStr;
-		Params->TryGetStringField(TEXT("control_type"), ControlTypeStr);
-		if (ControlTypeStr.IsEmpty()) ControlTypeStr = TEXT("Transform");
 		Root->SetStringField(TEXT("control_type"), ControlTypeStr);
 	}
 	return FMonolithActionResult::Success(Root);
@@ -4981,9 +5005,9 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetRetargetChainMapping(c
 
 	FString AutoMapStr;
 	FString SourceChain, TargetChain;
-	const bool bHasAutoMap = Params->TryGetStringField(TEXT("auto_map"), AutoMapStr);
-	const bool bHasSourceChain = Params->TryGetStringField(TEXT("source_chain"), SourceChain);
-	const bool bHasTargetChain = Params->TryGetStringField(TEXT("target_chain"), TargetChain);
+	bool bHasAutoMap = false; if (Params->HasField(TEXT("auto_map"))) { if (!Params->TryGetStringField(TEXT("auto_map"), AutoMapStr)) return FMonolithActionResult::Error(TEXT("Parameter \'auto_map\' must be a string")); bHasAutoMap = true; }
+	bool bHasSourceChain = false; if (Params->HasField(TEXT("source_chain"))) { if (!Params->TryGetStringField(TEXT("source_chain"), SourceChain)) return FMonolithActionResult::Error(TEXT("Parameter \'source_chain\' must be a string")); bHasSourceChain = true; }
+	bool bHasTargetChain = false; if (Params->HasField(TEXT("target_chain"))) { if (!Params->TryGetStringField(TEXT("target_chain"), TargetChain)) return FMonolithActionResult::Error(TEXT("Parameter \'target_chain\' must be a string")); bHasTargetChain = true; }
 
 	if (!bHasAutoMap && !(bHasSourceChain && bHasTargetChain))
 	{
@@ -5432,6 +5456,66 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateBlendSpace(const TS
 		return FMonolithActionResult::Error(ValidationError);
 	}
 
+	const bool bConfigureXAxis = Params->HasField(TEXT("axis_x_name")) || Params->HasField(TEXT("axis_x_min")) || Params->HasField(TEXT("axis_x_max"));
+	FString XName = TEXT("None");
+	float XMin = 0.0f;
+	float XMax = 100.0f;
+	if (bConfigureXAxis)
+	{
+		if (Params->HasField(TEXT("axis_x_name")) && !Params->TryGetStringField(TEXT("axis_x_name"), XName))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter \'axis_x_name\' must be a string"));
+		}
+		double TempXMin = 0.0;
+		if (Params->HasField(TEXT("axis_x_min")))
+		{
+			if (!Params->TryGetNumberField(TEXT("axis_x_min"), TempXMin))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'axis_x_min' must be a number"));
+			}
+			XMin = static_cast<float>(TempXMin);
+		}
+		double TempXMax = 0.0;
+		if (Params->HasField(TEXT("axis_x_max")))
+		{
+			if (!Params->TryGetNumberField(TEXT("axis_x_max"), TempXMax))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'axis_x_max' must be a number"));
+			}
+			XMax = static_cast<float>(TempXMax);
+		}
+	}
+
+	const bool bConfigureYAxis = Params->HasField(TEXT("axis_y_name")) || Params->HasField(TEXT("axis_y_min")) || Params->HasField(TEXT("axis_y_max"));
+	FString YName = TEXT("None");
+	float YMin = 0.0f;
+	float YMax = 100.0f;
+	if (bConfigureYAxis)
+	{
+		if (Params->HasField(TEXT("axis_y_name")) && !Params->TryGetStringField(TEXT("axis_y_name"), YName))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter \'axis_y_name\' must be a string"));
+		}
+		double TempYMin = 0.0;
+		if (Params->HasField(TEXT("axis_y_min")))
+		{
+			if (!Params->TryGetNumberField(TEXT("axis_y_min"), TempYMin))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'axis_y_min' must be a number"));
+			}
+			YMin = static_cast<float>(TempYMin);
+		}
+		double TempYMax = 0.0;
+		if (Params->HasField(TEXT("axis_y_max")))
+		{
+			if (!Params->TryGetNumberField(TEXT("axis_y_max"), TempYMax))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'axis_y_max' must be a number"));
+			}
+			YMax = static_cast<float>(TempYMax);
+		}
+	}
+
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at '%s'"), *AssetPath));
 
@@ -5441,24 +5525,12 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateBlendSpace(const TS
 	BS->SetSkeleton(Skeleton);
 
 	// Optional axis configuration
-	if (Params->HasField(TEXT("axis_x_name")) || Params->HasField(TEXT("axis_x_min")) || Params->HasField(TEXT("axis_x_max")))
+	if (bConfigureXAxis)
 	{
-		FString XName = TEXT("None");
-	Params->TryGetStringField(TEXT("axis_x_name"), XName);
-		float XMin = 0.0f; double TempXMin;
-		if (Params->HasField(TEXT("axis_x_min"))) { if (!Params->TryGetNumberField(TEXT("axis_x_min"), TempXMin)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_x_min' must be a number")); XMin = static_cast<float>(TempXMin); }
-		float XMax = 100.0f; double TempXMax;
-		if (Params->HasField(TEXT("axis_x_max"))) { if (!Params->TryGetNumberField(TEXT("axis_x_max"), TempXMax)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_x_max' must be a number")); XMax = static_cast<float>(TempXMax); }
 		ConfigureBlendSpaceAxis(BS, 0, XName, XMin, XMax);
 	}
-	if (Params->HasField(TEXT("axis_y_name")) || Params->HasField(TEXT("axis_y_min")) || Params->HasField(TEXT("axis_y_max")))
+	if (bConfigureYAxis)
 	{
-		FString YName = TEXT("None");
-	Params->TryGetStringField(TEXT("axis_y_name"), YName);
-		float YMin = 0.0f; double TempYMin;
-		if (Params->HasField(TEXT("axis_y_min"))) { if (!Params->TryGetNumberField(TEXT("axis_y_min"), TempYMin)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_y_min' must be a number")); YMin = static_cast<float>(TempYMin); }
-		float YMax = 100.0f; double TempYMax;
-		if (Params->HasField(TEXT("axis_y_max"))) { if (!Params->TryGetNumberField(TEXT("axis_y_max"), TempYMax)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_y_max' must be a number")); YMax = static_cast<float>(TempYMax); }
 		ConfigureBlendSpaceAxis(BS, 1, YName, YMin, YMax);
 	}
 
@@ -5512,7 +5584,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateBlendSpace1D(const 
 	if (Params->HasField(TEXT("axis_name")) || Params->HasField(TEXT("axis_min")) || Params->HasField(TEXT("axis_max")))
 	{
 		FString AxisName = TEXT("None");
-	Params->TryGetStringField(TEXT("axis_name"), AxisName);
+	if (Params->HasField(TEXT("axis_name")) && !Params->TryGetStringField(TEXT("axis_name"), AxisName)) return FMonolithActionResult::Error(TEXT("Parameter \'axis_name\' must be a string"));
 		float AxisMin = 0.0f; double TempAxisMin;
 		if (Params->HasField(TEXT("axis_min"))) { if (!Params->TryGetNumberField(TEXT("axis_min"), TempAxisMin)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_min' must be a number")); AxisMin = static_cast<float>(TempAxisMin); }
 		float AxisMax = 100.0f; double TempAxisMax;
@@ -5568,7 +5640,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateAimOffset(const TSh
 	// Default Yaw/Pitch axes for aim offsets, overridable via params
 	{
 		FString XName = TEXT("Yaw");
-	Params->TryGetStringField(TEXT("axis_x_name"), XName);
+	if (Params->HasField(TEXT("axis_x_name")) && !Params->TryGetStringField(TEXT("axis_x_name"), XName)) return FMonolithActionResult::Error(TEXT("Parameter \'axis_x_name\' must be a string"));
 		float XMin = -180.0f; double TempXMin;
 		if (Params->HasField(TEXT("axis_x_min"))) { if (!Params->TryGetNumberField(TEXT("axis_x_min"), TempXMin)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_x_min' must be a number")); XMin = static_cast<float>(TempXMin); }
 		float XMax = 180.0f; double TempXMax;
@@ -5577,7 +5649,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateAimOffset(const TSh
 	}
 	{
 		FString YName = TEXT("Pitch");
-	Params->TryGetStringField(TEXT("axis_y_name"), YName);
+	if (Params->HasField(TEXT("axis_y_name")) && !Params->TryGetStringField(TEXT("axis_y_name"), YName)) return FMonolithActionResult::Error(TEXT("Parameter \'axis_y_name\' must be a string"));
 		float YMin = -90.0f; double TempYMin;
 		if (Params->HasField(TEXT("axis_y_min"))) { if (!Params->TryGetNumberField(TEXT("axis_y_min"), TempYMin)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_y_min' must be a number")); YMin = static_cast<float>(TempYMin); }
 		float YMax = 90.0f; double TempYMax;
@@ -5634,7 +5706,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateAimOffset1D(const T
 	// Default Yaw axis for 1D aim offsets
 	{
 		FString AxisName = TEXT("Yaw");
-	Params->TryGetStringField(TEXT("axis_name"), AxisName);
+	if (Params->HasField(TEXT("axis_name")) && !Params->TryGetStringField(TEXT("axis_name"), AxisName)) return FMonolithActionResult::Error(TEXT("Parameter \'axis_name\' must be a string"));
 		float AxisMin = -180.0f; double TempAxisMin;
 		if (Params->HasField(TEXT("axis_min"))) { if (!Params->TryGetNumberField(TEXT("axis_min"), TempAxisMin)) return FMonolithActionResult::Error(TEXT("Parameter 'axis_min' must be a number")); AxisMin = static_cast<float>(TempAxisMin); }
 		float AxisMax = 180.0f; double TempAxisMax;
@@ -5705,7 +5777,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateAnimBlueprint(const
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString SkeletonPath = Params->GetStringField(TEXT("skeleton_path"));
 	FString ParentClassName = TEXT("AnimInstance");
-	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
+	if (Params->HasField(TEXT("parent_class")) && !Params->TryGetStringField(TEXT("parent_class"), ParentClassName)) return FMonolithActionResult::Error(TEXT("Parameter \'parent_class\' must be a string"));
 
 	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton) return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
@@ -6391,7 +6463,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleBatchExecute(const TShare
 	}
 
 	bool bStopOnError = false;
-	Params->TryGetBoolField(TEXT("stop_on_error"), bStopOnError);
+	if (Params->HasField(TEXT("stop_on_error")) && !Params->TryGetBoolField(TEXT("stop_on_error"), bStopOnError)) return FMonolithActionResult::Error(TEXT("Parameter \'stop_on_error\' must be a boolean"));
 
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "AnimBatchExec", "Animation Batch Execute"));
 
@@ -6419,10 +6491,17 @@ FMonolithActionResult FMonolithAnimationActions::HandleBatchExecute(const TShare
 		if (!Op->TryGetStringField(TEXT("op"), OpName) || OpName.IsEmpty())
 		{
 			FString HintName;
-			Op->TryGetStringField(TEXT("action"), HintName);
-			FString Hint = HintName.IsEmpty()
-				? TEXT("Each operation must have an \"op\" key with the action name, plus flat inline params (not nested under \"params\").")
-				: FString::Printf(TEXT("Use \"op\" key, not \"action\". Found \"action\":\"%s\". Params must be flat inline, not nested."), *HintName);
+			FString Hint;
+			if (Op->HasField(TEXT("action")) && !Op->TryGetStringField(TEXT("action"), HintName))
+			{
+				Hint = TEXT("Parameter 'action' must be a string. Use an \"op\" key with the action name, plus flat inline params.");
+			}
+			else
+			{
+				Hint = HintName.IsEmpty()
+					? TEXT("Each operation must have an \"op\" key with the action name, plus flat inline params (not nested under \"params\").")
+					: FString::Printf(TEXT("Use \"op\" key, not \"action\". Found \"action\":\"%s\". Params must be flat inline, not nested."), *HintName);
+			}
 			RO->SetStringField(TEXT("op"), TEXT("(missing)"));
 			RO->SetBoolField(TEXT("success"), false);
 			RO->SetStringField(TEXT("error"), Hint);
@@ -6664,9 +6743,9 @@ FMonolithActionResult FMonolithAnimationActions::HandleCloneNotifySetup(const TS
 		TimeScale = static_cast<float>(TempTimeScale);
 	}
 	bool bAutoScale = false;
-	Params->TryGetBoolField(TEXT("auto_scale"), bAutoScale);
+	if (Params->HasField(TEXT("auto_scale")) && !Params->TryGetBoolField(TEXT("auto_scale"), bAutoScale)) return FMonolithActionResult::Error(TEXT("Parameter \'auto_scale\' must be a boolean"));
 	bool bReplaceExisting = false;
-	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
+	if (Params->HasField(TEXT("replace_existing")) && !Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting)) return FMonolithActionResult::Error(TEXT("Parameter \'replace_existing\' must be a boolean"));
 
 	UAnimSequenceBase* Source = FMonolithAssetUtils::LoadAssetByPath<UAnimSequenceBase>(SourcePath);
 	if (!Source) return FMonolithActionResult::Error(FString::Printf(TEXT("Source animation not found: %s"), *SourcePath));
@@ -6836,7 +6915,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleBulkAddNotify(const TShar
 	FString NotifyClassName = Params->GetStringField(TEXT("notify_class"));
 	float Time = static_cast<float>(Params->GetNumberField(TEXT("time")));
 	FString TimeMode = TEXT("absolute");
-	Params->TryGetStringField(TEXT("time_mode"), TimeMode);
+	if (Params->HasField(TEXT("time_mode")) && !Params->TryGetStringField(TEXT("time_mode"), TimeMode)) return FMonolithActionResult::Error(TEXT("Parameter \'time_mode\' must be a string"));
 	bool bIsNormalized = TimeMode.Equals(TEXT("normalized"), ESearchCase::IgnoreCase);
 
 	float Duration = 0.f;
@@ -6853,7 +6932,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleBulkAddNotify(const TShar
 	}
 
 	FString TrackName = TEXT("1");
-	Params->TryGetStringField(TEXT("track_name"), TrackName);
+	if (Params->HasField(TEXT("track_name")) && !Params->TryGetStringField(TEXT("track_name"), TrackName)) return FMonolithActionResult::Error(TEXT("Parameter \'track_name\' must be a string"));
 
 	// Resolve notify class
 	bool bIsNotifyState = false;
@@ -6961,7 +7040,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString SkeletonPath = Params->GetStringField(TEXT("skeleton_path"));
 	FString SlotName = TEXT("DefaultSlot");
-	Params->TryGetStringField(TEXT("slot_name"), SlotName);
+	if (Params->HasField(TEXT("slot_name")) && !Params->TryGetStringField(TEXT("slot_name"), SlotName)) return FMonolithActionResult::Error(TEXT("Parameter \'slot_name\' must be a string"));
 
 	// Step 1: Create the montage
 	TSharedRef<FJsonObject> CreateParams = MakeShared<FJsonObject>();
@@ -6978,6 +7057,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 
 	GEditor->BeginTransaction(FText::FromString(TEXT("Create Montage From Sections")));
 	Montage->Modify();
+	auto EndMontageTransactionAndError = [](const FString& Message)
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(Message);
+	};
 
 	TArray<FString> Errors;
 
@@ -7010,7 +7094,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 					double TempTime;
 					if (!SecObj->TryGetNumberField(TEXT("start_time"), TempTime))
 					{
-						return FMonolithActionResult::Error(TEXT("Parameter 'start_time' in section must be a number"));
+						return EndMontageTransactionAndError(TEXT("Parameter 'start_time' in section must be a number"));
 					}
 					StartTime = static_cast<float>(TempTime);
 				}
@@ -7072,19 +7156,19 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 		if ((*BlendObj)->HasField(TEXT("blend_in_time")))
 			{
 				double TempVal;
-				if (!(*BlendObj)->TryGetNumberField(TEXT("blend_in_time"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'blend_in_time' must be a number"));
+				if (!(*BlendObj)->TryGetNumberField(TEXT("blend_in_time"), TempVal)) return EndMontageTransactionAndError(TEXT("Parameter 'blend_in_time' must be a number"));
 				Montage->BlendIn.SetBlendTime(static_cast<float>(TempVal));
 			}
 		if ((*BlendObj)->HasField(TEXT("blend_out_time")))
 			{
 				double TempVal;
-				if (!(*BlendObj)->TryGetNumberField(TEXT("blend_out_time"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'blend_out_time' must be a number"));
+				if (!(*BlendObj)->TryGetNumberField(TEXT("blend_out_time"), TempVal)) return EndMontageTransactionAndError(TEXT("Parameter 'blend_out_time' must be a number"));
 				Montage->BlendOut.SetBlendTime(static_cast<float>(TempVal));
 			}
 		if ((*BlendObj)->HasField(TEXT("blend_out_trigger_time")))
 			{
 				double TempVal;
-				if (!(*BlendObj)->TryGetNumberField(TEXT("blend_out_trigger_time"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'blend_out_trigger_time' must be a number"));
+				if (!(*BlendObj)->TryGetNumberField(TEXT("blend_out_trigger_time"), TempVal)) return EndMontageTransactionAndError(TEXT("Parameter 'blend_out_trigger_time' must be a number"));
 				Montage->BlendOutTriggerTime = static_cast<float>(TempVal);
 			}
 		bool bAutoBlendOut = true;
@@ -7104,7 +7188,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 			FString NClassName = NObj->GetStringField(TEXT("notify_class"));
 			float NTime = static_cast<float>(NObj->GetNumberField(TEXT("time")));
 			FString NTrackName = TEXT("1");
-			NObj->TryGetStringField(TEXT("track_name"), NTrackName);
+			if (NObj->HasField(TEXT("track_name")) && !NObj->TryGetStringField(TEXT("track_name"), NTrackName)) return EndMontageTransactionAndError(TEXT("Parameter \'track_name\' must be a string"));
 
 			UClass* NClass = FindFirstObject<UClass>(*NClassName, EFindFirstObjectOptions::NativeFirst);
 			if (!NClass)
@@ -7126,7 +7210,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 						double TempDuration;
 						if (!NObj->TryGetNumberField(TEXT("duration"), TempDuration))
 						{
-							return FMonolithActionResult::Error(TEXT("Parameter 'duration' in notify must be a number"));
+							return EndMontageTransactionAndError(TEXT("Parameter 'duration' in notify must be a number"));
 						}
 						NDuration = static_cast<float>(TempDuration);
 					}
@@ -8014,10 +8098,10 @@ FMonolithActionResult FMonolithAnimationActions::HandleCopyBonePoseBetweenSequen
 	FString DestPath = Params->GetStringField(TEXT("dest_path"));
 
 	double SourceTime = 0.0;
-	Params->TryGetNumberField(TEXT("source_time"), SourceTime);
+	if (Params->HasField(TEXT("source_time")) && !Params->TryGetNumberField(TEXT("source_time"), SourceTime)) return FMonolithActionResult::Error(TEXT("Parameter \'source_time\' must be a number"));
 
 	bool bApplyToAllFrames = true;
-	Params->TryGetBoolField(TEXT("apply_to_all_dest_frames"), bApplyToAllFrames);
+	if (Params->HasField(TEXT("apply_to_all_dest_frames")) && !Params->TryGetBoolField(TEXT("apply_to_all_dest_frames"), bApplyToAllFrames)) return FMonolithActionResult::Error(TEXT("Parameter \'apply_to_all_dest_frames\' must be a boolean"));
 
 	const TArray<TSharedPtr<FJsonValue>>* BoneNamesArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("bone_names"), BoneNamesArr) || !BoneNamesArr || BoneNamesArr->Num() == 0)
