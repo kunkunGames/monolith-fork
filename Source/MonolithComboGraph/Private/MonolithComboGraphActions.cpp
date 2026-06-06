@@ -1546,6 +1546,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 
 		if (ContainerData->TryGetArrayField(TEXT("definitions"), Definitions) && Definitions)
 		{
+			DefTexts.Reserve(Definitions->Num());
 			for (const auto& DefVal : *Definitions)
 			{
 				if (!DefVal.IsValid() || DefVal->Type != EJson::Object) continue;
