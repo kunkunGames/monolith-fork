@@ -1117,7 +1117,7 @@ Sound Cue + MetaSound graph CRUD + on-disk document introspection, attenuation/c
 | References / unused | 4 | `find_audio_references`, `find_unused_audio`, `find_sounds_without_class`, `find_unattenuated_sounds` |
 | Batch ops | 9 | `batch_assign_sound_class`, `batch_assign_attenuation`, `batch_set_compression`, `batch_set_submix`, `batch_set_concurrency`, `batch_set_looping`, `batch_set_virtualization`, `batch_rename_audio`, `batch_set_sound_wave_properties` |
 | Templates | 1 | `apply_audio_template` |
-| Sound Cue graph | 9 | `create_sound_cue`, `get_sound_cue_graph`, `add_sound_cue_node`, `remove_sound_cue_node`, `connect_sound_cue_nodes`, `set_sound_cue_first_node`, `set_sound_cue_node_property`, `list_sound_cue_node_types`, `find_sound_waves_in_cue`, `validate_sound_cue` |
+| Sound Cue graph | 10 | `create_sound_cue`, `get_sound_cue_graph`, `add_sound_cue_node`, `remove_sound_cue_node`, `connect_sound_cue_nodes`, `set_sound_cue_first_node`, `set_sound_cue_node_property`, `list_sound_cue_node_types`, `find_sound_waves_in_cue`, `validate_sound_cue` |
 | Sound Cue spec / templates | 8 | `build_sound_cue_from_spec`, `create_random_sound_cue`, `create_layered_sound_cue`, `create_looping_ambient_cue`, `create_distance_crossfade_cue`, `create_switch_sound_cue`, `duplicate_sound_cue`, `delete_audio_asset` |
 | Preview | 3 | `preview_sound`, `stop_preview`, `get_sound_cue_duration` |
 | Perception bindings | 4 | `bind_sound_to_perception`, `unbind_sound_from_perception`, `get_sound_perception_binding`, `list_perception_bound_sounds` |
@@ -1136,6 +1136,8 @@ Sound Cue + MetaSound graph CRUD + on-disk document introspection, attenuation/c
 | `duration_seconds` | number | optional | Clip length (0.05 to 5.0). Default: `0.5` |
 | `sample_rate` | integer | optional | Allowlist `{22050, 44100, 48000}`. Default: `44100` |
 | `amplitude` | number | optional | Peak amplitude in `(0.0, 1.0]`. Default: `0.5` |
+
+**Returns:** `{ asset_path, samples_written, duration_actual_seconds, frequency_hz, sample_rate, amplitude }`
 
 ### `audio.bind_sound_to_perception`
 
