@@ -3954,20 +3954,35 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 	constexpr int32 HardFrameCap = GifHardFrameCap;
 
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'asset_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (AssetPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 
 	double DurationSeconds = 2.0;
-	Params->TryGetNumberField(TEXT("duration_seconds"), DurationSeconds);
+	if (Params->HasField(TEXT("duration_seconds")) && !Params->TryGetNumberField(TEXT("duration_seconds"), DurationSeconds))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'duration_seconds' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	double FpsDouble = static_cast<double>(DefaultGifFPS);
-	Params->TryGetNumberField(TEXT("fps"), FpsDouble);
+	if (Params->HasField(TEXT("fps")) && !Params->TryGetNumberField(TEXT("fps"), FpsDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'fps' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	int32 RequestedFPS = FMath::RoundToInt(FpsDouble);
 	double ResDouble = 256.0;
-	Params->TryGetNumberField(TEXT("resolution"), ResDouble);
+	if (Params->HasField(TEXT("resolution")) && !Params->TryGetNumberField(TEXT("resolution"), ResDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'resolution' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	int32 Resolution = static_cast<int32>(ResDouble);
 	FString Encoder = TEXT("auto");
-	Params->TryGetStringField(TEXT("encoder"), Encoder);
+	if (Params->HasField(TEXT("encoder")) && !Params->TryGetStringField(TEXT("encoder"), Encoder))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'encoder' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	Encoder = Encoder.ToLower();
 
 	if (RequestedFPS <= 0) RequestedFPS = DefaultGifFPS;
