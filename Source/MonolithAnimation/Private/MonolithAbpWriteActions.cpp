@@ -569,6 +569,7 @@ UEdGraphNode* FindNodeByName(UAnimBlueprint* ABP, const FString& NodeName, UEdGr
 TArray<TSharedPtr<FJsonValue>> BuildPinList(UEdGraphNode* Node)
 {
 	TArray<TSharedPtr<FJsonValue>> PinsArr;
+	PinsArr.Reserve(Node->Pins.Num());
 	for (UEdGraphPin* Pin : Node->Pins)
 	{
 		if (!Pin) continue;

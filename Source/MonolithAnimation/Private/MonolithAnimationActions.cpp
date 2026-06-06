@@ -2048,6 +2048,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetBlendNodes(const TShar
 		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 		Root->SetStringField(TEXT("graph_name"), Graph->GetName());
 		TArray<TSharedPtr<FJsonValue>> NodesArr;
+		NodesArr.Reserve(Graph->Nodes.Num());
 
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
@@ -2059,6 +2060,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetBlendNodes(const TShar
 			NodeObj->SetStringField(TEXT("title"), AnimNode->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
 
 			TArray<TSharedPtr<FJsonValue>> PinsArr;
+			PinsArr.Reserve(AnimNode->Pins.Num());
 			for (UEdGraphPin* Pin : AnimNode->Pins)
 			{
 				if (!Pin || Pin->LinkedTo.Num() == 0) continue;
@@ -2158,6 +2160,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetNodes(const TSharedPtr
 			NodeObj->SetStringField(TEXT("graph"), Graph->GetName());
 
 			TArray<TSharedPtr<FJsonValue>> PinsArr;
+			PinsArr.Reserve(AnimNode->Pins.Num());
 			for (UEdGraphPin* Pin : AnimNode->Pins)
 			{
 				if (!Pin || Pin->LinkedTo.Num() == 0) continue;
