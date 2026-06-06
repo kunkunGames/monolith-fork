@@ -53,6 +53,31 @@ bool FMonolithParamGuardWorldGenTerrainSampleMalformedParamsTest::RunTest(const 
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithWorldGenParamGuardCreateGridFromRoomsTest, "Monolith.ParamGuard.WorldGen.CreateGridFromRoomsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithWorldGenParamGuardCreateGridFromRoomsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> JsonObj = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> Rooms;
+	TSharedPtr<FJsonObject> Room = MakeShared<FJsonObject>();
+	Room->SetStringField(TEXT("room_id"), TEXT("r1"));
+	Room->SetStringField(TEXT("room_type"), TEXT("hall"));
+	Room->SetNumberField(TEXT("x"), 0);
+	Room->SetNumberField(TEXT("y"), 0);
+	Room->SetNumberField(TEXT("width"), 2);
+	Room->SetNumberField(TEXT("height"), 2);
+	Rooms.Add(MakeShared<FJsonValueObject>(Room));
+	JsonObj->SetArrayField(TEXT("rooms"), Rooms);
+	JsonObj->SetStringField(TEXT("cell_size"), TEXT("not_a_number"));
+
+	FMonolithActionResult Result = FMonolithMeshBuildingActions::CreateGridFromRooms(JsonObj);
+
+	TestFalse(TEXT("CreateGridFromRooms rejects malformed cell_size parameter"), Result.bSuccess);
+	TestTrue(TEXT("CreateGridFromRooms reports the validation error"), Result.ErrorMessage.Contains(TEXT("cell_size must be a number")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardWorldGenRoofMalformedParamsTest, "Monolith.ParamGuard.MonolithWorldGen.GenerateRoofRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardWorldGenRoofMalformedParamsTest::RunTest(const FString& Parameters)

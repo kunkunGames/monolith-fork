@@ -2101,7 +2101,16 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateGridFromRooms(const TS
 		return FMonolithActionResult::Error(TEXT("Missing or empty 'rooms' array"));
 	}
 
-	float CellSize = Params->HasField(TEXT("cell_size")) ? static_cast<float>(Params->GetNumberField(TEXT("cell_size"))) : 50.0f;
+	float CellSize = 50.0f;
+	if (Params->HasField(TEXT("cell_size")))
+	{
+		double TmpCellSize;
+		if (!Params->TryGetNumberField(TEXT("cell_size"), TmpCellSize))
+		{
+			return FMonolithActionResult::Error(TEXT("cell_size must be a number"));
+		}
+		CellSize = static_cast<float>(TmpCellSize);
+	}
 
 	struct FRoomRect
 	{
