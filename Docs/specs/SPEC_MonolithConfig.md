@@ -14,11 +14,11 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithConfigModule` | Registers 10 config actions and 10 localization actions |
+| `FMonolithConfigModule` | Registers 11 config actions and 10 localization actions |
 | `FMonolithConfigActions` | Static handlers. Helpers: ResolveConfigFilePath, GetConfigHierarchy (5 layers: Base -> Default -> Project -> User -> Saved). Uses GConfig API for reliable resolution |
 | `FMonolithLocalizationActions` | Static handlers for culture inspection and guarded StringTable CRUD/import/export operations. |
 
-### Actions (10 — namespace: "config")
+### Actions (11 — namespace: "config")
 
 | Action | Description |
 |--------|-------------|
@@ -32,6 +32,7 @@
 | `get_plugin` | Get descriptor metadata for one discovered plugin. Read-only. |
 | `get_cvar` | Get one console variable value and flags. Read-only. |
 | `find_cvars` | Find console variables by prefix or substring. Read-only. |
+| `set_developer_setting` | DEV-ONLY (write): set a property on a UDeveloperSettings CDO at runtime. #if WITH_EDITOR-gated. |
 
 ### Actions (10 — namespace: "localization")
 

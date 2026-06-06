@@ -26,7 +26,7 @@ Live editor introspection on a fully loaded project (with sibling plugins presen
 | [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs (incl. custom anim-graph nodes), montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
-| [config](#config) | 6 | INI config inspection and search |
+| [config](#config) | 11 | INI config inspection and search |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 11 | Unreal Engine C++ source code navigation |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
@@ -628,7 +628,7 @@ Close the current persistent level (without saving) and load the specified level
 
 ## config
 
-INI config file inspection and search. **6 actions.** Read-only.
+INI config file inspection and search. **11 actions.** Read-only (except `set_developer_setting`).
 
 ### `config.resolve_setting`
 
@@ -685,6 +685,51 @@ List all config files with their hierarchy level.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `category` | string | optional | Filter to a specific category |
+
+### `config.list_plugins`
+
+List discovered plugins with enabled state and descriptor metadata. Read-only.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name_contains` | string | optional | Case-insensitive plugin name substring filter |
+| `enabled_only` | boolean | optional | Only return enabled plugins. Default: `false` |
+
+### `config.get_plugin`
+
+Get descriptor metadata for one discovered plugin. Read-only.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | **required** | Plugin name |
+
+### `config.get_cvar`
+
+Get one console variable value and flags. Read-only.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | **required** | Console variable name |
+
+### `config.find_cvars`
+
+Find console variables by prefix or substring. Read-only.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | optional | Prefix or substring to search for |
+| `mode` | string | optional | `prefix` or `contains`. Default: `prefix` |
+
+### `config.set_developer_setting`
+
+DEV-ONLY (write): set a property on a UDeveloperSettings CDO at runtime. Resolves a settings class by short-name or full path, parses `value` via UProperty::ImportText_Direct, and optionally persists back to the INI via SaveConfig(). `#if WITH_EDITOR`-gated.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `class` | string | **required** | Settings class short-name or full path |
+| `property` | string | **required** | Property name to mutate |
+| `value` | string | **required** | New value (ImportText format) |
+| `save_config` | boolean | optional | If true, calls SaveConfig() on the CDO to persist the change. Default: `false` |
 
 ---
 
