@@ -88,8 +88,8 @@ private:
 	// ---- Shared helpers (private) ----
 
 	/** Parse a "dimensions" sub-object, filling defaults from the provided values */
-	static void ParseDimensions(const TSharedPtr<FJsonObject>& Params, float& Width, float& Depth, float& Height,
-		float DefaultWidth = 100.0f, float DefaultDepth = 100.0f, float DefaultHeight = 100.0f);
+	static bool ParseDimensions(const TSharedPtr<FJsonObject>& Params, float& Width, float& Depth, float& Height,
+		float DefaultWidth, float DefaultDepth, float DefaultHeight, FString& OutError);
 
 	/** Parse a "params" sub-object, returning it (or empty object if absent) */
 	static TSharedPtr<FJsonObject> ParseSubParams(const TSharedPtr<FJsonObject>& Params);

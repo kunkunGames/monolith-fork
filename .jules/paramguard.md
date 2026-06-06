@@ -70,3 +70,8 @@ Prevention: If an optional field is present, use `TryGetNumberField` or `TryGetA
 **Malformed input pattern:** `trigger_event` on bind actions and nested properties inside `bindings` arrays or `input_config` were read using `GetStringField` without type checks.
 **Learning:** `GetStringField` on optional/nested untrusted parameters will crash if the user provides the wrong type (e.g., number instead of string) or misses it and the tool doesn't gracefully fall back.
 **Prevention:** Use `TryGetStringField` paired with `HasField` to check if a provided field is of the correct type, and return an error before the crash. Defaults are only valid when the field is completely absent.
+
+## YYYY-MM-DD - ParamGuard: Harden MonolithMesh procedural param parsing
+**Malformed input pattern:** Using `HasField` combined with direct unchecked cast and `GetNumberField` or `GetBoolField` inside procedural geometry generation functions in `MonolithMeshProceduralActions.cpp`.
+**Learning:** Checking for field existence with `HasField` does not guarantee the type of the value returned by `GetNumberField` or `GetBoolField`. Malformed JSON specifying string fields or other incorrect types for dimensions or mesh characteristics will trigger unhandled assertions and crashes.
+**Prevention:** Handlers extracting complex sub-parameters nested in optional structs or procedural options must extract parameters using `TryGet*Field`. When extracting numeric configurations, the method must return an error gracefully rather than forcing the engine assertion to occur.
