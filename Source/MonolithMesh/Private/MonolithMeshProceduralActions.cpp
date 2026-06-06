@@ -2076,6 +2076,7 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateStructure(const TSha
 		if (!Params->TryGetNumberField(TEXT("wall_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'wall_thickness'. Expected number."));
 		WallT = static_cast<float>(TempVal);
 	}
+
 	float FloorT = 3.0f;
 	if (Params->HasField(TEXT("floor_thickness")))
 	{
@@ -2083,11 +2084,13 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateStructure(const TSha
 		if (!Params->TryGetNumberField(TEXT("floor_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'floor_thickness'. Expected number."));
 		FloorT = static_cast<float>(TempVal);
 	}
+
 	bool bCeiling = true;
 	if (Params->HasField(TEXT("has_ceiling")) && !Params->TryGetBoolField(TEXT("has_ceiling"), bCeiling))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'has_ceiling'. Expected boolean."));
 	}
+
 	bool bFloor = true;
 	if (Params->HasField(TEXT("has_floor")) && !Params->TryGetBoolField(TEXT("has_floor"), bFloor))
 	{

@@ -127,3 +127,24 @@ bool FMonolithParamGuardMeshFragmentsMalformedParamsTest::RunTest(const FString&
 
     return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshStructureMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.CreateStructureRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardMeshStructureMalformedParamsTest::RunTest(const FString& Parameters)
+{
+    FMonolithMeshProceduralActions::RegisterActions(FMonolithToolRegistry::Get());
+    TestTrue(TEXT("create_structure action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("create_structure")));
+
+    // Test with malformed wall_thickness (string instead of number)
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("type"), TEXT("room"));
+        Params->SetStringField(TEXT("wall_thickness"), TEXT("thick"));
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("create_structure"), Params);
+        TestFalse(TEXT("CreateStructure rejects malformed wall_thickness parameter"), Result.bSuccess);
+        TestTrue(TEXT("CreateStructure reports the validation error"), Result.ErrorMessage.Contains(TEXT("Invalid type for parameter 'wall_thickness'. Expected number.")));
+    }
+
+    return true;
+}
