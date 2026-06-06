@@ -1289,6 +1289,17 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 		return FMonolithActionResult::Error(Error);
 	}
 
+	bool bRequestedDefineReferenceValue = false;
+	bool RequestedDefineReferenceValue = false;
+	if (Params->HasField(TEXT("define_reference_value")))
+	{
+		if (!Params->TryGetBoolField(TEXT("define_reference_value"), RequestedDefineReferenceValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'define_reference_value' must be a boolean"));
+		}
+		bRequestedDefineReferenceValue = true;
+	}
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Configure EQS Scoring")));
 	Query->Modify();
 
@@ -1378,9 +1389,9 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 	}
 
 	// Reference value
-	if (Params->HasField(TEXT("define_reference_value")))
+	if (bRequestedDefineReferenceValue)
 	{
-		Test->bDefineReferenceValue = Params->GetBoolField(TEXT("define_reference_value"));
+		Test->bDefineReferenceValue = RequestedDefineReferenceValue;
 	}
 	if (Params->HasField(TEXT("reference_value")))
 	{
@@ -1439,6 +1450,17 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSFilter(const TSha
 		return FMonolithActionResult::Error(Error);
 	}
 
+	bool bRequestedBool = false;
+	bool RequestedBool = false;
+	if (Params->HasField(TEXT("bool_value")))
+	{
+		if (!Params->TryGetBoolField(TEXT("bool_value"), RequestedBool))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'bool_value' must be a boolean"));
+		}
+		bRequestedBool = true;
+	}
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Configure EQS Filter")));
 	Query->Modify();
 
@@ -1477,13 +1499,9 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSFilter(const TSha
 	}
 
 	// Bool match
-	bool bRequestedBool = false;
-	bool RequestedBool = false;
-	if (Params->HasField(TEXT("bool_value")))
+	if (bRequestedBool)
 	{
-		RequestedBool = Params->GetBoolField(TEXT("bool_value"));
 		Test->BoolValue.DefaultValue = RequestedBool;
-		bRequestedBool = true;
 	}
 
 	Query->MarkPackageDirty();
@@ -1831,7 +1849,7 @@ namespace
 	}
 
 	/** Apply filter spec to a test. */
-	void ApplyEQSFilterSpec(UEnvQueryTest* Test, const TSharedPtr<FJsonObject>& FilterObj)
+	void ApplyEQSFilterSpec(UEnvQueryTest* Test, const TSharedPtr<FJsonObject>& FilterObj, TArray<FString>& Warnings, const FString& WarningContext)
 	{
 		if (!Test || !FilterObj.IsValid()) return;
 
@@ -1853,7 +1871,15 @@ namespace
 		}
 		if (FilterObj->HasField(TEXT("bool_value")))
 		{
-			Test->BoolValue.DefaultValue = FilterObj->GetBoolField(TEXT("bool_value"));
+			bool TmpBool = false;
+			if (FilterObj->TryGetBoolField(TEXT("bool_value"), TmpBool))
+			{
+				Test->BoolValue.DefaultValue = TmpBool;
+			}
+			else
+			{
+				Warnings.Add(FString::Printf(TEXT("%s.filter.bool_value: must be a boolean"), *WarningContext));
+			}
 		}
 	}
 }
@@ -2012,7 +2038,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleBuildEQSQueryFromSpec(const T
 				const TSharedPtr<FJsonObject>* FilterObj = nullptr;
 				if ((*TestObj)->TryGetObjectField(TEXT("filter"), FilterObj) && FilterObj->IsValid())
 				{
-					ApplyEQSFilterSpec(NewTest, *FilterObj);
+					ApplyEQSFilterSpec(NewTest, *FilterObj, Warnings, FString::Printf(TEXT("Option[%d].Test[%d]"), OptIdx, TestIdx));
 				}
 			}
 		}
