@@ -30,13 +30,13 @@ Replace each Phase I feature with stock-UE-only mechanisms:
 
 - **I1:** Use UMG `PropertyBindings` + a runtime delegate-driven binding system that exists in stock UE 5.7. Monolith action stamps `FDelegateRuntimeBinding` entries onto the WBP — these are engine-native and survive cooking.
 - **I2:** Use the GAS-companion plugin's `BTTask_RunGameplayAbility` if available, or a stock engine BTTask if present. If neither exists, emit a Blueprint-graph BT that uses stock nodes (RunBehaviorTree → custom event → ASC->TryActivateAbility).
-- **I3:** Stamp metadata onto the SoundCue via stock `UAssetUserData` subclass that lives in the *project's own* runtime module (LeviathanGameplay or similar), not in Monolith. The audio component listener subsystem also lives in project code.
+- **I3:** Stamp metadata onto the SoundCue via stock `UAssetUserData` subclass that lives in the *project's own* runtime module (a project gameplay module), not in Monolith. The audio component listener subsystem also lives in project code.
 
 **Effort:** Substantial — likely re-architects all three features (~30-40h).
 **Trade-off:** Less feature flexibility; some H-plan capabilities may not be expressible via stock UE.
 
 ### Option B — Sibling shipping plugin
-New plugin `LeviathanRuntimeBindings` (or similar) — Type: Runtime, ships in the cooked game. Holds the three runtime classes. Monolith authors INTO this plugin's classes.
+A new runtime sibling plugin (e.g. `MyProjectRuntimeBindings`) — Type: Runtime, ships in the cooked game. Holds the three runtime classes. Monolith authors INTO this plugin's classes.
 
 **Effort:** ~2-3 days of refactor.
 **Trade-off:** New plugin to maintain; users of Monolith outside this project would also need this plugin or write their own equivalent.

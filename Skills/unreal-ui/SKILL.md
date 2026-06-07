@@ -85,6 +85,10 @@ description: Use when working with Unreal Engine UI via Monolith MCP — creatin
 4. ui_query("set_font", {"asset_path": "/Game/UI/WBP_GameHUD", "widget_name": "ammo_counter_Current", "font_size": 28, "typeface": "Bold"})
 ```
 
+## Capturing UMG Widgets to PNG (editor:: action)
+
+`editor_query("capture_scene_preview", { asset_path: "/Game/UI/WBP_Foo", asset_type: "widget", scale: 1.5 })` renders a Widget Blueprint offscreen via `FWidgetRenderer` and writes a PNG. Optional `scale` is a DPI multiplier. Useful for design reviews, accessibility audits, and verifying menu scaffolds before PIE. See `monolith_guide(section="recipes")` entry "Visual introspection -- going beyond thumbnails".
+
 ## Horror UI + Accessibility Guidelines
 
 **Horror:**

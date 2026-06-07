@@ -2945,6 +2945,24 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleReorderBTChildren(co
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Reorder BT Children")));
 	BTGraph->Modify();
 
+	// Child execution order serialized into UBTCompositeNode::Children is derived from
+	// graph node X-position, NOT from pin LinkedTo order: both UBehaviorTreeGraph::RebuildChildOrder
+	// and BTGraphHelpers::CreateChildren (invoked by UpdateAsset) call
+	// Pin->LinkedTo.Sort(FCompareNodeXLocation()) before walking children
+	// (BehaviorTreeGraph.cpp:551 / :1189). Reconnecting pins in a new order is therefore
+	// discarded on serialization — the sort restores the original visual order. To make the
+	// reorder persist we must reposition the child graph nodes' NodePosX to match NewOrder,
+	// matching the +250 left-to-right layout convention used elsewhere in this file.
+	const int32 BaseChildX = ParentNode->NodePosX;
+	const int32 ChildY = ParentNode->NodePosY + 200;
+	for (int32 OrderIdx = 0; OrderIdx < NewOrder.Num(); ++OrderIdx)
+	{
+		UBehaviorTreeGraphNode* Child = NewOrder[OrderIdx];
+		Child->Modify();
+		Child->NodePosX = BaseChildX + (OrderIdx * 250);
+		Child->NodePosY = ChildY;
+	}
+
 	// Disconnect all children from parent output pin
 	UEdGraphPin* ParentOut = ParentNode->GetOutputPin();
 	if (ParentOut)
@@ -2952,15 +2970,18 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleReorderBTChildren(co
 		ParentOut->BreakAllPinLinks();
 	}
 
-	// Reconnect in new order
+	// Reconnect in new order (cosmetic — final order is decided by the X-sort below)
 	for (UBehaviorTreeGraphNode* Child : NewOrder)
 	{
 		ConnectParentChild(ParentNode, Child);
 	}
 
-	// Rebuild execution order to reflect new child ordering
+	// RebuildChildOrder re-sorts LinkedTo by the now-updated X positions, then UpdateAsset
+	// rebuilds UBTCompositeNode::Children in that order and re-links execution indices.
 	BTGraph->RebuildChildOrder(ParentNode);
 	BTGraph->UpdateAsset();
+	BTGraph->MarkPackageDirty();
+	BT->Modify();
 	BT->MarkPackageDirty();
 
 	// Build result with new order
@@ -3671,17 +3692,20 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleBuildBTFromSpec(cons
 		return FMonolithActionResult::Error(TEXT("Failed to create UBehaviorTree object"));
 	}
 
-	// Handle blackboard — either load from path or create inline
+	// Handle blackboard — either load from path or create inline. Resolve only here; the
+	// actual link is set on the Root graph node after the editor graph exists.
+	// Setting BT->BlackboardAsset directly here is unreliable because the Root node can
+	// push its own seeded BlackboardAsset back onto the asset during UpdateBlackboard().
+	UBlackboardData* ResolvedBB = nullptr;
 	FString BBPath;
 	Spec->TryGetStringField(TEXT("blackboard_path"), BBPath);
 	if (!BBPath.IsEmpty())
 	{
-		UBlackboardData* BB = Cast<UBlackboardData>(FMonolithAssetUtils::LoadAssetByPath(UBlackboardData::StaticClass(), BBPath));
-		if (!BB)
+		ResolvedBB = Cast<UBlackboardData>(FMonolithAssetUtils::LoadAssetByPath(UBlackboardData::StaticClass(), BBPath));
+		if (!ResolvedBB)
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Blackboard not found: %s"), *BBPath));
 		}
-		BT->BlackboardAsset = BB;
 	}
 	else
 	{
@@ -3689,12 +3713,11 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleBuildBTFromSpec(cons
 		if (Spec->TryGetObjectField(TEXT("blackboard"), BBSpecPtr) && BBSpecPtr && (*BBSpecPtr).IsValid())
 		{
 			FString BBError;
-			UBlackboardData* InlineBB = CreateInlineBB(SavePath, *BBSpecPtr, BBError);
-			if (!InlineBB)
+			ResolvedBB = CreateInlineBB(SavePath, *BBSpecPtr, BBError);
+			if (!ResolvedBB)
 			{
 				return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create inline BB: %s"), *BBError));
 			}
-			BT->BlackboardAsset = InlineBB;
 		}
 	}
 
@@ -3728,6 +3751,22 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleBuildBTFromSpec(cons
 	if (!RootGraphNode)
 	{
 		return FMonolithActionResult::Error(TEXT("Root graph node not found in freshly created BT"));
+	}
+
+	// Set the blackboard link on the Root graph node — the authoritative owner. Set it here
+	// (after CreateDefaultNodesForGraph has run and possibly seeded a default) so our value wins,
+	// and call UpdateBlackboard() to push it onto BT->BlackboardAsset and reinitialize nodes.
+	// Without this, RunBehaviorTree(BT) at runtime sees a null BlackboardAsset and creates no
+	// Blackboard component, so the AI does nothing.
+	if (ResolvedBB)
+	{
+		RootGraphNode->Modify();
+		BT->Modify();
+		RootGraphNode->BlackboardAsset = ResolvedBB;
+		// Force propagation even if the seeded default happened to equal ResolvedBB by clearing
+		// the BT side first (UpdateBlackboard early-outs when the two already match).
+		BT->BlackboardAsset = nullptr;
+		RootGraphNode->UpdateBlackboard();
 	}
 
 	// Recursively build the tree from spec

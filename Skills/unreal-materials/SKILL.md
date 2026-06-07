@@ -165,6 +165,16 @@ Before finalizing any material that uses tiling textures, verify ALL of these:
 4. **`MF_AntiTile_IqOffset` used for organic/terrain textures?** Apply Iq's 2-sample offset technique (cheapest proper anti-tiling, ~15 instructions). See `Docs/references/materials/anti-tiling.md` for HLSL and alternatives (hex tiling for large surfaces).
 5. **FluidNinja noise textures used for macro variation?** Recommended: `/Game/FluidNinjaLive/Textures/T_LowResBlurredNoise_sRGB` (color), `/Game/FluidNinjaLive/Textures/T_MultilevelNoise1` (roughness).
 
+## AI Introspection (editor:: actions)
+
+For AI agents reasoning about materials without round-tripping through `render_preview`:
+
+- `editor_query("inspect_material_pbr", { asset_path })` — pure reflection walk of `UMaterialInterface`. Classifies texture params by name (basecolor/normal/roughness/metallic) and detects ORM/ARM/MRA channel packing. Returns structured JSON, no render.
+- `editor_query("capture_material_grid", { material_paths: [...] })` — N material instances (1-16) side-by-side under shared lighting; auto-grid `ceil(sqrt(N))` columns. Returns one PNG.
+- `editor_query("capture_scene_preview", { asset_path, asset_type: "material" })` — single-material preview render.
+
+See `monolith_guide(section="recipes")` entries "Visual introspection — going beyond thumbnails" and "Reading asset structure without rendering".
+
 ## Rules
 
 - Graph editing only works on base Materials, not MICs

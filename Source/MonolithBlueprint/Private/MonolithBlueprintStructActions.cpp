@@ -6,6 +6,7 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithBulkFillTypes.h"
 #include "Reflection/MonolithReflectionWalker.h"
+#include "Reflection/MonolithReflectionReader.h"
 #include "Kismet2/StructureEditorUtils.h"
 #include "Kismet2/EnumEditorUtils.h"
 #include "UserDefinedStructure/UserDefinedStructEditorData.h"
@@ -130,6 +131,7 @@ void FMonolithBlueprintStructActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("dry_run"),    TEXT("boolean"), TEXT("If true, validate the tree against the class WITHOUT creating the asset."), TEXT("false"))
 			.Optional(TEXT("strict"),     TEXT("boolean"), TEXT("If true, promote silent drops / unknown fields / enum misses to hard errors."), TEXT("false"))
 			.Optional(TEXT("skip_save"),  TEXT("boolean"), TEXT("Skip synchronous package save (default: false)."), TEXT("false"))
+			.Optional(TEXT("read_back_values"), TEXT("boolean"), TEXT("If true, after the write succeeds re-read the written top-level fields' live values and attach them as 'values': { field: <json> }. Pure read-only verify (no extra transaction, no extra dirty). Default: false."), TEXT("false"))
 			.Build());
 }
 
@@ -1516,9 +1518,11 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 	bool bDryRun = false;
 	bool bStrict = false;
 	bool bSkipSave = false;
+	bool bReadBackValues = false;
 	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
 	Params->TryGetBoolField(TEXT("strict"), bStrict);
 	Params->TryGetBoolField(TEXT("skip_save"), bSkipSave);
+	Params->TryGetBoolField(TEXT("read_back_values"), bReadBackValues);
 
 	// Extract asset name from save path
 	int32 LastSlash;
@@ -1692,6 +1696,27 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 	AppendFieldWrites(Root, Report);
 	Root->SetBoolField(TEXT("would_apply"), true);
 	Root->SetBoolField(TEXT("saved"), bSaved);
+
+	// Optional live readback: re-walk the written top-level fields through the
+	// shared read-only reflection reader and echo their live values. This is a
+	// pure read — it opens NO transaction and marks NOTHING dirty (the write
+	// transaction above has already completed).
+	if (bReadBackValues)
+	{
+		TSharedPtr<FJsonObject> Values = MakeShared<FJsonObject>();
+		for (const auto& KV : Tree->Values)
+		{
+			FProperty* TopProp = FMonolithReflectionWalker::FindPropertyForwarding(ResolvedClass, KV.Key);
+			if (TopProp)
+			{
+				const void* ValuePtr = TopProp->ContainerPtrToValuePtr<void>(NewAsset);
+				Values->SetField(TopProp->GetName(),
+					FMonolithReflectionReader::PropertyToJsonValue(TopProp, ValuePtr, NewAsset));
+			}
+		}
+		Root->SetObjectField(TEXT("values"), Values);
+	}
+
 	Root->SetBoolField(TEXT("success"), true);
 	return FMonolithActionResult::Success(Root);
 }

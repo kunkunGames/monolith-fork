@@ -35,4 +35,9 @@ private:
 	// --- Cloth/Outfit discovery ---
 	static FMonolithActionResult HandleGetClothStatus(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleListClothingAssets(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Motion Matching Pack Sprint 1: NormalizationSet + DB entry tags (3 class-member) ---
+	static FMonolithActionResult HandleCreateNormalizationSet(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleAddDatabaseToNormalizationSet(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSetDatabaseEntryTags(const TSharedPtr<FJsonObject>& Params);
 };

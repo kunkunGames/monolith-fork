@@ -19,6 +19,7 @@ public class MonolithIndex : ModuleRules
 			"MonolithCore",
 			"UnrealEd",
 			"AssetRegistry",
+			"EditorScriptingUtilities",
 			"Json",
 			"JsonUtilities",
 			"SQLiteCore",

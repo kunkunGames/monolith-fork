@@ -1,8 +1,8 @@
-﻿# Monolith — MonolithNiagara Module
+# Monolith — MonolithNiagara Module
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.18.0 (Beta)
+**Version:** 0.18.1 (Beta)
 
 ---
 

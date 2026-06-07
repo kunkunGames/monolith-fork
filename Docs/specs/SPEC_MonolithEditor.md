@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.16.0 (Beta)
+**Version:** 0.18.1 (Beta)
 
 ---
 
@@ -27,7 +27,7 @@
 |--------|-------------|
 | `trigger_build` | Live Coding compile. `wait` param for synchronous. Windows-only. Auto-enables Live Coding |
 | `live_compile` | Trigger Live Coding hot-reload compile. Alternative to trigger_build |
-| `get_build_errors` | Build errors/warnings from log capture. Max 500 entries |
+| `get_build_errors` | Build errors/warnings from log capture, scoped to a time window and bucketed into `compile_errors` (LogLiveCoding/LogCompile/LogLinker) vs `other_errors`. **Window params** (precedence high→low): `since_marker` (errors after the latest log line containing this token — UE_LOG a marker right before compiling; reports `marker_found`), `since_iso` (absolute ISO-8601 cutoff), `since_seconds` / `since` (legacy alias; last N seconds), else last compile. `clear_baseline` (default false) stamps a fresh `now` baseline and returns immediately — the "I just kicked off a build, ignore prior noise" reset. `exclude_categories` (default `[LogPython, LogMonolith]`) bucketed under `other_errors` and kept OUT of the headline `error_count` (never hidden). `category` / `compile_only` narrow the query. Max 500 entries |
 | `get_build_status` | Live Coding availability, started, enabled, compiling status |
 | `get_build_summary` | Total error/warning counts + compile status |
 | `search_build_output` | Search build log by `pattern`. Default limit 100, max 1000 |
@@ -80,6 +80,78 @@
 | `inspect_texture_channels` | `LockMipReadOnly` on `UTexture2D` source mip 0; walks pixel buffer per channel for min/max/mean statistics. Returns width, height, runtime pixel format, sRGB flag, has_alpha flag. Optional `emit_splits=true` writes 4 grayscale-replicated BGRA8 PNGs to `output_dir` for per-channel visual diff. Non-BGRA8 source returns a clean warning payload rather than mis-decoded bytes. |
 
 Plus `capture_scene_preview` (in Base section above) was **extended** in v0.16.0: `asset_type` enum now also accepts `static_mesh`, `skeletal_mesh` (with optional `animation_path` + `seek_time` for posed-frame capture), and `widget` (UMG via `FWidgetRenderer` with `scale` DPI multiplier). No new action — schema widening only.
+
+**Test/Profiling Harness — Wave 1 (7 — save / async-PIE smoke / nav harness)**
+
+| Action | Description |
+|--------|-------------|
+| `list_dirty_packages` | Report loaded packages with unsaved changes (`UPackage::IsDirty`), optionally scoped to one or more `/Game` path prefixes. Returns per-package `{ package, is_map, disk_path, transient }`. Params: `scope_paths[]` (omit for all dirty), `include_transient` (default false), `include_maps` (default true), `include_content` (default true). Use to audit what a `save_packages` call would touch. |
+| `save_packages` | Save the requested packages to disk (`UPackage::SavePackage` + `FSavePackageArgs`). Returns per-package save status. Params: `packages[]` (required, long package names), `fail_on_unrequested_dirty` (default false — when true, aborts saving nothing if a dirty package exists outside the request set, bounded by `scope_paths` if given), `scope_paths[]`, `dry_run` (default false — reports per-package `would_save` without writing). |
+| `run_pie_smoke` | Start an **async** PIE smoke session on a map and return immediately with `{ session_id, status: "running", started: true }`. Loads the map, starts PIE synchronously, emits a `UE_LOG` marker, and registers a session that the editor's real frame loop advances over real frames, sampling the target pawn's AnimInstance vars. Params: `map` (omit = current level), `marker` (post-marker log-pattern matching counts only lines after it; pass any token — see source-leak note below re: the current default value), `duration` (seconds, clamped 0–120, default 5), `sample_vars[]` (default `[GroundSpeed, bShouldMove, DesiredYawDelta]`), `pawn_class` (substring match; omit = first PC's pawn), `console_script[]`, `python_script`, `log_patterns` (**flat array** = legacy `must_absent`, OR **object** `{must_absent, must_present, observe_only, warn}` — see grouped-pattern note below), `ignore_after_pattern` (teardown-boundary substring, default `"BeginTearingDown"`; empty disables the split), `teardown_allowed` (default true — teardown-bucket `must_absent` hits never affect `ok`), `probe_scripts[]` (`[{at_seconds, python?, console?[]}]` delayed in-session probes fired once against the live PIE world), `stages` (staged startup hooks `{pre_pie, on_begin_play, after_n_ticks:{n,...}, before_capture}` fired at lifecycle moments — `pre_pie` runs synchronously against the editor BEFORE PIE start, `on_begin_play` on the first observer tick after `HasBegunPlay`, `after_n_ticks` after N observer ticks, `before_capture` is the clip variant's pre-frame-grab hook; complements the start-time `python_script`; reported under `stages`), `on_compile_errors` (`"refuse"` default / `"suppress"`). **Gap-closure additions (2026-06-07):** `actor_setup` (declarative actor staging — see § Structured `actor_setup` below), `csv_profile` (bool — bracket a CSV profiler capture to exactly the PIE window, report `csv_path`), `trace_channels` (string[] — start a trace with the given channels for the PIE window, report `trace_path`); both profilers are stopped/flushed on EVERY session-end path (success, failure, abort). Does NOT block the editor frame. Poll with `poll_pie_smoke`; force-end with `stop_pie_smoke`. **World-leak guard on map load:** see `load_level`; identical policy is applied before the pre-PIE `LoadLevel`. **`on_compile_errors` policy:** before starting PIE the action pre-flights for errored Blueprints (the same `BS_Error && bDisplayCompilePIEWarning` condition `list_errored_blueprints` reports). `"refuse"` (default, safe) returns a structured error listing the offending `{name, path}` and does NOT start PIE — this prevents the engine's blocking PIE compile-error modal, which would freeze the editor and starve the in-process MCP server. `"suppress"` wraps the play-session request in `TGuardValue<bool>(GIsRunningUnattendedScript, true)` so the engine skips the prompt and starts PIE anyway. |
+| `poll_pie_smoke` | Poll an async PIE-smoke session by `session_id` (required). Returns `{ status (running/complete/stopped/error), lifecycle, elapsed_seconds, sample_count, pie_active, per-var min/max/last summary, grouped_counts, post_marker_counts:{pattern:count} (legacy), total_matches (legacy), warnings[], missing_must_present[], probes[] }`. **`lifecycle`** (#11) is the explicit session state — one of `running` \| `capture-complete-pie-open` \| `teardown-started` \| `teardown-complete` \| `stopped-by-tool` — disambiguating "capture done but PIE still open" from "running" (which `status` alone conflates). **`grouped_counts`** (#3/#10) splits matches into `active_runtime` (the `ok`-bearing bucket) and `teardown` buckets at the first `ignore_after_pattern` hit, each with per-group/per-pattern counts. **`ok` rule:** `status==complete && pie_ready && (active must_absent total == 0) && (every must_present matched >=1)`; teardown-bucket hits affect `ok` only when `teardown_allowed=false`. When `status==complete` includes the full report (all samples + captured frame paths for the clip variant). `include_samples` (default false) appends the full per-frame sample array even before completion. Does not advance PIE — the editor frame loop does that. |
+| `stop_pie_smoke` | Force-stop a PIE-smoke session (`RequestEndPlayMap` + mark stopped) and return its final report. With no `session_id`, stops ALL running sessions. Also serves as cleanup — the shared frame observer self-unregisters once no sessions remain running. |
+| `capture_pie_movement_clip` | Start an async PIE-smoke session (same model as `run_pie_smoke`) that ALSO captures a PIE viewport frame every `capture_interval` seconds into `output_path`, plus per-frame AnimInstance sampling. Returns `{ session_id, status: "running", started: true }` immediately; `poll_pie_smoke` returns sampled values + captured frame paths. Params mirror `run_pie_smoke` (incl. grouped `log_patterns`, `ignore_after_pattern`, `teardown_allowed`, `probe_scripts[]`, and the same world-leak guard before any pre-PIE map load) plus `marker` (a log marker token; pass any value — see source-leak note below), `capture_interval` (seconds, clamped 0.05–5, default 0.25), `output_path` (default `Saved/Screenshots/Monolith/PieClip/<timestamp>/`). **Capture-validity / framing additions (Wave 3):** `view_target_actor` (name-, **Outliner-label-** (2026-06-07), or class-substring of a PIE actor to `APlayerController::SetViewTarget` on at session begin so captured frames frame the intended subject — resolution now compares `GetActorLabel()` alongside `GetName()` and class-name; the active view target + per-frame validity are reported under `view_target` / `capture_validity`); `discard_first_frames` (int, default 1, 2026-06-07 — warm-up policy: discard the first N captured frames and/or force a render flush before the initial read so a uniform/black first frame is not counted as invalid); `stages` (staged startup hooks `{pre_pie, on_begin_play, after_n_ticks:{n,...}, before_capture}` — `before_capture` fires immediately before the first frame grab; reported under `stages`); `expected_anim_class` (when set, asserts the live mesh `AnimClass` path CONTAINS this substring each sampled tick — a mismatch is reported under `runtime_identity.expected_mismatch`, never crashes). poll also surfaces a `runtime_identity` report (resolved pawn/mesh/AnimClass). If viewport capture is unavailable during PIE the session continues and poll reports `capture_deferred`. |
+| `create_nav_harness_map` | Build a navigation test map from a JSON spec: blank `UWorld`, floor, nav bounds, camera, target points, and BP/actor instances with UPROPERTY defaults (incl. `FSoftObjectPath`). All spawned actors get a `SetFolderPath`. Rebuilds + validates nav via runtime `ai` dispatch (`ai.rebuild_navigation`) and saves. Params: `path` (required, throwaway map path), `floor` `{location, scale, mesh}`, `nav_bounds` `{location, extent}`, `camera` `{location, rotation}`, `target_points[]` `{name, location}` (spawned as `ATargetPoint`, also used as nav validation points), `actors[]` `{class, location, rotation, folder, properties{}}`, `validate_pairs[]` `{from, to}` (target-point name pairs that must have a nav path), `nav_timeout` (seconds, default 30). **Gap-closure additions (2026-06-07):** `game_mode_override` (class path → set `AWorldSettings::DefaultGameMode`), `player_starts[]` (array of transforms → spawn `APlayerStart`s), and improved typed-property coverage in `actors[].properties` — a dedicated `FSoftClassProperty` / `FClassProperty` branch (normalizes to the `_C` generated-class form and imports as a class ref, instead of mis-importing an object path into a class prop) plus `FArrayProperty`-of-object / -soft-ref support. |
+
+**Async PIE design rationale.** `run_pie_smoke` / `capture_pie_movement_clip` are an async session family rather than a single blocking call because a synchronous in-handler engine pump is impossible: the MCP handler runs *inside* the editor's frame, so calling `GEditor->Tick` / `UWorld::Tick` / `ProcessAsyncLoading` from within the handler re-enters the engine tick and trips re-entrancy asserts (the prior synchronous pump re-entered `UWorld::Tick` and crashed). The async design sidesteps this: `run` starts PIE and registers a frame observer, then returns a `session_id` immediately; the editor's own real frame loop advances PIE and accumulates AnimInstance samples + post-marker log-pattern counts; `poll` reads the accumulated state; `stop` force-ends and cleans up (the shared observer self-unregisters when no sessions remain). `capture_pie_movement_clip` reuses the same session model, adding per-interval viewport capture.
+
+**Grouped log patterns + teardown bucketing.** `log_patterns` accepts either the legacy **flat array** (back-compat — every entry is treated as `must_absent`) or a **grouped object** `{ must_absent, must_present, observe_only, warn }`. `must_absent`: any match fails `ok` (default-set substrings are always added here). `must_present`: every pattern must match `>=1` for `ok`. `observe_only`: counted + reported, never affects `ok`. `warn`: surfaces a `warnings[]` list, never affects `ok`. Independently, post-marker entries are split at the first `ignore_after_pattern` (default `"BeginTearingDown"`) hit into an **active-runtime** bucket (before) and a **teardown** bucket (after); `ok` consumes the active-runtime bucket only, and with `teardown_allowed=true` (default) teardown-bucket hits never affect `ok`. This fixes the known false-fail where a post-`BeginTearingDown` `"Unable to find RecastNavMesh..."` warning wrongly failed an otherwise-clean smoke.
+
+**Delayed in-session probes (`probe_scripts`).** Start-time `console_script` / `python_script` run once against the PIE world the instant PIE is requested; an external `editor.run_python` issued later races teardown. `probe_scripts` (`[{ at_seconds, python?, console?[] }]`) instead fires each probe ONCE from the per-frame observer (which already holds the live PIE world each frame) when session elapsed reaches `at_seconds`, using the same `IPythonScriptPlugin::ExecPythonCommandEx` / `PlayerController::ConsoleCommand` mechanism. Each probe's fire time + python output/error are reported under `probes[]`.
+
+**Test/Profiling Harness — Wave 2 (1 — compile-error pre-flight)**
+
+| Action | Description |
+|--------|-------------|
+| `list_errored_blueprints` | Read-only scan of all loaded `UBlueprint`s for unresolved compile errors (`Status == BS_Error && bDisplayCompilePIEWarning`) — the exact condition the engine tests before raising its blocking PIE compile-error modal. Returns `{ count, blueprints: [{ name, path }] }`. Run before `run_pie_smoke` to know in advance whether PIE will be refused or blocked. No params. |
+
+**Test/Profiling Harness — Wave 3 (1 — skeletal-animation preview capture)**
+
+| Action | Description |
+|--------|-------------|
+| `capture_anim_frames` | Preview + capture a SKELETAL ANIMATION asset (`UAnimSequence` \| `UBlendSpace` \| `UAnimBlueprint`) to PNG frames in an isolated `FPreviewScene` — **NO PIE**. For each time sample the pose is evaluated (single-node `SetPosition` for sequences; blend-param + `SetPosition` for blendspaces; AnimBlueprint mode + `TickComponent` for ABPs), then rendered via the shared scene-capture→PNG path. The anim counterpart to `capture_sequence_frames` (which is Niagara-only). Params: `asset_path` (required), `skeletal_mesh` (omit = the asset's skeleton preview mesh), `time_samples[]` (explicit sample seconds; omit to use `count` + `duration`), `count` (evenly-spaced samples, default 8), `duration` (default = sequence length, else 1.0), `blend_params` (BlendSpace only — `[X, Y]`, default `[0,0]`), `camera` (`{location, rotation, fov}`, default front framing), `resolution` (default `[512,512]`), `output_dir`, `filename_prefix` (default `frame`). |
+
+**`/Game` virtual-path output resolution (Wave 3).** `capture_anim_frames`' `output_dir` (and `capture_pie_movement_clip`'s `output_path`) accept a disk-relative, absolute, OR a virtual `/Game/...` path — a `/Game/...` value is resolved to `<project>/Content/...` and the resolved absolute directory is echoed back as `resolved_output_dir`. A virtual path that cannot be written is a **hard error** (no silent no-op).
+
+**Test/Profiling Harness — Gap-Closure Pass (1 — map authoring; 2026-06-07)**
+
+| Action | Description |
+|--------|-------------|
+| `author_map_settings` | Apply WorldSettings + PlayerStart settings to ANY currently-open map (not locked to the nav-harness path). Params: `game_mode_override` (class path → `AWorldSettings::DefaultGameMode`, assigned after `WorldSettings->Modify()`), `player_starts[]` (array of transforms → spawn `APlayerStart`s, each `SetFolderPath`'d). Map mutation dirties the package by design; only dirties on an actual change, and never leaves the map half-authored on a mid-apply failure. |
+
+#### Structured `actor_setup` (on the PIE-smoke actions; 2026-06-07)
+
+`run_pie_smoke` / `capture_pie_movement_clip` accept an optional **`actor_setup`** block — declarative actor staging against the live PIE world, without free-form Python:
+
+```
+actor_setup: [
+  {
+    class: "/Game/.../BP_Thing"        // BP or native class path
+    count: 3                            // default 1
+    locations: [[x,y,z], ...]          // optional; else origin/grid
+    apply_data_asset: "/Game/.../DA_X" // optional; reflectively applies the DataAsset's matching fields to each actor
+    move_to: [x,y,z]                   // optional; AAIController::MoveToLocation
+  }
+]
+```
+
+Executes against the transient PIE world only (`World->SpawnActor`; reflective field apply via the shared reflection walker; `AAIController::MoveToLocation`). `apply_data_asset` is a **generic DataAsset path** — fields the actor also declares are copied; the result reports a **structured** `applied: [field…]` / `unmatched: [field…]` split so callers can distinguish partial from full apply. Spawned actors are cleaned up on session end and never leak into the editor world.
+
+#### PIE-smoke `marker` default
+
+The `run_pie_smoke` / `capture_pie_movement_clip` `marker` param defaults to a generic token (`MONOLITH_SMOKE` / `MONOLITH_CLIP`). Post-marker log-pattern matching counts only lines after the marker, so callers may override it with any value when running concurrent or distinguishable sessions.
+
+### Module-Level Modal Watcher
+
+`FMonolithEditorModule::StartupModule` subscribes a watcher to `FCoreDelegates::PreSlateModal`. Immediately before the engine enters any blocking modal loop, the watcher emits, on the game thread, a single structured log line:
+
+```
+LogMonolith: Warning: MODAL_OPEN ts=<timestamp> title=<window-title> text=<message-text>
+```
+
+The purpose is recovery: when a blocking modal opens, the in-process MCP server is the strangled thread and cannot respond, but an external agent tailing the editor log can read this line and recover context (what dialog opened, when). `title` and `text` are **best-effort** — they are empty when the modal window is not yet on the modal stack at broadcast time.
+
+**Honest scope limitation:** this watcher provides notification only. Synchronous live modal-read and programmatic modal dismissal are **NOT** provided and are architecturally unsound here — the in-process server is the very thread the modal blocks, so it cannot service a request to read or close the dialog while the modal loop owns the thread. Prevention (`run_pie_smoke`'s `on_compile_errors="refuse"`, `list_errored_blueprints`) is the supported path; the watcher is the fallback for modals that open despite prevention.
 
 ---
 

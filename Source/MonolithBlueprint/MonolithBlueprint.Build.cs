@@ -24,6 +24,7 @@ public class MonolithBlueprint : ModuleRules
 			"Kismet",
 			"KismetCompiler",
 			"EditorScriptingUtilities",
+			"EnhancedInput",
 			"Json",
 			"JsonUtilities",
 			"AssetRegistry"

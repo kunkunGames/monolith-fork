@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.14.7 (Beta)
+**Version:** 0.18.1 (Beta)
 
 ---
 
@@ -83,7 +83,7 @@ Tree shape:
 ```json
 {
   "fill_kind": "AttributeInitDataTable",
-  "attribute_set": "ULeviathanVitalsSet",
+  "attribute_set": "UMyProjectAttributeSet",
   "rows": {
     "Player.1": { "MaxHealth": 100.0, "HealthRegenRate": 1.0, "AttackRating": 10 },
     "Player.2": { "MaxHealth": 200.0, "HealthRegenRate": 1.0, "AttackRating": 12 },
@@ -92,7 +92,7 @@ Tree shape:
 }
 ```
 
-- `attribute_set` accepts either a C++ class name (`"ULeviathanVitalsSet"` / `"LeviathanVitalsSet"`) or a Blueprint asset path (`"/Game/.../BP_VitalsSet"`).
+- `attribute_set` accepts either a C++ class name (e.g. `"UMyProjectAttributeSet"` / `"MyProjectAttributeSet"`) or a Blueprint asset path (`"/Game/.../BP_VitalsSet"`).
 - Each cell may be a bare number (sets `BaseValue` only) OR an object `{ "base": N, "min": N, "max": N }` (sets all three on `FAttributeMetaData`).
 - Row names are stored as `[GroupName].[AttributeSetName].[Attribute]` per the engine's `FAttributeSetInitterDiscreteLevels` convention (`AttributeSet.h:303-318`).
 - Pre-commit, every column-name in `rows[].*` is resolved against the `attribute_set` class. **A miss surfaces as a `SilentDrops` entry** with a "possible rename hazard" warning — this is the `FGameplayAttribute`-rename-invalidates-GEs quirk from the design's Cross-Cutting Engine Quirks table.

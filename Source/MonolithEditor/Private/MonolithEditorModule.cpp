@@ -14,6 +14,13 @@
 #include "Misc/OutputDeviceRedirector.h"
 #include "UObject/UObjectGlobals.h"
 
+// PART C — passive modal watcher.
+#include "Misc/CoreDelegates.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/SWindow.h"
+#include "Widgets/Text/STextBlock.h"
+#include "Layout/Children.h"
+
 #define LOCTEXT_NAMESPACE "FMonolithEditorModule"
 
 namespace
@@ -81,6 +88,36 @@ private:
 };
 
 FMonolithPieTransactionBufferGuard GMonolithPieTransactionBufferGuard;
+
+	// Recursively walk a Slate widget subtree, appending the text of every STextBlock
+	// found to OutText (newline-joined). Best-effort and depth-bounded so a pathological
+	// tree can't stall the broadcast. The broadcasting thread is the game thread; this
+	// runs before the modal's nested loop starts.
+	void HarvestTextBlocks(const TSharedPtr<SWidget>& Widget, FString& OutText, int32 Depth)
+	{
+		if (!Widget.IsValid() || Depth > 12)
+		{
+			return;
+		}
+		// STextBlock is a SLeafWidget — identify by widget type name (no RTTI dependency).
+		if (Widget->GetType() == TEXT("STextBlock"))
+		{
+			const FText Text = StaticCastSharedPtr<STextBlock>(Widget)->GetText();
+			if (!Text.IsEmpty())
+			{
+				if (!OutText.IsEmpty()) { OutText.Append(TEXT(" | ")); }
+				OutText.Append(Text.ToString());
+			}
+		}
+		if (FChildren* Children = Widget->GetChildren())
+		{
+			const int32 Num = Children->Num();
+			for (int32 Index = 0; Index < Num; ++Index)
+			{
+				HarvestTextBlocks(Children->GetChildAt(Index), OutText, Depth + 1);
+			}
+		}
+	}
 }
 
 void FMonolithEditorModule::StartupModule()
@@ -110,6 +147,39 @@ void FMonolithEditorModule::StartupModule()
 
 	const int32 EditorActionCount = Registry.GetNamespaceActionCount(TEXT("editor"));
 	UE_LOG(LogMonolith, Log, TEXT("Monolith — Editor module loaded (%d editor actions)"), EditorActionCount);
+
+	// PART C — subscribe to the pre-Slate-modal broadcast so we can log modal context
+	// just before the blocking nested loop starves the in-process MCP server.
+#if WITH_EDITOR
+	PreSlateModalHandle = FCoreDelegates::PreSlateModal.AddRaw(this, &FMonolithEditorModule::OnPreSlateModal);
+#endif
+}
+
+void FMonolithEditorModule::OnPreSlateModal()
+{
+	// Always emit at least a timestamped "modal opening" line — text extraction below
+	// is best-effort (the window may not yet be on the modal stack at broadcast time).
+	FString Title;
+	FString Text;
+
+	if (FSlateApplication::IsInitialized())
+	{
+		FSlateApplication& Slate = FSlateApplication::Get();
+		TSharedPtr<SWindow> Window = Slate.GetActiveModalWindow();
+		if (!Window.IsValid())
+		{
+			Window = Slate.GetActiveTopLevelWindow();
+		}
+		if (Window.IsValid())
+		{
+			Title = Window->GetTitle().ToString();
+			HarvestTextBlocks(Window->GetContent(), Text, 0);
+		}
+	}
+
+	UE_LOG(LogMonolith, Warning,
+		TEXT("MODAL_OPEN ts='%s' title='%s' text='%s' — game thread is about to enter a blocking modal loop; MCP will be unresponsive until dismissed."),
+		*FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S")), *Title, *Text);
 }
 
 void FMonolithEditorModule::ShutdownModule()
@@ -117,6 +187,13 @@ void FMonolithEditorModule::ShutdownModule()
 	GMonolithPieTransactionBufferGuard.Unregister();
 
 	FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithEditor"));
+#if WITH_EDITOR
+	if (PreSlateModalHandle.IsValid())
+	{
+		FCoreDelegates::PreSlateModal.Remove(PreSlateModalHandle);
+		PreSlateModalHandle.Reset();
+	}
+#endif
 
 	if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))
 	{

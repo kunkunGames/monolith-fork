@@ -2,6 +2,8 @@
 
 #include "MonolithAIInternal.h"
 
+class UNavigationSystemV1;
+
 class FMonolithAINavigationActions
 {
 public:
@@ -40,8 +42,18 @@ private:
 	static FMonolithActionResult HandleSetCrowdManagerConfig(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleAnalyzeNavigationCoverage(const TSharedPtr<FJsonObject>& Params);
 
+	// 167-168: Harness support — rebuild + validation
+	static FMonolithActionResult HandleRebuildNavigation(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleValidateNavPoints(const TSharedPtr<FJsonObject>& Params);
+
 	// Helpers
 	static UWorld* GetNavWorld();
 	static FVector ParseVector(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, bool& bOutFound);
 	static TArray<TSharedPtr<FJsonValue>> VectorToJsonArray(const FVector& V);
+
+	// Pump the editor world tick in a bounded loop until navmesh generation
+	// completes (no remaining build tasks and not in progress) or the deadline
+	// elapses. Returns true if generation finished within the budget.
+	// Game-thread only; drives async tile generation to completion without a busy-loop.
+	static bool WaitForNavGenerationComplete(UWorld* World, UNavigationSystemV1* NavSys, double TimeoutSeconds, int32& OutTicks);
 };

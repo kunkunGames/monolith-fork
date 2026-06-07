@@ -1,4 +1,5 @@
 using UnrealBuildTool;
+using System.IO;
 
 public class MonolithAnimation : ModuleRules
 {
@@ -33,7 +34,72 @@ public class MonolithAnimation : ModuleRules
 			"RigVM",
 			"RigVMDeveloper",
 			"PoseSearchEditor",    // UAnimGraphNode_MotionMatching (Wave 7 ABP graph wiring)
-			"AssetRegistry"
+			"AssetRegistry",
+			"BlendStackEditor",    // UAnimGraphNode_BlendStack_Base (Sprint 4 BoundGraph-node spawn fix)
 		});
+
+		// --- Conditional: Chooser (UChooserTable authoring) ---
+		// The Chooser plugin ships with the engine but can be disabled per-project.
+		// Gate the dependency so a project without it still links MonolithAnimation
+		// (the chooser handlers fall back to a clean "not available" error).
+		//
+		// Release builds: MONOLITH_RELEASE_BUILD=1 forces this OFF so binary releases
+		// never hard-link against a plugin the end user may have disabled.
+		bool bHasChooser = false;
+		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
+
+		if (!bReleaseBuild)
+		{
+			// 1. Project Plugins/ folder (manual install or symlink)
+			string ProjectPluginsDir = Path.Combine(
+				Target.ProjectFile.Directory.FullName, "Plugins");
+			if (Directory.Exists(ProjectPluginsDir))
+			{
+				bHasChooser = Directory.Exists(
+					Path.Combine(ProjectPluginsDir, "Chooser"));
+			}
+
+			// 2. Engine Plugins/Marketplace/ folder (Fab install)
+			if (!bHasChooser)
+			{
+				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
+				string MarketplaceDir = Path.Combine(
+					EngineDir, "Plugins", "Marketplace");
+				if (Directory.Exists(MarketplaceDir))
+				{
+					bHasChooser = Directory.Exists(
+						Path.Combine(MarketplaceDir, "Chooser"));
+				}
+
+				// 3. Engine Plugins/ root (default UE install location)
+				if (!bHasChooser)
+				{
+					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
+					bHasChooser = Directory.Exists(
+						Path.Combine(EnginePluginsDir, "Chooser"))
+						|| Directory.Exists(
+							Path.Combine(EnginePluginsDir, "Animation", "Chooser"))
+						|| Directory.Exists(
+							Path.Combine(EnginePluginsDir, "Experimental", "Chooser"));
+				}
+			}
+		}
+
+		if (bHasChooser)
+		{
+			PrivateDependencyModuleNames.Add("Chooser");
+			// FGameplayTagColumn cells use FGameplayTagContainer + UGameplayTagsManager.
+			// Chooser keeps GameplayTags as a PRIVATE dep (not re-exported), so the
+			// chooser-authoring GameplayTag cell-write path needs it directly. Only
+			// linked when WITH_CHOOSER, matching the gated #if WITH_CHOOSER bodies.
+			PrivateDependencyModuleNames.Add("GameplayTags");
+			// PUBLIC so every TU in the module (including a sibling graph-surgery
+			// file added later) sees WITH_CHOOSER consistently.
+			PublicDefinitions.Add("WITH_CHOOSER=1");
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_CHOOSER=0");
+		}
 	}
 }

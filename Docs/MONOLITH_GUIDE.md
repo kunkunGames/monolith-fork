@@ -13,9 +13,7 @@ You are an AI agent driving an Unreal Engine editor through Monolith's MCP tools
 3. **`monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })`** — returns the exact parameter schema for one action. Use broader namespace discovery only when you need to browse an unfamiliar namespace.
 4. **`monolith_guide(section="recipes")`** — pull the worked cross-namespace examples once you know what you want to build.
 
-Each broad `monolith_discover("<namespace>")` costs real tokens — a large namespace's schema dump is sizeable. Spend that cost intentionally: use `monolith_find` for routing and focused `mode:"schema"` discovery for exact params. For the authoritative live count, trust `monolith_status()` / live discovery over any number written in prose.
-
-The runtime registry is also the source of truth for sibling and custom actions. Those actions should register through `FMonolithToolRegistry` with focused schema discovery; static docs describe the stable in-tree surface but do not freeze every loaded roster. High-risk actions may reject wrong JSON types, out-of-range values, and malformed query fragments before the handler runs.
+Each `monolith_discover("<namespace>")` costs real tokens — a large namespace's schema dump is sizeable. Spend that cost intentionally: discover the one or two namespaces your task needs, not all of them. The surface is large — roughly 1600+ actions across ~30 namespaces — and shifts between releases, so never rely on an exact count written in prose: trust the live `monolith_discover()` / `monolith_status()` figure over any number you read here or in the docs.
 
 The golden rule underneath all of this: **discover before you guess.** Action names, parameter names, and which namespaces exist are all answerable at runtime. Fabricating any of them wastes a round-trip on a guaranteed error.
 
@@ -78,6 +76,38 @@ Prefer the inspect actions over capture when downstream logic needs to branch on
 2. `niagara.set_emitter_loop_profile` — same action as the stateful path; pass `loop_duration_mode` (`"Fixed"` / `"Infinite"`) to set the stateless-only knob. Stateful systems emit a warning if `loop_duration_mode` is supplied because the stateful `EmitterState` module has no equivalent input.
 3. **Verify:** `niagara_query("get_emitter_timing_summary", {asset_path: "/Game/.../SLE_Foo"})` returns `stateless: true` and the topology you set.
 
+**Recipe 9 — Authoring custom (GAS-free) primary data assets.** When your project defines its own native `UPrimaryDataAsset` (or any non-Actor, non-Blueprint `UObject`) subclass, you do **not** need the `gas` namespace or any GAS plugin — `blueprint.seed_data_asset` creates the asset and reflection-populates its `UPROPERTY` fields from a JSON tree, with dry-run validation. It accepts any concrete class that is not abstract, deprecated, Actor-derived, or a Blueprint class, so a native `UPrimaryDataAsset` subclass passes the class guard with zero GAS coupling.
+1. **Dry-run first** — validate the tree against the class CDO without writing anything:
+   `blueprint seed_data_asset { save_path: "/Game/Data/DA_Foo", class_name: "YourDataAssetClass", tree: { ... }, dry_run: true }`
+   The response reports each would-be field write (`field_writes[]`) and `would_apply`. Fix any rejected paths before committing.
+2. **Commit** — re-issue with `dry_run: false` to create and save the asset.
+3. **Object-reference fields and arrays are supported.** A hard object-ref field (`TObjectPtr<USomeClass>`) takes an asset-path **string** (resolved via `StaticLoadObject`); an array of refs (`TArray<TObjectPtr<USomeClass>>`) takes a JSON **array of asset-path strings** — the reflection walker dispatches each element through the same object-ref resolver. Soft refs (`TSoftObjectPtr<...>`) take their path string too. Example tree fragment: `{ "Icon": "/Game/UI/T_Icon", "RelatedItems": ["/Game/Data/DA_Bar", "/Game/Data/DA_Baz"] }`.
+4. **Read the field shape first** if unsure — `class_name` resolution tries the name as-is, then with a `U`/`A` prefix; pass a full `/Script/Module.ClassName` path to disambiguate. Use `blueprint_query("get_cdo_properties", ...)` to inspect the writable fields before building the tree.
+5. **Verify the write landed** — `blueprint.seed_data_asset` takes `read_back_values: true` to echo the saved field values straight from the just-written asset, and `blueprint_query("get_cdo_properties", ...)` reads them live from the asset object. Prefer either over `project_query("get_asset_details", ...)`, which serves a **stale indexed snapshot** (it lags the actual asset until the index re-scans) and will happily report old values after a fresh write.
+
+**Recipe 10 — Prove a nested chooser remap from readback (not from the write call).** A write that reports success only means the call returned — to prove a chooser row actually points where you intend, read the resolved table back.
+1. `chooser.inspect_chooser` with `recursive: true` — returns the full table including **nested** chooser tables inline, so a row that delegates to a sub-chooser is resolved in one call rather than chasing references by hand.
+2. For chooser tables embedded in an AnimGraph: `animation.get_anim_graph_choosers` lists the choosers a given AnimBP's graph references, and `animation.get_nodes` with `include_anim_graph: true` surfaces the AnimGraph nodes (chooser players, blend nodes) that consume them.
+3. **Verify:** compare the readback's resolved output class/asset per row against your intended remap. Trust the readback, not the write call's `success` flag.
+
+**Recipe 11 — Author and confirm an AnimBP transition rule.** Transition rules between states can be authored as a structured comparison rather than a hand-wired Boolean graph.
+1. `animation.set_transition_rule` with `kind: "compare"` — sets the rule as a typed comparison (a variable/property compared against a value with an operator), avoiding manual node wiring.
+2. **Verify:** `animation.get_transition_rule` reads the rule back in structured form so you can confirm the operator, operands, and that it landed on the intended transition.
+
+**Recipe 12 — Inspect inherited native components on a Blueprint.** Components added in a C++ base class are easy to miss because they are not in the Blueprint's own SimpleConstructionScript.
+1. `get_blueprint_info` — its `native_component_count` tells you how many components come from native base classes (vs Blueprint-added).
+2. `blueprint.get_component_details` — resolves a component's details, falling back to the inherited-native lookup when the component lives on a C++ base rather than in the Blueprint graph, so inherited components report their real class and properties.
+
+**Recipe 13 — Profile a PIE session and capture movement.** Drive a Play-In-Editor session and collect timing + a movement clip without leaving the MCP surface.
+1. `editor.actor_setup` — spawn an actor, apply a DataAsset to it, and/or move it into position for the scenario you want to profile.
+2. `editor.csv_profile` (start/stop a CSV profiling capture) with `trace_channels` to scope which trace channels the session records — keeps the capture focused instead of recording everything.
+3. `editor.capture_pie_movement_clip` with `discard_first_frames: N` — records a movement clip while dropping the first N frames (PIE warm-up / hitch frames that would skew the data); the capture is label-aware and follows the view target you set.
+4. **Verify:** inspect the returned CSV/clip paths; the discarded-frame count and trace-channel set are echoed back so you can confirm the capture was scoped as intended.
+
+**Recipe 14 — Author map settings (GameMode override, PlayerStarts).** Configure a world's settings and spawn points in one transactional call.
+1. `editor.author_map_settings` (or `editor.create_nav_harness_map` for a fresh harness map) — set `game_mode_override` (a typed `AGameModeBase`-subclass path), `player_starts` (an array of `{location, rotation}` objects), and other typed/array world-settings props in one call.
+2. **Idempotent by design:** re-applying the same `game_mode_override` is a no-op — the call only dirties the package when the class actually differs, and the response reports `game_mode_override_changed: false` when nothing changed. Use that flag to confirm whether a re-run mutated anything.
+
 ## decisions
 
 When two tools overlap, pick by intent:
@@ -133,7 +163,7 @@ Monolith ships a set of Claude Code **skills** — task-scoped instruction files
 | level_sequence | unreal-level-sequences | `Skills/unreal-level-sequences/SKILL.md` |
 | cross-domain (config/material/mesh) | unreal-performance | `Skills/unreal-performance/SKILL.md` |
 
-22 mapped skills shown here. `unreal-performance` spans namespaces (config audit, material shader stats, mesh draw-call analysis) rather than mapping one-to-one. The full repository skill set lives under `Skills/<skill>/SKILL.md`.
+`unreal-performance` spans namespaces (config audit, material shader stats, mesh draw-call analysis) rather than mapping one-to-one. The skill set grows between releases — read the plugin's `Skills/` directory for the current roster rather than relying on a fixed count here.
 
 ## gotchas
 
@@ -143,5 +173,4 @@ Monolith-specific traps not covered by general Unreal documentation:
 - **MCP transport is `"http"`, not `"streamableHttp"`.** When configuring a client, use `"http"`. Nested `params` may serialize to a JSON string in transit — detect that and deserialize back to an object before reading fields.
 - **Sibling plugins are absent from the release zip.** The Monolith release zip contains only Monolith. Its sibling plugins (separate repos, separate lifecycles) are not bundled — a live editor with siblings present will report more namespaces than the plugin you installed actually ships. Treat `monolith_discover()` on your own install as the truth for what you have.
 - **Optional namespaces register conditionally.** `gas`, `combograph`, `logicdriver`, `ai`, and MetaSound audio actions only appear when their plugin/gate is enabled. A namespace missing from `monolith_discover()` is gated off, not broken — see the **errors** section.
-- **Schema validation is intentional, not a coercion bug.** If an action reports `ErrInvalidParams` for type or range, fix the payload to match focused schema discovery. Do not rely on string-to-number or malformed-query coercion for high-risk routing actions.
-- **For Unreal Engine 5.7 API gotchas** (deprecations, changed signatures, kinematic-velocity asymmetry, package-reuse semantics, and similar), consult the Leviathan project reference at `Docs/references/UE57Gotchas.md` when working inside the Leviathan project. These are engine-level, not Monolith-specific, so they are cross-linked rather than restated here.
+- **For Unreal Engine 5.7 API gotchas** (deprecations, changed signatures, kinematic-velocity asymmetry, package-reuse semantics, and similar), verify against the live engine source via `source_query("search_source", ...)` before writing C++. These are engine-level, not Monolith-specific, so they are not restated here — the source index is the source of truth.

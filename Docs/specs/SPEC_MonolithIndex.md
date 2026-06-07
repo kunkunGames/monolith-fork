@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.17.1 (Beta)
+**Version:** 0.18.1 (Beta)
 
 ---
 
@@ -16,9 +16,8 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithIndexModule` | Registers 19 `project` actions and 13 `collection` actions through owner-scoped registration |
-| `FMonolithIndexDatabase` | RAII SQLite wrapper. 14 authoritative tables (including `asset_search_values` and `meta`) + 7 external-content FTS5 tables + 21 triggers. DELETE journal mode, 64MB cache. Schema v2: `saved_hash` column (Blake3 `FIoHash` hex), `schema_version` meta key |
-| `FMonolithIndexReview` | CRG-inspired navigation/review over the existing `dependencies` graph plus rebuildable CRG projection/cache tables. Provides bounded BFS impact radius, read-only health, execute-gated FTS/CRG repair, cached/query-time risk scoring, changed-path impact detection, advisory unused-asset discovery, pre-merge gate aggregation, CRG snapshot/diff comparison, review-hotspot ranking, and review-context packaging. Uses only the public `FMonolithIndexDatabase` surface — the DB impl file is untouched (additive, REQ-009) |
+| `FMonolithIndexModule` | Registers 11 project actions (7 baseline + 1 v0.17.0 cross-module `audit_orphan_assets` + 3 test/profiling harness Wave 1) |
+| `FMonolithIndexDatabase` | RAII SQLite wrapper. 13 tables + 2 FTS5 + 6 triggers + 1 meta. DELETE journal mode, 64MB cache. Schema v2: `saved_hash` column (Blake3 `FIoHash` hex), `schema_version` meta key |
 | `UMonolithIndexSubsystem` | UEditorSubsystem. 3-layer indexing (startup delta, live AR callbacks, full fallback). Hash-based startup catch-up. Live batched AR delegates on 2s timer. Deep asset indexing with game-thread batching. Batches every 100 assets. Progress notifications |
 | `IMonolithIndexer` | Pure virtual interface: GetSupportedClasses(), IndexAsset(), GetName(), IsSentinel(), SupportsIncrementalIndex(), IndexScoped() |
 | `FBlueprintIndexer` | Blueprint, WidgetBlueprint, AnimBlueprint — graphs, nodes, variables |
@@ -34,47 +33,28 @@
 | `FDependencyIndexer` | Hard + Soft package dependencies (runs after all other indexers) |
 | `FMonolithIndexNotification` | Slate notification bar with throbber + percentage |
 
-### Actions (19 — namespace: "project")
+> **Shared read-side serializer (2026-06-07).** The DataAsset indexer's `PropertyToJsonValue` field serializer was deduplicated into the new `FMonolithReflectionReader` helper in `MonolithCore` (see [`SPEC_MonolithCore.md`](SPEC_MonolithCore.md)). The indexer now calls the shared reader instead of carrying its own copy — the same single implementation the Blueprint CDO actions (`get_cdo_properties`) and `seed_data_asset`'s `read_back_values` use, so indexed DataAsset field JSON and live verify-after-write JSON are produced by one code path.
+
+### Actions (11 — namespace: "project")
 
 | Action | Params | Description |
 |--------|--------|-------------|
 | `search` | `query` (required), `limit` (50), `include_content` (true) | FTS5 full-text search across indexed assets and graph/content signals. Default content-inclusive mode covers assets, nodes, variables, parameters, DataTable rows, actors, and curated `asset_search_values`; `include_content=false` keeps legacy asset/node-only behavior |
 | `find_references` | `asset_path` (required) | Bidirectional dependency lookup |
 | `find_by_type` | `asset_type` (required), `limit` (100), `offset` (0) | Filter assets by class with pagination |
-| `get_stats` | none | Row counts for all 14 authoritative tables + asset class breakdown (top 20) |
+| `get_stats` | none | Row counts for all 13 tables + asset class breakdown (top 20) |
 | `get_asset_details` | `asset_path` (required) | Deep inspection: nodes, variables, references for a single asset |
-| `list_gameplay_tags` | `prefix`, `limit`, `offset` (optional) | List indexed gameplay tags, optionally filtered by prefix |
-| `search_gameplay_tags` | `query` (required), `limit` (100), `offset` (0) | Search gameplay tags and return referencing assets |
-| `impact_radius` | `asset_path` (required), `direction` (both), `max_depth` (2), `max_results` (200), `dependency_type` | Bounded BFS over `dependencies`: who is impacted within N hops (cycle-safe, `truncated` flag) |
-| `health` | `include_counts` (true) | Read-only diagnostics: v2 schema, 21 FTS triggers, row parity for all project FTS tables, orphan deps, CRG projection table/index/parity checks, journal mode |
-| `repair_fts` | `target` (all\|assets\|nodes\|variables\|parameters\|datatable_rows\|actors\|asset_search_values), `execute` (false) | Rebuild project FTS tables. Dry-run unless `execute=true` (sole write gate); refused while `IsIndexing()` |
-| `repair_crg_cache` | `scope` (all), `execute` (false) | Rebuild derived `crg_nodes`/`crg_edges`/`crg_node_metrics`/`crg_meta` from `assets` and `dependencies`. Dry-run unless `execute=true`; refused while `IsIndexing()` |
-| `risk_score` | `asset_path`/`seed`, `limit` (20), `min_tier` (low) | Cached risk `{score,tier,reasons[],raw_counts,cache}` from CRG projection when present; safe query-time fallback on cache miss; scoring v3 adds UE-domain sensitivity |
-| `detect_changes` | `changed_paths` or `paths`, `max_results` (200), `detail_level` (minimal) | VCS-agnostic changed asset path mapping: `.uasset`/`.umap` path/name -> indexed assets -> risk + depth-1 dependency impact + review priorities. Path stems treat SQL `LIKE` wildcards (`_`, `%`) as literal filename characters. Never shells out to P4/git |
-| `find_unused` | `kind` (all), `limit` (100), `min_confidence` (low) | Advisory orphan-asset candidates with `confidence` + `reasons[]`; never reports `high`, never mutates, and excludes World/Level/PrimaryAssetLabel/root-like assets |
-| `pre_merge_check` | `changed_paths` or `paths`, `max_results` (200), `unused_limit` (20), `detail_level` (minimal), `include_unused` (true) | Read-only pre-merge gate that composes `health`, `detect_changes`, and optional `find_unused` into `decision` (`pass`/`warn`/`fail`), `checks[]`, `findings[]`, and next actions. Never shells out to P4/git |
-| `snapshot` | `label`, `execute` (false) | Dry-run by default; `execute=true` stores current `crg_nodes`/`crg_edges` manifest in derived `crg_snapshots` for later review diffs |
-| `diff_snapshots` | `before` (label/id), `after` (label/id or current), `limit` (100) | Read-only CRG projection diff. Accepts positional refs and `--before`/`--after` refs, including mixed `--before=<ref> <after-ref>` calls. Returns new/removed node and edge samples plus `summary_counts`; no cache rebuild or VCS shell-out |
-| `review_hotspots` | `kind` (all), `limit` (50), `min_lines` (100), `include_questions` (true) | Global review queue over fan-in/fan-out/risk/large asset graph signals with optional advisory questions |
-| `review_context` | `asset_path` (required), `direction` (both), `max_depth` (2), `max_results` (200), `detail_level` (minimal) | Token-efficient package: seed + impact + risk reasons + next actions; `minimal` omits full asset details |
+| `list_gameplay_tags` | `prefix` (optional) | List indexed gameplay tags, optionally filtered by prefix |
+| `search_gameplay_tags` | `query` (required) | Search gameplay tags and return referencing assets |
+| `audit_orphan_assets` | `asset_class_filter` (optional), `limit` (50, cap 200), `cursor` (optional) | **v0.17.0 (cross-module from `MonolithReflectionIntel`).** List `/Game/.../*.uasset` assets with ZERO `IAssetRegistry` referencers AND zero entries in `cpp_asset_edges`. Strictest orphan signal for pre-release cleanup. Excludes `/Engine/*` + `/Memory/*`. Read-only, cursor-paginated |
 
-### Collection Actions (13 — namespace: "collection")
+**Test/Profiling Harness — Wave 1 (3 — post-save freshness / disk state / sandboxed cleanup)**
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `list_collections` | `scope`, `type`, `limit`, `offset` | List Content Browser collections |
-| `get_collection` | `name`, `scope` | Get collection metadata |
-| `create_collection` | `name`, `scope`, `type`, `query`, `color`, `confirm` | Create a static or dynamic collection |
-| `delete_collection` | `name`, `scope`, `force`, `confirm` | Delete a collection; non-empty collections require `force=true` |
-| `add_assets` | `name`, `scope`, `asset_paths`, `confirm` | Add assets to a static collection |
-| `remove_assets` | `name`, `scope`, `asset_paths`, `confirm` | Remove assets from a static collection |
-| `list_assets` | `name`, `scope`, `limit`, `offset` | List collection asset paths |
-| `contains_asset` | `name`, `scope`, `asset_path` | Check whether a collection contains an asset |
-| `set_dynamic_query` | `name`, `scope`, `query`, `confirm` | Set query text for a dynamic collection |
-| `get_dynamic_query` | `name`, `scope` | Read query text from a dynamic collection |
-| `set_collection_color` | `name`, `scope`, `color`, `confirm` | Set collection color |
-| `validate_collection_name` | `name`, `scope` | Validate a collection name |
-| `create_unique_collection_name` | `base_name`, `scope` | Create an available collection name |
+| `refresh_assets` | `asset_paths[]` (required), `wait_for_asset_registry` (default true), `wait_for_disk` (default false) | Force a synchronous asset-registry rescan of the requested `/Game/...` package or directory paths (post-save freshness). `wait_for_asset_registry` drains pending registry work so subsequent queries see fresh state; `wait_for_disk` bounded-polls until each package's backing file exists with size > 0 |
+| `get_saved_asset_state` | `asset_path` (required) | Return disk-backed state for an asset — class, package, disk path, file size, mtime, dependencies, and referencers |
+| `cleanup_generated_assets` | `paths[]` (required), `dry_run` (default true), `require_no_referencers` (default true), `remove_empty_folders` (default false) | Safely delete generated throwaway assets with reference checks. **HARD allowlist guard:** refuses any path outside `/Game/Tests/Monolith/`. Dry-run by default (reports what would be deleted without touching disk); `require_no_referencers` skips any asset still referenced from outside the request set; `remove_empty_folders` prunes now-empty folders under the allowlist |
 
 ### Database Schema
 

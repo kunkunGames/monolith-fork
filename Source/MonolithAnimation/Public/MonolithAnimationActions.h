@@ -39,6 +39,9 @@ public:
 	static FMonolithActionResult HandleGetLinkedLayers(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetGraphs(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetNodes(const TSharedPtr<FJsonObject>& Params);
+	// Enumerate AnimGraph EvaluateChooser (v1/v2) nodes + reflectively-resolved chooser asset;
+	// optional recursive nested-tree expansion via the Phase-2 MonolithChooserTreeCollector.
+	static FMonolithActionResult HandleGetAnimGraphChoosers(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Notify Editing (2) ---
 	static FMonolithActionResult HandleSetNotifyTime(const TSharedPtr<FJsonObject>& Params);
@@ -145,6 +148,14 @@ public:
 	static FMonolithActionResult HandleAddStateToMachine(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleAddTransition(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleSetTransitionRule(const TSharedPtr<FJsonObject>& Params);
+	// Phase 6 — read back a transition's authored rule (kind + operands + comparison).
+	static FMonolithActionResult HandleGetTransitionRule(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Wave 16: State Machine Authoring (#13/#14) ---
+	// create_state_machine — spawn a UAnimGraphNode_StateMachine into an ABP's anim graph.
+	// build_state_machine  — declarative builder composing create + add states/transitions/rules.
+	static FMonolithActionResult HandleCreateStateMachine(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleBuildStateMachine(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Wave 14: Notify Properties (1) ---
 	static FMonolithActionResult HandleSetNotifyProperties(const TSharedPtr<FJsonObject>& Params);
@@ -156,6 +167,16 @@ public:
 	static FMonolithActionResult HandleAddRetargetChain(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRemoveRetargetChain(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleSetRetargetChainBones(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Retarget CREATE/RUN pack (4) ---
+	// Creates the IK Rig + IK Retargeter assets and runs a cross-skeleton batch
+	// retarget. Complements the existing IK Rig / retargeter MUTATION actions
+	// (get_ikrig_info, add_ik_solver, get_retargeter_info, set_retarget_chain_mapping,
+	// add/remove/set_retarget_chain*) which only operate on assets that already exist.
+	static FMonolithActionResult HandleCreateIKRig(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleCreateIKRetargeter(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSetRetargeterRigs(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleBatchRetargetAnimations(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Wave 11: Asset Creation + Setup (7 in this file) ---
 	static FMonolithActionResult HandleCreateBlendSpace(const TSharedPtr<FJsonObject>& Params);

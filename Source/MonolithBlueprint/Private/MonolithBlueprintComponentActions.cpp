@@ -8,6 +8,7 @@
 #include "Engine/SkinnedAsset.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h"
 
 // ---------------------------------------------------------------------------
 // Registration
@@ -480,6 +481,7 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 
 	// 1) BP-added components live on the SimpleConstructionScript as USCS_Node.
 	UActorComponent* Template = nullptr;
+	bool bNativeCdoSubobject = false;
 	if (BP->SimpleConstructionScript)
 	{
 		if (USCS_Node* Node = FindSCSNodeByName(BP->SimpleConstructionScript, FName(*CompName)))
@@ -506,6 +508,7 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 					    Comp->GetFName() == FName(*CompName))
 					{
 						Template = Comp;
+						bNativeCdoSubobject = true;
 						break;
 					}
 				}
@@ -659,7 +662,21 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleSetComponentProp
 		Template->PostEditChangeProperty(ChangeEvent);
 	}
 
-	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
+	// PERSISTENCE: a write to an INHERITED NATIVE component lands on the CDO default
+	// subobject (no SCS node, so no Inheritable Component Handler override exists).
+	// MarkBlueprintAsModified alone does NOT re-serialise that CDO override — it silently
+	// reverts on the next reload/recompile. The override only persists if the Blueprint is
+	// structurally modified AND recompiled. SCS-template writes keep the lighter handshake.
+	if (bNativeCdoSubobject)
+	{
+		BP->Modify();
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+		FKismetEditorUtilities::CompileBlueprint(BP);
+	}
+	else
+	{
+		FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
+	}
 	BP->MarkPackageDirty();
 
 	// Re-export to reflect whatever UE actually stored — caller can diff old vs new.

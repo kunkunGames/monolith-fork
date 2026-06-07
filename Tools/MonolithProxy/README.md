@@ -88,7 +88,7 @@ once at startup; toggling it mid-session requires a proxy restart.
 
 - Post-hoc grep / analysis of which actions an agent session called.
 - Spot the silent retries hidden by the dedup window.
-- Pipe through `mcp__leviathan-dev-toolkit__tail_log` for live tailing.
+- Pipe through your own log-tailing tool for live tailing.
 - Cheap input to future Markov-style breadcrumb analytics (deferred — substrate
   ships first, consumers later).
 

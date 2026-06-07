@@ -23,5 +23,4 @@ public:
 
 private:
 	static TSharedPtr<FJsonObject> SerializeObjectProperties(UObject* Object);
-	static TSharedPtr<FJsonValue> PropertyToJsonValue(FProperty* Prop, const void* ValuePtr, const UObject* Owner);
 };

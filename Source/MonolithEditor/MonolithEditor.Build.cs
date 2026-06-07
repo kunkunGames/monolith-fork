@@ -43,6 +43,10 @@ public class MonolithEditor : ModuleRules
 			// editor.run_python + editor.load_level (HOFF 7)
 			"PythonScriptPlugin",
 			"LevelEditor",
+			// Phase 8 (OG-E2/E5): actor_setup move_to -> AAIController::MoveToLocation
+			// (AIMODULE_API). Stock-engine module, always present + auto-enabled, so this
+			// is release-build safe — no conditional gating / WITH_* probe required.
+			"AIModule",
 			// Preview & inspection surface expansion (2026-05-26 plan, Phase 1):
 			// UMG = FWidgetRenderer + UWidget + UUserWidget for asset_type=widget.
 			// UMGEditor = UWidgetBlueprint typed loading.

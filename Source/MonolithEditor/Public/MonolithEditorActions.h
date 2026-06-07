@@ -65,6 +65,10 @@ public:
 	// --- Capture actions ---
 	static FMonolithActionResult HandleCaptureScenePreview(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCaptureSequenceFrames(const TSharedPtr<FJsonObject>& Params);
+	// #15 preview + capture a skeletal animation asset (AnimSequence / BlendSpace /
+	// AnimBlueprint) to PNG frames at requested time samples. Reuses the same
+	// FAdvancedPreviewScene -> USceneCaptureComponent2D -> RenderAndSaveCapture path.
+	static FMonolithActionResult HandleCaptureAnimFrames(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCaptureSystemGif(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleEncodeFrameSequenceGif(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetViewportInfo(const TSharedPtr<FJsonObject>& Params);
@@ -73,6 +77,8 @@ public:
 	static FMonolithActionResult HandleCaptureAssetEditorViewport(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCaptureWidgetDesigner(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCaptureAssetThumbnail(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleImportTexture(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleDeleteAssets(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleStitchFlipbook(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Inspect actions (Phase 2: 2026-05-26-monolith-editor-preview-expansion plan) ---
@@ -114,6 +120,38 @@ public:
 	// Stop the active Play-In-Editor session.
 	static FMonolithActionResult HandleStopPIE(const TSharedPtr<FJsonObject>& Params);
 
+	// --- Package state (F1: PIE/profiling harness plan 2026-06-04) ---
+	// Scoped dirty-package report + scoped saver with fail-on-unrequested-dirty.
+	static FMonolithActionResult HandleListDirtyPackages(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSavePackages(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Async session-based PIE smoke (F2/F3: PIE/profiling harness plan 2026-06-04) ---
+	// run_pie_smoke starts PIE + registers a session and RETURNS IMMEDIATELY; the
+	// editor's real frame loop advances the session via the shared frame observer
+	// (FPieSmokeSessionManager). poll_pie_smoke reads progress / the final report;
+	// stop_pie_smoke forces RequestEndPlayMap + finalises. capture_pie_movement_clip
+	// uses the same session model plus per-interval viewport frame capture.
+	static FMonolithActionResult HandleRunPieSmoke(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandlePollPieSmoke(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleStopPieSmoke(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleCapturePieMovementClip(const TSharedPtr<FJsonObject>& Params);
+
+	// Read-only scan of loaded UBlueprints for the engine's PIE compile-error
+	// condition (BS_Error && bDisplayCompilePIEWarning). Returns {count, blueprints:[{name, path}]}.
+	// Same scan run_pie_smoke's on_compile_errors=refuse gate uses to avoid starting
+	// PIE on a broken world (which would raise a game-thread-blocking modal).
+	static FMonolithActionResult HandleListErroredBlueprints(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Nav harness map builder (F4: PIE/profiling harness plan 2026-06-04) ---
+	// Build a test map from a JSON spec (floor, nav bounds, camera, target points,
+	// actor instances), rebuild + validate nav via runtime `ai` dispatch, save.
+	static FMonolithActionResult HandleCreateNavHarnessMap(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Generic map settings authoring (Phase 10 / OG-E4, plan 2026-06-07) ---
+	// Set WorldSettings GameMode override + spawn APlayerStart actors (+ optional generic
+	// actor instances with reflective UPROPERTY defaults) on the open / specified map.
+	static FMonolithActionResult HandleAuthorMapSettings(const TSharedPtr<FJsonObject>& Params);
+
 	static void OnLiveCodingPatchComplete();
 
 private:
@@ -149,4 +187,23 @@ private:
 		class USceneCaptureComponent2D* CaptureComp,
 		class UTextureRenderTarget2D* RT,
 		int32 ResX, int32 ResY, const FString& OutputPath);
+
+	// --- PIE-smoke helpers (F2/F3) ---
+	// Queue a PIE session pinned to the active level viewport. Returns false (with
+	// OutError set) when no viewport / GUnrealEd is available, or when PIE is
+	// already running. The session is async/queued; callers must pump editor ticks
+	// via PumpEditorUntilPieReady before probing the world.
+	// When bSuppressModals is true, the PIE request is wrapped in a GIsRunningUnattendedScript
+	// guard so the engine's blocking compile-error prompt resolves to its default
+	// instead of starving the game-thread MCP server (used by on_compile_errors=suppress).
+	static bool StartPieInternal(FString& OutError, bool bSuppressModals = false);
+
+	// Request the active PIE session to end. Returns true if a session was running.
+	static bool StopPieInternal();
+
+	// Find the active PIE world context's UWorld, or nullptr when no PIE is running.
+	// Public: the anonymous-namespace map-load guard (EnsureNoResidentPieWorldBeforeMapLoad)
+	// and lifecycle reporting read this read-only PIE-residency probe from free-function scope.
+public:
+	static class UWorld* FindActivePieWorld();
 };

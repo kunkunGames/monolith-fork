@@ -20,7 +20,8 @@ namespace MonolithBulkFillActionsInternal
 	{
 		return FParamSchemaBuilder()
 			.Required(TEXT("target_namespace"), TEXT("string"),
-				TEXT("Adapter namespace ('blueprint', 'gas', 'inventory', 'ui', 'ai', 'niagara', 'material', 'audio', 'mesh', 'animation', 'logicdriver', 'combograph')."))
+				TEXT("Adapter namespace ('blueprint', 'gas', 'inventory', 'ui', 'ai', 'niagara', 'material', 'audio', 'mesh', 'animation', 'logicdriver', 'combograph'). Alias: `namespace`."),
+				{ TEXT("namespace") })
 			.Required(TEXT("target"), TEXT("string"),
 				TEXT("Asset path or adapter-defined target identifier (e.g. '/Game/Items/DA_HealingPotion')."))
 			.Required(TEXT("tree"), TEXT("object"),

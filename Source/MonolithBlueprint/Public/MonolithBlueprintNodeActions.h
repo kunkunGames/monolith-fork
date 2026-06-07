@@ -45,4 +45,11 @@ public:
 
 	// Phase 1 (gap #11) — Cross-class property access (foreign-class VariableGet/Set)
 	static FMonolithActionResult HandleAddPropertyAccess(const TSharedPtr<FJsonObject>& Params);
+
+	// Genuine thread-safe Property Access — reflective UK2Node_PropertyAccess authoring.
+	// Unlike add_property_access (which emits a foreign-member VariableGet with a self
+	// pin, non-thread-safe), this spawns a real K2Node_PropertyAccess whose path-based
+	// read is resolved thread-safe (or game-thread-cached) by the AnimBP property-access
+	// compiler. The class is MinimalAPI/unlinkable, so it is created reflectively.
+	static FMonolithActionResult HandleAddPropertyAccessNode(const TSharedPtr<FJsonObject>& Params);
 };

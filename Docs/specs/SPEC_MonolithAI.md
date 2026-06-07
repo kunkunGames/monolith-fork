@@ -2,14 +2,14 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.14.10 (Beta)
+**Version:** 0.18.1 (Beta)
 
 ---
 
 ## MonolithAI
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AIModule, GameplayTasks, NavigationSystem, Json, JsonUtilities
-**Namespace:** `ai` | **Tool:** `ai_query(action, params)` | **Actions:** 243 (includes 22 Mass/Zone Graph actions)
+**Namespace:** `ai` | **Tool:** `ai_query(action, params)` | **Actions:** ~223 (Phase J F8: +`add_perception_to_actor`, +`get_bt_graph`; test/profiling harness Wave 1: +`rebuild_navigation`, +`validate_nav_points`). Counts approximate — query `monolith_discover("ai")` for the live figure.
 **Conditional:** State Trees (`#if WITH_STATETREE`) and Smart Objects (`#if WITH_SMARTOBJECTS`) are required dependencies. Mass Entity (`#if WITH_MASSENTITY`) and Zone Graph (`#if WITH_ZONEGRAPH`) are optional extensions. When required deps are absent, the module compiles to an empty stub (0 actions registered).
 **Settings toggle:** `bEnableAI` (default: True)
 
@@ -29,14 +29,23 @@ Counts below are the **actual** registrations from `Source/MonolithAI/Private/Mo
 | AI Controllers | 10 | `MonolithAIControllerActions.cpp` | Controller configuration, team assignment, focus management |
 | Perception | 11 | `MonolithAIPerceptionActions.cpp` | Sight/hearing/damage/team sense configuration, stimulus management (AIController-only) |
 | Perception Scaffold | 1 | `MonolithAIPerceptionScaffoldActions.cpp` | **F8** `add_perception_to_actor` — accepts ANY actor BP (not just AIControllers) plus a `senses` array |
-| Navigation | 24 | `MonolithAINavigationActions.cpp` | NavMesh queries, path finding, nav link management, nav modifier volumes |
+| Navigation | 26 | `MonolithAINavigationActions.cpp` | NavMesh queries, path finding, nav link management, nav modifier volumes. **Test/profiling harness Wave 1:** +`rebuild_navigation`, +`validate_nav_points` |
 | Runtime/PIE | 14 | `MonolithAIRuntimeActions.cpp` | Runtime BT/ST inspection, active task queries, blackboard value read/write in PIE |
 | Scaffolding | 23 | `MonolithAIScaffoldActions.cpp` | Pre-built AI patterns: patrol, guard, investigate, flee, horror stalker, search area |
 | Discovery | 11 | `MonolithAIDiscoveryActions.cpp` | AI asset overview, explain, compare, validate, search |
 | Mass Zone Graph | 22 | `MonolithAIMassZoneGraphActions.cpp` | Mass spawner and ZoneShape/ZoneGraph inspection and guarded operations |
 | Advanced | 12 | `MonolithAIAdvancedActions.cpp` | Mass Entity + Zone Graph cross-module integration (conditional `#if WITH_MASSENTITY`, `#if WITH_ZONEGRAPH`) |
 
-**Total:** 32 + 12 + 35 + 20 + 16 + 10 + 11 + 1 + 24 + 14 + 23 + 11 + 22 + 12 = **243**.
+**Total:** 32 + 12 + 35 + 20 + 16 + 10 + 11 + 1 + 26 + 14 + 23 + 11 + 12 = **223**.
+
+### Test/Profiling Harness — Wave 1 nav actions
+
+Two navigation actions added for the test/profiling harness workflow (`MonolithAINavigationActions.cpp`):
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `rebuild_navigation` | `save_after` (bool), `nav_timeout` (seconds) | Rebuild the navigation system with a bounded async-generation wait, optionally saving the level after generation completes. |
+| `validate_nav_points` | `points:[{name, location}]`, `pairs` (index references) | Per-point projection onto the navmesh plus per-pair path existence / length check. `pairs` reference points by index into `points`. |
 
 ### Phase J fixes touching this module
 
@@ -45,6 +54,29 @@ Counts below are the **actual** registrations from `Source/MonolithAI/Private/Mo
 - **F15 (2026-04-26)** — `MonolithAIBehaviorTreeActions.cpp` 16 sites hoisted into `RequireBtNodeByGuid` helper — invalid-GUID and unknown-GUID errors now distinct.
 
 See [SPEC_CORE.md §11 Recent Fixes](../SPEC_CORE.md#recent-fixes-phase-j--shipped-in-0147) for the long-form descriptions.
+
+### Motion Matching AI-wander runtime surface (2026-06-07)
+
+A small runtime surface supporting a self-driving "wander" AI built on a Motion-Matching locomotion Anim Blueprint. These are **C++ runtime classes**, not MCP actions — they live in the running game / PIE and are referenced from authored Behavior Tree and AIController assets. The BT task classes are placed into a tree via the existing `add_bt_node` action (`node_class` = the task class).
+
+**Behavior Tree task classes (3 — `UBTTaskNode` subclasses, runtime, editor + PIE):**
+
+| Class | Behaviour |
+|-------|-----------|
+| `BTTask_SetMaxWalkSpeed` | Set the possessed pawn's `UCharacterMovementComponent::MaxWalkSpeed` to a configured value — drives walk/jog/sprint locomotion-state changes that the Motion-Matching ABP samples. |
+| `BTTask_SetCrouch` | Crouch or un-crouch the possessed character (toggles the movement-component crouch state). |
+| `BTTask_RandomizeFloat` | Write a random float in a configured `[min, max]` range into a named Blackboard key — feeds wander timers / target speeds without an extra service node. |
+
+**AIController class (1 — `AAIController` subclass, Blueprintable):**
+
+| Class | Behaviour |
+|-------|-----------|
+| `AMonolithBehaviorTreeAIController` | A Blueprintable `AAIController` carrying a Behavior Tree `UPROPERTY`. On `OnPossess` it runs the assigned tree, so possessing a pawn with this controller auto-starts the AI's BT. The canonical way to start an authored wander tree without hand-wiring a `RunBehaviorTree` call. |
+
+**Fixes (2026-06-07):**
+
+- `reorder_bt_children` — child reordering now persists. Sibling order is written through the nodes' `NodePosX` (the property the BT graph derives left-to-right execution order from), so a reorder survives save / reopen instead of reverting on recompile.
+- `build_behavior_tree_from_spec` — now links the Blackboard asset. The generated tree's `UBehaviorTree::BlackboardAsset` is assigned, so blackboard-key decorators / tasks resolve against the right Blackboard instead of failing to bind.
 
 ### Bulk Fill & Describe Surface (2026-05-11)
 

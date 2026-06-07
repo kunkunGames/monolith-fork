@@ -16,6 +16,7 @@
 #include "MonolithBlueprintGraphExportActions.h"
 #include "MonolithBlueprintLayoutActions.h"
 #include "MonolithBlueprintSpawnActions.h"
+#include "MonolithMotionMatchingScaffoldActions.h"
 #include "MonolithBlueprintBulkFillAdapter.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
@@ -46,12 +47,15 @@ void FMonolithBlueprintModule::StartupModule()
 	FMonolithBlueprintLayoutActions::RegisterActions(Registry);
 	FMonolithBlueprintSpawnActions::RegisterActions(Registry);
 
+	// Sprint 5 — Motion Matching Action Pack (Pillar D): character/actor BP scaffolding.
+	FMonolithMotionMatchingScaffoldActions::RegisterActions(Registry);
+
 	// Phase 1 bulk_fill / describe pilot adapter. Self-registers with
 	// FMonolithBulkFillRegistry under namespace "blueprint"; routed-to by the
 	// central bulk_fill.apply / describe.schema dispatchers (Phase 0).
 	FMonolithBlueprintBulkFillAdapter::Register();
 
-	UE_LOG(LogMonolith, Log, TEXT("Monolith — Blueprint module loaded (121 actions + bulk_fill/describe adapter)"));
+	UE_LOG(LogMonolith, Log, TEXT("Monolith — Blueprint module loaded (bulk_fill/describe adapter)"));
 }
 
 void FMonolithBlueprintModule::ShutdownModule()

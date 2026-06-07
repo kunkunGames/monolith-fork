@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.14.10 (Beta) — [Unreleased] adds 12 MetaSound document introspection actions
+**Version:** 0.18.1 (Beta) — includes the 12 MetaSound document introspection actions
 
 ---
 
@@ -15,7 +15,7 @@
 
 MonolithAudio provides MCP coverage of audio asset creation, inspection, batch management, Sound Cue graph building, MetaSound graph building, and AI Perception sound binding. It covers the 5 configurable audio asset types (SoundAttenuation, SoundClass, SoundMix, SoundConcurrency, SoundSubmix), read-only SoundWave inspection, Sound Cue node graph construction, MetaSound Builder API integration, and `UAssetUserData`-based perception stimulus authoring.
 
-**No overlap with Resonance** — Resonance owns runtime footstep/surface/movement audio playback. MonolithAudio owns editor-time asset creation, management, and inspection.
+**No overlap with runtime audio playback plugins** — a runtime audio plugin owns footstep/surface/movement audio playback; MonolithAudio owns editor-time asset creation, management, and inspection.
 
 ### Action Categories
 

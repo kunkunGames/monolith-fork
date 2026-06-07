@@ -31,6 +31,15 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Optional(TEXT("reliable"), TEXT("bool"), TEXT("Use reliable replication (default: false)"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("set_function_thread_safe"),
+		TEXT("Set (or clear) the 'Thread Safe' flag on an existing Blueprint function graph. Sets FKismetUserDeclaredFunctionMetadata::bThreadSafe on the function's entry node and recompiles. Required for functions called from BlueprintThreadSafeUpdateAnimation. Searches function graphs (including AnimBP function graphs)."),
+		FMonolithActionHandler::CreateStatic(&HandleSetFunctionThreadSafe),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
+			.Required(TEXT("function_name"), TEXT("string"), TEXT("Function graph name"), {TEXT("name")})
+			.Optional(TEXT("thread_safe"), TEXT("bool"), TEXT("Set the Thread Safe flag (true) or clear it (false)"), TEXT("true"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("override_parent_function"),
 		TEXT("Author a Blueprint override of an overridable parent function (BlueprintImplementableEvent / BlueprintNativeEvent), including those that RETURN a value (e.g. UCommonActivatableWidget::BP_GetDesiredFocusTarget -> UWidget*). add_function cannot do this and the event-node form has no ReturnValue pin. Declaring class is resolved generically by name. Returns graph_name, entry_node_id, return_pin_id/name, override_class, has_return_value."),
 		FMonolithActionHandler::CreateStatic(&HandleOverrideParentFunction),
@@ -420,6 +429,76 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveFunction(const
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("removed_function"), FuncName);
+	return FMonolithActionResult::Success(Root);
+}
+
+// --- set_function_thread_safe ---
+// Sets/clears FKismetUserDeclaredFunctionMetadata::bThreadSafe on a function graph's entry node.
+// The BP compiler turns bThreadSafe into the BlueprintThreadSafe function metadata, i.e. it ticks
+// the "Thread Safe" checkbox programmatically. Mirrors HandleRemoveFunction's graph search and
+// HandleAddFunction's entry-node-find pattern. Function graphs only (AnimBP function graphs also
+// live in BP->FunctionGraphs).
+
+FMonolithActionResult FMonolithBlueprintGraphActions::HandleSetFunctionThreadSafe(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	UBlueprint* BP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, AssetPath);
+	if (!BP)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+	}
+
+	FString FuncName;
+	if (!Params->TryGetStringField(TEXT("function_name"), FuncName) || FuncName.IsEmpty())
+	{
+		Params->TryGetStringField(TEXT("name"), FuncName);
+	}
+	if (FuncName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: function_name"));
+	}
+
+	bool bThreadSafe = true;
+	Params->TryGetBoolField(TEXT("thread_safe"), bThreadSafe);
+
+	// Function graphs only (covers AnimBP function graphs, which also live here).
+	UEdGraph* Graph = nullptr;
+	for (UEdGraph* G : BP->FunctionGraphs)
+	{
+		if (G && G->GetName() == FuncName)
+		{
+			Graph = G;
+			break;
+		}
+	}
+
+	if (!Graph)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Function not found: %s"), *FuncName));
+	}
+
+	// Find the entry node (mirror HandleAddFunction).
+	UK2Node_FunctionEntry* EntryNode = nullptr;
+	for (UEdGraphNode* Node : Graph->Nodes)
+	{
+		EntryNode = Cast<UK2Node_FunctionEntry>(Node);
+		if (EntryNode) break;
+	}
+
+	if (!EntryNode)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("No function entry node found in graph: %s"), *FuncName));
+	}
+
+	EntryNode->Modify();
+	EntryNode->MetaData.bThreadSafe = bThreadSafe;
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("function_name"), FuncName);
+	Root->SetBoolField(TEXT("thread_safe"), EntryNode->MetaData.bThreadSafe);
 	return FMonolithActionResult::Success(Root);
 }
 

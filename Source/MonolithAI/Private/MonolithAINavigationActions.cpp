@@ -11,6 +11,7 @@
 #include "AI/Navigation/NavigationTypes.h"
 #include "NavFilters/NavigationQueryFilter.h"
 #include "Navigation/CrowdManager.h"
+#include "AI/Navigation/NavAgentInterface.h"
 
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -305,6 +306,26 @@ void FMonolithAINavigationActions::RegisterActions(FMonolithToolRegistry& Regist
 		FParamSchemaBuilder()
 			.Optional(TEXT("sample_spacing"), TEXT("number"), TEXT("Distance between sample points (cm, default: 200)"))
 			.Optional(TEXT("bounds"), TEXT("object"), TEXT("Custom bounds {min: [x,y,z], max: [x,y,z]} — defaults to nav bounds"))
+			.Build());
+
+	// 167. rebuild_navigation
+	Registry.RegisterAction(TEXT("ai"), TEXT("rebuild_navigation"),
+		TEXT("Rebuild the current editor world's navigation. Triggers UNavigationSystemV1::Build(), bound-waits for async tile generation to finish, and optionally saves the affected nav-data + level packages to disk"),
+		FMonolithActionHandler::CreateStatic(&HandleRebuildNavigation),
+		FParamSchemaBuilder()
+			.Optional(TEXT("save_after"), TEXT("boolean"), TEXT("Save nav-data / level packages to disk once generation completes (default: false)"))
+			.Optional(TEXT("timeout_seconds"), TEXT("number"), TEXT("Max seconds to wait for tile generation before returning (default: 30, clamped 1-120)"))
+			.Build());
+
+	// 168. validate_nav_points
+	Registry.RegisterAction(TEXT("ai"), TEXT("validate_nav_points"),
+		TEXT("Validate a set of named points: project each to the navmesh and (optionally) confirm a path exists between named pairs. Returns per-point projection status, per-pair path status + length, and overall ok"),
+		FMonolithActionHandler::CreateStatic(&HandleValidateNavPoints),
+		FParamSchemaBuilder()
+			.Required(TEXT("points"), TEXT("array"), TEXT("Array of point objects: [{\"name\":\"start\",\"location\":[x,y,z]}, ...]. location may be {x,y,z} or [x,y,z]"))
+			.Optional(TEXT("agent_class_or_actor"), TEXT("string"), TEXT("Agent class path or in-level actor name/label used to select the nav agent + nav data for path queries. Default agent used if omitted or unresolved"))
+			.Optional(TEXT("require_path_pairs"), TEXT("array"), TEXT("Array of pair objects requiring a path: [{\"from\":\"start\",\"to\":\"goal\"}, ...]. Names reference entries in 'points'"))
+			.Optional(TEXT("extent"), TEXT("object"), TEXT("Projection search extent {x,y,z} or [x,y,z] (default: 50,50,250)"))
 			.Build());
 }
 
@@ -1965,5 +1986,370 @@ FMonolithActionResult FMonolithAINavigationActions::HandleAnalyzeNavigationCover
 	else Quality = TEXT("poor");
 	Result->SetStringField(TEXT("quality"), Quality);
 
+	return FMonolithActionResult::Success(Result);
+}
+
+// ============================================================
+//  Bounded nav-generation wait helper
+// ============================================================
+
+bool FMonolithAINavigationActions::WaitForNavGenerationComplete(UWorld* World, UNavigationSystemV1* NavSys, double TimeoutSeconds, int32& OutTicks)
+{
+	OutTicks = 0;
+	if (!World || !NavSys)
+	{
+		return false;
+	}
+
+	// UNavigationSystemV1::Build() kicks off ASYNC tile generation. Tiles are
+	// processed by the nav system's tick (driven here by World->Tick), which
+	// advances the Recast generator's async build queue. Pump the editor world
+	// tick in a bounded loop until there are no remaining build tasks and the
+	// build is no longer in progress, or the deadline elapses. This is a bounded
+	// wait — never an infinite or CPU-spinning busy-loop (the tick itself yields
+	// to background nav tasks). Game-thread only.
+	const double Deadline = FPlatformTime::Seconds() + TimeoutSeconds;
+	const float TickDelta = 1.0f / 60.0f;
+
+	// Prime: give the build request at least one tick to register tasks before
+	// we sample the "in progress" flags, so we don't early-out on a not-yet-started build.
+	World->Tick(ELevelTick::LEVELTICK_PauseTick, TickDelta);
+	OutTicks++;
+
+	while (FPlatformTime::Seconds() < Deadline)
+	{
+		const bool bInProgress = NavSys->IsNavigationBuildInProgress();
+		const int32 Remaining = NavSys->GetNumRemainingBuildTasks();
+		if (!bInProgress && Remaining == 0)
+		{
+			return true;
+		}
+
+		World->Tick(ELevelTick::LEVELTICK_PauseTick, TickDelta);
+		OutTicks++;
+
+		// Small yield so background nav generation threads make progress between ticks.
+		FPlatformProcess::Sleep(0.005f);
+	}
+
+	// Final sample after the deadline so the caller reports the true end state.
+	return !NavSys->IsNavigationBuildInProgress() && NavSys->GetNumRemainingBuildTasks() == 0;
+}
+
+// ============================================================
+//  167. rebuild_navigation
+// ============================================================
+
+FMonolithActionResult FMonolithAINavigationActions::HandleRebuildNavigation(const TSharedPtr<FJsonObject>& Params)
+{
+	UWorld* World = GetNavWorld();
+	if (!World)
+	{
+		return FMonolithActionResult::Error(TEXT("No world available"));
+	}
+
+	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+	if (!NavSys)
+	{
+		return FMonolithActionResult::Error(TEXT("NavigationSystemV1 not found"));
+	}
+
+	const bool bSaveAfter = Params->HasField(TEXT("save_after")) && Params->GetBoolField(TEXT("save_after"));
+	double TimeoutSeconds = Params->HasField(TEXT("timeout_seconds")) ? Params->GetNumberField(TEXT("timeout_seconds")) : 30.0;
+	TimeoutSeconds = FMath::Clamp(TimeoutSeconds, 1.0, 120.0);
+
+	// Trigger the (async) navmesh rebuild.
+	NavSys->Build();
+
+	// Bound-wait for tile generation to finish BEFORE reading state / saving —
+	// saving mid-generation would persist stale or empty tiles.
+	int32 Ticks = 0;
+	const bool bGenerationComplete = WaitForNavGenerationComplete(World, NavSys, TimeoutSeconds, Ticks);
+
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("build_started"), true);
+	Result->SetBoolField(TEXT("generation_complete"), bGenerationComplete);
+	Result->SetBoolField(TEXT("is_building"), NavSys->IsNavigationBuildInProgress());
+	Result->SetNumberField(TEXT("remaining_build_tasks"), NavSys->GetNumRemainingBuildTasks());
+	Result->SetBoolField(TEXT("is_built"), NavSys->IsNavigationBuilt(World->GetWorldSettings()));
+	Result->SetNumberField(TEXT("wait_ticks"), Ticks);
+	Result->SetNumberField(TEXT("timeout_seconds"), TimeoutSeconds);
+
+	if (!bGenerationComplete)
+	{
+		Result->SetStringField(TEXT("message"),
+			TEXT("Navigation generation did not complete within the timeout. Increase timeout_seconds or check nav bounds. Save skipped if requested."));
+	}
+
+	// Save phase — only when explicitly requested AND generation finished.
+	if (bSaveAfter)
+	{
+		auto SaveStatus = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> SavedPackages;
+		int32 SavedCount = 0;
+		int32 FailedCount = 0;
+
+		if (!bGenerationComplete)
+		{
+			SaveStatus->SetBoolField(TEXT("attempted"), false);
+			SaveStatus->SetStringField(TEXT("reason"), TEXT("Generation incomplete — refusing to save stale/partial tiles"));
+		}
+		else
+		{
+			SaveStatus->SetBoolField(TEXT("attempted"), true);
+
+			// Collect the packages backing the nav data. Recast nav data may live
+			// in its own external package or be embedded in the level package; save
+			// whichever outermost packages are dirty.
+			TSet<UPackage*> PackagesToSave;
+			for (ANavigationData* NavData : NavSys->NavDataSet)
+			{
+				if (!NavData) continue;
+				if (UPackage* Pkg = NavData->GetOutermost())
+				{
+					PackagesToSave.Add(Pkg);
+				}
+			}
+			// Also include the editor world's package — nav data embedded in the
+			// level is persisted with the level package.
+			if (UPackage* WorldPkg = World->GetOutermost())
+			{
+				PackagesToSave.Add(WorldPkg);
+			}
+
+			for (UPackage* Pkg : PackagesToSave)
+			{
+				if (!Pkg) continue;
+
+				const FString PackageName = Pkg->GetName();
+				// Skip transient / in-memory-only packages (e.g. /Temp/, transient world).
+				if (!FPackageName::IsValidLongPackageName(PackageName) ||
+					PackageName.StartsWith(TEXT("/Temp/")))
+				{
+					continue;
+				}
+
+				const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+					PackageName, FPackageName::GetAssetPackageExtension());
+
+				FSavePackageArgs SaveArgs;
+				SaveArgs.TopLevelFlags = RF_NoFlags;
+				SaveArgs.SaveFlags = SAVE_NoError;
+				const bool bSaved = UPackage::SavePackage(Pkg, nullptr, *PackageFilename, SaveArgs);
+
+				auto PkgObj = MakeShared<FJsonObject>();
+				PkgObj->SetStringField(TEXT("package"), PackageName);
+				PkgObj->SetBoolField(TEXT("saved"), bSaved);
+				SavedPackages.Add(MakeShared<FJsonValueObject>(PkgObj));
+
+				if (bSaved) { SavedCount++; } else { FailedCount++; }
+			}
+
+			SaveStatus->SetNumberField(TEXT("saved_count"), SavedCount);
+			SaveStatus->SetNumberField(TEXT("failed_count"), FailedCount);
+			SaveStatus->SetArrayField(TEXT("packages"), SavedPackages);
+		}
+
+		Result->SetObjectField(TEXT("save_status"), SaveStatus);
+	}
+
+	return FMonolithActionResult::Success(Result);
+}
+
+// ============================================================
+//  168. validate_nav_points
+// ============================================================
+
+FMonolithActionResult FMonolithAINavigationActions::HandleValidateNavPoints(const TSharedPtr<FJsonObject>& Params)
+{
+	UWorld* World = GetNavWorld();
+	if (!World)
+	{
+		return FMonolithActionResult::Error(TEXT("No world available"));
+	}
+
+	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+	if (!NavSys)
+	{
+		return FMonolithActionResult::Error(TEXT("NavigationSystemV1 not found"));
+	}
+
+	// Parse points[] into a name->location map (and keep original order for output).
+	const TArray<TSharedPtr<FJsonValue>>* PointsArr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("points"), PointsArr) || !PointsArr || PointsArr->Num() == 0)
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: points"));
+	}
+
+	TMap<FString, FVector> PointLocations;
+	TArray<FString> PointOrder;
+	for (const TSharedPtr<FJsonValue>& Val : *PointsArr)
+	{
+		const TSharedPtr<FJsonObject>* PtObj = nullptr;
+		if (!Val->TryGetObject(PtObj) || !PtObj)
+		{
+			continue;
+		}
+
+		FString Name;
+		if (!(*PtObj)->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("Each point requires a non-empty 'name' field"));
+		}
+
+		bool bLocFound = false;
+		FVector Loc = ParseVector(*PtObj, TEXT("location"), bLocFound);
+		if (!bLocFound)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Point '%s' is missing a valid 'location'"), *Name));
+		}
+
+		PointLocations.Add(Name, Loc);
+		PointOrder.Add(Name);
+	}
+
+	// Resolve nav data — honour agent_class_or_actor when it maps to an in-level
+	// INavAgentInterface actor; otherwise fall back to the default nav data.
+	ANavigationData* NavData = nullptr;
+	FString AgentResolution = TEXT("default");
+	FString AgentSpec;
+	if (Params->TryGetStringField(TEXT("agent_class_or_actor"), AgentSpec) && !AgentSpec.IsEmpty())
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			AActor* Actor = *It;
+			if (Actor->GetActorLabel() == AgentSpec || Actor->GetName() == AgentSpec || Actor->GetPathName() == AgentSpec)
+			{
+				if (const INavAgentInterface* NavAgent = Cast<INavAgentInterface>(Actor))
+				{
+					NavData = NavSys->GetNavDataForProps(NavAgent->GetNavAgentPropertiesRef());
+					if (NavData)
+					{
+						AgentResolution = FString::Printf(TEXT("actor:%s"), *Actor->GetActorNameOrLabel());
+					}
+				}
+				break;
+			}
+		}
+	}
+
+	if (!NavData)
+	{
+		NavData = NavSys->GetDefaultNavDataInstance();
+	}
+	if (!NavData)
+	{
+		return FMonolithActionResult::Error(TEXT("No navigation data available. Build navigation first."));
+	}
+
+	bool bExtentFound = false;
+	FVector Extent = ParseVector(Params, TEXT("extent"), bExtentFound);
+	if (!bExtentFound)
+	{
+		Extent = FVector(50.0, 50.0, 250.0);
+	}
+
+	bool bOverallOk = true;
+
+	// Per-point projection.
+	TMap<FString, FVector> ProjectedLocations;
+	TArray<TSharedPtr<FJsonValue>> PointResults;
+	for (const FString& Name : PointOrder)
+	{
+		const FVector Original = PointLocations[Name];
+
+		FNavLocation NavLoc;
+		const bool bProjected = NavSys->ProjectPointToNavigation(Original, NavLoc, Extent);
+
+		auto PtResult = MakeShared<FJsonObject>();
+		PtResult->SetStringField(TEXT("name"), Name);
+		PtResult->SetArrayField(TEXT("input"), VectorToJsonArray(Original));
+		PtResult->SetBoolField(TEXT("projected"), bProjected);
+		if (bProjected)
+		{
+			PtResult->SetArrayField(TEXT("projected_point"), VectorToJsonArray(NavLoc.Location));
+			PtResult->SetNumberField(TEXT("distance_from_original"), FVector::Dist(Original, NavLoc.Location));
+			ProjectedLocations.Add(Name, NavLoc.Location);
+		}
+		else
+		{
+			bOverallOk = false;
+		}
+		PointResults.Add(MakeShared<FJsonValueObject>(PtResult));
+	}
+
+	// Per-pair path requirements.
+	TArray<TSharedPtr<FJsonValue>> PairResults;
+	const TArray<TSharedPtr<FJsonValue>>* PairsArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("require_path_pairs"), PairsArr) && PairsArr)
+	{
+		for (const TSharedPtr<FJsonValue>& Val : *PairsArr)
+		{
+			const TSharedPtr<FJsonObject>* PairObj = nullptr;
+			if (!Val->TryGetObject(PairObj) || !PairObj)
+			{
+				continue;
+			}
+
+			FString FromName, ToName;
+			(*PairObj)->TryGetStringField(TEXT("from"), FromName);
+			(*PairObj)->TryGetStringField(TEXT("to"), ToName);
+
+			auto PairResult = MakeShared<FJsonObject>();
+			PairResult->SetStringField(TEXT("from"), FromName);
+			PairResult->SetStringField(TEXT("to"), ToName);
+
+			// Resolve endpoints — prefer the projected nav location, fall back to
+			// the raw input if projection failed (path query will then likely fail).
+			const FVector* FromLocPtr = ProjectedLocations.Find(FromName);
+			const FVector* ToLocPtr = ProjectedLocations.Find(ToName);
+
+			if (!PointLocations.Contains(FromName) || !PointLocations.Contains(ToName))
+			{
+				PairResult->SetBoolField(TEXT("has_path"), false);
+				PairResult->SetStringField(TEXT("error"), TEXT("Pair references an unknown point name"));
+				bOverallOk = false;
+				PairResults.Add(MakeShared<FJsonValueObject>(PairResult));
+				continue;
+			}
+
+			const FVector FromLoc = FromLocPtr ? *FromLocPtr : PointLocations[FromName];
+			const FVector ToLoc = ToLocPtr ? *ToLocPtr : PointLocations[ToName];
+
+			FPathFindingQuery Query(nullptr, *NavData, FromLoc, ToLoc);
+			FPathFindingResult PathResult = NavSys->FindPathSync(Query);
+
+			const bool bHasPath = PathResult.IsSuccessful() && PathResult.Path.IsValid() && !PathResult.IsPartial();
+			PairResult->SetBoolField(TEXT("has_path"), bHasPath);
+			PairResult->SetBoolField(TEXT("is_partial"), PathResult.IsPartial());
+
+			if (PathResult.IsSuccessful() && PathResult.Path.IsValid())
+			{
+				const TArray<FNavPathPoint>& PathPoints = PathResult.Path->GetPathPoints();
+				double PathLength = 0.0;
+				for (int32 i = 1; i < PathPoints.Num(); ++i)
+				{
+					PathLength += FVector::Dist(PathPoints[i - 1].Location, PathPoints[i].Location);
+				}
+				PairResult->SetNumberField(TEXT("path_length"), PathLength);
+				PairResult->SetNumberField(TEXT("path_cost"), PathResult.Path->GetCost());
+				PairResult->SetNumberField(TEXT("point_count"), PathPoints.Num());
+			}
+
+			if (!bHasPath)
+			{
+				bOverallOk = false;
+			}
+
+			PairResults.Add(MakeShared<FJsonValueObject>(PairResult));
+		}
+	}
+
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("ok"), bOverallOk);
+	Result->SetStringField(TEXT("agent_resolution"), AgentResolution);
+	Result->SetStringField(TEXT("nav_data"), NavData->GetName());
+	Result->SetArrayField(TEXT("points"), PointResults);
+	Result->SetArrayField(TEXT("path_pairs"), PairResults);
 	return FMonolithActionResult::Success(Result);
 }

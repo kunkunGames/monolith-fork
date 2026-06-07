@@ -39,6 +39,9 @@
 #include "K2Node_Select.h"
 #include "EdGraphNode_Comment.h"
 #include "EdGraphSchema_K2.h"
+#include "K2Node.h"
+#include "UObject/UnrealType.h"
+#include "UObject/UObjectGlobals.h"
 #include "Engine/TimelineTemplate.h"
 #include "Curves/CurveFloat.h"
 #include "Curves/CurveVector.h"
@@ -742,6 +745,30 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("graph_name"),  TEXT("string"),  TEXT("Graph name (defaults to EventGraph)"))
 			.Optional(TEXT("is_setter"),   TEXT("bool"),    TEXT("If true, creates a VariableSet (write) node; otherwise a VariableGet (read) node. Default: false."))
 			.Optional(TEXT("position"),    TEXT("array"),   TEXT("Node position as [x, y] (default: [0, 0])"))
+			.Build());
+
+	// ---- Genuine thread-safe Property Access (real UK2Node_PropertyAccess) ----
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("add_property_access_node"),
+		TEXT("Author a GENUINE thread-safe Property Access node (UK2Node_PropertyAccess) into a Blueprint/AnimBP graph. "
+		     "Unlike add_property_access (which emits a foreign-member VariableGet with a 'self' object pin — itself NON-thread-safe "
+		     "and the cause of 'Accessing an object reference is not thread-safe' errors), this spawns the real Property Access node. "
+		     "Its path-based read is resolved by the AnimBP property-access compiler either directly (when thread-safe) or via a "
+		     "game-thread-cached copy — so the resulting graph compiles thread-safe-clean. "
+		     "The node class is MinimalAPI/unlinkable (its header lives in PropertyAccessNode/Private), so it is created REFLECTIVELY "
+		     "(LoadClass + NewObject<UK2Node>), exactly like the EvaluateChooser2 surgery. "
+		     "'path' is the verbatim resolution chain: element 0 is a member/function on the access root (e.g. the AnimInstance's own "
+		     "member struct variable 'CharacterProperties', or a thread-safe function like 'GetDeltaSeconds'); subsequent elements are "
+		     "struct field internal names (for a UserDefinedStruct field, the GUID-suffixed name e.g. 'Velocity_19_<GUID>'). "
+		     "The path is set reflectively then AllocateDefaultPins resolves the leaf type and creates the single output pin named 'Value'. "
+		     "Returns node_id and value_pin_name ('Value'). Requires the PropertyAccessNode editor module (present in any editor build)."),
+		FMonolithActionHandler::CreateStatic(&HandleAddPropertyAccessNode),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"),  TEXT("Blueprint / Animation Blueprint asset path"))
+			.Required(TEXT("path"), TEXT("array"), TEXT("Verbatim resolution chain (array of strings). Element 0 = member/function on the access root (e.g. 'CharacterProperties' or 'GetDeltaSeconds'); subsequent elements = struct field internal names (GUID-suffixed for UserDefinedStruct fields)."))
+			.Optional(TEXT("graph_name"),  TEXT("string"), TEXT("Target graph/function name. Defaults to the first ubergraph if omitted; pass a function name (e.g. 'BlueprintThreadSafeUpdateAnimation' or 'UpdateEssentialValues') to author into that function graph."), {TEXT("target_graph"), TEXT("function_name")})
+			.Optional(TEXT("context_id"),  TEXT("string"), TEXT("Optional Property Access ContextId (FName). Leave empty for the default unbatched worker-thread context (matches the Game Animation Sample)."))
+			.Optional(TEXT("position"),    TEXT("array"),  TEXT("Node position as [x, y] (default: [0, 0])"))
 			.Build());
 }
 
@@ -2123,6 +2150,176 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddPropertyAccess(con
 		Root->SetStringField(TEXT("warning"), FString::Printf(
 			TEXT("Property '%s' was not found on class '%s' via reflection — node was authored with the external member reference, but verify the property name."),
 			*MemberName, *MemberClass->GetName()));
+	}
+	return FMonolithActionResult::Success(Root);
+}
+
+// ============================================================
+//  add_property_access_node  (genuine thread-safe Property Access)
+//
+//  Spawns a REAL UK2Node_PropertyAccess reflectively (the class is
+//  MinimalAPI, header in PropertyAccessNode/Private -- not includable),
+//  mirroring the EvaluateChooser2 surgery pattern. The private
+//  TArray<FString> Path UPROPERTY is set via FArrayProperty reflection
+//  BEFORE AllocateDefaultPins(), so AllocatePins()->ResolvePropertyAccess()
+//  resolves the leaf property + creates the 'Value' output pin with the
+//  correct type. Optionally sets the private FName ContextId UPROPERTY.
+//
+//  Why this is thread-safe (unlike add_property_access): the AnimBP
+//  property-access compiler either resolves the path on the worker thread
+//  directly (if thread-safe) or generates a game-thread-cached variable
+//  the worker reads — never a raw cross-thread object deref. This is the
+//  pattern the Game Animation Sample's SandboxCharacter_CMC_ABP uses for
+//  Velocity / Acceleration / Stance reads.
+// ============================================================
+
+FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddPropertyAccessNode(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	UBlueprint* BP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, AssetPath);
+	if (!BP)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+	}
+
+	// Parse the verbatim path (array of strings). At least one element required.
+	TArray<FString> Path;
+	const TArray<TSharedPtr<FJsonValue>>* PathArr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("path"), PathArr) || !PathArr || PathArr->Num() == 0)
+	{
+		return FMonolithActionResult::Error(TEXT("add_property_access_node requires a non-empty 'path' array of strings"));
+	}
+	for (const TSharedPtr<FJsonValue>& Elem : *PathArr)
+	{
+		FString S;
+		if (!Elem.IsValid() || !Elem->TryGetString(S) || S.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("Each 'path' element must be a non-empty string"));
+		}
+		Path.Add(S);
+	}
+
+	// Resolve the target graph (defaults to first ubergraph; FindGraphByName already
+	// searches FunctionGraphs so a named thread-safe function graph resolves directly).
+	const FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	UEdGraph* Graph = MonolithBlueprintInternal::FindGraphByName(BP, GraphName);
+	if (!Graph)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Graph not found: %s"), GraphName.IsEmpty() ? TEXT("(first ubergraph)") : *GraphName));
+	}
+
+	// Optional ContextId.
+	FString ContextId;
+	Params->TryGetStringField(TEXT("context_id"), ContextId);
+
+	// Parse position.
+	int32 PosX = 0;
+	int32 PosY = 0;
+	const TArray<TSharedPtr<FJsonValue>>* PosArray = nullptr;
+	if (Params->TryGetArrayField(TEXT("position"), PosArray) && PosArray && PosArray->Num() >= 2)
+	{
+		PosX = (int32)(*PosArray)[0]->AsNumber();
+		PosY = (int32)(*PosArray)[1]->AsNumber();
+	}
+
+	// Resolve the UK2Node_PropertyAccess class reflectively. LoadClass forces the owning
+	// editor module (PropertyAccessNode) to provide the class if present. The header is in
+	// PropertyAccessNode/Private and cannot be included — same constraint the EvaluateChooser2
+	// surgery handles. No Build.cs dependency is required (we never link a symbol from it).
+	static const TCHAR* PropertyAccessClassPath = TEXT("/Script/PropertyAccessNode.K2Node_PropertyAccess");
+	UClass* PAClass = LoadClass<UObject>(nullptr, PropertyAccessClassPath);
+	if (!PAClass)
+	{
+		PAClass = FindObject<UClass>(nullptr, PropertyAccessClassPath);
+	}
+	if (!PAClass)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("UK2Node_PropertyAccess class not resolvable (/Script/PropertyAccessNode.K2Node_PropertyAccess). "
+			     "The PropertyAccessNode editor module is required — it ships with the editor; ensure this is an editor build."));
+	}
+
+	// Reflect the private members we must set BEFORE pin allocation.
+	FArrayProperty* PathProp = FindFProperty<FArrayProperty>(PAClass, TEXT("Path"));
+	if (!PathProp || !CastField<FStrProperty>(PathProp->Inner))
+	{
+		return FMonolithActionResult::Error(
+			TEXT("UK2Node_PropertyAccess::Path (TArray<FString>) not found via reflection — engine layout changed."));
+	}
+	FNameProperty* ContextProp = FindFProperty<FNameProperty>(PAClass, TEXT("ContextId"));
+
+	// Spawn the node reflectively (NewObject<UK2Node> with the resolved class), add it to
+	// the graph, then set Path (and ContextId) reflectively, THEN AllocateDefaultPins so
+	// AllocatePins()->ResolvePropertyAccess() resolves the leaf type and creates 'Value'.
+	UK2Node* Node = NewObject<UK2Node>(Graph, PAClass, NAME_None, RF_Transactional);
+	if (!Node)
+	{
+		return FMonolithActionResult::Error(TEXT("Failed to create UK2Node_PropertyAccess — NewObject returned null"));
+	}
+
+	Graph->Modify();
+	Graph->AddNode(Node, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+	Node->CreateNewGuid();
+	Node->NodePosX = PosX;
+	Node->NodePosY = PosY;
+
+	// Set Path reflectively (FStrProperty inner — mirrors the established FScriptArrayHelper idiom).
+	{
+		void* ArrayValuePtr = PathProp->ContainerPtrToValuePtr<void>(Node);
+		FScriptArrayHelper Helper(PathProp, ArrayValuePtr);
+		Helper.Resize(Path.Num());
+		FStrProperty* InnerStr = CastField<FStrProperty>(PathProp->Inner);
+		for (int32 i = 0; i < Path.Num(); ++i)
+		{
+			InnerStr->SetPropertyValue(Helper.GetRawPtr(i), Path[i]);
+		}
+	}
+
+	// Set ContextId reflectively if requested.
+	if (ContextProp && !ContextId.IsEmpty())
+	{
+		ContextProp->SetPropertyValue_InContainer(Node, FName(*ContextId));
+	}
+
+	// Allocate pins — runs AllocatePins() -> ResolvePropertyAccess(), resolving the leaf
+	// and creating the 'Value' output pin with the resolved type.
+	Node->AllocateDefaultPins();
+	Node->PostPlacedNewNode();
+
+	// Locate the 'Value' output pin (the resolved data pin callers wire downstream).
+	UEdGraphPin* ValuePin = nullptr;
+	for (UEdGraphPin* P : Node->Pins)
+	{
+		if (P && P->Direction == EGPD_Output && P->PinName == TEXT("Value"))
+		{
+			ValuePin = P;
+			break;
+		}
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
+
+	TSharedPtr<FJsonObject> Root = MonolithBlueprintInternal::SerializeNode(Node);
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("graph"), Graph->GetName());
+	Root->SetStringField(TEXT("node_id"), Node->GetName());
+	Root->SetStringField(TEXT("value_pin_name"), TEXT("Value"));
+	Root->SetStringField(TEXT("value_pin_id"), ValuePin ? ValuePin->PinId.ToString() : FString());
+	{
+		TArray<TSharedPtr<FJsonValue>> PathOut;
+		for (const FString& S : Path) { PathOut.Add(MakeShared<FJsonValueString>(S)); }
+		Root->SetArrayField(TEXT("path"), PathOut);
+	}
+	if (!ContextId.IsEmpty()) Root->SetStringField(TEXT("context_id"), ContextId);
+	if (!ValuePin)
+	{
+		// The path did not resolve to a leaf (e.g. wrong field name / GUID, or the access
+		// root member is not present on this Blueprint). Node is still authored; warn.
+		Root->SetStringField(TEXT("warning"),
+			TEXT("Property Access authored but its 'Value' pin did not resolve — verify the path: element 0 must be a member/function "
+			     "on the access root (the AnimInstance's own variable or a thread-safe function), and struct field elements must use "
+			     "the exact internal field name (GUID-suffixed for UserDefinedStruct fields)."));
 	}
 	return FMonolithActionResult::Success(Root);
 }

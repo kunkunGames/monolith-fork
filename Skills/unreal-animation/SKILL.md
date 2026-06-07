@@ -78,6 +78,10 @@ animation_query({ action: "add_montage_section", params: { asset_path: "/Game/An
 animation_query({ action: "set_section_next", params: { asset_path: "/Game/Animations/AM_Attack", section: "Intro", next: "Loop" } })
 ```
 
+## Posed Skeletal-Mesh Capture (editor:: action)
+
+`editor_query("capture_scene_preview", { asset_path: "/Game/.../SK_Char", asset_type: "skeletal_mesh", animation_path: "/Game/.../A_Idle", seek_time: 0.5 })` renders the skeletal mesh at the requested pose (omit `animation_path` for rest pose). Useful for visually verifying retarget output, montage section poses, or sequence keyframes. See `monolith_guide(section="recipes")` entry "Visual introspection — going beyond thumbnails".
+
 ## Rules
 
 - Editing tools modify assets **live in the editor** -- changes are immediate

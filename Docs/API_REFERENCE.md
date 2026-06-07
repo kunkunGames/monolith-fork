@@ -1,12 +1,10 @@
 # Monolith API Reference
 
-**Version:** v0.17.1 · **Last updated:** 2026-06-01
+**Version:** v0.18.1 · **Last updated:** 2026-06-07
 
-**In-tree action total:** v0.17.x registers the public Monolith surface across **25 in-tree namespaces**. The Reflection Intelligence layer adds `decision`, `risk`, `cppreflect`, `network`, `pipeline`, and `reflect`, plus cross-namespace audit actions registered onto `source`, `material`, `niagara`, `blueprint`, and `project`. The `monolith_*` meta-tools plus `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count.
+**In-tree action total is approximate: 1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.18.1 adds the Motion Matching authoring pack (`animation` / `chooser` / `blueprint`), a PIE / profiling harness (`editor` / `ai` / `project`), state-machine authoring + live anim telemetry, an AI controller that runs a BehaviorTree on possess, inherited-native-component inspection, and live DataAsset field read-back. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
-**Live full-project snapshot caveat:** the 2026-05-26 Go checkout reported **1584 registered actions across 45 namespaces** with sibling/private plugins loaded. The curated public table below intentionally excludes sibling-plugin actions (`MonolithISX`, `MonolithSteamBridge`, `MonolithSubstance`, `MonolithClaudeDesignBridge`, and project-private bridges) that ship in their own repos or distributions. Exact current schemas come from runtime `monolith_find`, `monolith_discover`, and `describe`, not from static prose.
-
-Live editor introspection on a fully loaded project (with sibling plugins present) can report additional namespaces beyond the in-tree Monolith surface. Those actions ship in their owning sibling repositories and are documented separately — see [§Sibling Plugins](#sibling-plugins).
+The per-namespace numbers in the Table of Contents and body sections below are kept for structure, not precision — they drift with every action added and are no longer maintained to the unit. Treat them as ballpark; the live figure always comes from `monolith_discover()`.
 
 > Auto-generated and hand-curated. Each action is dispatched via HTTP POST to `http://localhost:<port>` with JSON body `{ "namespace": "<ns>", "action": "<action>", "params": { ... } }`, or via the MCP `tools/list` surface that AI clients see at session start.
 >
@@ -158,7 +156,12 @@ Section-keyed editorial onboarding guide for your AI agent — an onboarding scr
 
 ## blueprint
 
-Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, spawn-time actor placement, and dataset read/edit (DataTable / CurveTable / StringTable round-trip + `seed_data_asset`). **121 actions.**
+Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, spawn-time actor placement, and dataset read/edit (DataTable / CurveTable / StringTable round-trip + `seed_data_asset`). Count is approximate — query `monolith_discover("blueprint")` for the live figure.
+
+**New in v0.18.1 (Motion Matching + thread-safe AnimBP authoring + inspection):**
+- `set_anim_class`, `apply_movement_preset`, `add_engine_component_typed`, `scaffold_locomotion_input`, `validate_animbp_variable_contract`, `scaffold_motion_matching_character` — character/actor scaffolding for a motion-matching setup (adds an `EnhancedInput` dep).
+- `add_property_access_node` (reflective `K2Node_PropertyAccess` for thread-safe property reads), `set_function_thread_safe` (mark a Blueprint function `BlueprintThreadSafe`). `scaffold_locomotion_anim_values` now emits a fully-wired thread-safe body via Property Access and can target a named function graph.
+- `get_component_details` falls back to inherited native components (reports `is_inherited_native`, `skeletal_mesh`, `anim_class`, `animation_mode`); `get_blueprint_info` adds `native_component_count`; `get_inherited_component_override` reads the effective component template value + source; `seed_data_asset` gained `read_back_values`; `get_cdo_properties` routes through the shared reflection reader as the canonical verify-after-write path.
 
 > For full param schemas, call `monolith_discover("blueprint")` at runtime. The action surface is too broad to enumerate here without bloat — high-traffic actions are documented below; the rest are listed and discoverable.
 
@@ -388,7 +391,14 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithMaterial.md` for full graph_spec s
 
 ## animation
 
-Animation curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig. **125 actions** total — the 118 baseline (96 core + 13 PoseSearch + 5 ABP write + 3 Control Rig write + 1 layout) plus the v0.14.9/v0.14.10 PR pack: `copy_bone_pose_between_sequences`, `list_bone_tracks`, `get_skeleton_preview_attached_assets`, `get_bone_ref_pose`, and the three `*_compatible_skeleton` actions.
+Animation curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch, IKRig, Control Rig, Motion Matching authoring, state machines, and live PIE anim telemetry. Count is approximate — query `monolith_discover("animation")` for the live figure.
+
+**New in v0.18.1 (Motion Matching pack):**
+- **Pose Search / database:** `create_normalization_set`, `add_database_to_normalization_set`, `set_database_normalization_set`, `add_database_entry`, `set_database_entry_tags`, `configure_schema_channel`, `derive_schema_channels_from_skeleton`, `add_pose_search_notify`, `validate_pose_search_database`.
+- **Mirror tables:** `create_mirror_data_table`, `set_schema_mirror_data_table`.
+- **AnimBP graph:** `configure_pose_history_node`, `configure_motion_matching_node`, `build_motion_matching_node` (composite, wires to the Output Pose), `add_evaluate_chooser_node`, `wire_chooser_to_motion_matching`, `build_foot_ik_pass`, `assign_post_process_anim_rig`, `bind_chooser_database_via_threadsafe`. `add_anim_graph_node` gained `pose_history` / `inertialization` aliases.
+- **Retarget:** `create_ik_rig`, `create_ik_retargeter`, `set_retargeter_rigs`, `batch_retarget_animations`.
+- **State machines + telemetry:** `create_state_machine`, `build_state_machine`, `sample_pie_anim_instance`, `get_anim_graph_choosers`, `get_transition_rule`, `get_anim_graph_output_connection`. `set_transition_rule` accepts a structured `kind=compare`; `get_nodes` gained `include_anim_graph`.
 
 > For full param schemas, call `monolith_discover("animation")` at runtime.
 
@@ -435,7 +445,6 @@ The Tranche 2 search/discovery actions are backed by strict `FParamSchemaBuilder
 | Systems | 11 | `create_system`, `create_system_from_spec`, `duplicate_system`, `validate_system`, `save_system`, `set_system_property`, `get_system_property`, `get_system_summary`, `get_system_diagnostics`, `set_fixed_bounds`, `set_effect_type`, `list_systems` |
 | Emitters | 12 | `add_emitter`, `remove_emitter`, `duplicate_emitter`, `set_emitter_enabled`, `reorder_emitters`, `set_emitter_property`, `get_emitter_property`, `get_emitter_summary`, `list_emitters`, `list_emitter_properties`, `create_emitter`, `rename_emitter`, `save_emitter_as_template`, `clear_emitter_modules`, `get_emitter_parent` |
 | Modules | 10 | `add_module`, `remove_module`, `move_module`, `set_module_enabled`, `get_ordered_modules`, `get_module_inputs`, `get_module_graph`, `get_module_input_value`, `get_module_output_parameters`, `get_module_script_inputs`, `set_module_input_value`, `set_module_input_binding`, `set_module_input_di`, `clone_module_overrides`, `duplicate_module`, `list_module_scripts` |
-| Search / discovery | 7 | `search_by_parameter`, `search_by_data_interface`, `query_niagara`, `find_similar_systems`, `search_by_material`, `find_niagara_references`, `list_system_data_interfaces` |
 
 `get_ordered_modules` / `add_module` / `move_module` / `duplicate_module` support selector-based stages (PR #65): `usage: "particle_event"` with `usage_id` or `handler_index`, and `usage: "particle_simulation_stage"` with `usage_id`, `stage_name`, or `stage_index`.
 
@@ -470,7 +479,12 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithNiagara.md`.
 
 ## editor
 
-Live Coding builds, compile output capture, editor log capture, scene capture, texture import, asset deletion, viewport info, GIF capture and already-captured PNG sequence GIF encoding, **map creation** and **module status** (Phase J F8), plus the **PIE / console / Python automation** verbs (`run_console_command`, `start_pie`, `stop_pie`, `run_python`, `load_level` — v0.14.9/v0.14.10). **60 actions.**
+Live Coding builds, compile output capture, editor log capture, scene capture, texture import, asset deletion, viewport info, GIF capture, **map creation** and **module status** (Phase J F8), plus the **PIE / console / Python automation** verbs (`run_console_command`, `start_pie`, `stop_pie`, `run_python`, `load_level`). Count is approximate — query `monolith_discover("editor")` for the live figure.
+
+**New in v0.18.1 (PIE / profiling harness):**
+- **PIE smoke + capture:** `run_pie_smoke` / `poll_pie_smoke` / `stop_pie_smoke` (async session model), `capture_pie_movement_clip` (with `discard_first_frames` warm-up, label-aware `view_target_actor`, staged hooks, runtime-identity report + `expected_anim_class` assert), `capture_anim_frames` (preview AnimSequence / BlendSpace / AnimBlueprint to PNG), `list_dirty_packages`, `save_packages`, `list_errored_blueprints`.
+- **Profiling / actor setup:** a declarative `actor_setup` block (spawn N actors, copy a DataAsset's reflected fields, AIController MoveToLocation) plus `csv_profile` / `trace_channels` brackets scoped to the PIE window. `get_build_errors` gained `since_marker` / `since_iso` / `clear_baseline` + compile-vs-other buckets.
+- **Map authoring:** `author_map_settings` (WorldSettings GameMode override + PlayerStarts + actor instances), `create_nav_harness_map` (now with `game_mode_override` + `player_starts`).
 
 ### `editor.trigger_build` / `editor.live_compile`
 
@@ -1101,7 +1115,12 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithComboGraph.md`.
 
 ## ai
 
-Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass Entity, Zone Graph, runtime PIE inspection, and a deep library of scaffolds. **243 actions** — the largest single conditional namespace.
+Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass Entity, Zone Graph, runtime PIE inspection, and a deep library of scaffolds. The largest single conditional namespace — count is approximate, query `monolith_discover("ai")` for the live figure.
+
+**New in v0.18.1:**
+- `rebuild_navigation` (bounded async wait, optional save), `validate_nav_points` (per-point projection + per-pair path checks).
+- **Runtime classes (no MCP-action delta):** `AMonolithBehaviorTreeAIController` (Blueprintable; runs a `UBehaviorTree` from `OnPossess`, plus a BlueprintCallable `StartBehaviorTree`), and three `UBTTaskNode` subclasses for locomotion control — `BTTask_SetMaxWalkSpeed`, `BTTask_SetCrouch`, `BTTask_RandomizeFloat` (placed via `add_bt_node`).
+- **Fixes:** `reorder_bt_children` order now persists (`NodePosX`-based); `build_behavior_tree_from_spec` now links `UBehaviorTree::BlackboardAsset`.
 
 **Conditional on `#if WITH_STATETREE` + `#if WITH_SMARTOBJECTS`** — projects missing either plugin register 0 AI actions.
 
@@ -1438,7 +1457,7 @@ List `#if WITH_*` macros, `bHas*` 3-location probe variables, and `MONOLITH_RELE
 
 **New v0.17.0 (Reflection Intelligence, Phase 3a).** UE 5.7 reflection-edge queries driven by a regex sweep over UHT artefacts (`Intermediate/Build/Win64/.../Inc/<Module>/UHT/*.gen.cpp`) cross-joined with `IAssetRegistry::GetDependencies`. No tree-sitter dependency, no ThirdParty vendoring. Writes into `reflect_uclasses`, `reflect_uproperties`, `reflect_ufunctions`, `reflect_uinterfaces`, `reflect_uinterface_impls`, and `cpp_asset_edges` on `EngineSource.db`. All 6 actions are read-only + idempotent. **6 actions** (5 shipped in v0.17.0 Phase 3a; `list_class_specifiers` added [Unreleased]).
 
-> **Scan scope ([Unreleased]):** the indexers scan your project plugins (InventorySystemX, CarnageFX, etc.) by default, not just the game module. Scope follows a game-module → project-plugin → marketplace ladder driven by `IPluginManager::GetEnabledPlugins()`: `bIndexProjectPluginReflection` (default `true`) walks enabled `LoadedFrom == Project` plugins; `bIndexMarketplacePluginReflection` (default `false`) also walks enabled engine-installed marketplace plugins (LogicDriver/SMSystem, GASCompanion); Epic engine built-ins stay excluded (`bIndexEnginePluginReflection`, default off).
+> **Scan scope:** the indexers scan your project plugins by default, not just the game module. Scope follows a game-module → project-plugin → marketplace ladder driven by `IPluginManager::GetEnabledPlugins()`: `bIndexProjectPluginReflection` (default `true`) walks enabled `LoadedFrom == Project` plugins; `bIndexMarketplacePluginReflection` (default `false`) also walks enabled engine-installed marketplace plugins; Epic engine built-ins stay excluded (`bIndexEnginePluginReflection`, default off).
 
 > **Phase 3a caller-contract notes:** `source_path` is UHT's `ModuleRelativePath` (not project-relative); `source_line` is `0` everywhere (UHT discards the original-header line — pair with `source_query("search_source")` for per-line precision); `reflect_uproperties.blueprint_visibility` / `.specifiers` are empty strings (Phase 3b populates them); `cpp_asset_edges.edge_kind` is the coarse `'package_dep'`.
 
@@ -1521,9 +1540,9 @@ Find every UCLASS carrying a given specifier — substring match against the `fl
 **New v0.17.0 (Reflection Intelligence, Phase 4a).** UE 5.7 replication inspection driven by a second UHT-artefact regex sweep (independent of Phase 3a's reader) over per-property `MetaData` blocks plus the `CPF_Net` property-flag emission. Cross-joins against Phase 3a's `reflect_ufunctions`. Writes into `reflect_replicated_properties` on `EngineSource.db`. All 4 actions are read-only + idempotent. **4 actions.**
 
 > **Status notes ([Unreleased] network-completeness workstream):**
-> - The indexer now scans project plugins by default (the scan-scope ladder — see the `cppreflect` header note), so replicated classes and RPCs declared in plugins like InventorySystemX are in scope, not just the game module.
-> - `list_replicated_classes` now captures bare `UPROPERTY(Replicated)` + `DOREPLIFETIME` (via `CPF_Net`) in addition to `ReplicatedUsing` — verified end-to-end (returned `ALeviathanCharacterBase` + `ULeviathanVitalsSet`).
-> - `list_rpc_functions` switched to specifier-based detection (`reflect_ufunctions.specifiers` from `EFunctionFlags`) instead of name-prefix, and with project plugins in scope it now returns the project's actual RPCs — verified E2E (the InventorySystemX `UInventoryComponent` / `UWeaponBase_ISX` Server RPCs). The prior "empty because game-module-only" status is resolved.
+> - The indexer now scans project plugins by default (the scan-scope ladder — see the `cppreflect` header note), so replicated classes and RPCs declared in project plugins are in scope, not just the game module.
+> - `list_replicated_classes` now captures bare `UPROPERTY(Replicated)` + `DOREPLIFETIME` (via `CPF_Net`) in addition to `ReplicatedUsing` — verified end-to-end against a real project's replicated character/attribute classes.
+> - `list_rpc_functions` switched to specifier-based detection (`reflect_ufunctions.specifiers` from `EFunctionFlags`) instead of name-prefix, and with project plugins in scope it now returns the project's actual RPCs — verified E2E against project-plugin Server RPCs. The prior "empty because game-module-only" status is resolved.
 > - `COND_*` replication conditions still aren't surfaced.
 
 ### `network_query.list_replicated_classes`
@@ -1540,7 +1559,7 @@ Enumerate UCLASSes carrying at least one replicated property, sorted by replicat
 
 ### `network_query.list_rpc_functions`
 
-Filter `reflect_ufunctions` by replication specifier (`reflect_ufunctions.specifiers` parsed from `EFunctionFlags` — `FUNC_NetServer` / `FUNC_NetClient` / `FUNC_NetMulticast`) to surface the project's RPC surface. As of the [Unreleased] network-completeness workstream this is specifier-based, not name-prefix-based, and the scan covers project plugins by default (see the scan-scope note in the `cppreflect` header). The project's actual RPCs — which live in project plugins like InventorySystemX — are therefore in scope; E2E returned 28 RPCs including `UInventoryComponent` / `UWeaponBase_ISX` Server RPCs. Cursor-paginated.
+Filter `reflect_ufunctions` by replication specifier (`reflect_ufunctions.specifiers` parsed from `EFunctionFlags` — `FUNC_NetServer` / `FUNC_NetClient` / `FUNC_NetMulticast`) to surface the project's RPC surface. As of the [Unreleased] network-completeness workstream this is specifier-based, not name-prefix-based, and the scan covers project plugins by default (see the scan-scope note in the `cppreflect` header). The project's actual RPCs — which often live in project plugins — are therefore in scope; an E2E run returned the project's project-plugin Server RPCs. Cursor-paginated.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1550,7 +1569,7 @@ Filter `reflect_ufunctions` by replication specifier (`reflect_ufunctions.specif
 | `limit` | integer | optional | Hard cap `500`. Default: `100` |
 | `cursor` | string | optional | Opaque cursor |
 
-**Returns:** `{ "rpcs": [ { "class_name", "module_name", "function_name", "rpc_kind", "function_flags", "return_type", "source_path", "source_line" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. `rpc_kind` is derived from the replication specifier (`EFunctionFlags`) at query time. With project plugins in scope by default the array populates from project-plugin RPCs — e.g. the InventorySystemX Server RPCs.
+**Returns:** `{ "rpcs": [ { "class_name", "module_name", "function_name", "rpc_kind", "function_flags", "return_type", "source_path", "source_line" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. `rpc_kind` is derived from the replication specifier (`EFunctionFlags`) at query time. With project plugins in scope by default the array populates from project-plugin RPCs.
 
 ### `network_query.list_onrep_handlers`
 
@@ -1679,7 +1698,7 @@ Exists because after an RI indexer code change there's no other clean repopulati
 
 **Returns:** a per-table row-count summary — `{ "ok": true, "rebuilt": { "reflect_uclasses": N, "reflect_uproperties": N, "reflect_ufunctions": N, "reflect_uinterfaces": N, "reflect_uinterface_impls": N, "cpp_asset_edges": N, "reflect_replicated_properties": N } }`.
 
-> Note: with the [Unreleased] scan-scope ladder, a rebuild repopulates project-plugin reflection by default — so `network_query("list_rpc_functions")` returns the project's RPCs (the InventorySystemX Server RPCs) after a rebuild (see the `network` namespace status notes).
+> Note: with the scan-scope ladder, a rebuild repopulates project-plugin reflection by default — so `network_query("list_rpc_functions")` returns the project's RPCs after a rebuild (see the `network` namespace status notes).
 
 ---
 
@@ -1695,7 +1714,7 @@ If you're building a sibling plugin yourself, read `Plugins/Monolith/Docs/SIBLIN
 |---|---|---|---|---|
 | External sibling plugin | Custom | Varies | Registers its own namespace at startup and ships through its own repo/channel. | Outside `Plugins/Monolith/` |
 
-**Why these aren't in the curated in-tree count:** the public Monolith reference counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
+**Why these aren't in the in-tree count:** the in-tree count (the approximate `1,400+ / 25+` figure) counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
 
 Private sibling bridges are intentionally omitted from the public API reference. Their action rosters, namespaces, and release notes belong in their own repos/channels; Monolith must not publish them as part of the public API surface.
 
