@@ -105,14 +105,23 @@ FMonolithActionResult FMonolithMeshQualityActions::GenerateProxyMesh(const TShar
 	}
 
 	double ScreenSizeD = 300.0;
-	Params->TryGetNumberField(TEXT("screen_size"), ScreenSizeD);
+	if (Params->HasField(TEXT("screen_size")) && !Params->TryGetNumberField(TEXT("screen_size"), ScreenSizeD))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'screen_size'. Expected number."));
+	}
 	int32 ScreenSize = FMath::Clamp(static_cast<int32>(ScreenSizeD), 50, 4096);
 
 	bool bMergeMaterials = true;
-	Params->TryGetBoolField(TEXT("merge_materials"), bMergeMaterials);
+	if (Params->HasField(TEXT("merge_materials")) && !Params->TryGetBoolField(TEXT("merge_materials"), bMergeMaterials))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'merge_materials'. Expected boolean."));
+	}
 
 	double TextureSizeD = 1024.0;
-	Params->TryGetNumberField(TEXT("texture_size"), TextureSizeD);
+	if (Params->HasField(TEXT("texture_size")) && !Params->TryGetNumberField(TEXT("texture_size"), TextureSizeD))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'texture_size'. Expected number."));
+	}
 	int32 TextureSize = FMath::Clamp(static_cast<int32>(TextureSizeD), 64, 4096);
 
 	UWorld* World = MonolithMeshUtils::GetEditorWorld();
@@ -274,14 +283,23 @@ FMonolithActionResult FMonolithMeshQualityActions::SetupHlod(const TSharedPtr<FJ
 	}
 
 	FString LayerTypeStr = TEXT("MeshSimplify");
-	Params->TryGetStringField(TEXT("layer_type"), LayerTypeStr);
+	if (Params->HasField(TEXT("layer_type")) && !Params->TryGetStringField(TEXT("layer_type"), LayerTypeStr))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'layer_type'. Expected string."));
+	}
 
 	double CellSizeD = 25600.0;
-	Params->TryGetNumberField(TEXT("cell_size"), CellSizeD);
+	if (Params->HasField(TEXT("cell_size")) && !Params->TryGetNumberField(TEXT("cell_size"), CellSizeD))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'cell_size'. Expected number."));
+	}
 	int32 CellSize = FMath::Clamp(static_cast<int32>(CellSizeD), 1600, 409600);
 
 	double LoadingRange = 2.0;
-	Params->TryGetNumberField(TEXT("loading_range"), LoadingRange);
+	if (Params->HasField(TEXT("loading_range")) && !Params->TryGetNumberField(TEXT("loading_range"), LoadingRange))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'loading_range'. Expected number."));
+	}
 	LoadingRange = FMath::Clamp(LoadingRange, 0.5, 10.0);
 
 	// Map string to enum
@@ -366,10 +384,16 @@ FMonolithActionResult FMonolithMeshQualityActions::SetupHlod(const TSharedPtr<FJ
 FMonolithActionResult FMonolithMeshQualityActions::AnalyzeTextureBudget(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ScanPath;
-	Params->TryGetStringField(TEXT("scan_path"), ScanPath);
+	if (Params->HasField(TEXT("scan_path")) && !Params->TryGetStringField(TEXT("scan_path"), ScanPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'scan_path'. Expected string."));
+	}
 
 	double TopCountD = 20.0;
-	Params->TryGetNumberField(TEXT("top_count"), TopCountD);
+	if (Params->HasField(TEXT("top_count")) && !Params->TryGetNumberField(TEXT("top_count"), TopCountD))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'top_count'. Expected number."));
+	}
 	int32 TopCount = FMath::Clamp(static_cast<int32>(TopCountD), 1, 100);
 
 	// Collect all texture info
