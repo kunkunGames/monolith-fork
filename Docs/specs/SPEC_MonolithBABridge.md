@@ -108,6 +108,6 @@ Asset-mutating `auto_layout` actions accept an optional `formatter` param. Bluep
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `bEnableBlueprintAssist` | True | When false, MonolithBABridge skips `IModularFeatures` registration even if Blueprint Assist is present. Asset mutation actions use built-in formatters when available and may call BA only for domains with no built-in formatter. |
+| `bEnableBlueprintAssist` | True | When false, MonolithBABridge skips `IModularFeatures` registration even if Blueprint Assist is present. Asset mutation actions use built-in formatters when available; BA formatting is fully disabled and unavailable for all domains. |
 
 **Config key:** `bEnableBlueprintAssist` in `[/Script/MonolithCore.MonolithSettings]`
