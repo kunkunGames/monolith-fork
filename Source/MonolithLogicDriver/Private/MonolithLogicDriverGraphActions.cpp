@@ -289,6 +289,13 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleGetNodeDetails(con
 
 	// Full connection list with details
 	TArray<TSharedPtr<FJsonValue>> AllConnections;
+	int32 TotalConnections = 0;
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (Pin) TotalConnections += Pin->LinkedTo.Num();
+	}
+	AllConnections.Reserve(TotalConnections);
+
 	for (UEdGraphPin* Pin : Node->Pins)
 	{
 		if (!Pin) continue;
@@ -350,6 +357,18 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleGetNodeConnections
 
 	TArray<TSharedPtr<FJsonValue>> Inbound;
 	TArray<TSharedPtr<FJsonValue>> Outbound;
+
+	int32 NumInbound = 0, NumOutbound = 0;
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (Pin)
+		{
+			if (Pin->Direction == EGPD_Input) NumInbound += Pin->LinkedTo.Num();
+			else NumOutbound += Pin->LinkedTo.Num();
+		}
+	}
+	Inbound.Reserve(NumInbound);
+	Outbound.Reserve(NumOutbound);
 
 	for (UEdGraphPin* Pin : Node->Pins)
 	{

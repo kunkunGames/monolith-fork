@@ -366,6 +366,18 @@ TSharedPtr<FJsonObject> NodeToJson(UEdGraphNode* Node, bool bDetailed)
 
 		// Connections summary
 		TArray<TSharedPtr<FJsonValue>> InputConns, OutputConns;
+		int32 NumInputs = 0, NumOutputs = 0;
+		for (UEdGraphPin* Pin : Node->Pins)
+		{
+			if (Pin)
+			{
+				if (Pin->Direction == EGPD_Input) NumInputs += Pin->LinkedTo.Num();
+				else NumOutputs += Pin->LinkedTo.Num();
+			}
+		}
+		InputConns.Reserve(NumInputs);
+		OutputConns.Reserve(NumOutputs);
+
 		for (UEdGraphPin* Pin : Node->Pins)
 		{
 			if (!Pin) continue;
@@ -404,6 +416,11 @@ TSharedPtr<FJsonObject> SMStructureToJson(UBlueprint* Blueprint, int32 MaxDepth)
 	TArray<TSharedPtr<FJsonValue>> States, Transitions, Conduits, NestedSMs;
 	FString EntryNodeGuid;
 	int32 StateCount = 0, TransitionCount = 0;
+
+	States.Reserve(RootGraph->Nodes.Num());
+	Transitions.Reserve(RootGraph->Nodes.Num());
+	Conduits.Reserve(RootGraph->Nodes.Num());
+	NestedSMs.Reserve(RootGraph->Nodes.Num());
 
 	for (UEdGraphNode* RawNode : RootGraph->Nodes)
 	{
