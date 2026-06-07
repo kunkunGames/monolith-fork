@@ -29,7 +29,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 |--------|-------------|---------|
 | `import_texture_from_bytes` | `MonolithAsset::FTextureIngestActions` | Decode base64 compressed image bytes and create a `UTexture2D` under `/Game/...`; optional `texture_role` applies Unreal texture-role import presets, role post-processing, validation metadata, and optional postprocessed PNG return. |
 | `import_font_family` | `MonolithAsset::FFontIngestActions` | Import one or more TTF files as a composite `UFont` plus `UFontFace` assets. |
-| `import_texture_from_file` | `FMonolithAssetLifecycleActions` | Import an external image file as a `UTexture2D` with optional compression, sRGB, tiling, max-size, and LOD-group settings. |
+| `import_texture_from_file` | `FMonolithAssetLifecycleActions` | Import an external image file as a `UTexture2D` with optional compression, sRGB, tiling, max-size, and LOD-group settings. Accepts `source_file`/`file_path`/`path` aliases for `source_path`, `destination_path`/`dest_path` aliases for `destination`, optional `asset_name` when the destination is a folder, `overwrite_policy=overwrite|replace` as a compatibility alias for `replace_existing=true`, and UI compression aliases such as `UserInterface2D`. |
 | `save_asset` | `FMonolithAssetLifecycleActions` | Save any loaded asset package to disk. |
 | `delete_assets` | `FMonolithAssetLifecycleActions` | Delete assets by path with optional prefix guard, dry-run validation, non-interactive editor closing, and optional force deletion. |
 | `validate_naming_conventions` | `FMonolithAssetHygieneActions` | Scan assets under a content path and report prefix-rule violations. |

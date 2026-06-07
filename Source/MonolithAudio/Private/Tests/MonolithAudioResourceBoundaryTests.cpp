@@ -420,10 +420,45 @@ bool FMonolithAudioListAvailableMetaSoundNodesLimitTest::RunTest(const FString& 
 			{
 				AddError(FString::Printf(TEXT("Default limit of 200 was not respected. Count was %d"), NodesArray->Num()));
 			}
+			if (NodesArray->Num() > 0)
+			{
+				const TSharedPtr<FJsonObject> FirstNode = (*NodesArray)[0]->AsObject();
+				if (!FirstNode.IsValid() || FirstNode->HasField(TEXT("inputs")) || FirstNode->HasField(TEXT("outputs")))
+				{
+					AddError(TEXT("Default list_available_metasound_nodes detail should omit pin arrays"));
+				}
+			}
 		}
 		else
 		{
 			AddError(TEXT("Missing nodes array in result"));
+		}
+
+		FString DetailLevel;
+		if (!Result.Result->TryGetStringField(TEXT("detail_level"), DetailLevel) || DetailLevel != TEXT("minimal"))
+		{
+			AddError(TEXT("Default list_available_metasound_nodes detail_level should be minimal"));
+		}
+	}
+
+	// Test standard detail keeps the pin arrays available for callers that need them.
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 1.0);
+		Params->SetStringField(TEXT("detail_level"), TEXT("standard"));
+		FMonolithActionResult Result = ExecuteListAvailableMetaSoundNodes(Params);
+
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
+			if (Result.Result->TryGetArrayField(TEXT("nodes"), NodesArray) && NodesArray && NodesArray->Num() > 0)
+			{
+				const TSharedPtr<FJsonObject> FirstNode = (*NodesArray)[0]->AsObject();
+				if (!FirstNode.IsValid() || !FirstNode->HasField(TEXT("inputs")) || !FirstNode->HasField(TEXT("outputs")))
+				{
+					AddError(TEXT("detail_level=standard should include pin arrays"));
+				}
+			}
 		}
 	}
 

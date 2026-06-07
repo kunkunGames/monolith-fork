@@ -713,6 +713,17 @@ static void AddNextActions(const TSharedPtr<FJsonObject>& Root, std::initializer
 	Root->SetArrayField(TEXT("next_actions"), Arr);
 }
 
+static void AddNextActions(const TSharedPtr<FJsonObject>& Root, const TArray<FString>& Actions)
+{
+	TArray<TSharedPtr<FJsonValue>> Arr;
+	Arr.Reserve(Actions.Num());
+	for (const FString& Action : Actions)
+	{
+		Arr.Add(MakeShared<FJsonValueString>(Action));
+	}
+	Root->SetArrayField(TEXT("next_actions"), Arr);
+}
+
 static bool ParseJsonArray(const FString& Json, TArray<TSharedPtr<FJsonValue>>& Out)
 {
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
@@ -2542,18 +2553,25 @@ bool FMonolithSourceDatabase::RollbackTransaction()
 // modules/files/symbols/inheritance/"references"/symbols_fts/source_fts schema.
 // ============================================================
 
-TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCounts)
+TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCounts, bool bIncludeDeepChecks)
 {
 	FScopeLock Lock(&DbLock);
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Checks;
 	TArray<TSharedPtr<FJsonValue>> Warnings;
+	const bool bRunExpensiveChecks = bIncludeCounts || bIncludeDeepChecks;
+	bool bNeedsReindex = false;
+	bool bNeedsFtsRepair = false;
+	bool bNeedsCrgRepair = false;
+	bool bNeedsOverrideRepair = false;
 
 	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
 	Input->SetBoolField(TEXT("include_counts"), bIncludeCounts);
+	Input->SetBoolField(TEXT("include_deep_checks"), bIncludeDeepChecks);
 	Root->SetObjectField(TEXT("input"), Input);
 	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
 	Limits->SetBoolField(TEXT("include_counts"), bIncludeCounts);
+	Limits->SetBoolField(TEXT("include_deep_checks"), bIncludeDeepChecks);
 	Root->SetObjectField(TEXT("limits"), Limits);
 
 	auto Check = [&](const FString& Name, bool bPass, const FString& Detail)
@@ -2564,6 +2582,14 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		C->SetStringField(TEXT("detail"), Detail);
 		Checks.Add(MakeShared<FJsonValueObject>(C));
 		if (!bPass) Warnings.Add(MakeShared<FJsonValueString>(Detail));
+	};
+	auto Info = [&](const FString& Name, const FString& Detail)
+	{
+		TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
+		C->SetStringField(TEXT("check"), Name);
+		C->SetStringField(TEXT("result"), TEXT("info"));
+		C->SetStringField(TEXT("detail"), Detail);
+		Checks.Add(MakeShared<FJsonValueObject>(C));
 	};
 
 	if (!Database || !Database->IsValid())
@@ -2602,6 +2628,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	for (const TCHAR* T : Tables)
 	{
 		const bool bHas = Exists(TEXT("table"), T);
+		if (!bHas)
+		{
+			bNeedsReindex = true;
+		}
 		Check(FString::Printf(TEXT("table:%s"), T), bHas,
 			bHas ? FString::Printf(TEXT("table %s present"), T)
 				: FString::Printf(TEXT("missing table %s"), T));
@@ -2610,6 +2640,17 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	for (const TCHAR* F : { TEXT("symbols_fts"), TEXT("source_fts") })
 	{
 		const bool bHas = Exists(TEXT("table"), F);
+		if (!bHas)
+		{
+			if (FCString::Strcmp(F, TEXT("symbols_fts")) == 0)
+			{
+				bNeedsFtsRepair = true;
+			}
+			else
+			{
+				bNeedsReindex = true;
+			}
+		}
 		Check(FString::Printf(TEXT("fts:%s"), F), bHas,
 			bHas ? FString::Printf(TEXT("FTS table %s present"), F)
 				: FString::Printf(TEXT("missing FTS table %s"), F));
@@ -2619,6 +2660,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	for (const TCHAR* Tr : { TEXT("symbols_ai"), TEXT("symbols_ad") })
 	{
 		const bool bHas = Exists(TEXT("trigger"), Tr);
+		if (!bHas)
+		{
+			bNeedsFtsRepair = true;
+		}
 		Check(FString::Printf(TEXT("trigger:%s"), Tr), bHas,
 			bHas ? FString::Printf(TEXT("trigger %s present"), Tr)
 				: FString::Printf(TEXT("missing trigger %s (symbols_fts may drift)"), Tr));
@@ -2633,34 +2678,65 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 			S.GetColumnValueByIndex(0, SchemaVer);
 		}
 	}
+	if (SchemaVer != TEXT("1"))
+	{
+		bNeedsReindex = true;
+	}
 	Check(TEXT("meta:schema_version"), SchemaVer == TEXT("1"),
 		SchemaVer.IsEmpty() ? TEXT("meta.schema_version missing")
 			: FString::Printf(TEXT("schema_version=%s (expected 1)"), *SchemaVer));
 
-	const int64 OrphanRefs = CountOf(TEXT(
-		"SELECT COUNT(*) FROM \"references\" r "
-		"WHERE r.from_symbol_id NOT IN (SELECT id FROM symbols) "
-		"   OR r.to_symbol_id NOT IN (SELECT id FROM symbols);"));
-	Check(TEXT("integrity:orphan_references"), OrphanRefs == 0,
-		OrphanRefs == 0 ? TEXT("no orphan reference rows")
-			: FString::Printf(TEXT("%lld orphan reference row(s)"), OrphanRefs));
+	int64 OrphanRefs = -1;
+	int64 SymCnt = -1;
+	int64 SymFtsCnt = -1;
+	if (bRunExpensiveChecks)
+	{
+		OrphanRefs = CountOf(TEXT(
+			"SELECT COUNT(*) FROM \"references\" r "
+			"WHERE r.from_symbol_id NOT IN (SELECT id FROM symbols) "
+			"   OR r.to_symbol_id NOT IN (SELECT id FROM symbols);"));
+		if (OrphanRefs != 0)
+		{
+			bNeedsReindex = true;
+		}
+		Check(TEXT("integrity:orphan_references"), OrphanRefs == 0,
+			OrphanRefs == 0 ? TEXT("no orphan reference rows")
+				: FString::Printf(TEXT("%lld orphan reference row(s); rebuild source index rather than repeatedly repairing CRG cache"), OrphanRefs));
 
-	const int64 SymCnt = CountOf(TEXT("SELECT COUNT(*) FROM symbols;"));
-	const int64 SymFtsCnt = CountOf(TEXT("SELECT COUNT(*) FROM symbols_fts;"));
-	Check(TEXT("fts:symbols_row_parity"), SymCnt == SymFtsCnt,
-		FString::Printf(TEXT("symbols=%lld symbols_fts=%lld%s"), SymCnt, SymFtsCnt,
-			SymCnt == SymFtsCnt ? TEXT("") : TEXT(" (mismatch -> source.repair_fts target=symbols)")));
+		SymCnt = CountOf(TEXT("SELECT COUNT(*) FROM symbols;"));
+		SymFtsCnt = CountOf(TEXT("SELECT COUNT(*) FROM symbols_fts;"));
+		if (SymCnt != SymFtsCnt)
+		{
+			bNeedsFtsRepair = true;
+		}
+		Check(TEXT("fts:symbols_row_parity"), SymCnt == SymFtsCnt,
+			FString::Printf(TEXT("symbols=%lld symbols_fts=%lld%s"), SymCnt, SymFtsCnt,
+				SymCnt == SymFtsCnt ? TEXT("") : TEXT(" (mismatch -> source.repair_fts target=symbols)")));
+	}
+	else
+	{
+		Info(TEXT("integrity:orphan_references"), TEXT("skipped; pass include_deep_checks=true or include_counts=true"));
+		Info(TEXT("fts:symbols_row_parity"), TEXT("skipped; pass include_deep_checks=true or include_counts=true"));
+	}
 
 	bool bHasCoreCrg = true;
 	for (const TCHAR* T : { TEXT("crg_nodes"), TEXT("crg_edges"), TEXT("crg_node_metrics"), TEXT("crg_meta") })
 	{
 		const bool bHas = Exists(TEXT("table"), T);
 		bHasCoreCrg = bHasCoreCrg && bHas;
+		if (!bHas)
+		{
+			bNeedsCrgRepair = true;
+		}
 		Check(FString::Printf(TEXT("crg:table:%s"), T), bHas,
 			bHas ? FString::Printf(TEXT("CRG projection table %s present"), T)
 				: FString::Printf(TEXT("missing CRG projection table %s (run source.repair_crg_cache)"), T));
 	}
 	const bool bHasSourceOverrideEdges = Exists(TEXT("table"), TEXT("source_override_edges"));
+	if (!bHasSourceOverrideEdges)
+	{
+		bNeedsOverrideRepair = true;
+	}
 	Check(TEXT("crg:table:source_override_edges"), bHasSourceOverrideEdges,
 		bHasSourceOverrideEdges ? TEXT("CRG projection table source_override_edges present")
 			: TEXT("missing CRG projection table source_override_edges (run source.repair_crg_cache)"));
@@ -2671,6 +2747,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		TEXT("idx_crg_edges_kind_subkind"), TEXT("idx_crg_metrics_score") })
 	{
 		const bool bHas = Exists(TEXT("index"), I);
+		if (!bHas)
+		{
+			bNeedsCrgRepair = true;
+		}
 		Check(FString::Printf(TEXT("crg:index:%s"), I), bHas,
 			bHas ? FString::Printf(TEXT("CRG projection index %s present"), I)
 				: FString::Printf(TEXT("missing CRG projection index %s (run source.repair_crg_cache)"), I));
@@ -2681,6 +2761,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		TEXT("idx_inheritance_parent_child"), TEXT("idx_inheritance_child_parent") })
 	{
 		const bool bHas = Exists(TEXT("index"), I);
+		if (!bHas)
+		{
+			bNeedsOverrideRepair = true;
+		}
 		Check(FString::Printf(TEXT("crg:index:%s"), I), bHas,
 			bHas ? FString::Printf(TEXT("CRG projection index %s present"), I)
 				: FString::Printf(TEXT("missing CRG projection index %s (run source.repair_crg_cache)"), I));
@@ -2688,7 +2772,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	int64 CrgNodeCnt = -1;
 	int64 CrgEdgeCnt = -1;
 	int64 CrgMetricCnt = -1;
-	if (bHasCoreCrg)
+	if (bHasCoreCrg && bRunExpensiveChecks)
 	{
 		const int64 ValidRefCnt = CountOf(TEXT(
 			"SELECT COUNT(*) FROM \"references\" r "
@@ -2700,6 +2784,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		CrgMetricCnt = CountOf(TEXT(
 			"SELECT COUNT(*) FROM crg_node_metrics m "
 			"JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain = 'source';"));
+		if (CrgNodeCnt != SymCnt || CrgEdgeCnt != ValidRefCnt + InhCnt || CrgMetricCnt != CrgNodeCnt)
+		{
+			bNeedsCrgRepair = true;
+		}
 		Check(TEXT("crg:nodes_row_parity"), CrgNodeCnt == SymCnt,
 			FString::Printf(TEXT("symbols=%lld crg_nodes(source)=%lld%s"), SymCnt, CrgNodeCnt,
 				CrgNodeCnt == SymCnt ? TEXT("") : TEXT(" (mismatch -> source.repair_crg_cache)")));
@@ -2714,6 +2802,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 			"WHERE e.domain = 'source' AND ("
 			" e.source_node_id NOT IN (SELECT id FROM crg_nodes) "
 			" OR e.target_node_id NOT IN (SELECT id FROM crg_nodes));"));
+		if (OrphanCrgEdges != 0)
+		{
+			bNeedsCrgRepair = true;
+		}
 		Check(TEXT("crg:orphan_edges"), OrphanCrgEdges == 0,
 			OrphanCrgEdges == 0 ? TEXT("no orphan CRG projection edge rows")
 				: FString::Printf(TEXT("%lld orphan CRG projection edge row(s)"), OrphanCrgEdges));
@@ -2723,6 +2815,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 			&& S.Step() == ESQLitePreparedStatementStepResult::Row)
 		{
 			S.GetColumnValueByIndex(0, CacheVersion);
+		}
+		if (CacheVersion.IsEmpty())
+		{
+			bNeedsCrgRepair = true;
 		}
 		Check(TEXT("crg:cache_version"), !CacheVersion.IsEmpty(),
 			CacheVersion.IsEmpty() ? TEXT("crg_meta.cache_version missing (run source.repair_crg_cache)")
@@ -2734,11 +2830,19 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		{
 			S2.GetColumnValueByIndex(0, CrgScoringVersion);
 		}
+		if (CrgScoringVersion != TEXT("3"))
+		{
+			bNeedsCrgRepair = true;
+		}
 		Check(TEXT("crg:scoring_version"), CrgScoringVersion == TEXT("3"),
 			CrgScoringVersion.IsEmpty() ? TEXT("crg_meta.scoring_version missing (run source.repair_crg_cache)")
 				: FString::Printf(TEXT("crg scoring_version=%s (expected 3)"), *CrgScoringVersion));
 	}
-	if (bHasSourceOverrideEdges && Exists(TEXT("table"), TEXT("crg_meta")))
+	else if (bHasCoreCrg)
+	{
+		Info(TEXT("crg:row_parity"), TEXT("skipped; pass include_deep_checks=true or include_counts=true"));
+	}
+	if (bHasSourceOverrideEdges && Exists(TEXT("table"), TEXT("crg_meta")) && bRunExpensiveChecks)
 	{
 		FString OverrideEdgesVersion;
 		FSQLitePreparedStatement S3;
@@ -2747,21 +2851,29 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 		{
 			S3.GetColumnValueByIndex(0, OverrideEdgesVersion);
 		}
+		if (OverrideEdgesVersion != TEXT("2"))
+		{
+			bNeedsOverrideRepair = true;
+		}
 		Check(TEXT("crg:source_override_edges_version"), OverrideEdgesVersion == TEXT("2"),
 			OverrideEdgesVersion.IsEmpty() ? TEXT("crg_meta.source_override_edges_version missing (run source.repair_crg_cache)")
 				: FString::Printf(TEXT("source override edge cache version=%s (expected 2)"), *OverrideEdgesVersion));
 	}
+	else if (bHasSourceOverrideEdges)
+	{
+		Info(TEXT("crg:source_override_edges_version"), TEXT("skipped; pass include_deep_checks=true or include_counts=true"));
+	}
 
 	// source_fts is a plain (non external-content) fts5 table — a row-count
 	// difference is expected and informational, never a warning.
-	const int64 SrcFtsCnt = CountOf(TEXT("SELECT COUNT(*) FROM source_fts;"));
+	const int64 SrcFtsCnt = bRunExpensiveChecks
+		? CountOf(TEXT("SELECT COUNT(*) FROM source_fts;"))
+		: -1;
 	{
-		TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
-		C->SetStringField(TEXT("check"), TEXT("fts:source_fts_info"));
-		C->SetStringField(TEXT("result"), TEXT("info"));
-		C->SetStringField(TEXT("detail"), FString::Printf(
-			TEXT("source_fts rows=%lld (plain fts5; not rebuildable — reindex to repair)"), SrcFtsCnt));
-		Checks.Add(MakeShared<FJsonValueObject>(C));
+		const FString Detail = bRunExpensiveChecks
+			? FString::Printf(TEXT("source_fts rows=%lld (plain fts5; not rebuildable — reindex to repair)"), SrcFtsCnt)
+			: TEXT("source_fts row count skipped; pass include_deep_checks=true or include_counts=true");
+		Info(TEXT("fts:source_fts_info"), Detail);
 	}
 
 	FString Journal;
@@ -2828,14 +2940,57 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	}
 
 	const bool bHealthy = Warnings.Num() == 0;
+	Root->SetStringField(TEXT("check_depth"), bRunExpensiveChecks ? TEXT("deep") : TEXT("shallow"));
 	Root->SetStringField(TEXT("status"), bHealthy ? TEXT("ok") : TEXT("warning"));
 	Root->SetStringField(TEXT("summary"), bHealthy
-		? TEXT("EngineSource schema, triggers, symbols_fts parity and integrity OK")
+		? (bRunExpensiveChecks
+			? TEXT("EngineSource schema, triggers, symbols_fts parity and integrity OK")
+			: TEXT("EngineSource schema, required tables/triggers, and CRG structure OK; deep parity checks skipped"))
 		: FString::Printf(TEXT("%d health warning(s)"), Warnings.Num()));
 	Root->SetArrayField(TEXT("checks"), Checks);
 	Root->SetArrayField(TEXT("warnings"), Warnings);
 	Root->SetBoolField(TEXT("truncated"), false);
-	AddNextActions(Root, { TEXT("source.repair_crg_cache"), TEXT("source.repair_fts"), TEXT("source.trigger_project_reindex"), TEXT("source.search_source") });
+	TArray<FString> NextActions;
+	auto AddNextUnique = [&NextActions](const FString& Action)
+	{
+		if (!NextActions.Contains(Action))
+		{
+			NextActions.Add(Action);
+		}
+	};
+	if (!bRunExpensiveChecks)
+	{
+		AddNextUnique(TEXT("source.health include_deep_checks=true"));
+	}
+	if (bNeedsCrgRepair)
+	{
+		AddNextUnique(TEXT("source.repair_crg_cache"));
+	}
+	if (bNeedsOverrideRepair)
+	{
+		AddNextUnique(TEXT("source.repair_crg_cache scope=override_edges"));
+	}
+	if (bNeedsFtsRepair)
+	{
+		AddNextUnique(TEXT("source.repair_fts target=symbols"));
+	}
+	if (bNeedsReindex)
+	{
+		AddNextUnique(TEXT("source.trigger_project_reindex"));
+		AddNextUnique(TEXT("source.trigger_reindex"));
+	}
+	if (bHealthy)
+	{
+		AddNextUnique(TEXT("source.search_source"));
+		AddNextUnique(TEXT("source.review_context"));
+		AddNextUnique(TEXT("source.risk_score"));
+	}
+	else
+	{
+		AddNextUnique(TEXT("source.health"));
+		AddNextUnique(TEXT("source.search_source"));
+	}
+	AddNextActions(Root, NextActions);
 	return Root;
 }
 
@@ -3059,17 +3214,144 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(const FString& S
 	}
 	Root->SetObjectField(TEXT("before"), Before);
 
+	TArray<TSharedPtr<FJsonValue>> FreshnessChecks;
+	bool bRepairNeeded = false;
+	auto AddFreshnessCheck = [&](const FString& Name, bool bPass, const FString& Detail)
+	{
+		TSharedPtr<FJsonObject> CheckObj = MakeShared<FJsonObject>();
+		CheckObj->SetStringField(TEXT("check"), Name);
+		CheckObj->SetStringField(TEXT("result"), bPass ? TEXT("ok") : TEXT("stale"));
+		CheckObj->SetStringField(TEXT("detail"), Detail);
+		FreshnessChecks.Add(MakeShared<FJsonValueObject>(CheckObj));
+		if (!bPass)
+		{
+			bRepairNeeded = true;
+		}
+	};
+	auto MetaValue = [&](const TCHAR* Key) -> FString
+	{
+		FString Value;
+		if (!Exists(TEXT("table"), TEXT("crg_meta")))
+		{
+			return Value;
+		}
+		FSQLitePreparedStatement S;
+		if (S.Create(*Database, TEXT("SELECT value FROM crg_meta WHERE key = ?;")))
+		{
+			S.SetBindingValueByIndex(1, FString(Key));
+			if (S.Step() == ESQLitePreparedStatementStepResult::Row)
+			{
+				S.GetColumnValueByIndex(0, Value);
+			}
+		}
+		return Value;
+	};
+
+	if (NormalizedScope == TEXT("override_edges"))
+	{
+		const bool bHasOverrideTable = Exists(TEXT("table"), TEXT("source_override_edges"));
+		AddFreshnessCheck(TEXT("table:source_override_edges"), bHasOverrideTable,
+			bHasOverrideTable ? TEXT("source_override_edges table present")
+				: TEXT("source_override_edges table missing"));
+		const bool bHasParentIndex = Exists(TEXT("index"), TEXT("idx_source_override_edges_parent"));
+		AddFreshnessCheck(TEXT("index:idx_source_override_edges_parent"), bHasParentIndex,
+			bHasParentIndex ? TEXT("source override parent index present")
+				: TEXT("source override parent index missing"));
+		const bool bHasSignatureIndex = Exists(TEXT("index"), TEXT("idx_symbols_override_signature"));
+		AddFreshnessCheck(TEXT("index:idx_symbols_override_signature"), bHasSignatureIndex,
+			bHasSignatureIndex ? TEXT("symbol override signature index present")
+				: TEXT("symbol override signature index missing"));
+		const FString OverrideVersion = MetaValue(TEXT("source_override_edges_version"));
+		AddFreshnessCheck(TEXT("meta:source_override_edges_version"), OverrideVersion == TEXT("2"),
+			OverrideVersion.IsEmpty() ? TEXT("source_override_edges_version missing")
+				: FString::Printf(TEXT("source_override_edges_version=%s (expected 2)"), *OverrideVersion));
+	}
+	else
+	{
+		AddFreshnessCheck(TEXT("tables:crg_core"), bHadCrg,
+			bHadCrg ? TEXT("core CRG projection tables present")
+				: TEXT("one or more core CRG projection tables are missing"));
+		if (bHadCrg)
+		{
+			for (const TCHAR* I : {
+				TEXT("idx_crg_nodes_domain_native"), TEXT("idx_crg_nodes_stable"),
+				TEXT("idx_crg_edges_domain_source"), TEXT("idx_crg_edges_domain_target"),
+				TEXT("idx_crg_edges_kind_subkind"), TEXT("idx_crg_metrics_score"),
+				TEXT("idx_source_override_edges_parent"),
+				TEXT("idx_symbols_override_signature"),
+				TEXT("idx_inheritance_parent_child"), TEXT("idx_inheritance_child_parent") })
+			{
+				const bool bHasIndex = Exists(TEXT("index"), I);
+				AddFreshnessCheck(FString::Printf(TEXT("index:%s"), I), bHasIndex,
+					bHasIndex ? FString::Printf(TEXT("index %s present"), I)
+						: FString::Printf(TEXT("index %s missing"), I));
+			}
+			const int64 FreshValidRefCnt = Count(TEXT(
+				"SELECT COUNT(*) FROM \"references\" r "
+				"JOIN symbols fs ON fs.id = r.from_symbol_id "
+				"JOIN symbols ts ON ts.id = r.to_symbol_id;"));
+			const int64 FreshInhCnt = Count(TEXT("SELECT COUNT(*) FROM inheritance;"));
+			const int64 FreshSymCnt = Count(TEXT("SELECT COUNT(*) FROM symbols;"));
+			const int64 FreshCrgNodeCnt = Count(TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain = 'source';"));
+			const int64 FreshCrgEdgeCnt = Count(TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain = 'source';"));
+			const int64 FreshCrgMetricCnt = Count(TEXT(
+				"SELECT COUNT(*) FROM crg_node_metrics m "
+				"JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain = 'source';"));
+			AddFreshnessCheck(TEXT("crg:nodes_row_parity"), FreshCrgNodeCnt == FreshSymCnt,
+				FString::Printf(TEXT("symbols=%lld crg_nodes(source)=%lld"), FreshSymCnt, FreshCrgNodeCnt));
+			AddFreshnessCheck(TEXT("crg:edges_row_parity"), FreshCrgEdgeCnt == FreshValidRefCnt + FreshInhCnt,
+				FString::Printf(TEXT("valid references+inheritance=%lld crg_edges(source)=%lld"), FreshValidRefCnt + FreshInhCnt, FreshCrgEdgeCnt));
+			AddFreshnessCheck(TEXT("crg:metrics_row_parity"), FreshCrgMetricCnt == FreshCrgNodeCnt,
+				FString::Printf(TEXT("crg_nodes(source)=%lld crg_node_metrics=%lld"), FreshCrgNodeCnt, FreshCrgMetricCnt));
+			const FString CacheVersion = MetaValue(TEXT("cache_version"));
+			AddFreshnessCheck(TEXT("meta:cache_version"), !CacheVersion.IsEmpty(),
+				CacheVersion.IsEmpty() ? TEXT("cache_version missing")
+					: FString::Printf(TEXT("cache_version=%s"), *CacheVersion));
+			const FString ScoringVersion = MetaValue(TEXT("scoring_version"));
+			AddFreshnessCheck(TEXT("meta:scoring_version"), ScoringVersion == TEXT("3"),
+				ScoringVersion.IsEmpty() ? TEXT("scoring_version missing")
+					: FString::Printf(TEXT("scoring_version=%s (expected 3)"), *ScoringVersion));
+			const FString OverrideVersion = MetaValue(TEXT("source_override_edges_version"));
+			AddFreshnessCheck(TEXT("meta:source_override_edges_version"), OverrideVersion == TEXT("2"),
+				OverrideVersion.IsEmpty() ? TEXT("source_override_edges_version missing")
+					: FString::Printf(TEXT("source_override_edges_version=%s (expected 2)"), *OverrideVersion));
+		}
+	}
+	Root->SetArrayField(TEXT("freshness_checks"), FreshnessChecks);
+	Root->SetBoolField(TEXT("repair_needed"), bRepairNeeded);
+
 	if (!bExecute)
 	{
 		Root->SetStringField(TEXT("status"), TEXT("ok"));
 		Root->SetStringField(TEXT("summary"),
-			NormalizedScope == TEXT("override_edges")
-				? TEXT("Dry-run: source override edge cache would be rebuilt. Pass execute=true to apply.")
-				: TEXT("Dry-run: source CRG projection/cache would be rebuilt. Pass execute=true to apply."));
+			bRepairNeeded
+				? (NormalizedScope == TEXT("override_edges")
+					? TEXT("Dry-run: source override edge cache is stale and would be rebuilt. Pass execute=true to apply.")
+					: TEXT("Dry-run: source CRG projection/cache is stale and would be rebuilt. Pass execute=true to apply."))
+				: TEXT("Dry-run: source CRG projection/cache is already fresh; execute=true would skip the rebuild."));
 		Root->SetObjectField(TEXT("after"), MakeShared<FJsonObject>());
 		Root->SetArrayField(TEXT("warnings"), Warnings);
 		Root->SetBoolField(TEXT("truncated"), false);
-		AddNextActions(Root, { TEXT("source.repair_crg_cache (execute=true)"), TEXT("source.repair_crg_cache scope=override_edges execute=true"), TEXT("source.health"), TEXT("source.risk_score") });
+		if (bRepairNeeded)
+		{
+			AddNextActions(Root, { TEXT("source.repair_crg_cache execute=true"), TEXT("source.repair_crg_cache scope=override_edges execute=true"), TEXT("source.health include_deep_checks=true"), TEXT("source.risk_score") });
+		}
+		else
+		{
+			AddNextActions(Root, { TEXT("source.health"), TEXT("source.risk_score"), TEXT("source.review_context") });
+		}
+		return Root;
+	}
+
+	if (!bRepairNeeded)
+	{
+		Root->SetObjectField(TEXT("after"), Before);
+		Root->SetBoolField(TEXT("skipped"), true);
+		Root->SetStringField(TEXT("status"), TEXT("ok"));
+		Root->SetStringField(TEXT("summary"), TEXT("Source CRG projection/cache already fresh; skipped rebuild."));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.health"), TEXT("source.risk_score"), TEXT("source.review_context") });
 		return Root;
 	}
 
@@ -3861,7 +4143,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::PreMergeCheck(
 	Root->SetObjectField(TEXT("limits"), Limits);
 	Root->SetStringField(TEXT("scoring_version"), TEXT("3"));
 
-	TSharedPtr<FJsonObject> HealthResult = ComputeHealth(false);
+	TSharedPtr<FJsonObject> HealthResult = ComputeHealth(false, true);
 	// pre_merge_check stays file-level (no line ranges): default empty range map = original behavior.
 	TSharedPtr<FJsonObject> ChangeResult = DetectChanges(NormalizedPaths, ChangeCap, bStandard ? TEXT("standard") : TEXT("minimal"));
 	TSharedPtr<FJsonObject> UnusedResult = bIncludeUnused

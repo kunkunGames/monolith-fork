@@ -205,6 +205,27 @@ Lightweight overview with node id/class/title and exec connections only. ~10 KB 
 | `asset_path` | string | **required** | Package path |
 | `graph_name` | string | optional | Defaults to first UbergraphPage |
 
+### `blueprint.get_component_details`
+
+Reads full reflected properties for a named Blueprint component. The lookup covers SCS components and inherited native actor components. If `component_name` is not found, the action returns `match_status=component_not_found` with `scs_components`, `inherited_native_components`, `candidate_components`, and `next_actions` instead of a blind retry error.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Blueprint asset path |
+| `component_name` | string | **required** | Component variable/native component name from `blueprint.get_components` |
+
+### `blueprint.search_functions`
+
+Search Blueprint-callable native functions. At least one of `query` or `class_filter` is required. The default `detail_level=minimal` returns function identity plus parameter counts; use `detail_level=standard` to include full `inputs[]` and `outputs[]` arrays.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | optional | Case-insensitive substring over function name, class name, and category |
+| `class_filter` | string | optional | Case-insensitive class-name substring |
+| `pure_only` | bool | optional | Only return pure functions. Default: `false` |
+| `limit` | integer | optional | Default: `50`, hard max `1000` |
+| `detail_level` | string | optional | `minimal` or `standard`. Default: `minimal` |
+
 ### `blueprint.build_blueprint_from_spec`
 
 The crown jewel — author an entire Blueprint (parent class, variables, components, functions, event graph nodes, connections) from a single JSON spec. Validates and compiles in one call. See `monolith_discover("blueprint")` for the full spec schema.
@@ -507,9 +528,12 @@ Capture multiple frames at specified timestamps. Same params as `capture_scene_p
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `source_path` | string | **required** | Absolute path to source image (PNG, TGA, EXR, HDR) |
-| `destination` | string | **required** | UE asset path |
-| `settings` | object | optional | `{compression, srgb, tiling, max_size, lod_group}` |
+| `source_path` | string | **required** | Absolute path to source image (PNG, TGA, EXR, HDR). Aliases: `source_file`, `file_path`, `path` |
+| `destination` | string | **required** | UE asset path. Aliases: `dest_path`, `destination_path`; with `asset_name`, this may be a destination folder |
+| `asset_name` | string | optional | Asset name to append when `destination`/`destination_path` is a folder |
+| `settings` | object | optional | `{compression, srgb, tiling, max_size, lod_group}`; `compression` accepts TC_* names plus `UI`/`UserInterface2D` aliases |
+| `replace_existing` | bool | optional | Overwrite existing destination asset. Default: `false` |
+| `overwrite_policy` | string | optional | Compatibility alias: `overwrite`/`replace` -> `replace_existing=true`; `fail`/`unique` -> false |
 
 ### `editor.stitch_flipbook`
 
@@ -611,7 +635,7 @@ Execute a Python command, statement, or file via `IPythonScriptPlugin::ExecPytho
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `command` | string | **required** | Python source — inline code, single statement, or a file path with optional space-separated args (when `mode=execute_file`) |
+| `command` | string | **required** | Python source — inline code, single statement, or a file path with optional space-separated args (when `mode=execute_file`). Aliases: `code`, `script` |
 | `mode` | string | optional | `execute_file` (default), `execute_statement`, or `evaluate_statement` |
 | `unattended` | bool | optional | Set `GIsRunningUnattendedScript=true` to suppress UI dialogs. Default: `false` |
 | `file_scope` | string | optional | Scope for `execute_file`: `private` (isolated, default) or `public` (shared with REPL console) |
@@ -798,10 +822,13 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **12 actions** (1
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `symbol` | string | **required** | Class, function, or struct name |
+| `symbol` | string | **required** | Class, function, or struct name. Aliases: `query`, `name`, `path`; path-like values delegate to `source.read_file` |
 | `include_header` | bool | optional | Include the header declaration. Default: `false` |
 | `max_lines` | integer | optional | Default: `500` |
 | `members_only` | bool | optional | Only show class members. Default: `false` |
+| `start_line` | integer | optional | First line when `symbol`/`path` is a source file path. Default: `1` |
+| `end_line` | integer | optional | Last line when `symbol`/`path` is a source file path |
+| `line_count` | integer | optional | Number of file lines when `end_line` is omitted |
 
 ### `source.find_references` · `source.find_callers` · `source.find_callees`
 
@@ -810,6 +837,8 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **12 actions** (1
 | `symbol` | string | **required** | Symbol or function name |
 | `ref_kind` | string | optional | (`find_references` only) Filter by reference kind |
 | `limit` | integer | optional | Default: `50` |
+
+`source.find_references` returns `match_status=no_symbol`, `count=0`, and `next_actions` when the requested symbol is not indexed. Use `source.search_source` to discover the indexed spelling before retrying.
 
 ### `source.search_source`
 
@@ -848,13 +877,45 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **12 actions** (1
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `file_path` | string | **required** | Source file path |
+| `file_path` | string | **required** | Source file path. Alias: `path` |
 | `start_line` | integer | optional | Default: `1` |
 | `end_line` | integer | optional | Default: end of file |
+| `line_count` | integer | optional | Number of lines when `end_line` is omitted |
+| `max_lines` | integer | optional | Alias for `line_count` when `end_line` is omitted |
 
 ### `source.trigger_reindex` · `source.trigger_project_reindex`
 
-`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*.
+`trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*. Offline `monolith_query.exe source trigger_project_reindex` returns live-only guidance instead of an unknown-action error; actual indexing still requires the editor-backed MCP action.
+
+### `source.find_overrides`
+
+Override-only traversal for virtual/function symbols. The default `detail_level=minimal` keeps `overrides[]`, reports `edge_count`, samples `edges[]`, and omits the duplicate `impacted_symbols` array. Use `detail_level=standard` for full edge arrays and the full impact payload.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | **required** | Function symbol, preferably qualified |
+| `direction` | string | optional | `in`, `out`, or `both`. Default: `both` |
+| `max_depth` | integer | optional | Default: `2` |
+| `max_results` | integer | optional | Default: `200` |
+| `detail_level` | string | optional | `minimal` or `standard`. Default: `minimal` |
+
+### `source.health`
+
+Default `source.health` is a fast shallow check. It validates required tables, schema metadata, journal mode, triggers, and CRG structure without large row-count/parity scans.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `include_counts` | bool | optional | Include row counts and run deep parity checks. Default: `false` |
+| `include_deep_checks` | bool | optional | Run expensive orphan-reference, FTS parity, and CRG row-parity checks without row-count output. Default: `false` |
+
+### `source.repair_crg_cache`
+
+Dry-run by default. `execute=true` is freshness-gated: if CRG projection counts, helper indexes, and cache metadata are already current, the action returns `skipped=true` and does not rebuild.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `scope` | string | optional | `all` or `override_edges`. Default: `all` |
+| `execute` | bool | optional | Apply the repair only when freshness checks report `repair_needed=true`. Default: `false` |
 
 ### `source.audit_module_dep_reality`
 
@@ -928,7 +989,7 @@ UMG widget Blueprint CRUD, templates, styling, animation (v1 + v2), the schema-d
 
 | Category | Actions | Examples |
 |----------|---------|----------|
-| Widget CRUD | 9 | `create_widget_blueprint`, `get_widget_tree`, `add_widget`, `remove_widget`, `set_widget_property` (accepts `value` alias), `compile_widget` (returns `errors[]`/`warnings[]`), `list_widget_types`, `rename_widget`, `dump_blueprint_compile_log` |
+| Widget CRUD | 9 | `create_widget_blueprint`, `get_widget_tree`, `add_widget`, `remove_widget`, `set_widget_property` (accepts `value` alias and routes `IsVariable`/`bIsVariable`), `compile_widget` (returns `errors[]`/`warnings[]`), `list_widget_types`, `rename_widget`, `dump_blueprint_compile_log` |
 | Variable flags (v0.15.0) | 3 | `add_widget_variable`, `set_widget_is_variable`, `list_widget_property_enums` |
 | Root / reparent (v0.15.0) | 1 | `reparent_widget_root` |
 | Slot / layout | 4 | `set_slot_property`, `set_anchor_preset`, `move_widget`, `set_brush` |
@@ -1127,6 +1188,8 @@ Sound Cue + MetaSound graph CRUD + on-disk document introspection, attenuation/c
 | MetaSound document introspection (v0.14.10, PR #18) | 12 | `list_metasounds`, `list_metasound_documents`, `get_metasound_document`, `get_metasound_summary`, `inspect_metasound_node_instance`, `get_metasound_document_connections`, `get_metasound_document_variables`, `get_metasound_user_parameters`, `search_metasound_document_nodes`, `get_metasound_info`, `get_metasound_dependencies`, `validate_metasound` |
 | MetaSound spec / templates | 6 | `build_metasound_from_spec`, `create_oneshot_sfx`, `create_looping_ambient_metasound`, `create_synthesized_tone`, `create_interactive_metasound`, `create_metasound_preset` |
 
+`audio.list_available_metasound_nodes` defaults to `detail_level=minimal`: rows include node identity plus `input_count`/`output_count`, and the response includes `matched_count`, `returned_count`, `limit`, and `truncated`. Use `detail_level=standard` to include full per-node `inputs[]` and `outputs[]`.
+
 ### `audio.create_test_wave` · NEW in Phase J F18
 
 | Parameter | Type | Required | Description |
@@ -1213,7 +1276,7 @@ Return a rich `FSchemaDescriptor` tree (type names, ImportText forms, enum-value
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `target_namespace` | string | **required** | Adapter namespace whose schema should be introspected |
+| `target_namespace` | string | optional | Adapter namespace whose schema should be introspected. Aliases: `namespace`, `domain`. If omitted or unknown, the action returns `match_status=namespace_index` or `match_status=no_adapter` guidance with `available_namespaces` and `next_actions` instead of a hard validation error. |
 | `target` | string | optional | Asset path or action name to describe. Omit it to request the adapter's namespace-level writable-shape descriptor. |
 
 ### `describe_query.list_targets`
@@ -1222,7 +1285,7 @@ List the asset paths / action names the describe adapter can introspect for a gi
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `target_namespace` | string | **required** | Adapter namespace whose introspection inventory should be listed |
+| `target_namespace` | string | optional | Adapter namespace whose introspection inventory should be listed. Aliases: `namespace`, `domain`. If omitted or unknown, the action returns registered namespace guidance with `available_namespaces`, per-namespace `inventory_supported`, and `next_actions`. |
 
 ### `describe_query.action_schema`
 
@@ -1230,7 +1293,7 @@ Return a registered ACTION's param schema (names, types, required, defaults, ali
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `target_namespace` | string | **required** | Namespace that owns the action (e.g. `blueprint`, `ui`) |
+| `target_namespace` | string | **required** | Namespace that owns the action (e.g. `blueprint`, `ui`). Aliases: `namespace`, `domain` |
 | `target_action` | string | **required** | Action name whose param schema to return (e.g. `add_nodes_bulk`). Alias: `action` |
 
 See the per-system SPECs' "Bulk Fill & Describe Surface" sections for each adapter's `fill_kind` catalogue.

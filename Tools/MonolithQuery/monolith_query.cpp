@@ -947,6 +947,21 @@ static std::string read_file_lines(const std::string& file_path, int start, int 
     return out.str();
 }
 
+static bool looks_like_source_file_path(const std::string& value) {
+    std::string trimmed = trim_copy(value);
+    if (trimmed.empty()) return false;
+
+    std::string lower = lower_copy(trimmed);
+    if (lower.find('/') != std::string::npos || lower.find('\\') != std::string::npos)
+        return true;
+
+    std::string ext = lower_copy(fs::path(trimmed).extension().string());
+    return ext == ".h" || ext == ".hpp" || ext == ".hh" ||
+           ext == ".cpp" || ext == ".cc" || ext == ".cxx" ||
+           ext == ".c" || ext == ".inl" || ext == ".cs" ||
+           ext == ".usf" || ext == ".ush";
+}
+
 // Bridge asset/source symbol helpers and actions.
 #include "monolith_query_bridge.h"
 
@@ -1073,8 +1088,23 @@ public:
 
     // --- read_source ---
     void read_source(const Args& args) {
-        if (args.positional.empty()) die("read_source requires a symbol argument");
+        std::string path = args.opt("path", args.opt("file_path"));
+        if (args.positional.empty()) {
+            if (!path.empty()) {
+                Args file_args = args;
+                file_args.positional = {path};
+                read_file(file_args);
+                return;
+            }
+            die("read_source requires a symbol argument; use read_file or --path for source file paths");
+        }
         std::string symbol = args.positional[0];
+        if (looks_like_source_file_path(symbol)) {
+            Args file_args = args;
+            file_args.positional = {symbol};
+            read_file(file_args);
+            return;
+        }
         int max_lines = args.opt_int("max_lines", 0);
         bool include_header = !args.options.count("no_header");
         // bool members_only = args.opt_bool("members_only"); // reserved for future use
@@ -1149,7 +1179,16 @@ public:
             sym_rows = query(db, "SELECT s.id, s.name FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
                                  "WHERE symbols_fts MATCH ? LIMIT 5", {fts_q});
         }
-        if (sym_rows.empty()) die("No symbol found matching '" + symbol + "'.");
+        if (sym_rows.empty()) {
+            std::cout << "No symbol found matching '" << symbol << "'. "
+                      << "Run source search_source first to discover the indexed symbol name, then retry source find_references.\n"
+                      << "match_status=no_symbol\n"
+                      << "query=" << symbol << "\n"
+                      << "count=0\n"
+                      << "next_actions=source.search_source,source.search_crg_graph,source.review_context"
+                      << std::endl;
+            return;
+        }
 
         std::vector<std::string> lines;
         for (auto& sym : sym_rows) {
@@ -1398,10 +1437,12 @@ public:
 
     // --- read_file ---
     void read_file(const Args& args) {
-        if (args.positional.empty()) die("read_file requires a file_path argument");
-        std::string file_path = args.positional[0];
-        int start = args.opt_int("start", 1);
-        int end = args.opt_int("end", 0);
+        std::string file_path = args.opt("file_path", args.opt("path"));
+        if (file_path.empty() && !args.positional.empty()) file_path = args.positional[0];
+        if (file_path.empty()) die("read_file requires a file_path argument");
+        int start = args.opt_int("start", args.opt_int("start_line", 1));
+        int end = args.opt_int("end", args.opt_int("end_line", 0));
+        int line_count = args.opt_int("line_count", args.opt_int("max_lines", 0));
 
         std::string resolved;
 
@@ -1422,6 +1463,7 @@ public:
 
         if (resolved.empty()) die("No file found matching '" + file_path + "'.");
 
+        if (end <= 0 && line_count > 0) end = start + line_count - 1;
         if (end <= 0) end = start + 199;
 
         std::cout << "--- " << short_path(resolved) << " (lines " << start << "-" << end << ") ---\n";
@@ -1625,10 +1667,15 @@ LIMIT ?
         return o;
     }
 
-    json source_health_json(bool include_counts) {
+    json source_health_json(bool include_counts, bool include_deep_checks) {
+        bool run_expensive_checks = include_counts || include_deep_checks;
+        bool needs_reindex = false;
+        bool needs_fts_repair = false;
+        bool needs_crg_repair = false;
+        bool needs_override_repair = false;
         json root = {
-            {"input", {{"include_counts", include_counts}}},
-            {"limits", {{"include_counts", include_counts}}},
+            {"input", {{"include_counts", include_counts}, {"include_deep_checks", include_deep_checks}}},
+            {"limits", {{"include_counts", include_counts}, {"include_deep_checks", include_deep_checks}}},
             {"checks", json::array()},
             {"warnings", json::array()},
             {"truncated", false},
@@ -1637,28 +1684,56 @@ LIMIT ?
             root["checks"].push_back({{"check", name}, {"result", pass ? "ok" : "warning"}, {"detail", detail}});
             if (!pass) root["warnings"].push_back(detail);
         };
+        auto info = [&](const std::string& name, const std::string& detail) {
+            root["checks"].push_back({{"check", name}, {"result", "info"}, {"detail", detail}});
+        };
 
-        for (const char* t : {"modules", "files", "symbols", "inheritance", "references", "includes", "meta"})
-            check(std::string("table:") + t, object_exists(db, "table", t), object_exists(db, "table", t) ? std::string("table ") + t + " present" : std::string("missing table ") + t);
-        for (const char* f : {"symbols_fts", "source_fts"})
-            check(std::string("fts:") + f, object_exists(db, "table", f), object_exists(db, "table", f) ? std::string("FTS table ") + f + " present" : std::string("missing FTS table ") + f);
-        for (const char* tr : {"symbols_ai", "symbols_ad"})
-            check(std::string("trigger:") + tr, object_exists(db, "trigger", tr), object_exists(db, "trigger", tr) ? std::string("trigger ") + tr + " present" : std::string("missing trigger ") + tr + " (symbols_fts may drift)");
+        for (const char* t : {"modules", "files", "symbols", "inheritance", "references", "includes", "meta"}) {
+            bool has = object_exists(db, "table", t);
+            if (!has) needs_reindex = true;
+            check(std::string("table:") + t, has, has ? std::string("table ") + t + " present" : std::string("missing table ") + t);
+        }
+        for (const char* f : {"symbols_fts", "source_fts"}) {
+            bool has = object_exists(db, "table", f);
+            if (!has) {
+                if (std::string(f) == "symbols_fts") needs_fts_repair = true;
+                else needs_reindex = true;
+            }
+            check(std::string("fts:") + f, has, has ? std::string("FTS table ") + f + " present" : std::string("missing FTS table ") + f);
+        }
+        for (const char* tr : {"symbols_ai", "symbols_ad"}) {
+            bool has = object_exists(db, "trigger", tr);
+            if (!has) needs_fts_repair = true;
+            check(std::string("trigger:") + tr, has, has ? std::string("trigger ") + tr + " present" : std::string("missing trigger ") + tr + " (symbols_fts may drift)");
+        }
 
         std::string schema_ver = scalar_str(db, "SELECT value FROM meta WHERE key = 'schema_version';");
+        if (schema_ver != "1") needs_reindex = true;
         check("meta:schema_version", schema_ver == "1", schema_ver.empty() ? "meta.schema_version missing" : "schema_version=" + schema_ver + " (expected 1)");
-        int64_t orphan_refs = count_rows(db,
-            "SELECT COUNT(*) FROM \"references\" r "
-            "WHERE r.from_symbol_id NOT IN (SELECT id FROM symbols) "
-            "OR r.to_symbol_id NOT IN (SELECT id FROM symbols);");
-        check("integrity:orphan_references", orphan_refs == 0, orphan_refs == 0 ? "no orphan reference rows" : std::to_string(orphan_refs) + " orphan reference row(s)");
 
-        int64_t sym_cnt = count_rows(db, "SELECT COUNT(*) FROM symbols;");
-        int64_t sym_fts_cnt = count_rows(db, "SELECT COUNT(*) FROM symbols_fts;");
-        check("fts:symbols_row_parity", sym_cnt == sym_fts_cnt,
-            "symbols=" + std::to_string(sym_cnt) + " symbols_fts=" + std::to_string(sym_fts_cnt) + (sym_cnt == sym_fts_cnt ? "" : " (mismatch -> source.repair_fts target=symbols)"));
-        int64_t source_fts_cnt = count_rows(db, "SELECT COUNT(*) FROM source_fts;");
-        root["checks"].push_back({{"check", "fts:source_fts_info"}, {"result", "info"}, {"detail", "source_fts rows=" + std::to_string(source_fts_cnt) + " (plain fts5; not rebuildable; reindex to repair)"}});
+        int64_t sym_cnt = -1;
+        int64_t source_fts_cnt = -1;
+        if (run_expensive_checks) {
+            int64_t orphan_refs = count_rows(db,
+                "SELECT COUNT(*) FROM \"references\" r "
+                "WHERE r.from_symbol_id NOT IN (SELECT id FROM symbols) "
+                "OR r.to_symbol_id NOT IN (SELECT id FROM symbols);");
+            if (orphan_refs != 0) needs_reindex = true;
+            check("integrity:orphan_references", orphan_refs == 0,
+                  orphan_refs == 0 ? "no orphan reference rows" : std::to_string(orphan_refs) + " orphan reference row(s); rebuild source index rather than repeatedly repairing CRG cache");
+
+            sym_cnt = count_rows(db, "SELECT COUNT(*) FROM symbols;");
+            int64_t sym_fts_cnt = count_rows(db, "SELECT COUNT(*) FROM symbols_fts;");
+            if (sym_cnt != sym_fts_cnt) needs_fts_repair = true;
+            check("fts:symbols_row_parity", sym_cnt == sym_fts_cnt,
+                "symbols=" + std::to_string(sym_cnt) + " symbols_fts=" + std::to_string(sym_fts_cnt) + (sym_cnt == sym_fts_cnt ? "" : " (mismatch -> source.repair_fts target=symbols)"));
+            source_fts_cnt = count_rows(db, "SELECT COUNT(*) FROM source_fts;");
+            info("fts:source_fts_info", "source_fts rows=" + std::to_string(source_fts_cnt) + " (plain fts5; not rebuildable; reindex to repair)");
+        } else {
+            info("integrity:orphan_references", "skipped; pass --include-deep-checks=true or --include-counts=true");
+            info("fts:symbols_row_parity", "skipped; pass --include-deep-checks=true or --include-counts=true");
+            info("fts:source_fts_info", "source_fts row count skipped; pass --include-deep-checks=true or --include-counts=true");
+        }
         std::string journal_mode = scalar_str(db, "PRAGMA journal_mode;");
         root["schema"] = {{"schema_version", schema_ver}, {"journal_mode", journal_mode}};
         if (lower_copy(journal_mode) == "wal") {
@@ -1695,23 +1770,97 @@ LIMIT ?
                 {"source_fts", source_fts_cnt},
             };
         }
-        // RX-2: CRG projection-cache health parity (mirrors editor ComputeHealth).
-        // valid edges use the symbols-joined ref count so parity matches the
-        // editor's dangling-ref-corrected rebuild.
-        int64_t valid_refs = count_rows(db,
-            "SELECT COUNT(*) FROM \"references\" r "
-            "JOIN symbols fs ON fs.id = r.from_symbol_id "
-            "JOIN symbols ts ON ts.id = r.to_symbol_id;");
-        int64_t inh_cnt = count_rows(db, "SELECT COUNT(*) FROM inheritance;");
-        append_crg_health_checks(db, "source", sym_cnt, valid_refs + inh_cnt, root);
+        const size_t warnings_before_crg = root["warnings"].size();
+        if (run_expensive_checks) {
+            // RX-2: CRG projection-cache health parity (mirrors editor ComputeHealth).
+            // valid edges use the symbols-joined ref count so parity matches the
+            // editor's dangling-ref-corrected rebuild.
+            int64_t valid_refs = count_rows(db,
+                "SELECT COUNT(*) FROM \"references\" r "
+                "JOIN symbols fs ON fs.id = r.from_symbol_id "
+                "JOIN symbols ts ON ts.id = r.to_symbol_id;");
+            int64_t inh_cnt = count_rows(db, "SELECT COUNT(*) FROM inheritance;");
+            append_crg_health_checks(db, "source", sym_cnt, valid_refs + inh_cnt, root);
+        } else {
+            bool has_core_crg = object_exists(db, "table", "crg_nodes")
+                && object_exists(db, "table", "crg_edges")
+                && object_exists(db, "table", "crg_node_metrics")
+                && object_exists(db, "table", "crg_meta");
+            if (!has_core_crg) needs_crg_repair = true;
+            check("crg:tables_core", has_core_crg,
+                  has_core_crg ? "core CRG projection tables present" : "one or more core CRG projection tables are missing");
+            bool has_override_edges = object_exists(db, "table", "source_override_edges");
+            if (!has_override_edges) needs_override_repair = true;
+            check("crg:table:source_override_edges", has_override_edges,
+                  has_override_edges ? "source_override_edges table present" : "source_override_edges table missing");
+            info("crg:row_parity", "skipped; pass --include-deep-checks=true or --include-counts=true");
+        }
+        if (root["warnings"].size() > warnings_before_crg) {
+            needs_crg_repair = true;
+        }
+        if (run_expensive_checks && !source_override_edge_cache_ready(db)) {
+            needs_override_repair = true;
+        }
         root["status"] = root["warnings"].empty() ? "ok" : "warning";
-        root["summary"] = root["warnings"].empty() ? "EngineSource schema, triggers, symbols_fts parity, CRG cache and integrity OK" : std::to_string(root["warnings"].size()) + " health warning(s)";
-        add_next(root, {"source.repair_crg_cache", "source.repair_fts", "source.trigger_project_reindex", "source.search_source"});
+        root["check_depth"] = run_expensive_checks ? "deep" : "shallow";
+        root["summary"] = root["warnings"].empty()
+            ? (run_expensive_checks
+                ? "EngineSource schema, triggers, symbols_fts parity, CRG cache and integrity OK"
+                : "EngineSource schema, required tables/triggers, and CRG structure OK; deep parity checks skipped")
+            : std::to_string(root["warnings"].size()) + " health warning(s)";
+        auto next = json::array();
+        auto add_next_unique = [&](const std::string& action) {
+            for (const auto& existing : next) {
+                if (existing.is_string() && existing.get<std::string>() == action) return;
+            }
+            next.push_back(action);
+        };
+        if (!run_expensive_checks) add_next_unique("source.health --include-deep-checks=true");
+        if (needs_crg_repair) add_next_unique("source.repair_crg_cache");
+        if (needs_override_repair) add_next_unique("source.repair_crg_cache --scope=override_edges");
+        if (needs_fts_repair) add_next_unique("source.repair_fts --target=symbols");
+        if (needs_reindex) {
+            add_next_unique("source.trigger_project_reindex");
+            add_next_unique("source.trigger_reindex");
+        }
+        if (root["warnings"].empty()) {
+            add_next_unique("source.search_source");
+            add_next_unique("source.review_context");
+            add_next_unique("source.risk_score");
+        } else {
+            add_next_unique("source.health");
+            add_next_unique("source.search_source");
+        }
+        root["next_actions"] = next;
         return root;
     }
 
     void health(const Args& args) {
-        print_json(source_health_json(args.opt_bool("include_counts", true)));
+        print_json(source_health_json(
+            args.opt_bool("include_counts", false),
+            args.opt_bool("include_deep_checks", false)));
+    }
+
+    void trigger_reindex(const Args&) {
+        json root = {
+            {"status", "live_only"},
+            {"offline_supported", false},
+            {"action", "source.trigger_reindex"},
+            {"summary", "source.trigger_reindex requires a running Unreal Editor/Monolith MCP server; monolith_query.exe is an offline SQLite reader and cannot launch source indexing."},
+            {"next_actions", json::array({"source.health", "source.search_source", "Use live MCP source.trigger_reindex when editor-backed reindexing is required"})},
+        };
+        print_json(root);
+    }
+
+    void trigger_project_reindex(const Args&) {
+        json root = {
+            {"status", "live_only"},
+            {"offline_supported", false},
+            {"action", "source.trigger_project_reindex"},
+            {"summary", "source.trigger_project_reindex requires a running Unreal Editor/Monolith MCP server; monolith_query.exe is an offline SQLite reader and cannot update EngineSource.db."},
+            {"next_actions", json::array({"source.health", "source.search_source", "Use live MCP source.trigger_project_reindex after a C++ build or hot reload"})},
+        };
+        print_json(root);
     }
 
     json source_repair_fts_json(const std::string& target, bool execute) {
@@ -2558,25 +2707,51 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
         std::string direction = args.opt("direction", "both");
         int max_depth = args.opt_int("max_depth", 2);
         int max_results = args.opt_int("max_results", 200);
+        std::string detail = lower_copy(args.opt("detail_level", "minimal"));
+        bool standard = detail == "standard" || detail == "full";
+        if (!standard && detail != "minimal") die("find_overrides --detail-level must be minimal or standard");
         json root = source_impact_radius_json(symbol, "override", direction, max_depth, max_results);
         root["overrides"] = root.value("impacted_symbols", json::array());
         root["direct_override_edges"] = json::array();
+        root["detail_level"] = standard ? "standard" : "minimal";
 
         int cap = clamp_int(max_results <= 0 ? 200 : max_results, 1, 1000);
+        int direct_edge_cap = standard ? cap : std::min(cap, 25);
+        int direct_edge_count = 0;
         auto seeds = symbols_by_name(symbol, 5);
         bool in = direction != "out";
         bool out = direction != "in";
+        auto add_direct_edge = [&](const Row& edge) {
+            ++direct_edge_count;
+            if ((int)root["direct_override_edges"].size() < direct_edge_cap) {
+                root["direct_override_edges"].push_back(override_edge_json(edge, 1));
+            }
+        };
         for (const auto& seed : seeds) {
             if (out) {
                 for (const auto& edge : override_edges_from(seed.get("id"), cap)) {
-                    root["direct_override_edges"].push_back(override_edge_json(edge, 1));
+                    add_direct_edge(edge);
                 }
             }
             if (in) {
                 for (const auto& edge : override_edges_to(seed.get("id"), cap)) {
-                    root["direct_override_edges"].push_back(override_edge_json(edge, 1));
+                    add_direct_edge(edge);
                 }
             }
+        }
+        root["direct_override_edge_count"] = direct_edge_count;
+        root["direct_override_edges_truncated"] = direct_edge_count > (int)root["direct_override_edges"].size();
+        json edges = root.value("edges", json::array());
+        int edge_count = edges.size();
+        root["edge_count"] = edge_count;
+        if (!standard) {
+            json edge_sample = json::array();
+            for (size_t i = 0; i < edges.size() && i < 25u; ++i) edge_sample.push_back(edges[i]);
+            root["edges"] = edge_sample;
+            root["edges_truncated"] = edge_count > (int)edge_sample.size();
+            root.erase("impacted_symbols");
+        } else {
+            root["edges_truncated"] = false;
         }
         root["summary"] = std::to_string(root["overrides"].size()) + " override-related symbol(s) within depth "
             + std::to_string(clamp_int(max_depth <= 0 ? 2 : max_depth, 0, 8))
@@ -2911,7 +3086,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
             {"scoring_version", "3"},
         };
 
-        json health = source_health_json(false);
+        json health = source_health_json(false, true);
         json changes = source_detect_changes_json(changed_paths, change_cap, standard ? "standard" : "minimal");
         json unused = include_unused ? source_find_unused_json("all", unused_cap, "low") : json();
 
@@ -6016,6 +6191,8 @@ int main(int argc, char* argv[]) {
                 {"impact_radius",       [](SourceActions& s, const Args& a) { s.impact_radius(a); }},
                 {"find_overrides",      [](SourceActions& s, const Args& a) { s.find_overrides(a); }},
                 {"health",              [](SourceActions& s, const Args& a) { s.health(a); }},
+                {"trigger_reindex",     [](SourceActions& s, const Args& a) { s.trigger_reindex(a); }},
+                {"trigger_project_reindex", [](SourceActions& s, const Args& a) { s.trigger_project_reindex(a); }},
                 {"repair_fts",          [](SourceActions& s, const Args& a) { s.repair_fts(a); }},
                 {"repair_crg_cache",    [](SourceActions& s, const Args& a) { s.repair_crg_cache(a); }},
                 {"build_crg_graph",     [](SourceActions& s, const Args& a) { s.build_crg_graph(a); }},

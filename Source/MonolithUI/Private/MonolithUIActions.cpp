@@ -45,6 +45,69 @@ namespace MonolithUIActionsPhase2
     static FMonolithActionResult HandleDumpBlueprintCompileLog(const TSharedPtr<FJsonObject>& Params);
 }
 
+namespace MonolithUISetWidgetPropertyInternal
+{
+    static bool IsVariableFlagProperty(const FString& PropertyName)
+    {
+        return PropertyName.Equals(TEXT("IsVariable"), ESearchCase::IgnoreCase)
+            || PropertyName.Equals(TEXT("bIsVariable"), ESearchCase::IgnoreCase);
+    }
+
+    static bool TryReadBoolValue(const TSharedPtr<FJsonValue>& ValueJson, bool& OutValue, FString& OutError)
+    {
+        if (!ValueJson.IsValid())
+        {
+            OutError = TEXT("missing JSON value");
+            return false;
+        }
+
+        if (ValueJson->Type == EJson::Boolean)
+        {
+            return ValueJson->TryGetBool(OutValue);
+        }
+
+        FString TextValue;
+        if (ValueJson->TryGetString(TextValue))
+        {
+            TextValue.TrimStartAndEndInline();
+            if (TextValue.Equals(TEXT("true"), ESearchCase::IgnoreCase) || TextValue == TEXT("1"))
+            {
+                OutValue = true;
+                return true;
+            }
+            if (TextValue.Equals(TEXT("false"), ESearchCase::IgnoreCase) || TextValue == TEXT("0"))
+            {
+                OutValue = false;
+                return true;
+            }
+
+            OutError = FString::Printf(TEXT("string value '%s' is not one of true/false/1/0"), *TextValue);
+            return false;
+        }
+
+        double NumberValue = 0.0;
+        if (ValueJson->TryGetNumber(NumberValue))
+        {
+            if (NumberValue == 0.0)
+            {
+                OutValue = false;
+                return true;
+            }
+            if (NumberValue == 1.0)
+            {
+                OutValue = true;
+                return true;
+            }
+
+            OutError = FString::Printf(TEXT("numeric value %.17g is not 0 or 1"), NumberValue);
+            return false;
+        }
+
+        OutError = TEXT("expected a boolean, true/false string, or 0/1 number");
+        return false;
+    }
+}
+
 void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
     Registry.RegisterAction(
@@ -101,12 +164,12 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("set_widget_property"),
-        TEXT("Set a property on a widget (text, color, opacity, visibility, etc.). Default mode gates writes through the per-type curated allowlist; pass raw_mode=true to bypass the gate (legacy compat). The new value can be supplied as `value` OR the alias `property_value` (Bug #6 fix)."),
+        TEXT("Set a property on a widget (text, color, opacity, visibility, etc.). Default mode gates writes through the per-type curated allowlist; pass raw_mode=true to bypass the gate (legacy compat). The new value can be supplied as `value` OR the alias `property_value` (Bug #6 fix). `IsVariable`/`bIsVariable` routes to the first-class variable-flag path."),
         FMonolithActionHandler::CreateStatic(&HandleSetWidgetProperty),
         FParamSchemaBuilder()
             .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("widget_name"), TEXT("string"), TEXT("Target widget name"))
-            .Required(TEXT("property_name"), TEXT("string"), TEXT("Property path. Dotted segments allowed (e.g. 'Padding.Left'). Allowlist-gated unless raw_mode=true."))
+            .Required(TEXT("property_name"), TEXT("string"), TEXT("Property path. Dotted segments allowed (e.g. 'Padding.Left'). Allowlist-gated unless raw_mode=true. `IsVariable`/`bIsVariable` is accepted as a compatibility route to set_widget_is_variable."))
             .Required(TEXT("value"), TEXT("string"), TEXT("Property value (alias: 'property_value'). Strings, numbers, booleans, JSON arrays/objects all accepted; struct types (Vector2D/LinearColor/Margin/Vector4/SlateColor) accept multiple shapes."))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile after setting"), TEXT("false"))
             .Optional(TEXT("raw_mode"), TEXT("boolean"), TEXT("Bypass the allowlist gate (legacy unconditional ImportText_Direct path). Default false."), TEXT("false"))
@@ -722,6 +785,41 @@ FMonolithActionResult FMonolithUIActions::HandleSetWidgetProperty(const TSharedP
             TEXT("/widget_name"),
             FString::Printf(TEXT("Widget '%s' not found in WBP '%s'."), *WidgetName, *AssetPath),
             TEXT("Call ui::get_widget_tree to enumerate live widget names.")));
+    }
+
+    if (MonolithUISetWidgetPropertyInternal::IsVariableFlagProperty(PropertyName))
+    {
+        bool bIsVariable = false;
+        FString BoolParseError;
+        if (!MonolithUISetWidgetPropertyInternal::TryReadBoolValue(ValueJson, bIsVariable, BoolParseError))
+        {
+            return FMonolithActionResult::Error(FString::Printf(
+                TEXT("set_widget_property: property '%s' routes to ui.set_widget_is_variable and requires a boolean-compatible value (%s)."),
+                *PropertyName,
+                *BoolParseError),
+                -32602);
+        }
+
+        const bool bWasVariable = Widget->bIsVariable;
+
+        Widget->Modify();
+        Widget->bIsVariable = bIsVariable;
+
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+        FKismetEditorUtilities::CompileBlueprint(WBP);
+        WBP->GetOutermost()->MarkPackageDirty();
+
+        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+        Result->SetStringField(TEXT("widget"), WidgetName);
+        Result->SetStringField(TEXT("widget_name"), WidgetName);
+        Result->SetStringField(TEXT("property"), PropertyName);
+        Result->SetStringField(TEXT("value"), bIsVariable ? TEXT("true") : TEXT("false"));
+        Result->SetBoolField(TEXT("is_variable"), bIsVariable);
+        Result->SetBoolField(TEXT("changed"), bWasVariable != bIsVariable);
+        Result->SetBoolField(TEXT("compiled"), true);
+        Result->SetBoolField(TEXT("raw_mode"), bRawMode);
+        Result->SetStringField(TEXT("routed_action"), TEXT("ui.set_widget_is_variable"));
+        return FMonolithActionResult::Success(Result);
     }
 
     // ----- Phase C primary path: gated reflection helper -----

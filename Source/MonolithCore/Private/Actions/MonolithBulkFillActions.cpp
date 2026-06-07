@@ -12,6 +12,8 @@
 #include "MonolithParamSchema.h"
 #include "Dom/JsonObject.h"
 
+#include <initializer_list>
+
 namespace MonolithBulkFillActionsInternal
 {
 	static TSharedPtr<FJsonObject> BuildBulkFillSchema()
@@ -40,8 +42,9 @@ namespace MonolithBulkFillActionsInternal
 	static TSharedPtr<FJsonObject> BuildDescribeSchema()
 	{
 		return FParamSchemaBuilder()
-			.Required(TEXT("target_namespace"), TEXT("string"),
-				TEXT("Adapter namespace whose schema should be introspected."))
+			.Optional(TEXT("target_namespace"), TEXT("string"),
+				TEXT("Adapter namespace whose schema should be introspected. Optional so empty/misrouted calls can return registered namespace guidance instead of a validation dead-end. Aliases: `namespace`, `domain`."),
+				{ TEXT("namespace"), TEXT("domain") })
 			.Optional(TEXT("target"), TEXT("string"),
 				TEXT("Asset path or action name to describe. Omit or pass an empty string for the adapter's namespace-level writable-shape summary."))
 			.Build();
@@ -50,8 +53,9 @@ namespace MonolithBulkFillActionsInternal
 	static TSharedPtr<FJsonObject> BuildDescribeListTargetsSchema()
 	{
 		return FParamSchemaBuilder()
-			.Required(TEXT("target_namespace"), TEXT("string"),
-				TEXT("Registered adapter namespace whose optional introspection inventory should be listed. If inventory_supported=false, the namespace is registered but does not expose an authoritative target list; use describe.schema without target for the namespace-level shape or with a known target for target-specific shape."))
+			.Optional(TEXT("target_namespace"), TEXT("string"),
+				TEXT("Registered adapter namespace whose optional introspection inventory should be listed. Optional so empty/misrouted calls can return registered namespace guidance. If inventory_supported=false, the namespace is registered but does not expose an authoritative target list; use describe.schema without target for the namespace-level shape or with a known target for target-specific shape. Aliases: `namespace`, `domain`."),
+				{ TEXT("namespace"), TEXT("domain") })
 			.Build();
 	}
 
@@ -87,6 +91,83 @@ namespace MonolithBulkFillActionsInternal
 			O->SetArrayField(TEXT("children"), Kids);
 		}
 		return O;
+	}
+
+	static TArray<TSharedPtr<FJsonValue>> StringArrayToJson(const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> JsonValues;
+		JsonValues.Reserve(Values.Num());
+		for (const FString& Value : Values)
+		{
+			JsonValues.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return JsonValues;
+	}
+
+	static bool TryGetStringFieldAny(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* CanonicalName,
+		std::initializer_list<const TCHAR*> Aliases,
+		FString& OutValue)
+	{
+		if (!Params.IsValid())
+		{
+			return false;
+		}
+		if (Params->TryGetStringField(CanonicalName, OutValue) && !OutValue.IsEmpty())
+		{
+			return true;
+		}
+		for (const TCHAR* Alias : Aliases)
+		{
+			if (Params->TryGetStringField(Alias, OutValue) && !OutValue.IsEmpty())
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	static TSharedPtr<FJsonObject> BuildDescribeNamespaceGuidance(
+		const FString& RequestedNamespace,
+		const FString& MatchStatus,
+		const FString& Message)
+	{
+		FMonolithBulkFillRegistry& Registry = FMonolithBulkFillRegistry::Get();
+		TArray<FString> Namespaces = Registry.GetRegisteredNamespaces();
+		Namespaces.Sort();
+
+		TArray<TSharedPtr<FJsonValue>> NamespaceEntries;
+		NamespaceEntries.Reserve(Namespaces.Num());
+		for (const FString& Namespace : Namespaces)
+		{
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("namespace"), Namespace);
+			Entry->SetBoolField(TEXT("registered"), true);
+			Entry->SetBoolField(TEXT("inventory_supported"), Registry.HasListTargetsAdapter(Namespace));
+			NamespaceEntries.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+
+		TArray<FString> NextActions;
+		NextActions.Add(TEXT("bulk_fill.list_namespaces"));
+		NextActions.Add(TEXT("describe.schema with target_namespace=<namespace>"));
+		NextActions.Add(TEXT("describe.list_targets with target_namespace=<namespace>"));
+		NextActions.Add(TEXT("describe.action_schema for action parameter schemas"));
+		NextActions.Add(TEXT("monolith.discover namespace=describe"));
+
+		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+		Out->SetStringField(TEXT("match_status"), MatchStatus);
+		Out->SetStringField(TEXT("message"), Message);
+		Out->SetArrayField(TEXT("available_namespaces"), StringArrayToJson(Namespaces));
+		Out->SetArrayField(TEXT("namespaces"), NamespaceEntries);
+		Out->SetNumberField(TEXT("namespace_count"), Namespaces.Num());
+		Out->SetArrayField(TEXT("next_actions"), StringArrayToJson(NextActions));
+		if (!RequestedNamespace.IsEmpty())
+		{
+			Out->SetStringField(TEXT("requested_namespace"), RequestedNamespace);
+			Out->SetBoolField(TEXT("registered"), Registry.HasAdapter(RequestedNamespace));
+		}
+		return Out;
 	}
 
 	// --- bulk_fill.apply ---
@@ -162,26 +243,31 @@ namespace MonolithBulkFillActionsInternal
 	{
 		if (!Params.IsValid())
 		{
-			return FMonolithActionResult::Error(TEXT("describe.schema requires params"));
+			return FMonolithActionResult::Success(BuildDescribeNamespaceGuidance(
+				TEXT(""),
+				TEXT("namespace_index"),
+				TEXT("describe.schema was called without params. Choose a registered target_namespace and optionally pass target for a target-specific schema.")));
 		}
 
 		FString TargetNamespace;
 		FString Target;
-		Params->TryGetStringField(TEXT("target_namespace"), TargetNamespace);
+		TryGetStringFieldAny(Params, TEXT("target_namespace"), { TEXT("namespace"), TEXT("domain") }, TargetNamespace);
 		Params->TryGetStringField(TEXT("target"), Target);
 
 		if (TargetNamespace.IsEmpty())
 		{
-			return FMonolithActionResult::Error(
-				TEXT("describe.schema requires target_namespace"),
-				FMonolithJsonUtils::ErrInvalidParams);
+			return FMonolithActionResult::Success(BuildDescribeNamespaceGuidance(
+				TEXT(""),
+				TEXT("namespace_index"),
+				TEXT("describe.schema requires a target_namespace to return a writable-shape descriptor. Returning registered namespaces instead of a validation dead-end.")));
 		}
 
 		if (!FMonolithBulkFillRegistry::Get().HasAdapter(TargetNamespace))
 		{
-			return FMonolithActionResult::Error(
-				FString::Printf(TEXT("no describe adapter registered for namespace '%s'"), *TargetNamespace),
-				FMonolithJsonUtils::ErrOptionalDepUnavailable);
+			return FMonolithActionResult::Success(BuildDescribeNamespaceGuidance(
+				TargetNamespace,
+				TEXT("no_adapter"),
+				FString::Printf(TEXT("No describe adapter is registered for namespace '%s'. Use one of the available_namespaces values or describe.action_schema for action parameter schemas."), *TargetNamespace)));
 		}
 
 		const FSchemaDescriptor Root = FMonolithBulkFillRegistry::Get().DispatchDescribe(TargetNamespace, Target);
@@ -193,25 +279,30 @@ namespace MonolithBulkFillActionsInternal
 	{
 		if (!Params.IsValid())
 		{
-			return FMonolithActionResult::Error(TEXT("describe.list_targets requires params"));
+			return FMonolithActionResult::Success(BuildDescribeNamespaceGuidance(
+				TEXT(""),
+				TEXT("namespace_index"),
+				TEXT("describe.list_targets was called without params. Choose a registered target_namespace to inspect optional inventory support.")));
 		}
 
 		FString TargetNamespace;
-		Params->TryGetStringField(TEXT("target_namespace"), TargetNamespace);
+		TryGetStringFieldAny(Params, TEXT("target_namespace"), { TEXT("namespace"), TEXT("domain") }, TargetNamespace);
 
 		if (TargetNamespace.IsEmpty())
 		{
-			return FMonolithActionResult::Error(
-				TEXT("describe.list_targets requires target_namespace"),
-				FMonolithJsonUtils::ErrInvalidParams);
+			return FMonolithActionResult::Success(BuildDescribeNamespaceGuidance(
+				TEXT(""),
+				TEXT("namespace_index"),
+				TEXT("describe.list_targets requires a target_namespace to list adapter inventory. Returning registered namespaces instead of a validation dead-end.")));
 		}
 
 		FMonolithBulkFillRegistry& Registry = FMonolithBulkFillRegistry::Get();
 		if (!Registry.HasAdapter(TargetNamespace))
 		{
-			return FMonolithActionResult::Error(
-				FString::Printf(TEXT("no describe adapter registered for namespace '%s'"), *TargetNamespace),
-				FMonolithJsonUtils::ErrOptionalDepUnavailable);
+			return FMonolithActionResult::Success(BuildDescribeNamespaceGuidance(
+				TargetNamespace,
+				TEXT("no_adapter"),
+				FString::Printf(TEXT("No describe adapter is registered for namespace '%s'. Use one of the available_namespaces values or bulk_fill.list_namespaces."), *TargetNamespace)));
 		}
 
 		const bool bInventorySupported = Registry.HasListTargetsAdapter(TargetNamespace);
@@ -246,14 +337,15 @@ namespace MonolithBulkFillActionsInternal
 	// this just reads it back by (namespace, action). Closes the cause behind gaps #4/#12/#13.
 	static TSharedPtr<FJsonObject> BuildDescribeActionSchemaSchema()
 	{
-		// RI ergonomics handover #6 (2026-05-29): canonical param is now
-		// `target_action` for naming symmetry with `target_namespace`. The
-		// historical name `action` is kept as a K2 alias so callers that
-		// passed `{target_namespace, action}` still work — the registry's
-		// ApplyAliases pass rewrites `action` → `target_action` before
-		// the required-param check fires.
+		// RI ergonomics handover #6 (2026-05-29): canonical params are
+		// `target_namespace` and `target_action`. Historical/agent-natural
+		// names are kept as K2 aliases so callers that pass `{namespace, action}`
+		// or `{domain, target_action}` are rewritten before required-param
+		// validation fires.
 		return FParamSchemaBuilder()
-			.Required(TEXT("target_namespace"), TEXT("string"), TEXT("Namespace that owns the action (e.g. \"blueprint\", \"ui\")"))
+			.Required(TEXT("target_namespace"), TEXT("string"),
+				TEXT("Namespace that owns the action (e.g. \"blueprint\", \"ui\"). Aliases: `namespace`, `domain`."),
+				{ TEXT("namespace"), TEXT("domain") })
 			.Required(TEXT("target_action"), TEXT("string"),
 				TEXT("Action name whose param schema to return (e.g. \"add_nodes_bulk\"). Alias: `action`."),
 				{ TEXT("action") })
@@ -276,7 +368,13 @@ namespace MonolithBulkFillActionsInternal
 			return FMonolithActionResult::Error(TEXT("describe.action_schema requires params"));
 		}
 		FString TargetNamespace;
-		Params->TryGetStringField(TEXT("target_namespace"), TargetNamespace);
+		if (!Params->TryGetStringField(TEXT("target_namespace"), TargetNamespace) || TargetNamespace.IsEmpty())
+		{
+			if (!Params->TryGetStringField(TEXT("namespace"), TargetNamespace) || TargetNamespace.IsEmpty())
+			{
+				Params->TryGetStringField(TEXT("domain"), TargetNamespace);
+			}
+		}
 		FString ActionName;
 		if (!Params->TryGetStringField(TEXT("target_action"), ActionName) || ActionName.IsEmpty())
 		{

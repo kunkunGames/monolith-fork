@@ -35,7 +35,8 @@ public:
 		const FString& Symbol,
 		const FString& Direction,
 		int32 MaxDepth,
-		int32 MaxResults);
+		int32 MaxResults,
+		const FString& DetailLevel);
 
 	/** Query-time risk: caller/callee degree, descendants, UE macro, fan. */
 	static TSharedPtr<FJsonObject> RiskScore(

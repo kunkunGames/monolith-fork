@@ -29,7 +29,7 @@
 **Important:** `monolith_reindex` is the **asset/project** indexer (Blueprints, materials, textures via `MonolithIndex`). It does NOT update the C++ source DB. Source-symbol freshness is owned by this module via:
 
 1. `source.trigger_reindex` — full clean rebuild (engine + shaders + project).
-2. `source.trigger_project_reindex` — incremental, project C++ only.
+2. `source.trigger_project_reindex` — incremental, project C++ only. Offline `monolith_query.exe source trigger_project_reindex` is a DB-free live-only guidance action and does not mutate `EngineSource.db`.
 3. **F17 auto-hook (2026-04-26):** `UMonolithSourceSubsystem` listens on `FCoreUObjectDelegates::ReloadCompleteDelegate`. After every Live Coding patch and after every UBT-driven editor restart that fires hot-reload, the subsystem auto-kicks `TriggerProjectReindex()` (async). Guarded by a 5-second cooldown and an in-flight `bIsIndexing` flag so multi-module reload bursts don't storm. Skips silently if `EngineSource.db` doesn't yet exist (first-install bootstrap requires a manual `source.trigger_reindex`).
 
 After F17, agents do not need to invoke any source-reindex action manually in the common dev loop — just run UBT or Live Coding and `source_query` reflects the new symbols within ~1 second.
@@ -38,15 +38,15 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `read_source` | `symbol`, `include_header`, `max_lines`, `members_only` | Get source code for a class/function/struct. FTS fallback if exact match fails |
-| `find_references` | `symbol`, `ref_kind`, `limit` | Find all usage sites |
+| `read_source` | `symbol`, `include_header`, `max_lines`, `members_only`, `start_line`, `end_line`, `line_count` | Get source code for a class/function/struct. FTS fallback if exact match fails; path-like `symbol`/`path` input delegates to `read_file` |
+| `find_references` | `symbol`, `ref_kind`, `limit` | Find all usage sites. Unknown symbols return success with `match_status=no_symbol`, `count=0`, and `next_actions` instead of a retry-inducing hard error |
 | `find_callers` | `symbol`, `limit` | All functions that call the given function |
 | `find_callees` | `symbol`, `limit` | All functions called by the given function |
 | `search_source` | `query`, `scope`, `limit`, `mode`, `module`, `path_filter`, `symbol_kind` | Dual search: symbol FTS + source line FTS |
 | `get_class_hierarchy` | `symbol`, `direction`, `depth` | Inheritance tree (both/ancestors/descendants, max 80 shown) |
 | `get_module_info` | `module_name` | Module stats: file count, symbol counts, key classes |
 | `get_symbol_context` | `symbol`, `context_lines` | Definition with surrounding context |
-| `read_file` | `file_path`, `start_line`, `end_line` | Read source lines by path (absolute -> DB exact -> DB suffix match) |
+| `read_file` | `file_path`, `start_line`, `end_line`, `line_count`, `max_lines` | Read source lines by path (absolute -> DB exact -> DB suffix match). `path` is accepted as an alias for `file_path` |
 | `trigger_reindex` | none | Trigger full C++ engine source re-index (replaces entire EngineSource.db) |
 | `trigger_project_reindex` | none | Trigger incremental project-only C++ source re-index (updates project symbols in EngineSource.db without a full rebuild) |
 | `bridge.get_index_status` | `include_stats` | Report local project/source index readiness for Monolith bridge mentions |
@@ -55,10 +55,10 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 | `bridge.build_attachment` | `item_id`, `context_lines` | Materialize a `bridge.search_items` result into a bounded prompt attachment |
 | `bridge.search_asset_symbols` | `asset_path` or `symbol`, `limit` (20), `detail_level` (minimal) | RX-6 read-only bridge between ProjectIndex assets and EngineSource symbols. Returns bounded heuristic `links[]` with `confidence`, `reasons[]`, `asset`, `symbol`, `warnings[]`, `truncated`, and `next_actions` |
 | `impact_radius` | `symbol` (required), `edge_kinds` (default call\|type\|inheritance; optional override), `direction` (both), `max_depth` (2), `max_results` (200) | Bounded BFS over quoted `"references"` + `inheritance`, with derived function override edges only when explicitly requested (cycle-safe, `truncated`). `include` excluded |
-| `find_overrides` | `symbol` (required), `direction` (both), `max_depth` (2), `max_results` (200) | Override-only traversal for function symbols. Direct override edges are derived from `symbols.parent_symbol_id` + `inheritance` + exact method name + matching normalized parameter list; use qualified symbols when possible |
-| `health` | `include_counts` (true) | Read-only diagnostics: v1 schema, `journal_mode`, WAL sidecar/checkpoint counters if an accidental WAL DB is opened by a WAL-capable path, `symbols_ai/ad` triggers, `symbols_fts` parity, orphan refs, CRG projection table/index/parity checks. `source_fts` reported as info |
+| `find_overrides` | `symbol` (required), `direction` (both), `max_depth` (2), `max_results` (200), `detail_level` (minimal) | Override-only traversal for function symbols. Default minimal output keeps `overrides[]` but samples `edges[]`, reports `edge_count`, and omits the duplicate `impacted_symbols`; pass `detail_level=standard` for full edge arrays. Direct override edges are derived from `symbols.parent_symbol_id` + `inheritance` + exact method name + matching normalized parameter list; use qualified symbols when possible |
+| `health` | `include_counts` (false), `include_deep_checks` (false) | Read-only diagnostics. Default is a fast shallow check of v1 schema, `journal_mode`, required tables/triggers, and CRG projection structure. `include_deep_checks=true` or `include_counts=true` additionally runs expensive `symbols_fts` parity, orphan-reference, `source_fts` count, and CRG row-parity checks. |
 | `repair_fts` | `target` (all\|symbols\|source), `execute` (false) | Rebuilds `symbols_fts` (external-content). `target=source` always degrades to reindex guidance (plain fts5). Refused while `IsIndexing()` |
-| `repair_crg_cache` | `scope` (all\|override_edges), `execute` (false) | Rebuild derived `crg_nodes`/`crg_edges`/`crg_node_metrics`/`crg_meta` from `symbols`, `"references"`, and `inheritance`, plus the signature-aware `source_override_edges` cache. `scope=override_edges` refreshes only `source_override_edges` and `source_override_edges_version`. Dry-run unless `execute=true`; refused while `IsIndexing()` |
+| `repair_crg_cache` | `scope` (all\|override_edges), `execute` (false) | Rebuild derived `crg_nodes`/`crg_edges`/`crg_node_metrics`/`crg_meta` from `symbols`, `"references"`, and `inheritance`, plus the signature-aware `source_override_edges` cache. `scope=override_edges` refreshes only `source_override_edges` and `source_override_edges_version`. Dry-run unless `execute=true`; refused while `IsIndexing()`. Execute is freshness-gated and returns `skipped=true` without rebuilding when projection counts, indexes, and cache metadata are already current. |
 | `build_crg_graph` | `execute` (false), `force` (false), `graph_db` optional | Build or dry-run a CRG-compatible `Saved\graph.db` from `Saved\EngineSource.db` files, symbols, references, and inheritance. Offline execute builds are synchronous; live editor/MCP execute calls start an async child process and return `status=started`, `job_id`, and `poll_action=source.crg_graph_health`. Execute builds use a same-directory temp DB, validate it, and atomically replace the graph only after validation; current source-signature metadata skips rebuild unless `force=true`. The default graph DB path is used unless `graph_db` points to a copied/non-standard location |
 | `rebuild_crg_graph` | `execute` (false), `force` (false), `graph_db` optional | Alias of `build_crg_graph` for explicit rebuild workflows |
 | `search_crg_graph` | `query`, `kind` optional, `limit` (20), `graph_db` optional | Search `Saved\graph.db` graph nodes through `nodes_fts` first, with LIKE fallback when FTS has no rows. If a hot rollback journal or active graph writer blocks open, returns structured busy/warning JSON with EngineSource-backed fallback actions rather than a fatal process error |
@@ -79,6 +79,8 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 **Derived CRG Projection Cache:** `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta`, `crg_snapshots`.
 These tables are rebuildable projections over `symbols`, `"references"`, and
 `inheritance`, not source-of-truth tables. `source.repair_crg_cache execute=true`
+first checks `freshness_checks` and `repair_needed`; if the projection is already
+current it returns `skipped=true` instead of rebuilding. When repair is needed it
 purges stale/orphan metrics, recreates the projection, and `source.risk_score` reads `crg_node_metrics` first
 before falling back to query-time scoring. Rebuilt projection metrics use
 `crg_meta.scoring_version=3` for the UE-domain sensitivity factor; override fan-out

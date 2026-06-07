@@ -445,9 +445,12 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::FindOverrides(
 	const FString& Symbol,
 	const FString& Direction,
 	int32 MaxDepth,
-	int32 MaxResults)
+	int32 MaxResults,
+	const FString& DetailLevel)
 {
 	const FString EffectiveDirection = Direction.IsEmpty() ? TEXT("both") : Direction;
+	const bool bStandardDetail = DetailLevel.Equals(TEXT("standard"), ESearchCase::IgnoreCase)
+		|| DetailLevel.Equals(TEXT("full"), ESearchCase::IgnoreCase);
 	TSharedPtr<FJsonObject> Root = ImpactRadius(
 		Db,
 		Symbol,
@@ -466,6 +469,30 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::FindOverrides(
 			ClampDepth(MaxDepth),
 			*EffectiveDirection,
 			*Symbol));
+	}
+	Root->SetStringField(TEXT("detail_level"), bStandardDetail ? TEXT("standard") : TEXT("minimal"));
+
+	const TArray<TSharedPtr<FJsonValue>>* Edges = nullptr;
+	if (Root->TryGetArrayField(TEXT("edges"), Edges) && Edges)
+	{
+		const int32 EdgeCount = Edges->Num();
+		Root->SetNumberField(TEXT("edge_count"), EdgeCount);
+		if (!bStandardDetail)
+		{
+			const int32 EdgeSampleLimit = 25;
+			FJsonArr EdgeSample;
+			for (int32 Index = 0; Index < EdgeCount && Index < EdgeSampleLimit; ++Index)
+			{
+				EdgeSample.Add((*Edges)[Index]);
+			}
+			Root->SetArrayField(TEXT("edges"), EdgeSample);
+			Root->SetBoolField(TEXT("edges_truncated"), EdgeCount > EdgeSample.Num());
+			Root->RemoveField(TEXT("impacted_symbols"));
+		}
+		else
+		{
+			Root->SetBoolField(TEXT("edges_truncated"), false);
+		}
 	}
 	AddNext(Root, { TEXT("source.impact_radius"), TEXT("source.review_context"), TEXT("source.risk_score") });
 	return Root;

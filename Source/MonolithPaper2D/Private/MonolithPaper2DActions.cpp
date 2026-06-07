@@ -56,6 +56,74 @@ namespace MonolithPaper2D
 		return Row;
 	}
 
+	static void CollectAssetCandidatesForPath(IAssetRegistry& AssetRegistry, const FString& RawAssetPath, TArray<FAssetData>& OutAssets)
+	{
+		FString AssetPath = RawAssetPath;
+		AssetPath.TrimStartAndEndInline();
+		if (AssetPath.IsEmpty() || !IsProjectAssetPath(AssetPath))
+		{
+			return;
+		}
+
+		FAssetData DirectAsset = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(AssetPath));
+		if (DirectAsset.IsValid())
+		{
+			OutAssets.Add(DirectAsset);
+		}
+
+		FString PackageName = AssetPath;
+		int32 DotIndex = INDEX_NONE;
+		if (PackageName.FindChar(TEXT('.'), DotIndex))
+		{
+			PackageName.LeftInline(DotIndex);
+		}
+
+		TArray<FAssetData> PackageAssets;
+		AssetRegistry.GetAssetsByPackageName(FName(*PackageName), PackageAssets, true);
+		for (const FAssetData& PackageAsset : PackageAssets)
+		{
+			if (!OutAssets.ContainsByPredicate([&PackageAsset](const FAssetData& Existing)
+			{
+				return Existing.GetObjectPathString() == PackageAsset.GetObjectPathString();
+			}))
+			{
+				OutAssets.Add(PackageAsset);
+			}
+		}
+	}
+
+	static TSharedPtr<FJsonObject> BuildPaper2DMissResult(IAssetRegistry& AssetRegistry, const FString& AssetPath, const FString& ErrorMessage)
+	{
+		TArray<FAssetData> Candidates;
+		CollectAssetCandidatesForPath(AssetRegistry, AssetPath, Candidates);
+
+		constexpr int32 CandidateLimit = 10;
+		TArray<TSharedPtr<FJsonValue>> CandidateRows;
+		for (int32 Index = 0; Index < FMath::Min(CandidateLimit, Candidates.Num()); ++Index)
+		{
+			CandidateRows.Add(MakeShared<FJsonValueObject>(BuildPaper2DAssetRow(Candidates[Index])));
+		}
+
+		TArray<TSharedPtr<FJsonValue>> NextActions;
+		NextActions.Add(MakeShared<FJsonValueString>(TEXT("project.get_asset_details")));
+		NextActions.Add(MakeShared<FJsonValueString>(TEXT("project.search")));
+		NextActions.Add(MakeShared<FJsonValueString>(TEXT("paper2d.list_assets")));
+
+		auto ResultJson = MakeShared<FJsonObject>();
+		ResultJson->SetStringField(TEXT("namespace"), TEXT("paper2d"));
+		ResultJson->SetStringField(TEXT("domain"), TEXT("paper2d_discovery"));
+		ResultJson->SetStringField(TEXT("requested_path"), AssetPath);
+		ResultJson->SetStringField(TEXT("match_status"), TEXT("no_match"));
+		ResultJson->SetBoolField(TEXT("paper2d_asset"), false);
+		ResultJson->SetStringField(TEXT("message"), ErrorMessage);
+		ResultJson->SetNumberField(TEXT("candidate_count"), Candidates.Num());
+		ResultJson->SetNumberField(TEXT("returned_candidate_count"), CandidateRows.Num());
+		ResultJson->SetBoolField(TEXT("candidates_truncated"), Candidates.Num() > CandidateRows.Num());
+		ResultJson->SetArrayField(TEXT("candidates"), CandidateRows);
+		ResultJson->SetArrayField(TEXT("next_actions"), NextActions);
+		return ResultJson;
+	}
+
 	static bool ResolvePaper2DAssetData(IAssetRegistry& AssetRegistry, const FString& RawAssetPath, FAssetData& OutAssetData, FString& OutError)
 	{
 		FString AssetPath = RawAssetPath;
@@ -314,7 +382,11 @@ FMonolithActionResult FMonolithPaper2DActions::GetAsset(const TSharedPtr<FJsonOb
 	FString ErrorMessage;
 	if (!MonolithPaper2D::ResolvePaper2DAssetData(AssetRegistry, AssetPath, AssetData, ErrorMessage))
 	{
-		return FMonolithActionResult::Error(ErrorMessage);
+		if (!MonolithPaper2D::IsProjectAssetPath(AssetPath))
+		{
+			return FMonolithActionResult::Error(ErrorMessage);
+		}
+		return FMonolithActionResult::Success(MonolithPaper2D::BuildPaper2DMissResult(AssetRegistry, AssetPath, ErrorMessage));
 	}
 
 	int32 TagCount = 0;
@@ -334,6 +406,8 @@ FMonolithActionResult FMonolithPaper2DActions::GetAsset(const TSharedPtr<FJsonOb
 	ResultJson->SetStringField(TEXT("namespace"), TEXT("paper2d"));
 	ResultJson->SetStringField(TEXT("domain"), TEXT("paper2d_discovery"));
 	ResultJson->SetStringField(TEXT("requested_path"), AssetPath);
+	ResultJson->SetStringField(TEXT("match_status"), TEXT("paper2d_asset"));
+	ResultJson->SetBoolField(TEXT("paper2d_asset"), true);
 	ResultJson->SetObjectField(TEXT("asset"), MonolithPaper2D::BuildPaper2DAssetRow(AssetData));
 	ResultJson->SetBoolField(TEXT("tags_included"), bIncludeTags);
 	ResultJson->SetNumberField(TEXT("tag_count"), TagCount);

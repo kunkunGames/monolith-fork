@@ -84,6 +84,7 @@ static const std::map<std::string, CliOptionKind>& cli_option_kinds() {
         {"graph_db", CliOptionKind::Value},
         {"include_content", CliOptionKind::Bool},
         {"include_counts", CliOptionKind::Bool},
+        {"include_deep_checks", CliOptionKind::Bool},
         {"include_questions", CliOptionKind::Bool},
         {"include_unused", CliOptionKind::Bool},
         {"interface_name", CliOptionKind::Value},
@@ -103,6 +104,7 @@ static const std::map<std::string, CliOptionKind>& cli_option_kinds() {
         {"module_name", CliOptionKind::Value},
         {"no_header", CliOptionKind::Bool},
         {"offset", CliOptionKind::Value},
+        {"path", CliOptionKind::Value},
         {"path_filter", CliOptionKind::Value},
         {"project_db", CliOptionKind::Value},
         {"ranges", CliOptionKind::Value},
@@ -116,6 +118,9 @@ static const std::map<std::string, CliOptionKind>& cli_option_kinds() {
         {"source_db", CliOptionKind::Value},
         {"specifier_name", CliOptionKind::Value},
         {"start", CliOptionKind::Value},
+        {"start_line", CliOptionKind::Value},
+        {"end_line", CliOptionKind::Value},
+        {"line_count", CliOptionKind::Value},
         {"status", CliOptionKind::Value},
         {"symbol", CliOptionKind::Value},
         {"target", CliOptionKind::Value},
@@ -135,7 +140,8 @@ static const std::map<std::string, std::vector<std::string>>& offline_dispatch_a
             "search_source", "read_source", "find_references", "find_callers",
             "find_callees", "get_class_hierarchy", "get_module_info",
             "get_symbol_context", "read_file", "impact_radius", "find_overrides",
-            "health", "repair_fts", "repair_crg_cache", "build_crg_graph",
+            "health", "trigger_reindex", "trigger_project_reindex",
+            "repair_fts", "repair_crg_cache", "build_crg_graph",
             "rebuild_crg_graph", "repair_crg_graph", "search_crg_graph",
             "crg_graph_health", "risk_score", "review_hotspots", "review_context",
             "detect_changes", "find_unused", "pre_merge_check", "snapshot",
@@ -191,9 +197,9 @@ static const std::vector<CliNamespaceHelp>& cli_help_catalog() {
               {"text sections: Symbol Matches, Source Line Matches"},
               {"monolith_query.exe source search_source UObject --limit=5"}, {"source.read_source", "source.review_context"}},
              {"read_source", "Discovery", "Print source for the best matching symbol.",
-              "source read_source <symbol> [--max-lines=N] [--no-header] [--members-only]",
-              {"symbol: class, function, or qualified name"}, {"--max-lines N", "--no-header", "--members-only"},
-              "max-lines=0 means full indexed range.", "read-only",
+              "source read_source <symbol> [--max-lines=N] [--no-header] [--members-only] OR source read_source --path=Source/Foo.cpp [--start-line=N] [--line-count=N]",
+              {"symbol: class, function, qualified name, or source file path"}, {"--max-lines N", "--no-header", "--members-only", "--path PATH", "--start-line N", "--end-line N", "--line-count N"},
+              "max-lines=0 means full indexed range; path input delegates to read_file.", "read-only",
               {"source text"}, {"monolith_query.exe source read_source UObject --max-lines=80"}, {"source.find_references"}},
              {"find_references", "Discovery", "Find indexed references to a source symbol.",
               "source find_references <symbol> [--ref-kind=K] [--limit=N]",
@@ -216,21 +222,27 @@ static const std::vector<CliNamespaceHelp>& cli_help_catalog() {
               "source get_symbol_context <symbol> [--context-lines=N]", {"symbol"}, {"--context-lines N"},
               "context-lines=10.", "read-only", {"context"}, {"monolith_query.exe source get_symbol_context UObject --context-lines=6"}, {"source.read_source"}},
              {"read_file", "Discovery", "Print indexed file lines.",
-              "source read_file <file_path> [--start=N] [--end=N]", {"file_path"}, {"--start N", "--end N"},
-              "start=1; end=0 means through EOF.", "read-only", {"file text"}, {"monolith_query.exe source read_file Source/Foo.cpp --start=1 --end=80"}, {"source.search_source"}},
+              "source read_file <file_path> [--start=N] [--end=N] [--line-count=N]", {"file_path"}, {"--start N", "--end N", "--start-line N", "--end-line N", "--line-count N", "--max-lines N", "--path PATH"},
+              "start=1; end=0 means 200 lines unless line-count/max-lines is supplied.", "read-only", {"file text"}, {"monolith_query.exe source read_file Source/Foo.cpp --start=1 --end=80"}, {"source.search_source"}},
              {"impact_radius", "Review", "Estimate source blast radius through CRG edges.",
               "source impact_radius <symbol> [--edge-kinds=call|type|inheritance[|override]] [--direction=in|out|both] [--max-depth=N] [--max-results=N]",
               {"symbol"}, {"--edge-kinds K", "--direction in|out|both", "--max-depth N", "--max-results N"},
               "edge-kinds=call|type|inheritance; direction=both; max-depth=2; max-results=200.", "read-only",
               {"success", "input", "nodes", "edges", "count", "truncated"}, {"monolith_query.exe source impact_radius UObject --max-depth 1 --max-results 20"}, {"source.review_context", "source.risk_score"}},
              {"find_overrides", "Review", "Find overrides or overridden functions for a virtual contract.",
-              "source find_overrides <symbol> [--direction=in|out|both] [--max-depth=N] [--max-results=N]",
-              {"symbol, preferably qualified"}, {"--direction in|out|both", "--max-depth N", "--max-results N"},
-              "direction=in; max-depth=2; max-results=200.", "read-only",
-              {"success", "input", "overrides", "count"}, {"monolith_query.exe source find_overrides UActorComponent::BeginPlay --direction=in"}, {"source.impact_radius", "source.review_hotspots"}},
-             {"health", "Health", "Report EngineSource.db health and optional counts.",
-              "source health [--include-counts=true|false]", {}, {"--include-counts bool"}, "include-counts=true.", "read-only",
+              "source find_overrides <symbol> [--direction=in|out|both] [--max-depth=N] [--max-results=N] [--detail-level=minimal|standard]",
+              {"symbol, preferably qualified"}, {"--direction in|out|both", "--max-depth N", "--max-results N", "--detail-level minimal|standard"},
+              "direction=in; max-depth=2; max-results=200; detail-level=minimal samples edge arrays. Use standard for full edges.", "read-only",
+              {"success", "input", "overrides", "edge_count", "truncated"}, {"monolith_query.exe source find_overrides UActorComponent::BeginPlay --direction=in"}, {"source.impact_radius", "source.review_hotspots"}},
+             {"health", "Health", "Report EngineSource.db health with optional deep parity checks and counts.",
+             "source health [--include-counts=true|false] [--include-deep-checks=true|false]", {}, {"--include-counts bool", "--include-deep-checks bool"}, "Default is a fast shallow check; include-counts=true also enables deep checks.", "read-only",
               {"status", "success", "checks", "counts"}, {"monolith_query.exe source health --include-counts=false"}, {"source.repair_fts"}},
+             {"trigger_reindex", "Live-only", "Explain how to run the live full source reindex action.",
+              "source trigger_reindex", {}, {}, "Offline guidance only; requires live MCP/editor to execute.", "read-only guidance",
+              {"status", "offline_supported", "next_actions"}, {"monolith_query.exe source trigger_reindex"}, {"source.health"}},
+             {"trigger_project_reindex", "Live-only", "Explain how to run the live incremental project source reindex action.",
+              "source trigger_project_reindex", {}, {}, "Offline guidance only; requires live MCP/editor to execute.", "read-only guidance",
+              {"status", "offline_supported", "next_actions"}, {"monolith_query.exe source trigger_project_reindex"}, {"source.health"}},
              {"repair_fts", "Maintenance", "Inspect or repair source FTS tables.",
               "source repair_fts [--target=all|symbols|source] [--execute]", {}, {"--target NAME", "--execute bool"},
               "target=all; dry-run unless --execute=true.", "execute-gated write",
@@ -699,6 +711,12 @@ static int print_namespace_or_action_help(const std::string& ns_name, const std:
 
 static int maybe_handle_help_or_catalog_check(int argc, char* argv[], bool& handled) {
     handled = false;
+    if (argc == 1) {
+        handled = true;
+        print_top_level_help(std::cout);
+        return 0;
+    }
+
     if (argc >= 2 && std::string(argv[1]) == "--catalog-self-check") {
         handled = true;
         print_catalog_self_check(std::cout);

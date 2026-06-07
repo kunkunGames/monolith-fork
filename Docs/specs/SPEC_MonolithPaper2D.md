@@ -34,7 +34,7 @@
 |--------|--------|-------------|
 | `paper2d.get_status` | none | Reports Paper2D/Paper2DEditor module availability and supported Paper2D asset classes. |
 | `paper2d.list_assets` | `package_path`?, `limit`? | Lists PaperSprite, PaperFlipbook, PaperTileSet, and PaperTileMap registry rows under `/Game`. |
-| `paper2d.get_asset` | `asset_path`, `include_tags`?, `tag_limit`? | Returns one bounded Paper2D registry row and optional bounded tags under `/Game`. |
+| `paper2d.get_asset` | `asset_path`, `include_tags`?, `tag_limit`? | Returns one bounded Paper2D registry row and optional bounded tags under `/Game`; `/Game` paths that do not resolve to Paper2D return structured `match_status=no_match` guidance instead of an error. |
 
 The single-asset response contract is documented in [SPEC_MonolithPaper2DAssetMetadata.md](SPEC_MonolithPaper2DAssetMetadata.md).
 

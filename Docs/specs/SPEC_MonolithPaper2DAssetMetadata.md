@@ -17,7 +17,7 @@ Expose a low-risk, high-signal Paper2D inspection action without introducing a h
 
 | Action | Namespace | Mode | Description |
 |--------|-----------|------|-------------|
-| `paper2d.get_asset` | `paper2d` | read-only | Return bounded metadata for one PaperSprite, PaperFlipbook, PaperTileSet, or PaperTileMap asset under `/Game`. |
+| `paper2d.get_asset` | `paper2d` | read-only | Return bounded metadata for one PaperSprite, PaperFlipbook, PaperTileSet, or PaperTileMap asset under `/Game`; non-Paper2D `/Game` paths return structured no-match guidance. |
 
 | Parameter | Type | Required | Default | Contract |
 |-----------|------|----------|---------|----------|
@@ -33,6 +33,9 @@ Expose a low-risk, high-signal Paper2D inspection action without introducing a h
 |-------|------|-------------|
 | `namespace` | string | Always `paper2d`. |
 | `domain` | string | Always `paper2d_discovery`. |
+| `requested_path` | string | Original requested `/Game` path. |
+| `match_status` | string | `paper2d_asset` when resolved, `no_match` when the `/Game` path is not a Paper2D asset. |
+| `paper2d_asset` | boolean | True only when `asset` is a Paper2D registry row. |
 | `asset` | object | AssetRegistry row for the resolved Paper2D asset. |
 | `asset.object_path` | string | Full object path from AssetRegistry. |
 | `asset.package_name` | string | Package name, for example `/Game/Sprites/HeroSprite`. |
@@ -46,6 +49,17 @@ Expose a low-risk, high-signal Paper2D inspection action without introducing a h
 | `returned_tag_count` | integer | Number of returned tag rows. |
 | `tags_truncated` | boolean | True when more tags existed than returned. |
 
+When `match_status` is `no_match`, the action still succeeds and returns:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `message` | string | Human-readable reason, such as not found or not a Paper2D class. |
+| `candidate_count` | integer | Registry rows found at the requested package/object path. |
+| `returned_candidate_count` | integer | Bounded number of candidate rows returned. |
+| `candidates_truncated` | boolean | True when more candidate rows existed than returned. |
+| `candidates` | array | Up to 10 bounded AssetRegistry rows for the requested path. |
+| `next_actions` | array | Follow-up actions such as `project.get_asset_details`, `project.search`, and `paper2d.list_assets`. |
+
 ---
 
 ## 4. Safety
@@ -56,7 +70,7 @@ Expose a low-risk, high-signal Paper2D inspection action without introducing a h
 | Optional dependency | The implementation must not include Paper2D headers or load `Paper2D`/`Paper2DEditor`. |
 | Read-only behavior | The action must not call `GetAsset()`, mutate packages, create transactions, or save assets. |
 | Bounded output | Tag values are truncated for JSON readability and tag rows are capped. |
-| Class guard | Non-Paper2D assets and unresolved paths return structured errors. |
+| Class guard | Non-Paper2D assets and unresolved `/Game` paths return structured `match_status=no_match` results; non-project paths remain errors. |
 
 ---
 

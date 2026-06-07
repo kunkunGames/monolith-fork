@@ -96,6 +96,10 @@ namespace
 			{ TEXT("grayscale"), TC_Grayscale },
 			{ TEXT("alpha"), TC_Alpha },
 			{ TEXT("masks"), TC_Masks },
+			{ TEXT("ui"), TC_EditorIcon },
+			{ TEXT("userinterface2d"), TC_EditorIcon },
+			{ TEXT("userinterface2drgba"), TC_EditorIcon },
+			{ TEXT("tc_editoricon"), TC_EditorIcon },
 			{ TEXT("hdr"), TC_HDR },
 			{ TEXT("bc7"), TC_BC7 },
 			{ TEXT("halfhdr"), TC_HalfFloat },
@@ -210,10 +214,14 @@ void FMonolithAssetLifecycleActions::RegisterActions(FMonolithToolRegistry& Regi
 		TEXT("Import an external image file as a UTexture2D asset with optional texture settings."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetLifecycleActions::ImportTextureFromFile),
 		FParamSchemaBuilder()
-			.Required(TEXT("source_path"), TEXT("string"), TEXT("Absolute source image path. Alias accepted: source_file."))
-			.Required(TEXT("destination"), TEXT("string"), TEXT("Destination asset path, e.g. /Game/Textures/T_Example. Alias accepted: dest_path."))
-			.Optional(TEXT("settings"), TEXT("object"), TEXT("{compression, srgb, tiling, max_size, lod_group}"))
+			.Required(TEXT("source_path"), TEXT("string"), TEXT("Absolute source image path. Aliases: source_file, file_path, path."),
+				{ TEXT("source_file"), TEXT("file_path"), TEXT("path") })
+			.Required(TEXT("destination"), TEXT("string"), TEXT("Destination asset path, e.g. /Game/Textures/T_Example. Aliases: dest_path, destination_path. If asset_name is also supplied, destination/destination_path is treated as the output folder."),
+				{ TEXT("dest_path"), TEXT("destination_path") })
+			.Optional(TEXT("asset_name"), TEXT("string"), TEXT("Optional asset name used with destination_path/destination as an output folder."))
+			.Optional(TEXT("settings"), TEXT("object"), TEXT("{compression, srgb, tiling, max_size, lod_group}. compression accepts TC_* names plus UI/UserInterface2D aliases."))
 			.Optional(TEXT("replace_existing"), TEXT("bool"), TEXT("Overwrite existing destination asset"), TEXT("false"))
+			.Optional(TEXT("overwrite_policy"), TEXT("string"), TEXT("Compatibility alias for replace_existing: overwrite/replace -> true; fail/unique -> false."))
 			.Build());
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("save_asset"),
@@ -238,12 +246,27 @@ FMonolithActionResult FMonolithAssetLifecycleActions::ImportTextureFromFile(cons
 {
 	FString SourcePath;
 	FString Destination;
-	ReadStringAlias(Params, TEXT("source_path"), TEXT("source_file"), SourcePath);
-	ReadStringAlias(Params, TEXT("destination"), TEXT("dest_path"), Destination);
+	if (!ReadStringAlias(Params, TEXT("source_path"), TEXT("source_file"), SourcePath) || SourcePath.IsEmpty())
+	{
+		if (!ReadStringAlias(Params, TEXT("file_path"), TEXT("path"), SourcePath))
+		{
+			SourcePath.Reset();
+		}
+	}
+	if (!ReadStringAlias(Params, TEXT("destination"), TEXT("dest_path"), Destination) || Destination.IsEmpty())
+	{
+		Params->TryGetStringField(TEXT("destination_path"), Destination);
+	}
+	FString AssetName;
+	Params->TryGetStringField(TEXT("asset_name"), AssetName);
+	if (!AssetName.IsEmpty() && !Destination.IsEmpty())
+	{
+		Destination = Destination / AssetName;
+	}
 
 	if (SourcePath.IsEmpty() || Destination.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("source_path and destination are required"));
+		return FMonolithActionResult::Error(TEXT("source_path and destination are required. Aliases: file_path/source_file/path and destination_path/dest_path; destination_path may be paired with asset_name."));
 	}
 
 	if (!FPlatformFileManager::Get().GetPlatformFile().FileExists(*SourcePath))
@@ -264,6 +287,15 @@ FMonolithActionResult FMonolithAssetLifecycleActions::ImportTextureFromFile(cons
 
 	bool bReplaceExisting = false;
 	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
+	FString OverwritePolicy;
+	if (!bReplaceExisting && Params->TryGetStringField(TEXT("overwrite_policy"), OverwritePolicy))
+	{
+		const FString Policy = OverwritePolicy.ToLower();
+		if (Policy == TEXT("overwrite") || Policy == TEXT("replace") || Policy == TEXT("replace_existing"))
+		{
+			bReplaceExisting = true;
+		}
+	}
 
 	TextureCompressionSettings Compression = TC_Default;
 	FString CompressionStr;

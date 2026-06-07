@@ -412,7 +412,7 @@ bool FSourceFindOverridesTraversesDepthTest::RunTest(const FString& Parameters)
 	FTempOverrideSourceDb T;
 	TestTrue(TEXT("temp override source db built"), T.Build());
 
-	TSharedPtr<FJsonObject> R = FMonolithSourceReview::FindOverrides(T.Db, TEXT("M::Base::Tick"), TEXT("in"), 1, 200);
+	TSharedPtr<FJsonObject> R = FMonolithSourceReview::FindOverrides(T.Db, TEXT("M::Base::Tick"), TEXT("in"), 1, 200, TEXT("standard"));
 	TestEqual(TEXT("find_overrides status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	const TArray<TSharedPtr<FJsonValue>>* Overrides = nullptr;
 	TestTrue(TEXT("overrides array present"), R->TryGetArrayField(TEXT("overrides"), Overrides) && Overrides != nullptr);
@@ -434,6 +434,11 @@ bool FSourceFindOverridesTraversesDepthTest::RunTest(const FString& Parameters)
 			TestEqual(TEXT("find_overrides emits override edges only"), Edge->GetStringField(TEXT("kind")), FString(TEXT("override")));
 		}
 	}
+
+	TSharedPtr<FJsonObject> Compact = FMonolithSourceReview::FindOverrides(T.Db, TEXT("M::Base::Tick"), TEXT("in"), 1, 200, TEXT("minimal"));
+	TestEqual(TEXT("compact find_overrides detail"), Compact->GetStringField(TEXT("detail_level")), FString(TEXT("minimal")));
+	TestFalse(TEXT("compact find_overrides omits duplicate impacted_symbols"), Compact->HasField(TEXT("impacted_symbols")));
+	TestTrue(TEXT("compact find_overrides reports edge_count"), Compact->HasField(TEXT("edge_count")));
 	return true;
 }
 
@@ -443,7 +448,7 @@ bool FSourceFindOverridesHandlesDiamondDepthTest::RunTest(const FString& Paramet
 	FTempOverrideSourceDb T;
 	TestTrue(TEXT("temp override source db built"), T.Build());
 
-	TSharedPtr<FJsonObject> R = FMonolithSourceReview::FindOverrides(T.Db, TEXT("M::Base::Apply"), TEXT("in"), 2, 200);
+	TSharedPtr<FJsonObject> R = FMonolithSourceReview::FindOverrides(T.Db, TEXT("M::Base::Apply"), TEXT("in"), 2, 200, TEXT("standard"));
 	TestEqual(TEXT("find_overrides diamond status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	const TArray<TSharedPtr<FJsonValue>>* Overrides = nullptr;
 	TestTrue(TEXT("diamond overrides array present"), R->TryGetArrayField(TEXT("overrides"), Overrides) && Overrides != nullptr);
@@ -497,8 +502,15 @@ bool FSourceHealthHealthyTest::RunTest(const FString& Parameters)
 {
 	FTempSourceDb T;
 	TestTrue(TEXT("temp source db built"), T.Build());
+	TSharedPtr<FJsonObject> Shallow = T.Db.ComputeHealth(false, false);
+	TestEqual(TEXT("default shallow source health stays healthy"), Shallow->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("shallow health reports depth"), Shallow->GetStringField(TEXT("check_depth")), FString(TEXT("shallow")));
+	TestFalse(TEXT("shallow health omits row counts"), Shallow->HasField(TEXT("row_counts")));
+	TSharedPtr<FJsonObject> DefaultShallow = T.Db.ComputeHealth(false);
+	TestEqual(TEXT("single-argument health defaults to shallow checks"), DefaultShallow->GetStringField(TEXT("check_depth")), FString(TEXT("shallow")));
 	TSharedPtr<FJsonObject> R = T.Db.ComputeHealth(true);
 	TestEqual(TEXT("fresh consistent source DB is healthy"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("deep health reports depth"), R->GetStringField(TEXT("check_depth")), FString(TEXT("deep")));
 	const TArray<TSharedPtr<FJsonValue>>* W = nullptr;
 	TestTrue(TEXT("warnings present"), R->TryGetArrayField(TEXT("warnings"), W) && W != nullptr);
 	TestEqual(TEXT("no warnings"), W->Num(), 0);
@@ -512,7 +524,7 @@ bool FSourceHealthWarnsOnOrphanReferenceTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("temp source db built"), T.Build());
 	T.Db.InsertReference(T.Sa, 999999, TEXT("call"), T.FileId, 22);
 
-	TSharedPtr<FJsonObject> R = T.Db.ComputeHealth(false);
+	TSharedPtr<FJsonObject> R = T.Db.ComputeHealth(false, true);
 	TestEqual(TEXT("orphan reference yields warning status"), R->GetStringField(TEXT("status")), FString(TEXT("warning")));
 	const TArray<TSharedPtr<FJsonValue>>* W = nullptr;
 	TestTrue(TEXT("warnings present"), R->TryGetArrayField(TEXT("warnings"), W) && W && W->Num() >= 1);
@@ -541,11 +553,13 @@ bool FSourceRepairCrgCacheTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("temp source db built"), T.Build());
 	TSharedPtr<FJsonObject> Dry = T.Db.RepairCrgCache(false);
 	TestEqual(TEXT("dry-run ok"), Dry->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestFalse(TEXT("fresh dry-run does not need repair"), Dry->GetBoolField(TEXT("repair_needed")));
 	const TArray<TSharedPtr<FJsonValue>>* Plan = nullptr;
 	TestTrue(TEXT("plan present"), Dry->TryGetArrayField(TEXT("plan"), Plan) && Plan && Plan->Num() >= 3);
 
 	TSharedPtr<FJsonObject> Exec = T.Db.RepairCrgCache(true);
 	TestEqual(TEXT("execute ok"), Exec->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestTrue(TEXT("fresh execute skips rebuild"), Exec->GetBoolField(TEXT("skipped")));
 	TSharedPtr<FJsonObject> After = Exec->GetObjectField(TEXT("after"));
 	TestTrue(TEXT("after counts present"), After.IsValid());
 	TestEqual(TEXT("one CRG node per symbol"), After->GetIntegerField(TEXT("crg_nodes")), 5);

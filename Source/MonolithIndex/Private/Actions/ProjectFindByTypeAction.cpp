@@ -31,10 +31,21 @@ FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonOb
 			return FMonolithActionResult::Error(TEXT("'asset_class' parameter cannot be empty"), -32602);
 		}
 	}
+	if (AssetClass.IsEmpty() && Params->HasField(TEXT("type")))
+	{
+		if (!Params->TryGetStringField(TEXT("type"), AssetClass))
+		{
+			return FMonolithActionResult::Error(TEXT("'type' parameter must be a string"), -32602);
+		}
+		if (AssetClass.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("'type' parameter cannot be empty"), -32602);
+		}
+	}
 
 	if (AssetClass.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'asset_type' (or 'asset_class') parameter is required"), -32602);
+		return FMonolithActionResult::Error(TEXT("'asset_type' (or 'asset_class'/'type') parameter is required"), -32602);
 	}
 
 	int32 Limit = 100;
@@ -110,7 +121,9 @@ FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonOb
 TSharedPtr<FJsonObject> FProjectFindByTypeAction::GetSchema()
 {
 	return FParamSchemaBuilder()
-		.Required(TEXT("asset_type"), TEXT("string"), TEXT("Asset class name (e.g. Blueprint, Material, StaticMesh, Texture2D)"))
+		.Required(TEXT("asset_type"), TEXT("string"),
+			TEXT("Asset class name (e.g. Blueprint, Material, StaticMesh, Texture2D). Aliases: asset_class, type."),
+			{ TEXT("asset_class"), TEXT("type") })
 		.Optional(TEXT("module"), TEXT("string"), TEXT("Filter by plugin/module name (e.g. ExampleInventory)"))
 		.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum results"), TEXT("100"))
 		.Optional(TEXT("offset"), TEXT("integer"), TEXT("Pagination offset"), TEXT("0"))

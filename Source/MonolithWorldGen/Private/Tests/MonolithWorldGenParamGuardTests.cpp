@@ -57,6 +57,9 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithWorldGenParamGuardCreateGridFromRoomsT
 
 bool FMonolithWorldGenParamGuardCreateGridFromRoomsTest::RunTest(const FString& Parameters)
 {
+	FMonolithMeshBuildingActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("create_grid_from_rooms action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("worldgen"), TEXT("create_grid_from_rooms")));
+
 	TSharedPtr<FJsonObject> JsonObj = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Rooms;
 	TSharedPtr<FJsonObject> Room = MakeShared<FJsonObject>();
@@ -70,7 +73,7 @@ bool FMonolithWorldGenParamGuardCreateGridFromRoomsTest::RunTest(const FString& 
 	JsonObj->SetArrayField(TEXT("rooms"), Rooms);
 	JsonObj->SetStringField(TEXT("cell_size"), TEXT("not_a_number"));
 
-	FMonolithActionResult Result = FMonolithMeshBuildingActions::CreateGridFromRooms(JsonObj);
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("create_grid_from_rooms"), JsonObj);
 
 	TestFalse(TEXT("CreateGridFromRooms rejects malformed cell_size parameter"), Result.bSuccess);
 	TestTrue(TEXT("CreateGridFromRooms reports the validation error"), Result.ErrorMessage.Contains(TEXT("cell_size must be a number")));

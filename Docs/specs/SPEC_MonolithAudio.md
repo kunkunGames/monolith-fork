@@ -75,6 +75,8 @@ Companion deep indexer: `FMetaSoundIndexer` lives in `MonolithIndex/Private/Inde
 >
 > **Template cues and MetaSounds.** Pre-built audio patterns: `create_random_sound_cue` (randomized selection with weights), `create_layered_sound_cue` (simultaneous playback), `create_looping_ambient_cue`, `create_distance_crossfade_cue`, `create_switch_sound_cue`, `create_oneshot_sfx`, `create_looping_ambient_metasound`, `create_synthesized_tone`, `create_interactive_metasound`.
 
+> **MetaSound node discovery payloads.** `list_available_metasound_nodes(filter?, category?, limit=200, detail_level="minimal")` returns compact node identity rows plus `input_count`/`output_count` by default, with `matched_count`, `returned_count`, `limit`, and `truncated` metadata. Use `detail_level="standard"` when the caller needs full per-node `inputs[]` and `outputs[]` arrays.
+
 ### Bulk Fill & Describe Surface (2026-05-11)
 
 `MonolithAudioBulkFillAdapter` registers under `FMonolithBulkFillRegistry` for the `audio` namespace, exposed via the framework-level `bulk_fill_query("apply", ...)` and `describe_query("schema", ...)` dispatchers. Phase 5 of the MCP ergonomics rollout (design spec `Docs/plans/2026-05-11-monolith-mcp-ergonomics-design.md`).

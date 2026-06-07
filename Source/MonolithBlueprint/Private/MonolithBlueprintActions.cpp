@@ -120,7 +120,7 @@ void FMonolithBlueprintActions::RegisterActions()
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("search_functions"),
-		TEXT("Search for Blueprint-callable functions across all loaded C++ classes. Returns function names, classes, param lists. Results are cached on first call for the session. At least one of 'query' or 'class_filter' is required."),
+		TEXT("Search for Blueprint-callable functions across all loaded C++ classes. Default detail is compact; pass detail_level=standard to include param lists. Results are cached on first call for the session. At least one of 'query' or 'class_filter' is required."),
 		FMonolithActionHandler::CreateStatic(&HandleSearchFunctions),
 		FParamSchemaBuilder()
 			.Optional(TEXT("query"),             TEXT("string"),  TEXT("Search string matched against function name, class name, and category (case-insensitive contains). Required if class_filter is empty."))
@@ -128,6 +128,7 @@ void FMonolithBlueprintActions::RegisterActions()
 			.Optional(TEXT("include_inherited"), TEXT("boolean"), TEXT("Include inherited functions (default: true)"))
 			.Optional(TEXT("pure_only"),         TEXT("boolean"), TEXT("Only return pure (no exec pins) functions (default: false)"))
 			.Optional(TEXT("limit"),             TEXT("integer"), TEXT("Max results to return (default: 50, hard max 1000)"))
+			.Optional(TEXT("detail_level"),      TEXT("string"),  TEXT("minimal|standard. Default minimal returns param counts; standard includes inputs/outputs arrays."), TEXT("minimal"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_node_details"),
@@ -178,6 +179,167 @@ void FMonolithBlueprintActions::RegisterActions()
 UBlueprint* FMonolithBlueprintActions::LoadBlueprint(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath)
 {
 	return MonolithBlueprintInternal::LoadBlueprintFromParams(Params, OutAssetPath);
+}
+
+namespace MonolithBlueprintComponentDetailsInternal
+{
+	static TArray<TSharedPtr<FJsonValue>> StringArrayToJson(const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		Out.Reserve(Values.Num());
+		for (const FString& Value : Values)
+		{
+			Out.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Out;
+	}
+
+	static void CollectScsComponentNames(const UBlueprint* BP, TArray<FString>& OutNames)
+	{
+		if (!BP || !BP->SimpleConstructionScript)
+		{
+			return;
+		}
+
+		TArray<USCS_Node*> Nodes = BP->SimpleConstructionScript->GetAllNodes();
+		for (const USCS_Node* Node : Nodes)
+		{
+			if (!Node)
+			{
+				continue;
+			}
+			const FString Name = Node->GetVariableName().ToString();
+			if (!Name.IsEmpty())
+			{
+				OutNames.AddUnique(Name);
+			}
+		}
+		OutNames.Sort();
+	}
+
+	static void CollectNativeComponentNames(const UBlueprint* BP, TArray<FString>& OutNames)
+	{
+		if (!BP || !BP->ParentClass || !BP->ParentClass->IsChildOf(AActor::StaticClass()))
+		{
+			return;
+		}
+
+		const AActor* CDO = Cast<AActor>(BP->ParentClass->GetDefaultObject(false));
+		if (!CDO)
+		{
+			return;
+		}
+
+		TArray<UActorComponent*> Components;
+		CDO->GetComponents(Components);
+		for (const UActorComponent* Component : Components)
+		{
+			if (!Component)
+			{
+				continue;
+			}
+			const FString Name = Component->GetName();
+			if (!Name.IsEmpty())
+			{
+				OutNames.AddUnique(Name);
+			}
+		}
+		OutNames.Sort();
+	}
+
+	static UActorComponent* FindNativeComponentByName(const UBlueprint* BP, const FString& ComponentName)
+	{
+		if (!BP || ComponentName.IsEmpty() || !BP->ParentClass || !BP->ParentClass->IsChildOf(AActor::StaticClass()))
+		{
+			return nullptr;
+		}
+
+		AActor* CDO = Cast<AActor>(BP->ParentClass->GetDefaultObject(false));
+		if (!CDO)
+		{
+			return nullptr;
+		}
+
+		TArray<UActorComponent*> Components;
+		CDO->GetComponents(Components);
+		for (UActorComponent* Component : Components)
+		{
+			if (Component && Component->GetName().Equals(ComponentName, ESearchCase::IgnoreCase))
+			{
+				return Component;
+			}
+		}
+		return nullptr;
+	}
+
+	static TArray<FString> BuildCandidateNames(const FString& RequestedName, const TArray<FString>& ScsNames, const TArray<FString>& NativeNames)
+	{
+		TArray<FString> Candidates;
+		for (const FString& Name : ScsNames)
+		{
+			if (Name.Contains(RequestedName, ESearchCase::IgnoreCase) || RequestedName.Contains(Name, ESearchCase::IgnoreCase))
+			{
+				Candidates.AddUnique(Name);
+			}
+		}
+		for (const FString& Name : NativeNames)
+		{
+			if (Name.Contains(RequestedName, ESearchCase::IgnoreCase) || RequestedName.Contains(Name, ESearchCase::IgnoreCase))
+			{
+				Candidates.AddUnique(Name);
+			}
+		}
+		if (Candidates.Num() == 0)
+		{
+			for (const FString& Name : ScsNames)
+			{
+				Candidates.AddUnique(Name);
+				if (Candidates.Num() >= 10)
+				{
+					break;
+				}
+			}
+			for (const FString& Name : NativeNames)
+			{
+				if (Candidates.Num() >= 10)
+				{
+					break;
+				}
+				Candidates.AddUnique(Name);
+			}
+		}
+		Candidates.Sort();
+		return Candidates;
+	}
+
+	static TSharedPtr<FJsonObject> BuildComponentNotFoundResult(
+		const UBlueprint* BP,
+		const FString& AssetPath,
+		const FString& RequestedName)
+	{
+		TArray<FString> ScsNames;
+		TArray<FString> NativeNames;
+		CollectScsComponentNames(BP, ScsNames);
+		CollectNativeComponentNames(BP, NativeNames);
+		TArray<FString> Candidates = BuildCandidateNames(RequestedName, ScsNames, NativeNames);
+
+		TArray<FString> NextActions;
+		NextActions.Add(TEXT("blueprint.get_components"));
+		NextActions.Add(TEXT("blueprint.get_component_details with one of candidate_components"));
+
+		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("match_status"), TEXT("component_not_found"));
+		Root->SetStringField(TEXT("asset_path"), AssetPath);
+		Root->SetStringField(TEXT("requested_component_name"), RequestedName);
+		Root->SetStringField(TEXT("message"), FString::Printf(
+			TEXT("Component '%s' was not found in the Blueprint SCS or inherited native component list. Use candidate_components or blueprint.get_components before retrying."),
+			*RequestedName));
+		Root->SetArrayField(TEXT("scs_components"), StringArrayToJson(ScsNames));
+		Root->SetArrayField(TEXT("inherited_native_components"), StringArrayToJson(NativeNames));
+		Root->SetArrayField(TEXT("candidate_components"), StringArrayToJson(Candidates));
+		Root->SetArrayField(TEXT("next_actions"), StringArrayToJson(NextActions));
+		return Root;
+	}
 }
 
 // --- list_graphs ---
@@ -808,6 +970,8 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetComponents(const TShar
 
 FMonolithActionResult FMonolithBlueprintActions::HandleGetComponentDetails(const TSharedPtr<FJsonObject>& Params)
 {
+	using namespace MonolithBlueprintComponentDetailsInternal;
+
 	FString AssetPath;
 	UBlueprint* BP = LoadBlueprint(Params, AssetPath);
 	if (!BP)
@@ -823,26 +987,30 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetComponentDetails(const
 	}
 
 	USimpleConstructionScript* SCS = BP->SimpleConstructionScript;
-	if (!SCS)
+	USCS_Node* Node = SCS ? SCS->FindSCSNode(FName(*ComponentName)) : nullptr;
+	bool bInheritedNativeComponent = false;
+	UActorComponent* Template = Node ? Node->ComponentTemplate : nullptr;
+	if (!Template)
 	{
-		return FMonolithActionResult::Error(TEXT("Blueprint has no SimpleConstructionScript (not an Actor Blueprint?)"));
+		Template = FindNativeComponentByName(BP, ComponentName);
+		bInheritedNativeComponent = Template != nullptr;
 	}
-
-	USCS_Node* Node = SCS->FindSCSNode(FName(*ComponentName));
-	if (!Node)
+	if (!Template && !Node)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
+		return FMonolithActionResult::Success(BuildComponentNotFoundResult(BP, AssetPath, ComponentName));
 	}
-
-	UActorComponent* Template = Node->ComponentTemplate;
 	if (!Template)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Component template is null for: %s"), *ComponentName));
 	}
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("match_status"), TEXT("component"));
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
 	Root->SetStringField(TEXT("component_name"), ComponentName);
 	Root->SetStringField(TEXT("class"), Template->GetClass()->GetName());
+	Root->SetBoolField(TEXT("is_native"), bInheritedNativeComponent);
+	Root->SetBoolField(TEXT("is_scs_component"), Node != nullptr);
 	Root->SetBoolField(TEXT("is_scene_component"), Template->IsA(USceneComponent::StaticClass()));
 
 	// For USceneComponent, include transform explicitly
@@ -872,6 +1040,14 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetComponentDetails(const
 		TransformObj->SetObjectField(TEXT("relative_scale"), ScaleObj);
 
 		Root->SetObjectField(TEXT("transform"), TransformObj);
+		if (bInheritedNativeComponent)
+		{
+			if (USceneComponent* AttachParent = SceneTemplate->GetAttachParent())
+			{
+				Root->SetStringField(TEXT("parent"), AttachParent->GetName());
+			}
+			Root->SetBoolField(TEXT("is_root"), SceneTemplate->GetAttachParent() == nullptr);
+		}
 	}
 
 	// Iterate properties via reflection — include CPF_Edit or CPF_BlueprintVisible
@@ -1316,6 +1492,18 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 
 	bool bPureOnly = false;
 	Params->TryGetBoolField(TEXT("pure_only"), bPureOnly);
+	FString DetailLevel;
+	Params->TryGetStringField(TEXT("detail_level"), DetailLevel);
+	if (DetailLevel.IsEmpty())
+	{
+		DetailLevel = TEXT("minimal");
+	}
+	const bool bIncludeParams = DetailLevel.Equals(TEXT("standard"), ESearchCase::IgnoreCase)
+		|| DetailLevel.Equals(TEXT("full"), ESearchCase::IgnoreCase);
+	if (!DetailLevel.Equals(TEXT("minimal"), ESearchCase::IgnoreCase) && !bIncludeParams)
+	{
+		return FMonolithActionResult::Error(TEXT("detail_level must be 'minimal' or 'standard'"));
+	}
 
 	// include_inherited controls whether the cache is built with inherited entries exposed.
 	// The cache itself only stores functions owned by their declaring class (no duplication).
@@ -1338,10 +1526,9 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 
 	TArray<TSharedPtr<FJsonValue>> Results;
 	Results.Reserve(Limit);
+	int32 MatchedCount = 0;
 	for (const FFunctionCacheEntry& Entry : Cache)
 	{
-		if (Results.Num() >= Limit) break;
-
 		// Class filter
 		if (!ClassFilterLower.IsEmpty() && !Entry.ClassName.ToLower().Contains(ClassFilterLower))
 		{
@@ -1371,6 +1558,12 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 			if (!bAllTokensMatch) continue;
 		}
 
+		MatchedCount++;
+		if (Results.Num() >= Limit)
+		{
+			continue;
+		}
+
 		// Build result object
 		TSharedPtr<FJsonObject> RObj = MakeShared<FJsonObject>();
 		RObj->SetStringField(TEXT("function_name"), Entry.FunctionName);
@@ -1391,21 +1584,26 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 			RObj->SetStringField(TEXT("k2_name"), Entry.FunctionName);
 		}
 
-		TArray<TSharedPtr<FJsonValue>> InputsArr;
-		InputsArr.Reserve(Entry.Inputs.Num());
-		for (const auto& P : Entry.Inputs)
+		RObj->SetNumberField(TEXT("input_count"), Entry.Inputs.Num());
+		RObj->SetNumberField(TEXT("output_count"), Entry.Outputs.Num());
+		if (bIncludeParams)
 		{
-			InputsArr.Add(MakeShared<FJsonValueObject>(P));
-		}
-		RObj->SetArrayField(TEXT("inputs"), InputsArr);
+			TArray<TSharedPtr<FJsonValue>> InputsArr;
+			InputsArr.Reserve(Entry.Inputs.Num());
+			for (const auto& P : Entry.Inputs)
+			{
+				InputsArr.Add(MakeShared<FJsonValueObject>(P));
+			}
+			RObj->SetArrayField(TEXT("inputs"), InputsArr);
 
-		TArray<TSharedPtr<FJsonValue>> OutputsArr;
-		OutputsArr.Reserve(Entry.Outputs.Num());
-		for (const auto& P : Entry.Outputs)
-		{
-			OutputsArr.Add(MakeShared<FJsonValueObject>(P));
+			TArray<TSharedPtr<FJsonValue>> OutputsArr;
+			OutputsArr.Reserve(Entry.Outputs.Num());
+			for (const auto& P : Entry.Outputs)
+			{
+				OutputsArr.Add(MakeShared<FJsonValueObject>(P));
+			}
+			RObj->SetArrayField(TEXT("outputs"), OutputsArr);
 		}
-		RObj->SetArrayField(TEXT("outputs"), OutputsArr);
 
 		Results.Add(MakeShared<FJsonValueObject>(RObj));
 	}
@@ -1413,7 +1611,12 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetArrayField(TEXT("results"), Results);
 	Root->SetNumberField(TEXT("count"), Results.Num());
+	Root->SetNumberField(TEXT("returned_count"), Results.Num());
+	Root->SetNumberField(TEXT("matched_count"), MatchedCount);
+	Root->SetNumberField(TEXT("limit"), Limit);
 	Root->SetNumberField(TEXT("cache_size"), Cache.Num());
+	Root->SetBoolField(TEXT("truncated"), MatchedCount > Results.Num());
+	Root->SetStringField(TEXT("detail_level"), bIncludeParams ? TEXT("standard") : TEXT("minimal"));
 
 	return FMonolithActionResult::Success(Root);
 }

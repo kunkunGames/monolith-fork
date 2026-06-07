@@ -669,7 +669,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		TEXT("Execute a Python command, statement, or file via IPythonScriptPlugin::ExecPythonCommandEx. Returns success, stdout/stderr captured by Python, and (for evaluate_statement mode) the evaluated result."),
 		FMonolithActionHandler::CreateStatic(&HandleRunPython),
 		FParamSchemaBuilder()
-			.Required(TEXT("command"), TEXT("string"), TEXT("Python source. May be inline code, a single statement, or a file path with optional space-separated args (when mode=execute_file)."))
+			.Required(TEXT("command"), TEXT("string"), TEXT("Python source. May be inline code, a single statement, or a file path with optional space-separated args (when mode=execute_file). Aliases: code, script."), { TEXT("code"), TEXT("script") })
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("Execution mode: execute_file (default — multi-statement script or file with args), execute_statement (single stmt, prints result), evaluate_statement (single expr, returns result in 'result')."), TEXT("execute_file"))
 			.Optional(TEXT("unattended"), TEXT("bool"), TEXT("Set GIsRunningUnattendedScript=true to suppress UI dialogs."), TEXT("false"))
 			.Optional(TEXT("file_scope"), TEXT("string"), TEXT("Scope for execute_file: private (isolated locals/globals — default), public (shared with REPL console)."), TEXT("private"))
@@ -679,7 +679,10 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		TEXT("Close the current persistent level (without saving) and load the specified level by /Game/... asset path. Wraps ULevelEditorSubsystem::LoadLevel."),
 		FMonolithActionHandler::CreateStatic(&HandleLoadLevel),
 		FParamSchemaBuilder()
-			.RequiredAssetPath(TEXT("path"), TEXT("Asset path of the level to load (e.g. /Game/Maps/L_Backyard). Must exist."))
+			.RequiredAssetPath(
+				TEXT("path"),
+				TEXT("Asset path of the level to load (e.g. /Game/Maps/L_Backyard). Must exist."),
+				{ TEXT("level_path") })
 			.Build());
 
 	InitLiveCodingDelegate();
@@ -5036,7 +5039,18 @@ FMonolithActionResult FMonolithEditorActions::HandleRunPython(const TSharedPtr<F
 	FString Command;
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("command"), Command) || Command.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: command"));
+		if (Params.IsValid())
+		{
+			Params->TryGetStringField(TEXT("code"), Command);
+			if (Command.IsEmpty())
+			{
+				Params->TryGetStringField(TEXT("script"), Command);
+			}
+		}
+	}
+	if (Command.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: command (aliases: code, script)"));
 	}
 
 	FString ModeStr = TEXT("execute_file");
@@ -5137,6 +5151,13 @@ FMonolithActionResult FMonolithEditorActions::HandleLoadLevel(const TSharedPtr<F
 {
 	FString Path;
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("path"), Path) || Path.IsEmpty())
+	{
+		if (Params.IsValid())
+		{
+			Params->TryGetStringField(TEXT("level_path"), Path);
+		}
+	}
+	if (Path.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: path"));
 	}

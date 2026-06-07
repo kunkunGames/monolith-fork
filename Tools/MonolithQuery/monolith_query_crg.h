@@ -1255,15 +1255,117 @@ static json crg_repair_cache_json(Database& db, const std::string& domain,
     }
 
     root["before"] = crg_repair_counts(db, domain);
+    json freshness_checks = json::array();
+    bool repair_needed = false;
+    auto add_freshness_check = [&](const std::string& name, bool pass, const std::string& detail) {
+        freshness_checks.push_back({{"check", name}, {"result", pass ? "ok" : "stale"}, {"detail", detail}});
+        if (!pass) repair_needed = true;
+    };
+    if (domain == "source" && normalized_scope == "override_edges") {
+        bool has_override_table = object_exists(db, "table", "source_override_edges");
+        add_freshness_check("table:source_override_edges", has_override_table,
+                            has_override_table ? "source_override_edges table present" : "source_override_edges table missing");
+        bool has_parent_index = object_exists(db, "index", "idx_source_override_edges_parent");
+        add_freshness_check("index:idx_source_override_edges_parent", has_parent_index,
+                            has_parent_index ? "source override parent index present" : "source override parent index missing");
+        bool has_signature_index = object_exists(db, "index", "idx_symbols_override_signature");
+        add_freshness_check("index:idx_symbols_override_signature", has_signature_index,
+                            has_signature_index ? "symbol override signature index present" : "symbol override signature index missing");
+        std::string override_version = object_exists(db, "table", "crg_meta")
+            ? scalar_str(db, "SELECT value FROM crg_meta WHERE key='source_override_edges_version';")
+            : "";
+        add_freshness_check("meta:source_override_edges_version", override_version == "2",
+                            override_version.empty() ? "source_override_edges_version missing" : "source_override_edges_version=" + override_version + " (expected 2)");
+    } else {
+        bool has_core_crg = has_crg_projection_tables(db);
+        add_freshness_check("tables:crg_core", has_core_crg,
+                            has_core_crg ? "core CRG projection tables present" : "one or more core CRG projection tables are missing");
+        if (has_core_crg) {
+            if (domain == "source") {
+                for (const char* index_name : {
+                    "idx_crg_nodes_domain_native", "idx_crg_nodes_stable",
+                    "idx_crg_edges_domain_source", "idx_crg_edges_domain_target",
+                    "idx_crg_edges_kind_subkind", "idx_crg_metrics_score",
+                    "idx_source_override_edges_parent",
+                    "idx_symbols_override_signature",
+                    "idx_inheritance_parent_child", "idx_inheritance_child_parent"}) {
+                    bool has_index = object_exists(db, "index", index_name);
+                    add_freshness_check(std::string("index:") + index_name, has_index,
+                                        has_index ? std::string("index ") + index_name + " present" : std::string("index ") + index_name + " missing");
+                }
+                int64_t symbols = count_rows(db, "SELECT COUNT(*) FROM symbols;");
+                int64_t valid_refs = count_rows(db,
+                    "SELECT COUNT(*) FROM \"references\" r "
+                    "JOIN symbols fs ON fs.id = r.from_symbol_id "
+                    "JOIN symbols ts ON ts.id = r.to_symbol_id;");
+                int64_t inheritance = count_rows(db, "SELECT COUNT(*) FROM inheritance;");
+                int64_t crg_nodes = count_rows(db, "SELECT COUNT(*) FROM crg_nodes WHERE domain = 'source';");
+                int64_t crg_edges = count_rows(db, "SELECT COUNT(*) FROM crg_edges WHERE domain = 'source';");
+                int64_t crg_metrics = count_rows(db,
+                    "SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id "
+                    "WHERE n.domain = 'source';");
+                add_freshness_check("crg:nodes_row_parity", crg_nodes == symbols,
+                                    "symbols=" + std::to_string(symbols) + " crg_nodes(source)=" + std::to_string(crg_nodes));
+                add_freshness_check("crg:edges_row_parity", crg_edges == valid_refs + inheritance,
+                                    "valid references+inheritance=" + std::to_string(valid_refs + inheritance) + " crg_edges(source)=" + std::to_string(crg_edges));
+                add_freshness_check("crg:metrics_row_parity", crg_metrics == crg_nodes,
+                                    "crg_nodes(source)=" + std::to_string(crg_nodes) + " crg_node_metrics=" + std::to_string(crg_metrics));
+                std::string override_version = scalar_str(db, "SELECT value FROM crg_meta WHERE key='source_override_edges_version';");
+                add_freshness_check("meta:source_override_edges_version", override_version == "2",
+                                    override_version.empty() ? "source_override_edges_version missing" : "source_override_edges_version=" + override_version + " (expected 2)");
+            } else {
+                int64_t assets = count_rows(db, "SELECT COUNT(*) FROM assets;");
+                int64_t dependencies = count_rows(db, "SELECT COUNT(*) FROM dependencies;");
+                int64_t crg_nodes = count_rows(db, "SELECT COUNT(*) FROM crg_nodes WHERE domain = 'project';");
+                int64_t crg_edges = count_rows(db, "SELECT COUNT(*) FROM crg_edges WHERE domain = 'project';");
+                int64_t crg_metrics = count_rows(db,
+                    "SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id "
+                    "WHERE n.domain = 'project';");
+                add_freshness_check("crg:nodes_row_parity", crg_nodes == assets,
+                                    "assets=" + std::to_string(assets) + " crg_nodes(project)=" + std::to_string(crg_nodes));
+                add_freshness_check("crg:edges_row_parity", crg_edges == dependencies,
+                                    "dependencies=" + std::to_string(dependencies) + " crg_edges(project)=" + std::to_string(crg_edges));
+                add_freshness_check("crg:metrics_row_parity", crg_metrics == crg_nodes,
+                                    "crg_nodes(project)=" + std::to_string(crg_nodes) + " crg_node_metrics=" + std::to_string(crg_metrics));
+            }
+            std::string cache_version = scalar_str(db, "SELECT value FROM crg_meta WHERE key='cache_version';");
+            add_freshness_check("meta:cache_version", !cache_version.empty(),
+                                cache_version.empty() ? "cache_version missing" : "cache_version=" + cache_version);
+            std::string scoring_version = scalar_str(db, "SELECT value FROM crg_meta WHERE key='scoring_version';");
+            add_freshness_check("meta:scoring_version", scoring_version == "3",
+                                scoring_version.empty() ? "scoring_version missing" : "scoring_version=" + scoring_version + " (expected 3)");
+        }
+    }
+    root["freshness_checks"] = freshness_checks;
+    root["repair_needed"] = repair_needed;
     if (!execute) {
         root["status"] = "ok";
-        root["summary"] = normalized_scope == "override_edges"
-            ? "Dry-run: source override edge cache would be rebuilt. Pass --execute to apply."
-            : "Dry-run: " + domain + " CRG projection/cache would be rebuilt. Pass --execute to apply.";
+        root["summary"] = repair_needed
+            ? (normalized_scope == "override_edges"
+                ? "Dry-run: source override edge cache is stale and would be rebuilt. Pass --execute to apply."
+                : "Dry-run: " + domain + " CRG projection/cache is stale and would be rebuilt. Pass --execute to apply.")
+            : "Dry-run: " + domain + " CRG projection/cache is already fresh; --execute would skip the rebuild.";
         root["after"] = json::object();
+        if (repair_needed) {
+            root["next_actions"] = domain == "source"
+                ? json::array({"source.repair_crg_cache --execute", "source.repair_crg_cache --scope=override_edges --execute", "source.health --include-deep-checks=true", "source.risk_score"})
+                : json::array({domain + ".repair_crg_cache --execute", domain + ".health", domain + ".risk_score"});
+        } else {
+            root["next_actions"] = domain == "source"
+                ? json::array({"source.health", "source.risk_score", "source.review_context"})
+                : json::array({domain + ".health", domain + ".risk_score", domain + ".review_context"});
+        }
+        return root;
+    }
+
+    if (!repair_needed) {
+        root["after"] = root["before"];
+        root["skipped"] = true;
+        root["status"] = "ok";
+        root["summary"] = domain + " CRG projection/cache already fresh; skipped rebuild.";
         root["next_actions"] = domain == "source"
-            ? json::array({"source.repair_crg_cache --execute", "source.repair_crg_cache --scope=override_edges --execute", "source.health", "source.risk_score"})
-            : json::array({domain + ".repair_crg_cache --execute", domain + ".health", domain + ".risk_score"});
+            ? json::array({"source.health", "source.risk_score", "source.review_context"})
+            : json::array({"project.health", "project.risk_score", "project.review_context"});
         return root;
     }
 

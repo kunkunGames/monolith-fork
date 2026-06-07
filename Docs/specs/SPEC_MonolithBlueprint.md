@@ -34,13 +34,14 @@
 | `get_cdo_properties` | `asset_path`, `category_filter?`, `include_parent_defaults?`, `owner_class_filter?`, `name_pattern?`, `exclude_categories?` | Reflects all CDO properties of a Blueprint class with current default values. Optional filters compose: `category_filter` (case-insensitive substring on `Category` metadata), `include_parent_defaults` (bool, walks parent CDO chain), `owner_class_filter` (case-insensitive substring on owner class name — skips inherited `AActor`/`APawn`/`ACharacter` in one parameter, PR #57), `name_pattern` (case-insensitive substring on property name, PR #57), `exclude_categories` (string array, case-insensitive exact match against `Category` — e.g. `["Replication", "Cooking", "HLOD"]`, PR #57). All filter params default to `null`/empty (no-op). Cuts JSON payload by ~90% in typical AActor-subclass inspection flows. |
 | `get_execution_flow` | `asset_path`, `entry_point` | Linearized exec trace from entry point. Handles branching (multiple exec outputs). MaxDepth=100 |
 | `search_nodes` | `asset_path`, `query` | Case-insensitive search by title, class name, or function name |
-| `get_components` | `asset_path` | List all components in the component hierarchy |
-| `get_component_details` | `asset_path`, `component_name` | Full property reflection for a named component |
+| `get_components` | `asset_path` | List all SCS components in the component hierarchy plus inherited native actor components when available |
+| `get_component_details` | `asset_path`, `component_name` | Full property reflection for a named SCS or inherited native component. Missing names return `match_status=component_not_found` with SCS/native/candidate component lists and `next_actions` instead of a blind retry error. |
 | `get_functions` | `asset_path` | List all functions with signatures, access, and purity flags |
 | `get_event_dispatchers` | `asset_path` | List all event dispatchers with parameter signatures |
 | `get_parent_class` | `asset_path` | Return the parent class of the Blueprint |
 | `get_interfaces` | `asset_path` | List all implemented interfaces |
 | `get_construction_script` | `asset_path` | Get the construction script graph |
+| `search_functions` | `query?`, `class_filter?`, `include_inherited?`, `pure_only?`, `limit?`, `detail_level?` | Search Blueprint-callable native functions. At least one of `query` or `class_filter` is required. Default `detail_level=minimal` returns function identity plus `input_count`/`output_count`; use `detail_level=standard` to include `inputs[]`/`outputs[]` parameter arrays. |
 
 **Variable CRUD (7)**
 | Action | Params | Description |

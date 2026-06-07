@@ -1,6 +1,6 @@
 ﻿# Monolith — TODO
 
-Last updated: 2026-06-05 (MonolithImageGen SVG source P1 implemented and verified; Tool invocation log analyzer remains deferred)
+Last updated: 2026-06-07 (Tool invocation log analyzer implementation started under Analyzer with log-grounded ROI reporting)
 
 ---
 
@@ -30,7 +30,7 @@ Plan spec: [specs/SPEC_MonolithHeadlessMcpLaunch.md](specs/SPEC_MonolithHeadless
 
 ### Tool Invocation Log Data Collection — PLAN (2026-05-20)
 
-Plan spec: [specs/SPEC_MonolithToolInvocationLogs.md](specs/SPEC_MonolithToolInvocationLogs.md#52-analysis-data-collection-contract). Analyzer implementation is deferred; this plan is only about collecting enough structured data for future analysis of what agents call, why they likely call it, how they continue, and where latency accumulates.
+Plan spec: [specs/SPEC_MonolithToolInvocationLogs.md](specs/SPEC_MonolithToolInvocationLogs.md#52-analysis-data-collection-contract). Analyzer implementation has started at `Analyzer/analyze_invocation_logs.py` with compact fixtures under `Analyzer/fixtures/invocation_logs/`. The analyzer contract is [specs/SPEC_MonolithInvocationLogAnalyzer.md](specs/SPEC_MonolithInvocationLogAnalyzer.md), including log-grounded high-ROI priorities for heartbeat noise, source maintenance loops, schema confusion, missing-action triage, escape-hatch replacement mining, expected-slow-domain error ranking, large result projection, and high-error-rate action health. This plan is only about collecting enough structured data for future analysis of what agents call, why they likely call it, how they continue, and where latency accumulates.
 
 - [x] **P1 correlation upgrade** — Added `record_id`, `parent_span_id`, `session_key`, `process_instance_id`, `call_index`, `previous_record_id`, and `time_since_previous_ms` while preserving v1/v2 reader compatibility.
 - [x] **P2 routing context** — Added `routing_context` with `decision_source`, `namespace_source`, recent find/discover trace links where available, discovery matching, and coarse `inferred_intent`.

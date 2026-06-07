@@ -396,12 +396,13 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 	// ---- Query & Discovery (5) ----
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("list_available_metasound_nodes"),
-		TEXT("List all registered MetaSound node classes with their inputs/outputs"),
+		TEXT("List registered MetaSound node classes. Default detail is compact; pass detail_level=standard to include input/output pins."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioMetaSoundActions::ListAvailableMetaSoundNodes),
 		FParamSchemaBuilder()
 			.Optional(TEXT("filter"), TEXT("string"), TEXT("Substring filter on node name"))
 			.Optional(TEXT("category"), TEXT("string"), TEXT("Filter by namespace/category"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum results (default: 200, max: 1000)"), TEXT("200"))
+			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("minimal|standard. Default minimal omits per-node pins; standard includes inputs/outputs."), TEXT("minimal"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("audio"), TEXT("get_metasound_node_info"),
@@ -1267,25 +1268,36 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ListAvailableMetaSoundNode
 	Params->TryGetStringField(TEXT("filter"), Filter);
 	FString Category;
 	Params->TryGetStringField(TEXT("category"), Category);
+	FString DetailLevel;
+	Params->TryGetStringField(TEXT("detail_level"), DetailLevel);
+	if (DetailLevel.IsEmpty())
+	{
+		DetailLevel = TEXT("minimal");
+	}
+	const bool bIncludePins = DetailLevel.Equals(TEXT("standard"), ESearchCase::IgnoreCase)
+		|| DetailLevel.Equals(TEXT("full"), ESearchCase::IgnoreCase);
+	if (!DetailLevel.Equals(TEXT("minimal"), ESearchCase::IgnoreCase) && !bIncludePins)
+	{
+		return FMonolithActionResult::Error(TEXT("detail_level must be 'minimal' or 'standard'"));
+	}
+
 	int32 Limit = 200;
 	double LimitVal = 200.0;
 	if (Params->TryGetNumberField(TEXT("limit"), LimitVal))
 	{
 		Limit = static_cast<int32>(LimitVal);
 	}
-	Limit = FMath::Clamp(Limit, 0, 1000);
+	Limit = FMath::Clamp(Limit, 1, 1000);
 
 	Metasound::Frontend::INodeClassRegistry& Registry = Metasound::Frontend::INodeClassRegistry::GetChecked();
 
 	TArray<TSharedPtr<FJsonValue>> NodesJson;
 	NodesJson.Reserve(Limit);
-	int32 Count = 0;
+	int32 MatchedCount = 0;
 
 	Registry.IterateRegistry(
 		[&](const FMetasoundFrontendClass& InClass)
 		{
-			if (Count >= Limit) return;
-
 			const FMetasoundFrontendClassName& ClassName = InClass.Metadata.GetClassName();
 			const FString NameStr = ClassName.Name.ToString();
 			const FString NamespaceStr = ClassName.Namespace.ToString();
@@ -1301,38 +1313,47 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ListAvailableMetaSoundNode
 				return;
 			}
 
+			MatchedCount++;
+			if (NodesJson.Num() >= Limit)
+			{
+				return;
+			}
+
 			auto NodeJson = MakeShared<FJsonObject>();
 			NodeJson->SetStringField(TEXT("namespace"), NamespaceStr);
 			NodeJson->SetStringField(TEXT("name"), NameStr);
 			NodeJson->SetStringField(TEXT("variant"), ClassName.Variant.ToString());
 
-			// Inputs
 			const FMetasoundFrontendClassInterface& ClassInterface = InClass.GetDefaultInterface();
-			TArray<TSharedPtr<FJsonValue>> InputsJson;
-			InputsJson.Reserve(ClassInterface.Inputs.Num());
-			for (const FMetasoundFrontendClassVertex& Vertex : ClassInterface.Inputs)
-			{
-				auto VJson = MakeShared<FJsonObject>();
-				VJson->SetStringField(TEXT("name"), Vertex.Name.ToString());
-				VJson->SetStringField(TEXT("type"), Vertex.TypeName.ToString());
-				InputsJson.Add(MakeShared<FJsonValueObject>(VJson));
-			}
-			NodeJson->SetArrayField(TEXT("inputs"), InputsJson);
+			NodeJson->SetNumberField(TEXT("input_count"), ClassInterface.Inputs.Num());
+			NodeJson->SetNumberField(TEXT("output_count"), ClassInterface.Outputs.Num());
 
-			// Outputs
-			TArray<TSharedPtr<FJsonValue>> OutputsJson;
-			OutputsJson.Reserve(ClassInterface.Outputs.Num());
-			for (const FMetasoundFrontendClassVertex& Vertex : ClassInterface.Outputs)
+			if (bIncludePins)
 			{
-				auto VJson = MakeShared<FJsonObject>();
-				VJson->SetStringField(TEXT("name"), Vertex.Name.ToString());
-				VJson->SetStringField(TEXT("type"), Vertex.TypeName.ToString());
-				OutputsJson.Add(MakeShared<FJsonValueObject>(VJson));
+				TArray<TSharedPtr<FJsonValue>> InputsJson;
+				InputsJson.Reserve(ClassInterface.Inputs.Num());
+				for (const FMetasoundFrontendClassVertex& Vertex : ClassInterface.Inputs)
+				{
+					auto VJson = MakeShared<FJsonObject>();
+					VJson->SetStringField(TEXT("name"), Vertex.Name.ToString());
+					VJson->SetStringField(TEXT("type"), Vertex.TypeName.ToString());
+					InputsJson.Add(MakeShared<FJsonValueObject>(VJson));
+				}
+				NodeJson->SetArrayField(TEXT("inputs"), InputsJson);
+
+				TArray<TSharedPtr<FJsonValue>> OutputsJson;
+				OutputsJson.Reserve(ClassInterface.Outputs.Num());
+				for (const FMetasoundFrontendClassVertex& Vertex : ClassInterface.Outputs)
+				{
+					auto VJson = MakeShared<FJsonObject>();
+					VJson->SetStringField(TEXT("name"), Vertex.Name.ToString());
+					VJson->SetStringField(TEXT("type"), Vertex.TypeName.ToString());
+					OutputsJson.Add(MakeShared<FJsonValueObject>(VJson));
+				}
+				NodeJson->SetArrayField(TEXT("outputs"), OutputsJson);
 			}
-			NodeJson->SetArrayField(TEXT("outputs"), OutputsJson);
 
 			NodesJson.Add(MakeShared<FJsonValueObject>(NodeJson));
-			Count++;
 		},
 		EMetasoundFrontendClassType::Invalid // Invalid = iterate ALL types
 	);
@@ -1340,6 +1361,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ListAvailableMetaSoundNode
 	auto ResultJson = MakeShared<FJsonObject>();
 	ResultJson->SetArrayField(TEXT("nodes"), NodesJson);
 	ResultJson->SetNumberField(TEXT("count"), NodesJson.Num());
+	ResultJson->SetNumberField(TEXT("returned_count"), NodesJson.Num());
+	ResultJson->SetNumberField(TEXT("matched_count"), MatchedCount);
+	ResultJson->SetNumberField(TEXT("limit"), Limit);
+	ResultJson->SetBoolField(TEXT("truncated"), MatchedCount > NodesJson.Num());
+	ResultJson->SetStringField(TEXT("detail_level"), bIncludePins ? TEXT("standard") : TEXT("minimal"));
 	return FMonolithActionResult::Success(ResultJson);
 }
 

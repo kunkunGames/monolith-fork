@@ -26,11 +26,45 @@ bool FMonolithBlueprintSearchFunctionsLimitTest::RunTest(const FString& Paramete
 		FMonolithActionResult Result = ExecuteSearchFunctions(Params);
 
 		double CountVal = 0.0;
-		if (Result.Result.IsValid() && Result.Result->TryGetNumberField(TEXT("match_count"), CountVal))
+		if (Result.Result.IsValid() && Result.Result->TryGetNumberField(TEXT("returned_count"), CountVal))
 		{
 			if (CountVal > 1000.0)
 			{
 				AddError(FString::Printf(TEXT("Huge limit was not clamped to 1000. Count was %f"), CountVal));
+			}
+		}
+
+		FString DetailLevel;
+		if (Result.Result.IsValid() && (!Result.Result->TryGetStringField(TEXT("detail_level"), DetailLevel) || DetailLevel != TEXT("minimal")))
+		{
+			AddError(TEXT("search_functions default detail_level should be minimal"));
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Results = nullptr;
+		if (Result.Result.IsValid() && Result.Result->TryGetArrayField(TEXT("results"), Results) && Results && Results->Num() > 0)
+		{
+			const TSharedPtr<FJsonObject> FirstResult = (*Results)[0]->AsObject();
+			if (!FirstResult.IsValid() || FirstResult->HasField(TEXT("inputs")) || FirstResult->HasField(TEXT("outputs")))
+			{
+				AddError(TEXT("search_functions minimal detail should omit parameter arrays"));
+			}
+		}
+	}
+
+	// Test standard detail preserves parameter arrays for callers that need full pin signatures.
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("query"), TEXT("Get"));
+		Params->SetNumberField(TEXT("limit"), 1.0);
+		Params->SetStringField(TEXT("detail_level"), TEXT("standard"));
+		FMonolithActionResult Result = ExecuteSearchFunctions(Params);
+
+		const TArray<TSharedPtr<FJsonValue>>* Results = nullptr;
+		if (Result.Result.IsValid() && Result.Result->TryGetArrayField(TEXT("results"), Results) && Results && Results->Num() > 0)
+		{
+			const TSharedPtr<FJsonObject> FirstResult = (*Results)[0]->AsObject();
+			if (!FirstResult.IsValid() || !FirstResult->HasField(TEXT("inputs")) || !FirstResult->HasField(TEXT("outputs")))
+			{
+				AddError(TEXT("search_functions detail_level=standard should include parameter arrays"));
 			}
 		}
 	}

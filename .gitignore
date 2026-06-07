@@ -8,6 +8,8 @@ Logs/
 *.pdb
 *.dSYM/
 *.exp
+*.ilk
+*.idb
 *.obj
 *.sarif
 *.rsp
@@ -20,6 +22,10 @@ Logs/
 __pycache__/
 .pytest_cache/
 *.pyc
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
 .venv/
 *.log
 *.bak
@@ -92,6 +98,7 @@ Monolith-*-macOS.zip
 .vs/
 .idea/
 .vscode/
+.antigravitycli/
 .cache/
 .clangd/
 *.sln

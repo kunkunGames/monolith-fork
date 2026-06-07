@@ -73,6 +73,31 @@ namespace
 		return Paths;
 	}
 
+	bool LooksLikeSourceFilePath(const FString& Value)
+	{
+		const FString Trimmed = Value.TrimStartAndEnd();
+		if (Trimmed.IsEmpty())
+		{
+			return false;
+		}
+
+		FString Extension = FPaths::GetExtension(Trimmed).ToLower();
+		const bool bKnownSourceExtension =
+			Extension == TEXT("h") ||
+			Extension == TEXT("hpp") ||
+			Extension == TEXT("hh") ||
+			Extension == TEXT("cpp") ||
+			Extension == TEXT("cc") ||
+			Extension == TEXT("cxx") ||
+			Extension == TEXT("c") ||
+			Extension == TEXT("inl") ||
+			Extension == TEXT("cs") ||
+			Extension == TEXT("usf") ||
+			Extension == TEXT("ush");
+
+		return bKnownSourceExtension || Trimmed.Contains(TEXT("/")) || Trimmed.Contains(TEXT("\\"));
+	}
+
 	void MergeRangePair(const TSharedPtr<FJsonValue>& Pair, TArray<TPair<int32, int32>>& Out)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Tuple = nullptr;
@@ -221,13 +246,16 @@ void FMonolithSourceActions::RegisterAll()
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
 	Registry.RegisterAction(TEXT("source"), TEXT("read_source"),
-		TEXT("Get the implementation source code for a class, function, or struct"),
+		TEXT("Get the implementation source code for a class, function, or struct. If a source file path is supplied via path, delegates to source.read_file."),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleReadSource),
 		FParamSchemaBuilder()
-			.Required(TEXT("symbol"), TEXT("string"), TEXT("Symbol name (class, function, or struct)"))
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("Symbol name (class, function, or struct). Aliases: query, name, path."), { TEXT("query"), TEXT("name"), TEXT("path") })
 			.Optional(TEXT("include_header"), TEXT("bool"), TEXT("Include the header declaration"), TEXT("false"))
 			.Optional(TEXT("max_lines"), TEXT("integer"), TEXT("Max lines to return"), TEXT("500"))
 			.Optional(TEXT("members_only"), TEXT("bool"), TEXT("Only show class members, not full body"), TEXT("false"))
+			.Optional(TEXT("start_line"), TEXT("integer"), TEXT("First line to read when symbol/path is a file path"), TEXT("1"))
+			.Optional(TEXT("end_line"), TEXT("integer"), TEXT("Last line to read when symbol/path is a file path"))
+			.Optional(TEXT("line_count"), TEXT("integer"), TEXT("Number of file lines to read when end_line is omitted"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("find_references"),
@@ -299,9 +327,11 @@ void FMonolithSourceActions::RegisterAll()
 		TEXT("Read source lines from a file by path"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleReadFile),
 		FParamSchemaBuilder()
-			.RequiredDiskPath(TEXT("file_path"), TEXT("Source file path"))
+			.RequiredDiskPath(TEXT("file_path"), TEXT("Source file path"), { TEXT("path") })
 			.Optional(TEXT("start_line"), TEXT("integer"), TEXT("First line to read"), TEXT("1"))
 			.Optional(TEXT("end_line"), TEXT("integer"), TEXT("Last line to read"))
+			.Optional(TEXT("line_count"), TEXT("integer"), TEXT("Number of lines to read when end_line is omitted"))
+			.Optional(TEXT("max_lines"), TEXT("integer"), TEXT("Alias for line_count when end_line is omitted"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("trigger_reindex"),
@@ -334,13 +364,15 @@ void FMonolithSourceActions::RegisterAll()
 			.Optional(TEXT("direction"), TEXT("string"), TEXT("in=child overrides, out=overridden parents, both"), TEXT("both"))
 			.Optional(TEXT("max_depth"), TEXT("integer"), TEXT("Max override traversal hops"), TEXT("2"))
 			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max override-related symbols"), TEXT("200"))
+			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("minimal|standard. Default minimal omits duplicate impacted_symbols and samples edges; standard returns full edge arrays."), TEXT("minimal"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("health"),
 		TEXT("Read-only EngineSource diagnostics: schema v1, symbols_ai/ad triggers, symbols_fts parity, orphans"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleHealth),
 		FParamSchemaBuilder()
-			.Optional(TEXT("include_counts"), TEXT("bool"), TEXT("Include row-count summary"), TEXT("true"))
+			.Optional(TEXT("include_counts"), TEXT("bool"), TEXT("Include row-count summary and deep parity checks"), TEXT("false"))
+			.Optional(TEXT("include_deep_checks"), TEXT("bool"), TEXT("Run expensive integrity/parity checks without row-count output"), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("repair_fts"),
@@ -539,7 +571,8 @@ FMonolithActionResult FMonolithSourceActions::HandleFindOverrides(const TSharedP
 	TSharedPtr<FJsonObject> R = FMonolithSourceReview::FindOverrides(*DB, Symbol,
 		FMonolithSourceReview::PStr(Params, TEXT("direction"), TEXT("both")),
 		FMonolithSourceReview::PInt(Params, TEXT("max_depth"), 2),
-		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200));
+		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200),
+		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal")));
 	return FMonolithActionResult::Success(R);
 }
 
@@ -550,8 +583,9 @@ FMonolithActionResult FMonolithSourceActions::HandleHealth(const TSharedPtr<FJso
 	{
 		return FMonolithActionResult::Error(TEXT("Source index database not available"));
 	}
-	const bool bCounts = FMonolithSourceReview::PBool(Params, TEXT("include_counts"), true);
-	return FMonolithActionResult::Success(DB->ComputeHealth(bCounts));
+	const bool bCounts = FMonolithSourceReview::PBool(Params, TEXT("include_counts"), false);
+	const bool bDeepChecks = FMonolithSourceReview::PBool(Params, TEXT("include_deep_checks"), false);
+	return FMonolithActionResult::Success(DB->ComputeHealth(bCounts, bDeepChecks));
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleRepairFts(const TSharedPtr<FJsonObject>& Params)
@@ -1093,6 +1127,20 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 	{
 		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
 	}
+	if (LooksLikeSourceFilePath(Symbol))
+	{
+		TSharedPtr<FJsonObject> FileParams = MakeShared<FJsonObject>();
+		FileParams->SetStringField(TEXT("file_path"), Symbol);
+		for (const TCHAR* Key : { TEXT("start_line"), TEXT("end_line"), TEXT("line_count"), TEXT("max_lines") })
+		{
+			TSharedPtr<FJsonValue> Value = Params->TryGetField(Key);
+			if (Value.IsValid())
+			{
+				FileParams->SetField(Key, Value);
+			}
+		}
+		return HandleReadFile(FileParams);
+	}
 	bool bIncludeHeader = true;
 	Params->TryGetBoolField(TEXT("include_header"), bIncludeHeader);
 	int32 MaxLines = 0;
@@ -1233,17 +1281,59 @@ FMonolithActionResult FMonolithSourceActions::HandleFindReferences(const TShared
 	if (Symbols.Num() == 0) Symbols = DB->SearchSymbolsFTS(Symbol, 5);
 	if (Symbols.Num() == 0)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("No symbol found matching '%s'."), *Symbol));
+		const FString ResultText = FString::Printf(
+			TEXT("No symbol found matching '%s'. Run source.search_source first to discover the indexed symbol name, then retry source.find_references."),
+			*Symbol);
+
+		auto ResultObj = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> ContentArr;
+		auto ContentItem = MakeShared<FJsonObject>();
+		ContentItem->SetStringField(TEXT("type"), TEXT("text"));
+		ContentItem->SetStringField(TEXT("text"), ResultText);
+		ContentArr.Add(MakeShared<FJsonValueObject>(ContentItem));
+		ResultObj->SetArrayField(TEXT("content"), ContentArr);
+		ResultObj->SetStringField(TEXT("match_status"), TEXT("no_symbol"));
+		ResultObj->SetStringField(TEXT("query"), Symbol);
+		ResultObj->SetNumberField(TEXT("count"), 0);
+		ResultObj->SetArrayField(TEXT("matched_symbols"), TArray<TSharedPtr<FJsonValue>>());
+		ResultObj->SetArrayField(TEXT("references"), TArray<TSharedPtr<FJsonValue>>());
+
+		TArray<TSharedPtr<FJsonValue>> NextActions;
+		NextActions.Add(MakeShared<FJsonValueString>(TEXT("source.search_source")));
+		NextActions.Add(MakeShared<FJsonValueString>(TEXT("source.search_crg_graph")));
+		NextActions.Add(MakeShared<FJsonValueString>(TEXT("source.review_context")));
+		ResultObj->SetArrayField(TEXT("next_actions"), NextActions);
+		return FMonolithActionResult::Success(ResultObj);
 	}
 
 	TArray<FString> Lines;
+	TArray<TSharedPtr<FJsonValue>> MatchedSymbols;
+	TArray<TSharedPtr<FJsonValue>> ReferenceItems;
 	for (const auto& Sym : Symbols)
 	{
+		auto SymObj = MakeShared<FJsonObject>();
+		SymObj->SetNumberField(TEXT("id"), static_cast<double>(Sym.Id));
+		SymObj->SetStringField(TEXT("name"), Sym.Name);
+		SymObj->SetStringField(TEXT("qualified_name"), Sym.QualifiedName);
+		SymObj->SetStringField(TEXT("kind"), Sym.Kind);
+		SymObj->SetStringField(TEXT("path"), DB->GetFilePath(Sym.FileId));
+		SymObj->SetNumberField(TEXT("line_start"), Sym.LineStart);
+		SymObj->SetNumberField(TEXT("line_end"), Sym.LineEnd);
+		MatchedSymbols.Add(MakeShared<FJsonValueObject>(SymObj));
+
 		TArray<FMonolithSourceReference> Refs = DB->GetReferencesTo(Sym.Id, RefKind, Limit);
 		for (const auto& Ref : Refs)
 		{
 			Lines.Add(FString::Printf(TEXT("[%s] %s:%d (from %s)"),
 				*Ref.RefKind, *ShortPath(Ref.Path), Ref.Line, *Ref.FromName));
+
+			auto RefObj = MakeShared<FJsonObject>();
+			RefObj->SetStringField(TEXT("ref_kind"), Ref.RefKind);
+			RefObj->SetStringField(TEXT("path"), Ref.Path);
+			RefObj->SetNumberField(TEXT("line"), Ref.Line);
+			RefObj->SetStringField(TEXT("from_name"), Ref.FromName);
+			RefObj->SetStringField(TEXT("to_name"), Ref.ToName);
+			ReferenceItems.Add(MakeShared<FJsonValueObject>(RefObj));
 		}
 	}
 
@@ -1258,6 +1348,24 @@ FMonolithActionResult FMonolithSourceActions::HandleFindReferences(const TShared
 	ContentItem->SetStringField(TEXT("text"), ResultText);
 	ContentArr.Add(MakeShared<FJsonValueObject>(ContentItem));
 	ResultObj->SetArrayField(TEXT("content"), ContentArr);
+	ResultObj->SetStringField(TEXT("match_status"), Lines.Num() > 0 ? TEXT("references") : TEXT("no_references"));
+	ResultObj->SetStringField(TEXT("query"), Symbol);
+	if (!RefKind.IsEmpty())
+	{
+		ResultObj->SetStringField(TEXT("ref_kind"), RefKind);
+	}
+	ResultObj->SetNumberField(TEXT("count"), ReferenceItems.Num());
+	ResultObj->SetNumberField(TEXT("matched_symbol_count"), MatchedSymbols.Num());
+	ResultObj->SetArrayField(TEXT("matched_symbols"), MatchedSymbols);
+	ResultObj->SetArrayField(TEXT("references"), ReferenceItems);
+	if (Lines.Num() == 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> NextActions;
+		NextActions.Add(MakeShared<FJsonValueString>(TEXT("source.search_source")));
+		NextActions.Add(MakeShared<FJsonValueString>(TEXT("source.find_callers")));
+		NextActions.Add(MakeShared<FJsonValueString>(TEXT("source.find_callees")));
+		ResultObj->SetArrayField(TEXT("next_actions"), NextActions);
+	}
 	return FMonolithActionResult::Success(ResultObj);
 }
 
@@ -1951,6 +2059,10 @@ FMonolithActionResult FMonolithSourceActions::HandleReadFile(const TSharedPtr<FJ
 	FString Path;
 	if (!Params->TryGetStringField(TEXT("file_path"), Path) || Path.IsEmpty())
 	{
+		Params->TryGetStringField(TEXT("path"), Path);
+	}
+	if (Path.IsEmpty())
+	{
 		return FMonolithActionResult::Error(TEXT("\'file_path\' parameter is required and must be a string"));
 	}
 	int32 StartLine = 1;
@@ -1964,6 +2076,19 @@ FMonolithActionResult FMonolithSourceActions::HandleReadFile(const TSharedPtr<FJ
 	if (Params->TryGetNumberField(TEXT("end_line"), RawEndLine))
 	{
 		EndLine = FMath::Clamp(static_cast<int32>(RawEndLine), 0, 1000000);
+	}
+	else
+	{
+		double RawLineCount = 0;
+		if (!Params->TryGetNumberField(TEXT("line_count"), RawLineCount))
+		{
+			Params->TryGetNumberField(TEXT("max_lines"), RawLineCount);
+		}
+		if (RawLineCount > 0)
+		{
+			const int32 LineCount = FMath::Clamp(static_cast<int32>(RawLineCount), 1, 1000000);
+			EndLine = FMath::Clamp(StartLine + LineCount - 1, 0, 1000000);
+		}
 	}
 
 	// Resolve path

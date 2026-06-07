@@ -2090,11 +2090,30 @@ namespace MonolithImageGen::ImageGenerationInternal
 			{
 				ErrorData->SetStringField(TEXT("code"), ErrorCode);
 			}
+			TSharedPtr<FJsonObject> RequestSummary = MakeShared<FJsonObject>();
+			CopyOptionalString(Payload, RequestSummary, TEXT("provider"), TEXT("provider"));
+			CopyOptionalString(Payload, RequestSummary, TEXT("model"), TEXT("model"));
+			CopyOptionalString(Payload, RequestSummary, TEXT("quality"), TEXT("quality"));
+			CopyOptionalString(Payload, RequestSummary, TEXT("size"), TEXT("size"));
+			CopyOptionalString(Payload, RequestSummary, TEXT("format"), TEXT("format"));
+			CopyOptionalString(Payload, RequestSummary, TEXT("background"), TEXT("provider_background"));
+			CopyOptionalString(Payload, RequestSummary, TEXT("moderation"), TEXT("moderation"));
+			CopyOptionalString(Payload, RequestSummary, TEXT("mode"), TEXT("mode"));
+			const TArray<TSharedPtr<FJsonValue>>* References = nullptr;
+			if (Payload->TryGetArrayField(TEXT("references"), References) && References)
+			{
+				RequestSummary->SetNumberField(TEXT("reference_count"), References->Num());
+			}
+			ErrorData->SetObjectField(TEXT("request_summary"), RequestSummary);
 			FMonolithActionResult Error = FMonolithActionResult::Error(ErrorMessage, -32603);
 			Error.WithErrorData(ErrorData);
 			if (ErrorCode == TEXT("API_KEY_REQUIRED"))
 			{
 				Error.WithHint(TEXT("Use provider='oauth' for the API-key-free Codex OAuth path, or configure OPENAI_API_KEY on the ima2/imag2-gen server when provider='api'."));
+			}
+			else if (ErrorMessage.Contains(TEXT("rejected"), ESearchCase::IgnoreCase) || ResponseCode == 400)
+			{
+				Error.WithHint(TEXT("Review error_data.request_summary for provider/model/size/quality/background/reference_count. Monolith forwards background='transparent' as provider_background='auto'; remaining parameter rejection usually comes from the ima2/OpenAI model or reference constraints."));
 			}
 			return Error;
 		}

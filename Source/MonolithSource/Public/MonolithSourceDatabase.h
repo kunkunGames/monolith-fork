@@ -181,7 +181,7 @@ public:
 
 	// --- CRG-inspired health / repair (additive; see MonolithSourceReview) ---
 	/** Read-only schema/trigger/FTS/orphan/meta diagnostics. Never mutates. */
-	TSharedPtr<FJsonObject> ComputeHealth(bool bIncludeCounts);
+	TSharedPtr<FJsonObject> ComputeHealth(bool bIncludeCounts, bool bIncludeDeepChecks = false);
 	/**
 	 * Rebuild FTS. Default dry-run; mutates only when bExecute is true.
 	 * Only `symbols_fts` is external-content and rebuildable; `source_fts` is a
