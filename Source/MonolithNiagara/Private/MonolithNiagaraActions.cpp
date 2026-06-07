@@ -14517,7 +14517,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 
 	// Add user parameters
 	const TArray<TSharedPtr<FJsonValue>>* UserParamsArray = nullptr;
-	if (Spec->TryGetArrayField(TEXT("user_parameters"), UserParamsArray))
+	if (Spec->TryGetArrayField(TEXT("user_parameters"), UserParamsArray) && UserParamsArray)
 	{
 		for (int32 ParamIndex = 0; ParamIndex < UserParamsArray->Num(); ++ParamIndex)
 		{
@@ -14560,7 +14560,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 
 	// Add emitters
 	const TArray<TSharedPtr<FJsonValue>>* EmittersArray = nullptr;
-	if (Spec->TryGetArrayField(TEXT("emitters"), EmittersArray))
+	if (Spec->TryGetArrayField(TEXT("emitters"), EmittersArray) && EmittersArray)
 	{
 		for (int32 EmitterIndex = 0; EmitterIndex < EmittersArray->Num(); ++EmitterIndex)
 		{
@@ -14620,7 +14620,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 
 			// Modules
 			const TArray<TSharedPtr<FJsonValue>>* ModsArray = nullptr;
-			if (EO->TryGetArrayField(TEXT("modules"), ModsArray))
+			if (EO->TryGetArrayField(TEXT("modules"), ModsArray) && ModsArray)
 			{
 				const TArray<TSharedPtr<FJsonValue>>& Mods = *ModsArray;
 				for (int32 MI = 0; MI < Mods.Num(); ++MI)
@@ -14703,7 +14703,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 
 			// Renderers
 			const TArray<TSharedPtr<FJsonValue>>* RenderersArray = nullptr;
-			if (EO->TryGetArrayField(TEXT("renderers"), RenderersArray))
+			if (EO->TryGetArrayField(TEXT("renderers"), RenderersArray) && RenderersArray)
 			{
 				for (const TSharedPtr<FJsonValue>& RV : *RenderersArray)
 				{
