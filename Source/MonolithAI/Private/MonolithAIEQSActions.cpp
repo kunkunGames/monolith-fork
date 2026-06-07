@@ -1300,6 +1300,19 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 		bRequestedDefineReferenceValue = true;
 	}
 
+	bool bRequestedFactor = false;
+	float RequestedFactor = 0.0f;
+	if (Params->HasField(TEXT("factor")))
+	{
+		double TempFactor = 0.0;
+		if (!Params->TryGetNumberField(TEXT("factor"), TempFactor))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'factor' must be a number"));
+		}
+		RequestedFactor = (float)TempFactor;
+		bRequestedFactor = true;
+	}
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Configure EQS Scoring")));
 	Query->Modify();
 
@@ -1336,13 +1349,9 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 	}
 
 	// ScoringFactor
-	bool bRequestedFactor = false;
-	float RequestedFactor = 0.0f;
-	if (Params->HasField(TEXT("factor")))
+	if (bRequestedFactor)
 	{
-		RequestedFactor = (float)Params->GetNumberField(TEXT("factor"));
 		Test->ScoringFactor.DefaultValue = RequestedFactor;
-		bRequestedFactor = true;
 	}
 
 	// Clamp
