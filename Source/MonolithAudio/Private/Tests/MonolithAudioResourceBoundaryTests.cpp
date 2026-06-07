@@ -524,23 +524,76 @@ bool FMonolithAudioListAvailableMetaSoundNodesLimitTest::RunTest(const FString& 
 		}
 	}
 
-	// Test malformed limit type (TryGetNumberField fails and leaves default intact)
-	// (or returns error depending on how we handle it - the current code just ignores and uses default)
+	// Test malformed limit type
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("limit"), TEXT("not_a_number"));
 		FMonolithActionResult Result = ExecuteListAvailableMetaSoundNodes(Params);
-		if (Result.bSuccess && Result.Result.IsValid())
-		{
-			const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
-			if (Result.Result->TryGetArrayField(TEXT("nodes"), NodesArray))
-			{
-				if (NodesArray->Num() > 200)
-				{
-					AddError(FString::Printf(TEXT("Malformed limit was not ignored/defaulted to 200. Count was %d"), NodesArray->Num()));
-				}
-			}
-		}
+		TestFalse(TEXT("String limit should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention limit"), Result.ErrorMessage.Contains(TEXT("limit")));
+	}
+
+	return true;
+}
+
+namespace
+{
+FMonolithActionResult ExecuteCreateSynthesizedTone(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry::Get());
+	return FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("create_synthesized_tone"), Params);
+}
+FMonolithActionResult ExecuteCreateLoopingAmbientMetaSound(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry::Get());
+	return FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("create_looping_ambient_metasound"), Params);
+}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioMetaSoundMalformedInputTest, "Monolith.LimitGuard.Audio.MetaSoundMalformedInput", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAudioMetaSoundMalformedInputTest::RunTest(const FString& Parameters)
+{
+	// Test malformed frequency
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/SynthTone"));
+		Params->SetStringField(TEXT("frequency"), TEXT("not_a_number"));
+		FMonolithActionResult Result = ExecuteCreateSynthesizedTone(Params);
+		TestFalse(TEXT("String frequency should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention frequency"), Result.ErrorMessage.Contains(TEXT("frequency")));
+	}
+
+	// Test malformed adsr
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/SynthTone"));
+		Params->SetStringField(TEXT("adsr"), TEXT("not_an_object"));
+		FMonolithActionResult Result = ExecuteCreateSynthesizedTone(Params);
+		TestFalse(TEXT("String adsr should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention adsr"), Result.ErrorMessage.Contains(TEXT("adsr")));
+	}
+
+	// Test malformed adsr.attack
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/SynthTone"));
+		TSharedPtr<FJsonObject> AdsrObj = MakeShared<FJsonObject>();
+		AdsrObj->SetStringField(TEXT("attack"), TEXT("not_a_number"));
+		Params->SetObjectField(TEXT("adsr"), AdsrObj);
+		FMonolithActionResult Result = ExecuteCreateSynthesizedTone(Params);
+		TestFalse(TEXT("String adsr.attack should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention attack"), Result.ErrorMessage.Contains(TEXT("attack")));
+	}
+
+	// Test malformed lfo_frequency
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/LfoWave"));
+		Params->SetStringField(TEXT("sound_wave"), TEXT("/Game/Temp/SomeWave"));
+		Params->SetStringField(TEXT("lfo_frequency"), TEXT("not_a_number"));
+		FMonolithActionResult Result = ExecuteCreateLoopingAmbientMetaSound(Params);
+		TestFalse(TEXT("String lfo_frequency should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should mention lfo_frequency"), Result.ErrorMessage.Contains(TEXT("lfo_frequency")));
 	}
 
 	return true;

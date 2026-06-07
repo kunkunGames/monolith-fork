@@ -1283,8 +1283,12 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ListAvailableMetaSoundNode
 
 	int32 Limit = 200;
 	double LimitVal = 200.0;
-	if (Params->TryGetNumberField(TEXT("limit"), LimitVal))
+	if (Params->HasField(TEXT("limit")))
 	{
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: limit must be a number"));
+		}
 		Limit = static_cast<int32>(LimitVal);
 	}
 	Limit = FMath::Clamp(Limit, 1, 1000);
@@ -2520,17 +2524,21 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateLoopingAmbientMetaSo
 		return FMonolithActionResult::Error(TEXT("asset_path and sound_wave are required"));
 	}
 
+	float LfoFrequency = 0.25f;
+	double LfoFreqVal = 0.25;
+	if (Params->HasField(TEXT("lfo_frequency")))
+	{
+		if (!Params->TryGetNumberField(TEXT("lfo_frequency"), LfoFreqVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: lfo_frequency must be a number"));
+		}
+		LfoFrequency = static_cast<float>(LfoFreqVal);
+	}
+
 	USoundWave* Wave = Cast<USoundWave>(StaticLoadObject(USoundWave::StaticClass(), nullptr, *WavePath));
 	if (!Wave)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("SoundWave not found at '%s'"), *WavePath));
-	}
-
-	float LfoFrequency = 0.25f;
-	double LfoFreqVal = 0.25;
-	if (Params->TryGetNumberField(TEXT("lfo_frequency"), LfoFreqVal))
-	{
-		LfoFrequency = static_cast<float>(LfoFreqVal);
 	}
 
 	float PitchMin = 0.95f, PitchMax = 1.05f;
@@ -2691,24 +2699,49 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateSynthesizedTone(cons
 
 	float Frequency = 440.0f;
 	double FreqVal = 440.0;
-	if (Params->TryGetNumberField(TEXT("frequency"), FreqVal))
+	if (Params->HasField(TEXT("frequency")))
 	{
+		if (!Params->TryGetNumberField(TEXT("frequency"), FreqVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: frequency must be a number"));
+		}
 		Frequency = static_cast<float>(FreqVal);
 	}
 
 	// ADSR defaults
 	float Attack = 0.01f, Decay = 0.1f, Sustain = 0.7f, Release = 0.3f;
 	const TSharedPtr<FJsonObject>* AdsrPtr = nullptr;
-	if (Params->TryGetObjectField(TEXT("adsr"), AdsrPtr) && AdsrPtr && AdsrPtr->IsValid())
+	if (Params->HasField(TEXT("adsr")))
 	{
+		if (!Params->TryGetObjectField(TEXT("adsr"), AdsrPtr) || !AdsrPtr || !AdsrPtr->IsValid())
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: adsr must be an object"));
+		}
+
 		double AttackVal = 0.01;
-		if ((*AdsrPtr)->TryGetNumberField(TEXT("attack"), AttackVal)) Attack = static_cast<float>(AttackVal);
+		if ((*AdsrPtr)->HasField(TEXT("attack")))
+		{
+			if (!(*AdsrPtr)->TryGetNumberField(TEXT("attack"), AttackVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: adsr.attack must be a number"));
+			Attack = static_cast<float>(AttackVal);
+		}
 		double DecayVal = 0.1;
-		if ((*AdsrPtr)->TryGetNumberField(TEXT("decay"), DecayVal)) Decay = static_cast<float>(DecayVal);
+		if ((*AdsrPtr)->HasField(TEXT("decay")))
+		{
+			if (!(*AdsrPtr)->TryGetNumberField(TEXT("decay"), DecayVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: adsr.decay must be a number"));
+			Decay = static_cast<float>(DecayVal);
+		}
 		double SustainVal = 0.7;
-		if ((*AdsrPtr)->TryGetNumberField(TEXT("sustain"), SustainVal)) Sustain = static_cast<float>(SustainVal);
+		if ((*AdsrPtr)->HasField(TEXT("sustain")))
+		{
+			if (!(*AdsrPtr)->TryGetNumberField(TEXT("sustain"), SustainVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: adsr.sustain must be a number"));
+			Sustain = static_cast<float>(SustainVal);
+		}
 		double ReleaseVal = 0.3;
-		if ((*AdsrPtr)->TryGetNumberField(TEXT("release"), ReleaseVal)) Release = static_cast<float>(ReleaseVal);
+		if ((*AdsrPtr)->HasField(TEXT("release")))
+		{
+			if (!(*AdsrPtr)->TryGetNumberField(TEXT("release"), ReleaseVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: adsr.release must be a number"));
+			Release = static_cast<float>(ReleaseVal);
+		}
 	}
 
 	FString PackagePath, AssetName;
