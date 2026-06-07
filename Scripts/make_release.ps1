@@ -369,6 +369,10 @@ $trackedFiles = $allTrackedFiles | Where-Object {
     if ($keep -and $path -like "Docs/testing/*") {
         $keep = $false
     }
+    # Strip internal planning and spec folders (Docs/plans/, CRG/, PRD/, Plans/)
+    if ($keep -and ($path -like "Docs/plans/*" -or $path -like "CRG/*" -or $path -like "PRD/*" -or $path -like "Plans/*")) {
+        $keep = $false
+    }
     # Enforce release ZIP hygiene: explicitly exclude build/local folders even if accidentally tracked
     if ($keep -and ($path -like "Intermediate/*" -or $path -like "Saved/*" -or $path -like ".git/*" -or $path -eq ".git" -or $path -like ".github/*" -or $path -eq ".github" -or $path -like ".claude/*" -or $path -eq ".claude" -or $path -like ".jules/*" -or $path -eq ".jules" -or $path -like ".vscode/*" -or $path -like ".vs/*" -or $path -like ".idea/*" -or $path -like ".pytest_cache/*" -or $path -eq ".pytest_cache" -or $path -like ".ruff_cache/*" -or $path -eq ".ruff_cache" -or $path -like ".venv/*" -or $path -eq ".venv" -or $path -like ".code-review-graph/*" -or $path -eq ".code-review-graph")) {
         $keep = $false
