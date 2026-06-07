@@ -264,7 +264,14 @@ def check_action_registry_duplicates(ctx: CheckContext) -> None:
         r"RegisterAction\s*\(\s*TEXT\(\"([^\"]+)\"\)\s*,\s*TEXT\(\"([^\"]+)\"\)",
         re.MULTILINE | re.DOTALL,
     )
+    project_template_re = re.compile(r"RegisterProjectAction\s*<\s*([A-Za-z_][A-Za-z0-9_:]*)\s*>\s*\(")
+    get_name_re = re.compile(
+        r"(?:class|struct)\s+([A-Za-z_][A-Za-z0-9_]*)[\s\S]{0,3000}?"
+        r"GetName\s*\(\s*\)\s*(?:const\s*)?\{\s*return\s+TEXT\(\"([^\"]+)\"\)\s*;",
+        re.MULTILINE,
+    )
     registrations: dict[tuple[str, str], list[tuple[Path, int]]] = {}
+    action_names: dict[str, tuple[str, Path, int]] = {}
 
     for path in ctx.tracked_files():
         if path.suffix not in extensions:
@@ -275,10 +282,39 @@ def check_action_registry_duplicates(ctx: CheckContext) -> None:
             continue
 
         text = read_text(path)
+        for match in get_name_re.finditer(text):
+            class_name, action = match.group(1), match.group(2)
+            line_number = text.count("\n", 0, match.start()) + 1
+            action_names[class_name] = (action, path, line_number)
+
         for match in register_re.finditer(text):
             namespace, action = match.group(1), match.group(2)
             line_number = text.count("\n", 0, match.start()) + 1
             registrations.setdefault((namespace, action), []).append((path, line_number))
+
+    for path in ctx.tracked_files():
+        if path.suffix not in extensions:
+            continue
+        try:
+            path.resolve().relative_to(source_dir)
+        except ValueError:
+            continue
+
+        text = read_text(path)
+        for match in project_template_re.finditer(text):
+            class_name = match.group(1).split("::")[-1]
+            line_number = text.count("\n", 0, match.start()) + 1
+            action_info = action_names.get(class_name)
+            if action_info is None:
+                ctx.block(
+                    "action-registry",
+                    f"Could not resolve RegisterProjectAction<{class_name}> GetName()",
+                    path,
+                )
+                continue
+
+            action, _name_path, _name_line = action_info
+            registrations.setdefault(("project", action), []).append((path, line_number))
 
     for (namespace, action), locations in sorted(registrations.items()):
         if len(locations) <= 1:
@@ -972,6 +1008,21 @@ def run_selftest() -> int:
                 "void Register(FRegistry& Registry) {\n"
                 "    Registry.RegisterAction(TEXT(\"foo\"), TEXT(\"bar\"), TEXT(\"one\"), Handler);\n"
                 "    Registry.RegisterAction(TEXT(\"foo\"), TEXT(\"bar\"), TEXT(\"two\"), Handler);\n"
+                "}\n",
+                encoding="utf-8",
+            ),
+        ),
+        (
+            "duplicate templated project action registration",
+            "action-registry",
+            lambda root: (root / "Source/Foo/Private/DuplicateProjectActions.cpp").write_text(
+                "class FProjectDuplicateAction {\n"
+                "public:\n"
+                "    static FString GetName() { return TEXT(\"bar\"); }\n"
+                "};\n"
+                "void Register(FRegistry& Registry) {\n"
+                "    RegisterProjectAction<FProjectDuplicateAction>(Registry);\n"
+                "    Registry.RegisterAction(TEXT(\"project\"), TEXT(\"bar\"), TEXT(\"two\"), Handler);\n"
                 "}\n",
                 encoding="utf-8",
             ),
