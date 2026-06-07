@@ -796,10 +796,16 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleAddAttribute(const TSh
 	if (!MonolithGAS::RequireStringParam(Params, TEXT("name"), AttrName, Err)) return Err;
 
 	bool bReplicated = false;
-	Params->TryGetBoolField(TEXT("replicated"), bReplicated);
+	if (Params->HasField(TEXT("replicated")) && !Params->TryGetBoolField(TEXT("replicated"), bReplicated))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameter: replicated must be a boolean"));
+	}
 
 	double DefaultValue = 0.0;
-	Params->TryGetNumberField(TEXT("default_value"), DefaultValue);
+	if (Params->HasField(TEXT("default_value")) && !Params->TryGetNumberField(TEXT("default_value"), DefaultValue))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameter: default_value must be a number"));
+	}
 
 	// ---- Blueprint mode ----
 	if (LooksLikeBlueprintPath(AttrSet))
