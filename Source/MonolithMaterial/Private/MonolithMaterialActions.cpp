@@ -1881,11 +1881,14 @@ FMonolithActionResult FMonolithMaterialActions::ValidateMaterial(const TSharedPt
 
 	TConstArrayView<TObjectPtr<UMaterialExpression>> Expressions = Mat->GetExpressions();
 	TArray<TSharedPtr<FJsonValue>> IssuesArray;
+	IssuesArray.Reserve(Expressions.Num());
 	int32 FixedCount = 0;
 
 	// BFS from material outputs to find reachable expressions
 	TSet<UMaterialExpression*> ReachableSet;
+	ReachableSet.Reserve(Expressions.Num());
 	TArray<UMaterialExpression*> BfsQueue;
+	BfsQueue.Reserve(Expressions.Num());
 
 	for (EMaterialProperty Prop : AllMaterialProperties)
 	{
@@ -9762,17 +9765,20 @@ FMonolithActionResult FMonolithMaterialActions::CheckTilingQuality(const TShared
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load base material at '%s'"), *AssetPath));
 	}
 
+	TConstArrayView<TObjectPtr<UMaterialExpression>> Expressions = Mat->GetExpressions();
 	TArray<TSharedPtr<FJsonValue>> IssuesArray;
+	IssuesArray.Reserve(Expressions.Num());
 	bool bHasAntiTiling = false;
 	bool bHasMacroVariation = false;
 
 	// Gather all expressions by type for analysis
 	TArray<UMaterialExpressionTextureSample*> TextureSamples;
+	TextureSamples.Reserve(Expressions.Num());
 	bool bHasWorldPosition = false;
 	bool bHasNoise = false;
 	bool bHasCustomHLSL = false;
 
-	for (const TObjectPtr<UMaterialExpression>& Expr : Mat->GetExpressions())
+	for (const TObjectPtr<UMaterialExpression>& Expr : Expressions)
 	{
 		if (!Expr) continue;
 
