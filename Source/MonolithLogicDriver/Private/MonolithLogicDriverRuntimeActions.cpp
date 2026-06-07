@@ -426,6 +426,7 @@ FMonolithActionResult FMonolithLogicDriverRuntimeActions::HandleRuntimeGetStateH
 	{
 		FScriptArrayHelper ArrayHelper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(Lookup.SMInstance));
 		int32 Count = FMath::Min(ArrayHelper.Num(), Limit);
+		HistoryArr.Reserve(Count);
 		for (int32 i = 0; i < Count; i++)
 		{
 			// Each element might be a struct — export as text

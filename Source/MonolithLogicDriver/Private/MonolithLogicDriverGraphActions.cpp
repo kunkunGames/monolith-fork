@@ -423,6 +423,7 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleFindNodesByType(co
 	}
 
 	TArray<TSharedPtr<FJsonValue>> MatchingNodes;
+	MatchingNodes.Reserve(RootGraph->Nodes.Num());
 
 	for (UEdGraphNode* RawNode : RootGraph->Nodes)
 	{
@@ -462,6 +463,7 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleFindNodesByClass(c
 	}
 
 	TArray<TSharedPtr<FJsonValue>> MatchingNodes;
+	MatchingNodes.Reserve(RootGraph->Nodes.Num());
 
 	for (UEdGraphNode* RawNode : RootGraph->Nodes)
 	{
