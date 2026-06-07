@@ -1716,7 +1716,7 @@ LIMIT ?
         if (run_expensive_checks) {
             int64_t orphan_refs = count_rows(db,
                 "SELECT COUNT(*) FROM \"references\" r "
-                "WHERE r.from_symbol_id NOT IN (SELECT id FROM symbols) "
+                "WHERE (r.from_symbol_id != 0 AND r.from_symbol_id NOT IN (SELECT id FROM symbols)) "
                 "OR r.to_symbol_id NOT IN (SELECT id FROM symbols);");
             if (orphan_refs != 0) needs_reindex = true;
             check("integrity:orphan_references", orphan_refs == 0,

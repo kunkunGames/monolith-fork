@@ -2693,7 +2693,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	{
 		OrphanRefs = CountOf(TEXT(
 			"SELECT COUNT(*) FROM \"references\" r "
-			"WHERE r.from_symbol_id NOT IN (SELECT id FROM symbols) "
+			"WHERE (r.from_symbol_id != 0 AND r.from_symbol_id NOT IN (SELECT id FROM symbols)) "
 			"   OR r.to_symbol_id NOT IN (SELECT id FROM symbols);"));
 		if (OrphanRefs != 0)
 		{

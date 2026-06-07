@@ -508,6 +508,7 @@ bool FSourceHealthHealthyTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("shallow health omits row counts"), Shallow->HasField(TEXT("row_counts")));
 	TSharedPtr<FJsonObject> DefaultShallow = T.Db.ComputeHealth(false);
 	TestEqual(TEXT("single-argument health defaults to shallow checks"), DefaultShallow->GetStringField(TEXT("check_depth")), FString(TEXT("shallow")));
+	T.Db.InsertReference(0, T.Sb, TEXT("type"), T.FileId, 11);
 	TSharedPtr<FJsonObject> R = T.Db.ComputeHealth(true);
 	TestEqual(TEXT("fresh consistent source DB is healthy"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	TestEqual(TEXT("deep health reports depth"), R->GetStringField(TEXT("check_depth")), FString(TEXT("deep")));
