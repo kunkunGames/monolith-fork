@@ -4285,14 +4285,6 @@ FMonolithActionResult FMonolithMaterialActions::GetExpressionConnections(const T
 
 FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-
-	UMaterial* Mat = LoadBaseMaterial(AssetPath);
-	if (!Mat)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load base material at '%s'"), *AssetPath));
-	}
-
 	// Build a list of move operations
 	struct FMoveOp
 	{
@@ -4333,10 +4325,34 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 			if (Val && Val->TryGetObject(ObjPtr) && ObjPtr)
 			{
 				FMoveOp Op;
-				Op.Name = (*ObjPtr)->GetStringField(TEXT("name"));
+				if (!(*ObjPtr)->TryGetStringField(TEXT("name"), Op.Name))
+				{
+					return FMonolithActionResult::Error(TEXT("Parameter 'name' must be a valid string for each expression in 'expressions' array"));
+				}
+
 				// Accept both "x"/"y" and "pos_x"/"pos_y"
-				Op.X = static_cast<int32>((*ObjPtr)->HasField(TEXT("x")) ? (*ObjPtr)->GetNumberField(TEXT("x")) : (*ObjPtr)->GetNumberField(TEXT("pos_x")));
-				Op.Y = static_cast<int32>((*ObjPtr)->HasField(TEXT("y")) ? (*ObjPtr)->GetNumberField(TEXT("y")) : (*ObjPtr)->GetNumberField(TEXT("pos_y")));
+				double XVal = 0.0;
+				if ((*ObjPtr)->HasField(TEXT("x")))
+				{
+					if (!(*ObjPtr)->TryGetNumberField(TEXT("x"), XVal)) return FMonolithActionResult::Error(TEXT("Parameter 'x' must be a number"));
+				}
+				else if ((*ObjPtr)->HasField(TEXT("pos_x")))
+				{
+					if (!(*ObjPtr)->TryGetNumberField(TEXT("pos_x"), XVal)) return FMonolithActionResult::Error(TEXT("Parameter 'pos_x' must be a number"));
+				}
+				Op.X = static_cast<int32>(XVal);
+
+				double YVal = 0.0;
+				if ((*ObjPtr)->HasField(TEXT("y")))
+				{
+					if (!(*ObjPtr)->TryGetNumberField(TEXT("y"), YVal)) return FMonolithActionResult::Error(TEXT("Parameter 'y' must be a number"));
+				}
+				else if ((*ObjPtr)->HasField(TEXT("pos_y")))
+				{
+					if (!(*ObjPtr)->TryGetNumberField(TEXT("pos_y"), YVal)) return FMonolithActionResult::Error(TEXT("Parameter 'pos_y' must be a number"));
+				}
+				Op.Y = static_cast<int32>(YVal);
+
 				MoveOps.Add(MoveTemp(Op));
 			}
 		}
@@ -4344,9 +4360,25 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 	else if (Params->HasField(TEXT("expression_name")))
 	{
 		FMoveOp Op;
-		Op.Name = Params->GetStringField(TEXT("expression_name"));
-		Op.X = Params->HasField(TEXT("pos_x")) ? static_cast<int32>(Params->GetNumberField(TEXT("pos_x"))) : 0;
-		Op.Y = Params->HasField(TEXT("pos_y")) ? static_cast<int32>(Params->GetNumberField(TEXT("pos_y"))) : 0;
+		if (!Params->TryGetStringField(TEXT("expression_name"), Op.Name))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'expression_name' must be a string"));
+		}
+
+		double XVal = 0.0;
+		if (Params->HasField(TEXT("pos_x")) && !Params->TryGetNumberField(TEXT("pos_x"), XVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'pos_x' must be a number"));
+		}
+		Op.X = static_cast<int32>(XVal);
+
+		double YVal = 0.0;
+		if (Params->HasField(TEXT("pos_y")) && !Params->TryGetNumberField(TEXT("pos_y"), YVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'pos_y' must be a number"));
+		}
+		Op.Y = static_cast<int32>(YVal);
+
 		MoveOps.Add(MoveTemp(Op));
 	}
 	else
@@ -4359,6 +4391,13 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 		return FMonolithActionResult::Error(TEXT("No move operations specified"));
 	}
 
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+
+	UMaterial* Mat = LoadBaseMaterial(AssetPath);
+	if (!Mat)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load base material at '%s'"), *AssetPath));
+	}
 	// Build name -> expression lookup
 	TMap<FString, UMaterialExpression*> NameToExpr;
 	for (const TObjectPtr<UMaterialExpression>& Expr : Mat->GetExpressions())
