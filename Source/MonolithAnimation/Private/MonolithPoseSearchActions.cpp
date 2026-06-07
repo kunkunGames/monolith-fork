@@ -1,5 +1,6 @@
 #include "MonolithPoseSearchActions.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 
 #include "PoseSearch/PoseSearchDatabase.h"
@@ -1309,68 +1310,138 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSearchMode(co
 	if (!Database)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("PoseSearchDatabase not found: %s"), *AssetPath));
 
-	GEditor->BeginTransaction(FText::FromString(TEXT("Set PoseSearch Database Search Mode")));
-	Database->Modify();
-
-	// Search mode
+	bool bSetPoseSearchMode = false;
+	EPoseSearchMode NewPoseSearchMode = Database->PoseSearchMode;
 	if (Params->HasField(TEXT("pose_search_mode")))
 	{
-		FString ModeStr = Params->GetStringField(TEXT("pose_search_mode"));
+		FString ModeStr;
+		if (!Params->TryGetStringField(TEXT("pose_search_mode"), ModeStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'pose_search_mode' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		if (ModeStr.Equals(TEXT("BruteForce"), ESearchCase::IgnoreCase))
-			Database->PoseSearchMode = EPoseSearchMode::BruteForce;
+			NewPoseSearchMode = EPoseSearchMode::BruteForce;
 		else if (ModeStr.Equals(TEXT("PCAKDTree"), ESearchCase::IgnoreCase))
-			Database->PoseSearchMode = EPoseSearchMode::PCAKDTree;
+			NewPoseSearchMode = EPoseSearchMode::PCAKDTree;
 		else if (ModeStr.Equals(TEXT("VPTree"), ESearchCase::IgnoreCase))
-			Database->PoseSearchMode = EPoseSearchMode::VPTree;
+			NewPoseSearchMode = EPoseSearchMode::VPTree;
 		else if (ModeStr.Equals(TEXT("EventOnly"), ESearchCase::IgnoreCase))
-			Database->PoseSearchMode = EPoseSearchMode::EventOnly;
+			NewPoseSearchMode = EPoseSearchMode::EventOnly;
 		else
 		{
-			GEditor->EndTransaction();
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid pose_search_mode: '%s'. Use BruteForce, PCAKDTree, VPTree, or EventOnly"), *ModeStr));
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Invalid pose_search_mode: '%s'. Use BruteForce, PCAKDTree, VPTree, or EventOnly"), *ModeStr),
+				FMonolithJsonUtils::ErrInvalidParams);
 		}
+		bSetPoseSearchMode = true;
 	}
 
-	// KDTree neighbors (not editor-only)
+	bool bSetKDTreeQueryNumNeighbors = false;
+	int32 NewKDTreeQueryNumNeighbors = Database->KDTreeQueryNumNeighbors;
 	if (Params->HasField(TEXT("kd_tree_query_num_neighbors")))
 	{
-		Database->KDTreeQueryNumNeighbors = FMath::Clamp(
-			static_cast<int32>(Params->GetNumberField(TEXT("kd_tree_query_num_neighbors"))), 1, 600);
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("kd_tree_query_num_neighbors"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'kd_tree_query_num_neighbors' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		NewKDTreeQueryNumNeighbors = FMath::Clamp(static_cast<int32>(TempVal), 1, 600);
+		bSetKDTreeQueryNumNeighbors = true;
 	}
 
 #if WITH_EDITORONLY_DATA
-	// PCA components (editor-only)
+	bool bSetNumberOfPrincipalComponents = false;
+	int32 NewNumberOfPrincipalComponents = Database->NumberOfPrincipalComponents;
 	if (Params->HasField(TEXT("number_of_principal_components")))
 	{
-		Database->NumberOfPrincipalComponents = FMath::Clamp(
-			static_cast<int32>(Params->GetNumberField(TEXT("number_of_principal_components"))), 1, 64);
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("number_of_principal_components"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'number_of_principal_components' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		NewNumberOfPrincipalComponents = FMath::Clamp(static_cast<int32>(TempVal), 1, 64);
+		bSetNumberOfPrincipalComponents = true;
 	}
 
-	// KDTree max leaf size (editor-only)
+	bool bSetKDTreeMaxLeafSize = false;
+	int32 NewKDTreeMaxLeafSize = Database->KDTreeMaxLeafSize;
 	if (Params->HasField(TEXT("kd_tree_max_leaf_size")))
 	{
-		Database->KDTreeMaxLeafSize = FMath::Clamp(
-			static_cast<int32>(Params->GetNumberField(TEXT("kd_tree_max_leaf_size"))), 1, 256);
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("kd_tree_max_leaf_size"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'kd_tree_max_leaf_size' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		NewKDTreeMaxLeafSize = FMath::Clamp(static_cast<int32>(TempVal), 1, 256);
+		bSetKDTreeMaxLeafSize = true;
 	}
 #endif // WITH_EDITORONLY_DATA
 
-	// Cost biases (runtime-accessible)
+	bool bSetContinuingPoseCostBias = false;
+	float NewContinuingPoseCostBias = Database->ContinuingPoseCostBias;
 	if (Params->HasField(TEXT("continuing_pose_cost_bias")))
 	{
-		Database->ContinuingPoseCostBias = static_cast<float>(Params->GetNumberField(TEXT("continuing_pose_cost_bias")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("continuing_pose_cost_bias"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'continuing_pose_cost_bias' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		NewContinuingPoseCostBias = static_cast<float>(TempVal);
+		bSetContinuingPoseCostBias = true;
 	}
+
+	bool bSetBaseCostBias = false;
+	float NewBaseCostBias = Database->BaseCostBias;
 	if (Params->HasField(TEXT("base_cost_bias")))
 	{
-		Database->BaseCostBias = static_cast<float>(Params->GetNumberField(TEXT("base_cost_bias")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("base_cost_bias"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'base_cost_bias' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		NewBaseCostBias = static_cast<float>(TempVal);
+		bSetBaseCostBias = true;
 	}
+
+	bool bSetLoopingCostBias = false;
+	float NewLoopingCostBias = Database->LoopingCostBias;
 	if (Params->HasField(TEXT("looping_cost_bias")))
 	{
-		Database->LoopingCostBias = static_cast<float>(Params->GetNumberField(TEXT("looping_cost_bias")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("looping_cost_bias"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'looping_cost_bias' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		NewLoopingCostBias = static_cast<float>(TempVal);
+		bSetLoopingCostBias = true;
 	}
+
+	bool bSetContinuingInteractionCostBias = false;
+	float NewContinuingInteractionCostBias = Database->ContinuingInteractionCostBias;
 	if (Params->HasField(TEXT("continuing_interaction_cost_bias")))
 	{
-		Database->ContinuingInteractionCostBias = static_cast<float>(Params->GetNumberField(TEXT("continuing_interaction_cost_bias")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("continuing_interaction_cost_bias"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'continuing_interaction_cost_bias' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		NewContinuingInteractionCostBias = static_cast<float>(TempVal);
+		bSetContinuingInteractionCostBias = true;
 	}
+
+	GEditor->BeginTransaction(FText::FromString(TEXT("Set PoseSearch Database Search Mode")));
+	Database->Modify();
+
+	if (bSetPoseSearchMode) Database->PoseSearchMode = NewPoseSearchMode;
+	if (bSetKDTreeQueryNumNeighbors) Database->KDTreeQueryNumNeighbors = NewKDTreeQueryNumNeighbors;
+#if WITH_EDITORONLY_DATA
+	if (bSetNumberOfPrincipalComponents) Database->NumberOfPrincipalComponents = NewNumberOfPrincipalComponents;
+	if (bSetKDTreeMaxLeafSize) Database->KDTreeMaxLeafSize = NewKDTreeMaxLeafSize;
+#endif
+	if (bSetContinuingPoseCostBias) Database->ContinuingPoseCostBias = NewContinuingPoseCostBias;
+	if (bSetBaseCostBias) Database->BaseCostBias = NewBaseCostBias;
+	if (bSetLoopingCostBias) Database->LoopingCostBias = NewLoopingCostBias;
+	if (bSetContinuingInteractionCostBias) Database->ContinuingInteractionCostBias = NewContinuingInteractionCostBias;
 
 	GEditor->EndTransaction();
 	Database->MarkPackageDirty();
