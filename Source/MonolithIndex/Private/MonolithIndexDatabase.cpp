@@ -1441,8 +1441,10 @@ TSharedPtr<FJsonObject> FMonolithIndexDatabase::GetAssetDetails(const FString& P
 	Details->SetStringField(TEXT("indexed_at"), Asset.IndexedAt);
 
 	// Nodes
+	TArray<FIndexedNode> Nodes = GetNodesForAsset(Asset.Id);
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
-	for (const auto& Node : GetNodesForAsset(Asset.Id))
+	NodesArr.Reserve(Nodes.Num());
+	for (const auto& Node : Nodes)
 	{
 		auto NodeObj = MakeShared<FJsonObject>();
 		NodeObj->SetStringField(TEXT("node_type"), Node.NodeType);
@@ -1465,8 +1467,10 @@ TSharedPtr<FJsonObject> FMonolithIndexDatabase::GetAssetDetails(const FString& P
 	Details->SetArrayField(TEXT("nodes"), NodesArr);
 
 	// Variables
+	TArray<FIndexedVariable> Vars = GetVariablesForAsset(Asset.Id);
 	TArray<TSharedPtr<FJsonValue>> VarsArr;
-	for (const auto& Var : GetVariablesForAsset(Asset.Id))
+	VarsArr.Reserve(Vars.Num());
+	for (const auto& Var : Vars)
 	{
 		auto VarObj = MakeShared<FJsonObject>();
 		VarObj->SetStringField(TEXT("name"), Var.VarName);
@@ -1547,8 +1551,10 @@ TSharedPtr<FJsonObject> FMonolithIndexDatabase::FindReferences(const FString& Pa
 	if (AssetId < 0) return Result;
 
 	// What this asset depends on
+	TArray<FIndexedDependency> Deps = GetDependenciesForAsset(AssetId);
 	TArray<TSharedPtr<FJsonValue>> DepsArr;
-	for (const auto& Dep : GetDependenciesForAsset(AssetId))
+	DepsArr.Reserve(Deps.Num());
+	for (const auto& Dep : Deps)
 	{
 		FSQLitePreparedStatement Stmt;
 		Stmt.Create(*Database, TEXT("SELECT package_path, asset_class FROM assets WHERE id = ?;"));
@@ -1568,8 +1574,10 @@ TSharedPtr<FJsonObject> FMonolithIndexDatabase::FindReferences(const FString& Pa
 	Result->SetArrayField(TEXT("depends_on"), DepsArr);
 
 	// What references this asset
+	TArray<FIndexedDependency> Refs = GetReferencersOfAsset(AssetId);
 	TArray<TSharedPtr<FJsonValue>> RefsArr;
-	for (const auto& Ref : GetReferencersOfAsset(AssetId))
+	RefsArr.Reserve(Refs.Num());
+	for (const auto& Ref : Refs)
 	{
 		FSQLitePreparedStatement Stmt;
 		Stmt.Create(*Database, TEXT("SELECT package_path, asset_class FROM assets WHERE id = ?;"));
