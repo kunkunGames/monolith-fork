@@ -255,7 +255,7 @@ namespace
 FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Category;
-	if (!Params->TryGetStringField(TEXT("file"), Category))
+	if (!Params->TryGetStringField(TEXT("file"), Category) || Category.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'file' parameter"));
 	}
@@ -265,13 +265,13 @@ FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJ
 	}
 
 	FString Section;
-	if (!Params->TryGetStringField(TEXT("section"), Section))
+	if (!Params->TryGetStringField(TEXT("section"), Section) || Section.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'section' parameter"));
 	}
 
 	FString Key;
-	if (!Params->TryGetStringField(TEXT("key"), Key))
+	if (!Params->TryGetStringField(TEXT("key"), Key) || Key.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'key' parameter"));
 	}
@@ -543,7 +543,7 @@ static TSharedPtr<FJsonObject> MakeDiffEntry(
 FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Category;
-	if (!Params->TryGetStringField(TEXT("file"), Category))
+	if (!Params->TryGetStringField(TEXT("file"), Category) || Category.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'file' parameter"));
 	}
@@ -652,7 +652,7 @@ FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<F
 FMonolithActionResult FMonolithConfigActions::SearchConfig(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Query;
-	if (!Params->TryGetStringField(TEXT("query"), Query))
+	if (!Params->TryGetStringField(TEXT("query"), Query) || Query.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'query' parameter"));
 	}
@@ -749,7 +749,7 @@ FMonolithActionResult FMonolithConfigActions::SearchConfig(const TSharedPtr<FJso
 FMonolithActionResult FMonolithConfigActions::GetSection(const TSharedPtr<FJsonObject>& Params)
 {
 	FString FileShortName;
-	if (!Params->TryGetStringField(TEXT("file"), FileShortName))
+	if (!Params->TryGetStringField(TEXT("file"), FileShortName) || FileShortName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'file' parameter"));
 	}
@@ -759,7 +759,7 @@ FMonolithActionResult FMonolithConfigActions::GetSection(const TSharedPtr<FJsonO
 	}
 
 	FString Section;
-	if (!Params->TryGetStringField(TEXT("section"), Section))
+	if (!Params->TryGetStringField(TEXT("section"), Section) || Section.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'section' parameter"));
 	}
