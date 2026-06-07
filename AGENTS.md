@@ -138,3 +138,6 @@ When changing MCP setup, project instructions, or skill distribution, update `Te
 
 ## 18. Action Count Synchronization
 When updating action counts in documentation (e.g., `README.md`, `Docs/API_REFERENCE.md`, `Docs/SPEC_CORE.md`, module specs, and `Monolith.uplugin`), agents must update all counts together in a single PR to prevent fragmentation and drift. Agents whose primary task is not syncing action counts (such as docs-only agents) must avoid count churn unless it is their exact mission. Stop without PR if an active PR from an ActionCountKeeper, SkillDocSmith, or Sentinel spec already touches the same count-bearing files.
+
+## 19. Release Packaging and Exclusions
+When maintaining release packaging scripts (e.g., `Scripts/make_release.ps1`), explicitly exclude internal planning, spec, and documentation folders (such as `.jules/`, `CRG/`, `PRD/`, and `Docs/plans/`) from the release ZIP. Even if these folders are listed in `.gitignore`, `git ls-files` will package them if their contents are being tracked in git. Ensure local developer, workspace, and AI tooling directories are explicitly excluded from release archives to prevent data leakage and excessive release sizes.

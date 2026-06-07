@@ -160,3 +160,9 @@
 **Learning:** Without explicit instruction, agents tend to over-explain their workflow or paste verbose trace logs as proof of work.
 **Prevention:** Added 'PR Body Hygiene and Sensitive Information' rule to `AGENTS.md` requiring concise PR descriptions focused only on structured fields and forbidding the exposure of private task logs or sensitive findings.
 **Avoid:** Exposing private task execution logs or sensitive internal paths in PR descriptions or commit messages.
+
+## 2026-06-07 - Explicitly exclude AI and planning folders from release packaging
+**Coordination issue:** Agents were packaging internal AI coordination folders (`.jules/`), spec folders (`PRD/`, `CRG/`), and planning folders into release ZIPs because they relied solely on `.gitignore` while `git ls-files` includes them if tracked.
+**Learning:** `.gitignore` is not a sufficient filter for packaging scripts if internal workspace files are tracked in the repository.
+**Prevention:** Added a rule to `AGENTS.md` requiring explicitly excluding these specific internal directories when modifying release scripts like `Scripts/make_release.ps1`.
+**Avoid:** Modifying release packaging scripts without explicitly filtering out AI tooling and planning directories.
