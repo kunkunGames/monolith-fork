@@ -184,6 +184,7 @@ namespace MonolithDataflow
 		TArray<FDataflowInput*> Inputs = Node->GetInputs();
 		if (Inputs.Num() > 0)
 		{
+			Pins.Reserve(Inputs.Num());
 			for (const FDataflowInput* Input : Inputs)
 			{
 				AddConnectionPin(Pins, Input);
@@ -212,6 +213,7 @@ namespace MonolithDataflow
 		TArray<FDataflowOutput*> Outputs = Node->GetOutputs();
 		if (Outputs.Num() > 0)
 		{
+			Pins.Reserve(Outputs.Num());
 			for (const FDataflowOutput* Output : Outputs)
 			{
 				AddConnectionPin(Pins, Output);
@@ -597,6 +599,7 @@ FMonolithActionResult FMonolithDataflowActions::GetStatus(const TSharedPtr<FJson
 	Result->SetBoolField(TEXT("graph_inspection_compiled"), WITH_MONOLITH_DATAFLOW != 0);
 
 	TArray<TSharedPtr<FJsonValue>> Modules;
+	Modules.Reserve(6);
 	Modules.Add(MakeShared<FJsonValueObject>(MonolithDataflow::MakeModuleStatus(TEXT("DataflowCore"))));
 	Modules.Add(MakeShared<FJsonValueObject>(MonolithDataflow::MakeModuleStatus(TEXT("DataflowEngine"))));
 	Modules.Add(MakeShared<FJsonValueObject>(MonolithDataflow::MakeModuleStatus(TEXT("DataflowEditor"))));
@@ -606,6 +609,11 @@ FMonolithActionResult FMonolithDataflowActions::GetStatus(const TSharedPtr<FJson
 	Result->SetArrayField(TEXT("modules"), Modules);
 
 	TArray<TSharedPtr<FJsonValue>> ImplementedActions;
+#if WITH_MONOLITH_DATAFLOW
+	ImplementedActions.Reserve(8);
+#else
+	ImplementedActions.Reserve(2);
+#endif
 	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("dataflow.get_status")));
 	ImplementedActions.Add(MakeShared<FJsonValueString>(TEXT("dataflow.list_assets")));
 #if WITH_MONOLITH_DATAFLOW
@@ -620,12 +628,15 @@ FMonolithActionResult FMonolithDataflowActions::GetStatus(const TSharedPtr<FJson
 
 	TArray<TSharedPtr<FJsonValue>> FutureActions;
 #if !WITH_MONOLITH_DATAFLOW
+	FutureActions.Reserve(9);
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("dataflow.get_dataflow_graph")));
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("dataflow.list_dataflow_node_types")));
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("dataflow.get_dataflow_node_schema")));
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("dataflow.validate_dataflow_graph")));
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("dataflow.list_dataflow_variables")));
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("dataflow.list_dataflow_comments")));
+#else
+	FutureActions.Reserve(3);
 #endif
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("dataflow.can_connect_dataflow")));
 	FutureActions.Add(MakeShared<FJsonValueString>(TEXT("dataflow.evaluate_dataflow_terminal")));
@@ -633,6 +644,7 @@ FMonolithActionResult FMonolithDataflowActions::GetStatus(const TSharedPtr<FJson
 	Result->SetArrayField(TEXT("future_optional_actions"), FutureActions);
 
 	TArray<TSharedPtr<FJsonValue>> Notes;
+	Notes.Reserve(3);
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("MonolithDataflow owns the dataflow namespace; AssetRegistry discovery is always dependency-light.")));
 #if WITH_MONOLITH_DATAFLOW
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Graph inspection is compiled because DataflowCore/DataflowEngine headers are available and MONOLITH_RELEASE_BUILD is not set.")));
@@ -667,6 +679,7 @@ FMonolithActionResult FMonolithDataflowActions::ListAssets(const TSharedPtr<FJso
 	AssetRegistry.GetAssets(Filter, Assets);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(FMath::Min(Assets.Num(), Limit));
 	int32 MatchedCount = 0;
 	TMap<FString, int32> ClassCounts;
 
@@ -818,6 +831,7 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowNodeTypes(const TSha
 	});
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(FMath::Min(RegisteredParams.Num(), Limit));
 	int32 MatchedCount = 0;
 	for (const UE::Dataflow::FFactoryParameters& FactoryParams : RegisteredParams)
 	{
@@ -914,7 +928,9 @@ FMonolithActionResult FMonolithDataflowActions::ValidateDataflowGraph(const TSha
 
 	TArray<TSharedPtr<FJsonValue>> Issues;
 	TSet<FName> NodeNames;
+	NodeNames.Reserve(Graph->GetNodes().Num());
 	TSet<FGuid> NodeGuids;
+	NodeGuids.Reserve(Graph->GetNodes().Num());
 
 	for (const TSharedPtr<FDataflowNode>& Node : Graph->GetNodes())
 	{
@@ -1043,6 +1059,7 @@ FMonolithActionResult FMonolithDataflowActions::ListDataflowComments(const TShar
 
 	const int32 NodeLimit = MonolithDataflow::GetClampedIntParam(Params, TEXT("node_limit"), 128, 1, 500);
 	TArray<const UEdGraphNode*> GraphNodes;
+	GraphNodes.Reserve(Dataflow->Nodes.Num());
 	int32 CommentCount = 0;
 	for (const UEdGraphNode* Node : Dataflow->Nodes)
 	{
