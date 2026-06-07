@@ -383,8 +383,7 @@ namespace MonolithUI::EffectActionsInternal
         const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
         if (Val->TryGetArray(Arr) && Arr && Arr->Num() >= 2)
         {
-            OutVec.X = (*Arr)[0]->AsNumber();
-            OutVec.Y = (*Arr)[1]->AsNumber();
+            if (!(*Arr)[0]->TryGetNumber(OutVec.X) || !(*Arr)[1]->TryGetNumber(OutVec.Y)) return false;
             return true;
         }
 
@@ -410,12 +409,13 @@ namespace MonolithUI::EffectActionsInternal
      * for FArrayProperty paths. Cap at 4 entries (matches the widget's MID push
      * loop).
      */
-    static FString MakeShadowArrayText(const TArray<TSharedPtr<FJsonValue>>& Layers)
+    static FString MakeShadowArrayText(const TArray<TSharedPtr<FJsonValue>>& Layers, int32* OutEmittedCount = nullptr)
     {
         constexpr int32 MaxLayers = 4;
         const int32 Count = FMath::Min(Layers.Num(), MaxLayers);
 
         FString Out = TEXT("(");
+        int32 EmittedCount = 0;
         for (int32 i = 0; i < Count; ++i)
         {
             if (!Layers[i].IsValid()) continue;
@@ -429,8 +429,7 @@ namespace MonolithUI::EffectActionsInternal
             const TSharedPtr<FJsonObject>* OffObj = nullptr;
             if (Obj->TryGetArrayField(TEXT("offset"), OffArr) && OffArr && OffArr->Num() >= 2)
             {
-                OX = (*OffArr)[0]->AsNumber();
-                OY = (*OffArr)[1]->AsNumber();
+                if (!(*OffArr)[0]->TryGetNumber(OX) || !(*OffArr)[1]->TryGetNumber(OY)) continue;
             }
             else if (Obj->TryGetObjectField(TEXT("offset"), OffObj) && OffObj && (*OffObj).IsValid())
             {
@@ -450,12 +449,17 @@ namespace MonolithUI::EffectActionsInternal
                 MonolithUI::TryParseColor(ColorStr, Color);
             }
 
-            if (i > 0) Out += TEXT(",");
+            if (EmittedCount > 0) Out += TEXT(",");
             Out += FString::Printf(
                 TEXT("(Offset=(X=%f,Y=%f),Blur=%f,Spread=%f,Color=(R=%f,G=%f,B=%f,A=%f))"),
                 OX, OY, Blur, Spread, Color.R, Color.G, Color.B, Color.A);
+            EmittedCount++;
         }
         Out += TEXT(")");
+        if (OutEmittedCount)
+        {
+            *OutEmittedCount = EmittedCount;
+        }
         return Out;
     }
 
@@ -641,10 +645,15 @@ FMonolithActionResult MonolithUI::FEffectSurfaceActions::HandleSetCorners(const 
 
     // Compose the corner-radii write through the JSON path surface.
     TSharedPtr<FJsonObject> Vec4Obj = MakeShared<FJsonObject>();
-    Vec4Obj->SetNumberField(TEXT("x"), (*RadiiArr)[0]->AsNumber());
-    Vec4Obj->SetNumberField(TEXT("y"), (*RadiiArr)[1]->AsNumber());
-    Vec4Obj->SetNumberField(TEXT("z"), (*RadiiArr)[2]->AsNumber());
-    Vec4Obj->SetNumberField(TEXT("w"), (*RadiiArr)[3]->AsNumber());
+    double X = 0.0, Y = 0.0, Z = 0.0, W = 0.0;
+    if (!(*RadiiArr)[0]->TryGetNumber(X) || !(*RadiiArr)[1]->TryGetNumber(Y) || !(*RadiiArr)[2]->TryGetNumber(Z) || !(*RadiiArr)[3]->TryGetNumber(W))
+    {
+        return FMonolithActionResult::Error(TEXT("corner_radii array elements must be numbers"), -32602);
+    }
+    Vec4Obj->SetNumberField(TEXT("x"), X);
+    Vec4Obj->SetNumberField(TEXT("y"), Y);
+    Vec4Obj->SetNumberField(TEXT("z"), Z);
+    Vec4Obj->SetNumberField(TEXT("w"), W);
     ApplyPath(Surface, TEXT("Effect.Shape.CornerRadii"),
         MakeShared<FJsonValueObject>(Vec4Obj), PathsWritten, Failures);
 
@@ -866,13 +875,14 @@ namespace MonolithUI::EffectActionsInternal
         TArray<FString> PathsWritten;
         TArray<FString> Failures;
 
-        const FString ShadowsText = MakeShadowArrayText(*LayersArr);
+        int32 EmittedLayerCount = 0;
+        const FString ShadowsText = MakeShadowArrayText(*LayersArr, &EmittedLayerCount);
         ApplyPath(Surface, JsonPath,
             MakeShared<FJsonValueString>(ShadowsText), PathsWritten, Failures);
 
-        // Only flip the bit if the stack is non-empty -- empty stack should NOT
-        // pay the shader permutation cost.
-        if (LayersArr->Num() > 0)
+        // Only flip the bit if the emitted stack is non-empty -- empty or fully
+        // skipped stacks should NOT pay the shader permutation cost.
+        if (EmittedLayerCount > 0)
         {
             MergeFeatureFlagBits(Surface, FeatureBit, PathsWritten, Failures);
         }
@@ -1642,10 +1652,14 @@ FMonolithActionResult MonolithUI::FEffectSurfaceActions::HandleApplyPreset(const
         if (IH->TryGetArrayField(TEXT("offset"), OffArr) && OffArr && OffArr->Num() >= 2)
         {
             TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-            O->SetNumberField(TEXT("x"), (*OffArr)[0]->AsNumber());
-            O->SetNumberField(TEXT("y"), (*OffArr)[1]->AsNumber());
-            ApplyPath(Surface, TEXT("Effect.InsetHighlight.Offset"),
-                MakeShared<FJsonValueObject>(O), PathsWritten, Failures);
+            double X = 0.0, Y = 0.0;
+            if ((*OffArr)[0]->TryGetNumber(X) && (*OffArr)[1]->TryGetNumber(Y))
+            {
+                O->SetNumberField(TEXT("x"), X);
+                O->SetNumberField(TEXT("y"), Y);
+                ApplyPath(Surface, TEXT("Effect.InsetHighlight.Offset"),
+                    MakeShared<FJsonValueObject>(O), PathsWritten, Failures);
+            }
         }
         double IBlur = 0.0;
         if (IH->TryGetNumberField(TEXT("blur"), IBlur))
