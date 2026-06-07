@@ -1,4 +1,10 @@
 
+## 2026-06-06 - Prevent fragmented action count updates
+**Coordination issue:** Multiple agents (e.g., SkillDocSmith, ActionCountKeeper) were racing to update action counts in isolated modules, causing fragmentation, drift across core documentation, and multiple overlapping PRs in the queue.
+**Learning:** Permitting agents to update action counts partially or without checking for other active count-related PRs leads to merge conflicts and inconsistent public documentation (e.g., README, API_REFERENCE.md, module specs).
+**Prevention:** Updated `AGENTS.md` to mandate that action counts must be updated together across all core documents in a single PR, and explicitly required agents to stop without PR if an active count-updating PR already exists.
+**Avoid:** Creating PRs that only update a subset of action counts or attempting to update counts while another agent is already doing so.
+
 ## 2026-05-10 - Require checking legacy branch prefixes
 **Coordination issue:** Agents were missing collisions with older open work because they only checked for the strict `jules/<agent>/...` branch pattern.
 **Learning:** Legacy PRs often use non-standard prefixes (e.g., `bolt-*`, `perf-*`, `sentinel-*`), which evade the strict `git branch -r` filter in duplicate checks.

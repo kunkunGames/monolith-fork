@@ -135,3 +135,6 @@ When creating execution plans, agents must adhere to the following rules to ensu
 Use `Templates\Onboarding\Onboarding.md` and `Scripts/onboard_monolith.ps1` for global Monolith MCP client setup, project instruction setup, and global skill-link installation. In-repo skills live at `Skills/<skill>/SKILL.md`; do not refresh global skills by copying files. Use `Scripts/install_monolith_skills.ps1` only for direct skill-link repair, and `Scripts/validate_monolith_skills.ps1` to validate repository and installed skill roots.
 
 When changing MCP setup, project instructions, or skill distribution, update `Templates\Onboarding\Onboarding.md` and `Docs/specs/SPEC_MonolithSkillsSymlinkDistribution.md` in the same change.
+
+## 18. Action Count Synchronization
+When updating action counts in documentation (e.g., `README.md`, `Docs/API_REFERENCE.md`, `Docs/SPEC_CORE.md`, module specs, and `Monolith.uplugin`), agents must update all counts together in a single PR to prevent fragmentation and drift. Agents whose primary task is not syncing action counts (such as docs-only agents) must avoid count churn unless it is their exact mission. Stop without PR if an active PR from an ActionCountKeeper, SkillDocSmith, or Sentinel spec already touches the same count-bearing files.
