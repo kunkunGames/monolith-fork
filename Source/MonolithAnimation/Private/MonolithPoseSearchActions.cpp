@@ -1940,6 +1940,13 @@ static FMonolithActionResult HandleDeriveSchemaChannelsFromSkeleton(const TShare
 #if WITH_EDITORONLY_DATA
 	FString SchemaPath = Params->GetStringField(TEXT("schema_path"));
 	FString SkeletonPath = Params->GetStringField(TEXT("skeleton_path"));
+	FString Preset = TEXT("biped");
+	Params->TryGetStringField(TEXT("preset"), Preset);
+
+	if (!Preset.Equals(TEXT("biped"), ESearchCase::IgnoreCase))
+	{
+		return FMonolithActionResult::Error(TEXT("Only the 'biped' channel preset is currently supported"));
+	}
 
 	UPoseSearchSchema* Schema = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchSchema>(SchemaPath);
 	if (!Schema)
