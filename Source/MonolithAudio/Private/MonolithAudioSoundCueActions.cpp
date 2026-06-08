@@ -804,6 +804,32 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateSoundCue(const TShare
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
+	// Optional: auto-create WavePlayers from sound_waves array
+	const TArray<TSharedPtr<FJsonValue>>* WavesArray = nullptr;
+	TArray<FString> WavePaths;
+	if (Params->HasField(TEXT("sound_waves")))
+	{
+		if (!Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) || !WavesArray || WavesArray->Num() == 0)
+		{
+			return FMonolithActionResult::Error(TEXT("sound_waves must be an array and must not be empty"));
+		}
+		if (WavesArray->Num() > 100)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Requested %d wave players, which exceeds the maximum allowed (100)"), WavesArray->Num()));
+		}
+
+		WavePaths.Reserve(WavesArray->Num());
+		for (const auto& Val : *WavesArray)
+		{
+			FString Path;
+			if (!Val->TryGetString(Path) || Path.IsEmpty())
+			{
+				return FMonolithActionResult::Error(TEXT("sound_waves entries must be non-empty strings"));
+			}
+			WavePaths.Add(Path);
+		}
+	}
+
 	FString Error;
 	USoundCue* Cue = CreateEmptySoundCue(AssetPath, Error);
 	if (!Cue)
@@ -811,26 +837,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateSoundCue(const TShare
 		return FMonolithActionResult::Error(Error);
 	}
 
-	// Optional: auto-create WavePlayers from sound_waves array
-	const TArray<TSharedPtr<FJsonValue>>* WavesArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) && WavesArray && WavesArray->Num() > 0)
+	if (WavePaths.Num() > 0)
 	{
-		if (WavesArray->Num() > 100)
-		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Requested %d wave players, which exceeds the maximum allowed (100)"), WavesArray->Num()));
-		}
-
-		TArray<FString> WavePaths;
-		WavePaths.Reserve(WavesArray->Num());
-		for (const auto& Val : *WavesArray)
-		{
-			FString Path;
-			if (Val->TryGetString(Path))
-			{
-				WavePaths.Add(Path);
-			}
-		}
-
 		TArray<USoundNode*> WaveNodes = CreateWavePlayerNodes(Cue, WavePaths, Error);
 		if (WaveNodes.Num() == 0 && !Error.IsEmpty())
 		{
@@ -1703,7 +1711,14 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateRandomSoundCue(const 
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* WavesArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) || !WavesArray || WavesArray->Num() == 0)
+	if (Params->HasField(TEXT("sound_waves")))
+	{
+		if (!Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) || !WavesArray || WavesArray->Num() == 0)
+		{
+			return FMonolithActionResult::Error(TEXT("sound_waves array is required and must not be empty"));
+		}
+	}
+	else
 	{
 		return FMonolithActionResult::Error(TEXT("sound_waves array is required and must not be empty"));
 	}
@@ -1718,7 +1733,31 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateRandomSoundCue(const 
 	for (const auto& Val : *WavesArray)
 	{
 		FString Path;
-		if (Val->TryGetString(Path)) WavePaths.Add(Path);
+		if (!Val->TryGetString(Path) || Path.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("sound_waves entries must be non-empty strings"));
+		}
+		WavePaths.Add(Path);
+	}
+
+	TArray<float> WeightValues;
+	if (Params->HasField(TEXT("weights")))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* WeightsArray = nullptr;
+		if (!Params->TryGetArrayField(TEXT("weights"), WeightsArray) || !WeightsArray || WeightsArray->Num() == 0)
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: weights must be an array and must not be empty"));
+		}
+		WeightValues.Reserve(WeightsArray->Num());
+		for (const TSharedPtr<FJsonValue>& WeightValue : *WeightsArray)
+		{
+			double DVal;
+			if (!WeightValue->TryGetNumber(DVal))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: weights entries must be numbers"));
+			}
+			WeightValues.Add(static_cast<float>(DVal));
+		}
 	}
 
 	FString Error;
@@ -1746,8 +1785,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateRandomSoundCue(const 
 	}
 
 	// Apply optional weights
-	const TArray<TSharedPtr<FJsonValue>>* WeightsArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("weights"), WeightsArray) && WeightsArray && WeightsArray->Num() > 0)
+	if (WeightValues.Num() > 0)
 	{
 		// USoundNodeRandom has a Weights TArray<float> property
 		FProperty* WeightsProp = USoundNodeRandom::StaticClass()->FindPropertyByName(TEXT("Weights"));
@@ -1758,17 +1796,13 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateRandomSoundCue(const 
 			if (ArrayProp)
 			{
 				FScriptArrayHelper ArrayHelper(ArrayProp, WeightsPtr);
-				ArrayHelper.Resize(WeightsArray->Num());
-				for (int32 i = 0; i < WeightsArray->Num(); ++i)
+				ArrayHelper.Resize(WeightValues.Num());
+				for (int32 i = 0; i < WeightValues.Num(); ++i)
 				{
-					double DVal;
-					if ((*WeightsArray)[i]->TryGetNumber(DVal))
+					FFloatProperty* InnerFloat = CastField<FFloatProperty>(ArrayProp->Inner);
+					if (InnerFloat)
 					{
-						FFloatProperty* InnerFloat = CastField<FFloatProperty>(ArrayProp->Inner);
-						if (InnerFloat)
-						{
-							InnerFloat->SetPropertyValue(ArrayHelper.GetRawPtr(i), static_cast<float>(DVal));
-						}
+						InnerFloat->SetPropertyValue(ArrayHelper.GetRawPtr(i), WeightValues[i]);
 					}
 				}
 			}
@@ -1794,7 +1828,14 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateLayeredSoundCue(const
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* WavesArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) || !WavesArray || WavesArray->Num() == 0)
+	if (Params->HasField(TEXT("sound_waves")))
+	{
+		if (!Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) || !WavesArray || WavesArray->Num() == 0)
+		{
+			return FMonolithActionResult::Error(TEXT("sound_waves array is required and must not be empty"));
+		}
+	}
+	else
 	{
 		return FMonolithActionResult::Error(TEXT("sound_waves array is required and must not be empty"));
 	}
@@ -1809,7 +1850,31 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateLayeredSoundCue(const
 	for (const auto& Val : *WavesArray)
 	{
 		FString Path;
-		if (Val->TryGetString(Path)) WavePaths.Add(Path);
+		if (!Val->TryGetString(Path) || Path.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("sound_waves entries must be non-empty strings"));
+		}
+		WavePaths.Add(Path);
+	}
+
+	TArray<float> VolumeValues;
+	if (Params->HasField(TEXT("volumes")))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* VolumesArray = nullptr;
+		if (!Params->TryGetArrayField(TEXT("volumes"), VolumesArray) || !VolumesArray || VolumesArray->Num() == 0)
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: volumes must be an array and must not be empty"));
+		}
+		VolumeValues.Reserve(VolumesArray->Num());
+		for (const TSharedPtr<FJsonValue>& VolumeValue : *VolumesArray)
+		{
+			double DVal;
+			if (!VolumeValue->TryGetNumber(DVal))
+			{
+				return FMonolithActionResult::Error(TEXT("Malformed parameter: volumes entries must be numbers"));
+			}
+			VolumeValues.Add(static_cast<float>(DVal));
+		}
 	}
 
 	FString Error;
@@ -1837,8 +1902,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateLayeredSoundCue(const
 	}
 
 	// Apply optional per-input volumes via the InputVolume array
-	const TArray<TSharedPtr<FJsonValue>>* VolumesArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("volumes"), VolumesArray) && VolumesArray && VolumesArray->Num() > 0)
+	if (VolumeValues.Num() > 0)
 	{
 		FProperty* VolProp = USoundNodeMixer::StaticClass()->FindPropertyByName(TEXT("InputVolume"));
 		if (VolProp)
@@ -1848,17 +1912,13 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateLayeredSoundCue(const
 			if (ArrayProp)
 			{
 				FScriptArrayHelper ArrayHelper(ArrayProp, VolPtr);
-				ArrayHelper.Resize(VolumesArray->Num());
-				for (int32 i = 0; i < VolumesArray->Num(); ++i)
+				ArrayHelper.Resize(VolumeValues.Num());
+				for (int32 i = 0; i < VolumeValues.Num(); ++i)
 				{
-					double DVal;
-					if ((*VolumesArray)[i]->TryGetNumber(DVal))
+					FFloatProperty* InnerFloat = CastField<FFloatProperty>(ArrayProp->Inner);
+					if (InnerFloat)
 					{
-						FFloatProperty* InnerFloat = CastField<FFloatProperty>(ArrayProp->Inner);
-						if (InnerFloat)
-						{
-							InnerFloat->SetPropertyValue(ArrayHelper.GetRawPtr(i), static_cast<float>(DVal));
-						}
+						InnerFloat->SetPropertyValue(ArrayHelper.GetRawPtr(i), VolumeValues[i]);
 					}
 				}
 			}
@@ -1884,7 +1944,14 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateLoopingAmbientCue(con
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* WavesArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) || !WavesArray || WavesArray->Num() == 0)
+	if (Params->HasField(TEXT("sound_waves")))
+	{
+		if (!Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) || !WavesArray || WavesArray->Num() == 0)
+		{
+			return FMonolithActionResult::Error(TEXT("sound_waves array is required and must not be empty"));
+		}
+	}
+	else
 	{
 		return FMonolithActionResult::Error(TEXT("sound_waves array is required and must not be empty"));
 	}
@@ -1895,8 +1962,14 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateLoopingAmbientCue(con
 	}
 
 	double DelayMin = 0.1, DelayMax = 1.0;
-	Params->TryGetNumberField(TEXT("delay_min"), DelayMin);
-	Params->TryGetNumberField(TEXT("delay_max"), DelayMax);
+	if (Params->HasField(TEXT("delay_min")) && !Params->TryGetNumberField(TEXT("delay_min"), DelayMin))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: delay_min must be a number"));
+	}
+	if (Params->HasField(TEXT("delay_max")) && !Params->TryGetNumberField(TEXT("delay_max"), DelayMax))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: delay_max must be a number"));
+	}
 
 	TArray<FString> WavePaths;
 	WavePaths.Reserve(WavesArray->Num());
@@ -1998,7 +2071,14 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue(
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* BandsArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("bands"), BandsArray) || !BandsArray || BandsArray->Num() == 0)
+	if (Params->HasField(TEXT("bands")))
+	{
+		if (!Params->TryGetArrayField(TEXT("bands"), BandsArray) || !BandsArray || BandsArray->Num() == 0)
+		{
+			return FMonolithActionResult::Error(TEXT("bands array is required and must not be empty"));
+		}
+	}
+	else
 	{
 		return FMonolithActionResult::Error(TEXT("bands array is required and must not be empty"));
 	}
@@ -2123,7 +2203,14 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateSwitchSoundCue(const 
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* WavesArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) || !WavesArray || WavesArray->Num() == 0)
+	if (Params->HasField(TEXT("sound_waves")))
+	{
+		if (!Params->TryGetArrayField(TEXT("sound_waves"), WavesArray) || !WavesArray || WavesArray->Num() == 0)
+		{
+			return FMonolithActionResult::Error(TEXT("sound_waves array is required and must not be empty"));
+		}
+	}
+	else
 	{
 		return FMonolithActionResult::Error(TEXT("sound_waves array is required and must not be empty"));
 	}

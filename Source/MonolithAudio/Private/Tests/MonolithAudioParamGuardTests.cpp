@@ -276,4 +276,70 @@ bool FMonolithParamGuardAudioBuildSoundCueRejectsMalformedPropsTest::RunTest(con
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioCreateSoundCueRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.CreateSoundCueRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioCreateSoundCueRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SC_TestMalformed"));
+	Params->SetStringField(TEXT("sound_waves"), TEXT("malformed")); // Should be array
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("create_sound_cue"), Params);
+	TestTrue(TEXT("CreateSoundCue with malformed sound_waves should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("CreateSoundCue reports malformed sound_waves"), Result.ErrorMessage.Contains(TEXT("must be an array")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioCreateLoopingAmbientCueRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.CreateLoopingAmbientCueRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioCreateLoopingAmbientCueRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SC_TestMalformedAmbient"));
+	TArray<TSharedPtr<FJsonValue>> WavesArray;
+	WavesArray.Add(MakeShared<FJsonValueString>(TEXT("/Game/Audio/SW_Test")));
+	Params->SetArrayField(TEXT("sound_waves"), WavesArray);
+
+	Params->SetStringField(TEXT("delay_min"), TEXT("malformed")); // Should be number
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("create_looping_ambient_cue"), Params);
+	TestTrue(TEXT("CreateLoopingAmbientCue with malformed delay_min should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("CreateLoopingAmbientCue reports malformed delay_min"), Result.ErrorMessage.Contains(TEXT("must be a number")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioCreateRandomSoundCueRejectsMalformedWeightsTest, "Monolith.ParamGuard.Audio.CreateRandomSoundCueRejectsMalformedWeights", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioCreateRandomSoundCueRejectsMalformedWeightsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SC_TestMalformedRandom"));
+	TArray<TSharedPtr<FJsonValue>> WavesArray;
+	WavesArray.Add(MakeShared<FJsonValueString>(TEXT("/Game/Audio/SW_Test")));
+	Params->SetArrayField(TEXT("sound_waves"), WavesArray);
+	Params->SetStringField(TEXT("weights"), TEXT("malformed")); // Should be array
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("create_random_sound_cue"), Params);
+	TestTrue(TEXT("CreateRandomSoundCue with malformed weights should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("CreateRandomSoundCue reports malformed weights"), Result.ErrorMessage.Contains(TEXT("weights must be an array")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioCreateLayeredSoundCueRejectsMalformedVolumesTest, "Monolith.ParamGuard.Audio.CreateLayeredSoundCueRejectsMalformedVolumes", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioCreateLayeredSoundCueRejectsMalformedVolumesTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SC_TestMalformedLayered"));
+	TArray<TSharedPtr<FJsonValue>> WavesArray;
+	WavesArray.Add(MakeShared<FJsonValueString>(TEXT("/Game/Audio/SW_Test")));
+	Params->SetArrayField(TEXT("sound_waves"), WavesArray);
+	Params->SetStringField(TEXT("volumes"), TEXT("malformed")); // Should be array
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("create_layered_sound_cue"), Params);
+	TestTrue(TEXT("CreateLayeredSoundCue with malformed volumes should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("CreateLayeredSoundCue reports malformed volumes"), Result.ErrorMessage.Contains(TEXT("volumes must be an array")));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
