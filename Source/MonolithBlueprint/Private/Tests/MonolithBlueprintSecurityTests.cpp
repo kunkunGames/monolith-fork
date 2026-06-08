@@ -58,4 +58,27 @@ bool FMonolithBlueprintSecurityPathTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithBlueprintScaffoldLocomotionCrashguardTest, "Monolith.Crashguard.Blueprint.ScaffoldLocomotionInputRejectMalformedPath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithBlueprintScaffoldLocomotionCrashguardTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("bp_path"), TEXT("/Game/Tests/Monolith/Blueprint/BP_Character"));
+	Payload->SetStringField(TEXT("imc_path"), TEXT("//Game/MalformedPath/IMC_Input"));
+
+	TArray<TSharedPtr<FJsonValue>> Actions;
+	TSharedPtr<FJsonObject> Action = MakeShared<FJsonObject>();
+	Action->SetStringField(TEXT("name"), TEXT("Move"));
+	Action->SetStringField(TEXT("value_type"), TEXT("Vector2D"));
+	Actions.Add(MakeShared<FJsonValueObject>(Action));
+	Payload->SetArrayField(TEXT("actions"), Actions);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("scaffold_locomotion_input"), Payload);
+
+	TestFalse(TEXT("scaffold_locomotion_input should fail on malformed path"), Result.bSuccess);
+	TestTrue(TEXT("scaffold_locomotion_input error should complain about invalid package path"), Result.ErrorMessage.Contains(TEXT("Invalid package path")));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

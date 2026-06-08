@@ -9,6 +9,7 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithPackagePathValidator.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Engine/InheritableComponentHandler.h"
@@ -608,6 +609,12 @@ namespace
 			return nullptr;
 		}
 
+		if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackagePath); !ValidationError.IsEmpty())
+		{
+			OutError = ValidationError;
+			return nullptr;
+		}
+
 		UPackage* Pkg = CreatePackage(*PackagePath);
 		if (!Pkg)
 		{
@@ -634,6 +641,10 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldLoco
 
 	if (BpPath.IsEmpty())  return FMonolithActionResult::Error(TEXT("Missing required parameter: bp_path"));
 	if (ImcPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: imc_path"));
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(ImcPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("scaffold_locomotion_input: %s"), *ValidationError));
+	}
 
 	const TArray<TSharedPtr<FJsonValue>>* ActionsArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("actions"), ActionsArr) || !ActionsArr || ActionsArr->Num() == 0)
