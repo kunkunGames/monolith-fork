@@ -342,14 +342,14 @@ FMonolithActionResult FMonolithAssetLifecycleActions::ImportTextureFromFile(cons
 	Tasks.Add(ImportTask);
 	FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().ImportAssetTasks(Tasks);
 
-	UObject* ImportedObject = UEditorAssetLibrary::LoadAsset(FinalAssetPath);
+	UObject* ImportedObject = FMonolithAssetUtils::LoadAssetByPath(FinalAssetPath);
 	UTexture2D* Texture = ImportedObject ? Cast<UTexture2D>(ImportedObject) : nullptr;
 	FString ResolvedAssetPath = FinalAssetPath;
 
 	if (!Texture)
 	{
 		const FString FallbackPath = DestinationPackagePath / FPaths::GetBaseFilename(SourcePath);
-		ImportedObject = UEditorAssetLibrary::LoadAsset(FallbackPath);
+		ImportedObject = FMonolithAssetUtils::LoadAssetByPath(FallbackPath);
 		Texture = ImportedObject ? Cast<UTexture2D>(ImportedObject) : nullptr;
 		if (Texture)
 		{

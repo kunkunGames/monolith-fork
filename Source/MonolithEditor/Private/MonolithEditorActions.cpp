@@ -3753,7 +3753,7 @@ FMonolithActionResult FMonolithEditorActions::HandleDeleteAssets(
 
 	for (const FString& Path : AssetPaths)
 	{
-		UObject* Asset = UEditorAssetLibrary::LoadAsset(Path);
+		UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(Path);
 		if (Asset)
 		{
 			ObjectsToDelete.Add(Asset);

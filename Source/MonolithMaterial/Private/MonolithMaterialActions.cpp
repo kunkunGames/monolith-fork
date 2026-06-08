@@ -1,4 +1,5 @@
 ﻿#include "MonolithMaterialActions.h"
+#include "MonolithAssetUtils.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithPackagePathValidator.h"
@@ -735,27 +736,8 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 
 UMaterial* FMonolithMaterialActions::LoadBaseMaterial(const FString& AssetPath)
 {
-	// Try UEditorAssetLibrary first (loads from disk)
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	if (LoadedAsset)
-	{
-		return Cast<UMaterial>(LoadedAsset);
-	}
-
-	// Fallback: check in-memory objects (e.g. freshly created, not yet saved)
-	FString FullObjectPath = AssetPath;
-	if (!FullObjectPath.Contains(TEXT(".")))
-	{
-		// Convert "/Game/Path/Name" to "/Game/Path/Name.Name"
-		int32 LastSlash;
-		if (FullObjectPath.FindLastChar('/', LastSlash))
-		{
-			FString ObjName = FullObjectPath.Mid(LastSlash + 1);
-			FullObjectPath = FString::Printf(TEXT("%s.%s"), *AssetPath, *ObjName);
-		}
-	}
-	UObject* Found = FindFirstObject<UMaterial>(*FullObjectPath, EFindFirstObjectOptions::NativeFirst);
-	return Cast<UMaterial>(Found);
+	// FMonolithAssetUtils::LoadAssetByPath handles 4-tier lookup including in-memory freshly created assets
+	return FMonolithAssetUtils::LoadAssetByPath<UMaterial>(AssetPath);
 }
 
 TSharedPtr<FJsonObject> FMonolithMaterialActions::SerializeExpression(const UMaterialExpression* Expression)
@@ -943,7 +925,7 @@ FMonolithActionResult FMonolithMaterialActions::GetAllExpressions(const TSharedP
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
 	// Try UMaterial first, then fall back to UMaterialFunction
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterial* Mat = Cast<UMaterial>(LoadedAsset);
 	UMaterialFunction* MatFunc = Mat ? nullptr : Cast<UMaterialFunction>(LoadedAsset);
 
@@ -986,7 +968,7 @@ FMonolithActionResult FMonolithMaterialActions::GetExpressionDetails(const TShar
 	FString ExpressionName = Params->GetStringField(TEXT("expression_name"));
 
 	// Try UMaterial first, then fall back to UMaterialFunction
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterial* Mat = Cast<UMaterial>(LoadedAsset);
 	UMaterialFunction* MatFunc = Mat ? nullptr : Cast<UMaterialFunction>(LoadedAsset);
 
@@ -2229,7 +2211,7 @@ FMonolithActionResult FMonolithMaterialActions::RenderPreview(const TSharedPtr<F
 	}
 
 	// Fast path: default 1x sphere via ThumbnailTools
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -2301,7 +2283,7 @@ FMonolithActionResult FMonolithMaterialActions::GetThumbnail(const TSharedPtr<FJ
 		Params->TryGetBoolField(TEXT("save_to_file"), bSaveToFile);
 	}
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -2470,7 +2452,7 @@ FMonolithActionResult FMonolithMaterialActions::GetLayerInfo(const TSharedPtr<FJ
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -2717,7 +2699,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	FString ParentPath = Params->GetStringField(TEXT("parent_material"));
 
 	// Load parent material
-	UObject* ParentObj = UEditorAssetLibrary::LoadAsset(ParentPath);
+	UObject* ParentObj = FMonolithAssetUtils::LoadAssetByPath(ParentPath);
 	UMaterialInterface* ParentMat = ParentObj ? Cast<UMaterialInterface>(ParentObj) : nullptr;
 	if (!ParentMat)
 	{
@@ -2725,7 +2707,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	}
 
 	// Check if asset already exists
-	UObject* Existing = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* Existing = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (Existing)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
@@ -2812,7 +2794,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 		{
 			if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::String) continue;
 			FString TexPath = Pair.Value->AsString();
-			UTexture* Tex = Cast<UTexture>(UEditorAssetLibrary::LoadAsset(TexPath));
+			UTexture* Tex = Cast<UTexture>(FMonolithAssetUtils::LoadAssetByPath(TexPath));
 			if (Tex)
 			{
 				MIC->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(*Pair.Key), Tex);
@@ -3117,7 +3099,7 @@ FMonolithActionResult FMonolithMaterialActions::GetMaterialParameters(const TSha
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInterface* MatInterface = LoadedAsset ? Cast<UMaterialInterface>(LoadedAsset) : nullptr;
 	if (!MatInterface)
 	{
@@ -3221,7 +3203,7 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameter(const TShar
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString ParamName = Params->GetStringField(TEXT("parameter_name"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInstanceConstant* MIC = LoadedAsset ? Cast<UMaterialInstanceConstant>(LoadedAsset) : nullptr;
 	if (!MIC)
 	{
@@ -3281,7 +3263,7 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameter(const TShar
 	else if (Params->HasField(TEXT("texture_value")))
 	{
 		FString TexPath = Params->GetStringField(TEXT("texture_value"));
-		UTexture* Tex = Cast<UTexture>(UEditorAssetLibrary::LoadAsset(TexPath));
+		UTexture* Tex = Cast<UTexture>(FMonolithAssetUtils::LoadAssetByPath(TexPath));
 		if (!Tex)
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load texture at '%s'"), *TexPath));
@@ -3330,7 +3312,7 @@ FMonolithActionResult FMonolithMaterialActions::RecompileMaterial(const TSharedP
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInterface* MatInterface = LoadedAsset ? Cast<UMaterialInterface>(LoadedAsset) : nullptr;
 	if (!MatInterface)
 	{
@@ -3404,14 +3386,14 @@ FMonolithActionResult FMonolithMaterialActions::DuplicateMaterial(const TSharedP
 	FString DestPath = Params->GetStringField(TEXT("dest_path"));
 
 	// Check source exists
-	UObject* SourceObj = UEditorAssetLibrary::LoadAsset(SourcePath);
+	UObject* SourceObj = FMonolithAssetUtils::LoadAssetByPath(SourcePath);
 	if (!SourceObj)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Source material not found at '%s'"), *SourcePath));
 	}
 
 	// Check dest doesn't exist
-	if (UEditorAssetLibrary::LoadAsset(DestPath))
+	if (FMonolithAssetUtils::LoadAssetByPath(DestPath))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *DestPath));
 	}
@@ -3439,7 +3421,7 @@ FMonolithActionResult FMonolithMaterialActions::GetCompilationStats(const TShare
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInterface* MatInterface = LoadedAsset ? Cast<UMaterialInterface>(LoadedAsset) : nullptr;
 	if (!MatInterface)
 	{
@@ -3562,7 +3544,7 @@ FMonolithActionResult FMonolithMaterialActions::SetExpressionProperty(const TSha
 	}
 
 	// Try UMaterial first, then fall back to UMaterialFunction
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterial* Mat = Cast<UMaterial>(LoadedAsset);
 	UMaterialFunction* MatFunc = Mat ? nullptr : Cast<UMaterialFunction>(LoadedAsset);
 
@@ -3880,7 +3862,7 @@ FMonolithActionResult FMonolithMaterialActions::AutoLayout(const TSharedPtr<FJso
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -4474,7 +4456,7 @@ FMonolithActionResult FMonolithMaterialActions::GetMaterialProperties(const TSha
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInterface* MatInterface = LoadedAsset ? Cast<UMaterialInterface>(LoadedAsset) : nullptr;
 	if (!MatInterface)
 	{
@@ -4572,7 +4554,7 @@ FMonolithActionResult FMonolithMaterialActions::GetInstanceParameters(const TSha
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInstanceConstant* MIC = LoadedAsset ? Cast<UMaterialInstanceConstant>(LoadedAsset) : nullptr;
 	if (!MIC)
 	{
@@ -4699,7 +4681,7 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameters(const TSha
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInstanceConstant* MIC = LoadedAsset ? Cast<UMaterialInstanceConstant>(LoadedAsset) : nullptr;
 	if (!MIC)
 	{
@@ -4810,7 +4792,7 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameters(const TSha
 		else if (Type.Equals(TEXT("texture"), ESearchCase::IgnoreCase))
 		{
 			FString TexPath = (*ParamObj)->GetStringField(TEXT("value"));
-			UTexture* Tex = Cast<UTexture>(UEditorAssetLibrary::LoadAsset(TexPath));
+			UTexture* Tex = Cast<UTexture>(FMonolithAssetUtils::LoadAssetByPath(TexPath));
 			if (Tex)
 			{
 				MIC->SetTextureParameterValueEditorOnly(ParamInfo, Tex);
@@ -4894,14 +4876,14 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParent(const TSharedP
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString NewParentPath = Params->GetStringField(TEXT("new_parent"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInstanceConstant* MIC = LoadedAsset ? Cast<UMaterialInstanceConstant>(LoadedAsset) : nullptr;
 	if (!MIC)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load material instance at '%s'"), *AssetPath));
 	}
 
-	UObject* NewParentObj = UEditorAssetLibrary::LoadAsset(NewParentPath);
+	UObject* NewParentObj = FMonolithAssetUtils::LoadAssetByPath(NewParentPath);
 	UMaterialInterface* NewParent = NewParentObj ? Cast<UMaterialInterface>(NewParentObj) : nullptr;
 	if (!NewParent)
 	{
@@ -4983,7 +4965,7 @@ FMonolithActionResult FMonolithMaterialActions::ClearInstanceParameter(const TSh
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInstanceConstant* MIC = LoadedAsset ? Cast<UMaterialInstanceConstant>(LoadedAsset) : nullptr;
 	if (!MIC)
 	{
@@ -5116,7 +5098,7 @@ FMonolithActionResult FMonolithMaterialActions::SaveMaterial(const TSharedPtr<FJ
 	Params->TryGetBoolField(TEXT("only_if_dirty"), bOnlyIfDirty);
 
 	// Verify asset exists
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -5827,7 +5809,7 @@ FMonolithActionResult FMonolithMaterialActions::ListMaterialInstances(const TSha
 	Params->TryGetBoolField(TEXT("recursive"), bRecursive);
 
 	// Verify parent exists
-	UObject* ParentAsset = UEditorAssetLibrary::LoadAsset(ParentPath);
+	UObject* ParentAsset = FMonolithAssetUtils::LoadAssetByPath(ParentPath);
 	if (!ParentAsset || !Cast<UMaterialInterface>(ParentAsset))
 	{
 		return FMonolithActionResult::Error(FString::Printf(
@@ -6422,7 +6404,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 	}
 
 	// Check if asset already exists
-	UObject* Existing = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* Existing = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (Existing)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
@@ -6522,7 +6504,7 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 	Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting);
 
 	// Load the material function
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -6816,7 +6798,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInfo(const TSharedPtr
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -6952,7 +6934,7 @@ FMonolithActionResult FMonolithMaterialActions::ExportFunctionGraph(const TShare
 	Params->TryGetBoolField(TEXT("include_properties"), bIncludeProperties);
 	Params->TryGetBoolField(TEXT("include_positions"), bIncludePositions);
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -7280,7 +7262,7 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionMetadata(const TShare
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -7353,7 +7335,7 @@ FMonolithActionResult FMonolithMaterialActions::UpdateMaterialFunction(const TSh
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -7385,7 +7367,7 @@ FMonolithActionResult FMonolithMaterialActions::DeleteFunctionExpression(const T
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString ExpressionNameParam = Params->GetStringField(TEXT("expression_name"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -7742,7 +7724,7 @@ FMonolithActionResult FMonolithMaterialActions::BatchRecompile(const TSharedPtr<
 		auto PerAssetResult = MakeShared<FJsonObject>();
 		PerAssetResult->SetStringField(TEXT("asset_path"), AssetPath);
 
-		UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+		UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 		UMaterialInterface* MatInterface = LoadedAsset ? Cast<UMaterialInterface>(LoadedAsset) : nullptr;
 		if (!MatInterface)
 		{
@@ -7935,7 +7917,7 @@ static FTextureImportResult ImportTextureInternal(
 	AssetTools.ImportAssetTasks(Tasks);
 
 	// Verify the import succeeded by loading the asset
-	UObject* ImportedObj = UEditorAssetLibrary::LoadAsset(FinalAssetPath);
+	UObject* ImportedObj = FMonolithAssetUtils::LoadAssetByPath(FinalAssetPath);
 	UTexture2D* Texture = ImportedObj ? Cast<UTexture2D>(ImportedObj) : nullptr;
 
 	if (!Texture)
@@ -7943,7 +7925,7 @@ static FTextureImportResult ImportTextureInternal(
 		// Try without explicit name (some importers use the source filename)
 		FString FallbackName = FPaths::GetBaseFilename(SourceFile);
 		FString FallbackPath = DestDirectory / FallbackName;
-		ImportedObj = UEditorAssetLibrary::LoadAsset(FallbackPath);
+		ImportedObj = FMonolithAssetUtils::LoadAssetByPath(FallbackPath);
 		Texture = ImportedObj ? Cast<UTexture2D>(ImportedObj) : nullptr;
 		if (Texture)
 		{
@@ -8285,7 +8267,7 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	// Handle replace_existing for the material
 	if (bReplaceExisting)
 	{
-		UObject* ExistingMat = UEditorAssetLibrary::LoadAsset(MaterialPath);
+		UObject* ExistingMat = FMonolithAssetUtils::LoadAssetByPath(MaterialPath);
 		if (ExistingMat)
 		{
 			UEditorAssetLibrary::DeleteAsset(MaterialPath);
@@ -8293,7 +8275,7 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	}
 	else
 	{
-		UObject* ExistingMat = UEditorAssetLibrary::LoadAsset(MaterialPath);
+		UObject* ExistingMat = FMonolithAssetUtils::LoadAssetByPath(MaterialPath);
 		if (ExistingMat)
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Material already exists at '%s'. Set replace_existing: true to overwrite."), *MaterialPath));
@@ -8495,7 +8477,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 	}
 
 	// Check if asset already exists
-	UObject* Existing = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* Existing = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (Existing)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
@@ -8511,7 +8493,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 	AssetName = AssetPath.Mid(LastSlash + 1);
 
 	// Load parent as UMaterialFunctionInterface
-	UObject* ParentObj = UEditorAssetLibrary::LoadAsset(ParentPath);
+	UObject* ParentObj = FMonolithAssetUtils::LoadAssetByPath(ParentPath);
 	UMaterialFunctionInterface* ParentFunc = ParentObj ? Cast<UMaterialFunctionInterface>(ParentObj) : nullptr;
 	if (!ParentFunc)
 	{
@@ -8671,7 +8653,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 		{
 			FName ParamName(*Pair.Key);
 			FString TexPath = Pair.Value->AsString();
-			UTexture* Tex = Cast<UTexture>(UEditorAssetLibrary::LoadAsset(TexPath));
+			UTexture* Tex = Cast<UTexture>(FMonolithAssetUtils::LoadAssetByPath(TexPath));
 			if (!Tex)
 			{
 				Errors.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("Failed to load texture '%s' for param '%s'"), *TexPath, *Pair.Key)));
@@ -8753,7 +8735,7 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionInstanceParameter(con
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString ParamName = Params->GetStringField(TEXT("parameter_name"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialFunctionInstance* MFI = LoadedAsset ? Cast<UMaterialFunctionInstance>(LoadedAsset) : nullptr;
 	if (!MFI)
 	{
@@ -8883,7 +8865,7 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionInstanceParameter(con
 	else if (Params->HasField(TEXT("texture_value")))
 	{
 		FString TexPath = Params->GetStringField(TEXT("texture_value"));
-		UTexture* Tex = Cast<UTexture>(UEditorAssetLibrary::LoadAsset(TexPath));
+		UTexture* Tex = Cast<UTexture>(FMonolithAssetUtils::LoadAssetByPath(TexPath));
 		if (!Tex)
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load texture at '%s'"), *TexPath));
@@ -8970,7 +8952,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -9247,7 +9229,7 @@ FMonolithActionResult FMonolithMaterialActions::LayoutFunctionExpressions(const 
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -9281,7 +9263,7 @@ FMonolithActionResult FMonolithMaterialActions::RenameFunctionParameterGroup(con
 	FString OldGroup  = Params->GetStringField(TEXT("old_group"));
 	FString NewGroup  = Params->GetStringField(TEXT("new_group"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -9531,7 +9513,7 @@ FMonolithActionResult FMonolithMaterialActions::GetTextureProperties(const TShar
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -9567,7 +9549,7 @@ FMonolithActionResult FMonolithMaterialActions::PreviewTexture(const TSharedPtr<
 	FString OutputPath;
 	Params->TryGetStringField(TEXT("output_path"), OutputPath);
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
@@ -9677,7 +9659,7 @@ FMonolithActionResult FMonolithMaterialActions::PreviewTextures(const TSharedPtr
 		TexInfo->SetStringField(TEXT("asset_path"), AssetPath);
 		TexInfo->SetNumberField(TEXT("index"), i);
 
-		UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+		UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 		UTexture* Tex = LoadedAsset ? Cast<UTexture>(LoadedAsset) : nullptr;
 		if (!Tex)
 		{
