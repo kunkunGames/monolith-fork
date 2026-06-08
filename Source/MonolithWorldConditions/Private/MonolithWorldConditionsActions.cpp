@@ -389,6 +389,7 @@ TSharedPtr<FJsonObject> QueryToJson(const FWorldConditionQueryDefinition& QueryD
 			const FStructProperty* ConditionProp = FindFProperty<FStructProperty>(EditableStructProp->Struct, TEXT("Condition"));
 
 			const int32 RowCount = FMath::Min(Helper.Num(), MaxConditionRows);
+			Conditions.Reserve(RowCount);
 			for (int32 Index = 0; Index < RowCount; ++Index)
 			{
 				const uint8* ElementPtr = Helper.GetRawPtr(Index);
@@ -438,6 +439,7 @@ TSharedPtr<FJsonObject> QueryToJson(const FWorldConditionQueryDefinition& QueryD
 	{
 		const FInstancedStructContainer& SharedConditions = SharedDefinition->GetConditions();
 		const int32 RowCount = FMath::Min(SharedConditions.Num(), MaxConditionRows);
+		Conditions.Reserve(RowCount);
 		for (int32 Index = 0; Index < RowCount; ++Index)
 		{
 			const FConstStructView View = SharedConditions[Index];
