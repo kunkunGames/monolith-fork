@@ -22,7 +22,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 AGENTS_DIR = PROJECT_ROOT / ".claude" / "agents"
 
-DISPATCHER_RE = re.compile(r"mcp__monolith__[A-Za-z0-9_]+")
+DISPATCHER_RE = re.compile(r"mcp__monolith__[A-Za-z0-9_-]+")
 
 
 def parse_tools_line(text: str) -> tuple[set[str], int] | None:
