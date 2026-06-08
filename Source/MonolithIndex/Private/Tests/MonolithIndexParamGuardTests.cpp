@@ -1,5 +1,6 @@
 #include "Misc/AutomationTest.h"
 #include "Actions/ProjectGetAssetDetailsAction.h"
+#include "Actions/ProjectGetSavedAssetStateAction.h"
 #include "Actions/ProjectFindReferencesAction.h"
 #include "Actions/ProjectFindByTypeAction.h"
 #include "Dom/JsonObject.h"
@@ -54,6 +55,22 @@ bool FProjectIndexParamGuardTest::RunTest(const FString& Parameters)
 		FMonolithActionResult Result = FProjectFindByTypeAction::Execute(Params);
 		TestFalse(TEXT("FindByType: Reject wrong type for asset_class"), Result.bSuccess);
 		TestEqual(TEXT("FindByType: Error code for asset_class"), Result.ErrorCode, -32602);
+	}
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("asset_path"), 12345);
+		FMonolithActionResult Result = FProjectGetSavedAssetStateAction::Execute(Params);
+		TestFalse(TEXT("GetSavedAssetState: Reject wrong type for asset_path"), Result.bSuccess);
+		TestEqual(TEXT("GetSavedAssetState: Error code for asset_path"), Result.ErrorCode, -32602);
+	}
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("package_path"), 12345);
+		FMonolithActionResult Result = FProjectGetSavedAssetStateAction::Execute(Params);
+		TestFalse(TEXT("GetSavedAssetState: Reject wrong type for package_path"), Result.bSuccess);
+		TestEqual(TEXT("GetSavedAssetState: Error code for package_path"), Result.ErrorCode, -32602);
 	}
 
 	return true;
