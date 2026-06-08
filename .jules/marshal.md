@@ -172,3 +172,9 @@
 **Learning:** Checking for collisions only within an agent's own track or relying strictly on explicit file checks is insufficient because agents may overlap on shared modules before PR diffs are fully populated.
 **Prevention:** Added a 'Cross-Agent Module Check' rule to `AGENTS.md` requiring agents to check if any other agent's branch targets their intended module (e.g., `jules/*/your-module/*`) before beginning work.
 **Avoid:** Proceeding with edits in a module if another agent already has an open branch for that module, unless the file targets are guaranteed not to overlap.
+
+## 2026-06-08 - Use semantic matching for cross-agent module checks
+**Coordination issue:** Agents were failing to catch cross-agent collisions because they relied on a strict 4-segment branch glob (e.g., `jules/*/module/*`) to check other tracks.
+**Learning:** Many domain agents (e.g., `anim-weaver`, `mesh-cartographer`) are instructed to use a 3-segment branch pattern (`jules/<agent>/<short-topic>`), so a 4-segment glob silently fails to match them.
+**Prevention:** Updated `AGENTS.md` to explicitly instruct agents to scan the full branch list for semantic substring matches of their target area, rather than relying on strict path segment counting.
+**Avoid:** Using strict path globs like `jules/*/module/*` that fail to match 3-segment branch names from domain agents.
