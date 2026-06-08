@@ -507,74 +507,103 @@ FMonolithActionResult FMonolithAINavigationActions::HandleSetNavMeshConfig(const
 		return FMonolithActionResult::Error(TEXT("No ARecastNavMesh found"));
 	}
 
+	double ReqAgentRadius = 0, ReqAgentHeight = 0, ReqCellSize = 0, ReqCellHeight = 0, ReqTileSize = 0, ReqAgentMaxSlope = 0, ReqAgentMaxStepHeight = 0;
+	bool bHasAgentRadius = false, bHasAgentHeight = false, bHasCellSize = false, bHasCellHeight = false, bHasTileSize = false, bHasAgentMaxSlope = false, bHasAgentMaxStepHeight = false;
+
+	if (Params->HasField(TEXT("agent_radius")))
+	{
+		if (!Params->TryGetNumberField(TEXT("agent_radius"), ReqAgentRadius)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_radius' must be a number"));
+		bHasAgentRadius = true;
+	}
+	if (Params->HasField(TEXT("agent_height")))
+	{
+		if (!Params->TryGetNumberField(TEXT("agent_height"), ReqAgentHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_height' must be a number"));
+		bHasAgentHeight = true;
+	}
+	if (Params->HasField(TEXT("cell_size")))
+	{
+		if (!Params->TryGetNumberField(TEXT("cell_size"), ReqCellSize)) return FMonolithActionResult::Error(TEXT("Parameter 'cell_size' must be a number"));
+		bHasCellSize = true;
+	}
+	if (Params->HasField(TEXT("cell_height")))
+	{
+		if (!Params->TryGetNumberField(TEXT("cell_height"), ReqCellHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'cell_height' must be a number"));
+		bHasCellHeight = true;
+	}
+	if (Params->HasField(TEXT("tile_size")))
+	{
+		if (!Params->TryGetNumberField(TEXT("tile_size"), ReqTileSize)) return FMonolithActionResult::Error(TEXT("Parameter 'tile_size' must be a number"));
+		bHasTileSize = true;
+	}
+	if (Params->HasField(TEXT("agent_max_slope")))
+	{
+		if (!Params->TryGetNumberField(TEXT("agent_max_slope"), ReqAgentMaxSlope)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_max_slope' must be a number"));
+		bHasAgentMaxSlope = true;
+	}
+	if (Params->HasField(TEXT("agent_max_step_height")))
+	{
+		if (!Params->TryGetNumberField(TEXT("agent_max_step_height"), ReqAgentMaxStepHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_max_step_height' must be a number"));
+		bHasAgentMaxStepHeight = true;
+	}
+
+	// Validate resolution params before transaction
+	struct FResParam {
+		bool bHasCellSize = false; double CellSize = 0;
+		bool bHasCellHeight = false; double CellHeight = 0;
+		bool bHasAgentMaxStepHeight = false; double AgentMaxStepHeight = 0;
+	};
+	TArray<FResParam> ResParamsList;
+	ResParamsList.AddZeroed(3);
+
+	const TArray<TSharedPtr<FJsonValue>>* ResArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("resolution_params"), ResArr) && ResArr)
+	{
+		for (int32 i = 0; i < FMath::Min(ResArr->Num(), 3); ++i)
+		{
+			const TSharedPtr<FJsonObject>* ResObj = nullptr;
+			if ((*ResArr)[i]->TryGetObject(ResObj) && ResObj && (*ResObj)->Values.Num() > 0)
+			{
+				if ((*ResObj)->HasField(TEXT("cell_size")))
+				{
+					if (!(*ResObj)->TryGetNumberField(TEXT("cell_size"), ResParamsList[i].CellSize)) return FMonolithActionResult::Error(TEXT("Parameter 'cell_size' in resolution_params must be a number"));
+					ResParamsList[i].bHasCellSize = true;
+				}
+				if ((*ResObj)->HasField(TEXT("cell_height")))
+				{
+					if (!(*ResObj)->TryGetNumberField(TEXT("cell_height"), ResParamsList[i].CellHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'cell_height' in resolution_params must be a number"));
+					ResParamsList[i].bHasCellHeight = true;
+				}
+				if ((*ResObj)->HasField(TEXT("agent_max_step_height")))
+				{
+					if (!(*ResObj)->TryGetNumberField(TEXT("agent_max_step_height"), ResParamsList[i].AgentMaxStepHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_max_step_height' in resolution_params must be a number"));
+					ResParamsList[i].bHasAgentMaxStepHeight = true;
+				}
+			}
+		}
+	}
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Set NavMesh Config")));
 	NavMesh->Modify();
 
 	int32 ChangedCount = 0;
 	constexpr ENavigationDataResolution LegacyResolution = ENavigationDataResolution::Default;
 
-	if (Params->HasField(TEXT("agent_radius")))
-	{
-		NavMesh->AgentRadius = Params->GetNumberField(TEXT("agent_radius"));
-		ChangedCount++;
-	}
-	if (Params->HasField(TEXT("agent_height")))
-	{
-		NavMesh->AgentHeight = Params->GetNumberField(TEXT("agent_height"));
-		ChangedCount++;
-	}
-	if (Params->HasField(TEXT("cell_size")))
-	{
-		NavMesh->SetCellSize(LegacyResolution, Params->GetNumberField(TEXT("cell_size")));
-		ChangedCount++;
-	}
-	if (Params->HasField(TEXT("cell_height")))
-	{
-		NavMesh->SetCellHeight(LegacyResolution, Params->GetNumberField(TEXT("cell_height")));
-		ChangedCount++;
-	}
-	if (Params->HasField(TEXT("tile_size")))
-	{
-		NavMesh->TileSizeUU = Params->GetNumberField(TEXT("tile_size"));
-		ChangedCount++;
-	}
-	if (Params->HasField(TEXT("agent_max_slope")))
-	{
-		NavMesh->AgentMaxSlope = Params->GetNumberField(TEXT("agent_max_slope"));
-		ChangedCount++;
-	}
-	if (Params->HasField(TEXT("agent_max_step_height")))
-	{
-		NavMesh->SetAgentMaxStepHeight(LegacyResolution, Params->GetNumberField(TEXT("agent_max_step_height")));
-		ChangedCount++;
-	}
+	if (bHasAgentRadius) { NavMesh->AgentRadius = ReqAgentRadius; ChangedCount++; }
+	if (bHasAgentHeight) { NavMesh->AgentHeight = ReqAgentHeight; ChangedCount++; }
+	if (bHasCellSize) { NavMesh->SetCellSize(LegacyResolution, ReqCellSize); ChangedCount++; }
+	if (bHasCellHeight) { NavMesh->SetCellHeight(LegacyResolution, ReqCellHeight); ChangedCount++; }
+	if (bHasTileSize) { NavMesh->TileSizeUU = ReqTileSize; ChangedCount++; }
+	if (bHasAgentMaxSlope) { NavMesh->AgentMaxSlope = ReqAgentMaxSlope; ChangedCount++; }
+	if (bHasAgentMaxStepHeight) { NavMesh->SetAgentMaxStepHeight(LegacyResolution, ReqAgentMaxStepHeight); ChangedCount++; }
 
-	// Multi-resolution params
-	const TArray<TSharedPtr<FJsonValue>>* ResArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("resolution_params"), ResArr) && ResArr)
+	if (ResArr)
 	{
 		for (int32 i = 0; i < FMath::Min(ResArr->Num(), 3); ++i)
 		{
 			const ENavigationDataResolution Resolution = static_cast<ENavigationDataResolution>(i);
-			const TSharedPtr<FJsonObject>* ResObj = nullptr;
-			if ((*ResArr)[i]->TryGetObject(ResObj) && ResObj && (*ResObj)->Values.Num() > 0)
-			{
-				if ((*ResObj)->HasField(TEXT("cell_size")))
-				{
-					NavMesh->SetCellSize(Resolution, (*ResObj)->GetNumberField(TEXT("cell_size")));
-					ChangedCount++;
-				}
-				if ((*ResObj)->HasField(TEXT("cell_height")))
-				{
-					NavMesh->SetCellHeight(Resolution, (*ResObj)->GetNumberField(TEXT("cell_height")));
-					ChangedCount++;
-				}
-				if ((*ResObj)->HasField(TEXT("agent_max_step_height")))
-				{
-					NavMesh->SetAgentMaxStepHeight(Resolution, (*ResObj)->GetNumberField(TEXT("agent_max_step_height")));
-					ChangedCount++;
-				}
-			}
+			if (ResParamsList[i].bHasCellSize) { NavMesh->SetCellSize(Resolution, ResParamsList[i].CellSize); ChangedCount++; }
+			if (ResParamsList[i].bHasCellHeight) { NavMesh->SetCellHeight(Resolution, ResParamsList[i].CellHeight); ChangedCount++; }
+			if (ResParamsList[i].bHasAgentMaxStepHeight) { NavMesh->SetAgentMaxStepHeight(Resolution, ResParamsList[i].AgentMaxStepHeight); ChangedCount++; }
 		}
 	}
 
