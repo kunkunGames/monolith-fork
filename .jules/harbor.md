@@ -69,3 +69,9 @@
 **Learning:** Monolith's C++ updater uses a destructive swap script (`monolith_swap.bat`/`.sh`) that moves the old plugin folder to backup, and copies only explicitly listed developer directories back to the new folder.
 **Prevention:** Added explicit rules to preserve the `.code-review-graph/` directory in `monolith_swap.bat` and `monolith_swap.sh`, and excluded it from public release zips in `make_release.ps1`.
 **Avoid:** Deleting untracked workspace tools and developer settings during an auto-update.
+
+## 2026-06-08 - Preserve .clangd directory in release ZIP and auto-updater
+**Release risk:** Developer workspaces using clangd for C++ indexing have their `.clangd/` directory packaged into release ZIPs (bloat/leak) or destroyed during a Monolith auto-update because the auto-updater blindly swaps the folder, dropping local directories that weren't explicitly preserved.
+**Learning:** Monolith's standard `.gitignore` explicitly ignores `.clangd/`, but `make_release.ps1` explicitly checks for many local developer folders and missed it, leading to it potentially being shipped if accidentally tracked. Likewise, the C++ updater uses a destructive swap script (`monolith_swap.bat`/`.sh`) that moves the old plugin folder to backup, and copies only explicitly listed developer directories back to the new folder.
+**Prevention:** Added explicit rules to exclude `.clangd/` from public release zips in `make_release.ps1` and to preserve the `.clangd/` directory in `monolith_swap.bat` and `monolith_swap.sh`.
+**Avoid:** Packaging workflow artifacts into public release ZIPs or deleting untracked workspace tools and developer settings during an auto-update.
