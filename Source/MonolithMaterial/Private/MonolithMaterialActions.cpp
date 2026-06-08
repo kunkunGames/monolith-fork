@@ -9152,6 +9152,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 	const UEnum* InputTypeEnum = StaticEnum<EFunctionInputType>();
 
 	TArray<TSharedPtr<FJsonValue>> InputsJson;
+	InputsJson.Reserve(FuncInputs.Num());
 	for (const FFunctionExpressionInput& FuncIn : FuncInputs)
 	{
 		if (!FuncIn.ExpressionInput)
@@ -9183,6 +9184,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 	});
 
 	TArray<TSharedPtr<FJsonValue>> OutputsJson;
+	OutputsJson.Reserve(FuncOutputs.Num());
 	for (const FFunctionExpressionOutput& FuncOut : FuncOutputs)
 	{
 		if (!FuncOut.ExpressionOutput)
