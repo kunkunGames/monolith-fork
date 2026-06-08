@@ -2201,7 +2201,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddPropertyAccessNode
 
 	// Resolve the target graph (defaults to first ubergraph; FindGraphByName already
 	// searches FunctionGraphs so a named thread-safe function graph resolves directly).
-	const FString GraphName = Params->GetStringField(TEXT("graph_name"));
+	FString GraphName;
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	UEdGraph* Graph = MonolithBlueprintInternal::FindGraphByName(BP, GraphName);
 	if (!Graph)
 	{

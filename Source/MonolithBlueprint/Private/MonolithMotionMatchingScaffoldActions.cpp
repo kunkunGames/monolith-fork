@@ -352,9 +352,12 @@ namespace
 
 FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleSetAnimClass(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString BpPath = Params->GetStringField(TEXT("bp_path"));
-	const FString CompName = Params->GetStringField(TEXT("component"));
-	const FString AnimBpPath = Params->GetStringField(TEXT("anim_bp_path"));
+	FString BpPath;
+	Params->TryGetStringField(TEXT("bp_path"), BpPath);
+	FString CompName;
+	Params->TryGetStringField(TEXT("component"), CompName);
+	FString AnimBpPath;
+	Params->TryGetStringField(TEXT("anim_bp_path"), AnimBpPath);
 
 	if (BpPath.IsEmpty())     return FMonolithActionResult::Error(TEXT("Missing required parameter: bp_path"));
 	if (CompName.IsEmpty())   return FMonolithActionResult::Error(TEXT("Missing required parameter: component"));
@@ -441,8 +444,10 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleSetAnimClass
 
 FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleApplyMovementPreset(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString BpPath = Params->GetStringField(TEXT("bp_path"));
-	const FString Preset = Params->GetStringField(TEXT("preset"));
+	FString BpPath;
+	Params->TryGetStringField(TEXT("bp_path"), BpPath);
+	FString Preset;
+	Params->TryGetStringField(TEXT("preset"), Preset);
 
 	if (BpPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: bp_path"));
 	if (Preset.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: preset"));
@@ -534,9 +539,12 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleApplyMovemen
 
 FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleAddEngineComponentTyped(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString BpPath = Params->GetStringField(TEXT("bp_path"));
-	const FString CompType = Params->GetStringField(TEXT("component_type"));
-	const FString CompName = Params->GetStringField(TEXT("component_name"));
+	FString BpPath;
+	Params->TryGetStringField(TEXT("bp_path"), BpPath);
+	FString CompType;
+	Params->TryGetStringField(TEXT("component_type"), CompType);
+	FString CompName;
+	Params->TryGetStringField(TEXT("component_name"), CompName);
 
 	if (BpPath.IsEmpty())   return FMonolithActionResult::Error(TEXT("Missing required parameter: bp_path"));
 	if (CompType.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: component_type"));
@@ -636,8 +644,10 @@ namespace
 
 FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldLocomotionInput(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString BpPath = Params->GetStringField(TEXT("bp_path"));
-	const FString ImcPath = Params->GetStringField(TEXT("imc_path"));
+	FString BpPath;
+	Params->TryGetStringField(TEXT("bp_path"), BpPath);
+	FString ImcPath;
+	Params->TryGetStringField(TEXT("imc_path"), ImcPath);
 
 	if (BpPath.IsEmpty())  return FMonolithActionResult::Error(TEXT("Missing required parameter: bp_path"));
 	if (ImcPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: imc_path"));
@@ -746,8 +756,10 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldLoco
 
 FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleValidateAnimBpVariableContract(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AbpPath = Params->GetStringField(TEXT("abp_path"));
-	const FString BpPath = Params->GetStringField(TEXT("bp_path"));
+	FString AbpPath;
+	Params->TryGetStringField(TEXT("abp_path"), AbpPath);
+	FString BpPath;
+	Params->TryGetStringField(TEXT("bp_path"), BpPath);
 
 	if (AbpPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: abp_path"));
 	if (BpPath.IsEmpty())  return FMonolithActionResult::Error(TEXT("Missing required parameter: bp_path"));
@@ -802,16 +814,20 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleValidateAnim
 
 FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldMotionMatchingCharacter(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString BpPath = Params->GetStringField(TEXT("bp_path"));
-	const FString AnimBpPath = Params->GetStringField(TEXT("anim_bp_path"));
+	FString BpPath;
+	Params->TryGetStringField(TEXT("bp_path"), BpPath);
+	FString AnimBpPath;
+	Params->TryGetStringField(TEXT("anim_bp_path"), AnimBpPath);
 
 	if (BpPath.IsEmpty())     return FMonolithActionResult::Error(TEXT("Missing required parameter: bp_path"));
 	if (AnimBpPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: anim_bp_path"));
 
-	FString ParentClass = Params->GetStringField(TEXT("parent_class"));
+	FString ParentClass;
+	Params->TryGetStringField(TEXT("parent_class"), ParentClass);
 	if (ParentClass.IsEmpty()) ParentClass = TEXT("Character");
 
-	FString MovementPreset = Params->GetStringField(TEXT("movement_preset"));
+	FString MovementPreset;
+	Params->TryGetStringField(TEXT("movement_preset"), MovementPreset);
 	if (MovementPreset.IsEmpty()) MovementPreset = TEXT("orient_to_movement");
 
 	FString Mesh;
@@ -963,8 +979,10 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldMoti
 
 FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleGetInheritedComponentOverride(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString BpPath = Params->GetStringField(TEXT("bp_path"));
-	const FString CompName = Params->GetStringField(TEXT("component"));
+	FString BpPath;
+	Params->TryGetStringField(TEXT("bp_path"), BpPath);
+	FString CompName;
+	Params->TryGetStringField(TEXT("component"), CompName);
 	FString SingleProp;
 	Params->TryGetStringField(TEXT("property_name"), SingleProp);
 
@@ -1160,7 +1178,8 @@ namespace
 
 FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldThreadSafeUpdate(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AbpPath = Params->GetStringField(TEXT("abp_path"));
+	FString AbpPath;
+	Params->TryGetStringField(TEXT("abp_path"), AbpPath);
 	if (AbpPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: abp_path"));
 
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AbpPath);
@@ -1210,10 +1229,12 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldThre
 
 FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleAddPawnOwnerAccess(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AbpPath = Params->GetStringField(TEXT("abp_path"));
+	FString AbpPath;
+	Params->TryGetStringField(TEXT("abp_path"), AbpPath);
 	if (AbpPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: abp_path"));
 
-	FString CastClass = Params->GetStringField(TEXT("cast_class"));
+	FString CastClass;
+	Params->TryGetStringField(TEXT("cast_class"), CastClass);
 	if (CastClass.IsEmpty()) CastClass = TEXT("Character");
 
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AbpPath);
@@ -1308,7 +1329,8 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleAddPawnOwner
 
 FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldLocomotionAnimValues(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AbpPath = Params->GetStringField(TEXT("abp_path"));
+	FString AbpPath;
+	Params->TryGetStringField(TEXT("abp_path"), AbpPath);
 	if (AbpPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: abp_path"));
 
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AbpPath);
@@ -1320,7 +1342,8 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldLoco
 	// Name overrides (default to the §4.1 contract names).
 	auto VarName = [&Params](const TCHAR* Key, const TCHAR* Default) -> FString
 	{
-		FString V = Params->GetStringField(Key);
+		FString V;
+		Params->TryGetStringField(Key, V);
 		return V.IsEmpty() ? FString(Default) : V;
 	};
 	const FString VelocityVar     = VarName(TEXT("velocity_var"),     TEXT("Velocity"));
@@ -1647,7 +1670,8 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldLoco
 
 FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleApplyLocomotionSpeedBand(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString BpPath = Params->GetStringField(TEXT("bp_path"));
+	FString BpPath;
+	Params->TryGetStringField(TEXT("bp_path"), BpPath);
 	if (BpPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: bp_path"));
 
 	double WalkSpeed = 0.0, RunSpeed = 0.0, CrouchSpeed = 0.0;
