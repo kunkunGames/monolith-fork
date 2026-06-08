@@ -42,6 +42,38 @@ namespace
 		return Query;
 	}
 
+	bool ValidateOptionalNumberField(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, FString& OutError)
+	{
+		if (!Params.IsValid() || !Params->HasField(FieldName))
+		{
+			return true;
+		}
+
+		double IgnoredValue = 0.0;
+		if (!Params->TryGetNumberField(FieldName, IgnoredValue))
+		{
+			OutError = FString::Printf(TEXT("Parameter '%s' must be a number"), FieldName);
+			return false;
+		}
+		return true;
+	}
+
+	bool ValidateOptionalBoolField(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, FString& OutError)
+	{
+		if (!Params.IsValid() || !Params->HasField(FieldName))
+		{
+			return true;
+		}
+
+		bool IgnoredValue = false;
+		if (!Params->TryGetBoolField(FieldName, IgnoredValue))
+		{
+			OutError = FString::Printf(TEXT("Parameter '%s' must be a boolean"), FieldName);
+			return false;
+		}
+		return true;
+	}
+
 	/** Get the mutable options array from UEnvQuery. Returns TArray<TObjectPtr<UEnvQueryOption>>&. */
 	TArray<TObjectPtr<UEnvQueryOption>>& GetOptionsMutable(UEnvQuery* Query)
 	{
@@ -1273,6 +1305,16 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSTest(const TShare
 FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath, Error;
+	FString ParamError;
+	if (!ValidateOptionalBoolField(Params, TEXT("define_reference_value"), ParamError) ||
+		!ValidateOptionalNumberField(Params, TEXT("factor"), ParamError) ||
+		!ValidateOptionalNumberField(Params, TEXT("score_clamp_min"), ParamError) ||
+		!ValidateOptionalNumberField(Params, TEXT("score_clamp_max"), ParamError) ||
+		!ValidateOptionalNumberField(Params, TEXT("reference_value"), ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
+
 	UEnvQuery* Query = LoadEQSFromParams(Params, AssetPath, Error);
 	if (!Query)
 	{
@@ -1378,11 +1420,21 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 
 	if (Params->HasField(TEXT("score_clamp_min")))
 	{
-		Test->ScoreClampMin.DefaultValue = (float)Params->GetNumberField(TEXT("score_clamp_min"));
+		double TmpClampMin;
+		if (!Params->TryGetNumberField(TEXT("score_clamp_min"), TmpClampMin))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'score_clamp_min' must be a number"));
+		}
+		Test->ScoreClampMin.DefaultValue = (float)TmpClampMin;
 	}
 	if (Params->HasField(TEXT("score_clamp_max")))
 	{
-		Test->ScoreClampMax.DefaultValue = (float)Params->GetNumberField(TEXT("score_clamp_max"));
+		double TmpClampMax;
+		if (!Params->TryGetNumberField(TEXT("score_clamp_max"), TmpClampMax))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'score_clamp_max' must be a number"));
+		}
+		Test->ScoreClampMax.DefaultValue = (float)TmpClampMax;
 	}
 
 	// Normalization
@@ -1404,7 +1456,12 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 	}
 	if (Params->HasField(TEXT("reference_value")))
 	{
-		Test->ReferenceValue.DefaultValue = (float)Params->GetNumberField(TEXT("reference_value"));
+		double TmpReference;
+		if (!Params->TryGetNumberField(TEXT("reference_value"), TmpReference))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'reference_value' must be a number"));
+		}
+		Test->ReferenceValue.DefaultValue = (float)TmpReference;
 	}
 
 	Query->MarkPackageDirty();
@@ -1443,6 +1500,14 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSFilter(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath, Error;
+	FString ParamError;
+	if (!ValidateOptionalBoolField(Params, TEXT("bool_value"), ParamError) ||
+		!ValidateOptionalNumberField(Params, TEXT("min"), ParamError) ||
+		!ValidateOptionalNumberField(Params, TEXT("max"), ParamError))
+	{
+		return FMonolithActionResult::Error(ParamError);
+	}
+
 	UEnvQuery* Query = LoadEQSFromParams(Params, AssetPath, Error);
 	if (!Query)
 	{
@@ -1494,7 +1559,12 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSFilter(const TSha
 	float RequestedMin = 0.0f;
 	if (Params->HasField(TEXT("min")))
 	{
-		RequestedMin = (float)Params->GetNumberField(TEXT("min"));
+		double TmpMin;
+		if (!Params->TryGetNumberField(TEXT("min"), TmpMin))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'min' must be a number"));
+		}
+		RequestedMin = (float)TmpMin;
 		Test->FloatValueMin.DefaultValue = RequestedMin;
 		bRequestedMin = true;
 	}
@@ -1502,7 +1572,12 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSFilter(const TSha
 	float RequestedMax = 0.0f;
 	if (Params->HasField(TEXT("max")))
 	{
-		RequestedMax = (float)Params->GetNumberField(TEXT("max"));
+		double TmpMax;
+		if (!Params->TryGetNumberField(TEXT("max"), TmpMax))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'max' must be a number"));
+		}
+		RequestedMax = (float)TmpMax;
 		Test->FloatValueMax.DefaultValue = RequestedMax;
 		bRequestedMax = true;
 	}
@@ -1831,7 +1906,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleReorderEQSTests(const TShared
 namespace
 {
 	/** Apply scoring spec to a test. */
-	void ApplyEQSScoringSpec(UEnvQueryTest* Test, const TSharedPtr<FJsonObject>& ScoringObj)
+	void ApplyEQSScoringSpec(UEnvQueryTest* Test, const TSharedPtr<FJsonObject>& ScoringObj, TArray<FString>& Warnings, const FString& WarningContext)
 	{
 		if (!Test || !ScoringObj.IsValid()) return;
 
@@ -1853,7 +1928,15 @@ namespace
 
 		if (ScoringObj->HasField(TEXT("factor")))
 		{
-			Test->ScoringFactor.DefaultValue = (float)ScoringObj->GetNumberField(TEXT("factor"));
+			double TmpFactor;
+			if (ScoringObj->TryGetNumberField(TEXT("factor"), TmpFactor))
+			{
+				Test->ScoringFactor.DefaultValue = (float)TmpFactor;
+			}
+			else
+			{
+				Warnings.Add(FString::Printf(TEXT("%s.scoring.factor: must be a number"), *WarningContext));
+			}
 		}
 	}
 
@@ -1872,11 +1955,27 @@ namespace
 
 		if (FilterObj->HasField(TEXT("min")))
 		{
-			Test->FloatValueMin.DefaultValue = (float)FilterObj->GetNumberField(TEXT("min"));
+			double TmpMin;
+			if (FilterObj->TryGetNumberField(TEXT("min"), TmpMin))
+			{
+				Test->FloatValueMin.DefaultValue = (float)TmpMin;
+			}
+			else
+			{
+				Warnings.Add(FString::Printf(TEXT("%s.filter.min: must be a number"), *WarningContext));
+			}
 		}
 		if (FilterObj->HasField(TEXT("max")))
 		{
-			Test->FloatValueMax.DefaultValue = (float)FilterObj->GetNumberField(TEXT("max"));
+			double TmpMax;
+			if (FilterObj->TryGetNumberField(TEXT("max"), TmpMax))
+			{
+				Test->FloatValueMax.DefaultValue = (float)TmpMax;
+			}
+			else
+			{
+				Warnings.Add(FString::Printf(TEXT("%s.filter.max: must be a number"), *WarningContext));
+			}
 		}
 		if (FilterObj->HasField(TEXT("bool_value")))
 		{
@@ -2040,7 +2139,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleBuildEQSQueryFromSpec(const T
 				const TSharedPtr<FJsonObject>* ScoringObj = nullptr;
 				if ((*TestObj)->TryGetObjectField(TEXT("scoring"), ScoringObj) && ScoringObj->IsValid())
 				{
-					ApplyEQSScoringSpec(NewTest, *ScoringObj);
+					ApplyEQSScoringSpec(NewTest, *ScoringObj, Warnings, FString::Printf(TEXT("Option[%d].Test[%d]"), OptIdx, TestIdx));
 				}
 
 				// Apply filter

@@ -6,6 +6,7 @@
 #include "MonolithAIScaffoldActions.h"
 #include "MonolithAIStateTreeActions.h"
 #include "MonolithAINavigationActions.h"
+#include "MonolithAIEQSActions.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -97,6 +98,31 @@ bool FMonolithAIConfigureNavLinkParamGuardTest::RunTest(const FString& Parameter
 
     TestFalse(TEXT("configure_nav_link should fail if enabled is wrong type"), Result.bSuccess);
     TestTrue(TEXT("configure_nav_link error should indicate wrong parameter type for enabled"), Result.ErrorMessage.Contains(TEXT("enabled")));
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAIEQSScoringParamGuardTest, "Monolith.ParamGuard.AI.EQSScoring", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAIEQSScoringParamGuardTest::RunTest(const FString& Parameters)
+{
+    FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+    if (!Registry.HasAction(TEXT("ai"), TEXT("configure_eqs_scoring")))
+    {
+        FMonolithAIEQSActions::RegisterActions(Registry);
+    }
+
+    TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+    Payload->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/EQS_TestQuery"));
+    Payload->SetNumberField(TEXT("option_index"), 0);
+    Payload->SetNumberField(TEXT("test_index"), 0);
+    // Malformed type for a number field
+    Payload->SetStringField(TEXT("score_clamp_min"), TEXT("NotANumber"));
+
+    FMonolithActionResult Result = Registry.ExecuteAction(TEXT("ai"), TEXT("configure_eqs_scoring"), Payload);
+
+    TestFalse(TEXT("configure_eqs_scoring should fail if score_clamp_min is wrong type"), Result.bSuccess);
+    TestTrue(TEXT("configure_eqs_scoring error should indicate wrong parameter type for score_clamp_min"), Result.ErrorMessage.Contains(TEXT("score_clamp_min")));
 
     return true;
 }
