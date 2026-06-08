@@ -16,6 +16,7 @@
 #include "PoseSearch/PoseSearchFeatureChannel_Distance.h"
 #include "PoseSearch/PoseSearchFeatureChannel_Curve.h"
 #include "PoseSearch/PoseSearchFeatureChannel_Group.h"
+#include "MonolithPackagePathValidator.h"
 #include "PoseSearch/PoseSearchIndex.h"
 #include "PoseSearch/PoseSearchDerivedData.h"
 #include "PoseSearch/PoseSearchAnimNotifies.h"
@@ -813,6 +814,11 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleCreatePoseSearchSchema(c
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString SkeletonPath = Params->GetStringField(TEXT("skeleton_path"));
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton) return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
 
@@ -876,6 +882,11 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleCreatePoseSearchDatabase
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString SchemaPath = Params->GetStringField(TEXT("schema_path"));
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	UPoseSearchSchema* Schema = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchSchema>(SchemaPath);
 	if (!Schema) return FMonolithActionResult::Error(FString::Printf(TEXT("PoseSearchSchema not found: %s"), *SchemaPath));
@@ -1481,6 +1492,11 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSearchMode(co
 FMonolithActionResult FMonolithPoseSearchActions::HandleCreateNormalizationSet(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	FString AssetName;
 	int32 LastSlash;

@@ -37,21 +37,46 @@ bool FMonolithAnimationSecurityPathTest::RunTest(const FString& Parameters)
 
 	for (const FString& Path : MalformedPaths)
 	{
-		// Setup payload
-		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-		Payload->SetStringField(TEXT("asset_path"), Path);
-		// skeleton_path is required by create_blend_space
-		Payload->SetStringField(TEXT("skeleton_path"), TEXT("/Game/Anims/MySkeleton"));
+		// Setup payloads for different actions
+		TSharedPtr<FJsonObject> BlendSpacePayload = MakeShared<FJsonObject>();
+		BlendSpacePayload->SetStringField(TEXT("asset_path"), Path);
+		BlendSpacePayload->SetStringField(TEXT("skeleton_path"), TEXT("/Game/Anims/MySkeleton"));
 
-		// Call the action
-		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("create_blend_space"), Payload);
+		TSharedPtr<FJsonObject> SchemaPayload = MakeShared<FJsonObject>();
+		SchemaPayload->SetStringField(TEXT("asset_path"), Path);
+		SchemaPayload->SetStringField(TEXT("skeleton_path"), TEXT("/Game/Anims/MySkeleton"));
 
-		// Verify it failed gracefully and returned the validation error
-		TestFalse(*FString::Printf(TEXT("Action should fail on malformed path: %s"), *Path), Result.bSuccess);
-		TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), Result.ErrorMessage.IsEmpty());
-		if (!Path.IsEmpty())
+		TSharedPtr<FJsonObject> DatabasePayload = MakeShared<FJsonObject>();
+		DatabasePayload->SetStringField(TEXT("asset_path"), Path);
+		DatabasePayload->SetStringField(TEXT("schema_path"), TEXT("/Game/Anims/MySchema"));
+
+		TSharedPtr<FJsonObject> NormalizationSetPayload = MakeShared<FJsonObject>();
+		NormalizationSetPayload->SetStringField(TEXT("asset_path"), Path);
+
+		TMap<FString, TSharedPtr<FJsonObject>> ActionsToTest = {
+			{TEXT("create_blend_space"), BlendSpacePayload},
+			{TEXT("create_pose_search_schema"), SchemaPayload},
+			{TEXT("create_pose_search_database"), DatabasePayload},
+			{TEXT("create_normalization_set"), NormalizationSetPayload}
+		};
+
+		for (const auto& ActionPair : ActionsToTest)
 		{
-			TestTrue(*FString::Printf(TEXT("Error should complain about invalid package path for: %s"), *Path), Result.ErrorMessage.Contains(TEXT("Invalid package path")) || Result.ErrorMessage.Contains(TEXT("Package path")));
+			const FString& ActionName = ActionPair.Key;
+			const TSharedPtr<FJsonObject>& Payload = ActionPair.Value;
+
+			// Call the action
+			FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), ActionName, Payload);
+
+			// Verify it failed gracefully and returned the validation error
+			TestFalse(*FString::Printf(TEXT("Action %s should fail on malformed path: %s"), *ActionName, *Path), Result.bSuccess);
+			TestFalse(*FString::Printf(TEXT("Error should be populated for action %s with malformed path: %s"), *ActionName, *Path), Result.ErrorMessage.IsEmpty());
+
+			if (!Path.IsEmpty())
+			{
+				TestTrue(*FString::Printf(TEXT("Error should complain about invalid package path for action %s: %s"), *ActionName, *Path),
+					Result.ErrorMessage.Contains(TEXT("Invalid package path")) || Result.ErrorMessage.Contains(TEXT("Package path")));
+			}
 		}
 	}
 
