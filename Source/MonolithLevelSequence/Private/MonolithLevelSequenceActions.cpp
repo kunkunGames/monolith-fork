@@ -722,6 +722,7 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListSavedReplays(const TSha
 	Params->TryGetBoolField(TEXT("include_nested_files"), bIncludeNestedFiles);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(Limit);
 	TSet<FString> SeenPaths;
 
 	for (const FString& Root : GetReplaySearchRoots())
