@@ -3,6 +3,30 @@ using System.IO;
 
 public class MonolithBABridge : ModuleRules
 {
+	private bool FindBlueprintAssistPlugin(string SearchDir)
+	{
+		if (!Directory.Exists(SearchDir))
+		{
+			return false;
+		}
+
+		if (Directory.Exists(Path.Combine(SearchDir, "BlueprintAssist")))
+		{
+			return true;
+		}
+
+		string[] Dirs = Directory.GetDirectories(SearchDir, "BlueprintAssist_*", SearchOption.TopDirectoryOnly);
+		foreach (string Dir in Dirs)
+		{
+			if (File.Exists(Path.Combine(Dir, "BlueprintAssist.uplugin")))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public MonolithBABridge(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -23,18 +47,7 @@ public class MonolithBABridge : ModuleRules
 			{
 				string ProjectPluginsDir = Path.Combine(
 					Target.ProjectFile.Directory.FullName, "Plugins");
-				if (Directory.Exists(ProjectPluginsDir))
-				{
-					bHasBlueprintAssist = Directory.Exists(
-						Path.Combine(ProjectPluginsDir, "BlueprintAssist"));
-
-					if (!bHasBlueprintAssist)
-					{
-						bHasBlueprintAssist = Directory.Exists(ProjectPluginsDir) && Directory.GetDirectories(
-							ProjectPluginsDir, "BlueprintAssist_*",
-							SearchOption.TopDirectoryOnly).Length > 0;
-					}
-				}
+				bHasBlueprintAssist = FindBlueprintAssistPlugin(ProjectPluginsDir);
 			}
 
 			// 2. Check Engine Plugins/Marketplace/ folder (Fab/launcher install)
@@ -42,35 +55,13 @@ public class MonolithBABridge : ModuleRules
 			{
 				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
 				string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
-				if (Directory.Exists(MarketplaceDir))
-				{
-					bHasBlueprintAssist = Directory.Exists(
-						Path.Combine(MarketplaceDir, "BlueprintAssist"));
-
-					if (!bHasBlueprintAssist)
-					{
-						bHasBlueprintAssist = Directory.Exists(MarketplaceDir) && Directory.GetDirectories(
-							MarketplaceDir, "BlueprintAssist_*",
-							SearchOption.TopDirectoryOnly).Length > 0;
-					}
-				}
+				bHasBlueprintAssist = FindBlueprintAssistPlugin(MarketplaceDir);
 
 				// 3. Check Engine Plugins/ root (some installs go here)
 				if (!bHasBlueprintAssist)
 				{
 					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-					if (Directory.Exists(EnginePluginsDir))
-					{
-						bHasBlueprintAssist = Directory.Exists(
-							Path.Combine(EnginePluginsDir, "BlueprintAssist"));
-
-						if (!bHasBlueprintAssist)
-						{
-							bHasBlueprintAssist = Directory.Exists(EnginePluginsDir) && Directory.GetDirectories(
-								EnginePluginsDir, "BlueprintAssist_*",
-								SearchOption.TopDirectoryOnly).Length > 0;
-						}
-					}
+					bHasBlueprintAssist = FindBlueprintAssistPlugin(EnginePluginsDir);
 				}
 			}
 		}
