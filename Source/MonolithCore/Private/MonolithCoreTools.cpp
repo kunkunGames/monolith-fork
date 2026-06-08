@@ -423,10 +423,32 @@ static FString BuildDomainDescription(const FString& Namespace, const TArray<FMo
 	{
 		TArray<FString> CategoryList = Categories.Array();
 		CategoryList.Sort();
+
+		int32 TotalLen = 0;
+		for (const FString& Category : CategoryList)
+		{
+			TotalLen += Category.Len();
+		}
+		if (CategoryList.Num() > 0)
+		{
+			TotalLen += (CategoryList.Num() - 1) * 2; // ", "
+		}
+
+		FString CategoriesStr;
+		CategoriesStr.Reserve(TotalLen);
+		for (int32 i = 0; i < CategoryList.Num(); ++i)
+		{
+			if (i > 0)
+			{
+				CategoriesStr += TEXT(", ");
+			}
+			CategoriesStr += CategoryList[i];
+		}
+
 		return FString::Printf(TEXT("%s domain with %d profile-allowed actions across categories: %s."),
 			*Namespace,
 			Actions.Num(),
-			*FString::Join(CategoryList, TEXT(", ")));
+			*CategoriesStr);
 	}
 
 	return FString::Printf(TEXT("%s domain with %d profile-allowed actions."), *Namespace, Actions.Num());
