@@ -829,6 +829,7 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetSoundWaveProperties(co
 		Wave->Modify();
 		bool bAnySet = false;
 		TArray<FString> PropertyErrors;
+		PropertyErrors.Reserve(Properties->Values.Num());
 
 		for (const auto& PropPair : Properties->Values)
 		{
@@ -1002,6 +1003,7 @@ FMonolithActionResult FMonolithAudioBatchActions::ApplyAudioTemplate(const TShar
 
 	// Pre-resolve template assets so we fail fast before iterating
 	TArray<FString> AppliedFields;
+	AppliedFields.Reserve(7);
 
 	USoundClass* SoundClass = nullptr;
 	if (Template->HasField(TEXT("sound_class")))
