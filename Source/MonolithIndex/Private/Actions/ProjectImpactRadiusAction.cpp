@@ -13,6 +13,10 @@ FMonolithActionResult FProjectImpactRadiusAction::Execute(const TSharedPtr<FJson
 		{
 			return FMonolithActionResult::Error(TEXT("'asset_path' parameter must be a string"), -32602);
 		}
+		if (AssetPath.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("'asset_path' parameter cannot be empty"), -32602);
+		}
 	}
 	else if (Params->HasField(TEXT("package_path")))
 	{
@@ -20,11 +24,15 @@ FMonolithActionResult FProjectImpactRadiusAction::Execute(const TSharedPtr<FJson
 		{
 			return FMonolithActionResult::Error(TEXT("'package_path' parameter must be a string"), -32602);
 		}
+		if (AssetPath.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("'package_path' parameter cannot be empty"), -32602);
+		}
 	}
 
 	if (AssetPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'asset_path' parameter is required"), -32602);
+		return FMonolithActionResult::Error(TEXT("'asset_path' (or 'package_path') parameter is required"), -32602);
 	}
 
 	UMonolithIndexSubsystem* Subsystem = GEditor ? GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>() : nullptr;
@@ -40,8 +48,43 @@ FMonolithActionResult FProjectImpactRadiusAction::Execute(const TSharedPtr<FJson
 		return FMonolithActionResult::Error(TEXT("'direction' parameter must be a string"), -32602);
 	}
 
-	const int32 MaxDepth = FMonolithIndexReview::PInt(Params, TEXT("max_depth"), 2);
-	const int32 MaxResults = FMonolithIndexReview::PInt(Params, TEXT("max_results"), 200);
+	int32 MaxDepth = 2;
+	if (Params->HasField(TEXT("max_depth")))
+	{
+		double DepthValue = 0.0;
+		FString StringValue;
+		if (Params->TryGetNumberField(TEXT("max_depth"), DepthValue))
+		{
+			MaxDepth = FMath::Clamp(static_cast<int32>(DepthValue) <= 0 ? 2 : static_cast<int32>(DepthValue), 1, 6);
+		}
+		else if (Params->TryGetStringField(TEXT("max_depth"), StringValue) && StringValue.IsNumeric())
+		{
+			MaxDepth = FMath::Clamp(FCString::Atoi(*StringValue) <= 0 ? 2 : FCString::Atoi(*StringValue), 1, 6);
+		}
+		else
+		{
+			return FMonolithActionResult::Error(TEXT("'max_depth' parameter must be a number or numeric string"), -32602);
+		}
+	}
+
+	int32 MaxResults = 200;
+	if (Params->HasField(TEXT("max_results")))
+	{
+		double ResultsValue = 0.0;
+		FString StringValue;
+		if (Params->TryGetNumberField(TEXT("max_results"), ResultsValue))
+		{
+			MaxResults = FMath::Clamp(static_cast<int32>(ResultsValue) <= 0 ? 200 : static_cast<int32>(ResultsValue), 1, 2000);
+		}
+		else if (Params->TryGetStringField(TEXT("max_results"), StringValue) && StringValue.IsNumeric())
+		{
+			MaxResults = FMath::Clamp(FCString::Atoi(*StringValue) <= 0 ? 200 : FCString::Atoi(*StringValue), 1, 2000);
+		}
+		else
+		{
+			return FMonolithActionResult::Error(TEXT("'max_results' parameter must be a number or numeric string"), -32602);
+		}
+	}
 
 	FString DepType;
 	if (Params->HasField(TEXT("dependency_type")) && !Params->TryGetStringField(TEXT("dependency_type"), DepType))
