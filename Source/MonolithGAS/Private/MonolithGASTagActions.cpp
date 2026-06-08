@@ -208,7 +208,8 @@ FMonolithActionResult FMonolithGASTagActions::HandleAddGameplayTags(const TShare
 		return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: tags"));
 	}
 
-	FString TablePath = Params->GetStringField(TEXT("table_path"));
+	FString TablePath;
+	Params->TryGetStringField(TEXT("table_path"), TablePath);
 
 	// Expand all tags to include parent hierarchy
 	TSet<FString> AllTags;
@@ -373,7 +374,11 @@ FMonolithActionResult FMonolithGASTagActions::HandleAddGameplayTags(const TShare
 
 FMonolithActionResult FMonolithGASTagActions::HandleGetTagHierarchy(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Root = Params->GetStringField(TEXT("root"));
+	FString Root;
+	if (Params->HasField(TEXT("root")) && !Params->TryGetStringField(TEXT("root"), Root))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: root must be a string"));
+	}
 	int32 MaxDepth = 0;
 	double DepthVal = 0.0;
 	if (Params->TryGetNumberField(TEXT("depth"), DepthVal))
@@ -457,7 +462,11 @@ FMonolithActionResult FMonolithGASTagActions::HandleSearchTagUsage(const TShared
 		return ErrorResult;
 	}
 
-	FString MatchType = Params->GetStringField(TEXT("match_type"));
+	FString MatchType;
+	if (Params->HasField(TEXT("match_type")) && !Params->TryGetStringField(TEXT("match_type"), MatchType))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: match_type must be a string"));
+	}
 	if (MatchType.IsEmpty()) MatchType = TEXT("exact");
 
 	bool bPartial = MatchType.Equals(TEXT("partial"), ESearchCase::IgnoreCase);
@@ -745,7 +754,11 @@ FMonolithActionResult FMonolithGASTagActions::HandleScaffoldTagHierarchy(const T
 	}
 	AddParams->SetArrayField(TEXT("tags"), TagArray);
 
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	FString SavePath;
+	if (Params->HasField(TEXT("save_path")) && !Params->TryGetStringField(TEXT("save_path"), SavePath))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: save_path must be a string"));
+	}
 	if (!SavePath.IsEmpty())
 	{
 		AddParams->SetStringField(TEXT("table_path"), SavePath);
@@ -1063,7 +1076,11 @@ FMonolithActionResult FMonolithGASTagActions::HandleRemoveGameplayTags(const TSh
 
 FMonolithActionResult FMonolithGASTagActions::HandleValidateTagConsistency(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString PathFilter;
+	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: path_filter must be a string"));
+	}
 
 	UGameplayTagsManager& TagManager = UGameplayTagsManager::Get();
 	IAssetRegistry& AssetRegistry =
@@ -1440,9 +1457,17 @@ FMonolithActionResult FMonolithGASTagActions::HandleAuditTagNaming(const TShared
 
 FMonolithActionResult FMonolithGASTagActions::HandleExportTagHierarchy(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Format = Params->GetStringField(TEXT("format"));
+	FString Format;
+	if (Params->HasField(TEXT("format")) && !Params->TryGetStringField(TEXT("format"), Format))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: format must be a string"));
+	}
 	if (Format.IsEmpty()) Format = TEXT("json");
-	FString OutputPath = Params->GetStringField(TEXT("output_path"));
+	FString OutputPath;
+	if (Params->HasField(TEXT("output_path")) && !Params->TryGetStringField(TEXT("output_path"), OutputPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: output_path must be a string"));
+	}
 
 	UGameplayTagsManager& TagManager = UGameplayTagsManager::Get();
 	FGameplayTagContainer AllTags;
@@ -1544,7 +1569,11 @@ FMonolithActionResult FMonolithGASTagActions::HandleImportTagHierarchy(const TSh
 	FMonolithActionResult Err;
 	if (!MonolithGAS::RequireStringParam(Params, TEXT("source_path"), SourcePath, Err)) return Err;
 
-	FString MergeMode = Params->GetStringField(TEXT("merge_mode"));
+	FString MergeMode;
+	if (Params->HasField(TEXT("merge_mode")) && !Params->TryGetStringField(TEXT("merge_mode"), MergeMode))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: merge_mode must be a string"));
+	}
 	if (MergeMode.IsEmpty()) MergeMode = TEXT("merge");
 
 	bool bDryRun = false;

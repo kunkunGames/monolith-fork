@@ -536,9 +536,13 @@ FMonolithActionResult FMonolithGASInputActions::HandleBatchBindAbilities(const T
 
 		if (SingleResult.bSuccess)
 		{
-			if (SingleResult.Result.IsValid() && SingleResult.Result->HasField(TEXT("binding_mode")))
+			if (SingleResult.Result.IsValid())
 			{
-				ResultObj->SetStringField(TEXT("binding_mode"), SingleResult.Result->GetStringField(TEXT("binding_mode")));
+				FString OutMode;
+				if (SingleResult.Result->TryGetStringField(TEXT("binding_mode"), OutMode))
+				{
+					ResultObj->SetStringField(TEXT("binding_mode"), OutMode);
+				}
 			}
 			SuccessCount++;
 		}

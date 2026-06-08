@@ -2163,7 +2163,7 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleCreateAttributeSetFrom
 				const TSharedPtr<FJsonObject>& Obj = *ObjPtr;
 
 				FAttributeTemplateDef NewDef;
-				NewDef.Name = Obj->GetStringField(TEXT("name"));
+				Obj->TryGetStringField(TEXT("name"), NewDef.Name);
 				if (NewDef.Name.IsEmpty()) continue;
 				Obj->TryGetNumberField(TEXT("default_value"), NewDef.DefaultValue);
 				Obj->TryGetBoolField(TEXT("replicated"), NewDef.bReplicated);
@@ -2509,8 +2509,10 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleDuplicateAttributeSet(
 			const TSharedPtr<FJsonObject>& Obj = *ObjPtr;
 
 			FAttributeTemplateDef NewDef;
-			NewDef.Name = Obj->GetStringField(TEXT("name"));
-			if (NewDef.Name.IsEmpty()) continue;
+			if (!Obj->TryGetStringField(TEXT("name"), NewDef.Name) || NewDef.Name.IsEmpty())
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid parameter: add_attributes[].name must be a non-empty string"));
+			}
 			Obj->TryGetNumberField(TEXT("default_value"), NewDef.DefaultValue);
 			Obj->TryGetBoolField(TEXT("replicated"), NewDef.bReplicated);
 			NewDef.bIsMeta = false;

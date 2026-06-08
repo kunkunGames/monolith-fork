@@ -18,8 +18,7 @@ namespace MonolithGAS
 
 UBlueprint* LoadBlueprintFromParams(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)
 {
-	OutAssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (OutAssetPath.IsEmpty())
+	if (!Params->TryGetStringField(TEXT("asset_path"), OutAssetPath) || OutAssetPath.IsEmpty())
 	{
 		OutError = TEXT("Missing required parameter: asset_path");
 		return nullptr;

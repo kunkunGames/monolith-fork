@@ -1158,7 +1158,8 @@ FMonolithActionResult FMonolithGASDataAssetProfileActions::HandleDescribeDataAss
 	}
 
 	FGASProfileDescribeResult Description = DescribeProfileAsset(AssetPath, LoadedAsset, BuildRoleSpecs(Params));
-	if (!Description.Json.IsValid() || !Description.Json->GetBoolField(TEXT("described")))
+	bool bDescribed = false;
+	if (!Description.Json.IsValid() || !Description.Json->TryGetBoolField(TEXT("described"), bDescribed) || !bDescribed)
 	{
 		return FMonolithActionResult::Error(
 			FString::Printf(TEXT("Asset '%s' could not be described as a UObject/DataAsset profile target."), *AssetPath));
@@ -1198,7 +1199,8 @@ FMonolithActionResult FMonolithGASDataAssetProfileActions::HandleValidateDataAss
 		const FString AssetPath = AssetData.GetObjectPathString();
 		UObject* LoadedAsset = AssetData.GetAsset();
 		FGASProfileDescribeResult Description = DescribeProfileAsset(AssetPath, LoadedAsset, RoleSpecs);
-		if (!Description.Json.IsValid() || !Description.Json->GetBoolField(TEXT("described")))
+		bool bDescribed = false;
+	if (!Description.Json.IsValid() || !Description.Json->TryGetBoolField(TEXT("described"), bDescribed) || !bDescribed)
 		{
 			AddIssue(Issues, TEXT("error"), TEXT("asset_load_failed"),
 				TEXT("DataAsset candidate could not be loaded or described."), AssetPath);
@@ -1388,9 +1390,10 @@ FMonolithActionResult FMonolithGASDataAssetProfileActions::HandleSetDataAssetGAS
 		if (!Spec)
 		{
 			WriteReport->SetBoolField(TEXT("ok"), false);
-			WriteReport->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown GAS profile role '%s'."), *Role));
+			FString ErrorMsg = FString::Printf(TEXT("Unknown GAS profile role \'%s\'."), *Role);
+			WriteReport->SetStringField(TEXT("error"), ErrorMsg);
 			WriteReports.Add(MakeShared<FJsonValueObject>(WriteReport));
-			AddIssue(Errors, TEXT("error"), TEXT("unknown_role"), WriteReport->GetStringField(TEXT("error")), AssetPath, Role);
+			AddIssue(Errors, TEXT("error"), TEXT("unknown_role"), ErrorMsg, AssetPath, Role);
 			continue;
 		}
 
@@ -1398,10 +1401,11 @@ FMonolithActionResult FMonolithGASDataAssetProfileActions::HandleSetDataAssetGAS
 		if (!Prop)
 		{
 			WriteReport->SetBoolField(TEXT("ok"), false);
-			WriteReport->SetStringField(TEXT("error"), FString::Printf(TEXT("No property found for GAS profile role '%s'."), *Role));
+			FString ErrorMsg = FString::Printf(TEXT("No property found for GAS profile role \'%s\'."), *Role);
+			WriteReport->SetStringField(TEXT("error"), ErrorMsg);
 			WriteReport->SetArrayField(TEXT("candidate_properties"), StringArrayToJson(Spec->Candidates));
 			WriteReports.Add(MakeShared<FJsonValueObject>(WriteReport));
-			AddIssue(Errors, TEXT("error"), TEXT("missing_role_property"), WriteReport->GetStringField(TEXT("error")), AssetPath, Role);
+			AddIssue(Errors, TEXT("error"), TEXT("missing_role_property"), ErrorMsg, AssetPath, Role);
 			continue;
 		}
 
