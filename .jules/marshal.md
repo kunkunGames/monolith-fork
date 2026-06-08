@@ -166,3 +166,9 @@
 **Learning:** `.gitignore` is not a sufficient filter for packaging scripts if internal workspace files are tracked in the repository.
 **Prevention:** Added a rule to `AGENTS.md` requiring explicitly excluding these specific internal directories when modifying release scripts like `Scripts/make_release.ps1`.
 **Avoid:** Modifying release packaging scripts without explicitly filtering out AI tooling and planning directories.
+
+## 2026-06-07 - Prevent cross-agent module collisions
+**Coordination issue:** Agents from different tracks were simultaneously targeting the same modules (e.g., `animation-domain` and `monolith-dataflow` being edited by multiple agents concurrently), causing duplicate work or merge conflicts on shared files.
+**Learning:** Checking for collisions only within an agent's own track or relying strictly on explicit file checks is insufficient because agents may overlap on shared modules before PR diffs are fully populated.
+**Prevention:** Added a 'Cross-Agent Module Check' rule to `AGENTS.md` requiring agents to check if any other agent's branch targets their intended module (e.g., `jules/*/your-module/*`) before beginning work.
+**Avoid:** Proceeding with edits in a module if another agent already has an open branch for that module, unless the file targets are guaranteed not to overlap.
