@@ -39,7 +39,7 @@
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `search` | `query` (required), `limit` (50), `include_content` (true) | FTS5 full-text search across indexed assets and graph/content signals. Default content-inclusive mode covers assets, nodes, variables, parameters, DataTable rows, actors, and curated `asset_search_values`; `include_content=false` keeps legacy asset/node-only behavior |
+| `search` | `query` (required), `limit` (50), `include_content` (true) | FTS full-text search across indexed assets and graph/content signals. Inputs are automatically escaped and tokenized for safe prefix matching. Default content-inclusive mode covers assets, nodes, variables, parameters, DataTable rows, actors, and curated `asset_search_values`; `include_content=false` keeps legacy asset/node-only behavior |
 | `find_references` | `asset_path` (required) | Bidirectional dependency lookup |
 | `find_by_type` | `asset_type` (required), `limit` (100), `offset` (0) | Filter assets by class with pagination |
 | `get_stats` | none | Row counts for all 13 tables + asset class breakdown (top 20) |

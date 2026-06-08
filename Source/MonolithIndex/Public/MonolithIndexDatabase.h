@@ -261,6 +261,7 @@ public:
 	bool DeleteAssetSearchValuesBySourceKind(const FString& SourceKind);
 
 	// --- FTS5 Search ---
+	static FString EscapeFTS(const FString& Query);
 	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit = 50);
 	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit, const FProjectSearchOptions& Options);
 

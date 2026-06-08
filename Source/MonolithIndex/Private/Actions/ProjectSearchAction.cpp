@@ -94,7 +94,7 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 TSharedPtr<FJsonObject> FProjectSearchAction::GetSchema()
 {
 	return FParamSchemaBuilder()
-		.Required(TEXT("query"), TEXT("string"), TEXT("FTS5 search query (supports AND, OR, NOT, prefix*). Search results are not writable schema."))
+		.Required(TEXT("query"), TEXT("string"), TEXT("FTS search query (automatically escaped and tokenized for prefix matching). Search results are not writable schema."))
 		.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum results to return"), TEXT("50"))
 		.Optional(TEXT("include_content"), TEXT("bool"), TEXT("Include variable/parameter/DataTable/actor/supplemental matches for discovery only"), TEXT("true"))
 		.Build();

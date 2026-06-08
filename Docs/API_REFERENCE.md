@@ -781,7 +781,7 @@ Full-text search across all indexed project assets, nodes, variables, and parame
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `query` | string | **required** | FTS5 search query (supports `AND`, `OR`, `NOT`, `prefix*`) |
+| `query` | string | **required** | FTS search query (automatically escaped and tokenized for prefix matching) |
 | `limit` | integer | optional | Default: `50` |
 | `include_content` | boolean | optional | Include variable/parameter/DataTable/actor/supplemental matches for discovery only. Default: `true` |
 

@@ -544,6 +544,19 @@ bool FProjectReviewContextMinimalTest::RunTest(const FString& Parameters)
 }
 
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectEscapeFTSPreservesSafeTokensTest, "Monolith.IndexGuard.Project.EscapeFTSPreservesSafeTokens", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectEscapeFTSPreservesSafeTokensTest::RunTest(const FString& Parameters)
+{
+	TestEqual(TEXT("Simple word is wrapped with quotes and star"), FMonolithIndexDatabase::EscapeFTS(TEXT("Asset")), TEXT("\"Asset\"*"));
+	TestEqual(TEXT("Namespaces are converted to spaces and individually wrapped"), FMonolithIndexDatabase::EscapeFTS(TEXT("Core::System::Logic")), TEXT("\"Core\"* \"System\"* \"Logic\"*"));
+	TestEqual(TEXT("Punctuation is replaced with spaces and collapsed"), FMonolithIndexDatabase::EscapeFTS(TEXT("UObject*;[]()")), TEXT("\"UObject\"*"));
+	TestEqual(TEXT("Multiple spaces are collapsed"), FMonolithIndexDatabase::EscapeFTS(TEXT("Find   Asset   Data")), TEXT("\"Find\"* \"Asset\"* \"Data\"*"));
+	TestEqual(TEXT("Empty or fully stripped string returns quoted empty"), FMonolithIndexDatabase::EscapeFTS(TEXT("!@#$")), TEXT("\"\""));
+	TestEqual(TEXT("Path is tokenized by slash separator"), FMonolithIndexDatabase::EscapeFTS(TEXT("/Game/Maps/Interactable/BP_Wave")), TEXT("\"Game\"* \"Maps\"* \"Interactable\"* \"BP_Wave\"*"));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSearchTagsUsesPreparedLikeTest, "Monolith.IndexGuard.Project.TagsUsesPreparedLike", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectSearchTagsUsesPreparedLikeTest::RunTest(const FString& Parameters)
 {

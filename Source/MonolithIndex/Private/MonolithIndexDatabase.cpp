@@ -1229,6 +1229,47 @@ bool FMonolithIndexDatabase::UpdateSavedHash(const FString& PackagePath, const F
 // FTS5 Full-text search
 // ============================================================
 
+FString FMonolithIndexDatabase::EscapeFTS(const FString& Query)
+{
+	// Replace :: with space
+	FString Q = Query.Replace(TEXT("::"), TEXT(" "));
+
+	// Replace non-alphanumeric/non-underscore with space
+	FString Cleaned;
+	Cleaned.Reserve(Q.Len());
+	for (TCHAR Ch : Q)
+	{
+		if (FChar::IsAlnum(Ch) || Ch == TEXT('_'))
+		{
+			Cleaned += Ch;
+		}
+		else
+		{
+			Cleaned += TEXT(' ');
+		}
+	}
+
+	// Split into tokens, wrap each with quotes and trailing *
+	TArray<FString> Tokens;
+	Cleaned.ParseIntoArray(Tokens, TEXT(" "), true);
+
+	if (Tokens.Num() == 0)
+	{
+		return TEXT("\"\""); // Empty search string
+	}
+
+	FString Escaped;
+	for (int32 i = 0; i < Tokens.Num(); ++i)
+	{
+		Escaped += FString::Printf(TEXT("\"%s\"*"), *Tokens[i]);
+		if (i < Tokens.Num() - 1)
+		{
+			Escaped += TEXT(" ");
+		}
+	}
+	return Escaped;
+}
+
 TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Query, int32 Limit)
 {
 	return FullTextSearch(Query, Limit, FProjectSearchOptions::AssetNodeOnly());
@@ -1239,6 +1280,7 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	TArray<FSearchResult> Results;
 	if (!IsOpen()) return Results;
 	const int32 ClampedLimit = FMath::Clamp(Limit, 1, 1000);
+	const FString FTSQuery = EscapeFTS(Query);
 
 	auto AddMatches = [&](const FString& SQL, const FString& MatchSource)
 	{
@@ -1247,7 +1289,7 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 		{
 			return;
 		}
-		Stmt.SetBindingValueByIndex(1, Query);
+		Stmt.SetBindingValueByIndex(1, FTSQuery);
 		Stmt.SetBindingValueByIndex(2, static_cast<int64>(ClampedLimit));
 
 		while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
