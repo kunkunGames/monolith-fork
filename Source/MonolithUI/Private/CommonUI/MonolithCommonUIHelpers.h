@@ -32,6 +32,12 @@ namespace MonolithCommonUI
 		UObject*& OutAsset);
 
 	/**
+	 * Load a Widget Blueprint through the shared asset resolver while preserving
+	 * Unreal's native copied-reference and redirector resolution fallback.
+	 */
+	MONOLITHUI_API UWidgetBlueprint* LoadWidgetBlueprintAsset(const FString& WbpPath);
+
+	/**
 	 * Pattern 2: Load an existing WBP and locate a named widget inside its WidgetTree.
 	 * Caller is responsible for compiling + saving the WBP after mutation.
 	 * @param WbpPath      Asset path to the Widget Blueprint

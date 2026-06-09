@@ -235,7 +235,7 @@ namespace MonolithCommonUIInput
 				*ButtonClassPath));
 		}
 
-		UWidgetBlueprint* Wbp = LoadObject<UWidgetBlueprint>(nullptr, *WbpPath);
+		UWidgetBlueprint* Wbp = MonolithCommonUI::LoadWidgetBlueprintAsset(WbpPath);
 		if (!Wbp || !Wbp->WidgetTree)
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load WBP '%s'"), *WbpPath));
 

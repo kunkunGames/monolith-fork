@@ -1,6 +1,7 @@
 // MonolithCommonUIHelpers.cpp
 // Implementation of shared CommonUI authoring / mutation / runtime helpers.
 #include "MonolithCommonUIHelpers.h"
+#include "MonolithAssetUtils.h"
 
 #if WITH_COMMONUI
 
@@ -90,6 +91,16 @@ namespace MonolithCommonUI
 		return FMonolithActionResult::Success(Result);
 	}
 
+	UWidgetBlueprint* LoadWidgetBlueprintAsset(const FString& WbpPath)
+	{
+		UWidgetBlueprint* Wbp = FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(WbpPath);
+		if (!Wbp)
+		{
+			Wbp = LoadObject<UWidgetBlueprint>(nullptr, *WbpPath);
+		}
+		return Wbp;
+	}
+
 	FMonolithActionResult LoadWidgetForMutation(
 		const FString& WbpPath,
 		const FName& WidgetName,
@@ -99,7 +110,7 @@ namespace MonolithCommonUI
 		OutWbp = nullptr;
 		OutWidget = nullptr;
 
-		UWidgetBlueprint* Wbp = LoadObject<UWidgetBlueprint>(nullptr, *WbpPath);
+		UWidgetBlueprint* Wbp = LoadWidgetBlueprintAsset(WbpPath);
 		if (!Wbp)
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("LoadWidgetForMutation: failed to load WBP '%s'"), *WbpPath));

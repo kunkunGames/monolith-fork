@@ -1261,7 +1261,7 @@ namespace MonolithCommonUIButton
 		if (WbpPath.IsEmpty())
 			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
 
-		UWidgetBlueprint* Wbp = LoadObject<UWidgetBlueprint>(nullptr, *WbpPath);
+		UWidgetBlueprint* Wbp = MonolithCommonUI::LoadWidgetBlueprintAsset(WbpPath);
 		if (!Wbp || !Wbp->WidgetTree)
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load WBP '%s'"), *WbpPath));
 

@@ -139,7 +139,7 @@ namespace MonolithCommonUINavigation
 		if (!Params.IsValid() || !Params->TryGetArrayField(TEXT("entries"), Entries) || !Entries)
 			return FMonolithActionResult::Error(TEXT("entries array required: [{widget_name, direction, rule, explicit_target?}]"));
 
-		UWidgetBlueprint* Wbp = LoadObject<UWidgetBlueprint>(nullptr, *WbpPath);
+		UWidgetBlueprint* Wbp = MonolithCommonUI::LoadWidgetBlueprintAsset(WbpPath);
 		if (!Wbp || !Wbp->WidgetTree)
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load WBP '%s'"), *WbpPath));
 
@@ -274,7 +274,7 @@ namespace MonolithCommonUINavigation
 		if (WbpPath.IsEmpty())
 			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
 
-		UWidgetBlueprint* Wbp = LoadObject<UWidgetBlueprint>(nullptr, *WbpPath);
+		UWidgetBlueprint* Wbp = MonolithCommonUI::LoadWidgetBlueprintAsset(WbpPath);
 		if (!Wbp || !Wbp->WidgetTree)
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load WBP '%s'"), *WbpPath));
 
@@ -357,7 +357,7 @@ namespace MonolithCommonUINavigation
 		if (WbpPath.IsEmpty())
 			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
 
-		UWidgetBlueprint* Wbp = LoadObject<UWidgetBlueprint>(nullptr, *WbpPath);
+		UWidgetBlueprint* Wbp = MonolithCommonUI::LoadWidgetBlueprintAsset(WbpPath);
 		if (!Wbp || !Wbp->GeneratedClass)
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load WBP '%s'"), *WbpPath));
 
@@ -565,7 +565,7 @@ namespace MonolithCommonUINavigation
 		if (WbpPath.IsEmpty())
 			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
 
-		UWidgetBlueprint* Wbp = LoadObject<UWidgetBlueprint>(nullptr, *WbpPath);
+		UWidgetBlueprint* Wbp = MonolithCommonUI::LoadWidgetBlueprintAsset(WbpPath);
 		if (!Wbp || !Wbp->WidgetTree)
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load WBP '%s'"), *WbpPath));
 
