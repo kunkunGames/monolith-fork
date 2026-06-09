@@ -483,7 +483,7 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
    - Polls `tasklist` for `UnrealEditor.exe` until it's gone (120s timeout)
    - Asks for user confirmation (Y/N)
    - `move` command with retry loop (10 attempts × 3s) to handle Defender/Indexer file locks
-   - `xcopy /h` copies new version, preserves `.git/`, `.gitignore`, `.github/`, `.jules/`, `.pytest_cache/`, `.ruff_cache/`, `.venv/`, `Saved/`
+   - `xcopy /h` copies new version, preserves `.git/`, `.gitignore`, `.github/`, `.claude/`, `.jules/`, `.pytest_cache/`, `.ruff_cache/`, `.venv/`, `.vscode/`, `.vs/`, `.idea/`, `.clangd/`, `.code-review-graph/`, `Saved/`
    - Rollback on failure: removes partial copy, restores backup
    - Shows conditional message: C++ users rebuild, BP-only users launch immediately
 
