@@ -36,9 +36,21 @@ FMonolithActionResult FProjectCleanupGeneratedAssetsAction::Execute(const TShare
 	}
 
 	// dry_run defaults TRUE -- destructive deletion is strictly opt-in.
-	const bool bDryRun = !Params->HasField(TEXT("dry_run")) || Params->GetBoolField(TEXT("dry_run"));
-	const bool bRequireNoReferencers = !Params->HasField(TEXT("require_no_referencers")) || Params->GetBoolField(TEXT("require_no_referencers"));
-	const bool bRemoveEmptyFolders = Params->HasField(TEXT("remove_empty_folders")) && Params->GetBoolField(TEXT("remove_empty_folders"));
+	bool bDryRun = true;
+	if (Params->HasField(TEXT("dry_run")) && !Params->TryGetBoolField(TEXT("dry_run"), bDryRun))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'dry_run'. Expected boolean."), -32602);
+	}
+	bool bRequireNoReferencers = true;
+	if (Params->HasField(TEXT("require_no_referencers")) && !Params->TryGetBoolField(TEXT("require_no_referencers"), bRequireNoReferencers))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'require_no_referencers'. Expected boolean."), -32602);
+	}
+	bool bRemoveEmptyFolders = false;
+	if (Params->HasField(TEXT("remove_empty_folders")) && !Params->TryGetBoolField(TEXT("remove_empty_folders"), bRemoveEmptyFolders))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'remove_empty_folders'. Expected boolean."), -32602);
+	}
 
 	// Normalise + validate the request set first; refuse the whole call if anything
 	// targets outside the allowlist, so a single bad path cannot half-delete.

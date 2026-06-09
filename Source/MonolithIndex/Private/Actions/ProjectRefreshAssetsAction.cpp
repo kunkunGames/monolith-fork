@@ -36,8 +36,16 @@ FMonolithActionResult FProjectRefreshAssetsAction::Execute(const TSharedPtr<FJso
 		return FMonolithActionResult::Error(TEXT("'asset_paths' array parameter is required (at least one /Game/... path)"), -32602);
 	}
 
-	const bool bWaitForRegistry = !Params->HasField(TEXT("wait_for_asset_registry")) || Params->GetBoolField(TEXT("wait_for_asset_registry"));
-	const bool bWaitForDisk = Params->HasField(TEXT("wait_for_disk")) && Params->GetBoolField(TEXT("wait_for_disk"));
+	bool bWaitForRegistry = true;
+	if (Params->HasField(TEXT("wait_for_asset_registry")) && !Params->TryGetBoolField(TEXT("wait_for_asset_registry"), bWaitForRegistry))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'wait_for_asset_registry'. Expected boolean."), -32602);
+	}
+	bool bWaitForDisk = false;
+	if (Params->HasField(TEXT("wait_for_disk")) && !Params->TryGetBoolField(TEXT("wait_for_disk"), bWaitForDisk))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'wait_for_disk'. Expected boolean."), -32602);
+	}
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 
