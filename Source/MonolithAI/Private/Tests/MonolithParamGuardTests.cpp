@@ -7,6 +7,7 @@
 #include "MonolithAIStateTreeActions.h"
 #include "MonolithAINavigationActions.h"
 #include "MonolithAIEQSActions.h"
+#include "Misc/Guid.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -123,6 +124,47 @@ bool FMonolithAIEQSScoringParamGuardTest::RunTest(const FString& Parameters)
 
     TestFalse(TEXT("configure_eqs_scoring should fail if score_clamp_min is wrong type"), Result.bSuccess);
     TestTrue(TEXT("configure_eqs_scoring error should indicate wrong parameter type for score_clamp_min"), Result.ErrorMessage.Contains(TEXT("score_clamp_min")));
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAIEQSTestParamGuardTest, "Monolith.ParamGuard.AI.EQSTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAIEQSTestParamGuardTest::RunTest(const FString& Parameters)
+{
+    FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+    if (!Registry.HasAction(TEXT("ai"), TEXT("configure_eqs_test")))
+    {
+        FMonolithAIEQSActions::RegisterActions(Registry);
+    }
+
+    const FString TestQueryPath = FString::Printf(
+        TEXT("/Game/Temp/EQS_TestQuery_%s"),
+        *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+
+    TSharedPtr<FJsonObject> CreatePayload = MakeShared<FJsonObject>();
+    CreatePayload->SetStringField(TEXT("save_path"), TestQueryPath);
+
+    FMonolithActionResult CreateResult = Registry.ExecuteAction(TEXT("ai"), TEXT("create_eqs_query"), CreatePayload);
+    if (!TestTrue(TEXT("configure_eqs_test param guard fixture should be created"), CreateResult.bSuccess))
+    {
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+    Payload->SetStringField(TEXT("asset_path"), TestQueryPath);
+    Payload->SetStringField(TEXT("option_index"), TEXT("NotANumber"));
+    Payload->SetNumberField(TEXT("test_index"), 0);
+
+    FMonolithActionResult Result = Registry.ExecuteAction(TEXT("ai"), TEXT("configure_eqs_test"), Payload);
+
+    TSharedPtr<FJsonObject> DeletePayload = MakeShared<FJsonObject>();
+    DeletePayload->SetStringField(TEXT("asset_path"), TestQueryPath);
+    FMonolithActionResult DeleteResult = Registry.ExecuteAction(TEXT("ai"), TEXT("delete_eqs_query"), DeletePayload);
+
+    TestFalse(TEXT("configure_eqs_test should fail if option_index is wrong type"), Result.bSuccess);
+    TestTrue(TEXT("configure_eqs_test error should indicate wrong parameter type for option_index"), Result.ErrorMessage.Contains(TEXT("option_index")));
+    TestTrue(TEXT("configure_eqs_test param guard fixture should be cleaned up"), DeleteResult.bSuccess);
 
     return true;
 }
