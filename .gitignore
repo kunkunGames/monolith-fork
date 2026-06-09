@@ -145,3 +145,5 @@ Docs/pcg/
 release_body*.md
 pr*.diff
 make_release*.log
+Monolith_FullUnity_*.log
+Monolith_OfflineCLIBuild_*.log
