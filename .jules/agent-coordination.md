@@ -33,5 +33,6 @@ This file establishes clear file boundaries and domain coordination rules for Ju
   - Must coordinate with Code/Source agents when modifying module paths.
 
 ## Overlap Prevention Rules
+- **Task vs Domain Collision:** Domain Smiths (e.g., anim-weaver, ai-director, blueprint-smith) must yield generic cross-cutting tasks (like param hardening, limit clamping, array reservations) to dedicated task agents (e.g., ParamGuard, Crashguard, Bolt) to prevent redundant PRs in the same files.
 - **Strict Single Responsibility:** If an agent finds a task that requires modifying files outside its primary domain (e.g., a ParamGuard agent trying to fix a rule in `AGENTS.md`), the agent MUST stop without a PR. Let the correct agent type handle it.
 - **Micro-Edits on Shared Files:** Shared coordination files (`AGENTS.md`, release scripts) are high-collision zones. Agents MUST NO-OP if the only available work is a micro-edit against these shared surfaces, unless it's their specific duty.

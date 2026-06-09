@@ -1,4 +1,10 @@
 
+
+## 2026-06-09 - Resolve Task Agent vs Domain Smith collisions
+**Coordination issue:** Domain Smiths like `ai-director` and `anim-weaver` were performing parameter hardening tasks (e.g., `harden-pose-search-params`, `eqs-param-guard`), leading to collisions with dedicated Task Agents like `ParamGuard`.
+**Learning:** Domain agents taking on cross-cutting tasks (param hardening, crash prevention, array reservations) create overlapping PRs in the same modules as the dedicated task agents assigned to those specific concerns.
+**Prevention:** Updated `.jules/agent-coordination.md` to require Domain Smiths to yield generic cross-cutting tasks to dedicated task agents, focusing instead on domain-specific logic and spec parity.
+**Avoid:** Domain Smiths creating PRs for generic `Source/` level param/limit hardening or array reservations when dedicated task agents exist for that purpose.
 ## 2026-06-06 - Prevent fragmented action count updates
 **Coordination issue:** Multiple agents (e.g., SkillDocSmith, ActionCountKeeper) were racing to update action counts in isolated modules, causing fragmentation, drift across core documentation, and multiple overlapping PRs in the queue.
 **Learning:** Permitting agents to update action counts partially or without checking for other active count-related PRs leads to merge conflicts and inconsistent public documentation (e.g., README, API_REFERENCE.md, module specs).
