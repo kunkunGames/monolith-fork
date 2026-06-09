@@ -374,7 +374,7 @@ $trackedFiles = $allTrackedFiles | Where-Object {
         $keep = $false
     }
     # Enforce release ZIP hygiene: explicitly exclude build/local folders even if accidentally tracked
-    if ($keep -and ($path -like "Intermediate/*" -or $path -like "Saved/*" -or $path -like ".git/*" -or $path -eq ".git" -or $path -like ".github/*" -or $path -eq ".github" -or $path -like ".claude/*" -or $path -eq ".claude" -or $path -like ".jules/*" -or $path -eq ".jules" -or $path -like ".vscode/*" -or $path -like ".vs/*" -or $path -like ".idea/*" -or $path -like ".clangd/*" -or $path -eq ".clangd" -or $path -like ".pytest_cache/*" -or $path -eq ".pytest_cache" -or $path -like ".ruff_cache/*" -or $path -eq ".ruff_cache" -or $path -like ".venv/*" -or $path -eq ".venv" -or $path -like ".code-review-graph/*" -or $path -eq ".code-review-graph")) {
+    if ($keep -and ($path -like "Intermediate/*" -or $path -like "Saved/*" -or $path -like ".git/*" -or $path -eq ".git" -or $path -like ".github/*" -or $path -eq ".github" -or $path -like ".claude/*" -or $path -eq ".claude" -or $path -like ".jules/*" -or $path -eq ".jules" -or $path -like ".vscode/*" -or $path -like ".vs/*" -or $path -like ".idea/*" -or $path -like ".clangd/*" -or $path -eq ".clangd" -or $path -like ".pytest_cache/*" -or $path -eq ".pytest_cache" -or $path -like ".ruff_cache/*" -or $path -eq ".ruff_cache" -or $path -like ".mypy_cache/*" -or $path -eq ".mypy_cache" -or $path -like ".venv/*" -or $path -eq ".venv" -or $path -like ".code-review-graph/*" -or $path -eq ".code-review-graph")) {
         $keep = $false
     }
     # Strip internal-only Docs that the project tracks in git but should not ship.
