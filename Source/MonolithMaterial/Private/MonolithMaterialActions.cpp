@@ -7882,10 +7882,9 @@ static FTextureImportResult ImportTextureInternal(
 {
 	FTextureImportResult Result;
 
-	// Validate source file exists on disk
-	if (!FPlatformFileManager::Get().GetPlatformFile().FileExists(*SourceFile))
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(DestPath); !ValidationError.IsEmpty())
 	{
-		Result.ErrorMessage = FString::Printf(TEXT("Source file not found: '%s'"), *SourceFile);
+		Result.ErrorMessage = ValidationError;
 		return Result;
 	}
 
@@ -7895,6 +7894,20 @@ static FTextureImportResult ImportTextureInternal(
 
 	// Check if asset already exists
 	FString FinalAssetPath = DestDirectory / FinalDestName;
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(FinalAssetPath); !ValidationError.IsEmpty())
+	{
+		Result.ErrorMessage = ValidationError;
+		return Result;
+	}
+
+	// Validate source file exists on disk
+	if (!FPlatformFileManager::Get().GetPlatformFile().FileExists(*SourceFile))
+	{
+		Result.ErrorMessage = FString::Printf(TEXT("Source file not found: '%s'"), *SourceFile);
+		return Result;
+	}
+
 	if (!bReplaceExisting && UEditorAssetLibrary::DoesAssetExist(FinalAssetPath))
 	{
 		Result.ErrorMessage = FString::Printf(TEXT("Asset already exists at '%s'. Set replace_existing: true to overwrite."), *FinalAssetPath);

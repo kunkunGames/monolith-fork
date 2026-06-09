@@ -123,3 +123,46 @@ bool FMonolithMaterialSecurityCreateFunctionInstancePathTest::RunTest(const FStr
 }
 
 #endif // WITH_DEV_AUTOMATION_TESTS
+
+#if WITH_DEV_AUTOMATION_TESTS
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithMaterialSecurityImportTexturePathTest, "Monolith.Security.Material.ImportTexture.ValidatePackagePath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithMaterialSecurityImportTexturePathTest::RunTest(const FString& Parameters)
+{
+	TArray<FString> MalformedPaths = {
+		TEXT(""), // Empty path
+		TEXT("//Game/MalformedPath/TestTexture"), // Double leading slash
+		TEXT("Game/MalformedPath/TestTexture"), // Missing leading slash
+		TEXT("/Game/MalformedPath/TestTexture/"), // Trailing slash
+		TEXT("/Game/MalformedPath/TestTexture#Invalid") // Illegal characters
+	};
+
+	for (const FString& Path : MalformedPaths)
+	{
+		// Setup payload to simulate malformed path
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("source_file"), TEXT("C:/fake/path/texture.png")); // Fake source
+		Payload->SetStringField(TEXT("dest_path"), Path);
+
+		// Call the action
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("material"), TEXT("import_texture"), Payload);
+
+		// Verify it failed gracefully and returned the validation error
+		TestFalse(*FString::Printf(TEXT("Action should fail on malformed path: %s"), *Path), Result.bSuccess);
+		TestFalse(*FString::Printf(TEXT("Error should be populated for malformed path: %s"), *Path), Result.ErrorMessage.IsEmpty());
+
+		if (!Path.IsEmpty())
+		{
+			TestTrue(*FString::Printf(TEXT("Error should complain about invalid package path or empty asset name for: %s"), *Path),
+				Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
+				Result.ErrorMessage.Contains(TEXT("Invalid asset path")) ||
+				Result.ErrorMessage.Contains(TEXT("Asset name is empty")) ||
+				Result.ErrorMessage.Contains(TEXT("Package path")));
+		}
+	}
+
+	return true;
+}
+
+#endif // WITH_DEV_AUTOMATION_TESTS
