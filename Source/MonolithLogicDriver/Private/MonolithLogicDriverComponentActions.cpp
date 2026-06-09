@@ -2,6 +2,7 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithLogicDriverInternal.h"
+#include "MonolithAssetUtils.h"
 
 #include "Engine/Blueprint.h"
 #include "Engine/SCS_Node.h"
@@ -117,7 +118,12 @@ namespace
 
 static UBlueprint* LoadActorBlueprintForSM(const FString& BPPath, FMonolithActionResult& OutError)
 {
-	UBlueprint* BP = Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BPPath));
+	UBlueprint* BP = FMonolithAssetUtils::LoadAssetByPath<UBlueprint>(BPPath);
+	if (!BP)
+	{
+		// Fallback for copied-reference formats or unresolved redirectors
+		BP = Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *BPPath));
+	}
 	if (!BP)
 	{
 		OutError = FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load Blueprint at '%s'"), *BPPath));
