@@ -257,7 +257,6 @@ FMonolithActionResult FMonolithGASTargetActions::HandleCreateTargetActor(const T
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	UBlueprint* NewBP = FKismetEditorUtilities::CreateBlueprint(
 		ParentClass,

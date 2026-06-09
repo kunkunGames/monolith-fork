@@ -330,7 +330,6 @@ FMonolithActionResult FMonolithGASCueActions::HandleCreateGameplayCueNotify(cons
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	// Create Blueprint
 	UBlueprint* NewBP = FKismetEditorUtilities::CreateBlueprint(

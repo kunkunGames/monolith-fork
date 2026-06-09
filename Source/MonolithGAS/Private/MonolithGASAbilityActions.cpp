@@ -659,7 +659,6 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleCreateAbility(const TSha
 		return FMonolithActionResult::Error(
 			FString::Printf(TEXT("Failed to create package at: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	// Create the Blueprint
 	UBlueprint* NewBP = FKismetEditorUtilities::CreateBlueprint(

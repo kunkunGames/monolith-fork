@@ -1007,7 +1007,6 @@ FMonolithActionResult FMonolithGASEffectActions::HandleCreateGameplayEffect(cons
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	// Create Blueprint with UGameplayEffect parent
 	UBlueprint* NewBP = FKismetEditorUtilities::CreateBlueprint(
@@ -2371,7 +2370,6 @@ namespace
 			OutError = FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package: %s"), *SavePath));
 			return nullptr;
 		}
-		Package->FullyLoad();
 
 		UBlueprint* NewBP = FKismetEditorUtilities::CreateBlueprint(
 			UGameplayEffect::StaticClass(),

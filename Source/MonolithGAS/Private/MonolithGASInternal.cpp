@@ -71,13 +71,18 @@ UPackage* GetOrCreatePackage(const FString& SavePath, FString& OutError)
 		return nullptr;
 	}
 
+	if (FindPackage(nullptr, *PackageName))
+	{
+		OutError = FString::Printf(TEXT("Package already exists in memory: %s"), *PackageName);
+		return nullptr;
+	}
+
 	UPackage* Package = CreatePackage(*PackageName);
 	if (!Package)
 	{
 		OutError = FString::Printf(TEXT("Failed to create package: %s"), *PackageName);
 		return nullptr;
 	}
-	Package->FullyLoad();
 	return Package;
 }
 
@@ -326,6 +331,12 @@ bool EnsureAssetPathFree(const FString& PackagePath, const FString& AssetName, F
 	if (ExistingPkg && FindObject<UObject>(ExistingPkg, *AssetName))
 	{
 		OutError = FString::Printf(TEXT("Asset already exists in package '%s'. Delete it first or use a different path."), *PackagePath);
+		return false;
+	}
+
+	if (FindPackage(nullptr, *PackagePath))
+	{
+		OutError = FString::Printf(TEXT("Package '%s' already exists in memory. Delete it first."), *PackagePath);
 		return false;
 	}
 

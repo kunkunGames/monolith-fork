@@ -1079,7 +1079,6 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleScaffoldDamagePipeline(
 				FString::Printf(TEXT("Failed to create package for %s"), *GEPath)));
 			continue;
 		}
-		Package->FullyLoad();
 
 		UBlueprint* NewBP = FKismetEditorUtilities::CreateBlueprint(
 			UGameplayEffect::StaticClass(),
@@ -1267,7 +1266,6 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleScaffoldStatusEffect(co
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	UBlueprint* NewBP = FKismetEditorUtilities::CreateBlueprint(
 		UGameplayEffect::StaticClass(),
@@ -1504,7 +1502,6 @@ FMonolithActionResult FMonolithGASScaffoldActions::HandleScaffoldWeaponAbility(c
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	UBlueprint* NewBP = FKismetEditorUtilities::CreateBlueprint(
 		UGameplayAbility::StaticClass(),
