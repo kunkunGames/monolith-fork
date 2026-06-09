@@ -9,6 +9,7 @@
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "UObject/ObjectRedirector.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "Misc/PackageName.h"
@@ -25,6 +26,7 @@
 #include "EditorAssetLibrary.h"
 #include "GameplayTagContainer.h"
 #include "Abilities/GameplayAbility.h"
+#include "MonolithAssetUtils.h"
 
 // ============================================================
 //  Anonymous helpers
@@ -378,19 +380,70 @@ namespace
 		return true;
 	}
 
-	UObject* LoadComboGraph(const FString& AssetPath, FString& OutError)
+	UObject* ResolveRedirector(UObject* Asset)
 	{
-		UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
-		if (!Asset)
+		if (UObjectRedirector* Redirector = Cast<UObjectRedirector>(Asset))
 		{
-			OutError = FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath);
-			return nullptr;
+			return Redirector->DestinationObject;
+		}
+		return Asset;
+	}
+
+	UObject* LoadAssetPreservingLegacyRefs(const FString& AssetPath, UClass* ExpectedClass, FString* OutResolvedObjectPath = nullptr)
+	{
+		UClass* LookupClass = ExpectedClass ? ExpectedClass : UObject::StaticClass();
+		auto TryAccept = [ExpectedClass, OutResolvedObjectPath](UObject* Candidate) -> UObject*
+		{
+			Candidate = ResolveRedirector(Candidate);
+			if (!Candidate)
+			{
+				return nullptr;
+			}
+			if (ExpectedClass && !Candidate->IsA(ExpectedClass))
+			{
+				return nullptr;
+			}
+			if (OutResolvedObjectPath)
+			{
+				*OutResolvedObjectPath = Candidate->GetPathName();
+			}
+			return Candidate;
+		};
+
+		if (UObject* Asset = TryAccept(FMonolithAssetUtils::LoadAssetByPath(LookupClass, AssetPath)))
+		{
+			return Asset;
 		}
 
+		if (UObject* Asset = TryAccept(StaticLoadObject(LookupClass, nullptr, *AssetPath)))
+		{
+			return Asset;
+		}
+
+		if (LookupClass != UObject::StaticClass())
+		{
+			if (UObject* Asset = TryAccept(StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath)))
+			{
+				return Asset;
+			}
+		}
+
+		return nullptr;
+	}
+
+	UObject* LoadComboGraph(const FString& AssetPath, FString& OutError)
+	{
 		UClass* ComboGraphClass = FindComboGraphClass();
 		if (!ComboGraphClass)
 		{
 			OutError = TEXT("ComboGraph class not found. Is the ComboGraph plugin loaded?");
+			return nullptr;
+		}
+
+		UObject* Asset = LoadAssetPreservingLegacyRefs(AssetPath, ComboGraphClass);
+		if (!Asset)
+		{
+			OutError = FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath);
 			return nullptr;
 		}
 
@@ -1100,7 +1153,8 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 	}
 
 	// Load animation asset
-	UObject* AnimAsset = StaticLoadObject(UObject::StaticClass(), nullptr, *AnimAssetPath);
+	FString ResolvedAnimAssetPath;
+	UObject* AnimAsset = LoadAssetPreservingLegacyRefs(AnimAssetPath, UObject::StaticClass(), &ResolvedAnimAssetPath);
 	if (!AnimAsset)
 	{
 		return FMonolithActionResult::Error(
@@ -1120,7 +1174,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 		FProperty* MontageProp = NewNode->GetClass()->FindPropertyByName(TEXT("Montage"));
 		if (MontageProp)
 		{
-			FString SoftPath = AnimAssetPath;
+			FString SoftPath = ResolvedAnimAssetPath;
 			MontageProp->ImportText_Direct(*SoftPath, MontageProp->ContainerPtrToValuePtr<void>(NewNode), NewNode, PPF_None);
 		}
 	}
@@ -1130,7 +1184,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 		FProperty* SeqProp = NewNode->GetClass()->FindPropertyByName(TEXT("AnimationSequence"));
 		if (SeqProp)
 		{
-			FString SoftPath = AnimAssetPath;
+			FString SoftPath = ResolvedAnimAssetPath;
 			SeqProp->ImportText_Direct(*SoftPath, SeqProp->ContainerPtrToValuePtr<void>(NewNode), NewNode, PPF_None);
 		}
 	}
@@ -1866,7 +1920,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleLinkAbilityToComboGraph(
 	}
 
 	// Load blueprint
-	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *AbilityPath);
+	UObject* Asset = LoadAssetPreservingLegacyRefs(AbilityPath, UBlueprint::StaticClass());
 	UBlueprint* BP = Cast<UBlueprint>(Asset);
 	if (!BP)
 	{
@@ -2198,10 +2252,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleLayoutComboGraph(const T
 	}
 
 	// Load the ComboGraph asset
-	UObject* Graph = LoadObject<UObject>(nullptr, *AssetPath);
+	FString LoadError;
+	UObject* Graph = LoadComboGraph(AssetPath, LoadError);
 	if (!Graph)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset: %s"), *AssetPath));
+		return FMonolithActionResult::Error(LoadError);
 	}
 
 	UClass* ComboGraphClass = FindComboGraphClass();
