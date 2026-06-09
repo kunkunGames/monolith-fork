@@ -30,6 +30,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 142 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, DataAsset profile inspection/writes, runtime probes, scaffold |
+| [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection and Fracture module visibility and asset/component listing |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
@@ -1086,6 +1087,20 @@ PIE-only runtime evidence for DataAsset/native GAS flows. `start_event_cue_probe
 Grant a `UGameplayAbility` to a pawn's `UAbilitySystemComponent` directly without scaffold-side wiring or `apply_effect` ceremony. See `monolith_discover("gas")` for params.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithGAS.md` for the deep dive.
+
+---
+
+## chaos_fracture
+
+Optional Geometry Collection and Fracture module visibility. Read-only probes; does not load Fracture tools or mutate assets. **3 actions.**
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `list_geometry_collection_assets` | `package_path` (optional string), `limit` (optional integer) |
+| `list_geometry_collection_components` | `limit` (optional integer) |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithChaosFracture.md` for the deep dive.
 
 ---
 
