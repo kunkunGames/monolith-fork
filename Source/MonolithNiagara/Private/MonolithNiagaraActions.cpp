@@ -15038,6 +15038,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetDIProperties(const TShar
 	CDO->GetFunctionSignatures(Sigs);
 
 	TArray<TSharedPtr<FJsonValue>> FuncArr;
+	FuncArr.Reserve(Sigs.Num());
 	for (const FNiagaraFunctionSignature& Sig : Sigs)
 	{
 		TSharedRef<FJsonObject> SO = MakeShared<FJsonObject>();
@@ -15176,7 +15177,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleScriptInputs(const
 	// is NOT exported (no NIAGARAEDITOR_API), so we replicate its logic inline.
 	// Only collect Parameter-usage input nodes, filtering duplicates by name.
 	TSet<FName> SeenNames;
+	SeenNames.Reserve(Graph->Nodes.Num());
 	TArray<TSharedPtr<FJsonValue>> InputArr;
+	InputArr.Reserve(Graph->Nodes.Num());
 
 	for (UEdGraphNode* Node : Graph->Nodes)
 	{
@@ -15269,6 +15272,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetScalabilitySettings(cons
 	const FNiagaraSystemScalabilitySettingsArray& SSArr = EffectType->GetSystemScalabilitySettings();
 
 	TArray<TSharedPtr<FJsonValue>> SettingsArr;
+	SettingsArr.Reserve(SSArr.Settings.Num());
 	for (int32 i = 0; i < SSArr.Settings.Num(); i++)
 	{
 		const FNiagaraSystemScalabilitySettings& S = SSArr.Settings[i];
