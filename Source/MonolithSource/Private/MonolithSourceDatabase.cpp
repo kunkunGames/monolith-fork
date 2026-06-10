@@ -885,9 +885,10 @@ static bool JsonArrayToSet(const TSharedPtr<FJsonObject>& Object, const TCHAR* F
 	}
 	for (const TSharedPtr<FJsonValue>& Value : *Arr)
 	{
-		if (Value.IsValid())
+		FString S;
+		if (Value.IsValid() && Value->TryGetString(S))
 		{
-			Out.Add(Value->AsString());
+			Out.Add(S);
 		}
 	}
 	return true;

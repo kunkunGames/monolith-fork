@@ -489,7 +489,11 @@ bool FSourceRiskScoreIncludesOverrideFanoutTest::RunTest(const FString& Paramete
 		{
 			for (const TSharedPtr<FJsonValue>& Reason : *Reasons)
 			{
-				bOverrideReason = bOverrideReason || Reason->AsString().Contains(TEXT("override fan-out"));
+				FString S;
+				if (Reason.IsValid() && Reason->TryGetString(S))
+				{
+					bOverrideReason = bOverrideReason || S.Contains(TEXT("override fan-out"));
+				}
 			}
 		}
 		TestTrue(TEXT("override fanout reason is emitted"), bOverrideReason);
@@ -651,7 +655,11 @@ bool FSourceRiskScoreSensitivityTest::RunTest(const FString& Parameters)
 	bool bFound = false;
 	for (const TSharedPtr<FJsonValue>& Reason : *Reasons)
 	{
-		bFound = bFound || Reason->AsString().Contains(TEXT("sensitivity:"));
+		FString S;
+		if (Reason.IsValid() && Reason->TryGetString(S))
+		{
+			bFound = bFound || S.Contains(TEXT("sensitivity:"));
+		}
 	}
 	TestTrue(TEXT("sensitivity reason present"), bFound);
 	return true;

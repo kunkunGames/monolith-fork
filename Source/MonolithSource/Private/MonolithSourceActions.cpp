@@ -51,9 +51,10 @@ namespace
 			Out.Reserve(Out.Num() + Arr->Num());
 			for (const TSharedPtr<FJsonValue>& Value : *Arr)
 			{
-				if (Value.IsValid())
+				FString S;
+				if (Value.IsValid() && Value->TryGetString(S))
 				{
-					AppendPathString(Value->AsString(), Out);
+					AppendPathString(S, Out);
 				}
 			}
 			return;
@@ -105,8 +106,14 @@ namespace
 		{
 			return;
 		}
-		const int32 Start = FMath::TruncToInt((*Tuple)[0]->AsNumber());
-		const int32 End = FMath::TruncToInt((*Tuple)[1]->AsNumber());
+		double StartRaw = 0.0;
+		double EndRaw = 0.0;
+		if (!(*Tuple)[0]->TryGetNumber(StartRaw) || !(*Tuple)[1]->TryGetNumber(EndRaw))
+		{
+			return;
+		}
+		const int32 Start = FMath::TruncToInt(StartRaw);
+		const int32 End = FMath::TruncToInt(EndRaw);
 		if (Start > 0 && End >= Start)
 		{
 			Out.Add(TPair<int32, int32>(Start, End));
