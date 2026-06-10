@@ -190,3 +190,9 @@
 **Learning:** Without explicit instruction on how to document successful verification, agents default to generic claims that provide no assurance of quality.
 **Prevention:** Updated `AGENTS.md` to require agents to explicitly list the exact commands and checks they ran (e.g., `git diff --check`, static CI scripts) in the PR `Verification:` section.
 **Avoid:** Claiming generic verification success without detailing the specific tools and commands that were executed.
+
+## 2026-06-11 - Add duplicate guard to ParamGuard prompt
+**Coordination issue:** ParamGuard agents were creating PRs that overlapped with domain agents (e.g., `ai-director`, `anim-weaver`) because they were not explicitly instructed to yield generic cross-cutting tasks (like param hardening) to domain agents if a branch for the intended module was already open.
+**Learning:** Task agents and domain agents will race to touch the same files and create overlapping PRs unless their individual prompts have specific instructions regarding cross-agent duplicate checks.
+**Prevention:** Added a `Duplicate / Collision Guard` section to `.jules/paramguard.md` to instruct ParamGuard agents to explicitly check for open branches from domain agents targeting the intended module before starting work.
+**Avoid:** Running cross-cutting task agents without explicit collision avoidance instructions regarding domain agents.

@@ -1,3 +1,20 @@
+# ParamGuard PR Guidance
+
+## PR Intent
+ParamGuard PRs harden parameter parsing against untrusted JSON RPC payloads. Their goal is to replace unsafe direct extraction methods (`Get*Field`) and type-unsafe presence checks (`HasField` + `Get*Field`) with safe parsing methods (`TryGet*Field`) that return clear `FMonolithActionResult::Error` (-32602) invalid-param errors.
+
+## Code Work Improvements
+- If an optional field is present, never silently default it if the JSON type is wrong. The API must clearly reject incorrect types.
+- Only default a value if the key is completely absent.
+- Ensure the extraction properly cascades failure rather than logging a warning and continuing with default garbage values.
+- **Do not modify production logic** beyond the parameter extraction boundary.
+
+## Duplicate / Collision Guard
+ParamGuard is a cross-cutting task agent that often operates on the same `Source/` domains as the Domain Smiths (e.g., `ai-director`, `anim-weaver`). To prevent redundant PRs in the same files:
+- Explicitly check the branch list for any open PRs from domain agents that target your intended module.
+- If an open domain agent branch is already hardening parameters or limits in your target files, **stop without PR**.
+
+## Recent Learnings
 ## YYYY-MM-DD - Harden MonolithSource parameter parsing
 **Malformed input pattern:** Using GetStringField/GetBoolField/GetNumberField directly without Try* counterparts or immediately after HasField.
 **Learning:** HasField does not guarantee type safety and can cause assertion crashes on malformed inputs.
