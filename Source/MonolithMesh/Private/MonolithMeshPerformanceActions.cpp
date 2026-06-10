@@ -279,7 +279,10 @@ FMonolithActionResult FMonolithMeshPerformanceActions::EstimatePlacementCost(con
 		}
 
 		double CountD = 1.0;
-		(*EntryObj)->TryGetNumberField(TEXT("count"), CountD);
+		if ((*EntryObj)->HasField(TEXT("count")) && !(*EntryObj)->TryGetNumberField(TEXT("count"), CountD))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'count' must be a number"));
+		}
 		int32 Count = FMath::Clamp(static_cast<int32>(CountD), 1, 10000);
 
 		// Try loading as StaticMesh first, then SkeletalMesh
@@ -371,7 +374,10 @@ FMonolithActionResult FMonolithMeshPerformanceActions::FindOverdrawHotspots(cons
 	}
 
 	double FOV = 90.0;
-	Params->TryGetNumberField(TEXT("fov"), FOV);
+	if (Params->HasField(TEXT("fov")) && !Params->TryGetNumberField(TEXT("fov"), FOV))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'fov' must be a number"));
+	}
 	FOV = FMath::Clamp(FOV, 10.0, 170.0);
 
 	UWorld* World = MonolithMeshUtils::GetEditorWorld();
@@ -830,11 +836,17 @@ FMonolithActionResult FMonolithMeshPerformanceActions::GetTriangleBudget(const T
 	}
 
 	double FOV = 90.0;
-	Params->TryGetNumberField(TEXT("fov"), FOV);
+	if (Params->HasField(TEXT("fov")) && !Params->TryGetNumberField(TEXT("fov"), FOV))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'fov' must be a number"));
+	}
 	FOV = FMath::Clamp(FOV, 10.0, 170.0);
 
 	double BudgetD = 500000.0;
-	Params->TryGetNumberField(TEXT("budget"), BudgetD);
+	if (Params->HasField(TEXT("budget")) && !Params->TryGetNumberField(TEXT("budget"), BudgetD))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'budget' must be a number"));
+	}
 	int64 Budget = FMath::Clamp(static_cast<int64>(BudgetD), 1000LL, 100000000LL);
 
 	UWorld* World = MonolithMeshUtils::GetEditorWorld();
