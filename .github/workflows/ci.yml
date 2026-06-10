@@ -52,16 +52,21 @@ jobs:
       - name: PowerShell syntax
         shell: pwsh
         run: |
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            "Scripts/make_release.ps1",
-            [ref]$null,
-            [ref]$errors
-          ) | Out-Null
-          if ($errors.Count -gt 0) {
-            $errors | Select-Object -First 20 | ForEach-Object { Write-Error $_.Message }
-            exit 1
+          $hasErrors = $false
+          Get-ChildItem -Path Scripts -Filter "*.ps1" -Recurse | ForEach-Object {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName,
+              [ref]$null,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $hasErrors = $true
+              Write-Error "Syntax errors in $($_.Name):"
+              $errors | Select-Object -First 20 | ForEach-Object { Write-Error $_.Message }
+            }
           }
+          if ($hasErrors) { exit 1 }
 
       - name: PSScriptAnalyzer advisory
         continue-on-error: true
