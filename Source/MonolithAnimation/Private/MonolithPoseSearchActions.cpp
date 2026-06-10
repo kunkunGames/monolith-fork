@@ -597,7 +597,10 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleAddDatabaseSequence(cons
 	bool bEnabled = true;
 	if (Params->HasField(TEXT("enabled")))
 	{
-		bEnabled = Params->GetBoolField(TEXT("enabled"));
+		bool bTemp;
+		if (!Params->TryGetBoolField(TEXT("enabled"), bTemp))
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bEnabled = bTemp;
 	}
 
 	UPoseSearchDatabase* Database = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchDatabase>(AssetPath);
@@ -843,14 +846,20 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleCreatePoseSearchSchema(c
 	// Set sample rate if provided
 	if (Params->HasField(TEXT("sample_rate")))
 	{
-		Schema->SampleRate = static_cast<int32>(Params->GetNumberField(TEXT("sample_rate")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("sample_rate"), TempVal))
+			return FMonolithActionResult::Error(TEXT("Parameter 'sample_rate' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		Schema->SampleRate = static_cast<int32>(TempVal);
 	}
 
 	// Add default channels (Pose + Trajectory) unless explicitly disabled
 	bool bAddDefaults = true;
 	if (Params->HasField(TEXT("add_default_channels")))
 	{
-		bAddDefaults = Params->GetBoolField(TEXT("add_default_channels"));
+		bool bTemp;
+		if (!Params->TryGetBoolField(TEXT("add_default_channels"), bTemp))
+			return FMonolithActionResult::Error(TEXT("Parameter 'add_default_channels' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bAddDefaults = bTemp;
 	}
 	if (bAddDefaults)
 	{
@@ -1000,17 +1009,25 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 #if WITH_EDITORONLY_DATA
 	if (Params->HasField(TEXT("enabled")))
 	{
-		Entry->SetIsEnabled(Params->GetBoolField(TEXT("enabled")));
+		bool bTemp;
+		if (!Params->TryGetBoolField(TEXT("enabled"), bTemp))
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		Entry->SetIsEnabled(bTemp);
 	}
 
 	if (Params->HasField(TEXT("disable_reselection")))
 	{
-		Entry->SetDisableReselection(Params->GetBoolField(TEXT("disable_reselection")));
+		bool bTemp;
+		if (!Params->TryGetBoolField(TEXT("disable_reselection"), bTemp))
+			return FMonolithActionResult::Error(TEXT("Parameter 'disable_reselection' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		Entry->SetDisableReselection(bTemp);
 	}
 
 	if (Params->HasField(TEXT("mirror_option")))
 	{
-		FString MirrorStr = Params->GetStringField(TEXT("mirror_option"));
+		FString MirrorStr;
+		if (!Params->TryGetStringField(TEXT("mirror_option"), MirrorStr))
+			return FMonolithActionResult::Error(TEXT("Parameter 'mirror_option' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		if (MirrorStr.Equals(TEXT("UnmirroredOnly"), ESearchCase::IgnoreCase))
 			Entry->MirrorOption = EPoseSearchMirrorOption::UnmirroredOnly;
 		else if (MirrorStr.Equals(TEXT("MirroredOnly"), ESearchCase::IgnoreCase))
@@ -1027,12 +1044,22 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 	if (Params->HasField(TEXT("sampling_range_start")) || Params->HasField(TEXT("sampling_range_end")))
 	{
 		FFloatInterval CurrentRange = Entry->GetSamplingRange();
-		float Start = Params->HasField(TEXT("sampling_range_start"))
-			? static_cast<float>(Params->GetNumberField(TEXT("sampling_range_start")))
-			: CurrentRange.Min;
-		float End = Params->HasField(TEXT("sampling_range_end"))
-			? static_cast<float>(Params->GetNumberField(TEXT("sampling_range_end")))
-			: CurrentRange.Max;
+		float Start = CurrentRange.Min;
+		if (Params->HasField(TEXT("sampling_range_start")))
+		{
+			double TempVal;
+			if (!Params->TryGetNumberField(TEXT("sampling_range_start"), TempVal))
+				return FMonolithActionResult::Error(TEXT("Parameter 'sampling_range_start' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			Start = static_cast<float>(TempVal);
+		}
+		float End = CurrentRange.Max;
+		if (Params->HasField(TEXT("sampling_range_end")))
+		{
+			double TempVal;
+			if (!Params->TryGetNumberField(TEXT("sampling_range_end"), TempVal))
+				return FMonolithActionResult::Error(TEXT("Parameter 'sampling_range_end' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			End = static_cast<float>(TempVal);
+		}
 		Entry->SetSamplingRange(FFloatInterval(Start, End));
 	}
 #endif // WITH_EDITORONLY_DATA
@@ -1104,7 +1131,10 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleAddSchemaChannel(const T
 #if WITH_EDITORONLY_DATA
 	if (Params->HasField(TEXT("weight")))
 	{
-		float Weight = static_cast<float>(Params->GetNumberField(TEXT("weight")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("weight"), TempVal))
+			return FMonolithActionResult::Error(TEXT("Parameter 'weight' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		float Weight = static_cast<float>(TempVal);
 		FProperty* WeightProp = Channel->GetClass()->FindPropertyByName(TEXT("Weight"));
 		if (WeightProp)
 		{
@@ -1117,7 +1147,9 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleAddSchemaChannel(const T
 	// Set bone reference if provided (for Position, Velocity, Heading channels)
 	if (Params->HasField(TEXT("bone")))
 	{
-		FString BoneName = Params->GetStringField(TEXT("bone"));
+		FString BoneName;
+		if (!Params->TryGetStringField(TEXT("bone"), BoneName))
+			return FMonolithActionResult::Error(TEXT("Parameter 'bone' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		FProperty* BoneProp = Channel->GetClass()->FindPropertyByName(TEXT("Bone"));
 		if (BoneProp)
 		{
@@ -1273,7 +1305,10 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleRebuildPoseSearchIndex(c
 	bool bWait = false;
 	if (Params->HasField(TEXT("wait")))
 	{
-		bWait = Params->GetBoolField(TEXT("wait"));
+		bool bTemp;
+		if (!Params->TryGetBoolField(TEXT("wait"), bTemp))
+			return FMonolithActionResult::Error(TEXT("Parameter 'wait' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bWait = bTemp;
 	}
 
 	using namespace UE::PoseSearch;
@@ -1584,17 +1619,25 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseEntryTags(con
 
 	if (Params->HasField(TEXT("enabled")))
 	{
-		Entry->SetIsEnabled(Params->GetBoolField(TEXT("enabled")));
+		bool bTemp;
+		if (!Params->TryGetBoolField(TEXT("enabled"), bTemp))
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		Entry->SetIsEnabled(bTemp);
 	}
 
 	if (Params->HasField(TEXT("disable_reselection")))
 	{
-		Entry->SetDisableReselection(Params->GetBoolField(TEXT("disable_reselection")));
+		bool bTemp;
+		if (!Params->TryGetBoolField(TEXT("disable_reselection"), bTemp))
+			return FMonolithActionResult::Error(TEXT("Parameter 'disable_reselection' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		Entry->SetDisableReselection(bTemp);
 	}
 
 	if (Params->HasField(TEXT("mirror_option")))
 	{
-		FString MirrorStr = Params->GetStringField(TEXT("mirror_option"));
+		FString MirrorStr;
+		if (!Params->TryGetStringField(TEXT("mirror_option"), MirrorStr))
+			return FMonolithActionResult::Error(TEXT("Parameter 'mirror_option' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		if (MirrorStr.Equals(TEXT("UnmirroredOnly"), ESearchCase::IgnoreCase))
 			Entry->MirrorOption = EPoseSearchMirrorOption::UnmirroredOnly;
 		else if (MirrorStr.Equals(TEXT("MirroredOnly"), ESearchCase::IgnoreCase))
@@ -1688,7 +1731,10 @@ static FMonolithActionResult HandleAddDatabaseEntry(const TSharedPtr<FJsonObject
 	bool bEnabled = true;
 	if (Params->HasField(TEXT("enabled")))
 	{
-		bEnabled = Params->GetBoolField(TEXT("enabled"));
+		bool bTemp;
+		if (!Params->TryGetBoolField(TEXT("enabled"), bTemp))
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		bEnabled = bTemp;
 	}
 
 	UPoseSearchDatabase* Database = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchDatabase>(DatabasePath);
@@ -1712,7 +1758,9 @@ static FMonolithActionResult HandleAddDatabaseEntry(const TSharedPtr<FJsonObject
 
 	if (Params->HasField(TEXT("mirror_option")))
 	{
-		FString MirrorStr = Params->GetStringField(TEXT("mirror_option"));
+		FString MirrorStr;
+		if (!Params->TryGetStringField(TEXT("mirror_option"), MirrorStr))
+			return FMonolithActionResult::Error(TEXT("Parameter 'mirror_option' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		if (MirrorStr.Equals(TEXT("UnmirroredOnly"), ESearchCase::IgnoreCase))
 			NewEntry.MirrorOption = EPoseSearchMirrorOption::UnmirroredOnly;
 		else if (MirrorStr.Equals(TEXT("MirroredOnly"), ESearchCase::IgnoreCase))
@@ -1802,7 +1850,10 @@ static FMonolithActionResult HandleConfigureSchemaChannel(const TSharedPtr<FJson
 		}
 		if (Params->HasField(TEXT("weight")))
 		{
-			TrajChannel->Weight = static_cast<float>(Params->GetNumberField(TEXT("weight")));
+			double TempVal;
+			if (!Params->TryGetNumberField(TEXT("weight"), TempVal))
+				return FMonolithActionResult::Error(TEXT("Parameter 'weight' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			TrajChannel->Weight = static_cast<float>(TempVal);
 		}
 		Root->SetNumberField(TEXT("sample_count"), TrajChannel->Samples.Num());
 	}
@@ -1822,7 +1873,10 @@ static FMonolithActionResult HandleConfigureSchemaChannel(const TSharedPtr<FJson
 		}
 		if (Params->HasField(TEXT("weight")))
 		{
-			PoseChannel->Weight = static_cast<float>(Params->GetNumberField(TEXT("weight")));
+			double TempVal;
+			if (!Params->TryGetNumberField(TEXT("weight"), TempVal))
+				return FMonolithActionResult::Error(TEXT("Parameter 'weight' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			PoseChannel->Weight = static_cast<float>(TempVal);
 		}
 		Root->SetNumberField(TEXT("bone_count"), PoseChannel->SampledBones.Num());
 	}
@@ -1897,7 +1951,10 @@ static FMonolithActionResult HandleAddPoseSearchNotify(const TSharedPtr<FJsonObj
 	// Kind-specific params: CostAddend on the two cost-bias notifies.
 	if (Params->HasField(TEXT("cost_bias")))
 	{
-		float CostBias = static_cast<float>(Params->GetNumberField(TEXT("cost_bias")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("cost_bias"), TempVal))
+			return FMonolithActionResult::Error(TEXT("Parameter 'cost_bias' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		float CostBias = static_cast<float>(TempVal);
 		if (UAnimNotifyState_PoseSearchModifyCost* ModifyCost = Cast<UAnimNotifyState_PoseSearchModifyCost>(NewNotify))
 		{
 			ModifyCost->CostAddend = CostBias;
