@@ -14,12 +14,18 @@ FMonolithActionResult FProjectGetSavedAssetStateAction::Execute(const TSharedPtr
 		{
 			return FMonolithActionResult::Error(TEXT("'asset_path' parameter must be a string"), -32602);
 		}
+		// An empty asset_path is not an error yet — the package_path alias below
+		// may still supply the value. The final IsEmpty() check rejects both-empty.
 	}
 	if (PackagePath.IsEmpty() && Params->HasField(TEXT("package_path")))
 	{
 		if (!Params->TryGetStringField(TEXT("package_path"), PackagePath))
 		{
 			return FMonolithActionResult::Error(TEXT("'package_path' parameter must be a string"), -32602);
+		}
+		if (PackagePath.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("'package_path' parameter cannot be empty"), -32602);
 		}
 	}
 	if (PackagePath.IsEmpty())
