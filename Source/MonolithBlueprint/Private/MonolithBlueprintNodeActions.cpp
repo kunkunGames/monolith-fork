@@ -3110,7 +3110,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 		Params->TryGetStringField(TEXT("macro_blueprint"), MacroBP);
 		if (MacroBP.IsEmpty()) MacroBP = TEXT("/Engine/EditorBlueprintResources/StandardMacros");
 
-		UBlueprint* MacroBlueprint = LoadObject<UBlueprint>(nullptr, *MacroBP);
+		UBlueprint* MacroBlueprint = FMonolithAssetUtils::LoadAssetByPath<UBlueprint>(MacroBP);
 		if (!MacroBlueprint)
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Macro blueprint not found: %s"), *MacroBP));

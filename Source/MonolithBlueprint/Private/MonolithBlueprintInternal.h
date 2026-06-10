@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithAssetUtils.h"
+#include "Misc/PackageName.h"
 #include "Engine/Blueprint.h"
 #include "Engine/LevelScriptBlueprint.h"
 #include "Engine/Level.h"
@@ -268,23 +269,44 @@ namespace MonolithBlueprintInternal
 
 		if (Value.Contains(TEXT("/")))
 		{
-			// Path resolution.
-			Resolved = StaticLoadObject(UObject::StaticClass(), nullptr, *Value);
+			// Path resolution. Normalize export-text references first —
+			// LoadAssetByPath does not parse Blueprint'/Game/Foo.BP_Foo' wrappers
+			// the way StaticLoadObject's ResolveName does, so strip them up front.
+			FString ObjectPath = FPackageName::ExportTextPathToObjectPath(Value);
+			ObjectPath.TrimStartAndEndInline();
+
+			// Subobject paths (/Game/Foo.Foo:Template) must keep StaticLoadObject:
+			// LoadAssetByPath strips the :SubObject suffix for its in-memory lookup
+			// and would collapse the request to the owning asset.
+			if (ObjectPath.Contains(TEXT(":")))
+			{
+				Resolved = StaticLoadObject(UObject::StaticClass(), nullptr, *ObjectPath);
+			}
+			else
+			{
+				Resolved = FMonolithAssetUtils::LoadAssetByPath(UObject::StaticClass(), ObjectPath);
+			}
 
 			// BP class path retry: PC_Class needs a UClass (the GeneratedClass), not a UBlueprint asset.
 			// Fire the retry when value lacks _C AND (load failed OR loaded object isn't a UClass).
 			// '/Game/Foo/BP_Bar' loads the UBlueprint successfully — wrong kind for a class pin —
 			// so the bare-null check alone misses this case.
-			const bool bNeedsClassRetry = bIsClassPin && !Value.EndsWith(TEXT("_C")) &&
+			const bool bNeedsClassRetry = bIsClassPin && !ObjectPath.EndsWith(TEXT("_C")) &&
 				(!Resolved || !Resolved->IsA(UClass::StaticClass()));
 			if (bNeedsClassRetry)
 			{
+				// Build the retry from the normalized asset path so forms like
+				// '/Game/Foo/BP_Foo.uasset' don't retry as 'BP_Foo.uasset_C'.
+				const FString NormalizedAssetPath = FMonolithAssetUtils::ResolveAssetPath(ObjectPath);
 				int32 LastSlash = INDEX_NONE;
-				if (Value.FindLastChar(TEXT('/'), LastSlash))
+				if (NormalizedAssetPath.FindLastChar(TEXT('/'), LastSlash))
 				{
-					const FString Leaf = Value.Mid(LastSlash + 1);
-					const FString RetryPath = FString::Printf(TEXT("%s.%s_C"), *Value, *Leaf);
-					if (UObject* Retry = StaticLoadObject(UObject::StaticClass(), nullptr, *RetryPath))
+					int32 LastDot = INDEX_NONE;
+					const bool bHasAssetName = NormalizedAssetPath.FindLastChar(TEXT('.'), LastDot) && LastDot > LastSlash;
+					const FString RetryPath = bHasAssetName
+						? NormalizedAssetPath + TEXT("_C")
+						: FString::Printf(TEXT("%s.%s_C"), *NormalizedAssetPath, *NormalizedAssetPath.Mid(LastSlash + 1));
+					if (UObject* Retry = FMonolithAssetUtils::LoadAssetByPath(UObject::StaticClass(), RetryPath))
 					{
 						if (Retry->IsA(UClass::StaticClass()))
 						{
