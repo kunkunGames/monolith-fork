@@ -3572,6 +3572,55 @@ FMonolithActionResult FMonolithEditorActions::HandleImportTexture(
 			FString::Printf(TEXT("Source file not found: %s"), *SourcePath));
 	}
 
+	// Parse + type-validate optional settings up front. ImportAssetsAutomated
+	// runs with bReplaceExisting and can create or replace the destination
+	// asset, so malformed settings must fail before the import mutates anything.
+	TSharedPtr<FJsonObject> ParsedSettings;
+	if (Params->HasField(TEXT("settings")))
+	{
+		const TSharedPtr<FJsonObject>* SettingsObj;
+		// Handle string-serialized params (Claude Code quirk)
+		if (Params->TryGetObjectField(TEXT("settings"), SettingsObj))
+		{
+			ParsedSettings = *SettingsObj;
+		}
+		else
+		{
+			FString SettingsStr = Params->GetStringField(TEXT("settings"));
+			if (!SettingsStr.IsEmpty())
+			{
+				ParsedSettings = FMonolithJsonUtils::Parse(SettingsStr);
+			}
+		}
+
+		if (ParsedSettings.IsValid())
+		{
+			FString SettingsStrValue;
+			bool bSettingsBoolValue = false;
+			double SettingsNumberValue = 0.0;
+			if (ParsedSettings->HasField(TEXT("compression")) && !ParsedSettings->TryGetStringField(TEXT("compression"), SettingsStrValue))
+			{
+				return FMonolithActionResult::Error(TEXT("settings.compression must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			if (ParsedSettings->HasField(TEXT("srgb")) && !ParsedSettings->TryGetBoolField(TEXT("srgb"), bSettingsBoolValue))
+			{
+				return FMonolithActionResult::Error(TEXT("settings.srgb must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			if (ParsedSettings->HasField(TEXT("tiling")) && !ParsedSettings->TryGetBoolField(TEXT("tiling"), bSettingsBoolValue))
+			{
+				return FMonolithActionResult::Error(TEXT("settings.tiling must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			if (ParsedSettings->HasField(TEXT("max_size")) && !ParsedSettings->TryGetNumberField(TEXT("max_size"), SettingsNumberValue))
+			{
+				return FMonolithActionResult::Error(TEXT("settings.max_size must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			if (ParsedSettings->HasField(TEXT("lod_group")) && !ParsedSettings->TryGetStringField(TEXT("lod_group"), SettingsStrValue))
+			{
+				return FMonolithActionResult::Error(TEXT("settings.lod_group must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
+	}
+
 	// Import using AssetTools
 	UAutomatedAssetImportData* ImportData = NewObject<UAutomatedAssetImportData>();
 	ImportData->Filenames.Add(SourcePath);
@@ -3593,31 +3642,18 @@ FMonolithActionResult FMonolithEditorActions::HandleImportTexture(
 		return FMonolithActionResult::Error(TEXT("Imported asset is not a Texture2D"));
 	}
 
-	// Apply optional settings
-	if (Params->HasField(TEXT("settings")))
+	// Apply optional settings (parsed + type-validated before the import ran)
 	{
-		const TSharedPtr<FJsonObject>* SettingsObj;
-		// Handle string-serialized params (Claude Code quirk)
-		TSharedPtr<FJsonObject> ParsedSettings;
-		if (Params->TryGetObjectField(TEXT("settings"), SettingsObj))
-		{
-			ParsedSettings = *SettingsObj;
-		}
-		else
-		{
-			FString SettingsStr = Params->GetStringField(TEXT("settings"));
-			if (!SettingsStr.IsEmpty())
-			{
-				ParsedSettings = FMonolithJsonUtils::Parse(SettingsStr);
-			}
-		}
-
 		if (ParsedSettings.IsValid())
 		{
 			// Compression
 			if (ParsedSettings->HasField(TEXT("compression")))
 			{
-				FString Comp = ParsedSettings->GetStringField(TEXT("compression"));
+				FString Comp;
+				if (!ParsedSettings->TryGetStringField(TEXT("compression"), Comp))
+				{
+					return FMonolithActionResult::Error(TEXT("settings.compression must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+				}
 				if (Comp == TEXT("TC_Normalmap")) Texture->CompressionSettings = TC_Normalmap;
 				else if (Comp == TEXT("TC_Masks")) Texture->CompressionSettings = TC_Masks;
 				else if (Comp == TEXT("TC_HDR")) Texture->CompressionSettings = TC_HDR;
@@ -3628,13 +3664,23 @@ FMonolithActionResult FMonolithEditorActions::HandleImportTexture(
 			// sRGB
 			if (ParsedSettings->HasField(TEXT("srgb")))
 			{
-				Texture->SRGB = ParsedSettings->GetBoolField(TEXT("srgb"));
+				bool bSrgb = false;
+				if (!ParsedSettings->TryGetBoolField(TEXT("srgb"), bSrgb))
+				{
+					return FMonolithActionResult::Error(TEXT("settings.srgb must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+				}
+				Texture->SRGB = bSrgb;
 			}
 
 			// Tiling
 			if (ParsedSettings->HasField(TEXT("tiling")))
 			{
-				if (ParsedSettings->GetBoolField(TEXT("tiling")))
+				bool bTiling = false;
+				if (!ParsedSettings->TryGetBoolField(TEXT("tiling"), bTiling))
+				{
+					return FMonolithActionResult::Error(TEXT("settings.tiling must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+				}
+				if (bTiling)
 				{
 					Texture->AddressX = TA_Wrap;
 					Texture->AddressY = TA_Wrap;
@@ -3644,7 +3690,12 @@ FMonolithActionResult FMonolithEditorActions::HandleImportTexture(
 			// Max size
 			if (ParsedSettings->HasField(TEXT("max_size")))
 			{
-				int32 MaxSize = (int32)ParsedSettings->GetNumberField(TEXT("max_size"));
+				double MaxSizeDbl = 0;
+				if (!ParsedSettings->TryGetNumberField(TEXT("max_size"), MaxSizeDbl))
+				{
+					return FMonolithActionResult::Error(TEXT("settings.max_size must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+				}
+				int32 MaxSize = (int32)MaxSizeDbl;
 				if (MaxSize > 0)
 				{
 					Texture->MaxTextureSize = MaxSize;
@@ -5778,8 +5829,12 @@ FMonolithActionResult FMonolithEditorActions::HandleFindAutomationTests(const TS
 		Params->TryGetStringField(TEXT("query"), Query);
 
 		double MaxNum = MaxResults;
-		if (Params->TryGetNumberField(TEXT("max_results"), MaxNum))
+		if (Params->HasField(TEXT("max_results")))
 		{
+			if (!Params->TryGetNumberField(TEXT("max_results"), MaxNum))
+			{
+				return FMonolithActionResult::Error(TEXT("max_results must be a number"));
+			}
 			MaxResults = FMath::Clamp(FMath::FloorToInt(MaxNum), 1, 1000);
 		}
 	}
@@ -5870,8 +5925,12 @@ FMonolithActionResult FMonolithEditorActions::HandleListAutomationHistory(const 
 	if (Params.IsValid())
 	{
 		double MaxNum = MaxResults;
-		if (Params->TryGetNumberField(TEXT("max_results"), MaxNum))
+		if (Params->HasField(TEXT("max_results")))
 		{
+			if (!Params->TryGetNumberField(TEXT("max_results"), MaxNum))
+			{
+				return FMonolithActionResult::Error(TEXT("max_results must be a number"));
+			}
 			MaxResults = FMath::Clamp(FMath::FloorToInt(MaxNum), 1, MonolithAutomationDetail::AutomationHistoryCapacity);
 		}
 	}
@@ -5980,8 +6039,12 @@ FMonolithActionResult FMonolithEditorActions::HandleRunAutomationTests(const TSh
 	if (Params.IsValid())
 	{
 		double MaxNum = MaxTests;
-		if (Params->TryGetNumberField(TEXT("max_tests"), MaxNum))
+		if (Params->HasField(TEXT("max_tests")))
 		{
+			if (!Params->TryGetNumberField(TEXT("max_tests"), MaxNum))
+			{
+				return FMonolithActionResult::Error(TEXT("max_tests must be a number"));
+			}
 			MaxTests = FMath::Clamp(FMath::FloorToInt(MaxNum), 1, 1000);
 		}
 	}
