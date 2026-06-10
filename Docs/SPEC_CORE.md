@@ -1,6 +1,6 @@
 # Monolith — Technical Specification
 
-**Version:** v0.17.1
+**Version:** v0.18.1
 **Wiki:** https://github.com/tumourlove/monolith/wiki
 **Engine:** Unreal Engine 5.7+
 **Platform:** Windows, macOS, Linux
