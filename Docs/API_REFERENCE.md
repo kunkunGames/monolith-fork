@@ -1323,7 +1323,7 @@ List the asset paths / action names the describe adapter can introspect for a gi
 
 ### `describe_query.action_schema`
 
-Return a registered ACTION's param schema (names, types, required, defaults, aliases, descriptions) by `(target_namespace, action)` — so callers stop trial-and-erroring param names.
+Return a registered ACTION's param schema (names, types, required, defaults, aliases, descriptions) by `(target_namespace, target_action)` — so callers stop trial-and-erroring param names.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|

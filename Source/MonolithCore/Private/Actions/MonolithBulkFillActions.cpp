@@ -335,7 +335,7 @@ namespace MonolithBulkFillActionsInternal
 	// Surfaces a registered ACTION's param schema (names / types / required / defaults /
 	// aliases / descriptions) so callers stop trial-and-erroring param names. The data already
 	// lives in FMonolithActionInfo.ParamSchema (the same object discover serializes as "params");
-	// this just reads it back by (namespace, action). Closes the cause behind gaps #4/#12/#13.
+	// this just reads it back by (target_namespace, target_action). Closes the cause behind gaps #4/#12/#13.
 	static TSharedPtr<FJsonObject> BuildDescribeActionSchemaSchema()
 	{
 		// RI ergonomics handover #6 (2026-05-29): canonical params are
@@ -462,7 +462,7 @@ void FMonolithBulkFillActions::RegisterAll()
 	Reg.RegisterAction(
 		TEXT("describe"),
 		TEXT("action_schema"),
-		TEXT("Return a registered ACTION's param schema (names, types, required, defaults, aliases, descriptions) by (target_namespace, action). Closes param-name discoverability so callers stop trial-and-erroring param names."),
+		TEXT("Return a registered ACTION's param schema (names, types, required, defaults, aliases, descriptions) by (target_namespace, target_action). Closes param-name discoverability so callers stop trial-and-erroring param names."),
 		FMonolithActionHandler::CreateStatic(&HandleDescribeActionSchema),
 		BuildDescribeActionSchemaSchema());
 
