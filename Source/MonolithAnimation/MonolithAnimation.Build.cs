@@ -56,7 +56,8 @@ public class MonolithAnimation : ModuleRules
 			if (Directory.Exists(ProjectPluginsDir))
 			{
 				bHasChooser = Directory.Exists(
-					Path.Combine(ProjectPluginsDir, "Chooser"));
+					Path.Combine(ProjectPluginsDir, "Chooser"))
+					|| HasChooserVariantDir(ProjectPluginsDir);
 			}
 
 			// 2. Engine Plugins/Marketplace/ folder (Fab install)
@@ -68,7 +69,8 @@ public class MonolithAnimation : ModuleRules
 				if (Directory.Exists(MarketplaceDir))
 				{
 					bHasChooser = Directory.Exists(
-						Path.Combine(MarketplaceDir, "Chooser"));
+						Path.Combine(MarketplaceDir, "Chooser"))
+						|| HasChooserVariantDir(MarketplaceDir);
 				}
 
 				// 3. Engine Plugins/ root (default UE install location)
@@ -80,7 +82,8 @@ public class MonolithAnimation : ModuleRules
 						|| Directory.Exists(
 							Path.Combine(EnginePluginsDir, "Animation", "Chooser"))
 						|| Directory.Exists(
-							Path.Combine(EnginePluginsDir, "Experimental", "Chooser"));
+							Path.Combine(EnginePluginsDir, "Experimental", "Chooser"))
+						|| HasChooserVariantDir(EnginePluginsDir);
 				}
 			}
 		}
@@ -101,5 +104,25 @@ public class MonolithAnimation : ModuleRules
 		{
 			PublicDefinitions.Add("WITH_CHOOSER=0");
 		}
+	}
+
+	// A "Chooser_*" sibling (e.g. a suffixed Fab/marketplace install) only counts
+	// when the directory actually contains the Chooser plugin descriptor. Scratch
+	// folders like Plugins/Chooser_Backup must not force a Chooser module
+	// dependency that UBT cannot resolve.
+	private static bool HasChooserVariantDir(string ParentDir)
+	{
+		if (!Directory.Exists(ParentDir))
+		{
+			return false;
+		}
+		foreach (string Dir in Directory.GetDirectories(ParentDir, "Chooser_*", SearchOption.TopDirectoryOnly))
+		{
+			if (File.Exists(Path.Combine(Dir, "Chooser.uplugin")))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 }
