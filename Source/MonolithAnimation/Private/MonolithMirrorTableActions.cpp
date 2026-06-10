@@ -1,6 +1,7 @@
 #include "MonolithMirrorTableActions.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithPackagePathValidator.h"
 
 #include "Animation/MirrorDataTable.h"
 #include "Animation/Skeleton.h"
@@ -92,6 +93,11 @@ FMonolithActionResult FMonolithMirrorTableActions::HandleCreateMirrorDataTable(c
 	if (!AssetPath.FindLastChar('/', LastSlash) || LastSlash == AssetPath.Len() - 1)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid asset path: %s"), *AssetPath));
 	AssetName = AssetPath.Mid(LastSlash + 1);
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	if (FMonolithAssetUtils::LoadAssetByPath<UObject>(AssetPath))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));

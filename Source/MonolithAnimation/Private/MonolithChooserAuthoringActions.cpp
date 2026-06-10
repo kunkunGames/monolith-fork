@@ -6,6 +6,7 @@
 
 #if WITH_CHOOSER
 #include "MonolithAssetUtils.h"
+#include "MonolithPackagePathValidator.h"
 
 // Chooser runtime headers. Chooser.Build.cs adds its Internal/ dir to
 // PublicIncludePaths, so the Internal table/column headers are reachable for any
@@ -548,6 +549,11 @@ FMonolithActionResult FMonolithChooserAuthoringActions::HandleCreateChooserTable
 	{
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Unrecognized output_type '%s' (expected ObjectResult/ClassResult/NoPrimaryResult)"), *OutputType));
+	}
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	// CreatePackage reuse semantics (project gotcha): guard against an existing asset first.
