@@ -501,6 +501,35 @@ bool FSourceRiskScoreIncludesOverrideFanoutTest::RunTest(const FString& Paramete
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceFindReferencesValidatesParamsTest, "Monolith.IndexGuard.Source.FindReferencesValidatesParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceFindReferencesValidatesParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithSourceActions Actions;
+
+	// limit type mismatch
+	auto P1 = MakeShared<FJsonObject>();
+	P1->SetStringField(TEXT("symbol"), TEXT("TestSymbol"));
+	P1->SetStringField(TEXT("limit"), TEXT("NotANumber"));
+	FMonolithActionResult R1 = Actions.HandleFindReferences(P1);
+	TestFalse(TEXT("Rejects string limit"), R1.bSuccess);
+	if (R1.ErrorData.IsValid())
+	{
+		TestEqual(TEXT("Error code -32602"), R1.ErrorData->GetIntegerField(TEXT("code")), -32602);
+	}
+
+	// ref_kind type mismatch
+	auto P2 = MakeShared<FJsonObject>();
+	P2->SetStringField(TEXT("symbol"), TEXT("TestSymbol"));
+	P2->SetNumberField(TEXT("ref_kind"), 123);
+	FMonolithActionResult R2 = Actions.HandleFindReferences(P2);
+	TestFalse(TEXT("Rejects number ref_kind"), R2.bSuccess);
+	if (R2.ErrorData.IsValid())
+	{
+		TestEqual(TEXT("Error code -32602"), R2.ErrorData->GetIntegerField(TEXT("code")), -32602);
+	}
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceHealthHealthyTest, "Monolith.IndexGuard.Source.HealthHealthy", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FSourceHealthHealthyTest::RunTest(const FString& Parameters)
 {

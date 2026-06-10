@@ -1276,13 +1276,24 @@ FMonolithActionResult FMonolithSourceActions::HandleFindReferences(const TShared
 		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
 	}
 	FString RefKind;
-	Params->TryGetStringField(TEXT("ref_kind"), RefKind);
-	int32 Limit = 50;
-	double RawLimit = 0;
-	if (Params->TryGetNumberField(TEXT("limit"), RawLimit))
+	if (Params->HasField(TEXT("ref_kind")))
 	{
-		Limit = FMath::Clamp(static_cast<int32>(RawLimit), 1, 1000);
+		if (!Params->TryGetStringField(TEXT("ref_kind"), RefKind))
+		{
+			return FMonolithActionResult::Error(TEXT("'ref_kind' parameter must be a string"), -32602);
+		}
 	}
+	int32 Limit = 50;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = FMath::Clamp(Limit, 1, 1000);
 
 	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(Symbol);
 	if (Symbols.Num() == 0) Symbols = DB->SearchSymbolsFTS(Symbol, 5);
