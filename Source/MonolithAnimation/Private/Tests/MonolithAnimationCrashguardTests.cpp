@@ -15,7 +15,7 @@ bool FMonolithCrashguardChooserTableTest::RunTest(const FString& Parameters)
 {
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("asset_path"), TEXT("//Game/Malformed/Table"));
-	FMonolithActionResult Result = FMonolithChooserAuthoringActions::HandleCreateChooserTable(Payload);
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("chooser"), TEXT("create_chooser_table"), Payload);
 
 	TestFalse(TEXT("create_chooser_table should fail on malformed path"), Result.bSuccess);
 	TestTrue(TEXT("create_chooser_table error should complain about invalid package path"), Result.ErrorMessage.Contains(TEXT("Invalid package path")) || Result.ErrorMessage.Contains(TEXT("Package path")));
@@ -30,7 +30,7 @@ bool FMonolithCrashguardMirrorTableTest::RunTest(const FString& Parameters)
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("asset_path"), TEXT("//Game/Malformed/Mirror"));
 	Payload->SetStringField(TEXT("skeleton_path"), TEXT("/Game/Anims/MySkeleton"));
-	FMonolithActionResult Result = FMonolithMirrorTableActions::HandleCreateMirrorDataTable(Payload);
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("create_mirror_data_table"), Payload);
 
 	TestFalse(TEXT("create_mirror_data_table should fail on malformed path"), Result.bSuccess);
 	TestTrue(TEXT("create_mirror_data_table error should complain about invalid package path"), Result.ErrorMessage.Contains(TEXT("Invalid package path")) || Result.ErrorMessage.Contains(TEXT("Package path")));

@@ -504,13 +504,13 @@ bool FSourceRiskScoreIncludesOverrideFanoutTest::RunTest(const FString& Paramete
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceFindReferencesValidatesParamsTest, "Monolith.IndexGuard.Source.FindReferencesValidatesParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FSourceFindReferencesValidatesParamsTest::RunTest(const FString& Parameters)
 {
-	FMonolithSourceActions Actions;
+	EnsureSourceActionsRegistered();
 
 	// limit type mismatch
 	auto P1 = MakeShared<FJsonObject>();
 	P1->SetStringField(TEXT("symbol"), TEXT("TestSymbol"));
 	P1->SetStringField(TEXT("limit"), TEXT("NotANumber"));
-	FMonolithActionResult R1 = Actions.HandleFindReferences(P1);
+	FMonolithActionResult R1 = FMonolithToolRegistry::Get().ExecuteAction(TEXT("source"), TEXT("find_references"), P1);
 	TestFalse(TEXT("Rejects string limit"), R1.bSuccess);
 	if (R1.ErrorData.IsValid())
 	{
@@ -521,7 +521,7 @@ bool FSourceFindReferencesValidatesParamsTest::RunTest(const FString& Parameters
 	auto P2 = MakeShared<FJsonObject>();
 	P2->SetStringField(TEXT("symbol"), TEXT("TestSymbol"));
 	P2->SetNumberField(TEXT("ref_kind"), 123);
-	FMonolithActionResult R2 = Actions.HandleFindReferences(P2);
+	FMonolithActionResult R2 = FMonolithToolRegistry::Get().ExecuteAction(TEXT("source"), TEXT("find_references"), P2);
 	TestFalse(TEXT("Rejects number ref_kind"), R2.bSuccess);
 	if (R2.ErrorData.IsValid())
 	{
