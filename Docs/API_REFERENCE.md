@@ -31,6 +31,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 142 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, DataAsset profile inspection/writes, runtime probes, scaffold |
 | [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection and Fracture module visibility and asset/component listing |
+| [pcg](#pcg) | 4 | Optional PCG discovery and graph-like asset/component listing |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
@@ -1101,6 +1102,21 @@ Optional Geometry Collection and Fracture module visibility. Read-only probes; d
 | `list_geometry_collection_components` | `limit` (optional integer) |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithChaosFracture.md` for the deep dive.
+
+---
+
+## pcg
+
+Optional PCG discovery and graph-like asset/component listing. Read-only probes; does not load PCG graph assets or execute PCG. **4 actions.**
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `list_graph_assets` | `package_path` (optional string), `limit` (optional integer) |
+| `get_graph_asset` | `asset_path`, `include_tags` (optional boolean), `tag_limit` (optional integer) |
+| `list_components` | `limit` (optional integer) |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithPCG.md` for the deep dive.
 
 ---
 
