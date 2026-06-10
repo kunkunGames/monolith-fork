@@ -36,3 +36,21 @@ bool FMonolithCrashguardNiagaraCreateStatelessEmitterPathTest::RunTest(const FSt
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithCrashguardNiagaraDuplicateSystemPathTest, "Monolith.Crashguard.Niagara.HandleDuplicateSystemPathValidation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithCrashguardNiagaraDuplicateSystemPathTest::RunTest(const FString& Parameters)
+{
+	// Ensure that duplicate actions fail cleanly with malformed save paths without crashing
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Niagara/SourceSystem"));
+	Params->SetStringField(TEXT("save_path"), TEXT("//Game/MalformedPath_System"));
+
+	FMonolithActionResult Result = FMonolithNiagaraActions::HandleDuplicateSystem(Params);
+
+	TestFalse(TEXT("Malformed save_path should fail cleanly"), Result.bSuccess);
+	TestFalse(TEXT("Malformed save_path should include an error message"), Result.ErrorMessage.IsEmpty());
+
+	return true;
+}
