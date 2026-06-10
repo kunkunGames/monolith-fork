@@ -257,6 +257,7 @@ Monolith.uplugin
 | `ai` | `ai_query` | 243 | BT, BB, State Trees, EQS, Smart Objects, Controllers, Perception, Navigation, runtime debugging, scaffolding. Conditional on `WITH_STATETREE` + `WITH_SMARTOBJECTS` |
 | `gas` | `gas_query` | 135 | Gameplay Ability System — abilities, effects, attributes (incl. `ULeviathanVitalsSet`), ASC, tags, cues, targeting, input, inspect, scaffold. Conditional on `WITH_GBA` for Blueprint AttributeSets |
 | `chaos_fracture` | `chaos_fracture_query` | 3 | Chaos/Geometry Collection module status plus Geometry Collection asset and component listing |
+| `dataflow` | `dataflow_query` | 8 | Read-only Dataflow/Chaos graph discovery — asset listing, bounded graph and node-schema reads, duplicate/broken-connection validation. Graph readers conditional on `WITH_MONOLITH_DATAFLOW` |
 | `logicdriver` | `logicdriver_query` | 66 | Logic Driver Pro state machines — SM CRUD, graph read/write, JSON spec, scaffolding, components. Conditional on `WITH_LOGICDRIVER` |
 | `combograph` | `combograph_query` | 13 | ComboGraph combo trees — graph CRUD, nodes, edges, effects, cues, ability scaffolding. Conditional on `WITH_COMBOGRAPH` |
 | `audio` | `audio_query` | 98 | Sound asset CRUD, Sound Cue + MetaSound graph building (Builder API write-side), MetaSound document introspection (read-side, v0.14.10 +12 from PR #18 by @alakangas), batch ops, audio health checks, templates, sine test wave, AI perception binding. MetaSound features conditional on `WITH_METASOUND` |

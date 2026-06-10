@@ -32,6 +32,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [gas](#gas) | 142 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, DataAsset profile inspection/writes, runtime probes, scaffold |
 | [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection and Fracture module visibility and asset/component listing |
 | [pcg](#pcg) | 4 | Optional PCG discovery and graph-like asset/component listing |
+| [dataflow](#dataflow) | 8 | Optional read-only Dataflow/Chaos graph discovery, bounded graph/node-schema reads, and validation (graph readers under `WITH_MONOLITH_DATAFLOW`) |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
@@ -1117,6 +1118,25 @@ Optional PCG discovery and graph-like asset/component listing. Read-only probes;
 | `list_components` | `limit` (optional integer) |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithPCG.md` for the deep dive.
+
+---
+
+## dataflow
+
+Read-only Dataflow/Chaos graph discovery and bounded graph inspection. `get_status` and `list_assets` always register; the graph and node-schema readers are conditional on `WITH_MONOLITH_DATAFLOW`. Does not load, evaluate, regenerate, or mutate Dataflow assets. **8 actions.**
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `list_assets` | `package_path` (optional string), `limit` (optional integer) |
+| `get_dataflow_graph` | `asset_path`, `node_limit` (optional integer), `connection_limit` (optional integer), `include_properties` (optional boolean) |
+| `list_dataflow_node_types` | `filter` (optional string), `common_only` (optional boolean), `limit` (optional integer), `include_pins` (optional boolean) |
+| `get_dataflow_node_schema` | `type_name`, `include_properties` (optional boolean) |
+| `validate_dataflow_graph` | `asset_path` |
+| `list_dataflow_variables` | `asset_path` |
+| `list_dataflow_comments` | `asset_path`, `node_limit` (optional integer) |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithDataflow.md` for the deep dive.
 
 ---
 
