@@ -8,6 +8,7 @@
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
 #include "MonolithMeshProceduralActions.h"
+#include "MonolithLevelInstanceActions.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshInspectionMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.InspectionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -144,6 +145,25 @@ bool FMonolithParamGuardMeshStructureMalformedParamsTest::RunTest(const FString&
         FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("create_structure"), Params);
         TestFalse(TEXT("CreateStructure rejects malformed wall_thickness parameter"), Result.bSuccess);
         TestTrue(TEXT("CreateStructure reports the validation error"), Result.ErrorMessage.Contains(TEXT("Invalid type for parameter 'wall_thickness'. Expected number.")));
+    }
+
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLevelInstanceMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.LevelInstanceAliasesRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardLevelInstanceMalformedParamsTest::RunTest(const FString& Parameters)
+{
+    FMonolithLevelInstanceActions::RegisterActions(FMonolithToolRegistry::Get());
+    TestTrue(TEXT("list_child_instances action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("level_instance"), TEXT("list_child_instances")));
+
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("actor_name"), TEXT("NonExistentTestActor"));
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("level_instance"), TEXT("list_child_instances"), Params);
+        // It shouldn't fail due to "Unknown parameter: actor_name"
+        TestFalse(TEXT("list_child_instances does not reject valid alias 'actor_name' as unknown parameter"), Result.ErrorMessage.Contains(TEXT("Unknown parameter")));
     }
 
     return true;

@@ -218,9 +218,7 @@ void FMonolithLevelInstanceActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Inspect a Level Instance actor by label, name, or object path."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelInstanceActions::GetLevelInstance),
 		FParamSchemaBuilder()
-			.Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or object path"))
-			.Optional(TEXT("actor_name"), TEXT("string"), TEXT("Alias for actor"))
-			.Optional(TEXT("actor_path"), TEXT("string"), TEXT("Alias for actor"))
+			.Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or object path"), {TEXT("actor_name"), TEXT("actor_path")})
 			.Build());
 
 	Registry.RegisterAction(TEXT("level_instance"), TEXT("create_level_instance"),
@@ -235,37 +233,37 @@ void FMonolithLevelInstanceActions::RegisterActions(FMonolithToolRegistry& Regis
 	Registry.RegisterAction(TEXT("level_instance"), TEXT("edit_level_instance"),
 		TEXT("Report Level Instance edit-session availability without taking over editor-global state."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelInstanceActions::EditLevelInstance),
-		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path")).Build());
+		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path"), {TEXT("actor_name"), TEXT("actor_path")}).Build());
 	Registry.RegisterAction(TEXT("level_instance"), TEXT("commit_level_instance"),
 		TEXT("Report Level Instance commit availability and dirty-package context."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelInstanceActions::CommitLevelInstance),
-		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path")).Build());
+		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path"), {TEXT("actor_name"), TEXT("actor_path")}).Build());
 	Registry.RegisterAction(TEXT("level_instance"), TEXT("discard_level_instance"),
 		TEXT("Report Level Instance discard availability and dirty-package context."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelInstanceActions::DiscardLevelInstance),
-		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path")).Build());
+		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path"), {TEXT("actor_name"), TEXT("actor_path")}).Build());
 	Registry.RegisterAction(TEXT("level_instance"), TEXT("load_level_instance"),
 		TEXT("Report Level Instance load availability without forcing nested edit state."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelInstanceActions::LoadLevelInstance),
-		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path")).Build());
+		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path"), {TEXT("actor_name"), TEXT("actor_path")}).Build());
 	Registry.RegisterAction(TEXT("level_instance"), TEXT("unload_level_instance"),
 		TEXT("Report Level Instance unload availability without forcing nested edit state."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelInstanceActions::UnloadLevelInstance),
-		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path")).Build());
+		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path"), {TEXT("actor_name"), TEXT("actor_path")}).Build());
 
 	Registry.RegisterAction(TEXT("level_instance"), TEXT("list_child_instances"),
 		TEXT("List attached child Level Instance-like actors for a parent Level Instance."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelInstanceActions::ListChildInstances),
-		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path")).Build());
+		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path"), {TEXT("actor_name"), TEXT("actor_path")}).Build());
 	Registry.RegisterAction(TEXT("level_instance"), TEXT("list_instance_actors"),
 		TEXT("List directly attached actors for a Level Instance actor."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelInstanceActions::ListInstanceActors),
-		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path")).Build());
+		FParamSchemaBuilder().Optional(TEXT("actor"), TEXT("string"), TEXT("Actor label, object name, or path"), {TEXT("actor_name"), TEXT("actor_path")}).Build());
 	Registry.RegisterAction(TEXT("level_instance"), TEXT("move_actors_to_instance"),
 		TEXT("Preview actor movement into a Level Instance; direct nested mutation is unavailable until conflict tests exist."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelInstanceActions::MoveActorsToInstance),
 		FParamSchemaBuilder()
-			.Optional(TEXT("actor"), TEXT("string"), TEXT("Target Level Instance actor"))
+			.Optional(TEXT("actor"), TEXT("string"), TEXT("Target Level Instance actor"), {TEXT("actor_name"), TEXT("actor_path")})
 			.Optional(TEXT("actor_names"), TEXT("array"), TEXT("Actor labels/names to move"))
 			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Reserved for future mutation"), TEXT("false"))
 			.Build());

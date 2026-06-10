@@ -20,19 +20,19 @@ monolith_discover({ namespace: "level_instance", action: "<action>", mode: "sche
 
 | Action | Purpose |
 |--------|---------|
-| `commit_level_instance` | Report Level Instance commit availability and dirty-package context. |
+| `commit_level_instance` | Report Level Instance commit availability and dirty-package context. Accepts `actor` (alias: `actor_name`, `actor_path`). |
 | `create_level_instance` | Preview or create a Level Instance from actor_names. Requires confirm=true for mutation. |
 | `create_packed_level_actor_blueprint` | Preview or create a Packed Level Actor from actor_names. Requires confirm=true for mutation. |
-| `discard_level_instance` | Report Level Instance discard availability and dirty-package context. |
-| `edit_level_instance` | Report Level Instance edit-session availability without taking over editor-global state. |
-| `get_level_instance` | Inspect a Level Instance actor by label, name, or object path. |
-| `list_child_instances` | List attached child Level Instance-like actors for a parent Level Instance. |
-| `list_instance_actors` | List directly attached actors for a Level Instance actor. |
+| `discard_level_instance` | Report Level Instance discard availability and dirty-package context. Accepts `actor` (alias: `actor_name`, `actor_path`). |
+| `edit_level_instance` | Report Level Instance edit-session availability without taking over editor-global state. Accepts `actor` (alias: `actor_name`, `actor_path`). |
+| `get_level_instance` | Inspect a Level Instance actor by label, name, or object path. Accepts `actor` (alias: `actor_name`, `actor_path`). |
+| `list_child_instances` | List attached child Level Instance-like actors for a parent Level Instance. Accepts `actor` (alias: `actor_name`, `actor_path`). |
+| `list_instance_actors` | List directly attached actors for a Level Instance actor. Accepts `actor` (alias: `actor_name`, `actor_path`). |
 | `list_level_instances` | List Level Instance-like actors in the current editor world. |
-| `load_level_instance` | Report Level Instance load availability without forcing nested edit state. |
-| `move_actors_to_instance` | Preview actor movement into a Level Instance; direct nested mutation is unavailable until conflict tests exist. |
+| `load_level_instance` | Report Level Instance load availability without forcing nested edit state. Accepts `actor` (alias: `actor_name`, `actor_path`). |
+| `move_actors_to_instance` | Preview actor movement into a Level Instance; direct nested mutation is unavailable until conflict tests exist. Accepts `actor` (alias: `actor_name`, `actor_path`). |
 | `pack_level_actor` | Preview or create a Packed Level Actor using the Level Instance creation path. Requires confirm=true. |
-| `unload_level_instance` | Report Level Instance unload availability without forcing nested edit state. |
+| `unload_level_instance` | Report Level Instance unload availability without forcing nested edit state. Accepts `actor` (alias: `actor_name`, `actor_path`). |
 
 ### Level Design Placement (3)
 
