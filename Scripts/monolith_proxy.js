@@ -891,7 +891,7 @@ MCP config example:
   {"mcpServers":{"monolith":{"command":"node","args":["D:/P4/game/Plugins/Monolith/Scripts/monolith_proxy.js"]}}}
 
 Offline fallback:
-  Use Binaries/monolith_query.exe for read-only source/project/bridge queries when the editor or MCP server is unavailable.
+  Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge queries when the editor or MCP server is unavailable.
 `);
 }
 
