@@ -17,6 +17,17 @@ description: Use when working with Unreal Engine UI via Monolith MCP — creatin
 - `parent_name` -- parent panel (omit for root)
 - `anchor_preset` -- `center`, `top_left`, `stretch_fill`, etc.
 
+## Project UI Architecture Rules
+
+When creating or modifying UMG widgets, Widget Blueprints, HUDs, menus, UI binding code, or UI-facing Blueprint/C++ APIs, keep UI code behind a ViewModel boundary.
+
+- Widgets must not directly reach into gameplay `Actor`, `Pawn`, `Controller`, component, subsystem, or domain/model objects to pull mutable gameplay state.
+- Expose UI-facing state through an explicit ViewModel object or ViewModel-like adapter owned by the UI flow; bind widget text, visibility, enabled state, lists, and progress values to that ViewModel.
+- Route user intent from widgets to the ViewModel first. The ViewModel may translate it into gameplay commands, service calls, or events; widgets should not call gameplay actors/models directly.
+- Gameplay/domain changes should notify the ViewModel through delegates, events, or observer-style subscriptions. Widgets subscribe to ViewModel-facing notifications, not to arbitrary Actor/model delegates.
+- If an existing widget currently binds directly to an Actor/model, new work should move the touched path toward ViewModel mediation instead of expanding the direct dependency.
+- Blueprint and C++ APIs exposed for UI must preserve this boundary: public UI entry points take ViewModels, interfaces, or UI DTOs rather than raw gameplay Actors/models unless the asset's purpose is actor picking/inspection tooling.
+
 ## Action Reference
 
 | Action | Key Params | Purpose |

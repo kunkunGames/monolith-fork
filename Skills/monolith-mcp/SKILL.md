@@ -51,6 +51,32 @@ Beyond the four core tools, the `monolith` namespace carries server-management a
 - **Notifications:** `get_notification_settings`, `set_notification_settings`, `test_notification`
 - **Maintenance:** `status`, `reindex`, `update`
 
+## Go checkout MCP recovery
+
+For Go checkout work that needs editor-backed Monolith actions, use the configured MCP client connection to `http://localhost:9316/mcp` and confirm it with `monolith_status()` or the active MCP client's health check before calling editor actions.
+
+If the endpoint is unreachable or the MCP transport fails, treat it as an editor/server availability issue and start the project wrapper from the checkout root:
+
+```powershell
+.\BatchFiles\RunHeadlessEditor.bat
+```
+
+Keep the MCP client configuration on the existing Monolith proxy command; do not point MCP config at this wrapper. The wrapper resolves `UnrealEditor.exe` from `GO.uproject`, launches the full editor with rendering disabled by default (`-NullRHI`) plus unattended args, and leaves source control enabled. Script contract: `Docs\specs\Script\RunHeadlessEditor_SPEC.md`.
+
+After launching the wrapper, wait for `localhost:9316` to listen, reconnect the existing Monolith proxy/client to `http://localhost:9316/mcp`, then re-run `monolith_status()` before using `monolith_find`, `monolith_discover`, or namespace actions. If the endpoint still cannot connect, inspect `Saved\HeadlessMcp\Logs\HeadlessEditor-*.log` plus the Monolith proxy/editor invocation logs, report the concrete blocker, and limit fallback work to read-only `Plugins\Monolith\Binaries\monolith_query.exe` source/project/bridge queries while editor-only actions remain blocked.
+
+## Invocation diagnostics
+
+When the checkout includes Monolith invocation logs, treat them as local diagnostics only. They do not replace the tool return shown to the agent, and their absence in an older checkout is not by itself a tool failure.
+
+- Proxy calls append JSONL records under `Plugins\Monolith\Logs\<yyyyMMdd>\proxy.jsonl`.
+- Offline query calls append JSONL records under `Plugins\Monolith\Logs\<yyyyMMdd>\query.jsonl`.
+- Editor action dispatch appends JSONL records under `Plugins\Monolith\Logs\<yyyyMMdd>\action.jsonl` when `UMonolithSettings::bEnableDailyLog=true`; the Go checkout opts in through `Config\DefaultMonolith.ini`.
+- Proxy/query logging is enabled by default. Unset or `MONOLITH_TOOL_LOG_ENABLED=1` enables it; `MONOLITH_TOOL_LOG_ENABLED=0` disables it before launching the proxy/query process.
+- For proxy/query smoke tests or temporary diagnostics, set `MONOLITH_TOOL_LOG_DIR` before launching the process to isolate logs outside `Plugins\Monolith\Logs`.
+- Use the logs to aggregate repeated missing-action, schema-confusing, retry, large-result, editor-unavailable, and escape-hatch patterns before changing namespace placement or action contracts.
+- Do not commit `Plugins\Monolith\Logs\*`; logs can contain project/source context even after redaction and truncation.
+
 ## Offline CLI (no editor / no MCP)
 
 When the editor and MCP server are down, `source` / `project` / `bridge` actions still work against the on-disk DBs via the bundled CLI (reads `Saved\EngineSource.db`, `Saved\ProjectIndex.db`, `Saved\graph.db`):
@@ -65,6 +91,17 @@ Plugins\Monolith\Binaries\monolith_query.exe source review_hotspots --kind=overr
 ```
 
 The CLI is the MCP-free equivalent of `source_query` / `project_query` / `bridge_query` only — other namespaces need the running editor. Offline `project search` matches live `project.search`: `--include-content=true` is the default and searches assets, nodes, variables, parameters, DataTable rows, actors, and supplemental values; use `--include-content=false` for asset/node-only search.
+
+## Source/project index freshness
+
+When a source query fails to show a C++ change that is present on disk, treat the source index as stale before making source-backed conclusions.
+
+1. Discover the current `source` reindex action schema through the live catalog, then call the source reindex action when available.
+2. After the reindex reports completion, verify freshness by searching for the touched symbol, filename, or unique changed text through `source_query("search_source", ...)` or `source_query("read_source", ...)`.
+3. If MCP/editor source reindex is unavailable or fails in the Go checkout, run the project's primary UBT build command from the checkout root, then verify the same symbol or unique changed text through `source_query` or `Plugins\Monolith\Binaries\monolith_query.exe source search_source ...`. Do not treat the build itself as source-index verification.
+4. If the index still cannot see the change, report the concrete blocker and avoid source-index-backed review or API claims until indexing is fixed.
+
+For project assets, `project.search` is content-inclusive by default and returns provenance fields such as `match_source`, `match_table`, `match_field`, `match_object_path`, and `match_value`; inspect them before treating a hit as an asset identity match. Use `include_content=false` only for identity-sensitive lookup or noisy name/type searches.
 
 ## Rules
 
