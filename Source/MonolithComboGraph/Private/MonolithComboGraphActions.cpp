@@ -1051,7 +1051,6 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboGraph(const T
 		return FMonolithActionResult::Error(
 			FString::Printf(TEXT("Failed to create package at: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	// Create the ComboGraph via factory
 	UObject* NewGraph = Factory->FactoryCreateNew(
@@ -1755,7 +1754,6 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboAbility(const
 		return FMonolithActionResult::Error(
 			FString::Printf(TEXT("Failed to create package at: %s"), *SavePath));
 	}
-	Package->FullyLoad();
 
 	// Create Blueprint
 	UBlueprint* NewBP = FKismetEditorUtilities::CreateBlueprint(
