@@ -10,6 +10,7 @@ bool UMonolithMeshHandlePool::ReleaseHandle(const FString&) { return false; }
 bool UMonolithMeshHandlePool::SaveHandle(const FString&, const FString&, bool, FString& OutError, const FString&, int32) { OutError = TEXT("GeometryScript not available"); return false; }
 TSharedPtr<FJsonObject> UMonolithMeshHandlePool::ListHandles() const { return MakeShared<FJsonObject>(); }
 #else // WITH_GEOMETRYSCRIPT
+#include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 
 #include "UDynamicMesh.h"
@@ -457,7 +458,7 @@ UDynamicMesh* UMonolithMeshHandlePool::CreateFromPrimitive(const FString& Primit
 
 UDynamicMesh* UMonolithMeshHandlePool::CreateFromAsset(const FString& AssetPath, FString& OutError)
 {
-	UStaticMesh* StaticMesh = LoadObject<UStaticMesh>(nullptr, *AssetPath);
+	UStaticMesh* StaticMesh = FMonolithAssetUtils::LoadAssetByPath<UStaticMesh>(AssetPath);
 	if (!StaticMesh)
 	{
 		OutError = FString::Printf(TEXT("Could not load StaticMesh at '%s'"), *AssetPath);

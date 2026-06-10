@@ -392,7 +392,7 @@ FMonolithActionResult FMonolithMeshTechArtActions::ExportMesh(const TSharedPtr<F
 	}
 
 	// Load the asset (StaticMesh or SkeletalMesh)
-	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+	UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!Asset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset: %s"), *AssetPath));
