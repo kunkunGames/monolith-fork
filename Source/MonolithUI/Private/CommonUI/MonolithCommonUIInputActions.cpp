@@ -11,6 +11,7 @@
 #if WITH_COMMONUI
 
 #include "MonolithToolRegistry.h"
+#include "MonolithAssetUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"
 
@@ -85,7 +86,7 @@ namespace MonolithCommonUIInput
 			!Params->TryGetStringField(TEXT("display_name"), DisplayName))
 			return FMonolithActionResult::Error(TEXT("table_path, row_name, display_name required"));
 
-		UDataTable* DT = LoadObject<UDataTable>(nullptr, *TablePath);
+		UDataTable* DT = FMonolithAssetUtils::LoadAssetByPath<UDataTable>(TablePath);
 		if (!DT) return FMonolithActionResult::Error(FString::Printf(TEXT("DataTable '%s' not found"), *TablePath));
 		if (DT->RowStruct != FCommonInputActionDataBase::StaticStruct())
 			return FMonolithActionResult::Error(TEXT("DataTable RowStruct is not FCommonInputActionDataBase"));
@@ -152,7 +153,7 @@ namespace MonolithCommonUIInput
 		if (WbpPath.IsEmpty())
 			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
 
-		UDataTable* DT = LoadObject<UDataTable>(nullptr, *TablePath);
+		UDataTable* DT = FMonolithAssetUtils::LoadAssetByPath<UDataTable>(TablePath);
 		if (!DT) return FMonolithActionResult::Error(FString::Printf(TEXT("DataTable '%s' not found"), *TablePath));
 
 		if (!DT->FindRowUnchecked(FName(*RowName)))

@@ -12,6 +12,7 @@
 #if WITH_COMMONUI
 
 #include "MonolithToolRegistry.h"
+#include "MonolithAssetUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"
 
@@ -236,8 +237,8 @@ namespace MonolithCommonUIActivatable
 			{
 				if (FObjectProperty* P = FindFProperty<FObjectProperty>(GenClass, PropName))
 				{
-					UObject* Resolved = LoadObject<UObject>(nullptr, *Val);
-					if (Resolved && Resolved->IsA(P->PropertyClass))
+					UObject* Resolved = FMonolithAssetUtils::LoadAssetByPath(P->PropertyClass, Val);
+					if (Resolved)
 					{
 						P->SetObjectPropertyValue(P->ContainerPtrToValuePtr<void>(CDO), Resolved);
 						Applied.Add(FString(JsonField));

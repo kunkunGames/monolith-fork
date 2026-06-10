@@ -253,8 +253,8 @@ namespace MonolithCommonUI
 			FString Path;
 			if (JsonValue->TryGetString(Path))
 			{
-				UObject* Resolved = LoadObject<UObject>(nullptr, *Path);
-				if (Resolved && Resolved->IsA(ObjectProp->PropertyClass))
+				UObject* Resolved = FMonolithAssetUtils::LoadAssetByPath(ObjectProp->PropertyClass, Path);
+				if (Resolved)
 				{
 					ObjectProp->SetObjectPropertyValue(Ptr, Resolved);
 					return true;

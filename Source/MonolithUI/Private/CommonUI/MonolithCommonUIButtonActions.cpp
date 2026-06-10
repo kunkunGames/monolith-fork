@@ -19,6 +19,7 @@
 
 #include "CommonButtonBase.h"
 #include "CommonTextBlock.h"
+#include "MonolithAssetUtils.h"
 #include "CommonBorder.h"
 
 #include "Components/Button.h"
@@ -171,7 +172,7 @@ namespace MonolithCommonUIButton
 		if (!StyleClass)
 		{
 			// Fallback: load as asset and GeneratedClass
-			UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *StyleAssetPath);
+			UBlueprint* BP = FMonolithAssetUtils::LoadAssetByPath<UBlueprint>(StyleAssetPath);
 			if (BP) StyleClass = BP->GeneratedClass;
 		}
 		if (!StyleClass)
@@ -393,7 +394,7 @@ namespace MonolithCommonUIButton
 				{
 					const FString DefaultPath = TEXT("/Game/Monolith/CommonUI/MonolithDefaultCommonButton");
 					// Check if it already exists on disk from a prior session
-					UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *DefaultPath);
+					UBlueprint* BP = FMonolithAssetUtils::LoadAssetByPath<UBlueprint>(DefaultPath);
 					if (!BP)
 					{
 						if (const FString ValidationError = MonolithCore::ValidatePackagePath(DefaultPath); !ValidationError.IsEmpty())
@@ -574,7 +575,7 @@ namespace MonolithCommonUIButton
 			UClass* C = LoadClass<UObject>(nullptr, *Path);
 			if (!C)
 			{
-				UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *Path);
+				UBlueprint* BP = FMonolithAssetUtils::LoadAssetByPath<UBlueprint>(Path);
 				if (BP) C = BP->GeneratedClass;
 			}
 			return C;
@@ -1049,7 +1050,7 @@ namespace MonolithCommonUIButton
 		UClass* ResolvedButtonClass = LoadClass<UObject>(nullptr, *ButtonClassPath);
 		if (!ResolvedButtonClass)
 		{
-			if (UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *ButtonClassPath))
+			if (UBlueprint* BP = FMonolithAssetUtils::LoadAssetByPath<UBlueprint>(ButtonClassPath))
 			{
 				ResolvedButtonClass = BP->GeneratedClass;
 			}
