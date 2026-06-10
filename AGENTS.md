@@ -33,6 +33,8 @@ Every agent PR description must include a `WorkFingerprint` containing at least:
 ## 4. Verification Claims
 Do not claim Unreal Engine (UE) verification or release packaging was successful unless the tools were actually executed in the current VM. If the UE Editor is unavailable, explicitly note `[blocked: UE 5.7 editor unavailable in Jules VM]` in a dedicated 'Blocked verification' section in the PR description. If build, packaging, or other UE command-line tools are unavailable while the editor itself is not the blocker, use the matching concrete blocker text, for example `[blocked: UE 5.7 build tools unavailable in Jules VM]`.
 
+When a verification succeeds, the `Verification:` section of the PR must clearly state the exact tools and checks that were run, such as `Ran git diff --check, verified file edits, and ran static CI checks which returned 0 blocking findings.` Do not use vague claims like "verified" or "tests passed" without specifying what was executed.
+
 ## 5. Journal Hygiene
 When updating `.jules/` journal files, only document durable coordination rules and learnings. Do not use them as routine work logs or task journals.
 

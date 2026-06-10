@@ -184,3 +184,9 @@
 **Learning:** Many domain agents (e.g., `anim-weaver`, `mesh-cartographer`) are instructed to use a 3-segment branch pattern (`jules/<agent>/<short-topic>`), so a 4-segment glob silently fails to match them.
 **Prevention:** Updated `AGENTS.md` to explicitly instruct agents to scan the full branch list for semantic substring matches of their target area, rather than relying on strict path segment counting.
 **Avoid:** Using strict path globs like `jules/*/module/*` that fail to match 3-segment branch names from domain agents.
+
+## 2026-06-10 - Standardize verification wording
+**Coordination issue:** Agents were using vague language like "verified" or "tests passed" in their PR descriptions, making it unclear what specific checks were actually run.
+**Learning:** Without explicit instruction on how to document successful verification, agents default to generic claims that provide no assurance of quality.
+**Prevention:** Updated `AGENTS.md` to require agents to explicitly list the exact commands and checks they ran (e.g., `git diff --check`, static CI scripts) in the PR `Verification:` section.
+**Avoid:** Claiming generic verification success without detailing the specific tools and commands that were executed.
