@@ -395,8 +395,14 @@ FMonolithActionResult FMonolithMeshContextPropActions::ScatterOnSurface(const TS
 	}
 
 	double CountD = 5;
-	Params->TryGetNumberField(TEXT("count"), CountD);
-	int32 Count = FMath::Clamp(static_cast<int32>(CountD), 1, 100);
+	if (Params->TryGetNumberField(TEXT("count"), CountD))
+	{
+		if (CountD > 100.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("count %g exceeds the maximum allowed (100)"), CountD));
+		}
+	}
+	int32 Count = FMath::Max(1, static_cast<int32>(CountD));
 
 	FString SurfaceSide = TEXT("top");
 	Params->TryGetStringField(TEXT("surface_side"), SurfaceSide);
@@ -1615,8 +1621,14 @@ FMonolithActionResult FMonolithMeshContextPropActions::ScatterOnWalls(const TSha
 	}
 
 	double CountD = 10;
-	Params->TryGetNumberField(TEXT("count"), CountD);
-	int32 Count = FMath::Clamp(static_cast<int32>(CountD), 1, 100);
+	if (Params->TryGetNumberField(TEXT("count"), CountD))
+	{
+		if (CountD > 100.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("count %g exceeds the maximum allowed (100)"), CountD));
+		}
+	}
+	int32 Count = FMath::Max(1, static_cast<int32>(CountD));
 
 	double WallOffset = 2.0;
 	Params->TryGetNumberField(TEXT("wall_offset"), WallOffset);
@@ -1871,8 +1883,14 @@ FMonolithActionResult FMonolithMeshContextPropActions::ScatterOnCeiling(const TS
 	}
 
 	double CountD = 8;
-	Params->TryGetNumberField(TEXT("count"), CountD);
-	int32 Count = FMath::Clamp(static_cast<int32>(CountD), 1, 100);
+	if (Params->TryGetNumberField(TEXT("count"), CountD))
+	{
+		if (CountD > 100.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("count %g exceeds the maximum allowed (100)"), CountD));
+		}
+	}
+	int32 Count = FMath::Max(1, static_cast<int32>(CountD));
 
 	double CeilingOffset = 2.0;
 	Params->TryGetNumberField(TEXT("ceiling_offset"), CeilingOffset);
