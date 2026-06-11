@@ -53,11 +53,20 @@ bool FMonolithAnimationSecurityPathTest::RunTest(const FString& Parameters)
 		TSharedPtr<FJsonObject> NormalizationSetPayload = MakeShared<FJsonObject>();
 		NormalizationSetPayload->SetStringField(TEXT("asset_path"), Path);
 
+		TSharedPtr<FJsonObject> IKRigPayload = MakeShared<FJsonObject>();
+		IKRigPayload->SetStringField(TEXT("asset_path"), Path);
+		IKRigPayload->SetStringField(TEXT("skeletal_mesh_path"), TEXT("/Game/Anims/MyMesh"));
+
+		TSharedPtr<FJsonObject> IKRetargeterPayload = MakeShared<FJsonObject>();
+		IKRetargeterPayload->SetStringField(TEXT("asset_path"), Path);
+
 		TMap<FString, TSharedPtr<FJsonObject>> ActionsToTest = {
 			{TEXT("create_blend_space"), BlendSpacePayload},
 			{TEXT("create_pose_search_schema"), SchemaPayload},
 			{TEXT("create_pose_search_database"), DatabasePayload},
-			{TEXT("create_normalization_set"), NormalizationSetPayload}
+			{TEXT("create_normalization_set"), NormalizationSetPayload},
+			{TEXT("create_ik_rig"), IKRigPayload},
+			{TEXT("create_ik_retargeter"), IKRetargeterPayload}
 		};
 
 		for (const auto& ActionPair : ActionsToTest)

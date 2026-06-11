@@ -9630,6 +9630,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateIKRig(const TShared
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString MeshPath = Params->GetStringField(TEXT("skeletal_mesh_path"));
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	USkeletalMesh* Mesh = FMonolithAssetUtils::LoadAssetByPath<USkeletalMesh>(MeshPath);
 	if (!Mesh) return FMonolithActionResult::Error(FString::Printf(TEXT("Skeletal mesh not found: %s"), *MeshPath));
 
@@ -9735,6 +9740,11 @@ static EAutoMapChainType ParseAutoMapType(const TSharedPtr<FJsonObject>& Params)
 FMonolithActionResult FMonolithAnimationActions::HandleCreateIKRetargeter(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
 
 	int32 LastSlash;
 	if (!AssetPath.FindLastChar('/', LastSlash) || LastSlash == AssetPath.Len() - 1)
