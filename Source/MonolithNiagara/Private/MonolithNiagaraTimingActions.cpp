@@ -482,7 +482,8 @@ namespace MonolithNiagaraTimingLocal
 	static bool TryGetSummaryString(const TSharedPtr<FJsonObject>& InputResp, FString& OutValue)
 	{
 		if (!InputResp.IsValid()) return false;
-		const FString Raw = InputResp->GetStringField(TEXT("value"));
+		FString Raw;
+		if (!InputResp->TryGetStringField(TEXT("value"), Raw)) return false;
 		if (Raw.IsEmpty() || Raw == TEXT("(default)")) return false;
 		OutValue = Raw;
 		return true;
@@ -763,7 +764,11 @@ namespace MonolithNiagaraTimingLocal
 		TSharedRef<FJsonObject> Resp = MakeShared<FJsonObject>();
 		Resp->SetBoolField(TEXT("success"), true);
 		Resp->SetStringField(TEXT("asset_path"), GetAssetPath(Params));
-		Resp->SetStringField(TEXT("emitter"), Params->GetStringField(TEXT("emitter")));
+
+		FString EmitterOut;
+		Params->TryGetStringField(TEXT("emitter"), EmitterOut);
+		Resp->SetStringField(TEXT("emitter"), EmitterOut);
+
 		Resp->SetBoolField(TEXT("stateless"), true);
 		Resp->SetArrayField(TEXT("warnings"), OutWarnings);
 		return FMonolithActionResult::Success(Resp);
@@ -1350,8 +1355,8 @@ namespace MonolithNiagaraTimingLocal
 		// Forward exactly one of stage_index / stage_name (canonical handler
 		// validates that at least one is supplied; we mirror that here to give a
 		// clearer error attributed to the alias).
-		const bool bHasIndex = Params->HasTypedField<EJson::Number>(TEXT("stage_index"));
-		const bool bHasName = Params->HasTypedField<EJson::String>(TEXT("stage_name"));
+		const bool bHasIndex = Params->HasField(TEXT("stage_index"));
+		const bool bHasName = Params->HasField(TEXT("stage_name"));
 		if (!bHasIndex && !bHasName)
 			return FMonolithActionResult::Error(TEXT("Must provide stage_index or stage_name"));
 
@@ -1363,11 +1368,21 @@ namespace MonolithNiagaraTimingLocal
 		Envelope->SetStringField(TEXT("emitter"), Emitter);
 		if (bHasIndex)
 		{
-			Envelope->SetNumberField(TEXT("stage_index"), Params->GetNumberField(TEXT("stage_index")));
+			double StageIndexVal = 0.0;
+			if (!Params->TryGetNumberField(TEXT("stage_index"), StageIndexVal))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'stage_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Envelope->SetNumberField(TEXT("stage_index"), StageIndexVal);
 		}
 		if (bHasName)
 		{
-			Envelope->SetStringField(TEXT("stage_name"), Params->GetStringField(TEXT("stage_name")));
+			FString StageNameVal;
+			if (!Params->TryGetStringField(TEXT("stage_name"), StageNameVal))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'stage_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Envelope->SetStringField(TEXT("stage_name"), StageNameVal);
 		}
 		Envelope->SetStringField(TEXT("property"), Property);
 		Envelope->SetField(TEXT("value"), Value);
