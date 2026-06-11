@@ -3,7 +3,33 @@ using System.IO;
 
 public class MonolithLevelSequence : ModuleRules
 {
+
+	private static bool HasPluginDir(string BaseDir, string PluginName)
+	{
+		if (!Directory.Exists(BaseDir))
+		{
+			return false;
+		}
+
+		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
+		{
+			return true;
+		}
+
+		string[] Dirs = Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly);
+		foreach (string Dir in Dirs)
+		{
+			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public MonolithLevelSequence(ReadOnlyTargetRules Target) : base(Target)
+
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
@@ -41,11 +67,7 @@ public class MonolithLevelSequence : ModuleRules
 			if (Target.ProjectFile != null)
 			{
 				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-				if (Directory.Exists(ProjectPluginsDir))
-				{
-					bHasMovieRenderPipeline = Directory.Exists(Path.Combine(ProjectPluginsDir, "MovieRenderPipeline"))
-						|| (Directory.Exists(ProjectPluginsDir) && Directory.GetDirectories(ProjectPluginsDir, "MovieRenderPipeline_*", SearchOption.TopDirectoryOnly).Length > 0);
-				}
+				bHasMovieRenderPipeline = HasPluginDir(ProjectPluginsDir, "MovieRenderPipeline");
 			}
 
 			// 2. Check Engine Plugins/ folder
@@ -55,11 +77,10 @@ public class MonolithLevelSequence : ModuleRules
 				string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
 
 				bHasMovieRenderPipeline =
-					Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "MovieRenderPipeline"))
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace", "MovieRenderPipeline"))
-					|| (Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace")) && Directory.GetDirectories(Path.Combine(EnginePluginsDir, "Marketplace"), "MovieRenderPipeline_*", SearchOption.TopDirectoryOnly).Length > 0)
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "MovieScene", "MovieRenderPipeline"))
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "MovieRenderPipeline"));
+					HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "MovieRenderPipeline")
+					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Marketplace"), "MovieRenderPipeline")
+					|| HasPluginDir(Path.Combine(EnginePluginsDir, "MovieScene"), "MovieRenderPipeline")
+					|| HasPluginDir(EnginePluginsDir, "MovieRenderPipeline");
 			}
 		}
 
@@ -69,7 +90,6 @@ public class MonolithLevelSequence : ModuleRules
 		{
 			PrivateDependencyModuleNames.AddRange(new string[]
 			{
-				"AssetRegistry",
 				"MovieRenderPipelineCore",
 				"MovieRenderPipelineEditor"
 			});

@@ -74,3 +74,10 @@ Avoid: Using short or generic wildcards like `Gameplaya*` when the plugin name i
 **Learning:** `Directory.GetDirectories` throws an exception if the base path is missing. Using it to probe for optional plugin subdirectories inside the engine, marketplace, or project directories can break the build if the base directory itself was never created. This is especially true for `ProjectPluginsDir` and `MarketplaceDir` which might not exist in a fresh project or engine install.
 **Prevention:** Always check if the base path exists using `Directory.Exists(BaseDir)` before calling `Directory.GetDirectories(BaseDir, ...)` to avoid exceptions.
 **Avoid:** Calling `Directory.GetDirectories` without verifying the base directory exists.
+
+2026-05-18 - Optional Plugin Detection Exception Prevention
+
+Build pattern: Optional plugin detection via `Directory.GetDirectories(..., "PluginName_*", ...)` can throw `DirectoryNotFoundException` if the base path does not exist. It also risks incorrectly identifying obfuscated backup or disabled folders if they don't contain the actual `.uplugin` file.
+Learning: `Target.RelativeEnginePath` and common folder assumptions like `Plugins/Marketplace/` or `Plugins/Runtime/` do not guarantee those directories exist on every machine (e.g. source-build engines or stripped project folders).
+Prevention: Always ensure optional plugin detection guards use a helper that first checks `Directory.Exists(BaseDir)`. When checking wildcard directories (e.g. `PluginName_*`), always verify `File.Exists(Path.Combine(Dir, PluginName + ".uplugin"))` inside the matched directory to ensure it is the real plugin and not a disabled scratch folder.
+Avoid: Using `Directory.GetDirectories()` on optional or assumed paths without a preceding `Directory.Exists()` check, and returning true simply because a wildcard directory matched without verifying the `.uplugin` descriptor.
