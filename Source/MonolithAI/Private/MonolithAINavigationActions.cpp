@@ -1,6 +1,7 @@
 #include "MonolithAINavigationActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 
 #include "NavigationSystem.h"
 #include "NavMesh/RecastNavMesh.h"
@@ -53,11 +54,15 @@ FVector FMonolithAINavigationActions::ParseVector(const TSharedPtr<FJsonObject>&
 	const TSharedPtr<FJsonObject>* VecObj = nullptr;
 	if (Params->TryGetObjectField(FieldName, VecObj) && VecObj && (*VecObj)->Values.Num() > 0)
 	{
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		if (!(*VecObj)->TryGetNumberField(TEXT("x"), X)
+			|| !(*VecObj)->TryGetNumberField(TEXT("y"), Y)
+			|| !(*VecObj)->TryGetNumberField(TEXT("z"), Z))
+		{
+			return FVector::ZeroVector;
+		}
 		bOutFound = true;
-		return FVector(
-			(*VecObj)->GetNumberField(TEXT("x")),
-			(*VecObj)->GetNumberField(TEXT("y")),
-			(*VecObj)->GetNumberField(TEXT("z")));
+		return FVector(X, Y, Z);
 	}
 
 	// Try array: [100, 200, 0]
@@ -512,37 +517,37 @@ FMonolithActionResult FMonolithAINavigationActions::HandleSetNavMeshConfig(const
 
 	if (Params->HasField(TEXT("agent_radius")))
 	{
-		if (!Params->TryGetNumberField(TEXT("agent_radius"), ReqAgentRadius)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_radius' must be a number"));
+		if (!Params->TryGetNumberField(TEXT("agent_radius"), ReqAgentRadius)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_radius' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		bHasAgentRadius = true;
 	}
 	if (Params->HasField(TEXT("agent_height")))
 	{
-		if (!Params->TryGetNumberField(TEXT("agent_height"), ReqAgentHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_height' must be a number"));
+		if (!Params->TryGetNumberField(TEXT("agent_height"), ReqAgentHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_height' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		bHasAgentHeight = true;
 	}
 	if (Params->HasField(TEXT("cell_size")))
 	{
-		if (!Params->TryGetNumberField(TEXT("cell_size"), ReqCellSize)) return FMonolithActionResult::Error(TEXT("Parameter 'cell_size' must be a number"));
+		if (!Params->TryGetNumberField(TEXT("cell_size"), ReqCellSize)) return FMonolithActionResult::Error(TEXT("Parameter 'cell_size' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		bHasCellSize = true;
 	}
 	if (Params->HasField(TEXT("cell_height")))
 	{
-		if (!Params->TryGetNumberField(TEXT("cell_height"), ReqCellHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'cell_height' must be a number"));
+		if (!Params->TryGetNumberField(TEXT("cell_height"), ReqCellHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'cell_height' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		bHasCellHeight = true;
 	}
 	if (Params->HasField(TEXT("tile_size")))
 	{
-		if (!Params->TryGetNumberField(TEXT("tile_size"), ReqTileSize)) return FMonolithActionResult::Error(TEXT("Parameter 'tile_size' must be a number"));
+		if (!Params->TryGetNumberField(TEXT("tile_size"), ReqTileSize)) return FMonolithActionResult::Error(TEXT("Parameter 'tile_size' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		bHasTileSize = true;
 	}
 	if (Params->HasField(TEXT("agent_max_slope")))
 	{
-		if (!Params->TryGetNumberField(TEXT("agent_max_slope"), ReqAgentMaxSlope)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_max_slope' must be a number"));
+		if (!Params->TryGetNumberField(TEXT("agent_max_slope"), ReqAgentMaxSlope)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_max_slope' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		bHasAgentMaxSlope = true;
 	}
 	if (Params->HasField(TEXT("agent_max_step_height")))
 	{
-		if (!Params->TryGetNumberField(TEXT("agent_max_step_height"), ReqAgentMaxStepHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_max_step_height' must be a number"));
+		if (!Params->TryGetNumberField(TEXT("agent_max_step_height"), ReqAgentMaxStepHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_max_step_height' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		bHasAgentMaxStepHeight = true;
 	}
 
@@ -565,17 +570,17 @@ FMonolithActionResult FMonolithAINavigationActions::HandleSetNavMeshConfig(const
 			{
 				if ((*ResObj)->HasField(TEXT("cell_size")))
 				{
-					if (!(*ResObj)->TryGetNumberField(TEXT("cell_size"), ResParamsList[i].CellSize)) return FMonolithActionResult::Error(TEXT("Parameter 'cell_size' in resolution_params must be a number"));
+					if (!(*ResObj)->TryGetNumberField(TEXT("cell_size"), ResParamsList[i].CellSize)) return FMonolithActionResult::Error(TEXT("Parameter 'cell_size' in resolution_params must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 					ResParamsList[i].bHasCellSize = true;
 				}
 				if ((*ResObj)->HasField(TEXT("cell_height")))
 				{
-					if (!(*ResObj)->TryGetNumberField(TEXT("cell_height"), ResParamsList[i].CellHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'cell_height' in resolution_params must be a number"));
+					if (!(*ResObj)->TryGetNumberField(TEXT("cell_height"), ResParamsList[i].CellHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'cell_height' in resolution_params must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 					ResParamsList[i].bHasCellHeight = true;
 				}
 				if ((*ResObj)->HasField(TEXT("agent_max_step_height")))
 				{
-					if (!(*ResObj)->TryGetNumberField(TEXT("agent_max_step_height"), ResParamsList[i].AgentMaxStepHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_max_step_height' in resolution_params must be a number"));
+					if (!(*ResObj)->TryGetNumberField(TEXT("agent_max_step_height"), ResParamsList[i].AgentMaxStepHeight)) return FMonolithActionResult::Error(TEXT("Parameter 'agent_max_step_height' in resolution_params must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 					ResParamsList[i].bHasAgentMaxStepHeight = true;
 				}
 			}
@@ -718,7 +723,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleAddNavBoundsVolume(con
 	UActorFactory::CreateBrushForVolumeActor(NavVol, CubeBuilder);
 
 	// Folder
-	FString Folder = Params->GetStringField(TEXT("folder_path"));
+	FString Folder;
+	Params->TryGetStringField(TEXT("folder_path"), Folder);
 	NavVol->SetFolderPath(FName(Folder.IsEmpty() ? TEXT("AI/Navigation") : *Folder));
 	NavVol->MarkPackageDirty();
 
@@ -890,6 +896,20 @@ FMonolithActionResult FMonolithAINavigationActions::HandleCreateNavArea(const TS
 		return FMonolithActionResult::Error(Error);
 	}
 
+	double DefaultCost = 0.0;
+	const bool bHasDefaultCost = Params->HasField(TEXT("default_cost"));
+	if (bHasDefaultCost && !Params->TryGetNumberField(TEXT("default_cost"), DefaultCost))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'default_cost' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	double FixedAreaEnteringCost = 0.0;
+	const bool bHasFixedAreaEnteringCost = Params->HasField(TEXT("fixed_area_entering_cost"));
+	if (bHasFixedAreaEnteringCost && !Params->TryGetNumberField(TEXT("fixed_area_entering_cost"), FixedAreaEnteringCost))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'fixed_area_entering_cost' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	UPackage* Package = MonolithAI::GetOrCreatePackage(SavePath, Error);
 	if (!Package)
 	{
@@ -904,17 +924,17 @@ FMonolithActionResult FMonolithAINavigationActions::HandleCreateNavArea(const TS
 		return FMonolithActionResult::Error(TEXT("Failed to create UNavArea"));
 	}
 
-	if (Params->HasField(TEXT("default_cost")))
+	if (bHasDefaultCost)
 	{
-		NewArea->DefaultCost = Params->GetNumberField(TEXT("default_cost"));
+		NewArea->DefaultCost = DefaultCost;
 	}
 
-	if (Params->HasField(TEXT("fixed_area_entering_cost")))
+	if (bHasFixedAreaEnteringCost)
 	{
 		// FixedAreaEnteringCost is protected — set via FProperty reflection
 		if (FFloatProperty* CostProp = CastField<FFloatProperty>(UNavArea::StaticClass()->FindPropertyByName(TEXT("FixedAreaEnteringCost"))))
 		{
-			CostProp->SetPropertyValue_InContainer(NewArea, static_cast<float>(Params->GetNumberField(TEXT("fixed_area_entering_cost"))));
+			CostProp->SetPropertyValue_InContainer(NewArea, static_cast<float>(FixedAreaEnteringCost));
 		}
 	}
 
@@ -922,12 +942,12 @@ FMonolithActionResult FMonolithAINavigationActions::HandleCreateNavArea(const TS
 	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("color"), ColorObj) && ColorObj && (*ColorObj)->Values.Num() > 0)
 	{
-		NewArea->DrawColor = FColor(
-			(uint8)(*ColorObj)->GetNumberField(TEXT("r")),
-			(uint8)(*ColorObj)->GetNumberField(TEXT("g")),
-			(uint8)(*ColorObj)->GetNumberField(TEXT("b")),
-			(*ColorObj)->HasField(TEXT("a")) ? (uint8)(*ColorObj)->GetNumberField(TEXT("a")) : 255
-		);
+		double R = 255.0, G = 255.0, B = 255.0, A = 255.0;
+		(*ColorObj)->TryGetNumberField(TEXT("r"), R);
+		(*ColorObj)->TryGetNumberField(TEXT("g"), G);
+		(*ColorObj)->TryGetNumberField(TEXT("b"), B);
+		(*ColorObj)->TryGetNumberField(TEXT("a"), A);
+		NewArea->DrawColor = FColor((uint8)R, (uint8)G, (uint8)B, (uint8)A);
 	}
 
 	FAssetRegistryModule::AssetCreated(NewArea);
@@ -957,10 +977,10 @@ FMonolithActionResult FMonolithAINavigationActions::HandleAddNavModifierVolume(c
 	if (!bLocFound) return FMonolithActionResult::Error(TEXT("Missing required parameter: location"));
 	if (!bExtFound) return FMonolithActionResult::Error(TEXT("Missing required parameter: extent"));
 
-	FString AreaClassName = Params->GetStringField(TEXT("area_class"));
-	if (AreaClassName.IsEmpty())
+	FString AreaClassName;
+	if (!Params->TryGetStringField(TEXT("area_class"), AreaClassName) || AreaClassName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: area_class"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: area_class"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// Resolve area class
@@ -995,7 +1015,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleAddNavModifierVolume(c
 
 	ModVol->SetAreaClass(AreaClass);
 
-	FString Folder = Params->GetStringField(TEXT("folder_path"));
+	FString Folder;
+	Params->TryGetStringField(TEXT("folder_path"), Folder);
 	ModVol->SetFolderPath(FName(Folder.IsEmpty() ? TEXT("AI/Navigation") : *Folder));
 	ModVol->MarkPackageDirty();
 
@@ -1026,7 +1047,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleAddNavLinkProxy(const 
 	if (!bStartFound) return FMonolithActionResult::Error(TEXT("Missing required parameter: start_location"));
 	if (!bEndFound) return FMonolithActionResult::Error(TEXT("Missing required parameter: end_location"));
 
-	FString LinkType = Params->GetStringField(TEXT("link_type"));
+	FString LinkType;
+	Params->TryGetStringField(TEXT("link_type"), LinkType);
 	bool bSmartLink = LinkType.Equals(TEXT("smart"), ESearchCase::IgnoreCase);
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Add NavLinkProxy")));
@@ -1064,7 +1086,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleAddNavLinkProxy(const 
 	}
 
 	// Area class
-	FString AreaClassName = Params->GetStringField(TEXT("area_class"));
+	FString AreaClassName;
+	Params->TryGetStringField(TEXT("area_class"), AreaClassName);
 	if (!AreaClassName.IsEmpty())
 	{
 		UClass* AreaClass = FindFirstObject<UClass>(*AreaClassName, EFindFirstObjectOptions::EnsureIfAmbiguous);
@@ -1081,7 +1104,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleAddNavLinkProxy(const 
 		}
 	}
 
-	FString Folder = Params->GetStringField(TEXT("folder_path"));
+	FString Folder;
+	Params->TryGetStringField(TEXT("folder_path"), Folder);
 	LinkActor->SetFolderPath(FName(Folder.IsEmpty() ? TEXT("AI/Navigation") : *Folder));
 	LinkActor->MarkPackageDirty();
 
@@ -1099,31 +1123,31 @@ FMonolithActionResult FMonolithAINavigationActions::HandleAddNavLinkProxy(const 
 
 FMonolithActionResult FMonolithAINavigationActions::HandleConfigureNavLink(const TSharedPtr<FJsonObject>& Params)
 {
-	FString ActorPath = Params->GetStringField(TEXT("actor_path"));
-	if (ActorPath.IsEmpty())
+	FString ActorPath;
+	if (!Params->TryGetStringField(TEXT("actor_path"), ActorPath) || ActorPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: actor_path"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: actor_path"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	const bool bHasEnabled = Params->HasField(TEXT("enabled"));
 	bool bEnabled = false;
 	if (bHasEnabled && !Params->TryGetBoolField(TEXT("enabled"), bEnabled))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'enabled'. Expected boolean."));
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'enabled'. Expected boolean."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	const bool bHasAreaClass = Params->HasField(TEXT("area_class"));
 	FString AreaClassName;
 	if (bHasAreaClass && !Params->TryGetStringField(TEXT("area_class"), AreaClassName))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'area_class'. Expected string."));
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'area_class'. Expected string."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	const bool bHasDirection = Params->HasField(TEXT("direction"));
 	FString Dir;
 	if (bHasDirection && !Params->TryGetStringField(TEXT("direction"), Dir))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'direction'. Expected string."));
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'direction'. Expected string."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	UWorld* World = GetNavWorld();
@@ -1222,7 +1246,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleListNavLinks(const TSh
 		return FMonolithActionResult::Error(TEXT("No world available"));
 	}
 
-	FString LevelFilter = Params->GetStringField(TEXT("level"));
+	FString LevelFilter;
+	Params->TryGetStringField(TEXT("level"), LevelFilter);
 
 	TArray<TSharedPtr<FJsonValue>> Links;
 	for (TActorIterator<ANavLinkProxy> It(World); It; ++It)
@@ -1451,7 +1476,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleGetRandomNavigablePoin
 
 	if (bOriginFound)
 	{
-		double Radius = Params->HasField(TEXT("radius")) ? Params->GetNumberField(TEXT("radius")) : 1000.0;
+		double Radius = 1000.0;
+		Params->TryGetNumberField(TEXT("radius"), Radius);
 		bFound = NavSys->GetRandomReachablePointInRadius(Origin, Radius, NavLoc);
 	}
 	else
@@ -1525,7 +1551,12 @@ FMonolithActionResult FMonolithAINavigationActions::HandleConfigureNavAgent(cons
 		return FMonolithActionResult::Error(TEXT("NavigationSystemV1 not found"));
 	}
 
-	int32 AgentIndex = (int32)Params->GetNumberField(TEXT("agent_index"));
+	double AgentIndexDbl = 0.0;
+	if (!Params->TryGetNumberField(TEXT("agent_index"), AgentIndexDbl))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: agent_index"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	int32 AgentIndex = (int32)AgentIndexDbl;
 
 	const int32 AgentCount = NavSys->GetSupportedAgents().Num();
 	if (AgentIndex < 0 || AgentIndex >= AgentCount)
@@ -1565,8 +1596,12 @@ FMonolithActionResult FMonolithAINavigationActions::HandleConfigureNavAgent(cons
 		{
 			if (FFloatProperty* Prop = CastField<FFloatProperty>(StructType->FindPropertyByName(PropName)))
 			{
-				Prop->SetPropertyValue(Prop->ContainerPtrToValuePtr<void>(ElementPtr), (float)Params->GetNumberField(JsonField));
-				ChangedCount++;
+				double TmpVal = 0.0;
+				if (Params->TryGetNumberField(JsonField, TmpVal))
+				{
+					Prop->SetPropertyValue(Prop->ContainerPtrToValuePtr<void>(ElementPtr), (float)TmpVal);
+					ChangedCount++;
+				}
 			}
 		}
 	};
@@ -1590,10 +1625,24 @@ FMonolithActionResult FMonolithAINavigationActions::HandleConfigureNavAgent(cons
 
 FMonolithActionResult FMonolithAINavigationActions::HandleAddNavInvokerComponent(const TSharedPtr<FJsonObject>& Params)
 {
-	FString BlueprintPath = Params->GetStringField(TEXT("blueprint_path"));
-	if (BlueprintPath.IsEmpty())
+	FString BlueprintPath;
+	if (!Params->TryGetStringField(TEXT("blueprint_path"), BlueprintPath) || BlueprintPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: blueprint_path"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: blueprint_path"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	double GenerationRadius = 0.0;
+	const bool bHasGenerationRadius = Params->HasField(TEXT("generation_radius"));
+	if (bHasGenerationRadius && !Params->TryGetNumberField(TEXT("generation_radius"), GenerationRadius))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'generation_radius' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	double RemovalRadius = 0.0;
+	const bool bHasRemovalRadius = Params->HasField(TEXT("removal_radius"));
+	if (bHasRemovalRadius && !Params->TryGetNumberField(TEXT("removal_radius"), RemovalRadius))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'removal_radius' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString Error;
@@ -1647,18 +1696,18 @@ FMonolithActionResult FMonolithAINavigationActions::HandleAddNavInvokerComponent
 	UActorComponent* Template = NewNode->ComponentTemplate;
 	if (Template)
 	{
-		if (Params->HasField(TEXT("generation_radius")))
+		if (bHasGenerationRadius)
 		{
 			if (FFloatProperty* Prop = CastField<FFloatProperty>(InvokerClass->FindPropertyByName(TEXT("GenerationRadius"))))
 			{
-				Prop->SetPropertyValue_InContainer(Template, (float)Params->GetNumberField(TEXT("generation_radius")));
+				Prop->SetPropertyValue_InContainer(Template, (float)GenerationRadius);
 			}
 		}
-		if (Params->HasField(TEXT("removal_radius")))
+		if (bHasRemovalRadius)
 		{
 			if (FFloatProperty* Prop = CastField<FFloatProperty>(InvokerClass->FindPropertyByName(TEXT("RemovalRadius"))))
 			{
-				Prop->SetPropertyValue_InContainer(Template, (float)Params->GetNumberField(TEXT("removal_radius")));
+				Prop->SetPropertyValue_InContainer(Template, (float)RemovalRadius);
 			}
 		}
 	}
@@ -1774,6 +1823,32 @@ FMonolithActionResult FMonolithAINavigationActions::HandleSetCrowdManagerConfig(
 		return FMonolithActionResult::Error(TEXT("No CrowdManager active. Start a PIE session with crowd-following AI agents first."));
 	}
 
+	const TCHAR* NumberFields[] = {
+		TEXT("max_agents"),
+		TEXT("max_avoidance_agents"),
+		TEXT("max_avoided_walls"),
+		TEXT("max_agent_radius"),
+		TEXT("navmesh_check_interval"),
+		TEXT("path_optimization_interval"),
+		TEXT("separation_dir_clamp"),
+		TEXT("path_offset_radius_multiplier")
+	};
+	for (const TCHAR* Field : NumberFields)
+	{
+		double Ignored = 0.0;
+		if (Params->HasField(Field) && !Params->TryGetNumberField(Field, Ignored))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Parameter '%s' must be a number"), Field),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+	bool IgnoredBool = false;
+	if (Params->HasField(TEXT("resolve_collisions")) && !Params->TryGetBoolField(TEXT("resolve_collisions"), IgnoredBool))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'resolve_collisions' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Set CrowdManager Config")));
 	CrowdMgr->Modify();
 
@@ -1788,7 +1863,9 @@ FMonolithActionResult FMonolithAINavigationActions::HandleSetCrowdManagerConfig(
 		{
 			return;
 		}
-		const int32 Requested = (int32)Params->GetNumberField(JsonField);
+		double RequestedDbl = 0.0;
+		Params->TryGetNumberField(JsonField, RequestedDbl);
+		const int32 Requested = (int32)RequestedDbl;
 		FIntProperty* Prop = CastField<FIntProperty>(CrowdClass->FindPropertyByName(PropName));
 		if (!Prop)
 		{
@@ -1817,7 +1894,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleSetCrowdManagerConfig(
 		{
 			return;
 		}
-		const double Requested = Params->GetNumberField(JsonField);
+		double Requested = 0.0;
+		Params->TryGetNumberField(JsonField, Requested);
 		double Actual = 0.0;
 		bool bWrote = false;
 		if (FFloatProperty* FProp = CastField<FFloatProperty>(CrowdClass->FindPropertyByName(PropName)))
@@ -1848,7 +1926,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleSetCrowdManagerConfig(
 		{
 			return;
 		}
-		const bool Requested = Params->GetBoolField(JsonField);
+		bool Requested = false;
+		Params->TryGetBoolField(JsonField, Requested);
 		FBoolProperty* Prop = CastField<FBoolProperty>(CrowdClass->FindPropertyByName(PropName));
 		if (!Prop)
 		{
@@ -1912,7 +1991,8 @@ FMonolithActionResult FMonolithAINavigationActions::HandleAnalyzeNavigationCover
 		return FMonolithActionResult::Error(TEXT("NavigationSystemV1 not found"));
 	}
 
-	double SampleSpacing = Params->HasField(TEXT("sample_spacing")) ? Params->GetNumberField(TEXT("sample_spacing")) : 200.0;
+	double SampleSpacing = 200.0;
+	Params->TryGetNumberField(TEXT("sample_spacing"), SampleSpacing);
 
 	// Determine bounds
 	FBox SampleBounds(ForceInit);
@@ -2083,8 +2163,16 @@ FMonolithActionResult FMonolithAINavigationActions::HandleRebuildNavigation(cons
 		return FMonolithActionResult::Error(TEXT("NavigationSystemV1 not found"));
 	}
 
-	const bool bSaveAfter = Params->HasField(TEXT("save_after")) && Params->GetBoolField(TEXT("save_after"));
-	double TimeoutSeconds = Params->HasField(TEXT("timeout_seconds")) ? Params->GetNumberField(TEXT("timeout_seconds")) : 30.0;
+	bool bSaveAfter = false;
+	if (Params->HasField(TEXT("save_after")) && !Params->TryGetBoolField(TEXT("save_after"), bSaveAfter))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'save_after' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	double TimeoutSeconds = 30.0;
+	if (Params->HasField(TEXT("timeout_seconds")) && !Params->TryGetNumberField(TEXT("timeout_seconds"), TimeoutSeconds))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'timeout_seconds' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	TimeoutSeconds = FMath::Clamp(TimeoutSeconds, 1.0, 120.0);
 
 	// Trigger the (async) navmesh rebuild.
@@ -2223,7 +2311,7 @@ FMonolithActionResult FMonolithAINavigationActions::HandleValidateNavPoints(cons
 		FString Name;
 		if (!(*PtObj)->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
 		{
-			return FMonolithActionResult::Error(TEXT("Each point requires a non-empty 'name' field"));
+			return FMonolithActionResult::Error(TEXT("Each point requires a non-empty 'name' field"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 
 		bool bLocFound = false;
