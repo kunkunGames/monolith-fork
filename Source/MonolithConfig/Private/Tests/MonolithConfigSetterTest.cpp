@@ -26,6 +26,7 @@
 #include "Dom/JsonValue.h"
 #include "UObject/Class.h"
 #include "UObject/UObjectGlobals.h"
+#include "MonolithJsonUtils.h"
 
 namespace MonolithConfigSetterTestDetail
 {
@@ -191,6 +192,7 @@ bool FMonolithConfigSetterMissingParamsTest::RunTest(const FString& /*Parameters
 	TestFalse(TEXT("action failed"), Result.bSuccess);
 	TestTrue(TEXT("error mentions required params"),
 		Result.ErrorMessage.Contains(TEXT("required")));
+	TestEqual(TEXT("error code is ErrInvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
 	return true;
 }
 

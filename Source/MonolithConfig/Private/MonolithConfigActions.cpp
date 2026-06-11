@@ -18,6 +18,7 @@
 #include "UObject/UObjectGlobals.h"
 #include "UObject/Class.h"
 #include "Misc/StringOutputDevice.h"
+#include "MonolithJsonUtils.h"
 #endif // WITH_EDITOR
 
 // ============================================================================
@@ -1100,20 +1101,29 @@ FMonolithActionResult FMonolithConfigActions::SetDeveloperSetting(const TSharedP
 {
 	if (!Params.IsValid())
 	{
-		return FMonolithActionResult::Error(TEXT("set_developer_setting: missing params object"));
+		return FMonolithActionResult::Error(TEXT("set_developer_setting: missing params object"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	const FString ClassName = Params->GetStringField(TEXT("class"));
-	const FString PropertyName = Params->GetStringField(TEXT("property"));
-	const FString NewValueText = Params->GetStringField(TEXT("value"));
+	FString ClassName;
+	if (!Params->TryGetStringField(TEXT("class"), ClassName) || ClassName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("set_developer_setting: 'class' is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property"), PropertyName) || PropertyName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("set_developer_setting: 'property' is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString NewValueText;
+	if (!Params->TryGetStringField(TEXT("value"), NewValueText))
+	{
+		return FMonolithActionResult::Error(TEXT("set_developer_setting: 'value' is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	bool bSaveConfig = false;
 	Params->TryGetBoolField(TEXT("save_config"), bSaveConfig);
-
-	if (ClassName.IsEmpty() || PropertyName.IsEmpty())
-	{
-		return FMonolithActionResult::Error(
-			TEXT("set_developer_setting: both 'class' and 'property' are required"));
-	}
 
 	// 1) Resolve class. Try full-path first (works for '/Script/Module.Class'),
 	//    then short-name lookup biased toward native classes.
