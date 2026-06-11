@@ -1152,6 +1152,19 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithDataflow.md` for the deep dive.
 
 ---
 
+## water
+
+Optional Water/Landscape discovery and actor/component listing. Read-only probes; does not mutate actors, splines, landscapes, or zones. **2 actions.**
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `list_bodies` | `limit` (optional integer), `actor_name_filter` (optional string) |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithWater.md` for the deep dive.
+
+---
+
 ## combograph
 
 ComboGraph melee combo authoring. **13 actions.** **Conditional on `#if WITH_COMBOGRAPH`** — requires the ComboGraph marketplace plugin. Reflection-only (no direct C++ API linkage).
