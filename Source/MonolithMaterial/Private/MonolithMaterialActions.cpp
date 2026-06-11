@@ -39,6 +39,7 @@
 #include "MaterialShared.h"
 #include "RHIShaderPlatform.h"
 #include "Misc/Base64.h"
+#include "MonolithJsonUtils.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
@@ -922,7 +923,11 @@ static const FMaterialOutputEntry MaterialOutputEntries[] =
 
 FMonolithActionResult FMonolithMaterialActions::GetAllExpressions(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Try UMaterial first, then fall back to UMaterialFunction
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
@@ -964,8 +969,16 @@ FMonolithActionResult FMonolithMaterialActions::GetAllExpressions(const TSharedP
 
 FMonolithActionResult FMonolithMaterialActions::GetExpressionDetails(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ExpressionName = Params->GetStringField(TEXT("expression_name"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ExpressionName;
+	if (!Params->TryGetStringField(TEXT("expression_name"), ExpressionName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'expression_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Try UMaterial first, then fall back to UMaterialFunction
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
@@ -1071,7 +1084,11 @@ FMonolithActionResult FMonolithMaterialActions::GetExpressionDetails(const TShar
 
 FMonolithActionResult FMonolithMaterialActions::GetFullConnectionGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -1153,8 +1170,16 @@ FMonolithActionResult FMonolithMaterialActions::GetFullConnectionGraph(const TSh
 
 FMonolithActionResult FMonolithMaterialActions::DisconnectExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ExpressionName = Params->GetStringField(TEXT("expression_name"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ExpressionName;
+	if (!Params->TryGetStringField(TEXT("expression_name"), ExpressionName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'expression_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString InputName = TEXT("");
 	Params->TryGetStringField(TEXT("input_name"), InputName);
 	bool bDisconnectOutputs = false;
@@ -1324,7 +1349,11 @@ FMonolithActionResult FMonolithMaterialActions::DisconnectExpression(const TShar
 
 FMonolithActionResult FMonolithMaterialActions::BeginTransaction(const TSharedPtr<FJsonObject>& Params)
 {
-	FString TransactionName = Params->GetStringField(TEXT("transaction_name"));
+	FString TransactionName;
+	if (!Params->TryGetStringField(TEXT("transaction_name"), TransactionName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'transaction_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	GEditor->BeginTransaction(FText::FromString(TransactionName));
 
 	auto ResultJson = MakeShared<FJsonObject>();
@@ -1354,7 +1383,11 @@ FMonolithActionResult FMonolithMaterialActions::EndTransaction(const TSharedPtr<
 
 FMonolithActionResult FMonolithMaterialActions::BuildMaterialGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bClearExisting = true;
 	Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting);
 
@@ -1372,11 +1405,14 @@ FMonolithActionResult FMonolithMaterialActions::BuildMaterialGraph(const TShared
 	}
 	else if (Params->HasTypedField<EJson::String>(TEXT("graph_spec")))
 	{
-		FString GraphSpecJson = Params->GetStringField(TEXT("graph_spec"));
-		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(GraphSpecJson);
-		if (!FJsonSerializer::Deserialize(Reader, Spec) || !Spec.IsValid())
+		FString GraphSpecJson;
+		if (Params->TryGetStringField(TEXT("graph_spec"), GraphSpecJson))
 		{
-			return FMonolithActionResult::Error(TEXT("Failed to parse graph_spec JSON string"));
+			TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(GraphSpecJson);
+			if (!FJsonSerializer::Deserialize(Reader, Spec) || !Spec.IsValid())
+			{
+				return FMonolithActionResult::Error(TEXT("Failed to parse graph_spec JSON string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 	}
 	else
@@ -1570,7 +1606,11 @@ FMonolithActionResult FMonolithMaterialActions::BuildMaterialGraph(const TShared
 
 FMonolithActionResult FMonolithMaterialActions::ExportMaterialGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	bool bIncludeProperties = true;
 	bool bIncludePositions = true;
@@ -1773,8 +1813,16 @@ FMonolithActionResult FMonolithMaterialActions::ExportMaterialGraph(const TShare
 
 FMonolithActionResult FMonolithMaterialActions::ImportMaterialGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString GraphJson = Params->GetStringField(TEXT("graph_json"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString GraphJson;
+	if (!Params->TryGetStringField(TEXT("graph_json"), GraphJson))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_json' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString Mode = TEXT("overwrite");
 	Params->TryGetStringField(TEXT("mode"), Mode);
 
