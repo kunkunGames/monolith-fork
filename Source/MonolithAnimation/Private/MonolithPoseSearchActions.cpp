@@ -452,6 +452,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetPoseSearchSchema(cons
 
 		// All roled skeletons
 		TArray<TSharedPtr<FJsonValue>> SkeletonArray;
+		SkeletonArray.Reserve(RoledSkeletons.Num());
 		for (int32 i = 0; i < RoledSkeletons.Num(); ++i)
 		{
 			TSharedPtr<FJsonObject> SkelObj = MakeShared<FJsonObject>();
@@ -478,6 +479,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetPoseSearchSchema(cons
 	// Channels
 	TConstArrayView<TObjectPtr<UPoseSearchFeatureChannel>> Channels = Schema->GetChannels();
 	TArray<TSharedPtr<FJsonValue>> ChannelArray;
+	ChannelArray.Reserve(Channels.Num());
 	for (int32 i = 0; i < Channels.Num(); ++i)
 	{
 		const UPoseSearchFeatureChannel* Channel = Channels[i];
@@ -494,6 +496,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetPoseSearchSchema(cons
 		{
 			ChObj->SetNumberField(TEXT("sample_count"), TrajChannel->Samples.Num());
 			TArray<TSharedPtr<FJsonValue>> SampleArr;
+			SampleArr.Reserve(TrajChannel->Samples.Num());
 			for (const FPoseSearchTrajectorySample& S : TrajChannel->Samples)
 			{
 				TSharedPtr<FJsonObject> SObj = MakeShared<FJsonObject>();
@@ -510,6 +513,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetPoseSearchSchema(cons
 		{
 			ChObj->SetNumberField(TEXT("bone_count"), PoseChannel->SampledBones.Num());
 			TArray<TSharedPtr<FJsonValue>> BoneArr;
+			BoneArr.Reserve(PoseChannel->SampledBones.Num());
 			for (const FPoseSearchBone& B : PoseChannel->SampledBones)
 			{
 				BoneArr.Add(MakeShared<FJsonValueString>(B.Reference.BoneName.ToString()));
@@ -553,6 +557,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetPoseSearchDatabase(co
 	Root->SetNumberField(TEXT("count"), NumAssets);
 
 	TArray<TSharedPtr<FJsonValue>> SeqArray;
+	SeqArray.Reserve(NumAssets);
 	for (int32 i = 0; i < NumAssets; ++i)
 	{
 		const FPoseSearchDatabaseAnimationAsset* AnimAsset = Database->GetDatabaseAnimationAsset(i);
@@ -716,6 +721,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetDatabaseStats(const T
 	// §12b R1: per-entry flags — needed by tasks 1.2, 1.4, 1.5 read-backs
 	{
 		TArray<TSharedPtr<FJsonValue>> EntryArray;
+		EntryArray.Reserve(EntryCount);
 		for (int32 i = 0; i < EntryCount; ++i)
 		{
 			const FPoseSearchDatabaseAnimationAsset* Entry = Database->GetDatabaseAnimationAsset(i);
@@ -798,6 +804,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleGetDatabaseStats(const T
 	if (Database->Tags.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> TagArray;
+		TagArray.Reserve(Database->Tags.Num());
 		for (const FName& Tag : Database->Tags)
 		{
 			TagArray.Add(MakeShared<FJsonValueString>(Tag.ToString()));
@@ -2137,6 +2144,7 @@ static FMonolithActionResult HandleDeriveSchemaChannelsFromSkeleton(const TShare
 	Root->SetNumberField(TEXT("foot_bone_count"), FootBones.Num());
 	{
 		TArray<TSharedPtr<FJsonValue>> BoneArr;
+		BoneArr.Reserve(FootBones.Num());
 		for (const FName& Bone : FootBones) BoneArr.Add(MakeShared<FJsonValueString>(Bone.ToString()));
 		Root->SetArrayField(TEXT("foot_bones"), BoneArr);
 	}
