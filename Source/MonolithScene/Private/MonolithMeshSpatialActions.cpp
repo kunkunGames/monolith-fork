@@ -356,6 +356,7 @@ FMonolithActionResult FMonolithMeshSpatialActions::QueryMultiRaycast(const TShar
 	}
 
 	TArray<TSharedPtr<FJsonValue>> HitsArr;
+	HitsArr.Reserve(Hits.Num());
 	for (const FHitResult& Hit : Hits)
 	{
 		HitsArr.Add(MakeShared<FJsonValueObject>(HitResultToJson(Hit)));
@@ -591,6 +592,7 @@ FMonolithActionResult FMonolithMeshSpatialActions::QueryRadialSweep(const TShare
 		}
 
 		TArray<TSharedPtr<FJsonValue>> ActorArr;
+		ActorArr.Reserve(Pair.Value.ActorsHit.Num());
 		for (const FString& ActorName : Pair.Value.ActorsHit)
 		{
 			ActorArr.Add(MakeShared<FJsonValueString>(ActorName));
@@ -601,6 +603,7 @@ FMonolithActionResult FMonolithMeshSpatialActions::QueryRadialSweep(const TShare
 	}
 
 	TArray<TSharedPtr<FJsonValue>> UniqueActorsArr;
+	UniqueActorsArr.Reserve(AllActorsHit.Num());
 	for (const FString& ActorName : AllActorsHit)
 	{
 		UniqueActorsArr.Add(MakeShared<FJsonValueString>(ActorName));
@@ -698,6 +701,8 @@ FMonolithActionResult FMonolithMeshSpatialActions::QueryOverlap(const TSharedPtr
 	// Deduplicate by actor
 	TSet<AActor*> SeenActors;
 	TArray<TSharedPtr<FJsonValue>> ActorsArr;
+
+	ActorsArr.Reserve(Overlaps.Num());
 
 	for (const FOverlapResult& Overlap : Overlaps)
 	{
@@ -836,6 +841,7 @@ FMonolithActionResult FMonolithMeshSpatialActions::QueryNearest(const TSharedPtr
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ActorsArr;
+	ActorsArr.Reserve(Entries.Num());
 	for (const FActorEntry& Entry : Entries)
 	{
 		auto ActorObj = MakeShared<FJsonObject>();
@@ -1295,6 +1301,7 @@ FMonolithActionResult FMonolithMeshSpatialActions::GetSpatialRelationships(const
 
 	TArray<TSharedPtr<FJsonValue>> NeighborsArr;
 
+	NeighborsArr.Reserve(Neighbors.Num());
 	for (const FNeighborEntry& Entry : Neighbors)
 	{
 		FVector NeighborOrigin, NeighborExtent;
@@ -1468,6 +1475,7 @@ FMonolithActionResult FMonolithMeshSpatialActions::QueryNavmesh(const TSharedPtr
 
 	// Convert path points
 	TArray<TSharedPtr<FJsonValue>> PointsArr;
+	PointsArr.Reserve(PathPoints.Num());
 	double TotalDistance = 0.0;
 
 	for (int32 i = 0; i < PathPoints.Num(); ++i)
