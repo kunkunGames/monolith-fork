@@ -26,7 +26,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [config](#config) | 11 | INI config inspection and search |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
-| [source](#source) | 11 | Unreal Engine C++ source code navigation |
+| [source](#source) | 12 | Unreal Engine C++ source code navigation |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 142 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, DataAsset profile inspection/writes, runtime probes, scaffold |
@@ -833,7 +833,7 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 
 ## source
 
-Unreal Engine C++ source code navigation. 1M+ symbols indexed. **12 actions** (11 navigation + 1 Reflection Intelligence audit registered cross-namespace in v0.17.0).
+Unreal Engine C++ source code navigation. 1M+ symbols indexed. **13 actions** (12 navigation + 1 Reflection Intelligence audit registered cross-namespace in v0.17.0).
 
 ### `source.read_source`
 
@@ -903,6 +903,18 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **12 actions** (1
 ### `source.trigger_reindex` · `source.trigger_project_reindex`
 
 `trigger_reindex` does a full clean build (engine + shaders + project). `trigger_project_reindex` is incremental (project Source/ + Plugins/ only). Both take *no parameters*. Offline `monolith_query.exe source trigger_project_reindex` returns live-only guidance instead of an unknown-action error; actual indexing still requires the editor-backed MCP action.
+
+### `source.impact_radius`
+
+Bounded BFS over call/type references, inheritance and function overrides: who is impacted within N hops.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | **required** | Seed symbol name |
+| `edge_kinds` | string | optional | `call\|type\|inheritance` by default; append `\|override` or use `find_overrides` for virtual/override function edits |
+| `direction` | string | optional | `in`, `out`, or `both`. Default: `both` |
+| `max_depth` | integer | optional | Max traversal hops. Default: `2` |
+| `max_results` | integer | optional | Max impacted symbols. Default: `200` |
 
 ### `source.find_overrides`
 
