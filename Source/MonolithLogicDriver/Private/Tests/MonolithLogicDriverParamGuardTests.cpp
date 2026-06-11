@@ -470,4 +470,31 @@ bool FMonolithParamGuardLogicDriverAddAnyStateNodeRejectsMalformedParamsTest::Ru
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverSetExposedPropertyRejectsMissingValueTest, "Monolith.ParamGuard.LogicDriver.SetExposedPropertyRejectsMissingValue", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverSetExposedPropertyRejectsMissingValueTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("set_exposed_property")))
+	{
+		FMonolithLogicDriverNodeActions::RegisterActions(Registry);
+	}
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	Params->SetStringField(TEXT("node_guid"), TEXT("test-guid"));
+	Params->SetStringField(TEXT("property_name"), TEXT("MyProperty"));
+
+	FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("set_exposed_property"), Params);
+	TestTrue(TEXT("set_exposed_property rejects missing value"), !Result.bSuccess);
+	TestTrue(TEXT("error mentions missing value param"), Result.ErrorMessage.Contains(TEXT("value")));
+
+	Params->SetNumberField(TEXT("value"), 123.0);
+	Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("set_exposed_property"), Params);
+	TestTrue(TEXT("set_exposed_property rejects non-string value"), !Result.bSuccess);
+	TestEqual(TEXT("non-string value returns ErrInvalidParams (-32602)"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+	TestTrue(TEXT("error mentions string value param"), Result.ErrorMessage.Contains(TEXT("value")) && Result.ErrorMessage.Contains(TEXT("string")));
+
+	return true;
+}
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
