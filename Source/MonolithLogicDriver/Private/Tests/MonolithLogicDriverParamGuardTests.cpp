@@ -2,6 +2,7 @@
 #include "Misc/AutomationTest.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithLogicDriverComponentActions.h"
 #include "MonolithLogicDriverNodeActions.h"
 #include "MonolithLogicDriverScaffoldActions.h"
@@ -338,6 +339,39 @@ bool FMonolithParamGuardLogicDriverBuildSMFromSpecRejectsMalformedParamsTest::Ru
 		FMonolithActionResult Result = ExecuteAction(Params);
 		TestTrue(TEXT("Malformed nested_sms array should return error"), !Result.bSuccess);
 		TestTrue(TEXT("Error message should mention nested_sms"), Result.ErrorMessage.Contains(TEXT("nested_sms")));
+	}
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverComponentActionsRejectsMissingBlueprintPathTest, "Monolith.ParamGuard.LogicDriver.ComponentActionsRejectsMissingBlueprintPath", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverComponentActionsRejectsMissingBlueprintPathTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> EmptyParams = MakeShared<FJsonObject>();
+
+	// Test 1: get_sm_component_config
+	{
+		FMonolithActionResult Result = FMonolithLogicDriverComponentActions::HandleGetSMComponentConfig(EmptyParams);
+		TestTrue(TEXT("HandleGetSMComponentConfig rejects missing blueprint_path"), !Result.bSuccess);
+		TestEqual(TEXT("HandleGetSMComponentConfig returns ErrInvalidParams (-32602)"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+		TestTrue(TEXT("Error message should mention blueprint_path"), Result.ErrorMessage.Contains(TEXT("blueprint_path")));
+	}
+
+	// Test 2: add_sm_component
+	{
+		FMonolithActionResult Result = FMonolithLogicDriverComponentActions::HandleAddSMComponent(EmptyParams);
+		TestTrue(TEXT("HandleAddSMComponent rejects missing blueprint_path"), !Result.bSuccess);
+		TestEqual(TEXT("HandleAddSMComponent returns ErrInvalidParams (-32602)"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+		TestTrue(TEXT("Error message should mention blueprint_path"), Result.ErrorMessage.Contains(TEXT("blueprint_path")));
+	}
+
+	// Test 3: configure_sm_component
+	{
+		FMonolithActionResult Result = FMonolithLogicDriverComponentActions::HandleConfigureSMComponent(EmptyParams);
+		TestTrue(TEXT("HandleConfigureSMComponent rejects missing blueprint_path"), !Result.bSuccess);
+		TestEqual(TEXT("HandleConfigureSMComponent returns ErrInvalidParams (-32602)"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+		TestTrue(TEXT("Error message should mention blueprint_path"), Result.ErrorMessage.Contains(TEXT("blueprint_path")));
 	}
 
 	return true;

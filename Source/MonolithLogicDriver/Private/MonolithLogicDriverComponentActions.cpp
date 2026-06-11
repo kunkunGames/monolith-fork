@@ -177,7 +177,7 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleGetSMComponent
 	FString BPPath;
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("blueprint_path"), BPPath) || BPPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param: blueprint_path"));
+		return FMonolithActionResult::Error(TEXT("Missing required param: blueprint_path"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString ComponentName;
@@ -293,7 +293,7 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleAddSMComponent
 	FString BPPath;
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("blueprint_path"), BPPath) || BPPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param: blueprint_path"));
+		return FMonolithActionResult::Error(TEXT("Missing required param: blueprint_path"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString CompName = TEXT("StateMachineComponent");
@@ -407,7 +407,7 @@ FMonolithActionResult FMonolithLogicDriverComponentActions::HandleConfigureSMCom
 	FString BPPath;
 	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("blueprint_path"), BPPath) || BPPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param: blueprint_path"));
+		return FMonolithActionResult::Error(TEXT("Missing required param: blueprint_path"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString ComponentName;
