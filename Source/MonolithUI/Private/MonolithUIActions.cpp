@@ -6,6 +6,9 @@
 #include "WidgetBlueprintFactory.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/SavePackage.h"
+#include "MonolithAssetUtils.h"
+#include "Misc/PackageName.h"
+#include "UObject/ObjectRedirector.h"
 
 // Phase C: set_widget_property routes through the allowlist-gated reflection
 // helper. The legacy bare-FProperty::ImportText_Direct path is preserved
@@ -1256,11 +1259,22 @@ namespace MonolithUIActionsPhase2
         if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, ParamError))
             return ParamError;
 
-        UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
+        const FString RequestedAssetPath = AssetPath;
+        const FString BlueprintObjectPath = FPackageName::ExportTextPathToObjectPath(AssetPath);
+
+        UBlueprint* Blueprint = FMonolithAssetUtils::LoadAssetByPath<UBlueprint>(BlueprintObjectPath);
+        if (!Blueprint)
+        {
+            UObject* RedirectorObject = StaticLoadObject(UObjectRedirector::StaticClass(), nullptr, *BlueprintObjectPath);
+            if (UObjectRedirector* Redirector = Cast<UObjectRedirector>(RedirectorObject))
+            {
+                Blueprint = Cast<UBlueprint>(Redirector->DestinationObject);
+            }
+        }
         if (!Blueprint)
         {
             return FMonolithActionResult::Error(
-                FString::Printf(TEXT("Failed to load Blueprint at '%s'"), *AssetPath),
+                FString::Printf(TEXT("Failed to load Blueprint at '%s'"), *RequestedAssetPath),
                 -32602);
         }
 
