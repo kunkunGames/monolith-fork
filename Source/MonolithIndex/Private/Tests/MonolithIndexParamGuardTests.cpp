@@ -73,5 +73,14 @@ bool FProjectIndexParamGuardTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("GetSavedAssetState: Error code for package_path"), Result.ErrorCode, -32602);
 	}
 
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT(""));
+		Params->SetStringField(TEXT("package_path"), TEXT("/Game/Foo"));
+		FMonolithActionResult Result = FProjectGetAssetDetailsAction::Execute(Params);
+		// It might fail to find the asset, but it shouldn't fail with -32602 (invalid params)
+		TestNotEqual(TEXT("GetAssetDetails: Fallback to package_path when asset_path is empty"), Result.ErrorCode, -32602);
+	}
+
 	return true;
 }
