@@ -3,6 +3,30 @@ using System.IO;
 
 public class MonolithComboGraph : ModuleRules
 {
+	private bool FindComboGraphPlugin(string SearchDir)
+	{
+		if (!Directory.Exists(SearchDir))
+		{
+			return false;
+		}
+
+		if (File.Exists(Path.Combine(SearchDir, "ComboGraph", "ComboGraph.uplugin")))
+		{
+			return true;
+		}
+
+		string[] Dirs = Directory.GetDirectories(SearchDir, "ComboGraph_*", SearchOption.TopDirectoryOnly);
+		foreach (string Dir in Dirs)
+		{
+			if (File.Exists(Path.Combine(Dir, "ComboGraph.uplugin")))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public MonolithComboGraph(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -18,14 +42,7 @@ public class MonolithComboGraph : ModuleRules
 			{
 				string ProjectPluginsDir = Path.Combine(
 					Target.ProjectFile.Directory.FullName, "Plugins");
-				if (Directory.Exists(ProjectPluginsDir))
-				{
-					bHasComboGraph = Directory.Exists(
-						Path.Combine(ProjectPluginsDir, "ComboGraph"))
-						|| (Directory.Exists(ProjectPluginsDir) && Directory.GetDirectories(
-							ProjectPluginsDir, "ComboGraph_*",
-							SearchOption.TopDirectoryOnly).Length > 0);
-				}
+				bHasComboGraph = FindComboGraphPlugin(ProjectPluginsDir);
 			}
 
 			// 2. Check Engine Plugins/Marketplace/ folder (Fab install)
@@ -33,35 +50,13 @@ public class MonolithComboGraph : ModuleRules
 			{
 				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
 				string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
-				if (Directory.Exists(MarketplaceDir))
-				{
-					bHasComboGraph = Directory.Exists(
-						Path.Combine(MarketplaceDir, "ComboGraph"));
-
-					if (!bHasComboGraph)
-					{
-						bHasComboGraph = Directory.Exists(MarketplaceDir) && Directory.GetDirectories(
-							MarketplaceDir, "ComboGraph_*",
-							SearchOption.TopDirectoryOnly).Length > 0;
-					}
-				}
+				bHasComboGraph = FindComboGraphPlugin(MarketplaceDir);
 
 				// 3. Check Engine Plugins/ root
 				if (!bHasComboGraph)
 				{
 					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-					if (Directory.Exists(EnginePluginsDir))
-					{
-						bHasComboGraph = Directory.Exists(
-							Path.Combine(EnginePluginsDir, "ComboGraph"));
-
-						if (!bHasComboGraph)
-						{
-							bHasComboGraph = Directory.Exists(EnginePluginsDir) && Directory.GetDirectories(
-								EnginePluginsDir, "ComboGraph_*",
-								SearchOption.TopDirectoryOnly).Length > 0;
-						}
-					}
+					bHasComboGraph = FindComboGraphPlugin(EnginePluginsDir);
 				}
 			}
 		}
