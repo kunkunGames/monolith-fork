@@ -3,6 +3,30 @@ using System.IO;
 
 public class MonolithGAS : ModuleRules
 {
+	private static bool HasPluginDir(string BaseDir, string PluginName)
+	{
+		if (!Directory.Exists(BaseDir))
+		{
+			return false;
+		}
+
+		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
+		{
+			return true;
+		}
+
+		string[] Dirs = Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly);
+		foreach (string Dir in Dirs)
+		{
+			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public MonolithGAS(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -48,14 +72,7 @@ public class MonolithGAS : ModuleRules
 			{
 				string ProjectPluginsDir = Path.Combine(
 					Target.ProjectFile.Directory.FullName, "Plugins");
-				if (Directory.Exists(ProjectPluginsDir))
-				{
-					bHasGBA = Directory.Exists(
-						Path.Combine(ProjectPluginsDir, "BlueprintAttributes"))
-						|| (Directory.Exists(ProjectPluginsDir) && Directory.GetDirectories(
-							ProjectPluginsDir, "BlueprintAttributes_*",
-							SearchOption.TopDirectoryOnly).Length > 0);
-				}
+				bHasGBA = HasPluginDir(ProjectPluginsDir, "BlueprintAttributes");
 			}
 
 			// 2. Engine Plugins/Marketplace/ folder (Fab install)
@@ -64,32 +81,13 @@ public class MonolithGAS : ModuleRules
 				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
 				string MarketplaceDir = Path.Combine(
 					EngineDir, "Plugins", "Marketplace");
-				if (Directory.Exists(MarketplaceDir))
-				{
-					bHasGBA = Directory.Exists(
-						Path.Combine(MarketplaceDir, "BlueprintAttributes"));
-
-					if (!bHasGBA)
-					{
-						bHasGBA = Directory.Exists(MarketplaceDir) && Directory.GetDirectories(
-							MarketplaceDir, "BlueprintAttributes_*",
-							SearchOption.TopDirectoryOnly).Length > 0;
-					}
-				}
+				bHasGBA = HasPluginDir(MarketplaceDir, "BlueprintAttributes");
 
 				// 3. Engine Plugins/ root
 				if (!bHasGBA)
 				{
 					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-					bHasGBA = Directory.Exists(
-						Path.Combine(EnginePluginsDir, "BlueprintAttributes"));
-
-					if (!bHasGBA)
-					{
-						bHasGBA = Directory.Exists(EnginePluginsDir) && Directory.GetDirectories(
-							EnginePluginsDir, "BlueprintAttributes_*",
-							SearchOption.TopDirectoryOnly).Length > 0;
-					}
+					bHasGBA = HasPluginDir(EnginePluginsDir, "BlueprintAttributes");
 				}
 			}
 		}
