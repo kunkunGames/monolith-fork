@@ -32,3 +32,18 @@ tumourlove and now unified into this single package:
 - `NiagaraMCPBridge` — 39 UFUNCTIONs across 7 classes for Niagara system access
 
 **Total: 231 original tools folded in — and vastly expanded since. Monolith today exposes 1,387 actions through 29 namespace-dispatch MCP tools.**
+
+## Vendored Third-Party Code
+
+Monolith includes the following third-party code directly in the source tree to simplify standalone tool compilation:
+
+### nlohmann/json
+- **Source:** `Tools/MonolithProxy/ThirdParty/nlohmann/json.hpp`
+- **License:** MIT License
+- **Copyright:** Copyright (c) 2013-2023 Niels Lohmann <https://nlohmann.me>
+- **Purpose:** Used for JSON parsing and serialization in the C++ MCP Proxy executable.
+
+### SQLite
+- **Source:** `Tools/MonolithQuery/ThirdParty/sqlite3.c` and `sqlite3.h`
+- **License:** Public Domain / Blessing ("May you do good and not evil.")
+- **Purpose:** Used as the embedded database engine for the offline Project Index query tool.
