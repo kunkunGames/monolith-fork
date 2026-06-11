@@ -298,13 +298,24 @@ Then use Claude Code or any MCP-compatible client to interact with the tools.
 When preparing a new release of Monolith:
 
 1. **Update versions:** Update the version number in `Monolith.uplugin`, `Source/MonolithCore/Public/MonolithCoreModule.h`, `CHANGELOG.md`, `README.md`, `Docs/API_REFERENCE.md`, and `Docs/SPEC_CORE.md`.
-2. **Action counts:** Verify that action counts in `README.md` and `Docs/API_REFERENCE.md` match `monolith_discover()` output.
-3. **Clean working tree:** Ensure your git working tree is clean (`git status`). The release script refuses to run with uncommitted changes unless forced.
-4. **Build release ZIP:** Run the release script from PowerShell:
+2. **Action counts:** Verify every count-bearing release file against `monolith_discover()` / the action-count synchronization rule: `README.md`, `Docs/API_REFERENCE.md`, `Docs/SPEC_CORE.md`, and `Monolith.uplugin`.
+3. **Commit release metadata:** Commit and push the version/count/doc updates before packaging so the release script sees the intended clean tree.
+   ```bash
+   git status --short
+   git add Monolith.uplugin Source/MonolithCore/Public/MonolithCoreModule.h CHANGELOG.md README.md Docs/API_REFERENCE.md Docs/SPEC_CORE.md
+   git commit -m "Release vX.Y.Z metadata"
+   git push origin master
+   ```
+4. **Clean working tree:** Ensure `git status --short` is empty. The release script refuses to run with uncommitted changes unless forced.
+5. **Build release ZIP:** Run the release script from PowerShell:
    ```powershell
    powershell -ExecutionPolicy Bypass -File Scripts/make_release.ps1 -Version "X.Y.Z"
    ```
-5. **Publish:** Create a GitHub Release with the new tag. **Crucial:** You must copy the exact `Monolith-SHA256: <hash>` output from the release script and paste it into the release notes body. When providing platform-specific release assets, include all applicable markers (`Monolith-SHA256: <hash>`, `Monolith-macOS-SHA256: <hash>`, `Monolith-Linux-SHA256: <hash>`). If a platform's marker is missing, the auto-updater logs a warning and proceeds without the release-notes integrity check.
+6. **Publish:** Create a GitHub Release with the new tag and attach the generated ZIP asset (for the default Windows build, `../Monolith-vX.Y.Z.zip`; for platform builds, also attach the matching `Monolith-vX.Y.Z-macOS.zip` / `Monolith-vX.Y.Z-Linux.zip` assets).
+   ```bash
+   gh release create vX.Y.Z "../Monolith-vX.Y.Z.zip" --title "Monolith vX.Y.Z" --notes-file release_notes.md
+   ```
+   **Crucial:** You must copy the exact `Monolith-SHA256: <hash>` output from the release script into the release notes body before publishing. When providing platform-specific release assets, include all applicable markers (`Monolith-SHA256: <hash>`, `Monolith-macOS-SHA256: <hash>`, `Monolith-Linux-SHA256: <hash>`). If a platform's marker is missing, the auto-updater logs a warning and proceeds without the release-notes integrity check.
 
 ## Architecture Notes
 
