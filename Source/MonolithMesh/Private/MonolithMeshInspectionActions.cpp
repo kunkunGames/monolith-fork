@@ -747,7 +747,7 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetMeshUvs(const TSharedPt
 	}
 
 	FStaticMeshRenderData* RenderData = SM->GetRenderData();
-	if (!RenderData || LodIndex >= RenderData->LODResources.Num())
+	if (!RenderData || LodIndex < 0 || LodIndex >= RenderData->LODResources.Num())
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid LOD index %d"), LodIndex));
 	}
@@ -1321,7 +1321,7 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetVertexData(const TShare
 	}
 
 	FStaticMeshRenderData* RenderData = SM->GetRenderData();
-	if (!RenderData || LodIndex >= RenderData->LODResources.Num())
+	if (!RenderData || LodIndex < 0 || LodIndex >= RenderData->LODResources.Num())
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid LOD index %d"), LodIndex));
 	}
