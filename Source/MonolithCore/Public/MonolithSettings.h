@@ -66,11 +66,11 @@ public:
 			  ToolTip="Reserved feature flag for MCP resources/list and resources/read support. Default off until resource providers are implemented."))
 	bool bEnableMcpResources = false;
 
-	/** Adds MCP structuredContent and typed content entries while preserving
-	 *  legacy text JSON output. Default off for existing clients. */
+	/** Adds MCP structuredContent while replacing successful text JSON with a
+	 *  compact status line. Default off for existing clients. */
 	UPROPERTY(config, EditAnywhere, Category="MCP Server|Results",
 		meta=(DisplayName="Enable Structured Tool Results",
-			  ToolTip="Reserved feature flag for structuredContent and typed MCP content. Legacy text JSON remains available."))
+			  ToolTip="Emit successful tool JSON in structuredContent instead of duplicating it in text content."))
 	bool bEnableStructuredToolResults = false;
 
 	/** Enables persistent MCP session/request state, progress, and cancellation

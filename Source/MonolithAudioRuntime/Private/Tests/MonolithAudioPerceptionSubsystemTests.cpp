@@ -10,7 +10,7 @@
 
 // Note: A minimal smoke test scaffold for the perception subsystem without launching a live editor session.
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioPerceptionSubsystemTest, "Monolith.AudioRuntime.PerceptionSubsystem", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioPerceptionSubsystemTest, "Monolith.AudioRuntime.PerceptionSubsystem", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithAudioPerceptionSubsystemTest::RunTest(const FString& Parameters)
 {

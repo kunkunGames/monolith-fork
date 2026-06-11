@@ -6,9 +6,10 @@
 /**
  * Helpers for MCP tool result envelopes.
  *
- * Legacy clients continue to receive JSON serialized into text content.
- * Newer MCP clients can opt into structuredContent through settings-gated
- * call sites.
+ * Legacy clients continue to receive JSON serialized into text content while
+ * newer MCP clients can opt into structuredContent through settings-gated call
+ * sites. In structured mode, successful responses keep content[] compact and
+ * place the JSON payload only in structuredContent.
  */
 class MONOLITHCORE_API FMonolithToolResultUtils
 {
@@ -20,5 +21,5 @@ public:
 private:
 	static FString BuildErrorText(const FMonolithActionResult& ActionResult);
 	static TSharedPtr<FJsonObject> BuildStructuredErrorContent(const FMonolithActionResult& ActionResult);
-	static TSharedPtr<FJsonObject> BuildMetaObject(const FString& ResultKind);
+	static TSharedPtr<FJsonObject> BuildMetaObject(const FString& ResultKind, const FString& ContentTextMode);
 };

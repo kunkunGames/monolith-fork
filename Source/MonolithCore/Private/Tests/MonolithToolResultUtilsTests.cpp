@@ -72,9 +72,11 @@ bool FMonolithToolResultStructuredShapeTest::RunTest(const FString& Parameters)
 	if (Meta && Meta->IsValid())
 	{
 		TestEqual(TEXT("result kind"), (*Meta)->GetStringField(TEXT("result_kind")), TEXT("structured"));
-		TestTrue(TEXT("legacy text JSON marker"), (*Meta)->GetBoolField(TEXT("legacy_text_json")));
+		TestFalse(TEXT("legacy text JSON marker is omitted"), (*Meta)->HasField(TEXT("legacy_text_json")));
+		TestEqual(TEXT("content text mode"), (*Meta)->GetStringField(TEXT("content_text_mode")), TEXT("compact_status"));
 	}
-	TestTrue(TEXT("Structured result preserves legacy text JSON"), FirstTextContent(Result).Contains(TEXT("\"value\":7")));
+	TestEqual(TEXT("Structured result uses compact text"), FirstTextContent(Result), TEXT("OK; see structuredContent."));
+	TestFalse(TEXT("Structured result does not duplicate JSON text"), FirstTextContent(Result).Contains(TEXT("\"value\":7")));
 	return true;
 }
 
@@ -89,7 +91,7 @@ bool FMonolithToolResultStructuredEmptySuccessTest::RunTest(const FString& Param
 
 	TestTrue(TEXT("Empty success result exists"), Result.IsValid());
 	TestFalse(TEXT("Empty success is not an error"), Result->GetBoolField(TEXT("isError")));
-	TestEqual(TEXT("Empty success text JSON"), FirstTextContent(Result), TEXT("{}"));
+	TestEqual(TEXT("Empty success text is compact"), FirstTextContent(Result), TEXT("OK; see structuredContent."));
 	TestTrue(TEXT("Empty success has structuredContent"), Result->HasTypedField<EJson::Object>(TEXT("structuredContent")));
 	return true;
 }
@@ -120,6 +122,14 @@ bool FMonolithToolResultStructuredErrorTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("structured error ok=false"), (*Structured)->GetBoolField(TEXT("ok")));
 		TestEqual(TEXT("structured error code"), (*Structured)->GetIntegerField(TEXT("error_code")), -32602);
 		TestTrue(TEXT("structured error data exists"), (*Structured)->HasTypedField<EJson::Object>(TEXT("error_data")));
+	}
+
+	const TSharedPtr<FJsonObject>* Meta = nullptr;
+	TestTrue(TEXT("_meta exists"), Result->TryGetObjectField(TEXT("_meta"), Meta));
+	if (Meta && Meta->IsValid())
+	{
+		TestEqual(TEXT("error content text mode"), (*Meta)->GetStringField(TEXT("content_text_mode")), TEXT("error_text"));
+		TestFalse(TEXT("error legacy text JSON marker is omitted"), (*Meta)->HasField(TEXT("legacy_text_json")));
 	}
 
 	return true;

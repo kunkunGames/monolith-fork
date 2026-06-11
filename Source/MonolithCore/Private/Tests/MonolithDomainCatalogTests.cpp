@@ -195,6 +195,11 @@ bool FMonolithSharedMcpFeatureStatusTest::RunTest(const FString& Parameters)
 			TestTrue(TEXT("Resources are configured"), Resources && Resources->IsValid() && (*Resources)->GetBoolField(TEXT("configured")));
 			TestFalse(TEXT("Resources are not active in settings-only slice"), Resources && Resources->IsValid() && (*Resources)->GetBoolField(TEXT("active")));
 			TestTrue(TEXT("Structured results are configured"), Structured && Structured->IsValid() && (*Structured)->GetBoolField(TEXT("configured")));
+			if (Structured && Structured->IsValid())
+			{
+				TestEqual(TEXT("Structured content mode"), (*Structured)->GetStringField(TEXT("content_mode")), TEXT("compact_text_plus_structured_content"));
+				TestFalse(TEXT("Structured status omits legacy text JSON marker"), (*Structured)->HasField(TEXT("legacy_text_json")));
+			}
 			TestTrue(TEXT("Session mode is configured"), Sessions && Sessions->IsValid() && (*Sessions)->GetBoolField(TEXT("configured")));
 			TestTrue(TEXT("Advanced records are configured"), Records && Records->IsValid() && (*Records)->GetBoolField(TEXT("configured")));
 		}

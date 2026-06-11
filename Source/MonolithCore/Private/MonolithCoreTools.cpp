@@ -382,8 +382,7 @@ static TSharedPtr<FJsonObject> MakeStructuredToolResultsStatus(const UMonolithSe
 		bConfigured,
 		bConfigured,
 		bConfigured ? TEXT("active_structured_content") : TEXT("disabled"));
-	Obj->SetBoolField(TEXT("legacy_text_json"), true);
-	Obj->SetStringField(TEXT("content_mode"), bConfigured ? TEXT("text_plus_structured_content") : TEXT("legacy_text_json_only"));
+	Obj->SetStringField(TEXT("content_mode"), bConfigured ? TEXT("compact_text_plus_structured_content") : TEXT("legacy_text_json_only"));
 	Obj->SetStringField(TEXT("scope"), TEXT("tools_call_response_envelope"));
 	return Obj;
 }

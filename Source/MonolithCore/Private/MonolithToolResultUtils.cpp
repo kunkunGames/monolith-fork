@@ -5,6 +5,8 @@
 
 namespace
 {
+	const TCHAR* StructuredSuccessText = TEXT("OK; see structuredContent.");
+
 	TArray<TSharedPtr<FJsonValue>> StringArrayToJsonValues(const TArray<FString>& Strings)
 	{
 		TArray<TSharedPtr<FJsonValue>> Values;
@@ -29,7 +31,11 @@ TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildMcpToolResult(
 	{
 		TSharedPtr<FJsonObject> TextContent = MakeShared<FJsonObject>();
 		TextContent->SetStringField(TEXT("type"), TEXT("text"));
-		if (ActionResult.Result.IsValid())
+		if (bEnableStructuredContent)
+		{
+			TextContent->SetStringField(TEXT("text"), StructuredSuccessText);
+		}
+		else if (ActionResult.Result.IsValid())
 		{
 			TextContent->SetStringField(TEXT("text"), FMonolithJsonUtils::Serialize(ActionResult.Result));
 		}
@@ -45,7 +51,7 @@ TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildMcpToolResult(
 			Result->SetObjectField(
 				TEXT("structuredContent"),
 				ActionResult.Result.IsValid() ? ActionResult.Result : MakeShared<FJsonObject>());
-			Result->SetObjectField(TEXT("_meta"), BuildMetaObject(TEXT("structured")));
+			Result->SetObjectField(TEXT("_meta"), BuildMetaObject(TEXT("structured"), TEXT("compact_status")));
 		}
 	}
 	else
@@ -75,7 +81,7 @@ TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildMcpToolResult(
 		if (bEnableStructuredContent)
 		{
 			Result->SetObjectField(TEXT("structuredContent"), BuildStructuredErrorContent(ActionResult));
-			Result->SetObjectField(TEXT("_meta"), BuildMetaObject(TEXT("error")));
+			Result->SetObjectField(TEXT("_meta"), BuildMetaObject(TEXT("error"), TEXT("error_text")));
 		}
 	}
 
@@ -131,11 +137,10 @@ TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildStructuredErrorContent(co
 	return Structured;
 }
 
-TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildMetaObject(const FString& ResultKind)
+TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildMetaObject(const FString& ResultKind, const FString& ContentTextMode)
 {
 	TSharedPtr<FJsonObject> Meta = MakeShared<FJsonObject>();
 	Meta->SetStringField(TEXT("result_kind"), ResultKind);
-	Meta->SetBoolField(TEXT("legacy_text_json"), true);
-	Meta->SetBoolField(TEXT("truncated"), false);
+	Meta->SetStringField(TEXT("content_text_mode"), ContentTextMode);
 	return Meta;
 }

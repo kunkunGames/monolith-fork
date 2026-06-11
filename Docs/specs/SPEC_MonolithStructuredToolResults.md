@@ -4,8 +4,8 @@
 **Engine:** Unreal Engine 5.7+
 **Status:** Implemented first slice
 **Owner module:** MonolithCore
-**Scope:** Add settings-gated MCP `structuredContent` helper output while preserving the legacy text JSON result envelope.
-**Non-goals:** Removing legacy text results, changing domain action result payloads, typed media content, resource links, session/progress metadata, per-action custom serializers.
+**Scope:** Add settings-gated MCP `structuredContent` helper output that avoids duplicating successful JSON in text content.
+**Non-goals:** Removing the legacy mode, changing domain action result payloads, typed media content, resource links, session/progress metadata, per-action custom serializers.
 
 ---
 
@@ -31,7 +31,7 @@ Monolith's MCP `tools/call` response currently serializes the action result JSON
 | Question | Current state | Needed state |
 |----------|---------------|--------------|
 | Can clients read successful results as JSON without text parsing? | No; JSON is embedded as a string. | Add `structuredContent` when opted in. |
-| Do old clients keep working? | Yes today. | Preserve `content[]` text JSON exactly as the compatibility surface. |
+| Do old clients keep working? | Yes today. | Preserve `content[]` text JSON when `bEnableStructuredToolResults=false`; when the flag is true, clients should read `structuredContent`. |
 | Can errors expose hints and related actions structurally? | Mostly text plus top-level legacy fields. | Add structured error content while preserving text and legacy fields. |
 | Is the behavior safely gated? | Implemented behind `bEnableStructuredToolResults`. | Keep helper output settings-gated. |
 
@@ -53,14 +53,14 @@ When `UMonolithSettings::bEnableStructuredToolResults=false`, `tools/call` respo
 }
 ```
 
-When `UMonolithSettings::bEnableStructuredToolResults=true`, successful calls additionally include `structuredContent` and `_meta`:
+When `UMonolithSettings::bEnableStructuredToolResults=true`, successful calls put the JSON payload in `structuredContent` and keep `content[]` as a compact status entry:
 
 ```json
 {
   "content": [
     {
       "type": "text",
-      "text": "{\"value\":42}"
+      "text": "OK; see structuredContent."
     }
   ],
   "isError": false,
@@ -69,8 +69,7 @@ When `UMonolithSettings::bEnableStructuredToolResults=true`, successful calls ad
   },
   "_meta": {
     "result_kind": "structured",
-    "legacy_text_json": true,
-    "truncated": false
+    "content_text_mode": "compact_status"
   }
 }
 ```
@@ -78,8 +77,8 @@ When `UMonolithSettings::bEnableStructuredToolResults=true`, successful calls ad
 Compatibility rules:
 
 1. `content` remains an array with a text entry for both success and error responses.
-2. Successful `structuredContent` is the same JSON object currently serialized into text.
-3. If an action succeeds with no result object, text remains `{}` and `structuredContent` is `{}`.
+2. Successful `structuredContent` is the single canonical JSON payload in structured mode.
+3. If an action succeeds with no result object, text remains compact and `structuredContent` is `{}`.
 4. Existing top-level legacy error fields such as `related_actions`, `hints`, and copied `ErrorData` stay available.
 
 ---
@@ -109,8 +108,7 @@ When structured output is enabled, errors should include a structured error obje
   },
   "_meta": {
     "result_kind": "error",
-    "legacy_text_json": true,
-    "truncated": false
+    "content_text_mode": "error_text"
   }
 }
 ```
@@ -136,7 +134,7 @@ Rules:
       "configured": true,
       "active": true,
       "state": "active_structured_content",
-      "legacy_text_json": true
+      "content_mode": "compact_text_plus_structured_content"
     }
   }
 }
@@ -151,7 +149,7 @@ This slice does not require restart-sensitive registration because helper output
 1. Add `FMonolithToolResultUtils` to build MCP tool result envelopes from `FMonolithActionResult`.
 2. Move duplicated success/error envelope construction out of `FMonolithHttpServer::HandleToolsCall`.
 3. Pass `UMonolithSettings::bEnableStructuredToolResults` into the helper at response build time.
-4. Preserve legacy text JSON and top-level legacy error fields.
+4. Preserve legacy text JSON only when the setting is disabled, and preserve top-level legacy error fields.
 5. Update server status feature reporting from settings-only to active/inactive helper state.
 6. Add automation tests for legacy success, structured success, structured no-result success, and structured error.
 7. Update `Docs/API_REFERENCE.md` and [SPEC_MonolithCore.md](SPEC_MonolithCore.md) when code lands.
@@ -163,8 +161,8 @@ This slice does not require restart-sensitive registration because helper output
 | Gate | Required evidence |
 |------|-------------------|
 | Legacy shape | With the flag false, `structuredContent` and `_meta` are absent and text JSON remains present. |
-| Structured success | With the flag true, `structuredContent` equals the success result object and text JSON is still present. |
-| Empty success | A success with no result object returns `{}` in text and `{}` in `structuredContent`. |
+| Structured success | With the flag true, `structuredContent` equals the success result object and text is compact rather than duplicated JSON. |
+| Empty success | A success with no result object returns compact text and `{}` in `structuredContent`. |
 | Structured error | Errors include `structuredContent.ok=false`, `error`, `error_code`, hints, related actions, and optional `error_data`. |
 | Status accuracy | `structured_tool_results` reports active only when configured. |
 | No domain contract drift | Domain action handlers do not need per-action changes. |
