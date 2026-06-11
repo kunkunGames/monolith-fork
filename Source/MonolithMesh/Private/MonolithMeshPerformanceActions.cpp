@@ -263,6 +263,7 @@ FMonolithActionResult FMonolithMeshPerformanceActions::EstimatePlacementCost(con
 	int32 TotalDrawCalls = 0;
 	int64 TotalVertices = 0;
 	TArray<TSharedPtr<FJsonValue>> PerAssetResults;
+	PerAssetResults.Reserve(AssetsArr->Num());
 
 	for (const TSharedPtr<FJsonValue>& Val : *AssetsArr)
 	{
