@@ -487,7 +487,7 @@ bool EnsureAssetPathFree(UPackage* Package, const FString& PackagePath, const FS
 		return false;
 	}
 
-	// Tier 3: Package-scoped search (catches objects loaded by FullyLoad)
+	// Tier 3: Package-scoped search (catches objects existing in package)
 	if (Package)
 	{
 		UObject* InPackage = FindObject<UObject>(Package, *AssetName);

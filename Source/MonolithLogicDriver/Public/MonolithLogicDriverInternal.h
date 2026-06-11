@@ -74,7 +74,7 @@ namespace MonolithLD
 	int32 GetIntProperty(UObject* Obj, FName PropName, int32 Default = 0);
 	float GetFloatProperty(UObject* Obj, FName PropName, float Default = 0.f);
 
-	/** 3-tier guard that asset path is free. MUST call AFTER CreatePackage+FullyLoad. */
+	/** 3-tier guard that asset path is free. MUST call AFTER CreatePackage. */
 	bool EnsureAssetPathFree(UPackage* Package, const FString& PackagePath, const FString& AssetName, FString& OutError);
 }
 
