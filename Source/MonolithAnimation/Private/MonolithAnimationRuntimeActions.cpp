@@ -215,6 +215,7 @@ FMonolithActionResult FMonolithAnimationRuntimeActions::HandleSamplePIEAnimInsta
 	const TArray<TSharedPtr<FJsonValue>>* RequestedSMs = nullptr;
 	if (Params->TryGetArrayField(TEXT("state_machines"), RequestedSMs) && RequestedSMs)
 	{
+		MachineNames.Reserve(RequestedSMs->Num());
 		for (const TSharedPtr<FJsonValue>& V : *RequestedSMs)
 		{
 			FString Name;
@@ -229,6 +230,7 @@ FMonolithActionResult FMonolithAnimationRuntimeActions::HandleSamplePIEAnimInsta
 		// Enumerate all baked state machines from the generated anim class.
 		if (IAnimClassInterface* AnimClassInterface = IAnimClassInterface::GetFromClass(AnimInstance->GetClass()))
 		{
+			MachineNames.Reserve(AnimClassInterface->GetBakedStateMachines().Num());
 			for (const FBakedAnimationStateMachine& Baked : AnimClassInterface->GetBakedStateMachines())
 			{
 				MachineNames.Add(Baked.MachineName);
@@ -236,6 +238,7 @@ FMonolithActionResult FMonolithAnimationRuntimeActions::HandleSamplePIEAnimInsta
 		}
 	}
 
+	StateMachinesArr.Reserve(MachineNames.Num());
 	for (const FName& MachineName : MachineNames)
 	{
 		const int32 MachineIndex = AnimInstance->GetStateMachineIndex(MachineName);
@@ -297,6 +300,7 @@ FMonolithActionResult FMonolithAnimationRuntimeActions::HandleSamplePIEAnimInsta
 	if (Params->TryGetArrayField(TEXT("bones"), RequestedBones) && RequestedBones)
 	{
 		TArray<TSharedPtr<FJsonValue>> BonesArr;
+		BonesArr.Reserve(RequestedBones->Num());
 		for (const TSharedPtr<FJsonValue>& V : *RequestedBones)
 		{
 			FString BoneName;
@@ -339,6 +343,7 @@ FMonolithActionResult FMonolithAnimationRuntimeActions::HandleSamplePIEAnimInsta
 	if (Params->TryGetArrayField(TEXT("sockets"), RequestedSockets) && RequestedSockets)
 	{
 		TArray<TSharedPtr<FJsonValue>> SocketsArr;
+		SocketsArr.Reserve(RequestedSockets->Num());
 		for (const TSharedPtr<FJsonValue>& V : *RequestedSockets)
 		{
 			FString SocketName;
