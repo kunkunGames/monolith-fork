@@ -14,9 +14,9 @@ static void print_proxy_help()
 {
     std::cout
         << "Usage:\n"
-        << "  monolith_proxy.exe --help\n"
-        << "  monolith_proxy.exe --version\n"
-        << "  monolith_proxy.exe\n\n"
+        << "  monolith_proxy --help\n"
+        << "  monolith_proxy --version\n"
+        << "  monolith_proxy\n\n"
         << "Role:\n"
         << "  Stdio-to-HTTP MCP bridge for the editor-hosted Monolith server.\n"
         << "  Default target: MONOLITH_URL=http://localhost:9316/mcp\n\n"
@@ -33,7 +33,7 @@ static void print_proxy_help()
         << "MCP config example:\n"
         << "  {\"mcpServers\":{\"monolith\":{\"command\":\"D:/P4/game/Plugins/Monolith/Binaries/monolith_proxy.exe\"}}}\n\n"
         << "Offline fallback:\n"
-        << "  Use Binaries/monolith_query.exe for read-only source/project/bridge queries when the editor or MCP server is unavailable.\n";
+        << "  Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge queries when the editor or MCP server is unavailable.\n";
 }
 
 static void print_proxy_version()
