@@ -10,7 +10,7 @@ public class MonolithBABridge : ModuleRules
 			return false;
 		}
 
-		if (Directory.Exists(Path.Combine(SearchDir, "BlueprintAssist")))
+		if (Directory.Exists(Path.Combine(SearchDir, "BlueprintAssist")) && File.Exists(Path.Combine(SearchDir, "BlueprintAssist", "BlueprintAssist.uplugin")))
 		{
 			return true;
 		}
