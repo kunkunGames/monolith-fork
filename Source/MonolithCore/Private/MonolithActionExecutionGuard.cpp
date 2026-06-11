@@ -692,6 +692,7 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Result->SetBoolField(TEXT("builtin_blueprint_post_edit_validator"), true);
 
 	TArray<TSharedPtr<FJsonValue>> Implemented;
+	Implemented.Reserve(bAdvancedRegistered ? 12 : 9);
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.get_execution_guard_status")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.list_recent_action_audit")));
 	Implemented.Add(MakeShared<FJsonValueString>(TEXT("monolith.get_last_rollback")));
@@ -719,10 +720,12 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetStatusJson() const
 	Result->SetArrayField(TEXT("implemented_actions"), Implemented);
 
 	TArray<TSharedPtr<FJsonValue>> Future;
+	Future.Reserve(1);
 	Future.Add(MakeShared<FJsonValueString>(TEXT("rollback reports for policy failures")));
 	Result->SetArrayField(TEXT("future_work"), Future);
 
 	TArray<TSharedPtr<FJsonValue>> Notes;
+	Notes.Reserve(4);
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Audit capture is wired through the existing central crash-breadcrumb execution scope, so it applies to action dispatch without changing each domain action.")));
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Default read_only policies skip package scans, transactions, source-control prepare, and post-edit validation; mutating policies opt into each central guard feature.")));
 	Notes.Add(MakeShared<FJsonValueString>(TEXT("Post-edit validation failure returns a structured action error, but automatic asset rollback remains unavailable.")));
@@ -739,6 +742,7 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetRecentAuditJson(int32 
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	const int32 StartIndex = FMath::Max(0, AuditRows.Num() - ClampedLimit);
+	Rows.Reserve(AuditRows.Num() - StartIndex);
 	for (int32 Index = AuditRows.Num() - 1; Index >= StartIndex; --Index)
 	{
 		Rows.Add(MakeShared<FJsonValueObject>(AuditRowToJson(AuditRows[Index])));
@@ -799,6 +803,7 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::GetToolCallRecordsJson(
 	const int32 ClampedLimit = FMath::Clamp(Limit, 1, AuditCapacity);
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	FScopeLock Lock(&GuardLock);
+	Rows.Reserve(FMath::Min(AuditRows.Num(), ClampedLimit));
 	for (int32 Index = AuditRows.Num() - 1; Index >= 0 && Rows.Num() < ClampedLimit; --Index)
 	{
 		const FAuditRow& Row = AuditRows[Index];
@@ -906,6 +911,7 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::AnalyzeToolCallRecordsJso
 	}
 
 	TArray<TSharedPtr<FJsonValue>> TopErrors;
+	TopErrors.Reserve(ErrorCounts.Num());
 	for (const auto& Pair : ErrorCounts)
 	{
 		TSharedPtr<FJsonObject> Error = MakeShared<FJsonObject>();
