@@ -1,4 +1,5 @@
 ﻿#include "MonolithMaterialActions.h"
+#include "MonolithParamUtils.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
@@ -98,6 +99,33 @@ static FString NormalizeInputPinName(const FString& PinName)
 		}
 	}
 	return Result;
+}
+
+static bool GetRequiredStringParamAllowEmpty(const TSharedPtr<FJsonObject>& Params, const FString& Key, FString& OutValue, FString& OutError, bool bTrim = false)
+{
+	OutValue.Reset();
+	if (!Params.IsValid())
+	{
+		OutError = FString::Printf(TEXT("Missing required field: %s"), *Key);
+		return false;
+	}
+
+	const TSharedPtr<FJsonValue> Value = Params->TryGetField(Key);
+	if (!Value.IsValid())
+	{
+		OutError = FString::Printf(TEXT("Missing required field: %s"), *Key);
+		return false;
+	}
+	if (!Value->TryGetString(OutValue))
+	{
+		OutError = FString::Printf(TEXT("Parameter '%s' must be a string"), *Key);
+		return false;
+	}
+	if (bTrim)
+	{
+		OutValue.TrimStartAndEndInline();
+	}
+	return true;
 }
 
 // ============================================================================
@@ -1899,7 +1927,12 @@ FMonolithActionResult FMonolithMaterialActions::ImportMaterialGraph(const TShare
 
 FMonolithActionResult FMonolithMaterialActions::ValidateMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bFixIssues = false;
 	Params->TryGetBoolField(TEXT("fix_issues"), bFixIssues);
 
@@ -2199,7 +2232,12 @@ FMonolithActionResult FMonolithMaterialActions::ValidateMaterial(const TSharedPt
 
 FMonolithActionResult FMonolithMaterialActions::RenderPreview(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	int32 Resolution = 256;
 	double Resolution_Val;
 	if (Params->TryGetNumberField(TEXT("resolution"), Resolution_Val)) Resolution = static_cast<int32>(Resolution_Val);
@@ -2316,7 +2354,12 @@ FMonolithActionResult FMonolithMaterialActions::RenderPreview(const TSharedPtr<F
 
 FMonolithActionResult FMonolithMaterialActions::GetThumbnail(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	int32 Resolution = 256;
 	double Resolution_Val;
 	if (Params->TryGetNumberField(TEXT("resolution"), Resolution_Val)) Resolution = static_cast<int32>(Resolution_Val);
@@ -2397,8 +2440,18 @@ FMonolithActionResult FMonolithMaterialActions::GetThumbnail(const TSharedPtr<FJ
 
 FMonolithActionResult FMonolithMaterialActions::CreateCustomHLSLNode(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString Code = Params->GetStringField(TEXT("code"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString Code;
+	FString ErrorMsg_Code;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("code"), Code, ErrorMsg_Code))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_Code, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString Description = TEXT("");
 	Params->TryGetStringField(TEXT("description"), Description);
 	FString OutputType = TEXT("");
@@ -2498,7 +2551,12 @@ FMonolithActionResult FMonolithMaterialActions::CreateCustomHLSLNode(const TShar
 
 FMonolithActionResult FMonolithMaterialActions::GetLayerInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
@@ -2636,7 +2694,12 @@ static bool ParseEnum(const FString& Str, TEnum& OutValue, FString& OutError)
 
 FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Parse optional properties
 	FString BlendModeStr = TEXT("Opaque");
@@ -2743,8 +2806,18 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<
 
 FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ParentPath = Params->GetStringField(TEXT("parent_material"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ParentPath;
+	FString ErrorMsg_ParentPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("parent_material"), ParentPath, ErrorMsg_ParentPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ParentPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Load parent material
 	UObject* ParentObj = FMonolithAssetUtils::LoadAssetByPath(ParentPath);
@@ -2892,12 +2965,50 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 
 FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load base material at '%s'"), *AssetPath));
+	}
+
+	const bool bHasBlendMode = Params->HasField(TEXT("blend_mode"));
+	FString BlendModeValue;
+	if (bHasBlendMode)
+	{
+		FString ErrorMsg_BlendMode;
+		if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("blend_mode"), BlendModeValue, ErrorMsg_BlendMode))
+		{
+			return FMonolithActionResult::Error(ErrorMsg_BlendMode, FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+
+	const bool bHasShadingModel = Params->HasField(TEXT("shading_model"));
+	FString ShadingModelValue;
+	if (bHasShadingModel)
+	{
+		FString ErrorMsg_ShadingModel;
+		if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("shading_model"), ShadingModelValue, ErrorMsg_ShadingModel))
+		{
+			return FMonolithActionResult::Error(ErrorMsg_ShadingModel, FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+
+	const bool bHasMaterialDomain = Params->HasField(TEXT("material_domain"));
+	FString MaterialDomainValue;
+	if (bHasMaterialDomain)
+	{
+		FString ErrorMsg_MaterialDomain;
+		if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("material_domain"), MaterialDomainValue, ErrorMsg_MaterialDomain))
+		{
+			return FMonolithActionResult::Error(ErrorMsg_MaterialDomain, FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	GEditor->BeginTransaction(FText::FromString(TEXT("SetMaterialProperty")));
@@ -2915,44 +3026,41 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 		ChangeCount++;
 	};
 
-	if (Params->HasField(TEXT("blend_mode")))
+	if (bHasBlendMode)
 	{
-		FString Val = Params->GetStringField(TEXT("blend_mode"));
 		FString EnumError;
 		EBlendMode ParsedMode;
-		if (!ParseEnum<EBlendMode>(Val, ParsedMode, EnumError))
+		if (!ParseEnum<EBlendMode>(BlendModeValue, ParsedMode, EnumError))
 		{
 			GEditor->EndTransaction();
 			return FMonolithActionResult::Error(FString::Printf(TEXT("blend_mode: %s"), *EnumError));
 		}
 		Mat->BlendMode = ParsedMode;
-		RecordChange(TEXT("blend_mode"), Val);
+		RecordChange(TEXT("blend_mode"), BlendModeValue);
 	}
-	if (Params->HasField(TEXT("shading_model")))
+	if (bHasShadingModel)
 	{
-		FString Val = Params->GetStringField(TEXT("shading_model"));
 		FString EnumError;
 		EMaterialShadingModel ParsedModel;
-		if (!ParseEnum<EMaterialShadingModel>(Val, ParsedModel, EnumError))
+		if (!ParseEnum<EMaterialShadingModel>(ShadingModelValue, ParsedModel, EnumError))
 		{
 			GEditor->EndTransaction();
 			return FMonolithActionResult::Error(FString::Printf(TEXT("shading_model: %s"), *EnumError));
 		}
 		Mat->SetShadingModel(ParsedModel);
-		RecordChange(TEXT("shading_model"), Val);
+		RecordChange(TEXT("shading_model"), ShadingModelValue);
 	}
-	if (Params->HasField(TEXT("material_domain")))
+	if (bHasMaterialDomain)
 	{
-		FString Val = Params->GetStringField(TEXT("material_domain"));
 		FString EnumError;
 		EMaterialDomain ParsedDomain;
-		if (!ParseEnum<EMaterialDomain>(Val, ParsedDomain, EnumError))
+		if (!ParseEnum<EMaterialDomain>(MaterialDomainValue, ParsedDomain, EnumError))
 		{
 			GEditor->EndTransaction();
 			return FMonolithActionResult::Error(FString::Printf(TEXT("material_domain: %s"), *EnumError));
 		}
 		Mat->MaterialDomain = ParsedDomain;
-		RecordChange(TEXT("material_domain"), Val);
+		RecordChange(TEXT("material_domain"), MaterialDomainValue);
 	}
 	if (Params->HasField(TEXT("two_sided")))
 	{
@@ -3088,8 +3196,18 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 
 FMonolithActionResult FMonolithMaterialActions::DeleteExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ExprName = Params->GetStringField(TEXT("expression_name"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ExprName;
+	FString ErrorMsg_ExprName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("expression_name"), ExprName, ErrorMsg_ExprName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ExprName, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -3145,7 +3263,12 @@ FMonolithActionResult FMonolithMaterialActions::DeleteExpression(const TSharedPt
 
 FMonolithActionResult FMonolithMaterialActions::GetMaterialParameters(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInterface* MatInterface = LoadedAsset ? Cast<UMaterialInterface>(LoadedAsset) : nullptr;
@@ -3248,8 +3371,18 @@ FMonolithActionResult FMonolithMaterialActions::GetMaterialParameters(const TSha
 
 FMonolithActionResult FMonolithMaterialActions::SetInstanceParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ParamName = Params->GetStringField(TEXT("parameter_name"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ParamName;
+	FString ErrorMsg_ParamName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("parameter_name"), ParamName, ErrorMsg_ParamName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ParamName, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInstanceConstant* MIC = LoadedAsset ? Cast<UMaterialInstanceConstant>(LoadedAsset) : nullptr;
@@ -3310,7 +3443,12 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameter(const TShar
 	}
 	else if (Params->HasField(TEXT("texture_value")))
 	{
-		FString TexPath = Params->GetStringField(TEXT("texture_value"));
+		FString TexPath;
+		FString ErrorMsg_TexPath;
+		if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("texture_value"), TexPath, ErrorMsg_TexPath))
+		{
+			return FMonolithActionResult::Error(ErrorMsg_TexPath, FMonolithJsonUtils::ErrInvalidParams);
+		}
 		UTexture* Tex = Cast<UTexture>(FMonolithAssetUtils::LoadAssetByPath(TexPath));
 		if (!Tex)
 		{
@@ -3358,7 +3496,12 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameter(const TShar
 
 FMonolithActionResult FMonolithMaterialActions::RecompileMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInterface* MatInterface = LoadedAsset ? Cast<UMaterialInterface>(LoadedAsset) : nullptr;
@@ -3430,8 +3573,18 @@ FMonolithActionResult FMonolithMaterialActions::RecompileMaterial(const TSharedP
 
 FMonolithActionResult FMonolithMaterialActions::DuplicateMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SourcePath = Params->GetStringField(TEXT("source_path"));
-	FString DestPath = Params->GetStringField(TEXT("dest_path"));
+	FString SourcePath;
+	FString ErrorMsg_SourcePath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("source_path"), SourcePath, ErrorMsg_SourcePath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_SourcePath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString DestPath;
+	FString ErrorMsg_DestPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("dest_path"), DestPath, ErrorMsg_DestPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_DestPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Check source exists
 	UObject* SourceObj = FMonolithAssetUtils::LoadAssetByPath(SourcePath);
@@ -3467,7 +3620,12 @@ FMonolithActionResult FMonolithMaterialActions::DuplicateMaterial(const TSharedP
 
 FMonolithActionResult FMonolithMaterialActions::GetCompilationStats(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInterface* MatInterface = LoadedAsset ? Cast<UMaterialInterface>(LoadedAsset) : nullptr;
@@ -3563,9 +3721,24 @@ FMonolithActionResult FMonolithMaterialActions::GetCompilationStats(const TShare
 
 FMonolithActionResult FMonolithMaterialActions::SetExpressionProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ExprName = Params->GetStringField(TEXT("expression_name"));
-	FString PropName = Params->GetStringField(TEXT("property_name"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ExprName;
+	FString ErrorMsg_ExprName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("expression_name"), ExprName, ErrorMsg_ExprName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ExprName, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString PropName;
+	FString ErrorMsg_PropName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("property_name"), PropName, ErrorMsg_PropName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_PropName, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Extract value as string regardless of JSON type — GetStringField returns ""
 	// for JSON numbers, which then gets Atof'd to 0.0 (Bug #6).
@@ -3776,8 +3949,18 @@ FMonolithActionResult FMonolithMaterialActions::SetExpressionProperty(const TSha
 
 FMonolithActionResult FMonolithMaterialActions::ConnectExpressions(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString FromExprName = Params->GetStringField(TEXT("from_expression"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString FromExprName;
+	FString ErrorMsg_FromExprName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("from_expression"), FromExprName, ErrorMsg_FromExprName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_FromExprName, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString FromOutput = TEXT("");
 	Params->TryGetStringField(TEXT("from_pin"), FromOutput);
 	Params->TryGetStringField(TEXT("from_output"), FromOutput);
@@ -3908,7 +4091,12 @@ FMonolithActionResult FMonolithMaterialActions::ConnectExpressions(const TShared
 
 FMonolithActionResult FMonolithMaterialActions::AutoLayout(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
@@ -3976,8 +4164,18 @@ FMonolithActionResult FMonolithMaterialActions::AutoLayout(const TSharedPtr<FJso
 
 FMonolithActionResult FMonolithMaterialActions::DuplicateExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ExprName = Params->GetStringField(TEXT("expression_name"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ExprName;
+	FString ErrorMsg_ExprName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("expression_name"), ExprName, ErrorMsg_ExprName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ExprName, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	int32 OffsetX = 50;
 	double OffsetX_Val;
 	if (Params->TryGetNumberField(TEXT("offset_x"), OffsetX_Val)) OffsetX = static_cast<int32>(OffsetX_Val);
@@ -4179,8 +4377,18 @@ FMonolithActionResult FMonolithMaterialActions::ListExpressionClasses(const TSha
 
 FMonolithActionResult FMonolithMaterialActions::GetExpressionConnections(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ExprName = Params->GetStringField(TEXT("expression_name"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ExprName;
+	FString ErrorMsg_ExprName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("expression_name"), ExprName, ErrorMsg_ExprName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ExprName, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -4424,7 +4632,12 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 		return FMonolithActionResult::Error(TEXT("No move operations specified"));
 	}
 
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -4502,7 +4715,12 @@ FMonolithActionResult FMonolithMaterialActions::MoveExpression(const TSharedPtr<
 
 FMonolithActionResult FMonolithMaterialActions::GetMaterialProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInterface* MatInterface = LoadedAsset ? Cast<UMaterialInterface>(LoadedAsset) : nullptr;
@@ -4600,7 +4818,12 @@ FMonolithActionResult FMonolithMaterialActions::GetMaterialProperties(const TSha
 
 FMonolithActionResult FMonolithMaterialActions::GetInstanceParameters(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInstanceConstant* MIC = LoadedAsset ? Cast<UMaterialInstanceConstant>(LoadedAsset) : nullptr;
@@ -4727,7 +4950,12 @@ FMonolithActionResult FMonolithMaterialActions::GetInstanceParameters(const TSha
 
 FMonolithActionResult FMonolithMaterialActions::SetInstanceParameters(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInstanceConstant* MIC = LoadedAsset ? Cast<UMaterialInstanceConstant>(LoadedAsset) : nullptr;
@@ -4921,8 +5149,18 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameters(const TSha
 
 FMonolithActionResult FMonolithMaterialActions::SetInstanceParent(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString NewParentPath = Params->GetStringField(TEXT("new_parent"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString NewParentPath;
+	FString ErrorMsg_NewParentPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("new_parent"), NewParentPath, ErrorMsg_NewParentPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_NewParentPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInstanceConstant* MIC = LoadedAsset ? Cast<UMaterialInstanceConstant>(LoadedAsset) : nullptr;
@@ -5011,7 +5249,12 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParent(const TSharedP
 
 FMonolithActionResult FMonolithMaterialActions::ClearInstanceParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialInstanceConstant* MIC = LoadedAsset ? Cast<UMaterialInstanceConstant>(LoadedAsset) : nullptr;
@@ -5141,7 +5384,12 @@ FMonolithActionResult FMonolithMaterialActions::ClearInstanceParameter(const TSh
 
 FMonolithActionResult FMonolithMaterialActions::SaveMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bOnlyIfDirty = true;
 	Params->TryGetBoolField(TEXT("only_if_dirty"), bOnlyIfDirty);
 
@@ -5176,8 +5424,18 @@ FMonolithActionResult FMonolithMaterialActions::SaveMaterial(const TSharedPtr<FJ
 
 FMonolithActionResult FMonolithMaterialActions::UpdateCustomHlslNode(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ExprName = Params->GetStringField(TEXT("expression_name"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ExprName;
+	FString ErrorMsg_ExprName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("expression_name"), ExprName, ErrorMsg_ExprName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ExprName, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -5340,9 +5598,24 @@ FMonolithActionResult FMonolithMaterialActions::UpdateCustomHlslNode(const TShar
 
 FMonolithActionResult FMonolithMaterialActions::ReplaceExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ExprName = Params->GetStringField(TEXT("expression_name"));
-	FString NewClassName = Params->GetStringField(TEXT("new_class"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ExprName;
+	FString ErrorMsg_ExprName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("expression_name"), ExprName, ErrorMsg_ExprName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ExprName, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString NewClassName;
+	FString ErrorMsg_NewClassName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("new_class"), NewClassName, ErrorMsg_NewClassName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_NewClassName, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bPreserveConnections = true;
 	Params->TryGetBoolField(TEXT("preserve_connections"), bPreserveConnections);
 
@@ -5721,7 +5994,12 @@ FMonolithActionResult FMonolithMaterialActions::ReplaceExpression(const TSharedP
 
 FMonolithActionResult FMonolithMaterialActions::GetExpressionPinInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	FString ClassName = Params->GetStringField(TEXT("class_name"));
+	FString ClassName;
+	FString ErrorMsg_ClassName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("class_name"), ClassName, ErrorMsg_ClassName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ClassName, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Resolve class name with shorthand support
 	FString FullClassName = ClassName;
@@ -5794,9 +6072,24 @@ FMonolithActionResult FMonolithMaterialActions::GetExpressionPinInfo(const TShar
 
 FMonolithActionResult FMonolithMaterialActions::RenameExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ExprName = Params->GetStringField(TEXT("expression_name"));
-	FString NewDesc = Params->GetStringField(TEXT("new_desc"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ExprName;
+	FString ErrorMsg_ExprName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("expression_name"), ExprName, ErrorMsg_ExprName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ExprName, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString NewDesc;
+	FString ErrorMsg_NewDesc;
+	if (!GetRequiredStringParamAllowEmpty(Params, TEXT("new_desc"), NewDesc, ErrorMsg_NewDesc))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_NewDesc, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
@@ -5852,7 +6145,12 @@ FMonolithActionResult FMonolithMaterialActions::RenameExpression(const TSharedPt
 
 FMonolithActionResult FMonolithMaterialActions::ListMaterialInstances(const TSharedPtr<FJsonObject>& Params)
 {
-	FString ParentPath = Params->GetStringField(TEXT("parent_path"));
+	FString ParentPath;
+	FString ErrorMsg_ParentPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("parent_path"), ParentPath, ErrorMsg_ParentPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ParentPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bRecursive = true;
 	Params->TryGetBoolField(TEXT("recursive"), bRecursive);
 
@@ -6431,7 +6729,12 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 
 FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Extract package path and asset name
 	FString PackagePath, AssetName;
@@ -6547,7 +6850,12 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 
 FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bClearExisting = false;
 	Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting);
 
@@ -6571,7 +6879,12 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 	}
 	else if (Params->HasTypedField<EJson::String>(TEXT("graph_spec")))
 	{
-		FString GraphSpecJson = Params->GetStringField(TEXT("graph_spec"));
+		FString GraphSpecJson;
+		FString ErrorMsg_GraphSpecJson;
+		if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("graph_spec"), GraphSpecJson, ErrorMsg_GraphSpecJson))
+		{
+			return FMonolithActionResult::Error(ErrorMsg_GraphSpecJson, FMonolithJsonUtils::ErrInvalidParams);
+		}
 		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(GraphSpecJson);
 		if (!FJsonSerializer::Deserialize(Reader, Spec) || !Spec.IsValid())
 		{
@@ -6844,7 +7157,12 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 
 FMonolithActionResult FMonolithMaterialActions::GetFunctionInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
@@ -6975,7 +7293,12 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInfo(const TSharedPtr
 
 FMonolithActionResult FMonolithMaterialActions::ExportFunctionGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	bool bIncludeProperties = true;
 	bool bIncludePositions = true;
@@ -7308,7 +7631,12 @@ FMonolithActionResult FMonolithMaterialActions::ExportFunctionGraph(const TShare
 
 FMonolithActionResult FMonolithMaterialActions::SetFunctionMetadata(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
@@ -7381,7 +7709,12 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionMetadata(const TShare
 
 FMonolithActionResult FMonolithMaterialActions::UpdateMaterialFunction(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
@@ -7412,8 +7745,18 @@ FMonolithActionResult FMonolithMaterialActions::UpdateMaterialFunction(const TSh
 
 FMonolithActionResult FMonolithMaterialActions::DeleteFunctionExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ExpressionNameParam = Params->GetStringField(TEXT("expression_name"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ExpressionNameParam;
+	FString ErrorMsg_ExpressionNameParam;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("expression_name"), ExpressionNameParam, ErrorMsg_ExpressionNameParam))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ExpressionNameParam, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
@@ -7570,6 +7913,39 @@ FMonolithActionResult FMonolithMaterialActions::BatchSetMaterialProperty(const T
 		return FMonolithActionResult::Error(TEXT("asset_paths array exceeds maximum allowed size (200)"));
 	}
 
+	const bool bHasBlendMode = Params->HasField(TEXT("blend_mode"));
+	FString BlendModeValue;
+	if (bHasBlendMode)
+	{
+		FString ErrorMsg_BlendMode;
+		if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("blend_mode"), BlendModeValue, ErrorMsg_BlendMode))
+		{
+			return FMonolithActionResult::Error(ErrorMsg_BlendMode, FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+
+	const bool bHasShadingModel = Params->HasField(TEXT("shading_model"));
+	FString ShadingModelValue;
+	if (bHasShadingModel)
+	{
+		FString ErrorMsg_ShadingModel;
+		if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("shading_model"), ShadingModelValue, ErrorMsg_ShadingModel))
+		{
+			return FMonolithActionResult::Error(ErrorMsg_ShadingModel, FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+
+	const bool bHasMaterialDomain = Params->HasField(TEXT("material_domain"));
+	FString MaterialDomainValue;
+	if (bHasMaterialDomain)
+	{
+		FString ErrorMsg_MaterialDomain;
+		if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("material_domain"), MaterialDomainValue, ErrorMsg_MaterialDomain))
+		{
+			return FMonolithActionResult::Error(ErrorMsg_MaterialDomain, FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+
 	// Build a params object without asset_paths — just the properties
 	// We reuse SetMaterialProperty by forwarding per-asset, but we wrap in a single transaction
 	GEditor->BeginTransaction(FText::FromString(TEXT("BatchSetMaterialProperty")));
@@ -7607,15 +7983,14 @@ FMonolithActionResult FMonolithMaterialActions::BatchSetMaterialProperty(const T
 		};
 
 		// Blend mode
-		if (Params->HasField(TEXT("blend_mode")))
+		if (bHasBlendMode)
 		{
-			FString Val = Params->GetStringField(TEXT("blend_mode"));
 			FString EnumError;
 			EBlendMode ParsedMode;
-			if (ParseEnum<EBlendMode>(Val, ParsedMode, EnumError))
+			if (ParseEnum<EBlendMode>(BlendModeValue, ParsedMode, EnumError))
 			{
 				Mat->BlendMode = ParsedMode;
-				RecordChange(TEXT("blend_mode"), Val);
+				RecordChange(TEXT("blend_mode"), BlendModeValue);
 			}
 			else
 			{
@@ -7624,15 +7999,14 @@ FMonolithActionResult FMonolithMaterialActions::BatchSetMaterialProperty(const T
 		}
 
 		// Shading model
-		if (Params->HasField(TEXT("shading_model")))
+		if (bHasShadingModel)
 		{
-			FString Val = Params->GetStringField(TEXT("shading_model"));
 			FString EnumError;
 			EMaterialShadingModel ParsedModel;
-			if (ParseEnum<EMaterialShadingModel>(Val, ParsedModel, EnumError))
+			if (ParseEnum<EMaterialShadingModel>(ShadingModelValue, ParsedModel, EnumError))
 			{
 				Mat->SetShadingModel(ParsedModel);
-				RecordChange(TEXT("shading_model"), Val);
+				RecordChange(TEXT("shading_model"), ShadingModelValue);
 			}
 			else
 			{
@@ -7641,15 +8015,14 @@ FMonolithActionResult FMonolithMaterialActions::BatchSetMaterialProperty(const T
 		}
 
 		// Material domain
-		if (Params->HasField(TEXT("material_domain")))
+		if (bHasMaterialDomain)
 		{
-			FString Val = Params->GetStringField(TEXT("material_domain"));
 			FString EnumError;
 			EMaterialDomain ParsedDomain;
-			if (ParseEnum<EMaterialDomain>(Val, ParsedDomain, EnumError))
+			if (ParseEnum<EMaterialDomain>(MaterialDomainValue, ParsedDomain, EnumError))
 			{
 				Mat->MaterialDomain = ParsedDomain;
-				RecordChange(TEXT("material_domain"), Val);
+				RecordChange(TEXT("material_domain"), MaterialDomainValue);
 			}
 			else
 			{
@@ -8051,8 +8424,18 @@ static FTextureImportResult ImportTextureInternal(
 
 FMonolithActionResult FMonolithMaterialActions::ImportTexture(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SourceFile = Params->GetStringField(TEXT("source_file"));
-	FString DestPath = Params->GetStringField(TEXT("dest_path"));
+	FString SourceFile;
+	FString ErrorMsg_SourceFile;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("source_file"), SourceFile, ErrorMsg_SourceFile))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_SourceFile, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString DestPath;
+	FString ErrorMsg_DestPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("dest_path"), DestPath, ErrorMsg_DestPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_DestPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString DestName;
 	Params->TryGetStringField(TEXT("dest_name"), DestName);
 	bool bReplaceExisting = false;
@@ -8062,7 +8445,12 @@ FMonolithActionResult FMonolithMaterialActions::ImportTexture(const TSharedPtr<F
 	TextureCompressionSettings Compression = TC_Default;
 	if (Params->HasField(TEXT("compression")))
 	{
-		FString CompressionStr = Params->GetStringField(TEXT("compression"));
+		FString CompressionStr;
+		FString ErrorMsg_CompressionStr;
+		if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("compression"), CompressionStr, ErrorMsg_CompressionStr))
+		{
+			return FMonolithActionResult::Error(ErrorMsg_CompressionStr, FMonolithJsonUtils::ErrInvalidParams);
+		}
 		if (!ParseTextureCompression(CompressionStr, Compression))
 		{
 			return FMonolithActionResult::Error(FString::Printf(
@@ -8077,7 +8465,12 @@ FMonolithActionResult FMonolithMaterialActions::ImportTexture(const TSharedPtr<F
 	TextureGroup LODGroup = TEXTUREGROUP_World;
 	if (Params->HasField(TEXT("lod_group")))
 	{
-		FString LODGroupStr = Params->GetStringField(TEXT("lod_group"));
+		FString LODGroupStr;
+		FString ErrorMsg_LODGroupStr;
+		if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("lod_group"), LODGroupStr, ErrorMsg_LODGroupStr))
+		{
+			return FMonolithActionResult::Error(ErrorMsg_LODGroupStr, FMonolithJsonUtils::ErrInvalidParams);
+		}
 		if (!ParseTextureLODGroup(LODGroupStr, LODGroup))
 		{
 			return FMonolithActionResult::Error(FString::Printf(
@@ -8182,8 +8575,18 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 		return FMonolithActionResult::Error(TEXT("Missing required param: maps"));
 	}
 
-	FString MaterialPath = Params->GetStringField(TEXT("material_path"));
-	FString TextureFolder = Params->GetStringField(TEXT("texture_folder"));
+	FString MaterialPath;
+	FString ErrorMsg_MaterialPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("material_path"), MaterialPath, ErrorMsg_MaterialPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_MaterialPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString TextureFolder;
+	FString ErrorMsg_TextureFolder;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("texture_folder"), TextureFolder, ErrorMsg_TextureFolder))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_TextureFolder, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	const TSharedPtr<FJsonObject>& MapsObj = Params->GetObjectField(TEXT("maps"));
 
 	if (!MapsObj.IsValid() || MapsObj->Values.Num() == 0)
@@ -8529,8 +8932,18 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 // ============================================================================
 FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ParentPath = Params->GetStringField(TEXT("parent"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ParentPath;
+	FString ErrorMsg_ParentPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("parent"), ParentPath, ErrorMsg_ParentPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ParentPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
 	{
@@ -8793,8 +9206,18 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 
 FMonolithActionResult FMonolithMaterialActions::SetFunctionInstanceParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString ParamName = Params->GetStringField(TEXT("parameter_name"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ParamName;
+	FString ErrorMsg_ParamName;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("parameter_name"), ParamName, ErrorMsg_ParamName))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_ParamName, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	UMaterialFunctionInstance* MFI = LoadedAsset ? Cast<UMaterialFunctionInstance>(LoadedAsset) : nullptr;
@@ -8925,7 +9348,12 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionInstanceParameter(con
 	}
 	else if (Params->HasField(TEXT("texture_value")))
 	{
-		FString TexPath = Params->GetStringField(TEXT("texture_value"));
+		FString TexPath;
+		FString ErrorMsg_TexPath;
+		if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("texture_value"), TexPath, ErrorMsg_TexPath))
+		{
+			return FMonolithActionResult::Error(ErrorMsg_TexPath, FMonolithJsonUtils::ErrInvalidParams);
+		}
 		UTexture* Tex = Cast<UTexture>(FMonolithAssetUtils::LoadAssetByPath(TexPath));
 		if (!Tex)
 		{
@@ -9011,7 +9439,12 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionInstanceParameter(con
 
 FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
@@ -9290,7 +9723,12 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 FMonolithActionResult FMonolithMaterialActions::LayoutFunctionExpressions(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
@@ -9322,9 +9760,24 @@ FMonolithActionResult FMonolithMaterialActions::LayoutFunctionExpressions(const 
 
 FMonolithActionResult FMonolithMaterialActions::RenameFunctionParameterGroup(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString OldGroup  = Params->GetStringField(TEXT("old_group"));
-	FString NewGroup  = Params->GetStringField(TEXT("new_group"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString OldGroup;
+	FString ErrorMsg_OldGroup;
+	if (!GetRequiredStringParamAllowEmpty(Params, TEXT("old_group"), OldGroup, ErrorMsg_OldGroup))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_OldGroup, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString NewGroup;
+	FString ErrorMsg_NewGroup;
+	if (!GetRequiredStringParamAllowEmpty(Params, TEXT("new_group"), NewGroup, ErrorMsg_NewGroup))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_NewGroup, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
@@ -9358,7 +9811,12 @@ FMonolithActionResult FMonolithMaterialActions::RenameFunctionParameterGroup(con
 
 FMonolithActionResult FMonolithMaterialActions::ClearGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bPreserveParams = false;
 	Params->TryGetBoolField(TEXT("preserve_parameters"), bPreserveParams);
 
@@ -9434,7 +9892,12 @@ FMonolithActionResult FMonolithMaterialActions::ClearGraph(const TSharedPtr<FJso
 
 FMonolithActionResult FMonolithMaterialActions::DeleteExpressions(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	const TArray<TSharedPtr<FJsonValue>>* NamesArray = nullptr;
 	if (!Params->TryGetArrayField(TEXT("expression_names"), NamesArray) || !NamesArray)
@@ -9574,7 +10037,12 @@ static void PopulateTextureMetadata(UTexture* Tex, const TSharedPtr<FJsonObject>
 
 FMonolithActionResult FMonolithMaterialActions::GetTextureProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!LoadedAsset)
@@ -9603,7 +10071,12 @@ FMonolithActionResult FMonolithMaterialActions::GetTextureProperties(const TShar
 
 FMonolithActionResult FMonolithMaterialActions::PreviewTexture(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 	int32 Resolution = 256;
 	{
 		double Tmp = 0;
@@ -9802,7 +10275,12 @@ FMonolithActionResult FMonolithMaterialActions::PreviewTextures(const TSharedPtr
 
 FMonolithActionResult FMonolithMaterialActions::CheckTilingQuality(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
