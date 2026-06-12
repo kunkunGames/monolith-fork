@@ -1428,36 +1428,7 @@ FMonolithActionResult FMonolithLevelSequenceActions::FindDirectorFunctionCallers
 		Stmt.SetBindingValueByIndex(2, LikePattern);
 	}
 
-	int64 CallerCount = 0;
-	{
-		FSQLitePreparedStatement CountStmt;
-		FString CountSQL = FString::Printf(TEXT(
-			"SELECT COUNT(*) "
-			"FROM level_sequence_event_bindings b "
-			"JOIN level_sequence_directors d ON d.ls_asset_id = b.ls_asset_id "
-			"WHERE b.fires_function_name = ?%s"),
-			*PathClause);
-
-		if (CountStmt.Create(*RawDB, *CountSQL))
-		{
-			CountStmt.SetBindingValueByIndex(1, FunctionName);
-			if (!PathFilter.IsEmpty())
-			{
-				CountStmt.SetBindingValueByIndex(2, LikePattern);
-			}
-			if (CountStmt.Step() == ESQLitePreparedStatementStepResult::Row)
-			{
-				CountStmt.GetColumnValueByIndex(0, CallerCount);
-			}
-		}
-		CountStmt.Destroy();
-	}
-
 	TArray<TSharedPtr<FJsonValue>> Callers;
-	if (CallerCount > 0)
-	{
-		Callers.Reserve(static_cast<int32>(CallerCount));
-	}
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FString LsPath, BGuid, BName, BKind, BClass, SectionKind, ResolvedKind;
@@ -1676,28 +1647,7 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListBindings(const TSharedP
 		Stmt.SetBindingValueByIndex(2, KindFilter);
 	}
 
-	int64 TotalBindingCount = 0;
-	{
-		FSQLitePreparedStatement CountStmt;
-		if (CountStmt.Create(*RawDB, TEXT(
-			"SELECT COUNT(*) "
-			"FROM level_sequence_bindings "
-			"WHERE ls_asset_id = ?")))
-		{
-			CountStmt.SetBindingValueByIndex(1, LsAssetId);
-			if (CountStmt.Step() == ESQLitePreparedStatementStepResult::Row)
-			{
-				CountStmt.GetColumnValueByIndex(0, TotalBindingCount);
-			}
-		}
-		CountStmt.Destroy();
-	}
-
 	TArray<TSharedPtr<FJsonValue>> Rows;
-	if (!bFilterByKind && TotalBindingCount > 0)
-	{
-		Rows.Reserve(static_cast<int32>(TotalBindingCount));
-	}
 	TMap<FString, int32> KindCounts;
 
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
