@@ -9,7 +9,7 @@ class UBlueprint;
 class MONOLITHCORE_API FMonolithAssetUtils
 {
 public:
-	/** Resolve a user-provided path to a proper asset path (handles /Game/, /Content/, relative, etc.) */
+	/** Resolve a user-provided path to a proper asset path (handles export-text, /Game/, /Content/, relative, etc.) */
 	static FString ResolveAssetPath(const FString& InPath);
 
 	/** Load a package by path, returns nullptr on failure */

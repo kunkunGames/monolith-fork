@@ -269,9 +269,8 @@ namespace MonolithBlueprintInternal
 
 		if (Value.Contains(TEXT("/")))
 		{
-			// Path resolution. Normalize export-text references first —
-			// LoadAssetByPath does not parse Blueprint'/Game/Foo.BP_Foo' wrappers
-			// the way StaticLoadObject's ResolveName does, so strip them up front.
+			// Path resolution. Normalize export-text references first so the
+			// subobject branch below checks object paths, not wrapper strings.
 			FString ObjectPath = FPackageName::ExportTextPathToObjectPath(Value);
 			ObjectPath.TrimStartAndEndInline();
 

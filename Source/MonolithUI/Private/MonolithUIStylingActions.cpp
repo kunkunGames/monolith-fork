@@ -7,6 +7,7 @@
 #include "Engine/Font.h"
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInterface.h"
+#include "MonolithAssetUtils.h"
 
 void FMonolithUIStylingActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
@@ -277,7 +278,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     Params->TryGetStringField(TEXT("texture_path"), TexturePath);
     if (!TexturePath.IsEmpty())
     {
-        UTexture2D* Tex = Cast<UTexture2D>(StaticLoadObject(UTexture2D::StaticClass(), nullptr, *TexturePath));
+        UTexture2D* Tex = FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(TexturePath);
         if (Tex)
         {
             Brush->SetResourceObject(Tex);
@@ -294,7 +295,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     Params->TryGetStringField(TEXT("material_path"), MaterialPath);
     if (!MaterialPath.IsEmpty())
     {
-        UMaterialInterface* Mat = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, *MaterialPath));
+        UMaterialInterface* Mat = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(MaterialPath);
         if (Mat)
         {
             Brush->SetResourceObject(Mat);
@@ -397,7 +398,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetFont(const TSharedPtr<
     Params->TryGetStringField(TEXT("font_family"), FontFamily);
     if (!FontFamily.IsEmpty())
     {
-        UObject* FontObj = StaticLoadObject(UFont::StaticClass(), nullptr, *FontFamily);
+        UFont* FontObj = FMonolithAssetUtils::LoadAssetByPath<UFont>(FontFamily);
         if (FontObj)
         {
             FontInfo->FontObject = FontObj;
@@ -795,7 +796,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetImage(const TSharedPtr
     Params->TryGetStringField(TEXT("texture_path"), TexturePath);
     if (!TexturePath.IsEmpty())
     {
-        UTexture2D* Tex = Cast<UTexture2D>(StaticLoadObject(UTexture2D::StaticClass(), nullptr, *TexturePath));
+        UTexture2D* Tex = FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(TexturePath);
         if (Tex)
         {
             ImageWidget->SetBrushFromTexture(Tex);
@@ -812,7 +813,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetImage(const TSharedPtr
     Params->TryGetStringField(TEXT("material_path"), MaterialPath);
     if (!MaterialPath.IsEmpty())
     {
-        UMaterialInterface* Mat = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, *MaterialPath));
+        UMaterialInterface* Mat = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(MaterialPath);
         if (Mat)
         {
             ImageWidget->SetBrushFromMaterial(Mat);
