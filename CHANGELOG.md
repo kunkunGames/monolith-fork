@@ -4,6 +4,12 @@ All notable changes to Monolith will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **Level Sequence** — Removed redundant COUNT(*) queries used for local array sizing, preserving result shapes (73e820c).
+
 ## [0.18.1] - 2026-06-07
 
 A motion-matching-focused release: a from-scratch Motion Matching authoring pack across the `animation`, `chooser`, and `blueprint` namespaces, plus a PIE / profiling harness, thread-safe AnimBP authoring primitives, and a batch of AI / editor / blueprint additions.
