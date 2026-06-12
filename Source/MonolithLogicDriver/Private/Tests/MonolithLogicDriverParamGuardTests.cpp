@@ -497,4 +497,114 @@ bool FMonolithParamGuardLogicDriverSetExposedPropertyRejectsMissingValueTest::Ru
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverAddTransitionRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.AddTransitionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverAddTransitionRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("add_transition")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// priority as string instead of number
+	TSharedPtr<FJsonObject> BadPriorityParams = MakeShared<FJsonObject>();
+	BadPriorityParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadPriorityParams->SetStringField(TEXT("source_guid"), TEXT("test-source-guid"));
+	BadPriorityParams->SetStringField(TEXT("target_guid"), TEXT("test-target-guid"));
+	BadPriorityParams->SetStringField(TEXT("priority"), TEXT("1"));
+
+	FMonolithActionResult Result1 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_transition"), BadPriorityParams);
+	TestTrue(TEXT("add_transition rejects string priority"), !Result1.bSuccess);
+	TestTrue(TEXT("error mentions priority must be a number"), Result1.ErrorMessage.Contains(TEXT("priority")) && Result1.ErrorMessage.Contains(TEXT("must be a number")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverAddStateRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.AddStateRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverAddStateRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("add_state")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// name as bool instead of string
+	TSharedPtr<FJsonObject> BadNameParams = MakeShared<FJsonObject>();
+	BadNameParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadNameParams->SetBoolField(TEXT("name"), true);
+
+	FMonolithActionResult Result1 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), BadNameParams);
+	TestTrue(TEXT("add_state rejects bool name"), !Result1.bSuccess);
+	TestTrue(TEXT("error mentions name must be a string"), Result1.ErrorMessage.Contains(TEXT("name")) && Result1.ErrorMessage.Contains(TEXT("must be a string")));
+
+	// position_x as string instead of number
+	TSharedPtr<FJsonObject> BadXParams = MakeShared<FJsonObject>();
+	BadXParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadXParams->SetStringField(TEXT("position_x"), TEXT("100"));
+
+	FMonolithActionResult Result2 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), BadXParams);
+	TestTrue(TEXT("add_state rejects string position_x"), !Result2.bSuccess);
+	TestTrue(TEXT("error mentions position_x must be a number"), Result2.ErrorMessage.Contains(TEXT("position_x")) && Result2.ErrorMessage.Contains(TEXT("must be a number")));
+
+	// position_y as string instead of number
+	TSharedPtr<FJsonObject> BadYParams = MakeShared<FJsonObject>();
+	BadYParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadYParams->SetStringField(TEXT("position_y"), TEXT("100"));
+
+	FMonolithActionResult Result3 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), BadYParams);
+	TestTrue(TEXT("add_state rejects string position_y"), !Result3.bSuccess);
+	TestTrue(TEXT("error mentions position_y must be a number"), Result3.ErrorMessage.Contains(TEXT("position_y")) && Result3.ErrorMessage.Contains(TEXT("must be a number")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverAddStateMachineNodeRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.AddStateMachineNodeRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverAddStateMachineNodeRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("add_state_machine_node")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// name as bool instead of string
+	TSharedPtr<FJsonObject> BadNameParams = MakeShared<FJsonObject>();
+	BadNameParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadNameParams->SetBoolField(TEXT("name"), true);
+
+	FMonolithActionResult Result1 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state_machine_node"), BadNameParams);
+	TestTrue(TEXT("add_state_machine_node rejects bool name"), !Result1.bSuccess);
+	TestTrue(TEXT("error mentions name must be a string"), Result1.ErrorMessage.Contains(TEXT("name")) && Result1.ErrorMessage.Contains(TEXT("must be a string")));
+
+	// reference_path as bool instead of string
+	TSharedPtr<FJsonObject> BadRefParams = MakeShared<FJsonObject>();
+	BadRefParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadRefParams->SetBoolField(TEXT("reference_path"), true);
+
+	FMonolithActionResult Result2 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state_machine_node"), BadRefParams);
+	TestTrue(TEXT("add_state_machine_node rejects bool reference_path"), !Result2.bSuccess);
+	TestTrue(TEXT("error mentions reference_path must be a string"), Result2.ErrorMessage.Contains(TEXT("reference_path")) && Result2.ErrorMessage.Contains(TEXT("must be a string")));
+
+	// position_x as string instead of number
+	TSharedPtr<FJsonObject> BadXParams = MakeShared<FJsonObject>();
+	BadXParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadXParams->SetStringField(TEXT("position_x"), TEXT("100"));
+
+	FMonolithActionResult Result3 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state_machine_node"), BadXParams);
+	TestTrue(TEXT("add_state_machine_node rejects string position_x"), !Result3.bSuccess);
+	TestTrue(TEXT("error mentions position_x must be a number"), Result3.ErrorMessage.Contains(TEXT("position_x")) && Result3.ErrorMessage.Contains(TEXT("must be a number")));
+
+	// position_y as string instead of number
+	TSharedPtr<FJsonObject> BadYParams = MakeShared<FJsonObject>();
+	BadYParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadYParams->SetStringField(TEXT("position_y"), TEXT("100"));
+
+	FMonolithActionResult Result4 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state_machine_node"), BadYParams);
+	TestTrue(TEXT("add_state_machine_node rejects string position_y"), !Result4.bSuccess);
+	TestTrue(TEXT("error mentions position_y must be a number"), Result4.ErrorMessage.Contains(TEXT("position_y")) && Result4.ErrorMessage.Contains(TEXT("must be a number")));
+
+	return true;
+}
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
