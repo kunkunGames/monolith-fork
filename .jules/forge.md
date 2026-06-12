@@ -87,3 +87,9 @@ Build pattern: Optional plugins checked using `Directory.GetDirectories(..., "Pl
 Learning: Uninitialized submodules or missing marketplace folders can trick raw path strings into causing build exceptions when checking for suffixed directories.
 Prevention: Always ensure the base directory exists before calling `Directory.GetDirectories`. Use a robust `HasPluginDir` helper that checks both existence and the presence of the `.uplugin` descriptor to avoid mistaking scratch/backup folders for the real plugin.
 Avoid: Directly calling `Directory.GetDirectories` on dynamically constructed plugin root paths without `Directory.Exists` guards.
+
+## 2026-06-12 - [Add missing Chooser optional plugin dependency]
+**Build pattern:** The `Chooser` plugin was conditionally linked in `MonolithAnimation.Build.cs` via `bHasChooser` engine path checks but was missing from the `Monolith.uplugin` configuration list of Plugins.
+**Learning:** For optional Engine plugins that are conditionally queried and linked in a module's Build.cs, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file can cause the Engine to refuse to load the plugin entirely or fail dependency resolution when the optional dependency is enabled.
+**Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have a corresponding `"Optional": true` entry defined in `Monolith.uplugin`.
+**Avoid:** Linking optional plugins in `Build.cs` without adding them to `.uplugin`.
