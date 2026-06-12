@@ -95,6 +95,7 @@ Monolith-v*.zip
 Monolith-*-macOS.zip
 
 # IDE and local editor artifacts
+Saved/HeadlessMcp/
 .vs/
 .idea/
 .vscode/
