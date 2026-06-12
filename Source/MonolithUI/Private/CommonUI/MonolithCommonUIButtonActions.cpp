@@ -218,20 +218,31 @@ namespace MonolithCommonUIButton
 		return FMonolithActionResult::Success(Result);
 	}
 
+	// Helper to deduplicate WbpPath + WidgetName extraction and loading.
+	static FMonolithActionResult LoadTargetWidgetFromParams(
+		const TSharedPtr<FJsonObject>& Params,
+		FString& OutWidgetName,
+		FString& OutWbpPath,
+		UWidgetBlueprint*& OutWbp,
+		UWidget*& OutTarget)
+	{
+		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("widget_name"), OutWidgetName))
+			return FMonolithActionResult::Error(TEXT("wbp_path and widget_name required"));
+		OutWbpPath = MonolithCommonUI::GetWbpPath(Params);
+		if (OutWbpPath.IsEmpty())
+			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
+
+		return MonolithCommonUI::LoadWidgetForMutation(OutWbpPath, FName(*OutWidgetName), OutWbp, OutTarget);
+	}
+
 	// ----- 2.B.2 configure_common_button ---------------------------------------
 
 	static FMonolithActionResult HandleConfigureCommonButton(const TSharedPtr<FJsonObject>& Params)
 	{
-		FString WidgetName;
-		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("widget_name"), WidgetName))
-			return FMonolithActionResult::Error(TEXT("wbp_path and widget_name required"));
-		FString WbpPath = MonolithCommonUI::GetWbpPath(Params);
-		if (WbpPath.IsEmpty())
-			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
-
+		FString WidgetName, WbpPath;
 		UWidgetBlueprint* Wbp = nullptr;
 		UWidget* Target = nullptr;
-		FMonolithActionResult Loaded = MonolithCommonUI::LoadWidgetForMutation(WbpPath, FName(*WidgetName), Wbp, Target);
+		FMonolithActionResult Loaded = LoadTargetWidgetFromParams(Params, WidgetName, WbpPath, Wbp, Target);
 		if (!Loaded.bSuccess) return Loaded;
 
 		UCommonButtonBase* Btn = Cast<UCommonButtonBase>(Target);
@@ -674,16 +685,10 @@ namespace MonolithCommonUIButton
 
 	static FMonolithActionResult HandleConfigureCommonText(const TSharedPtr<FJsonObject>& Params)
 	{
-		FString WidgetName;
-		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("widget_name"), WidgetName))
-			return FMonolithActionResult::Error(TEXT("wbp_path and widget_name required"));
-		FString WbpPath = MonolithCommonUI::GetWbpPath(Params);
-		if (WbpPath.IsEmpty())
-			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
-
+		FString WidgetName, WbpPath;
 		UWidgetBlueprint* Wbp = nullptr;
 		UWidget* Target = nullptr;
-		FMonolithActionResult Loaded = MonolithCommonUI::LoadWidgetForMutation(WbpPath, FName(*WidgetName), Wbp, Target);
+		FMonolithActionResult Loaded = LoadTargetWidgetFromParams(Params, WidgetName, WbpPath, Wbp, Target);
 		if (!Loaded.bSuccess) return Loaded;
 
 		UCommonTextBlock* Txt = Cast<UCommonTextBlock>(Target);
@@ -744,16 +749,10 @@ namespace MonolithCommonUIButton
 
 	static FMonolithActionResult HandleConfigureCommonBorder(const TSharedPtr<FJsonObject>& Params)
 	{
-		FString WidgetName;
-		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("widget_name"), WidgetName))
-			return FMonolithActionResult::Error(TEXT("wbp_path and widget_name required"));
-		FString WbpPath = MonolithCommonUI::GetWbpPath(Params);
-		if (WbpPath.IsEmpty())
-			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
-
+		FString WidgetName, WbpPath;
 		UWidgetBlueprint* Wbp = nullptr;
 		UWidget* Target = nullptr;
-		FMonolithActionResult Loaded = MonolithCommonUI::LoadWidgetForMutation(WbpPath, FName(*WidgetName), Wbp, Target);
+		FMonolithActionResult Loaded = LoadTargetWidgetFromParams(Params, WidgetName, WbpPath, Wbp, Target);
 		if (!Loaded.bSuccess) return Loaded;
 
 		UCommonBorder* Brd = Cast<UCommonBorder>(Target);
@@ -929,16 +928,10 @@ namespace MonolithCommonUIButton
 
 	static FMonolithActionResult HandleConvertTextBlockToCommon(const TSharedPtr<FJsonObject>& Params)
 	{
-		FString WidgetName;
-		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("widget_name"), WidgetName))
-			return FMonolithActionResult::Error(TEXT("wbp_path and widget_name required"));
-		FString WbpPath = MonolithCommonUI::GetWbpPath(Params);
-		if (WbpPath.IsEmpty())
-			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
-
+		FString WidgetName, WbpPath;
 		UWidgetBlueprint* Wbp = nullptr;
 		UWidget* Target = nullptr;
-		FMonolithActionResult Loaded = MonolithCommonUI::LoadWidgetForMutation(WbpPath, FName(*WidgetName), Wbp, Target);
+		FMonolithActionResult Loaded = LoadTargetWidgetFromParams(Params, WidgetName, WbpPath, Wbp, Target);
 		if (!Loaded.bSuccess) return Loaded;
 
 		UTextBlock* OldTxt = Cast<UTextBlock>(Target);
@@ -1162,16 +1155,10 @@ namespace MonolithCommonUIButton
 
 	static FMonolithActionResult HandleConvertBorderToCommon(const TSharedPtr<FJsonObject>& Params)
 	{
-		FString WidgetName;
-		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("widget_name"), WidgetName))
-			return FMonolithActionResult::Error(TEXT("wbp_path and widget_name required"));
-		FString WbpPath = MonolithCommonUI::GetWbpPath(Params);
-		if (WbpPath.IsEmpty())
-			return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"));
-
+		FString WidgetName, WbpPath;
 		UWidgetBlueprint* Wbp = nullptr;
 		UWidget* Target = nullptr;
-		FMonolithActionResult Loaded = MonolithCommonUI::LoadWidgetForMutation(WbpPath, FName(*WidgetName), Wbp, Target);
+		FMonolithActionResult Loaded = LoadTargetWidgetFromParams(Params, WidgetName, WbpPath, Wbp, Target);
 		if (!Loaded.bSuccess) return Loaded;
 
 		UBorder* OldBorder = Cast<UBorder>(Target);
