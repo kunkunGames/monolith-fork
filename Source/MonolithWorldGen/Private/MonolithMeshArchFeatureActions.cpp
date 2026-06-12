@@ -152,6 +152,7 @@ void FMonolithMeshArchFeatureActions::EmitWallOpenings(
 	if (Openings.Num() == 0) return;
 
 	TArray<TSharedPtr<FJsonValue>> OpeningsArr;
+	OpeningsArr.Reserve(Openings.Num());
 	for (const FWallOpeningRequest& O : Openings)
 	{
 		OpeningsArr.Add(MakeShared<FJsonValueObject>(O.ToJson()));
