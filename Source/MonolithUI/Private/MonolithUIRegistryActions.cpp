@@ -12,6 +12,7 @@
 
 // Phase 2 (2026-05-16 UI gap audit) — Item #8 (add_widget_variable) +
 // Item #11 (list_widget_property_enums) bring reflection-walking surface
+#include "MonolithUIInternal.h"
 // into this file. Item #8 wraps FBlueprintEditorUtils::AddMemberVariable,
 // Item #11 walks FEnumProperty for the curated property allowlist.
 #include "WidgetBlueprint.h"
@@ -189,29 +190,31 @@ namespace MonolithUIRegistryPhase2
             return FMonolithActionResult::Error(TEXT("Missing parameters object."), -32602);
         }
 
+        FMonolithActionResult ParamError;
         FString WbpPath;
         if (!Params->TryGetStringField(TEXT("wbp_path"), WbpPath))
         {
-            Params->TryGetStringField(TEXT("asset_path"), WbpPath);
+            if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), WbpPath, ParamError))
+            {
+                ParamError.ErrorCode = -32602;
+                return ParamError;
+            }
         }
         if (WbpPath.IsEmpty())
-        {
             return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"), -32602);
-        }
 
         FString VarName, VarType;
-        if (!Params->TryGetStringField(TEXT("var_name"), VarName) || VarName.IsEmpty())
+        if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("var_name"), VarName, ParamError))
         {
-            return FMonolithActionResult::Error(TEXT("Required parameter 'var_name' missing or empty."), -32602);
+            ParamError.ErrorCode = -32602;
+            return ParamError;
         }
-        if (!Params->TryGetStringField(TEXT("var_type"), VarType) || VarType.IsEmpty())
-        {
+        if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("var_type"), VarType, ParamError))
             return FMonolithActionResult::Error(
                 TEXT("Required parameter 'var_type' missing or empty. Use bool/int/int64/float/double/string/"
                      "name/text/byte/object:Class/class:Class/struct:Name/enum:Name/softobject:Class/softclass:Class. "
                      "Container prefixes: array:/set:/map:Key:Value."),
                 -32602);
-        }
 
         FString DefaultValue;
         Params->TryGetStringField(TEXT("default_value"), DefaultValue);
@@ -317,20 +320,24 @@ namespace MonolithUIRegistryPhase2
             return FMonolithActionResult::Error(TEXT("Missing parameters object."), -32602);
         }
 
+        FMonolithActionResult ParamError;
         FString WbpPath;
         if (!Params->TryGetStringField(TEXT("wbp_path"), WbpPath))
         {
-            Params->TryGetStringField(TEXT("asset_path"), WbpPath);
+            if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), WbpPath, ParamError))
+            {
+                ParamError.ErrorCode = -32602;
+                return ParamError;
+            }
         }
         if (WbpPath.IsEmpty())
-        {
             return FMonolithActionResult::Error(TEXT("wbp_path (or asset_path) required"), -32602);
-        }
 
         FString WidgetName;
-        if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName) || WidgetName.IsEmpty())
+        if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("widget_name"), WidgetName, ParamError))
         {
-            return FMonolithActionResult::Error(TEXT("Required parameter 'widget_name' missing or empty."), -32602);
+            ParamError.ErrorCode = -32602;
+            return ParamError;
         }
 
         bool bIsVariable = false;
@@ -611,11 +618,13 @@ FMonolithActionResult FMonolithUIRegistryActions::HandleDumpPropertyAllowlist(co
         return FMonolithActionResult::Error(TEXT("Missing parameters object."), -32602);
     }
 
+    FMonolithActionResult ParamError;
     FString WidgetTypeStr;
-    if (!Params->TryGetStringField(TEXT("widget_type"), WidgetTypeStr) || WidgetTypeStr.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Required parameter 'widget_type' missing or empty."), -32602);
-    }
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("widget_type"), WidgetTypeStr, ParamError))
+        {
+            ParamError.ErrorCode = -32602;
+            return ParamError;
+        }
 
     UMonolithUIRegistrySubsystem* Sub = UMonolithUIRegistrySubsystem::Get();
     if (!Sub)
