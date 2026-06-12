@@ -1043,7 +1043,7 @@ Runtime support notes:
   MONOLITH_CALL_LOG and MONOLITH_PROJECT_ROOT control the native C++ proxy call log.
 
 MCP config example:
-  {"mcpServers":{"monolith":{"command":"python","args":["D:/P4/game/Plugins/Monolith/Scripts/monolith_proxy.py"]}}}
+  {"mcpServers":{"monolith":{"command":"python","args":["<project-root>/Plugins/Monolith/Scripts/monolith_proxy.py"]}}}
 
 Offline fallback:
   Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge queries when the editor or MCP server is unavailable.
