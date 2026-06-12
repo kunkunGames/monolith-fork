@@ -1502,6 +1502,7 @@ namespace
 	static TArray<TSharedPtr<FJsonValue>> BuildStringArray(const TArray<FString>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> Result;
+		Result.Reserve(Values.Num());
 		for (const FString& Value : Values)
 		{
 			Result.Add(MakeShared<FJsonValueString>(Value));
@@ -1602,6 +1603,7 @@ namespace
 		}
 
 		TArray<TSharedPtr<FJsonValue>> EventGeneratorsArr;
+		EventGeneratorsArr.Reserve(Semantic.EventGenerators.Num());
 		for (const FMonolithNiagaraEventGeneratorInfo& Generator : Semantic.EventGenerators)
 		{
 			EventGeneratorsArr.Add(MakeShared<FJsonValueObject>(MakeEventGeneratorJson(Generator)));
@@ -1609,6 +1611,7 @@ namespace
 		Obj->SetArrayField(TEXT("event_generators"), EventGeneratorsArr);
 
 		TArray<TSharedPtr<FJsonValue>> IncomingEventsArr;
+		IncomingEventsArr.Reserve(Semantic.IncomingEvents.Num());
 		for (const FMonolithNiagaraTopologyEdge& Incoming : Semantic.IncomingEvents)
 		{
 			IncomingEventsArr.Add(MakeShared<FJsonValueObject>(MakeTopologyEdgeJson(Incoming, DetailLevel)));
@@ -1616,6 +1619,7 @@ namespace
 		Obj->SetArrayField(TEXT("incoming_events"), IncomingEventsArr);
 
 		TArray<TSharedPtr<FJsonValue>> OutgoingLinksArr;
+		OutgoingLinksArr.Reserve(Semantic.OutgoingLinks.Num());
 		for (const FMonolithNiagaraTopologyEdge& Outgoing : Semantic.OutgoingLinks)
 		{
 			OutgoingLinksArr.Add(MakeShared<FJsonValueObject>(MakeTopologyEdgeJson(Outgoing, DetailLevel)));
@@ -1623,6 +1627,7 @@ namespace
 		Obj->SetArrayField(TEXT("outgoing_links"), OutgoingLinksArr);
 
 		TArray<TSharedPtr<FJsonValue>> LocationModulesArr;
+		LocationModulesArr.Reserve(Semantic.LocationModules.Num());
 		for (const FMonolithNiagaraStageModule& Module : Semantic.LocationModules)
 		{
 			LocationModulesArr.Add(MakeShared<FJsonValueObject>(MakeStageModuleJson(Module)));
