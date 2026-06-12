@@ -8,6 +8,55 @@
 #include "MonolithMeshRoofActions.h"
 #include "MonolithMeshBuildingActions.h"
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardWorldGenSampleTerrainGridMalformedParamsTest, "Monolith.ParamGuard.MonolithWorldGen.SampleTerrainGridRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardWorldGenSampleTerrainGridMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("sample_terrain_grid action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("worldgen"), TEXT("sample_terrain_grid")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+	TArray<TSharedPtr<FJsonValue>> Center;
+	Center.Add(MakeShared<FJsonValueNumber>(0));
+	Center.Add(MakeShared<FJsonValueNumber>(0));
+	Center.Add(MakeShared<FJsonValueNumber>(0));
+	Params->SetArrayField(TEXT("center"), Center);
+
+	TArray<TSharedPtr<FJsonValue>> Size;
+	Size.Add(MakeShared<FJsonValueNumber>(1000));
+	Size.Add(MakeShared<FJsonValueNumber>(1000));
+	Params->SetArrayField(TEXT("size"), Size);
+
+	// Malformed grid_resolution
+	Params->SetStringField(TEXT("grid_resolution"), TEXT("invalid_string"));
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("sample_terrain_grid"), Params);
+
+	TestFalse(TEXT("sample_terrain_grid rejects malformed grid_resolution parameter"), Result.bSuccess);
+	TestTrue(TEXT("sample_terrain_grid reports the validation error"), Result.ErrorMessage.Contains(TEXT("Parameter 'grid_resolution' must be a number")));
+
+	// Malformed trace_height
+	Params->RemoveField(TEXT("grid_resolution"));
+	Params->SetStringField(TEXT("trace_height"), TEXT("invalid_string"));
+
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("sample_terrain_grid"), Params);
+
+	TestFalse(TEXT("sample_terrain_grid rejects malformed trace_height parameter"), Result.bSuccess);
+	TestTrue(TEXT("sample_terrain_grid reports the validation error"), Result.ErrorMessage.Contains(TEXT("Parameter 'trace_height' must be a number")));
+
+	// Malformed trace_depth
+	Params->RemoveField(TEXT("trace_height"));
+	Params->SetStringField(TEXT("trace_depth"), TEXT("invalid_string"));
+
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("sample_terrain_grid"), Params);
+
+	TestFalse(TEXT("sample_terrain_grid rejects malformed trace_depth parameter"), Result.bSuccess);
+	TestTrue(TEXT("sample_terrain_grid reports the validation error"), Result.ErrorMessage.Contains(TEXT("Parameter 'trace_depth' must be a number")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardWorldGenTerrainSampleMalformedParamsTest, "Monolith.ParamGuard.MonolithWorldGen.TerrainSampleRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardWorldGenTerrainSampleMalformedParamsTest::RunTest(const FString& Parameters)

@@ -1261,12 +1261,38 @@ FMonolithActionResult FMonolithMeshTerrainActions::SampleTerrainGrid(const TShar
 		static_cast<float>((*SizeArr)[1]->AsNumber()));
 
 	// Optional params
-	int32 Res = Params->HasField(TEXT("grid_resolution")) ?
-		static_cast<int32>(Params->GetNumberField(TEXT("grid_resolution"))) : 8;
-	float TraceHeight = Params->HasField(TEXT("trace_height")) ?
-		static_cast<float>(Params->GetNumberField(TEXT("trace_height"))) : 5000.0f;
-	float TraceDepth = Params->HasField(TEXT("trace_depth")) ?
-		static_cast<float>(Params->GetNumberField(TEXT("trace_depth"))) : 10000.0f;
+	int32 Res = 8;
+	if (Params->HasField(TEXT("grid_resolution")))
+	{
+		double TempVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("grid_resolution"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'grid_resolution' must be a number"));
+		}
+		Res = static_cast<int32>(TempVal);
+	}
+
+	float TraceHeight = 5000.0f;
+	if (Params->HasField(TEXT("trace_height")))
+	{
+		double TempVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("trace_height"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'trace_height' must be a number"));
+		}
+		TraceHeight = static_cast<float>(TempVal);
+	}
+
+	float TraceDepth = 10000.0f;
+	if (Params->HasField(TEXT("trace_depth")))
+	{
+		double TempVal = 0.0;
+		if (!Params->TryGetNumberField(TEXT("trace_depth"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'trace_depth' must be a number"));
+		}
+		TraceDepth = static_cast<float>(TempVal);
+	}
 
 	// Trace channel
 	ECollisionChannel Channel = ECC_Visibility;
