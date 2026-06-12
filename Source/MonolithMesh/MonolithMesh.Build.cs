@@ -3,6 +3,30 @@ using System.IO;
 
 public class MonolithMesh : ModuleRules
 {
+	private static bool HasPluginDir(string BaseDir, string PluginName)
+	{
+		if (!Directory.Exists(BaseDir))
+		{
+			return false;
+		}
+
+		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
+		{
+			return true;
+		}
+
+		string[] Dirs = Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly);
+		foreach (string Dir in Dirs)
+		{
+			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public MonolithMesh(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -57,14 +81,7 @@ public class MonolithMesh : ModuleRules
 			{
 				string ProjectPluginsDir = Path.Combine(
 					Target.ProjectFile.Directory.FullName, "Plugins");
-				if (Directory.Exists(ProjectPluginsDir))
-				{
-					bHasGeometryScripting = Directory.Exists(
-						Path.Combine(ProjectPluginsDir, "GeometryScripting"))
-						|| (Directory.Exists(ProjectPluginsDir) && Directory.GetDirectories(
-							ProjectPluginsDir, "GeometryScripting_*",
-							SearchOption.TopDirectoryOnly).Length > 0);
-				}
+				bHasGeometryScripting = HasPluginDir(ProjectPluginsDir, "GeometryScripting");
 			}
 
 			// 2. Check Engine Plugins/ folder
@@ -74,11 +91,11 @@ public class MonolithMesh : ModuleRules
 				string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
 
 				bHasGeometryScripting =
-					Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "GeometryScripting"))
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Developer", "GeometryScripting"))
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Experimental", "GeometryScripting"))
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace", "GeometryScripting"))
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "GeometryScripting"));
+					HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "GeometryScripting")
+					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Developer"), "GeometryScripting")
+					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Experimental"), "GeometryScripting")
+					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Marketplace"), "GeometryScripting")
+					|| HasPluginDir(EnginePluginsDir, "GeometryScripting");
 			}
 		}
 

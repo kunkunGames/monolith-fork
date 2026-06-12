@@ -81,3 +81,9 @@ Build pattern: Optional plugin detection via `Directory.GetDirectories(..., "Plu
 Learning: `Target.RelativeEnginePath` and common folder assumptions like `Plugins/Marketplace/` or `Plugins/Runtime/` do not guarantee those directories exist on every machine (e.g. source-build engines or stripped project folders).
 Prevention: Always ensure optional plugin detection guards use a helper that first checks `Directory.Exists(BaseDir)`. When checking wildcard directories (e.g. `PluginName_*`), always verify `File.Exists(Path.Combine(Dir, PluginName + ".uplugin"))` inside the matched directory to ensure it is the real plugin and not a disabled scratch folder.
 Avoid: Using `Directory.GetDirectories()` on optional or assumed paths without a preceding `Directory.Exists()` check, and returning true simply because a wildcard directory matched without verifying the `.uplugin` descriptor.
+
+2026-05-13 - [Safeguard Optional Plugin Discovery]
+Build pattern: Optional plugins checked using `Directory.GetDirectories(..., "PluginName_*", ...)` which throws `DirectoryNotFoundException` if the base directory does not exist.
+Learning: Uninitialized submodules or missing marketplace folders can trick raw path strings into causing build exceptions when checking for suffixed directories.
+Prevention: Always ensure the base directory exists before calling `Directory.GetDirectories`. Use a robust `HasPluginDir` helper that checks both existence and the presence of the `.uplugin` descriptor to avoid mistaking scratch/backup folders for the real plugin.
+Avoid: Directly calling `Directory.GetDirectories` on dynamically constructed plugin root paths without `Directory.Exists` guards.
