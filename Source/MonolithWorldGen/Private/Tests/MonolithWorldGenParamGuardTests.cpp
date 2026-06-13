@@ -7,6 +7,7 @@
 #include "MonolithMeshTerrainActions.h"
 #include "MonolithMeshRoofActions.h"
 #include "MonolithMeshBuildingActions.h"
+#include "MonolithMeshContextPropActions.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardWorldGenSampleTerrainGridMalformedParamsTest, "Monolith.ParamGuard.MonolithWorldGen.SampleTerrainGridRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -207,6 +208,44 @@ bool FMonolithParamGuardWorldGenBuildingFromGridMalformedParamsTest::RunTest(con
 	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("create_building_from_grid"), Params);
 	TestFalse(TEXT("create_building_from_grid rejects malformed snap_to_floor parameter"), Result.bSuccess);
 	TestTrue(TEXT("create_building_from_grid reports the late validation error before mutation"), Result.ErrorMessage.Contains(TEXT("snap_to_floor must be a boolean")));
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardWorldGenScatterSurfaceTest, "Monolith.ParamGuard.MonolithWorldGen.ScatterOnSurfaceRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardWorldGenScatterSurfaceTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshContextPropActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("scatter_on_surface action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("worldgen"), TEXT("scatter_on_surface")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+	// Test missing surface_actor
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("scatter_on_surface"), Params);
+	TestFalse(TEXT("scatter_on_surface rejects missing surface_actor"), Result.bSuccess);
+	TestTrue(TEXT("scatter_on_surface reports schema missing-param validation"), Result.ErrorMessage.Contains(TEXT("Missing required param(s):")));
+	TestTrue(TEXT("scatter_on_surface reports missing surface_actor"), Result.ErrorMessage.Contains(TEXT("surface_actor")));
+	TestTrue(TEXT("scatter_on_surface reports missing asset_paths"), Result.ErrorMessage.Contains(TEXT("asset_paths")));
+
+	Params->SetStringField(TEXT("surface_actor"), TEXT("TestSurfaceActor"));
+
+	// Test missing asset_paths
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("scatter_on_surface"), Params);
+	TestFalse(TEXT("scatter_on_surface rejects missing asset_paths"), Result.bSuccess);
+	TestTrue(TEXT("scatter_on_surface reports schema missing-param validation"), Result.ErrorMessage.Contains(TEXT("Missing required param(s):")));
+	TestTrue(TEXT("scatter_on_surface reports missing asset_paths"), Result.ErrorMessage.Contains(TEXT("asset_paths")));
+
+	TArray<TSharedPtr<FJsonValue>> AssetPaths;
+	AssetPaths.Add(MakeShared<FJsonValueString>(TEXT("/Game/TestMesh")));
+	Params->SetArrayField(TEXT("asset_paths"), AssetPaths);
+
+	// Test max count exceeded
+	Params->SetNumberField(TEXT("count"), 101.0);
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("scatter_on_surface"), Params);
+	TestFalse(TEXT("scatter_on_surface rejects count exceeding max limit"), Result.bSuccess);
+	TestTrue(TEXT("scatter_on_surface reports the validation error"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed (100)")));
 
 	return true;
 }
