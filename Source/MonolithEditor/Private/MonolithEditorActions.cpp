@@ -8387,7 +8387,7 @@ namespace MonolithEditorNavHarness
 			{
 				continue;
 			}
-			FString Label = FString::Printf(TEXT("Harness_PlayerStart_%d"), Count);
+			FString Label = FString::Printf(TEXT("Harness_PlayerStart_%d"), OutCount);
 			if (StartObj.IsValid())
 			{
 				StartObj->TryGetStringField(TEXT("name"), Label);

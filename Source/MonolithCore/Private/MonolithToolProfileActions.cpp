@@ -3,6 +3,7 @@
 #include "Dom/JsonValue.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithParamUtils.h"
 #include "MonolithToolProfileManager.h"
 #include "MonolithToolRegistry.h"
 
