@@ -31,7 +31,7 @@ static void print_proxy_help()
         << "  MONOLITH_CALL_LOG                    Native C++ proxy call log toggle; 0 disables.\n"
         << "  MONOLITH_PROJECT_ROOT                Native C++ call-log project root override.\n\n"
         << "MCP config example:\n"
-        << "  {\"mcpServers\":{\"monolith\":{\"command\":\"D:/P4/game/Plugins/Monolith/Binaries/monolith_proxy.exe\"}}}\n\n"
+        << "  {\"mcpServers\":{\"monolith\":{\"command\":\"<project-root>/Plugins/Monolith/Binaries/monolith_proxy.exe\"}}}\n\n"
         << "Offline fallback:\n"
         << "  Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge queries when the editor or MCP server is unavailable.\n";
 }
