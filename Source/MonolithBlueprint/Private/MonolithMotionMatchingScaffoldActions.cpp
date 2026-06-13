@@ -787,11 +787,13 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleValidateAnim
 	// missing: ABP exposes/reads a variable the BP does not publish.
 	// extra:   BP publishes a variable the ABP does not consume.
 	TArray<TSharedPtr<FJsonValue>> Missing;
+	Missing.Reserve(AbpVars.Num());
 	for (const FString& V : AbpVars)
 	{
 		if (!BpVars.Contains(V)) Missing.Add(MakeShared<FJsonValueString>(V));
 	}
 	TArray<TSharedPtr<FJsonValue>> Extra;
+	Extra.Reserve(BpVars.Num());
 	for (const FString& V : BpVars)
 	{
 		if (!AbpVars.Contains(V)) Extra.Add(MakeShared<FJsonValueString>(V));
@@ -834,6 +836,7 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldMoti
 	Params->TryGetStringField(TEXT("mesh"), Mesh);
 
 	TArray<TSharedPtr<FJsonValue>> Steps;
+	Steps.Reserve(5);
 	auto NoteStep = [&Steps](const FString& Name, bool bOk, const FString& Detail)
 	{
 		TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
@@ -1259,6 +1262,7 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleAddPawnOwner
 	NodesSub->SetStringField(TEXT("graph_name"), kThreadSafeUpdateFuncName);
 	{
 		TArray<TSharedPtr<FJsonValue>> Nodes;
+		Nodes.Reserve(2);
 
 		// TryGetPawnOwner — CallFunction on the AnimInstance (self).
 		TSharedPtr<FJsonObject> PawnNode = MakeShared<FJsonObject>();
@@ -1379,6 +1383,7 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldLoco
 	const bool bWireCrouch = CrouchPath.Num() > 0;
 
 	TArray<TSharedPtr<FJsonValue>> Steps;
+	Steps.Reserve(5);
 	auto NoteStep = [&Steps](const FString& Name, bool bOk, const FString& Detail)
 	{
 		TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
@@ -1465,6 +1470,7 @@ FMonolithActionResult FMonolithMotionMatchingScaffoldActions::HandleScaffoldLoco
 	NodesSub->SetStringField(TEXT("graph_name"), TargetGraphName);
 	{
 		TArray<TSharedPtr<FJsonValue>> Nodes;
+		Nodes.Reserve(bWireCrouch ? 10 : 9);
 
 		auto AddCallNoTarget = [&Nodes](const TCHAR* TempId, const TCHAR* Func)
 		{
