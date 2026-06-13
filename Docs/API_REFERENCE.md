@@ -36,6 +36,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
+| [asset](#asset) | 12 | Asset lifecycle, hygiene, inspection, and enrichment |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD + document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
 | [level_sequence](#level_sequence) | 8 | Level Sequence inspection: binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
 | [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 12 per-namespace adapters (`apply`, `list_namespaces`) |
@@ -1253,6 +1254,148 @@ Logic Driver Pro state machines: graph CRUD, node configuration, runtime PIE con
 The crown jewel is `build_sm_from_spec` — create a complete state machine (states, transitions, conduits, nested SMs, initial/end markers) from a single JSON spec, then compile, in one call.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithLogicDriver.md`.
+
+---
+
+
+---
+
+## asset
+
+Asset lifecycle, hygiene, inspection, and enrichment. **12 actions.**
+
+### `asset.import_texture_from_file`
+
+Import an external image file as a UTexture2D asset with optional texture settings.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `source_path` | string | **required** | Absolute source image path. Aliases: source_file, file_path, path. |
+| `destination` | string | **required** | Destination asset path, e.g. /Game/Textures/T_Example. Aliases: dest_path, destination_path. If asset_name is also supplied, destination/destination_path is treated as the output folder. |
+| `asset_name` | string | optional | Optional asset name used with destination_path/destination as an output folder. |
+| `settings` | object | optional | {compression, srgb, tiling, max_size, lod_group}. compression accepts TC_* names plus UI/UserInterface2D aliases. |
+| `replace_existing` | boolean | optional | Overwrite existing destination asset. Default: `false` |
+| `overwrite_policy` | string | optional | Compatibility alias for replace_existing: overwrite/replace -> true; fail/unique -> false. |
+
+### `asset.import_texture_from_bytes`
+
+Decode base64 image bytes and import them as a UTexture2D asset.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `destination` | string | **required** | Output texture asset path without `.uasset`. |
+| `bytes_b64` | string | **required** | Base64-encoded image bytes. |
+| `format_hint` | string | **required** | Image format: png, jpg, jpeg, bmp, exr, tga, hdr, tif, tiff, or dds. |
+| `texture_role` | string | optional | Texture role preset: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, or emissive. |
+| `settings` | object | optional | Texture settings such as compression_settings, srgb, mip_gen_settings, lod_group, address_x, address_y, alpha_bleed, alpha_from_edge_background, tile_seam_harmonize. |
+| `save` | bool | optional | Save the imported texture asset. Default: `true` |
+| `return_processed_png` | bool | optional | Return postprocessed imported pixels re-encoded as PNG. Default: `false` |
+
+### `asset.import_font_family`
+
+Import a font family from one or more TTF files as a composite UFont plus UFontFace assets.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `destination` | string | **required** | Output directory, e.g. /Game/UI/Fonts. |
+| `family_name` | string | **required** | Composite UFont asset name. |
+| `faces` | array | **required** | Typeface specs with `typeface` and absolute `source_path`; non-empty. |
+| `loading_policy` | string | optional | LazyLoad, Stream, or Inline. Default: `LazyLoad` |
+| `hinting` | string | optional | Default, Auto, AutoLight, Monochrome, or None. Default: `Default` |
+| `save` | bool | optional | Save imported font assets. Default: `true` |
+
+### `asset.save_asset`
+
+Save a loaded asset package to disk.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Asset path to save |
+
+### `asset.delete_assets`
+
+Delete UE assets by path. Optional safety: restrict to allowed path prefixes.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_paths` | string[] | **required** | Array of UE asset paths to delete |
+| `allowed_prefixes` | string[] | optional | Only paths starting with these prefixes may be deleted |
+| `dry_run` | boolean | optional | Validate and report targets without deleting. Default: `false` |
+| `force` | boolean | optional | Force-delete referenced assets after closing open editors. Default: `false` |
+
+### `asset.find_assets`
+
+Fuzzy, scored, typo-tolerant search over the live AssetRegistry. Ranks assets by name/path/class with edit-distance typo tolerance; sees unsaved assets created this session. Results feed asset.inspect_asset. Distinct from offline project search.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | **required** | Asset name or task text to search for. |
+| `path` | string | optional | Content path scope, e.g. /Game or /Game/Characters. Default: `/Game` |
+| `recursive` | boolean | optional | Recurse subfolders under path. Default: `true` |
+| `class_names` | string[] | optional | Filter by asset class names (e.g. Texture2D, Blueprint) or /Script/Module.ClassName paths. |
+| `limit` | integer | optional | Maximum ranked rows to return. Default: `20` |
+| `threshold` | integer | optional | Minimum raw asset_fuzzy_v1 score to keep a match. |
+| `include_tags` | boolean | optional | Also score selected AssetRegistry tag values. Default: `false` |
+| `include_score_breakdown` | boolean | optional | Include reason, matched_tokens, distance, and per-field score breakdown. Default: `false` |
+| `allow_transposition` | boolean | optional | Count adjacent character swaps as one typo edit for fuzzy token matching. Default: `true` |
+
+### `asset.list_supported_asset_enrichers`
+
+List read-only specialized asset enrichers supported by Monolith. *No parameters.*
+
+### `asset.inspect_asset`
+
+Inspect an asset with specialized read-only enrichment when supported.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Asset path to inspect |
+| `include_references` | boolean | optional | Include reflected object references. Default: `true` |
+| `array_limit` | number | optional | Maximum items per reflected array. Default: `32` |
+
+### `asset.inspect_assets_batch`
+
+Inspect multiple assets with per-row success/error results.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_paths` | string[] | **required** | Asset paths to inspect |
+| `include_references` | boolean | optional | Include reflected object references. Default: `false` |
+| `array_limit` | number | optional | Maximum items per reflected array. Default: `16` |
+
+### `asset.validate_specialized_asset`
+
+Validate a specialized asset and report warnings without mutation.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Asset path to validate |
+| `array_limit` | number | optional | Array cap used when evaluating large payload warnings. Default: `32` |
+
+### `asset.validate_naming_conventions`
+
+Scan assets by path and flag names not matching prefix conventions (SM_ for StaticMesh, SK_ for SkeletalMesh, M_ for Material, MI_ for MaterialInstance, T_ for Texture, BP_ for Blueprint). Supports custom rules.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `scan_path` | string | optional | Content path to scan (e.g. /Game/Environment). Default: `/Game` |
+| `max_results` | integer | optional | Maximum violations to return. Default: `100` |
+| `custom_rules` | object | optional | Custom prefix rules: {"ClassName": "Prefix_", ...} |
+
+### `asset.batch_rename_assets`
+
+Rename assets with find/replace, prefix add/remove, or suffix add/remove. Uses IAssetTools::RenameAssets for automatic reference fixup and redirector creation.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_paths` | string[] | **required** | Array of asset paths to rename |
+| `find` | string | optional | String to find in asset name |
+| `replace` | string | optional | Replacement string |
+| `add_prefix` | string | optional | Prefix to add |
+| `remove_prefix` | string | optional | Prefix to remove |
+| `add_suffix` | string | optional | Suffix to add |
+| `remove_suffix` | string | optional | Suffix to remove |
+| `dry_run` | boolean | optional | Preview renames without applying. Default: `false` |
 
 ---
 
