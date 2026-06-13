@@ -7910,6 +7910,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListModuleScripts(const TSh
 	AR.GetAssets(Filter, Assets);
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(FMath::Min(Assets.Num(), Limit));
 	for (const FAssetData& Asset : Assets)
 	{
 		FString AssetName = Asset.AssetName.ToString();
@@ -15488,6 +15489,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListSystems(const TSharedPt
 	AR.GetAssets(Filter, Assets);
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(FMath::Min(Assets.Num(), Limit));
 	for (const FAssetData& Asset : Assets)
 	{
 		FString AssetName = Asset.AssetName.ToString();
