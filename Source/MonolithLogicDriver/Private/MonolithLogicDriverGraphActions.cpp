@@ -787,16 +787,6 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddConduit(const T
 	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
-	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
-
-	UClass* ConduitClass = MonolithLD::GetSMGraphNodeConduitClass();
-	if (!ConduitClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_ConduitNode class not found"));
-
 	int32 PosX = 0;
 	double TmpX = 0.0;
 	const bool bHasPosX = Params->HasField(TEXT("position_x"));
@@ -825,6 +815,16 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddConduit(const T
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param: 'name' must be a string"), -32602);
 	}
+
+	FString LoadError;
+	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
+	if (!BP) return FMonolithActionResult::Error(LoadError);
+
+	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
+	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+
+	UClass* ConduitClass = MonolithLD::GetSMGraphNodeConduitClass();
+	if (!ConduitClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_ConduitNode class not found"));
 
 	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, ConduitClass, PosX, PosY);
 	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create conduit node"));

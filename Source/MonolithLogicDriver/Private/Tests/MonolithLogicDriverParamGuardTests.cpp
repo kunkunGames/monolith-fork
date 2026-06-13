@@ -560,6 +560,45 @@ bool FMonolithParamGuardLogicDriverAddStateRejectsMalformedParamsTest::RunTest(c
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverAddConduitRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.AddConduitRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverAddConduitRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("add_conduit")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// name as bool instead of string
+	TSharedPtr<FJsonObject> BadNameParams = MakeShared<FJsonObject>();
+	BadNameParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadNameParams->SetBoolField(TEXT("name"), true);
+
+	FMonolithActionResult Result1 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_conduit"), BadNameParams);
+	TestTrue(TEXT("add_conduit rejects bool name"), !Result1.bSuccess);
+	TestTrue(TEXT("error mentions name must be a string"), Result1.ErrorMessage.Contains(TEXT("name")) && Result1.ErrorMessage.Contains(TEXT("must be a string")));
+
+	// position_x as string instead of number
+	TSharedPtr<FJsonObject> BadXParams = MakeShared<FJsonObject>();
+	BadXParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadXParams->SetStringField(TEXT("position_x"), TEXT("100"));
+
+	FMonolithActionResult Result2 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_conduit"), BadXParams);
+	TestTrue(TEXT("add_conduit rejects string position_x"), !Result2.bSuccess);
+	TestTrue(TEXT("error mentions position_x must be a number"), Result2.ErrorMessage.Contains(TEXT("position_x")) && Result2.ErrorMessage.Contains(TEXT("must be a number")));
+
+	// position_y as string instead of number
+	TSharedPtr<FJsonObject> BadYParams = MakeShared<FJsonObject>();
+	BadYParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadYParams->SetStringField(TEXT("position_y"), TEXT("100"));
+
+	FMonolithActionResult Result3 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_conduit"), BadYParams);
+	TestTrue(TEXT("add_conduit rejects string position_y"), !Result3.bSuccess);
+	TestTrue(TEXT("error mentions position_y must be a number"), Result3.ErrorMessage.Contains(TEXT("position_y")) && Result3.ErrorMessage.Contains(TEXT("must be a number")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverAddStateMachineNodeRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.AddStateMachineNodeRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardLogicDriverAddStateMachineNodeRejectsMalformedParamsTest::RunTest(const FString& Parameters)
 {
