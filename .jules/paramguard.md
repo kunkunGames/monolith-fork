@@ -97,3 +97,7 @@ Prevention: If an optional field is present, use `TryGetNumberField` or `TryGetA
 **Malformed input pattern:** Using `HasField` combined with `GetNumberField` for optional terrain parameters (`grid_resolution`, `trace_height`, `trace_depth`).
 **Learning:** Checking for field existence with `HasField` does not guarantee the type of the value returned by `GetNumberField`. Malformed JSON specifying string fields or other incorrect types will trigger unhandled assertions and crashes.
 **Prevention:** Always use `TryGetNumberField` when parsing optional numeric fields, and if the field is present but of the wrong type, explicitly return an error instead of silently falling back to defaults.
+2026-05-18 - Reject malformed type in WorldGen procedural params
+Malformed input pattern: Using `HasField` combined with direct unchecked cast and `GetNumberField` or `GetBoolField` inside procedural geometry generation functions in `MonolithMeshTerrainActions.cpp`.
+Learning: Checking for field existence with `HasField` does not guarantee the type of the value returned by `GetNumberField` or `GetBoolField`. Malformed JSON specifying string fields or other incorrect types for dimensions or mesh characteristics will trigger unhandled assertions and crashes.
+Prevention: Handlers extracting complex sub-parameters nested in optional structs or procedural options must extract parameters using `TryGet*Field`. When extracting numeric configurations, the method must return an error gracefully rather than forcing the engine assertion to occur.

@@ -100,6 +100,22 @@ bool FMonolithParamGuardWorldGenTerrainSampleMalformedParamsTest::RunTest(const 
 	TestFalse(TEXT("analyze_building_site rejects malformed all_hit parameter"), Result.bSuccess);
 	TestTrue(TEXT("analyze_building_site reports the validation error"), Result.ErrorMessage.Contains(TEXT("all_hit")));
 
+	TerrainObj->RemoveField(TEXT("all_hit"));
+	Params->SetObjectField(TEXT("terrain_samples"), TerrainObj);
+
+	Params->SetStringField(TEXT("floor_height"), TEXT("invalid"));
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("analyze_building_site"), Params);
+
+	TestFalse(TEXT("analyze_building_site rejects malformed floor_height parameter"), Result.bSuccess);
+	TestTrue(TEXT("analyze_building_site reports the validation error"), Result.ErrorMessage.Contains(TEXT("Invalid type for parameter 'floor_height'")));
+
+	Params->RemoveField(TEXT("floor_height"));
+	Params->SetStringField(TEXT("hospice_mode"), TEXT("invalid"));
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("analyze_building_site"), Params);
+
+	TestFalse(TEXT("analyze_building_site rejects malformed hospice_mode parameter"), Result.bSuccess);
+	TestTrue(TEXT("analyze_building_site reports the validation error"), Result.ErrorMessage.Contains(TEXT("Invalid type for parameter 'hospice_mode'")));
+
 	return true;
 }
 

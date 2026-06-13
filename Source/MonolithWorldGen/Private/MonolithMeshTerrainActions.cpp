@@ -1339,10 +1339,25 @@ FMonolithActionResult FMonolithMeshTerrainActions::AnalyzeBuildingSite(const TSh
 		return FMonolithActionResult::Error(TerrainError);
 	}
 
-	float FloorHeight = Params->HasField(TEXT("floor_height")) ?
-		static_cast<float>(Params->GetNumberField(TEXT("floor_height"))) : 270.0f;
-	bool bHospice = Params->HasField(TEXT("hospice_mode")) ?
-		Params->GetBoolField(TEXT("hospice_mode")) : false;
+	float FloorHeight = 270.0f;
+	if (Params->HasField(TEXT("floor_height")))
+	{
+		double Temp;
+		if (!Params->TryGetNumberField(TEXT("floor_height"), Temp))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'floor_height'. Expected number."));
+		}
+		FloorHeight = static_cast<float>(Temp);
+	}
+
+	bool bHospice = false;
+	if (Params->HasField(TEXT("hospice_mode")))
+	{
+		if (!Params->TryGetBoolField(TEXT("hospice_mode"), bHospice))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'hospice_mode'. Expected boolean."));
+		}
+	}
 
 	FSiteAnalysis Analysis = AnalyzeSite(Footprint, Terrain, FloorHeight, bHospice);
 
@@ -1411,18 +1426,49 @@ FMonolithActionResult FMonolithMeshTerrainActions::CreateFoundation(const TShare
 	}
 
 	// Optional params
-	float FloorHeight = Params->HasField(TEXT("floor_height")) ?
-		static_cast<float>(Params->GetNumberField(TEXT("floor_height"))) : 270.0f;
-	float PierDiameter = Params->HasField(TEXT("pier_diameter")) ?
-		static_cast<float>(Params->GetNumberField(TEXT("pier_diameter"))) : 30.0f;
-	float PierSpacing = Params->HasField(TEXT("pier_spacing")) ?
-		static_cast<float>(Params->GetNumberField(TEXT("pier_spacing"))) : 200.0f;
+	float FloorHeight = 270.0f;
+	if (Params->HasField(TEXT("floor_height")))
+	{
+		double Temp;
+		if (!Params->TryGetNumberField(TEXT("floor_height"), Temp))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'floor_height'. Expected number."));
+		}
+		FloorHeight = static_cast<float>(Temp);
+	}
+
+	float PierDiameter = 30.0f;
+	if (Params->HasField(TEXT("pier_diameter")))
+	{
+		double Temp;
+		if (!Params->TryGetNumberField(TEXT("pier_diameter"), Temp))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'pier_diameter'. Expected number."));
+		}
+		PierDiameter = static_cast<float>(Temp);
+	}
+
+	float PierSpacing = 200.0f;
+	if (Params->HasField(TEXT("pier_spacing")))
+	{
+		double Temp;
+		if (!Params->TryGetNumberField(TEXT("pier_spacing"), Temp))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'pier_spacing'. Expected number."));
+		}
+		PierSpacing = static_cast<float>(Temp);
+	}
 
 	// Compute pad Z (or use provided)
 	float PadZ;
 	if (Params->HasField(TEXT("pad_z")))
 	{
-		PadZ = static_cast<float>(Params->GetNumberField(TEXT("pad_z")));
+		double Temp;
+		if (!Params->TryGetNumberField(TEXT("pad_z"), Temp))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'pad_z'. Expected number."));
+		}
+		PadZ = static_cast<float>(Temp);
 	}
 	else
 	{
@@ -1476,7 +1522,14 @@ FMonolithActionResult FMonolithMeshTerrainActions::CreateFoundation(const TShare
 	FMonolithMeshProceduralActions::CleanupMesh(Mesh, false);
 
 	// Save to asset
-	bool bOverwrite = Params->HasField(TEXT("overwrite")) ? Params->GetBoolField(TEXT("overwrite")) : false;
+	bool bOverwrite = false;
+	if (Params->HasField(TEXT("overwrite")))
+	{
+		if (!Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'overwrite'. Expected boolean."));
+		}
+	}
 	FString SaveErr;
 	if (!FMonolithMeshProceduralActions::SaveMeshToAsset(Mesh, SavePath, bOverwrite, SaveErr))
 	{
@@ -1561,10 +1614,27 @@ FMonolithActionResult FMonolithMeshTerrainActions::CreateRetainingWall(const TSh
 		return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
 	}
 
-	float Thickness = Params->HasField(TEXT("thickness")) ?
-		static_cast<float>(Params->GetNumberField(TEXT("thickness"))) : 20.0f;
-	float CapHeight = Params->HasField(TEXT("cap_height")) ?
-		static_cast<float>(Params->GetNumberField(TEXT("cap_height"))) : 10.0f;
+	float Thickness = 20.0f;
+	if (Params->HasField(TEXT("thickness")))
+	{
+		double Temp;
+		if (!Params->TryGetNumberField(TEXT("thickness"), Temp))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'thickness'. Expected number."));
+		}
+		Thickness = static_cast<float>(Temp);
+	}
+
+	float CapHeight = 10.0f;
+	if (Params->HasField(TEXT("cap_height")))
+	{
+		double Temp;
+		if (!Params->TryGetNumberField(TEXT("cap_height"), Temp))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'cap_height'. Expected number."));
+		}
+		CapHeight = static_cast<float>(Temp);
+	}
 
 	UDynamicMesh* Mesh = NewObject<UDynamicMesh>(Pool);
 	if (!Mesh)
@@ -1642,10 +1712,23 @@ FMonolithActionResult FMonolithMeshTerrainActions::PlaceBuildingOnTerrain(const 
 		return FMonolithActionResult::Error(TEXT("Missing required param: save_path_prefix"));
 	}
 
-	bool bHospice = Params->HasField(TEXT("hospice_mode")) ?
-		Params->GetBoolField(TEXT("hospice_mode")) : false;
-	bool bCreateRetainingWalls = Params->HasField(TEXT("create_retaining_walls")) ?
-		Params->GetBoolField(TEXT("create_retaining_walls")) : true;
+	bool bHospice = false;
+	if (Params->HasField(TEXT("hospice_mode")))
+	{
+		if (!Params->TryGetBoolField(TEXT("hospice_mode"), bHospice))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'hospice_mode'. Expected boolean."));
+		}
+	}
+
+	bool bCreateRetainingWalls = true;
+	if (Params->HasField(TEXT("create_retaining_walls")))
+	{
+		if (!Params->TryGetBoolField(TEXT("create_retaining_walls"), bCreateRetainingWalls))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'create_retaining_walls'. Expected boolean."));
+		}
+	}
 	FString Folder;
 	Params->TryGetStringField(TEXT("folder"), Folder);
 	if (Folder.IsEmpty()) Folder = TEXT("Procedural/Terrain");
