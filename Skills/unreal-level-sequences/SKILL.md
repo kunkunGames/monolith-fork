@@ -1,13 +1,27 @@
 ---
 name: unreal-level-sequences
-description: Use when inspecting Unreal Level Sequences via Monolith MCP — listing every binding inside a sequence (legacy Possessables/Spawnables and UE 5.7 UMovieSceneCustomBinding subclasses like MovieSceneSpawnableActorBinding), reading Director Blueprint functions and variables when a Director is present, walking event-track bindings, and reverse-looking-up which sections fire a given director function across the project. Triggers on level sequence, sequencer, cinematic, possessable, spawnable, custom binding, MovieSceneSpawnableActorBinding, BindingReferences, director blueprint, event track, FMovieSceneEvent.
+description: Use when inspecting Unreal Level Sequences and Sequencer cinematics via Monolith MCP (level_sequence) — list every binding (legacy Possessables/Spawnables and UE 5.7 UMovieSceneCustomBinding subclasses), read the Director Blueprint functions/variables, walk event-track bindings, and reverse-lookup which sections fire a director function project-wide. To read or edit the Director Blueprint graph itself use unreal-blueprints; to edit a montage or anim sequence a track plays use unreal-animation; to spawn or place the actors a sequence possesses use unreal-scene. Triggers on level sequence, sequencer, cinematic, cutscene, LevelSequence, possessable, spawnable, custom binding, MovieSceneSpawnableActorBinding, binding references, director blueprint, director function, event track, FMovieSceneEvent, which sequence calls this function, what is bound in this sequence.
 ---
 
 # Unreal Level Sequence Workflows
 
-**7 inspection actions** via `level_sequence_query()`. Discover with `monolith_discover({ namespace: "level_sequence" })`.
+Drives the **`level_sequence`** namespace via `level_sequence_query()` to inspect Level Sequences (Sequencer cinematics): binding inventory, Director Blueprint functions/variables, and event-track wiring. **7 read-only inspection actions** — the table below is a snapshot, so discover the live action set and confirm each action's schema before calling it.
+
+## Discovery
+
+```
+monolith_discover({ namespace: "level_sequence" })                              // all actions in this namespace
+monolith_discover({ namespace: "level_sequence", action: "list_bindings", mode: "schema" })  // exact params for one action
+```
 
 Indexes **every** Level Sequence — including those with no Director. Each binding is classified by inspecting both the legacy `UMovieScene` structures (`FMovieScenePossessable` / `FMovieSceneSpawnable`) and the UE 5.7 `UMovieSceneSequence::GetBindingReferences()` chain, so modern custom bindings (`MovieSceneSpawnableActorBinding`, `MovieSceneReplaceableActorBinding`, etc.) report as `spawnable` / `replaceable` rather than the upgrade-stub `possessable`. Director Blueprint introspection layers on top: own functions (including synthetic `SequenceEvent__ENTRYPOINT<DirBP>_N` UFunctions UE generates for "Quick Bind" event entries), variables, and event-track wiring.
+
+## When to use / Use a different skill for
+
+- **This skill (unreal-level-sequences):** inspect a sequence's bindings/tracks/event-track wiring and its Director's functions/variables; reverse-lookup which sections fire a director function.
+- **unreal-blueprints:** to read or edit the Director Blueprint's own graph — functions, variables, nodes, pins — as a Blueprint (the Director is a regular `UBlueprint`; see the combine workflow below).
+- **unreal-animation:** to edit a montage or anim sequence that a Sequencer animation track plays, versus inspecting the binding/section wiring here.
+- **unreal-scene:** to spawn, move, or place the actors a sequence possesses/spawns in the live level, versus inspecting the sequence's bindings.
 
 ## Key Parameters
 
@@ -19,15 +33,19 @@ Indexes **every** Level Sequence — including those with no Director. Each bind
 
 ## Action Reference
 
-| Action | Key Params | Purpose |
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, `[w]` mutates (transaction-wrapped). This namespace is read-only — none of the actions below mutate. Signatures are a snapshot of the live catalog — for the exact full schema call `monolith_discover` with `mode: "schema"` (the Discovery block above stays the authority).
+
+| Action | Signature | Purpose |
 |--------|-----------|---------|
-| `list_bindings` | `asset_path`, `kind`? | Every binding inside one LS (one row per `Guid×BindingIndex`), regardless of event-track presence. Each row carries `name`, `kind`, `bound_class`, `custom_binding_class` (e.g. `MovieSceneSpawnableActorBinding`) and `custom_binding_pretty` when a `UMovieSceneCustomBinding` is attached, plus `track_count` and a `kind_counts` breakdown |
-| `list_directors` | `asset_path_filter`? | All LSes with a Director BP, ordered by path. Each row: `ls_path`, `director_bp_name`, `function_count`, `variable_count` |
-| `get_director_info` | `asset_path` | One Director's summary: `function_breakdown` grouped by kind, `variable_count`, `event_bindings.{total,resolved}`, sample of up to 10 functions ordered user → custom_event → sequencer_endpoint |
-| `list_director_functions` | `asset_path`, `kind`? | Director's own functions with parsed signatures. Inherited base-class methods and compiler-generated `ExecuteUbergraph*` are not indexed (own-only, matches `blueprint_query` convention) |
-| `list_director_variables` | `asset_path` | Director's own variables (name + K2-formatted type) in declaration order |
-| `list_event_bindings` | `asset_path` | All event-track entries grouped by binding GUID. Each binding shows kind (now correctly `spawnable` / `replaceable` for UE 5.7 custom bindings), bound class, and an array of sections (`trigger` / `repeater`) with the Director function each fires (resolved name + kind + signature when matched) |
-| `find_director_function_callers` | `function_name`, `asset_path_filter`? | Cross-sequence reverse lookup. Returns every event-track section across the project that fires the named function, with LS path and binding context (binding GUID/name/kind/bound class, section kind, resolved bool) |
+| `list_bindings` | `asset_path*` `kind?` (`possessable`/`spawnable`/`replaceable`/`custom`/`all`) | Every binding inside one LS (one row per `Guid×BindingIndex`), regardless of event-track presence. Each row carries `name`, `kind`, `bound_class`, `custom_binding_class` (e.g. `MovieSceneSpawnableActorBinding`) and `custom_binding_pretty` when a `UMovieSceneCustomBinding` is attached, plus `track_count` and a `kind_counts` breakdown |
+| `list_directors` | `asset_path_filter?` (glob `*`/`?`) | All LSes with a Director BP, ordered by path. Each row: `ls_path`, `director_bp_name`, `function_count`, `variable_count` |
+| `get_director_info` | `asset_path*` | One Director's summary: `function_breakdown` grouped by kind, `variable_count`, `event_bindings.{total,resolved}`, sample of up to 10 functions ordered user → custom_event → sequencer_endpoint |
+| `list_director_functions` | `asset_path*` `kind?` (`user`/`custom_event`/`sequencer_endpoint`/`event`/`all`) | Director's own functions with parsed signatures. Inherited base-class methods and compiler-generated `ExecuteUbergraph*` are not indexed (own-only, matches `blueprint_query` convention) |
+| `list_director_variables` | `asset_path*` | Director's own variables (name + K2-formatted type) in declaration order |
+| `list_event_bindings` | `asset_path*` | All event-track entries grouped by binding GUID. Each binding shows kind (now correctly `spawnable` / `replaceable` for UE 5.7 custom bindings), bound class, and an array of sections (`trigger` / `repeater`) with the Director function each fires (resolved name + kind + signature when matched) |
+| `find_director_function_callers` | `function_name*` (exact, case-sensitive) `asset_path_filter?` (glob `*`/`?`) | Cross-sequence reverse lookup. Returns every event-track section across the project that fires the named function, with LS path and binding context (binding GUID/name/kind/bound class, section kind, resolved bool) |
+
+The live `level_sequence` catalog also registers read-only replay (`get_replay_status`, `list_saved_replays`, `get_saved_replay`), anim-mixer (`get_anim_mixer_status`, `list_anim_mixer_tracks`), and a `ping` smoke test outside this skill's binding/Director inspection scope — `monolith_discover` lists them with schemas if needed.
 
 ## Common Workflows
 
@@ -66,13 +84,13 @@ level_sequence_query({ action: "find_director_function_callers", params: { funct
 level_sequence_query({ action: "find_director_function_callers", params: { function_name: "SequenceEvent__ENTRYPOINTLS_Intro_DirectorBP_0", asset_path_filter: "/Game/Cinematics/*" } })
 ```
 
-### Combine with `blueprint_query` for full graph introspection
-The Director Blueprint is also a regular `UBlueprint` accessible via `blueprint_query` using `subobject:` syntax:
+### Combine with the `blueprint` namespace (unreal-blueprints) for full graph introspection
+The Director Blueprint is also a regular `UBlueprint`. For graph-level editing (functions, variables, nodes, pins) switch to the **unreal-blueprints** skill, which reaches the Director via `subobject:` syntax:
 ```
 blueprint_query({ action: "get_blueprint_info", params: { asset_path: "/Game/Cinematics/LS_Intro.LS_Intro:LS_Intro_DirectorBP" } })
 blueprint_query({ action: "get_graph_summary", params: { asset_path: "...:LS_Intro_DirectorBP", graph_name: "Sequencer Events" } })
 ```
-`level_sequence_query` covers Sequencer-side metadata (bindings, event-track structure); `blueprint_query` covers BP graph-level details.
+`level_sequence_query` covers Sequencer-side metadata (bindings, event-track structure); the `blueprint` namespace covers BP graph-level details.
 
 ## Rules
 

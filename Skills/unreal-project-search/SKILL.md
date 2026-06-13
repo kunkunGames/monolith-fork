@@ -1,17 +1,27 @@
 ---
 name: unreal-project-search
-description: Use when searching for assets, references, or dependencies across an Unreal project via Monolith MCP — FTS5 full-text search, asset discovery, reference tracing, type filtering. Triggers on find asset, search project, asset references, where is, dependencies.
+description: Use when searching the indexed Unreal project via Monolith MCP (project namespace) — FTS5 asset search, discovery by name/type, asset-to-asset reference and dependency tracing, impact radius, gameplay-tag lookup, and asset-level risk/review-context/hotspots. For C++ symbol/text search, callers/callees, or class hierarchy use unreal-cpp; to cross from a found asset/BP node to its backing C++ symbol use unreal-bridge; for UCLASS/UPROPERTY reflection metadata or replication audits use unreal-reflection-intel; to act on a found asset (save/rename/move/delete/metadata) or fuzzy live find use unreal-asset; to gather results into an editor Collection use unreal-collection. Triggers on project search, find asset, search project, asset references, find references, where is this used, who references, dependencies, impact radius, find by type, FTS, full-text search, gameplay tags, asset risk score, review hotspots, find unused assets, ProjectIndex.
 ---
 
 # Unreal Project Search Workflows
 
-You have access to **Monolith** with a deep project index via `project_query()`.
+Drives the **project** namespace via `project_query()` over a deep, indexed project graph — FTS asset search, references, dependencies, type filtering, gameplay tags, and asset-level review/risk.
 
 ## Discovery
 
 ```
-monolith_discover({ namespace: "project" })
+monolith_discover({ namespace: "project" })                                  // all project actions
+monolith_discover({ namespace: "project", action: "search", mode: "schema" })  // exact params
 ```
+
+## When to use / Use a different skill for
+
+- **This skill (unreal-project-search / project namespace):** find project ASSETS by name or type, trace asset-to-asset references and dependencies, compute impact radius, look up GameplayTags, and gather asset-level risk/review-context/hotspots.
+- **unreal-cpp** — the search target is C++ SOURCE (symbol/text search, callers/callees, references, class hierarchy), not project assets.
+- **unreal-bridge** — cross from a found asset or Blueprint node to its backing C++ symbol (asset-to-symbol), versus asset-to-asset reference tracing here.
+- **unreal-reflection-intel** — UCLASS/UPROPERTY/UFUNCTION reflection metadata or replication audits, versus FTS asset content search.
+- **unreal-asset** — ACT on a found asset (save/rename/move/delete/metadata) or do a fuzzy live find, versus indexed project-wide search/references.
+- **unreal-collection** — gather search results into an editor Collection, versus running the search itself.
 
 ## Asset Path Conventions
 
@@ -27,44 +37,50 @@ All asset paths follow UE content browser format (no .uasset extension):
 
 ## Action Reference
 
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed, `[w]` mutates (transaction-wrapped — for `impact_radius`/`risk_score`/`pre_merge_check`/`snapshot`/`repair_*` this is index-cache bookkeeping, not asset edits). Signatures are a snapshot of the live catalog — for the exact full schema call `monolith_discover` with `mode: "schema"` (the discover block above is the authority).
+
 ### Search & inspect
 
 | Action | Params | Purpose |
 |--------|--------|---------|
-| `search` | `query` (string), `limit`?, `include_content`? | Full-text search across indexed assets plus graph/content signals. `include_content` defaults to `true`; set `false` for asset/node-only search |
-| `find_references` | `asset_path` (string) | Find all assets that reference a given asset |
-| `find_by_type` | `asset_type` (string), `module`? (string) | List all assets of a specific type, optionally filtered by plugin/module |
-| `get_asset_details` | `asset_path` (string) | Detailed metadata for a specific asset |
-| `get_stats` | _(none)_ | Index statistics — asset counts by type, module_breakdown by plugin, index freshness |
-| `impact_radius` | `asset_path`, `direction`?, `max_depth`?, `dependency_type`? | Dependency blast radius (in/out/both) for an asset |
+| `search` | `query*` `limit?=50` `include_content?=true` | Full-text search across indexed assets plus graph/content signals. `include_content=false` for asset/node-only search |
+| `find_references` | `asset_path*` | Assets that reference OR are referenced by the given asset |
+| `find_by_type` | `asset_type*` (aliases: `asset_class`/`type`) `module?` `limit?=100` `offset?=0` | List all assets of a type, optionally filtered by plugin/module |
+| `get_asset_details` | `asset_path*` | Deep details: nodes, variables, parameters, dependencies |
+| `get_saved_asset_state` | `asset_path*` | Disk-backed state: class, package, disk path, size, mtime, deps, referencers |
+| `get_stats` | (none) | Index statistics — counts by table and asset-class breakdown |
+| `impact_radius` [w] | `asset_path*` `direction?=both` (in/out/both) `max_depth?=2` `max_results?=200` `dependency_type?` (Hard/Soft/...) | Bounded-BFS dependency blast radius |
+| `refresh_assets` [w] | `asset_paths*` `wait_for_asset_registry?=true` `wait_for_disk?=false` | Force a synchronous asset-registry rescan of paths (post-save freshness) |
 
 ### Gameplay tags
 
 | Action | Params | Purpose |
 |--------|--------|---------|
-| `list_gameplay_tags` | `prefix`? | List project GameplayTags, optionally filtered by prefix |
-| `search_gameplay_tags` | `query` | Search GameplayTags by substring |
+| `list_gameplay_tags` | `prefix?` `limit?=100` `offset?=0` | List indexed GameplayTags, optionally filtered by prefix |
+| `search_gameplay_tags` | `query*` `limit?=100` `offset?=0` | Search GameplayTags by substring, with referencing assets |
 
 ### Review & risk (use before code/asset-review claims)
 
 | Action | Params | Purpose |
 |--------|--------|---------|
-| `risk_score` | `asset_path`, `limit`? | Change-risk score for an asset and its dependents |
-| `review_context` | `asset_path`, `direction`?, `detail_level`? | Reviewer context bundle for an asset |
-| `review_hotspots` | `kind`?, `limit`? | Project-wide review hotspots (fan-in/out, risk, large) |
-| `find_unused` | `kind`?, `limit`?, `min_confidence`? | Candidate unused assets |
-| `detect_changes` | `changed_paths`/`diff_*` | Impact of a set of changed assets |
-| `pre_merge_check` | `changed_paths`?, `max_results`? | Pre-merge impact + unused summary |
+| `risk_score` [w] | `asset_path?` (alias `seed`; omit to rank top fan-in) `limit?=20` `min_tier?=low` (low/medium/high) | Change-risk score (fan-in, hard deps, class weight, graph density) |
+| `review_context` | `asset_path*` `direction?=both` (in/out/both) `max_depth?=2` `max_results?=200` `detail_level?=minimal` (minimal/standard) | Token-efficient review package: seed + impact + risk + next actions |
+| `review_hotspots` | `kind?=all` (fan_in/fan_out/risk/large/all) `limit?=50` `min_lines?=100` `include_questions?=true` | Project-wide review hotspots |
+| `find_unused` | `kind?=all` `limit?=100` `min_confidence?=low` (low/medium/high) | Advisory orphan-asset candidates with confidence + reasons |
+| `audit_orphan_assets` [w] | `asset_class_filter?` `limit?=50` (cap 200) `cursor?` | Strictest orphan signal: zero registry referencers AND zero cpp_asset_edges |
+| `detect_changes` | `changed_paths?` (array or comma string; alias `paths`) `max_results?=200` `detail_level?=minimal` (minimal/standard) | Map changed paths to impact + risk-ranked review priorities |
+| `pre_merge_check` [w] | `changed_paths?` (alias `paths`) `max_results?=200` `unused_limit?=20` `detail_level?=minimal` (minimal/standard) `include_unused?=true` | Pre-merge decision: health + change risk + impact + optional unused |
+| `cleanup_generated_assets` [w] | `paths*` (allowlist `/Game/Tests/Monolith/` only) `dry_run?=true` `require_no_referencers?=true` `remove_empty_folders?=false` | Safely delete throwaway test assets with reference checks |
 
 ### Snapshots & maintenance
 
 | Action | Params | Purpose |
 |--------|--------|---------|
-| `snapshot` | `label`?, `execute`? | Capture an index snapshot for later diffing |
-| `diff_snapshots` | `before`, `after`? | Diff two index snapshots |
-| `health` | `include_counts`? | Index health/parity check |
-| `repair_fts` | `target`?, `execute`? | Rebuild project FTS tables when search looks stale. Targets: `all`, `assets`, `nodes`, `variables`, `parameters`, `datatable_rows`, `actors`, `asset_search_values` |
-| `repair_crg_cache` | `scope`?, `execute`? | Rebuild project CRG projection/cache |
+| `snapshot` [w] | `label?` (default `project-<utc_ticks>`) `execute?=false` | Capture an index CRG projection snapshot for later diffing |
+| `diff_snapshots` | `before*` `after?=current` `limit?=100` | Diff two index snapshots |
+| `health` | `include_counts?=true` | Index diagnostics: schema, triggers, FTS parity, orphans, journal mode |
+| `repair_fts` [w] | `target?=all` (all/assets/nodes/variables/parameters/datatable_rows/actors/asset_search_values) `execute?=false` | Rebuild project FTS tables when search looks stale |
+| `repair_crg_cache` [w] | `scope?=all` `execute?=false` | Rebuild project CRG projection/cache |
 
 > Asset **Collections** moved to their own namespace — see `unreal-collection`.
 > The same `risk_score` / `review_context` / `impact_radius` review surface exists for C++ in `unreal-cpp` (`source` namespace).
@@ -93,6 +109,42 @@ Search results expose provenance fields so agents can judge relevance without fe
 | `match_value` | Matched value payload when available |
 
 ## Common Workflows
+
+### 1. Find-and-trace: from a name to its blast radius
+
+Search for the asset, list what references it (both directions), then bound the dependency blast radius before a rename/delete/refactor.
+
+```
+1. project_query({ action: "search", params: { query: "M_Skin*", include_content: false } })
+2. project_query({ action: "find_references", params: { asset_path: "/Game/Materials/M_Skin" } })
+3. project_query({ action: "impact_radius", params: { asset_path: "/Game/Materials/M_Skin", direction: "in", max_depth: 2, max_results: 200 } })
+```
+
+`find_references` returns assets that reference OR are referenced by the seed; `impact_radius` is a bounded BFS (`[w]` here is index-cache bookkeeping, not an asset edit). To cross from a found asset/BP node into its backing C++ symbol use **unreal-bridge**; for C++ symbol callers/callees use **unreal-cpp**.
+
+### 2. Find-by-type plus gameplay-tag lookup
+
+List every asset of a type (optionally filtered by module), then resolve which assets carry a GameplayTag.
+
+```
+1. project_query({ action: "find_by_type", params: { asset_type: "WidgetBlueprint", limit: 100 } })
+2. project_query({ action: "list_gameplay_tags", params: { prefix: "Ability.", limit: 100 } })
+3. project_query({ action: "search_gameplay_tags", params: { query: "Damage", limit: 100 } })
+```
+
+`search_gameplay_tags` returns the referencing assets per tag; `find_by_type` accepts `module` to scope to a plugin.
+
+### 3. Review-hotspots pass before a change/merge
+
+Rank project-wide hotspots, score the change-risk of a specific seed, then pull a token-efficient review package.
+
+```
+1. project_query({ action: "review_hotspots", params: { kind: "risk", limit: 50 } })
+2. project_query({ action: "risk_score", params: { asset_path: "/Game/Blueprints/BP_Player", min_tier: "medium" } })
+3. project_query({ action: "review_context", params: { asset_path: "/Game/Blueprints/BP_Player", direction: "both", max_depth: 2, detail_level: "standard" } })
+```
+
+The same `risk_score` / `review_context` / `impact_radius` review surface exists for C++ in **unreal-cpp** (`source` namespace); use it when the review target is source rather than an asset.
 
 ### Find any asset by name
 ```

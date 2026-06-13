@@ -21,6 +21,13 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Layout/Children.h"
 
+// Headless layout-save guard.
+#include "Containers/Ticker.h"
+#include "Framework/Docking/TabManager.h"
+#include "LevelEditor.h"
+#include "Misc/App.h"
+#include "Subsystems/AssetEditorSubsystem.h"
+
 #define LOCTEXT_NAMESPACE "FMonolithEditorModule"
 
 namespace
@@ -89,6 +96,110 @@ private:
 
 FMonolithPieTransactionBufferGuard GMonolithPieTransactionBufferGuard;
 
+// Headless (-NullRHI / no-render) editors create Slate windows whose native window is
+// the base FGenericWindow. FTabManager's 5s deferred layout save then fatals in
+// SDockingArea::GatherPersistentLayout -> SWindow::GetNonMaximizedRectInScreen ->
+// FGenericWindow::GetRestoredDimensions ("not expected to be called on this platform",
+// GenericWindow.cpp:113), killing the editor ~10s after boot and taking the Monolith
+// MCP server with it. The engine is an installed build and the per-manager
+// bCanDoDeferredLayoutSave switch sits behind FTabManager::FPrivateApi (protected), so
+// this guard uses the two public surfaces instead:
+//   1. FGlobalTabmanager::SetCanSavePersistentLayouts(false) — layout ini/json writes
+//      are meaningless without real window dimensions.
+//   2. ClearPendingLayoutSave() on the global + level-editor tab managers, once at
+//      OnPostEngineInit and then every second, which always cancels the 5s deferred
+//      save ticker before it can fire (FTSTicker does not tick during engine init, so
+//      saves requested mid-init are cleared by the immediate pass).
+// Open asset editors are covered too: their host tab managers are enumerated
+// through UAssetEditorSubsystem on every clearing pass.
+class FMonolithHeadlessLayoutSaveGuard
+{
+public:
+	void Register()
+	{
+		if (bRegistered || FApp::CanEverRender())
+		{
+			return;
+		}
+		PostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddRaw(
+			this, &FMonolithHeadlessLayoutSaveGuard::HandlePostEngineInit);
+		bRegistered = true;
+	}
+
+	void Unregister()
+	{
+		if (!bRegistered)
+		{
+			return;
+		}
+		if (PostEngineInitHandle.IsValid())
+		{
+			FCoreDelegates::OnPostEngineInit.Remove(PostEngineInitHandle);
+			PostEngineInitHandle.Reset();
+		}
+		if (TickerHandle.IsValid())
+		{
+			FTSTicker::GetCoreTicker().RemoveTicker(TickerHandle);
+			TickerHandle.Reset();
+		}
+		bRegistered = false;
+	}
+
+private:
+	void HandlePostEngineInit()
+	{
+		FGlobalTabmanager::Get()->SetCanSavePersistentLayouts(false);
+		ClearPendingLayoutSaves();
+		TickerHandle = FTSTicker::GetCoreTicker().AddTicker(
+			FTickerDelegate::CreateLambda([](float /*DeltaTime*/)
+			{
+				ClearPendingLayoutSaves();
+				return true;
+			}),
+			1.0f);
+		UE_LOG(LogMonolith, Log,
+			TEXT("HeadlessLayoutSaveGuard: CanEverRender=false — persistent layout saves disabled and deferred layout-save tickers are being cleared (FGenericWindow::GetRestoredDimensions fatals under null windows)."));
+	}
+
+	static void ClearPendingLayoutSaves()
+	{
+		FGlobalTabmanager::Get()->ClearPendingLayoutSave();
+		if (FModuleManager::Get().IsModuleLoaded(TEXT("LevelEditor")))
+		{
+			FLevelEditorModule& LevelEditor = FModuleManager::GetModuleChecked<FLevelEditorModule>(TEXT("LevelEditor"));
+			if (TSharedPtr<FTabManager> LevelEditorTabManager = LevelEditor.GetLevelEditorTabManager())
+			{
+				LevelEditorTabManager->ClearPendingLayoutSave();
+			}
+		}
+		if (GEditor)
+		{
+			if (UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
+			{
+				for (UObject* Asset : AssetEditorSubsystem->GetAllEditedAssets())
+				{
+					IAssetEditorInstance* Instance = Asset
+						? AssetEditorSubsystem->FindEditorForAsset(Asset, /*bFocusIfOpen=*/false)
+						: nullptr;
+					if (Instance)
+					{
+						if (TSharedPtr<FTabManager> AssetTabManager = Instance->GetAssociatedTabManager())
+						{
+							AssetTabManager->ClearPendingLayoutSave();
+						}
+					}
+				}
+			}
+		}
+	}
+
+	FDelegateHandle PostEngineInitHandle;
+	FTSTicker::FDelegateHandle TickerHandle;
+	bool bRegistered = false;
+};
+
+FMonolithHeadlessLayoutSaveGuard GMonolithHeadlessLayoutSaveGuard;
+
 	// Recursively walk a Slate widget subtree, appending the text of every STextBlock
 	// found to OutText (newline-joined). Best-effort and depth-bounded so a pathological
 	// tree can't stall the broadcast. The broadcasting thread is the game thread; this
@@ -137,6 +248,7 @@ void FMonolithEditorModule::StartupModule()
 		FMonolithEditorCrashActions::RegisterActions();  // CrashRecovery: get_last_crash_reason / list_recent_crashes / get_crash_stats
 	});
 	GMonolithPieTransactionBufferGuard.Register();
+	GMonolithHeadlessLayoutSaveGuard.Register();
 
 	// Register settings detail customization
 	FPropertyEditorModule& PropModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
@@ -184,6 +296,7 @@ void FMonolithEditorModule::OnPreSlateModal()
 
 void FMonolithEditorModule::ShutdownModule()
 {
+	GMonolithHeadlessLayoutSaveGuard.Unregister();
 	GMonolithPieTransactionBufferGuard.Unregister();
 
 	FMonolithToolRegistry::Get().UnregisterOwner(TEXT("MonolithEditor"));

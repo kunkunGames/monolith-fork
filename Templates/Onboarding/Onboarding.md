@@ -101,6 +101,8 @@ After connecting, verify with `monolith_status()` before calling editor-backed a
 D:\P4\game\BatchFiles\RunHeadlessEditor.bat
 ```
 
+`Plugins\Monolith\Scripts\recover_mcp.ps1` runs that recovery deterministically (probe `/health`, launch the wrapper when no editor-server instance exists, wait, report `RESULT=` plus exit code); see `Docs/specs/SPEC_MonolithAgentOpsScripts.md`.
+
 Then use `monolith_find("<task>")` for routing and `monolith_discover({ "namespace": "<ns>", "action": "<action>", "mode": "schema" })` for exact parameters.
 
 ## 2. Add Project Instructions

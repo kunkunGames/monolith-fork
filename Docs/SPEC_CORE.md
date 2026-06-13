@@ -169,6 +169,10 @@ Each module has its own spec file under `specs/`. The table below is the index.
 
 Merge audit specs live beside the module specs. The 0.15.0 CL 448 compact-merge decision record is [`specs/SPEC_Monolith0150CompactMerge.md`](specs/SPEC_Monolith0150CompactMerge.md).
 
+Developer authoring guide: to add or modify an MCP action (registration, param schema, handler, execution policy, tests, docs/skill sync), see [`specs/SPEC_MonolithActionAuthoring.md`](specs/SPEC_MonolithActionAuthoring.md).
+
+Agent Skill drift guard: `Scripts/check_skill_catalog_drift.ps1` compares each `Skills/<skill>/SKILL.md` action/param table against the live `monolith_discover` catalog so the per-skill documentation cannot silently rot; contract in [`specs/SPEC_MonolithSkillCatalogDrift.md`](specs/SPEC_MonolithSkillCatalogDrift.md).
+
 ---
 
 ## 4. Source Indexer

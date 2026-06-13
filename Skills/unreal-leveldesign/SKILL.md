@@ -1,6 +1,6 @@
 ---
 name: unreal-leveldesign
-description: "Use for level-design analysis and horror/accessibility passes via Monolith MCP: audio & acoustics (footsteps, reverb RT60, sound propagation, stealth maps, quiet paths), horror spatial analysis (sightlines, hiding/ambush spots, choke points, tension zones, pacing), encounter design (patrol routes, spawn-point scoring, scare sequences, safe rooms), and accessibility validation (wheelchair paths, visual contrast, rest points, hospice reports). Triggers on acoustics, reverb, RT60, footstep, sound propagation, stealth, sightline, hiding spot, ambush, choke point, tension, pacing, encounter, patrol, scare, safe room, accessibility, wheelchair, contrast, rest point, hospice, escape route."
+description: Use for level-design ANALYSIS and horror/accessibility passes via Monolith MCP (leveldesign namespace) — acoustics scoring, horror spatial analysis, encounter design, and accessibility validation that READ the scene and return heuristic scores rather than placing assets. To author the audio ASSET (Sound Cue/MetaSound/attenuation) use unreal-audio; for raw spatial primitives (raycast/overlap/nearest/navmesh) and actor placement use unreal-scene; to implement patrol/perception/nav BEHAVIOR use unreal-ai; to generate the building/town geometry use unreal-worldgen. Triggers on leveldesign, level design, acoustics, reverb, RT60, sound propagation, footstep, stealth, quiet path, sightline, hiding spot, ambush, choke point, dead end, tension, pacing, encounter, patrol route, spawn point, scare, safe room, monster reveal, co-op, accessibility, wheelchair, contrast, rest point, hospice, escape route.
 ---
 
 # unreal-leveldesign
@@ -14,86 +14,91 @@ monolith_discover({ namespace: "leveldesign" })                      # all actio
 monolith_discover({ namespace: "leveldesign", action: "<action>", mode: "schema" })  # exact params
 ```
 
+## When to use / Use a different skill for
+
+Use **unreal-leveldesign** for the *analysis pass* — read the existing scene and return heuristic scores, maps, and design specs for acoustics, horror tension, encounters, and accessibility. These actions are mostly read-only; they do not author assets or place gameplay logic.
+
+- **unreal-audio** — author the actual audio ASSET (Sound Cue, MetaSound, attenuation, submix, sound class). This skill only *scores* acoustics/reverb/RT60/footstep propagation as a design pass; it does not create sound assets.
+- **unreal-scene** — the raw spatial primitives an analysis pass is built on (raycast/overlap/nearest/line-of-sight/navmesh path, `build_navmesh`) and actor/light/decal placement, versus the horror/accessibility/encounter *scoring* on top.
+- **unreal-ai** — implement the patrol/perception/navigation BEHAVIOR (Behavior Tree, EQS, nav links, perception) that an encounter pass designs, versus the patrol-route/spawn-point *scoring* analysis.
+- **unreal-worldgen** — generate the blockout/building/town geometry that this analysis then reads, versus the analysis itself.
+
 ## Action Reference
+
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed, `[w]` mutates (transaction-wrapped). Signatures are a snapshot of the live catalog — for the exact full schema call `monolith_discover` with `mode: "schema"` (the discover block above is the authority). All positions are `[x,y,z]` arrays; all distances are in cm unless noted.
 
 ### Audio (14)
 
-| Action | Purpose |
-|--------|---------|
-| `analyze_room_acoustics` | Sample surfaces via raycasts in a volume, compute area-weighted absorption. Sabine RT60: 0.161 * Volume_m3 / TotalAbsorption. Classify: dead/dry/live/echo. |
-| `analyze_sound_propagation` | Analyzes sound propagation between two points. Direct trace (wall occlusion) + indirect navmesh path (doorway propagation). Returns whichever path has better audibility. |
-| `can_ai_hear_from` | Can AI hear the player? Direct trace (wall occlusion) + indirect navmesh path (doorway propagation). Uses best path. Returns yes/faintly/no + detection radius. |
-| `create_audio_volume` | Spawn an AAudioVolume matching a blocking volume's shape. Set reverb/interior settings. Undo transaction. |
-| `create_surface_datatable` | Bootstrap the acoustic system: create a DataTable with surface properties and register surface types via UPhysicsSettings CDO. |
-| `estimate_footstep_sound` | Downward trace at a location to determine floor surface type and footstep loudness factor. |
-| `find_loud_surfaces` | Find surfaces with high footstep loudness (metal, glass, gravel) in a volume or region. Returns locations, areas, detection radii. |
-| `find_quiet_path` | Sample candidate navmesh paths between two points, score by surface loudness along path. Returns lowest-loudness route. |
-| `find_sound_paths` | Multi-method sound path finder: direct trace, first-bounce reflections (image-source), and navmesh indirect path (doorway propagation). Returns all viable paths sorted by attenuation. |
-| `get_audio_volumes` | Enumerate all AAudioVolume actors. Returns reverb/interior settings, priority, bounds. Flags uncovered regions. |
-| `get_stealth_map` | Grid-sample a volume: per-cell footstep loudness + AI detection radius. Returns heatmap data. |
-| `get_surface_materials` | Cast rays in all directions to catalog physical materials in a volume or region. Returns material breakdown with acoustic properties. |
-| `set_surface_type` | Set physical material surface type override on a mesh actor's component. Undo transaction. |
-| `suggest_audio_volumes` | Given room geometry + surface materials, suggest AAudioVolume reverb settings based on RT60 + material classification. |
+| Action | Purpose | Params |
+|--------|---------|--------|
+| `analyze_room_acoustics` | Sample surfaces via raycasts in a volume, area-weighted absorption. Sabine RT60: 0.161 * Volume_m3 / TotalAbsorption. Classify: dead/dry/live/echo. | `volume_name*` `ray_count?=128` |
+| `analyze_sound_propagation` | Sound propagation between two points: direct trace + indirect navmesh path. Returns better-audibility path. | `from*` `to*` `include_occlusion?=true` |
+| `can_ai_hear_from` | Can AI hear the player? Best of direct trace + navmesh path. Returns yes/faintly/no + detection radius. | `ai_location*` `player_location*` `surface_type?` `ai_hearing_range?=2000` |
+| `create_audio_volume` [w] | Spawn an AAudioVolume matching a blocking volume's shape. Undo transaction. | `volume_name*` `reverb_preset?` `priority?=0` `label?` |
+| `create_surface_datatable` [w] | Bootstrap the acoustic system: create surface DataTable + register surface types via UPhysicsSettings CDO. | `template?=horror_default` `save_path?` |
+| `estimate_footstep_sound` | Downward trace to determine floor surface type and footstep loudness factor. | `location*` |
+| `find_loud_surfaces` | Find high-footstep-loudness surfaces (metal/glass/gravel) in a volume or region. | `volume_name?` `region_min?` `region_max?` `loudness_threshold?=0.5` |
+| `find_quiet_path` | Score candidate navmesh paths by surface loudness. Returns lowest-loudness route. | `start*` `end*` `max_loudness?=0.3` |
+| `find_sound_paths` | Multi-method path finder: direct trace, first-bounce reflections, navmesh indirect. Sorted by attenuation. | `from*` `to*` `max_bounces?=2` (1-3) `candidate_surfaces?=16` |
+| `get_audio_volumes` | Enumerate all AAudioVolume actors; reverb/interior settings, bounds, uncovered regions. | `include_details?=true` |
+| `get_stealth_map` | Grid-sample a volume: per-cell footstep loudness + AI detection radius heatmap. | `volume_name*` `grid_size?=100` `ai_hearing_range?=2000` |
+| `get_surface_materials` | Cast rays in all directions to catalog physical materials in a volume or region. | `volume_name?` `region_min?` `region_max?` `ray_count?=64` |
+| `set_surface_type` [w] | Set physical-material surface-type override on a mesh actor component. Undo transaction. | `actor_name*` `surface_type*` |
+| `suggest_audio_volumes` [w] | Suggest AAudioVolume reverb settings from RT60 + material classification. | `volume_name*` |
 
 ### Encounter (8)
 
-| Action | Purpose |
-|--------|---------|
-| `analyze_ai_territory` | Score a region as AI territory: hiding spot density, patrol route coverage, sightline control, ambush potential, escape routes for AI disengagement. |
-| `analyze_level_pacing_structure` | Macro-level tension-to-release rhythm across an entire level path. Identifies encounter zones, safe rooms, exploration areas. Compares to ideal pacing curves. |
-| `design_encounter` | Capstone: compose spawn points, patrol routes, player entry/exit, sightline breaks, and audio zones into a scored encounter specification. Returns a complete encounter blueprint JSON. |
-| `evaluate_safe_room` | Score a room as a safe room: entrance count, defensibility, lighting quality, sound isolation, size, hospice accessibility. Detects doors via actor tags/class. |
-| `generate_hospice_report` | Full level audit for hospice patients: intensity caps, rest spacing (every 2-3 min), cognitive load, input demands, one-handed playability, audio alternatives for visual scares. Profiles: motor_impaired, vision_impaired, cognitive_fatigue. |
-| `generate_scare_sequence` | Procedurally generate a sequence of scare events with variety, escalation, and pacing. Output is a specification, not placed actors. |
-| `suggest_patrol_route` | Generate navmesh patrol routes per AI archetype. Stalker: stay in earshot but out of sight. Patrol: regular loop hitting checkpoints. Ambusher: concealed wait position with surprise angle. |
-| `validate_horror_intensity` | Audit horror intensity for hospice compliance. Checks max tension never exceeds profile ceiling. Verifies generous escape windows. Flags jump scares. |
+| Action | Purpose | Params |
+|--------|---------|--------|
+| `analyze_ai_territory` | Score a region as AI territory: hiding density, patrol coverage, sightline control, ambush potential, escape routes. | `region*` `archetype?=stalker` (stalker/patrol/ambusher) `granularity?=200` |
+| `analyze_level_pacing_structure` | Macro tension-to-release rhythm across a level path. Identifies encounter zones, safe rooms, exploration areas. | `start*` `end*` `waypoints?` `sample_interval?=500` |
+| `design_encounter` [w] | Capstone: compose spawns, patrols, entry/exit, sightline breaks, audio zones into a scored encounter spec JSON. | `region*` `archetype?=stalker` (stalker/patrol/ambusher/swarm) `difficulty?=medium` (low/medium/high) `enemy_blueprint?` `constraints?` `dry_run?=true` |
+| `evaluate_safe_room` [w] | Score a room as a safe room: entrances, defensibility, lighting, isolation, size, hospice accessibility. | `region*` |
+| `generate_hospice_report` [w] | Full hospice audit: intensity caps, rest spacing, cognitive load, input demands, audio alternatives. | `start*` `end*` `profile?` (motor_impaired/vision_impaired/cognitive_fatigue; empty=all) `walk_speed_cms?=300` |
+| `generate_scare_sequence` [w] | Procedurally generate a scare-event sequence spec (not placed actors). | `path_points*` `style?=escalating` (slow_burn/escalating/relentless/single_peak) `intensity_cap?=1.0` `scare_types?` (audio/visual/environmental/entity_spawn) `count?=5` |
+| `suggest_patrol_route` [w] | Generate navmesh patrol routes per AI archetype. | `region*` `archetype?=patrol` (stalker/patrol/ambusher) `waypoint_count?=5` `patrol_style?=loop` (loop/back_and_forth/random) `constraints?` `player_path?` |
+| `validate_horror_intensity` | Audit horror intensity for hospice compliance: tension ceiling, escape windows, jump scares. | `start*` `end*` `intensity_cap?=50` (0-100) `flag_jump_scares?=true` `min_rest_distance_cm?=800` `min_escape_routes?=2` |
 
 ### Horror (8)
 
-| Action | Purpose |
-|--------|---------|
-| `analyze_choke_points` | Find narrow passages along a navmesh path. Returns choke points with width, flank possibility, and bypass routes. |
-| `analyze_escape_routes` | Find and score escape routes from a location to tagged exit actors. Critical for hospice: ensures no inescapable encounters. |
-| `analyze_pacing_curve` | Sample tension at intervals along a path. Identifies monotonous stretches, optimal scare placement, and false-calm opportunities. |
-| `analyze_sightlines` | Fan-of-rays sightline analysis from a location. Returns claustrophobia score 0-100, blocked percentages at distance thresholds, longest clear sightline. |
-| `classify_zone_tension` | Composite tension analysis: sightline distance + ceiling height + room volume + exit count. Returns calm/uneasy/tense/dread/panic. |
-| `find_ambush_points` | Find ambush positions lateral to a path. Scores concealment + surprise angle (180 degrees from player forward = perfect ambush). |
-| `find_dead_ends` | Navmesh flood-fill to find single-exit (dead-end) regions. Returns depth, width, exit direction for each. |
-| `find_hiding_spots` | Grid-sample a region and score each point for concealment from given viewpoints. Returns spots sorted by quality. |
+| Action | Purpose | Params |
+|--------|---------|--------|
+| `analyze_choke_points` | Find narrow passages along a navmesh path: width, flank possibility, bypass routes. | `start*` `end*` `agent_radius?=45` |
+| `analyze_escape_routes` | Find and score escape routes from a location to tagged exit actors. | `location*` `exit_tags?` `max_routes?=5` |
+| `analyze_pacing_curve` | Sample tension along a path: monotonous stretches, optimal scare placement, false-calm. | `path_points*` `sample_interval?=200` |
+| `analyze_sightlines` | Fan-of-rays sightline analysis: claustrophobia 0-100, blocked % at thresholds, longest clear line. | `location*` `forward?` (default +X) `fov?=90` `ray_count?=36` `max_distance?=5000` |
+| `classify_zone_tension` [w] | Composite tension: sightline + ceiling height + volume + exit count. Returns calm/uneasy/tense/dread/panic. | `location*` `radius?=500` |
+| `find_ambush_points` | Find ambush positions lateral to a path; scores concealment + surprise angle. | `path_points*` `lateral_range?=500` `concealment_threshold?=0.7` |
+| `find_dead_ends` | Navmesh flood-fill for single-exit regions: depth, width, exit direction. | `region_min?` `region_max?` (default whole navmesh) `grid_size?=200` |
+| `find_hiding_spots` | Grid-sample a region, score concealment from viewpoints. Sorted by quality. | `region_min*` `region_max*` `viewpoints*` `grid_size?=100` `min_concealment?=0.6` |
 
 ### Accessibility (6)
 
-| Action | Purpose |
-|--------|---------|
-| `analyze_visual_contrast` | Analyze visual contrast of interactable actors against their backgrounds using scene capture. WCAG-inspired thresholds. |
-| `find_rest_points` | Walk a path and inventory safe rooms/calm zones. Flag gaps exceeding max_gap (default 30m). Hospice patients need frequent rest opportunities. |
-| `generate_accessibility_report` | Comprehensive accessibility report combining path width, navigation complexity, visual contrast, rest points, and interactive reach. Profile-specific thresholds. |
-| `validate_interactive_reach` | Check interactable actors for height, navmesh distance, and obstructions. Flag items requiring jumping or precision movement. |
-| `validate_navigation_complexity` | Score cognitive difficulty of navigation between two points: turn count, sharp corners, backtracking, elevation changes. |
-| `validate_path_width` | Validate path width for wheelchair accessibility (default 120cm min). Returns pinch points with exact obstruction actors. |
+| Action | Purpose | Params |
+|--------|---------|--------|
+| `analyze_visual_contrast` | Visual contrast of interactable actors vs backgrounds via scene capture. WCAG-inspired. | `location*` `forward?` `fov?=90` `tags?` |
+| `find_rest_points` | Walk a path, inventory safe rooms/calm zones, flag gaps exceeding max_gap. | `start*` `end*` `max_gap?=3000` |
+| `generate_accessibility_report` [w] | Combined path width, nav complexity, contrast, rest points, interactive reach. | `start*` `end*` `profile?` (motor_impaired/vision_impaired/cognitive_fatigue) |
+| `validate_interactive_reach` | Check interactable actors for height, navmesh distance, obstructions. | `region_min?` `region_max?` `tags?` |
+| `validate_navigation_complexity` | Score cognitive nav difficulty: turn count, sharp corners, backtracking, elevation. | `start*` `end*` |
+| `validate_path_width` | Validate path width for wheelchair accessibility. Returns pinch points with obstruction actors. | `start*` `end*` `min_width?=120` |
 
 ### Horror Design (4)
 
-| Action | Purpose |
-|--------|---------|
-| `evaluate_encounter_pacing` | Analyze spacing and intensity of multiple encounter positions along a level path. Flags back-to-back encounters, insufficient rest periods, and intensity curve issues. |
-| `evaluate_spawn_point` | Composite score for an enemy spawn location. Evaluates visibility delay, lighting, audio cover, escape proximity, and path commitment from player paths. |
-| `predict_player_paths` | Generate weighted navmesh paths between two points using multiple strategy heuristics: shortest, safest, curious, cautious. Returns path points, distance, estimated time, and per-strategy scores. |
-| `suggest_scare_positions` | Find optimal positions for scripted scare events along a player path. Scores anticipation buildup, player visibility, timing, and player agency. Supports hospice mode. |
+| Action | Purpose | Params |
+|--------|---------|--------|
+| `evaluate_encounter_pacing` [w] | Spacing/intensity of multiple encounters along a path: back-to-back, rest gaps, curve issues. | `path_points*` `encounters*` (`[{location,type,intensity,duration_s}]`) `target_pacing?=horror_standard` (horror_standard/hospice_gentle/action) `walk_speed_cms?=400` |
+| `evaluate_spawn_point` [w] | Composite enemy-spawn score: visibility delay, lighting, audio cover, escape proximity, path commitment. | `location*` `player_paths?` `player_location?` `weights?` (`{visibility_delay,lighting,audio_cover,escape_proximity,path_commitment}`) |
+| `predict_player_paths` [w] | Weighted navmesh paths via strategy heuristics + per-strategy scores. | `start*` `end*` `strategies?` (shortest/safest/curious/cautious) `agent_radius?=45` `agent_height?=180` `waypoints?` `sample_density?=200` `max_samples?=500` `max_paths_per_strategy?=3` `walk_speed_cms?=400` |
+| `suggest_scare_positions` [w] | Optimal scripted-scare positions along a path: anticipation, visibility, timing, agency. | `path_points*` `scare_type?=visual` (audio/visual/entity_spawn/environmental) `count?=5` `min_spacing_cm?=1000` `intensity_curve?=escalating` (escalating/wave/random) `hospice_mode?=false` |
 
 ### Quality (3)
 
-| Action | Purpose |
-|--------|---------|
-| `analyze_co_op_balance` | Analyze spatial design for co-op play: coverage blind spots, separation opportunities, communication distances. Given multiple player positions, evaluate the level's co-op balance. |
-| `analyze_framing` | Camera composition scoring: rule of thirds placement, depth layering, leading lines. Projects actors to screen space from a camera viewpoint and analyzes composition. |
-| `evaluate_monster_reveal` | Score a monster reveal moment: silhouette quality (screen coverage), backlight potential, distance rating, partial visibility, player camera alignment. Uses traces and sightline analysis. |
-
-## Related skills
-
-- Live scene actors, volumes, navmesh build, lighting: `unreal-scene`
-- Procedural blockout / town generation: `unreal-worldgen`
-- Mesh assets: `unreal-mesh`
+| Action | Purpose | Params |
+|--------|---------|--------|
+| `analyze_co_op_balance` | Co-op spatial design: blind spots, separation opportunities, communication distances. | `player_positions*` `region_min?` `region_max?` |
+| `analyze_framing` | Camera composition: rule of thirds, depth layering, leading lines (screen-space projection). | `camera_location*` `camera_rotation*` (`[pitch,yaw,roll]`) `focal_actor?` `fov?=90` `aspect_ratio?=1.777` |
+| `evaluate_monster_reveal` [w] | Score a monster reveal: silhouette, backlight, distance, partial visibility, camera alignment. | `player_location*` `player_rotation*` (`[pitch,yaw,roll]`) `monster_actor*` `fov?=90` |
 
 ## Typical workflows
 

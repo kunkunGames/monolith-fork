@@ -1,61 +1,87 @@
 ---
 name: unreal-cpp
-description: Use when writing or debugging Unreal Engine C++ code via Monolith MCP — engine API lookup, signature verification, include paths, source reading, class hierarchies, config resolution. Triggers on C++, header, include, UCLASS, UFUNCTION, UPROPERTY, Build.cs, linker error.
+description: Use when reading, writing, or reviewing Unreal Engine C++ source via Monolith MCP (source namespace) — engine API lookup, signature verification, include paths, reading headers/source, class hierarchies, callers/callees, references, module dependencies, and code-review risk/review-context/impact-radius. For UCLASS/UPROPERTY reflection metadata, replication, or RPC/OnRep audits use unreal-reflection-intel; to cross from an asset/BP node to its C++ symbol use unreal-bridge; for project-asset search use unreal-project-search; for compiling or fixing build errors use unreal-build; for log/crash forensics use unreal-debugging. Triggers on C++, header, include, UCLASS, UFUNCTION, UPROPERTY, Build.cs, linker error, find function, callers of, callees, class hierarchy, where is symbol defined, function signature, read header, module dependency, API lookup, virtual override, risk score, review context, impact radius.
 ---
 
 # Unreal C++ Development Workflows
 
-**28 source actions** via `source_query()`, **6 config actions** via `config_query()` (see `unreal-config`).
+Drives the **source** namespace via `source_query()` for engine/project C++ source lookup, reading, hierarchy traversal, and code-review risk. For `.ini`/CVar/config resolution use the **unreal-config** skill (11 `config_query()` actions); the convenience config signatures below cover only the calls shown here.
 
 ```
-monolith_discover({ namespace: "source" })
-monolith_discover({ namespace: "config" })
+monolith_discover({ namespace: "source" })                               // all source actions
+monolith_discover({ namespace: "source", action: "search_source", mode: "schema" })  // exact params
 ```
+
+## When to use / Use a different skill for
+
+- **This skill (unreal-cpp / source namespace):** read engine or project C++ source, verify a signature, find callers/callees/references, walk a class hierarchy, check module dependencies, and gather code-review risk/impact context.
+- **unreal-reflection-intel** — UCLASS/UPROPERTY/UFUNCTION reflection metadata, replication audits, or RPC/OnRep handler checks (as-declared reflected surface, not raw source).
+- **unreal-bridge** — cross from an asset/BP node to its backing C++ symbol.
+- **unreal-project-search** — the search target is project ASSETS, references, or dependencies, not C++ source.
+- **unreal-build** — the task is compiling or fixing build errors rather than reading source.
+- **unreal-debugging** — diagnosing a linker/crash error via editor logs or crash context rather than verifying a signature.
+- **unreal-config** — read/edit `.ini` settings, sections, or console variables.
 
 ## Source Actions
 
-| Action | Key Params | Purpose |
-|--------|-----------|---------|
-| `search_source` | `query` | Find symbols across engine source |
-| `read_source` | `symbol` | Read engine source for a symbol |
-| `get_class_hierarchy` | `symbol` | Inheritance tree |
-| `find_callers` | `symbol` | Who calls this function |
-| `find_callees` | `symbol` | What this function calls |
-| `find_references` | `symbol` | All references to a symbol |
-| `get_module_info` | `symbol` | Module dependencies, build type |
-| `get_symbol_context` | `symbol` | Definition + surrounding context |
-| `read_file` | `file_path` | Raw engine source file |
-| `trigger_reindex` | -- | Full engine source re-index |
-| `trigger_project_reindex` | -- | Incremental project-only re-index |
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, `[w]` mutates. Signatures are a snapshot of the live catalog — for the exact, full, current schema of any action call `monolith_discover` with `mode: "schema"`.
+
+| Action | Params (req* opt? =default) | Purpose |
+|--------|------------------------------|---------|
+| `search_source` | `query*`, `scope?` (all/engine/shaders), `mode?` (fts/regex/exact), `module?`, `path_filter?`, `symbol_kind?`, `cursor?`, `limit=50` | Find symbols across engine source |
+| `read_source` | `symbol*` (aliases: query/name/path), `include_header=false`, `members_only=false`, `max_lines=500`, `start_line=1`, `end_line?`, `line_count?` | Read engine source for a symbol |
+| `get_class_hierarchy` | `symbol*` (alias: class_name), `direction=both` (up/down/both), `depth=5` | Inheritance tree |
+| `find_callers` | `symbol*`, `limit=50` | Who calls this function |
+| `find_callees` | `symbol*`, `limit=50` | What this function calls |
+| `find_references` | `symbol*`, `ref_kind?`, `limit=50` | All references to a symbol |
+| `get_module_info` | `module_name*` | Module dependencies, build type |
+| `get_symbol_context` | `symbol*`, `context_lines=10` | Definition + surrounding context |
+| `read_file` | `file_path*` (alias: path), `start_line=1`, `end_line?`, `line_count?`, `max_lines?` | Raw engine source file |
+| `audit_module_dep_reality` | `scan_root?`, `cursor?`, `limit=50` (cap 200) | Find UE type refs whose module is missing from the owner Build.cs deps (catches LNK2019 softptr_uproperty_needs_module_dep) |
+| `[w] trigger_reindex` | (no params) | Full engine source re-index (live editor only) |
+| `[w] trigger_project_reindex` | (no params) | Incremental project-only re-index (live editor only) |
+
+`get_module_info` takes `module_name`, NOT `symbol`. `read_source`/`read_file` accept either a symbol or a disk path.
+
+`trigger_reindex` / `trigger_project_reindex` need a running editor: offline `Plugins\Monolith\Binaries\monolith_query.exe` rejects them with `live_only` guidance instead of reindexing. When the MCP endpoint is down, recover it first (`powershell -File Plugins\Monolith\Scripts\recover_mcp.ps1`) or use the UBT-build path below.
 
 ## Code Review & Risk (use BEFORE making review claims)
 
-| Action | Key Params | Purpose |
-|--------|-----------|---------|
-| `risk_score` | `symbol`, `min_tier`? | Change-risk tier for a symbol + its dependents |
-| `review_context` | `symbol`, `direction`?, `detail_level`? | Reviewer context bundle (callers/callees/types) |
-| `review_hotspots` | `kind`?, `min_lines`? | Project-wide hotspots: fan_in/fan_out/risk/large/override |
-| `impact_radius` | `symbol`, `edge_kinds`?, `direction`?, `max_depth`? | Blast radius across call/type/inheritance/override edges |
-| `find_overrides` | `symbol`, `direction`?, `max_depth`? | Override-only traversal for virtual/override function edits |
-| `find_unused` | `kind`?, `min_confidence`? | Candidate unused functions/classes/structs |
-| `detect_changes` | `changed_paths`/`diff_file`/`diff_stdin` | Symbols impacted by a diff |
-| `pre_merge_check` | `changed_paths`?, `include_unused`? | Combined impact + unused pre-merge summary |
-| `snapshot` / `diff_snapshots` | `label` / `before`,`after` | Capture and diff source-graph snapshots |
+All `risk_score`/`impact_radius`/`pre_merge_check`/`snapshot` calls wrap a transaction (`[w]`) for dirty-package tracking even though they are read-style; they still answer review questions, not edit project files.
+
+| Action | Params (req* opt? =default) | Purpose |
+|--------|------------------------------|---------|
+| `[w] risk_score` | `symbol*`, `min_tier=low` (low/medium/high), `limit=10` | Change-risk tier for a symbol + its dependents |
+| `review_context` | `symbol*`, `direction=both` (in/out/both), `max_depth=2`, `max_results=200`, `detail_level=minimal` (minimal/standard) | Reviewer context bundle (callers/callees/types) |
+| `review_hotspots` | `kind=all` (fan_in/fan_out/risk/large/override/all), `min_lines=100`, `include_questions=true`, `limit=50` | Project-wide hotspots |
+| `[w] impact_radius` | `symbol*`, `edge_kinds=call\|type\|inheritance` (append \|override; \|include warns), `direction=both` (in/out/both), `max_depth=2`, `max_results=200` | Blast radius across call/type/inheritance/override edges |
+| `find_overrides` | `symbol*`, `direction=both` (in=child overrides/out=overridden parents/both), `max_depth=2`, `max_results=200`, `detail_level=minimal` (minimal/standard) | Override-only traversal for virtual/override function edits |
+| `find_unused` | `kind=all` (function/class/struct/all), `min_confidence=low` (low/medium/high), `limit=100` | Candidate unused functions/classes/structs |
+| `detect_changes` | `changed_paths?` (alias: paths; array or comma-string), `changed_ranges?`, `diff_text?`, `detail_level=minimal` (minimal/standard), `max_results=200` | Symbols impacted by a diff |
+| `[w] pre_merge_check` | `changed_paths?` (alias: paths), `include_unused=true`, `unused_limit=20`, `detail_level=minimal`, `max_results=200` | Combined impact + unused pre-merge summary |
+| `[w] snapshot` | `execute=false`, `label?` (defaults source-<utc_ticks>) | Capture source-graph CRG projection snapshot |
+| `diff_snapshots` | `before*`, `after=current`, `limit=100` | Diff two stored/current snapshots |
+
+`detect_changes` has NO `diff_file`/`diff_stdin` params — pass a unified diff via `diff_text`, paths via `changed_paths`, or line-precise edits via `changed_ranges` (`[{path, ranges:[[start,end]]}]`).
 
 ## CRG graph & index maintenance
 
-| Action | Key Params | Purpose |
-|--------|-----------|---------|
-| `search_crg_graph` | `query`, `kind`? | Search the CRG-compatible graph node export (FTS5, LIKE fallback) |
-| `build_crg_graph` / `rebuild_crg_graph` | `execute`, `force`? | Explicitly build/rebuild `Saved\graph.db` from `EngineSource.db`; temp-DB validate + atomic replace, skips when source signature is current unless forced |
-| `crg_graph_health` | -- | CRG graph schema/FTS/export health; reserved flow/community/risk tables are not populated health criteria |
-| `health` | `include_counts`? | Source index health |
-| `repair_fts` | `target`?, `execute` | Rebuild FTS when search looks stale |
-| `repair_crg_cache` | `scope`?, `execute` | Rebuild CRG projection/cache plus signature-aware override edge cache |
+| Action | Params (req* opt? =default) | Purpose |
+|--------|------------------------------|---------|
+| `search_crg_graph` | `query*`, `kind?`, `graph_db?`, `limit=20` | Search the CRG-compatible graph node export (FTS5, LIKE fallback) |
+| `[w] build_crg_graph` / `[w] rebuild_crg_graph` | `execute=false`, `force=false`, `graph_db?` | Build/rebuild `Saved\graph.db` from `EngineSource.db`; temp-DB validate + atomic replace, skips when source signature is current unless forced |
+| `[w] crg_graph_health` | `graph_db?` | CRG graph schema/FTS/export health; reserved flow/community/risk tables are not populated health criteria |
+| `health` | `include_counts=false`, `include_deep_checks=false` | Source index health |
+| `[w] repair_fts` | `execute=false`, `target=all` (all/symbols/source) | Rebuild FTS when search looks stale (dry-run unless execute) |
+| `[w] repair_crg_cache` | `execute=false`, `scope=all` (all/override_edges) | Rebuild CRG projection/cache plus signature-aware override edge cache (dry-run unless execute) |
+
+`execute` is the sole write gate on `repair_fts`/`repair_crg_cache`/`build_crg_graph`/`snapshot`; omit it (default `false`) for a safe dry-run preview.
 
 Default C++ lookup/review work should use `search_source`, `risk_score`, `review_context`, and `health`. `build_crg_graph --execute` is graph export/search maintenance, not routine setup; live editor/MCP execute returns `status=started` plus `poll_action=source.crg_graph_health`, while offline CLI execute remains synchronous. `risk_score` and `review_context` read the EngineSource `crg_*` projection/cache, not `Saved\graph.db`.
+Never run `repair_crg_cache` + `build_crg_graph` as an unconditional post-build routine: reindex completion auto-rebuilds the CRG cache, so health-gate the repair (`source health` first) and run `build_crg_graph` only when you actually query `search_crg_graph`/`graph.db`.
 `impact_radius` defaults to `call|type|inheritance`. For virtual method edits, call `find_overrides` with a qualified symbol such as `UActorComponent::BeginPlay`, or explicitly pass `edge_kinds=call|type|inheritance|override` when override traversal should be mixed into the broader blast radius; unqualified method names can match several same-name class methods and are useful only when that broad fan-out is intentional.
 `find_overrides`, `impact_radius`, `risk_score`, `review_context`, and `review_hotspots kind=override` use the `source_override_edges` cache when `source.health` shows `source_override_edges_version=1`; otherwise they fall back to query-time signature matching. If only the override cache/version is stale, run `source repair_crg_cache --scope=override_edges --execute`; use full `source repair_crg_cache --execute` for stale `crg_nodes`, `crg_edges`, or `crg_node_metrics` parity.
+Offline, `Plugins\Monolith\Scripts\check_index_freshness.ps1` runs the whole health -> repair -> re-verify chain for both `EngineSource.db` and `ProjectIndex.db` (`-Execute` runs only the warning-indicated repairs; contract: `Docs\specs\SPEC_MonolithAgentOpsScripts.md`).
 Use `review_hotspots kind=override` to find high-fanout virtual/override methods before broad API changes. `Saved\graph.db` flow/community/risk auxiliary tables are reserved placeholders and are not source-risk inputs.
 
 ## Common Workflows

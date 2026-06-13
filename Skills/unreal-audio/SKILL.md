@@ -1,11 +1,24 @@
 ---
 name: unreal-audio
-description: Use when creating, editing, or inspecting Unreal Engine audio assets via Monolith MCP. Covers Sound Cues, MetaSounds, attenuation, sound classes, submixes, batch ops, and templates. Triggers on audio, sound, metasound, sound cue, attenuation, submix, reverb.
+description: Use when creating, editing, or inspecting Unreal Engine audio ASSETS via the Monolith MCP audio namespace. Covers Sound Cues, MetaSound graphs, attenuation, sound classes, sound mixes, submixes, concurrency, audio buses, batch ops, and templates. For analyzing acoustics/reverb/RT60/footstep propagation as a level-design pass use unreal-leveldesign; this skill authors the audio ASSET. Triggers on audio, sound, SFX, music, sound wave, metasound, MetaSound graph, sound cue, audio component, attenuation, spatialization, occlusion, submix, audio bus, sound mix, sound class, concurrency, ambient sound, reverb.
 ---
 
 # Unreal Audio Workflows
 
-**98 audio actions** via `audio_query()`. Discover first: `monolith_discover({ namespace: "audio" })`
+Authors and inspects Unreal audio **assets** through the Monolith `audio` namespace via `audio_query()`. The live namespace has 98 actions; the curated set below is a snapshot — discover the live catalog and schemas first, never call from memory.
+
+```
+monolith_discover({ namespace: "audio" })
+describe_query("action_schema", { namespace: "audio", action: "build_metasound_from_spec" })
+```
+
+**Param notation:** `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, `[w]` mutates the project (transaction-wrapped). Signatures are a snapshot of the live catalog — for the exact, full, current schema of any action call `monolith_discover` with mode schema (`describe_query("action_schema", {namespace:"audio", action:"<name>"})`).
+
+## When to use / Use a different skill for
+
+- **Use this skill** to create or edit audio assets — Sound Cues, MetaSounds, attenuation, sound classes, sound mixes, submixes, concurrency, and to batch-configure imported `SoundWave` assets.
+- **Use unreal-leveldesign instead** when the task is analyzing acoustics, reverb/RT60, sound propagation, or footstep/stealth audio as a level-design pass rather than authoring an audio asset.
+- **Use unreal-niagara instead** when the "effect" is a visual VFX particle effect rather than a sound.
 
 ## Key Parameters
 
@@ -17,39 +30,39 @@ description: Use when creating, editing, or inspecting Unreal Engine audio asset
 
 ### Asset CRUD (15)
 
-| Action | Key Params | Purpose |
+| Action | Params (req* opt? =default) | Purpose |
 |--------|-----------|---------|
-| `create_sound_attenuation` | `asset_path`, `settings?` | Create USoundAttenuation with optional settings |
-| `get_attenuation_settings` | `asset_path` | Read all FSoundAttenuationSettings fields |
-| `set_attenuation_settings` | `asset_path`, `settings` | Partial update any attenuation fields |
-| `create_sound_class` | `asset_path`, `parent_class?`, `properties?` | Create USoundClass with hierarchy |
-| `get_sound_class_properties` | `asset_path` | Read FSoundClassProperties + parent + children |
-| `set_sound_class_properties` | `asset_path`, `properties`, `parent_class?` | Update class properties |
-| `create_sound_mix` | `asset_path`, `eq_settings?`, `class_effects?`, `timing?` | Create USoundMix with EQ + adjusters |
-| `get_sound_mix_settings` | `asset_path` | Read EQ bands, class adjusters, timing |
-| `set_sound_mix_settings` | `asset_path`, `eq_settings?`, `class_effects?`, `timing?` | Update mix |
-| `create_sound_concurrency` | `asset_path`, `settings?` | Create USoundConcurrency |
-| `get_concurrency_settings` | `asset_path` | Read MaxCount, ResolutionRule, ducking |
-| `set_concurrency_settings` | `asset_path`, `settings` | Update concurrency |
-| `create_sound_submix` | `asset_path`, `parent_submix?`, `effect_chain?` | Create USoundSubmix |
-| `get_submix_properties` | `asset_path` | Read effect chain, volume, hierarchy |
-| `set_submix_properties` | `asset_path`, `properties` | Update submix |
-| `create_test_wave` | `asset_path` (alias: `path`), `frequency_hz?`, `duration_seconds?`, `sample_rate?`, `amplitude?` | Synthesize a 16-bit mono sine USoundWave for tests |
+| `[w] create_sound_attenuation` | `asset_path*`, `settings?` (object) | Create USoundAttenuation with optional settings |
+| `get_attenuation_settings` | `asset_path*` | Read all FSoundAttenuationSettings fields |
+| `[w] set_attenuation_settings` | `asset_path*`, `settings*` (object) | Partial update any attenuation fields |
+| `[w] create_sound_class` | `asset_path*`, `parent_class?`, `properties?` (object) | Create USoundClass with hierarchy |
+| `get_sound_class_properties` | `asset_path*` | Read FSoundClassProperties + parent + children |
+| `[w] set_sound_class_properties` | `asset_path*`, `properties?` (object), `parent_class?` (empty to clear) | Update class properties |
+| `[w] create_sound_mix` | `asset_path*`, `eq_settings?` (object), `class_effects?` (array of FSoundClassAdjuster), `initial_delay?`, `fade_in_time?`, `duration?`, `fade_out_time?` | Create USoundMix with EQ + adjusters |
+| `get_sound_mix_settings` | `asset_path*` | Read EQ bands, class adjusters, timing |
+| `[w] set_sound_mix_settings` | `asset_path*`, `eq_settings?` (object), `class_effects?` (array, replaces), `initial_delay?`, `fade_in_time?`, `duration?`, `fade_out_time?` | Update mix |
+| `[w] create_sound_concurrency` | `asset_path*`, `settings?` (object) | Create USoundConcurrency |
+| `get_concurrency_settings` | `asset_path*` | Read MaxCount, ResolutionRule, ducking |
+| `[w] set_concurrency_settings` | `asset_path*`, `settings*` (object) | Update concurrency |
+| `[w] create_sound_submix` | `asset_path*`, `parent_submix?` | Create USoundSubmix (no effect_chain param — set via set_submix_properties) |
+| `get_submix_properties` | `asset_path*` | Read effect chain, volume, hierarchy |
+| `[w] set_submix_properties` | `asset_path*`, `properties*` (object) | Update submix |
+| `[w] create_test_wave` | `asset_path*` (alias `path`), `frequency_hz=440.0` (20-20000), `duration_seconds=0.5` (0.05-5.0), `sample_rate=44100` (22050/44100/48000), `amplitude=0.5` ((0,1]) | Synthesize a 16-bit mono sine USoundWave for tests |
 
 ### Query & Search (10)
 
-| Action | Key Params | Purpose |
+| Action | Params (req* opt? =default) | Purpose |
 |--------|-----------|---------|
-| `list_audio_assets` | `type`, `path_filter?`, `limit?` | List by type (SoundWave/SoundCue/MetaSoundSource/All/etc) |
-| `search_audio_assets` | `query`, `type?`, `limit?` | FTS name search |
-| `get_sound_wave_info` | `asset_path` | Duration, channels, sample rate, compression, class, attenuation |
-| `get_sound_class_hierarchy` | `root_class?` | Recursive tree traversal |
-| `get_submix_hierarchy` | `root_submix?` | Routing tree with effect chains |
-| `find_audio_references` | `asset_path` | Bidirectional reference scan |
-| `find_unused_audio` | `type?`, `path_filter?`, `limit?` | Zero-reference audio assets |
-| `find_sounds_without_class` | `path_filter?`, `limit?` | Unassigned SoundBases |
-| `find_unattenuated_sounds` | `path_filter?`, `limit?` | Missing attenuation |
-| `get_audio_stats` | — | Counts by type, sizes, compression breakdown |
+| `list_audio_assets` | `type*` (SoundWave/SoundCue/MetaSoundSource/SoundClass/SoundAttenuation/SoundSubmix/SoundConcurrency/SoundMix/All), `path_filter?`, `limit=100` | List by type |
+| `search_audio_assets` | `query*`, `type?`, `limit=50` | Name-substring search (de-dup by path — see issue #5) |
+| `get_sound_wave_info` | `asset_path*` | Duration, channels, sample rate, compression, class, attenuation |
+| `get_sound_class_hierarchy` | `root_class?` (omit = all roots) | Recursive tree traversal |
+| `get_submix_hierarchy` | `root_submix?` (omit = all roots) | Routing tree with effect chains |
+| `find_audio_references` | `asset_path*` | Bidirectional reference scan |
+| `find_unused_audio` | `type=All`, `path_filter?`, `limit=100` | Zero-reference audio assets |
+| `find_sounds_without_class` | `path_filter?`, `limit=100` | Unassigned SoundBases |
+| `find_unattenuated_sounds` | `path_filter?`, `limit=100` | Missing attenuation |
+| `get_audio_stats` | _(none)_ | Counts by type, sizes, compression breakdown |
 
 ### Batch Operations (10)
 

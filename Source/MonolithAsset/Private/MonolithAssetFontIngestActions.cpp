@@ -28,6 +28,9 @@
 #include "IAssetTools.h"                        // IAssetTools::CreateUniqueAssetName
 #include "Modules/ModuleManager.h"              // FModuleManager::LoadModuleChecked
 
+// Slate (headless guard)
+#include "Framework/Application/SlateApplication.h" // FSlateApplication::IsInitialized
+
 namespace MonolithAsset::FontIngestInternal
 {
     /**
@@ -273,7 +276,14 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
         FaceAsset->CacheSubFaces();
 #endif // WITH_EDITORONLY_DATA
 
-        FaceAsset->PostEditChange();
+        // UFontFace::PostEditChangeProperty flushes the Slate font cache through
+        // FSlateApplication::Get(), which asserts in headless commandlets where no
+        // Slate application exists. The flush only refreshes live editor previews,
+        // so skip PostEditChange when Slate is not initialized.
+        if (FSlateApplication::IsInitialized())
+        {
+            FaceAsset->PostEditChange();
+        }
         FAssetRegistryModule::AssetCreated(FaceAsset);
         FacePackage->MarkPackageDirty();
 
@@ -358,7 +368,12 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
     Composite.MakeDirty();
 #endif // WITH_EDITORONLY_DATA
 
-    FamilyFont->PostEditChange();
+    // Same headless guard as the per-face import: UFont::PostEditChange routes into
+    // Slate font-cache flushes that assert without a Slate application.
+    if (FSlateApplication::IsInitialized())
+    {
+        FamilyFont->PostEditChange();
+    }
     FAssetRegistryModule::AssetCreated(FamilyFont);
     FamilyPackage->MarkPackageDirty();
 

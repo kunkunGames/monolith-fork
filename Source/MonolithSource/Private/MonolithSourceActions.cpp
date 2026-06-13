@@ -2193,7 +2193,7 @@ FMonolithActionResult FMonolithSourceActions::HandleTriggerReindex(const TShared
 	TArray<TSharedPtr<FJsonValue>> ContentArr;
 	auto ContentItem = MakeShared<FJsonObject>();
 	ContentItem->SetStringField(TEXT("type"), TEXT("text"));
-	ContentItem->SetStringField(TEXT("text"), TEXT("Full source indexing started (engine + project). This runs in the background — check editor log for progress."));
+	ContentItem->SetStringField(TEXT("text"), TEXT("Full source indexing started (engine + project). This runs in the background — check editor log for progress. Completion automatically rebuilds the source CRG projection/cache; do not run source.repair_crg_cache afterwards (it is needed only when source.health reports stale CRG parity)."));
 	ContentArr.Add(MakeShared<FJsonValueObject>(ContentItem));
 	ResultObj->SetArrayField(TEXT("content"), ContentArr);
 	return FMonolithActionResult::Success(ResultObj);
@@ -2227,7 +2227,7 @@ FMonolithActionResult FMonolithSourceActions::HandleTriggerProjectReindex(const 
 	TArray<TSharedPtr<FJsonValue>> ContentArr;
 	auto ContentItem = MakeShared<FJsonObject>();
 	ContentItem->SetStringField(TEXT("type"), TEXT("text"));
-	ContentItem->SetStringField(TEXT("text"), TEXT("Project source indexing started (incremental). This runs in the background — check editor log for progress."));
+	ContentItem->SetStringField(TEXT("text"), TEXT("Project source indexing started (incremental). This runs in the background — check editor log for progress. Completion automatically rebuilds the source CRG projection/cache; do not run source.repair_crg_cache afterwards (it is needed only when source.health reports stale CRG parity)."));
 	ContentArr.Add(MakeShared<FJsonValueObject>(ContentItem));
 	ResultObj->SetArrayField(TEXT("content"), ContentArr);
 	return FMonolithActionResult::Success(ResultObj);

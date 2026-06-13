@@ -1,6 +1,6 @@
 ---
 name: unreal-mesh
-description: "Use for static/skeletal mesh asset inspection and editing via Monolith MCP: mesh info (tris/verts/bounds/materials/LODs/collision/UVs), quality analysis, GeometryScript operations (boolean/simplify/remesh/collision/LODs/holes/mirror/UVs via handles), procedural geometry (parametric furniture, structures, mazes, pipes, terrain), tech-art import/LOD/texel-density/collision, performance budgeting, validation, and actor/mesh merging. For scene actors and spatial queries use unreal-scene; for blockout and town generation use unreal-worldgen. Triggers on mesh, StaticMesh, SkeletalMesh, tri count, vertex, bounds, LOD, collision, UV, texel density, GeometryScript, handle, boolean, simplify, remesh, parametric mesh, import mesh, mesh quality, proxy mesh, merge meshes."
+description: Use for static/skeletal mesh ASSET inspection and editing via Monolith MCP (mesh namespace) - mesh info (tris/verts/bounds/materials/LODs/collision/UVs), quality analysis, GeometryScript handle ops, procedural geometry, tech-art import/LOD/texel-density, performance budgeting, validation, and actor/mesh merging. For placing/moving mesh ACTORS in the level and spatial queries use unreal-scene; for blockout and town generation use unreal-worldgen; to import via glTF/FBX/USD first use unreal-interchange; for cloth sim on a skeletal mesh use unreal-cloth; to fracture into a Geometry Collection use unreal-chaos-fracture; for a geometry/Chaos node GRAPH use unreal-dataflow. Triggers on mesh, StaticMesh, SkeletalMesh, tri count, vertex, bounds, LOD, collision, UV, texel density, GeometryScript, handle, boolean, simplify, remesh, parametric mesh, import mesh, mesh quality, proxy mesh, merge meshes.
 ---
 
 # unreal-mesh
@@ -14,7 +14,20 @@ monolith_discover({ namespace: "mesh" })                      # all actions in t
 monolith_discover({ namespace: "mesh", action: "<action>", mode: "schema" })  # exact params
 ```
 
+## When to use / Use a different skill for
+
+This skill owns the mesh **ASSET** (the StaticMesh/SkeletalMesh on disk and its GeometryScript editable handle). Route elsewhere when:
+
+- Placing/moving/duplicating mesh **actors** in the live level, or spatial queries (raycast/overlap/nearest) → `unreal-scene`
+- Procedural blockout, town/building generation, facades, streets, furnishing → `unreal-worldgen`
+- Importing the mesh through the glTF/FBX/USD pipeline before inspecting/editing it here → `unreal-interchange`
+- Cloth simulation set up on the skeletal mesh (this skill edits the underlying geometry) → `unreal-cloth`
+- Fracturing a mesh into a **Geometry Collection** for destruction → `unreal-chaos-fracture`
+- Authoring a geometry/Chaos **node GRAPH** (versus direct GeometryScript handle ops here) → `unreal-dataflow`
+
 ## Action Reference
+
+**Param notation:** `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, `[w]` mutates. The tables below list each action's purpose; full call signatures (every param with required/default/allowed values) live in [references/actions.md](references/actions.md). Signatures there are a snapshot of the live catalog — for the exact full schema call `monolith_discover({ namespace: "mesh", action: "<action>", mode: "schema" })`. The discover-first block above stays the authority.
 
 ### Operation (17)
 
@@ -141,6 +154,15 @@ The former 268-action `mesh` namespace was refactored into focused namespaces. U
 | **Scene/level** actors, spatial queries, volumes, lighting, decals, debug views | `scene` | `unreal-scene` |
 | **Horror/accessibility/audio** level analysis & encounter design | `leveldesign` | `unreal-leveldesign` |
 | **Blockout & procedural town** generation (buildings, facades, streets, furnishing) | `worldgen` | `unreal-worldgen` |
+
+Adjacent mesh-related skills outside the split:
+
+- **Import** the mesh via the glTF/FBX/USD pipeline first → `unreal-interchange`
+- **Cloth** simulation on a skeletal mesh (this skill edits the underlying geometry) → `unreal-cloth`
+- **Fracture** a mesh into a Geometry Collection for destruction → `unreal-chaos-fracture`
+- Geometry/Chaos **node GRAPH** authoring (versus direct GeometryScript handle ops here) → `unreal-dataflow`
+- **HLOD layer** creation/build/clear orchestration around the proxy/merged mesh (this skill still owns the `setup_hlod` / `generate_proxy_mesh` actions themselves) → `unreal-hlod`
+- **Cross-domain perf profiling** (material shader stats, Niagara complexity, CVar perf tuning) that a per-mesh budget pass feeds into → `unreal-performance`
 
 ## Key parameters
 

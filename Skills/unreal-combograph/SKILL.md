@@ -1,11 +1,29 @@
 ---
 name: unreal-combograph
-description: Use when working with ComboGraph plugin via Monolith MCP — creating and editing combo graphs, nodes, edges, effects, cues, and scaffolding combo abilities. Triggers on combo, combo graph, combo node, combo edge, combo ability, combo montage, attack chain, hit sequence.
+description: Use when working with the ComboGraph plugin via Monolith MCP (combograph namespace) — creating and editing the combo GRAPH (nodes/edges/wiring), effects, cues, and scaffolding combo abilities. unreal-combograph owns the ComboGraph graph; to edit the underlying montage/anim asset use unreal-animation, if the combo triggers a GAS ability/effect use unreal-gas, and for a generic state-machine attack chain use unreal-logicdriver. Triggers on combo, combo system, combo graph, ComboGraph asset, combo node, combo edge, combo transition, combo window, combo ability, combo montage, melee chain, attack chain, input buffer combo, next attack, branch attack, hit sequence.
 ---
 
 # Unreal ComboGraph Workflows
 
-**13 ComboGraph actions** via `combograph_query()`. Discover with `monolith_discover({ namespace: "combograph" })`.
+Edits the ComboGraph plugin combo graph (nodes/edges/wiring, effects, cues, scaffolded abilities) via the **combograph** namespace. **13 ComboGraph actions** via `combograph_query()`.
+
+> **Plugin not currently loaded — re-verify when enabled.** The `combograph` namespace dump reports `status: not_installed` / `actions: 0` in this editor (ComboGraph is a Fab marketplace plugin, gated by `#if WITH_COMBOGRAPH`). The live schema is therefore UNAVAILABLE, so every action name and parameter below is **unverified prior documentation, not invented** — nothing here was guessed or fabricated, but none of it has been checked against a live catalog. Before relying on any action once the ComboGraph plugin is enabled, CONFIRM the exact names and schemas via `monolith_discover({ namespace: "combograph" })` (with `mode: "schema"` per action) and reconcile this file against the live catalog with the drift checker `Scripts/check_skill_catalog_drift.ps1`. Do not treat these signatures as verified.
+
+## Discover first
+
+Always confirm live action names and schemas before calling — these tables are a snapshot, and (since the plugin is not loaded here) the params are unverified prior documentation. The discover-first block is the authority.
+
+```
+monolith_discover({ namespace: "combograph" })
+combograph_query({ action: "get_combo_graph_info", mode: "schema" })
+```
+
+## When to use / Use a different skill for
+
+- **unreal-combograph** (this skill) — the ComboGraph graph itself: nodes, edges, combo wiring, node effects/cues, and combo-ability scaffolding.
+- **unreal-animation** — editing the underlying montage/anim sequence asset (notifies, sync markers, sections) rather than the combo graph wiring.
+- **unreal-gas** — when the combo triggers a Gameplay Ability or Gameplay Effect and you need to author the ability/effect/attribute side.
+- **unreal-logicdriver** — when the attack chain is modeled as a generic LogicDriver state machine instead of a ComboGraph asset.
 
 ## Key Parameters
 
@@ -14,6 +32,8 @@ description: Use when working with ComboGraph plugin via Monolith MCP — creati
 - `save_path` -- destination for new assets | `ability_path` -- gameplay ability path
 
 ## Action Reference
+
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, `[w]` mutates project state. Signatures here are PRIOR DOCUMENTATION (the plugin is not loaded, so they are not a live-catalog snapshot) — for the exact, full, current schema of any action call `monolith_discover` with `mode: "schema"` once ComboGraph is enabled.
 
 | Action | Key Params | Purpose |
 |--------|-----------|---------|

@@ -2083,12 +2083,31 @@ namespace MonolithImageGen::ImageGenerationInternal
 			}
 			FString ErrorCode;
 			ResponseJson->TryGetStringField(TEXT("code"), ErrorCode);
+			// Provider rate limits arrive as HTTP 429 or as a relayed message such as
+			// "OpenAI rate limited the image request."; classify them so agents stop
+			// retry-storming the same request (observed 19-25x identical-signature
+			// retries in the invocation logs) and analyzers can bucket the failures.
+			const bool bProviderRateLimited =
+				ResponseCode == 429
+				|| ErrorCode.Equals(TEXT("RATE_LIMITED"), ESearchCase::IgnoreCase)
+				|| ErrorMessage.Contains(TEXT("rate limit"), ESearchCase::IgnoreCase);
 
 			TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
 			ErrorData->SetNumberField(TEXT("http_status"), ResponseCode);
 			if (!ErrorCode.IsEmpty())
 			{
 				ErrorData->SetStringField(TEXT("code"), ErrorCode);
+			}
+			if (bProviderRateLimited)
+			{
+				ErrorData->SetStringField(TEXT("error_class"), TEXT("provider_rate_limited"));
+				double RetryAfterSeconds = 0.0;
+				if (ResponseJson->TryGetNumberField(TEXT("retry_after_seconds"), RetryAfterSeconds)
+					|| ResponseJson->TryGetNumberField(TEXT("retryAfterSeconds"), RetryAfterSeconds)
+					|| ResponseJson->TryGetNumberField(TEXT("retry_after"), RetryAfterSeconds))
+				{
+					ErrorData->SetNumberField(TEXT("retry_after_seconds"), RetryAfterSeconds);
+				}
 			}
 			TSharedPtr<FJsonObject> RequestSummary = MakeShared<FJsonObject>();
 			CopyOptionalString(Payload, RequestSummary, TEXT("provider"), TEXT("provider"));
@@ -2107,7 +2126,11 @@ namespace MonolithImageGen::ImageGenerationInternal
 			ErrorData->SetObjectField(TEXT("request_summary"), RequestSummary);
 			FMonolithActionResult Error = FMonolithActionResult::Error(ErrorMessage, -32603);
 			Error.WithErrorData(ErrorData);
-			if (ErrorCode == TEXT("API_KEY_REQUIRED"))
+			if (bProviderRateLimited)
+			{
+				Error.WithHint(TEXT("Provider rate limit hit (error_data.error_class=provider_rate_limited). Do not retry the same request immediately — identical retries inside the provider's rate window keep failing. Wait (use error_data.retry_after_seconds when present, otherwise 60s+), reduce request volume, then retry once."));
+			}
+			else if (ErrorCode == TEXT("API_KEY_REQUIRED"))
 			{
 				Error.WithHint(TEXT("Use provider='oauth' for the API-key-free Codex OAuth path, or configure OPENAI_API_KEY on the ima2/imag2-gen server when provider='api'."));
 			}

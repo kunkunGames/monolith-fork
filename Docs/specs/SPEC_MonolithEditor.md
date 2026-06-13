@@ -14,10 +14,21 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 60 editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, module-status, asset-context, crash-report, metadata, temporal GIF encoding, and v0.16.0 preview/inspection toolsets, and owns editor PIE transaction-buffer cleanup |
+| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 60 editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, module-status, asset-context, crash-report, metadata, temporal GIF encoding, and v0.16.0 preview/inspection toolsets, and owns editor PIE transaction-buffer cleanup plus the headless layout-save guard (below) |
 | `FMonolithLogCapture` | FOutputDevice subclass. Ring buffer (10,000 entries max). Thread-safe. Tracks counts by verbosity |
 | `FMonolithEditorActions` | Static handlers for build and log operations. Hooks into `ILiveCodingModule::GetOnPatchCompleteDelegate()` to capture compile results and timestamps |
 | `FMonolithSettingsCustomization` | IDetailCustomization for UMonolithSettings. Adds re-index buttons for project and source databases in Project Settings UI |
+
+### Headless layout-save guard (2026-06-12)
+
+Headless editors (`-NullRHI` / `FApp::CanEverRender()==false`, e.g. `RunHeadlessEditor.bat`) create Slate windows whose native window is the base `FGenericWindow`. The engine's deferred persistent-layout save then fatals ~10s after boot in `FTabManager::SavePersistentLayout` → `SDockingArea::GatherPersistentLayout` → `SWindow::GetNonMaximizedRectInScreen` → `FGenericWindow::GetRestoredDimensions` (`GenericWindow.cpp:113`), killing the editor and the Monolith MCP server with it (observed identically across three boots on 2026-06-11).
+
+`FMonolithHeadlessLayoutSaveGuard` (file-local in `MonolithEditorModule.cpp`) activates only when `FApp::CanEverRender()` is false, on `OnPostEngineInit`:
+
+1. `FGlobalTabmanager::SetCanSavePersistentLayouts(false)` — layout ini/json writes are meaningless without real window dimensions.
+2. `ClearPendingLayoutSave()` on the global and level-editor tab managers, immediately and then on a 1s `FTSTicker`, which always cancels the engine's 5s deferred-save ticker before it can fire (`FTSTicker` does not tick during engine init, so saves requested mid-init are caught by the immediate pass).
+
+The per-manager `bCanDoDeferredLayoutSave` switch would be the precise off-switch but sits behind `FTabManager::FPrivateApi` (protected), and the engine is an installed build, so the guard uses the two public surfaces above. Each clearing pass also enumerates open asset editors through `UAssetEditorSubsystem` and clears their host tab managers (`IAssetEditorInstance::GetAssociatedTabManager`), so asset editors opened headless are covered too. Verified 2026-06-12: guarded headless boot bound MCP at +9s and stayed alive 40 minutes serving actions until externally terminated (pre-guard boots died at 10-20s in the layout-save fatal); guard log line `HeadlessLayoutSaveGuard: CanEverRender=false ...` confirms activation. Rendering editors are untouched (`CanEverRender()==true` short-circuits registration).
 
 ### Actions (60 — namespace: "editor")
 

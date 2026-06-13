@@ -1,7 +1,7 @@
 # Monolith Invocation Log Analyzer
 
 **Parent:** [SPEC_MonolithToolInvocationLogs.md](SPEC_MonolithToolInvocationLogs.md)
-**Status:** Proposed implementation spec
+**Status:** Implemented (`Analyzer/analyze_invocation_logs.py`, 2026-06-08, commit e2db9d81); verified against fixtures, a 7-day real log window, and the mixed v1/v2 `Logs/20260520` folder on 2026-06-12 (verification record: [SPEC_MonolithToolInvocationLogs.md](SPEC_MonolithToolInvocationLogs.md) §12)
 **Scope:** Local Python analysis tool for `Logs/yyyyMMdd/{proxy,query,action}.jsonl`
 **Created:** 2026-06-07
 

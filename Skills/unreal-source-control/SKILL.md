@@ -1,6 +1,6 @@
 ---
 name: unreal-source-control
-description: "Use for source control (Perforce/Git) operations from the editor via Monolith MCP: provider status, file/asset status, checkout, mark for add/delete, and revert. Triggers on source control, perforce, p4, git, changelist, checkout, mark for add, mark for delete, revert, diff, file history, revision, depot."
+description: Use when running source control (Perforce/Git) operations from the editor via Monolith MCP (source_control) - provider/capabilities status, file or /Game asset status, checkout, mark for add, mark for delete, revert, and revert-unchanged. This skill owns the P4/Git checkout/add/delete/revert action, not the thing being versioned. To edit the .ini content after a checkout use unreal-config; to save/move/delete the asset package itself use unreal-asset; when group/collection means an editor asset Collection not a changelist use unreal-collection. Triggers on source control, perforce, p4, git, changelist, CL, checkout, check out file, mark for add, mark for delete, revert, revert unchanged, file status, depot, revision, who has this checked out, prepare file for edit, add to depot.
 ---
 
 # unreal-source-control
@@ -14,21 +14,95 @@ monolith_discover({ namespace: "source_control" })                      # all ac
 monolith_discover({ namespace: "source_control", action: "<action>", mode: "schema" })  # exact params
 ```
 
+When the right action is unclear, `monolith_find("<task>")` suggests candidates across namespaces.
+
+## When to use / Use a different skill for
+
+- Use this skill for the source-control ACTION itself — provider/capabilities status, file/asset status, checkout, mark for add, mark for delete, revert, and revert-unchanged through the active Unreal provider (Perforce or Git).
+- **unreal-config** — to read or edit the `.ini` setting/section/cvar content after this skill checks the file out; this skill owns the checkout/add, not the edit.
+- **unreal-asset** — to actually save/move/delete the asset package itself; this skill only marks files for add/delete/checkout in source control.
+- **unreal-collection** — when "group" or "collection" means a Content Browser asset Collection, not a source-control changelist or depot grouping.
+
 ## Action Reference
+
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed, `[w]` mutates. Signatures are a snapshot of the live catalog — for the exact full schema call `monolith_discover` with `mode: "schema"`. Keep the discover-first block above as the authority. The mutation param is `paths` (array of filesystem or `/Game` package/object paths), not `files`.
 
 ### Core (9)
 
-| Action | Purpose |
-|--------|---------|
-| `add` | Mark files for add through the active Unreal source-control provider. |
-| `checkout` | Check out files through the active Unreal source-control provider. |
-| `checkout_or_add` | Prepare files for mutation by checking out existing source-controlled files or adding local files. |
-| `delete` | Mark files for delete through the active Unreal source-control provider. Requires confirm=true unless dry_run=true. |
-| `get_capabilities` | Return the active Unreal source-control provider and Phase 1 Monolith action capabilities. |
-| `get_status` | Return source-control status for filesystem or /Game package paths. |
-| `mark_for_delete` | Explicit mark-for-delete alias of delete. Requires confirm=true unless dry_run=true. |
-| `revert` | Revert files through the active Unreal source-control provider. Requires confirm=true unless dry_run=true. |
-| `revert_unchanged` | Revert unchanged files through the active Unreal source-control provider. Requires confirm=true unless dry_run=true. |
+| Action | Params | Purpose |
+|--------|--------|---------|
+| `get_capabilities` | _(none)_ | Return the active Unreal source-control provider and Phase 1 Monolith action capabilities. |
+| `get_status` | `paths*` | Return source-control status for filesystem or /Game package paths. |
+| `[w] checkout` | `paths*` `dry_run?=false` | Check out files through the active Unreal source-control provider. |
+| `[w] add` | `paths*` `dry_run?=false` | Mark files for add through the active Unreal source-control provider. |
+| `[w] checkout_or_add` | `paths*` `dry_run?=false` | Prepare files for mutation by checking out existing source-controlled files or adding local files. |
+| `[w] delete` | `paths*` `confirm?=false` `dry_run?=false` | Mark files for delete. Requires `confirm=true` unless `dry_run=true`. |
+| `[w] mark_for_delete` | `paths*` `confirm?=false` `dry_run?=false` | Explicit mark-for-delete alias of `delete`. Requires `confirm=true` unless `dry_run=true`. |
+| `[w] revert` | `paths*` `confirm?=false` `dry_run?=false` | Revert files. Requires `confirm=true` unless `dry_run=true`. |
+| `[w] revert_unchanged` | `paths*` `confirm?=false` `dry_run?=false` | Revert unchanged files. Requires `confirm=true` unless `dry_run=true`. |
+
+## Common workflows
+
+```text
+# Confirm a provider is connected before any mutation.
+source_control_query("get_capabilities", {})
+
+# Inspect status for a /Game asset and a filesystem .ini before editing.
+source_control_query("get_status", { paths: ["/Game/Maps/Interactable/BP_Wave", "Config/DefaultEngine.ini"] })
+
+# Prepare a file for edit (checkout if tracked, add if new local file).
+source_control_query("checkout_or_add", { paths: ["Config/DefaultEngine.ini"] })
+
+# Mark a file for delete — destructive, dry-run first then confirm.
+source_control_query("delete", { paths: ["/Game/Old/BP_Legacy"], dry_run: true })
+source_control_query("delete", { paths: ["/Game/Old/BP_Legacy"], confirm: true })
+
+# Roll back local changes through the active provider.
+source_control_query("revert", { paths: ["/Game/Maps/Interactable/BP_Wave"], confirm: true })
+```
+
+### Recipe: prepare a file for edit, then drop no-op checkouts
+
+End-to-end prepare-for-edit pass. Confirms the provider, inspects status, checks the file out, then (after the actual content edit happens elsewhere) reverts any file left unchanged so the changelist stays clean. The content edit itself is a separate step — for a `.ini` use **unreal-config**, for an asset package use **unreal-asset**.
+
+```text
+# 1. Confirm a provider is connected.
+source_control_query("get_capabilities", {})
+
+# 2. Inspect status for the target .ini and asset before touching them.
+source_control_query("get_status", { paths: ["Config/DefaultEngine.ini", "/Game/Maps/Interactable/BP_Wave"] })
+
+# 3. Check the files out through the active provider.
+source_control_query("checkout", { paths: ["Config/DefaultEngine.ini", "/Game/Maps/Interactable/BP_Wave"] })
+
+# 4. (Edit the .ini in unreal-config / save the asset in unreal-asset here.)
+
+# 5. Drop any checkout that ended up unchanged — dry-run first, then confirm.
+source_control_query("revert_unchanged", { paths: ["Config/DefaultEngine.ini", "/Game/Maps/Interactable/BP_Wave"], dry_run: true })
+source_control_query("revert_unchanged", { paths: ["Config/DefaultEngine.ini", "/Game/Maps/Interactable/BP_Wave"], confirm: true })
+```
+
+### Recipe: mark a new file for add and an old file for delete
+
+End-to-end add/delete flow. `checkout_or_add` adds the new local file (or checks it out if already tracked); `mark_for_delete` is the explicit delete verb, dry-run first then confirmed. (Save/create the new asset package itself in **unreal-asset** before adding it.)
+
+```text
+# 1. Add the new local file (checks out instead if already source-controlled).
+source_control_query("checkout_or_add", { paths: ["/Game/UI/Icons/T_icon_skill"] })
+
+# 2. Mark the obsolete file for delete — destructive, preview then confirm.
+source_control_query("mark_for_delete", { paths: ["/Game/UI/Icons/T_icon_old"], dry_run: true })
+source_control_query("mark_for_delete", { paths: ["/Game/UI/Icons/T_icon_old"], confirm: true })
+
+# 3. Confirm the resulting marked-for-add / marked-for-delete state.
+source_control_query("get_status", { paths: ["/Game/UI/Icons/T_icon_skill", "/Game/UI/Icons/T_icon_old"] })
+```
+
+## Gotchas / Rules
+
+- `delete`, `mark_for_delete`, `revert`, and `revert_unchanged` are destructive — they require `confirm=true` unless you pass `dry_run=true`. Run a `dry_run` first to preview the affected files.
+- This skill performs the source-control verb only. Editing the file content (`.ini`, asset package) is a separate step in **unreal-config** / **unreal-asset** after checkout.
+- Every action takes its file list as the `paths` array param (filesystem paths or `/Game` package/object paths), not `files`. `get_status` accepts both filesystem and `/Game` package paths; resolve `/Game` asset paths through the active provider rather than assuming a depot/disk layout.
 
 ## Notes
 

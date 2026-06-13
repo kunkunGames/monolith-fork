@@ -1,7 +1,7 @@
 # Monolith — Tool Invocation Daily Logs
 
 **Parent:** [../SPEC_CORE.md](../SPEC_CORE.md)
-**Status:** Writer implemented through format v3; proxy/query/action v3 verified; analyzer implementation deferred
+**Status:** Writer implemented through format v3; proxy/query/action v3 verified; offline reader implemented (`Analyzer/analyze_invocation_logs.py`, contract in [SPEC_MonolithInvocationLogAnalyzer.md](SPEC_MonolithInvocationLogAnalyzer.md))
 **Scope:** Proxy, offline query, and editor action invocation diagnostics
 **Created:** 2026-05-20
 **Doc reconciled with code:** 2026-05-21 (format v3 field pass: proxy/query/action correlation, routing, workflow, timing, and child-process records)
@@ -14,7 +14,7 @@ Monolith needs local, append-only daily logs that show how agents call Monolith 
 
 This document is the implementation contract and current writer verification record. Format v3 adds explicit row identity, parent/previous linkage, routing context, workflow phase, phase timing, environment context, result shape, and child-process timing on top of the v2 `trace_id` / `span_id` / `return_summary` contract. Daily files are append-only, so a date partition can contain older `format_version` 1 or 2 rows from long-running proxy/editor processes alongside newer v3 rows. Readers must treat `format_version` as a per-record schema discriminator, not as a file-level property.
 
-The current logs collect enough writer-side evidence to start a local analyzer for the target goal: infer what tool an agent called, why it likely chose that route, how it continued after each result, and where time accumulated. Analysis logic itself is still deferred; section 5.2 is now the v3 collection contract that analyzers should consume, not a future writer backlog.
+The current logs collect enough writer-side evidence to answer the target goal: infer what tool an agent called, why it likely chose that route, how it continued after each result, and where time accumulated. The reader is the offline analyzer `Analyzer/analyze_invocation_logs.py` (own spec: [SPEC_MonolithInvocationLogAnalyzer.md](SPEC_MonolithInvocationLogAnalyzer.md)); section 5.2 is the v3 collection contract that readers consume.
 
 The desired daily files live under `Plugins/Monolith/Logs/yyyyMMdd/` by default:
 
@@ -73,7 +73,7 @@ Proxy/query default-on is intentionally separate from editor action logging. Edi
 The document now reduces the implementation decision to three points:
 
 1. **Collect v3 data now:** proxy, query, and action writers emit v3 records with correlation, routing, workflow, timing, environment, and summary fields.
-2. **Analyze later:** analyzer/report code is deferred, but it should consume v3 first and gracefully degrade for v1/v2 rows in append-only date folders.
+2. **Analyze offline first:** the reader is `Analyzer/analyze_invocation_logs.py`; it consumes v3 first and gracefully degrades for v1/v2 rows in append-only date folders. Editor-action or native-CLI readers remain optional follow-ups.
 3. **Keep controls split:** proxy/query remain default-on through `MONOLITH_TOOL_LOG_ENABLED`; editor action logging remains controlled by `bEnableDailyLog`.
 
 ## 4. Record Contract
@@ -164,6 +164,16 @@ Tags currently emitted: `missing_action`, `schema_confusing`, `repeated_call` (p
 Tags reserved but not yet emitted by any surface: `discovery_gap`, `repeated_failure`. The proxy records routing context and retry signatures, but analyzers should derive discovery gaps and repeated-failure patterns from multiple rows before treating them as improvement findings.
 
 ## 5.1 Analysis Usage Contract
+
+### First reader
+
+`Analyzer/analyze_invocation_logs.py` is the implemented offline reader (landed 2026-06-08, commit e2db9d81; full contract in [SPEC_MonolithInvocationLogAnalyzer.md](SPEC_MonolithInvocationLogAnalyzer.md)). It never mutates the log root, follows the section 4.1 leniency rules (per-row `format_version` dispatch, parse-warning counting without file rejection, per-surface version counts in `findings.json` `summary.counts_by_surface_version`), classifies heartbeat/test/maintenance noise, and writes `summary.md`, `findings.json`, and CSV tables under the `--out` directory.
+
+```text
+python Analyzer/analyze_invocation_logs.py --log-root Logs --out Saved/Monolith/LogAnalysis/latest --format markdown,json,csv
+python Analyzer/analyze_invocation_logs.py --log-root Logs --since 20260605 --until 20260611 --out Saved/Monolith/LogAnalysis/recent7d
+python Analyzer/analyze_invocation_logs.py --log-root <dir> --out <out>   # isolated MONOLITH_TOOL_LOG_DIR roots
+```
 
 ### Current vs target analysis capability
 
@@ -460,7 +470,7 @@ When truncating, preserve `truncated=true`, `original_bytes`, `sha256` of the or
 | Trace continuity | Proxy-to-action records share `trace_id`; action records link to proxy `span_id`; action-spawned query records inherit the action `trace_id` and `span_id` as `parent_span_id`. |
 | Schema compactness | New format v3 records include `return_summary`, `routing_context`, `workflow`, `phase_timing`, and analyzer-friendly ids while omitting empty optional fields and duplicate `agent_signal.retry_signature` / byte fields. |
 | Fresh-process v3 append | After restarting proxy/editor/query processes, new proxy, query, and action calls append `format_version=3` rows to the current date folder. Existing v1/v2 rows may remain earlier in the same file. |
-| Mixed-schema reader tolerance | A reader/analyzer test covers a date folder containing v1, v2, and v3 rows and reports schema counts without dropping valid records. (Pending: no reader/analyzer exists yet — see §11 Open Decisions. This gate cannot pass until the first reader lands.) |
+| Mixed-schema reader tolerance | A reader/analyzer test covers a date folder containing v1, v2, and v3 rows and reports schema counts without dropping valid records. (Verified 2026-06-12 with `Analyzer/analyze_invocation_logs.py` against the mixed `Logs/20260520` folder — see §12.) |
 | Redaction/truncation | Sensitive values are absent and large payloads stay bounded with metadata. |
 | Failure paths | Unknown action, bad params, and editor unavailable preserve existing failure semantics and emit diagnostic records when enabled. |
 
@@ -480,8 +490,8 @@ Daily invocation logs are the durable, date-partitioned JSONL layer. They intent
 
 | Topic | Decision needed |
 |---|---|
-| Retention | P0 keeps logs manually managed. A later setting should cap by age, total bytes, or both. |
-| Reader/analyzer | Decide whether the first reader is editor action `monolith.analyze_invocation_logs`, offline `monolith_query logs analyze`, or both. |
+| Retention | Resolved 2026-06-12: retention stays manual, with `Scripts/prune_invocation_logs.ps1` as the manual entry point (age and/or total-size rules over `Logs/yyyyMMdd` folders, dry-run by default; contract in [SPEC_MonolithAgentOpsScripts.md](SPEC_MonolithAgentOpsScripts.md)). A writer-side auto-retention setting remains a possible follow-up. |
+| Reader/analyzer | Resolved: the first reader is `Analyzer/analyze_invocation_logs.py` (landed 2026-06-08, commit e2db9d81, own spec [SPEC_MonolithInvocationLogAnalyzer.md](SPEC_MonolithInvocationLogAnalyzer.md)); this parent spec stayed on "deferred" until 2026-06-12 because that change did not update it — readers must treat the child spec as authoritative for the analyzer surface. Editor action `monolith.analyze_invocation_logs` and native `monolith_query logs analyze` remain optional follow-ups if live/in-editor aggregation is needed. |
 | Shared enable config | Decide how editor `bEnableDailyLog` should mirror to proxy/query without requiring environment variables. |
 | Analyzer schema | Decide the first analyzer action/CLI shape for reading mixed v1/v2/v3 logs, grouping by `trace_id` / `parent_span_id` / `previous_record_id` when present, and falling back to timestamp/pid ordering when not. |
 | Privacy policy | Decide whether source snippets, asset paths, and user/project identifiers should be logged as raw text, redacted, or hash-only. |
@@ -527,3 +537,14 @@ Daily invocation logs are the durable, date-partitioned JSONL layer. They intent
 | MonolithCore build | GoGameEditor UBT build completed after closing the editor process that held the previous DLL. |
 | Headless action and child query | `BatchFiles\RunHeadlessEditor.bat` launched a `-NullRHI` editor; a live proxy `source_query(crg_graph_health)` produced correlated v3 `proxy.jsonl`, `action.jsonl`, and `query.jsonl` rows with shared `trace_id`, parent span linkage, action `child_process.exec_process_ms`, action/query `inferred_intent=verification`, and query `namespace_source=child_process`. |
 | Automation tests | `Monolith.Core.ToolInvocationLogger.DailyLogOptInRedaction`, `Monolith.Core.ToolInvocationLogger.PreDispatchFailureLogged`, and `Monolith.Core.ToolInvocationLogger.SourceChildQueryDualSurface` passed. |
+
+2026-06-12 offline reader verification (`Analyzer/analyze_invocation_logs.py`, landed 2026-06-08 in commit e2db9d81):
+
+| Gate | Result |
+|---|---|
+| Fixture smoke | `--log-root Analyzer/fixtures/invocation_logs` scanned 2 files / 19 records with 0 parse warnings and wrote `summary.md` + `findings.json`. |
+| 7-day real aggregate | `--log-root Logs --since 20260605 --until 20260612` scanned 13 files / 3,280 records / 0 parse warnings and produced surface-status, noise-classification (normal/maintenance/synthetic_test/heartbeat/expected_slow_domain/escape_hatch), environment, and 69 ranked findings. |
+| Mixed-schema reader tolerance | `--since 20260520 --until 20260520` parsed the append-only mixed folder (174 records: proxy v1=4, action v1=36, query v1=127 + v2=7) with 0 parse warnings and 0 dropped rows; per-surface version counts are reported in `findings.json` `summary.counts_by_surface_version`. |
+| Read-only behavior | Reports were written only under the `--out` directory (`Saved/Monolith/LogAnalysis/...`); `Logs/` was not modified. |
+
+A duplicate stdlib reader was briefly added as `Scripts/analyze_invocation_logs.py` on 2026-06-11 while this spec still claimed the analyzer was deferred; it was removed on 2026-06-12 in favor of the committed `Analyzer/` implementation above.

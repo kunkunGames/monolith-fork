@@ -1,11 +1,11 @@
 ---
 name: unreal-interchange
-description: "Use for the Interchange import/export framework via Monolith MCP: import pipelines and pipeline stacks, glTF/FBX/USD import, and reimport. Triggers on interchange, import, reimport, gltf, fbx, usd, obj, import pipeline, pipeline stack, asset import, source data."
+description: Use for the Unreal Interchange import/export framework via Monolith MCP (interchange namespace) - import pipelines and pipeline stacks, glTF/FBX/USD/OBJ import, typed mesh/skeletal-mesh/scene/texture/audio import, reimport, export, and source-data inspection. For generic asset lifecycle (save/duplicate/move/delete/metadata) and direct Texture2D/font ingest use unreal-asset; to inspect or edit a mesh after import (LOD/collision/texel-density/GeometryScript) use unreal-mesh; for sprite-sheet ingest contracts use unreal-sprite; when the source texture should be AI-generated instead of imported from a file use unreal-imagegen. Triggers on interchange, import, reimport, import asset, glTF, gltf, GLB, FBX, USD, USDZ, OBJ, import pipeline, pipeline stack, import mesh, import skeletal mesh, import scene, import texture, import audio, export asset, source data, reimport path, supported formats.
 ---
 
 # unreal-interchange
 
-**16 actions** via `interchange_query(action, params)`. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
+**16 actions** via `interchange_query(action, params)`. Drives the Monolith MCP `interchange` namespace - the guarded Interchange import/reimport/export pipeline. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
 
 ## Discovery
 
@@ -14,28 +14,86 @@ monolith_discover({ namespace: "interchange" })                      # all actio
 monolith_discover({ namespace: "interchange", action: "<action>", mode: "schema" })  # exact params
 ```
 
+When the right action is unclear, `monolith_find("<task>")` suggests candidates across namespaces.
+
+Module spec: `Docs/specs/SPEC_MonolithAsset.md`
+
+## When To Use / Use A Different Skill For
+
+Use this skill to drive the import pipeline: validate a source file, run a typed or generic import, reimport, update a reimport path, or export an asset to disk.
+
+| Instead, route to | When |
+| --- | --- |
+| `unreal-asset` | Generic asset lifecycle (save/duplicate/move/delete/metadata, naming, batch rename) or direct Texture2D / TTF-OTF font ingest, not the import-pipeline framework. |
+| `unreal-mesh` | Inspecting or editing a mesh AFTER import - LOD/collision/texel-density/GeometryScript - rather than driving the import. |
+| `unreal-sprite` | Sprite-sheet ingest contracts specifically, rather than the general Interchange import stack. |
+| `unreal-imagegen` | The source texture should be AI-generated instead of imported from an existing file. |
+
 ## Action Reference
 
-### Core (16)
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, `[w]` mutates (transaction-wrapped). Signatures are a snapshot of the live catalog — for the exact full schema call `monolith_discover` with `mode: "schema"` (the Discovery block above stays the authority).
 
-| Action | Purpose |
-|--------|---------|
-| `can_import` | Validate whether a source file can be handed to an Interchange import workflow. |
-| `can_reimport` | Check whether an existing asset has source import data usable for reimport. |
-| `export_asset` | Export one asset to a local file through UAssetExportTask after path validation. |
-| `get_import_data` | Read import source metadata from an existing asset without mutation. |
-| `get_supported_formats` | List Monolith Interchange import/export validation capabilities without mutating assets. |
-| `import_asset` | Import one source file with root, destination, conflict, confirmation, and dry-run guardrails. |
-| `import_assets` | Import multiple source files sequentially and return one result row per source. |
-| `import_audio` | Typed audio import entrypoint over the guarded Interchange import implementation. |
-| `import_mesh` | Typed mesh import entrypoint over the guarded Interchange import implementation. |
-| `import_scene` | Typed scene import entrypoint over the guarded Interchange import implementation. |
-| `import_skeletal_mesh` | Typed skeletal mesh import entrypoint over the guarded Interchange import implementation. |
-| `import_texture` | Typed texture import entrypoint over the guarded Interchange import implementation. |
-| `import_with_options` | Guarded import entrypoint that accepts a forward-compatible options object. |
-| `reimport_asset` | Reimport one existing asset through Unreal's reimport manager. |
-| `reimport_assets` | Reimport multiple assets sequentially and return one result row per asset. |
-| `update_reimport_path` | Update an asset reimport source path after source/root validation. |
+The typed import entrypoints (`import_mesh`/`import_skeletal_mesh`/`import_texture`/`import_audio`/`import_scene`/`import_with_options`) share the same signature as `import_asset` below; `conflict_policy` is REQUIRED on every import.
+
+### Read-only (4)
+
+| Action | Signature | Purpose |
+|--------|-----------|---------|
+| `get_supported_formats` | _(none)_ | List Monolith Interchange import/export validation capabilities |
+| `can_import` | `source_file*` `destination_path?` `allow_external?=false` | Validate whether a source file is importable |
+| `can_reimport` | `asset_path*` | Check whether an asset has source import data usable for reimport |
+| `get_import_data` | `asset_path*` | Read import source metadata from an asset without mutation |
+
+### Import (8, all `[w]`)
+
+| Action | Signature | Purpose |
+|--------|-----------|---------|
+| `[w] import_asset` | `source_file*` `destination_path*` `conflict_policy*` (`fail`/`overwrite`/`rename`/`reimport_only`) `allow_external?=false` `confirm?=false` `dry_run?=false` `options?` | Import one source file with guardrails |
+| `[w] import_assets` | `source_files*` (array) `destination_path*` `conflict_policy*` `allow_external?=false` `confirm?=false` `dry_run?=false` `options?` | Import multiple source files, one result row per source |
+| `[w] import_mesh` | _(same as import_asset)_ | Typed mesh import entrypoint |
+| `[w] import_skeletal_mesh` | _(same as import_asset)_ | Typed skeletal mesh import entrypoint |
+| `[w] import_texture` | _(same as import_asset)_ | Typed texture import entrypoint |
+| `[w] import_audio` | _(same as import_asset)_ | Typed audio import entrypoint |
+| `[w] import_scene` | _(same as import_asset)_ | Typed scene import entrypoint |
+| `[w] import_with_options` | _(same as import_asset)_ | Guarded import accepting a forward-compatible `options` object |
+
+### Reimport / export (4, all `[w]`)
+
+| Action | Signature | Purpose |
+|--------|-----------|---------|
+| `[w] reimport_asset` | `asset_path*` `source_file?` `source_file_index?=-1` `allow_external?=false` `confirm?=false` `dry_run?=false` | Reimport one asset via Unreal's reimport manager |
+| `[w] reimport_assets` | `asset_paths*` (array) `confirm?=false` `dry_run?=false` | Reimport multiple assets, one result row per asset |
+| `[w] update_reimport_path` | `asset_path*` `source_file*` `source_file_index?=-1` `allow_external?=false` `confirm?=false` `dry_run?=false` | Repoint an asset's reimport source path |
+| `[w] export_asset` | `asset_path*` `file_path*` `replace_existing?=false` `allow_external?=false` `confirm?=false` `dry_run?=false` | Export one asset to a local file after path validation |
+
+## Common Workflows
+
+```
+# Check a source file is importable before committing to a destination.
+interchange_query("can_import", { "source_file": "C:/in/hero.fbx" })
+
+# Import a mesh through the typed entrypoint with a dry run first, then for real (conflict_policy is required).
+interchange_query("import_mesh", { "source_file": "C:/in/hero.fbx", "destination_path": "/Game/Meshes", "conflict_policy": "rename", "dry_run": true })
+interchange_query("import_mesh", { "source_file": "C:/in/hero.fbx", "destination_path": "/Game/Meshes", "conflict_policy": "rename", "confirm": true })
+
+# Reimport an existing asset, then read back its import source metadata.
+interchange_query("reimport_asset", { "asset_path": "/Game/Meshes/Hero", "confirm": true })
+interchange_query("get_import_data", { "asset_path": "/Game/Meshes/Hero" })
+
+# Repoint a moved source file before reimporting.
+interchange_query("update_reimport_path", { "asset_path": "/Game/Meshes/Hero", "source_file": "D:/new/hero.fbx", "confirm": true })
+
+# Export an asset back out to a local file.
+interchange_query("export_asset", { "asset_path": "/Game/Meshes/Hero", "file_path": "C:/out/hero.fbx", "confirm": true })
+```
+
+## Gotchas / Rules
+
+- `destination_path` is a UE content folder such as `/Game/Imported` (not a `.uasset` filesystem path); `source_file` / export `file_path` are on-disk paths.
+- Import and reimport are high-impact mutations (`[w]`): `conflict_policy` is required, and writes need `confirm: true` unless `dry_run: true`. Use `dry_run` plus `can_import` / `can_reimport` first.
+- After importing a mesh, hand off mesh inspection/edit (LOD, collision, texel density, GeometryScript) to `unreal-mesh`; this skill owns the import pipeline, not post-import editing.
+- For direct Texture2D or TTF/OTF font ingest that does not need the Interchange stack, use `unreal-asset`; for AI-generated source textures use `unreal-imagegen`.
+- `get_supported_formats` reports the validation capabilities Monolith exposes, not the full engine importer matrix; confirm a format with `can_import` against the actual file.
 
 ## Notes
 

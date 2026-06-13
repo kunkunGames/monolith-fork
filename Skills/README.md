@@ -40,7 +40,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-reflection-intel` | `cppreflect`/`network`/`decision`/`risk`/`reflect` | 20+ | Reflection Intelligence, replication audit, decision records, risk signals |
 | `unreal-build` | `editor` | 57* | Build, hot reload, compile errors |
 | `unreal-debugging` | `editor` | 57* | Logs, crash context, output log |
-| `unreal-performance` | `editor`/`mesh` | — | Profiling, triangle/draw-call/shadow budgets |
+| `unreal-performance` | `config`/`material`/`niagara` | — | Cross-domain perf analysis — INI/CVar tuning, material shader stats, Niagara complexity |
 
 ### Gameplay
 | Skill | Namespace | ~Actions | Use for |
@@ -70,7 +70,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | Skill | Namespace | ~Actions | Use for |
 |-------|-----------|---------:|---------|
 | `unreal-ui` | `ui` | 119 | UMG widgets, bindings, slots, styling, templates, accessibility |
-| `unreal-niagara` | `niagara` | 109 | Niagara VFX systems, emitters, modules |
+| `unreal-niagara` | `niagara` | 123 | Niagara VFX systems, emitters, modules |
 | `unreal-animation` | `animation` | 135 | AnimBP, montages, sequences, blendspaces, layout |
 | `unreal-audio` | `audio` | 98 | Sound assets, cues, MetaSounds, attenuation, mixing |
 | `unreal-materials` | `material`/`asset` | 63 / 8 | Material graphs, instances, functions; asset ingest/inspect/validate |
@@ -100,12 +100,25 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-collection` | `collection` | 13 | Editor asset Collections |
 | `unreal-localization` | `localization` | 10 | Localization targets, string tables, cultures |
 
-\* `editor` actions are split across `unreal-build` (build/hot reload), `unreal-debugging` (logs/crash), and `unreal-performance` (profiling).
+\* `editor` actions are split across `unreal-build` (build/hot reload) and `unreal-debugging` (logs/crash). `unreal-performance` is cross-domain (`config`/`material`/`niagara`) profiling, not an `editor`-namespace skill; per-mesh triangle/draw-call/shadow budgeting lives in `unreal-mesh`.
 
 ## Reference companions
 
-- `material-reference/` — material-expression reference for `unreal-materials`.
-- `niagara-reference/` — Niagara module/data-interface reference for `unreal-niagara`.
+These two skills carry **no MCP actions** — they are read-only knowledge cards with on-demand
+`references/` docs (paths relative to each skill folder, so they survive the per-skill junction/symlink
+install). Each card holds a Quick Reference plus a table of reference documents. For any action on an
+actual asset, route to the paired live-namespace skill.
+
+- `material-reference/` — passive material/shader authoring knowledge for `unreal-materials`. Quick
+  Reference (PBR base values, sampler/instruction budgets, GPU cycle costs, CPD-vs-DMI) plus
+  `references/` docs: HLSL Custom-node guide, PBR values, material patterns, performance budgets,
+  material systems/architecture, and anti-tiling. For create/edit/inspect/validate/optimize on a real
+  material asset, use `unreal-materials`.
+- `niagara-reference/` — passive Niagara VFX knowledge for `unreal-niagara`. Quick Reference (CPU-vs-GPU
+  thresholds, fixed bounds, module order, GPU limits) plus `references/` docs: architecture, performance
+  budgets, gotchas, material integration, and synthesized effect recipes (seeds — verify in-editor).
+  Custom HLSL rules are not duplicated here; the authoritative guide is `Docs/NIAGARA_HLSL_GUIDE.md`. For
+  any action on a real Niagara system, use `unreal-niagara`.
 
 ## Conventions
 
