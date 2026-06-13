@@ -73,16 +73,18 @@ void ReadDescriptionOverridesParam(const TSharedPtr<FJsonObject>& Params, FMonol
 
 bool FillProfileFromParams(const TSharedPtr<FJsonObject>& Params, FMonolithToolProfile& Profile, FString& OutError)
 {
-	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("profile_id"), Profile.Id) || Profile.Id.IsEmpty())
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("profile_id"), Profile.Id, OutError))
 	{
-		OutError = TEXT("'profile_id' parameter is required");
 		return false;
 	}
 
-	Params->TryGetStringField(TEXT("display_name"), Profile.DisplayName);
-	Params->TryGetStringField(TEXT("description"), Profile.Description);
-	Params->TryGetStringField(TEXT("mode"), Profile.Mode);
-	Params->TryGetStringField(TEXT("custom_instructions"), Profile.CustomInstructions);
+	if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("display_name"), Profile.DisplayName, OutError, TEXT(""), false) ||
+		!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("description"), Profile.Description, OutError, TEXT(""), false) ||
+		!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("mode"), Profile.Mode, OutError, TEXT("")) ||
+		!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("custom_instructions"), Profile.CustomInstructions, OutError, TEXT(""), false))
+	{
+		return false;
+	}
 	if (Profile.DisplayName.IsEmpty())
 	{
 		Profile.DisplayName = Profile.Id;
@@ -317,9 +319,10 @@ FMonolithActionResult FMonolithToolProfileActions::HandleSetActionEnabled(const 
 {
 	const FString ProfileId = GetProfileIdParam(Params, true);
 	FString ActionId;
-	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("action_id"), ActionId) || ActionId.IsEmpty())
+	FString Error;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("action_id"), ActionId, Error))
 	{
-		return FMonolithActionResult::Error(TEXT("'action_id' parameter is required"), FMonolithJsonUtils::ErrInvalidParams);
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	bool bEnabled = true;
 	if (Params->HasField(TEXT("enabled")))
@@ -330,7 +333,6 @@ FMonolithActionResult FMonolithToolProfileActions::HandleSetActionEnabled(const 
 		}
 	}
 
-	FString Error;
 	if (!FMonolithToolProfileManager::Get().SetActionEnabled(ProfileId, ActionId, bEnabled, Error))
 	{
 		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
@@ -347,9 +349,10 @@ FMonolithActionResult FMonolithToolProfileActions::HandleSetNamespaceEnabled(con
 {
 	const FString ProfileId = GetProfileIdParam(Params, true);
 	FString Namespace;
-	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("namespace"), Namespace) || Namespace.IsEmpty())
+	FString Error;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("namespace"), Namespace, Error))
 	{
-		return FMonolithActionResult::Error(TEXT("'namespace' parameter is required"), FMonolithJsonUtils::ErrInvalidParams);
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	bool bEnabled = true;
 	if (Params->HasField(TEXT("enabled")))
@@ -360,7 +363,6 @@ FMonolithActionResult FMonolithToolProfileActions::HandleSetNamespaceEnabled(con
 		}
 	}
 
-	FString Error;
 	if (!FMonolithToolProfileManager::Get().SetNamespaceEnabled(ProfileId, Namespace, bEnabled, Error))
 	{
 		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
@@ -377,14 +379,17 @@ FMonolithActionResult FMonolithToolProfileActions::HandleSetActionDescriptionOve
 {
 	const FString ProfileId = GetProfileIdParam(Params, true);
 	FString ActionId;
-	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("action_id"), ActionId) || ActionId.IsEmpty())
+	FString Error;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("action_id"), ActionId, Error))
 	{
-		return FMonolithActionResult::Error(TEXT("'action_id' parameter is required"), FMonolithJsonUtils::ErrInvalidParams);
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	FString Override;
-	Params->TryGetStringField(TEXT("description_override"), Override);
+	if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("description_override"), Override, Error, TEXT(""), false))
+	{
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
-	FString Error;
 	if (!FMonolithToolProfileManager::Get().SetDescriptionOverride(ProfileId, ActionId, Override, Error))
 	{
 		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
@@ -401,10 +406,11 @@ FMonolithActionResult FMonolithToolProfileActions::HandleGetEffectiveDiscovery(c
 {
 	FString FilterNamespace;
 	FString FilterCategory;
-	if (Params.IsValid())
+	FString Error;
+	if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("namespace"), FilterNamespace, Error, TEXT("")) ||
+		!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("category"), FilterCategory, Error, TEXT("")))
 	{
-		Params->TryGetStringField(TEXT("namespace"), FilterNamespace);
-		Params->TryGetStringField(TEXT("category"), FilterCategory);
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();

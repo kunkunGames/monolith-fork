@@ -1169,7 +1169,9 @@ FMonolithActionResult FMonolithMeshFacadeActions::GenerateFacade(const TSharedPt
 	int32 TotalDoors = 0;
 
 	TArray<TSharedPtr<FJsonValue>> WindowMetadataArr;
+	WindowMetadataArr.Reserve(ExteriorFaces.Num() * 4);
 	TArray<TSharedPtr<FJsonValue>> DoorMetadataArr;
+	DoorMetadataArr.Reserve(ExteriorFaces.Num());
 
 	for (const FExteriorFaceDef& Face : ExteriorFaces)
 	{
@@ -1293,6 +1295,7 @@ FMonolithActionResult FMonolithMeshFacadeActions::GenerateFacade(const TSharedPt
 			FVector WorldPos = FaceCenter + WidthAxis * W.CenterX;
 			WorldPos.Z = Face.WorldOrigin.Z + W.SillZ + W.Height * 0.5f;
 			TArray<TSharedPtr<FJsonValue>> PosArr;
+			PosArr.Reserve(3);
 			PosArr.Add(MakeShared<FJsonValueNumber>(WorldPos.X));
 			PosArr.Add(MakeShared<FJsonValueNumber>(WorldPos.Y));
 			PosArr.Add(MakeShared<FJsonValueNumber>(WorldPos.Z));
@@ -1314,6 +1317,7 @@ FMonolithActionResult FMonolithMeshFacadeActions::GenerateFacade(const TSharedPt
 			FVector WorldPos = FaceCenter + WidthAxis * D.CenterX;
 			WorldPos.Z = Face.WorldOrigin.Z + D.Height * 0.5f;
 			TArray<TSharedPtr<FJsonValue>> PosArr;
+			PosArr.Reserve(3);
 			PosArr.Add(MakeShared<FJsonValueNumber>(WorldPos.X));
 			PosArr.Add(MakeShared<FJsonValueNumber>(WorldPos.Y));
 			PosArr.Add(MakeShared<FJsonValueNumber>(WorldPos.Z));
@@ -1587,6 +1591,7 @@ FMonolithActionResult FMonolithMeshFacadeActions::ApplyHorrorDamage(const TShare
 
 					auto PosObj = MakeShared<FJsonObject>();
 					TArray<TSharedPtr<FJsonValue>> PosArr;
+					PosArr.Reserve(3);
 					PosArr.Add(MakeShared<FJsonValueNumber>(StainPos.X));
 					PosArr.Add(MakeShared<FJsonValueNumber>(StainPos.Y));
 					PosArr.Add(MakeShared<FJsonValueNumber>(StainPos.Z));

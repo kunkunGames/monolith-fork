@@ -777,17 +777,21 @@ FMonolithActionResult FMonolithLogicDriverNodeActions::HandleGetExposedPropertie
 
 FMonolithActionResult FMonolithLogicDriverNodeActions::HandleSetExposedProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	FNodeLookupResult Lookup = LoadAndFindNode(Params);
-	if (!Lookup.bSuccess) return Lookup.Error;
-
 	FString PropertyName;
 	if (!Params->TryGetStringField(TEXT("property_name"), PropertyName) || PropertyName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'property_name'"));
 
 	FString Value;
-	if (Params->HasField(TEXT("value")) && !Params->TryGetStringField(TEXT("value"), Value))
+	if (!Params->HasField(TEXT("value")))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'value'"));
+	}
+	if (!Params->TryGetStringField(TEXT("value"), Value))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param: 'value' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
+
+	FNodeLookupResult Lookup = LoadAndFindNode(Params);
+	if (!Lookup.bSuccess) return Lookup.Error;
 
 	UEdGraphNode* Node = Lookup.Node;
 

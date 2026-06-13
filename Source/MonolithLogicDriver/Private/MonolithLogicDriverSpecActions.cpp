@@ -236,11 +236,16 @@ FMonolithActionResult FMonolithLogicDriverSpecActions::HandleBuildSMFromSpec(con
 		return FMonolithActionResult::Error(ValidationError);
 	}
 
+	// CreatePackage returns either the existing in-memory UPackage at this
+	// path or a fresh RF_Public one; it does not touch disk. Canonical asset-create
+	// uses CreatePackage's return value directly with no FullyLoad — calling
+	// FullyLoad on the in-memory hit path forces a serialization read that
+	// can pull stale RF_Transient flags from a leftover .uasset into the
+	// in-memory package.
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at: %s"), *SavePath));
-	Package->FullyLoad();
 
-	// Guard AFTER FullyLoad (FullyLoad can re-populate package with stale content from disk)
+	// Guard that asset path is free
 	FString ExistError;
 	if (!MonolithLD::EnsureAssetPathFree(Package, SavePath, AssetName, ExistError))
 	{

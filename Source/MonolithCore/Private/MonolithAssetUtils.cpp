@@ -3,6 +3,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "AssetRegistry/AssetData.h"
+#include "Misc/PackageName.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UObjectHash.h"
 #include "UObject/Package.h"
@@ -11,6 +12,14 @@ FString FMonolithAssetUtils::ResolveAssetPath(const FString& InPath)
 {
 	FString Path = InPath;
 	Path.TrimStartAndEndInline();
+
+	if (Path.IsEmpty())
+	{
+		return Path;
+	}
+
+	// Accept Unreal copy-reference strings such as Texture2D'/Game/Foo.Foo'.
+	Path = FPackageName::ExportTextPathToObjectPath(Path);
 
 	// Normalize backslashes
 	Path.ReplaceInline(TEXT("\\"), TEXT("/"));

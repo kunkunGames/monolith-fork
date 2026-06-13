@@ -22,3 +22,9 @@
 **Learning:** MonolithEditorActions constructing Texture2D from StitchFlipbook were missing the standard MonolithCore::ValidatePackagePath check before CreatePackage.
 **Prevention:** Added ValidatePackagePath checks immediately before CreatePackage in MonolithEditorActions.
 **Avoid:** Avoid calling CreatePackage with unvalidated paths originating from external JSON inputs.
+
+## 2026-06-12 - Forbid numeric branch evasion
+**Coordination issue:** Crashguard generated multiple branches with large numeric suffixes (e.g., `-10520128106955593194`, `-6763324284465746968`) to bypass collision checks when branch names were taken.
+**Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
+**Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
+**Avoid:** Generating branches with `-<number>` suffixes.

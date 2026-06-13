@@ -465,11 +465,13 @@ FMonolithActionResult FMonolithMeshTemplateActions::ApplyRoomTemplate(const TSha
 		CreatedObj->SetStringField(TEXT("label"), Label);
 		CreatedObj->SetStringField(TEXT("shape"), Shape);
 		TArray<TSharedPtr<FJsonValue>> LocArr;
+		LocArr.Reserve(3);
 		LocArr.Add(MakeShared<FJsonValueNumber>(WorldPos.X));
 		LocArr.Add(MakeShared<FJsonValueNumber>(WorldPos.Y));
 		LocArr.Add(MakeShared<FJsonValueNumber>(WorldPos.Z));
 		CreatedObj->SetArrayField(TEXT("location"), LocArr);
 		TArray<TSharedPtr<FJsonValue>> SizeArr;
+		SizeArr.Reserve(3);
 		SizeArr.Add(MakeShared<FJsonValueNumber>(Size.X));
 		SizeArr.Add(MakeShared<FJsonValueNumber>(Size.Y));
 		SizeArr.Add(MakeShared<FJsonValueNumber>(Size.Z));
@@ -637,6 +639,8 @@ FMonolithActionResult FMonolithMeshTemplateActions::CreateRoomTemplate(const TSh
 		// size_range
 		auto SizeRange = MakeShared<FJsonObject>();
 		TArray<TSharedPtr<FJsonValue>> MinArr, MaxArr;
+		MinArr.Reserve(3);
+		MaxArr.Reserve(3);
 		MinArr.Add(MakeShared<FJsonValueNumber>(FMath::RoundToInt(MinSize.X)));
 		MinArr.Add(MakeShared<FJsonValueNumber>(FMath::RoundToInt(MinSize.Y)));
 		MinArr.Add(MakeShared<FJsonValueNumber>(FMath::RoundToInt(MinSize.Z)));
@@ -649,6 +653,7 @@ FMonolithActionResult FMonolithMeshTemplateActions::CreateRoomTemplate(const TSh
 
 		// position_pct
 		TArray<TSharedPtr<FJsonValue>> PosArr;
+		PosArr.Reserve(3);
 		PosArr.Add(MakeShared<FJsonValueNumber>(FMath::RoundToFloat(NormalizedPos.X * 100.0f) / 100.0f));
 		PosArr.Add(MakeShared<FJsonValueNumber>(FMath::RoundToFloat(NormalizedPos.Y * 100.0f) / 100.0f));
 		PosArr.Add(MakeShared<FJsonValueNumber>(FMath::RoundToFloat(NormalizedPos.Z * 100.0f) / 100.0f));
@@ -657,6 +662,7 @@ FMonolithActionResult FMonolithMeshTemplateActions::CreateRoomTemplate(const TSh
 		// rotation
 		FRotator ActorRot = Actor->GetActorRotation();
 		TArray<TSharedPtr<FJsonValue>> RotArr;
+		RotArr.Reserve(3);
 		RotArr.Add(MakeShared<FJsonValueNumber>(ActorRot.Pitch));
 		RotArr.Add(MakeShared<FJsonValueNumber>(ActorRot.Yaw));
 		RotArr.Add(MakeShared<FJsonValueNumber>(ActorRot.Roll));

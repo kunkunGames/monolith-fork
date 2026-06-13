@@ -223,6 +223,7 @@ Monolith.uplugin
   MonolithEditor        — Build triggers, log capture, compile output, crash context, scene/material-grid/overlay capture, material PBR and texture-channel inspection, ordered frame capture plus existing-frame adaptive GIF encoding, blank map factory, module status, automation test list/run, Python escape-hatch, level swap (60 actions)
   MonolithConfig        — Config/INI resolution and search (11 actions)
   MonolithIndex         — SQLite FTS5 deep project indexer, marketplace content, 15 asset indexers (7 actions)
+  MonolithAsset         — Asset lifecycle, import, hygiene, inspection, validation, and batch rename helpers (12 actions)
   MonolithSource        — Native C++ engine source indexer, call graphs, class hierarchy, hot-reload-aware reindex (11 actions)
   MonolithUI            — UI widget Blueprint CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, CommonUI, scaffolders + gap-closure (138 actions)
   MonolithGAS           — Gameplay Ability System: abilities, effects, attributes, ASC, tags, cues, targeting, ULeviathanVitalsSet template (135 actions)
@@ -265,6 +266,7 @@ Monolith.uplugin
 | `editor` | `editor_query` | 60 | Build triggers, error logs, compile output, crash context, scene/material-grid/overlay capture, material PBR and texture-channel inspection, ordered frame capture and adaptive 60 fps GIF encoding from new or existing PNG frames, blank map factory, module status, selection/context inspection, UE automation test list/run, Python escape-hatch, persistent-level swap |
 | `config` | `config_query` | 6 | INI resolution, explain, diff, search |
 | `project` | `project_query` | 7 | Deep project search — FTS5 across all indexed assets including marketplace plugins |
+| `asset` | `asset_query` | 12 | Asset lifecycle, import from file/bytes, font family ingest, hygiene, inspection, validation, fuzzy find, and batch rename helpers |
 | `source` | `source_query` | 11 | Native C++ engine source lookup, call graphs, class hierarchy, project reindex, hot-reload-aware refresh |
 | `bulk_fill` | `bulk_fill_query` | 2 | Reflection-walker bulk property fill across 12 per-namespace adapters — `apply` (dry-run-able tree write), `list_namespaces` |
 | `describe` | `describe_query` | 3 | Read-only schema introspection for the same 12 adapters — `schema`, `list_targets`, `action_schema` (any registered action's full param schema) |

@@ -46,6 +46,7 @@ namespace BuildingValidationHelpers
 	TArray<TSharedPtr<FJsonValue>> VecToJsonArray(const FVector& V)
 	{
 		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Reserve(3);
 		Arr.Add(MakeShared<FJsonValueNumber>(V.X));
 		Arr.Add(MakeShared<FJsonValueNumber>(V.Y));
 		Arr.Add(MakeShared<FJsonValueNumber>(V.Z));
@@ -333,9 +334,10 @@ TSharedPtr<FJsonObject> FMonolithMeshBuildingValidationActions::ValidateConnecti
 	const FString& BuildingId)
 {
 	auto Result = MakeShared<FJsonObject>();
-	TArray<TSharedPtr<FJsonValue>> UnreachableArr;
-
 	TArray<FString> AllRoomIds = GetBuildingRoomIds(Block, BuildingId);
+
+	TArray<TSharedPtr<FJsonValue>> UnreachableArr;
+	UnreachableArr.Reserve(AllRoomIds.Num());
 	int32 TotalRooms = AllRoomIds.Num();
 
 	FString EntranceRoom = FindEntranceRoom(Block, BuildingId);

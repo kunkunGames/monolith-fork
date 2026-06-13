@@ -642,17 +642,6 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddState(const TSh
 	if (AssetPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
-	FString LoadError;
-	UBlueprint* BP = nullptr;
-	UEdGraph* RootGraph = nullptr;
-	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
-	{
-		return FMonolithActionResult::Error(LoadError);
-	}
-
-	UClass* StateClass = MonolithLD::GetSMGraphNodeStateClass();
-	if (!StateClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_StateNode class not found — is Logic Driver loaded?"));
-
 	int32 PosX = 0;
 	double TmpX = 0.0;
 	const bool bHasPosX = Params->HasField(TEXT("position_x"));
@@ -682,6 +671,17 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddState(const TSh
 		return FMonolithActionResult::Error(TEXT("Invalid param: 'name' must be a string"), -32602);
 	}
 
+	FString LoadError;
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
+
+	UClass* StateClass = MonolithLD::GetSMGraphNodeStateClass();
+	if (!StateClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_StateNode class not found — is Logic Driver loaded?"));
+
 	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, StateClass, PosX, PosY);
 	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create state node"));
 
@@ -706,6 +706,19 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddTransition(cons
 	if (SourceGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'source_guid'"));
 	if (TargetGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'target_guid'"));
 
+	// Validate optional priority before loading the asset or looking up nodes.
+	int32 Priority = 0;
+	const bool bHasPriority = Params->HasField(TEXT("priority"));
+	if (bHasPriority)
+	{
+		double TmpPriority = 0.0;
+		if (!Params->TryGetNumberField(TEXT("priority"), TmpPriority))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'priority' must be a number"), -32602);
+		}
+		Priority = static_cast<int32>(TmpPriority);
+	}
+
 	FString LoadError;
 	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
 	if (!BP) return FMonolithActionResult::Error(LoadError);
@@ -721,19 +734,6 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddTransition(cons
 
 	UClass* TransClass = MonolithLD::GetSMGraphNodeTransitionClass();
 	if (!TransClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_TransitionEdge class not found"));
-
-	// Validate optional priority before creating the transition node.
-	int32 Priority = 0;
-	const bool bHasPriority = Params->HasField(TEXT("priority"));
-	if (bHasPriority)
-	{
-		double TmpPriority = 0.0;
-		if (!Params->TryGetNumberField(TEXT("priority"), TmpPriority))
-		{
-			return FMonolithActionResult::Error(TEXT("Invalid param: 'priority' must be a number"), -32602);
-		}
-		Priority = static_cast<int32>(TmpPriority);
-	}
 
 	// Position transition midway between source and target
 	int32 PosX = (SourceNode->NodePosX + TargetNode->NodePosX) / 2;
@@ -787,16 +787,6 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddConduit(const T
 	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
-	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
-
-	UClass* ConduitClass = MonolithLD::GetSMGraphNodeConduitClass();
-	if (!ConduitClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_ConduitNode class not found"));
-
 	int32 PosX = 0;
 	double TmpX = 0.0;
 	const bool bHasPosX = Params->HasField(TEXT("position_x"));
@@ -826,6 +816,16 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddConduit(const T
 		return FMonolithActionResult::Error(TEXT("Invalid param: 'name' must be a string"), -32602);
 	}
 
+	FString LoadError;
+	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
+	if (!BP) return FMonolithActionResult::Error(LoadError);
+
+	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
+	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+
+	UClass* ConduitClass = MonolithLD::GetSMGraphNodeConduitClass();
+	if (!ConduitClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_ConduitNode class not found"));
+
 	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, ConduitClass, PosX, PosY);
 	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create conduit node"));
 
@@ -843,16 +843,6 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddStateMachineNod
 	FString AssetPath;
 	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
-
-	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
-
-	UClass* SMNodeClass = MonolithLD::GetSMGraphNodeSMClass();
-	if (!SMNodeClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_StateMachineStateNode class not found"));
 
 	int32 PosX = 0;
 	double TmpX = 0.0;
@@ -889,6 +879,16 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddStateMachineNod
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid param: 'reference_path' must be a string"), -32602);
 	}
+
+	FString LoadError;
+	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
+	if (!BP) return FMonolithActionResult::Error(LoadError);
+
+	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
+	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+
+	UClass* SMNodeClass = MonolithLD::GetSMGraphNodeSMClass();
+	if (!SMNodeClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_StateMachineStateNode class not found"));
 
 	UEdGraphNode* NewNode = CreateGraphNode(RootGraph, SMNodeClass, PosX, PosY);
 	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to create state machine node"));

@@ -3,6 +3,7 @@
 #include "MonolithSourceDatabase.h"
 #include "Misc/FileHelper.h"
 #include "Internationalization/Regex.h"
+#include "Algo/Reverse.h"
 
 // ============================================================
 // ParseFile — main entry point
@@ -676,13 +677,13 @@ FString FMonolithCppParser::ExtractDocstring(const TArray<FString>& Lines, int32
 		{
 			// Strip /// prefix
 			FString Content = Trimmed.Mid(3).TrimStart();
-			CommentLines.Insert(Content, 0);
+			CommentLines.Add(Content);
 			--ScanLine;
 		}
 		else if (Trimmed.EndsWith(TEXT("*/")))
 		{
 			// Block comment — scan upward to find /**
-			CommentLines.Insert(Trimmed.Replace(TEXT("*/"), TEXT("")).TrimStartAndEnd(), 0);
+			CommentLines.Add(Trimmed.Replace(TEXT("*/"), TEXT("")).TrimStartAndEnd());
 			--ScanLine;
 
 			while (ScanLine >= 0)
@@ -696,7 +697,7 @@ FString FMonolithCppParser::ExtractDocstring(const TArray<FString>& Lines, int32
 					Content = Content.Mid(3).TrimStart();
 					if (!Content.IsEmpty())
 					{
-						CommentLines.Insert(Content, 0);
+						CommentLines.Add(Content);
 					}
 					break;
 				}
@@ -705,7 +706,7 @@ FString FMonolithCppParser::ExtractDocstring(const TArray<FString>& Lines, int32
 					Content = Content.Mid(1).TrimStart();
 					if (!Content.IsEmpty())
 					{
-						CommentLines.Insert(Content, 0);
+						CommentLines.Add(Content);
 					}
 				}
 				else
@@ -743,6 +744,7 @@ FString FMonolithCppParser::ExtractDocstring(const TArray<FString>& Lines, int32
 		return FString();
 	}
 
+	Algo::Reverse(CommentLines);
 	return FString::Join(CommentLines, TEXT("\n"));
 }
 

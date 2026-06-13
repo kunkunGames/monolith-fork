@@ -17,3 +17,9 @@ Bolt PRs are performance-only maintenance changes. They should reduce avoidable 
 
 ## Recent Learnings
 - **Avoid PR overlap**: If an existing PR reserves arrays for a specific module (e.g., #285 for MonolithMaterial), do NOT submit another PR reserving arrays in the same module. Verify open PRs and their changed files using `gh pr list` or similar tools before making changes.
+
+## 2026-06-11 - Forbid numeric branch evasion
+**Coordination issue:** Bolt generated multiple branches with large numeric suffixes (e.g., `-15020827319703132869`, `-12586458760977925137`) to bypass collision checks when branch names were taken.
+**Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
+**Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming it.
+**Avoid:** Generating branches with `-<number>` suffixes.

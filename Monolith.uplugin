@@ -153,6 +153,11 @@
 			"Name": "Dataflow",
 			"Enabled": true,
 			"Optional": true
+		},
+		{
+			"Name": "Chooser",
+			"Enabled": true,
+			"Optional": true
 		}
 	],
 	"Modules": [

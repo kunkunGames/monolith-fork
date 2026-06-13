@@ -1,6 +1,7 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
 #include "MonolithMeshDecalActions.h"
+#include "MonolithMeshLightingActions.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 
@@ -18,6 +19,23 @@ bool FMonolithParamGuardSceneDecalMalformedParamsTest::RunTest(const FString& Pa
 	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("place_storytelling_scene"), Params);
 	TestFalse(TEXT("place_storytelling_scene rejects malformed location parameter"), Result.bSuccess);
 	TestTrue(TEXT("place_storytelling_scene reports the validation error"), Result.ErrorMessage.Contains(TEXT("location")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneLightingMalformedParamsTest, "Monolith.ParamGuard.MonolithScene.LightingActionsRejectMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardSceneLightingMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshLightingActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("sample_light_levels action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("sample_light_levels")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("points"), TEXT("not_an_array"));
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("sample_light_levels"), Params);
+	TestFalse(TEXT("sample_light_levels rejects malformed points parameter"), Result.bSuccess);
+	TestTrue(TEXT("sample_light_levels reports the validation error"), Result.ErrorMessage.Contains(TEXT("points")));
 
 	return true;
 }

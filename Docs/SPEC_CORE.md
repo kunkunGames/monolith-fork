@@ -479,7 +479,7 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
    git commit -m "Release vX.Y.Z metadata"
    git push origin master
    ```
-4. **Clean working tree:** Ensure `git status --short` is empty. The release script refuses to run with uncommitted changes unless forced.
+4. **Clean working tree:** Ensure `git status --porcelain` is empty. The release script refuses to run with uncommitted changes unless the `-AllowDirtyTree` switch is passed.
 5. **Build release ZIP:** Run the release script from PowerShell:
    ```powershell
    powershell -ExecutionPolicy Bypass -File Scripts/make_release.ps1 -Version "X.Y.Z"

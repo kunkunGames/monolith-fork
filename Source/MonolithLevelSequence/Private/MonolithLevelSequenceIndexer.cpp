@@ -649,6 +649,7 @@ bool FLevelSequenceIndexer::IndexAsset(const FAssetData& AssetData, UObject* Loa
 	// methods and compiler-generated UE bytecode dispatchers.
 	struct FFnRecord { FString Name; FString Kind; FString SignatureJson; };
 	TArray<FFnRecord> Functions;
+	Functions.Reserve(DirBP->FunctionGraphs.Num() + (DirBP->UbergraphPages.Num() * 4));
 
 	for (UEdGraph* FuncGraph : DirBP->FunctionGraphs)
 	{

@@ -50,8 +50,15 @@ bool FMonolithParamGuardLocalizationStringTableCreateDryRunTest::RunTest(const F
 
 	const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("localization"), TEXT("create_string_table"), Params);
 	TestTrue(TEXT("create_string_table dry_run succeeds without creating an asset"), Result.bSuccess);
-	TestTrue(TEXT("dry_run result reports would_create"), Result.Result.IsValid() && Result.Result->GetBoolField(TEXT("would_create")));
-	TestTrue(TEXT("dry_run result reports changed=false"), Result.Result.IsValid() && !Result.Result->GetBoolField(TEXT("changed")));
+	bool bWouldCreate = false;
+	bool bChanged = true; // default to true so failure to parse doesn't artificially pass the !changed check
+	if (Result.Result.IsValid())
+	{
+		Result.Result->TryGetBoolField(TEXT("would_create"), bWouldCreate);
+		Result.Result->TryGetBoolField(TEXT("changed"), bChanged);
+	}
+	TestTrue(TEXT("dry_run result reports would_create"), bWouldCreate);
+	TestTrue(TEXT("dry_run result reports changed=false"), !bChanged);
 
 	return true;
 }

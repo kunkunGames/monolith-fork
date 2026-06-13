@@ -3,6 +3,21 @@ using System.IO;
 
 public class MonolithAudio : ModuleRules
 {
+	private static bool HasPluginDir(string BaseDir, string PluginName)
+	{
+		if (!Directory.Exists(BaseDir))
+		{
+			return false;
+		}
+
+		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
+		{
+			return true;
+		}
+
+		return false;
+	}
+
 	public MonolithAudio(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -40,11 +55,11 @@ public class MonolithAudio : ModuleRules
 				if (Directory.Exists(ProjectPluginsDir))
 				{
 					bHasMetaSound =
-						Directory.Exists(Path.Combine(ProjectPluginsDir, "Metasound"))
-						|| Directory.Exists(Path.Combine(ProjectPluginsDir, "Runtime", "Metasound"))
-						|| Directory.Exists(Path.Combine(ProjectPluginsDir, "Developer", "Metasound"))
-						|| Directory.Exists(Path.Combine(ProjectPluginsDir, "Experimental", "Metasound"))
-						|| Directory.Exists(Path.Combine(ProjectPluginsDir, "Marketplace", "Metasound"));
+						HasPluginDir(ProjectPluginsDir, "Metasound")
+						|| HasPluginDir(Path.Combine(ProjectPluginsDir, "Runtime"), "Metasound")
+						|| HasPluginDir(Path.Combine(ProjectPluginsDir, "Developer"), "Metasound")
+						|| HasPluginDir(Path.Combine(ProjectPluginsDir, "Experimental"), "Metasound")
+						|| HasPluginDir(Path.Combine(ProjectPluginsDir, "Marketplace"), "Metasound");
 				}
 			}
 
@@ -57,11 +72,11 @@ public class MonolithAudio : ModuleRules
 				// 3-location probe (engine Plugins/Runtime, Plugins/Marketplace, top-level Plugins fallback)
 				// Note: MetaSound is a built-in engine plugin (ships with UE 5.7) usually found in Runtime.
 				bHasMetaSound =
-					Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "Metasound"))
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Developer", "Metasound"))
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Experimental", "Metasound"))
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Marketplace", "Metasound"))
-					|| Directory.Exists(Path.Combine(EnginePluginsDir, "Metasound"));
+					HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "Metasound")
+					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Developer"), "Metasound")
+					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Experimental"), "Metasound")
+					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Marketplace"), "Metasound")
+					|| HasPluginDir(EnginePluginsDir, "Metasound");
 			}
 		}
 

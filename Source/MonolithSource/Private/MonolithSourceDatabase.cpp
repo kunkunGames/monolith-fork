@@ -141,7 +141,9 @@ static bool ExtractSignatureParams(const FString& Signature, const FString& Func
 static TArray<FString> SplitTopLevelParams(const FString& Params)
 {
 	TArray<FString> Out;
+	Out.Reserve(4);
 	FString Current;
+	Current.Reserve(Params.Len());
 	int32 AngleDepth = 0;
 	int32 ParenDepth = 0;
 	int32 BracketDepth = 0;
@@ -158,7 +160,7 @@ static TArray<FString> SplitTopLevelParams(const FString& Params)
 		if (Ch == TEXT(',') && AngleDepth == 0 && ParenDepth == 0 && BracketDepth == 0)
 		{
 			Out.Add(Current.TrimStartAndEnd());
-			Current.Empty();
+			Current.Reset();
 			continue;
 		}
 		Current += Ch;
@@ -563,7 +565,7 @@ static bool ExecuteMulti(FSQLiteDatabase& DB, const TCHAR* SQL)
 	auto FlushStatement = [&]() -> bool
 	{
 		FString Stmt = Current.TrimStartAndEnd();
-		Current.Empty();
+		Current.Reset();
 		if (Stmt.IsEmpty())
 		{
 			return true;

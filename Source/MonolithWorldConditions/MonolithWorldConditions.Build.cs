@@ -3,6 +3,30 @@ using System.IO;
 
 public class MonolithWorldConditions : ModuleRules
 {
+	private static bool HasPluginDir(string BaseDir, string PluginName)
+	{
+		if (!Directory.Exists(BaseDir))
+		{
+			return false;
+		}
+
+		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
+		{
+			return true;
+		}
+
+		string[] Dirs = Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly);
+		foreach (string Dir in Dirs)
+		{
+			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public MonolithWorldConditions(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -33,14 +57,14 @@ public class MonolithWorldConditions : ModuleRules
 			string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
 
 			bHasWorldConditions =
-				Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "WorldConditions"))
-				|| Directory.Exists(Path.Combine(EnginePluginsDir, "Experimental", "WorldConditions"))
-				|| Directory.Exists(Path.Combine(EnginePluginsDir, "WorldConditions"));
+				HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "WorldConditions")
+				|| HasPluginDir(Path.Combine(EnginePluginsDir, "Experimental"), "WorldConditions")
+				|| HasPluginDir(EnginePluginsDir, "WorldConditions");
 
 			bHasSmartObjects =
-				Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "SmartObjects"))
-				|| Directory.Exists(Path.Combine(EnginePluginsDir, "AI", "SmartObjects"))
-				|| Directory.Exists(Path.Combine(EnginePluginsDir, "SmartObjects"));
+				HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "SmartObjects")
+				|| HasPluginDir(Path.Combine(EnginePluginsDir, "AI"), "SmartObjects")
+				|| HasPluginDir(EnginePluginsDir, "SmartObjects");
 
 			if (Target.ProjectFile != null)
 			{
@@ -48,9 +72,9 @@ public class MonolithWorldConditions : ModuleRules
 				if (Directory.Exists(ProjectPluginsDir))
 				{
 					bHasWorldConditions = bHasWorldConditions
-						|| Directory.Exists(Path.Combine(ProjectPluginsDir, "WorldConditions"));
+						|| HasPluginDir(ProjectPluginsDir, "WorldConditions");
 					bHasSmartObjects = bHasSmartObjects
-						|| Directory.Exists(Path.Combine(ProjectPluginsDir, "SmartObjects"));
+						|| HasPluginDir(ProjectPluginsDir, "SmartObjects");
 				}
 			}
 		}

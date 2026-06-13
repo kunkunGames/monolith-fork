@@ -1115,13 +1115,23 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildErrors(const TShared
 		}
 		else if (Params->HasField(TEXT("since_seconds")))
 		{
-			SinceTimestamp = FPlatformTime::Seconds() - Params->GetNumberField(TEXT("since_seconds"));
+			double SinceSeconds = 0.0;
+			if (!Params->TryGetNumberField(TEXT("since_seconds"), SinceSeconds))
+			{
+				return FMonolithActionResult::Error(TEXT("since_seconds must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			SinceTimestamp = FPlatformTime::Seconds() - SinceSeconds;
 			SinceSource = TEXT("since_seconds");
 		}
 		else if (Params->HasField(TEXT("since")))
 		{
+			double Since = 0.0;
+			if (!Params->TryGetNumberField(TEXT("since"), Since))
+			{
+				return FMonolithActionResult::Error(TEXT("since must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
 			// Legacy relative-seconds param (kept for back-compat).
-			SinceTimestamp = FPlatformTime::Seconds() - Params->GetNumberField(TEXT("since"));
+			SinceTimestamp = FPlatformTime::Seconds() - Since;
 			SinceSource = TEXT("since");
 		}
 	}
@@ -3285,10 +3295,10 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAnimFrames(
 {
 	check(IsInGameThread());
 
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(TEXT("asset_path is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	if (!FApp::CanEverRender())
 	{
@@ -3356,9 +3366,25 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAnimFrames(
 	if (TimeSamples.Num() == 0)
 	{
 		int32 Count = 8;
-		if (Params->HasField(TEXT("count"))) { Count = FMath::Max(1, (int32)Params->GetNumberField(TEXT("count"))); }
+		if (Params->HasField(TEXT("count")))
+		{
+			double CountVal = 0.0;
+			if (!Params->TryGetNumberField(TEXT("count"), CountVal))
+			{
+				return FMonolithActionResult::Error(TEXT("count must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Count = FMath::Max(1, (int32)CountVal);
+		}
 		float DurationS = 1.0f;
-		if (Params->HasField(TEXT("duration"))) { DurationS = (float)Params->GetNumberField(TEXT("duration")); }
+		if (Params->HasField(TEXT("duration")))
+		{
+			double DurationVal = 0.0;
+			if (!Params->TryGetNumberField(TEXT("duration"), DurationVal))
+			{
+				return FMonolithActionResult::Error(TEXT("duration must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			DurationS = (float)DurationVal;
+		}
 		else if (AnimSeq) { DurationS = AnimSeq->GetPlayLength(); }
 		DurationS = FMath::Max(0.0f, DurationS);
 		for (int32 i = 0; i < Count; ++i)
@@ -3382,8 +3408,12 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAnimFrames(
 	int32 ResX = 512, ResY = 512;
 	if (Params->HasField(TEXT("resolution")))
 	{
-		const TArray<TSharedPtr<FJsonValue>>& ResArray = Params->GetArrayField(TEXT("resolution"));
-		if (ResArray.Num() >= 2) { ResX = (int32)ResArray[0]->AsNumber(); ResY = (int32)ResArray[1]->AsNumber(); }
+		const TArray<TSharedPtr<FJsonValue>>* ResArrayPtr = nullptr;
+		if (!Params->TryGetArrayField(TEXT("resolution"), ResArrayPtr) || !ResArrayPtr)
+		{
+			return FMonolithActionResult::Error(TEXT("resolution must be an array"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (ResArrayPtr->Num() >= 2) { ResX = (int32)(*ResArrayPtr)[0]->AsNumber(); ResY = (int32)(*ResArrayPtr)[1]->AsNumber(); }
 	}
 	FVector CameraLocation(200.0f, 0.0f, 100.0f);
 	FRotator CameraRotation(0.0f, 180.0f, 0.0f);
@@ -3395,15 +3425,31 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAnimFrames(
 		{
 			if ((*CameraObj)->HasField(TEXT("location")))
 			{
-				const TArray<TSharedPtr<FJsonValue>>& Loc = (*CameraObj)->GetArrayField(TEXT("location"));
-				if (Loc.Num() >= 3) CameraLocation = FVector(Loc[0]->AsNumber(), Loc[1]->AsNumber(), Loc[2]->AsNumber());
+				const TArray<TSharedPtr<FJsonValue>>* LocPtr = nullptr;
+				if (!(*CameraObj)->TryGetArrayField(TEXT("location"), LocPtr) || !LocPtr)
+				{
+					return FMonolithActionResult::Error(TEXT("camera.location must be an array"), FMonolithJsonUtils::ErrInvalidParams);
+				}
+				if (LocPtr->Num() >= 3) CameraLocation = FVector((*LocPtr)[0]->AsNumber(), (*LocPtr)[1]->AsNumber(), (*LocPtr)[2]->AsNumber());
 			}
 			if ((*CameraObj)->HasField(TEXT("rotation")))
 			{
-				const TArray<TSharedPtr<FJsonValue>>& Rot = (*CameraObj)->GetArrayField(TEXT("rotation"));
-				if (Rot.Num() >= 3) CameraRotation = FRotator(Rot[0]->AsNumber(), Rot[1]->AsNumber(), Rot[2]->AsNumber());
+				const TArray<TSharedPtr<FJsonValue>>* RotPtr = nullptr;
+				if (!(*CameraObj)->TryGetArrayField(TEXT("rotation"), RotPtr) || !RotPtr)
+				{
+					return FMonolithActionResult::Error(TEXT("camera.rotation must be an array"), FMonolithJsonUtils::ErrInvalidParams);
+				}
+				if (RotPtr->Num() >= 3) CameraRotation = FRotator((*RotPtr)[0]->AsNumber(), (*RotPtr)[1]->AsNumber(), (*RotPtr)[2]->AsNumber());
 			}
-			if ((*CameraObj)->HasField(TEXT("fov"))) { FOV = (float)(*CameraObj)->GetNumberField(TEXT("fov")); }
+			if ((*CameraObj)->HasField(TEXT("fov")))
+			{
+				double FOVVal = 0.0;
+				if (!(*CameraObj)->TryGetNumberField(TEXT("fov"), FOVVal))
+				{
+					return FMonolithActionResult::Error(TEXT("camera.fov must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+				}
+				FOV = (float)FOVVal;
+			}
 		}
 	}
 
@@ -3557,12 +3603,15 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAnimFrames(
 FMonolithActionResult FMonolithEditorActions::HandleImportTexture(
 	const TSharedPtr<FJsonObject>& Params)
 {
-	FString SourcePath = Params->GetStringField(TEXT("source_path"));
-	FString Destination = Params->GetStringField(TEXT("destination"));
-
-	if (SourcePath.IsEmpty() || Destination.IsEmpty())
+	FString SourcePath;
+	if (!Params->TryGetStringField(TEXT("source_path"), SourcePath) || SourcePath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("source_path and destination are required"));
+		return FMonolithActionResult::Error(TEXT("source_path is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString Destination;
+	if (!Params->TryGetStringField(TEXT("destination"), Destination) || Destination.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("destination is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// Verify source file exists
@@ -3586,7 +3635,11 @@ FMonolithActionResult FMonolithEditorActions::HandleImportTexture(
 		}
 		else
 		{
-			FString SettingsStr = Params->GetStringField(TEXT("settings"));
+			FString SettingsStr;
+			if (!Params->TryGetStringField(TEXT("settings"), SettingsStr))
+			{
+				return FMonolithActionResult::Error(TEXT("settings must be an object or a JSON string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
 			if (!SettingsStr.IsEmpty())
 			{
 				ParsedSettings = FMonolithJsonUtils::Parse(SettingsStr);
@@ -3705,7 +3758,11 @@ FMonolithActionResult FMonolithEditorActions::HandleImportTexture(
 			// LOD group
 			if (ParsedSettings->HasField(TEXT("lod_group")))
 			{
-				FString LODGroup = ParsedSettings->GetStringField(TEXT("lod_group"));
+				FString LODGroup;
+				if (!ParsedSettings->TryGetStringField(TEXT("lod_group"), LODGroup))
+				{
+					return FMonolithActionResult::Error(TEXT("lod_group must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+				}
 				if (LODGroup == TEXT("TEXTUREGROUP_WorldNormalMap")) Texture->LODGroup = TEXTUREGROUP_WorldNormalMap;
 				else if (LODGroup == TEXT("TEXTUREGROUP_Effects")) Texture->LODGroup = TEXTUREGROUP_Effects;
 				else if (LODGroup == TEXT("TEXTUREGROUP_EffectsNotFiltered")) Texture->LODGroup = TEXTUREGROUP_EffectsNotFiltered;
@@ -6997,6 +7054,56 @@ namespace MonolithEditorPieSmoke
 		return true;
 	}
 
+	static bool ValidateSmokeParams(const TSharedPtr<FJsonObject>& Params, FString& OutError)
+	{
+		if (!Params.IsValid())
+		{
+			return true;
+		}
+
+		if (Params->HasField(TEXT("discard_first_frames")))
+		{
+			double DiscardFrames = 0.0;
+			if (!Params->TryGetNumberField(TEXT("discard_first_frames"), DiscardFrames))
+			{
+				OutError = TEXT("discard_first_frames must be a number");
+				return false;
+			}
+		}
+
+		if (Params->HasField(TEXT("actor_setup")))
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+			if (!Params->TryGetArrayField(TEXT("actor_setup"), Arr) || !Arr)
+			{
+				OutError = TEXT("actor_setup must be an array");
+				return false;
+			}
+
+			for (int32 Index = 0; Index < Arr->Num(); ++Index)
+			{
+				const TSharedPtr<FJsonValue>& Val = (*Arr)[Index];
+				const TSharedPtr<FJsonObject>* Obj = nullptr;
+				if (!Val.IsValid() || !Val->TryGetObject(Obj) || !Obj || !Obj->IsValid())
+				{
+					continue;
+				}
+
+				if ((*Obj)->HasField(TEXT("count")))
+				{
+					double CountVal = 0.0;
+					if (!(*Obj)->TryGetNumberField(TEXT("count"), CountVal))
+					{
+						OutError = FString::Printf(TEXT("actor_setup[%d].count must be a number"), Index);
+						return false;
+					}
+				}
+			}
+		}
+
+		return true;
+	}
+
 	// Phase 8 (OG-E2/E5): parse the optional generic `actor_setup` block:
 	//   actor_setup: [
 	//     { class:"/Game/.../BP_Foo", count:3, locations:[[x,y,z],...],
@@ -7028,7 +7135,11 @@ namespace MonolithEditorPieSmoke
 			int32 Count = 1;
 			if ((*Obj)->HasField(TEXT("count")))
 			{
-				Count = static_cast<int32>((*Obj)->GetNumberField(TEXT("count")));
+				double CountVal = 0.0;
+				if ((*Obj)->TryGetNumberField(TEXT("count"), CountVal))
+				{
+					Count = static_cast<int32>(CountVal);
+				}
 			}
 			Entry.Count = FMath::Max(1, Count);
 
@@ -7159,8 +7270,12 @@ namespace MonolithEditorPieSmoke
 		// but excluded from valid/invalid accounting so an un-warmed first frame can't false-fail.
 		if (Params->HasField(TEXT("discard_first_frames")))
 		{
-			Session.DiscardFirstFrames = FMath::Clamp(
-				static_cast<int32>(Params->GetNumberField(TEXT("discard_first_frames"))), 0, 16);
+			double DiscardFrames = 0.0;
+			if (Params->TryGetNumberField(TEXT("discard_first_frames"), DiscardFrames))
+			{
+				Session.DiscardFirstFrames = FMath::Clamp(
+					static_cast<int32>(DiscardFrames), 0, 16);
+			}
 		}
 
 		// Phase 9 (OG-E3): session-scoped profiling. csv_profile starts the CSV profiler and
@@ -7608,8 +7723,20 @@ FMonolithActionResult FMonolithEditorActions::HandleRunPieSmoke(const TSharedPtr
 	Params->TryGetStringField(TEXT("marker"), Marker);
 
 	double Duration = 5.0;
-	if (Params->HasField(TEXT("duration"))) { Duration = Params->GetNumberField(TEXT("duration")); }
+	if (Params->HasField(TEXT("duration")))
+	{
+		if (!Params->TryGetNumberField(TEXT("duration"), Duration))
+		{
+			return FMonolithActionResult::Error(TEXT("duration must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 	Duration = FMath::Clamp(Duration, 0.0, 120.0);
+
+	FString SmokeParamError;
+	if (!ValidateSmokeParams(Params, SmokeParamError))
+	{
+		return FMonolithActionResult::Error(SmokeParamError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Compile-error policy: "refuse" (default, safe) returns an error + the offending
 	// Blueprints and never starts PIE; "suppress" proceeds and silences the engine's
@@ -7788,17 +7915,38 @@ FMonolithActionResult FMonolithEditorActions::HandleCapturePieMovementClip(const
 	Params->TryGetStringField(TEXT("marker"), Marker);
 
 	double Duration = 5.0;
-	if (Params->HasField(TEXT("duration"))) { Duration = Params->GetNumberField(TEXT("duration")); }
+	if (Params->HasField(TEXT("duration")))
+	{
+		if (!Params->TryGetNumberField(TEXT("duration"), Duration))
+		{
+			return FMonolithActionResult::Error(TEXT("duration must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 	Duration = FMath::Clamp(Duration, 0.0, 120.0);
 
 	double Interval = 0.25;
-	if (Params->HasField(TEXT("capture_interval"))) { Interval = Params->GetNumberField(TEXT("capture_interval")); }
+	if (Params->HasField(TEXT("capture_interval")))
+	{
+		if (!Params->TryGetNumberField(TEXT("capture_interval"), Interval))
+		{
+			return FMonolithActionResult::Error(TEXT("capture_interval must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 	Interval = FMath::Clamp(Interval, 0.05, 5.0);
+
+	FString SmokeParamError;
+	if (!ValidateSmokeParams(Params, SmokeParamError))
+	{
+		return FMonolithActionResult::Error(SmokeParamError, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	FString OutputDir;
 	if (Params->HasField(TEXT("output_path")))
 	{
-		OutputDir = Params->GetStringField(TEXT("output_path"));
+		if (!Params->TryGetStringField(TEXT("output_path"), OutputDir))
+		{
+			return FMonolithActionResult::Error(TEXT("output_path must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	else
 	{
@@ -7876,27 +8024,62 @@ FMonolithActionResult FMonolithEditorActions::HandleCapturePieMovementClip(const
 namespace MonolithEditorNavHarness
 {
 	// Parse a [x,y,z] (or {x,y,z}) JSON value into an FVector. Returns false if absent.
-	static bool ParseVec3(const TSharedPtr<FJsonObject>& Obj, const FString& Field, FVector& OutVec)
+	// If OutError is provided, a present-but-malformed field also writes a -32602-ready
+	// validation message so callers can reject bad params instead of silently defaulting.
+	static bool ParseVec3(const TSharedPtr<FJsonObject>& Obj, const FString& Field, FVector& OutVec,
+		FString* OutError = nullptr)
 	{
 		if (!Obj.IsValid() || !Obj->HasField(Field))
 		{
 			return false;
 		}
-		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
-		if (Obj->TryGetArrayField(Field, Arr) && Arr && Arr->Num() >= 3)
+
+		auto SetError = [&]()
 		{
-			OutVec = FVector((*Arr)[0]->AsNumber(), (*Arr)[1]->AsNumber(), (*Arr)[2]->AsNumber());
+			if (OutError)
+			{
+				*OutError = FString::Printf(TEXT("Invalid param: '%s' must be a numeric [x,y,z] array or an object with numeric x/y/z fields"), *Field);
+			}
+		};
+
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (Obj->TryGetArrayField(Field, Arr) && Arr)
+		{
+			double X = 0.0, Y = 0.0, Z = 0.0;
+			if (Arr->Num() < 3 ||
+				!(*Arr)[0].IsValid() || !(*Arr)[0]->TryGetNumber(X) ||
+				!(*Arr)[1].IsValid() || !(*Arr)[1]->TryGetNumber(Y) ||
+				!(*Arr)[2].IsValid() || !(*Arr)[2]->TryGetNumber(Z))
+			{
+				SetError();
+				return false;
+			}
+			OutVec = FVector(X, Y, Z);
 			return true;
 		}
 		const TSharedPtr<FJsonObject>* SubObj = nullptr;
-		if (Obj->TryGetObjectField(Field, SubObj) && SubObj && (*SubObj)->Values.Num() >= 3)
+		if (Obj->TryGetObjectField(Field, SubObj) && SubObj && SubObj->IsValid())
 		{
-			OutVec = FVector((*SubObj)->GetNumberField(TEXT("x")),
-							 (*SubObj)->GetNumberField(TEXT("y")),
-							 (*SubObj)->GetNumberField(TEXT("z")));
-			return true;
+			double X = 0.0, Y = 0.0, Z = 0.0;
+			if ((*SubObj)->TryGetNumberField(TEXT("x"), X) &&
+				(*SubObj)->TryGetNumberField(TEXT("y"), Y) &&
+				(*SubObj)->TryGetNumberField(TEXT("z"), Z))
+			{
+				OutVec = FVector(X, Y, Z);
+				return true;
+			}
+			SetError();
+			return false;
 		}
+		SetError();
 		return false;
+	}
+
+	static bool ParseVec3Param(const TSharedPtr<FJsonObject>& Obj, const FString& Field, FVector& OutVec, FString& OutError)
+	{
+		OutError.Empty();
+		ParseVec3(Obj, Field, OutVec, &OutError);
+		return OutError.IsEmpty();
 	}
 
 	static TArray<TSharedPtr<FJsonValue>> Vec3ToJson(const FVector& V)
@@ -8179,10 +8362,11 @@ namespace MonolithEditorNavHarness
 	// Spawn APlayerStart actors at each transform in a JSON array of
 	// {location:[x,y,z], rotation:[p,y,r]} objects. Appends one report row per spawn to
 	// OutRows and returns the spawned count. Only dirties packages it actually creates.
-	static int32 SpawnPlayerStarts(UWorld* World, const TArray<TSharedPtr<FJsonValue>>& StartsArr,
-		const FActorSpawnParameters& SpawnParams, TArray<TSharedPtr<FJsonValue>>& OutRows)
+	static bool SpawnPlayerStarts(UWorld* World, const TArray<TSharedPtr<FJsonValue>>& StartsArr,
+		const FActorSpawnParameters& SpawnParams, TArray<TSharedPtr<FJsonValue>>& OutRows,
+		int32& OutCount, FString& OutError)
 	{
-		int32 Count = 0;
+		OutCount = 0;
 		for (const TSharedPtr<FJsonValue>& Val : StartsArr)
 		{
 			const TSharedPtr<FJsonObject> StartObj = Val.IsValid() ? Val->AsObject() : nullptr;
@@ -8190,8 +8374,11 @@ namespace MonolithEditorNavHarness
 			FVector Rot = FVector::ZeroVector;
 			if (StartObj.IsValid())
 			{
-				ParseVec3(StartObj, TEXT("location"), Loc);
-				ParseVec3(StartObj, TEXT("rotation"), Rot);
+				if (!ParseVec3Param(StartObj, TEXT("location"), Loc, OutError) ||
+					!ParseVec3Param(StartObj, TEXT("rotation"), Rot, OutError))
+				{
+					return false;
+				}
 			}
 
 			APlayerStart* Start = World->SpawnActor<APlayerStart>(APlayerStart::StaticClass(), Loc,
@@ -8214,9 +8401,9 @@ namespace MonolithEditorNavHarness
 			Row->SetStringField(TEXT("name"), Start->GetActorNameOrLabel());
 			Row->SetArrayField(TEXT("location"), Vec3ToJson(Loc));
 			OutRows.Add(MakeShared<FJsonValueObject>(Row));
-			++Count;
+			++OutCount;
 		}
-		return Count;
+		return true;
 	}
 }
 
@@ -8278,8 +8465,12 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 		const TSharedPtr<FJsonObject>* FloorObj = nullptr;
 		if (Params->TryGetObjectField(TEXT("floor"), FloorObj) && FloorObj)
 		{
-			ParseVec3(*FloorObj, TEXT("location"), FloorLoc);
-			ParseVec3(*FloorObj, TEXT("scale"), FloorScale);
+			FString VecError;
+			if (!ParseVec3Param(*FloorObj, TEXT("location"), FloorLoc, VecError) ||
+				!ParseVec3Param(*FloorObj, TEXT("scale"), FloorScale, VecError))
+			{
+				return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+			}
 			FString MeshOverride;
 			if ((*FloorObj)->TryGetStringField(TEXT("mesh"), MeshOverride) && !MeshOverride.IsEmpty())
 			{
@@ -8317,8 +8508,12 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 		{
 			FVector CamLoc(0.0f, 0.0f, 1000.0f);
 			FVector CamRot(-60.0f, 0.0f, 0.0f);
-			ParseVec3(*CamObj, TEXT("location"), CamLoc);
-			ParseVec3(*CamObj, TEXT("rotation"), CamRot);
+			FString VecError;
+			if (!ParseVec3Param(*CamObj, TEXT("location"), CamLoc, VecError) ||
+				!ParseVec3Param(*CamObj, TEXT("rotation"), CamRot, VecError))
+			{
+				return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+			}
 
 			ACameraActor* Cam = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), CamLoc,
 				FRotator(CamRot.X, CamRot.Y, CamRot.Z), SpawnParams);
@@ -8352,7 +8547,11 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 				FString Name;
 				TpObj->TryGetStringField(TEXT("name"), Name);
 				FVector Loc = FVector::ZeroVector;
-				ParseVec3(TpObj, TEXT("location"), Loc);
+				FString VecError;
+				if (!ParseVec3Param(TpObj, TEXT("location"), Loc, VecError))
+				{
+					return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+				}
 
 				ATargetPoint* Tp = World->SpawnActor<ATargetPoint>(ATargetPoint::StaticClass(), Loc, FRotator::ZeroRotator, SpawnParams);
 				if (Tp)
@@ -8414,8 +8613,12 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 
 				FVector Loc = FVector::ZeroVector;
 				FVector Rot = FVector::ZeroVector;
-				ParseVec3(ActorObj, TEXT("location"), Loc);
-				ParseVec3(ActorObj, TEXT("rotation"), Rot);
+				FString VecError;
+				if (!ParseVec3Param(ActorObj, TEXT("location"), Loc, VecError) ||
+					!ParseVec3Param(ActorObj, TEXT("rotation"), Rot, VecError))
+				{
+					return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+				}
 
 				AActor* Spawned = World->SpawnActor<AActor>(ActorClass, Loc,
 					FRotator(Rot.X, Rot.Y, Rot.Z), SpawnParams);
@@ -8480,7 +8683,12 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 		const TArray<TSharedPtr<FJsonValue>>* StartsArr = nullptr;
 		if (Params->TryGetArrayField(TEXT("player_starts"), StartsArr) && StartsArr)
 		{
-			const int32 Spawned = SpawnPlayerStarts(World, *StartsArr, SpawnParams, SpawnedActors);
+			int32 Spawned = 0;
+			FString VecError;
+			if (!SpawnPlayerStarts(World, *StartsArr, SpawnParams, SpawnedActors, Spawned, VecError))
+			{
+				return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+			}
 			Result->SetNumberField(TEXT("player_starts_spawned"), Spawned);
 		}
 	}
@@ -8492,8 +8700,12 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 		const TSharedPtr<FJsonObject>* NavObj = nullptr;
 		if (Params->TryGetObjectField(TEXT("nav_bounds"), NavObj) && NavObj)
 		{
-			ParseVec3(*NavObj, TEXT("location"), NavLoc);
-			ParseVec3(*NavObj, TEXT("extent"), NavExtent);
+			FString VecError;
+			if (!ParseVec3Param(*NavObj, TEXT("location"), NavLoc, VecError) ||
+				!ParseVec3Param(*NavObj, TEXT("extent"), NavExtent, VecError))
+			{
+				return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 
 		TSharedPtr<FJsonObject> NavParams = MakeShared<FJsonObject>();
@@ -8512,7 +8724,13 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 	//    for async tile generation).
 	{
 		double NavTimeout = 30.0;
-		if (Params->HasField(TEXT("nav_timeout"))) { NavTimeout = Params->GetNumberField(TEXT("nav_timeout")); }
+		if (Params->HasField(TEXT("nav_timeout")))
+		{
+			if (!Params->TryGetNumberField(TEXT("nav_timeout"), NavTimeout))
+			{
+				return FMonolithActionResult::Error(TEXT("nav_timeout must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
 
 		TSharedPtr<FJsonObject> RebuildParams = MakeShared<FJsonObject>();
 		RebuildParams->SetBoolField(TEXT("save_after"), false); // we save the level explicitly below
@@ -8656,7 +8874,12 @@ FMonolithActionResult FMonolithEditorActions::HandleAuthorMapSettings(const TSha
 		const TArray<TSharedPtr<FJsonValue>>* StartsArr = nullptr;
 		if (Params->TryGetArrayField(TEXT("player_starts"), StartsArr) && StartsArr)
 		{
-			const int32 Spawned = SpawnPlayerStarts(World, *StartsArr, SpawnParams, SpawnedActors);
+			int32 Spawned = 0;
+			FString VecError;
+			if (!SpawnPlayerStarts(World, *StartsArr, SpawnParams, SpawnedActors, Spawned, VecError))
+			{
+				return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+			}
 			Result->SetNumberField(TEXT("player_starts_spawned"), Spawned);
 		}
 	}
@@ -8695,8 +8918,12 @@ FMonolithActionResult FMonolithEditorActions::HandleAuthorMapSettings(const TSha
 
 				FVector Loc = FVector::ZeroVector;
 				FVector Rot = FVector::ZeroVector;
-				ParseVec3(ActorObj, TEXT("location"), Loc);
-				ParseVec3(ActorObj, TEXT("rotation"), Rot);
+				FString VecError;
+				if (!ParseVec3Param(ActorObj, TEXT("location"), Loc, VecError) ||
+					!ParseVec3Param(ActorObj, TEXT("rotation"), Rot, VecError))
+				{
+					return FMonolithActionResult::Error(VecError, FMonolithJsonUtils::ErrInvalidParams);
+				}
 
 				AActor* Spawned = World->SpawnActor<AActor>(ActorClass, Loc,
 					FRotator(Rot.X, Rot.Y, Rot.Z), SpawnParams);

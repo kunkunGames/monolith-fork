@@ -382,11 +382,10 @@ FMonolithActionResult FMonolithUIActions::HandleCreateWidgetBlueprint(const TSha
 // --- get_widget_tree ---
 FMonolithActionResult FMonolithUIActions::HandleGetWidgetTree(const TSharedPtr<FJsonObject>& Params)
 {
+    FMonolithActionResult ParamError;
     FString AssetPath;
-    if (!Params.IsValid() || !Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("missing required asset_path parameter"));
-    }
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, ParamError))
+        return ParamError;
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -678,14 +677,13 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
 // --- remove_widget ---
 FMonolithActionResult FMonolithUIActions::HandleRemoveWidget(const TSharedPtr<FJsonObject>& Params)
 {
+    FMonolithActionResult ParamError;
     FString AssetPath;
-    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, ParamError))
+        return ParamError;
     FString WidgetName;
-    Params->TryGetStringField(TEXT("widget_name"), WidgetName);
-    if (WidgetName.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing required param: widget_name"));
-    }
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("widget_name"), WidgetName, ParamError))
+        return ParamError;
 
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
@@ -741,12 +739,16 @@ FMonolithActionResult FMonolithUIActions::HandleSetWidgetProperty(const TSharedP
         return FMonolithActionResult::Error(TEXT("set_widget_property: Params is null"));
     }
 
+    FMonolithActionResult ParamError;
     FString AssetPath;
-    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, ParamError))
+        return ParamError;
     FString WidgetName;
-    Params->TryGetStringField(TEXT("widget_name"), WidgetName);
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("widget_name"), WidgetName, ParamError))
+        return ParamError;
     FString PropertyName;
-    Params->TryGetStringField(TEXT("property_name"), PropertyName);
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("property_name"), PropertyName, ParamError))
+        return ParamError;
     const bool bRawMode = MonolithUIInternal::GetOptionalBool(Params, TEXT("raw_mode"), false);
 
     // Bug #6 fix (2026-05-16 UI gap audit): accept BOTH `value` and
@@ -921,8 +923,10 @@ FMonolithActionResult FMonolithUIActions::HandleSetWidgetProperty(const TSharedP
 // MonolithBlueprintCompileActions.cpp:80 (HandleCompileBlueprint).
 FMonolithActionResult FMonolithUIActions::HandleCompileWidget(const TSharedPtr<FJsonObject>& Params)
 {
+    FMonolithActionResult ParamError;
     FString AssetPath;
-    Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, ParamError))
+        return ParamError;
     FMonolithActionResult Err;
     UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
     if (!WBP) return Err;
