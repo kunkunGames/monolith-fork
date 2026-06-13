@@ -262,7 +262,9 @@ bool FInputActionsRejectMalformedOptionalParamsTest::RunTest(const FString& Para
 		TestTrue(TEXT("Result bindings should have 1 item"), ResultBindings && ResultBindings->Num() == 1);
 		const TSharedPtr<FJsonObject>* ErrObj = nullptr;
 		TestTrue(TEXT("Result bindings item should be object"), (*ResultBindings)[0]->TryGetObject(ErrObj));
-		TestTrue(TEXT("Result bindings item should mention invalid ability_class"), (*ErrObj)->GetStringField(TEXT("error")).Contains(TEXT("ability_class: must be a string")));
+		FString ErrorStr;
+		bool bHasError = ErrObj && (*ErrObj)->TryGetStringField(TEXT("error"), ErrorStr);
+		TestTrue(TEXT("Result bindings item should mention invalid ability_class"), bHasError && ErrorStr.Contains(TEXT("ability_class: must be a string")));
 	}
 
 	auto ExecuteScaffoldInputBindingComponent = [](const TSharedPtr<FJsonObject>& Params)
