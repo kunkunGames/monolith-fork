@@ -32,8 +32,9 @@
 // MonolithUIInternal — `MakeOptionalDepUnavailableError` (§5.5 contract helper).
 #include "MonolithUIInternal.h"
 
-// Required for LoadObject<UMaterialInterface>(...) in HandleApplyPreset.
+// Required for UMaterialInterface type in HandleApplyPreset.
 #include "Materials/MaterialInterface.h"
+#include "MonolithAssetUtils.h"
 
 #include "Math/Color.h"
 #include "Math/Vector2D.h"
@@ -1461,7 +1462,7 @@ FMonolithActionResult MonolithUI::FEffectSurfaceActions::HandleApplyPreset(const
     if (Params->TryGetStringField(TEXT("parent_material"), ParentMaterialPath)
         && !ParentMaterialPath.IsEmpty())
     {
-        UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, *ParentMaterialPath);
+        UMaterialInterface* Parent = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(ParentMaterialPath);
         if (Parent)
         {
             CallSetBaseMaterialReflectively(Surface, Parent);
