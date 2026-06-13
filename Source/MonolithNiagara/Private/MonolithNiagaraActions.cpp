@@ -15648,8 +15648,18 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TShar
 // ============================================================================
 FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterParent(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("asset_path and emitter are required"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (SystemPath.IsEmpty() || EmitterHandleId.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("asset_path and emitter are required"));
