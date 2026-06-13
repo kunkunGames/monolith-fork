@@ -288,8 +288,9 @@ bool FMonolithUIErrorFormattingRequestIdEchoesTest::RunTest(const FString& /*Par
         TestTrue(TEXT("Validate-fail path returns success-on-the-wire"), R.bSuccess);
         if (R.Result.IsValid())
         {
+            FString OutRequestId;
             TestFalse(TEXT("request_id field is omitted when caller didn't supply one"),
-                R.Result->HasField(TEXT("request_id")));
+                R.Result->TryGetStringField(TEXT("request_id"), OutRequestId));
         }
     }
 

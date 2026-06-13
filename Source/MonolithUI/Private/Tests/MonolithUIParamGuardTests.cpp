@@ -93,7 +93,10 @@ bool FMonolithUIParamGuardSetImageMissingNumericField::RunTest(const FString& Pa
 
     const FMonolithActionResult Result = FMonolithUIStylingActions::HandleSetImage(Params);
     TestTrue(TEXT("set_image tolerates missing size.y numeric field"), Result.bSuccess);
-    TestEqual(TEXT("set_image applied one property"), Result.Result.IsValid() ? Result.Result->GetIntegerField(TEXT("properties_set")) : 0, 1);
+    int32 PropertiesSet = 0;
+    const bool bHasPropertiesSet = Result.Result.IsValid() && Result.Result->TryGetNumberField(TEXT("properties_set"), PropertiesSet);
+    TestTrue(TEXT("properties_set field is present"), bHasPropertiesSet);
+    TestEqual(TEXT("set_image applied one property"), PropertiesSet, 1);
 
     return true;
 }

@@ -133,7 +133,9 @@ bool FMonolithUIMenuSpecDeferredAggregationPartialTest::RunTest(const FString& /
 	TestFalse(TEXT("deferred aggregation is not a successful full build"), bSuccess);
 	TestFalse(TEXT("deferred aggregation did not commit all requested work"), bCommittedAllRequestedWork);
 	TestEqual(TEXT("top-level status is partial_non_mutating"), Status, FString(TEXT("partial_non_mutating")));
-	TestTrue(TEXT("deferred aggregation is echoed"), Out->HasField(TEXT("deferred_aggregation")));
+	const TSharedPtr<FJsonObject>* DeferredObj = nullptr;
+	const bool bHasDeferred = Out->TryGetObjectField(TEXT("deferred_aggregation"), DeferredObj);
+	TestTrue(TEXT("deferred aggregation is echoed"), bHasDeferred && DeferredObj && (*DeferredObj)->Values.Num() > 0);
 
 	return true;
 }
