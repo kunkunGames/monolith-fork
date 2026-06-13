@@ -383,6 +383,7 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateMenu(const TShared
     const TArray<TSharedPtr<FJsonValue>>* ButtonsArray = nullptr;
     if (Params->TryGetArrayField(TEXT("buttons"), ButtonsArray))
     {
+        ButtonLabels.Reserve(ButtonsArray->Num());
         for (const auto& Val : *ButtonsArray)
         {
             ButtonLabels.Add(Val->AsString());
@@ -511,6 +512,7 @@ FMonolithActionResult FMonolithUITemplateActions::HandleCreateSettingsPanel(cons
     const TArray<TSharedPtr<FJsonValue>>* TabsArray = nullptr;
     if (Params->TryGetArrayField(TEXT("tabs"), TabsArray))
     {
+        Tabs.Reserve(TabsArray->Num());
         for (const auto& Val : *TabsArray)
         {
             Tabs.Add(Val->AsString());

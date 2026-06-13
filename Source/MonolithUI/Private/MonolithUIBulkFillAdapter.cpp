@@ -603,7 +603,9 @@ namespace MonolithUIBulkFillInternal
 			{
 				if (UEnum* E = EnumProp->GetEnum())
 				{
-					for (int32 i = 0; i < E->NumEnums() - 1; ++i)
+					const int32 EnumValueCount = FMath::Max(0, E->NumEnums() - 1);
+					Child.EnumValues.Reserve(EnumValueCount);
+					for (int32 i = 0; i < EnumValueCount; ++i)
 					{
 						Child.EnumValues.Add(E->GetNameStringByIndex(i));
 					}
@@ -772,7 +774,9 @@ FSchemaDescriptor FMonolithUIBulkFillAdapter::UIDescribe(const FString& TargetAs
 				{
 					if (UEnum* E = EnumP->GetEnum())
 					{
-						for (int32 i = 0; i < E->NumEnums() - 1; ++i)
+						const int32 EnumValueCount = FMath::Max(0, E->NumEnums() - 1);
+						Child.EnumValues.Reserve(EnumValueCount);
+						for (int32 i = 0; i < EnumValueCount; ++i)
 						{
 							Child.EnumValues.Add(E->GetNameStringByIndex(i));
 						}
@@ -819,7 +823,9 @@ FSchemaDescriptor FMonolithUIBulkFillAdapter::UIDescribe(const FString& TargetAs
 			{
 				if (UEnum* E = EnumP->GetEnum())
 				{
-					for (int32 i = 0; i < E->NumEnums() - 1; ++i)
+					const int32 EnumValueCount = FMath::Max(0, E->NumEnums() - 1);
+					Child.EnumValues.Reserve(EnumValueCount);
+					for (int32 i = 0; i < EnumValueCount; ++i)
 					{
 						Child.EnumValues.Add(E->GetNameStringByIndex(i));
 					}
