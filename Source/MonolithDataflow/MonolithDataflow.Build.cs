@@ -3,6 +3,30 @@ using System.IO;
 
 public class MonolithDataflow : ModuleRules
 {
+	private static bool HasPluginDir(string BaseDir, string PluginName)
+	{
+		if (!Directory.Exists(BaseDir))
+		{
+			return false;
+		}
+
+		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
+		{
+			return true;
+		}
+
+		string[] Dirs = Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly);
+		foreach (string Dir in Dirs)
+		{
+			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public MonolithDataflow(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -31,10 +55,7 @@ public class MonolithDataflow : ModuleRules
 			if (Target.ProjectFile != null)
 			{
 				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-				if (Directory.Exists(ProjectPluginsDir))
-				{
-					bHasDataflowRuntime = Directory.Exists(Path.Combine(ProjectPluginsDir, "Dataflow"));
-				}
+				bHasDataflowRuntime = HasPluginDir(ProjectPluginsDir, "Dataflow");
 			}
 
 			if (!bHasDataflowRuntime)
@@ -42,17 +63,10 @@ public class MonolithDataflow : ModuleRules
 				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
 				string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
 
-				string ExperimentalDir = Path.Combine(EnginePluginsDir, "Experimental", "Dataflow");
-				string RuntimeDir = Path.Combine(EnginePluginsDir, "Runtime", "Dataflow");
-				string RootDir = Path.Combine(EnginePluginsDir, "Dataflow");
-
 				bHasDataflowRuntime =
-					Directory.Exists(ExperimentalDir)
-					|| Directory.Exists(RuntimeDir)
-					|| Directory.Exists(RootDir)
-					|| (Directory.Exists(Path.Combine(EnginePluginsDir, "Experimental")) && Directory.GetDirectories(Path.Combine(EnginePluginsDir, "Experimental"), "Dataflow_*", SearchOption.TopDirectoryOnly).Length > 0)
-					|| (Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime")) && Directory.GetDirectories(Path.Combine(EnginePluginsDir, "Runtime"), "Dataflow_*", SearchOption.TopDirectoryOnly).Length > 0)
-					|| (Directory.Exists(EnginePluginsDir) && Directory.GetDirectories(EnginePluginsDir, "Dataflow_*", SearchOption.TopDirectoryOnly).Length > 0)
+					HasPluginDir(Path.Combine(EnginePluginsDir, "Experimental"), "Dataflow")
+					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "Dataflow")
+					|| HasPluginDir(EnginePluginsDir, "Dataflow")
 					|| (Directory.Exists(Path.Combine(EngineDir, "Source", "Runtime", "Experimental", "Dataflow", "Core"))
 						&& Directory.Exists(Path.Combine(EngineDir, "Source", "Runtime", "Experimental", "Dataflow", "Engine")));
 			}
