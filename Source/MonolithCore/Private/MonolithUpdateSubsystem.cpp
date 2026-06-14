@@ -952,6 +952,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("if exist \"%s\\.clangd\" xcopy /s /e /i /q /h \"%s\\.clangd\" \"%s\\.clangd\\\"\r\n")
 
 		TEXT("if exist \"%s\\.code-review-graph\" xcopy /s /e /i /q /h \"%s\\.code-review-graph\" \"%s\\.code-review-graph\\\"\r\n")
+		TEXT("if exist \"%s\\Logs\" xcopy /s /e /i /q /h \"%s\\Logs\" \"%s\\Logs\\\"\r\n")
 		TEXT("rem Preserve Saved/ (contains EngineSource.db, ProjectIndex.db, previews, etc.)\r\n")
 		TEXT("if exist \"%s\\Saved\" (\r\n")
 		TEXT("    echo  Preserving Saved directory...\r\n")
@@ -984,6 +985,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*WinPluginDir,
 		// Preserve .git from backup
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
@@ -1035,6 +1037,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("[ -d \"%s/.clangd\" ] && cp -r \"%s/.clangd\" \"%s/.clangd\"\n")
 
 		TEXT("[ -d \"%s/.code-review-graph\" ] && cp -r \"%s/.code-review-graph\" \"%s/.code-review-graph\"\n")
+		TEXT("[ -d \"%s/Logs\" ] && cp -r \"%s/Logs\" \"%s/Logs\"\n")
 		TEXT("# Preserve Saved/ (contains EngineSource.db, ProjectIndex.db, previews, etc.)\n")
 		TEXT("[ -d \"%s/Saved\" ] && cp -r \"%s/Saved\" \"%s/Saved\"\n")
 		TEXT("rm -rf \"%s\" \"%s\"\n")
@@ -1046,6 +1049,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*PluginDir,
 		// Preserve .git from backup
+		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
