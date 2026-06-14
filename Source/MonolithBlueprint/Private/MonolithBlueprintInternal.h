@@ -91,7 +91,8 @@ namespace MonolithBlueprintInternal
 	inline void AddGraphArray(
 		TArray<TSharedPtr<FJsonValue>>& OutArr,
 		const TArray<TObjectPtr<UEdGraph>>& Graphs,
-		const FString& Type)
+		const FString& Type,
+		const FString& InterfaceName = FString())
 	{
 		for (const auto& Graph : Graphs)
 		{
@@ -100,6 +101,11 @@ namespace MonolithBlueprintInternal
 			GObj->SetStringField(TEXT("name"), Graph->GetName());
 			GObj->SetStringField(TEXT("type"), Type);
 			GObj->SetNumberField(TEXT("node_count"), Graph->Nodes.Num());
+			// Disambiguate interface-implementation graphs by their interface (Gap 7).
+			if (!InterfaceName.IsEmpty())
+			{
+				GObj->SetStringField(TEXT("interface"), InterfaceName);
+			}
 			OutArr.Add(MakeShared<FJsonValueObject>(GObj));
 		}
 	}
@@ -124,6 +130,12 @@ namespace MonolithBlueprintInternal
 		if (UEdGraph* G = SearchArray(BP->FunctionGraphs)) return G;
 		if (UEdGraph* G = SearchArray(BP->MacroGraphs)) return G;
 		if (UEdGraph* G = SearchArray(BP->DelegateSignatureGraphs)) return G;
+
+		// Interface-implementation function graphs live on a separate array (Gap 7).
+		for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
+		{
+			if (UEdGraph* G = SearchArray(Iface.Graphs)) return G;
+		}
 		return nullptr;
 	}
 
@@ -487,6 +499,10 @@ namespace MonolithBlueprintInternal
 					MacroNode->GetMacroGraph()->GetName());
 			}
 		}
+
+		// UK2Node_PropertyAccess — emit the resolved property-access path (Gap 1).
+		// The class is MinimalAPI/unlinkable, so this is a string-match + reflective read.
+		MonolithPropertyAccessReader::SerializePropertyAccessBlock(Node, NObj);
 
 		TArray<TSharedPtr<FJsonValue>> PinsArr;
 		for (const UEdGraphPin* Pin : Node->Pins)

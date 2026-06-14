@@ -2,13 +2,15 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.18.1 (Beta)
+**Version:** 0.20.0 (Beta)
 
 ---
 
 ## MonolithEditor
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, Json, JsonUtilities, MessageLog, LiveCoding (Win64 only)
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, Json, JsonUtilities, MessageLog, EnhancedInput, LiveCoding (Win64 only)
+
+> **`EnhancedInput` dep (Gap 4, 2026-06-10):** added for `pie_inject_input_action` (`UEnhancedInputLocalPlayerSubsystem::InjectInputForAction`). It is a stock, always-enabled engine plugin module — release-build safe, so it carries no `WITH_*` gate (same rationale as the existing `AIModule` dep).
 
 ### Classes
 
@@ -38,7 +40,27 @@ The per-manager `bCanDoDeferredLayoutSave` switch would be the precise off-switc
 |--------|-------------|
 | `trigger_build` | Live Coding compile. `wait` param for synchronous. Windows-only. Auto-enables Live Coding |
 | `live_compile` | Trigger Live Coding hot-reload compile. Alternative to trigger_build |
-| `get_build_errors` | Build errors/warnings from log capture, scoped to a time window and bucketed into `compile_errors` (LogLiveCoding/LogCompile/LogLinker) vs `other_errors`. **Window params** (precedence high→low): `since_marker` (errors after the latest log line containing this token — UE_LOG a marker right before compiling; reports `marker_found`), `since_iso` (absolute ISO-8601 cutoff), `since_seconds` / `since` (legacy alias; last N seconds), else last compile. `clear_baseline` (default false) stamps a fresh `now` baseline and returns immediately — the "I just kicked off a build, ignore prior noise" reset. `exclude_categories` (default `[LogPython, LogMonolith]`) bucketed under `other_errors` and kept OUT of the headline `error_count` (never hidden). `category` / `compile_only` narrow the query. Max 500 entries |
+| `get_build_errors` | Build errors/warnings from log capture, scoped to a time window and bucketed into `compile_errors` (LogLiveCoding/LogCompile/LogLinker) vs `other_errors`. **Window params** (precedence high→low): `since_marker` (errors after the latest log line containing this token — UE_LOG a marker right before compiling; reports `marker_found`), `since_iso` (absolute ISO-8601 cutoff), `since_seconds` / `since` (legacy alias; last N seconds), else last compile. `clear_baseline` (default false) stamps a fresh `now` baseline and returns immediately — the "I just kicked off a build, ignore prior noise" reset. `exclude_categories` (default `[LogPython, LogMonolith]`) bucketed under `other_errors` and kept OUT of the headline `error_count` (never hidden). `category` / `compile_only` narrow the query. Max 500 entries. **`fix_hints[]` (Phase 3, item 8 — ADDITIVE):** see Fix Hints below |
+
+### `get_build_errors` Fix Hints (Phase 3, item 8 — ADDITIVE)
+
+`get_build_errors` appends a deterministic error→fix-hint pattern table. The output is **purely additive** — every pre-existing field (`error_count`, `errors[]`, `compile_errors[]`, `other_errors[]`, `warnings[]`, `since`, `since_source`, `excluded_categories[]`, and each error object's `message` / `category` / `verbosity`) is **byte-identical** to the pre-Phase-3 response. Two additions:
+
+- **Top-level `fix_hints[]`** — one object per matched error: `{ error_index, pattern, hint }`.
+- **Per-error `fix_hint`** — a string stamped onto each matched error object in `errors[]` (the ONLY new field on those objects).
+
+Pattern table:
+
+| `pattern` | Matches | Hint |
+|-----------|---------|------|
+| `LNK2019_Z_Construct` | `LNK2019` on a `Z_Construct_*` symbol | Resolves the referenced UClass's owning module via the **borrowed** source DB and names the module to add to Build.cs (generic hint when the DB is unavailable). |
+| `LNK2019_DeveloperSettings` | `LNK2019` referencing `UDeveloperSettings`/`DeveloperSettings` | "Lives in the 'DeveloperSettings' module, not 'Engine'." |
+| `C4996_deprecation` | `C4996` | Recovers the deprecated identifier, attaches its `symbol_deprecations` message (`GetDeprecationsBatch`); generic hint otherwise. |
+| `generated_h_not_last` | message contains `generated.h` + `last` | "The `*.generated.h` include must be the LAST `#include`." |
+
+**Source DB borrow:** the hint builder borrows `FMonolithSourceDatabase::GetRawHandle()` under `FScopeLock(GetLock())` on the game thread (the same one-way Editor→Source borrow the RI adapter uses); the prepared statement is finalized before the lock releases, never a second handle on `EngineSource.db`. It degrades gracefully (generic hint) when the DB is not yet indexed.
+
+**No offline parity:** `fix_hints` is **NOT offline-served** — `get_build_errors` reads the in-process log capture ring buffer, which the offline `monolith_query.exe` / `monolith_offline.py` cannot reach. (Items 7 and 9 in the `source` namespace ARE offline-served; item 8 is live-only.)
 | `get_build_status` | Live Coding availability, started, enabled, compiling status |
 | `get_build_summary` | Total error/warning counts + compile status |
 | `search_build_output` | Search build log by `pattern`. Default limit 100, max 1000 |
@@ -129,6 +151,33 @@ Plus `capture_scene_preview` (in Base section above) was **extended** in v0.16.0
 | Action | Description |
 |--------|-------------|
 | `author_map_settings` | Apply WorldSettings + PlayerStart settings to ANY currently-open map (not locked to the nav-harness path). Params: `game_mode_override` (class path → `AWorldSettings::DefaultGameMode`, assigned after `WorldSettings->Modify()`), `player_starts[]` (array of transforms → spawn `APlayerStart`s, each `SetFolderPath`'d). Map mutation dirties the package by design; only dirties on an actual change, and never leaves the map half-authored on a mid-apply failure. |
+
+**Live-PIE object read/call (Gap 8 — 2 — `MonolithPieObjectActions.cpp`)**
+
+| Action | Description |
+|--------|-------------|
+| `pie_get_object_properties` | Read live UPROPERTY values off a resolved PIE object by dotted member path. Resolve target via `actor_label` (exact label) / `object_name` (exact name) / `class_name` (class-name substring, first match), optionally hopping to a `component_name` or (`anim_instance=true`) the skeletal mesh's active anim instance. `properties[]` are dotted paths (e.g. `CharacterProperties.OrientationIntent`) resolved through the shared `MonolithStructField` resolver (hoisted to MonolithCore) — descends nested structs and matches `UUserDefinedStruct` members by friendly (authored) name, reading the GUID-suffixed internal fields editor python cannot. Returns each path's JSON value (scalars directly; enums/structs/vectors as export text via the same `ReadResolvedValue` conventions as `sample_pie_anim_instance`). **Read-only.** Clean error when PIE is not running. |
+| `pie_call_function` | Call a BlueprintCallable UFunction/event on a resolved PIE object (same target resolution as `pie_get_object_properties`). Resolves the function via `FindFunctionByName`; requires `FUNC_BlueprintCallable` unless `allow_non_callable=true`; **rejects `FUNC_Net` (replicated) and latent (`Latent` metadata) functions** with clean errors. Allocates a `ParmsSize` parameter frame, `InitializeValue`/`DestroyValue` per-property via an RAII scoped helper, marshals JSON `args` by parameter name (primitives via `ImportText_Direct`; structs incl. `UUserDefinedStruct` by resolving each friendly field to its internal property then per-field import), invokes `ProcessEvent`, and reads back `CPF_OutParm`/`CPF_ReturnParm` into `out_params`/`return_value`. v1 scope: top-level args + ONE level of nested UDS (deeper rejected). **MUTATES LIVE PIE STATE** — not read-only. Clean error when PIE is not running. |
+
+**Time-series PIE sampling (Gap 9 — registered under the `animation` namespace; `MonolithPieTimeseries.cpp` + `MonolithEditorActions::StartTimeseriesSession`)**
+
+`sample_pie_timeseries` is IMPLEMENTED in MonolithEditor (it reuses the async PIE-smoke session machinery — `FPieSmokeSessionManager`, the shared frame observer, `poll_pie_smoke`/`stop_pie_smoke`) but REGISTERED under the **`animation`** namespace string (the registry is namespace-string-keyed; verification ergonomics match `sample_pie_anim_instance`). Async lifecycle identical to `run_pie_smoke`: returns `{session_id, status:'running'}`; poll/stop via the existing PIE-smoke actions. Per sample tick it reads dotted UDS-friendly `variables[]` off the resolved target (gated by `sample_interval`, capped by `max_samples`) and fires typed `provocations[]` once each when session-elapsed crosses `time`: `set_control_rotation` (`APlayerController::SetControlRotation`), `add_movement_input` (`APawn::AddMovementInput`), `jump` (`ACharacter::Jump` — target must be a Character), `console_command` (PIE console exec). `poll_pie_smoke` returns the full per-sample `[{t, vars:{...}}]` under `timeseries` (gated by completion / `include_samples`) and the provocation fire log under `provocations`. World-validity + `BeginTearingDown` teardown guards are inherited from the smoke session.
+
+**Deterministic PIE input / control driving (Gap 4 — 3 — `MonolithPieInputActions.cpp`; 2026-06-10)**
+
+Scripted, camera-independent PIE driving. Adds the `EnhancedInput` Build.cs dep (see Dependencies note above). All three **mutate live PIE state** and no-op with a clean error when PIE is not running.
+
+| Action | Description |
+|--------|-------------|
+| `pie_set_control_rotation` | Set the control rotation on a PIE player controller (`APlayerController::SetControlRotation`). Params: `pitch` / `yaw` / `roll` (degrees, omitted components default to 0), optional `player_index` (default 0). `hold_frames` (default 0) re-applies the rotation each frame for that many frames so it can outlast a per-tick camera/control system that re-writes `ControlRotation` — **best-effort, not frame-perfect**: a camera director that runs later in the frame can still win that frame. The re-apply hook clears itself on PIE end. |
+| `pie_inject_input_action` | Inject a value for an Enhanced Input action into a live PIE local player (`UEnhancedInputLocalPlayerSubsystem::InjectInputForAction`), running that action's modifiers and triggers as if real input arrived. `input_action` is a UInputAction asset path (`/Game/...`) or short asset name (registry-resolved, first match). `value` maps to `FInputActionValue` by JSON shape: bool → Boolean, number → Axis1D, array[2] → Axis2D, array[3] → Axis3D. Optional `player_index` (default 0); `repeat_frames` (default 1) re-injects each frame. |
+| `pie_possess_spectator_free` | Detach a PIE player controller to a free-fly spectator pawn, or re-possess the original. `enable=true` stores + unpossesses the current pawn and enters the Spectating state (`ChangeState(NAME_Spectating)`, which spawns a spectator pawn from the game mode's `SpectatorClass`); `enable=false` re-possesses the stored original (`ChangeState(NAME_Playing)` + Possess). The original is held as a weak pointer, cleared on PIE end. Note: free-fly spawning depends on the game mode providing a `SpectatorClass`; with none configured the controller still enters Spectating but no pawn is created. Optional `player_index` (default 0). |
+
+**Stat-group counter readout (Gap 10 — 1 — `MonolithStatActions.cpp`; 2026-06-10)**
+
+| Action | Description |
+|--------|-------------|
+| `get_stat_group_values` | Read a stats group programmatically into a structured response. Enables high-performance collection for `group_name` (full `STATGROUP_Anim` or short `Anim` form; project-defined groups work the same), reads the most recent settled stat frame(s) from the stats thread, and returns each stat's counter value (int64/double) and cycle-stat timing in milliseconds. `sample_frames` (default 1; >1 aggregates per-stat min/avg/max over the last N already-settled frames). A group this action enables is disabled again on completion (a group already collecting is left as-is). **`#if STATS`-gated** — compiled into Development editor builds but NOT Shipping/Test; off-gate the handler returns a clean "stats system not compiled in" error (the registration itself is unconditional). Reads the LIVE stats stream, which only produces frames while overall collection is primary-enabled — for reliable data have stats already active (PIE running with an on-screen stat, or call `run_console_command("stat <group>")` first). If no settled frame exists yet it returns `settled=false` with zero stats; retry once the editor/PIE has advanced a frame with collection active. |
 
 #### Structured `actor_setup` (on the PIE-smoke actions; 2026-06-07)
 

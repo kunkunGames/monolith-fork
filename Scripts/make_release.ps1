@@ -118,7 +118,7 @@ if (-not $SkipBuild) {
     try {
         # Non-unity build catches missing includes and unity-only symbol collisions
         # before they reach public releases (feedback_non_unity_build_releases.md).
-        & $UBT LeviathanEditor Win64 Development "-Project=$UProject" -waitmutex -DisableUnity
+        & $UBT MonolithEditor Win64 Development "-Project=$UProject" -waitmutex -DisableUnity
         if ($LASTEXITCODE -ne 0) {
             throw "UBT failed with exit code $LASTEXITCODE. Is the editor closed?"
         }
@@ -206,7 +206,7 @@ if (-not $SkipBuild) {
         # We do NOT throw on a non-zero UBT exit here directly -- a collision is
         # itself a non-zero exit, and we want the filtered diagnostic, not a bare
         # "exit code" message. The collision scan below is the real ship-gate.
-        & $UBT LeviathanEditor Win64 Development "-Project=$UProject" -waitmutex 2>&1 |
+        & $UBT MonolithEditor Win64 Development "-Project=$UProject" -waitmutex 2>&1 |
             Tee-Object -FilePath $UnityLog | Out-Null
         $unityExit = $LASTEXITCODE
 
@@ -408,8 +408,12 @@ if (Test-Path $binDir) {
     $binStripCount = 0
     # Build a regex that matches any stripped module's binary.
     $stripModuleRegex = "(" + (($StrippedModules | ForEach-Object { [regex]::Escape($_) }) -join "|") + ")"
+    # Exclude gitignored dot-directories (e.g. .claude) that may exist physically under
+    # Binaries/. git ls-files never tracks them, but the Binaries copy below walks the
+    # physical directory -- without this guard such a directory and its contents could ship
+    # in the public zip. No legitimate Binaries content lives under a dot-directory.
     Get-ChildItem $binDir -Recurse -File |
-        Where-Object { $_.Extension -ne '.pdb' -and $_.Name -notmatch '\.patch_' } |
+        Where-Object { $_.Extension -ne '.pdb' -and $_.Name -notmatch '\.patch_' -and $_.FullName -notmatch '[\\/]\.claude[\\/]' } |
         ForEach-Object {
             if ($_.Name -match "UnrealEditor-$stripModuleRegex\.") {
                 $binStripCount++

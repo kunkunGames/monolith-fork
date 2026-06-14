@@ -7,6 +7,7 @@
 class UWorld;
 class APawn;
 class FMonolithLogCapture;
+class FJsonValue;
 
 // One timestamped sample of the named AnimInstance variables on the tracked pawn.
 // Values are stored loosely (float OR bool) keyed by the variable name; the poll
@@ -116,6 +117,50 @@ struct FPieSmokeProbe
 	FString PythonOutput; // CommandResult / exception trace, when available
 };
 
+// Gap 9: a typed timed provocation fired ONCE against the live PIE world when session
+// elapsed crosses AtSeconds. Generalises the probe_scripts "fire-once" mechanism into
+// first-class typed actions (set_control_rotation / add_movement_input / jump /
+// console_command). Params are interpreted per Action; outcome stamped for the report.
+enum class EPieProvocationAction : uint8
+{
+	SetControlRotation,  // APlayerController::SetControlRotation({pitch,yaw,roll})
+	AddMovementInput,    // APawn::AddMovementInput({x,y,z} direction, scale)
+	Jump,                // ACharacter::Jump()
+	ConsoleCommand,      // PC->ConsoleCommand(command) on the PIE world
+	Unknown,
+};
+
+struct FPieProvocation
+{
+	double AtSeconds = 0.0;
+	EPieProvocationAction Action = EPieProvocationAction::Unknown;
+	FString RawAction;                    // echoed action token for the report
+
+	// set_control_rotation
+	FRotator Rotation = FRotator::ZeroRotator;
+	// add_movement_input
+	FVector Direction = FVector::ForwardVector;
+	double Scale = 1.0;
+	// console_command
+	FString Command;
+
+	bool bFired = false;
+	double FiredAtSeconds = -1.0;
+	bool bDispatched = false;             // a target was found and the call was made
+	FString Result;                       // outcome / why-not token
+};
+
+// Gap 9: one timestamped sample of the dotted (UDS-friendly) variable paths read off the
+// resolved timeseries target. Stored as pre-serialised JSON values so per-tick reads carry
+// no extra read-back pass; the poll report assembles them under {t, vars:{...}}.
+struct FPieTimeseriesSample
+{
+	double TimeSeconds = 0.0;
+	// One entry per requested variable path that resolved on this tick. Value is the
+	// already-serialised JSON value from the shared PIE-object reader.
+	TArray<TPair<FString, TSharedPtr<FJsonValue>>> Vars;
+};
+
 // Phase 8 (OG-E2/E5): one entry of the declarative `actor_setup` block. Generic
 // spawn-and-configure spec executed ONCE against the LIVE PIE world on the first
 // ready observer tick. Fully general-purpose: ClassPath is any BP/native actor
@@ -194,6 +239,32 @@ struct FPieSmokeSession
 
 	// #4 delayed in-session probes, fired by the per-frame observer.
 	TArray<FPieSmokeProbe> Probes;
+
+	// Gap 9: time-series variant. When bTimeseries is true the observer reads the dotted
+	// (UDS-friendly) TimeseriesVarPaths off the resolved target each sample tick (gated by
+	// SampleInterval), fires typed Provocations at their times, and accumulates
+	// TimeseriesSamples — instead of the flat anim-var sampling the smoke path uses.
+	bool bTimeseries = false;
+	TArray<FString> TimeseriesVarPaths;       // dotted UDS member paths to read each tick
+	double SampleInterval = 0.0;              // min seconds between samples (0 = per-tick)
+	double LastSampleSeconds = -1.0;          // last sample-relative time a sample was taken
+	int32 MaxSamples = 2048;                  // hard cap on accumulated samples (payload guard)
+
+	// Target selector for the timeseries read (resolved via the shared PIE-object resolver,
+	// reused by Gap 8). actor_label/object_name/class_name + optional component/anim_instance.
+	FString TargetActorLabel;
+	FString TargetObjectName;
+	FString TargetClassName;
+	FString TargetComponentName;
+	bool bTargetAnimInstance = false;
+
+	// Cached resolved timeseries target. The full actor+component scan runs only when this
+	// weak pointer is stale (first tick, or after the target actor dies); a still-valid
+	// cached pointer is reused, so per-tick sampling is O(1) instead of O(actors x ticks).
+	TWeakObjectPtr<UObject> CachedTimeseriesTarget;
+
+	TArray<FPieProvocation> Provocations;     // typed timed provocations, fired once each
+	TArray<FPieTimeseriesSample> TimeseriesSamples;
 
 	// Phase 8 (OG-E2/E5): declarative actor_setup spec. Executed ONCE on the first ready
 	// observer tick (after BeginPlay) against the LIVE PIE world; results captured in

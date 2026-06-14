@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.18.1 (Beta) — actions shipped across Phases 1–4a (decision + risk + a source-namespace module-dep audit + cppreflect + network + pipeline + audit actions on existing namespaces: material/niagara/blueprint/project), plus the `cppreflect_query("list_class_specifiers")` and `reflect_query("rebuild_reflection_index")` (new `reflect` namespace, WRITE/maintenance) follow-ups. Counts are approximate — query `monolith_discover()` for the live figure. The network-completeness workstream also makes `list_replicated_classes` capture bare `UPROPERTY(Replicated)` (now WORKS, verified E2E), switches `list_rpc_functions` to specifier-based detection, and widens the indexer scan scope from the game module alone to an `IPluginManager`-driven ladder — game module + project plugins by default, marketplace plugins gated, Epic engine built-ins excluded (§5.2). With project plugins in scope, `list_rpc_functions` now returns the project's actual RPCs (the project's project-plugin Server RPCs, verified E2E) — the prior "empty due to game-module-only scan scope" limitation is resolved.
+**Version:** 0.20.0 (Beta) — actions shipped across Phases 1–4a (decision + risk + a source-namespace module-dep audit + cppreflect + network + pipeline + audit actions on existing namespaces: material/niagara/blueprint/project), plus the `cppreflect_query("list_class_specifiers")` and `reflect_query("rebuild_reflection_index")` (new `reflect` namespace, WRITE/maintenance) follow-ups. Counts are approximate — query `monolith_discover()` for the live figure. The network-completeness workstream also makes `list_replicated_classes` capture bare `UPROPERTY(Replicated)` (now WORKS, verified E2E), switches `list_rpc_functions` to specifier-based detection, and widens the indexer scan scope from the game module alone to an `IPluginManager`-driven ladder — game module + project plugins by default, marketplace plugins gated, Epic engine built-ins excluded (§5.2). With project plugins in scope, `list_rpc_functions` now returns the project's actual RPCs (the project's project-plugin Server RPCs, verified E2E) — the prior "empty due to game-module-only scan scope" limitation is resolved.
 
 ---
 
@@ -505,7 +505,7 @@ Run via `editor_query("run_automation_tests", "Monolith.ReflectionIntel.Risk")` 
 
 The audit catches a specific bug class: a UPROPERTY (or other reflection-touching declaration) references a symbol from a module that the owning module's `Build.cs` does not list in `PrivateDependencyModuleNames` (or `PublicDependencyModuleNames`). UHT generates `Z_Construct_*_NoRegister` reflection code that calls into the foreign module's API macro at link time — if the dep is missing, the failure surfaces as a downstream LNK2019 with a confusing-looking unresolved external referring to a symbol the developer didn't expect to be a link-time dep.
 
-The bug class is documented in `.claude/agent-memory/<agent>/feedback_softptr_uproperty_needs_module_dep.md` — the canonical example is `TSoftObjectPtr<UWidgetBase>` UPROPERTY in a non-UMG module, where `UMG` is missing from `Build.cs`. Same class also covers FGameplayTag UPROPERTY without `GameplayTags`, FNiagaraSystemAsset without `Niagara`, etc.
+The canonical example of this bug class is `TSoftObjectPtr<UWidgetBase>` UPROPERTY in a non-UMG module, where `UMG` is missing from `Build.cs`. The same class also covers FGameplayTag UPROPERTY without `GameplayTags`, FNiagaraSystemAsset without `Niagara`, etc.
 
 ### 4b.2 Algorithm
 
@@ -570,6 +570,27 @@ Annotations: `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: tr
 - **Template-argument metaclasses partial.** Single-argument templates (`TSoftObjectPtr<X>`, `TSubclassOf<X>`, `TArray<X>`) are handled. Multi-argument templates (`TMap<K, V>`, custom 3+ arg templates) extract only the first argument in v0.17.0.
 - **Macro-hidden types invisible.** Types behind `#if WITH_*` blocks that are gated false at audit time produce false negatives. This is intentional — the audit reflects the build-as-configured, not all theoretical configurations. Pair with `risk_query("list_conditional_gates")` to spot-check gated regions.
 - **No deduplication across `module_filter` paginations.** A violation appearing in two distinct source lines surfaces as two rows. This is correct — distinct call sites are distinct evidence — but callers writing release-gate reports should dedupe on `(declaring_module, missing_dep)` before presenting summary counts.
+
+### 4b.6 Forward direction — `source_query("suggest_build_cs_deps")` (Phase 2, LLM C++ ergonomics)
+
+A second action on `FModuleDepRealityAdapter`, registered onto the `source` namespace alongside `audit_module_dep_reality`. Where the audit scans the whole project for missing-dep *violations*, this is the **forward direction**: given ONE file (or symbol list), report the modules it requires and which are absent from the declaring module's `Build.cs`. Same four-pass machinery (Build.cs parse + UE-ident regex + symbol→module SQL resolve + implicit-whitelist diff), inverted.
+
+| Param | Type | EMonolithParamKind | Required | Notes |
+|-------|------|---------------------|----------|-------|
+| `file_path` | string | `Other` | one of file_path/symbols | A `.h`/`.cpp` whose declaring module's Build.cs deps to audit. **Intentionally `Other`, NOT `DiskPath`** — see kind note below. |
+| `symbols` | array | `Other` | one of file_path/symbols | Explicit UE type names (used instead of / together with file extraction). |
+
+**`file_path` is `Other`, not `DiskPath`, by design.** The `DiskPath` kind warns "paths in this index are stored with forward slashes, so a query for '<x>' will likely return zero results" on backslashes — correct for actions that key the SQLite index BY PATH, but FALSE here: this handler uses `file_path` only for on-disk reads (the file + its `<Module>.Build.cs`, both backslash-tolerant on Windows) and path-string module derivation. The DB is queried by TYPE NAME, never by path, so a backslash path resolves fine and the warning was spurious. `Other` passes the value through untouched.
+
+**Declaring-module resolution is path-first** — parse `Source/<Module>/...` or `Plugins/<X>/Source/<Module>/...` out of `file_path` (LAST `/Source/` wins → innermost module), then read `<Module>.Build.cs` from disk. This works on **uncommitted/unindexed files** (the common case: a header the agent just wrote). The DB is used ONLY to resolve the OWNING modules of the *used types*, never the declaring module.
+
+**Build.cs dep parse strips C# comments first.** `ParseBuildCs` (shared with `audit_module_dep_reality`) runs the dependency-array regex over a comment-stripped copy of the file. Without this, a `//` or `/* */` comment containing a `)` *inside* the `AddRange(new string[]{ ... })` body (e.g. `// (AIMODULE_API). ...`) truncated the non-greedy `(...)` site capture at the first `)`, silently dropping every dependency declared after it (observed: `EnhancedInput` / `UMG` / `MaterialEditor` reported missing though declared). Comment stripping is string-literal aware. This hardening benefits both `suggest_build_cs_deps` and `audit_module_dep_reality`.
+
+**Response:** `{ declaring_module, build_cs (or build_cs_note if none on disk), required_modules[], missing[] }` (+ a `content[].text` rendering). `required_modules` excludes self + the Core/CoreUObject/Engine/Projects/RHI/RenderCore implicit whitelist; `missing` = required minus declared.
+
+Annotations: `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, game-thread only (`ensure(IsInGameThread())`). Borrows the shared `FMonolithSourceDatabase` via `GetSharedSourceDb()` and holds `FScopeLock(&SharedDb->GetLock())` for the full statement borrow (prepare→step→`Destroy()`), per the `GetRawHandle` contract.
+
+**NOT offline-served.** Like `audit_module_dep_reality`, this action is RI/live-only — it needs the cached query DB plus an on-disk Build.cs/source walk that the standalone `monolith_query.exe` / `monolith_offline.py` do not implement. It is absent from the offline tools and from `verify_offline_parity.py`.
 
 ---
 

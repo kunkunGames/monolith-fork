@@ -863,6 +863,677 @@ class SourceActions:
         source = self.read_file_lines(resolved, start, end)
         print(f"{header}\n{source}")
 
+    # ============================================================
+    # Phase 1 — LLM C++ authoring ergonomics (items 1-3). Byte-equivalent to the
+    # monolith_query.exe SourceActions methods (parity-gated).
+    # ============================================================
+
+    @staticmethod
+    def derive_include_path(indexed_path, module_name):
+        """Mirror of FMonolithSourceActions::DeriveIncludePath.
+        Returns (include, includable, warning)."""
+        path = (indexed_path or "").replace("\\", "/")
+        for root in ("/Public/", "/Classes/", "/Internal/"):
+            idx = path.rfind(root)
+            if idx >= 0:
+                return path[idx + len(root):], True, ""
+        pidx = path.rfind("/Private/")
+        if pidx >= 0:
+            warn = ("Private header -- not includable outside "
+                    + (module_name if module_name else "its module")
+                    + "; same-module include shown")
+            return path[pidx + len("/Private/"):], False, warn
+        slash = path.rfind("/")
+        return (path if slash < 0 else path[slash + 1:]), True, ""
+
+    def resolve_symbol_row(self, symbol):
+        lookup = symbol
+        scope = symbol.rfind("::")
+        if scope >= 0:
+            lookup = symbol[:scope]
+        rows = self.db.execute(
+            "SELECT id, name, file_id FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC",
+            (lookup,)).fetchall()
+        if not rows:
+            fts_q = escape_fts(lookup)
+            rows = self.db.execute(
+                "SELECT s.id, s.name, s.file_id FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
+                "WHERE symbols_fts MATCH ? LIMIT 5", (fts_q,)).fetchall()
+        return rows[0] if rows else None
+
+    def get_include_path(self, args):
+        symbol = args.symbol
+        sym = self.resolve_symbol_row(symbol)
+        if not sym:
+            print(f"No symbol found matching '{symbol}'.", file=sys.stderr)
+            sys.exit(1)
+
+        file_id = sym["file_id"]
+        lookup = symbol
+        scope = symbol.rfind("::")
+        if scope >= 0:
+            lookup = symbol[:scope]
+        allrows = self.db.execute(
+            "SELECT s.file_id, f.path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.name = ?",
+            (lookup,)).fetchall()
+        file_path = self.get_file_path(file_id)
+        for r in allrows:
+            p = r["path"]
+            if p.endswith(".h"):
+                file_id = r["file_id"]
+                file_path = p
+                break
+
+        mrows = self.db.execute(
+            "SELECT m.name, m.build_cs_path FROM files f JOIN modules m ON m.id = f.module_id WHERE f.id = ?",
+            (file_id,)).fetchall()
+        module_name = mrows[0]["name"] if mrows else ""
+        build_cs = mrows[0]["build_cs_path"] if mrows else ""
+
+        include, includable, warning = self.derive_include_path(file_path, module_name)
+
+        build_cs_note = ""
+        if module_name:
+            if build_cs:
+                base = build_cs.replace("\\", "/").rsplit("/", 1)[-1]
+                build_cs_note = f"Module '{module_name}' -- add to your Build.cs deps ({base})"
+            else:
+                build_cs_note = f"Module '{module_name}' -- add to your Build.cs deps"
+
+        out = [f'#include "{include}"']
+        if module_name:
+            out.append(f"Module: {module_name}")
+        if build_cs_note:
+            out.append(build_cs_note)
+        if warning:
+            out.append(f"WARNING: {warning}")
+        print("\n".join(out))
+
+    @staticmethod
+    def compact_declaration(lines, start_idx):
+        """Mirror of FMonolithSourceActions::CompactDeclaration."""
+        accum = []
+        paren_depth = 0
+        saw_open = False
+        for i in range(start_idx, min(len(lines), start_idx + 12)):
+            line = lines[i].rstrip()
+            if line.endswith("\\"):
+                line = line[:-1].rstrip()
+            done = False
+            for c, ch in enumerate(line):
+                if ch == "(":
+                    paren_depth += 1
+                    saw_open = True
+                elif ch == ")":
+                    paren_depth = max(0, paren_depth - 1)
+                elif paren_depth == 0 and saw_open and ch in ("{", ";"):
+                    # Prefix already accumulated char-by-char above; just stop
+                    # (re-appending line[:c] duplicated the tail).
+                    done = True
+                    break
+                else:
+                    accum.append(ch)
+                    continue
+                accum.append(ch)
+            if done:
+                break
+            accum.append(" ")
+        # collapse whitespace
+        raw = "".join(accum)
+        out = []
+        prev_space = False
+        for ch in raw:
+            if ch in (" ", "\t", "\r", "\n"):
+                if not prev_space:
+                    out.append(" ")
+                prev_space = True
+            else:
+                out.append(ch)
+                prev_space = False
+        return "".join(out).strip()
+
+    def get_signature(self, args):
+        symbol = args.symbol
+        limit = args.limit
+        method = symbol
+        scope = symbol.rfind("::")
+        if scope >= 0:
+            method = symbol[scope + 2:]
+
+        overloads = []  # (sig, source, file, line)
+
+        fnrows = self.db.execute(
+            "SELECT signature, file_id, line_start FROM symbols WHERE name = ? AND kind = 'function'",
+            (method,)).fetchall()
+        for r in fnrows:
+            if len(overloads) >= limit:
+                break
+            sig = r["signature"] or ""
+            if not sig:
+                continue
+            if "{" in sig or "\\" in sig:
+                continue
+            sig = sig.strip()
+            overloads.append((sig, "column", self.short_path(self.get_file_path(r["file_id"])), r["line_start"]))
+
+        if not overloads:
+            fts_q = escape_fts(symbol)
+            chunks = self.db.execute(
+                "SELECT file_id, line_number, text FROM source_fts WHERE source_fts MATCH ? "
+                "ORDER BY bm25(source_fts) LIMIT 50", (fts_q,)).fetchall()
+            seen = set()
+            needle = method + "("
+            for ch in chunks:
+                if len(overloads) >= limit:
+                    break
+                fp = self.get_file_path(ch["file_id"])
+                try:
+                    with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                        file_lines = [ln.rstrip("\n") for ln in f.readlines()]
+                except FileNotFoundError:
+                    continue
+                win_start = max(0, ch["line_number"] - 1)
+                win_end = min(len(file_lines), win_start + 10)
+                for i in range(win_start, win_end):
+                    if len(overloads) >= limit:
+                        break
+                    line = file_lines[i]
+                    didx = line.find(needle)
+                    if didx < 0:
+                        continue
+                    if didx > 0:
+                        prev = line[didx - 1]
+                        if prev.isalnum() or prev == "_":
+                            continue
+                    sig = self.compact_declaration(file_lines, i)
+                    if not sig or needle not in sig:
+                        continue
+                    if sig in seen:
+                        continue
+                    seen.add(sig)
+                    overloads.append((sig, "declaration_read", self.short_path(fp), i + 1))
+
+        if not overloads:
+            print(f"No signature found for '{symbol}'.", file=sys.stderr)
+            sys.exit(1)
+
+        out = []
+        for sig, source, fp, line in overloads:
+            out.append(f"{sig}\n  // {source} @ {fp}:{line}")
+        print("\n".join(out))
+
+    def check_deprecations(self, args):
+        symbols = args.symbols
+        total = self.db.execute("SELECT COUNT(*) as c FROM symbol_deprecations").fetchone()["c"]
+        if total == 0:
+            print("Deprecation index is empty (schema v2 landed but not yet populated). "
+                  "Run source.trigger_reindex to populate it.")
+            return
+        lines = []
+        for name in symbols:
+            row = self.db.execute(
+                "SELECT version, message, kind FROM symbol_deprecations WHERE symbol_name = ? LIMIT 1",
+                (name,)).fetchone()
+            if row:
+                lines.append(f"{name}: DEPRECATED ({row['version']}) [{row['kind']}] {row['message']}")
+            else:
+                lines.append(f"{name}: not deprecated")
+        print("\n".join(lines))
+
+    # --- shared composition helpers (mirror FMonolithSourceActions) ---
+
+    def symbol_exists(self, symbol):
+        lookup = symbol
+        scope = symbol.rfind("::")
+        if scope >= 0:
+            lookup = symbol[:scope]
+        if self.db.execute("SELECT id FROM symbols WHERE name = ? LIMIT 1", (lookup,)).fetchone():
+            return True
+        fts_q = escape_fts(lookup)
+        if self.db.execute("SELECT s.id FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
+                           "WHERE symbols_fts MATCH ? LIMIT 1", (fts_q,)).fetchone():
+            return True
+        method = symbol if scope < 0 else symbol[scope + 2:]
+        needle = method + "("
+        sfts = escape_fts(symbol)
+        chunks = self.db.execute(
+            "SELECT file_id, line_number FROM source_fts WHERE source_fts MATCH ? "
+            "ORDER BY bm25(source_fts) LIMIT 25", (sfts,)).fetchall()
+        for ch in chunks:
+            try:
+                with open(self.get_file_path(ch["file_id"]), "r", encoding="utf-8", errors="replace") as f:
+                    fl = [ln.rstrip("\n").rstrip("\r") for ln in f.readlines()]
+            except FileNotFoundError:
+                continue
+            ws = max(0, ch["line_number"] - 1)
+            we = min(len(fl), ws + 10)
+            for i in range(ws, we):
+                di = fl[i].find(needle)
+                if di < 0:
+                    continue
+                if di > 0 and (fl[i][di - 1].isalnum() or fl[i][di - 1] == "_"):
+                    continue
+                return True
+        return False
+
+    def first_signature(self, symbol):
+        method = symbol
+        scope = symbol.rfind("::")
+        if scope >= 0:
+            method = symbol[scope + 2:]
+        for r in self.db.execute(
+                "SELECT signature, file_id, line_start FROM symbols WHERE name = ? AND kind = 'function'",
+                (method,)).fetchall():
+            sig = r["signature"] or ""
+            if not sig or "{" in sig or "\\" in sig:
+                continue
+            return sig.strip(), "column"
+        fts_q = escape_fts(symbol)
+        chunks = self.db.execute(
+            "SELECT file_id, line_number FROM source_fts WHERE source_fts MATCH ? "
+            "ORDER BY bm25(source_fts) LIMIT 50", (fts_q,)).fetchall()
+        needle = method + "("
+        for ch in chunks:
+            try:
+                with open(self.get_file_path(ch["file_id"]), "r", encoding="utf-8", errors="replace") as f:
+                    fl = [ln.rstrip("\n") for ln in f.readlines()]
+            except FileNotFoundError:
+                continue
+            ws = max(0, ch["line_number"] - 1)
+            we = min(len(fl), ws + 10)
+            for i in range(ws, we):
+                di = fl[i].find(needle)
+                if di < 0:
+                    continue
+                if di > 0 and (fl[i][di - 1].isalnum() or fl[i][di - 1] == "_"):
+                    continue
+                sig = self.compact_declaration(fl, i)
+                if not sig or needle not in sig:
+                    continue
+                return sig, "declaration_read"
+        return None, None
+
+    def verify_symbols(self, args):
+        symbols = args.symbols
+        cnt = self.db.execute("SELECT COUNT(*) as c FROM symbol_deprecations").fetchone()["c"]
+        dep_empty = cnt == 0
+
+        lines = []
+        for symbol in symbols:
+            if not self.symbol_exists(symbol):
+                lines.append(f"{symbol}: NOT FOUND")
+                continue
+            line = f"{symbol}: exists"
+
+            sym = self.resolve_symbol_row(symbol)
+            include = module_name = warning = ""
+            includable = True
+            if sym:
+                lookup = symbol
+                scope = symbol.rfind("::")
+                if scope >= 0:
+                    lookup = symbol[:scope]
+                allrows = self.db.execute(
+                    "SELECT s.file_id, f.path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.name = ?",
+                    (lookup,)).fetchall()
+                file_id = sym["file_id"]
+                file_path = self.get_file_path(file_id)
+                for r in allrows:
+                    if r["path"].endswith(".h"):
+                        file_id = r["file_id"]
+                        file_path = r["path"]
+                        break
+                mrows = self.db.execute(
+                    "SELECT m.name FROM files f JOIN modules m ON m.id = f.module_id WHERE f.id = ?",
+                    (file_id,)).fetchall()
+                module_name = mrows[0]["name"] if mrows else ""
+                include, includable, warning = self.derive_include_path(file_path, module_name)
+            if include:
+                line += f' | #include "{include}"' + ("" if includable else " (NOT includable)")
+
+            sig, _src = self.first_signature(symbol)
+            if sig:
+                line += f" | {sig}"
+
+            if not dep_empty:
+                method = symbol
+                scope = symbol.rfind("::")
+                if scope >= 0:
+                    method = symbol[scope + 2:]
+                drow = self.db.execute(
+                    "SELECT version FROM symbol_deprecations WHERE symbol_name = ? LIMIT 1", (method,)).fetchone()
+                if drow:
+                    line += " | DEPRECATED"
+            lines.append(line)
+        print("\n".join(lines))
+
+    def find_example_usage(self, args):
+        symbol = args.symbol
+        prefer = (getattr(args, "prefer", None) or "engine").lower()
+        prefer_project = prefer == "project"
+        limit = max(1, args.limit)
+        HARD_CAP, FTS_FETCH = 500, 400
+
+        method = symbol
+        scope = symbol.rfind("::")
+        if scope >= 0:
+            method = symbol[scope + 2:]
+        needle = method + "("
+
+        usages = []  # (file, line, context, rank, sort_path)
+        seen = set()
+        fts_q = escape_fts(symbol)
+        chunks = self.db.execute(
+            "SELECT file_id, line_number FROM source_fts WHERE source_fts MATCH ? "
+            "ORDER BY bm25(source_fts) LIMIT ?", (fts_q, FTS_FETCH)).fetchall()
+        for ch in chunks:
+            fp = self.get_file_path(ch["file_id"])
+            try:
+                with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                    fl = [ln.rstrip("\n").rstrip("\r") for ln in f.readlines()]
+            except FileNotFoundError:
+                continue
+            ws = max(0, ch["line_number"] - 1)
+            we = min(len(fl), ws + 10)
+            for i in range(ws, we):
+                hi = fl[i].find(needle)
+                if hi < 0:
+                    continue
+                if hi > 0 and (fl[i][hi - 1].isalnum() or fl[i][hi - 1] == "_"):
+                    continue
+                key = f"{ch['file_id']}_{i + 1}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                cs, ce = max(0, i - 3), min(len(fl) - 1, i + 3)
+                ctx = "\n".join(f"{c+1:5d} | {fl[c]}" for c in range(cs, ce + 1))
+                norm = fp.replace("\\", "/")
+                is_engine = "Engine/Source/" in norm
+                is_runtime = "/Source/Runtime/" in norm
+                rank = 0 if (is_engine and is_runtime) else (1 if is_engine else 2)
+                usages.append((self.short_path(fp), i + 1, ctx, rank, fp))
+
+        def rank_key(u):
+            if not prefer_project:
+                return u[3]
+            return {2: 0, 0: 1}.get(u[3], 2)
+
+        usages.sort(key=lambda u: (rank_key(u), u[4], u[1]))
+
+        total = len(usages)
+        slice_end = min(min(limit, total), HARD_CAP)
+        if total == 0:
+            print(f"No call-site examples found for '{symbol}'.")
+            return
+        # PARITY: emit ONLY the rendered snippets (no total_estimate / next_cursor).
+        # Those are structured-JSON fields the live handler sets on its result
+        # object, not on content[].text. The text byte-compare runs against the
+        # live content[].text, which likewise omits both. Do NOT add them here.
+        parts = []
+        for i in range(slice_end):
+            f, ln, ctx, _r, _sp = usages[i]
+            parts.append(f"--- {f}:{ln} ---\n{ctx}")
+        print("\n\n".join(parts))
+
+    # ------------------------------------------------------------------
+    # item 7: lint_header — mirror of FMonolithSourceActions::LintHeaderLines
+    # with an ALWAYS-EMPTY specifier vocabulary (the offline tool cannot reach
+    # the RI registry; the invalid-specifier rule is always skipped, matching
+    # the live "degrade gracefully when RI unavailable" path). Text output is
+    # byte-identical to the live content[].text.
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _derive_module_from_path(file_path):
+        p = (file_path or "").replace("\\", "/")
+        src = p.rfind("/Source/")
+        if src < 0:
+            return ""
+        after = p[src + len("/Source/"):]
+        slash = after.find("/")
+        return "" if slash < 0 else after[:slash]
+
+    @staticmethod
+    def _strip_block_comments(line, state):
+        """state is a 1-element list [bool] threading the in-block flag."""
+        result = []
+        work = line
+        while True:
+            if state[0]:
+                end = work.find("*/")
+                if end < 0:
+                    return "".join(result)
+                work = work[end + 2:]
+                state[0] = False
+            open_idx = work.find("/*")
+            if open_idx < 0:
+                result.append(work)
+                return "".join(result)
+            result.append(work[:open_idx])
+            work = work[open_idx + 2:]
+            state[0] = True
+
+    @staticmethod
+    def _strip_line_comment(line):
+        lc = line.find("//")
+        return line if lc < 0 else line[:lc]
+
+    def lint_header(self, args):
+        file_path = args.file_path
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = [ln.rstrip("\n").rstrip("\r") for ln in f.readlines()]
+        except FileNotFoundError:
+            print(f"Could not read header file: {file_path}", file=sys.stderr)
+            sys.exit(1)
+
+        module = self._derive_module_from_path(file_path)
+        api_macro = "" if not module else module.upper() + "_API"
+
+        inc_re = re.compile(r'^\s*#\s*include\s+["<]([^">]+)[">]')
+        decl_re = re.compile(r'^\s*(?:class|struct)\s+(?:[A-Z][A-Z0-9_]*_API\s+)?([A-Za-z_][A-Za-z0-9_]*)')
+        api_re = re.compile(r'\b([A-Z][A-Z0-9_]*_API)\b')
+
+        has_gen_body = False
+        any_reflected = False
+        gen_body_line = 0
+        last_inc_line = 0
+        last_inc_path = ""
+        gen_h_line = 0
+        gen_h_path = ""   # the ACTUAL *.generated.h include (NOT the last include -- fixes rule-c false positive)
+        reflected = []  # list of (decl_line, name, has_api)
+        pending = False
+
+        findings = []  # (rule_id, line, message, severity)
+        state = [False]
+        for i, raw in enumerate(lines):
+            code = self._strip_line_comment(self._strip_block_comments(raw, state))
+            trimmed = code.strip()
+            if not trimmed:
+                continue
+            m = inc_re.search(code)
+            if m:
+                inc = m.group(1)
+                last_inc_line = i + 1
+                last_inc_path = inc
+                if inc.endswith(".generated.h"):
+                    gen_h_line = i + 1
+                    gen_h_path = inc
+                continue
+            if "GENERATED_BODY" in trimmed or "GENERATED_UCLASS_BODY" in trimmed:
+                has_gen_body = True
+                if gen_body_line == 0:
+                    gen_body_line = i + 1
+            if (trimmed.startswith("UCLASS") or trimmed.startswith("USTRUCT")
+                    or trimmed.startswith("UENUM") or trimmed.startswith("UINTERFACE")):
+                any_reflected = True
+                if trimmed.startswith("UCLASS"):
+                    pending = True
+            if pending:
+                dm = decl_re.search(code)
+                if dm:
+                    has_api = bool(api_re.search(code))
+                    reflected.append((i + 1, dm.group(1), has_api))
+                    pending = False
+            # Invalid-specifier rule SKIPPED offline (empty vocabulary).
+
+        # (a) missing GENERATED_BODY.
+        if any_reflected and not has_gen_body:
+            findings.append(("missing_generated_body",
+                             reflected[0][0] if reflected else 0,
+                             "Reflected type (UCLASS/USTRUCT) is missing a GENERATED_BODY() macro.",
+                             "error"))
+        # (b) generated.h not last.
+        if gen_h_line != 0 and last_inc_line != 0 and gen_h_line != last_inc_line:
+            findings.append(("generated_h_not_last", gen_h_line,
+                             f"'*.generated.h' must be the LAST #include (an include at line "
+                             f"{last_inc_line} follows it: \"{last_inc_path}\").",
+                             "error"))
+        elif any_reflected and has_gen_body and gen_h_line == 0:
+            findings.append(("missing_generated_h_include", gen_body_line,
+                             "Reflected type uses GENERATED_BODY() but no '*.generated.h' include is present (must be last).",
+                             "error"))
+        # (d) missing <MODULE>_API.
+        header_base = os.path.splitext(os.path.basename(file_path.replace("\\", "/")))[0]
+        for (decl_line, name, has_api) in reflected:
+            if api_macro and not has_api:
+                findings.append(("missing_api_macro", decl_line,
+                                 f"UCLASS-declared type '{name}' is missing the '{api_macro}' "
+                                 f"export macro (class {name} ...).",
+                                 "warning"))
+        # (c) generated.h name mismatch. Use the ACTUAL generated.h include
+        # (gen_h_path), NOT the last include -- when generated.h is not last
+        # (rule-b case) the last include is some other header and would fire a
+        # bogus mismatch. Gate on the captured include ending in `.generated.h`.
+        if gen_h_line != 0 and header_base and gen_h_path.endswith(".generated.h"):
+            gen_base = gen_h_path.replace("\\", "/").rsplit("/", 1)[-1]
+            gen_base = gen_base[:-len(".generated.h")]
+            if gen_base and gen_base != header_base:
+                findings.append(("generated_h_name_mismatch", gen_h_line,
+                                 f"'{gen_base}.generated.h' does not match the header file name "
+                                 f"'{header_base}.h' -- the GENERATED_BODY pairing requires "
+                                 f"\"{header_base}.generated.h\".",
+                                 "error"))
+        # (e) UPROPERTY/UFUNCTION in a non-reflected file.
+        if not any_reflected:
+            state2 = [False]
+            for i, raw in enumerate(lines):
+                trimmed = self._strip_line_comment(self._strip_block_comments(raw, state2)).strip()
+                if trimmed.startswith("UPROPERTY") or trimmed.startswith("UFUNCTION"):
+                    findings.append(("reflected_member_in_non_reflected_type", i + 1,
+                                     "UPROPERTY/UFUNCTION found but the file declares no reflected type "
+                                     "(UCLASS/USTRUCT) -- the macro will not be processed by UHT.",
+                                     "error"))
+
+        findings.sort(key=lambda f: (f[1], f[0]))
+
+        if not findings:
+            print("Clean -- no lint findings.")
+            return
+        out = []
+        for (rule_id, line, message, severity) in findings:
+            out.append(f"[{severity}] L{line} ({rule_id}): {message}")
+        print("\n".join(out))
+
+    # ------------------------------------------------------------------
+    # item 9: generate_class_stub — TEXT-RETURN-ONLY, offline-served (Decision 5).
+    # ------------------------------------------------------------------
+    def generate_class_stub(self, args):
+        parent = args.parent
+        class_name = args.class_name
+        module = args.module
+        if not parent or not class_name or not module:
+            print("generate_class_stub requires parent, class_name, and module", file=sys.stderr)
+            sys.exit(1)
+
+        sym = self.resolve_symbol_row(parent)
+        if not sym:
+            print(f"Parent class '{parent}' not found in the source index. "
+                  f"Run source.trigger_reindex if it is a project type.", file=sys.stderr)
+            sys.exit(1)
+
+        if not (parent[0] == "U" or parent[0] == "A"):
+            print(f"Parent '{parent}' is not a UCLASS-derived type. generate_class_stub v1 "
+                  f"supports UCLASS-derived parents only (no USTRUCT/UENUM/UINTERFACE).", file=sys.stderr)
+            sys.exit(1)
+
+        allrows = self.db.execute(
+            "SELECT s.file_id, f.path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.name = ?",
+            (parent,)).fetchall()
+        parent_path = self.get_file_path(sym["file_id"])
+        for r in allrows:
+            p = r["path"]
+            if p.endswith(".h"):
+                parent_path = p
+                break
+        parent_module = self._derive_module_from_path(parent_path)
+        parent_include, _includable, _warn = self.derive_include_path(parent_path, parent_module)
+
+        # Constructor convention.
+        ctors = self.db.execute(
+            "SELECT signature FROM symbols WHERE name = ? AND kind = 'function'", (parent,)).fetchall()
+        saw_any = saw_plain = saw_obj = False
+        ctor_open = parent + "("
+        for r in ctors:
+            s = r["signature"] or ""
+            if not s or ctor_open not in s:
+                continue
+            saw_any = True
+            if "FObjectInitializer" in s:
+                saw_obj = True
+            else:
+                saw_plain = True
+        needs_obj_init = saw_any and saw_obj and not saw_plain
+
+        api_macro = module.upper() + "_API"
+        # UE "Add C++ Class" file-naming: drop the U/A UCLASS-derived prefix from the
+        # FILE names (class UMyComp -> MyComp.h/.cpp/.generated.h). class_name is
+        # validated UCLASS-derived, so strip a leading U/A only when followed by an
+        # uppercase letter; else use the raw name. The class IDENTIFIER is unchanged.
+        if (len(class_name) >= 2 and class_name[0] in ("U", "A") and class_name[1].isupper()):
+            file_base = class_name[1:]
+        else:
+            file_base = class_name
+        gen_inc = file_base + ".generated.h"
+
+        h = []
+        h.append("#pragma once")
+        h.append("")
+        h.append('#include "CoreMinimal.h"')
+        if parent_include:
+            h.append(f'#include "{parent_include}"')
+        h.append(f'#include "{gen_inc}"')
+        h.append("")
+        h.append("UCLASS()")
+        h.append(f"class {api_macro} {class_name} : public {parent}")
+        h.append("{")
+        h.append("\tGENERATED_BODY()")
+        h.append("")
+        h.append("public:")
+        if needs_obj_init:
+            h.append(f"\t{class_name}(const FObjectInitializer& ObjectInitializer);")
+        else:
+            h.append(f"\t{class_name}();")
+        h.append("};")
+        h.append("")
+        header_text = "\n".join(h)
+
+        c = []
+        c.append(f'#include "{file_base}.h"')
+        c.append("")
+        if needs_obj_init:
+            c.append(f"{class_name}::{class_name}(const FObjectInitializer& ObjectInitializer)")
+            c.append("\t: Super(ObjectInitializer)")
+            c.append("{")
+            c.append("}")
+        else:
+            c.append(f"{class_name}::{class_name}()")
+            c.append("{")
+            c.append("}")
+        c.append("")
+        cpp_text = "\n".join(c)
+
+        print(f"// === {file_base}.h ===\n{header_text}\n// === {file_base}.cpp ===\n{cpp_text}")
+
 
 # ============================================================
 # Project actions (UNCHANGED — do not touch)
@@ -1913,6 +2584,34 @@ def build_parser():
     p.add_argument("file_path")
     p.add_argument("--start", type=int, default=1)
     p.add_argument("--end", type=int, default=0)
+
+    p = src_sub.add_parser("get_include_path")
+    p.add_argument("symbol")
+
+    p = src_sub.add_parser("get_signature")
+    p.add_argument("symbol")
+    p.add_argument("--limit", type=int, default=10)
+
+    p = src_sub.add_parser("check_deprecations")
+    p.add_argument("symbols", nargs="+")
+
+    p = src_sub.add_parser("verify_symbols")
+    p.add_argument("symbols", nargs="+")
+
+    p = src_sub.add_parser("find_example_usage")
+    p.add_argument("symbol")
+    p.add_argument("--prefer", default="engine", choices=["engine", "project"])
+    p.add_argument("--limit", type=int, default=10)
+
+    p = src_sub.add_parser("lint_header")
+    p.add_argument("file_path")
+
+    p = src_sub.add_parser("generate_class_stub")
+    # Positional parent class_name module to match the exe sibling
+    # (`monolith_query.exe source generate_class_stub <parent> <class_name> <module>`).
+    p.add_argument("parent")
+    p.add_argument("class_name")
+    p.add_argument("module")
 
     # --- project namespace ---
     prj = sub.add_parser("project", help="Query project index database")

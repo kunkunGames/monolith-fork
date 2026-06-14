@@ -47,6 +47,10 @@ public class MonolithEditor : ModuleRules
 			// (AIMODULE_API). Stock-engine module, always present + auto-enabled, so this
 			// is release-build safe — no conditional gating / WITH_* probe required.
 			"AIModule",
+			// Gap 4: pie_inject_input_action -> UEnhancedInputLocalPlayerSubsystem::InjectInputForAction.
+			// EnhancedInput is a stock, always-enabled engine plugin module (same rationale as
+			// AIModule above), so this is release-build safe — no conditional gating / WITH_* probe.
+			"EnhancedInput",
 			// Preview & inspection surface expansion (2026-05-26 plan, Phase 1):
 			// UMG = FWidgetRenderer + UWidget + UUserWidget for asset_type=widget.
 			// UMGEditor = UWidgetBlueprint typed loading.

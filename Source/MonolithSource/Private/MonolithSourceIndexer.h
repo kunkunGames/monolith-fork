@@ -63,6 +63,7 @@ private:
 		FString Path;
 		FString Name;
 		FString Type; // Runtime, Editor, Developer, Programs, Plugin, Shaders, Project, GameFeature
+		FString BuildCsPath; // Decision 2: derived <Module>.Build.cs path (empty for Shaders / when absent)
 	};
 
 	void DiscoverEngineModules(TArray<FModuleEntry>& OutModules);

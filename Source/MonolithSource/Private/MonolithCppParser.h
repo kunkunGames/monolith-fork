@@ -49,8 +49,10 @@ private:
 	void ExtractEnums(const TArray<FString>& OrigLines, const TArray<FString>& CleanLines, FParsedFileResult& Result);
 	void ExtractFreeFunctions(const TArray<FString>& OrigLines, const TArray<FString>& CleanLines, FParsedFileResult& Result);
 	void ExtractMacrosAndTypedefs(const TArray<FString>& OrigLines, FParsedFileResult& Result);
+	// ParentClass is BY VALUE — ExtractMembers Adds to Result.Symbols, so a reference into
+	// that array's backing store would dangle after a reallocation (see definition comment).
 	void ExtractMembers(const TArray<FString>& OrigLines, int32 BodyStartLine, int32 BodyEndLine,
-		const FString& ParentClass, const FString& DefaultAccess, FParsedFileResult& Result);
+		FString ParentClass, const FString& DefaultAccess, FParsedFileResult& Result);
 
 	// Helpers
 	FString ExtractDocstring(const TArray<FString>& Lines, int32 TargetLine, bool bSkipUEMacro = false);

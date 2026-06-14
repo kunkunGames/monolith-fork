@@ -3,19 +3,23 @@
 verify_offline_parity.py -- HARD-GATE parity guard for the two offline Monolith RI tools.
 
 Byte/deep-diffs the C++ exe (Binaries/monolith_query.exe) against the Python
-reference (Scripts/monolith_offline.py) across all 20 Reflection-Intelligence
-(RI) actions spanning 4 namespaces: cppreflect, network, decision, risk.
+reference (Scripts/monolith_offline.py) across 27 actions: 20 Reflection-
+Intelligence (RI) actions spanning 4 namespaces (cppreflect, network, decision,
+risk; JSON deep-diff) PLUS 7 source-ergonomics actions (get_include_path,
+get_signature, check_deprecations, verify_symbols, find_example_usage,
+lint_header, generate_class_stub; plain-text STRICT byte-compare).
 
 This is the acceptance test for the offline-parity sprint. Strict mode (default)
-requires every action to deep-equal, INCLUDING the opaque base64 `next_cursor`
-bytes -- which means the two tools must compute identical filter-hashes (qh).
+requires every JSON action to deep-equal (INCLUDING the opaque base64
+`next_cursor` bytes -- so the two tools must compute identical filter-hashes qh)
+and every text action's raw stdout to byte-match (trailing newline normalised).
 
 Usage (run from the Monolith plugin root):
     python Scripts/verify_offline_parity.py
     python Scripts/verify_offline_parity.py --ignore-cursor-bytes
     python Scripts/verify_offline_parity.py --live          # FUTURE stub, see below
 
-Exit code 0 IFF all 20 actions deep-equal in the active mode AND --version
+Exit code 0 IFF all 23 actions match in the active mode AND --version
 parity-rev matches. Non-zero otherwise.
 
 stdlib-only. Do not add third-party deps.
@@ -296,6 +300,53 @@ def build_actions(chain):
         ("risk.get_file_churn", "risk", "get_file_churn", [rpath]),
         ("risk.get_release_window_hotspots", "risk", "get_release_window_hotspots", []),
         ("risk.list_conditional_gates", "risk", "list_conditional_gates", []),
+
+        # ---- source ergonomics (3) -- plain-text output, STRICT byte-compare ----
+        # Deterministic fixed inputs (no chaining):
+        #   AActor                          -> stable engine class header
+        #   UGameplayStatics::ApplyDamage   -> stable class-body method (declaration_read)
+        #   PreparePathfinding              -> known 4.13 UE_DEPRECATED_FORGAME verdict
+        #   AActor (2nd check_deprecations) -> known not-deprecated
+        ("source.get_include_path", "source", "get_include_path", ["AActor"], "text"),
+        ("source.get_signature", "source", "get_signature",
+         ["UGameplayStatics::ApplyDamage"], "text"),
+        ("source.check_deprecations", "source", "check_deprecations",
+         ["PreparePathfinding", "AActor"], "text"),
+
+        # ---- source ergonomics Phase 2 (items 4-5) -- plain-text, STRICT byte-compare ----
+        # Fixed deterministic inputs:
+        #   verify_symbols      -> a stable class-body method (exists:true via class
+        #                          row + source_fts), a stable class, and a guaranteed-
+        #                          missing name (exists:false, no error).
+        #   find_example_usage  -> a stable engine API method with many call sites;
+        #                          --limit pins the page size so the slice is fixed.
+        ("source.verify_symbols", "source", "verify_symbols",
+         ["UGameplayStatics::ApplyDamage", "AActor", "UThisDoesNotExistAnywhereXYZ"], "text"),
+        ("source.find_example_usage", "source", "find_example_usage",
+         ["UGameplayStatics::ApplyDamage", "--limit", "5"], "text"),
+
+        # ---- source ergonomics Phase 3 (items 7, 9) -- plain-text, STRICT byte-compare ----
+        # Fixed deterministic inputs:
+        #   lint_header         -> a COMMITTED fixture so exe + py see byte-identical
+        #                          input. The fixture carries a `.h.fixture` extension
+        #                          (UHT must NOT parse its reflection macros); lint_header
+        #                          reads via LoadFileToStringArray, which is extension-
+        #                          agnostic. LintOrphanUproperty.h.fixture has NO UCLASS
+        #                          macro, so rules (c)/(d) (the only base-name-sensitive
+        #                          ones) and the invalid-specifier rule never fire -> the
+        #                          `.h.fixture` extension is irrelevant to its output, and
+        #                          exe == py deterministically. It triggers rule (e) so the
+        #                          "Clean" sentinel line is never byte-compared.
+        #   generate_class_stub -> a stable engine UCLASS parent (AActor); the .h/.cpp
+        #                          text is a pure DB read (offline-served, Decision 5).
+        #                          class "AMyParityActor" -> UE file base "MyParityActor"
+        #                          (the A/U UCLASS prefix is stripped from FILE names),
+        #                          so both tools emit "MyParityActor.generated.h" / .h
+        #                          and the "// === MyParityActor.h ===" banner -- byte-equal.
+        ("source.lint_header", "source", "lint_header",
+         ["Source/MonolithSource/Private/Tests/Fixtures/CppErgoCorpus/Source/CppErgoTestMod/LintOrphanUproperty.h.fixture"], "text"),
+        ("source.generate_class_stub", "source", "generate_class_stub",
+         ["AActor", "AMyParityActor", "MonolithSource"], "text"),
     ]
     return actions
 
@@ -315,13 +366,18 @@ def fetch_live(ns, action, args):
 # ------------------------------------------------------------------ per-action
 
 
-def run_action(label, ns, action, args, ignore_cursor_bytes):
+def run_action(label, ns, action, args, ignore_cursor_bytes, compare="json"):
     """
     Returns a result dict:
       status: MATCH | DIFF | ERROR
       diffs:  list of (path, exe_val, py_val)
       warnings: list of (path, exe_val, py_val)
       error:  str | None
+
+    compare="json" (default): parse both stdouts as JSON and deep-diff.
+    compare="text": STRICT raw-stdout byte-compare (the source.* ergonomics
+    actions emit plain text, not JSON). Trailing newlines are normalised so a
+    lone print() newline difference is not a false DIFF; all other bytes must match.
     """
     res = {"label": label, "args": args, "status": None,
            "diffs": [], "warnings": [], "error": None}
@@ -334,6 +390,22 @@ def run_action(label, ns, action, args, ignore_cursor_bytes):
         err_parts.append(f"EXE exit={erc} stderr={eerr.strip()[:400]!r}")
     if prc != 0:
         err_parts.append(f"PY exit={prc} stderr={perr.strip()[:400]!r}")
+
+    if err_parts:
+        res["status"] = "ERROR"
+        res["error"] = " | ".join(err_parts)
+        return res
+
+    if compare == "text":
+        # Normalise only trailing newline(s); interior bytes must match exactly.
+        etext = (eout or "").rstrip("\n")
+        ptext = (pout or "").rstrip("\n")
+        if etext != ptext:
+            res["diffs"] = [("<stdout-text>", etext, ptext)]
+            res["status"] = "DIFF"
+        else:
+            res["status"] = "MATCH"
+        return res
 
     edata = pdata = None
     try:

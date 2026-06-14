@@ -2,6 +2,8 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
+#include "MonolithPropertyAccessReader.h"
+#include "MonolithAnimNodeBindingReader.h" // Gap 2 (function bindings) + Gap 12 (pin bindings) read helpers
 
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
@@ -39,7 +41,9 @@
 #include "AnimationModifier.h"
 #include "Rig/IKRigDefinition.h"
 #include "Rig/IKRigSkeleton.h"
+#include "Rig/Solvers/IKRigSolverBase.h" // FIKRigSolverBase::StaticStruct() for add_ik_solver struct enumeration
 #include "RigEditor/IKRigController.h"
+#include "UObject/UObjectIterator.h"     // TObjectIterator<UStruct> — enumerate live IKRig solver-struct table
 #include "Retargeter/IKRetargeter.h"
 #include "Retargeter/IKRetargetChainMapping.h"
 #include "RetargetEditor/IKRetargeterController.h"
@@ -260,6 +264,26 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("BlendSpace asset path"))
 			.Required(TEXT("sample_index"), TEXT("integer"), TEXT("Index of the sample to delete"))
 			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("bake_blend_space"),
+		TEXT("Rebuild a blend space's triangulation/grid (FBlendSpaceData) by running ResampleData(). "
+			 "Required after programmatic sample/axis edits — without it the runtime reads an empty "
+			 "triangulation and the blend space evaluates to bind/A-pose while the editor preview looks fine. "
+			 "Works on BlendSpace and BlendSpace1D. Marks the package dirty; saving is the caller's concern."),
+		FMonolithActionHandler::CreateStatic(&HandleBakeBlendSpace),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("BlendSpace or BlendSpace1D asset path"))
+			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("set_blend_space_interpolation"),
+		TEXT("Set a blend space's input-interpolation settings: 'use_grid' toggles bInterpolateUsingGrid "
+			 "(true = runtime uses the grid, false = runtime uses the triangulation), and "
+			 "'preferred_triangulation_direction' chooses the edge direction for ambiguous triangulation. "
+			 "Rebuilds the data (ResampleData) so the chosen structure is populated; marks the package dirty."),
+		FMonolithActionHandler::CreateStatic(&HandleSetBlendSpaceInterpolation),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("BlendSpace asset path"))
+			.Optional(TEXT("use_grid"), TEXT("bool"), TEXT("Set bInterpolateUsingGrid: true = grid interpolation, false = triangulation"))
+			.Optional(TEXT("preferred_triangulation_direction"), TEXT("string"), TEXT("None, Tangential, or Radial"))
+			.Build());
 
 	// ABP Graph Reading
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_state_machines"),
@@ -317,6 +341,65 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Optional(TEXT("recursive"), TEXT("bool"), TEXT("Expand each referenced chooser's full nested tree (root->child) in the output"), TEXT("false"))
+			.Build());
+
+	// --- Anim-node bindings: function (Gap 2) + pin property (Gap 12) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("get_anim_node_function_bindings"),
+		TEXT("Read the per-node function bindings (On Initial Update / On Become Relevant / On Update) on an animation graph node. ")
+		TEXT("Each binding reports function_name, member_parent_class, is_self_context and thread_safe. ")
+		TEXT("Omit node_id to list every node that has any non-empty function binding. ")
+		TEXT("Example: { asset_path: '/Game/Anim/ABP_Char', node_id: 'AnimGraphNode_SequencePlayer_0' }."),
+		FMonolithActionHandler::CreateStatic(&HandleGetAnimNodeFunctionBindings),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Optional(TEXT("node_id"), TEXT("string"), TEXT("Node name or NodeGuid. Omit to return all nodes that have any function binding."))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Filter to a specific graph"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("animation"), TEXT("set_anim_node_function_binding"),
+		TEXT("Bind (or clear) a function on an animation graph node's On Initial Update / On Become Relevant / On Update slot. ")
+		TEXT("Validates like the engine: the function must match the thread-safe anim-update prototype signature and be thread-safe ")
+		TEXT("(hard reject unless allow_non_thread_safe=true). Pass an empty function_name to clear. function_class targets an external ")
+		TEXT("library class; omit it to bind a function authored on the Animation Blueprint itself. ")
+		TEXT("Example: { asset_path: '/Game/Anim/ABP_Char', node_id: 'AnimGraphNode_BlendSpacePlayer_0', binding: 'update', function_name: 'UpdateSpeed' }."),
+		FMonolithActionHandler::CreateStatic(&HandleSetAnimNodeFunctionBinding),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("node_id"), TEXT("string"), TEXT("Node name or NodeGuid"))
+			.Required(TEXT("binding"), TEXT("string"), TEXT("Which slot: initial_update | become_relevant | update"))
+			.Optional(TEXT("function_name"), TEXT("string"), TEXT("Function to bind. Empty/omitted clears the binding."))
+			.Optional(TEXT("function_class"), TEXT("string"), TEXT("External library class path for the function. Omit for a self-member on the Animation Blueprint."))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Filter to a specific graph"))
+			.Optional(TEXT("recompile"), TEXT("bool"), TEXT("Recompile the Animation Blueprint after the change"), TEXT("true"))
+			.Optional(TEXT("allow_non_thread_safe"), TEXT("bool"), TEXT("Override the thread-safe hard reject (binding a non-thread-safe function can corrupt worker-thread anim evaluation)"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("animation"), TEXT("get_anim_node_pin_bindings"),
+		TEXT("Read the property-access PIN bindings on an animation graph node (distinct from function bindings). ")
+		TEXT("Each entry reports pin, path (the property-access chain), type (Property/Function) and is_bound. ")
+		TEXT("Omit node_id to list every node that has any pin binding. ")
+		TEXT("Example: { asset_path: '/Game/Anim/ABP_Char', node_id: 'AnimGraphNode_ModifyBone_0' }."),
+		FMonolithActionHandler::CreateStatic(&HandleGetAnimNodePinBindings),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Optional(TEXT("node_id"), TEXT("string"), TEXT("Node name or NodeGuid. Omit to return all nodes that have any pin binding."))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Filter to a specific graph"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("animation"), TEXT("set_anim_node_pin_binding"),
+		TEXT("Bind (or clear) a PIN on an animation graph node to a property-access path. ")
+		TEXT("Pass path as a string array (e.g. ['CharacterState','Speed']); an empty/omitted path clears the binding. ")
+		TEXT("After the write the node is reconstructed so the binding's pin type is re-derived, then the Animation Blueprint is recompiled. ")
+		TEXT("Works even when the node has no existing binding: the binding object is created on demand if absent. ")
+		TEXT("Example: { asset_path: '/Game/Anim/ABP_Char', node_id: 'AnimGraphNode_ModifyBone_0', pin: 'Alpha', path: ['CharacterState','Alpha'] }."),
+		FMonolithActionHandler::CreateStatic(&HandleSetAnimNodePinBinding),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("node_id"), TEXT("string"), TEXT("Node name or NodeGuid"))
+			.Required(TEXT("pin"), TEXT("string"), TEXT("Pin (property) name to bind"))
+			.Optional(TEXT("path"), TEXT("array"), TEXT("Property-access chain as a string array. Empty/omitted clears the binding."))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Filter to a specific graph"))
+			.Optional(TEXT("recompile"), TEXT("bool"), TEXT("Recompile the Animation Blueprint after the change"), TEXT("true"))
 			.Build());
 
 	// Notify Editing
@@ -714,9 +797,16 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleAddIKSolver),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("IKRig asset path"))
-			.Required(TEXT("solver_type"), TEXT("string"), TEXT("Solver type (e.g. FullBodyIKSolver or /Script/IKRig.FullBodyIKSolver)"))
-			.Optional(TEXT("root_bone"), TEXT("string"), TEXT("Root bone name for the solver"))
+			.Required(TEXT("solver_type"), TEXT("string"), TEXT("Solver type — friendly alias (fullbodyik/fbik, limb, pole, bodymover, settransform, stretchlimb) or the exact reflected struct name (e.g. IKRigFullBodyIKSolver). Resolved against the live solver-struct table; an unknown value returns the available list."))
+			.Optional(TEXT("root_bone"), TEXT("string"), TEXT("Root/start bone for the solver (meaningful for solvers that use a start bone, e.g. FullBodyIK)"))
 			.Optional(TEXT("goals"), TEXT("array"), TEXT("Array of {name, bone} goal objects to create and connect"))
+			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("remove_ik_solver"),
+		TEXT("Remove a solver from an IK Rig asset by stack index"),
+		FMonolithActionHandler::CreateStatic(&HandleRemoveIKSolver),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("IKRig asset path"))
+			.Required(TEXT("solver_index"), TEXT("integer"), TEXT("Index of the solver to remove (0-based stack index)"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_retargeter_info"),
 		TEXT("Get IK Retargeter asset info: source/target rigs, preview meshes, and chain mappings"),
@@ -775,6 +865,19 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("position_x"), TEXT("integer"), TEXT("Node X position (default: 200)"), TEXT("200"))
 			.Optional(TEXT("position_y"), TEXT("integer"), TEXT("Node Y position (default: 0)"), TEXT("0"))
 			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_conduit"),
+		TEXT("Add a conduit node to an existing state machine. A conduit is a shared transition hub: transitions route INTO it and its internal boolean rule gates onward transitions. "
+			 "NOTE: a conduit's bound graph is a TRANSITION-LOGIC graph (a boolean rule graph), NOT an anim/pose graph - it has no pose sink, so do not target it with pose-pin actions "
+			 "(set_state_result_source, add_anim_graph_node with a player node, etc.). The result reports graph_kind='transition_logic'. Transitions to/from the conduit use the existing add_transition. "
+			 "Recompiles the blueprint; marks the package dirty (saving is the caller's concern)."),
+		FMonolithActionHandler::CreateStatic(&HandleAddConduit),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("machine_name"), TEXT("string"), TEXT("State machine name (exact, as shown in get_state_machines)"))
+			.Required(TEXT("conduit_name"), TEXT("string"), TEXT("Name for the new conduit"))
+			.Optional(TEXT("position_x"), TEXT("integer"), TEXT("Node X position (default: 200)"), TEXT("200"))
+			.Optional(TEXT("position_y"), TEXT("integer"), TEXT("Node Y position (default: 0)"), TEXT("0"))
+			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("add_transition"),
 		TEXT("Add a transition between two states in a state machine"),
 		FMonolithActionHandler::CreateStatic(&HandleAddTransition),
@@ -785,7 +888,7 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("to_state"), TEXT("string"), TEXT("Destination state name"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_transition_rule"),
-		TEXT("Author a state machine transition's condition: a boolean variable, the sequence-player auto rule, or a numeric comparison (var/Abs(var) vs constant). Transaction-safe: rolls back on compile failure with no dirty package."),
+		TEXT("Author a state machine transition's condition: a boolean variable, the sequence-player auto rule, a numeric comparison (var/Abs(var) vs constant), or a compound AND/OR expression of multiple comparison terms. Transaction-safe: rolls back on compile failure with no dirty package."),
 		FMonolithActionHandler::CreateStatic(&HandleSetTransitionRule),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
@@ -793,11 +896,47 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("from_state"), TEXT("string"), TEXT("Source state name"))
 			.Required(TEXT("to_state"), TEXT("string"), TEXT("Destination state name"))
 			.Optional(TEXT("variable_name"), TEXT("string"), TEXT("Legacy/back-compat: boolean variable name. Equivalent to rule={kind:bool, variable:<name>}. Use 'rule' for non-bool conditions."))
-			.Optional(TEXT("rule"), TEXT("object"), TEXT("Structured rule. String 'auto'/'automatic' or a bool variable name also accepted. Object forms: {kind:'bool', variable:'X'} | {kind:'auto'} | {kind:'compare', lhs:'X' or 'Abs(X)', op:'>'|'<'|'>='|'<='|'=='|'!=', rhs:<number>}. (kind:'expression' is not yet supported.)"))
+			.Optional(TEXT("rule"), TEXT("object"), TEXT("Structured rule. String 'auto'/'automatic' or a bool variable name also accepted. Object forms: {kind:'bool', variable:'X'} | {kind:'auto'} | {kind:'compare', lhs:'X' or 'Abs(X)', op:'>'|'<'|'>='|'<='|'=='|'!=', rhs:<number>} | {kind:'expression', combine:'and'|'or' (default 'and'), terms:[{lhs:'X' or 'Abs(X)', op:<compare op>, rhs:<number>, abs?:bool, negate?:bool}, ...]}. The 'expression' kind folds its terms through chained BooleanAND/BooleanOR (a single term degrades to a plain compare)."))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_transition_rule"),
-		TEXT("Read back a state machine transition's current rule as structured data (kind=auto/bool/compare/none/custom, operands, op, rhs, comparison string)."),
+		TEXT("Read back a state machine transition's current rule as structured data (kind=auto/bool/compare/expression/none/custom, operands, op, rhs, comparison string; expression rules report combine + decoded terms)."),
 		FMonolithActionHandler::CreateStatic(&HandleGetTransitionRule),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("machine_name"), TEXT("string"), TEXT("State machine name"))
+			.Required(TEXT("from_state"), TEXT("string"), TEXT("Source state name"))
+			.Required(TEXT("to_state"), TEXT("string"), TEXT("Destination state name"))
+			.Build());
+
+	// State-machine editing — removal + entry re-point.
+	Registry.RegisterAction(TEXT("animation"), TEXT("remove_anim_state"),
+		TEXT("Remove a state from a state machine by name. Also removes the state's dependent transitions "
+			 "(incoming + outgoing) when remove_dependent_transitions is true (default); if false and "
+			 "transitions exist, errors rather than orphaning them. Refuses to remove the current entry state "
+			 "(re-point it with set_anim_entry_state first). The state's inner anim graph is torn down "
+			 "automatically. Recompiles the blueprint; marks the package dirty (saving is the caller's concern)."),
+		FMonolithActionHandler::CreateStatic(&HandleRemoveAnimState),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("machine_name"), TEXT("string"), TEXT("State machine name"))
+			.Required(TEXT("state_name"), TEXT("string"), TEXT("State to remove"))
+			.Optional(TEXT("remove_dependent_transitions"), TEXT("bool"), TEXT("Also remove transitions into/out of this state (default: true). If false and transitions exist, the call errors."), TEXT("true"))
+			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("set_anim_entry_state"),
+		TEXT("Re-point a state machine's entry/initial state to a different existing state. Breaks the entry "
+			 "node's current link and wires it to the named state's input pin. Recompiles the blueprint; "
+			 "marks the package dirty (saving is the caller's concern)."),
+		FMonolithActionHandler::CreateStatic(&HandleSetAnimEntryState),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("machine_name"), TEXT("string"), TEXT("State machine name"))
+			.Required(TEXT("state_name"), TEXT("string"), TEXT("State to make the entry/initial state"))
+			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("remove_anim_transition"),
+		TEXT("Remove the transition between two named states (directed from_state -> to_state). The transition's "
+			 "rule subgraph is torn down automatically. Recompiles the blueprint; marks the package dirty "
+			 "(saving is the caller's concern)."),
+		FMonolithActionHandler::CreateStatic(&HandleRemoveAnimTransition),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
 			.Required(TEXT("machine_name"), TEXT("string"), TEXT("State machine name"))
@@ -1413,7 +1552,10 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddBlendSpaceSample(const
 	BS->Modify();
 	FVector SampleValue(X, Y, 0.0f);
 	int32 Index = BS->AddSample(Anim, SampleValue);
+	BS->ValidateSampleData();   // clamp/validate sample positions
+	BS->ResampleData();         // rebuild FBlendSpaceData triangulation — REQUIRED for runtime
 	GEditor->EndTransaction();
+	BS->MarkPackageDirty();     // outside the transaction — dirty is not transactional state
 
 	if (Index == INDEX_NONE)
 		return FMonolithActionResult::Error(TEXT("Failed to add sample"));
@@ -1423,6 +1565,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddBlendSpaceSample(const
 	Root->SetStringField(TEXT("animation"), AnimPath);
 	Root->SetNumberField(TEXT("x"), X);
 	Root->SetNumberField(TEXT("y"), Y);
+	Root->SetBoolField(TEXT("baked"), true);
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -1457,13 +1600,17 @@ FMonolithActionResult FMonolithAnimationActions::HandleEditBlendSpaceSample(cons
 		}
 	}
 
+	BS->ValidateSampleData();   // clamp/validate sample positions
+	BS->ResampleData();         // rebuild FBlendSpaceData triangulation — REQUIRED for runtime
 	GEditor->EndTransaction();
+	BS->MarkPackageDirty();     // outside the transaction — dirty is not transactional state
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetNumberField(TEXT("index"), SampleIndex);
 	Root->SetNumberField(TEXT("x"), X);
 	Root->SetNumberField(TEXT("y"), Y);
 	if (!AnimPath.IsEmpty()) Root->SetStringField(TEXT("animation"), AnimPath);
+	Root->SetBoolField(TEXT("baked"), true);
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -1481,13 +1628,88 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeleteBlendSpaceSample(co
 	GEditor->BeginTransaction(FText::FromString(TEXT("Delete BlendSpace Sample")));
 	BS->Modify();
 	bool bSuccess = BS->DeleteSample(SampleIndex);
+	BS->ValidateSampleData();   // clamp/validate sample positions
+	BS->ResampleData();         // rebuild FBlendSpaceData triangulation — REQUIRED for runtime
 	GEditor->EndTransaction();
+	BS->MarkPackageDirty();     // outside the transaction — dirty is not transactional state
 
 	if (!bSuccess)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to delete sample at index %d"), SampleIndex));
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetNumberField(TEXT("deleted_index"), SampleIndex);
+	Root->SetBoolField(TEXT("baked"), true);
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleBakeBlendSpace(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+
+	UBlendSpace* BS = FMonolithAssetUtils::LoadAssetByPath<UBlendSpace>(AssetPath);
+	if (!BS) return FMonolithActionResult::Error(FString::Printf(TEXT("BlendSpace not found: %s"), *AssetPath));
+
+	const int32 SampleCount = BS->GetBlendSamples().Num();
+
+	BS->ValidateSampleData();   // clamp/validate sample positions
+	BS->ResampleData();         // rebuild FBlendSpaceData triangulation — REQUIRED for runtime
+	BS->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetBoolField(TEXT("baked"), true);
+	Root->SetNumberField(TEXT("sample_count"), SampleCount);
+	Root->SetBoolField(TEXT("has_blendspace_data"), !BS->GetBlendSpaceData().IsEmpty());
+	Root->SetBoolField(TEXT("saved"), false);
+	// 2D triangulation needs >= 3 samples; fewer than that is degenerate (resample is a no-op for 0).
+	if (SampleCount > 0 && SampleCount < 3 && !BS->IsA<UBlendSpace1D>())
+		Root->SetStringField(TEXT("warning"),
+			TEXT("Blend space has fewer than 3 samples — 2D triangulation is degenerate until more are added."));
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleSetBlendSpaceInterpolation(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+
+	UBlendSpace* BS = FMonolithAssetUtils::LoadAssetByPath<UBlendSpace>(AssetPath);
+	if (!BS) return FMonolithActionResult::Error(FString::Printf(TEXT("BlendSpace not found: %s"), *AssetPath));
+
+	if (Params->HasField(TEXT("use_grid")))
+		BS->bInterpolateUsingGrid = Params->GetBoolField(TEXT("use_grid"));
+
+	if (Params->HasField(TEXT("preferred_triangulation_direction")))
+	{
+		FString DirStr = Params->GetStringField(TEXT("preferred_triangulation_direction"));
+		if (DirStr.Equals(TEXT("None"), ESearchCase::IgnoreCase))
+			BS->PreferredTriangulationDirection = EPreferredTriangulationDirection::None;
+		else if (DirStr.Equals(TEXT("Tangential"), ESearchCase::IgnoreCase))
+			BS->PreferredTriangulationDirection = EPreferredTriangulationDirection::Tangential;
+		else if (DirStr.Equals(TEXT("Radial"), ESearchCase::IgnoreCase))
+			BS->PreferredTriangulationDirection = EPreferredTriangulationDirection::Radial;
+		else
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid preferred_triangulation_direction '%s' — must be None, Tangential, or Radial"), *DirStr));
+	}
+
+	// Rebuild so the chosen interpolation structure (grid samples / triangulation) is populated.
+	BS->ResampleData();
+	BS->MarkPackageDirty();
+
+	const TCHAR* DirName = TEXT("Tangential");
+	switch (BS->PreferredTriangulationDirection)
+	{
+	case EPreferredTriangulationDirection::None:       DirName = TEXT("None"); break;
+	case EPreferredTriangulationDirection::Tangential: DirName = TEXT("Tangential"); break;
+	case EPreferredTriangulationDirection::Radial:     DirName = TEXT("Radial"); break;
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetBoolField(TEXT("use_grid"), BS->bInterpolateUsingGrid);
+	Root->SetStringField(TEXT("preferred_triangulation_direction"), DirName);
+	Root->SetBoolField(TEXT("has_blendspace_data"), !BS->GetBlendSpaceData().IsEmpty());
+	Root->SetBoolField(TEXT("saved"), false);
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -2366,6 +2588,13 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetNodes(const TSharedPtr
 				PinsArr.Add(MakeShared<FJsonValueObject>(PinObj));
 			}
 			NodeObj->SetArrayField(TEXT("connected_pins"), PinsArr);
+
+			// Gap 2 — compact function-binding block { initial_update/become_relevant/update:
+			// name-or-null }, omitted when all three are empty. Gap 12 — compact pin-binding
+			// list [{pin, path}], omitted when empty. Both keep the payload lean.
+			MonolithAnimNodeBindingReader::SerializeCompactFunctionBindings(AnimNode, NodeObj);
+			MonolithAnimNodeBindingReader::SerializeCompactPinBindings(AnimNode, NodeObj);
+
 			NodesArr.Add(MakeShared<FJsonValueObject>(NodeObj));
 		}
 	}
@@ -2384,7 +2613,15 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetNodes(const TSharedPtr
 			if (!GraphFilter.IsEmpty() && Graph->GetName() != GraphFilter) continue;
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
-				if (!MonolithAnimGraphChooser::IsEvaluateChooserNode(Node)) continue;
+				if (!Node) continue;
+
+				// EvaluateChooser and PropertyAccess K2Nodes are NOT UAnimGraphNode_Base
+				// subclasses, so the primary loop skips them. Surface both here: the chooser
+				// node carries a reflectively-resolved chooser asset; the PropertyAccess node
+				// carries a reflectively-resolved property-access path (Gap 1).
+				const bool bIsChooser = MonolithAnimGraphChooser::IsEvaluateChooserNode(Node);
+				const bool bIsPropertyAccess = (Node->GetClass()->GetName() == TEXT("K2Node_PropertyAccess"));
+				if (!bIsChooser && !bIsPropertyAccess) continue;
 
 				FString ClassName = Node->GetClass()->GetName();
 				if (!NodeClassFilter.IsEmpty() && !ClassName.Contains(NodeClassFilter)) continue;
@@ -2396,8 +2633,16 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetNodes(const TSharedPtr
 				NodeObj->SetStringField(TEXT("graph"), Graph->GetName());
 				NodeObj->SetStringField(TEXT("node_guid"), Node->NodeGuid.ToString());
 
-				// Reflectively resolve the private `Chooser` UPROPERTY (see file-header comment).
-				MonolithAnimGraphChooser::ResolveChooserAsset(Node, NodeObj);
+				if (bIsChooser)
+				{
+					// Reflectively resolve the private `Chooser` UPROPERTY (see file-header comment).
+					MonolithAnimGraphChooser::ResolveChooserAsset(Node, NodeObj);
+				}
+				if (bIsPropertyAccess)
+				{
+					// Reflectively resolve the private PropertyAccess path (shared helper, Gap 1).
+					MonolithPropertyAccessReader::SerializePropertyAccessBlock(Node, NodeObj);
+				}
 
 				TArray<TSharedPtr<FJsonValue>> PinsArr;
 				for (UEdGraphPin* Pin : Node->Pins)
@@ -3888,6 +4133,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetBlendSpaceAxis(const T
 	}
 
 	BS->ValidateSampleData();
+	BS->ResampleData();         // rebuild FBlendSpaceData triangulation — REQUIRED for runtime
 
 	GEditor->EndTransaction();
 	BS->MarkPackageDirty();
@@ -3900,6 +4146,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetBlendSpaceAxis(const T
 	Root->SetNumberField(TEXT("grid_divisions"), BlendParam->GridNum);
 	Root->SetBoolField(TEXT("snap_to_grid"), BlendParam->bSnapToGrid);
 	Root->SetBoolField(TEXT("wrap_input"), BlendParam->bWrapInput);
+	Root->SetBoolField(TEXT("baked"), true);
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -5159,17 +5406,92 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddIKSolver(const TShared
 	UIKRigController* C = UIKRigController::GetController(Asset);
 	if (!C) return FMonolithActionResult::Error(TEXT("Failed to get IKRigController"));
 
-	// Normalize solver type — add package prefix if bare name
-	if (!SolverType.Contains(TEXT("/")))
+	if (SolverType.IsEmpty())
+		return FMonolithActionResult::Error(TEXT("solver_type is required"));
+
+	// Resolve the solver type by enumerating the live FIKRigSolverBase struct table
+	// (engine pattern: IKRigEditorController.cpp:854-882). The struct table is the source of
+	// truth — never a hardcoded /Script/... path. The alias map is a friendly-name convenience
+	// ON TOP of the enumeration; it carries both the bare spelling and the '...solver'-suffixed
+	// spelling so solver_type:"FullBodyIKSolver" resolves via alias before the gated substring
+	// branch is ever reached.
+	static const TMap<FString, FString> Aliases = {       // friendly (lowercase) -> canonical Struct->GetName()
+		{TEXT("fullbodyik"),        TEXT("IKRigFullBodyIKSolver")},
+		{TEXT("fbik"),              TEXT("IKRigFullBodyIKSolver")},
+		{TEXT("fullbodyiksolver"),  TEXT("IKRigFullBodyIKSolver")},
+		{TEXT("limb"),              TEXT("IKRigLimbSolver")},
+		{TEXT("limbsolver"),        TEXT("IKRigLimbSolver")},
+		{TEXT("pole"),              TEXT("IKRigPoleSolver")},
+		{TEXT("polesolver"),        TEXT("IKRigPoleSolver")},
+		{TEXT("bodymover"),         TEXT("IKRigBodyMoverSolver")},
+		{TEXT("bodymoversolver"),   TEXT("IKRigBodyMoverSolver")},
+		{TEXT("settransform"),      TEXT("IKRigSetTransform")},
+		{TEXT("stretchlimb"),       TEXT("IKRigStretchLimbSolver")},
+		{TEXT("stretchlimbsolver"), TEXT("IKRigStretchLimbSolver")},
+	};
+	const FString LowerType = SolverType.ToLower();
+	const FString Want = Aliases.Contains(LowerType) ? Aliases[LowerType] : SolverType;
+
+	// First pass: collect every candidate struct + remember any exact identity-style match.
+	// NEVER break on a substring hit — TObjectIterator order is not stable, and e.g. both
+	// IKRigLimbSolver and IKRigStretchLimbSolver contain "LimbSolver", so a first-hit substring
+	// match is non-deterministic. The engine matches by struct identity, so we resolve
+	// deterministically: alias/exact/prefix first, gated-unique substring only as a last resort.
+	UScriptStruct* Exact = nullptr;
+	TArray<UScriptStruct*> SubstringMatches;
+	TArray<FString> Available;
+	for (TObjectIterator<UStruct> It; It; ++It)
 	{
-		SolverType = FString::Printf(TEXT("/Script/IKRig.%s"), *SolverType);
+		UScriptStruct* S = Cast<UScriptStruct>(*It);
+		if (!S || !S->IsNative() || !S->IsChildOf(FIKRigSolverBase::StaticStruct())) continue;
+		if (S == FIKRigSolverBase::StaticStruct()) continue;          // skip base struct
+		const FString Name = S->GetName();
+		Available.Add(Name);
+		// exact match on Struct->GetName(); also accept the leading-'F' C++ spelling.
+		if (Name.Equals(Want, ESearchCase::IgnoreCase)
+			|| Name.Equals(FString::Printf(TEXT("F%s"), *Want), ESearchCase::IgnoreCase))
+		{
+			Exact = S;   // do NOT break — keep enumerating so 'Available' is complete for errors
+		}
+		else if (Name.Contains(Want, ESearchCase::IgnoreCase))
+		{
+			SubstringMatches.Add(S);
+		}
 	}
 
-	int32 SolverIdx = C->AddSolver(SolverType);
+	UScriptStruct* Resolved = Exact;
+	if (!Resolved)
+	{
+		// Last-resort substring: fire ONLY when exactly one struct contains the term.
+		if (SubstringMatches.Num() == 1)
+		{
+			Resolved = SubstringMatches[0];
+		}
+		else if (SubstringMatches.Num() > 1)
+		{
+			TArray<FString> Names;
+			for (UScriptStruct* S : SubstringMatches) Names.Add(S->GetName());
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Solver type '%s' is ambiguous — matches %d solvers: %s. Use the exact struct name."),
+				*SolverType, SubstringMatches.Num(), *FString::Join(Names, TEXT(", "))));
+		}
+	}
+	if (!Resolved)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Solver type '%s' not found. Available: %s"), *SolverType, *FString::Join(Available, TEXT(", "))));
+	}
+
+	const int32 SolverIdx = C->AddSolver(Resolved);   // UScriptStruct* overload — IKRigController.h:151
 	if (SolverIdx < 0)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to add solver of type '%s' — check type name"), *SolverType));
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Failed to add solver of type '%s' (resolved '%s') — AddSolver returned INDEX_NONE"),
+			*SolverType, *Resolved->GetName()));
 	}
+
+	// Canonical resolved name for the result payload.
+	const FString ResolvedName = Resolved->GetName();
 
 	// Optional root bone
 	FString RootBone;
@@ -5226,7 +5548,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddIKSolver(const TShared
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("asset_path"), AssetPath);
 	Root->SetNumberField(TEXT("solver_index"), SolverIdx);
-	Root->SetStringField(TEXT("solver_type"), SolverType);
+	Root->SetStringField(TEXT("solver_type"), ResolvedName);
 	Root->SetStringField(TEXT("label"), C->GetSolverUniqueName(SolverIdx));
 
 	if (!RootBone.IsEmpty())
@@ -5264,6 +5586,45 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddIKSolver(const TShared
 		Root->SetArrayField(TEXT("warnings"), WarningsArr);
 	}
 
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleRemoveIKSolver(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+
+	UIKRigDefinition* Asset = FMonolithAssetUtils::LoadAssetByPath<UIKRigDefinition>(AssetPath);
+	if (!Asset) return FMonolithActionResult::Error(FString::Printf(TEXT("IKRigDefinition not found: %s"), *AssetPath));
+
+	UIKRigController* C = UIKRigController::GetController(Asset);
+	if (!C) return FMonolithActionResult::Error(TEXT("Failed to get IKRigController"));
+
+	if (!Params->HasField(TEXT("solver_index")))
+		return FMonolithActionResult::Error(TEXT("solver_index is required"));
+	const int32 SolverIndex = static_cast<int32>(Params->GetNumberField(TEXT("solver_index")));
+
+	const int32 NumSolvers = C->GetNumSolvers();
+	if (SolverIndex < 0 || SolverIndex >= NumSolvers)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Invalid solver_index %d — IK Rig has %d solver(s) (valid range 0..%d)."),
+			SolverIndex, NumSolvers, NumSolvers - 1));
+	}
+
+	// RemoveSolver re-validates the index internally and returns false on failure.
+	if (!C->RemoveSolver(SolverIndex))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("RemoveSolver failed for index %d (IK Rig has %d solver(s))."), SolverIndex, NumSolvers));
+	}
+
+	Asset->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetNumberField(TEXT("removed_index"), SolverIndex);
+	Root->SetNumberField(TEXT("solver_count_after"), C->GetNumSolvers());
+	Root->SetBoolField(TEXT("saved"), false);
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -5619,6 +5980,104 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddStateToMachine(const T
 	return FMonolithActionResult::Success(Root);
 }
 
+// Find an existing conduit node in a state machine graph by its display name.
+// A conduit derives its name from its BoundGraph, exactly like a state.
+static UAnimStateConduitNode* FindConduitNodeByName(UAnimationStateMachineGraph* SMGraph, const FString& ConduitName)
+{
+	for (UEdGraphNode* Node : SMGraph->Nodes)
+	{
+		UAnimStateConduitNode* Conduit = Cast<UAnimStateConduitNode>(Node);
+		if (Conduit && Conduit->GetStateName() == ConduitName)
+		{
+			return Conduit;
+		}
+	}
+	return nullptr;
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleAddConduit(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath   = Params->GetStringField(TEXT("asset_path"));
+	FString MachineName = Params->GetStringField(TEXT("machine_name"));
+	FString ConduitName = Params->GetStringField(TEXT("conduit_name"));
+
+	double TempVal;
+	int32 PosX = 200;
+	int32 PosY = 0;
+	if (Params->TryGetNumberField(TEXT("position_x"), TempVal)) PosX = static_cast<int32>(TempVal);
+	if (Params->TryGetNumberField(TEXT("position_y"), TempVal)) PosY = static_cast<int32>(TempVal);
+
+	if (MachineName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: machine_name"));
+	if (ConduitName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: conduit_name"));
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	UAnimationStateMachineGraph* SMGraph = FindStateMachineGraphByName(ABP, MachineName);
+	if (!SMGraph) return FMonolithActionResult::Error(FString::Printf(TEXT("State machine '%s' not found in ABP"), *MachineName));
+
+	// Reject name collisions against existing states AND conduits (both share the
+	// state-name namespace, since a conduit's name derives from its BoundGraph).
+	if (FindStateNodeByName(SMGraph, ConduitName))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("A state named '%s' already exists in machine '%s'"), *ConduitName, *MachineName));
+	}
+	if (FindConduitNodeByName(SMGraph, ConduitName))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("A conduit named '%s' already exists in machine '%s'"), *ConduitName, *MachineName));
+	}
+
+	GEditor->BeginTransaction(FText::FromString(TEXT("Add Conduit to Machine")));
+	SMGraph->Modify();
+
+	// Conduits spawn through the same state-node template path as UAnimStateNode.
+	// SpawnNodeFromTemplate runs the editor drag-drop code path, whose
+	// PostPlacedNewNode() creates the conduit's BoundGraph subgraph.
+	UAnimStateConduitNode* NewNode = FEdGraphSchemaAction_NewStateNode::SpawnNodeFromTemplate<UAnimStateConduitNode>(
+		SMGraph,
+		NewObject<UAnimStateConduitNode>(SMGraph),
+		FVector2f(static_cast<float>(PosX), static_cast<float>(PosY)),
+		/*bSelectNewNode=*/false);
+
+	if (!NewNode)
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(TEXT("Failed to spawn conduit node"));
+	}
+
+	// IMPORTANT: a conduit's BoundGraph is a TRANSITION-LOGIC graph (a boolean rule
+	// graph), NOT an anim/pose graph. It has no pose sink — pose-pin actions
+	// (set_state_result_source, add_anim_graph_node with a player node, etc.) must
+	// NOT target it. See AnimStateConduitNode.h:19.
+	if (!NewNode->BoundGraph)
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(TEXT("Conduit node created but BoundGraph is null — conduit may be corrupt"));
+	}
+
+	// Rename via the BoundGraph so GetStateName() returns the desired conduit name.
+	{
+		TSharedPtr<INameValidatorInterface> NameValidator = FNameValidatorFactory::MakeValidator(NewNode);
+		FBlueprintEditorUtils::RenameGraphWithSuggestion(NewNode->BoundGraph, NameValidator, ConduitName);
+	}
+
+	GEditor->EndTransaction();
+
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("machine_name"), MachineName);
+	Root->SetStringField(TEXT("conduit_name"), NewNode->GetStateName());
+	Root->SetStringField(TEXT("bound_graph"), NewNode->BoundGraph->GetName());
+	// Tag the bound graph kind so callers do not target it with pose-pin actions.
+	Root->SetStringField(TEXT("graph_kind"), TEXT("transition_logic"));
+	Root->SetNumberField(TEXT("position_x"), NewNode->NodePosX);
+	Root->SetNumberField(TEXT("position_y"), NewNode->NodePosY);
+	return FMonolithActionResult::Success(Root);
+}
+
 FMonolithActionResult FMonolithAnimationActions::HandleAddTransition(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath   = Params->GetStringField(TEXT("asset_path"));
@@ -5680,6 +6139,334 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddTransition(const TShar
 	return FMonolithActionResult::Success(Root);
 }
 
+// Helper: find the single entry node of a state machine graph. A well-formed SM has exactly one.
+static UAnimStateEntryNode* FindEntryNode(UAnimationStateMachineGraph* SMGraph)
+{
+	for (UEdGraphNode* Node : SMGraph->Nodes)
+	{
+		if (UAnimStateEntryNode* Entry = Cast<UAnimStateEntryNode>(Node))
+		{
+			return Entry;
+		}
+	}
+	return nullptr;
+}
+
+// Helper: resolve the state currently wired to the entry node's output pin, or nullptr if none.
+static UAnimStateNodeBase* GetEntryTargetState(UAnimStateEntryNode* EntryNode)
+{
+	if (!EntryNode) return nullptr;
+	UEdGraphPin* EntryOut = EntryNode->GetOutputPin();
+	if (!EntryOut) return nullptr;
+	for (UEdGraphPin* Linked : EntryOut->LinkedTo)
+	{
+		if (Linked)
+		{
+			if (UAnimStateNodeBase* State = Cast<UAnimStateNodeBase>(Linked->GetOwningNode()))
+			{
+				return State;
+			}
+		}
+	}
+	return nullptr;
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleRemoveAnimState(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("GEditor unavailable"));
+
+	FString AssetPath   = Params->GetStringField(TEXT("asset_path"));
+	FString MachineName = Params->GetStringField(TEXT("machine_name"));
+	FString StateName   = Params->GetStringField(TEXT("state_name"));
+
+	if (MachineName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: machine_name"));
+	if (StateName.IsEmpty())   return FMonolithActionResult::Error(TEXT("Missing required parameter: state_name"));
+
+	bool bRemoveDependentTransitions = true;
+	Params->TryGetBoolField(TEXT("remove_dependent_transitions"), bRemoveDependentTransitions);
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	UAnimationStateMachineGraph* SMGraph = FindStateMachineGraphByName(ABP, MachineName);
+	if (!SMGraph) return FMonolithActionResult::Error(FString::Printf(TEXT("State machine '%s' not found in ABP"), *MachineName));
+
+	UAnimStateNode* StateNode = FindStateNodeByName(SMGraph, StateName);
+	if (!StateNode) return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found in machine '%s'"), *StateName, *MachineName));
+
+	// Guard: refuse to remove the current entry-target — it would leave the entry node dangling.
+	// Caller should re-point the entry via set_anim_entry_state first.
+	if (UAnimStateEntryNode* EntryNode = FindEntryNode(SMGraph))
+	{
+		if (GetEntryTargetState(EntryNode) == StateNode)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("State '%s' is the current entry state of machine '%s'. Re-point the entry with set_anim_entry_state before removing it."),
+				*StateName, *MachineName));
+		}
+	}
+
+	// Enumerate ALL transitions whose from-state OR to-state is this state, by scanning the graph's
+	// transition nodes and matching the directed endpoints by name. UAnimStateNodeBase::GetTransitionList
+	// is NOT a complete dependency set: it returns this state's outgoing transitions plus only its
+	// *bidirectional* incoming ones (AnimStateNodeBase.cpp) — an incoming non-bidirectional transition is
+	// missed. Such a transition is still swept when the state is removed (its link to us breaks, triggering
+	// UAnimStateTransitionNode::PinConnectionListChanged self-destruct), so counting via GetTransitionList
+	// under-reports. A full-graph scan keyed on both endpoints captures every dependent transition.
+	// Snapshot into local arrays up front so the count and names reflect exactly what gets swept, and so the
+	// removal loop iterates a stable copy (RemoveNode mutates SMGraph->Nodes and cascades self-destructs).
+	TArray<UAnimStateTransitionNode*> DepTransitions;
+	TArray<FString> DepTransitionLabels;
+	for (UEdGraphNode* Node : SMGraph->Nodes)
+	{
+		UAnimStateTransitionNode* Trans = Cast<UAnimStateTransitionNode>(Node);
+		if (!Trans) continue;
+		UAnimStateNodeBase* Prev = Trans->GetPreviousState();
+		UAnimStateNodeBase* Next = Trans->GetNextState();
+		const bool bTouchesState =
+			(Prev && Prev->GetStateName() == StateName) ||
+			(Next && Next->GetStateName() == StateName);
+		if (!bTouchesState) continue;
+		DepTransitions.Add(Trans);
+		DepTransitionLabels.Add(FString::Printf(TEXT("%s->%s"),
+			Prev ? *Prev->GetStateName() : TEXT("?"),
+			Next ? *Next->GetStateName() : TEXT("?")));
+	}
+
+	if (!bRemoveDependentTransitions && DepTransitions.Num() > 0)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("State '%s' has %d dependent transition(s): %s. Pass remove_dependent_transitions:true to remove them too."),
+			*StateName, DepTransitions.Num(), *FString::Join(DepTransitionLabels, TEXT(", "))));
+	}
+
+	GEditor->BeginTransaction(FText::FromString(TEXT("Remove Anim State")));
+	SMGraph->Modify();
+
+	// Remove the dependent transitions FIRST, before the state, iterating the up-front snapshot (never a
+	// live node list — RemoveNode mutates SMGraph->Nodes and each removal can cascade self-destructs).
+	// Do NOT pre-break their links — UAnimStateTransitionNode::PinConnectionListChanged self-destroys the
+	// node when links hit zero (AnimStateTransitionNode.cpp), which would invalidate the pointer before
+	// RemoveNode runs. RemoveNode breaks links + invokes DestroyNode (rule-subgraph teardown) itself.
+	// Build the reported list from the pre-captured snapshot labels so the count is exactly what we sweep,
+	// regardless of the cascade order. Removing the transitions here means the subsequent state removal has
+	// nothing left to cascade onto them (their pointers are already gone), so no double-remove can occur.
+	TArray<TSharedPtr<FJsonValue>> RemovedTransitions;
+	if (bRemoveDependentTransitions)
+	{
+		for (int32 Index = 0; Index < DepTransitions.Num(); ++Index)
+		{
+			UAnimStateTransitionNode* Trans = DepTransitions[Index];
+			if (!Trans) continue;
+			RemovedTransitions.Add(MakeShared<FJsonValueString>(DepTransitionLabels[Index]));
+			FBlueprintEditorUtils::RemoveNode(ABP, Trans, /*bDontRecompile=*/true);
+		}
+	}
+
+	// Remove the state node. UAnimStateNode::DestroyNode() auto-collects the state's BoundGraph via
+	// FBlueprintEditorUtils::RemoveGraph(..., EGraphRemoveFlags::Recompile) — do NOT call RemoveGraph
+	// here (double-remove). The Recompile flag inside DestroyNode fires a recompile regardless of
+	// bDontRecompile; the final CompileBlueprint below is the authoritative pass.
+	FBlueprintEditorUtils::RemoveNode(ABP, StateNode, /*bDontRecompile=*/true);
+
+	GEditor->EndTransaction();
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	const bool bCompileOk = (ABP->Status == EBlueprintStatus::BS_UpToDate
+		|| ABP->Status == EBlueprintStatus::BS_UpToDateWithWarnings);
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("machine_name"), MachineName);
+	Root->SetStringField(TEXT("removed_state"), StateName);
+	Root->SetArrayField(TEXT("removed_transitions"), RemovedTransitions);
+	Root->SetNumberField(TEXT("removed_transition_count"), RemovedTransitions.Num());
+	Root->SetBoolField(TEXT("compile_ok"), bCompileOk);
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleSetAnimEntryState(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("GEditor unavailable"));
+
+	FString AssetPath   = Params->GetStringField(TEXT("asset_path"));
+	FString MachineName = Params->GetStringField(TEXT("machine_name"));
+	FString StateName   = Params->GetStringField(TEXT("state_name"));
+
+	if (MachineName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: machine_name"));
+	if (StateName.IsEmpty())   return FMonolithActionResult::Error(TEXT("Missing required parameter: state_name"));
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	UAnimationStateMachineGraph* SMGraph = FindStateMachineGraphByName(ABP, MachineName);
+	if (!SMGraph) return FMonolithActionResult::Error(FString::Printf(TEXT("State machine '%s' not found in ABP"), *MachineName));
+
+	UAnimStateEntryNode* EntryNode = FindEntryNode(SMGraph);
+	if (!EntryNode) return FMonolithActionResult::Error(FString::Printf(TEXT("State machine '%s' has no entry node (corrupt)"), *MachineName));
+
+	UAnimStateNode* TargetState = FindStateNodeByName(SMGraph, StateName);
+	if (!TargetState) return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found in machine '%s'"), *StateName, *MachineName));
+
+	// Capture the prior entry target for the result (and the unchanged fast-path).
+	UAnimStateNodeBase* PrevTarget = GetEntryTargetState(EntryNode);
+	const FString PrevName = PrevTarget ? PrevTarget->GetStateName() : FString();
+
+	if (PrevTarget == TargetState)
+	{
+		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("asset_path"), AssetPath);
+		Root->SetStringField(TEXT("machine_name"), MachineName);
+		Root->SetStringField(TEXT("previous_entry_state"), PrevName);
+		Root->SetStringField(TEXT("new_entry_state"), StateName);
+		Root->SetBoolField(TEXT("unchanged"), true);
+		Root->SetBoolField(TEXT("compile_ok"), true);
+		Root->SetBoolField(TEXT("saved"), false);
+		return FMonolithActionResult::Success(Root);
+	}
+
+	UEdGraphPin* EntryOut = EntryNode->GetOutputPin();
+	if (!EntryOut) return FMonolithActionResult::Error(TEXT("Entry node has no output pin"));
+	UEdGraphPin* StateIn = TargetState->GetInputPin();
+	if (!StateIn) return FMonolithActionResult::Error(FString::Printf(TEXT("Target state '%s' has no input pin"), *StateName));
+
+	const UAnimationStateMachineSchema* Schema = Cast<UAnimationStateMachineSchema>(SMGraph->GetSchema());
+	if (!Schema) return FMonolithActionResult::Error(TEXT("State machine graph has unexpected or null schema"));
+
+	GEditor->BeginTransaction(FText::FromString(TEXT("Set Anim Entry State")));
+	SMGraph->Modify();
+
+	// Break the entry's current link(s), then connect to the new state's input pin. The entry node's
+	// output pin has no self-destruct behavior (unlike transition nodes), so breaking here is safe.
+	EntryOut->BreakAllPinLinks();
+	const bool bConnected = Schema->TryCreateConnection(EntryOut, StateIn);
+
+	GEditor->EndTransaction();
+
+	if (!bConnected)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Failed to wire entry node to state '%s'"), *StateName));
+	}
+
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	const bool bCompileOk = (ABP->Status == EBlueprintStatus::BS_UpToDate
+		|| ABP->Status == EBlueprintStatus::BS_UpToDateWithWarnings);
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("machine_name"), MachineName);
+	if (PrevName.IsEmpty())
+	{
+		Root->SetField(TEXT("previous_entry_state"), MakeShared<FJsonValueNull>());
+	}
+	else
+	{
+		Root->SetStringField(TEXT("previous_entry_state"), PrevName);
+	}
+	Root->SetStringField(TEXT("new_entry_state"), StateName);
+	Root->SetBoolField(TEXT("compile_ok"), bCompileOk);
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleRemoveAnimTransition(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("GEditor unavailable"));
+
+	FString AssetPath   = Params->GetStringField(TEXT("asset_path"));
+	FString MachineName = Params->GetStringField(TEXT("machine_name"));
+	FString FromState   = Params->GetStringField(TEXT("from_state"));
+	FString ToState     = Params->GetStringField(TEXT("to_state"));
+
+	if (MachineName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: machine_name"));
+	if (FromState.IsEmpty())   return FMonolithActionResult::Error(TEXT("Missing required parameter: from_state"));
+	if (ToState.IsEmpty())     return FMonolithActionResult::Error(TEXT("Missing required parameter: to_state"));
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	UAnimationStateMachineGraph* SMGraph = FindStateMachineGraphByName(ABP, MachineName);
+	if (!SMGraph) return FMonolithActionResult::Error(FString::Printf(TEXT("State machine '%s' not found in ABP"), *MachineName));
+
+	UAnimStateNode* FromNode = FindStateNodeByName(SMGraph, FromState);
+	if (!FromNode) return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found in machine '%s'"), *FromState, *MachineName));
+
+	UAnimStateNode* ToNode = FindStateNodeByName(SMGraph, ToState);
+	if (!ToNode) return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found in machine '%s'"), *ToState, *MachineName));
+
+	// Find the transition from FromState -> ToState. Use the source state's transition list and match
+	// the directed endpoints (GetPreviousState/GetNextState), mirroring the build_state_machine lookup.
+	TArray<UAnimStateTransitionNode*> Transitions;
+	FromNode->GetTransitionList(Transitions);
+
+	UAnimStateTransitionNode* TargetTransition = nullptr;
+	int32 MatchCount = 0;
+	for (UAnimStateTransitionNode* Trans : Transitions)
+	{
+		if (!Trans) continue;
+		UAnimStateNodeBase* Prev = Trans->GetPreviousState();
+		UAnimStateNodeBase* Next = Trans->GetNextState();
+		if (Prev && Next && Prev->GetStateName() == FromState && Next->GetStateName() == ToState)
+		{
+			if (!TargetTransition) TargetTransition = Trans;
+			++MatchCount;
+		}
+	}
+
+	if (!TargetTransition)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("No transition '%s'->'%s' found in machine '%s'"), *FromState, *ToState, *MachineName));
+	}
+
+	GEditor->BeginTransaction(FText::FromString(TEXT("Remove Anim Transition")));
+	SMGraph->Modify();
+
+	// Do NOT pre-break the transition's pin links — UAnimStateTransitionNode::PinConnectionListChanged
+	// self-destroys the node when links hit zero (AnimStateTransitionNode.cpp), invalidating the pointer.
+	// FBlueprintEditorUtils::RemoveNode breaks links + invokes DestroyNode (rule-subgraph teardown) itself.
+	FBlueprintEditorUtils::RemoveNode(ABP, TargetTransition, /*bDontRecompile=*/true);
+
+	GEditor->EndTransaction();
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	const bool bCompileOk = (ABP->Status == EBlueprintStatus::BS_UpToDate
+		|| ABP->Status == EBlueprintStatus::BS_UpToDateWithWarnings);
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("machine_name"), MachineName);
+	Root->SetStringField(TEXT("from_state"), FromState);
+	Root->SetStringField(TEXT("to_state"), ToState);
+	Root->SetBoolField(TEXT("removed"), true);
+	Root->SetNumberField(TEXT("matched_transition_count"), MatchCount);
+	Root->SetBoolField(TEXT("compile_ok"), bCompileOk);
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+// One comparison term of a compound expression rule: the same per-term grammar the `compare`
+// kind already parses (lhs operand variable, optional Abs(...), op, numeric rhs), plus an
+// optional per-term boolean negation applied via Not_PreBool.
+struct FExprTerm
+{
+	FString Variable;     // lhs operand variable name
+	bool    bUseAbs = false; // wrap lhs in Abs(...)
+	FString Op;           // one of > < >= <= == !=
+	double  Rhs = 0.0;    // constant right-hand side
+	bool    bNegate = false; // wrap the term's bool result in Not_PreBool
+};
+
 // Parsed representation of a structured transition rule. A plain-string `rule` collapses to
 // kind=bool (variable) or kind=auto, preserving full back-compat with the legacy string form.
 struct FParsedTransitionRule
@@ -5691,6 +6478,8 @@ struct FParsedTransitionRule
 	FString Op;           // compare: one of > < >= <= == !=
 	double  Rhs = 0.0;    // compare: constant right-hand side
 	FString ExpressionText; // expression kind: raw text (deferred)
+	TArray<FExprTerm> Terms; // expression kind: structured AND/OR terms
+	FString Combine;      // expression kind: "and" | "or" (default "and")
 	FString ParseError;   // populated when Kind == Invalid
 };
 
@@ -5797,22 +6586,224 @@ static FParsedTransitionRule ParseTransitionRule(const TSharedPtr<FJsonObject>& 
 	}
 	if (Kind.Equals(TEXT("expression"), ESearchCase::IgnoreCase))
 	{
-		// Arbitrary-expression graph authoring is intentionally NOT implemented in this pass —
-		// safe parsing + multi-node graph synthesis of free-form expressions is too large to do
-		// robustly here. Callers needing magnitude/threshold rules use kind=compare instead.
-		RuleObj->TryGetStringField(TEXT("text"), Out.ExpressionText);
+		// Structured compound rule: an array of comparison `terms` (each reusing the `compare`
+		// grammar) reduced through a single `combine` boolean operator. No free-form text parser.
+		FString Combine = TEXT("and");
+		if (RuleObj->HasField(TEXT("combine")))
+		{
+			RuleObj->TryGetStringField(TEXT("combine"), Combine);
+		}
+		Combine = Combine.TrimStartAndEnd();
+		if (!Combine.Equals(TEXT("and"), ESearchCase::IgnoreCase) && !Combine.Equals(TEXT("or"), ESearchCase::IgnoreCase))
+		{
+			Out.Kind = FParsedTransitionRule::EKind::Invalid;
+			Out.ParseError = FString::Printf(TEXT("rule.kind=expression 'combine' must be 'and' or 'or' (got '%s')."), *Combine);
+			return Out;
+		}
+		Out.Combine = Combine.ToLower();
+
+		const TArray<TSharedPtr<FJsonValue>>* TermsArr = nullptr;
+		if (!RuleObj->TryGetArrayField(TEXT("terms"), TermsArr) || !TermsArr)
+		{
+			Out.Kind = FParsedTransitionRule::EKind::Invalid;
+			Out.ParseError = TEXT("rule.kind=expression requires a 'terms' array of { lhs, op, rhs, abs?, negate? } objects.");
+			return Out;
+		}
+		if (TermsArr->Num() == 0)
+		{
+			Out.Kind = FParsedTransitionRule::EKind::Invalid;
+			Out.ParseError = TEXT("rule.kind=expression requires at least one term in 'terms'.");
+			return Out;
+		}
+
+		for (int32 Ti = 0; Ti < TermsArr->Num(); ++Ti)
+		{
+			const TSharedPtr<FJsonValue>& TermVal = (*TermsArr)[Ti];
+			const TSharedPtr<FJsonObject>* TermObjPtr = nullptr;
+			if (!TermVal.IsValid() || !TermVal->TryGetObject(TermObjPtr) || !TermObjPtr || !TermObjPtr->IsValid())
+			{
+				Out.Kind = FParsedTransitionRule::EKind::Invalid;
+				Out.ParseError = FString::Printf(TEXT("rule.kind=expression term %d is not an object { lhs, op, rhs, abs?, negate? }."), Ti);
+				return Out;
+			}
+			const TSharedPtr<FJsonObject>& TermObj = *TermObjPtr;
+
+			FExprTerm Term;
+
+			FString Lhs;
+			if (!TermObj->TryGetStringField(TEXT("lhs"), Lhs) || Lhs.IsEmpty())
+			{
+				Out.Kind = FParsedTransitionRule::EKind::Invalid;
+				Out.ParseError = FString::Printf(TEXT("rule.kind=expression term %d requires a non-empty 'lhs' (variable name, optionally 'Abs(Var)')."), Ti);
+				return Out;
+			}
+			// Allow lhs of the form "Abs(Var)" (mirrors the compare grammar).
+			FString LhsTrimmed = Lhs.TrimStartAndEnd();
+			if (LhsTrimmed.StartsWith(TEXT("Abs(")) && LhsTrimmed.EndsWith(TEXT(")")))
+			{
+				Term.bUseAbs = true;
+				Term.Variable = LhsTrimmed.Mid(4, LhsTrimmed.Len() - 5).TrimStartAndEnd();
+			}
+			else
+			{
+				TermObj->TryGetBoolField(TEXT("abs"), Term.bUseAbs);
+				Term.Variable = LhsTrimmed;
+			}
+			if (Term.Variable.IsEmpty())
+			{
+				Out.Kind = FParsedTransitionRule::EKind::Invalid;
+				Out.ParseError = FString::Printf(TEXT("rule.kind=expression term %d 'lhs' resolved to an empty operand name."), Ti);
+				return Out;
+			}
+
+			FString Op;
+			if (!TermObj->TryGetStringField(TEXT("op"), Op) || CompareOpToKismetFunctionName(Op).IsNone())
+			{
+				Out.Kind = FParsedTransitionRule::EKind::Invalid;
+				Out.ParseError = FString::Printf(TEXT("rule.kind=expression term %d requires 'op' to be one of: > < >= <= == != ."), Ti);
+				return Out;
+			}
+			Term.Op = Op;
+
+			double Rhs = 0.0;
+			if (!TermObj->TryGetNumberField(TEXT("rhs"), Rhs))
+			{
+				Out.Kind = FParsedTransitionRule::EKind::Invalid;
+				Out.ParseError = FString::Printf(TEXT("rule.kind=expression term %d requires a numeric 'rhs' constant."), Ti);
+				return Out;
+			}
+			Term.Rhs = Rhs;
+
+			TermObj->TryGetBoolField(TEXT("negate"), Term.bNegate);
+
+			Out.Terms.Add(Term);
+		}
+
 		Out.Kind = FParsedTransitionRule::EKind::Expression;
 		return Out;
 	}
 
 	Out.Kind = FParsedTransitionRule::EKind::Invalid;
-	Out.ParseError = FString::Printf(TEXT("Unknown rule.kind '%s'. Supported: bool, auto, compare. (expression is not yet supported.)"), *Kind);
+	Out.ParseError = FString::Printf(TEXT("Unknown rule.kind '%s'. Supported: bool, auto, compare, expression."), *Kind);
 	return Out;
 }
 
-// Author a float-compare rule into a transition's bound rule graph: VariableGet(lhs) ->
-// [optional Abs] -> Compare(op, rhs) -> result.bCanEnterTransition. Pure node authoring +
-// wiring only; the CALLER owns the transaction, compile, and rollback. Returns true on full
+// Build ONE comparison's nodes into a transition rule graph: VariableGet(lhs) -> [optional Abs]
+// -> Compare(op, rhs), and RETURN the comparison's bool ReturnValue pin (NOT wired to anything).
+// Pure node authoring; the CALLER owns Modify()/BreakAllPinLinks(), the transaction, the result
+// wiring, the compile, and rollback. RowY/ColBaseX let the caller stack multiple subgraphs
+// vertically (expression terms) or place a single one (compare). Returns the bool result pin on
+// success; on failure returns nullptr and fills OutError so the caller can roll back.
+static UEdGraphPin* BuildCompareSubgraph(
+	UEdGraph* RuleGraph,
+	const FString& Lhs,
+	bool bUseAbs,
+	const FString& Op,
+	double Rhs,
+	int32 ColBaseX,
+	int32 RowY,
+	FString& OutError)
+{
+	if (!RuleGraph)
+	{
+		OutError = TEXT("Internal: null rule graph.");
+		return nullptr;
+	}
+
+	const UEdGraphSchema* RuleSchema = RuleGraph->GetSchema();
+	if (!RuleSchema)
+	{
+		OutError = TEXT("Rule graph has no schema.");
+		return nullptr;
+	}
+
+	// 1) VariableGet for the lhs operand. SetSelfMember resolves inherited members too
+	//    (same idiom as the bool-rule path).
+	UK2Node_VariableGet* VarGetNode = NewObject<UK2Node_VariableGet>(RuleGraph);
+	VarGetNode->VariableReference.SetSelfMember(FName(*Lhs));
+	RuleGraph->AddNode(VarGetNode, /*bFromUI=*/false, /*bSelectNewNode=*/false);
+	VarGetNode->NodePosX = ColBaseX - 600;
+	VarGetNode->NodePosY = RowY;
+	VarGetNode->AllocateDefaultPins();
+
+	UEdGraphPin* VarOutPin = FindVariableGetOutputPin(VarGetNode, Lhs);
+	if (!VarOutPin)
+	{
+		OutError = FString::Printf(TEXT("Could not resolve output pin for operand '%s' (variable may not exist or is not readable)."), *Lhs);
+		return nullptr;
+	}
+
+	// 2) Optional Abs(double) node.
+	UEdGraphPin* LhsValuePin = VarOutPin;
+	if (bUseAbs)
+	{
+		UFunction* AbsFn = UKismetMathLibrary::StaticClass()->FindFunctionByName(TEXT("Abs"));
+		if (!AbsFn)
+		{
+			OutError = TEXT("Internal: UKismetMathLibrary::Abs not found.");
+			return nullptr;
+		}
+		UK2Node_CallFunction* AbsNode = NewObject<UK2Node_CallFunction>(RuleGraph);
+		AbsNode->SetFromFunction(AbsFn);
+		RuleGraph->AddNode(AbsNode, /*bFromUI=*/false, /*bSelectNewNode=*/false);
+		AbsNode->NodePosX = ColBaseX - 400;
+		AbsNode->NodePosY = RowY;
+		AbsNode->AllocateDefaultPins();
+
+		UEdGraphPin* AbsInPin  = AbsNode->FindPin(TEXT("A"), EGPD_Input);
+		UEdGraphPin* AbsOutPin = AbsNode->FindPin(TEXT("ReturnValue"), EGPD_Output);
+		if (!AbsInPin || !AbsOutPin)
+		{
+			OutError = TEXT("Abs node missing expected pins (A / ReturnValue).");
+			return nullptr;
+		}
+		if (!RuleSchema->TryCreateConnection(VarOutPin, AbsInPin))
+		{
+			OutError = FString::Printf(TEXT("Failed to wire operand '%s' into Abs."), *Lhs);
+			return nullptr;
+		}
+		LhsValuePin = AbsOutPin;
+	}
+
+	// 3) Comparison node.
+	const FName CmpFnName = CompareOpToKismetFunctionName(Op);
+	UFunction* CmpFn = UKismetMathLibrary::StaticClass()->FindFunctionByName(CmpFnName);
+	if (!CmpFn)
+	{
+		OutError = FString::Printf(TEXT("Internal: comparison function '%s' not found."), *CmpFnName.ToString());
+		return nullptr;
+	}
+	UK2Node_CallFunction* CmpNode = NewObject<UK2Node_CallFunction>(RuleGraph);
+	CmpNode->SetFromFunction(CmpFn);
+	RuleGraph->AddNode(CmpNode, /*bFromUI=*/false, /*bSelectNewNode=*/false);
+	CmpNode->NodePosX = ColBaseX - 200;
+	CmpNode->NodePosY = RowY;
+	CmpNode->AllocateDefaultPins();
+
+	UEdGraphPin* CmpAPin   = CmpNode->FindPin(TEXT("A"), EGPD_Input);
+	UEdGraphPin* CmpBPin   = CmpNode->FindPin(TEXT("B"), EGPD_Input);
+	UEdGraphPin* CmpRetPin = CmpNode->FindPin(TEXT("ReturnValue"), EGPD_Output);
+	if (!CmpAPin || !CmpBPin || !CmpRetPin)
+	{
+		OutError = TEXT("Comparison node missing expected pins (A / B / ReturnValue).");
+		return nullptr;
+	}
+
+	if (!RuleSchema->TryCreateConnection(LhsValuePin, CmpAPin))
+	{
+		OutError = TEXT("Failed to wire operand into comparison input A.");
+		return nullptr;
+	}
+	// rhs constant -> default value on the B pin.
+	CmpBPin->DefaultValue = FString::SanitizeFloat(Rhs);
+
+	OutError.Empty();
+	return CmpRetPin;
+}
+
+// Author a single float-compare rule into a transition's bound rule graph: builds the comparison
+// subgraph and wires its bool result straight into result.bCanEnterTransition. Pure node authoring
+// + wiring only; the CALLER owns the transaction, compile, and rollback. Returns true on full
 // wire-through; on any failure fills OutError and the caller must roll the transaction back.
 static bool AuthorCompareRuleNodes(
 	UEdGraph* RuleGraph,
@@ -5840,93 +6831,182 @@ static bool AuthorCompareRuleNodes(
 	RuleGraph->Modify();
 	ResultPin->BreakAllPinLinks();
 
-	const int32 BaseX = ResultNode->NodePosX;
-	const int32 BaseY = ResultNode->NodePosY;
-
-	// 1) VariableGet for the lhs operand. SetSelfMember resolves inherited members too
-	//    (same idiom as the bool-rule path).
-	UK2Node_VariableGet* VarGetNode = NewObject<UK2Node_VariableGet>(RuleGraph);
-	VarGetNode->VariableReference.SetSelfMember(FName(*Lhs));
-	RuleGraph->AddNode(VarGetNode, /*bFromUI=*/false, /*bSelectNewNode=*/false);
-	VarGetNode->NodePosX = BaseX - 600;
-	VarGetNode->NodePosY = BaseY;
-	VarGetNode->AllocateDefaultPins();
-
-	UEdGraphPin* VarOutPin = FindVariableGetOutputPin(VarGetNode, Lhs);
-	if (!VarOutPin)
+	UEdGraphPin* CmpRetPin = BuildCompareSubgraph(
+		RuleGraph, Lhs, bUseAbs, Op, Rhs,
+		/*ColBaseX=*/ResultNode->NodePosX, /*RowY=*/ResultNode->NodePosY, OutError);
+	if (!CmpRetPin)
 	{
-		OutError = FString::Printf(TEXT("Could not resolve output pin for operand '%s' (variable may not exist or is not readable)."), *Lhs);
 		return false;
 	}
 
-	// 2) Optional Abs(double) node.
-	UEdGraphPin* LhsValuePin = VarOutPin;
-	if (bUseAbs)
-	{
-		UFunction* AbsFn = UKismetMathLibrary::StaticClass()->FindFunctionByName(TEXT("Abs"));
-		if (!AbsFn)
-		{
-			OutError = TEXT("Internal: UKismetMathLibrary::Abs not found.");
-			return false;
-		}
-		UK2Node_CallFunction* AbsNode = NewObject<UK2Node_CallFunction>(RuleGraph);
-		AbsNode->SetFromFunction(AbsFn);
-		RuleGraph->AddNode(AbsNode, /*bFromUI=*/false, /*bSelectNewNode=*/false);
-		AbsNode->NodePosX = BaseX - 400;
-		AbsNode->NodePosY = BaseY;
-		AbsNode->AllocateDefaultPins();
-
-		UEdGraphPin* AbsInPin  = AbsNode->FindPin(TEXT("A"), EGPD_Input);
-		UEdGraphPin* AbsOutPin = AbsNode->FindPin(TEXT("ReturnValue"), EGPD_Output);
-		if (!AbsInPin || !AbsOutPin)
-		{
-			OutError = TEXT("Abs node missing expected pins (A / ReturnValue).");
-			return false;
-		}
-		if (!RuleSchema->TryCreateConnection(VarOutPin, AbsInPin))
-		{
-			OutError = FString::Printf(TEXT("Failed to wire operand '%s' into Abs."), *Lhs);
-			return false;
-		}
-		LhsValuePin = AbsOutPin;
-	}
-
-	// 3) Comparison node.
-	const FName CmpFnName = CompareOpToKismetFunctionName(Op);
-	UFunction* CmpFn = UKismetMathLibrary::StaticClass()->FindFunctionByName(CmpFnName);
-	if (!CmpFn)
-	{
-		OutError = FString::Printf(TEXT("Internal: comparison function '%s' not found."), *CmpFnName.ToString());
-		return false;
-	}
-	UK2Node_CallFunction* CmpNode = NewObject<UK2Node_CallFunction>(RuleGraph);
-	CmpNode->SetFromFunction(CmpFn);
-	RuleGraph->AddNode(CmpNode, /*bFromUI=*/false, /*bSelectNewNode=*/false);
-	CmpNode->NodePosX = BaseX - 200;
-	CmpNode->NodePosY = BaseY;
-	CmpNode->AllocateDefaultPins();
-
-	UEdGraphPin* CmpAPin   = CmpNode->FindPin(TEXT("A"), EGPD_Input);
-	UEdGraphPin* CmpBPin   = CmpNode->FindPin(TEXT("B"), EGPD_Input);
-	UEdGraphPin* CmpRetPin = CmpNode->FindPin(TEXT("ReturnValue"), EGPD_Output);
-	if (!CmpAPin || !CmpBPin || !CmpRetPin)
-	{
-		OutError = TEXT("Comparison node missing expected pins (A / B / ReturnValue).");
-		return false;
-	}
-
-	if (!RuleSchema->TryCreateConnection(LhsValuePin, CmpAPin))
-	{
-		OutError = TEXT("Failed to wire operand into comparison input A.");
-		return false;
-	}
-	// rhs constant -> default value on the B pin.
-	CmpBPin->DefaultValue = FString::SanitizeFloat(Rhs);
-
-	// 4) Compare result -> bCanEnterTransition.
+	// Compare result -> bCanEnterTransition.
 	if (!RuleSchema->TryCreateConnection(CmpRetPin, ResultPin))
 	{
 		OutError = TEXT("Failed to wire comparison result into bCanEnterTransition.");
+		return false;
+	}
+
+	OutError.Empty();
+	return true;
+}
+
+// Author a compound expression rule: build one compare subgraph per term, apply Not_PreBool to any
+// negated term, then left-fold the per-term bool pins through chained BooleanAND/BooleanOR (per
+// Combine) and wire the final folded pin into result.bCanEnterTransition. A single term degrades to
+// a plain compare (no fold node). Before authoring, the existing rule nodes (everything except the
+// result node) are removed so re-authoring does not litter the graph. Pure node authoring; the
+// CALLER owns the transaction, compile, and rollback. Returns true on success; on any failure fills
+// OutError and the caller must roll the transaction back.
+static bool AuthorExpressionRuleNodes(
+	UAnimBlueprint* ABP,
+	UEdGraph* RuleGraph,
+	UAnimGraphNode_TransitionResult* ResultNode,
+	UEdGraphPin* ResultPin,
+	const TArray<FExprTerm>& Terms,
+	const FString& Combine,
+	FString& OutError)
+{
+	if (!ABP || !RuleGraph || !ResultNode || !ResultPin)
+	{
+		OutError = TEXT("Internal: null ABP / rule graph / result node / result pin.");
+		return false;
+	}
+	if (Terms.Num() == 0)
+	{
+		OutError = TEXT("kind:expression requires at least one term.");
+		return false;
+	}
+
+	const UEdGraphSchema* RuleSchema = RuleGraph->GetSchema();
+	if (!RuleSchema)
+	{
+		OutError = TEXT("Rule graph has no schema.");
+		return false;
+	}
+
+	RuleGraph->Modify();
+	ResultPin->BreakAllPinLinks();
+
+	// Clear the prior rule graph (keep the result node) so re-authoring leaves no orphaned nodes.
+	// RemoveNode breaks links + invokes DestroyNode (proper rule-subgraph teardown); inside the
+	// caller's open transaction so rollback restores them. bDontRecompile — the caller's compile
+	// is authoritative.
+	{
+		TArray<UEdGraphNode*> NodesToRemove;
+		for (UEdGraphNode* N : RuleGraph->Nodes)
+		{
+			if (N && N != ResultNode)
+			{
+				NodesToRemove.Add(N);
+			}
+		}
+		for (UEdGraphNode* N : NodesToRemove)
+		{
+			FBlueprintEditorUtils::RemoveNode(ABP, N, /*bDontRecompile=*/true);
+		}
+	}
+
+	const int32 ColBaseX = ResultNode->NodePosX;
+	const int32 BaseY = ResultNode->NodePosY;
+
+	// 1) Build one comparison subgraph per term, capturing its bool result pin (optionally negated).
+	TArray<UEdGraphPin*> TermBoolPins;
+	TermBoolPins.Reserve(Terms.Num());
+	for (int32 Ti = 0; Ti < Terms.Num(); ++Ti)
+	{
+		const FExprTerm& Term = Terms[Ti];
+		const int32 RowY = BaseY + Ti * 150;
+
+		UEdGraphPin* TermBoolPin = BuildCompareSubgraph(
+			RuleGraph, Term.Variable, Term.bUseAbs, Term.Op, Term.Rhs, ColBaseX, RowY, OutError);
+		if (!TermBoolPin)
+		{
+			OutError = FString::Printf(TEXT("term %d (%s): %s"), Ti, *Term.Variable, *OutError);
+			return false;
+		}
+
+		// Optional per-term negation via Not_PreBool.
+		if (Term.bNegate)
+		{
+			UFunction* NotFn = UKismetMathLibrary::StaticClass()->FindFunctionByName(TEXT("Not_PreBool"));
+			if (!NotFn)
+			{
+				OutError = TEXT("Internal: UKismetMathLibrary::Not_PreBool not found.");
+				return false;
+			}
+			UK2Node_CallFunction* NotNode = NewObject<UK2Node_CallFunction>(RuleGraph);
+			NotNode->SetFromFunction(NotFn);
+			RuleGraph->AddNode(NotNode, /*bFromUI=*/false, /*bSelectNewNode=*/false);
+			NotNode->NodePosX = ColBaseX - 120;
+			NotNode->NodePosY = RowY;
+			NotNode->AllocateDefaultPins();
+
+			UEdGraphPin* NotInPin  = NotNode->FindPin(TEXT("A"), EGPD_Input);
+			UEdGraphPin* NotOutPin = NotNode->FindPin(TEXT("ReturnValue"), EGPD_Output);
+			if (!NotInPin || !NotOutPin)
+			{
+				OutError = FString::Printf(TEXT("term %d: Not_PreBool node missing expected pins (A / ReturnValue)."), Ti);
+				return false;
+			}
+			if (!RuleSchema->TryCreateConnection(TermBoolPin, NotInPin))
+			{
+				OutError = FString::Printf(TEXT("term %d: failed to wire comparison into Not_PreBool."), Ti);
+				return false;
+			}
+			TermBoolPin = NotOutPin;
+		}
+
+		TermBoolPins.Add(TermBoolPin);
+	}
+
+	// 2) Single term -> wire its bool straight into the result (no fold node).
+	UEdGraphPin* FinalBoolPin = TermBoolPins[0];
+
+	// 3) Multiple terms -> left-fold through chained BooleanAND / BooleanOR.
+	if (TermBoolPins.Num() > 1)
+	{
+		const bool bUseAnd = Combine.Equals(TEXT("and"), ESearchCase::IgnoreCase);
+		const FName BoolFnName = bUseAnd ? FName(TEXT("BooleanAND")) : FName(TEXT("BooleanOR"));
+		UFunction* BoolFn = UKismetMathLibrary::StaticClass()->FindFunctionByName(BoolFnName);
+		if (!BoolFn)
+		{
+			OutError = FString::Printf(TEXT("Internal: UKismetMathLibrary::%s not found."), *BoolFnName.ToString());
+			return false;
+		}
+
+		UEdGraphPin* AccPin = TermBoolPins[0];
+		for (int32 Ki = 1; Ki < TermBoolPins.Num(); ++Ki)
+		{
+			UK2Node_CallFunction* FoldNode = NewObject<UK2Node_CallFunction>(RuleGraph);
+			FoldNode->SetFromFunction(BoolFn);
+			RuleGraph->AddNode(FoldNode, /*bFromUI=*/false, /*bSelectNewNode=*/false);
+			FoldNode->NodePosX = ColBaseX - 60;
+			FoldNode->NodePosY = BaseY + Ki * 150;
+			FoldNode->AllocateDefaultPins();
+
+			UEdGraphPin* FoldAPin   = FoldNode->FindPin(TEXT("A"), EGPD_Input);
+			UEdGraphPin* FoldBPin   = FoldNode->FindPin(TEXT("B"), EGPD_Input);
+			UEdGraphPin* FoldRetPin = FoldNode->FindPin(TEXT("ReturnValue"), EGPD_Output);
+			if (!FoldAPin || !FoldBPin || !FoldRetPin)
+			{
+				OutError = FString::Printf(TEXT("%s node missing expected pins (A / B / ReturnValue)."), *BoolFnName.ToString());
+				return false;
+			}
+			if (!RuleSchema->TryCreateConnection(AccPin, FoldAPin) ||
+				!RuleSchema->TryCreateConnection(TermBoolPins[Ki], FoldBPin))
+			{
+				OutError = FString::Printf(TEXT("Failed to wire term %d into the %s fold chain."), Ki, *BoolFnName.ToString());
+				return false;
+			}
+			AccPin = FoldRetPin;
+		}
+		FinalBoolPin = AccPin;
+	}
+
+	// 4) Final folded (or single) bool -> bCanEnterTransition.
+	if (!RuleSchema->TryCreateConnection(FinalBoolPin, ResultPin))
+	{
+		OutError = TEXT("Failed to wire expression result into bCanEnterTransition.");
 		return false;
 	}
 
@@ -6018,15 +7098,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetTransitionRule(const T
 	if (ParsedRule.Kind == FParsedTransitionRule::EKind::Invalid)
 	{
 		return FMonolithActionResult::Error(ParsedRule.ParseError.IsEmpty()
-			? TEXT("Invalid rule. Provide 'variable_name' (legacy bool), or 'rule' as a string or { kind: bool|auto|compare }.")
+			? TEXT("Invalid rule. Provide 'variable_name' (legacy bool), or 'rule' as a string or { kind: bool|auto|compare|expression }.")
 			: ParsedRule.ParseError);
-	}
-
-	// expression: explicit, clean deferral — no fragile graph surgery shipped this pass.
-	if (ParsedRule.Kind == FParsedTransitionRule::EKind::Expression)
-	{
-		return FMonolithActionResult::Error(
-			TEXT("kind:expression not yet supported. Use kind:compare for var/Abs(var) vs constant (op one of > < >= <= == !=)."));
 	}
 
 	// --- Operand validation (before touching the graph) ----------------------------------
@@ -6059,6 +7132,24 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetTransitionRule(const T
 		{
 			return FMonolithActionResult::Error(FString::Printf(
 				TEXT("Compare operand '%s' is not a usable numeric variable (no BP float/int or inherited Blueprint-visible float). Use get_abp_variables to list available variables."), *ParsedRule.Variable));
+		}
+	}
+	else if (ParsedRule.Kind == FParsedTransitionRule::EKind::Expression)
+	{
+		if (ParsedRule.Terms.Num() == 0)
+		{
+			return FMonolithActionResult::Error(TEXT("kind:expression requires at least one term in 'terms'."));
+		}
+		// Each term's operand must be a usable numeric, exactly as kind:compare requires.
+		for (int32 Ti = 0; Ti < ParsedRule.Terms.Num(); ++Ti)
+		{
+			FString FoundCat;
+			if (!IsUsableFloatOperand(ABP, ParsedRule.Terms[Ti].Variable, FoundCat))
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("kind:expression term %d operand '%s' is not a usable numeric variable (no BP float/int or inherited Blueprint-visible float). Use get_abp_variables to list available variables."),
+					Ti, *ParsedRule.Terms[Ti].Variable));
+			}
 		}
 	}
 
@@ -6172,10 +7263,15 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetTransitionRule(const T
 			AuthorError = FString::Printf(TEXT("Failed to wire bool variable '%s' into the rule result."), *ParsedRule.Variable);
 		}
 	}
-	else // Compare
+	else if (ParsedRule.Kind == FParsedTransitionRule::EKind::Compare)
 	{
 		bAuthored = AuthorCompareRuleNodes(RuleGraph, ResultNode, ResultPin,
 			ParsedRule.Variable, ParsedRule.bUseAbs, ParsedRule.Op, ParsedRule.Rhs, AuthorError);
+	}
+	else if (ParsedRule.Kind == FParsedTransitionRule::EKind::Expression)
+	{
+		bAuthored = AuthorExpressionRuleNodes(ABP, RuleGraph, ResultNode, ResultPin,
+			ParsedRule.Terms, ParsedRule.Combine, AuthorError);
 	}
 
 	if (!bAuthored)
@@ -6229,7 +7325,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetTransitionRule(const T
 		Root->SetStringField(TEXT("variable_name"), ParsedRule.Variable);
 		Root->SetBoolField(TEXT("pin_wired"), true);
 	}
-	else // Compare
+	else if (ParsedRule.Kind == FParsedTransitionRule::EKind::Compare)
 	{
 		Root->SetStringField(TEXT("rule_kind"), TEXT("compare"));
 		const FString LhsDisplay = ParsedRule.bUseAbs
@@ -6244,6 +7340,38 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetTransitionRule(const T
 			FString::Printf(TEXT("%s %s %s"), *LhsDisplay, *ParsedRule.Op, *FString::SanitizeFloat(ParsedRule.Rhs)));
 		Root->SetBoolField(TEXT("pin_wired"), true);
 	}
+	else // Expression
+	{
+		Root->SetStringField(TEXT("rule_kind"), TEXT("expression"));
+		Root->SetStringField(TEXT("combine"), ParsedRule.Combine);
+		Root->SetNumberField(TEXT("term_count"), ParsedRule.Terms.Num());
+
+		TArray<TSharedPtr<FJsonValue>> TermArr;
+		TArray<FString> CompareStrings;
+		for (const FExprTerm& Term : ParsedRule.Terms)
+		{
+			const FString LhsDisplay = Term.bUseAbs ? FString::Printf(TEXT("Abs(%s)"), *Term.Variable) : Term.Variable;
+			const FString Cmp = FString::Printf(TEXT("%s%s %s %s"),
+				Term.bNegate ? TEXT("NOT ") : TEXT(""),
+				*LhsDisplay, *Term.Op, *FString::SanitizeFloat(Term.Rhs));
+			CompareStrings.Add(Cmp);
+
+			TSharedPtr<FJsonObject> TermObj = MakeShared<FJsonObject>();
+			TermObj->SetStringField(TEXT("lhs"), LhsDisplay);
+			TermObj->SetStringField(TEXT("operand"), Term.Variable);
+			TermObj->SetBoolField(TEXT("abs"), Term.bUseAbs);
+			TermObj->SetStringField(TEXT("op"), Term.Op);
+			TermObj->SetNumberField(TEXT("rhs"), Term.Rhs);
+			TermObj->SetBoolField(TEXT("negate"), Term.bNegate);
+			TermObj->SetStringField(TEXT("comparison"), Cmp);
+			TermArr.Add(MakeShared<FJsonValueObject>(TermObj));
+		}
+		Root->SetArrayField(TEXT("terms"), TermArr);
+
+		const FString Joiner = ParsedRule.Combine.Equals(TEXT("or"), ESearchCase::IgnoreCase) ? TEXT(" OR ") : TEXT(" AND ");
+		Root->SetStringField(TEXT("expression"), FString::Join(CompareStrings, *Joiner));
+		Root->SetBoolField(TEXT("pin_wired"), true);
+	}
 
 	if (Warnings.Num() > 0)
 	{
@@ -6254,11 +7382,102 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetTransitionRule(const T
 	return FMonolithActionResult::Success(Root);
 }
 
+// Map a KismetMathLibrary double-comparison function name back to its operator token (inverse of
+// CompareOpToKismetFunctionName). Returns empty for a non-comparison function.
+static FString KismetCompareFnToOp(const FName& N)
+{
+	if (N == TEXT("Greater_DoubleDouble"))      return TEXT(">");
+	if (N == TEXT("Less_DoubleDouble"))         return TEXT("<");
+	if (N == TEXT("GreaterEqual_DoubleDouble")) return TEXT(">=");
+	if (N == TEXT("LessEqual_DoubleDouble"))    return TEXT("<=");
+	if (N == TEXT("EqualEqual_DoubleDouble"))   return TEXT("==");
+	if (N == TEXT("NotEqual_DoubleDouble"))     return TEXT("!=");
+	return FString();
+}
+
+// Decode a single bool-producing node (a comparison CallFunction, optionally fronted by Not_PreBool)
+// into a structured term JSON object { lhs, operand, abs, op, rhs, negate, comparison }. Returns the
+// object on a recognized comparison term, or nullptr if the node is not a decodable compare term.
+static TSharedPtr<FJsonObject> DecodeExpressionTerm(UEdGraphNode* BoolNode)
+{
+	bool bNegate = false;
+	UK2Node_CallFunction* CmpNode = Cast<UK2Node_CallFunction>(BoolNode);
+
+	// Peel an optional Not_PreBool wrapper to reach the comparison node.
+	if (CmpNode && CmpNode->FunctionReference.GetMemberName() == TEXT("Not_PreBool"))
+	{
+		bNegate = true;
+		UK2Node_CallFunction* NotNode = CmpNode;
+		CmpNode = nullptr;
+		if (UEdGraphPin* NotAPin = NotNode->FindPin(TEXT("A"), EGPD_Input))
+		{
+			if (NotAPin->LinkedTo.Num() > 0 && NotAPin->LinkedTo[0])
+			{
+				CmpNode = Cast<UK2Node_CallFunction>(NotAPin->LinkedTo[0]->GetOwningNode());
+			}
+		}
+	}
+
+	if (!CmpNode) return nullptr;
+	const FString Op = KismetCompareFnToOp(CmpNode->FunctionReference.GetMemberName());
+	if (Op.IsEmpty()) return nullptr;
+
+	double Rhs = 0.0;
+	if (UEdGraphPin* BPin = CmpNode->FindPin(TEXT("B"), EGPD_Input))
+	{
+		Rhs = FCString::Atod(*BPin->DefaultValue);
+	}
+
+	bool bUsesAbs = false;
+	FString OperandName;
+	if (UEdGraphPin* APin = CmpNode->FindPin(TEXT("A"), EGPD_Input))
+	{
+		if (APin->LinkedTo.Num() > 0 && APin->LinkedTo[0])
+		{
+			UEdGraphNode* UpstreamNode = APin->LinkedTo[0]->GetOwningNode();
+			if (UK2Node_CallFunction* MaybeAbs = Cast<UK2Node_CallFunction>(UpstreamNode))
+			{
+				if (MaybeAbs->FunctionReference.GetMemberName() == TEXT("Abs"))
+				{
+					bUsesAbs = true;
+					if (UEdGraphPin* AbsAPin = MaybeAbs->FindPin(TEXT("A"), EGPD_Input))
+					{
+						if (AbsAPin->LinkedTo.Num() > 0 && AbsAPin->LinkedTo[0])
+						{
+							if (UK2Node_VariableGet* InnerVar = Cast<UK2Node_VariableGet>(AbsAPin->LinkedTo[0]->GetOwningNode()))
+							{
+								OperandName = InnerVar->VariableReference.GetMemberName().ToString();
+							}
+						}
+					}
+				}
+			}
+			else if (UK2Node_VariableGet* DirectVar = Cast<UK2Node_VariableGet>(UpstreamNode))
+			{
+				OperandName = DirectVar->VariableReference.GetMemberName().ToString();
+			}
+		}
+	}
+
+	const FString LhsDisplay = bUsesAbs ? FString::Printf(TEXT("Abs(%s)"), *OperandName) : OperandName;
+	TSharedPtr<FJsonObject> TermObj = MakeShared<FJsonObject>();
+	TermObj->SetStringField(TEXT("lhs"), LhsDisplay);
+	TermObj->SetStringField(TEXT("operand"), OperandName);
+	TermObj->SetBoolField(TEXT("abs"), bUsesAbs);
+	TermObj->SetStringField(TEXT("op"), Op);
+	TermObj->SetNumberField(TEXT("rhs"), Rhs);
+	TermObj->SetBoolField(TEXT("negate"), bNegate);
+	TermObj->SetStringField(TEXT("comparison"),
+		FString::Printf(TEXT("%s%s %s %s"), bNegate ? TEXT("NOT ") : TEXT(""), *LhsDisplay, *Op, *FString::SanitizeFloat(Rhs)));
+	return TermObj;
+}
+
 // Read back a transition's current rule (kind + operands + comparison) as structured data.
 // Inspects the transition's bound rule graph: bAutomaticRuleBasedOnSequencePlayerInState ->
 // auto; a single bool VariableGet feeding the result -> bool; a comparison CallFunction (with
-// optional Abs upstream) -> compare. Anything else is reported as kind:custom with the node
-// titles, rather than failing.
+// optional Abs upstream) -> compare; a BooleanAND/BooleanOR fold (or a single Not_PreBool) feeding
+// the result -> expression with decoded terms. Anything else is reported as kind:custom with the
+// node titles, rather than failing.
 FMonolithActionResult FMonolithAnimationActions::HandleGetTransitionRule(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath   = Params->GetStringField(TEXT("asset_path"));
@@ -6323,21 +7542,88 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetTransitionRule(const T
 		return FMonolithActionResult::Success(Root);
 	}
 
+	// Expression: a BooleanAND / BooleanOR fold (multi-term), or a single Not_PreBool (one negated
+	// term), drives the result. Walk the fold chain back to its leaf comparison terms.
+	if (UK2Node_CallFunction* DrivingFn = Cast<UK2Node_CallFunction>(DrivingNode))
+	{
+		const FName DrivingFnName = DrivingFn->FunctionReference.GetMemberName();
+		const bool bIsAnd = DrivingFnName == TEXT("BooleanAND");
+		const bool bIsOr  = DrivingFnName == TEXT("BooleanOR");
+		const bool bIsNot = DrivingFnName == TEXT("Not_PreBool");
+
+		if (bIsAnd || bIsOr || bIsNot)
+		{
+			// Collect leaf bool-producing nodes in author order. The fold is a strict left-fold:
+			// each BooleanAND/OR node's A pin links to the previous accumulator (the upstream fold
+			// node, or the first term) and its B pin links to the next term. Walk the chain of A
+			// pins iteratively, gathering B-pin terms, then the innermost A leaf is term 0. A leaf
+			// is a compare or Not_PreBool node.
+			auto UpstreamOf = [](UK2Node_CallFunction* Fn, const TCHAR* PinName) -> UEdGraphNode*
+			{
+				if (UEdGraphPin* P = Fn->FindPin(PinName, EGPD_Input))
+				{
+					if (P->LinkedTo.Num() > 0 && P->LinkedTo[0]) { return P->LinkedTo[0]->GetOwningNode(); }
+				}
+				return nullptr;
+			};
+
+			TArray<UEdGraphNode*> LeafNodes; // reverse author order while walking; reversed below
+			UEdGraphNode* Cursor = DrivingNode;
+			int32 FoldGuard = 0;
+			while (Cursor && FoldGuard++ < 256)
+			{
+				UK2Node_CallFunction* Fn = Cast<UK2Node_CallFunction>(Cursor);
+				const FName FnName = Fn ? Fn->FunctionReference.GetMemberName() : NAME_None;
+				if (Fn && (FnName == TEXT("BooleanAND") || FnName == TEXT("BooleanOR")))
+				{
+					LeafNodes.Add(UpstreamOf(Fn, TEXT("B")));   // this fold's right-hand term
+					Cursor = UpstreamOf(Fn, TEXT("A"));          // descend into the accumulator
+				}
+				else
+				{
+					LeafNodes.Add(Cursor); // innermost leaf (term 0) or the single Not_PreBool
+					break;
+				}
+			}
+			// Restore author order (term 0 .. term N-1) — the walk gathered them innermost-last.
+			for (int32 Lo = 0, Hi = LeafNodes.Num() - 1; Lo < Hi; ++Lo, --Hi)
+			{
+				UEdGraphNode* Tmp = LeafNodes[Lo];
+				LeafNodes[Lo] = LeafNodes[Hi];
+				LeafNodes[Hi] = Tmp;
+			}
+
+			TArray<TSharedPtr<FJsonValue>> TermArr;
+			TArray<FString> CompareStrings;
+			bool bAllDecoded = true;
+			for (UEdGraphNode* Leaf : LeafNodes)
+			{
+				TSharedPtr<FJsonObject> TermObj = DecodeExpressionTerm(Leaf);
+				if (!TermObj) { bAllDecoded = false; break; }
+				CompareStrings.Add(TermObj->GetStringField(TEXT("comparison")));
+				TermArr.Add(MakeShared<FJsonValueObject>(TermObj));
+			}
+
+			if (bAllDecoded && TermArr.Num() > 0)
+			{
+				const FString Combine = bIsOr ? TEXT("or") : TEXT("and");
+				Root->SetStringField(TEXT("rule_kind"), TEXT("expression"));
+				Root->SetStringField(TEXT("combine"), Combine);
+				Root->SetNumberField(TEXT("term_count"), TermArr.Num());
+				Root->SetArrayField(TEXT("terms"), TermArr);
+				const FString Joiner = bIsOr ? TEXT(" OR ") : TEXT(" AND ");
+				Root->SetStringField(TEXT("expression"), FString::Join(CompareStrings, *Joiner));
+				return FMonolithActionResult::Success(Root);
+			}
+			// Fall through to the compare/custom decode below if the chain was not cleanly decodable.
+		}
+	}
+
 	// Compare: a comparison CallFunction drives the result.
 	if (UK2Node_CallFunction* CmpNode = Cast<UK2Node_CallFunction>(DrivingNode))
 	{
 		const FName FnName = CmpNode->FunctionReference.GetMemberName();
-		auto KismetFnToOp = [](const FName& N) -> FString
-		{
-			if (N == TEXT("Greater_DoubleDouble"))      return TEXT(">");
-			if (N == TEXT("Less_DoubleDouble"))         return TEXT("<");
-			if (N == TEXT("GreaterEqual_DoubleDouble")) return TEXT(">=");
-			if (N == TEXT("LessEqual_DoubleDouble"))    return TEXT("<=");
-			if (N == TEXT("EqualEqual_DoubleDouble"))   return TEXT("==");
-			if (N == TEXT("NotEqual_DoubleDouble"))     return TEXT("!=");
-			return FString();
-		};
-		const FString Op = KismetFnToOp(FnName);
+		const FString Op = KismetCompareFnToOp(FnName);
 		if (Op.IsEmpty())
 		{
 			Root->SetStringField(TEXT("rule_kind"), TEXT("custom"));
@@ -6807,7 +8093,10 @@ FMonolithActionResult FMonolithAnimationActions::HandleBuildStateMachine(const T
 				}
 				if (Parsed.Kind == FParsedTransitionRule::EKind::Expression)
 				{
-					Rep->SetStringField(TEXT("rule_deferred"), TEXT("kind:expression not yet supported. Use kind:compare."));
+					// Inline expression authoring is intentionally DEFERRED here (parity decision):
+					// the standalone set_transition_rule action covers kind:expression. Call it after
+					// build_state_machine for any compound AND/OR transition rule.
+					Rep->SetStringField(TEXT("rule_deferred"), TEXT("kind:expression deferred in build_state_machine; use the standalone set_transition_rule action for compound AND/OR rules."));
 					TransReport.Add(MakeShared<FJsonValueObject>(Rep));
 					continue;
 				}
@@ -8086,6 +9375,15 @@ FMonolithActionResult FMonolithAnimationActions::HandleBatchExecute(const TShare
 		else if (OpName == TEXT("add_blendspace_sample"))     SubResult = HandleAddBlendSpaceSample(SubParams);
 		else if (OpName == TEXT("edit_blendspace_sample"))    SubResult = HandleEditBlendSpaceSample(SubParams);
 		else if (OpName == TEXT("delete_blendspace_sample"))  SubResult = HandleDeleteBlendSpaceSample(SubParams);
+		else if (OpName == TEXT("bake_blend_space"))          SubResult = HandleBakeBlendSpace(SubParams);
+		else if (OpName == TEXT("set_blend_space_interpolation")) SubResult = HandleSetBlendSpaceInterpolation(SubParams);
+		// State machine editing ops
+		else if (OpName == TEXT("remove_anim_state"))         SubResult = HandleRemoveAnimState(SubParams);
+		else if (OpName == TEXT("set_anim_entry_state"))      SubResult = HandleSetAnimEntryState(SubParams);
+		else if (OpName == TEXT("remove_anim_transition"))    SubResult = HandleRemoveAnimTransition(SubParams);
+
+		else if (OpName == TEXT("add_ik_solver"))             SubResult = HandleAddIKSolver(SubParams);
+		else if (OpName == TEXT("remove_ik_solver"))          SubResult = HandleRemoveIKSolver(SubParams);
 		// Socket ops
 		else if (OpName == TEXT("add_socket"))                SubResult = HandleAddSocket(SubParams);
 		else if (OpName == TEXT("remove_socket"))             SubResult = HandleRemoveSocket(SubParams);
@@ -10187,5 +11485,518 @@ FMonolithActionResult FMonolithAnimationActions::HandleCopyBonePoseBetweenSequen
 	Root->SetArrayField(TEXT("copied_bones"), CopiedJson);
 	Root->SetArrayField(TEXT("skipped_bones"), SkippedJson);
 
+	return FMonolithActionResult::Success(Root);
+}
+
+// ============================================================
+//  Anim-node bindings — function (Gap 2) + pin property (Gap 12)
+//
+//  Function bindings: three public FMemberReference UPROPERTYs on
+//  UAnimGraphNode_Base. The setter mirrors UAnimGraphNode_Base::ValidateFunctionRef
+//  (AnimGraphNode_Base.cpp:259) — resolve UFunction, prototype-signature check,
+//  thread-safe gate — BEFORE writing the member, then recompile.
+//
+//  Pin bindings: reflective read/write of the unlinkable
+//  UAnimGraphNodeBinding_Base::PropertyBindings map. The setter mirrors the
+//  engine's own binding-widget write (AnimGraphNodeBinding_Base.cpp:486-503):
+//  build FAnimGraphNodePropertyBinding, add to the map, then ReconstructNode().
+// ============================================================
+
+namespace MonolithAnimNodeBindingHelpers
+{
+	// Resolve a UAnimGraphNode_Base in an AnimBP by node_id (matched against the
+	// node's GetName() OR its NodeGuid string — the serializer emits both forms).
+	// Walks every graph (anim graph + function graphs + sub-graphs) unless a
+	// graph_name filter is supplied.
+	static UAnimGraphNode_Base* FindAnimNode(UAnimBlueprint* ABP, const FString& NodeId, const FString& GraphFilter)
+	{
+		if (!ABP || NodeId.IsEmpty()) return nullptr;
+
+		TArray<UEdGraph*> AllGraphs;
+		ABP->GetAllGraphs(AllGraphs);
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (!Graph) continue;
+			if (!GraphFilter.IsEmpty() && Graph->GetName() != GraphFilter) continue;
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(Node);
+				if (!AnimNode) continue;
+				if (AnimNode->GetName() == NodeId || AnimNode->NodeGuid.ToString() == NodeId)
+				{
+					return AnimNode;
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	// Map the binding param value -> the matching FMemberReference UPROPERTY on the
+	// node, plus the property name (needed to read the PrototypeFunction metadata).
+	static FMemberReference* ResolveFunctionRef(UAnimGraphNode_Base* AnimNode, const FString& Binding, FName& OutPropertyName)
+	{
+		if (Binding == TEXT("initial_update"))
+		{
+			OutPropertyName = GET_MEMBER_NAME_CHECKED(UAnimGraphNode_Base, InitialUpdateFunction);
+			return &AnimNode->InitialUpdateFunction;
+		}
+		if (Binding == TEXT("become_relevant"))
+		{
+			OutPropertyName = GET_MEMBER_NAME_CHECKED(UAnimGraphNode_Base, BecomeRelevantFunction);
+			return &AnimNode->BecomeRelevantFunction;
+		}
+		if (Binding == TEXT("update"))
+		{
+			OutPropertyName = GET_MEMBER_NAME_CHECKED(UAnimGraphNode_Base, UpdateFunction);
+			return &AnimNode->UpdateFunction;
+		}
+		OutPropertyName = NAME_None;
+		return nullptr;
+	}
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleGetAnimNodeFunctionBindings(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString NodeId;
+	Params->TryGetStringField(TEXT("node_id"), NodeId);
+	FString GraphFilter;
+	Params->TryGetStringField(TEXT("graph_name"), GraphFilter);
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	// Resolve the owning class for the thread_safe flag (skeleton class first, fall
+	// back to generated class) — mirrors the engine validator's resolution target.
+	UClass* OwnerClass = ABP->SkeletonGeneratedClass ? ABP->SkeletonGeneratedClass : ABP->GeneratedClass;
+
+	auto EmitNode = [OwnerClass](UAnimGraphNode_Base* AnimNode, UEdGraph* Graph) -> TSharedPtr<FJsonObject>
+	{
+		TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+		NodeObj->SetStringField(TEXT("node_id"), AnimNode->GetName());
+		NodeObj->SetStringField(TEXT("node_guid"), AnimNode->NodeGuid.ToString());
+		NodeObj->SetStringField(TEXT("class"), AnimNode->GetClass()->GetName());
+		NodeObj->SetStringField(TEXT("title"), AnimNode->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+		if (Graph) NodeObj->SetStringField(TEXT("graph"), Graph->GetName());
+		NodeObj->SetObjectField(TEXT("initial_update"),
+			MonolithAnimNodeBindingReader::SerializeFunctionBinding(AnimNode->InitialUpdateFunction, OwnerClass));
+		NodeObj->SetObjectField(TEXT("become_relevant"),
+			MonolithAnimNodeBindingReader::SerializeFunctionBinding(AnimNode->BecomeRelevantFunction, OwnerClass));
+		NodeObj->SetObjectField(TEXT("update"),
+			MonolithAnimNodeBindingReader::SerializeFunctionBinding(AnimNode->UpdateFunction, OwnerClass));
+		return NodeObj;
+	};
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	TArray<TSharedPtr<FJsonValue>> NodesArr;
+
+	if (!NodeId.IsEmpty())
+	{
+		// Single node — locate it (re-walk graphs to also recover its owning graph).
+		UAnimGraphNode_Base* AnimNode = MonolithAnimNodeBindingHelpers::FindAnimNode(ABP, NodeId, GraphFilter);
+		if (!AnimNode)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Anim node not found: %s"), *NodeId));
+		}
+		NodesArr.Add(MakeShared<FJsonValueObject>(EmitNode(AnimNode, AnimNode->GetGraph())));
+	}
+	else
+	{
+		// All nodes that carry ANY non-empty function binding.
+		TArray<UEdGraph*> AllGraphs;
+		ABP->GetAllGraphs(AllGraphs);
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (!Graph) continue;
+			if (!GraphFilter.IsEmpty() && Graph->GetName() != GraphFilter) continue;
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(Node);
+				if (!AnimNode) continue;
+				if (!MonolithAnimNodeBindingReader::HasAnyFunctionBinding(AnimNode)) continue;
+				NodesArr.Add(MakeShared<FJsonValueObject>(EmitNode(AnimNode, Graph)));
+			}
+		}
+	}
+
+	Root->SetArrayField(TEXT("nodes"), NodesArr);
+	Root->SetNumberField(TEXT("count"), NodesArr.Num());
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleSetAnimNodeFunctionBinding(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString NodeId = Params->GetStringField(TEXT("node_id"));
+	FString Binding = Params->GetStringField(TEXT("binding"));
+	FString FunctionName;
+	Params->TryGetStringField(TEXT("function_name"), FunctionName);
+	FString FunctionClassPath;
+	Params->TryGetStringField(TEXT("function_class"), FunctionClassPath);
+	FString GraphFilter;
+	Params->TryGetStringField(TEXT("graph_name"), GraphFilter);
+	bool bRecompile = true;
+	Params->TryGetBoolField(TEXT("recompile"), bRecompile);
+	bool bAllowNonThreadSafe = false;
+	Params->TryGetBoolField(TEXT("allow_non_thread_safe"), bAllowNonThreadSafe);
+
+	if (Binding != TEXT("initial_update") && Binding != TEXT("become_relevant") && Binding != TEXT("update"))
+	{
+		return FMonolithActionResult::Error(TEXT("binding must be one of: initial_update, become_relevant, update"));
+	}
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	UAnimGraphNode_Base* AnimNode = MonolithAnimNodeBindingHelpers::FindAnimNode(ABP, NodeId, GraphFilter);
+	if (!AnimNode) return FMonolithActionResult::Error(FString::Printf(TEXT("Anim node not found: %s"), *NodeId));
+
+	FName PropertyName = NAME_None;
+	FMemberReference* Ref = MonolithAnimNodeBindingHelpers::ResolveFunctionRef(AnimNode, Binding, PropertyName);
+	if (!Ref) return FMonolithActionResult::Error(TEXT("Could not resolve the function-binding member reference"));
+
+	UClass* OwnerClass = ABP->SkeletonGeneratedClass ? ABP->SkeletonGeneratedClass : ABP->GeneratedClass;
+
+	const bool bClearing = FunctionName.IsEmpty();
+
+	ABP->Modify();
+
+	if (bClearing)
+	{
+		// Reset to default (empty) — the validator treats GetMemberName()==NAME_None
+		// as "no binding". SetSelfMember(NAME_None) restores that state.
+		Ref->SetSelfMember(NAME_None);
+	}
+	else
+	{
+		// Resolve the target UFunction. Default: self-member on the AnimBP class.
+		// Optional function_class: an external library class.
+		UClass* FunctionClass = nullptr;
+		if (!FunctionClassPath.IsEmpty())
+		{
+			FunctionClass = FindObject<UClass>(nullptr, *FunctionClassPath);
+			if (!FunctionClass)
+			{
+				FunctionClass = LoadObject<UClass>(nullptr, *FunctionClassPath);
+			}
+			if (!FunctionClass)
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("function_class not found: %s"), *FunctionClassPath));
+			}
+		}
+
+		UClass* ResolveClass = FunctionClass ? FunctionClass : OwnerClass;
+		UFunction* Function = ResolveClass ? ResolveClass->FindFunctionByName(FName(*FunctionName)) : nullptr;
+		if (!Function)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Function '%s' not found on %s"), *FunctionName,
+				ResolveClass ? *ResolveClass->GetName() : TEXT("<null class>")));
+		}
+
+		// --- Validate-before-commit, mirroring UAnimGraphNode_Base::ValidateFunctionRef ---
+		// Prototype signature: read the PrototypeFunction metadata off the node property
+		// and require IsSignatureCompatibleWith (same as the engine validator).
+		if (const FProperty* Property = AnimNode->GetClass()->FindPropertyByName(PropertyName))
+		{
+			const FString& PrototypeFunctionName = Property->GetMetaData(TEXT("PrototypeFunction"));
+			const UFunction* PrototypeFunction = PrototypeFunctionName.IsEmpty()
+				? nullptr : FindObject<UFunction>(nullptr, *PrototypeFunctionName);
+			if (PrototypeFunction && !PrototypeFunction->IsSignatureCompatibleWith(Function))
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Function '%s' signature is not compatible with the anim-update prototype (%s)"),
+					*FunctionName, *PrototypeFunctionName));
+			}
+		}
+
+		// Thread-safe gate: HARD REJECT a non-thread-safe function unless explicitly
+		// allowed. Binding a non-thread-safe function to a worker-thread anim-update
+		// slot silently corrupts evaluation — the engine validator errors here too.
+		const bool bThreadSafe = FBlueprintEditorUtils::HasFunctionBlueprintThreadSafeMetaData(Function);
+		if (!bThreadSafe && !bAllowNonThreadSafe)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Function '%s' is not thread-safe; refusing to bind it to an anim-update slot. ")
+				TEXT("Mark it BlueprintThreadSafe or pass allow_non_thread_safe=true to override."),
+				*FunctionName));
+		}
+
+		// Commit the member reference.
+		if (FunctionClass)
+		{
+			Ref->SetExternalMember(FName(*FunctionName), FunctionClass);
+		}
+		else
+		{
+			Ref->SetSelfMember(FName(*FunctionName));
+		}
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsModified(ABP);
+
+	bool bCompiled = false;
+	if (bRecompile)
+	{
+		FKismetEditorUtilities::CompileBlueprint(ABP);
+		bCompiled = true;
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("node_id"), AnimNode->GetName());
+	Root->SetStringField(TEXT("binding"), Binding);
+	Root->SetBoolField(TEXT("cleared"), bClearing);
+	if (!bClearing) Root->SetStringField(TEXT("function_name"), FunctionName);
+	Root->SetBoolField(TEXT("recompiled"), bCompiled);
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleGetAnimNodePinBindings(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString NodeId;
+	Params->TryGetStringField(TEXT("node_id"), NodeId);
+	FString GraphFilter;
+	Params->TryGetStringField(TEXT("graph_name"), GraphFilter);
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	auto EmitNode = [](UAnimGraphNode_Base* AnimNode, UEdGraph* Graph) -> TSharedPtr<FJsonObject>
+	{
+		TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+		NodeObj->SetStringField(TEXT("node_id"), AnimNode->GetName());
+		NodeObj->SetStringField(TEXT("node_guid"), AnimNode->NodeGuid.ToString());
+		NodeObj->SetStringField(TEXT("class"), AnimNode->GetClass()->GetName());
+		NodeObj->SetStringField(TEXT("title"), AnimNode->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+		if (Graph) NodeObj->SetStringField(TEXT("graph"), Graph->GetName());
+
+		TArray<TSharedPtr<FJsonValue>> Entries;
+		FString Note;
+		MonolithAnimNodeBindingReader::ReadPinBindings(AnimNode, Entries, Note);
+		NodeObj->SetArrayField(TEXT("pin_bindings"), Entries);
+		if (!Note.IsEmpty()) NodeObj->SetStringField(TEXT("note"), Note);
+		return NodeObj;
+	};
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	TArray<TSharedPtr<FJsonValue>> NodesArr;
+
+	if (!NodeId.IsEmpty())
+	{
+		UAnimGraphNode_Base* AnimNode = MonolithAnimNodeBindingHelpers::FindAnimNode(ABP, NodeId, GraphFilter);
+		if (!AnimNode) return FMonolithActionResult::Error(FString::Printf(TEXT("Anim node not found: %s"), *NodeId));
+		NodesArr.Add(MakeShared<FJsonValueObject>(EmitNode(AnimNode, AnimNode->GetGraph())));
+	}
+	else
+	{
+		// All nodes that carry any pin binding.
+		TArray<UEdGraph*> AllGraphs;
+		ABP->GetAllGraphs(AllGraphs);
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (!Graph) continue;
+			if (!GraphFilter.IsEmpty() && Graph->GetName() != GraphFilter) continue;
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(Node);
+				if (!AnimNode) continue;
+				TArray<TSharedPtr<FJsonValue>> Probe;
+				FString ProbeNote;
+				if (MonolithAnimNodeBindingReader::ReadPinBindings(AnimNode, Probe, ProbeNote) > 0)
+				{
+					NodesArr.Add(MakeShared<FJsonValueObject>(EmitNode(AnimNode, Graph)));
+				}
+			}
+		}
+	}
+
+	Root->SetArrayField(TEXT("nodes"), NodesArr);
+	Root->SetNumberField(TEXT("count"), NodesArr.Num());
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleSetAnimNodePinBinding(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString NodeId = Params->GetStringField(TEXT("node_id"));
+	FString Pin = Params->GetStringField(TEXT("pin"));
+	FString GraphFilter;
+	Params->TryGetStringField(TEXT("graph_name"), GraphFilter);
+	bool bRecompile = true;
+	Params->TryGetBoolField(TEXT("recompile"), bRecompile);
+
+	// path: string array (empty/null clears by removing the pin's map entry).
+	TArray<FString> Path;
+	const TArray<TSharedPtr<FJsonValue>>* PathArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("path"), PathArr) && PathArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *PathArr)
+		{
+			FString Seg;
+			if (V.IsValid() && V->TryGetString(Seg)) Path.Add(Seg);
+		}
+	}
+	const bool bClearing = (Path.Num() == 0);
+
+	if (Pin.IsEmpty()) return FMonolithActionResult::Error(TEXT("pin (PropertyName) is required"));
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	UAnimGraphNode_Base* AnimNode = MonolithAnimNodeBindingHelpers::FindAnimNode(ABP, NodeId, GraphFilter);
+	if (!AnimNode) return FMonolithActionResult::Error(FString::Printf(TEXT("Anim node not found: %s"), *NodeId));
+
+	const FName PinName(*Pin);
+	ABP->Modify();
+
+	// The node's binding object is type UAnimGraphNodeBinding, which is only
+	// forward-declared in reachable headers (defining header in AnimGraph/Internal/).
+	// We MUST treat it as a plain UObject* end-to-end — never GetBinding()/
+	// GetMutableBinding() (incomplete return type) and never RemoveBindings() (a virtual
+	// on the incomplete class). Both clear and write run entirely through FScriptMapHelper
+	// on the reflectively-resolved PropertyBindings map.
+	FMapProperty* MapProp = nullptr;
+	void* MapPtr = nullptr;
+	UObject* BindingObj = nullptr;
+	bool bHasMap = MonolithAnimNodeBindingReader::ResolvePropertyBindingsMap(AnimNode, MapProp, MapPtr, BindingObj);
+
+	if (bClearing)
+	{
+		// Remove the pin's map entry (this is what UAnimGraphNodeBinding_Base::RemoveBindings
+		// does internally). If the node has no binding object / map, there is nothing to
+		// clear — treat as a benign no-op rather than an error.
+		if (bHasMap)
+		{
+			if (BindingObj) BindingObj->Modify();
+			FScriptMapHelper Helper(MapProp, MapPtr);
+			Helper.RemovePair(&PinName); // find-by-key + remove; no-op if absent
+		}
+	}
+	else
+	{
+		// Zero-bootstrap: if the node has no binding object yet, create it ourselves,
+		// mirroring the engine's lazy-create. UAnimGraphNode_Base::EnsureBindingsArePresent()
+		// is PROTECTED (AnimGraphNode_Base.h:658, under the protected: at :579), so it is
+		// NOT callable from this external module. Instead we replicate its body
+		// (AnimGraphNode_Base.cpp:200-215): NewObject the binding from the ABP's default
+		// binding class, falling back to AnimGraphNodeBinding_Base when the default is null,
+		// and write it onto the node's `Binding` UPROPERTY reflectively (the concrete
+		// UAnimGraphNodeBinding_Base type lives in AnimGraph/Internal and is not reachable
+		// here, so we resolve its UClass by path and treat the binding as a plain UObject*).
+		// We then RE-RESOLVE the PropertyBindings map (now present) and proceed with the same
+		// AddPair + ReconstructNode path used when a binding already existed.
+		if (!bHasMap)
+		{
+			// 1. ABP's configured default binding class (public inline, AnimBlueprint.h:245).
+			UClass* BindingClass = ABP->GetDefaultBindingClass();
+			// 2. Engine fallback when the default is null (AnimGraphNode_Base.cpp:207-210).
+			//    UAnimGraphNodeBinding_Base is not includable from this module; resolve its
+			//    UClass by script path (the AllowedClasses meta at AnimBlueprint.h:285).
+			if (!BindingClass)
+			{
+				BindingClass = FindObject<UClass>(nullptr, TEXT("/Script/AnimGraph.AnimGraphNodeBinding_Base"));
+			}
+			if (!BindingClass)
+			{
+				return FMonolithActionResult::Error(
+					TEXT("Failed to resolve a binding class for this node (the ABP has no default ")
+					TEXT("binding class and AnimGraphNodeBinding_Base could not be found)."));
+			}
+
+			// 3. Create the binding subobject outered to the node (mirrors AnimGraphNode_Base.cpp:212).
+			UObject* NewBindingObj = NewObject<UObject>(AnimNode, BindingClass);
+
+			// 4. Write it onto the node's `Binding` FObjectProperty reflectively. This is the
+			//    same property the reader reads at MonolithAnimNodeBindingReader.h:139-141.
+			//    SetObjectPropertyValue_InContainer is public (CoreUObject UnrealType.h:2851).
+			FObjectProperty* BindProp = FindFProperty<FObjectProperty>(AnimNode->GetClass(), TEXT("Binding"));
+			if (!BindProp)
+			{
+				return FMonolithActionResult::Error(
+					TEXT("Node has no reflectable 'Binding' property (layout drift); cannot create a binding."));
+			}
+			BindProp->SetObjectPropertyValue_InContainer(AnimNode, NewBindingObj);
+
+			// 5. Re-resolve the now-present PropertyBindings map.
+			bHasMap = MonolithAnimNodeBindingReader::ResolvePropertyBindingsMap(AnimNode, MapProp, MapPtr, BindingObj);
+			if (!bHasMap)
+			{
+				return FMonolithActionResult::Error(
+					TEXT("Failed to create a binding object on this node (no PropertyBindings map after ")
+					TEXT("bootstrap). The node may lack a UAnimBlueprint outer."));
+			}
+		}
+
+		FStructProperty* ValueStructProp = CastField<FStructProperty>(MapProp->ValueProp);
+		if (!ValueStructProp || ValueStructProp->Struct != FAnimGraphNodePropertyBinding::StaticStruct())
+		{
+			return FMonolithActionResult::Error(TEXT("PropertyBindings value type is not FAnimGraphNodePropertyBinding"));
+		}
+		FNameProperty* KeyProp = CastField<FNameProperty>(MapProp->KeyProp);
+		if (!KeyProp)
+		{
+			return FMonolithActionResult::Error(TEXT("PropertyBindings key type is not FName"));
+		}
+
+		// Build the binding value. Mirrors AnimGraphNodeBinding_Base.cpp:486-499.
+		// NOTE: PinType/PromotedPinType (derived from the property path by
+		// UAnimGraphNode_Base::RecalculateBindingType) are not set here; we trigger
+		// re-derivation via ReconstructNode() below — see the re-derive comment.
+		// (RecalculateBindingType is PUBLIC + UE_API in 5.7, AnimGraphNode_Base.h:649,
+		// but driving it through ReconstructNode keeps a single re-derive path.)
+		// PathAsText is a display field; set it to the dotted path so the binding reads
+		// cleanly even before the reconstruct refreshes it.
+		FAnimGraphNodePropertyBinding NewBinding;
+		NewBinding.PropertyName = PinName;
+		NewBinding.PropertyPath = Path;
+		NewBinding.PathAsText = FText::FromString(FString::Join(Path, TEXT(".")));
+		NewBinding.Type = EAnimGraphNodePropertyBindingType::Property;
+		NewBinding.bIsBound = true;
+
+		if (BindingObj) BindingObj->Modify();
+
+		// AddPair overwrites an existing entry for the same key (engine PropertyBindings.Add
+		// semantics) and rehashes internally — no manual pre-remove / Rehash needed.
+		FScriptMapHelper Helper(MapProp, MapPtr);
+		Helper.AddPair(&PinName, &NewBinding);
+	}
+
+	// --- Re-derive trigger (the plan's CRITICAL OPEN DETAIL) ---
+	// Verified in engine source: the binding-type re-derivation lives in
+	// UAnimGraphNode_Base::RecalculateBindingType (PUBLIC + UE_API in 5.7,
+	// AnimGraphNode_Base.h:649 — it is reachable, but we drive it through the engine's
+	// own re-derive path rather than calling it directly). It is invoked by
+	// UAnimGraphNodeBinding_Base::OnReconstructNode, which loops over every entry in
+	// PropertyBindings (AnimGraphNodeBinding_Base.cpp:80-90). That override fires from the
+	// engine's own write path via AnimGraphNode->ReconstructNode()
+	// (AnimGraphNodeBinding_Base.cpp:503). UEdGraphNode::ReconstructNode() is PUBLIC
+	// (EdGraphNode.h:711), so we call it directly to re-derive PinType/PromotedPinType
+	// before compiling. CompileBlueprint alone is NOT relied upon for the re-derive.
+	AnimNode->ReconstructNode();
+	FBlueprintEditorUtils::MarkBlueprintAsModified(ABP);
+
+	bool bCompiled = false;
+	if (bRecompile)
+	{
+		FKismetEditorUtilities::CompileBlueprint(ABP);
+		bCompiled = true;
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("node_id"), AnimNode->GetName());
+	Root->SetStringField(TEXT("pin"), Pin);
+	Root->SetBoolField(TEXT("cleared"), bClearing);
+	if (!bClearing)
+	{
+		TArray<TSharedPtr<FJsonValue>> PathOut;
+		for (const FString& Seg : Path) PathOut.Add(MakeShared<FJsonValueString>(Seg));
+		Root->SetArrayField(TEXT("path"), PathOut);
+	}
+	Root->SetBoolField(TEXT("recompiled"), bCompiled);
 	return FMonolithActionResult::Success(Root);
 }

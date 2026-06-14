@@ -14,9 +14,12 @@
 #include "UObject/Class.h"
 #include "UObject/UObjectIterator.h"
 #include "UObject/UObjectHash.h"
+#include "K2Node.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_FunctionResult.h"
 #include "K2Node_CreateDelegate.h"
+#include "K2Node_VariableGet.h"
+#include "K2Node_VariableSet.h"
 
 // --- Registration ---
 
@@ -174,6 +177,19 @@ void FMonolithBlueprintActions::RegisterActions()
 		FMonolithActionHandler::CreateStatic(&HandleGetBlueprintInfo),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint asset path"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("find_variable_references"),
+		TEXT("Find every graph node that reads or writes a Blueprint member variable. Walks all graphs (event graphs, functions, macros, delegate signatures, and interface-implementation graphs) and calls the engine's UK2Node::ReferencesVariable virtual against the Blueprint's generated class. "
+		     "Per match, 'access' is classified as: 'read' (a VariableGet, e.g. a 'Get MyVar' node), 'write' (a VariableSet, e.g. a 'Set MyVar' node), 'read' for a thread-safe Property Access node whose path resolves to the variable, or 'other' for any other referencing node (transition rules, split-struct pins, etc.). "
+		     "Each entry returns graph, graph_type, node_id, node_title, and access; Property Access matches additionally carry a 'property_access' path block. A 'summary' object reports total/reads/writes/other counts. "
+		     "By default only references scoped to this Blueprint's own class match; set include_inherited=true to also match the variable where it is scoped to a parent class. "
+		     "v1 covers member variables only -- local function variables are out of scope."),
+		FMonolithActionHandler::CreateStatic(&HandleFindVariableReferences),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"),     TEXT("Blueprint asset path"))
+			.Required(TEXT("variable_name"),  TEXT("string"),  TEXT("Name of the member variable to find references to (e.g. 'Health', 'TargetActor')"))
+			.Optional(TEXT("include_inherited"), TEXT("boolean"), TEXT("Also match the variable where it is scoped to a parent class, not just this Blueprint's own class (default: false)"))
 			.Build());
 }
 
@@ -371,6 +387,12 @@ FMonolithActionResult FMonolithBlueprintActions::HandleListGraphs(const TSharedP
 	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->FunctionGraphs, TEXT("function"));
 	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->MacroGraphs, TEXT("macro"));
 	MonolithBlueprintInternal::AddGraphArray(GraphsArr, BP->DelegateSignatureGraphs, TEXT("delegate_signature"));
+	// Interface-implementation function graphs live on a separate array (Gap 7).
+	for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
+	{
+		const FString IfaceName = Iface.Interface ? Iface.Interface->GetName() : FString();
+		MonolithBlueprintInternal::AddGraphArray(GraphsArr, Iface.Graphs, TEXT("interface"), IfaceName);
+	}
 	Root->SetArrayField(TEXT("graphs"), GraphsArr);
 
 	return FMonolithActionResult::Success(Root);
@@ -405,6 +427,22 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetGraphData(const TShare
 	else if (BP->FunctionGraphs.Contains(Graph)) GraphType = TEXT("function");
 	else if (BP->MacroGraphs.Contains(Graph)) GraphType = TEXT("macro");
 	else if (BP->DelegateSignatureGraphs.Contains(Graph)) GraphType = TEXT("delegate_signature");
+	else
+	{
+		// Interface-implementation function graphs live on a separate array (Gap 7).
+		for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
+		{
+			if (Iface.Graphs.Contains(Graph))
+			{
+				GraphType = TEXT("interface");
+				if (Iface.Interface)
+				{
+					Root->SetStringField(TEXT("interface"), Iface.Interface->GetName());
+				}
+				break;
+			}
+		}
+	}
 	Root->SetStringField(TEXT("graph_type"), GraphType);
 
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
@@ -2376,5 +2414,149 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetBlueprintInfo(const TS
 	Root->SetBoolField(TEXT("is_data_only"),   FBlueprintEditorUtils::IsDataOnlyBlueprint(BP));
 	Root->SetBoolField(TEXT("is_actor_based"),  FBlueprintEditorUtils::IsActorBased(BP));
 
+	return FMonolithActionResult::Success(Root);
+}
+
+// ============================================================
+//  find_variable_references  (Gap 5)
+// ============================================================
+//
+// Walks every graph in the Blueprint and asks each K2 node, via the engine's
+// UK2Node::ReferencesVariable(FName, UStruct* Scope) virtual, whether it
+// references the named member variable. GetAllGraphs already includes
+// interface-implementation graphs (Blueprint.cpp iterates ImplementedInterfaces[].Graphs),
+// so no separate interface-graph append is required here.
+//
+// Scope semantics map the include_inherited flag onto ReferencesVariable's
+// scope check: passing the generated class restricts matches to references
+// scoped to this Blueprint's own class; passing nullptr skips the scope check
+// so the variable matches even where scoped to a parent class.
+
+FMonolithActionResult FMonolithBlueprintActions::HandleFindVariableReferences(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	UBlueprint* BP = LoadBlueprint(Params, AssetPath);
+	if (!BP)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+	}
+
+	FString VarNameStr = Params->GetStringField(TEXT("variable_name"));
+	if (VarNameStr.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: variable_name"));
+	}
+	const FName VarName(*VarNameStr);
+
+	bool bIncludeInherited = false;
+	Params->TryGetBoolField(TEXT("include_inherited"), bIncludeInherited);
+
+	// include_inherited: nullptr scope skips ReferencesVariable's scope check
+	// (name-only match, so parent-class-scoped references qualify). Otherwise
+	// restrict to references scoped to this Blueprint's own generated class.
+	const UStruct* Scope = bIncludeInherited ? nullptr : Cast<UStruct>(BP->GeneratedClass);
+
+	// graph_type label for a graph, mirroring HandleGetGraphData's classification.
+	// Sets an "interface" field on the match object for interface-graph hits.
+	auto ClassifyGraph = [&](UEdGraph* Graph, FString& OutInterfaceName) -> FString
+	{
+		OutInterfaceName.Reset();
+		if (BP->UbergraphPages.Contains(Graph))         return TEXT("event_graph");
+		if (BP->FunctionGraphs.Contains(Graph))         return TEXT("function");
+		if (BP->MacroGraphs.Contains(Graph))            return TEXT("macro");
+		if (BP->DelegateSignatureGraphs.Contains(Graph)) return TEXT("delegate_signature");
+		for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
+		{
+			if (Iface.Graphs.Contains(Graph))
+			{
+				if (Iface.Interface)
+				{
+					OutInterfaceName = Iface.Interface->GetName();
+				}
+				return TEXT("interface");
+			}
+		}
+		return TEXT("unknown");
+	};
+
+	TArray<UEdGraph*> AllGraphs;
+	BP->GetAllGraphs(AllGraphs);
+
+	TArray<TSharedPtr<FJsonValue>> Matches;
+	int32 NumReads = 0;
+	int32 NumWrites = 0;
+	int32 NumOther = 0;
+
+	for (UEdGraph* Graph : AllGraphs)
+	{
+		if (!Graph) continue;
+
+		// GetAllChildrenGraphs can surface a graph more than once across the
+		// parent arrays; classify against the source graph directly each time.
+		FString InterfaceName;
+		const FString GraphType = ClassifyGraph(Graph, InterfaceName);
+
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			UK2Node* K2Node = Cast<UK2Node>(Node);
+			if (!K2Node) continue;
+			if (!K2Node->ReferencesVariable(VarName, Scope)) continue;
+
+			// Classify access. PropertyAccess is MinimalAPI/unlinkable, so match
+			// it by class-name string (mirrors MonolithPropertyAccessReader).
+			FString Access;
+			if (Cast<UK2Node_VariableGet>(K2Node))
+			{
+				Access = TEXT("read");
+				++NumReads;
+			}
+			else if (Cast<UK2Node_VariableSet>(K2Node))
+			{
+				Access = TEXT("write");
+				++NumWrites;
+			}
+			else if (K2Node->GetClass()->GetName() == TEXT("K2Node_PropertyAccess"))
+			{
+				Access = TEXT("read");
+				++NumReads;
+			}
+			else
+			{
+				Access = TEXT("other");
+				++NumOther;
+			}
+
+			// Lean node stub — SerializeNode conventions (id / title) without the
+			// full pin dump; the property_access block is emitted via the shared
+			// helper for PropertyAccess nodes (no-op for everything else).
+			TSharedPtr<FJsonObject> MObj = MakeShared<FJsonObject>();
+			MObj->SetStringField(TEXT("graph"), Graph->GetName());
+			MObj->SetStringField(TEXT("graph_type"), GraphType);
+			if (!InterfaceName.IsEmpty())
+			{
+				MObj->SetStringField(TEXT("interface"), InterfaceName);
+			}
+			MObj->SetStringField(TEXT("node_id"), K2Node->GetName());
+			MObj->SetStringField(TEXT("node_title"),
+				K2Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+			MObj->SetStringField(TEXT("access"), Access);
+			MonolithPropertyAccessReader::SerializePropertyAccessBlock(K2Node, MObj);
+
+			Matches.Add(MakeShared<FJsonValueObject>(MObj));
+		}
+	}
+
+	TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
+	Summary->SetNumberField(TEXT("total"),  Matches.Num());
+	Summary->SetNumberField(TEXT("reads"),  NumReads);
+	Summary->SetNumberField(TEXT("writes"), NumWrites);
+	Summary->SetNumberField(TEXT("other"),  NumOther);
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("variable_name"), VarNameStr);
+	Root->SetBoolField(TEXT("include_inherited"), bIncludeInherited);
+	Root->SetArrayField(TEXT("references"), Matches);
+	Root->SetObjectField(TEXT("summary"), Summary);
 	return FMonolithActionResult::Success(Root);
 }

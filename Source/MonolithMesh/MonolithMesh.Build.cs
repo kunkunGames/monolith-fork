@@ -105,6 +105,16 @@ public class MonolithMesh : ModuleRules
 			PrivateDependencyModuleNames.Add("GeometryFramework");
 			PrivateDependencyModuleNames.Add("GeometryCore");
 			PublicDefinitions.Add("WITH_GEOMETRYSCRIPT=1");
+
+			// Delay-bind the GeometryScripting module DLLs so MonolithMesh.dll loads
+			// even if these aren't resolvable at module-load time (issue #70 — the
+			// import resolves lazily on first Tier-5 call instead of at LoadLibrary,
+			// removing the CouldNotBeLoadedByOS / GetLastError=126 first-build/load race).
+			// Verified: PublicDelayLoadDLLs at ModuleRules.cs:1308 (UE 5.7). Confirm via
+			// dumpbin that these imports move to the Delay Import table.
+			PublicDelayLoadDLLs.Add("UnrealEditor-GeometryScriptingCore.dll");
+			PublicDelayLoadDLLs.Add("UnrealEditor-GeometryFramework.dll");
+			PublicDelayLoadDLLs.Add("UnrealEditor-GeometryCore.dll");
 		}
 		else
 		{

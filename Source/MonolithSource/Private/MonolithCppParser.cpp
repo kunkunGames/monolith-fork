@@ -117,9 +117,16 @@ void FMonolithCppParser::ExtractClassesAndStructs(const TArray<FString>& OrigLin
 				}
 			}
 
-			if (BraceLineIdx >= 0)
+			// Defensive parity with Phase B: FindClosingBrace returns Lines.Num() (a
+			// sentinel COUNT, not a valid index) for an unterminated body at/near EOF.
+			// Layer 1's clamp already makes ExtractMembers crash-proof, but treating an
+			// unterminated body as no-body here avoids feeding it a past-array range at
+			// all. Zero behavior change for well-formed files (CloseLine < Num there).
+			const int32 CloseLine = (BraceLineIdx >= 0) ? FindClosingBrace(CleanLines, BraceLineIdx) : -1;
+			const bool bHasBody = (BraceLineIdx >= 0) && (CloseLine < NumLines);
+
+			if (bHasBody)
 			{
-				int32 CloseLine = FindClosingBrace(CleanLines, BraceLineIdx);
 				Sym.LineEnd = CloseLine;
 
 				// Default access: struct=public, class=private
@@ -131,9 +138,13 @@ void FMonolithCppParser::ExtractClassesAndStructs(const TArray<FString>& OrigLin
 				FoundNames.Add(Sym.Name);
 				Result.Symbols.Add(MoveTemp(Sym));
 
-				// Extract members within the body
+				// Extract members within the body. COPY the parent name first — passing
+				// Result.Symbols.Last().Name by reference is a use-after-free: ExtractMembers
+				// Adds member symbols to Result.Symbols, and a reallocation frees the backing
+				// store the reference points into (AV when the next member reads ParentClass).
+				const FString ParentName = Result.Symbols.Last().Name;
 				ExtractMembers(OrigLines, BraceLineIdx + 1, CloseLine - 1,
-					Result.Symbols.Last().Name, DefaultAccess, Result);
+					ParentName, DefaultAccess, Result);
 			}
 			else
 			{
@@ -149,8 +160,18 @@ void FMonolithCppParser::ExtractClassesAndStructs(const TArray<FString>& OrigLin
 	}
 
 	// ---- Phase B: Non-UE classes/structs ----
-	// Pattern requires opening brace on the same line
-	FRegexPattern NonUEPattern(TEXT("^\\s*(?:class|struct)\\s+(?:[A-Z][A-Z0-9]*_API\\s+)?(\\w+)(?:\\s*(?:final|sealed))?\\s*(?::\\s*(.+?))?\\s*\\{"));
+	// Allman-tolerant: the opening brace may be on the declaration line OR on a
+	// following line (Epic coding standard). The trailing group is a `{`-OR-end-of-line
+	// alternation, so BOTH forms match:
+	//   allman:   `class ENGINE_API FFoo`           (brace on the next line)
+	//   K&R/inline:`struct FFoo {};`                 (today's 87-style one-liners — no regression)
+	// The `^\s*` line anchor is RETAINED — Phase B scans every line, so the anchor is
+	// what keeps `template<class T>` and other mid-line matches out. The inheritance
+	// group `[^{;]+?` stops before any `{` or `;`. A trailing `;` with NO brace
+	// (forward declaration `class FFoo;`) fails the regex. A match with no opening
+	// brace found within the lookahead window is DROPPED (Phase B has no UE-macro
+	// anchor proving a definition follows — unlike Phase A).
+	FRegexPattern NonUEPattern(TEXT("^\\s*(class|struct)\\s+(?:[A-Z][A-Z0-9]*_API\\s+)?(\\w+)(?:\\s*(?:final|sealed))?\\s*(?::\\s*([^{;]+?))?\\s*(\\{|$)"));
 
 	for (int32 i = 0; i < NumLines; ++i)
 	{
@@ -160,15 +181,75 @@ void FMonolithCppParser::ExtractClassesAndStructs(const TArray<FString>& OrigLin
 			continue;
 		}
 
-		FString Name = Matcher.GetCaptureGroup(1);
+		FString Kind = Matcher.GetCaptureGroup(1);
+		FString Name = Matcher.GetCaptureGroup(2);
 		if (FoundNames.Contains(Name))
 		{
 			continue;
 		}
 
-		// Determine kind from the original line
-		FString TrimClean = CleanLines[i].TrimStart();
-		FString Kind = TrimClean.StartsWith(TEXT("struct")) ? TEXT("struct") : TEXT("class");
+		// Template-parameter guard: a multi-line template parameter list can place
+		// `class T` alone on a line (matching this pattern as a bogus class) while
+		// the real class's `{` sits within the lookahead window below. If the nearest
+		// preceding non-empty clean line ends with `<` or `,`, this match is a
+		// template parameter, not a declaration — skip it. (The SUBSEQUENT real
+		// `class FFoo` line still matches and indexes normally.)
+		{
+			bool bIsTemplateParam = false;
+			for (int32 p = i - 1; p >= 0; --p)
+			{
+				FString Prev = CleanLines[p].TrimStartAndEnd();
+				if (Prev.IsEmpty())
+				{
+					continue;
+				}
+				if (Prev.EndsWith(TEXT("<")) || Prev.EndsWith(TEXT(",")))
+				{
+					bIsTemplateParam = true;
+				}
+				break; // first non-empty preceding line decides
+			}
+			if (bIsTemplateParam)
+			{
+				continue;
+			}
+		}
+
+		// Confirm the opening brace. It may be on the declaration line itself, or on
+		// one of the next few lines (allman). Require the brace to OPEN the line (its
+		// first non-whitespace char) — a stricter test than Contains, cheap insurance
+		// against an unrelated brace. Mirrors Phase A's k < j+3 lookahead window.
+		int32 BraceLineIdx = -1;
+		for (int32 k = i; k < FMath::Min(i + 3, NumLines); ++k)
+		{
+			FString TrimK = CleanLines[k].TrimStart();
+			if (k == i && CleanLines[k].Contains(TEXT("{")))
+			{
+				// Same-line brace (today's K&R style) — accept directly.
+				BraceLineIdx = k;
+				break;
+			}
+			if (k > i)
+			{
+				if (TrimK.IsEmpty())
+				{
+					continue; // skip blank lines between decl and brace
+				}
+				if (TrimK.StartsWith(TEXT("{")))
+				{
+					BraceLineIdx = k;
+				}
+				break; // first non-blank line after the decl decides
+			}
+		}
+
+		// No brace found within the window — forward declaration or non-definition.
+		// Unlike Phase A there is no UE-macro anchor proving a body follows, so DROP
+		// the match (no body, no symbol).
+		if (BraceLineIdx < 0)
+		{
+			continue;
+		}
 
 		FParsedSourceSymbol Sym;
 		Sym.Kind = Kind;
@@ -176,7 +257,7 @@ void FMonolithCppParser::ExtractClassesAndStructs(const TArray<FString>& OrigLin
 		Sym.LineStart = i + 1;
 
 		// Base classes
-		FString InheritClause = Matcher.GetCaptureGroup(2);
+		FString InheritClause = Matcher.GetCaptureGroup(3);
 		if (!InheritClause.IsEmpty())
 		{
 			ParseBaseClasses(InheritClause, Sym.BaseClasses);
@@ -185,17 +266,39 @@ void FMonolithCppParser::ExtractClassesAndStructs(const TArray<FString>& OrigLin
 		Sym.Docstring = ExtractDocstring(OrigLines, i, false);
 		Sym.Signature = OrigLines[i].TrimStartAndEnd();
 
-		// Find closing brace
-		int32 CloseLine = FindClosingBrace(CleanLines, i);
-		Sym.LineEnd = CloseLine;
+		// Find closing brace from the confirmed opening-brace line. FindClosingBrace
+		// returns Lines.Num() (a sentinel COUNT, NOT a valid index) when the body is
+		// unterminated — e.g. an allman `{` at/near EOF with no matching `}`. Treat that
+		// as a no-body declaration: record the class row (best-effort LineEnd) but SKIP
+		// ExtractMembers, which otherwise receives a body range running past the array.
+		const int32 CloseLine = FindClosingBrace(CleanLines, BraceLineIdx);
+		const bool bUnterminated = (CloseLine >= CleanLines.Num());
+
+		Sym.LineEnd = bUnterminated ? (i + 1) : CloseLine;
 
 		FString DefaultAccess = Kind == TEXT("struct") ? TEXT("public") : TEXT("private");
 
 		FoundNames.Add(Name);
 		Result.Symbols.Add(MoveTemp(Sym));
 
-		ExtractMembers(OrigLines, i + 1, CloseLine - 1,
-			Result.Symbols.Last().Name, DefaultAccess, Result);
+		if (!bUnterminated)
+		{
+			// Members live inside the body — scanning must start on the line AFTER the
+			// opening brace. BraceLineIdx is a 0-based line index; ExtractMembers treats
+			// BodyStartLine as 1-based, so the first body line is BraceLineIdx + 2. Passing
+			// BraceLineIdx + 1 would start the scan ON the `{` line, whose brace pushes the
+			// member-extractor's BraceDepth to 1 and (since the matching `}` sits past
+			// BodyEndLine = CloseLine - 1) the depth never returns to 0 — silently skipping
+			// every member, the symptom for allman-style bodies whose `{` is its own line.
+			//
+			// COPY the parent name first — passing Result.Symbols.Last().Name by reference
+			// is a use-after-free: ExtractMembers Adds member symbols to Result.Symbols, and
+			// a reallocation frees the backing store the reference points into (AV when the
+			// next member reads ParentClass).
+			const FString ParentName = Result.Symbols.Last().Name;
+			ExtractMembers(OrigLines, BraceLineIdx + 2, CloseLine - 1,
+				ParentName, DefaultAccess, Result);
+		}
 	}
 }
 
@@ -497,13 +600,29 @@ void FMonolithCppParser::ExtractMacrosAndTypedefs(const TArray<FString>& OrigLin
 // ExtractMembers — scan inside a class/struct body
 // ============================================================
 
+// ParentClass is taken BY VALUE on purpose: this function Adds member symbols to
+// Result.Symbols, so any reference into that array's backing store dangles after a
+// reallocation. Never pass a reference into Result.Symbols (e.g. Result.Symbols.Last().Name)
+// — the by-value copy (one per class, negligible) is the safety net for that mistake.
 void FMonolithCppParser::ExtractMembers(const TArray<FString>& OrigLines, int32 BodyStartLine, int32 BodyEndLine,
-	const FString& ParentClass, const FString& DefaultAccess, FParsedFileResult& Result)
+	FString ParentClass, const FString& DefaultAccess, FParsedFileResult& Result)
 {
 	// BodyStartLine/BodyEndLine are 1-based line numbers
-	// Convert to 0-based indices for array access
-	const int32 StartIdx = FMath::Max(0, BodyStartLine - 1);
-	const int32 EndIdx = FMath::Min(OrigLines.Num() - 1, BodyEndLine - 1);
+	// Convert to 0-based indices for array access. BOTH ends must be clamped to the
+	// array: a class whose `{` sits at/near EOF with no closing `}` makes
+	// FindClosingBrace return Lines.Num() (a sentinel COUNT, not a valid index), which
+	// can drive StartIdx past the last element. Without an upper clamp on StartIdx the
+	// loop below would read OrigLines[i] out of bounds -> access violation (observed on
+	// the background indexer thread against an unterminated real-project header).
+	const int32 LastIdx = OrigLines.Num() - 1;
+	const int32 StartIdx = FMath::Clamp(BodyStartLine - 1, 0, LastIdx);
+	const int32 EndIdx = FMath::Clamp(BodyEndLine - 1, 0, LastIdx);
+
+	// Empty or inverted range (degenerate / unterminated body) -> nothing to extract.
+	if (StartIdx > EndIdx)
+	{
+		return;
+	}
 
 	FString CurrentAccess = DefaultAccess;
 	bool bNextIsUEMacro = false;

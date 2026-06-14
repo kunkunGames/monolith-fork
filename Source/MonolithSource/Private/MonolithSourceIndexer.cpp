@@ -6,6 +6,31 @@
 #include "HAL/RunnableThread.h"
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
+#include "Internationalization/Regex.h"
+
+namespace MonolithSourceIndexerDetail
+{
+	// Decision 2: derive a module's <Module>.Build.cs path from its Source/<Module>/
+	// dir. Tries <ModulePath>/<ModuleName>.Build.cs first (the common convention);
+	// falls back to the first *.Build.cs found in the dir (module name != dir name).
+	// Returns empty when no Build.cs exists (e.g. the Shaders pseudo-module).
+	static FString DeriveBuildCsPath(const FString& ModulePath, const FString& ModuleName)
+	{
+		const FString Candidate = ModulePath / (ModuleName + TEXT(".Build.cs"));
+		if (IFileManager::Get().FileExists(*Candidate))
+		{
+			return Candidate;
+		}
+
+		TArray<FString> Found;
+		IFileManager::Get().FindFiles(Found, *(ModulePath / TEXT("*.Build.cs")), /*Files=*/true, /*Directories=*/false);
+		if (Found.Num() > 0)
+		{
+			return ModulePath / Found[0];
+		}
+		return FString();
+	}
+}
 
 // ============================================================
 // Construction / Destruction
@@ -182,7 +207,8 @@ void FMonolithSourceIndexer::DiscoverEngineModules(TArray<FModuleEntry>& OutModu
 			if (bIsDir)
 			{
 				FString DirName = FPaths::GetCleanFilename(Path);
-				OutModules.Add({ FString(Path), DirName, Category });
+				OutModules.Add({ FString(Path), DirName, Category,
+					MonolithSourceIndexerDetail::DeriveBuildCsPath(FString(Path), DirName) });
 			}
 			return true; // continue iteration
 		});
@@ -201,16 +227,17 @@ void FMonolithSourceIndexer::DiscoverEngineModules(TArray<FModuleEntry>& OutModu
 			{
 				FString ParentDir = FPaths::GetPath(FString(Path));
 				FString ModuleName = FPaths::GetCleanFilename(ParentDir);
-				OutModules.Add({ FString(Path), ModuleName, TEXT("Plugin") });
+				OutModules.Add({ FString(Path), ModuleName, TEXT("Plugin"),
+					MonolithSourceIndexerDetail::DeriveBuildCsPath(FString(Path), ModuleName) });
 			}
 		}
 		return true;
 	});
 
-	// Shaders
+	// Shaders — no Build.cs
 	if (!ShaderPath.IsEmpty())
 	{
-		OutModules.Add({ ShaderPath, TEXT("Shaders"), TEXT("Shaders") });
+		OutModules.Add({ ShaderPath, TEXT("Shaders"), TEXT("Shaders"), FString() });
 	}
 }
 
@@ -223,7 +250,8 @@ void FMonolithSourceIndexer::DiscoverProjectModules(TArray<FModuleEntry>& OutMod
 		if (bIsDir)
 		{
 			FString DirName = FPaths::GetCleanFilename(Path);
-			OutModules.Add({ FString(Path), DirName, TEXT("Project") });
+			OutModules.Add({ FString(Path), DirName, TEXT("Project"),
+				MonolithSourceIndexerDetail::DeriveBuildCsPath(FString(Path), DirName) });
 		}
 		return true;
 	});
@@ -243,7 +271,8 @@ void FMonolithSourceIndexer::DiscoverProjectModules(TArray<FModuleEntry>& OutMod
 
 				// Detect GameFeature plugins
 				FString ModuleType = FullPath.Contains(TEXT("GameFeatures")) ? TEXT("GameFeature") : TEXT("Plugin");
-				OutModules.Add({ FullPath, ModuleName, ModuleType });
+				OutModules.Add({ FullPath, ModuleName, ModuleType,
+					MonolithSourceIndexerDetail::DeriveBuildCsPath(FullPath, ModuleName) });
 			}
 		}
 		return true;
@@ -256,7 +285,7 @@ void FMonolithSourceIndexer::DiscoverProjectModules(TArray<FModuleEntry>& OutMod
 
 void FMonolithSourceIndexer::IndexModule(const FModuleEntry& Module, FMonolithSourceDatabase& DB)
 {
-	int64 ModuleId = DB.InsertModule(Module.Name, Module.Path, Module.Type);
+	int64 ModuleId = DB.InsertModule(Module.Name, Module.Path, Module.Type, Module.BuildCsPath);
 
 	// Collect all source files for this module
 	TArray<FString> Files;
@@ -392,6 +421,136 @@ int32 FMonolithSourceIndexer::IndexCppFile(const FString& FilePath, int64 Module
 		}
 
 		SymbolCount++;
+	}
+
+	// --- Deprecation extraction (item 3) ---
+	// LOCAL FRegexPattern/FRegexMatcher only — never static/global (ICU init
+	// gotcha; the matcher relies on the internationalization system, and a
+	// file-scope instance would construct before ICU is ready). The indexer runs
+	// after engine init, so constructing locals here is safe.
+	//
+	// Matches UE_DEPRECATED / UE_DEPRECATED_FORENGINE / UE_DEPRECATED_FORGAME with
+	//   (Version, "Message")  — Version may be absent (e.g. some FORGAME forms).
+	// Capture groups: 1 = kind suffix (_FORENGINE|_FORGAME|empty), 2 = version,
+	//                 3 = message.
+	{
+		const FRegexPattern DeprPattern(
+			TEXT("UE_DEPRECATED(_FORENGINE|_FORGAME)?\\s*\\(\\s*([\\d.]+)?\\s*,?\\s*\"([^\"]*)\""));
+
+		const TArray<FString>& Lines = ParseResult.SourceLines;
+		for (int32 i = 0; i < Lines.Num(); ++i)
+		{
+			FRegexMatcher Matcher(DeprPattern, Lines[i]);
+			if (!Matcher.FindNext())
+			{
+				continue;
+			}
+
+			const FString Suffix  = Matcher.GetCaptureGroup(1);
+			const FString Version = Matcher.GetCaptureGroup(2);
+			const FString Message = Matcher.GetCaptureGroup(3);
+
+			FString Kind = TEXT("UE_DEPRECATED");
+			if (Suffix == TEXT("_FORENGINE")) Kind = TEXT("UE_DEPRECATED_FORENGINE");
+			else if (Suffix == TEXT("_FORGAME")) Kind = TEXT("UE_DEPRECATED_FORGAME");
+
+			// Parse the symbol NAME from the declaration text following the macro.
+			// Class-body methods have no symbols row (Step-0 finding), so we scan
+			// forward over intervening specifier/macro lines (UPROPERTY/UFUNCTION/
+			// UE_API/comments/blanks) to the first real declaration, then take the
+			// identifier immediately before '(' (function) or before ';'/'=' (var).
+			FString SymbolName;
+			for (int32 j = i; j < Lines.Num() && j < i + 8; ++j)
+			{
+				FString Decl = Lines[j].TrimStartAndEnd();
+
+				// On the macro line itself, strip the macro invocation up to the
+				// LAST ')' (the macro's closing paren; using the last paren tolerates
+				// a message string that itself contains "()", e.g. "Use Foo() instead").
+				if (j == i)
+				{
+					int32 CloseIdx = INDEX_NONE;
+					if (Decl.FindLastChar(TEXT(')'), CloseIdx))
+					{
+						Decl = Decl.Mid(CloseIdx + 1).TrimStartAndEnd();
+					}
+					else
+					{
+						continue; // macro args spill to next line — skip this one
+					}
+				}
+
+				if (Decl.IsEmpty()) continue;
+				if (Decl.StartsWith(TEXT("//")) || Decl.StartsWith(TEXT("/*")) || Decl.StartsWith(TEXT("*"))) continue;
+
+				// Skip pure specifier/macro lines (UPROPERTY(), UFUNCTION(...), etc.)
+				// and lone UE_API-style export macros — keep scanning for the decl.
+				if (Decl.StartsWith(TEXT("UPROPERTY")) || Decl.StartsWith(TEXT("UFUNCTION"))
+					|| Decl.StartsWith(TEXT("UDELEGATE")) || Decl.StartsWith(TEXT("UE_DEPRECATED")))
+				{
+					continue;
+				}
+
+				// Function form: identifier immediately before the first '('.
+				int32 ParenIdx = INDEX_NONE;
+				int32 SemiIdx = INDEX_NONE;
+				int32 EqIdx = INDEX_NONE;
+				Decl.FindChar(TEXT('('), ParenIdx);
+				Decl.FindChar(TEXT(';'), SemiIdx);
+				Decl.FindChar(TEXT('='), EqIdx);
+
+				int32 EndIdx = INDEX_NONE;
+				if (ParenIdx != INDEX_NONE)
+				{
+					EndIdx = ParenIdx; // function
+				}
+				else if (SemiIdx != INDEX_NONE || EqIdx != INDEX_NONE)
+				{
+					EndIdx = (SemiIdx != INDEX_NONE && (EqIdx == INDEX_NONE || SemiIdx < EqIdx)) ? SemiIdx : EqIdx; // variable / property
+				}
+
+				if (EndIdx == INDEX_NONE)
+				{
+					continue; // declaration continues on the next line
+				}
+
+				// Walk backwards from EndIdx over the trailing identifier.
+				int32 NameEnd = EndIdx;
+				while (NameEnd > 0 && FChar::IsWhitespace(Decl[NameEnd - 1])) --NameEnd;
+				int32 NameStart = NameEnd;
+				while (NameStart > 0)
+				{
+					const TCHAR Ch = Decl[NameStart - 1];
+					if (FChar::IsAlnum(Ch) || Ch == TEXT('_'))
+					{
+						--NameStart;
+					}
+					else
+					{
+						break;
+					}
+				}
+				if (NameEnd > NameStart)
+				{
+					SymbolName = Decl.Mid(NameStart, NameEnd - NameStart);
+				}
+				break;
+			}
+
+			if (SymbolName.IsEmpty())
+			{
+				continue; // could not resolve a name — skip rather than store garbage
+			}
+
+			// Link to a symbols row when one exists; NULL (0) otherwise.
+			int64 LinkedSymId = 0;
+			if (const int64* Found = SymbolNameToId.Find(SymbolName))
+			{
+				LinkedSymId = *Found;
+			}
+
+			DB.InsertDeprecation(LinkedSymId, SymbolName, Version, Message, Kind);
+		}
 	}
 
 	// Source FTS chunks

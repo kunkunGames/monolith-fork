@@ -1,14 +1,18 @@
 #include "MonolithPieSmokeSession.h"
 #include "MonolithEditorActions.h" // FMonolithLogCapture / FMonolithLogEntry
+#include "MonolithPieObjectActions.h" // Gap 9: shared PIE-object resolver + dotted read
 
 #include "Editor.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/Character.h" // Gap 9: ACharacter::Jump provocation
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Controller.h"
+#include "Components/ActorComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimInstance.h"
+#include "Dom/JsonValue.h" // Gap 9: timeseries sample JSON values
 #include "EngineUtils.h"
 
 // Phase 8 (OG-E2/E5): structured actor_setup execution against the live PIE world.
@@ -316,6 +320,163 @@ namespace
 		Probe.bFired = true;
 		Probe.FiredAtSeconds = ElapsedSeconds;
 		RunScriptPayload(Probe.Python, Probe.Console, PieWorld, Probe.bPythonOk, Probe.PythonOutput);
+	}
+
+	// ── Gap 9: time-series target resolution + typed provocation dispatch ──
+
+	// Resolve the timeseries target object in the live PIE world from the session's stored
+	// selector fields. Mirrors MonolithPieObject::Resolve's matching (actor_label/object_name
+	// exact, class_name substring; optional component hop or anim-instance hop) but reads the
+	// selector off the session struct rather than a JSON params blob.
+	UObject* ResolveTimeseriesTarget(UWorld* PieWorld, const FPieSmokeSession& Session)
+	{
+		if (!PieWorld)
+		{
+			return nullptr;
+		}
+
+		AActor* Actor = nullptr;
+		for (TActorIterator<AActor> It(PieWorld); It; ++It)
+		{
+			AActor* Candidate = *It;
+			if (!Candidate) { continue; }
+#if WITH_EDITOR
+			const FString Label = Candidate->GetActorLabel();
+#else
+			const FString Label;
+#endif
+			const FString Name = Candidate->GetName();
+			const FString Cls = Candidate->GetClass() ? Candidate->GetClass()->GetName() : FString();
+
+			if (!Session.TargetActorLabel.IsEmpty() && Label == Session.TargetActorLabel) { Actor = Candidate; break; }
+			if (!Session.TargetObjectName.IsEmpty() && Name == Session.TargetObjectName)  { Actor = Candidate; break; }
+			if (!Session.TargetClassName.IsEmpty() && Cls.Contains(Session.TargetClassName)) { Actor = Candidate; break; }
+		}
+		if (!Actor)
+		{
+			return nullptr;
+		}
+
+		if (Session.bTargetAnimInstance)
+		{
+			for (UActorComponent* C : Actor->GetComponents())
+			{
+				USkeletalMeshComponent* MC = Cast<USkeletalMeshComponent>(C);
+				if (!MC) { continue; }
+				if (Session.TargetComponentName.IsEmpty() || MC->GetName() == Session.TargetComponentName)
+				{
+					return MC->GetAnimInstance();
+				}
+			}
+			return nullptr;
+		}
+		if (!Session.TargetComponentName.IsEmpty())
+		{
+			for (UActorComponent* C : Actor->GetComponents())
+			{
+				if (C && C->GetName() == Session.TargetComponentName) { return C; }
+			}
+			return nullptr;
+		}
+		return Actor;
+	}
+
+	// Resolve the controlled pawn for movement/jump provocations: the timeseries target
+	// when it IS a pawn, else the first player controller's pawn. Returns nullptr if none.
+	APawn* ResolveProvocationPawn(UWorld* PieWorld, UObject* Target)
+	{
+		if (APawn* DirectPawn = Cast<APawn>(Target))
+		{
+			return DirectPawn;
+		}
+		if (AActor* TargetActor = Cast<AActor>(Target))
+		{
+			if (APawn* AsPawn = Cast<APawn>(TargetActor)) { return AsPawn; }
+		}
+		if (PieWorld)
+		{
+			if (APlayerController* PC = PieWorld->GetFirstPlayerController())
+			{
+				return PC->GetPawn();
+			}
+		}
+		return nullptr;
+	}
+
+	// Fire one typed provocation against the live PIE world. Each provocation fires once;
+	// the outcome (dispatched / why-not) is stamped for the report. Never crashes: every
+	// target lookup is null-checked and reported rather than dereferenced blindly.
+	void FireProvocation(FPieProvocation& Prov, UWorld* PieWorld, UObject* Target, double ElapsedSeconds)
+	{
+		Prov.bFired = true;
+		Prov.FiredAtSeconds = ElapsedSeconds;
+
+		switch (Prov.Action)
+		{
+		case EPieProvocationAction::SetControlRotation:
+		{
+			APlayerController* PC = PieWorld ? PieWorld->GetFirstPlayerController() : nullptr;
+			if (!PC)
+			{
+				Prov.Result = TEXT("no_player_controller");
+				return;
+			}
+			PC->SetControlRotation(Prov.Rotation);
+			Prov.bDispatched = true;
+			Prov.Result = TEXT("set_control_rotation");
+			return;
+		}
+		case EPieProvocationAction::AddMovementInput:
+		{
+			APawn* Pawn = ResolveProvocationPawn(PieWorld, Target);
+			if (!Pawn)
+			{
+				Prov.Result = TEXT("no_pawn");
+				return;
+			}
+			Pawn->AddMovementInput(Prov.Direction, static_cast<float>(Prov.Scale));
+			Prov.bDispatched = true;
+			Prov.Result = TEXT("add_movement_input");
+			return;
+		}
+		case EPieProvocationAction::Jump:
+		{
+			APawn* Pawn = ResolveProvocationPawn(PieWorld, Target);
+			ACharacter* Character = Cast<ACharacter>(Pawn);
+			if (!Character)
+			{
+				Prov.Result = Pawn ? TEXT("pawn_not_a_character") : TEXT("no_pawn");
+				return;
+			}
+			Character->Jump();
+			Prov.bDispatched = true;
+			Prov.Result = TEXT("jump");
+			return;
+		}
+		case EPieProvocationAction::ConsoleCommand:
+		{
+			if (Prov.Command.IsEmpty())
+			{
+				Prov.Result = TEXT("empty_command");
+				return;
+			}
+			if (APlayerController* PC = PieWorld ? PieWorld->GetFirstPlayerController() : nullptr)
+			{
+				PC->ConsoleCommand(Prov.Command, /*bWriteToLog=*/true);
+				Prov.bDispatched = true;
+			}
+			else if (GEngine && PieWorld)
+			{
+				GEngine->Exec(PieWorld, *Prov.Command);
+				Prov.bDispatched = true;
+			}
+			Prov.Result = Prov.bDispatched ? TEXT("console_command") : TEXT("no_exec_target");
+			return;
+		}
+		default:
+			Prov.Result = TEXT("unknown_action");
+			return;
+		}
 	}
 
 	// Phase 8: human-readable token for an AI move request result.
@@ -1039,6 +1200,57 @@ void FPieSmokeSessionManager::AdvanceSession(FPieSmokeSession& Session)
 		{
 			FireProbe(Probe, PieWorld, SampleTime);
 		}
+	}
+
+	// ── Gap 9: time-series variant ────────────────────────────────────────────
+	// Resolve the dotted target, fire typed provocations at their times, and sample the
+	// dotted (UDS-friendly) variable paths (gated by SampleInterval, capped by MaxSamples).
+	// This REPLACES the flat anim-var sampling below for a timeseries session.
+	if (Session.bTimeseries)
+	{
+		// Reuse the cached resolved target while it is still valid; only run the full
+		// actor+component scan when the weak pointer is stale (first tick, or after the
+		// target actor dies). Keeps per-tick sampling O(1) instead of O(actors x ticks).
+		UObject* Target = Session.CachedTimeseriesTarget.IsValid()
+			? Session.CachedTimeseriesTarget.Get() : nullptr;
+		if (!Target)
+		{
+			Target = ResolveTimeseriesTarget(PieWorld, Session);
+			Session.CachedTimeseriesTarget = Target;
+		}
+
+		// Typed provocations fire once each when elapsed crosses their time.
+		for (FPieProvocation& Prov : Session.Provocations)
+		{
+			if (!Prov.bFired && SampleTime >= Prov.AtSeconds)
+			{
+				FireProvocation(Prov, PieWorld, Target, SampleTime);
+			}
+		}
+
+		// Sample the dotted vars, gated by SampleInterval and the MaxSamples guard.
+		const bool bDue = (Session.LastSampleSeconds < 0.0) ||
+			(SampleTime - Session.LastSampleSeconds >= Session.SampleInterval);
+		if (bDue && Session.TimeseriesSamples.Num() < Session.MaxSamples)
+		{
+			FPieTimeseriesSample TSample;
+			TSample.TimeSeconds = SampleTime;
+			if (Target)
+			{
+				for (const FString& Path : Session.TimeseriesVarPaths)
+				{
+					FString TypeName;
+					TSharedPtr<FJsonValue> Val = MonolithPieObject::ReadDottedValue(Target, Path, TypeName);
+					if (Val.IsValid())
+					{
+						TSample.Vars.Emplace(Path, Val);
+					}
+				}
+			}
+			Session.TimeseriesSamples.Add(MoveTemp(TSample));
+			Session.LastSampleSeconds = SampleTime;
+		}
+		return; // timeseries sessions do not run the flat-var / clip sampling below
 	}
 
 	FPieSmokeSample Sample;

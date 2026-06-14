@@ -89,6 +89,16 @@ struct FMonolithSourceFile
 	int32 LineCount = 0;
 };
 
+/** A single symbol_deprecations row (item 3). Structured so a message containing
+ *  '|' cannot corrupt the version/kind fields (parity-safe vs the offline mirrors,
+ *  which read columns directly). */
+struct FMonolithDeprecationRow
+{
+	FString Version;
+	FString Message;
+	FString Kind;
+};
+
 /**
  * C++ wrapper around the engine source SQLite DB.
  * Supports both read-only access (Open) and read-write access (OpenForWriting)
@@ -146,6 +156,8 @@ public:
 	FString GetFilePath(int64 FileId);
 	TOptional<FMonolithSourceFile> FindFileBySuffix(const FString& Suffix);
 	TOptional<FMonolithSourceFile> FindFileByPath(const FString& Path);
+	/** Resolve a file's owning module name + (possibly empty) build_cs_path. False if file/module not found. */
+	bool GetFileModuleInfo(int64 FileId, FString& OutModuleName, FString& OutBuildCsPath);
 
 	// --- Reference queries ---
 	TArray<FMonolithSourceReference> GetReferencesTo(int64 SymbolId, const FString& RefKind = TEXT(""), int32 Limit = 50);
@@ -243,6 +255,17 @@ public:
 
 	void SetMeta(const FString& Key, const FString& Value);
 	FString GetMeta(const FString& Key);
+
+	// --- Deprecation queries (item 3) ---
+	// symbol_id is NULLABLE: pass 0 to store NULL (class-body methods have no
+	// symbols row — Step-0 finding). Lookups key on symbol_name.
+	void InsertDeprecation(int64 SymbolId, const FString& SymbolName, const FString& Version, const FString& Message, const FString& Kind);
+	/** Returns the deprecation row for the first matching symbol, or unset when not deprecated. */
+	TOptional<FMonolithDeprecationRow> GetDeprecation(const FString& SymbolName);
+	/** Batch lookup: maps each input symbol name that IS deprecated to its row. Absent keys = not deprecated. */
+	TMap<FString, FMonolithDeprecationRow> GetDeprecationsBatch(const TArray<FString>& SymbolNames);
+	/** Total rows in symbol_deprecations (used to detect the "index empty" state — Decision 3). */
+	int32 GetDeprecationCount();
 
 	// --- Incremental indexing support ---
 	int32 LoadExistingSymbols(TMap<FString, int64>& OutSymbolNameToId, TMap<FString, int64>& OutClassNameToId,

@@ -46,12 +46,34 @@
 class MONOLITHREFLECTIONINTEL_API FModuleDepRealityAdapter
 {
 public:
-	/** Register `source_query("audit_module_dep_reality")`. */
+	/** Register `source_query("audit_module_dep_reality")` + `source_query("suggest_build_cs_deps")`. */
 	static void RegisterActions(FMonolithToolRegistry& Registry);
 
 private:
 	static FMonolithActionResult HandleAuditModuleDepReality(const TSharedPtr<FJsonObject>& Params);
 
+	/**
+	 * Item 6 (Phase 2): forward direction of audit_module_dep_reality. Given a
+	 * `file_path` (or `symbols[]`), resolve the DECLARING module path-first from
+	 * the file_path (`Source/<Module>/...` / `Plugins/<X>/Source/<Module>/...`),
+	 * read its `<Module>.Build.cs` from DISK (works on uncommitted/unindexed files),
+	 * extract used UE types, resolve each used type's OWNING module via the
+	 * EngineSource.db symbols/files/modules join, diff against the declared deps
+	 * (apply the implicit Core/CoreUObject/Engine whitelist), and return
+	 * required_modules[] + missing[]. RI/live-only — NOT offline-served (matches
+	 * audit_module_dep_reality). Read-only, game-thread.
+	 */
+	static FMonolithActionResult HandleSuggestBuildCsDeps(const TSharedPtr<FJsonObject>& Params);
+
 	/** Shared DB accessor — routes through the module's cached query DB. */
 	static class FSQLiteDatabase* GetRawDB();
+
+	/**
+	 * Resolve the source subsystem's FMonolithSourceDatabase wrapper (NOT the raw
+	 * handle). Exposes GetLock() so a borrower of GetRawHandle() can serialise its
+	 * statement use per the borrow contract (MonolithSourceDatabase.h:116-120).
+	 * Returns nullptr when the editor / subsystem / DB is unavailable. Game-thread
+	 * only. Used by suggest_build_cs_deps to lock the borrow correctly.
+	 */
+	static class FMonolithSourceDatabase* GetSharedSourceDb();
 };

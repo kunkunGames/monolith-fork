@@ -13,9 +13,14 @@
 // module taking the "Chooser" dependency.
 #include "Chooser.h"                 // UChooserTable (Internal, on public include path)
 #include "ChooserSignature.h"        // UChooserSignature (Public)
-#include "ChooserPropertyAccess.h"   // FContextObjectTypeBase/Class/Struct (Public)
+#include "ChooserPropertyAccess.h"   // FContextObjectTypeBase/Class/Struct + FChooserPropertyBinding (Public)
 #include "ObjectChooser_Asset.h"     // FAssetChooser / FSoftAssetChooser (Internal, public path)
 #include "OutputObjectColumn.h"       // FOutputObjectColumn / FChooserOutputObjectRowData (Internal, public path)
+#include "BoolColumn.h"              // FBoolColumn / EBoolColumnCellValue (Internal, public path)
+#include "EnumColumn.h"              // FEnumColumn / FChooserEnumRowData (Internal, public path)
+#include "GameplayTagColumn.h"       // FGameplayTagColumn (RowValues: FGameplayTagContainer)
+#include "FloatRangeColumn.h"        // FFloatRangeColumn / FChooserFloatRangeRowData
+#include "GameplayTagContainer.h"
 
 #include "StructUtils/InstancedStruct.h"
 #include "UObject/Class.h"
@@ -35,10 +40,11 @@ void FMonolithChooserActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	// --- inspect_chooser ---
 	Registry.RegisterAction(TEXT("chooser"), TEXT("inspect_chooser"),
-		TEXT("Read-only inspection of a UChooserTable: context-data parameters (class/struct requirements), result type + result class, row count, column count + types, referenced assets walked from result rows, and compile/validation status. Set recursive=true to additionally emit the full nested tree of row/result targets (asset / soft_asset / evaluate_chooser / nested_chooser kinds), output-object column cells, fallback, parent_table/root_chooser, and recursed child tables."),
+		TEXT("Read-only inspection of a UChooserTable: context-data parameters (class/struct requirements), result type + result class, row count, column count + types, a richer 'columns' array (per-column index, type, input-binding chain, is_input flag), referenced assets walked from result rows, and compile/validation status. Set include_cells=true to also emit per-row cell values for input columns (bool/enum/float-range/gameplay-tag). Set recursive=true to additionally emit the full nested tree of row/result targets (asset / soft_asset / evaluate_chooser / nested_chooser kinds), output-object column cells, fallback, parent_table/root_chooser, and recursed child tables."),
 		FMonolithActionHandler::CreateStatic(&HandleInspectChooser),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("UChooserTable asset path"))
+			.Optional(TEXT("include_cells"), TEXT("bool"), TEXT("When true, emit per-row cell values for each input column under columns[].cells (bool MatchTrue/MatchFalse/any, enum value + comparison, float-range {min,max}, gameplay-tag list). Default false (back-compat: binding chains are always emitted, cells are not)."))
 			.Optional(TEXT("recursive"), TEXT("bool"), TEXT("When true, emit a recursive 'tree' of every row/result target (normalized asset paths) including nested FEvaluateChooser/FNestedChooser children, FallbackResult, and FOutputObjectColumn cells, so a root->child remap is provable from readback. Default false (back-compat)."))
 			.Build());
 
@@ -193,6 +199,149 @@ namespace
 		const FString ShortName = FMonolithAssetUtils::GetAssetName(SourceAssetPath);
 		return Folder + TEXT("/") + ShortName;
 	}
+
+	/** True when the column is one of the four bindable input (filter) column types. */
+	bool IsInputColumn(const FInstancedStruct& Col)
+	{
+		return Col.GetPtr<FBoolColumn>() || Col.GetPtr<FEnumColumn>()
+			|| Col.GetPtr<FGameplayTagColumn>() || Col.GetPtr<FFloatRangeColumn>();
+	}
+
+	/**
+	 * Read a column's input-binding chain into a JSON object { chain:[names], display:"A.B" }.
+	 * Mirrors ApplyInputBinding (MonolithChooserAuthoringActions.cpp) const-side: reach the
+	 * column's InputValue FInstancedStruct, find the 'Binding' FStructProperty on the
+	 * context-property struct (derives FChooserPropertyBinding), and read PropertyBindingChain.
+	 * Returns null when the column has no resolvable input binding (output/unknown columns,
+	 * or an input column whose InputValue/Binding struct could not be reached).
+	 */
+	TSharedPtr<FJsonObject> ReadInputBinding(const FInstancedStruct& Col)
+	{
+		const FInstancedStruct* InputValue = nullptr;
+		if (const FBoolColumn* BoolC = Col.GetPtr<FBoolColumn>())              { InputValue = &BoolC->InputValue; }
+		else if (const FEnumColumn* EnumC = Col.GetPtr<FEnumColumn>())         { InputValue = &EnumC->InputValue; }
+		else if (const FGameplayTagColumn* TagC = Col.GetPtr<FGameplayTagColumn>()) { InputValue = &TagC->InputValue; }
+		else if (const FFloatRangeColumn* RangeC = Col.GetPtr<FFloatRangeColumn>()) { InputValue = &RangeC->InputValue; }
+		if (!InputValue || !InputValue->IsValid())
+		{
+			return nullptr;
+		}
+
+		const UScriptStruct* SS = InputValue->GetScriptStruct();
+		if (!SS)
+		{
+			return nullptr;
+		}
+
+		for (TFieldIterator<FStructProperty> It(SS); It; ++It)
+		{
+			if (It->GetName() != TEXT("Binding"))
+			{
+				continue;
+			}
+			if (!It->Struct || !It->Struct->IsChildOf(FChooserPropertyBinding::StaticStruct()))
+			{
+				break;
+			}
+			const void* BindingPtr = It->ContainerPtrToValuePtr<void>(InputValue->GetMemory());
+			if (!BindingPtr)
+			{
+				break;
+			}
+			const FChooserPropertyBinding* Binding = static_cast<const FChooserPropertyBinding*>(BindingPtr);
+
+			TArray<TSharedPtr<FJsonValue>> ChainArr;
+			TArray<FString> ChainStrs;
+			for (const FName& Link : Binding->PropertyBindingChain)
+			{
+				ChainArr.Add(MakeShared<FJsonValueString>(Link.ToString()));
+				ChainStrs.Add(Link.ToString());
+			}
+
+			TSharedPtr<FJsonObject> BindingObj = MakeShared<FJsonObject>();
+			BindingObj->SetArrayField(TEXT("chain"), ChainArr);
+			BindingObj->SetStringField(TEXT("display"), FString::Join(ChainStrs, TEXT(".")));
+			return BindingObj;
+		}
+		return nullptr;
+	}
+
+	/** Bool cell-value enum -> JSON-friendly string. */
+	FString BoolCellToString(EBoolColumnCellValue Value)
+	{
+		switch (Value)
+		{
+		case EBoolColumnCellValue::MatchFalse: return TEXT("false");
+		case EBoolColumnCellValue::MatchTrue:  return TEXT("true");
+		case EBoolColumnCellValue::MatchAny:   return TEXT("any");
+		default:                               return TEXT("unknown");
+		}
+	}
+
+	/**
+	 * Append per-row cell values for an input column into OutCells. Handles the four
+	 * input column types; no-op for output/unknown columns. Float-range honors the
+	 * infinite-bound flags (bNoMin/bNoMax) by emitting nulls for unbounded ends.
+	 */
+	void ReadColumnCells(const FInstancedStruct& Col, TArray<TSharedPtr<FJsonValue>>& OutCells)
+	{
+		if (const FBoolColumn* BoolC = Col.GetPtr<FBoolColumn>())
+		{
+			for (int32 r = 0; r < BoolC->RowValuesWithAny.Num(); ++r)
+			{
+				TSharedPtr<FJsonObject> Cell = MakeShared<FJsonObject>();
+				Cell->SetNumberField(TEXT("row"), r);
+				Cell->SetStringField(TEXT("value"), BoolCellToString(BoolC->RowValuesWithAny[r]));
+				OutCells.Add(MakeShared<FJsonValueObject>(Cell));
+			}
+			return;
+		}
+		if (const FFloatRangeColumn* RangeC = Col.GetPtr<FFloatRangeColumn>())
+		{
+			for (int32 r = 0; r < RangeC->RowValues.Num(); ++r)
+			{
+				const FChooserFloatRangeRowData& Row = RangeC->RowValues[r];
+				TSharedPtr<FJsonObject> Cell = MakeShared<FJsonObject>();
+				Cell->SetNumberField(TEXT("row"), r);
+				if (Row.bNoMin) { Cell->SetField(TEXT("min"), MakeShared<FJsonValueNull>()); }
+				else            { Cell->SetNumberField(TEXT("min"), Row.Min); }
+				if (Row.bNoMax) { Cell->SetField(TEXT("max"), MakeShared<FJsonValueNull>()); }
+				else            { Cell->SetNumberField(TEXT("max"), Row.Max); }
+				OutCells.Add(MakeShared<FJsonValueObject>(Cell));
+			}
+			return;
+		}
+		if (const FGameplayTagColumn* TagC = Col.GetPtr<FGameplayTagColumn>())
+		{
+			for (int32 r = 0; r < TagC->RowValues.Num(); ++r)
+			{
+				TSharedPtr<FJsonObject> Cell = MakeShared<FJsonObject>();
+				Cell->SetNumberField(TEXT("row"), r);
+				TArray<TSharedPtr<FJsonValue>> TagArr;
+				for (const FGameplayTag& Tag : TagC->RowValues[r])
+				{
+					TagArr.Add(MakeShared<FJsonValueString>(Tag.ToString()));
+				}
+				Cell->SetArrayField(TEXT("tags"), TagArr);
+				OutCells.Add(MakeShared<FJsonValueObject>(Cell));
+			}
+			return;
+		}
+		if (const FEnumColumn* EnumC = Col.GetPtr<FEnumColumn>())
+		{
+			for (int32 r = 0; r < EnumC->RowValues.Num(); ++r)
+			{
+				const FChooserEnumRowData& Row = EnumC->RowValues[r];
+				TSharedPtr<FJsonObject> Cell = MakeShared<FJsonObject>();
+				Cell->SetNumberField(TEXT("row"), r);
+				Cell->SetNumberField(TEXT("value"), Row.Value);
+				Cell->SetNumberField(TEXT("comparison"), static_cast<int32>(Row.Comparison));
+				OutCells.Add(MakeShared<FJsonValueObject>(Cell));
+			}
+			return;
+		}
+		// Output / unknown column types: no cells emitted.
+	}
 }
 
 // ===========================================================================
@@ -261,6 +410,42 @@ FMonolithActionResult FMonolithChooserActions::HandleInspectChooser(const TShare
 			ColTypes.Add(MakeShared<FJsonValueString>(SS ? SS->GetName() : TEXT("<null>")));
 		}
 		Root->SetArrayField(TEXT("column_types"), ColTypes);
+	}
+
+	// Richer per-column view: index, type, input-binding chain, is_input flag, and
+	// (when include_cells) per-row cell values. Unknown/output column types degrade to
+	// { type, is_input:false } with no binding — never an error.
+	{
+		bool bIncludeCells = false;
+		Params->TryGetBoolField(TEXT("include_cells"), bIncludeCells);
+
+		TArray<TSharedPtr<FJsonValue>> ColumnsArr;
+		for (int32 c = 0; c < Table->ColumnsStructs.Num(); ++c)
+		{
+			const FInstancedStruct& Col = Table->ColumnsStructs[c];
+			const UScriptStruct* SS = Col.GetScriptStruct();
+
+			TSharedPtr<FJsonObject> ColObj = MakeShared<FJsonObject>();
+			ColObj->SetNumberField(TEXT("index"), c);
+			ColObj->SetStringField(TEXT("type"), SS ? SS->GetName() : TEXT("<null>"));
+
+			const bool bIsInput = IsInputColumn(Col);
+			ColObj->SetBoolField(TEXT("is_input"), bIsInput);
+			if (TSharedPtr<FJsonObject> Binding = ReadInputBinding(Col))
+			{
+				ColObj->SetObjectField(TEXT("input_binding"), Binding);
+			}
+
+			if (bIncludeCells && bIsInput)
+			{
+				TArray<TSharedPtr<FJsonValue>> Cells;
+				ReadColumnCells(Col, Cells);
+				ColObj->SetArrayField(TEXT("cells"), Cells);
+			}
+
+			ColumnsArr.Add(MakeShared<FJsonValueObject>(ColObj));
+		}
+		Root->SetArrayField(TEXT("columns"), ColumnsArr);
 	}
 
 	{

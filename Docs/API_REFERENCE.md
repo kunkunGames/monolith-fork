@@ -1,8 +1,8 @@
 # Monolith API Reference
 
-**Version:** v0.18.1 · **Last updated:** 2026-06-07
+**Version:** v0.20.0 · **Last updated:** 2026-06-14
 
-**In-tree action total is approximate: 1,400+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.18.1 adds the Motion Matching authoring pack (`animation` / `chooser` / `blueprint`), a PIE / profiling harness (`editor` / `ai` / `project`), state-machine authoring + live anim telemetry, an AI controller that runs a BehaviorTree on possess, inherited-native-component inspection, and live DataAsset field read-back. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
+**In-tree action total is approximate: ~1,500+ actions across 25+ in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
 The per-namespace numbers in the Table of Contents and body sections below are kept for structure, not precision — they drift with every action added and are no longer maintained to the unit. Treat them as ballpark; the live figure always comes from `monolith_discover()`.
 
@@ -21,7 +21,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [monolith](#monolith) | 5 | Core server tools (discover, status, update, reindex, guide) |
 | [blueprint](#blueprint) | 111 | Blueprint read/write, variable/component/graph CRUD, node ops, compile, auto-layout, spawn actors, dataset read/edit pack (DataTable/CurveTable/StringTable + `seed_data_asset`), cross-class property access, parent-function overrides |
 | [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
-| [animation](#animation) | 125 | Curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs (incl. custom anim-graph nodes), montages, skeletons, PoseSearch, IKRig, Control Rig |
+| [animation](#animation) | 145 | Curves, bone tracks, sync markers, root motion, compression, blend spaces (incl. baking + interpolation control), ABPs (incl. an AnimGraph-authoring pack — additive/slot/cached-pose/blend (by int + by enum)/sync/layered-blend/Control Rig/linked-layer/conduit nodes + output wiring — custom anim-graph nodes + state-machine teardown + compound expression transition rules), montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [config](#config) | 11 | INI config inspection and search |
@@ -406,6 +406,12 @@ Animation curves, bone tracks, sync markers, root motion, compression, blend spa
 - **Retarget:** `create_ik_rig`, `create_ik_retargeter`, `set_retargeter_rigs`, `batch_retarget_animations`.
 - **State machines + telemetry:** `create_state_machine`, `build_state_machine`, `sample_pie_anim_instance`, `get_anim_graph_choosers`, `get_transition_rule`, `get_anim_graph_output_connection`. `set_transition_rule` accepts a structured `kind=compare`; `get_nodes` gained `include_anim_graph`.
 
+**New (Unreleased) — blend space baking + state-machine teardown + IK solver removal:**
+- **Blend spaces:** `bake_blend_space` (rebuild a blend space's `FBlendSpaceData` triangulation via `ResampleData()` + mark dirty — repairs blend spaces authored externally or before the auto-bake fix; returns `has_blendspace_data`, `sample_count`, `baked`, and a `warning` when a 2D blend space has fewer than 3 samples), `set_blend_space_interpolation` (set `bInterpolateUsingGrid` via `use_grid` + a `preferred_triangulation_direction` of `None`/`Tangential`/`Radial`, then resample). In grid mode the triangulation is intentionally empty, so `has_blendspace_data` is `false` — correct, not a failure. The four blend space mutators (`add_blendspace_sample`, `edit_blendspace_sample`, `delete_blendspace_sample`, `set_blend_space_axis`) now auto-bake the triangulation after each edit, so MCP-authored blend spaces no longer ship empty and evaluate to the bind/reference pose at runtime.
+- **State machines:** `remove_anim_state` (remove a state + tear down its inner anim graph; `remove_dependent_transitions` default `true`; refuses to remove the machine's current entry state — re-point first), `set_anim_entry_state` (re-point the Entry node at an existing state; returns the previous target, `unchanged:true` fast-path), `remove_anim_transition` (remove a from→to transition; reports `matched_transition_count`).
+- **IKRig:** `remove_ik_solver` (remove a solver by 0-based `solver_index`, validated against the solver count; returns `removed_index`, `solver_count_after`). `add_ik_solver` now resolves `solver_type` against the live solver-struct table (friendly alias → exact struct name → unique substring; ambiguous input errors with the candidate list) instead of a hardcoded reflected path that did not resolve in UE 5.7, so Full Body IK now adds correctly and `root_bone` is meaningful for FBIK.
+- **AnimGraph authoring (14):** `add_apply_additive` / `add_apply_mesh_space_additive` (Apply Additive / mesh-space additive nodes), `add_slot_node` (slot name validated against the skeleton's slot groups), `add_save_cached_pose` / `add_use_cached_pose` (paired by `cache_name`), `set_output_pose_source` (wire a node into the AnimGraph Output / Root result pin), `set_state_result_source` (wire a node into a state machine state's result pin), `add_blend_by_int` (grown to `num_poses` pose pins), `add_blend_by_enum` (Blend Poses by Enum bound to a `UEnum` via `enum_path`; one pose pin per exposed enumerator plus a Default/else pin, skipping the auto `_MAX` sentinel and `Hidden` enumerators; optional `enumerators` exposes a subset), `set_sync_group` (player node sync group name / role / method), `set_layered_blend_bones` (per-bone branch filters on a Layered Blend Per Bone node), `add_anim_control_rig_node` (`control_rig_class`; IO pins regenerate), `add_linked_anim_layer` (`layer_name` + optional `interface_class`), `add_conduit` (a state-machine conduit whose bound graph is a transition-logic graph, not an anim graph). Plus 3 extensions: `set_anim_node_pin_binding` now bootstraps the binding object on previously-unbound nodes; `auto_layout` gained a Blueprint-Assist-free `builtin` formatter (also the `auto` fallback) so layout works in release builds where Blueprint Assist is compiled out; `set_transition_rule` gained an `expression` kind (compound multi-term `terms[]` — each `{lhs, op, rhs, abs?, negate?}` — folded through Boolean AND/OR via `combine`), extending the existing `bool` / `auto` / `compare` kinds.
+
 > For full param schemas, call `monolith_discover("animation")` at runtime.
 
 **Action categories:**
@@ -420,12 +426,13 @@ Animation curves, bone tracks, sync markers, root motion, compression, blend spa
 | Skeleton | 5 | `get_skeleton_info`, `get_skeletal_mesh_info`, `add_socket`, `remove_socket`, `set_socket_transform`, `get_skeleton_sockets`, `add_virtual_bone`, `remove_virtual_bones`, `compare_skeletons` |
 | Skeleton (read/compat, v0.14.10) | 5 | `get_skeleton_preview_attached_assets`, `get_bone_ref_pose`, `get_compatible_skeletons`, `add_compatible_skeleton`, `remove_compatible_skeleton` |
 | Montages | 9 | `get_montage_info`, `create_montage`, `set_montage_blend`, `add_montage_section`, `delete_montage_section`, `set_section_next`, `set_section_time`, `add_montage_slot`, `set_montage_slot`, `add_montage_anim_segment`, `create_montage_from_sections` |
-| Blend spaces | 8 | `get_blend_space_info`, `create_blend_space`, `create_blend_space_1d`, `create_aim_offset`, `create_aim_offset_1d`, `add_blendspace_sample`, `edit_blendspace_sample`, `delete_blendspace_sample`, `set_blend_space_axis` |
+| Blend spaces | 10 | `get_blend_space_info`, `create_blend_space`, `create_blend_space_1d`, `create_aim_offset`, `create_aim_offset_1d`, `add_blendspace_sample`, `edit_blendspace_sample`, `delete_blendspace_sample`, `set_blend_space_axis`, `bake_blend_space`, `set_blend_space_interpolation` |
 | ABPs | 9 | `get_abp_info`, `create_anim_blueprint`, `get_state_machines`, `get_state_info`, `get_transitions`, `get_blend_nodes`, `get_linked_layers`, `get_graphs`, `get_nodes`, `get_abp_variables`, `get_abp_linked_assets` |
-| State machines (write) | 3 | `add_state_to_machine`, `add_transition`, `set_transition_rule` |
+| State machines (write) | 6 | `add_state_to_machine`, `add_transition`, `set_transition_rule` (`bool` / `auto` / `compare` / `expression` kinds — `expression` folds multi-term `terms[]` through Boolean AND/OR), `remove_anim_state`, `set_anim_entry_state`, `remove_anim_transition` |
 | ABP graph (write) | 5 | `add_anim_graph_node` (aliases or generic `UAnimGraphNode_Base` class path/name via `node_type` / `node_class`), `connect_anim_graph_pins`, `set_state_animation`, `add_variable_get`, `set_anim_graph_node_property` |
+| ABP graph authoring (Unreleased) | 14 | `add_apply_additive`, `add_apply_mesh_space_additive`, `add_slot_node`, `add_save_cached_pose`, `add_use_cached_pose`, `set_output_pose_source`, `set_state_result_source`, `add_blend_by_int`, `add_blend_by_enum` (Blend Poses by Enum bound to a `UEnum`; one pin per exposed enumerator + Default, skips `_MAX` + `Hidden`), `set_sync_group`, `set_layered_blend_bones`, `add_anim_control_rig_node`, `add_linked_anim_layer`, `add_conduit` |
 | Composites | 3 | `get_composite_info`, `add_composite_segment`, `remove_composite_segment`, `create_composite` |
-| IKRig / Retarget | 6 | `get_ikrig_info`, `add_ik_solver`, `get_retargeter_info`, `set_retarget_chain_mapping`, `add_retarget_chain`, `remove_retarget_chain`, `set_retarget_chain_bones` |
+| IKRig / Retarget | 7 | `get_ikrig_info`, `add_ik_solver`, `remove_ik_solver`, `get_retargeter_info`, `set_retarget_chain_mapping`, `add_retarget_chain`, `remove_retarget_chain`, `set_retarget_chain_bones` |
 | Control Rig | 7 | `get_control_rig_info`, `get_control_rig_variables`, `add_control_rig_element`, `get_control_rig_graph`, `add_control_rig_node`, `connect_control_rig_pins` |
 | Anim modifiers | 2 | `apply_anim_modifier`, `list_anim_modifiers` |
 | Physics asset | 3 | `get_physics_asset_info`, `set_body_properties`, `set_constraint_properties` |
@@ -1691,7 +1698,7 @@ List `#if WITH_*` macros, `bHas*` 3-location probe variables, and `MONOLITH_RELE
 
 ## cppreflect
 
-**New v0.17.0 (Reflection Intelligence, Phase 3a).** UE 5.7 reflection-edge queries driven by a regex sweep over UHT artefacts (`Intermediate/Build/Win64/.../Inc/<Module>/UHT/*.gen.cpp`) cross-joined with `IAssetRegistry::GetDependencies`. No tree-sitter dependency, no ThirdParty vendoring. Writes into `reflect_uclasses`, `reflect_uproperties`, `reflect_ufunctions`, `reflect_uinterfaces`, `reflect_uinterface_impls`, and `cpp_asset_edges` on `EngineSource.db`. All 6 actions are read-only + idempotent. **6 actions** (5 shipped in v0.17.0 Phase 3a; `list_class_specifiers` added [Unreleased]).
+**New v0.17.0 (Reflection Intelligence, Phase 3a).** UE 5.7 reflection-edge queries driven by a regex sweep over UHT artefacts (`Intermediate/Build/Win64/.../Inc/<Module>/UHT/*.gen.cpp`) cross-joined with `IAssetRegistry::GetDependencies`. No tree-sitter dependency, no ThirdParty vendoring. Writes into `reflect_uclasses`, `reflect_uproperties`, `reflect_ufunctions`, `reflect_uinterfaces`, `reflect_uinterface_impls`, and `cpp_asset_edges` on `EngineSource.db`. All 6 actions are read-only + idempotent. **6 actions** (5 shipped in v0.17.0 Phase 3a; `list_class_specifiers` added v0.19.0).
 
 > **Scan scope:** the indexers scan your project plugins by default, not just the game module. Scope follows a game-module → project-plugin → marketplace ladder driven by `IPluginManager::GetEnabledPlugins()`: `bIndexProjectPluginReflection` (default `true`) walks enabled `LoadedFrom == Project` plugins; `bIndexMarketplacePluginReflection` (default `false`) also walks enabled engine-installed marketplace plugins; Epic engine built-ins stay excluded (`bIndexEnginePluginReflection`, default off).
 
@@ -1748,7 +1755,7 @@ List every C++ UCLASS that implements the given UINTERFACE. Blueprint implementa
 
 ### `cppreflect_query.find_class_specifier`
 
-Find every UCLASS carrying a given specifier — substring match against the `flags` column of `reflect_uclasses`. Cursor-paginated. The `flags` column stores UHT metadata keys (`IsBlueprintBase`, `BlueprintType`, `Abstract`, etc.), NOT raw C++ UCLASS specifiers, so matching is forgiving ([Unreleased] enhancements): an alias map translates well-known C++ specifiers (`Blueprintable` → `IsBlueprintBase`); specifiers UHT drops entirely (`MinimalAPI`, `NotBlueprintable`) return an explicit not-captured note rather than a silent empty result; matching is case-insensitive. Call `list_class_specifiers` to discover the queryable token universe.
+Find every UCLASS carrying a given specifier — substring match against the `flags` column of `reflect_uclasses`. Cursor-paginated. The `flags` column stores UHT metadata keys (`IsBlueprintBase`, `BlueprintType`, `Abstract`, etc.), NOT raw C++ UCLASS specifiers, so matching is forgiving (v0.19.0 enhancements): an alias map translates well-known C++ specifiers (`Blueprintable` → `IsBlueprintBase`); specifiers UHT drops entirely (`MinimalAPI`, `NotBlueprintable`) return an explicit not-captured note rather than a silent empty result; matching is case-insensitive. Call `list_class_specifiers` to discover the queryable token universe.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1761,7 +1768,7 @@ Find every UCLASS carrying a given specifier — substring match against the `fl
 
 ### `cppreflect_query.list_class_specifiers`
 
-**New [Unreleased].** Return the DISTINCT universe of tokens stored in the `flags` column of `reflect_uclasses`, each with a per-token class count. The `flags` column stores UHT metadata keys (e.g. `IsBlueprintBase`, `BlueprintType`, `Abstract`), NOT raw C++ UCLASS specifiers. Use this to discover what `find_class_specifier` can actually match. No params.
+**New v0.19.0.** Return the DISTINCT universe of tokens stored in the `flags` column of `reflect_uclasses`, each with a per-token class count. The `flags` column stores UHT metadata keys (e.g. `IsBlueprintBase`, `BlueprintType`, `Abstract`), NOT raw C++ UCLASS specifiers. Use this to discover what `find_class_specifier` can actually match. No params.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1775,7 +1782,7 @@ Find every UCLASS carrying a given specifier — substring match against the `fl
 
 **New v0.17.0 (Reflection Intelligence, Phase 4a).** UE 5.7 replication inspection driven by a second UHT-artefact regex sweep (independent of Phase 3a's reader) over per-property `MetaData` blocks plus the `CPF_Net` property-flag emission. Cross-joins against Phase 3a's `reflect_ufunctions`. Writes into `reflect_replicated_properties` on `EngineSource.db`. All 4 actions are read-only + idempotent. **4 actions.**
 
-> **Status notes ([Unreleased] network-completeness workstream):**
+> **Status notes (v0.19.0 network-completeness workstream):**
 > - The indexer now scans project plugins by default (the scan-scope ladder — see the `cppreflect` header note), so replicated classes and RPCs declared in project plugins are in scope, not just the game module.
 > - `list_replicated_classes` now captures bare `UPROPERTY(Replicated)` + `DOREPLIFETIME` (via `CPF_Net`) in addition to `ReplicatedUsing` — verified end-to-end against a real project's replicated character/attribute classes.
 > - `list_rpc_functions` switched to specifier-based detection (`reflect_ufunctions.specifiers` from `EFunctionFlags`) instead of name-prefix, and with project plugins in scope it now returns the project's actual RPCs — verified E2E against project-plugin Server RPCs. The prior "empty because game-module-only" status is resolved.
@@ -1783,7 +1790,7 @@ Find every UCLASS carrying a given specifier — substring match against the `fl
 
 ### `network_query.list_replicated_classes`
 
-Enumerate UCLASSes carrying at least one replicated property, sorted by replicated-property count. As of the [Unreleased] network-completeness workstream this captures bare `UPROPERTY(Replicated)` + `DOREPLIFETIME` (via `CPF_Net`) in addition to `ReplicatedUsing` — verified E2E. Cursor-paginated.
+Enumerate UCLASSes carrying at least one replicated property, sorted by replicated-property count. As of the v0.19.0 network-completeness workstream this captures bare `UPROPERTY(Replicated)` + `DOREPLIFETIME` (via `CPF_Net`) in addition to `ReplicatedUsing` — verified E2E. Cursor-paginated.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1795,7 +1802,7 @@ Enumerate UCLASSes carrying at least one replicated property, sorted by replicat
 
 ### `network_query.list_rpc_functions`
 
-Filter `reflect_ufunctions` by replication specifier (`reflect_ufunctions.specifiers` parsed from `EFunctionFlags` — `FUNC_NetServer` / `FUNC_NetClient` / `FUNC_NetMulticast`) to surface the project's RPC surface. As of the [Unreleased] network-completeness workstream this is specifier-based, not name-prefix-based, and the scan covers project plugins by default (see the scan-scope note in the `cppreflect` header). The project's actual RPCs — which often live in project plugins — are therefore in scope; an E2E run returned the project's project-plugin Server RPCs. Cursor-paginated.
+Filter `reflect_ufunctions` by replication specifier (`reflect_ufunctions.specifiers` parsed from `EFunctionFlags` — `FUNC_NetServer` / `FUNC_NetClient` / `FUNC_NetMulticast`) to surface the project's RPC surface. As of the v0.19.0 network-completeness workstream this is specifier-based, not name-prefix-based, and the scan covers project plugins by default (see the scan-scope note in the `cppreflect` header). The project's actual RPCs — which often live in project plugins — are therefore in scope; an E2E run returned the project's project-plugin Server RPCs. Cursor-paginated.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1920,11 +1927,11 @@ Project-wide zero-reference scan across all asset classes (the general form; `ma
 
 ## reflect
 
-**New [Unreleased] (Reflection Intelligence, network-completeness workstream).** One WRITE/maintenance action for repopulating the RI reflection tables. **1 action.**
+**New v0.19.0 (Reflection Intelligence, network-completeness workstream).** One WRITE/maintenance action for repopulating the RI reflection tables. **1 action.**
 
 ### `reflect_query.rebuild_reflection_index`
 
-Force-rebuild the RI reflection tables from PROJECT UHT artefacts — `reflect_uclasses`, `reflect_uproperties`, `reflect_ufunctions`, `reflect_uinterfaces`, `reflect_uinterface_impls`, `cpp_asset_edges`, and `reflect_replicated_properties`. Re-runs the RI indexers (`FCppReflectIndexer` + `FNetworkIndexer`) over the project's on-disk UHT artefacts. Scope is PROJECT only (Epic engine built-ins excluded) — and, as of the [Unreleased] scan-scope ladder, "project" includes enabled `LoadedFrom == Project` plugins by default (and marketplace plugins when enabled), so a rebuild repopulates project-plugin reflection.
+Force-rebuild the RI reflection tables from PROJECT UHT artefacts — `reflect_uclasses`, `reflect_uproperties`, `reflect_ufunctions`, `reflect_uinterfaces`, `reflect_uinterface_impls`, `cpp_asset_edges`, and `reflect_replicated_properties`. Re-runs the RI indexers (`FCppReflectIndexer` + `FNetworkIndexer`) over the project's on-disk UHT artefacts. Scope is PROJECT only (Epic engine built-ins excluded) — and, as of the v0.19.0 scan-scope ladder, "project" includes enabled `LoadedFrom == Project` plugins by default (and marketplace plugins when enabled), so a rebuild repopulates project-plugin reflection.
 
 Exists because after an RI indexer code change there's no other clean repopulation trigger — the lazy bootstrap only fires on table-absence, `OnReloadComplete` only on Live Coding, and `source_query("trigger_reindex")` is the heavyweight full-engine reindex.
 
@@ -1950,7 +1957,7 @@ If you're building a sibling plugin yourself, read `Plugins/Monolith/Docs/SIBLIN
 |---|---|---|---|---|
 | External sibling plugin | Custom | Varies | Registers its own namespace at startup and ships through its own repo/channel. | Outside `Plugins/Monolith/` |
 
-**Why these aren't in the in-tree count:** the in-tree count (the approximate `1,400+ / 25+` figure) counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
+**Why these aren't in the in-tree count:** the in-tree count (the approximate `~1,400+ / 25+` figure) counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
 
 Private sibling bridges are intentionally omitted from the public API reference. Their action rosters, namespaces, and release notes belong in their own repos/channels; Monolith must not publish them as part of the public API surface.
 

@@ -18,6 +18,13 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
+// Item 8: fix_hints — borrow the shared source DB (LNK2019 owner-module +
+// C4996 deprecation resolution). MonolithEditor already PrivateDependsOn
+// MonolithSource (MonolithEditor.Build.cs) — one-way Editor -> Source borrow.
+#include "MonolithSourceDatabase.h"
+#include "MonolithSourceSubsystem.h"
+#include "SQLiteDatabase.h"
+
 #if PLATFORM_WINDOWS
 #include "ILiveCodingModule.h"
 #endif
@@ -1254,7 +1261,176 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildErrors(const TShared
 	for (const FString& C : ExcludeCategories) { ExclEcho.Add(MakeShared<FJsonValueString>(C)); }
 	Root->SetArrayField(TEXT("excluded_categories"), ExclEcho);
 
+	// Item 8 (ADDITIVE): deterministic error->fix-hint pattern table. Computed over
+	// the SAME error objects already in `errors[]` so the per-error `fix_hint` lands
+	// on the objects callers see. Existing fields are byte-identical — BuildFixHints
+	// only ADDS a `fix_hint` string to matched objects + returns a top-level array.
+	TArray<TSharedPtr<FJsonValue>> FixHints = BuildFixHints(ErrorsArr);
+	Root->SetArrayField(TEXT("fix_hints"), FixHints);
+
 	return FMonolithActionResult::Success(Root);
+}
+
+// ============================================================================
+// Item 8: BuildFixHints — deterministic error->fix-hint pattern table.
+//
+// ADDITIVE-ONLY contract: stamps a `fix_hint` string onto matched error objects
+// in-place and returns a top-level `fix_hints[]` array; never mutates any
+// pre-existing error field. Borrows the shared source DB the way the RI adapter
+// does (game-thread ensure + FScopeLock(GetLock()); statement finalized before
+// the lock releases; never a second handle on EngineSource.db).
+// ============================================================================
+
+TArray<TSharedPtr<FJsonValue>> FMonolithEditorActions::BuildFixHints(const TArray<TSharedPtr<FJsonValue>>& ErrorObjs)
+{
+	TArray<TSharedPtr<FJsonValue>> Hints;
+
+	// Resolve the borrowed source DB (may be null — degrade gracefully).
+	FMonolithSourceDatabase* SourceDb = nullptr;
+	if (IsInGameThread() && GEditor)
+	{
+		if (UMonolithSourceSubsystem* SS = GEditor->GetEditorSubsystem<UMonolithSourceSubsystem>())
+		{
+			SourceDb = SS->GetDatabase();
+		}
+	}
+
+	// LNK2019 on Z_Construct_* -> the missing module owns the referenced UClass.
+	// Resolve owner module via the source DB; statement is finalized before the
+	// lock releases (single borrow, no second handle).
+	auto ResolveOwnerModuleForZConstruct = [SourceDb](const FString& SymbolFragment, FString& OutModule) -> bool
+	{
+		OutModule.Empty();
+		if (!SourceDb || !SourceDb->GetRawHandle()) { return false; }
+		// Z_Construct_UClass_UFoo_NoRegister -> recover the "UFoo" type name.
+		FString TypeName;
+		{
+			FString S = SymbolFragment;
+			int32 Idx = S.Find(TEXT("Z_Construct_UClass_"), ESearchCase::CaseSensitive);
+			if (Idx != INDEX_NONE) { S = S.Mid(Idx + FCString::Strlen(TEXT("Z_Construct_UClass_"))); }
+			// Trim any trailing _NoRegister / decoration after the type name.
+			int32 Cut = INDEX_NONE;
+			if (S.FindChar(TEXT('_'), Cut)) { TypeName = S.Left(Cut); }
+			else { TypeName = S; }
+		}
+		if (TypeName.IsEmpty()) { return false; }
+
+		bool bResolved = false;
+		{
+			FScopeLock Lock(&SourceDb->GetLock());
+			FSQLiteDatabase* DB = SourceDb->GetRawHandle();
+			if (!DB) { return false; }
+			FSQLitePreparedStatement Stmt;
+			if (Stmt.Create(*DB, TEXT(
+				"SELECT m.name FROM symbols s "
+				"JOIN files f ON f.id = s.file_id "
+				"JOIN modules m ON m.id = f.module_id "
+				"WHERE s.name = ? GROUP BY m.name LIMIT 1;")))
+			{
+				Stmt.SetBindingValueByIndex(1, TypeName);
+				if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+				{
+					Stmt.GetColumnValueByIndex(0, OutModule);
+					bResolved = !OutModule.IsEmpty();
+				}
+				// Finalize the statement BEFORE the lock releases (borrow-contract end).
+				Stmt.Destroy();
+			}
+		}
+		return bResolved;
+	};
+
+	for (int32 Idx = 0; Idx < ErrorObjs.Num(); ++Idx)
+	{
+		const TSharedPtr<FJsonObject>* ErrObjPtr = nullptr;
+		if (!ErrorObjs[Idx].IsValid() || !ErrorObjs[Idx]->TryGetObject(ErrObjPtr) || !ErrObjPtr) { continue; }
+		const TSharedPtr<FJsonObject>& ErrObj = *ErrObjPtr;
+
+		FString Message;
+		ErrObj->TryGetStringField(TEXT("message"), Message);
+		if (Message.IsEmpty()) { continue; }
+
+		FString Pattern;
+		FString Hint;
+
+		// --- LNK2019 on Z_Construct_* (missing module dep). ---
+		if (Message.Contains(TEXT("LNK2019")) && Message.Contains(TEXT("Z_Construct_")))
+		{
+			Pattern = TEXT("LNK2019_Z_Construct");
+			FString OwnerModule;
+			if (ResolveOwnerModuleForZConstruct(Message, OwnerModule))
+			{
+				Hint = FString::Printf(
+					TEXT("Unresolved UClass constructor — the referenced type is owned by module '%s'. Add \"%s\" to your Build.cs PrivateDependencyModuleNames (or PublicDependencyModuleNames)."),
+					*OwnerModule, *OwnerModule);
+			}
+			else
+			{
+				Hint = TEXT("Unresolved UClass constructor (Z_Construct_*) — the referenced type's owning module is missing from your Build.cs dependency list. Add the module that declares that UCLASS.");
+			}
+		}
+		// --- DeveloperSettings-module LNK2019 (common gotcha). ---
+		else if (Message.Contains(TEXT("LNK2019")) &&
+				 (Message.Contains(TEXT("UDeveloperSettings")) || Message.Contains(TEXT("DeveloperSettings"))))
+		{
+			Pattern = TEXT("LNK2019_DeveloperSettings");
+			Hint = TEXT("UDeveloperSettings lives in the 'DeveloperSettings' module (NOT 'Engine'). Add \"DeveloperSettings\" to your Build.cs dependency list.");
+		}
+		// --- C4996 deprecation. ---
+		else if (Message.Contains(TEXT("C4996")))
+		{
+			Pattern = TEXT("C4996_deprecation");
+			// Try to recover the deprecated identifier and attach the indexed message.
+			FString DeprMsg;
+			if (SourceDb && SourceDb->IsOpen())
+			{
+				// Parse a quoted identifier or "'Name': ..." form from the warning.
+				FString Ident;
+				int32 Q1 = Message.Find(TEXT("'"), ESearchCase::CaseSensitive);
+				if (Q1 != INDEX_NONE)
+				{
+					FString Rest = Message.Mid(Q1 + 1);
+					int32 Q2 = Rest.Find(TEXT("'"), ESearchCase::CaseSensitive);
+					if (Q2 != INDEX_NONE) { Ident = Rest.Left(Q2); }
+				}
+				// Take a trailing :: scope as the method name.
+				if (!Ident.IsEmpty())
+				{
+					int32 ScopeIdx = Ident.Find(TEXT("::"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+					const FString LookupName = (ScopeIdx != INDEX_NONE) ? Ident.Mid(ScopeIdx + 2) : Ident;
+					TArray<FString> Names; Names.Add(LookupName);
+					TMap<FString, FMonolithDeprecationRow> Dep = SourceDb->GetDeprecationsBatch(Names);
+					if (const FMonolithDeprecationRow* Row = Dep.Find(LookupName))
+					{
+						DeprMsg = FString::Printf(TEXT("'%s' is UE_DEPRECATED (%s): %s"), *LookupName, *Row->Version, *Row->Message);
+					}
+				}
+			}
+			Hint = DeprMsg.IsEmpty()
+				? TEXT("Deprecated API used (C4996). Query source.check_deprecations with the symbol name for the replacement, or read the deprecation message in the warning text.")
+				: DeprMsg;
+		}
+		// --- 'generated.h must be the last include'. ---
+		else if (Message.Contains(TEXT("generated.h")) && Message.Contains(TEXT("last")))
+		{
+			Pattern = TEXT("generated_h_not_last");
+			Hint = TEXT("The '*.generated.h' include must be the LAST #include in the header. Move it below every other include.");
+		}
+
+		if (!Hint.IsEmpty())
+		{
+			// ADDITIVE: stamp the per-error hint on the object (new field only).
+			ErrObj->SetStringField(TEXT("fix_hint"), Hint);
+
+			TSharedPtr<FJsonObject> HintObj = MakeShared<FJsonObject>();
+			HintObj->SetNumberField(TEXT("error_index"), Idx);
+			HintObj->SetStringField(TEXT("pattern"), Pattern);
+			HintObj->SetStringField(TEXT("hint"), Hint);
+			Hints.Add(MakeShared<FJsonValueObject>(HintObj));
+		}
+	}
+
+	return Hints;
 }
 
 FMonolithActionResult FMonolithEditorActions::HandleGetBuildStatus(const TSharedPtr<FJsonObject>& Params)
@@ -7601,6 +7777,49 @@ namespace MonolithEditorPieSmoke
 			Root->SetArrayField(TEXT("probes"), ProbeArr);
 		}
 
+		// Gap 9: time-series sampling + typed-provocation report. Emitted for a timeseries
+		// session (bTimeseries). The full per-sample {t, vars:{...}} array is gated behind
+		// bFull (completion or include_samples) like the smoke samples; the provocation fire
+		// log is always emitted so a caller sees what fired without pulling the whole series.
+		if (S.bTimeseries)
+		{
+			Root->SetNumberField(TEXT("timeseries_sample_count"), S.TimeseriesSamples.Num());
+
+			// Provocation fire log (always emitted).
+			TArray<TSharedPtr<FJsonValue>> ProvArr;
+			for (const FPieProvocation& Prov : S.Provocations)
+			{
+				TSharedPtr<FJsonObject> PObj = MakeShared<FJsonObject>();
+				PObj->SetStringField(TEXT("action"), Prov.RawAction);
+				PObj->SetNumberField(TEXT("time"), Prov.AtSeconds);
+				PObj->SetBoolField(TEXT("fired"), Prov.bFired);
+				PObj->SetNumberField(TEXT("fired_at_seconds"), Prov.FiredAtSeconds);
+				PObj->SetBoolField(TEXT("dispatched"), Prov.bDispatched);
+				if (!Prov.Result.IsEmpty()) { PObj->SetStringField(TEXT("result"), Prov.Result); }
+				ProvArr.Add(MakeShared<FJsonValueObject>(PObj));
+			}
+			Root->SetArrayField(TEXT("provocations"), ProvArr);
+
+			// Full per-sample time-series (gated by bFull).
+			if (bFull)
+			{
+				TArray<TSharedPtr<FJsonValue>> SeriesArr;
+				for (const FPieTimeseriesSample& TS : S.TimeseriesSamples)
+				{
+					TSharedPtr<FJsonObject> SObj = MakeShared<FJsonObject>();
+					SObj->SetNumberField(TEXT("t"), TS.TimeSeconds);
+					TSharedPtr<FJsonObject> VarsObj = MakeShared<FJsonObject>();
+					for (const TPair<FString, TSharedPtr<FJsonValue>>& Var : TS.Vars)
+					{
+						if (Var.Value.IsValid()) { VarsObj->SetField(Var.Key, Var.Value); }
+					}
+					SObj->SetObjectField(TEXT("vars"), VarsObj);
+					SeriesArr.Add(MakeShared<FJsonValueObject>(SObj));
+				}
+				Root->SetArrayField(TEXT("timeseries"), SeriesArr);
+			}
+		}
+
 		// Phase 8 (OG-E2/E5): structured actor_setup outcome. Per-entry class/DataAsset
 		// resolution + per-actor spawn ok/fail, applied/unmatched DataAsset fields, and the
 		// AI move-request result — so callers distinguish partial from full apply
@@ -7817,6 +8036,211 @@ FMonolithActionResult FMonolithEditorActions::HandleRunPieSmoke(const TSharedPtr
 	Result->SetBoolField(TEXT("started"), true);
 	Result->SetStringField(TEXT("marker"), Marker);
 	Result->SetNumberField(TEXT("duration"), Duration);
+	return FMonolithActionResult::Success(Result);
+}
+
+// ---------------------------------------------------------------------------
+// Gap 9: sample_pie_timeseries — async time-series PIE sampling + typed provocation.
+// Same async lifecycle as run_pie_smoke (returns {session_id, status:'running'}; polled
+// via poll_pie_smoke, stopped via stop_pie_smoke). Reuses the in-TU PIE-start / map-load /
+// compile-gate helpers + the shared FPieSmokeSessionManager — no parallel ticker.
+// ---------------------------------------------------------------------------
+
+namespace MonolithEditorPieSmoke
+{
+	// Parse a [x,y,z] JSON array into a vector (missing components default to 0).
+	static FVector ParseVec3(const TArray<TSharedPtr<FJsonValue>>& Arr, const FVector& Fallback)
+	{
+		FVector V = Fallback;
+		if (Arr.Num() >= 1 && Arr[0].IsValid()) { V.X = Arr[0]->AsNumber(); }
+		if (Arr.Num() >= 2 && Arr[1].IsValid()) { V.Y = Arr[1]->AsNumber(); }
+		if (Arr.Num() >= 3 && Arr[2].IsValid()) { V.Z = Arr[2]->AsNumber(); }
+		return V;
+	}
+
+	// Resolve typed provocations from the params 'provocations' array. Each entry is
+	// {time, action, params}. Unknown actions are dropped (with the raw token preserved
+	// so the report can flag them). Params interpretation is per-action.
+	static TArray<FPieProvocation> ResolveProvocations(const TSharedPtr<FJsonObject>& Params)
+	{
+		TArray<FPieProvocation> Out;
+		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+		if (!Params.IsValid() || !Params->TryGetArrayField(TEXT("provocations"), Arr) || !Arr)
+		{
+			return Out;
+		}
+		for (const TSharedPtr<FJsonValue>& Entry : *Arr)
+		{
+			const TSharedPtr<FJsonObject>* Obj = nullptr;
+			if (!Entry.IsValid() || !Entry->TryGetObject(Obj) || !Obj || !(*Obj).IsValid()) { continue; }
+
+			FPieProvocation Prov;
+			(*Obj)->TryGetNumberField(TEXT("time"), Prov.AtSeconds);
+			(*Obj)->TryGetStringField(TEXT("action"), Prov.RawAction);
+
+			const TSharedPtr<FJsonObject>* PParams = nullptr;
+			const bool bHasParams = (*Obj)->TryGetObjectField(TEXT("params"), PParams) && PParams && (*PParams).IsValid();
+
+			if (Prov.RawAction.Equals(TEXT("set_control_rotation"), ESearchCase::IgnoreCase))
+			{
+				Prov.Action = EPieProvocationAction::SetControlRotation;
+				if (bHasParams)
+				{
+					double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
+					(*PParams)->TryGetNumberField(TEXT("pitch"), Pitch);
+					(*PParams)->TryGetNumberField(TEXT("yaw"), Yaw);
+					(*PParams)->TryGetNumberField(TEXT("roll"), Roll);
+					Prov.Rotation = FRotator(Pitch, Yaw, Roll);
+				}
+			}
+			else if (Prov.RawAction.Equals(TEXT("add_movement_input"), ESearchCase::IgnoreCase))
+			{
+				Prov.Action = EPieProvocationAction::AddMovementInput;
+				if (bHasParams)
+				{
+					const TArray<TSharedPtr<FJsonValue>>* DirArr = nullptr;
+					if ((*PParams)->TryGetArrayField(TEXT("direction"), DirArr) && DirArr)
+					{
+						Prov.Direction = ParseVec3(*DirArr, FVector::ForwardVector);
+					}
+					(*PParams)->TryGetNumberField(TEXT("scale"), Prov.Scale);
+				}
+			}
+			else if (Prov.RawAction.Equals(TEXT("jump"), ESearchCase::IgnoreCase))
+			{
+				Prov.Action = EPieProvocationAction::Jump;
+			}
+			else if (Prov.RawAction.Equals(TEXT("console_command"), ESearchCase::IgnoreCase))
+			{
+				Prov.Action = EPieProvocationAction::ConsoleCommand;
+				if (bHasParams)
+				{
+					(*PParams)->TryGetStringField(TEXT("command"), Prov.Command);
+				}
+			}
+			else
+			{
+				Prov.Action = EPieProvocationAction::Unknown;
+			}
+			Out.Add(MoveTemp(Prov));
+		}
+		return Out;
+	}
+}
+
+FMonolithActionResult FMonolithEditorActions::StartTimeseriesSession(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace MonolithEditorPieSmoke;
+
+	if (!GEditor || !GUnrealEd)
+	{
+		return FMonolithActionResult::Error(TEXT("sample_pie_timeseries requires editor context (GEditor/GUnrealEd)."));
+	}
+
+	// Target selector: one of actor / pawn_class / object_name (mirrors Gap 8's resolver
+	// vocabulary; 'actor' = exact label, 'pawn_class' = class-name substring).
+	FString TargetActorLabel, TargetObjectName, TargetClassName;
+	Params->TryGetStringField(TEXT("actor"), TargetActorLabel);
+	Params->TryGetStringField(TEXT("object_name"), TargetObjectName);
+	Params->TryGetStringField(TEXT("pawn_class"), TargetClassName);
+	if (TargetActorLabel.IsEmpty() && TargetObjectName.IsEmpty() && TargetClassName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("sample_pie_timeseries requires one of: actor, pawn_class, object_name"));
+	}
+
+	TArray<FString> VarPaths;
+	ReadStringArrayField(Params, TEXT("variables"), VarPaths);
+	if (VarPaths.Num() == 0)
+	{
+		return FMonolithActionResult::Error(TEXT("sample_pie_timeseries requires a non-empty 'variables' array of dotted paths"));
+	}
+
+	double Duration = 6.0;
+	if (Params->HasField(TEXT("duration_seconds"))) { Duration = Params->GetNumberField(TEXT("duration_seconds")); }
+	Duration = FMath::Clamp(Duration, 0.0, 120.0);
+
+	double SampleInterval = 0.0;
+	if (Params->HasField(TEXT("sample_interval"))) { SampleInterval = Params->GetNumberField(TEXT("sample_interval")); }
+	SampleInterval = FMath::Max(0.0, SampleInterval);
+
+	int32 MaxSamples = 2048;
+	if (Params->HasField(TEXT("max_samples"))) { MaxSamples = (int32)Params->GetNumberField(TEXT("max_samples")); }
+	MaxSamples = FMath::Clamp(MaxSamples, 1, 100000);
+
+	if (FindActivePieWorld())
+	{
+		return FMonolithActionResult::Error(TEXT("A PIE session is already running — stop it before sample_pie_timeseries."));
+	}
+
+	// Optional map load before PIE.
+	FString LoadError;
+	if (!LoadMapIfRequested(Params, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
+
+	// Compile-error gate (same policy as run_pie_smoke: refuse a broken world by default).
+	FString CompileMode = TEXT("refuse");
+	Params->TryGetStringField(TEXT("on_compile_errors"), CompileMode);
+	const bool bSuppressModals = CompileMode.Equals(TEXT("suppress"), ESearchCase::IgnoreCase);
+	{
+		TArray<FErroredBlueprintEntry> Errored;
+		ScanErroredBlueprints(Errored);
+		if (Errored.Num() > 0 && !bSuppressModals)
+		{
+			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
+			ErrObj->SetNumberField(TEXT("errored_blueprint_count"), Errored.Num());
+			ErrObj->SetArrayField(TEXT("errored_blueprints"), ErroredBlueprintsToJson(Errored));
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("sample_pie_timeseries refused: %d Blueprint(s) have unresolved compile errors. ")
+					TEXT("Fix them, or pass on_compile_errors=\"suppress\" to PIE anyway."), Errored.Num()))
+				.WithErrorData(ErrObj);
+		}
+	}
+
+	FString StartError;
+	if (!StartPieInternal(StartError, bSuppressModals))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to start PIE: %s"), *StartError));
+	}
+
+	UWorld* PieWorld = FindActivePieWorld();
+	const FString Marker = TEXT("MONOLITH_TIMESERIES");
+	UE_LOG(LogMonolith, Display, TEXT("%s begin (map=%s)"), *Marker,
+		PieWorld ? *PieWorld->GetMapName() : TEXT("<current>"));
+
+	// Optional start-time console/python scripts (best-effort), same as run_pie_smoke.
+	if (PieWorld)
+	{
+		RunScripts(Params, PieWorld);
+	}
+
+	// Build the time-series session.
+	FPieSmokeSession Session;
+	Session.StartTimeSeconds = FPlatformTime::Seconds();
+	Session.DurationSeconds = Duration;
+	Session.Marker = Marker;
+	Session.MapName = PieWorld ? PieWorld->GetMapName() : TEXT("<current>");
+
+	Session.bTimeseries = true;
+	Session.TimeseriesVarPaths = MoveTemp(VarPaths);
+	Session.SampleInterval = SampleInterval;
+	Session.MaxSamples = MaxSamples;
+	Session.TargetActorLabel = TargetActorLabel;
+	Session.TargetObjectName = TargetObjectName;
+	Session.TargetClassName = TargetClassName;
+	Params->TryGetStringField(TEXT("component_name"), Session.TargetComponentName);
+	Params->TryGetBoolField(TEXT("anim_instance"), Session.bTargetAnimInstance);
+	Session.Provocations = ResolveProvocations(Params);
+
+	const FString SessionId = FPieSmokeSessionManager::Get().CreateSession(MoveTemp(Session));
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("session_id"), SessionId);
+	Result->SetStringField(TEXT("status"), TEXT("running"));
+	Result->SetBoolField(TEXT("started"), true);
+	Result->SetNumberField(TEXT("duration"), Duration);
+	Result->SetStringField(TEXT("note"), TEXT("Poll with poll_pie_smoke; stop with stop_pie_smoke. Time-series under 'timeseries'; provocation fire log under 'provocations'."));
 	return FMonolithActionResult::Success(Result);
 }
 

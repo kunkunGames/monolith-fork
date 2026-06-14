@@ -1728,6 +1728,27 @@ TOptional<FMonolithSourceFile> FMonolithSourceDatabase::FindFileBySuffix(const F
 	return {};
 }
 
+bool FMonolithSourceDatabase::GetFileModuleInfo(int64 FileId, FString& OutModuleName, FString& OutBuildCsPath)
+{
+	FScopeLock Lock(&DbLock);
+	OutModuleName.Empty();
+	OutBuildCsPath.Empty();
+	if (!Database || !Database->IsValid()) return false;
+
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database,
+		TEXT("SELECT m.name, m.build_cs_path FROM files f JOIN modules m ON m.id = f.module_id WHERE f.id = ?;"));
+	Stmt.SetBindingValueByIndex(1, FileId);
+
+	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		Stmt.GetColumnValueByIndex(0, OutModuleName);
+		Stmt.GetColumnValueByIndex(1, OutBuildCsPath);
+		return true;
+	}
+	return false;
+}
+
 TOptional<FMonolithSourceFile> FMonolithSourceDatabase::FindFileByPath(const FString& Path)
 {
 	FScopeLock Lock(&DbLock);
@@ -5283,6 +5304,96 @@ FString FMonolithSourceDatabase::GetMeta(const FString& Key)
 		return Value;
 	}
 	return TEXT("");
+}
+
+// ============================================================
+// Deprecation queries (item 3)
+// ============================================================
+
+void FMonolithSourceDatabase::InsertDeprecation(int64 SymbolId, const FString& SymbolName, const FString& Version, const FString& Message, const FString& Kind)
+{
+	FScopeLock Lock(&DbLock);
+	if (!Database || !Database->IsValid()) return;
+
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database,
+		TEXT("INSERT INTO symbol_deprecations (symbol_id, symbol_name, version, message, kind) ")
+		TEXT("VALUES (?, ?, ?, ?, ?);"));
+
+	// symbol_id — bind NULL if 0 (class-body methods have no symbols row)
+	if (SymbolId != 0)
+	{
+		Stmt.SetBindingValueByIndex(1, SymbolId);
+	}
+	// else: leave unbound — SQLite defaults to NULL
+
+	Stmt.SetBindingValueByIndex(2, SymbolName);
+	Stmt.SetBindingValueByIndex(3, Version);
+	Stmt.SetBindingValueByIndex(4, Message);
+	Stmt.SetBindingValueByIndex(5, Kind);
+	Stmt.Step();
+}
+
+TOptional<FMonolithDeprecationRow> FMonolithSourceDatabase::GetDeprecation(const FString& SymbolName)
+{
+	FScopeLock Lock(&DbLock);
+	if (!Database || !Database->IsValid()) return {};
+
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database, TEXT("SELECT version, message, kind FROM symbol_deprecations WHERE symbol_name = ? LIMIT 1;"));
+	Stmt.SetBindingValueByIndex(1, SymbolName);
+
+	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		FMonolithDeprecationRow Row;
+		Stmt.GetColumnValueByIndex(0, Row.Version);
+		Stmt.GetColumnValueByIndex(1, Row.Message);
+		Stmt.GetColumnValueByIndex(2, Row.Kind);
+		return Row;
+	}
+	return {};
+}
+
+TMap<FString, FMonolithDeprecationRow> FMonolithSourceDatabase::GetDeprecationsBatch(const TArray<FString>& SymbolNames)
+{
+	FScopeLock Lock(&DbLock);
+	TMap<FString, FMonolithDeprecationRow> Result;
+	if (!Database || !Database->IsValid()) return Result;
+
+	// One prepared statement reused per name — symbol counts are typically small.
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database, TEXT("SELECT version, message, kind FROM symbol_deprecations WHERE symbol_name = ? LIMIT 1;"));
+
+	for (const FString& Name : SymbolNames)
+	{
+		Stmt.Reset();
+		Stmt.SetBindingValueByIndex(1, Name);
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			FMonolithDeprecationRow Row;
+			Stmt.GetColumnValueByIndex(0, Row.Version);
+			Stmt.GetColumnValueByIndex(1, Row.Message);
+			Stmt.GetColumnValueByIndex(2, Row.Kind);
+			Result.Add(Name, Row);
+		}
+	}
+	return Result;
+}
+
+int32 FMonolithSourceDatabase::GetDeprecationCount()
+{
+	FScopeLock Lock(&DbLock);
+	if (!Database || !Database->IsValid()) return 0;
+
+	FSQLitePreparedStatement Stmt;
+	Stmt.Create(*Database, TEXT("SELECT COUNT(*) FROM symbol_deprecations;"));
+	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		int64 C64 = 0;
+		Stmt.GetColumnValueByIndex(0, C64);
+		return static_cast<int32>(C64);
+	}
+	return 0;
 }
 
 // ============================================================

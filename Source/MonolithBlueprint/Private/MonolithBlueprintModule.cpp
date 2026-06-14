@@ -1,6 +1,7 @@
 #include "MonolithBlueprintModule.h"
 #include "MonolithBlueprintActions.h"
 #include "MonolithBlueprintVariableActions.h"
+#include "MonolithBlueprintContractActions.h"
 #include "MonolithBlueprintComponentActions.h"
 #include "MonolithBlueprintGraphActions.h"
 #include "MonolithBlueprintNodeActions.h"
@@ -31,6 +32,7 @@ void FMonolithBlueprintModule::StartupModule()
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 	FMonolithBlueprintActions::RegisterActions();
 	FMonolithBlueprintVariableActions::RegisterActions(Registry);
+	FMonolithBlueprintContractActions::RegisterActions(Registry);
 	FMonolithBlueprintComponentActions::RegisterActions(Registry);
 	FMonolithBlueprintGraphActions::RegisterActions(Registry);
 	FMonolithBlueprintNodeActions::RegisterActions(Registry);

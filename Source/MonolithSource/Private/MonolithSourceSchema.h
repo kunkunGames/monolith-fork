@@ -15,7 +15,7 @@
  */
 namespace MonolithSourceSchema
 {
-	static const int32 SchemaVersion = 1;
+	static const int32 SchemaVersion = 2;
 
 	// ----------------------------------------------------------------
 	// Core tables + indexes
@@ -92,6 +92,23 @@ namespace MonolithSourceSchema
 		TEXT("    line          INTEGER")
 		TEXT(");")
 
+		// Schema v2 (item 3): UE_DEPRECATED extraction. symbol_id is NULLABLE —
+		// class-body method declarations are NOT indexed as `symbols` rows
+		// (Step-0 finding), so the extractor parses the symbol NAME from the
+		// declaration text after the macro and stores symbol_id = NULL when it
+		// cannot resolve a symbols row. Lookups (check_deprecations) key on
+		// symbol_name, so a NULL symbol_id does not break the read path.
+		TEXT("CREATE TABLE IF NOT EXISTS symbol_deprecations (")
+		TEXT("    id          INTEGER PRIMARY KEY AUTOINCREMENT,")
+		TEXT("    symbol_id   INTEGER REFERENCES symbols(id),")
+		TEXT("    symbol_name TEXT NOT NULL,")
+		TEXT("    version     TEXT,")
+		TEXT("    message     TEXT,")
+		TEXT("    kind        TEXT NOT NULL")
+		TEXT(");")
+
+		TEXT("CREATE INDEX IF NOT EXISTS idx_deprecations_name ON symbol_deprecations(symbol_name);")
+
 		TEXT("CREATE TABLE IF NOT EXISTS meta (")
 		TEXT("    key   TEXT PRIMARY KEY,")
 		TEXT("    value TEXT")
@@ -132,6 +149,7 @@ namespace MonolithSourceSchema
 		TEXT("DROP TRIGGER IF EXISTS symbols_ai;")
 		TEXT("DROP TABLE IF EXISTS symbols_fts;")
 		TEXT("DROP TABLE IF EXISTS source_fts;")
+		TEXT("DROP TABLE IF EXISTS symbol_deprecations;")
 		TEXT("DROP TABLE IF EXISTS includes;")
 		TEXT("DROP TABLE IF EXISTS \"references\";")
 		TEXT("DROP TABLE IF EXISTS inheritance;")

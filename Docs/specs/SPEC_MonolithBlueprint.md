@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.18.1 (Beta)
+**Version:** 0.20.0 (Beta)
 
 ---
 
@@ -14,24 +14,25 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithBlueprintModule` | Registers ~115 blueprint actions (count approximate — query `monolith_discover("blueprint")` for the live figure) |
+| `FMonolithBlueprintModule` | Registers ~120 blueprint actions (count approximate — query `monolith_discover("blueprint")` for the live figure; includes the 2026-06-10 `find_variable_references`, Gap 5) |
 | `FMonolithBlueprintActions` | Static handlers. Uses `FMonolithAssetUtils::LoadAssetByPath<UBlueprint>` |
+| `FMonolithBlueprintContractActions` | Variable-contract reconciliation: `compare_class_variable_contract` (diff engine) + `promote_variables_to_parent`. Pin-type-aware descriptor extraction shared by both. |
 | `MonolithBlueprintInternal` | Helpers: AddGraphArray, FindGraphByName, PinTypeToString, SerializePin/Node, TraceExecFlow, FindEntryNode |
 
 > **Unity-safe file-local helpers (#68).** Internal-linkage helpers (anonymous-namespace functions/types, file-`static`s) must carry file-unique names or live in per-file named namespaces — matching the MonolithUI model — so they don't collide when adaptive/full unity concatenates same-module `.cpp`s into one translation unit. (The previously-global `InterpModeToString` in `MonolithBlueprintNodeActions.cpp` is now `NodeInterpModeToString`.)
 
-### Actions (~115 — namespace: "blueprint")
+### Actions (~120 — namespace: "blueprint")
 
 ### Actions (121 — namespace: "blueprint")
 
 > **Count note (2026-05-27):** current static registry scan reports 121 unique `blueprint` actions after removing a duplicate `remove_data_table_row` registration. The table below remains a focused contract summary; use `monolith_discover("blueprint")` for the exhaustive live action schema.
 
-**Read Actions (14)**
+**Read Actions (15)**
 | Action | Params | Description |
 |--------|--------|-------------|
-| `list_graphs` | `asset_path` | List all graphs with name/type/node_count. Graph types: event_graph, function, macro, delegate_signature |
+| `list_graphs` | `asset_path` | List all graphs with name/type/node_count. Graph types: event_graph, function, macro, delegate_signature. **(2026-06-10, Gap 7):** also appends interface-implementation graphs (from `ImplementedInterfaces[].Graphs`) flagged `graph_type: interface`, each carrying an `interface` field naming the implemented interface for disambiguation. |
 | `get_graph_summary` | `asset_path`, `graph_name` | Lightweight graph overview: node id/class/title + exec connections only (~10KB vs 172KB for full data) |
-| `get_graph_data` | `asset_path`, `graph_name`, `node_class_filter` | Full graph with all nodes, pins (17+ type categories), connections, positions. Optional class filter |
+| `get_graph_data` | `asset_path`, `graph_name`, `node_class_filter` | Full graph with all nodes, pins (17+ type categories), connections, positions. Optional class filter. **(2026-06-10, Gap 7):** `graph_name` now also resolves against interface-implementation graphs (same fix in `export_graph`, which shares `FindGraphByName`), so an interface function graph is dumpable by name instead of returning "Graph not found". |
 | `get_variables` | `asset_path`, `include_bind_widgets?` | All NewVariables: name, type (with container prefix), default (from CDO), category, flags (editable, read_only, expose_on_spawn, replicated, transient). When `include_bind_widgets=true` (Phase 3, 2026-05-23) the response carries a `bind_widgets` array enumerating BOTH (a) C++ `BindWidget`/`BindWidgetOptional` references (`source=bind_widget_meta`, `is_bind_widget=true`) AND (b) pure-Blueprint tree widgets exposed as variables / `UWidget::bIsVariable==true` (`source=tree_variable`, `is_bind_widget=false`); entry fields are `name`, `widget_class`, `optional`, `category`, `source`, `is_bind_widget`. Deduped — a tree widget that is also a C++ BindWidget property is reported once as `bind_widget_meta`. |
 | `get_cdo_properties` | `asset_path`, `category_filter?`, `include_parent_defaults?`, `owner_class_filter?`, `name_pattern?`, `exclude_categories?` | Reflects all CDO properties of a Blueprint class with current default values. Optional filters compose: `category_filter` (case-insensitive substring on `Category` metadata), `include_parent_defaults` (bool, walks parent CDO chain), `owner_class_filter` (case-insensitive substring on owner class name — skips inherited `AActor`/`APawn`/`ACharacter` in one parameter, PR #57), `name_pattern` (case-insensitive substring on property name, PR #57), `exclude_categories` (string array, case-insensitive exact match against `Category` — e.g. `["Replication", "Cooking", "HLOD"]`, PR #57). All filter params default to `null`/empty (no-op). Cuts JSON payload by ~90% in typical AActor-subclass inspection flows. |
 | `get_execution_flow` | `asset_path`, `entry_point` | Linearized exec trace from entry point. Handles branching (multiple exec outputs). MaxDepth=100 |
@@ -55,6 +56,15 @@
 | `set_variable_defaults` | `asset_path`, `variable_name`, `default_value` | Set a variable's default value |
 | `add_local_variable` | `asset_path`, `function_name`, `variable_name`, `variable_type` | Add a local variable inside a function graph |
 | `remove_local_variable` | `asset_path`, `function_name`, `variable_name` | Remove a local variable from a function graph |
+
+**Variable Contract Reconciliation (2) — `MonolithBlueprintContractActions.cpp`**
+
+Reconcile the member-variable surface of one class against another by name + type + container kind + enum/struct subtype. Aimed at Blueprint→C++ migration, where a variable set must be promoted onto a native parent contract without breaking the bindings the AnimGraph / chooser / PropertyAccess pins compare against.
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `compare_class_variable_contract` | `left`, `right`, `include_inherited?`, `variables?` | Pure read/report diff of two classes' variable contracts. Each side is a Blueprint asset path (`/Game/...` → `GeneratedClass`) or a native class name (resolved as-is, with U/A prefix added/stripped, or a full `/Script/...` path). Per-variable descriptor reports `base_type`, `container` (`scalar`/`Array`/`Set`/`Map`), `enum_subtype` (UEnum path), `struct_subtype` (UScriptStruct path), `object_class`, `map_value_type`, and presence on each side; the `mismatch` classification is one of `ok`, `missing-on-left`, `missing-on-right`, `type-mismatch`, `container-mismatch`, `enum-subtype-mismatch`, `struct-subtype-mismatch`. For a Blueprint side, descriptors are sourced from the **authoritative `FEdGraphPinType`** of `NewVariables` (overlaying the compiled-FProperty walk) — the KismetCompiler can lower a UserDefinedEnum pin to a plain `FIntProperty` on the generated class, and a BP variable that shadows a native parent property does not materialize as a direct generated-class property; the pin-type overlay catches both. Struct/enum identity is compared by `GetPathName()` (BP pins compare struct types by exact `UScriptStruct` pointer identity). Mutates nothing. |
+| `promote_variables_to_parent` | `asset_path`, `variables`, `mode?` (`verify` default / `remove_shadowed`) | Reconcile a Blueprint's named local variables against its **native parent class** contract (the parent is resolved by walking up the `ClassGeneratedBy` chain to the first native class). `verify`: per-variable `status` = `parent-satisfies` (parent already declares a name+type+container+enum/struct-compatible counterpart) / `parent-declares-but-mismatch` / `parent-missing`. Authors no C++ — it produces the authoritative delta that a hand-written/native header must satisfy, then re-verifies post-build. `remove_shadowed`: deletes the now-redundant BP-local duplicate (`FBlueprintEditorUtils::RemoveMemberVariable`) ONLY for variables that pass parity AND are genuinely BP-local member variables (present in `NewVariables`); never removes a variable the parent lacks or declares incompatibly. Reports `will_remove` / `remove_skipped_reason` per variable and a `summary{requested,parent_satisfies,not_satisfied,removed_shadowed}`. |
 
 **Component CRUD (6)**
 | Action | Params | Description |

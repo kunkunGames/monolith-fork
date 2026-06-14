@@ -122,6 +122,53 @@ bool FModuleDepRealityRegistrationTest::RunTest(const FString& /*Parameters*/)
 }
 
 // ---------------------------------------------------------------------------
+// Test: SuggestBuildCsDepsForward (item 6) — registration smoke + path-first
+// declaring-module derivation.
+//
+// Mirrors the SampleBuildCsParse idiom: the path-derivation logic lives in the
+// adapter's anonymous namespace, so we re-assert the same parse here to keep
+// the contract pinned (LAST `/Source/` wins so a Plugins/<X>/Source/<Module>/
+// path resolves to <Module>, not <X>). Full forward-resolution needs a live
+// EngineSource.db; that is covered by the MCP smoke in plan §12.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FModuleDepSuggestBuildCsDepsForwardTest,
+	"Monolith.ReflectionIntel.SourceAudit.SuggestBuildCsDepsForward",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FModuleDepSuggestBuildCsDepsForwardTest::RunTest(const FString& /*Parameters*/)
+{
+	const FMonolithToolRegistry& Reg = FMonolithToolRegistry::Get();
+	TestTrue(TEXT("source.suggest_build_cs_deps registered"),
+		Reg.HasAction(TEXT("source"), TEXT("suggest_build_cs_deps")));
+
+	// Path-first declaring-module derivation contract (LAST `/Source/` wins).
+	auto DeriveModule = [](const FString& InPath) -> FString
+	{
+		FString Norm = InPath;
+		Norm.ReplaceInline(TEXT("\\"), TEXT("/"));
+		const int32 SrcIdx = Norm.Find(TEXT("/Source/"), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+		if (SrcIdx == INDEX_NONE) { return FString(); }
+		FString Rest = Norm.Mid(SrcIdx + 8);
+		int32 NextSlash = INDEX_NONE;
+		if (!Rest.FindChar(TEXT('/'), NextSlash)) { return FString(); }
+		return Rest.Left(NextSlash);
+	};
+
+	TestEqual(TEXT("Source/<Module>/ derivation"),
+		DeriveModule(TEXT("D:/Proj/Source/MyMod/Public/Thing.h")), FString(TEXT("MyMod")));
+	TestEqual(TEXT("Plugins/<X>/Source/<Module>/ derivation (innermost wins)"),
+		DeriveModule(TEXT("D:/Proj/Plugins/Foo/Source/FooRuntime/Private/Bar.cpp")),
+		FString(TEXT("FooRuntime")));
+	TestEqual(TEXT("backslash path normalised"),
+		DeriveModule(TEXT("C:\\Proj\\Source\\WinMod\\X.h")), FString(TEXT("WinMod")));
+	TestTrue(TEXT("no /Source/ -> empty"),
+		DeriveModule(TEXT("D:/Proj/Content/Foo.uasset")).IsEmpty());
+
+	return true;
+}
+
+// ---------------------------------------------------------------------------
 // Test: risk_query registration — all 5 actions present.
 // ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(

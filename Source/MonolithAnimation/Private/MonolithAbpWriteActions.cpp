@@ -4,6 +4,7 @@
 
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimInstance.h"
+#include "Animation/Skeleton.h"
 #include "Engine/SkeletalMesh.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/BlendSpace.h"
@@ -22,6 +23,33 @@
 #include "AnimGraphNode_ModifyBone.h"
 #include "AnimGraphNode_LocalToComponentSpace.h"
 #include "AnimGraphNode_ComponentToLocalSpace.h"
+// AnimGraph authoring (Group 1) — additive blend / slot / cached-pose node classes.
+#include "AnimGraphNode_ApplyAdditive.h"
+#include "AnimGraphNode_ApplyMeshSpaceAdditive.h"
+#include "AnimGraphNode_Slot.h"
+#include "AnimGraphNode_SaveCachedPose.h"
+#include "AnimGraphNode_UseCachedPose.h"
+// AnimGraph authoring (Group 2) — blend-by-int dynamic pins, layered-bone-blend layer setup.
+#include "AnimGraphNode_BlendListByInt.h"
+// add_blend_by_enum — the BlendListByEnum editor node. Its inner FAnimNode_BlendListByEnum (public
+// Node UPROPERTY) exposes the header-inline FAnimNode_BlendListBase::AddPose(); BoundEnum /
+// VisibleEnumEntries are protected UPROPERTYs written by reflection.
+#include "AnimGraphNode_BlendListByEnum.h"
+// AnimGraph authoring (Group 3) — Control Rig anim node + linked anim layer.
+// FAnimNode_ControlRig::ControlRigClass is a private EditAnywhere UPROPERTY — written via the inner
+// ImportTextOntoStruct path (the unexported SetControlRigClass / MinimalAPI LinkedAnimLayer setters are
+// avoided to dodge LNK2019 across the module boundary).
+#include "AnimGraphNode_ControlRig.h"
+#include "AnimGraphNode_LinkedAnimLayer.h"
+#include "Animation/AnimLayerInterface.h"
+#include "Engine/Blueprint.h"
+// Sync-group setters live on the inner runtime structs — typed casts need these.
+// FAnimNode_SequencePlayer is in Engine (Animation/...); FAnimNode_BlendSpacePlayer is in
+// AnimGraphRuntime (AnimNodes/...) — NOT the editor AnimGraphNode_BlendSpacePlayer.h.
+#include "Animation/AnimNode_SequencePlayer.h"
+#include "AnimNodes/AnimNode_BlendSpacePlayer.h"
+// FInputBlendPose / FBranchFilter for set_layered_blend_bones LayerSetup writes.
+#include "Animation/AnimData/BoneMaskFilter.h"
 #include "K2Node_VariableGet.h"
 #include "BoneControllers/AnimNode_SkeletalControlBase.h"
 #include "Engine/MemberReference.h"
@@ -210,6 +238,183 @@ void FMonolithAbpWriteActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("mesh_path"), TEXT("USkeletalMesh asset path to assign the post-process ABP on"))
 			.RequiredAssetPath(TEXT("post_process_abp_path"), TEXT("Post-process Animation Blueprint asset (its generated UAnimInstance class is assigned). Empty/None clears the assignment."))
+			.Build());
+
+	// --- add_apply_additive (AnimGraph authoring) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_apply_additive"),
+		TEXT("Place an Apply Additive node (UAnimGraphNode_ApplyAdditive) and optionally wire a base pose into 'Base' and an additive pose into 'Additive'. The additive input must be authored as an additive animation (not detectable at author time). Set alpha to scale the additive contribution."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleAddApplyAdditive),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Optional(TEXT("base_node"), TEXT("string"), TEXT("Node whose pose output drives the Base input (must be in the same graph)"))
+			.Optional(TEXT("additive_node"), TEXT("string"), TEXT("Node whose pose output drives the Additive input (must be in the same graph)"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: AnimGraph)"), TEXT("AnimGraph"))
+			.Optional(TEXT("state_name"), TEXT("string"), TEXT("State name — place inside this state's inner graph"))
+			.Optional(TEXT("alpha"), TEXT("number"), TEXT("Additive blend alpha 0..1 (default: 1.0)"), TEXT("1.0"))
+			.Optional(TEXT("position_x"), TEXT("number"), TEXT("Node X position (default: 200)"), TEXT("200"))
+			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Node Y position (default: 0)"), TEXT("0"))
+			.Build());
+
+	// --- add_apply_mesh_space_additive (AnimGraph authoring) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_apply_mesh_space_additive"),
+		TEXT("Place an Apply Mesh-Space Additive node (UAnimGraphNode_ApplyMeshSpaceAdditive) — same Base/Additive/Alpha shape as add_apply_additive, but the additive input must be authored mesh-space (e.g. mesh-space aim offsets)."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleAddApplyMeshSpaceAdditive),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Optional(TEXT("base_node"), TEXT("string"), TEXT("Node whose pose output drives the Base input (must be in the same graph)"))
+			.Optional(TEXT("additive_node"), TEXT("string"), TEXT("Node whose pose output drives the Additive input — must be a mesh-space additive pose"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: AnimGraph)"), TEXT("AnimGraph"))
+			.Optional(TEXT("state_name"), TEXT("string"), TEXT("State name — place inside this state's inner graph"))
+			.Optional(TEXT("alpha"), TEXT("number"), TEXT("Additive blend alpha 0..1 (default: 1.0)"), TEXT("1.0"))
+			.Optional(TEXT("position_x"), TEXT("number"), TEXT("Node X position (default: 200)"), TEXT("200"))
+			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Node Y position (default: 0)"), TEXT("0"))
+			.Build());
+
+	// --- add_slot_node (AnimGraph authoring) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_slot_node"),
+		TEXT("Place an Anim Slot node (UAnimGraphNode_Slot) that lets montages play into the graph at slot_name. Optionally wire a source pose into 'Source' (passed through when no montage plays). slot_name is validated against the skeleton's registered slots (non-fatal warning if absent — montage slots are often registered later)."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleAddSlotNode),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("slot_name"), TEXT("string"), TEXT("Montage slot name (e.g. 'DefaultSlot')"))
+			.Optional(TEXT("source_node"), TEXT("string"), TEXT("Node whose pose output drives the Source input (must be in the same graph)"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: AnimGraph)"), TEXT("AnimGraph"))
+			.Optional(TEXT("state_name"), TEXT("string"), TEXT("State name — place inside this state's inner graph"))
+			.Optional(TEXT("validate_slot"), TEXT("bool"), TEXT("Validate slot_name against the skeleton's registered slots (default: true)"), TEXT("true"))
+			.Optional(TEXT("position_x"), TEXT("number"), TEXT("Node X position (default: 200)"), TEXT("200"))
+			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Node Y position (default: 0)"), TEXT("0"))
+			.Build());
+
+	// --- add_save_cached_pose (AnimGraph authoring) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_save_cached_pose"),
+		TEXT("Place a Save Cached Pose node (UAnimGraphNode_SaveCachedPose) that caches a pose under cache_name for reuse by add_use_cached_pose. Save nodes are sinks restricted to the main AnimGraph (not state inner graphs). Optionally wire the pose to cache into 'Pose'. Cache scope is per-graph."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleAddSaveCachedPose),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("cache_name"), TEXT("string"), TEXT("Cache key — the authoritative name add_use_cached_pose binds to"))
+			.Optional(TEXT("source_node"), TEXT("string"), TEXT("Node whose pose output is cached (drives the Pose input; must be in the same graph)"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: AnimGraph)"), TEXT("AnimGraph"))
+			.Optional(TEXT("position_x"), TEXT("number"), TEXT("Node X position (default: 200)"), TEXT("200"))
+			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Node Y position (default: 0)"), TEXT("0"))
+			.Build());
+
+	// --- add_use_cached_pose (AnimGraph authoring) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_use_cached_pose"),
+		TEXT("Place a Use Cached Pose node (UAnimGraphNode_UseCachedPose) that outputs the pose cached by a Save Cached Pose node with the matching cache_name. By default errors if no Save node with that name exists in the graph (validate_pair) — guards the classic mismatched-name silent-wrong-compile failure."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleAddUseCachedPose),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("cache_name"), TEXT("string"), TEXT("Cache key — must match an existing Save Cached Pose node's cache_name in the graph"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: AnimGraph)"), TEXT("AnimGraph"))
+			.Optional(TEXT("validate_pair"), TEXT("bool"), TEXT("Error if no Save node with this cache_name exists in the graph (default: true)"), TEXT("true"))
+			.Optional(TEXT("position_x"), TEXT("number"), TEXT("Node X position (default: 200)"), TEXT("200"))
+			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Node Y position (default: 0)"), TEXT("0"))
+			.Build());
+
+	// --- set_output_pose_source (AnimGraph authoring) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("set_output_pose_source"),
+		TEXT("Drive the AnimGraph's Output Pose: wire an arbitrary node's pose output into the UAnimGraphNode_Root 'Result' input. The write half of get_anim_graph_output_connection — closes the 'compiles but A-poses' failure when the Output Pose is left unwired."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleSetOutputPoseSource),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("source_node"), TEXT("string"), TEXT("Node whose pose output drives the Output Pose (must be in the target graph)"))
+			.Optional(TEXT("source_pin"), TEXT("string"), TEXT("Source pose output pin name (default: the node's first pose output)"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: AnimGraph)"), TEXT("AnimGraph"))
+			.Optional(TEXT("break_existing"), TEXT("bool"), TEXT("Break any existing link on the Output Pose before connecting (default: true)"), TEXT("true"))
+			.Build());
+
+	// --- set_state_result_source (AnimGraph authoring, Group 2) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("set_state_result_source"),
+		TEXT("Drive a state's output pose: wire an arbitrary node (already inside the state's inner graph) into the state result sink pin (UAnimStateNode pose sink). The per-state analogue of set_output_pose_source — closes the 'state compiles but A-poses' failure when a state's result is left unwired. source_node must live inside this state's inner graph."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleSetStateResultSource),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("machine_name"), TEXT("string"), TEXT("State machine name containing the state"))
+			.Required(TEXT("state_name"), TEXT("string"), TEXT("State whose result pose is being driven"))
+			.Required(TEXT("source_node"), TEXT("string"), TEXT("Node inside the state's inner graph whose pose output drives the state result"))
+			.Optional(TEXT("source_pin"), TEXT("string"), TEXT("Source pose output pin name (default: the node's first pose output)"))
+			.Optional(TEXT("break_existing"), TEXT("bool"), TEXT("Break any existing link on the state result pin before connecting (default: true)"), TEXT("true"))
+			.Build());
+
+	// --- add_blend_by_int (AnimGraph authoring, Group 2) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_blend_by_int"),
+		TEXT("Place a Blend Poses by int node (UAnimGraphNode_BlendListByInt) with num_poses BlendPose_* input pins, selected by an integer 'Active Child Index' input. The node ships with 2 pose pins; this grows it to num_poses via AddPinToBlendList(). Wire each BlendPose_0..N-1 pin to a candidate pose afterward."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleAddBlendByInt),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("num_poses"), TEXT("number"), TEXT("Total number of blend-pose input pins (2..32)"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: AnimGraph)"), TEXT("AnimGraph"))
+			.Optional(TEXT("state_name"), TEXT("string"), TEXT("State name — place inside this state's inner graph"))
+			.Optional(TEXT("position_x"), TEXT("number"), TEXT("Node X position (default: 200)"), TEXT("200"))
+			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Node Y position (default: 0)"), TEXT("0"))
+			.Build());
+
+	// --- add_blend_by_enum (AnimGraph authoring, Group 2) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_blend_by_enum"),
+		TEXT("Place a Blend Poses by enum node (UAnimGraphNode_BlendListByEnum) bound to the enum at enum_path, with one BlendPose_* input pin exposed per chosen enumerator plus the always-present index-0 'Default' pin (which catches every enum value not given its own pin). By default every non-Hidden, non-_MAX enumerator is exposed; pass 'enumerators' to expose an explicit subset. The active enum value selects which pose plays; wire each exposed BlendPose pin to a candidate pose afterward."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleAddBlendByEnum),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("enum_path"), TEXT("string"), TEXT("UEnum object path or name to bind (e.g. /Game/Enums/E_Locomotion.E_Locomotion, or a C++ enum like EAnimGroupRole)"))
+			.Optional(TEXT("enumerators"), TEXT("array"), TEXT("Explicit subset of enumerator names to expose as pins (default: all non-Hidden, non-_MAX enumerators). Names may be short (e.g. 'Walk') or fully-qualified (e.g. 'E_Locomotion::Walk')."))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: AnimGraph)"), TEXT("AnimGraph"))
+			.Optional(TEXT("state_name"), TEXT("string"), TEXT("State name — place inside this state's inner graph"))
+			.Optional(TEXT("position_x"), TEXT("number"), TEXT("Node X position (default: 200)"), TEXT("200"))
+			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Node Y position (default: 0)"), TEXT("0"))
+			.Build());
+
+	// --- set_sync_group (AnimGraph authoring, Group 2) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("set_sync_group"),
+		TEXT("Set the sync-group settings (GroupName/GroupRole/Method) on an asset-player node (Sequence Player or BlendSpace Player) so it synchronizes playback with other players in the same named group — e.g. so a start clip and a looping blendspace share phase with no foot-slide at the transition. Errors on node types that do not support sync groups."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleSetSyncGroup),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("node_id"), TEXT("string"), TEXT("Asset-player node id (Sequence Player / BlendSpace Player)"))
+			.Required(TEXT("group_name"), TEXT("string"), TEXT("Sync group name (empty string clears the group)"))
+			.Optional(TEXT("group_role"), TEXT("string"), TEXT("Role in the group: CanBeLeader / AlwaysLeader / AlwaysFollower / TransitionLeader / TransitionFollower / ExclusiveAlwaysLeader (default: CanBeLeader)"), TEXT("CanBeLeader"))
+			.Optional(TEXT("sync_method"), TEXT("string"), TEXT("Sync method: DoNotSync / SyncGroup / Graph (default: SyncGroup)"), TEXT("SyncGroup"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: search all graphs)"))
+			.Optional(TEXT("state_name"), TEXT("string"), TEXT("State name — scope the node lookup to this state's inner graph"))
+			.Build());
+
+	// --- set_layered_blend_bones (AnimGraph authoring, Group 2) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("set_layered_blend_bones"),
+		TEXT("Configure the per-layer bone branch filters on a Layered Blend Per Bone node (UAnimGraphNode_LayeredBoneBlend). Each layer entry grows a BlendPose input pin (AddPinToBlendByFilter) and a LayerSetup branch-filter list. For each bone in a layer, 'depth' maps to the struct BlendDepth: 0 = blend exactly that bone, >0 = include descendants down that many levels, <0 = exclude. The node starts with 1 layer; this grows to layers.Num()."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleSetLayeredBlendBones),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("node_id"), TEXT("string"), TEXT("Layered Blend Per Bone node id"))
+			.Required(TEXT("layers"), TEXT("array"), TEXT("Array of layers, one per blend-pose pin: [{ \"bones\": [{ \"bone\": \"spine_01\", \"depth\": 1 }] }]. 'depth' is the per-bone BlendDepth."))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: search all graphs)"))
+			.Optional(TEXT("state_name"), TEXT("string"), TEXT("State name — scope the node lookup to this state's inner graph"))
+			.Build());
+
+	// --- add_anim_control_rig_node (AnimGraph authoring, Group 3) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_anim_control_rig_node"),
+		TEXT("Place a Control Rig anim node (UAnimGraphNode_ControlRig) in the AnimGraph and set its Control Rig class. Writes the inner FAnimNode_ControlRig.ControlRigClass (a private EditAnywhere UPROPERTY) by reflection, then ReconstructNode() regenerates the rig's input/output pins from its exposed variables (via CreateCustomPins). Distinct from add_control_rig_node, which authors a RigVM control-rig graph — this is the AnimGraph-side node that runs a rig inside an Animation Blueprint."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleAddAnimControlRigNode),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("control_rig_class"), TEXT("string"), TEXT("UControlRig subclass to run — a Control Rig blueprint-generated class path or name (e.g. /Game/Rigs/CR_Foo.CR_Foo_C)"))
+			.Optional(TEXT("source_node"), TEXT("string"), TEXT("Node whose pose output drives the Control Rig node's pose input (intra-graph)"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: AnimGraph)"), TEXT("AnimGraph"))
+			.Optional(TEXT("state_name"), TEXT("string"), TEXT("State name — place inside this state's inner graph"))
+			.Optional(TEXT("position_x"), TEXT("number"), TEXT("Node X position (default: 200)"), TEXT("200"))
+			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Node Y position (default: 0)"), TEXT("0"))
+			.Build());
+
+	// --- add_linked_anim_layer (AnimGraph authoring, Group 3) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_linked_anim_layer"),
+		TEXT("Place a Linked Anim Layer node (UAnimGraphNode_LinkedAnimLayer) that runs a named animation layer declared on an implemented anim-layer interface. Spawns the node, reflection-writes the inner Layer name / Interface class / InstanceClass, and resolves the editor-node InterfaceGuid from the implemented interface graph whose name matches layer_name (mirrors the engine's GetGuidForLayer lookup), then ReconstructNode() regenerates the layer's IO pins. The ABP must implement at least one UAnimLayerInterface declaring the layer."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAbpWriteActions::HandleAddLinkedAnimLayer),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("layer_name"), TEXT("string"), TEXT("Layer/function name as declared on the implemented anim-layer interface graph"))
+			.Optional(TEXT("interface_class"), TEXT("string"), TEXT("UAnimLayerInterface class declaring the layer (path or name) — required only when the ABP implements multiple anim-layer interfaces; otherwise resolved automatically from layer_name"))
+			.Optional(TEXT("instance_class"), TEXT("string"), TEXT("External UAnimInstance class to run this layer (path or name); omit for a self/Default layer (only valid for non-self interface layers)"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Target graph name (default: AnimGraph)"), TEXT("AnimGraph"))
+			.Optional(TEXT("position_x"), TEXT("number"), TEXT("Node X position (default: 200)"), TEXT("200"))
+			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Node Y position (default: 0)"), TEXT("0"))
 			.Build());
 }
 
@@ -682,6 +887,169 @@ TArray<TSharedPtr<FJsonValue>> BuildPinList(UEdGraphNode* Node)
 		PinsArr.Add(MakeShared<FJsonValueObject>(PinObj));
 	}
 	return PinsArr;
+}
+
+/**
+ * Find a node's pose output pin. If PreferredName is non-empty, looks for that
+ * exact output pin first; otherwise (or on miss) returns the node's first pose
+ * output pin. Returns nullptr if the node has no pose output.
+ */
+UEdGraphPin* FindPoseOutputPin(UEdGraphNode* Node, const FString& PreferredName)
+{
+	if (!Node) return nullptr;
+
+	if (!PreferredName.IsEmpty())
+	{
+		if (UEdGraphPin* Named = Node->FindPin(FName(*PreferredName), EGPD_Output))
+		{
+			if (UAnimationGraphSchema::IsPosePin(Named->PinType))
+			{
+				return Named;
+			}
+		}
+	}
+
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (Pin && Pin->Direction == EGPD_Output && UAnimationGraphSchema::IsPosePin(Pin->PinType))
+		{
+			return Pin;
+		}
+	}
+	return nullptr;
+}
+
+/** Comma-joined list of a node's output pin names (for error messages). */
+FString ListOutputPins(UEdGraphNode* Node)
+{
+	FString Out;
+	if (!Node) return Out;
+	for (UEdGraphPin* Pin : Node->Pins)
+	{
+		if (Pin && Pin->Direction == EGPD_Output)
+		{
+			if (!Out.IsEmpty()) Out += TEXT(", ");
+			Out += Pin->PinName.ToString();
+		}
+	}
+	return Out;
+}
+
+/**
+ * Spawn an AnimGraph node of NodeClass into Graph at (X,Y) using the correct
+ * path — FGraphNodeCreator for BoundGraph-owning classes (which assert in
+ * PostPlacedNewNode when template-duplicated), template + PerformAction
+ * otherwise — and optionally wire SourceNode's pose output into the new node's
+ * TargetInputPin. Opens/closes its own transaction. Returns the spawned node,
+ * or nullptr with OutError set. Consolidates the spawn fork from
+ * HandleAddAnimGraphNode and the TryCreateConnection boilerplate.
+ */
+UAnimGraphNode_Base* SpawnAndWirePoseInput(
+	UEdGraph* Graph, UClass* NodeClass, float X, float Y,
+	UEdGraphNode* SourceNode, const FName& TargetInputPin, FString& OutError)
+{
+	if (!Graph || !NodeClass)
+	{
+		OutError = TEXT("SpawnAndWirePoseInput: null graph or node class");
+		return nullptr;
+	}
+
+	UAnimGraphNode_Base* SpawnedAnim = nullptr;
+
+	GEditor->BeginTransaction(FText::FromString(TEXT("Add Anim Graph Node")));
+	Graph->Modify();
+
+	// BoundGraph-owning classes (BlendStack family, LinkedAnimLayer, etc.) assert in
+	// PostPlacedNewNode if duplicated from a template, so spawn them pristine via
+	// FGraphNodeCreator. All other classes use the editor's template/PerformAction path.
+	if (NodeClass->IsChildOf(UAnimGraphNode_BlendStack_Base::StaticClass()))
+	{
+		FGraphNodeCreator<UAnimGraphNode_Base> Creator(*Graph);
+		UAnimGraphNode_Base* NewNode = Creator.CreateNode(/*bSelectNewNode=*/false, NodeClass);
+		if (!NewNode)
+		{
+			GEditor->EndTransaction();
+			OutError = FString::Printf(TEXT("FGraphNodeCreator failed to create node for class '%s'"), *NodeClass->GetPathName());
+			return nullptr;
+		}
+		NewNode->NodePosX = static_cast<int32>(X);
+		NewNode->NodePosY = static_cast<int32>(Y);
+		Creator.Finalize();
+		SpawnedAnim = NewNode;
+	}
+	else
+	{
+		UAnimGraphNode_Base* Template = Cast<UAnimGraphNode_Base>(NewObject<UObject>(GetTransientPackage(), NodeClass));
+		if (!Template)
+		{
+			GEditor->EndTransaction();
+			OutError = FString::Printf(TEXT("Failed to create node template for class '%s'"), *NodeClass->GetPathName());
+			return nullptr;
+		}
+
+		const UEdGraphSchema* TargetSchema = Graph->GetSchema();
+		if (!TargetSchema || !Template->CanCreateUnderSpecifiedSchema(TargetSchema))
+		{
+			GEditor->EndTransaction();
+			OutError = FString::Printf(
+				TEXT("Class '%s' cannot be created under graph '%s' with schema '%s'. Use an AnimGraph or animation state graph."),
+				*NodeClass->GetPathName(), *Graph->GetName(),
+				TargetSchema ? *TargetSchema->GetClass()->GetName() : TEXT("<null>"));
+			return nullptr;
+		}
+
+		FEdGraphSchemaAction_K2NewNode Action;
+		Action.NodeTemplate = Template;
+		UEdGraphNode* SpawnedNode = Action.PerformAction(Graph, /*FromPin=*/nullptr, FVector2f(X, Y), /*bSelectNewNode=*/false);
+		SpawnedAnim = Cast<UAnimGraphNode_Base>(SpawnedNode);
+		if (!SpawnedAnim)
+		{
+			GEditor->EndTransaction();
+			OutError = TEXT("PerformAction failed — node was not spawned. Check that the target graph supports this node type.");
+			return nullptr;
+		}
+	}
+
+	// Optional single pose-input wiring: SourceNode pose-out -> SpawnedAnim.TargetInputPin.
+	if (SourceNode && !TargetInputPin.IsNone())
+	{
+		UEdGraphPin* InPin = SpawnedAnim->FindPin(TargetInputPin, EGPD_Input);
+		if (!InPin)
+		{
+			GEditor->EndTransaction();
+			OutError = FString::Printf(TEXT("Input pin '%s' not found on spawned node '%s'"),
+				*TargetInputPin.ToString(), *SpawnedAnim->GetName());
+			return nullptr;
+		}
+		UEdGraphPin* OutPin = FindPoseOutputPin(SourceNode, FString());
+		if (!OutPin)
+		{
+			GEditor->EndTransaction();
+			OutError = FString::Printf(TEXT("Source node '%s' has no pose output pin. Available outputs: [%s]"),
+				*SourceNode->GetName(), *ListOutputPins(SourceNode));
+			return nullptr;
+		}
+		if (SourceNode->GetGraph() != SpawnedAnim->GetGraph())
+		{
+			GEditor->EndTransaction();
+			OutError = FString::Printf(
+				TEXT("Source node '%s' is in a different graph than the spawned node — connections must be intra-graph"),
+				*SourceNode->GetName());
+			return nullptr;
+		}
+		const UEdGraphSchema* Schema = SpawnedAnim->GetGraph()->GetSchema();
+		if (!Schema->TryCreateConnection(OutPin, InPin))
+		{
+			GEditor->EndTransaction();
+			OutError = FString::Printf(TEXT("TryCreateConnection failed: '%s.%s' -> '%s.%s'. Pin types may be incompatible."),
+				*SourceNode->GetName(), *OutPin->PinName.ToString(),
+				*SpawnedAnim->GetName(), *TargetInputPin.ToString());
+			return nullptr;
+		}
+	}
+
+	GEditor->EndTransaction();
+	return SpawnedAnim;
 }
 
 } // anonymous namespace
@@ -2021,6 +2389,1374 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleGetAnimGraphOutputConnecti
 	return FMonolithActionResult::Success(Root);
 }
 
+// ---------------------------------------------------------------------------
+// AnimGraph authoring (Group 1)
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+/**
+ * Shared body for add_apply_additive / add_apply_mesh_space_additive — identical
+ * apart from the fixed node class (bMeshSpace selects the mesh-space sibling).
+ * Spawns the node via SpawnAndWirePoseInput, wires Base/Additive from the named
+ * source nodes if supplied, and writes the inner Alpha if supplied.
+ */
+FMonolithActionResult ApplyAdditiveImpl(const TSharedPtr<FJsonObject>& Params, bool bMeshSpace)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString BaseNode;     Params->TryGetStringField(TEXT("base_node"), BaseNode);
+	FString AdditiveNode; Params->TryGetStringField(TEXT("additive_node"), AdditiveNode);
+	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+
+	double TempVal;
+	float PosX = 200.f, PosY = 0.f;
+	if (Params->TryGetNumberField(TEXT("position_x"), TempVal)) PosX = static_cast<float>(TempVal);
+	if (Params->TryGetNumberField(TEXT("position_y"), TempVal)) PosY = static_cast<float>(TempVal);
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	FString GraphError;
+	UEdGraph* TargetGraph = ResolveTargetGraph(ABP, GraphName, StateName, GraphError);
+	if (!TargetGraph) return FMonolithActionResult::Error(GraphError);
+
+	UClass* NodeClass = bMeshSpace
+		? UAnimGraphNode_ApplyMeshSpaceAdditive::StaticClass()
+		: UAnimGraphNode_ApplyAdditive::StaticClass();
+
+	// Spawn first (no auto-wire — Base/Additive are wired explicitly below).
+	FString SpawnError;
+	UAnimGraphNode_Base* NewNode = SpawnAndWirePoseInput(TargetGraph, NodeClass, PosX, PosY, nullptr, NAME_None, SpawnError);
+	if (!NewNode) return FMonolithActionResult::Error(SpawnError);
+
+	// Wire Base / Additive from the supplied source nodes (intra-graph).
+	auto WireInput = [&](const FString& SrcName, const TCHAR* PinName, FString& OutErr) -> bool
+	{
+		if (SrcName.IsEmpty()) return true; // nothing to wire is fine — caller can connect later
+		UEdGraphNode* Src = FindNodeByName(ABP, SrcName, TargetGraph);
+		if (!Src)
+		{
+			OutErr = FString::Printf(TEXT("%s source node '%s' not found in target graph"), PinName, *SrcName);
+			return false;
+		}
+		UEdGraphPin* OutPin = FindPoseOutputPin(Src, FString());
+		if (!OutPin)
+		{
+			OutErr = FString::Printf(TEXT("Source node '%s' has no pose output. Available outputs: [%s]"),
+				*SrcName, *ListOutputPins(Src));
+			return false;
+		}
+		UEdGraphPin* InPin = NewNode->FindPin(FName(PinName), EGPD_Input);
+		if (!InPin)
+		{
+			OutErr = FString::Printf(TEXT("Pin '%s' not found on ApplyAdditive node"), PinName);
+			return false;
+		}
+		const UEdGraphSchema* Schema = TargetGraph->GetSchema();
+		GEditor->BeginTransaction(FText::FromString(TEXT("Wire Additive Input")));
+		TargetGraph->Modify();
+		const bool bOk = Schema->TryCreateConnection(OutPin, InPin);
+		GEditor->EndTransaction();
+		if (!bOk)
+		{
+			OutErr = FString::Printf(TEXT("TryCreateConnection failed: '%s.%s' -> additive.%s"),
+				*SrcName, *OutPin->PinName.ToString(), PinName);
+			return false;
+		}
+		return true;
+	};
+
+	FString WireError;
+	if (!WireInput(BaseNode, TEXT("Base"), WireError))         return FMonolithActionResult::Error(WireError);
+	if (!WireInput(AdditiveNode, TEXT("Additive"), WireError)) return FMonolithActionResult::Error(WireError);
+
+	// Optional Alpha write on the inner FAnimNode_ApplyAdditive (shared field name on both variants).
+	// Capture the resolve/import results — if the caller supplied alpha and the write failed, we must
+	// surface it as a warning rather than silently reporting success with the default Alpha.
+	bool bAlphaSupplied = false;
+	bool bAlphaWriteFailed = false;
+	FString AlphaWarning;
+	if (Params->HasField(TEXT("alpha")))
+	{
+		bAlphaSupplied = true;
+		const float Alpha = static_cast<float>(Params->GetNumberField(TEXT("alpha")));
+		UScriptStruct* NodeStruct = nullptr; void* NodeAddr = nullptr; FString ResolveErr;
+		if (ResolveInnerAnimNode(NewNode, NodeStruct, NodeAddr, ResolveErr))
+		{
+			FString AlphaErr;
+			if (!ImportTextOntoStruct(NodeStruct, NodeAddr, TEXT("Alpha"), FString::SanitizeFloat(Alpha), NewNode, AlphaErr))
+			{
+				bAlphaWriteFailed = true;
+				AlphaWarning = FString::Printf(TEXT("Alpha was supplied but could not be written: %s. The node uses the default Alpha."), *AlphaErr);
+			}
+		}
+		else
+		{
+			bAlphaWriteFailed = true;
+			AlphaWarning = FString::Printf(TEXT("Alpha was supplied but the inner FAnimNode could not be resolved: %s. The node uses the default Alpha."), *ResolveErr);
+		}
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("node_name"), NewNode->GetName());
+	Root->SetStringField(TEXT("node_class"), NewNode->GetClass()->GetName());
+	Root->SetBoolField(TEXT("mesh_space"), bMeshSpace);
+	Root->SetBoolField(TEXT("base_wired"), !BaseNode.IsEmpty());
+	Root->SetBoolField(TEXT("additive_wired"), !AdditiveNode.IsEmpty());
+	if (bAlphaSupplied)
+	{
+		Root->SetBoolField(TEXT("alpha_write_failed"), bAlphaWriteFailed);
+		if (bAlphaWriteFailed) Root->SetStringField(TEXT("warning"), AlphaWarning);
+	}
+	Root->SetArrayField(TEXT("pins"), BuildPinList(NewNode));
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+} // anonymous namespace
+
+// ---------------------------------------------------------------------------
+// Action: add_apply_additive / add_apply_mesh_space_additive
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleAddApplyAdditive(const TSharedPtr<FJsonObject>& Params)
+{
+	return ApplyAdditiveImpl(Params, /*bMeshSpace=*/false);
+}
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleAddApplyMeshSpaceAdditive(const TSharedPtr<FJsonObject>& Params)
+{
+	return ApplyAdditiveImpl(Params, /*bMeshSpace=*/true);
+}
+
+// ---------------------------------------------------------------------------
+// Action: add_slot_node
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleAddSlotNode(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString SlotName;   Params->TryGetStringField(TEXT("slot_name"), SlotName);
+	FString SourceNode; Params->TryGetStringField(TEXT("source_node"), SourceNode);
+	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+
+	bool bValidateSlot = true;
+	if (Params->HasField(TEXT("validate_slot"))) bValidateSlot = Params->GetBoolField(TEXT("validate_slot"));
+
+	double TempVal;
+	float PosX = 200.f, PosY = 0.f;
+	if (Params->TryGetNumberField(TEXT("position_x"), TempVal)) PosX = static_cast<float>(TempVal);
+	if (Params->TryGetNumberField(TEXT("position_y"), TempVal)) PosY = static_cast<float>(TempVal);
+
+	if (SlotName.IsEmpty())
+	{
+		// A slot node with no name silently passes the source pose through — refuse.
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: slot_name (an unnamed slot node is a no-op pass-through)"));
+	}
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	FString GraphError;
+	UEdGraph* TargetGraph = ResolveTargetGraph(ABP, GraphName, StateName, GraphError);
+	if (!TargetGraph) return FMonolithActionResult::Error(GraphError);
+
+	// Non-fatal slot-name validation: montage slots are often registered after graph authoring,
+	// so an unknown slot is a warning, not an error.
+	bool bSlotFound = false;
+	FString SlotWarning;
+	if (bValidateSlot)
+	{
+		USkeleton* Skeleton = ABP->TargetSkeleton;
+		if (Skeleton)
+		{
+			bSlotFound = Skeleton->ContainsSlotName(FName(*SlotName));
+			if (!bSlotFound)
+			{
+				TArray<FString> ValidSlots;
+				for (const FAnimSlotGroup& Group : Skeleton->GetSlotGroups())
+				{
+					for (const FName& Slot : Group.SlotNames)
+					{
+						ValidSlots.Add(Slot.ToString());
+					}
+				}
+				SlotWarning = FString::Printf(
+					TEXT("Slot '%s' is not registered on skeleton '%s'. Known slots: [%s]. The node was still created (montage slots are often registered after graph authoring)."),
+					*SlotName, *Skeleton->GetName(), *FString::Join(ValidSlots, TEXT(", ")));
+			}
+		}
+		else
+		{
+			SlotWarning = TEXT("ABP has no TargetSkeleton — slot name not validated.");
+		}
+	}
+
+	// Spawn via shared helper, wiring the optional Source pose input.
+	UEdGraphNode* Src = nullptr;
+	if (!SourceNode.IsEmpty())
+	{
+		Src = FindNodeByName(ABP, SourceNode, TargetGraph);
+		if (!Src) return FMonolithActionResult::Error(FString::Printf(TEXT("Source node '%s' not found in target graph"), *SourceNode));
+	}
+
+	FString SpawnError;
+	UAnimGraphNode_Base* NewNode = SpawnAndWirePoseInput(
+		TargetGraph, UAnimGraphNode_Slot::StaticClass(), PosX, PosY,
+		Src, Src ? FName(TEXT("Source")) : NAME_None, SpawnError);
+	if (!NewNode) return FMonolithActionResult::Error(SpawnError);
+
+	// Write SlotName onto the inner FAnimNode_Slot via the same reflection path
+	// set_anim_graph_node_property uses (persisted through compile).
+	{
+		UScriptStruct* NodeStruct = nullptr; void* NodeAddr = nullptr; FString ResolveErr;
+		if (!ResolveInnerAnimNode(NewNode, NodeStruct, NodeAddr, ResolveErr))
+		{
+			return FMonolithActionResult::Error(ResolveErr);
+		}
+		FString WriteErr;
+		if (!ImportTextOntoStruct(NodeStruct, NodeAddr, TEXT("SlotName"), SlotName, NewNode, WriteErr))
+		{
+			return FMonolithActionResult::Error(WriteErr);
+		}
+		NewNode->ReconstructNode();
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("node_name"), NewNode->GetName());
+	Root->SetStringField(TEXT("slot_name"), SlotName);
+	Root->SetBoolField(TEXT("slot_validated"), bValidateSlot);
+	Root->SetBoolField(TEXT("slot_found"), bSlotFound);
+	if (!SlotWarning.IsEmpty()) Root->SetStringField(TEXT("warning"), SlotWarning);
+	Root->SetBoolField(TEXT("source_wired"), Src != nullptr);
+	Root->SetArrayField(TEXT("pins"), BuildPinList(NewNode));
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// Action: add_save_cached_pose
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleAddSaveCachedPose(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString CacheName;  Params->TryGetStringField(TEXT("cache_name"), CacheName);
+	FString SourceNode; Params->TryGetStringField(TEXT("source_node"), SourceNode);
+	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+
+	double TempVal;
+	float PosX = 200.f, PosY = 0.f;
+	if (Params->TryGetNumberField(TEXT("position_x"), TempVal)) PosX = static_cast<float>(TempVal);
+	if (Params->TryGetNumberField(TEXT("position_y"), TempVal)) PosY = static_cast<float>(TempVal);
+
+	if (CacheName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: cache_name"));
+
+	// Save nodes are sink nodes restricted to the main AnimGraph — reject a state target up front,
+	// but the engine's IsCompatibleWithGraph below is authoritative.
+	if (!StateName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Save Cached Pose nodes live only in the main AnimGraph, not inside a state's inner graph (they are sink nodes). Omit state_name."));
+	}
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	FString GraphError;
+	UEdGraph* TargetGraph = ResolveTargetGraph(ABP, GraphName, TEXT(""), GraphError);
+	if (!TargetGraph) return FMonolithActionResult::Error(GraphError);
+
+	// The Save node sinks the cached pose — wire the source into the 'Pose' input via the helper.
+	UEdGraphNode* Src = nullptr;
+	if (!SourceNode.IsEmpty())
+	{
+		Src = FindNodeByName(ABP, SourceNode, TargetGraph);
+		if (!Src) return FMonolithActionResult::Error(FString::Printf(TEXT("Source node '%s' not found in target graph"), *SourceNode));
+	}
+
+	FString SpawnError;
+	UAnimGraphNode_Base* NewNode = SpawnAndWirePoseInput(
+		TargetGraph, UAnimGraphNode_SaveCachedPose::StaticClass(), PosX, PosY,
+		Src, Src ? FName(TEXT("Pose")) : NAME_None, SpawnError);
+	if (!NewNode) return FMonolithActionResult::Error(SpawnError);
+
+	UAnimGraphNode_SaveCachedPose* SaveNode = Cast<UAnimGraphNode_SaveCachedPose>(NewNode);
+	if (!SaveNode) return FMonolithActionResult::Error(TEXT("Spawned node is not a SaveCachedPose node"));
+
+	// Surface the engine's own placement rejection rather than relying solely on our pre-check.
+	if (!SaveNode->IsCompatibleWithGraph(TargetGraph))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Save Cached Pose node is not compatible with graph '%s' (engine IsCompatibleWithGraph rejected it). Save nodes must live in the main AnimGraph."),
+			*TargetGraph->GetName()));
+	}
+
+	// CacheName is a public EditAnywhere UPROPERTY — set it directly, then OnRenameNode so the
+	// node title + name validator stay consistent.
+	SaveNode->CacheName = CacheName;
+	SaveNode->OnRenameNode(CacheName);
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("node_name"), NewNode->GetName());
+	Root->SetStringField(TEXT("cache_name"), CacheName);
+	Root->SetBoolField(TEXT("source_wired"), Src != nullptr);
+	Root->SetArrayField(TEXT("pins"), BuildPinList(NewNode));
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// Action: add_use_cached_pose
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleAddUseCachedPose(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString CacheName; Params->TryGetStringField(TEXT("cache_name"), CacheName);
+	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+
+	bool bValidatePair = true;
+	if (Params->HasField(TEXT("validate_pair"))) bValidatePair = Params->GetBoolField(TEXT("validate_pair"));
+
+	double TempVal;
+	float PosX = 200.f, PosY = 0.f;
+	if (Params->TryGetNumberField(TEXT("position_x"), TempVal)) PosX = static_cast<float>(TempVal);
+	if (Params->TryGetNumberField(TEXT("position_y"), TempVal)) PosY = static_cast<float>(TempVal);
+
+	if (CacheName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: cache_name"));
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	FString GraphError;
+	UEdGraph* TargetGraph = ResolveTargetGraph(ABP, GraphName, TEXT(""), GraphError);
+	if (!TargetGraph) return FMonolithActionResult::Error(GraphError);
+
+	// Validate that a Save node with this CacheName exists in the graph — the classic failure mode
+	// (mismatched names -> silent wrong compile) is exactly what this guards against.
+	if (bValidatePair)
+	{
+		TArray<UAnimGraphNode_SaveCachedPose*> SaveNodes;
+		TargetGraph->GetNodesOfClass<UAnimGraphNode_SaveCachedPose>(SaveNodes);
+		bool bMatch = false;
+		TArray<FString> Existing;
+		for (UAnimGraphNode_SaveCachedPose* SaveNode : SaveNodes)
+		{
+			if (SaveNode)
+			{
+				Existing.Add(SaveNode->CacheName);
+				if (SaveNode->CacheName == CacheName) bMatch = true;
+			}
+		}
+		if (!bMatch)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("No Save Cached Pose node named '%s' exists in graph '%s'. Existing cache names: [%s]. Add the Save node first, or pass validate_pair=false."),
+				*CacheName, *GraphName, *FString::Join(Existing, TEXT(", "))));
+		}
+	}
+
+	FString SpawnError;
+	UAnimGraphNode_Base* NewNode = SpawnAndWirePoseInput(
+		TargetGraph, UAnimGraphNode_UseCachedPose::StaticClass(), PosX, PosY,
+		nullptr, NAME_None, SpawnError);
+	if (!NewNode) return FMonolithActionResult::Error(SpawnError);
+
+	// NameOfCache is a private FString UPROPERTY on the editor node (NOT the inner FAnimNode) —
+	// reflection-write it via FStrProperty, then ReconstructNode. The weak SaveCachedPoseNode
+	// pointer re-resolves by name at compile.
+	{
+		FProperty* Prop = NewNode->GetClass()->FindPropertyByName(TEXT("NameOfCache"));
+		FStrProperty* StrProp = CastField<FStrProperty>(Prop);
+		if (!StrProp)
+		{
+			return FMonolithActionResult::Error(TEXT("Could not resolve 'NameOfCache' FStrProperty on UseCachedPose node"));
+		}
+		void* ValuePtr = StrProp->ContainerPtrToValuePtr<void>(NewNode);
+		StrProp->SetPropertyValue(ValuePtr, CacheName);
+		NewNode->ReconstructNode();
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("node_name"), NewNode->GetName());
+	Root->SetStringField(TEXT("cache_name"), CacheName);
+	Root->SetBoolField(TEXT("pair_validated"), bValidatePair);
+	Root->SetArrayField(TEXT("pins"), BuildPinList(NewNode));
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// Action: set_output_pose_source
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleSetOutputPoseSource(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString SourceNode; Params->TryGetStringField(TEXT("source_node"), SourceNode);
+	FString SourcePin;  Params->TryGetStringField(TEXT("source_pin"), SourcePin);
+	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+
+	bool bBreakExisting = true;
+	if (Params->HasField(TEXT("break_existing"))) bBreakExisting = Params->GetBoolField(TEXT("break_existing"));
+
+	if (SourceNode.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: source_node"));
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	FString GraphError;
+	UEdGraph* TargetGraph = ResolveTargetGraph(ABP, GraphName, TEXT(""), GraphError);
+	if (!TargetGraph) return FMonolithActionResult::Error(GraphError);
+
+	// Locate the Output Pose (Root) node — same lookup the read-only reader uses.
+	TArray<UAnimGraphNode_Root*> Roots;
+	TargetGraph->GetNodesOfClass<UAnimGraphNode_Root>(Roots);
+	if (Roots.Num() == 0)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("No Output Pose (UAnimGraphNode_Root) found in graph '%s' (corrupt graph)"), *GraphName));
+	}
+	UAnimGraphNode_Root* RootNode = Roots[0];
+	UEdGraphPin* ResultPin = RootNode->FindPin(FName(TEXT("Result")), EGPD_Input);
+	if (!ResultPin)
+	{
+		return FMonolithActionResult::Error(TEXT("Output Pose node has no 'Result' input pin (corrupt graph)"));
+	}
+
+	UEdGraphNode* Src = FindNodeByName(ABP, SourceNode, TargetGraph);
+	if (!Src) return FMonolithActionResult::Error(FString::Printf(TEXT("Source node '%s' not found in graph '%s'"), *SourceNode, *GraphName));
+
+	if (Src->GetGraph() != RootNode->GetGraph())
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Source node '%s' is not in graph '%s' — the Output Pose connection must be intra-graph"), *SourceNode, *GraphName));
+	}
+
+	UEdGraphPin* OutPin = FindPoseOutputPin(Src, SourcePin);
+	if (!OutPin)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Source node '%s' has no pose output pin (looked for '%s'). Available outputs: [%s]"),
+			*SourceNode, SourcePin.IsEmpty() ? TEXT("<first pose-out>") : *SourcePin, *ListOutputPins(Src)));
+	}
+
+	// No-op if already driven by the same source pin.
+	for (UEdGraphPin* Linked : ResultPin->LinkedTo)
+	{
+		if (Linked == OutPin)
+		{
+			TSharedPtr<FJsonObject> NoOp = MakeShared<FJsonObject>();
+			NoOp->SetStringField(TEXT("asset_path"), AssetPath);
+			NoOp->SetStringField(TEXT("graph_name"), GraphName);
+			NoOp->SetStringField(TEXT("root_node"), RootNode->GetName());
+			NoOp->SetStringField(TEXT("source_node"), SourceNode);
+			NoOp->SetStringField(TEXT("source_pin"), OutPin->PinName.ToString());
+			NoOp->SetBoolField(TEXT("unchanged"), true);
+			NoOp->SetBoolField(TEXT("saved"), false);
+			return FMonolithActionResult::Success(NoOp);
+		}
+	}
+
+	GEditor->BeginTransaction(FText::FromString(TEXT("Set Output Pose Source")));
+	TargetGraph->Modify();
+	if (bBreakExisting)
+	{
+		ResultPin->BreakAllPinLinks();
+	}
+	const UEdGraphSchema* Schema = TargetGraph->GetSchema();
+	const bool bConnected = Schema->TryCreateConnection(OutPin, ResultPin);
+	GEditor->EndTransaction();
+
+	if (!bConnected)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("TryCreateConnection failed: '%s.%s' -> OutputPose.Result. Pin types may be incompatible."),
+			*SourceNode, *OutPin->PinName.ToString()));
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("graph_name"), GraphName);
+	Root->SetStringField(TEXT("root_node"), RootNode->GetName());
+	Root->SetStringField(TEXT("source_node"), SourceNode);
+	Root->SetStringField(TEXT("source_pin"), OutPin->PinName.ToString());
+	Root->SetBoolField(TEXT("unchanged"), false);
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// Action: set_state_result_source (Group 2)
+//
+// Per-state analogue of set_output_pose_source: wire a node already inside a
+// state's inner graph into the state's result sink pin
+// (UAnimStateNode::GetPoseSinkPinInsideState — ANIMGRAPH_API).
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleSetStateResultSource(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString MachineName; Params->TryGetStringField(TEXT("machine_name"), MachineName);
+	FString StateName;   Params->TryGetStringField(TEXT("state_name"), StateName);
+	FString SourceNode;  Params->TryGetStringField(TEXT("source_node"), SourceNode);
+	FString SourcePin;   Params->TryGetStringField(TEXT("source_pin"), SourcePin);
+
+	bool bBreakExisting = true;
+	if (Params->HasField(TEXT("break_existing"))) bBreakExisting = Params->GetBoolField(TEXT("break_existing"));
+
+	if (MachineName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: machine_name"));
+	if (StateName.IsEmpty())   return FMonolithActionResult::Error(TEXT("Missing required parameter: state_name"));
+	if (SourceNode.IsEmpty())  return FMonolithActionResult::Error(TEXT("Missing required parameter: source_node"));
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	UAnimationStateMachineGraph* SMGraph = FindSMGraphByName(ABP, MachineName);
+	if (!SMGraph) return FMonolithActionResult::Error(FString::Printf(TEXT("State machine '%s' not found"), *MachineName));
+
+	UAnimStateNode* StateNode = FindStateByName(SMGraph, StateName);
+	if (!StateNode) return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found in state machine '%s'"), *StateName, *MachineName));
+
+	UEdGraph* StateGraph = StateNode->GetBoundGraph();
+	if (!StateGraph) return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' has no inner animation graph"), *StateName));
+
+	// The state's result sink pin — the pose pin of the sink node inside the state graph.
+	UEdGraphPin* SinkPin = StateNode->GetPoseSinkPinInsideState();
+	if (!SinkPin)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("State '%s' has no result sink pin (GetPoseSinkPinInsideState returned null — corrupt state graph)"), *StateName));
+	}
+
+	// Source node must live inside this state's inner graph (connections are intra-graph).
+	UEdGraphNode* Src = FindNodeByName(ABP, SourceNode, StateGraph);
+	if (!Src)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Source node '%s' not found inside state '%s' — the source must be a node inside this state's inner graph"),
+			*SourceNode, *StateName));
+	}
+
+	UEdGraphPin* OutPin = FindPoseOutputPin(Src, SourcePin);
+	if (!OutPin)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Source node '%s' has no pose output pin (looked for '%s'). Available outputs: [%s]"),
+			*SourceNode, SourcePin.IsEmpty() ? TEXT("<first pose-out>") : *SourcePin, *ListOutputPins(Src)));
+	}
+
+	// No-op if already driven by the same source pin.
+	for (UEdGraphPin* Linked : SinkPin->LinkedTo)
+	{
+		if (Linked == OutPin)
+		{
+			TSharedPtr<FJsonObject> NoOp = MakeShared<FJsonObject>();
+			NoOp->SetStringField(TEXT("asset_path"), AssetPath);
+			NoOp->SetStringField(TEXT("machine_name"), MachineName);
+			NoOp->SetStringField(TEXT("state_name"), StateName);
+			NoOp->SetStringField(TEXT("source_node"), SourceNode);
+			NoOp->SetStringField(TEXT("source_pin"), OutPin->PinName.ToString());
+			NoOp->SetBoolField(TEXT("unchanged"), true);
+			NoOp->SetBoolField(TEXT("saved"), false);
+			return FMonolithActionResult::Success(NoOp);
+		}
+	}
+
+	GEditor->BeginTransaction(FText::FromString(TEXT("Set State Result Source")));
+	StateGraph->Modify();
+	if (bBreakExisting)
+	{
+		SinkPin->BreakAllPinLinks();
+	}
+	const UEdGraphSchema* Schema = StateGraph->GetSchema();
+	const bool bConnected = Schema->TryCreateConnection(OutPin, SinkPin);
+	GEditor->EndTransaction();
+
+	if (!bConnected)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("TryCreateConnection failed: '%s.%s' -> state result sink. Pin types may be incompatible."),
+			*SourceNode, *OutPin->PinName.ToString()));
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("machine_name"), MachineName);
+	Root->SetStringField(TEXT("state_name"), StateName);
+	Root->SetStringField(TEXT("source_node"), SourceNode);
+	Root->SetStringField(TEXT("source_pin"), OutPin->PinName.ToString());
+	Root->SetBoolField(TEXT("unchanged"), false);
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// Action: add_blend_by_int (Group 2)
+//
+// Spawn UAnimGraphNode_BlendListByInt (ships with 2 BlendPose pins — one from the
+// ctor, one from PostPlacedNewNode) and grow to num_poses via the ANIMGRAPH_API
+// AddPinToBlendList(), which appends a BlendPose_k + BlendTime_k pin per call.
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleAddBlendByInt(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+
+	double NumVal = 0.0;
+	if (!Params->TryGetNumberField(TEXT("num_poses"), NumVal))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: num_poses"));
+	}
+	const int32 NumPoses = static_cast<int32>(NumVal);
+	if (NumPoses < 2)  return FMonolithActionResult::Error(TEXT("num_poses must be >= 2 (a blend list needs at least two poses)"));
+	if (NumPoses > 32) return FMonolithActionResult::Error(TEXT("num_poses is capped at 32"));
+
+	double TempVal;
+	float PosX = 200.f, PosY = 0.f;
+	if (Params->TryGetNumberField(TEXT("position_x"), TempVal)) PosX = static_cast<float>(TempVal);
+	if (Params->TryGetNumberField(TEXT("position_y"), TempVal)) PosY = static_cast<float>(TempVal);
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	FString GraphError;
+	UEdGraph* TargetGraph = ResolveTargetGraph(ABP, GraphName, StateName, GraphError);
+	if (!TargetGraph) return FMonolithActionResult::Error(GraphError);
+
+	FString SpawnError;
+	UAnimGraphNode_Base* NewNode = SpawnAndWirePoseInput(
+		TargetGraph, UAnimGraphNode_BlendListByInt::StaticClass(), PosX, PosY,
+		nullptr, NAME_None, SpawnError);
+	if (!NewNode) return FMonolithActionResult::Error(SpawnError);
+
+	UAnimGraphNode_BlendListByInt* BlendNode = Cast<UAnimGraphNode_BlendListByInt>(NewNode);
+	if (!BlendNode) return FMonolithActionResult::Error(TEXT("Spawned node is not a BlendListByInt node"));
+
+	// The node ships with 2 BlendPose pins (ctor AddPose + PostPlacedNewNode AddPose). Grow the
+	// delta to reach num_poses; AddPinToBlendList ReconstructNode()s internally each call.
+	const int32 StartingPoses = 2;
+	for (int32 i = StartingPoses; i < NumPoses; ++i)
+	{
+		BlendNode->AddPinToBlendList();
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+
+	// BlendTime is a FoldProperty pin (meta=(PinShownByDefault, FoldProperty) on
+	// FAnimNode_BlendListBase::BlendTime). Each AddPinToBlendList() grows BlendTime via
+	// Node.AddPose() (value 0.1f) and reconstructs, but the per-pose BlendTime fold pins do not
+	// reconcile against the blueprint's fold state until CompileBlueprint() recomputes it. During
+	// the intermediate grows an unmatched BlendTime_k pin carries a non-default value (0.1 != the
+	// autogenerated 0.0), so RewireOldPinsToNewPins retains it as an orphan (UK2Node.cpp ~L1439),
+	// producing the "orphan BlendTime_1 pin" compile warning.
+	//
+	// The orphan is a distinct RETAINED pin object that RewireOldPinsToNewPins re-creates from the
+	// old-pins snapshot on every reconstruct, so resetting its value is futile — the next
+	// reconstruct re-orphans it. The orphan has no links (bNotConnectable, no LinkedTo), so remove
+	// the orphan pins directly: removal is the only op that survives reconstruct. UEdGraphNode::
+	// RemovePin (ENGINE_API public, EdGraphNode.h:623; impl EdGraphNode.cpp:464) drops the pin from
+	// BlendNode->Pins and marks it garbage with NO reconstruct. Collect orphans into a local array
+	// FIRST, then remove, so BlendNode->Pins is never mutated mid-iteration. Then mark structurally
+	// modified + compile to settle, clearing the orphan-pin warning.
+	TArray<UEdGraphPin*> OrphanPins;
+	for (UEdGraphPin* Pin : BlendNode->Pins)
+	{
+		if (Pin && Pin->bOrphanedPin)
+		{
+			OrphanPins.Add(Pin);
+		}
+	}
+	for (UEdGraphPin* Pin : OrphanPins)
+	{
+		BlendNode->RemovePin(Pin);
+	}
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+
+	ABP->MarkPackageDirty();
+
+	// Count the realized BlendPose_* input pins so the caller can verify + wire them.
+	int32 PoseInputPins = 0;
+	for (UEdGraphPin* Pin : BlendNode->Pins)
+	{
+		if (Pin && Pin->Direction == EGPD_Input && Pin->PinName.ToString().StartsWith(TEXT("BlendPose")))
+		{
+			++PoseInputPins;
+		}
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("node_name"), NewNode->GetName());
+	Root->SetNumberField(TEXT("requested_poses"), NumPoses);
+	Root->SetNumberField(TEXT("blend_pose_pins"), PoseInputPins);
+	Root->SetArrayField(TEXT("pins"), BuildPinList(NewNode));
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// Action: add_blend_by_enum (Group 2)
+//
+// Place a UAnimGraphNode_BlendListByEnum bound to a UEnum, exposing one pose pin per
+// chosen enumerator (plus the always-present index-0 "Default" pin). The editor node's
+// own pin-grow primitives are out of reach across the module boundary:
+//   - ExposeEnumElementAsPin(FName) is protected (AnimGraphNode_BlendListByEnum.h:60-61),
+//   - there is NO AddPinToBlendList on the enum node or the base (that exists only on the
+//     Int node), and the class is UCLASS(MinimalAPI).
+// So ExposeEnumElementAsPin is replicated externally (it does exactly: VisibleEnumEntries.Add +
+// Node.AddPose() + ReconstructNode(), AnimGraphNode_BlendListByEnum.cpp:143-158):
+//   - BoundEnum (protected UPROPERTY TObjectPtr<UEnum>, h:25-26) is reflection-set via
+//     FObjectPropertyBase::SetObjectPropertyValue_InContainer (same idiom as :2186-2190).
+//   - VisibleEnumEntries (protected UPROPERTY TArray<FName>, h:28-29) has an FNameProperty inner
+//     DIRECTLY (a scalar array, NOT a struct array), so each enumerator name is appended via
+//     FScriptArrayHelper + FNameProperty::SetPropertyValue on the raw slot.
+//   - the inner FAnimNode_BlendListByEnum Node (public UPROPERTY, h:20-21) exposes the public
+//     header-inline FAnimNode_BlendListBase::AddPose() (#if WITH_EDITOR, AnimNode_BlendListBase.h:
+//     115-119) — inline, so no exported symbol is named.
+// The enum names stored in VisibleEnumEntries use UEnum::GetNameByIndex(i) (the stored Names key),
+// which BakeDataDuringCompilation round-trips through BoundEnum->GetIndexByName() (…ByEnum.cpp:
+// 317-348) to build EnumToPoseIndex automatically — no manual EnumToPoseIndex write. Unexposed enum
+// values fall through to the Default pose (index 0).
+//
+// The node ships with exactly ONE pose pin (its ctor calls Node.AddPose() once → the index-0
+// Default pin). UNLIKE blend-by-int (StartingPoses=2), we do NOT pre-count starting poses; each
+// exposed enumerator adds one AddPose() on top of the ctor's Default. After the loop a single
+// ReconstructNode() materializes the BlendPose_k pins; then the SAME orphan-BlendTime strip +
+// recompile tail that add_blend_by_int ships settles the FoldProperty orphan pins.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+// Local duplicate of MonolithReflectionWalker.cpp's IsAutoMaxSentinel (lives in an anonymous
+// namespace in MonolithCore; duplicated here to avoid a cross-module surface change for one
+// 6-line predicate). Skip a given enum index ONLY if it is genuinely the auto-generated _MAX
+// sentinel: the enum reports an existing max (UEnum::ContainsExistingMax()) AND the name ends in
+// "_MAX". The naive "NumEnums()-1" drops the last REAL enumerator on enums with no sentinel
+// (typical of UserDefinedEnums); the conditional form never does.
+bool IsAutoMaxSentinelEntry(const UEnum* Enum, int32 Index)
+{
+	if (!Enum)
+	{
+		return false;
+	}
+	if (!Enum->ContainsExistingMax())
+	{
+		return false;
+	}
+	return Enum->GetNameStringByIndex(Index).EndsWith(TEXT("_MAX"), ESearchCase::CaseSensitive);
+}
+
+} // namespace
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleAddBlendByEnum(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	const FString EnumPath  = Params->HasField(TEXT("enum_path")) ? Params->GetStringField(TEXT("enum_path")) : TEXT("");
+	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+
+	if (EnumPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: enum_path"));
+	}
+
+	double TempVal;
+	float PosX = 200.f, PosY = 0.f;
+	if (Params->TryGetNumberField(TEXT("position_x"), TempVal)) PosX = static_cast<float>(TempVal);
+	if (Params->TryGetNumberField(TEXT("position_y"), TempVal)) PosY = static_cast<float>(TempVal);
+
+	// --- Resolve the UEnum (try a full object load first, then a global object lookup by name). ---
+	UEnum* Enum = LoadObject<UEnum>(nullptr, *EnumPath);
+	if (!Enum)
+	{
+		Enum = FindFirstObject<UEnum>(*EnumPath, EFindFirstObjectOptions::NativeFirst);
+	}
+	if (!Enum)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Could not resolve enum_path '%s' to a UEnum. Pass a full object path (e.g. /Game/Enums/E_X.E_X) or a C++ enum name (e.g. EAnimGroupRole)."),
+			*EnumPath));
+	}
+
+	// --- Build the default exposable-enumerator list (non-Hidden, non-_MAX), index-ordered. ---
+	TArray<FName>   AvailableNames;     // stored Names key form (what BakeDataDuringCompilation expects)
+	TArray<FString> AvailableShortStr;  // short, lower-cost match form for the caller's filter
+	const int32 NumEntries = Enum->NumEnums();
+	for (int32 i = 0; i < NumEntries; ++i)
+	{
+		if (IsAutoMaxSentinelEntry(Enum, i))
+		{
+			continue;
+		}
+#if WITH_METADATA
+		if (Enum->HasMetaData(TEXT("Hidden"), i))
+		{
+			continue;
+		}
+#endif
+		AvailableNames.Add(Enum->GetNameByIndex(i));
+		AvailableShortStr.Add(Enum->GetNameStringByIndex(i));
+	}
+
+	if (AvailableNames.Num() == 0)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Enum '%s' has no exposable enumerators (all entries are Hidden or the _MAX sentinel)."), *Enum->GetName()));
+	}
+
+	// --- Resolve the chosen enumerators (optional explicit subset; default = all available). ---
+	// Match a requested name against either the full stored key (E::Walk) or the short name (Walk),
+	// case-insensitively, mirroring UEnum::GetIndexByName's lenient resolution. De-dupe, preserving
+	// the requested order; error on any unknown name with the valid list.
+	TArray<FName> ChosenNames;
+	if (Params->HasField(TEXT("enumerators")))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* RawList = nullptr;
+		if (!Params->TryGetArrayField(TEXT("enumerators"), RawList) || !RawList)
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'enumerators' must be an array of enumerator name strings"));
+		}
+
+		for (const TSharedPtr<FJsonValue>& Val : *RawList)
+		{
+			FString Requested;
+			if (!Val.IsValid() || !Val->TryGetString(Requested) || Requested.IsEmpty())
+			{
+				continue;
+			}
+
+			int32 MatchIdx = INDEX_NONE;
+			for (int32 k = 0; k < AvailableNames.Num(); ++k)
+			{
+				if (AvailableNames[k].ToString().Equals(Requested, ESearchCase::IgnoreCase) ||
+				    AvailableShortStr[k].Equals(Requested, ESearchCase::IgnoreCase))
+				{
+					MatchIdx = k;
+					break;
+				}
+			}
+
+			if (MatchIdx == INDEX_NONE)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Enumerator '%s' is not a valid exposable entry of enum '%s'. Valid: [%s]"),
+					*Requested, *Enum->GetName(), *FString::Join(AvailableShortStr, TEXT(", "))));
+			}
+
+			ChosenNames.AddUnique(AvailableNames[MatchIdx]);
+		}
+
+		if (ChosenNames.Num() == 0)
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'enumerators' resolved to no usable enumerator names"));
+		}
+	}
+	else
+	{
+		ChosenNames = AvailableNames;
+	}
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	FString GraphError;
+	UEdGraph* TargetGraph = ResolveTargetGraph(ABP, GraphName, StateName, GraphError);
+	if (!TargetGraph) return FMonolithActionResult::Error(GraphError);
+
+	FString SpawnError;
+	UAnimGraphNode_Base* NewNode = SpawnAndWirePoseInput(
+		TargetGraph, UAnimGraphNode_BlendListByEnum::StaticClass(), PosX, PosY,
+		nullptr, NAME_None, SpawnError);
+	if (!NewNode) return FMonolithActionResult::Error(SpawnError);
+
+	UAnimGraphNode_BlendListByEnum* EnumNode = Cast<UAnimGraphNode_BlendListByEnum>(NewNode);
+	if (!EnumNode) return FMonolithActionResult::Error(TEXT("Spawned node is not a BlendListByEnum node"));
+
+	// --- Reflection-set the protected BoundEnum (TObjectPtr<UEnum>) on the editor node. ---
+	FProperty* BoundEnumProp = EnumNode->GetClass()->FindPropertyByName(TEXT("BoundEnum"));
+	FObjectPropertyBase* BoundEnumObjProp = CastField<FObjectPropertyBase>(BoundEnumProp);
+	if (!BoundEnumObjProp)
+	{
+		return FMonolithActionResult::Error(TEXT("BlendListByEnum node has no FObjectProperty 'BoundEnum' (engine layout changed?)"));
+	}
+
+	// --- Resolve the protected VisibleEnumEntries (TArray<FName>) reflection handles. ---
+	FArrayProperty* VisibleProp = CastField<FArrayProperty>(EnumNode->GetClass()->FindPropertyByName(TEXT("VisibleEnumEntries")));
+	if (!VisibleProp)
+	{
+		return FMonolithActionResult::Error(TEXT("BlendListByEnum node has no array property 'VisibleEnumEntries' (engine layout changed?)"));
+	}
+	FNameProperty* VisibleInnerName = CastField<FNameProperty>(VisibleProp->Inner);
+	if (!VisibleInnerName)
+	{
+		return FMonolithActionResult::Error(TEXT("'VisibleEnumEntries' inner is not an FNameProperty (engine layout changed?)"));
+	}
+
+	GEditor->BeginTransaction(FText::FromString(TEXT("Add Blend By Enum")));
+	EnumNode->Modify();
+
+	BoundEnumObjProp->SetObjectPropertyValue_InContainer(EnumNode, Enum);
+
+	// Append each chosen enumerator name to VisibleEnumEntries (scalar FName array — the raw slot
+	// IS the FName, no struct-inner step) and grow the inner pose array by one Default per entry.
+	void* VisibleArrayPtr = VisibleProp->ContainerPtrToValuePtr<void>(EnumNode);
+	FScriptArrayHelper VisibleHelper(VisibleProp, VisibleArrayPtr);
+	for (const FName& EnumeratorName : ChosenNames)
+	{
+		const int32 Idx = VisibleHelper.AddValue();
+		VisibleInnerName->SetPropertyValue(VisibleHelper.GetRawPtr(Idx), EnumeratorName);
+
+		// Public header-inline AddPose() (FAnimNode_BlendListBase) — grows BlendPose + BlendTime.
+		EnumNode->Node.AddPose();
+	}
+
+	EnumNode->ReconstructNode();
+
+	GEditor->EndTransaction();
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+
+	// Orphan-pin strip — identical to add_blend_by_int. Each Node.AddPose() grows the FoldProperty
+	// BlendTime array (value 0.1f); during the intermediate grows an unmatched BlendTime_k pin is
+	// retained as an orphan by RewireOldPinsToNewPins until CompileBlueprint reconciles the fold
+	// state. The orphans have no links — remove them directly (collect first, then remove, so Pins
+	// is not mutated mid-iteration), then recompile to clear the orphan-pin warning.
+	TArray<UEdGraphPin*> OrphanPins;
+	for (UEdGraphPin* Pin : EnumNode->Pins)
+	{
+		if (Pin && Pin->bOrphanedPin)
+		{
+			OrphanPins.Add(Pin);
+		}
+	}
+	for (UEdGraphPin* Pin : OrphanPins)
+	{
+		EnumNode->RemovePin(Pin);
+	}
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+
+	ABP->MarkPackageDirty();
+
+	// Count the realized BlendPose_* input pins (1 Default + N exposed enumerators).
+	int32 PoseInputPins = 0;
+	for (UEdGraphPin* Pin : EnumNode->Pins)
+	{
+		if (Pin && Pin->Direction == EGPD_Input && Pin->PinName.ToString().StartsWith(TEXT("BlendPose")))
+		{
+			++PoseInputPins;
+		}
+	}
+
+	// Echo the enumerator names actually exposed (short form) for caller readback / wiring.
+	TArray<TSharedPtr<FJsonValue>> ExposedJson;
+	for (const FName& Name : ChosenNames)
+	{
+		ExposedJson.Add(MakeShared<FJsonValueString>(Name.ToString()));
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("node_name"), NewNode->GetName());
+	Root->SetStringField(TEXT("enum_path"), EnumPath);
+	Root->SetStringField(TEXT("bound_enum"), Enum->GetName());
+	Root->SetNumberField(TEXT("pose_pins"), PoseInputPins);
+	Root->SetNumberField(TEXT("exposed_enumerators"), ChosenNames.Num());
+	Root->SetArrayField(TEXT("enumerators"), ExposedJson);
+	Root->SetArrayField(TEXT("pins"), BuildPinList(NewNode));
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// Action: set_sync_group (Group 2)
+//
+// Write GroupName/GroupRole/Method on an asset-player node. The Sync UPROPERTYs
+// on FAnimNode_SequencePlayer are WITH_EDITORONLY_DATA + meta=(FoldProperty) — they
+// are NOT reachable by FindPropertyByName on the node struct. Use the concrete
+// player's public ENGINE_API SetGroupName(FName)/SetGroupRole(EAnimGroupRole::Type)/
+// SetGroupMethod(EAnimSyncMethod) overrides instead. The base FAnimNode_AssetPlayerBase
+// versions return false (no-op); only concrete players write.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+/** Map a role string (case-insensitive) to EAnimGroupRole::Type. Returns false on unknown. */
+bool ParseAnimGroupRole(const FString& In, EAnimGroupRole::Type& Out)
+{
+	if (In.Equals(TEXT("CanBeLeader"), ESearchCase::IgnoreCase))            { Out = EAnimGroupRole::CanBeLeader; return true; }
+	if (In.Equals(TEXT("AlwaysLeader"), ESearchCase::IgnoreCase))           { Out = EAnimGroupRole::AlwaysLeader; return true; }
+	if (In.Equals(TEXT("AlwaysFollower"), ESearchCase::IgnoreCase))         { Out = EAnimGroupRole::AlwaysFollower; return true; }
+	if (In.Equals(TEXT("TransitionLeader"), ESearchCase::IgnoreCase))       { Out = EAnimGroupRole::TransitionLeader; return true; }
+	if (In.Equals(TEXT("TransitionFollower"), ESearchCase::IgnoreCase))     { Out = EAnimGroupRole::TransitionFollower; return true; }
+	if (In.Equals(TEXT("ExclusiveAlwaysLeader"), ESearchCase::IgnoreCase))  { Out = EAnimGroupRole::ExclusiveAlwaysLeader; return true; }
+	return false;
+}
+
+/** Map a sync-method string (case-insensitive) to EAnimSyncMethod. Returns false on unknown. */
+bool ParseAnimSyncMethod(const FString& In, EAnimSyncMethod& Out)
+{
+	if (In.Equals(TEXT("DoNotSync"), ESearchCase::IgnoreCase)) { Out = EAnimSyncMethod::DoNotSync; return true; }
+	if (In.Equals(TEXT("SyncGroup"), ESearchCase::IgnoreCase)) { Out = EAnimSyncMethod::SyncGroup; return true; }
+	if (In.Equals(TEXT("Graph"), ESearchCase::IgnoreCase))     { Out = EAnimSyncMethod::Graph; return true; }
+	return false;
+}
+
+} // anonymous namespace
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleSetSyncGroup(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString NodeId;    Params->TryGetStringField(TEXT("node_id"), NodeId);
+	FString GroupName; Params->TryGetStringField(TEXT("group_name"), GroupName);
+	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("");
+	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+
+	if (NodeId.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: node_id"));
+	if (!Params->HasField(TEXT("group_name"))) return FMonolithActionResult::Error(TEXT("Missing required parameter: group_name"));
+
+	// Role / method default to CanBeLeader / SyncGroup; reject unknown spellings.
+	EAnimGroupRole::Type Role = EAnimGroupRole::CanBeLeader;
+	if (Params->HasField(TEXT("group_role")))
+	{
+		const FString RoleStr = Params->GetStringField(TEXT("group_role"));
+		if (!ParseAnimGroupRole(RoleStr, Role))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Unknown group_role '%s'. Valid: CanBeLeader / AlwaysLeader / AlwaysFollower / TransitionLeader / TransitionFollower / ExclusiveAlwaysLeader"),
+				*RoleStr));
+		}
+	}
+	EAnimSyncMethod Method = EAnimSyncMethod::SyncGroup;
+	if (Params->HasField(TEXT("sync_method")))
+	{
+		const FString MethodStr = Params->GetStringField(TEXT("sync_method"));
+		if (!ParseAnimSyncMethod(MethodStr, Method))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Unknown sync_method '%s'. Valid: DoNotSync / SyncGroup / Graph"), *MethodStr));
+		}
+	}
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	// Optional graph scope (mirror set_anim_graph_node_property's lookup).
+	UEdGraph* ScopeGraph = nullptr;
+	if (!StateName.IsEmpty() || (!GraphName.IsEmpty() && !GraphName.Equals(TEXT("AnimGraph"), ESearchCase::IgnoreCase)))
+	{
+		FString GraphError;
+		ScopeGraph = ResolveTargetGraph(ABP, GraphName, StateName, GraphError);
+	}
+
+	UEdGraphNode* FoundNode = FindNodeByName(ABP, NodeId, ScopeGraph);
+	if (!FoundNode) return FMonolithActionResult::Error(FString::Printf(TEXT("Node '%s' not found"), *NodeId));
+
+	UAnimGraphNode_Base* AnimNode = Cast<UAnimGraphNode_Base>(FoundNode);
+	if (!AnimNode)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Node '%s' is not a UAnimGraphNode_Base (class: %s)"), *NodeId, *FoundNode->GetClass()->GetName()));
+	}
+
+	// Resolve the inner FAnimNode and confirm it is a concrete player with sync-group setters.
+	UScriptStruct* NodeStruct = nullptr; void* NodeAddr = nullptr; FString ResolveErr;
+	if (!ResolveInnerAnimNode(AnimNode, NodeStruct, NodeAddr, ResolveErr))
+	{
+		return FMonolithActionResult::Error(ResolveErr);
+	}
+
+	// FAnimNode_SequencePlayer / FAnimNode_BlendSpacePlayer both override the setters as ENGINE_API.
+	// Cast through whichever concrete struct the node carries; reject node types without these settings.
+	// Wrap the Modify()/setters/ReconstructNode() in a transaction for undo parity with the other
+	// Group 1/2 handlers (every early-return error path must close the transaction first).
+	GEditor->BeginTransaction(FText::FromString(TEXT("Set Sync Group")));
+	AnimNode->Modify();
+	bool bNameOk = false, bRoleOk = false, bMethodOk = false;
+	FString PlayerKind;
+	if (NodeStruct->IsChildOf(FAnimNode_SequencePlayer::StaticStruct()))
+	{
+		FAnimNode_SequencePlayer* Player = static_cast<FAnimNode_SequencePlayer*>(NodeAddr);
+		bNameOk   = Player->SetGroupName(FName(*GroupName));
+		bRoleOk   = Player->SetGroupRole(Role);
+		bMethodOk = Player->SetGroupMethod(Method);
+		PlayerKind = TEXT("SequencePlayer");
+	}
+	else if (NodeStruct->IsChildOf(FAnimNode_BlendSpacePlayer::StaticStruct()))
+	{
+		FAnimNode_BlendSpacePlayer* Player = static_cast<FAnimNode_BlendSpacePlayer*>(NodeAddr);
+		bNameOk   = Player->SetGroupName(FName(*GroupName));
+		bRoleOk   = Player->SetGroupRole(Role);
+		bMethodOk = Player->SetGroupMethod(Method);
+		PlayerKind = TEXT("BlendSpacePlayer");
+	}
+	else
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Node '%s' (inner struct '%s') does not support sync groups — only Sequence Player and BlendSpace Player nodes expose group settings."),
+			*NodeId, *NodeStruct->GetName()));
+	}
+
+	if (!bNameOk && !bRoleOk && !bMethodOk)
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Node '%s' (%s) rejected all sync-group writes — the concrete player override returned false."),
+			*NodeId, *PlayerKind));
+	}
+
+	AnimNode->ReconstructNode();
+	GEditor->EndTransaction();
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("node_id"), AnimNode->GetName());
+	Root->SetStringField(TEXT("player_kind"), PlayerKind);
+	Root->SetStringField(TEXT("group_name"), GroupName);
+	Root->SetBoolField(TEXT("group_name_set"), bNameOk);
+	Root->SetBoolField(TEXT("group_role_set"), bRoleOk);
+	Root->SetBoolField(TEXT("sync_method_set"), bMethodOk);
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// Action: set_layered_blend_bones (Group 2)
+//
+// Configure the per-layer branch filters on a Layered Blend Per Bone node. The
+// node starts with 1 blend-pose pin / 1 LayerSetup entry (ctor AddFirstPose).
+// LayerSetup is an editfixedsize array tracking BlendPoses, so we MUST grow the
+// pins first (AddPinToBlendByFilter — ANIMGRAPH_API; calls Node.AddPose which
+// SyncBlendMasksAndLayers keeps LayerSetup matched), THEN write each layer's
+// BranchFilters (FBranchFilter{ FName BoneName; int32 BlendDepth; }).
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleSetLayeredBlendBones(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString NodeId; Params->TryGetStringField(TEXT("node_id"), NodeId);
+	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("");
+	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+
+	if (NodeId.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: node_id"));
+
+	const TArray<TSharedPtr<FJsonValue>>* LayersArray = nullptr;
+	if (!Params->TryGetArrayField(TEXT("layers"), LayersArray) || !LayersArray)
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: layers (array of { bones: [{ bone, depth }] })"));
+	}
+	const int32 NumLayers = LayersArray->Num();
+	if (NumLayers < 1) return FMonolithActionResult::Error(TEXT("layers must contain at least one layer"));
+	if (NumLayers > 32) return FMonolithActionResult::Error(TEXT("layers is capped at 32"));
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	UEdGraph* ScopeGraph = nullptr;
+	if (!StateName.IsEmpty() || (!GraphName.IsEmpty() && !GraphName.Equals(TEXT("AnimGraph"), ESearchCase::IgnoreCase)))
+	{
+		FString GraphError;
+		ScopeGraph = ResolveTargetGraph(ABP, GraphName, StateName, GraphError);
+	}
+
+	UEdGraphNode* FoundNode = FindNodeByName(ABP, NodeId, ScopeGraph);
+	if (!FoundNode) return FMonolithActionResult::Error(FString::Printf(TEXT("Node '%s' not found"), *NodeId));
+
+	UAnimGraphNode_LayeredBoneBlend* LayerNode = Cast<UAnimGraphNode_LayeredBoneBlend>(FoundNode);
+	if (!LayerNode)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Node '%s' is not a Layered Blend Per Bone node (class: %s)"), *NodeId, *FoundNode->GetClass()->GetName()));
+	}
+
+	// The node starts with 1 blend-pose pin / 1 LayerSetup entry. Grow the delta FIRST — LayerSetup is
+	// editfixedsize and tracks BlendPoses, so a reflection write into a not-yet-grown LayerSetup would fail.
+	const int32 StartingLayers = 1;
+	GEditor->BeginTransaction(FText::FromString(TEXT("Set Layered Blend Bones")));
+	LayerNode->Modify();
+	for (int32 i = StartingLayers; i < NumLayers; ++i)
+	{
+		LayerNode->AddPinToBlendByFilter();
+	}
+
+	// Resolve the inner FAnimNode_LayeredBoneBlend and its LayerSetup array.
+	UScriptStruct* NodeStruct = nullptr; void* NodeAddr = nullptr; FString ResolveErr;
+	if (!ResolveInnerAnimNode(LayerNode, NodeStruct, NodeAddr, ResolveErr))
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(ResolveErr);
+	}
+
+	FArrayProperty* LayerSetupProp = CastField<FArrayProperty>(NodeStruct->FindPropertyByName(TEXT("LayerSetup")));
+	if (!LayerSetupProp)
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(TEXT("Could not resolve 'LayerSetup' array property on the inner node"));
+	}
+	FStructProperty* LayerElemProp = CastField<FStructProperty>(LayerSetupProp->Inner);
+	if (!LayerElemProp || !LayerElemProp->Struct)
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(TEXT("LayerSetup inner is not a struct (FInputBlendPose expected)"));
+	}
+	// FInputBlendPose.BranchFilters : TArray<FBranchFilter>
+	FArrayProperty* BranchFiltersProp = CastField<FArrayProperty>(LayerElemProp->Struct->FindPropertyByName(TEXT("BranchFilters")));
+	if (!BranchFiltersProp)
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(TEXT("FInputBlendPose has no 'BranchFilters' array property"));
+	}
+	FStructProperty* FilterStructProp = CastField<FStructProperty>(BranchFiltersProp->Inner);
+	if (!FilterStructProp || !FilterStructProp->Struct)
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(TEXT("BranchFilters inner is not a struct (FBranchFilter expected)"));
+	}
+	FNameProperty* BoneNameProp = CastField<FNameProperty>(FilterStructProp->Struct->FindPropertyByName(TEXT("BoneName")));
+	FIntProperty* BlendDepthProp = CastField<FIntProperty>(FilterStructProp->Struct->FindPropertyByName(TEXT("BlendDepth")));
+	if (!BoneNameProp || !BlendDepthProp)
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(TEXT("FBranchFilter is missing the expected BoneName (FName) / BlendDepth (int32) fields"));
+	}
+
+	void* LayerSetupAddr = LayerSetupProp->ContainerPtrToValuePtr<void>(NodeAddr);
+	FScriptArrayHelper LayerHelper(LayerSetupProp, LayerSetupAddr);
+	if (LayerHelper.Num() < NumLayers)
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("LayerSetup has %d entries after growing pins but %d layers were requested — pin grow did not size the editfixedsize array as expected"),
+			LayerHelper.Num(), NumLayers));
+	}
+
+	// Write each layer's BranchFilters from the JSON, element-by-element via reflection
+	// (mirrors the WriteBoneReferenceArray pattern, generalized for FBranchFilter's two fields).
+	int32 TotalFilters = 0;
+	for (int32 LayerIdx = 0; LayerIdx < NumLayers; ++LayerIdx)
+	{
+		const TSharedPtr<FJsonValue>& LayerValue = (*LayersArray)[LayerIdx];
+		const TSharedPtr<FJsonObject>* LayerObj = nullptr;
+		if (!LayerValue.IsValid() || !LayerValue->TryGetObject(LayerObj) || !LayerObj)
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(FString::Printf(TEXT("layers[%d] is not an object"), LayerIdx));
+		}
+
+		void* LayerElemPtr = LayerHelper.GetRawPtr(LayerIdx);
+		void* BranchArrayPtr = BranchFiltersProp->ContainerPtrToValuePtr<void>(LayerElemPtr);
+		FScriptArrayHelper BranchHelper(BranchFiltersProp, BranchArrayPtr);
+		BranchHelper.EmptyValues();
+
+		const TArray<TSharedPtr<FJsonValue>>* BonesArray = nullptr;
+		if ((*LayerObj)->TryGetArrayField(TEXT("bones"), BonesArray) && BonesArray)
+		{
+			for (const TSharedPtr<FJsonValue>& BoneVal : *BonesArray)
+			{
+				const TSharedPtr<FJsonObject>* BoneObj = nullptr;
+				if (!BoneVal.IsValid() || !BoneVal->TryGetObject(BoneObj) || !BoneObj) continue;
+
+				FString BoneName;
+				if (!(*BoneObj)->TryGetStringField(TEXT("bone"), BoneName) || BoneName.IsEmpty())
+				{
+					GEditor->EndTransaction();
+					return FMonolithActionResult::Error(FString::Printf(
+						TEXT("layers[%d].bones entry is missing a non-empty 'bone' field"), LayerIdx));
+				}
+				int32 Depth = 0;
+				double DepthVal = 0.0;
+				if ((*BoneObj)->TryGetNumberField(TEXT("depth"), DepthVal)) Depth = static_cast<int32>(DepthVal);
+
+				const int32 ElemIdx = BranchHelper.AddValue();
+				void* FilterPtr = BranchHelper.GetRawPtr(ElemIdx);
+				BoneNameProp->SetPropertyValue(BoneNameProp->ContainerPtrToValuePtr<void>(FilterPtr), FName(*BoneName));
+				BlendDepthProp->SetPropertyValue(BlendDepthProp->ContainerPtrToValuePtr<void>(FilterPtr), Depth);
+				++TotalFilters;
+			}
+		}
+	}
+	GEditor->EndTransaction();
+
+	LayerNode->ReconstructNode();
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("node_id"), LayerNode->GetName());
+	Root->SetNumberField(TEXT("layers"), NumLayers);
+	Root->SetNumberField(TEXT("layer_setup_entries"), LayerHelper.Num());
+	Root->SetNumberField(TEXT("total_branch_filters"), TotalFilters);
+	Root->SetArrayField(TEXT("pins"), BuildPinList(LayerNode));
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
 
 // ---------------------------------------------------------------------------
 // Pack C — build_foot_ik_pass (COMPOSITE)
@@ -2271,6 +4007,389 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAssignPostProcessAnimRig(c
 	Root->SetStringField(TEXT("mesh_path"), MeshPath);
 	Root->SetBoolField(TEXT("cleared"), bClearing);
 	Root->SetStringField(TEXT("post_process_class"), PostClass ? PostClass->GetPathName() : FString(TEXT("<none>")));
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// AnimGraph authoring (Group 3) — reflection-heavy Tier-2 nodes
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+/**
+ * Resolve a single UClass from a user specifier (path or name) that must be a
+ * non-abstract subclass of RequiredBase. Returns nullptr with OutError set on a
+ * miss, an ambiguous match, or a wrong-base match. Reuses ResolveClassSpecifier
+ * (the same path/name resolver add_anim_graph_node uses for node_class).
+ */
+UClass* ResolveSingleClassOfType(const FString& Specifier, UClass* RequiredBase,
+                                 const TCHAR* WhatFor, FString& OutError)
+{
+	const FString Clean = CleanClassSpecifier(Specifier);
+	if (Clean.IsEmpty())
+	{
+		OutError = FString::Printf(TEXT("Empty %s class specifier"), WhatFor);
+		return nullptr;
+	}
+
+	TArray<UClass*> Matches = ResolveClassSpecifier(Clean);
+	TArray<UClass*> Valid;
+	for (UClass* Match : Matches)
+	{
+		if (Match && Match->IsChildOf(RequiredBase) && !Match->HasAnyClassFlags(CLASS_Abstract))
+		{
+			Valid.AddUnique(Match);
+		}
+	}
+
+	if (Valid.Num() == 0)
+	{
+		OutError = FString::Printf(
+			TEXT("Could not resolve %s '%s' to a non-abstract %s subclass. Provide a full class path such as '/Game/Path/Asset.Asset_C'."),
+			WhatFor, *Clean, *RequiredBase->GetName());
+		return nullptr;
+	}
+	if (Valid.Num() > 1)
+	{
+		OutError = FString::Printf(TEXT("Ambiguous %s '%s'. Matches: %s. Use a full class path."),
+			WhatFor, *Clean, *DescribeClassMatches(Valid));
+		return nullptr;
+	}
+	return Valid[0];
+}
+
+} // anonymous namespace
+
+// ---------------------------------------------------------------------------
+// Action: add_anim_control_rig_node (Group 3)
+//
+// Spawn UAnimGraphNode_ControlRig (a UAnimGraphNode_CustomProperty — NOT a
+// BoundGraph-owning node, so the shared template/PerformAction spawn path is
+// safe) and set the rig class. FAnimNode_ControlRig::ControlRigClass is a
+// private TSubclassOf<UControlRig> but EditAnywhere (AnimNode_ControlRig.h:56-57),
+// so it is reflection-writable via the same ImportTextOntoStruct path
+// set_anim_graph_node_property uses (the public SetControlRigClass setter is
+// avoided — it resolves ambiguously against a BP-library static). After the
+// class write, ReconstructNode() fires the editor node's CreateCustomPins()
+// (AnimGraphNode_ControlRig.cpp:45), which calls RebuildExposedProperties() and
+// regenerates the rig's input/output pins from its exposed variables.
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleAddAnimControlRigNode(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString ControlRigClassSpec; Params->TryGetStringField(TEXT("control_rig_class"), ControlRigClassSpec);
+	FString SourceNode;          Params->TryGetStringField(TEXT("source_node"), SourceNode);
+	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+
+	if (ControlRigClassSpec.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: control_rig_class"));
+
+	double TempVal;
+	float PosX = 200.f, PosY = 0.f;
+	if (Params->TryGetNumberField(TEXT("position_x"), TempVal)) PosX = static_cast<float>(TempVal);
+	if (Params->TryGetNumberField(TEXT("position_y"), TempVal)) PosY = static_cast<float>(TempVal);
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	// Resolve the Control Rig class up-front so a bad class never spawns a node.
+	FString ClassError;
+	UClass* RigClass = ResolveSingleClassOfType(ControlRigClassSpec, UControlRig::StaticClass(), TEXT("control_rig_class"), ClassError);
+	if (!RigClass) return FMonolithActionResult::Error(ClassError);
+
+	FString GraphError;
+	UEdGraph* TargetGraph = ResolveTargetGraph(ABP, GraphName, StateName, GraphError);
+	if (!TargetGraph) return FMonolithActionResult::Error(GraphError);
+
+	// Spawn the node and (optionally) wire source_node's pose-out into the node's pose input.
+	// FAnimNode_ControlRig's pose input pin is "Source" (FAnimNode_ControlRigBase pose link).
+	UEdGraphNode* Src = nullptr;
+	if (!SourceNode.IsEmpty())
+	{
+		Src = FindNodeByName(ABP, SourceNode, TargetGraph);
+		if (!Src) return FMonolithActionResult::Error(FString::Printf(TEXT("source_node '%s' not found in target graph"), *SourceNode));
+	}
+
+	FString SpawnError;
+	UAnimGraphNode_Base* NewNode = SpawnAndWirePoseInput(
+		TargetGraph, UAnimGraphNode_ControlRig::StaticClass(), PosX, PosY,
+		Src, Src ? FName(TEXT("Source")) : NAME_None, SpawnError);
+	if (!NewNode) return FMonolithActionResult::Error(SpawnError);
+
+	UAnimGraphNode_ControlRig* CRNode = Cast<UAnimGraphNode_ControlRig>(NewNode);
+	if (!CRNode) return FMonolithActionResult::Error(TEXT("Spawned node is not a Control Rig anim node"));
+
+	// Reflection-write the inner FAnimNode_ControlRig.ControlRigClass (private + EditAnywhere).
+	UScriptStruct* NodeStruct = nullptr; void* NodeAddr = nullptr; FString ResolveErr;
+	if (!ResolveInnerAnimNode(NewNode, NodeStruct, NodeAddr, ResolveErr))
+	{
+		return FMonolithActionResult::Error(ResolveErr);
+	}
+
+	GEditor->BeginTransaction(FText::FromString(TEXT("Set Control Rig Class")));
+	NewNode->Modify();
+	FString WriteErr;
+	if (!ImportTextOntoStruct(NodeStruct, NodeAddr, TEXT("ControlRigClass"), RigClass->GetPathName(), NewNode, WriteErr))
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Could not write ControlRigClass on the Control Rig node: %s"), *WriteErr));
+	}
+
+	// ReconstructNode() fires CreateCustomPins() -> RebuildExposedProperties(), regenerating the
+	// rig's IO pins from its exposed variables (AnimGraphNode_ControlRig.cpp:45-50).
+	NewNode->ReconstructNode();
+	GEditor->EndTransaction();
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("node_name"), NewNode->GetName());
+	Root->SetStringField(TEXT("node_class"), NewNode->GetClass()->GetName());
+	Root->SetStringField(TEXT("control_rig_class"), RigClass->GetPathName());
+	Root->SetBoolField(TEXT("pose_input_wired"), Src != nullptr);
+	Root->SetArrayField(TEXT("pins"), BuildPinList(NewNode));
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// Action: add_linked_anim_layer (Group 3)
+//
+// Spawn UAnimGraphNode_LinkedAnimLayer (UCLASS(MinimalAPI) — its SetLayerName /
+// UpdateGuidForLayer / GetLayerName carry no ANIMGRAPH_API, so calling them from
+// this module would LNK2019). The node owns FAnimNode_CustomProperty machinery,
+// so spawn it pristine via FGraphNodeCreator (mirroring SpawnAndWirePoseInput's
+// BoundGraph branch) rather than the template/duplicate path. Then drive it by
+// reflection only:
+//   - inner Node.Layer (FName, EditAnywhere)         AnimNode_LinkedAnimLayer.h:34
+//   - inner Node.Interface (TSubclassOf, UPROPERTY)  AnimNode_LinkedAnimLayer.h:30
+//   - inner Node.InstanceClass (TSubclassOf)         AnimNode_LinkedAnimGraph.h:41
+//   - editor InterfaceGuid (FGuid, UPROPERTY)        AnimGraphNode_LinkedAnimLayer.h:30
+// The Interface + InterfaceGuid are resolved from the ABP's implemented anim-layer
+// interface graph whose name matches layer_name — exactly the engine's own
+// GetInterfaceForLayer / GetGuidForLayer lookup (AnimGraphNode_LinkedAnimLayer.cpp:813,863):
+// walk UBlueprint::ImplementedInterfaces, match InterfaceGraph->GetFName() == layer_name,
+// read InterfaceDesc.Interface (the UAnimLayerInterface subclass) and InterfaceGraph->InterfaceGuid.
+// ReconstructNode() then regenerates the layer's IO pins from the resolved interface.
+// ---------------------------------------------------------------------------
+
+FMonolithActionResult FMonolithAbpWriteActions::HandleAddLinkedAnimLayer(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
+
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	FString LayerName;          Params->TryGetStringField(TEXT("layer_name"), LayerName);
+	FString InterfaceClassSpec; Params->TryGetStringField(TEXT("interface_class"), InterfaceClassSpec);
+	FString InstanceClassSpec;  Params->TryGetStringField(TEXT("instance_class"), InstanceClassSpec);
+	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+
+	if (LayerName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: layer_name"));
+
+	double TempVal;
+	float PosX = 200.f, PosY = 0.f;
+	if (Params->TryGetNumberField(TEXT("position_x"), TempVal)) PosX = static_cast<float>(TempVal);
+	if (Params->TryGetNumberField(TEXT("position_y"), TempVal)) PosY = static_cast<float>(TempVal);
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	// Resolve the interface + GUID from the ABP's implemented anim-layer interface graphs, exactly as
+	// the engine's GetInterfaceForLayer/GetGuidForLayer do: match the interface graph whose name is the
+	// layer name. This also validates that the ABP actually implements a layer with this name.
+	const FName LayerFName(*LayerName);
+	UClass* ResolvedInterfaceClass = nullptr;     // UAnimLayerInterface subclass that declares the layer
+	FGuid   ResolvedGuid;
+	bool    bFoundLayer = false;
+	TArray<FString> AvailableLayers;              // for the not-found error listing
+
+	UClass* RequestedInterface = nullptr;
+	if (!InterfaceClassSpec.IsEmpty())
+	{
+		FString IfaceErr;
+		RequestedInterface = ResolveSingleClassOfType(InterfaceClassSpec, UAnimLayerInterface::StaticClass(), TEXT("interface_class"), IfaceErr);
+		if (!RequestedInterface) return FMonolithActionResult::Error(IfaceErr);
+	}
+
+	for (const FBPInterfaceDescription& InterfaceDesc : ABP->ImplementedInterfaces)
+	{
+		UClass* IfaceClass = InterfaceDesc.Interface;
+		if (!IfaceClass || !IfaceClass->IsChildOf(UAnimLayerInterface::StaticClass()))
+		{
+			continue; // only anim-layer interfaces declare linkable layers
+		}
+		// If interface_class was supplied, only consider that interface's graphs.
+		if (RequestedInterface && IfaceClass != RequestedInterface)
+		{
+			continue;
+		}
+		for (const UEdGraph* InterfaceGraph : InterfaceDesc.Graphs)
+		{
+			if (!InterfaceGraph) continue;
+			AvailableLayers.AddUnique(InterfaceGraph->GetFName().ToString());
+			if (InterfaceGraph->GetFName() == LayerFName)
+			{
+				ResolvedInterfaceClass = IfaceClass;
+				ResolvedGuid = InterfaceGraph->InterfaceGuid;
+				bFoundLayer = true;
+				break;
+			}
+		}
+		if (bFoundLayer) break;
+	}
+
+	if (!bFoundLayer)
+	{
+		if (AvailableLayers.Num() == 0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("AnimBlueprint '%s' implements no anim-layer interface — nothing to link. Add a UAnimLayerInterface and declare the layer first."),
+				*AssetPath));
+		}
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Layer '%s' not found among the implemented anim-layer interface graphs. Available layers: [%s]"),
+			*LayerName, *FString::Join(AvailableLayers, TEXT(", "))));
+	}
+
+	// Optional external instance class (only meaningful for non-self interface layers).
+	UClass* InstanceClass = nullptr;
+	if (!InstanceClassSpec.IsEmpty())
+	{
+		FString InstErr;
+		InstanceClass = ResolveSingleClassOfType(InstanceClassSpec, UAnimInstance::StaticClass(), TEXT("instance_class"), InstErr);
+		if (!InstanceClass) return FMonolithActionResult::Error(InstErr);
+	}
+
+	FString GraphError;
+	UEdGraph* TargetGraph = ResolveTargetGraph(ABP, GraphName, TEXT(""), GraphError);
+	if (!TargetGraph) return FMonolithActionResult::Error(GraphError);
+
+	// Spawn pristine via FGraphNodeCreator — the LinkedAnimLayer custom-property machinery makes the
+	// template/duplicate path unsafe (mirrors SpawnAndWirePoseInput's BoundGraph branch).
+	GEditor->BeginTransaction(FText::FromString(TEXT("Add Linked Anim Layer")));
+	TargetGraph->Modify();
+
+	UAnimGraphNode_LinkedAnimLayer* LayerNode = nullptr;
+	{
+		FGraphNodeCreator<UAnimGraphNode_LinkedAnimLayer> Creator(*TargetGraph);
+		LayerNode = Creator.CreateNode(/*bSelectNewNode=*/false);
+		if (!LayerNode)
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("FGraphNodeCreator failed to create the Linked Anim Layer node"));
+		}
+		LayerNode->NodePosX = static_cast<int32>(PosX);
+		LayerNode->NodePosY = static_cast<int32>(PosY);
+		Creator.Finalize();
+	}
+
+	LayerNode->Modify();
+
+	// Reflection-write the inner FAnimNode_LinkedAnimLayer fields via the proven inner-struct path.
+	UScriptStruct* NodeStruct = nullptr; void* NodeAddr = nullptr; FString ResolveErr;
+	if (!ResolveInnerAnimNode(LayerNode, NodeStruct, NodeAddr, ResolveErr))
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(ResolveErr);
+	}
+
+	FString WriteErr;
+	if (!ImportTextOntoStruct(NodeStruct, NodeAddr, TEXT("Layer"), LayerName, LayerNode, WriteErr))
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Could not write Layer name: %s"), *WriteErr));
+	}
+	// Interface: a non-self layer carries its declaring UAnimLayerInterface subclass.
+	if (ResolvedInterfaceClass)
+	{
+		if (!ImportTextOntoStruct(NodeStruct, NodeAddr, TEXT("Interface"), ResolvedInterfaceClass->GetPathName(), LayerNode, WriteErr))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Could not write Interface class: %s"), *WriteErr));
+		}
+	}
+	// InstanceClass: optional external anim instance (only valid for non-self interface layers).
+	if (InstanceClass)
+	{
+		if (!ImportTextOntoStruct(NodeStruct, NodeAddr, TEXT("InstanceClass"), InstanceClass->GetPathName(), LayerNode, WriteErr))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Could not write InstanceClass: %s"), *WriteErr));
+		}
+	}
+
+	// Keep the editor node's FunctionReference (FMemberReference) in sync with Node.Layer, exactly as
+	// the engine's UAnimGraphNode_LinkedAnimLayer::SetLayerName does (AnimGraphNode_LinkedAnimLayer.cpp:841-855):
+	// an external-interface layer references the layer function on the interface class (with its function
+	// GUID); a self layer is a self member. Without this, GetLayerName()'s
+	// ensure(FunctionReference.GetMemberName() == Node.Layer) (cpp:859) can fire on display and
+	// jump-to-definition won't resolve. FunctionReference is protected on the base node, so build it
+	// locally and copy it through the reflected UPROPERTY. ResolvedInterfaceClass maps to SetLayerName's
+	// GetTargetClass() (non-null = external interface, null = self).
+	{
+		FMemberReference LayerFunctionRef;
+		if (ResolvedInterfaceClass)
+		{
+			FGuid FunctionGuid;
+			FBlueprintEditorUtils::GetFunctionGuidFromClassByFieldName(
+				FBlueprintEditorUtils::GetMostUpToDateClass(ResolvedInterfaceClass), LayerFName, FunctionGuid);
+			LayerFunctionRef.SetExternalMember(LayerFName, ResolvedInterfaceClass, FunctionGuid);
+		}
+		else
+		{
+			LayerFunctionRef.SetSelfMember(LayerFName);
+		}
+
+		if (FStructProperty* FuncRefProp = CastField<FStructProperty>(LayerNode->GetClass()->FindPropertyByName(TEXT("FunctionReference"))))
+		{
+			void* FuncRefAddr = FuncRefProp->ContainerPtrToValuePtr<void>(LayerNode);
+			*static_cast<FMemberReference*>(FuncRefAddr) = LayerFunctionRef;
+		}
+		else
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("Could not locate the FunctionReference UPROPERTY on the Linked Anim Layer node"));
+		}
+	}
+
+	// Reflection-set the editor-node InterfaceGuid UPROPERTY (FGuid has a text form via ExportText).
+	if (FStructProperty* GuidProp = CastField<FStructProperty>(LayerNode->GetClass()->FindPropertyByName(TEXT("InterfaceGuid"))))
+	{
+		void* GuidAddr = GuidProp->ContainerPtrToValuePtr<void>(LayerNode);
+		*static_cast<FGuid*>(GuidAddr) = ResolvedGuid;
+	}
+	else
+	{
+		GEditor->EndTransaction();
+		return FMonolithActionResult::Error(TEXT("Could not locate the InterfaceGuid UPROPERTY on the Linked Anim Layer node"));
+	}
+
+	// ReconstructNode() regenerates the layer's IO pins from the resolved interface
+	// (UAnimGraphNode_LinkedAnimLayer::ReconstructNode override -> CreateCustomPins).
+	LayerNode->ReconstructNode();
+	GEditor->EndTransaction();
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	FKismetEditorUtilities::CompileBlueprint(ABP);
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("node_name"), LayerNode->GetName());
+	Root->SetStringField(TEXT("layer_name"), LayerName);
+	Root->SetStringField(TEXT("interface_class"), ResolvedInterfaceClass ? ResolvedInterfaceClass->GetPathName() : FString(TEXT("<self>")));
+	Root->SetStringField(TEXT("interface_guid"), ResolvedGuid.ToString());
+	Root->SetBoolField(TEXT("guid_resolved"), ResolvedGuid.IsValid());
+	if (InstanceClass) Root->SetStringField(TEXT("instance_class"), InstanceClass->GetPathName());
+	Root->SetArrayField(TEXT("pins"), BuildPinList(LayerNode));
 	Root->SetBoolField(TEXT("saved"), false);
 	return FMonolithActionResult::Success(Root);
 }

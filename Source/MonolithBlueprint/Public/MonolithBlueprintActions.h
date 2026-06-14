@@ -31,6 +31,7 @@ public:
 	static FMonolithActionResult HandleGetFunctionSignature(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetEventDispatcherDetails(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetBlueprintInfo(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleFindVariableReferences(const TSharedPtr<FJsonObject>& Params);
 
 private:
 	static UBlueprint* LoadBlueprint(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath);
