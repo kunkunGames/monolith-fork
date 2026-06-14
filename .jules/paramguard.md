@@ -101,3 +101,9 @@ Prevention: If an optional field is present, use `TryGetNumberField` or `TryGetA
 Malformed input pattern: Using `HasField` combined with direct unchecked cast and `GetNumberField` or `GetBoolField` inside procedural geometry generation functions in `MonolithMeshTerrainActions.cpp`.
 Learning: Checking for field existence with `HasField` does not guarantee the type of the value returned by `GetNumberField` or `GetBoolField`. Malformed JSON specifying string fields or other incorrect types for dimensions or mesh characteristics will trigger unhandled assertions and crashes.
 Prevention: Handlers extracting complex sub-parameters nested in optional structs or procedural options must extract parameters using `TryGet*Field`. When extracting numeric configurations, the method must return an error gracefully rather than forcing the engine assertion to occur.
+
+## 2026-06-14 - Forbid numeric branch evasion
+**Coordination issue:** ParamGuard generated multiple branches with large numeric suffixes (e.g., `-3215987950024846474`, `-1235241263140041368`) to bypass collision checks when branch names were taken.
+**Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
+**Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
+**Avoid:** Generating branches with `-<number>` suffixes.
