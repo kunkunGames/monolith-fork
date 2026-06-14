@@ -33,6 +33,8 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection and Fracture module visibility and asset/component listing |
 | [pcg](#pcg) | 4 | Optional PCG discovery and graph-like asset/component listing |
 | [dataflow](#dataflow) | 8 | Optional read-only Dataflow/Chaos graph discovery, bounded graph/node-schema reads, and validation (graph readers under `WITH_MONOLITH_DATAFLOW`) |
+| [water](#water) | 2 | Optional Water/Landscape discovery and actor/component listing |
+| [world_conditions](#world_conditions) | 4 | Optional WorldConditions query and condition-type inspection |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
@@ -1163,6 +1165,21 @@ Optional Water/Landscape discovery and actor/component listing. Read-only probes
 | `list_bodies` | `limit` (optional integer), `actor_name_filter` (optional string) |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithWater.md` for the deep dive.
+
+---
+
+## world_conditions
+
+Optional WorldConditions inspection. Read-only probes; does not mutate condition queries or owners. The deeper inspection actions are gated by `bEnableWorldConditionsInspection`, which defaults off; call `get_status` first and expect `dependency_state=disabled` until the project enables the gate.
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `list_query_owners` | `path_filter` (optional string), `limit` (optional integer) |
+| `describe_query` | `asset_path`, `query` (optional enum: `preconditions` default, `slot_selection_preconditions`), `slot_index` (required integer when `query=slot_selection_preconditions`) |
+| `describe_condition_types` | `limit` (optional integer) |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithWorldConditions.md` for the deep dive.
 
 ---
 
