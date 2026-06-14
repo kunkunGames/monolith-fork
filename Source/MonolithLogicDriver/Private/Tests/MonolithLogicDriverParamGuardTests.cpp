@@ -599,6 +599,28 @@ bool FMonolithParamGuardLogicDriverAddConduitRejectsMalformedParamsTest::RunTest
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverSetEndStateRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.SetEndStateRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverSetEndStateRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("set_end_state")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// is_end_state as string instead of bool
+	TSharedPtr<FJsonObject> BadIsEndStateParams = MakeShared<FJsonObject>();
+	BadIsEndStateParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadIsEndStateParams->SetStringField(TEXT("node_guid"), TEXT("test-node-guid"));
+	BadIsEndStateParams->SetStringField(TEXT("is_end_state"), TEXT("true"));
+
+	FMonolithActionResult Result1 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("set_end_state"), BadIsEndStateParams);
+	TestTrue(TEXT("set_end_state rejects string is_end_state"), !Result1.bSuccess);
+	TestTrue(TEXT("error mentions is_end_state must be a boolean"), Result1.ErrorMessage.Contains(TEXT("is_end_state")) && Result1.ErrorMessage.Contains(TEXT("must be a boolean")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverAddStateMachineNodeRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.AddStateMachineNodeRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardLogicDriverAddStateMachineNodeRejectsMalformedParamsTest::RunTest(const FString& Parameters)
 {
