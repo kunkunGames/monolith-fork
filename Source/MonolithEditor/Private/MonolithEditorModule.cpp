@@ -4,6 +4,10 @@
 #include "MonolithEditorSelectionActions.h"
 #include "MonolithEditorLevelMetadataActions.h"
 #include "MonolithEditorCrashActions.h"
+#include "MonolithPieInputActions.h"
+#include "MonolithPieObjectActions.h"
+#include "MonolithPieTimeseries.h"
+#include "MonolithStatActions.h"
 #include "MonolithSettingsCustomization.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
@@ -246,6 +250,10 @@ void FMonolithEditorModule::StartupModule()
 		FMonolithEditorSelectionActions::RegisterActions();
 		FMonolithEditorLevelMetadataActions::RegisterActions();
 		FMonolithEditorCrashActions::RegisterActions();  // CrashRecovery: get_last_crash_reason / list_recent_crashes / get_crash_stats
+		FMonolithPieObjectActions::RegisterActions(OwnedRegistry);
+		FMonolithPieTimeseries::RegisterActions(OwnedRegistry);
+		FMonolithPieInputActions::RegisterActions(OwnedRegistry);
+		FMonolithStatActions::RegisterActions(OwnedRegistry);
 	});
 	GMonolithPieTransactionBufferGuard.Register();
 	GMonolithHeadlessLayoutSaveGuard.Register();

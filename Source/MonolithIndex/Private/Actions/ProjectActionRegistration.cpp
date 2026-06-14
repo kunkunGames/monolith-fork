@@ -4,6 +4,7 @@
 #include "Actions/ProjectCleanupGeneratedAssetsAction.h"
 #include "Actions/ProjectDetectChangesAction.h"
 #include "Actions/ProjectDiffSnapshotsAction.h"
+#include "Actions/ProjectExportAssetTextAction.h"
 #include "Actions/ProjectFindByTypeAction.h"
 #include "Actions/ProjectFindReferencesAction.h"
 #include "Actions/ProjectFindUnusedAction.h"
@@ -53,6 +54,7 @@ namespace MonolithIndex
 		RegisterProjectAction<FProjectCleanupGeneratedAssetsAction>(Registry);
 		RegisterProjectAction<FProjectListGameplayTagsAction>(Registry);
 		RegisterProjectAction<FProjectSearchGameplayTagsAction>(Registry);
+		RegisterProjectAction<FProjectExportAssetTextAction>(Registry);
 
 		FAssetCollectionActions::Register(Registry);
 

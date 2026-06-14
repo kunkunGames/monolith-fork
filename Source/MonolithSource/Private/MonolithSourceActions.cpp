@@ -252,6 +252,72 @@ void FMonolithSourceActions::RegisterAll()
 {
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
+		Registry.RegisterAction(TEXT("source"), TEXT("get_include_path"),
+		TEXT("Get the canonical #include path for a symbol (resolves via the owning class header). Public/Classes/Internal headers are includable cross-module; Private headers return includable:false with a same-module note."),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleGetIncludePath),
+		FParamSchemaBuilder()
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("Symbol name (class, struct, or Class::Method)"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("get_signature"),
+		TEXT("Get the declaration signature(s) for a symbol or Class::Method. Reads the declaration line(s) from source (engine class-body methods are not indexed as symbols); strips inline bodies and macro line-continuations. Overloads returned as separate entries."),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleGetSignature),
+		FParamSchemaBuilder()
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("Symbol name or Class::Method"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max overloads to return"), TEXT("10"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("check_deprecations"),
+		TEXT("Batch-check whether symbols are UE_DEPRECATED. Returns per-symbol {deprecated, version, message, kind}. If the deprecation index is empty (schema v2 landed but no reindex yet), returns index_state:\"empty\" with a hint to run source.trigger_reindex."),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleCheckDeprecations),
+		FParamSchemaBuilder()
+			.Required(TEXT("symbols"), TEXT("array"), TEXT("Array of symbol names to check"))
+			.Build());
+
+	// Survivor A (plan §3.A) — annotate the `source_query` namespace dispatcher
+	// as read-only + idempotent. The `trigger_reindex` / `trigger_project_reindex`
+	// actions are conservatively non-destructive (they kick a background sweep
+	// that yields identical results when re-run); every other source action is
+	// pure read. Annotating at the DISPATCHER level (not per-action) per plan
+	// §3.A — the dispatcher tool is what `tools/list` advertises.
+	FMonolithDispatcherAnnotations SourceAnnotations;
+	SourceAnnotations.bReadOnlyHint = true;
+	SourceAnnotations.bDestructiveHint = false;
+	SourceAnnotations.bIdempotentHint = true;
+	SourceAnnotations.Title = TEXT("Source-index query");
+	Registry.SetDispatcherAnnotations(TEXT("source"), SourceAnnotations);
+
+	// Phase 1 actions are pure reads — mark each read-only + idempotent + non-destructive.
+	Registry.SetActionAnnotations(TEXT("source"), TEXT("get_include_path"),  /*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true, TEXT("Get include path"));
+	Registry.SetActionAnnotations(TEXT("source"), TEXT("get_signature"),     /*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true, TEXT("Get signature"));
+	Registry.SetActionAnnotations(TEXT("source"), TEXT("check_deprecations"),/*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true, TEXT("Check deprecations"));
+
+	// --- Phase 2: round-trip compression (items 4-5) ---
+
+	Registry.RegisterAction(TEXT("source"), TEXT("verify_symbols"),
+		TEXT("Batch pre-flight verdict for a list of symbols. Per symbol composes include path, declaration signature, deprecation status, and existence into one record. `exists` for a Class::Method is decided by the owning class row + a source-line declaration hit (engine class-body methods are not indexed as symbols), NOT by symbols-table presence; a missing symbol reports exists:false with no error."),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleVerifySymbols),
+		FParamSchemaBuilder()
+			.Required(TEXT("symbols"), TEXT("array"), TEXT("Array of symbol names or Class::Method strings to verify"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source"), TEXT("find_example_usage"),
+		TEXT("Find real call-site examples of a symbol via full-text search over indexed source lines (pattern `SymbolName(`). Returns ranked snippets with ~3 lines of context. `prefer`: \"engine\" (default — engine Runtime first, then other engine, then project) or \"project\" (flips project ahead). Supports cursor pagination — pass `cursor` from a prior response's `next_cursor`."),
+		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleFindExampleUsage),
+		FParamSchemaBuilder()
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("Symbol name or Class::Method to find usage examples for"))
+			.Optional(TEXT("prefer"), TEXT("string"), TEXT("Ranking preference: engine (default) or project"), TEXT("engine"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max examples per page"), TEXT("10"))
+			.Optional(TEXT("cursor"), TEXT("string"), TEXT("Opaque pagination cursor from a prior next_cursor"))
+			.Build());
+
+	Registry.SetActionAnnotations(TEXT("source"), TEXT("verify_symbols"),     /*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true, TEXT("Verify symbols"));
+	Registry.SetActionAnnotations(TEXT("source"), TEXT("find_example_usage"), /*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true, TEXT("Find example usage"));
+
+	// --- Phase 3: pre-flight lint + stub gen (items 7, 9) ---
+
+	Registry.RegisterAction(TEXT("source"), TEXT("lint_header"),
+		TEXT("Regex-level UHT-gotcha lint of a single header file. Works on UNINDEXED files (a header you just wrote). Deterministic rule table: GENERATED_BODY presence/position, *.generated.h last-include, UCLASS/class-name match, missing <MODULE>_API, UPROPERTY/UFUNCTION in a non-reflected type, invalid specifier token. Returns structured findings {rule_id, line, message, severity}; a clean header returns zero findings."),
 	Registry.RegisterAction(TEXT("source"), TEXT("read_source"),
 		TEXT("Get the implementation source code for a class, function, or struct. If a source file path is supplied via path, delegates to source.read_file."),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleReadSource),
@@ -3777,5 +3843,167 @@ FMonolithActionResult FMonolithSourceActions::HandleGenerateClassStub(const TSha
 	StubContentItem->SetStringField(TEXT("text"), Text);
 	StubContentArr.Add(MakeShared<FJsonValueObject>(StubContentItem));
 	ResultObj->SetArrayField(TEXT("content"), StubContentArr);
+	return FMonolithActionResult::Success(ResultObj);
+}
+
+
+FMonolithActionResult FMonolithSourceActions::HandleGetIncludePath(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB || !DB->IsOpen())
+	{
+		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
+	}
+
+	const FString Symbol = Params->GetStringField(TEXT("symbol"));
+	if (Symbol.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("'symbol' is required."));
+	}
+
+	// For a Class::Method input resolve the include via the OWNING CLASS row — the
+	// method itself need not be a symbol; the file is the class's header regardless.
+	FString LookupName = Symbol;
+	int32 ScopeIdx = Symbol.Find(TEXT("::"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+	if (ScopeIdx != INDEX_NONE)
+	{
+		LookupName = Symbol.Left(ScopeIdx);
+	}
+
+	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(LookupName);
+	if (Symbols.Num() == 0) Symbols = DB->SearchSymbolsFTS(LookupName, 5);
+	if (Symbols.Num() == 0)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("No symbol found matching '%s'."), *Symbol));
+	}
+
+	// Prefer a header file when several rows share the name (e.g. decl + def).
+	const FMonolithSourceSymbol* Chosen = &Symbols[0];
+	for (const FMonolithSourceSymbol& S : Symbols)
+	{
+		const FString P = DB->GetFilePath(S.FileId);
+		if (P.EndsWith(TEXT(".h")))
+		{
+			Chosen = &S;
+			break;
+		}
+	}
+
+	const FString FilePath = DB->GetFilePath(Chosen->FileId);
+	bool bIncludable = true;
+	FString Warning;
+	const FString Include = DeriveIncludePath(FilePath, bIncludable, Warning);
+
+	FString ModuleName, BuildCsPath;
+	DB->GetFileModuleInfo(Chosen->FileId, ModuleName, BuildCsPath);
+	FString BuildCsNote;
+	if (!ModuleName.IsEmpty())
+	{
+		BuildCsNote = BuildCsPath.IsEmpty()
+			? FString::Printf(TEXT("Module '%s' — add to your Build.cs deps"), *ModuleName)
+			: FString::Printf(TEXT("Module '%s' — add to your Build.cs deps (%s)"), *ModuleName, *FPaths::GetCleanFilename(BuildCsPath));
+	}
+
+	auto ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetStringField(TEXT("include"), Include);
+	ResultObj->SetBoolField(TEXT("includable"), bIncludable);
+	if (!ModuleName.IsEmpty()) ResultObj->SetStringField(TEXT("module"), ModuleName);
+	if (!BuildCsNote.IsEmpty()) ResultObj->SetStringField(TEXT("build_cs_note"), BuildCsNote);
+	if (!Warning.IsEmpty()) ResultObj->SetStringField(TEXT("warning"), Warning);
+
+	// Human-readable content envelope, matching the other source handlers.
+	FString Text = FString::Printf(TEXT("#include \"%s\""), *Include);
+	if (!ModuleName.IsEmpty()) Text += FString::Printf(TEXT("\nModule: %s"), *ModuleName);
+	if (!BuildCsNote.IsEmpty()) Text += FString::Printf(TEXT("\n%s"), *BuildCsNote);
+	if (!Warning.IsEmpty()) Text += FString::Printf(TEXT("\nWARNING: %s"), *Warning);
+
+	TArray<TSharedPtr<FJsonValue>> ContentArr;
+	auto ContentItem = MakeShared<FJsonObject>();
+	ContentItem->SetStringField(TEXT("type"), TEXT("text"));
+	ContentItem->SetStringField(TEXT("text"), Text);
+	ContentArr.Add(MakeShared<FJsonValueObject>(ContentItem));
+	ResultObj->SetArrayField(TEXT("content"), ContentArr);
+	return FMonolithActionResult::Success(ResultObj);
+}
+
+
+
+FMonolithActionResult FMonolithSourceActions::HandleCheckDeprecations(const TSharedPtr<FJsonObject>& Params)
+{
+	FMonolithSourceDatabase* DB = GetDB();
+	if (!DB || !DB->IsOpen())
+	{
+		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
+	}
+
+	// Collect the requested symbol names (array of strings).
+	TArray<FString> SymbolNames;
+	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+	if (Params->TryGetArrayField(TEXT("symbols"), Arr) && Arr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Arr)
+		{
+			FString S;
+			if (V.IsValid() && V->TryGetString(S) && !S.IsEmpty())
+			{
+				SymbolNames.Add(S);
+			}
+		}
+	}
+	if (SymbolNames.Num() == 0)
+	{
+		return FMonolithActionResult::Error(TEXT("'symbols' must be a non-empty array of symbol names."));
+	}
+
+	auto ResultObj = MakeShared<FJsonObject>();
+
+	// Decision 3: empty deprecation index -> clean "empty" state, no verdicts.
+	if (DB->GetDeprecationCount() == 0)
+	{
+		ResultObj->SetStringField(TEXT("index_state"), TEXT("empty"));
+		ResultObj->SetStringField(TEXT("hint"), TEXT("run source.trigger_reindex"));
+
+		TArray<TSharedPtr<FJsonValue>> ContentArr;
+		auto ContentItem = MakeShared<FJsonObject>();
+		ContentItem->SetStringField(TEXT("type"), TEXT("text"));
+		ContentItem->SetStringField(TEXT("text"),
+			TEXT("Deprecation index is empty (schema v2 landed but not yet populated). Run source.trigger_reindex to populate it."));
+		ContentArr.Add(MakeShared<FJsonValueObject>(ContentItem));
+		ResultObj->SetArrayField(TEXT("content"), ContentArr);
+		return FMonolithActionResult::Success(ResultObj);
+	}
+
+	TMap<FString, FMonolithDeprecationRow> Deprecated = DB->GetDeprecationsBatch(SymbolNames);
+
+	TArray<TSharedPtr<FJsonValue>> Verdicts;
+	TArray<FString> TextLines;
+	for (const FString& Name : SymbolNames)
+	{
+		auto Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("symbol"), Name);
+		const FMonolithDeprecationRow* Found = Deprecated.Find(Name);
+		if (Found)
+		{
+			Obj->SetBoolField(TEXT("deprecated"), true);
+			Obj->SetStringField(TEXT("version"), Found->Version);
+			Obj->SetStringField(TEXT("message"), Found->Message);
+			Obj->SetStringField(TEXT("kind"), Found->Kind);
+			TextLines.Add(FString::Printf(TEXT("%s: DEPRECATED (%s) [%s] %s"), *Name, *Found->Version, *Found->Kind, *Found->Message));
+		}
+		else
+		{
+			Obj->SetBoolField(TEXT("deprecated"), false);
+			TextLines.Add(FString::Printf(TEXT("%s: not deprecated"), *Name));
+		}
+		Verdicts.Add(MakeShared<FJsonValueObject>(Obj));
+	}
+	ResultObj->SetArrayField(TEXT("results"), Verdicts);
+
+	TArray<TSharedPtr<FJsonValue>> ContentArr;
+	auto ContentItem = MakeShared<FJsonObject>();
+	ContentItem->SetStringField(TEXT("type"), TEXT("text"));
+	ContentItem->SetStringField(TEXT("text"), FString::Join(TextLines, TEXT("\n")));
+	ContentArr.Add(MakeShared<FJsonValueObject>(ContentItem));
+	ResultObj->SetArrayField(TEXT("content"), ContentArr);
 	return FMonolithActionResult::Success(ResultObj);
 }
