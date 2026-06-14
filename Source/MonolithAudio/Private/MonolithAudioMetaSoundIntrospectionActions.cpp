@@ -114,6 +114,7 @@ namespace
 		bool bOutgoing)
 	{
 		TArray<const FMetasoundFrontendEdge*> Out;
+		Out.Reserve(Graph.Edges.Num());
 		for (const FMetasoundFrontendEdge& Edge : Graph.Edges)
 		{
 			if (bIncoming && Edge.ToNodeID == NodeId)

@@ -1241,6 +1241,7 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ListMetaSoundConnections(c
 	const FMetasoundFrontendGraph& DefaultGraph = Doc.RootGraph.GetConstDefaultGraph();
 
 	TArray<TSharedPtr<FJsonValue>> ConnectionsJson;
+	ConnectionsJson.Reserve(DefaultGraph.Edges.Num());
 	for (const FMetasoundFrontendEdge& Edge : DefaultGraph.Edges)
 	{
 		auto EdgeJson = MakeShared<FJsonObject>();
