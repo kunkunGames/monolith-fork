@@ -4,6 +4,7 @@
 #include "AssetRegistry/IAssetRegistry.h"
 #include "AssetRegistry/AssetData.h"
 #include "Misc/PackageName.h"
+#include "UObject/ObjectRedirector.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UObjectHash.h"
 #include "UObject/Package.h"
@@ -69,6 +70,25 @@ UObject* FMonolithAssetUtils::LoadAssetByPath(UClass* ExpectedClass, const FStri
 	}
 
 	UClass* LookupClass = ExpectedClass ? ExpectedClass : UObject::StaticClass();
+	const bool bResolveTypedRedirectors = ExpectedClass && ExpectedClass != UObject::StaticClass();
+	auto TryResolveTypedRedirector = [ExpectedClass, bResolveTypedRedirectors](UObject* Object) -> UObject*
+	{
+		if (!bResolveTypedRedirectors)
+		{
+			return nullptr;
+		}
+
+		if (UObjectRedirector* Redirector = Cast<UObjectRedirector>(Object))
+		{
+			UObject* Destination = Redirector->DestinationObject;
+			if (Destination && Destination->IsA(ExpectedClass))
+			{
+				return Destination;
+			}
+		}
+
+		return nullptr;
+	};
 
 	// -------------------------------------------------------------------------
 	// Tier 1: Normalize. ResolveAssetPath handles /Content/->/Game/, relative
@@ -107,9 +127,9 @@ UObject* FMonolithAssetUtils::LoadAssetByPath(UClass* ExpectedClass, const FStri
 
 	// -------------------------------------------------------------------------
 	// Tier 2: AssetRegistry — authoritative for class match. Class mismatch is
-	// terminal (do NOT fall through to disk — would silently load wrong-class
-	// object at the same path). Reflects the editor's current ground truth and
-	// avoids stale RF_Standalone ghosts that StaticLoadObject can return.
+	// terminal except typed redirectors, which may point to the requested class.
+	// Do NOT fall through to disk for other mismatches: that would silently load
+	// wrong-class objects at the same path and can return stale RF_Standalone ghosts.
 	// -------------------------------------------------------------------------
 	if (IAssetRegistry* AR = IAssetRegistry::Get())
 	{
@@ -121,6 +141,10 @@ UObject* FMonolithAssetUtils::LoadAssetByPath(UClass* ExpectedClass, const FStri
 				if (!ExpectedClass || Loaded->IsA(ExpectedClass))
 				{
 					return Loaded;
+				}
+				if (UObject* Redirected = TryResolveTypedRedirector(Loaded))
+				{
+					return Redirected;
 				}
 				// Class mismatch in registry — authoritative, do NOT fall through.
 				return nullptr;
@@ -141,6 +165,10 @@ UObject* FMonolithAssetUtils::LoadAssetByPath(UClass* ExpectedClass, const FStri
 			{
 				return Found;
 			}
+			if (UObject* Redirected = TryResolveTypedRedirector(Found))
+			{
+				return Redirected;
+			}
 			// In-memory class mismatch is also terminal.
 			return nullptr;
 		}
@@ -157,6 +185,10 @@ UObject* FMonolithAssetUtils::LoadAssetByPath(UClass* ExpectedClass, const FStri
 		{
 			return DiskObj;
 		}
+		if (UObject* Redirected = TryResolveTypedRedirector(DiskObj))
+		{
+			return Redirected;
+		}
 	}
 
 	if (ExpectedClass && ExpectedClass != UObject::StaticClass())
@@ -166,6 +198,10 @@ UObject* FMonolithAssetUtils::LoadAssetByPath(UClass* ExpectedClass, const FStri
 			if (DiskObj2->IsA(ExpectedClass))
 			{
 				return DiskObj2;
+			}
+			if (UObject* Redirected = TryResolveTypedRedirector(DiskObj2))
+			{
+				return Redirected;
 			}
 		}
 	}

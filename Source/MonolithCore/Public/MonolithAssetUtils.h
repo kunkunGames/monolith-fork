@@ -25,9 +25,10 @@ public:
 	 * Tier 2: AssetRegistry — class match authoritative; class mismatch is terminal (no disk fall-through).
 	 * Tier 3: FindPackage + FindObject — catches freshly-created unsaved assets in this session.
 	 * Tier 4: StaticLoadObject — disk fallback. Retries with UObject::StaticClass() if class-typed call fails.
+	 * Typed loads resolve UObjectRedirector destinations when the destination matches ExpectedClass.
 	 *
-	 * Returns nullptr on miss, on class mismatch in tiers 2/3, and on bogus path.
-	 * Class-mismatch returns nullptr (does NOT silently load wrong-class objects at the same path).
+	 * Returns nullptr on miss, non-redirector class mismatch in tiers 2/3, and bogus path.
+	 * Class mismatch returns nullptr instead of silently loading wrong-class objects at the same path.
 	 */
 	static UObject* LoadAssetByPath(UClass* ExpectedClass, const FString& AssetPath);
 
