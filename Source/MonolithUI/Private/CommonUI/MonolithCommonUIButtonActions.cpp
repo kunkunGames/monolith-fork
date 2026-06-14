@@ -1280,6 +1280,7 @@ namespace MonolithCommonUIButton
 		if (UPanelWidget* OldPanel = Cast<UPanelWidget>(OldRoot))
 		{
 			OldPanel->Modify();
+			Children.Reserve(OldPanel->GetChildrenCount());
 			for (int32 i = 0; i < OldPanel->GetChildrenCount(); ++i)
 			{
 				if (UWidget* Child = OldPanel->GetChildAt(i))
