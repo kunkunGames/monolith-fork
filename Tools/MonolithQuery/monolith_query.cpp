@@ -4703,6 +4703,14 @@ static void emit_param_error(const std::string& message) {
     std::cout << out.dump(2) << std::endl;
 }
 
+static void emit_invalid_params_error(const std::string& message) {
+    ojson out;
+    out["success"] = false;
+    out["error"] = message;
+    out["error_code"] = "INVALID_PARAMS";
+    std::cout << out.dump(2) << std::endl;
+}
+
 // Emit a missing-table error per spec §0.7.
 static void emit_missing_table(const std::string& table) {
     ojson out;
@@ -4717,6 +4725,35 @@ static int clamp_limit(const Args& args) {
     if (limit < 1) limit = 1;
     if (limit > 200) limit = 200;
     return limit;
+}
+
+static bool validate_cppreflect_limit(const Args& args, int& limit) {
+    auto it = args.options.find("limit");
+    if (it == args.options.end() || it->second.empty()) {
+        limit = 50;
+        return true;
+    }
+
+    try {
+        std::size_t parsed = 0;
+        limit = std::stoi(it->second, &parsed);
+        if (parsed != it->second.size()) {
+            emit_invalid_params_error("`limit` must be a number.");
+            return false;
+        }
+    } catch (...) {
+        emit_invalid_params_error("`limit` must be a number.");
+        return false;
+    }
+
+    constexpr int HARD_CAP = 200;
+    if (limit < 1 || limit > HARD_CAP) {
+        emit_invalid_params_error("`limit` (" + std::to_string(limit) +
+                                  ") exceeds the allowed bounds [1, " +
+                                  std::to_string(HARD_CAP) + "].");
+        return false;
+    }
+    return true;
 }
 
 // COUNT(*) helper.
@@ -4929,7 +4966,8 @@ public:
         std::string class_name = args.opt("class_name");
         if (class_name.empty() && !args.positional.empty()) class_name = args.positional[0];
         bool bp_only = args.opt_bool("blueprint_visible_only", false);
-        int limit = clamp_limit(args);
+        int limit = 50;
+        if (!validate_cppreflect_limit(args, limit)) return;
 
         uint32_t qh = compute_filter_hash({class_name, bp_only ? "1" : "0"});
         int32_t page = 0, cached_total = -1; bool has_cursor = false;
@@ -4982,7 +5020,8 @@ public:
         std::string class_name = args.opt("class_name");
         if (class_name.empty() && !args.positional.empty()) class_name = args.positional[0];
         bool bp_only = args.opt_bool("blueprint_callable_only", false);
-        int limit = clamp_limit(args);
+        int limit = 50;
+        if (!validate_cppreflect_limit(args, limit)) return;
 
         uint32_t qh = compute_filter_hash({class_name, bp_only ? "1" : "0"});
         int32_t page = 0, cached_total = -1; bool has_cursor = false;
@@ -5097,11 +5136,6 @@ public:
         if (spec.empty()) { emit_param_error("`specifier_name` is required."); return; }
         if (!table_exists(db, "reflect_uclasses")) { emit_missing_table("reflect_uclasses"); return; }
 
-        int limit = clamp_limit(args);
-        uint32_t qh = compute_filter_hash({spec});
-        int32_t page = 0, cached_total = -1; bool has_cursor = false;
-        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
-
         std::string spec_lower = to_lower_copy(spec);
 
         // DROPPED tokens: no SQL, immediate note + known_tokens.
@@ -5123,6 +5157,12 @@ public:
             std::cout << out.dump(2) << std::endl;
             return;
         }
+
+        int limit = 50;
+        if (!validate_cppreflect_limit(args, limit)) return;
+        uint32_t qh = compute_filter_hash({spec});
+        int32_t page = 0, cached_total = -1; bool has_cursor = false;
+        if (!resolve_page(args, qh, page, cached_total, has_cursor)) return;
 
         // ALIAS.
         std::string effective = spec;

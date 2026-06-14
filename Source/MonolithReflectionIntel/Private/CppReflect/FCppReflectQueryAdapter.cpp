@@ -559,13 +559,26 @@ FMonolithActionResult FCppReflectQueryAdapter::HandleListUProperties(const TShar
 		? Params->GetStringField(TEXT("class_name")) : FString();
 	const bool bBpOnly = Params->HasField(TEXT("blueprint_visible_only"))
 		? Params->GetBoolField(TEXT("blueprint_visible_only")) : false;
-	const int32 ReqLimit = Params->HasField(TEXT("limit"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
+
+	double LimitDouble = 50.0;
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("`limit` must be a number."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+
+	constexpr int32 HARD_CAP = 200;
+	if (ReqLimit > HARD_CAP || ReqLimit < 1)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("`limit` (%d) exceeds the allowed bounds [1, %d]."), ReqLimit, HARD_CAP),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	const FString CursorIn = Params->HasField(TEXT("cursor"))
 		? Params->GetStringField(TEXT("cursor")) : FString();
 
-	constexpr int32 HARD_CAP = 200;
-	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
+	const int32 Limit = ReqLimit;
 	const uint32 FilterHash = RIComputeFilterHash({ ClassName, bBpOnly ? TEXT("1") : TEXT("0") });
 
 	int32 Page = 0;
@@ -673,13 +686,26 @@ FMonolithActionResult FCppReflectQueryAdapter::HandleListUFunctions(const TShare
 		? Params->GetStringField(TEXT("class_name")) : FString();
 	const bool bBpOnly = Params->HasField(TEXT("blueprint_callable_only"))
 		? Params->GetBoolField(TEXT("blueprint_callable_only")) : false;
-	const int32 ReqLimit = Params->HasField(TEXT("limit"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
+
+	double LimitDouble = 50.0;
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("`limit` must be a number."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+
+	constexpr int32 HARD_CAP = 200;
+	if (ReqLimit > HARD_CAP || ReqLimit < 1)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("`limit` (%d) exceeds the allowed bounds [1, %d]."), ReqLimit, HARD_CAP),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	const FString CursorIn = Params->HasField(TEXT("cursor"))
 		? Params->GetStringField(TEXT("cursor")) : FString();
 
-	constexpr int32 HARD_CAP = 200;
-	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
+	const int32 Limit = ReqLimit;
 	const uint32 FilterHash = RIComputeFilterHash({ ClassName, bBpOnly ? TEXT("1") : TEXT("0") });
 
 	int32 Page = 0;
@@ -897,13 +923,25 @@ FMonolithActionResult FCppReflectQueryAdapter::HandleFindClassSpecifier(const TS
 		EffectiveToken = TEXT("IsBlueprintBase");
 	}
 
-	const int32 ReqLimit = Params->HasField(TEXT("limit"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
+	double LimitDouble = 50.0;
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("`limit` must be a number."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+
+	constexpr int32 HARD_CAP = 200;
+	if (ReqLimit > HARD_CAP || ReqLimit < 1)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("`limit` (%d) exceeds the allowed bounds [1, %d]."), ReqLimit, HARD_CAP),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	const FString CursorIn = Params->HasField(TEXT("cursor"))
 		? Params->GetStringField(TEXT("cursor")) : FString();
 
-	constexpr int32 HARD_CAP = 200;
-	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
+	const int32 Limit = ReqLimit;
 	const uint32 FilterHash = RIComputeFilterHash({ SpecifierName });
 
 	int32 Page = 0;

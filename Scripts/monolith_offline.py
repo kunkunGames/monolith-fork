@@ -297,6 +297,18 @@ def clamp_limit(limit) -> int:
     return v
 
 
+def validate_cppreflect_limit(limit):
+    try:
+        v = int(limit)
+    except Exception:
+        emit_error("`limit` must be a number.", "INVALID_PARAMS")
+        return None
+    if v < 1 or v > HARD_CAP:
+        emit_error(f"`limit` ({v}) exceeds the allowed bounds [1, {HARD_CAP}].", "INVALID_PARAMS")
+        return None
+    return v
+
+
 # ============================================================
 # Float sentinel — UE serializes every numeric JSON field via
 # TJsonPrintPolicy::WriteDouble == FString::Printf("%.17g", Value) (JsonPrintPolicy.h:70).
@@ -1156,7 +1168,9 @@ class ReflectionActions:
         class_name = (getattr(args, "class_name", None) or
                       getattr(args, "class_name_pos", None) or "")
         bp_only = bool(getattr(args, "blueprint_visible_only", False))
-        limit = clamp_limit(args.limit)
+        limit = validate_cppreflect_limit(args.limit)
+        if limit is None:
+            return
         fh = compute_filter_hash([class_name, "1" if bp_only else "0"])
 
         try:
@@ -1201,7 +1215,9 @@ class ReflectionActions:
         class_name = (getattr(args, "class_name", None) or
                       getattr(args, "class_name_pos", None) or "")
         bp_only = bool(getattr(args, "blueprint_callable_only", False))
-        limit = clamp_limit(args.limit)
+        limit = validate_cppreflect_limit(args.limit)
+        if limit is None:
+            return
         fh = compute_filter_hash([class_name, "1" if bp_only else "0"])
 
         try:
@@ -1303,15 +1319,6 @@ class ReflectionActions:
         if not self._require_table("reflect_uclasses"):
             return
         specifier_name = args.specifier_name
-        limit = clamp_limit(args.limit)
-        fh = compute_filter_hash([specifier_name])
-
-        try:
-            page, had_cursor = resolve_page(getattr(args, "cursor", None) or "", fh)
-        except CursorError as e:
-            emit_error(e.reason, "INVALID_CURSOR")
-            return
-
         spec_lower = specifier_name.lower()
 
         # Dropped tokens — never stored in the flags vocabulary.
@@ -1328,6 +1335,17 @@ class ReflectionActions:
                 "note": note,
                 "known_tokens": known,
             })
+            return
+
+        limit = validate_cppreflect_limit(args.limit)
+        if limit is None:
+            return
+        fh = compute_filter_hash([specifier_name])
+
+        try:
+            page, had_cursor = resolve_page(getattr(args, "cursor", None) or "", fh)
+        except CursorError as e:
+            emit_error(e.reason, "INVALID_CURSOR")
             return
 
         effective = specifier_name
