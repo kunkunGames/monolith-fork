@@ -296,7 +296,6 @@ python Scripts/monolith_offline.py <namespace> <action> [args...]
 | Script | Role |
 |--------|------|
 | `Scripts/verify_offline_parity.py` | HARD-GATE parity guard — byte-diffs exe vs py across all 20 RI actions; exits non-zero on any diff. `make_release.ps1` runs it as a ship gate. |
-| `Scripts/check_offline_exe_fresh.py` | Staleness guard — compares the exe's `--version` `source_hash` against a fresh hash of `monolith_query.cpp`; flags a stale exe. |
 | `Tools/MonolithQuery/build.bat` | Injects `SOURCE_HASH` (certutil SHA256 of the source) into the exe via `/DSOURCE_HASH`. |
 
 `make_release.ps1` now builds the exe fresh (vcvars + `build.bat`) before the Binaries copy, then runs the parity guard — a stale or drifted exe can never ship. The 20-action RI parity is the scope verified this sprint; the source/project namespaces share the same engine but were not re-audited for byte-parity in this pass.
