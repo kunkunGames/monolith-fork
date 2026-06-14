@@ -3385,6 +3385,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleListCurves(const TSharedP
 			if (bIncludeKeys)
 			{
 				TArray<TSharedPtr<FJsonValue>> KeysArray;
+				KeysArray.Reserve(Keys.Num());
 				for (const FRichCurveKey& Key : Keys)
 				{
 					TSharedPtr<FJsonObject> KeyObj = MakeShared<FJsonObject>();
