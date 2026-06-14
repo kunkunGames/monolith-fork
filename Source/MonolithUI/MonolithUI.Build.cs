@@ -3,6 +3,30 @@ using System.IO;
 
 public class MonolithUI : ModuleRules
 {
+    private static bool HasPluginDir(string BaseDir, string PluginName)
+    {
+        if (!Directory.Exists(BaseDir))
+        {
+            return false;
+        }
+
+        if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
+        {
+            return true;
+        }
+
+        string[] Dirs = Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly);
+        foreach (string Dir in Dirs)
+        {
+            if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public MonolithUI(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -77,36 +101,22 @@ public class MonolithUI : ModuleRules
             if (Target.ProjectFile != null)
             {
                 string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-                if (Directory.Exists(ProjectPluginsDir))
-                {
-                    bHasCommonUI = Directory.Exists(Path.Combine(ProjectPluginsDir, "CommonUI"))
-                        || HasCommonUIVariantDir(ProjectPluginsDir);
-                }
+                bHasCommonUI = HasPluginDir(ProjectPluginsDir, "CommonUI");
             }
 
             if (!bHasCommonUI)
             {
                 string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
                 string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
-                if (Directory.Exists(MarketplaceDir))
-                {
-                    bHasCommonUI = Directory.Exists(Path.Combine(MarketplaceDir, "CommonUI"))
-                        || HasCommonUIVariantDir(MarketplaceDir);
-                }
+                bHasCommonUI = HasPluginDir(MarketplaceDir, "CommonUI");
 
                 if (!bHasCommonUI)
                 {
                     string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-                    if (Directory.Exists(EnginePluginsDir))
-                    {
-                        bHasCommonUI = Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "CommonUI"))
-                            || Directory.Exists(Path.Combine(EnginePluginsDir, "Developer", "CommonUI"))
-                            || Directory.Exists(Path.Combine(EnginePluginsDir, "Experimental", "CommonUI"))
-                            || HasCommonUIVariantDir(Path.Combine(EnginePluginsDir, "Runtime"))
-                            || HasCommonUIVariantDir(Path.Combine(EnginePluginsDir, "Developer"))
-                            || HasCommonUIVariantDir(Path.Combine(EnginePluginsDir, "Experimental"))
-                            || HasCommonUIVariantDir(EnginePluginsDir);
-                    }
+                    bHasCommonUI = HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "CommonUI")
+                        || HasPluginDir(Path.Combine(EnginePluginsDir, "Developer"), "CommonUI")
+                        || HasPluginDir(Path.Combine(EnginePluginsDir, "Experimental"), "CommonUI")
+                        || HasPluginDir(EnginePluginsDir, "CommonUI");
                 }
             }
         }
@@ -120,25 +130,5 @@ public class MonolithUI : ModuleRules
         {
             PublicDefinitions.Add("WITH_COMMONUI=0");
         }
-    }
-
-    // A "CommonUI_*" sibling (e.g. a suffixed Fab/marketplace install) only counts
-    // when the directory actually contains the CommonUI plugin descriptor. Scratch
-    // folders like Plugins/CommonUI_Backup must not force a CommonUI/CommonInput
-    // module dependency that UBT cannot resolve.
-    private static bool HasCommonUIVariantDir(string ParentDir)
-    {
-        if (!Directory.Exists(ParentDir))
-        {
-            return false;
-        }
-        foreach (string Dir in Directory.GetDirectories(ParentDir, "CommonUI_*", SearchOption.TopDirectoryOnly))
-        {
-            if (File.Exists(Path.Combine(Dir, "CommonUI.uplugin")))
-            {
-                return true;
-            }
-        }
-        return false;
     }
 }
