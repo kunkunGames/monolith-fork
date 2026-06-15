@@ -1608,6 +1608,12 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListBindings(const TSharedP
 	KindFilter = KindFilter.ToLower();
 	const bool bFilterByKind = !KindFilter.IsEmpty() && KindFilter != TEXT("all");
 
+	if (bFilterByKind && KindFilter != TEXT("possessable") && KindFilter != TEXT("spawnable") && KindFilter != TEXT("replaceable") && KindFilter != TEXT("custom"))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Unknown kind '%s'. Valid: possessable, spawnable, replaceable, custom, all"), *KindFilter));
+	}
+
 	// level_sequence_bindings stores ls_asset_id (the AssetId at index time) but
 	// callers query by ls_path. The directors table provides the bridge. For LS
 	// without a Director, fall back to looking up assets.path → assets.id.
