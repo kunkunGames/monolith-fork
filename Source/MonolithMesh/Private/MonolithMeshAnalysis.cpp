@@ -553,6 +553,7 @@ bool MonolithMeshAnalysis::FindNavPath(UWorld* World, const FVector& Start, cons
 	OutPoints.Empty();
 	OutDistance = 0.0;
 	const TArray<FNavPathPoint>& PathPts = PathResult.Path->GetPathPoints();
+	OutPoints.Reserve(PathPts.Num());
 
 	for (int32 i = 0; i < PathPts.Num(); ++i)
 	{
