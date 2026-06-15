@@ -3,12 +3,21 @@
 #include "Actions/ProjectGetSavedAssetStateAction.h"
 #include "Actions/ProjectFindReferencesAction.h"
 #include "Actions/ProjectFindByTypeAction.h"
+#include "Actions/ProjectFindUnusedAction.h"
 #include "Dom/JsonObject.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectIndexParamGuardTest, "Monolith.ParamGuard.ProjectIndex.MalformedInput", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FProjectIndexParamGuardTest::RunTest(const FString& Parameters)
 {
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("limit"), TEXT("not_a_number"));
+		FMonolithActionResult Result = FProjectFindUnusedAction::Execute(Params);
+		TestFalse(TEXT("FindUnused: Reject wrong type for limit"), Result.bSuccess);
+		TestEqual(TEXT("FindUnused: Error code for limit"), Result.ErrorCode, -32602);
+	}
+
 	{
 		auto Params = MakeShared<FJsonObject>();
 		Params->SetNumberField(TEXT("asset_path"), 12345);

@@ -13,10 +13,31 @@ FMonolithActionResult FProjectFindUnusedAction::Execute(const TSharedPtr<FJsonOb
 		return FMonolithActionResult::Error(TEXT("Index subsystem/database not available"));
 	}
 
-	return FMonolithActionResult::Success(FMonolithIndexReview::FindUnused(*Db,
-		FMonolithIndexReview::PStr(Params, TEXT("kind"), TEXT("all")),
-		FMonolithIndexReview::PInt(Params, TEXT("limit"), 100),
-		FMonolithIndexReview::PStr(Params, TEXT("min_confidence"), TEXT("low"))));
+	FString Kind = TEXT("all");
+	if (Params->HasField(TEXT("kind")) && !Params->TryGetStringField(TEXT("kind"), Kind))
+	{
+		return FMonolithActionResult::Error(TEXT("'kind' parameter must be a string"), -32602);
+	}
+
+	int32 Limit = 100;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
+		}
+		Limit = static_cast<int32>(LimitValue);
+	}
+	Limit = FMath::Clamp(Limit, 1, 1000);
+
+	FString MinConfidence = TEXT("low");
+	if (Params->HasField(TEXT("min_confidence")) && !Params->TryGetStringField(TEXT("min_confidence"), MinConfidence))
+	{
+		return FMonolithActionResult::Error(TEXT("'min_confidence' parameter must be a string"), -32602);
+	}
+
+	return FMonolithActionResult::Success(FMonolithIndexReview::FindUnused(*Db, Kind, Limit, MinConfidence));
 }
 
 TSharedPtr<FJsonObject> FProjectFindUnusedAction::GetSchema()
