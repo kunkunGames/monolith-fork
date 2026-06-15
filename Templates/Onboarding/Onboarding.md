@@ -98,7 +98,7 @@ Use this when the client should launch the Monolith proxy process. The onboardin
 After connecting, verify with `monolith_status()` before calling editor-backed actions. If the MCP endpoint is unreachable in the Go checkout, start the project-owned headless editor wrapper and reconnect:
 
 ```powershell
-D:\P4\game\BatchFiles\RunHeadlessEditor.bat
+<project-root>\BatchFiles\RunHeadlessEditor.bat
 ```
 
 `Plugins\Monolith\Scripts\recover_mcp.ps1` runs that recovery deterministically (probe `/health`, launch the wrapper when no editor-server instance exists, wait, report `RESULT=` plus exit code); see `Docs/specs/SPEC_MonolithAgentOpsScripts.md`.

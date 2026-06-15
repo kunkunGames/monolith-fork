@@ -7,7 +7,7 @@
 When an agent needs to start the editor for Monolith MCP instead of attaching to an already-running editor, prefer a project-owned batch wrapper rather than Monolith-specific editor arguments. For the Go project this is:
 
 ```powershell
-D:\P4\game\BatchFiles\RunHeadlessEditor.bat
+<project-root>\BatchFiles\RunHeadlessEditor.bat
 ```
 
 Keep the MCP client configuration on the existing Monolith proxy command. This batch is only for starting the editor-side server when no suitable editor is already running. It resolves `UnrealEditor.exe` from the `.uproject` and launches the full editor with rendering disabled by default (`-NullRHI`) plus generic unattended args. It should not pass Monolith-specific editor args; Monolith MCP server enablement and port come from normal config. Do not add `-NoP4` if project workflows need P4/source control.
