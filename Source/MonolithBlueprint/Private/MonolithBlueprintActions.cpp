@@ -2445,8 +2445,8 @@ FMonolithActionResult FMonolithBlueprintActions::HandleFindVariableReferences(co
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	FString VarNameStr = Params->GetStringField(TEXT("variable_name"));
-	if (VarNameStr.IsEmpty())
+	FString VarNameStr;
+	if (!Params->TryGetStringField(TEXT("variable_name"), VarNameStr) || VarNameStr.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: variable_name"));
 	}
