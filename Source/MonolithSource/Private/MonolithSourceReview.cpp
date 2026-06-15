@@ -1,5 +1,6 @@
 #include "MonolithSourceReview.h"
 #include "MonolithSourceDatabase.h"
+#include "MonolithFuzzyMatch.h"
 #include "Dom/JsonValue.h"
 #include <initializer_list>
 
@@ -14,6 +15,11 @@ namespace
 		return EdgeKinds.Contains(Kind);
 	}
 
+	FString PathStatus(const FString& Path)
+	{
+		return Path.IsEmpty() || Path == TEXT("<unknown>") ? TEXT("missing") : TEXT("known");
+	}
+
 	TSharedPtr<FJsonObject> SymbolJson(FMonolithSourceDatabase& Db, int64 SymId, int32 Depth)
 	{
 		const TOptional<FMonolithSourceSymbol> S = Db.GetSymbolById(SymId);
@@ -23,7 +29,9 @@ namespace
 		O->SetStringField(TEXT("name"), S->Name);
 		O->SetStringField(TEXT("qualified_name"), S->QualifiedName);
 		O->SetStringField(TEXT("kind"), S->Kind);
-		O->SetStringField(TEXT("file"), Db.GetFilePath(S->FileId));
+		const FString FilePath = Db.GetFilePath(S->FileId);
+		O->SetStringField(TEXT("file"), FilePath);
+		O->SetStringField(TEXT("path_status"), PathStatus(FilePath));
 		O->SetNumberField(TEXT("line"), S->LineStart);
 		if (Depth >= 0) O->SetNumberField(TEXT("depth"), Depth);
 		return O;
@@ -43,13 +51,118 @@ namespace
 		return TEXT("low");
 	}
 
-	bool ReviewContainsAnyToken(const FString& LowerText, std::initializer_list<const TCHAR*> Tokens)
+	bool AllowsSensitivityPrefix(const FString& Token)
 	{
-		for (const TCHAR* Token : Tokens)
+		return Token == TEXT("save")
+			|| Token == TEXT("serialize")
+			|| Token == TEXT("archive")
+			|| Token == TEXT("auth")
+			|| Token == TEXT("login")
+			|| Token == TEXT("account")
+			|| Token == TEXT("session")
+			|| Token == TEXT("purchase")
+			|| Token == TEXT("store")
+			|| Token == TEXT("entitlement")
+			|| Token == TEXT("anticheat")
+			|| Token == TEXT("crypto")
+			|| Token == TEXT("crypt")
+			|| Token == TEXT("encrypt")
+			|| Token == TEXT("decrypt")
+			|| Token == TEXT("signature")
+			|| Token == TEXT("signed")
+			|| Token == TEXT("signing")
+			|| Token == TEXT("hash")
+			|| Token == TEXT("exec")
+			|| Token == TEXT("eval")
+			|| Token == TEXT("command")
+			|| Token == TEXT("file")
+			|| Token == TEXT("registry")
+			|| Token == TEXT("process")
+			|| Token == TEXT("ufunction")
+			|| Token == TEXT("server")
+			|| Token == TEXT("client")
+			|| Token == TEXT("netmulticast")
+			|| Token == TEXT("onrep")
+			|| Token == TEXT("replication")
+			|| Token == TEXT("rpc")
+			|| Token == TEXT("network");
+	}
+
+	bool MatchesSensitivityToken(const FString& CandidateToken, const FString& SensitiveToken)
+	{
+		if (CandidateToken == SensitiveToken)
 		{
-			if (LowerText.Contains(FString(Token)))
+			return true;
+		}
+		return AllowsSensitivityPrefix(SensitiveToken) && CandidateToken.StartsWith(SensitiveToken);
+	}
+
+	void AddSensitivityCandidateToken(TArray<FString>& Tokens, TSet<FString>& Seen, FString Token)
+	{
+		Token.ToLowerInline();
+		if (Token.IsEmpty() || Seen.Contains(Token))
+		{
+			return;
+		}
+		Seen.Add(Token);
+		Tokens.Add(MoveTemp(Token));
+	}
+
+	TArray<FString> BuildSensitivityCandidateTokens(const FString& Text)
+	{
+		TArray<FString> Tokens;
+		TSet<FString> Seen;
+		for (const FString& Token : FMonolithFuzzyMatch::Tokenize(Text))
+		{
+			AddSensitivityCandidateToken(Tokens, Seen, Token);
+		}
+
+		FString Current;
+		TCHAR Previous = TEXT('\0');
+		for (int32 Index = 0; Index < Text.Len(); ++Index)
+		{
+			const TCHAR Ch = Text[Index];
+			if (!FChar::IsAlnum(Ch))
 			{
-				return true;
+				AddSensitivityCandidateToken(Tokens, Seen, Current);
+				Current.Empty();
+				Previous = TEXT('\0');
+				continue;
+			}
+			if (!Current.IsEmpty()
+				&& FChar::IsUpper(Ch)
+				&& (FChar::IsLower(Previous) || FChar::IsDigit(Previous)))
+			{
+				AddSensitivityCandidateToken(Tokens, Seen, Current);
+				Current.Empty();
+			}
+			Current.AppendChar(Ch);
+			Previous = Ch;
+		}
+		AddSensitivityCandidateToken(Tokens, Seen, Current);
+		return Tokens;
+	}
+
+	bool ReviewContainsAnyToken(const FString& Text, std::initializer_list<const TCHAR*> Tokens, FString* OutMatchedToken = nullptr)
+	{
+		const TArray<FString> CandidateTokens = BuildSensitivityCandidateTokens(Text);
+		for (const FString& CandidateToken : CandidateTokens)
+		{
+			if (CandidateToken.IsEmpty())
+			{
+				continue;
+			}
+			for (const TCHAR* Token : Tokens)
+			{
+				const FString SensitiveToken(Token);
+				if (MatchesSensitivityToken(CandidateToken, SensitiveToken))
+				{
+					if (OutMatchedToken)
+					{
+						*OutMatchedToken = CandidateToken;
+					}
+					return true;
+				}
 			}
 		}
 		return false;
@@ -57,45 +170,52 @@ namespace
 
 	double SensitivityFactor(const FString& Text, FString& OutReason)
 	{
-		const FString Lower = Text.ToLower();
-		if (ReviewContainsAnyToken(Lower, { TEXT("ufunction"), TEXT("server"), TEXT("client"), TEXT("netmulticast"), TEXT("onrep"), TEXT("replication"), TEXT("rpc"), TEXT("network") }))
+		auto MatchedReason = [](const TCHAR* Reason, const FString& Token)
 		{
-			OutReason = TEXT("sensitivity: replication/RPC or network surface");
+			return Token.IsEmpty()
+				? FString(Reason)
+				: FString::Printf(TEXT("%s (token=%s)"), Reason, *Token);
+		};
+
+		FString MatchedToken;
+		if (ReviewContainsAnyToken(Text, { TEXT("ufunction"), TEXT("server"), TEXT("client"), TEXT("netmulticast"), TEXT("onrep"), TEXT("replication"), TEXT("rpc"), TEXT("network") }, &MatchedToken))
+		{
+			OutReason = MatchedReason(TEXT("sensitivity: replication/RPC or network surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ReviewContainsAnyToken(Lower, { TEXT("save"), TEXT("serialize"), TEXT("archive") }))
+		if (ReviewContainsAnyToken(Text, { TEXT("save"), TEXT("serialize"), TEXT("archive") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: save/serialization surface");
+			OutReason = MatchedReason(TEXT("sensitivity: save/serialization surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ReviewContainsAnyToken(Lower, { TEXT("auth"), TEXT("login"), TEXT("account"), TEXT("session") }))
+		if (ReviewContainsAnyToken(Text, { TEXT("auth"), TEXT("login"), TEXT("account"), TEXT("session") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: auth/account/session surface");
+			OutReason = MatchedReason(TEXT("sensitivity: auth/account/session surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ReviewContainsAnyToken(Lower, { TEXT("purchase"), TEXT("iap"), TEXT("store"), TEXT("entitlement") }))
+		if (ReviewContainsAnyToken(Text, { TEXT("purchase"), TEXT("iap"), TEXT("store"), TEXT("entitlement") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: purchase/store entitlement surface");
+			OutReason = MatchedReason(TEXT("sensitivity: purchase/store entitlement surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ReviewContainsAnyToken(Lower, { TEXT("anticheat"), TEXT("anti_cheat"), TEXT("cheat") }))
+		if (ReviewContainsAnyToken(Text, { TEXT("anticheat"), TEXT("anti_cheat"), TEXT("cheat") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: anticheat surface");
+			OutReason = MatchedReason(TEXT("sensitivity: anticheat surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ReviewContainsAnyToken(Lower, { TEXT("crypt"), TEXT("encrypt"), TEXT("decrypt"), TEXT("sign"), TEXT("hash") }))
+		if (ReviewContainsAnyToken(Text, { TEXT("crypt"), TEXT("crypto"), TEXT("encrypt"), TEXT("decrypt"), TEXT("sign"), TEXT("signature"), TEXT("signed"), TEXT("signing"), TEXT("hash") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: crypto/signing/hash surface");
+			OutReason = MatchedReason(TEXT("sensitivity: crypto/signing/hash surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ReviewContainsAnyToken(Lower, { TEXT("exec"), TEXT("eval"), TEXT("command") }))
+		if (ReviewContainsAnyToken(Text, { TEXT("exec"), TEXT("eval"), TEXT("command") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: exec/eval/command surface");
+			OutReason = MatchedReason(TEXT("sensitivity: exec/eval/command surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ReviewContainsAnyToken(Lower, { TEXT("file"), TEXT("registry"), TEXT("process") }))
+		if (ReviewContainsAnyToken(Text, { TEXT("file"), TEXT("registry"), TEXT("process") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: file/registry/process surface");
+			OutReason = MatchedReason(TEXT("sensitivity: file/registry/process surface"), MatchedToken);
 			return 0.15;
 		}
 		return 0.0;
@@ -622,8 +742,39 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(
 	{
 		ImpactSummary->SetNumberField(TEXT("impacted_count"), ImpArr->Num());
 		FJsonArr Top;
-		for (int32 i = 0; i < ImpArr->Num() && i < (bMinimal ? 5 : 25); ++i)
+		TSet<FString> EmittedExactKeys;
+		TSet<FString> EmittedKnownSymbolKeys;
+		const int32 TopLimit = bMinimal ? 5 : 25;
+		for (int32 i = 0; i < ImpArr->Num() && Top.Num() < TopLimit; ++i)
 		{
+			TSharedPtr<FJsonObject> Obj = (*ImpArr)[i]->AsObject();
+			if (!Obj.IsValid())
+			{
+				continue;
+			}
+			const FString QualifiedName = Obj->GetStringField(TEXT("qualified_name"));
+			const FString Name = Obj->GetStringField(TEXT("name"));
+			const FString Kind = Obj->GetStringField(TEXT("kind"));
+			const FString SymbolKey = FString::Printf(TEXT("%s|%s"),
+				*(QualifiedName.IsEmpty() ? Name : QualifiedName), *Kind);
+			const FString FilePath = Obj->GetStringField(TEXT("file"));
+			FString Status;
+			Obj->TryGetStringField(TEXT("path_status"), Status);
+			const bool bKnownPath = Status == TEXT("known") || (!FilePath.IsEmpty() && FilePath != TEXT("<unknown>"));
+			const FString ExactKey = FString::Printf(TEXT("%s|%s"), *SymbolKey, *FilePath);
+			if (EmittedExactKeys.Contains(ExactKey))
+			{
+				continue;
+			}
+			if (!bKnownPath && EmittedKnownSymbolKeys.Contains(SymbolKey))
+			{
+				continue;
+			}
+			EmittedExactKeys.Add(ExactKey);
+			if (bKnownPath)
+			{
+				EmittedKnownSymbolKeys.Add(SymbolKey);
+			}
 			Top.Add((*ImpArr)[i]);
 		}
 		ImpactSummary->SetArrayField(TEXT("top_impacted"), Top);
@@ -637,7 +788,9 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(
 	SeedObj->SetStringField(TEXT("name"), Seed.Name);
 	SeedObj->SetStringField(TEXT("qualified_name"), Seed.QualifiedName);
 	SeedObj->SetStringField(TEXT("kind"), Seed.Kind);
-	SeedObj->SetStringField(TEXT("file"), Db.GetFilePath(Seed.FileId));
+	const FString SeedFilePath = Db.GetFilePath(Seed.FileId);
+	SeedObj->SetStringField(TEXT("file"), SeedFilePath);
+	SeedObj->SetStringField(TEXT("path_status"), PathStatus(SeedFilePath));
 	SeedObj->SetNumberField(TEXT("line"), Seed.LineStart);
 	if (!bMinimal)
 	{
@@ -649,7 +802,8 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(
 	SeedContext->SetStringField(TEXT("type"), TEXT("seed_symbol"));
 	SeedContext->SetStringField(TEXT("name"), Seed.Name);
 	SeedContext->SetStringField(TEXT("qualified_name"), Seed.QualifiedName);
-	SeedContext->SetStringField(TEXT("file"), Db.GetFilePath(Seed.FileId));
+	SeedContext->SetStringField(TEXT("file"), SeedFilePath);
+	SeedContext->SetStringField(TEXT("path_status"), PathStatus(SeedFilePath));
 	SeedContext->SetNumberField(TEXT("line"), Seed.LineStart);
 	Context.Add(MakeShared<FJsonValueObject>(SeedContext));
 	Root->SetArrayField(TEXT("context"), Context);

@@ -1,4 +1,4 @@
-#include "MonolithAIEQSActions.h"
+﻿#include "MonolithAIEQSActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
 
@@ -760,8 +760,6 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("template"), TEXT("string"), TEXT("Template name: find_cover, find_flank, find_patrol_point, find_nearest_item"))
 			.Optional(TEXT("properties"), TEXT("object"), TEXT("Override template defaults (e.g. {GridSize: 2000, SpaceBetween: 300})"))
 			.Build());
-}
-
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("create_eqs_query"),
 		{ TEXT("environment query"), TEXT("spatial query"), TEXT("find best location"), TEXT("scoring query asset") },
 		{ TEXT("new_eqs"), TEXT("make_environment_query"), TEXT("create_env_query") },
@@ -783,6 +781,7 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 		{ TEXT("eqs_template"), TEXT("preset_eqs") },
 		{ TEXT("create an EQS query from the find_cover template") });
 
+}
 // ============================================================
 //  71. create_eqs_query
 // ============================================================

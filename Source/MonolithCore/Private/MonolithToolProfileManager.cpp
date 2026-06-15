@@ -233,6 +233,7 @@ bool FMonolithToolProfileManager::IsProfileManagementAction(const FString& Names
 		|| Action == TEXT("set_namespace_enabled")
 		|| Action == TEXT("set_action_description_override")
 		|| Action == TEXT("get_effective_discovery")
+		|| Action == TEXT("get_action_metadata_coverage")
 		|| Action == TEXT("validate_tool_profile");
 }
 

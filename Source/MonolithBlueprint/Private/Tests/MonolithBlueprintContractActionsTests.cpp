@@ -1,7 +1,6 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
 #include "Dom/JsonObject.h"
-#include "MonolithActionRegistry.h"
 #include "MonolithToolRegistry.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -15,15 +14,15 @@ bool FMonolithBlueprintContractActionsTests::RunTest(const FString& Parameters)
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("blueprint"), TEXT("compare_class_variable_contract"), Params);
-		TestTrue(TEXT("compare_class_variable_contract missing left param should error"), Result.IsError());
-		TestTrue(TEXT("compare_class_variable_contract missing left param should indicate left in error msg"), Result.Error.Contains(TEXT("Missing required parameter: left")));
+		TestFalse(TEXT("compare_class_variable_contract missing left param should error"), Result.bSuccess);
+		TestTrue(TEXT("compare_class_variable_contract missing left param should indicate left in error msg"), Result.ErrorMessage.Contains(TEXT("Missing required parameter: left")));
 	}
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("left"), TEXT("dummy"));
 		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("blueprint"), TEXT("compare_class_variable_contract"), Params);
-		TestTrue(TEXT("compare_class_variable_contract missing right param should error"), Result.IsError());
-		TestTrue(TEXT("compare_class_variable_contract missing right param should indicate right in error msg"), Result.Error.Contains(TEXT("Missing required parameter: right")));
+		TestFalse(TEXT("compare_class_variable_contract missing right param should error"), Result.bSuccess);
+		TestTrue(TEXT("compare_class_variable_contract missing right param should indicate right in error msg"), Result.ErrorMessage.Contains(TEXT("Missing required parameter: right")));
 	}
 
 	return true;

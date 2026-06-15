@@ -1,4 +1,4 @@
-#include "MonolithAINavigationActions.h"
+﻿#include "MonolithAINavigationActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
@@ -332,8 +332,6 @@ void FMonolithAINavigationActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Optional(TEXT("require_path_pairs"), TEXT("array"), TEXT("Array of pair objects requiring a path: [{\"from\":\"start\",\"to\":\"goal\"}, ...]. Names reference entries in 'points'"))
 			.Optional(TEXT("extent"), TEXT("object"), TEXT("Projection search extent {x,y,z} or [x,y,z] (default: 50,50,250)"))
 			.Build());
-}
-
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("build_navigation"),
 		{ TEXT("generate navmesh"), TEXT("rebuild paths"), TEXT("bake navigation"), TEXT("recast build") },
 		{ TEXT("generate_navmesh"), TEXT("bake_navmesh"), TEXT("build_navmesh") },
@@ -359,6 +357,7 @@ void FMonolithAINavigationActions::RegisterActions(FMonolithToolRegistry& Regist
 		{ TEXT("configure_navmesh"), TEXT("edit_navmesh_settings") },
 		{ TEXT("set the navmesh agent radius and cell size for finer pathing") });
 
+}
 // ============================================================
 //  143. get_nav_system_config
 // ============================================================

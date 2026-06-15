@@ -1860,8 +1860,6 @@ void FMonolithAIBehaviorTreeActions::RegisterActions(FMonolithToolRegistry& Regi
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Behavior Tree asset path"))
 			.Build());
-}
-
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("build_behavior_tree_from_spec"),
 		{ TEXT("declarative tree authoring"), TEXT("json spec to BT"), TEXT("selector sequence composite"), TEXT("generate full behavior tree"), TEXT("npc decision tree") },
 		{ TEXT("make_behavior_tree"), TEXT("author_bt"), TEXT("create_bt_from_json") },
@@ -1887,6 +1885,7 @@ void FMonolithAIBehaviorTreeActions::RegisterActions(FMonolithToolRegistry& Regi
 		{ TEXT("read_behavior_tree"), TEXT("inspect_bt"), TEXT("dump_bt") },
 		{ TEXT("show me the full structure of this behavior tree") });
 
+}
 // ============================================================
 //  13. create_behavior_tree
 // ============================================================

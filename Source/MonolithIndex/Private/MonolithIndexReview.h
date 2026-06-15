@@ -50,6 +50,12 @@ public:
 	 */
 	static TSharedPtr<FJsonObject> RepairCrgCache(FMonolithIndexDatabase& Db, bool bExecute);
 
+	/** Refresh project CRG projection/cache for changed assets and 1-hop dependency neighbors. */
+	static TSharedPtr<FJsonObject> RefreshCrgCacheForAssets(
+		FMonolithIndexDatabase& Db,
+		const TSet<FString>& AssetPaths,
+		const FString& Context);
+
 	/** Cached risk scoring when present; query-time fallback -> {score,tier,reasons[],raw_counts}. */
 	static TSharedPtr<FJsonObject> RiskScore(
 		FMonolithIndexDatabase& Db,

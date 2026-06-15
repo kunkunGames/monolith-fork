@@ -786,7 +786,7 @@ DEV-ONLY (write): set a property on a UDeveloperSettings CDO at runtime. Resolve
 
 ## project
 
-Project-wide asset index backed by SQLite + FTS5. **7 actions.**
+Project-wide asset index backed by SQLite + FTS5. Base discovery/search actions plus CRG-inspired review actions over the existing `assets` and `dependencies` tables.
 
 ### `project.search`
 
@@ -838,6 +838,45 @@ Deep details for a specific asset — nodes, variables, parameters, dependencies
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | string | **required** | Substring to search for in tag names |
+
+### `project.health`
+
+Default health is shallow. `include_counts=true` also checks CRG projection count parity and warns when `assets`, `crg_nodes`, and `crg_node_metrics` diverge.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `include_counts` | bool | optional | Include row counts and CRG parity checks. Default: `false` |
+| `include_deep_checks` | bool | optional | Run deeper FTS/orphan/projection checks without row-count output. Default: `false` |
+
+### `project.repair_crg_cache`
+
+Dry-run by default. `execute=true` rebuilds disposable `crg_nodes`, `crg_edges`, `crg_node_metrics`, and `crg_meta` from authoritative `assets` and `dependencies` tables, gated by indexing state.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `execute` | bool | optional | Apply the repair. Default: `false` |
+
+### `project.risk_score`
+
+Returns cached or query-time risk `{score,tier,reasons[],raw_counts,cache}`. Scoring v3 uses token-boundary/camel-case aware UE-domain sensitivity, so `Design` and `Assignment` do not match signing risk while `Signature`, `Crypto`, and `Hash` remain positive controls.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Asset package path |
+| `limit` | integer | optional | Default: `20` |
+| `min_tier` | string | optional | `low`, `medium`, or `high`. Default: `low` |
+
+### `project.review_context`
+
+Token-efficient project review package: seed asset, bounded dependency impact, top risk rows, compact context, truncation state, and next actions.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Asset package path |
+| `direction` | string | optional | `in`, `out`, or `both`. Default: `both` |
+| `max_depth` | integer | optional | Default: `2` |
+| `max_results` | integer | optional | Default: `200` |
+| `detail_level` | string | optional | `minimal` or `standard`. Default: `minimal` |
 
 ---
 
@@ -945,7 +984,7 @@ Default `source.health` is a fast shallow check. It validates required tables, s
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `include_counts` | bool | optional | Include row counts and run deep parity checks. Default: `false` |
-| `include_deep_checks` | bool | optional | Run expensive orphan-reference, FTS parity, and CRG row-parity checks without row-count output. Default: `false` |
+| `include_deep_checks` | bool | optional | Run expensive orphan-symbol, orphan-reference, FTS parity, and CRG row-parity checks without row-count output. Default: `false` |
 
 ### `source.repair_crg_cache`
 
@@ -955,6 +994,39 @@ Dry-run by default. `execute=true` is freshness-gated: if CRG projection counts,
 |-----------|------|----------|-------------|
 | `scope` | string | optional | `all` or `override_edges`. Default: `all` |
 | `execute` | bool | optional | Apply the repair only when freshness checks report `repair_needed=true`. Default: `false` |
+
+### `source.search_crg_graph`
+
+Searches the optional `Saved\graph.db` export. Results expose `path_status=known|missing`, prefer known source paths, and suppress duplicate missing-path rows for the same symbol identity. Use this action for explicit graph-export/search needs; routine review should prefer `source.search_source`, `source.risk_score`, and `source.review_context`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | **required** | Symbol/query text |
+| `kind` | string | optional | Optional node kind filter |
+| `limit` | integer | optional | Default: `20` |
+| `graph_db` | string | optional | Non-default graph DB path |
+
+### `source.risk_score`
+
+Returns cached or query-time risk `{score,tier,reasons[],raw_counts,cache}`. Scoring v3 uses token-boundary/camel-case aware UE-domain sensitivity and adds query-time override fan-out/overridden-parent counts.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | **required** | Symbol name, preferably qualified when ambiguous |
+| `limit` | integer | optional | Default: `10` |
+| `min_tier` | string | optional | `low`, `medium`, or `high`. Default: `low` |
+
+### `source.review_context`
+
+Token-efficient source review package: seed symbol, risk, impact summary, compact context, truncation state, and next actions. Seed/context rows include `path_status=known|missing`; known-path rows are preferred over missing-path duplicates.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | **required** | Symbol name, preferably qualified when ambiguous |
+| `direction` | string | optional | `in`, `out`, or `both`. Default: `both` |
+| `max_depth` | integer | optional | Default: `2` |
+| `max_results` | integer | optional | Default: `200` |
+| `detail_level` | string | optional | `minimal` or `standard`. Default: `minimal` |
 
 ### `source.audit_module_dep_reality`
 

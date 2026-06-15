@@ -135,4 +135,33 @@ bool FMonolithToolResultStructuredErrorTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithToolResultLegacyErrorDataTest,
+	"Monolith.Core.ToolResults.LegacyErrorData",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithToolResultLegacyErrorDataTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+	ErrorData->SetStringField(TEXT("failure_cause"), TEXT("invalid_param"));
+	ErrorData->SetStringField(TEXT("retryability"), TEXT("retry_with_validated_param_types_or_ranges"));
+
+	FMonolithActionResult ActionResult = FMonolithActionResult::Error(TEXT("bad params"), -32602);
+	ActionResult.WithErrorData(ErrorData);
+
+	TSharedPtr<FJsonObject> Result = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, false);
+	TestTrue(TEXT("Legacy error result isError"), Result->GetBoolField(TEXT("isError")));
+	TestEqual(TEXT("Legacy error keeps flattened failure cause"), Result->GetStringField(TEXT("failure_cause")), TEXT("invalid_param"));
+
+	const TSharedPtr<FJsonObject>* ErrorDataObject = nullptr;
+	TestTrue(TEXT("Legacy error exposes nested error_data object"),
+		Result->TryGetObjectField(TEXT("error_data"), ErrorDataObject) && ErrorDataObject && ErrorDataObject->IsValid());
+	if (ErrorDataObject && ErrorDataObject->IsValid())
+	{
+		TestEqual(TEXT("Nested error_data keeps failure cause"), (*ErrorDataObject)->GetStringField(TEXT("failure_cause")), TEXT("invalid_param"));
+		TestEqual(TEXT("Nested error_data keeps retryability"), (*ErrorDataObject)->GetStringField(TEXT("retryability")), TEXT("retry_with_validated_param_types_or_ranges"));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

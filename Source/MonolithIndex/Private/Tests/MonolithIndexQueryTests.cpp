@@ -71,6 +71,26 @@ bool FProjectFindByTypeClampsLimitTest::RunTest(const FString& Parameters)
 // ============================================================================
 namespace
 {
+	int64 CountProjectRows(FMonolithIndexDatabase& Db, const TCHAR* Sql)
+	{
+		FSQLiteDatabase* Raw = Db.GetRawDatabase();
+		if (!Raw)
+		{
+			return -1;
+		}
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Raw, Sql))
+		{
+			return -1;
+		}
+		int64 Count = -1;
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			Stmt.GetColumnValueByIndex(0, Count);
+		}
+		return Count;
+	}
+
 	struct FTempIndexDb
 	{
 		FMonolithIndexDatabase Db;
@@ -163,6 +183,30 @@ bool FProjectHealthHealthyTest::RunTest(const FString& Parameters)
 	const TArray<TSharedPtr<FJsonValue>>* W = nullptr;
 	TestTrue(TEXT("warnings array present"), R->TryGetArrayField(TEXT("warnings"), W) && W != nullptr);
 	TestEqual(TEXT("no health warnings"), W->Num(), 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectHealthWarnsOnStaleCrgCacheTest, "Monolith.IndexGuard.Project.HealthWarnsOnStaleCrgCache", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectHealthWarnsOnStaleCrgCacheTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+
+	FIndexedAsset Asset;
+	Asset.PackagePath = TEXT("/Game/StaleCrgCacheProbe");
+	Asset.AssetName = TEXT("StaleCrgCacheProbe");
+	Asset.AssetClass = TEXT("Blueprint");
+	TestTrue(TEXT("asset inserted after CRG rebuild"), T.Db.InsertAsset(Asset) > 0);
+
+	TSharedPtr<FJsonObject> Stale = FMonolithIndexReview::Health(T.Db, true);
+	TestEqual(TEXT("stale CRG projection yields warning status"), Stale->GetStringField(TEXT("status")), FString(TEXT("warning")));
+	const TArray<TSharedPtr<FJsonValue>>* Warnings = nullptr;
+	TestTrue(TEXT("stale CRG warning present"), Stale->TryGetArrayField(TEXT("warnings"), Warnings) && Warnings && Warnings->Num() >= 1);
+
+	TSharedPtr<FJsonObject> Repair = FMonolithIndexReview::RepairCrgCache(T.Db, true);
+	TestEqual(TEXT("stale CRG repair ok"), Repair->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TSharedPtr<FJsonObject> Clean = FMonolithIndexReview::Health(T.Db, true);
+	TestEqual(TEXT("health is clean after repair"), Clean->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	return true;
 }
 
@@ -289,6 +333,111 @@ bool FProjectRepairCrgCacheTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectRefreshCrgCacheForAssetsScopedTest, "Monolith.IndexGuard.Project.RefreshCrgCacheForAssetsScoped", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectRefreshCrgCacheForAssetsScopedTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+
+	FIndexedAsset Asset;
+	Asset.PackagePath = TEXT("/Game/ScopedRefresh");
+	Asset.AssetName = TEXT("ScopedRefresh");
+	Asset.AssetClass = TEXT("Blueprint");
+	const int64 NewId = T.Db.InsertAsset(Asset);
+	TestTrue(TEXT("new asset inserted after full CRG rebuild"), NewId > 0);
+
+	FIndexedDependency Dep;
+	Dep.SourceAssetId = NewId;
+	Dep.TargetAssetId = T.B;
+	Dep.DependencyType = TEXT("Hard");
+	TestTrue(TEXT("new dependency inserted after full CRG rebuild"), T.Db.InsertDependency(Dep) > 0);
+
+	TSet<FString> ChangedPaths;
+	ChangedPaths.Add(TEXT("/Game/ScopedRefresh"));
+	TSharedPtr<FJsonObject> Refresh = FMonolithIndexReview::RefreshCrgCacheForAssets(
+		T.Db,
+		ChangedPaths,
+		TEXT("automation scoped refresh"));
+	TestEqual(TEXT("scoped refresh status ok"), Refresh->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("refresh uses scoped mode"), Refresh->GetStringField(TEXT("refresh_mode")), FString(TEXT("scoped_1hop")));
+	TSharedPtr<FJsonObject> Counts = Refresh->GetObjectField(TEXT("counts"));
+	TestTrue(TEXT("refresh counts present"), Counts.IsValid());
+	if (Counts.IsValid())
+	{
+		TestEqual(TEXT("one changed path bound"), Counts->GetIntegerField(TEXT("changed_paths")), 1);
+		TestTrue(TEXT("seed plus neighbor assets affected"), Counts->GetIntegerField(TEXT("affected_assets")) >= 2);
+	}
+
+	TestEqual(TEXT("scoped refresh keeps node parity"), CountProjectRows(T.Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain='project';")), static_cast<int64>(6));
+	TestEqual(TEXT("scoped refresh keeps edge parity without duplicate affected-endpoint edges"), CountProjectRows(T.Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain='project';")), static_cast<int64>(5));
+	TestEqual(TEXT("scoped refresh keeps metric parity"), CountProjectRows(T.Db, TEXT("SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain='project';")), static_cast<int64>(6));
+
+	TSharedPtr<FJsonObject> Health = FMonolithIndexReview::Health(T.Db, true);
+	TestEqual(TEXT("health remains clean after scoped refresh"), Health->GetStringField(TEXT("status")), FString(TEXT("ok")));
+
+	TSharedPtr<FJsonObject> Risk = FMonolithIndexReview::RiskScore(T.Db, TEXT("/Game/ScopedRefresh"), 10, TEXT("low"));
+	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+	TestTrue(TEXT("risk item present for scoped refreshed asset"), Risk->TryGetArrayField(TEXT("items"), Items) && Items && Items->Num() == 1);
+	if (Items && Items->Num() == 1)
+	{
+		TSharedPtr<FJsonObject> Item = (*Items)[0]->AsObject();
+		TestTrue(TEXT("risk item object"), Item.IsValid());
+		if (Item.IsValid())
+		{
+			TSharedPtr<FJsonObject> Cache = Item->GetObjectField(TEXT("cache"));
+			TestTrue(TEXT("scoped refreshed asset reads cached risk"), Cache.IsValid());
+			if (Cache.IsValid())
+			{
+				TestEqual(TEXT("risk cache hit"), Cache->GetStringField(TEXT("status")), FString(TEXT("hit")));
+			}
+		}
+	}
+
+	auto InboundCountFor = [&](const TCHAR* PackagePath) -> double
+	{
+		TSharedPtr<FJsonObject> R = FMonolithIndexReview::RiskScore(T.Db, PackagePath, 10, TEXT("low"));
+		const TArray<TSharedPtr<FJsonValue>>* RiskItems = nullptr;
+		if (!R->TryGetArrayField(TEXT("items"), RiskItems) || !RiskItems || RiskItems->Num() != 1)
+		{
+			return -1.0;
+		}
+		TSharedPtr<FJsonObject> Item = (*RiskItems)[0]->AsObject();
+		if (!Item.IsValid())
+		{
+			return -1.0;
+		}
+		TSharedPtr<FJsonObject> Raw = Item->GetObjectField(TEXT("raw_counts"));
+		if (!Raw.IsValid())
+		{
+			return -1.0;
+		}
+		return Raw->GetNumberField(TEXT("inbound"));
+	};
+	TestEqual(TEXT("neighbor inbound count includes new dependency before delete"), InboundCountFor(TEXT("/Game/B")), 2.0);
+
+	TestTrue(TEXT("scoped asset deleted from authoritative index"), T.Db.DeleteAssetByPath(TEXT("/Game/ScopedRefresh")));
+	TSharedPtr<FJsonObject> DeleteRefresh = FMonolithIndexReview::RefreshCrgCacheForAssets(
+		T.Db,
+		ChangedPaths,
+		TEXT("automation scoped delete refresh"));
+	TestEqual(TEXT("delete scoped refresh status ok"), DeleteRefresh->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("delete refresh uses scoped mode"), DeleteRefresh->GetStringField(TEXT("refresh_mode")), FString(TEXT("scoped_1hop")));
+	TSharedPtr<FJsonObject> DeleteCounts = DeleteRefresh->GetObjectField(TEXT("counts"));
+	TestTrue(TEXT("delete refresh counts present"), DeleteCounts.IsValid());
+	if (DeleteCounts.IsValid())
+	{
+		TestEqual(TEXT("one deleted path bound"), DeleteCounts->GetIntegerField(TEXT("changed_paths")), 1);
+		TestTrue(TEXT("old CRG edge neighbor is affected on delete"), DeleteCounts->GetIntegerField(TEXT("affected_assets")) >= 1);
+	}
+	TestEqual(TEXT("delete scoped refresh restores node parity"), CountProjectRows(T.Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain='project';")), static_cast<int64>(5));
+	TestEqual(TEXT("delete scoped refresh restores edge parity"), CountProjectRows(T.Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain='project';")), static_cast<int64>(4));
+	TestEqual(TEXT("delete scoped refresh restores metric parity"), CountProjectRows(T.Db, TEXT("SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain='project';")), static_cast<int64>(5));
+	TSharedPtr<FJsonObject> DeleteHealth = FMonolithIndexReview::Health(T.Db, true);
+	TestEqual(TEXT("health remains clean after delete scoped refresh"), DeleteHealth->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("neighbor inbound count is recomputed after delete"), InboundCountFor(TEXT("/Game/B")), 1.0);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSnapshotDiffTest, "Monolith.IndexGuard.Project.SnapshotDiff", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectSnapshotDiffTest::RunTest(const FString& Parameters)
 {
@@ -367,6 +516,79 @@ bool FProjectRiskScoreSensitivityTest::RunTest(const FString& Parameters)
 		bFound = bFound || Reason->AsString().Contains(TEXT("sensitivity:"));
 	}
 	TestTrue(TEXT("sensitivity reason present"), bFound);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectRiskScoreSensitivityTokenBoundaryTest, "Monolith.IndexGuard.Project.RiskScoreSensitivityTokenBoundary", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectRiskScoreSensitivityTokenBoundaryTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	auto AddAsset = [&](const TCHAR* PackagePath, const TCHAR* AssetClass) -> int64
+	{
+		FIndexedAsset Asset;
+		Asset.PackagePath = PackagePath;
+		Asset.AssetName = FPaths::GetCleanFilename(PackagePath);
+		Asset.AssetClass = AssetClass;
+		return T.Db.InsertAsset(Asset);
+	};
+	TestTrue(TEXT("Design fixture inserted"),
+		AddAsset(TEXT("/Game/Design/DataAsset/WorldTable/DA_World_002_Lobby"), TEXT("DataAsset")) > 0);
+	TestTrue(TEXT("Assignment fixture inserted"),
+		AddAsset(TEXT("/Game/Systems/AssignmentBoard"), TEXT("Blueprint")) > 0);
+	TestTrue(TEXT("Signature fixture inserted"),
+		AddAsset(TEXT("/Game/Security/SignatureStore"), TEXT("Blueprint")) > 0);
+	TestTrue(TEXT("CryptoHash fixture inserted"),
+		AddAsset(TEXT("/Game/Security/CryptoHash"), TEXT("Blueprint")) > 0);
+
+	TSharedPtr<FJsonObject> Rebuilt = FMonolithIndexReview::RepairCrgCache(T.Db, true);
+	TestEqual(TEXT("crg cache rebuild ok"), Rebuilt->GetStringField(TEXT("status")), FString(TEXT("ok")));
+
+	auto SensitivityFor = [&](const TCHAR* PackagePath, bool& bHasSensitivityReason) -> double
+	{
+		bHasSensitivityReason = false;
+		TSharedPtr<FJsonObject> R = FMonolithIndexReview::RiskScore(T.Db, PackagePath, 10, TEXT("low"));
+		const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+		TestTrue(TEXT("risk items present for token-boundary fixture"),
+			R->TryGetArrayField(TEXT("items"), Items) && Items && Items->Num() == 1);
+		if (!Items || Items->Num() == 0)
+		{
+			return -1.0;
+		}
+		TSharedPtr<FJsonObject> Item = (*Items)[0]->AsObject();
+		const TArray<TSharedPtr<FJsonValue>>* Reasons = nullptr;
+		if (Item.IsValid() && Item->TryGetArrayField(TEXT("reasons"), Reasons) && Reasons)
+		{
+			for (const TSharedPtr<FJsonValue>& Reason : *Reasons)
+			{
+				bHasSensitivityReason = bHasSensitivityReason || Reason->AsString().Contains(TEXT("sensitivity:"));
+			}
+		}
+		TSharedPtr<FJsonObject> Raw;
+		if (Item.IsValid())
+		{
+			Raw = Item->GetObjectField(TEXT("raw_counts"));
+		}
+		double Sensitivity = -1.0;
+		if (Raw.IsValid())
+		{
+			Raw->TryGetNumberField(TEXT("sensitivity"), Sensitivity);
+		}
+		return Sensitivity;
+	};
+
+	bool bDesignReason = false;
+	bool bAssignmentReason = false;
+	bool bSignatureReason = false;
+	bool bHashReason = false;
+	TestEqual(TEXT("Design must not match embedded sign"), SensitivityFor(TEXT("/Game/Design/DataAsset/WorldTable/DA_World_002_Lobby"), bDesignReason), 0.0);
+	TestFalse(TEXT("Design emits no sensitivity reason"), bDesignReason);
+	TestEqual(TEXT("Assignment must not match embedded sign"), SensitivityFor(TEXT("/Game/Systems/AssignmentBoard"), bAssignmentReason), 0.0);
+	TestFalse(TEXT("Assignment emits no sensitivity reason"), bAssignmentReason);
+	TestTrue(TEXT("Signature still contributes sensitivity"), SensitivityFor(TEXT("/Game/Security/SignatureStore"), bSignatureReason) > 0.0);
+	TestTrue(TEXT("Signature emits sensitivity reason"), bSignatureReason);
+	TestTrue(TEXT("CryptoHash still contributes sensitivity"), SensitivityFor(TEXT("/Game/Security/CryptoHash"), bHashReason) > 0.0);
+	TestTrue(TEXT("CryptoHash emits sensitivity reason"), bHashReason);
 	return true;
 }
 

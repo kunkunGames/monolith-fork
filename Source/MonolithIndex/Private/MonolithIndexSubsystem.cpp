@@ -100,6 +100,43 @@ namespace
 	// At most one full-index run is live at a time (guarded by bIsIndexing), so a
 	// single file-static owner is sufficient. Reset on the game thread only.
 	static TUniquePtr<FIncrementalReachabilityGCOverride> GIncrementalGCOverride;
+
+	static void RefreshProjectCrgCacheForChangedAssets(
+		FMonolithIndexDatabase* Database,
+		const TSet<FString>& ChangedAssetPaths,
+		const TCHAR* Context)
+	{
+		if (!Database || !Database->IsOpen() || ChangedAssetPaths.Num() == 0)
+		{
+			return;
+		}
+
+		TSharedPtr<FJsonObject> CrgResult = FMonolithIndexReview::RefreshCrgCacheForAssets(
+			*Database,
+			ChangedAssetPaths,
+			FString(Context));
+
+		FString Status;
+		FString Summary;
+		FString RefreshMode;
+		if (CrgResult.IsValid())
+		{
+			CrgResult->TryGetStringField(TEXT("status"), Status);
+			CrgResult->TryGetStringField(TEXT("summary"), Summary);
+			CrgResult->TryGetStringField(TEXT("refresh_mode"), RefreshMode);
+		}
+
+		if (Status == TEXT("ok"))
+		{
+			UE_LOG(LogMonolithIndex, Log, TEXT("%s; project CRG scoped refresh (%s): %s"),
+				Context, *RefreshMode, *Summary);
+		}
+		else
+		{
+			UE_LOG(LogMonolithIndex, Warning, TEXT("%s; project CRG scoped refresh did not complete cleanly: %s"),
+				Context, *Summary);
+		}
+	}
 }
 
 // Manual trigger for a full project index. Primary use: when bDeferFirstTimeIndex
@@ -1444,6 +1481,17 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 			ModifiedPaths.Add(Existing);  // Pre-v2 asset with no stored hash
 	}
 
+	TSet<FString> CrgTouchedPaths;
+	CrgTouchedPaths.Reserve(TrueAdds.Num() + TrueDeletes.Num() + Moves.Num() * 2 + ModifiedPaths.Num());
+	for (FName Path : TrueAdds) CrgTouchedPaths.Add(Path.ToString());
+	for (FName Path : TrueDeletes) CrgTouchedPaths.Add(Path.ToString());
+	for (FName Path : ModifiedPaths) CrgTouchedPaths.Add(Path.ToString());
+	for (const auto& [OldPath, NewPath] : Moves)
+	{
+		CrgTouchedPaths.Add(OldPath.ToString());
+		CrgTouchedPaths.Add(NewPath.ToString());
+	}
+
 	UE_LOG(LogMonolithIndex, Log,
 		TEXT("Incremental delta: %d added, %d deleted, %d moved, %d modified, %d unchanged"),
 		TrueAdds.Num(), TrueDeletes.Num(), Moves.Num(), ModifiedPaths.Num(),
@@ -1572,6 +1620,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 
 	UE_LOG(LogMonolithIndex, Log, TEXT("Incremental index complete."));
 	bIsIndexing = false;
+	RefreshProjectCrgCacheForChangedAssets(Database.Get(), CrgTouchedPaths, TEXT("Incremental project indexing complete"));
 	RegisterLiveCallbacks();
 }
 
@@ -1761,6 +1810,7 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 
 	TSet<FString> PathsToDeepIndex;
 	TSet<FString> RemovedPaths;
+	TSet<FString> CrgTouchedPaths;
 
 	for (const FPendingIndexChange& Change : LocalChanges)
 	{
@@ -1792,6 +1842,7 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 			}
 
 			Database->InsertAsset(IndexedAsset);
+			CrgTouchedPaths.Add(IndexedAsset.PackagePath);
 
 			FString ClassName = Change.AssetData.AssetClassPath.GetAssetName().ToString();
 			if (ClassToIndexer.Contains(ClassName))
@@ -1833,6 +1884,7 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 			{
 				Database->InsertAsset(IndexedAsset);
 			}
+			CrgTouchedPaths.Add(IndexedAsset.PackagePath);
 
 			FString ClassName = Change.AssetData.AssetClassPath.GetAssetName().ToString();
 			if (ClassToIndexer.Contains(ClassName))
@@ -1844,6 +1896,7 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 			FString Path = Change.AssetData.PackageName.ToString();
 			Database->DeleteAssetByPath(Path);
 			RemovedPaths.Add(Path);
+			CrgTouchedPaths.Add(Path);
 			break;
 		}
 		case EIndexChangeType::Renamed:
@@ -1852,6 +1905,8 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 			Change.OldObjectPath.Split(TEXT("."), &OldPackageName, &OldAssetName);
 			FString NewPath = Change.AssetData.PackageName.ToString();
 			FString NewAssetName = Change.AssetData.AssetName.ToString();
+			CrgTouchedPaths.Add(OldPackageName);
+			CrgTouchedPaths.Add(NewPath);
 
 			if (Database->UpdateAssetPath(OldPackageName, NewPath, NewAssetName))
 			{
@@ -1880,4 +1935,6 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 	// Sentinels after commit (they manage own transactions)
 	if (PathsToDeepIndex.Num() > 0 || RemovedPaths.Num() > 0)
 		RunScopedSentinels(PathsToDeepIndex, RemovedPaths);
+
+	RefreshProjectCrgCacheForChangedAssets(Database.Get(), CrgTouchedPaths, TEXT("Live asset index changes processed"));
 }

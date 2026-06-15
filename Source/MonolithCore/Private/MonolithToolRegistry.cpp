@@ -133,6 +133,446 @@ namespace
 		return Types.Num() == 0;
 	}
 
+	void AddUniqueString(TArray<FString>& Values, const FString& Value)
+	{
+		if (!Value.IsEmpty() && !Values.Contains(Value))
+		{
+			Values.Add(Value);
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> StringArrayToJsonValues(const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Result;
+		Result.Reserve(Values.Num());
+		for (const FString& Value : Values)
+		{
+			Result.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Result;
+	}
+
+	FString MakeMcpToolName(const FString& Namespace, const FString& Action)
+	{
+		return Namespace == TEXT("monolith")
+			? FString::Printf(TEXT("monolith_%s"), *Action)
+			: Namespace + TEXT("_query");
+	}
+
+	bool IsSchemaTypeValidationEnabled(const TSharedPtr<FJsonObject>& Schema)
+	{
+		if (!Schema.IsValid())
+		{
+			return false;
+		}
+
+		bool bEnabled = true;
+		TSharedPtr<FJsonValue> ValidateTypesField = Schema->TryGetField(TEXT("_validate_types"));
+		if (ValidateTypesField.IsValid())
+		{
+			ValidateTypesField->TryGetBool(bEnabled);
+		}
+		return bEnabled;
+	}
+
+	TSharedPtr<FJsonObject> BuildDiscoverArgs(const FString& Namespace, const FString& Action)
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("namespace"), Namespace);
+		if (!Action.IsEmpty())
+		{
+			Args->SetStringField(TEXT("action"), Action);
+			Args->SetStringField(TEXT("mode"), TEXT("schema"));
+		}
+		else
+		{
+			Args->SetStringField(TEXT("mode"), TEXT("actions"));
+		}
+		return Args;
+	}
+
+	TSharedPtr<FJsonObject> BuildParamSummaryRow(const FString& Name, const TSharedPtr<FJsonObject>& ParamDef, bool bRequired)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("name"), Name);
+		Row->SetBoolField(TEXT("required"), bRequired);
+
+		FString TextValue;
+		if (ParamDef->TryGetStringField(TEXT("type"), TextValue))
+		{
+			Row->SetStringField(TEXT("type"), TextValue);
+		}
+		if (ParamDef->TryGetStringField(TEXT("description"), TextValue))
+		{
+			Row->SetStringField(TEXT("description"), TextValue);
+		}
+		if (ParamDef->TryGetStringField(TEXT("kind"), TextValue))
+		{
+			Row->SetStringField(TEXT("kind"), TextValue);
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* ArrayValue = nullptr;
+		if (ParamDef->TryGetArrayField(TEXT("aliases"), ArrayValue) && ArrayValue)
+		{
+			Row->SetArrayField(TEXT("aliases"), *ArrayValue);
+		}
+		if (ParamDef->TryGetArrayField(TEXT("enum"), ArrayValue) && ArrayValue)
+		{
+			Row->SetArrayField(TEXT("enum"), *ArrayValue);
+		}
+
+		TSharedPtr<FJsonValue> DefaultValue = ParamDef->TryGetField(TEXT("default"));
+		if (DefaultValue.IsValid())
+		{
+			Row->SetField(TEXT("default"), DefaultValue);
+		}
+
+		double NumberValue = 0.0;
+		if (ParamDef->TryGetNumberField(TEXT("minimum"), NumberValue))
+		{
+			Row->SetNumberField(TEXT("minimum"), NumberValue);
+		}
+		if (ParamDef->TryGetNumberField(TEXT("maximum"), NumberValue))
+		{
+			Row->SetNumberField(TEXT("maximum"), NumberValue);
+		}
+
+		return Row;
+	}
+
+	void SplitParamSummaries(
+		const TSharedPtr<FJsonObject>& Schema,
+		TArray<TSharedPtr<FJsonValue>>& OutRequired,
+		TArray<TSharedPtr<FJsonValue>>& OutOptional,
+		TArray<FString>* OutRequiredNames = nullptr)
+	{
+		OutRequired.Reset();
+		OutOptional.Reset();
+		if (OutRequiredNames)
+		{
+			OutRequiredNames->Reset();
+		}
+		if (!Schema.IsValid())
+		{
+			return;
+		}
+
+		for (const auto& Pair : Schema->Values)
+		{
+			if (Pair.Key.StartsWith(TEXT("_")))
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject>* ParamDef = nullptr;
+			if (!Pair.Value.IsValid() || !Pair.Value->TryGetObject(ParamDef) || !ParamDef || !ParamDef->IsValid())
+			{
+				continue;
+			}
+
+			bool bRequired = false;
+			(*ParamDef)->TryGetBoolField(TEXT("required"), bRequired);
+			TSharedPtr<FJsonValue> Row = MakeShared<FJsonValueObject>(BuildParamSummaryRow(Pair.Key, *ParamDef, bRequired));
+			if (bRequired)
+			{
+				OutRequired.Add(Row);
+				if (OutRequiredNames)
+				{
+					OutRequiredNames->Add(Pair.Key);
+				}
+			}
+			else
+			{
+				OutOptional.Add(Row);
+			}
+		}
+	}
+
+	void SetObjectFieldIfMissing(TSharedPtr<FJsonObject>& Target, const FString& Field, const TSharedPtr<FJsonObject>& Value)
+	{
+		if (Target.IsValid() && Value.IsValid() && !Target->HasField(Field))
+		{
+			Target->SetObjectField(Field, Value);
+		}
+	}
+
+	void SetStringFieldIfMissing(TSharedPtr<FJsonObject>& Target, const FString& Field, const FString& Value)
+	{
+		if (Target.IsValid() && !Value.IsEmpty() && !Target->HasField(Field))
+		{
+			Target->SetStringField(Field, Value);
+		}
+	}
+
+	void SetArrayFieldIfMissing(TSharedPtr<FJsonObject>& Target, const FString& Field, const TArray<TSharedPtr<FJsonValue>>& Value)
+	{
+		if (Target.IsValid() && !Target->HasField(Field))
+		{
+			Target->SetArrayField(Field, Value);
+		}
+	}
+
+	void AddPlanningSignal(TArray<TSharedPtr<FJsonValue>>& Signals, const TSharedPtr<FJsonObject>& Signal)
+	{
+		if (Signal.IsValid())
+		{
+			Signals.Add(MakeShared<FJsonValueObject>(Signal));
+		}
+	}
+
+	void AddFailureDiagnostics(
+		TSharedPtr<FJsonObject>& ErrorData,
+		const FString& FailureCause,
+		const FString& Retryability)
+	{
+		SetStringFieldIfMissing(ErrorData, TEXT("failure_cause"), FailureCause);
+		SetStringFieldIfMissing(ErrorData, TEXT("retryability"), Retryability);
+	}
+
+	FString DefaultFailureCauseForStage(const FString& FailureStage)
+	{
+		if (FailureStage == TEXT("profile"))
+		{
+			return TEXT("profile_blocked");
+		}
+		if (FailureStage == TEXT("handler_unbound"))
+		{
+			return TEXT("handler_unbound");
+		}
+		if (FailureStage == TEXT("schema"))
+		{
+			return TEXT("schema_validation");
+		}
+		if (FailureStage == TEXT("lookup"))
+		{
+			return TEXT("unknown_action");
+		}
+		if (FailureStage == TEXT("handler"))
+		{
+			return TEXT("handler_error");
+		}
+		return FailureStage.IsEmpty() ? TEXT("unknown") : FailureStage;
+	}
+
+	FString DefaultRetryabilityForStage(const FString& FailureStage)
+	{
+		if (FailureStage == TEXT("profile"))
+		{
+			return TEXT("retry_after_profile_or_action_enablement_change");
+		}
+		if (FailureStage == TEXT("handler_unbound"))
+		{
+			return TEXT("not_retryable_until_handler_is_registered");
+		}
+		if (FailureStage == TEXT("schema") || FailureStage == TEXT("lookup"))
+		{
+			return TEXT("retry_with_corrected_action_or_arguments");
+		}
+		if (FailureStage == TEXT("handler"))
+		{
+			return TEXT("depends_on_handler_error");
+		}
+		return TEXT("unknown");
+	}
+
+	void AttachCandidateActions(
+		FMonolithActionResult& Result,
+		const FString& Namespace,
+		const TArray<FString>& CandidateActions)
+	{
+		if (CandidateActions.Num() == 0)
+		{
+			return;
+		}
+
+		if (!Result.ErrorData.IsValid())
+		{
+			Result.ErrorData = MakeShared<FJsonObject>();
+		}
+
+		TArray<TSharedPtr<FJsonValue>> CandidateRows;
+		TArray<FString> CandidateActionIds;
+		CandidateRows.Reserve(CandidateActions.Num());
+		CandidateActionIds.Reserve(CandidateActions.Num());
+		for (const FString& CandidateAction : CandidateActions)
+		{
+			const FString CandidateActionId = Namespace + TEXT(".") + CandidateAction;
+			CandidateActionIds.Add(CandidateActionId);
+
+			TSharedPtr<FJsonObject> Candidate = MakeShared<FJsonObject>();
+			Candidate->SetStringField(TEXT("action_id"), CandidateActionId);
+			Candidate->SetStringField(TEXT("namespace"), Namespace);
+			Candidate->SetStringField(TEXT("action"), CandidateAction);
+			CandidateRows.Add(MakeShared<FJsonValueObject>(Candidate));
+		}
+
+		if (!Result.ErrorData->HasField(TEXT("candidate_actions")))
+		{
+			Result.ErrorData->SetArrayField(TEXT("candidate_actions"), CandidateRows);
+		}
+		AddUniqueString(Result.Hints, FString::Printf(
+			TEXT("Candidate actions in namespace '%s': %s."),
+			*Namespace,
+			*FString::Join(CandidateActionIds, TEXT(", "))));
+	}
+
+	void AttachPreDispatchDiagnosticsToFailure(
+		FMonolithActionResult& Result,
+		const FString& Namespace,
+		const FString& Action,
+		const TArray<FString>& UnknownParams,
+		const TArray<FString>& PathParamWarnings)
+	{
+		if (Result.bSuccess || (UnknownParams.Num() == 0 && PathParamWarnings.Num() == 0))
+		{
+			return;
+		}
+
+		if (!Result.ErrorData.IsValid())
+		{
+			Result.ErrorData = MakeShared<FJsonObject>();
+		}
+
+		if (UnknownParams.Num() > 0)
+		{
+			if (!Result.ErrorData->HasField(TEXT("unknown_params")))
+			{
+				Result.ErrorData->SetArrayField(TEXT("unknown_params"), StringArrayToJsonValues(UnknownParams));
+			}
+			Result.ErrorData->SetBoolField(TEXT("strict_params"), FMonolithParamSchema::IsStrictParamsEnabled());
+			if (!Result.ErrorData->HasField(TEXT("possible_contributing_causes")))
+			{
+				TArray<FString> ContributingCauses;
+				ContributingCauses.Add(TEXT("unknown_param"));
+				Result.ErrorData->SetArrayField(TEXT("possible_contributing_causes"), StringArrayToJsonValues(ContributingCauses));
+			}
+			AddUniqueString(Result.Hints, FString::Printf(
+				TEXT("Remove unknown params for %s.%s: %s. Unknown params are ignored unless STRICT_PARAMS=1, so typos can still cause handler failures."),
+				*Namespace,
+				*Action,
+				*FString::Join(UnknownParams, TEXT(", "))));
+		}
+
+		if (PathParamWarnings.Num() > 0 && !Result.ErrorData->HasField(TEXT("pre_dispatch_warnings")))
+		{
+			Result.ErrorData->SetArrayField(TEXT("pre_dispatch_warnings"), StringArrayToJsonValues(PathParamWarnings));
+		}
+	}
+
+	void EnrichFailureWithActionGuidance(
+		FMonolithActionResult& Result,
+		const FMonolithActionInfo& ActionInfo,
+		const FString& FailureStage)
+	{
+		if (Result.bSuccess)
+		{
+			return;
+		}
+
+		const FString ActionId = ActionInfo.Namespace + TEXT(".") + ActionInfo.Action;
+		const FString Skill = ActionInfo.PlanningMetadata.Skill.IsEmpty()
+			? FMonolithToolRegistry::ResolveSkillForNamespace(ActionInfo.Namespace)
+			: ActionInfo.PlanningMetadata.Skill;
+
+		AddUniqueString(Result.RelatedActions, TEXT("monolith.discover"));
+		AddUniqueString(Result.RelatedActions, TEXT("monolith.find"));
+		AddUniqueString(Result.Hints, FString::Printf(
+			TEXT("Inspect exact parameters with monolith_discover({\"namespace\":\"%s\",\"action\":\"%s\",\"mode\":\"schema\"})."),
+			*ActionInfo.Namespace,
+			*ActionInfo.Action));
+		AddUniqueString(Result.Hints, FString::Printf(
+			TEXT("Use the %s skill when planning calls for %s."),
+			*Skill,
+			*ActionId));
+
+		TArray<TSharedPtr<FJsonValue>> RequiredParams;
+		TArray<TSharedPtr<FJsonValue>> OptionalParams;
+		TArray<FString> RequiredNames;
+		SplitParamSummaries(ActionInfo.ParamSchema, RequiredParams, OptionalParams, &RequiredNames);
+		if (RequiredNames.Num() > 0)
+		{
+			AddUniqueString(Result.Hints, FString::Printf(
+				TEXT("Required params: %s. See error_data.required_params for names, types, aliases, and constraints."),
+				*FString::Join(RequiredNames, TEXT(", "))));
+		}
+
+		if (!Result.ErrorData.IsValid())
+		{
+			Result.ErrorData = MakeShared<FJsonObject>();
+		}
+
+		SetStringFieldIfMissing(Result.ErrorData, TEXT("action_id"), ActionId);
+		SetStringFieldIfMissing(Result.ErrorData, TEXT("namespace"), ActionInfo.Namespace);
+		SetStringFieldIfMissing(Result.ErrorData, TEXT("action"), ActionInfo.Action);
+		SetStringFieldIfMissing(Result.ErrorData, TEXT("mcp_tool"), MakeMcpToolName(ActionInfo.Namespace, ActionInfo.Action));
+		SetStringFieldIfMissing(Result.ErrorData, TEXT("skill"), Skill);
+		SetStringFieldIfMissing(Result.ErrorData, TEXT("failure_stage"), FailureStage);
+		AddFailureDiagnostics(Result.ErrorData, DefaultFailureCauseForStage(FailureStage), DefaultRetryabilityForStage(FailureStage));
+		SetObjectFieldIfMissing(Result.ErrorData, TEXT("discover_args"), BuildDiscoverArgs(ActionInfo.Namespace, ActionInfo.Action));
+		SetArrayFieldIfMissing(Result.ErrorData, TEXT("planning_signals"), FMonolithToolRegistry::BuildPlanningSignals(ActionInfo));
+		if (FailureStage == TEXT("profile"))
+		{
+			AddUniqueString(Result.RelatedActions, TEXT("monolith.get_effective_discovery"));
+			AddUniqueString(Result.RelatedActions, TEXT("monolith.list_tool_profiles"));
+			AddUniqueString(Result.RelatedActions, TEXT("monolith.validate_tool_profile"));
+			AddUniqueString(Result.RelatedActions, TEXT("monolith.set_action_enabled"));
+			AddUniqueString(Result.RelatedActions, TEXT("monolith.set_namespace_enabled"));
+			AddUniqueString(Result.Hints, FString::Printf(
+				TEXT("The active tool profile '%s' blocks %s. Inspect effective discovery before retrying, then enable the action or namespace only if the profile policy allows it."),
+				*FMonolithToolProfileManager::Get().GetActiveProfileId(),
+				*ActionId));
+			Result.ErrorData->SetStringField(TEXT("profile_id"), FMonolithToolProfileManager::Get().GetActiveProfileId());
+			TArray<FString> ProfileRecoveryActions = {
+				TEXT("monolith.get_effective_discovery"),
+				TEXT("monolith.list_tool_profiles"),
+				TEXT("monolith.validate_tool_profile"),
+				TEXT("monolith.set_action_enabled"),
+				TEXT("monolith.set_namespace_enabled")
+			};
+			Result.ErrorData->SetArrayField(TEXT("profile_recovery_actions"), StringArrayToJsonValues(ProfileRecoveryActions));
+		}
+		else if (FailureStage == TEXT("handler_unbound"))
+		{
+			AddUniqueString(Result.Hints, FString::Printf(
+				TEXT("%s is registered but its handler delegate is null. Schema changes will not fix this; rebuild/restart the module that owns the action or report a Monolith registration bug."),
+				*ActionId));
+			Result.ErrorData->SetStringField(TEXT("bug_class"), TEXT("handler_unbound"));
+		}
+		if (!Result.ErrorData->HasField(TEXT("type_validation")))
+		{
+			Result.ErrorData->SetBoolField(TEXT("type_validation"), IsSchemaTypeValidationEnabled(ActionInfo.ParamSchema));
+		}
+		if (RequiredParams.Num() > 0 && !Result.ErrorData->HasField(TEXT("required_params")))
+		{
+			Result.ErrorData->SetArrayField(TEXT("required_params"), RequiredParams);
+		}
+		if (OptionalParams.Num() > 0 && !Result.ErrorData->HasField(TEXT("optional_params")))
+		{
+			Result.ErrorData->SetArrayField(TEXT("optional_params"), OptionalParams);
+		}
+	}
+
+	void EnrichUnknownActionFailure(FMonolithActionResult& Result, const FString& Namespace, const FString& Action)
+	{
+		AddUniqueString(Result.RelatedActions, TEXT("monolith.discover"));
+		AddUniqueString(Result.RelatedActions, TEXT("monolith.find"));
+		AddUniqueString(Result.Hints, FString::Printf(
+			TEXT("Call monolith_discover({\"namespace\":\"%s\",\"mode\":\"actions\"}) to enumerate valid actions in this namespace."),
+			*Namespace));
+		AddUniqueString(Result.Hints, TEXT("Call monolith_find with the task description if the namespace or action name is uncertain."));
+
+		if (!Result.ErrorData.IsValid())
+		{
+			Result.ErrorData = MakeShared<FJsonObject>();
+		}
+		SetStringFieldIfMissing(Result.ErrorData, TEXT("attempted_action_id"), Namespace + TEXT(".") + Action);
+		SetStringFieldIfMissing(Result.ErrorData, TEXT("namespace"), Namespace);
+		SetStringFieldIfMissing(Result.ErrorData, TEXT("action"), Action);
+		SetStringFieldIfMissing(Result.ErrorData, TEXT("failure_stage"), TEXT("lookup"));
+		AddFailureDiagnostics(Result.ErrorData, TEXT("unknown_action"), TEXT("retry_with_candidate_action_or_discovery"));
+		SetObjectFieldIfMissing(Result.ErrorData, TEXT("discover_args"), BuildDiscoverArgs(Namespace, FString()));
+	}
+
 	FMonolithActionExecutionPolicy MakeInferredMutationPolicy()
 	{
 		FMonolithActionExecutionPolicy Policy;
@@ -288,12 +728,13 @@ bool FMonolithParamSchema::ValidateTypedParams(
 		return true;
 	}
 
-	bool bValidateTypes = false;
+	bool bValidateTypes = true;
 	TSharedPtr<FJsonValue> ValidateTypesField = Schema->TryGetField(TEXT("_validate_types"));
 	if (ValidateTypesField.IsValid())
 	{
 		if (!ValidateTypesField->TryGetBool(bValidateTypes))
 		{
+			OutErrors.Add(TEXT("Schema field '_validate_types' must be a boolean."));
 			return false;
 		}
 	}
@@ -452,6 +893,171 @@ FMonolithToolRegistry& FMonolithToolRegistry::Get()
 	return Instance;
 }
 
+FString FMonolithToolRegistry::ResolveSkillForNamespace(const FString& Namespace)
+{
+	static const TMap<FString, FString> NamespaceSkills = {
+		{ TEXT("source"), TEXT("unreal-cpp") },
+		{ TEXT("project"), TEXT("unreal-project-search") },
+		{ TEXT("bridge"), TEXT("unreal-bridge") },
+		{ TEXT("editor"), TEXT("unreal-build") },
+		{ TEXT("ai"), TEXT("unreal-ai") },
+		{ TEXT("gas"), TEXT("unreal-gas") },
+		{ TEXT("blueprint"), TEXT("unreal-blueprints") },
+		{ TEXT("logicdriver"), TEXT("unreal-logicdriver") },
+		{ TEXT("combograph"), TEXT("unreal-combograph") },
+		{ TEXT("input"), TEXT("unreal-input") },
+		{ TEXT("world_conditions"), TEXT("unreal-world-conditions") },
+		{ TEXT("gamefeatures"), TEXT("unreal-gamefeatures") },
+		{ TEXT("scene"), TEXT("unreal-scene") },
+		{ TEXT("leveldesign"), TEXT("unreal-leveldesign") },
+		{ TEXT("worldgen"), TEXT("unreal-worldgen") },
+		{ TEXT("mesh"), TEXT("unreal-mesh") },
+		{ TEXT("level_instance"), TEXT("unreal-level-instance") },
+		{ TEXT("hlod"), TEXT("unreal-hlod") },
+		{ TEXT("pcg"), TEXT("unreal-pcg") },
+		{ TEXT("water"), TEXT("unreal-water") },
+		{ TEXT("material"), TEXT("unreal-materials") },
+		{ TEXT("asset"), TEXT("unreal-asset") },
+		{ TEXT("niagara"), TEXT("unreal-niagara") },
+		{ TEXT("animation"), TEXT("unreal-animation") },
+		{ TEXT("metahuman"), TEXT("unreal-metahuman") },
+		{ TEXT("audio"), TEXT("unreal-audio") },
+		{ TEXT("ui"), TEXT("unreal-ui") },
+		{ TEXT("slate"), TEXT("unreal-slate") },
+		{ TEXT("paper2d"), TEXT("unreal-paper2d") },
+		{ TEXT("chaos_fracture"), TEXT("unreal-chaos-fracture") },
+		{ TEXT("cloth"), TEXT("unreal-cloth") },
+		{ TEXT("dataflow"), TEXT("unreal-dataflow") },
+		{ TEXT("chooser"), TEXT("unreal-chooser") },
+		{ TEXT("interchange"), TEXT("unreal-interchange") },
+		{ TEXT("modelgen"), TEXT("unreal-modelgen") },
+		{ TEXT("imagegen"), TEXT("unreal-imagegen") },
+		{ TEXT("ndisplay"), TEXT("unreal-ndisplay") },
+		{ TEXT("level_sequence"), TEXT("unreal-level-sequences") },
+		{ TEXT("config"), TEXT("unreal-config") },
+		{ TEXT("source_control"), TEXT("unreal-source-control") },
+		{ TEXT("collection"), TEXT("unreal-collection") },
+		{ TEXT("localization"), TEXT("unreal-localization") },
+		{ TEXT("monolith"), TEXT("monolith-mcp") }
+	};
+
+	if (const FString* Skill = NamespaceSkills.Find(Namespace))
+	{
+		return *Skill;
+	}
+	return TEXT("monolith-mcp");
+}
+
+TArray<TSharedPtr<FJsonValue>> FMonolithToolRegistry::BuildPlanningSignals(const FMonolithActionInfo& ActionInfo)
+{
+	TArray<TSharedPtr<FJsonValue>> Signals;
+	Signals.Reserve(5);
+
+	const FString Skill = ActionInfo.PlanningMetadata.Skill.IsEmpty()
+		? ResolveSkillForNamespace(ActionInfo.Namespace)
+		: ActionInfo.PlanningMetadata.Skill;
+
+	TSharedPtr<FJsonObject> SkillSignal = MakeShared<FJsonObject>();
+	SkillSignal->SetStringField(TEXT("kind"), TEXT("skill"));
+	SkillSignal->SetStringField(TEXT("source"), ActionInfo.PlanningMetadata.Skill.IsEmpty() ? TEXT("namespace_map") : TEXT("declared"));
+	SkillSignal->SetStringField(TEXT("skill"), Skill);
+	AddPlanningSignal(Signals, SkillSignal);
+
+	TSharedPtr<FJsonObject> ToolSignal = MakeShared<FJsonObject>();
+	ToolSignal->SetStringField(TEXT("kind"), TEXT("mcp_tool"));
+	ToolSignal->SetStringField(TEXT("source"), TEXT("registry_namespace"));
+	ToolSignal->SetStringField(TEXT("tool"), MakeMcpToolName(ActionInfo.Namespace, ActionInfo.Action));
+	AddPlanningSignal(Signals, ToolSignal);
+
+	TArray<TSharedPtr<FJsonValue>> RequiredParams;
+	TArray<TSharedPtr<FJsonValue>> OptionalParams;
+	TArray<FString> RequiredNames;
+	SplitParamSummaries(ActionInfo.ParamSchema, RequiredParams, OptionalParams, &RequiredNames);
+
+	TArray<FString> OptionalNames;
+	if (ActionInfo.ParamSchema.IsValid())
+	{
+		OptionalNames.Reserve(OptionalParams.Num());
+		for (const auto& Pair : ActionInfo.ParamSchema->Values)
+		{
+			if (Pair.Key.StartsWith(TEXT("_")))
+			{
+				continue;
+			}
+			const TSharedPtr<FJsonObject>* ParamDef = nullptr;
+			bool bRequired = false;
+			if (Pair.Value.IsValid()
+				&& Pair.Value->TryGetObject(ParamDef)
+				&& ParamDef
+				&& ParamDef->IsValid())
+			{
+				(*ParamDef)->TryGetBoolField(TEXT("required"), bRequired);
+				if (!bRequired)
+				{
+					OptionalNames.Add(Pair.Key);
+				}
+			}
+		}
+	}
+
+	TSharedPtr<FJsonObject> SchemaSignal = MakeShared<FJsonObject>();
+	SchemaSignal->SetStringField(TEXT("kind"), TEXT("schema"));
+	SchemaSignal->SetStringField(TEXT("source"), TEXT("param_schema"));
+	SchemaSignal->SetStringField(TEXT("status"), ActionInfo.ParamSchema.IsValid() ? TEXT("declared") : TEXT("absent"));
+	SchemaSignal->SetBoolField(TEXT("type_validation"), IsSchemaTypeValidationEnabled(ActionInfo.ParamSchema));
+	SchemaSignal->SetNumberField(TEXT("required_param_count"), RequiredParams.Num());
+	SchemaSignal->SetNumberField(TEXT("optional_param_count"), OptionalParams.Num());
+	if (RequiredNames.Num() > 0)
+	{
+		SchemaSignal->SetArrayField(TEXT("required_params"), StringArrayToJsonValues(RequiredNames));
+	}
+	if (OptionalNames.Num() > 0)
+	{
+		SchemaSignal->SetArrayField(TEXT("optional_params"), StringArrayToJsonValues(OptionalNames));
+	}
+	AddPlanningSignal(Signals, SchemaSignal);
+
+	const bool bCanMutate =
+		ActionInfo.ExecutionPolicy.bDirtyPackageTracking
+		|| ActionInfo.ExecutionPolicy.bTransactionWrapping
+		|| ActionInfo.ExecutionPolicy.bPostEditValidation
+		|| ActionInfo.bDestructiveHint;
+	TSharedPtr<FJsonObject> PolicySignal = MakeShared<FJsonObject>();
+	PolicySignal->SetStringField(TEXT("kind"), TEXT("execution_policy"));
+	PolicySignal->SetStringField(TEXT("source"), TEXT("registry_policy"));
+	PolicySignal->SetStringField(TEXT("policy_id"), ActionInfo.ExecutionPolicy.PolicyId);
+	PolicySignal->SetBoolField(TEXT("can_mutate"), bCanMutate);
+	PolicySignal->SetBoolField(TEXT("policy_defaulted"), ActionInfo.ExecutionPolicy.bDefaulted);
+	PolicySignal->SetBoolField(TEXT("dirty_package_tracking"), ActionInfo.ExecutionPolicy.bDirtyPackageTracking);
+	PolicySignal->SetBoolField(TEXT("transaction_wrapping"), ActionInfo.ExecutionPolicy.bTransactionWrapping);
+	PolicySignal->SetBoolField(TEXT("post_edit_validation"), ActionInfo.ExecutionPolicy.bPostEditValidation);
+	PolicySignal->SetBoolField(TEXT("destructive_hint"), ActionInfo.bDestructiveHint);
+	AddPlanningSignal(Signals, PolicySignal);
+
+	TSharedPtr<FJsonObject> SearchSignal = MakeShared<FJsonObject>();
+	SearchSignal->SetStringField(TEXT("kind"), TEXT("search_metadata"));
+	SearchSignal->SetStringField(TEXT("source"), TEXT("registered_search_metadata"));
+	SearchSignal->SetStringField(TEXT("status"), ActionInfo.SearchMetadata.IsEmpty() ? TEXT("absent") : TEXT("declared_or_derived"));
+	SearchSignal->SetNumberField(TEXT("keyword_count"), ActionInfo.SearchMetadata.Keywords.Num());
+	SearchSignal->SetNumberField(TEXT("alias_count"), ActionInfo.SearchMetadata.Aliases.Num());
+	SearchSignal->SetNumberField(TEXT("example_count"), ActionInfo.SearchMetadata.Examples.Num());
+	if (ActionInfo.SearchMetadata.Keywords.Num() > 0)
+	{
+		SearchSignal->SetArrayField(TEXT("keywords"), StringArrayToJsonValues(ActionInfo.SearchMetadata.Keywords));
+	}
+	if (ActionInfo.SearchMetadata.Aliases.Num() > 0)
+	{
+		SearchSignal->SetArrayField(TEXT("aliases"), StringArrayToJsonValues(ActionInfo.SearchMetadata.Aliases));
+	}
+	if (ActionInfo.SearchMetadata.Examples.Num() > 0)
+	{
+		SearchSignal->SetArrayField(TEXT("examples"), StringArrayToJsonValues(ActionInfo.SearchMetadata.Examples));
+	}
+	AddPlanningSignal(Signals, SearchSignal);
+
+	return Signals;
+}
+
 void FMonolithToolRegistry::RegisterAction(
 	const FString& Namespace,
 	const FString& Action,
@@ -460,7 +1066,8 @@ void FMonolithToolRegistry::RegisterAction(
 	const TSharedPtr<FJsonObject>& ParamSchema,
 	const FString& Category,
 	const FMonolithActionExecutionPolicy& ExecutionPolicy,
-	const FMonolithActionSearchMetadata& SearchMetadata)
+	const FMonolithActionSearchMetadata& SearchMetadata,
+	const FMonolithActionPlanningMetadata& PlanningMetadata)
 {
 	FScopeLock Lock(&RegistryLock);
 
@@ -478,6 +1085,7 @@ void FMonolithToolRegistry::RegisterAction(
 	RegAction.Info.Category = Category;
 	RegAction.Info.ExecutionPolicy = InferExecutionPolicy(Namespace, Action, ExecutionPolicy);
 	RegAction.Info.SearchMetadata = SearchMetadata;
+	RegAction.Info.PlanningMetadata = PlanningMetadata;
 	RegAction.Info.ParamSchema = ParamSchema;
 	RegAction.Handler = Handler;
 	if (RegistrationOwnerStack.Num() > 0)
@@ -512,6 +1120,32 @@ bool FMonolithToolRegistry::SetActionSearchMetadata(
 	RegAction->Info.SearchMetadata.Keywords = Keywords;
 	RegAction->Info.SearchMetadata.Aliases = Aliases;
 	RegAction->Info.SearchMetadata.Examples = Examples;
+	return true;
+}
+
+bool FMonolithToolRegistry::SetActionPlanningMetadata(
+	const FString& Namespace,
+	const FString& Action,
+	const FString& Skill,
+	const TArray<FString>& Preconditions,
+	const TArray<FString>& Outputs,
+	const TArray<FString>& NextActions)
+{
+	FScopeLock Lock(&RegistryLock);
+
+	FRegisteredAction* RegAction = Actions.Find(MakeKey(Namespace, Action));
+	if (!RegAction)
+	{
+		UE_LOG(LogMonolith, Warning,
+			TEXT("SetActionPlanningMetadata: unknown action %s.%s — metadata not applied"),
+			*Namespace, *Action);
+		return false;
+	}
+
+	RegAction->Info.PlanningMetadata.Skill = Skill;
+	RegAction->Info.PlanningMetadata.Preconditions = Preconditions;
+	RegAction->Info.PlanningMetadata.Outputs = Outputs;
+	RegAction->Info.PlanningMetadata.NextActions = NextActions;
 	return true;
 }
 
@@ -682,13 +1316,17 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 			FString::Printf(TEXT("Unknown action: %s.%s — call monolith_discover(\"%s\") to enumerate valid actions in this namespace."), *Namespace, *Action, *Namespace),
 			FMonolithJsonUtils::ErrMethodNotFound
 		);
-		R.RelatedActions = MoveTemp(Similar);
-		if (R.RelatedActions.Num() == 0)
+		if (Similar.Num() > 0)
+		{
+			AttachCandidateActions(R, Namespace, Similar);
+		}
+		else
 		{
 			// No close matches — guide the agent to discovery.
 			R.Hints.Add(FString::Printf(
 				TEXT("Use monolith_discover(\"%s\") to list available actions."), *Namespace));
 		}
+		EnrichUnknownActionFailure(R, Namespace, Action);
 		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
 			TEXT(""),
 			Namespace,
@@ -700,6 +1338,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	}
 
 	SetPhaseMs(TEXT("lookup_ms"), LookupStartSeconds);
+	const FMonolithActionInfo& ActionInfo = RegAction->Info;
 	const double ProfileStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
 	if (!FMonolithToolProfileManager::Get().IsActionAllowed(Namespace, Action))
 	{
@@ -710,6 +1349,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 				*Action,
 				*FMonolithToolProfileManager::Get().GetActiveProfileId()),
 			FMonolithJsonUtils::ErrInvalidRequest);
+		EnrichFailureWithActionGuidance(R, ActionInfo, TEXT("profile"));
 		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
 			TEXT(""),
 			Namespace,
@@ -728,6 +1368,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 			FString::Printf(TEXT("Action handler not bound: %s — this is a Monolith bug; the action is registered but its handler delegate is null. Report at github.com/tumourlove/monolith."), *Key),
 			FMonolithJsonUtils::ErrInternalError
 		);
+		EnrichFailureWithActionGuidance(R, ActionInfo, TEXT("handler_unbound"));
 		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
 			TEXT(""),
 			Namespace,
@@ -739,7 +1380,6 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		return RecordAndReturn(R, TEXT("lookup"), Params);
 	}
 
-	const FMonolithActionInfo& ActionInfo = RegAction->Info;
 	TSharedPtr<FJsonObject> EffectiveParams = Params.IsValid() ? Params : MakeShared<FJsonObject>();
 
 	// K2 — alias rewriting BEFORE the required-param check.
@@ -751,6 +1391,9 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		{
 			SetPhaseMs(TEXT("alias_ms"), AliasStartSeconds);
 			FMonolithActionResult R = FMonolithActionResult::Error(Collision, FMonolithJsonUtils::ErrInvalidParams);
+			EnrichFailureWithActionGuidance(R, ActionInfo, TEXT("schema"));
+			R.ErrorData->SetStringField(TEXT("failure_cause"), TEXT("param_alias_collision"));
+			R.ErrorData->SetStringField(TEXT("retryability"), TEXT("retry_with_canonical_or_alias_params"));
 			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
 				TEXT(""),
 				Namespace,
@@ -837,6 +1480,10 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 				R.Hints.Add(FString::Printf(TEXT("Accepted aliases: %s"),
 					*FString::Join(AliasHints, TEXT("; "))));
 			}
+			EnrichFailureWithActionGuidance(R, ActionInfo, TEXT("schema"));
+			R.ErrorData->SetStringField(TEXT("failure_cause"), TEXT("missing_required_param"));
+			R.ErrorData->SetStringField(TEXT("retryability"), TEXT("retry_with_required_params"));
+			R.ErrorData->SetArrayField(TEXT("missing_required_params"), StringArrayToJsonValues(Missing));
 			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
 				TEXT(""),
 				Namespace,
@@ -936,6 +1583,10 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 					FString::Printf(TEXT("STRICT_PARAMS=1: rejected action '%s:%s' due to unknown params: [%s] — unset STRICT_PARAMS or remove the unknown params from the call."),
 						*Namespace, *Action, *FString::Join(Unknown, TEXT(", "))),
 					FMonolithJsonUtils::ErrInvalidParams);
+				EnrichFailureWithActionGuidance(R, ActionInfo, TEXT("schema"));
+				R.ErrorData->SetStringField(TEXT("failure_cause"), TEXT("unknown_param"));
+				R.ErrorData->SetStringField(TEXT("retryability"), TEXT("retry_without_unknown_params"));
+				AttachPreDispatchDiagnosticsToFailure(R, Namespace, Action, Unknown, PathParamWarnings);
 				FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
 					TEXT(""),
 					Namespace,
@@ -949,7 +1600,8 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		}
 	}
 
-	// Typed/range/enum validation is opt-in per schema via _validate_types.
+	// Typed/range/enum validation is enabled by default for every schema.
+	// A schema can set _validate_types=false only for deliberate legacy compatibility.
 	if (ActionInfo.ParamSchema.IsValid())
 	{
 		TArray<FString> ValidationErrors;
@@ -962,6 +1614,12 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 					*Action,
 					*FString::Join(ValidationErrors, TEXT("; "))),
 				FMonolithJsonUtils::ErrInvalidParams);
+			R.ErrorData = MakeShared<FJsonObject>();
+			R.ErrorData->SetArrayField(TEXT("validation_errors"), StringArrayToJsonValues(ValidationErrors));
+			EnrichFailureWithActionGuidance(R, ActionInfo, TEXT("schema"));
+			R.ErrorData->SetStringField(TEXT("failure_cause"), TEXT("invalid_param"));
+			R.ErrorData->SetStringField(TEXT("retryability"), TEXT("retry_with_validated_param_types_or_ranges"));
+			AttachPreDispatchDiagnosticsToFailure(R, Namespace, Action, Unknown, PathParamWarnings);
 			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
 				TEXT(""),
 				Namespace,
@@ -992,6 +1650,11 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	FScopedEnvironmentVar ParentSpanEnv(TEXT("MONOLITH_PARENT_SPAN_ID"), ActionSpanId);
 	FMonolithActionResult ActionResult = HandlerCopy.Execute(EffectiveParams);
 	SetPhaseMs(TEXT("handler_ms"), HandlerStartSeconds);
+	if (!ActionResult.bSuccess)
+	{
+		EnrichFailureWithActionGuidance(ActionResult, ActionInfo, TEXT("handler"));
+		AttachPreDispatchDiagnosticsToFailure(ActionResult, Namespace, Action, Unknown, PathParamWarnings);
+	}
 
 	// Collect ALL post-handler warnings into a single channel, then attach once.
 	// Sources, in order:

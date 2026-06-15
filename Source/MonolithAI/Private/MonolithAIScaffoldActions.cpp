@@ -586,7 +586,6 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Required(TEXT("name"), TEXT("string"), TEXT("Flying AI name"))
 			.Optional(TEXT("altitude_range"), TEXT("string"), TEXT("Altitude range as 'min,max' in cm (default: 500,2000)"))
 			.Build());
-}
 
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("scaffold_complete_ai_character"),
 		{ TEXT("full ai stack"), TEXT("npc from scratch"), TEXT("character controller bt bb perception"), TEXT("wire everything together"), TEXT("one call npc") },
@@ -612,6 +611,7 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 		{ TEXT("boss npc"), TEXT("multi phase fight"), TEXT("health threshold phases"), TEXT("phase transition ai") },
 		{ TEXT("create_boss"), TEXT("setup_boss_ai"), TEXT("make_boss") },
 		{ TEXT("scaffold a multi-phase boss that changes behavior at health thresholds") });
+}
 
 // ============================================================
 //  180b. hello_world_ai

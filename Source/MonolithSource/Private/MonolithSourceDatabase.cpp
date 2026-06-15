@@ -1,9 +1,11 @@
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceSchema.h"
+#include "MonolithFuzzyMatch.h"
 #include "Dom/JsonValue.h"
 #include "SQLiteDatabase.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
+#include "HAL/PlatformTime.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -459,16 +461,21 @@ static int32 CountOverrideEdgesFromUnlocked(FSQLiteDatabase& DB, int64 SymbolId,
 	return Edges.Num();
 }
 
-static bool PopulateSourceOverrideEdgeCacheLocked(FSQLiteDatabase& DB, int64& OutCount, FString& OutError)
+static bool PopulateSourceOverrideEdgeCacheLocked(FSQLiteDatabase& DB, const TCHAR* ChildSeedTable, int64& OutCount, FString& OutError)
 {
 	OutCount = 0;
-	FSQLitePreparedStatement Candidates;
-	if (!Candidates.Create(DB, TEXT(
+	const FString ChildSeedFilter = ChildSeedTable && ChildSeedTable[0] != TEXT('\0')
+		? FString::Printf(TEXT(" AND id IN (SELECT id FROM %s)"), ChildSeedTable)
+		: FString();
+	const FString CandidateSql = FString::Printf(TEXT(
 		"WITH RECURSIVE child_seed(id,name,qualified_name,kind,parent_symbol_id,signature) AS ("
 		"  SELECT id,name,qualified_name,kind,parent_symbol_id,signature FROM symbols "
-		"  WHERE kind = 'function' AND signature LIKE '%%override%%'"
+		"  WHERE kind = 'function' AND signature LIKE '%%override%%'%s"
 		"), ancestors(child_class_id, ancestor_class_id) AS ("
-		"  SELECT child_id, parent_id FROM inheritance"
+		"  SELECT DISTINCT child_cls.id, i.parent_id "
+		"  FROM child_seed child_fn "
+		"  JOIN symbols child_cls ON child_cls.id = child_fn.parent_symbol_id "
+		"  JOIN inheritance i ON i.child_id = child_cls.id "
 		"  UNION "
 		"  SELECT a.child_class_id, i.parent_id "
 		"  FROM ancestors a "
@@ -487,7 +494,9 @@ static bool PopulateSourceOverrideEdgeCacheLocked(FSQLiteDatabase& DB, int64& Ou
 		"      OR base_fn.name = base_cls.name || '::' || child_fn.name) "
 		"    AND base_fn.kind = child_fn.kind "
 		"WHERE child_fn.kind = 'function' "
-		"ORDER BY base_fn.id, child_fn.id;")))
+		"ORDER BY base_fn.id, child_fn.id;"), *ChildSeedFilter);
+	FSQLitePreparedStatement Candidates;
+	if (!Candidates.Create(DB, *CandidateSql))
 	{
 		OutError = DB.GetLastError();
 		return false;
@@ -503,6 +512,7 @@ static bool PopulateSourceOverrideEdgeCacheLocked(FSQLiteDatabase& DB, int64& Ou
 		return false;
 	}
 
+	const double StartSeconds = FPlatformTime::Seconds();
 	while (Candidates.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
 		FMonolithSourceOverrideEdge Edge;
@@ -542,7 +552,21 @@ static bool PopulateSourceOverrideEdgeCacheLocked(FSQLiteDatabase& DB, int64& Ou
 		}
 		++OutCount;
 	}
+	const double ElapsedSeconds = FPlatformTime::Seconds() - StartSeconds;
+	if (ElapsedSeconds >= 1.0)
+	{
+		UE_LOG(LogMonolithSource, Log,
+			TEXT("PopulateSourceOverrideEdgeCache: child_seed=%s inserted=%lld elapsed=%.3fs"),
+			ChildSeedTable && ChildSeedTable[0] != TEXT('\0') ? ChildSeedTable : TEXT("<all>"),
+			OutCount,
+			ElapsedSeconds);
+	}
 	return true;
+}
+
+static bool PopulateSourceOverrideEdgeCacheLocked(FSQLiteDatabase& DB, int64& OutCount, FString& OutError)
+{
+	return PopulateSourceOverrideEdgeCacheLocked(DB, nullptr, OutCount, OutError);
 }
 
 // ============================================================
@@ -649,6 +673,27 @@ static bool ApplyEngineSourceDeletePragmas(FSQLiteDatabase& DB, const FString& D
 		return false;
 	}
 	return bOk;
+}
+
+static bool DeleteSourceDatabaseFileIfPresent(IPlatformFile& PlatformFile, const FString& Path, bool bRequired)
+{
+	if (Path.IsEmpty() || !PlatformFile.FileExists(*Path))
+	{
+		return true;
+	}
+	if (PlatformFile.DeleteFile(*Path))
+	{
+		return true;
+	}
+	if (bRequired)
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Failed to delete EngineSource DB file before reset: %s"), *Path);
+	}
+	else
+	{
+		UE_LOG(LogMonolithSource, Warning, TEXT("Failed to delete EngineSource DB sidecar before reset: %s"), *Path);
+	}
+	return !bRequired;
 }
 
 // ============================================================
@@ -766,13 +811,118 @@ static FString TierForScore(double Score)
 	return TEXT("low");
 }
 
-static bool ContainsAnyToken(const FString& LowerText, std::initializer_list<const TCHAR*> Tokens)
+static bool AllowsSensitivityPrefix(const FString& Token)
 {
-	for (const TCHAR* Token : Tokens)
+	return Token == TEXT("save")
+		|| Token == TEXT("serialize")
+		|| Token == TEXT("archive")
+		|| Token == TEXT("auth")
+		|| Token == TEXT("login")
+		|| Token == TEXT("account")
+		|| Token == TEXT("session")
+		|| Token == TEXT("purchase")
+		|| Token == TEXT("store")
+		|| Token == TEXT("entitlement")
+		|| Token == TEXT("anticheat")
+		|| Token == TEXT("crypto")
+		|| Token == TEXT("crypt")
+		|| Token == TEXT("encrypt")
+		|| Token == TEXT("decrypt")
+		|| Token == TEXT("signature")
+		|| Token == TEXT("signed")
+		|| Token == TEXT("signing")
+		|| Token == TEXT("hash")
+		|| Token == TEXT("exec")
+		|| Token == TEXT("eval")
+		|| Token == TEXT("command")
+		|| Token == TEXT("file")
+		|| Token == TEXT("registry")
+		|| Token == TEXT("process")
+		|| Token == TEXT("ufunction")
+		|| Token == TEXT("server")
+		|| Token == TEXT("client")
+		|| Token == TEXT("netmulticast")
+		|| Token == TEXT("onrep")
+		|| Token == TEXT("replication")
+		|| Token == TEXT("rpc")
+		|| Token == TEXT("network");
+}
+
+static bool MatchesSensitivityToken(const FString& CandidateToken, const FString& SensitiveToken)
+{
+	if (CandidateToken == SensitiveToken)
 	{
-		if (LowerText.Contains(FString(Token)))
+		return true;
+	}
+	return AllowsSensitivityPrefix(SensitiveToken) && CandidateToken.StartsWith(SensitiveToken);
+}
+
+static void AddSensitivityCandidateToken(TArray<FString>& Tokens, TSet<FString>& Seen, FString Token)
+{
+	Token.ToLowerInline();
+	if (Token.IsEmpty() || Seen.Contains(Token))
+	{
+		return;
+	}
+	Seen.Add(Token);
+	Tokens.Add(MoveTemp(Token));
+}
+
+static TArray<FString> BuildSensitivityCandidateTokens(const FString& Text)
+{
+	TArray<FString> Tokens;
+	TSet<FString> Seen;
+	for (const FString& Token : FMonolithFuzzyMatch::Tokenize(Text))
+	{
+		AddSensitivityCandidateToken(Tokens, Seen, Token);
+	}
+
+	FString Current;
+	TCHAR Previous = TEXT('\0');
+	for (int32 Index = 0; Index < Text.Len(); ++Index)
+	{
+		const TCHAR Ch = Text[Index];
+		if (!FChar::IsAlnum(Ch))
 		{
-			return true;
+			AddSensitivityCandidateToken(Tokens, Seen, Current);
+			Current.Empty();
+			Previous = TEXT('\0');
+			continue;
+		}
+		if (!Current.IsEmpty()
+			&& FChar::IsUpper(Ch)
+			&& (FChar::IsLower(Previous) || FChar::IsDigit(Previous)))
+		{
+			AddSensitivityCandidateToken(Tokens, Seen, Current);
+			Current.Empty();
+		}
+		Current.AppendChar(Ch);
+		Previous = Ch;
+	}
+	AddSensitivityCandidateToken(Tokens, Seen, Current);
+	return Tokens;
+}
+
+static bool ContainsAnyToken(const FString& Text, std::initializer_list<const TCHAR*> Tokens, FString* OutMatchedToken = nullptr)
+{
+	const TArray<FString> CandidateTokens = BuildSensitivityCandidateTokens(Text);
+	for (const FString& CandidateToken : CandidateTokens)
+	{
+		if (CandidateToken.IsEmpty())
+		{
+			continue;
+		}
+		for (const TCHAR* Token : Tokens)
+		{
+			const FString SensitiveToken(Token);
+			if (MatchesSensitivityToken(CandidateToken, SensitiveToken))
+			{
+				if (OutMatchedToken)
+				{
+					*OutMatchedToken = CandidateToken;
+				}
+				return true;
+			}
 		}
 	}
 	return false;
@@ -780,45 +930,52 @@ static bool ContainsAnyToken(const FString& LowerText, std::initializer_list<con
 
 static double SourceSensitivityFactor(const FString& Text, FString& OutReason)
 {
-	const FString Lower = Text.ToLower();
-	if (ContainsAnyToken(Lower, { TEXT("ufunction"), TEXT("server"), TEXT("client"), TEXT("netmulticast"), TEXT("onrep"), TEXT("replication"), TEXT("rpc"), TEXT("network") }))
+	auto MatchedReason = [](const TCHAR* Reason, const FString& Token)
 	{
-		OutReason = TEXT("sensitivity: replication/RPC or network surface");
+		return Token.IsEmpty()
+			? FString(Reason)
+			: FString::Printf(TEXT("%s (token=%s)"), Reason, *Token);
+	};
+
+	FString MatchedToken;
+	if (ContainsAnyToken(Text, { TEXT("ufunction"), TEXT("server"), TEXT("client"), TEXT("netmulticast"), TEXT("onrep"), TEXT("replication"), TEXT("rpc"), TEXT("network") }, &MatchedToken))
+	{
+		OutReason = MatchedReason(TEXT("sensitivity: replication/RPC or network surface"), MatchedToken);
 		return 0.15;
 	}
-	if (ContainsAnyToken(Lower, { TEXT("save"), TEXT("serialize"), TEXT("archive") }))
+	if (ContainsAnyToken(Text, { TEXT("save"), TEXT("serialize"), TEXT("archive") }, &MatchedToken))
 	{
-		OutReason = TEXT("sensitivity: save/serialization surface");
+		OutReason = MatchedReason(TEXT("sensitivity: save/serialization surface"), MatchedToken);
 		return 0.15;
 	}
-	if (ContainsAnyToken(Lower, { TEXT("auth"), TEXT("login"), TEXT("account"), TEXT("session") }))
+	if (ContainsAnyToken(Text, { TEXT("auth"), TEXT("login"), TEXT("account"), TEXT("session") }, &MatchedToken))
 	{
-		OutReason = TEXT("sensitivity: auth/account/session surface");
+		OutReason = MatchedReason(TEXT("sensitivity: auth/account/session surface"), MatchedToken);
 		return 0.15;
 	}
-	if (ContainsAnyToken(Lower, { TEXT("purchase"), TEXT("iap"), TEXT("store"), TEXT("entitlement") }))
+	if (ContainsAnyToken(Text, { TEXT("purchase"), TEXT("iap"), TEXT("store"), TEXT("entitlement") }, &MatchedToken))
 	{
-		OutReason = TEXT("sensitivity: purchase/store entitlement surface");
+		OutReason = MatchedReason(TEXT("sensitivity: purchase/store entitlement surface"), MatchedToken);
 		return 0.15;
 	}
-	if (ContainsAnyToken(Lower, { TEXT("anticheat"), TEXT("anti_cheat"), TEXT("cheat") }))
+	if (ContainsAnyToken(Text, { TEXT("anticheat"), TEXT("anti_cheat"), TEXT("cheat") }, &MatchedToken))
 	{
-		OutReason = TEXT("sensitivity: anticheat surface");
+		OutReason = MatchedReason(TEXT("sensitivity: anticheat surface"), MatchedToken);
 		return 0.15;
 	}
-	if (ContainsAnyToken(Lower, { TEXT("crypt"), TEXT("encrypt"), TEXT("decrypt"), TEXT("sign"), TEXT("hash") }))
+	if (ContainsAnyToken(Text, { TEXT("crypt"), TEXT("crypto"), TEXT("encrypt"), TEXT("decrypt"), TEXT("sign"), TEXT("signature"), TEXT("signed"), TEXT("signing"), TEXT("hash") }, &MatchedToken))
 	{
-		OutReason = TEXT("sensitivity: crypto/signing/hash surface");
+		OutReason = MatchedReason(TEXT("sensitivity: crypto/signing/hash surface"), MatchedToken);
 		return 0.15;
 	}
-	if (ContainsAnyToken(Lower, { TEXT("exec"), TEXT("eval"), TEXT("command") }))
+	if (ContainsAnyToken(Text, { TEXT("exec"), TEXT("eval"), TEXT("command") }, &MatchedToken))
 	{
-		OutReason = TEXT("sensitivity: exec/eval/command surface");
+		OutReason = MatchedReason(TEXT("sensitivity: exec/eval/command surface"), MatchedToken);
 		return 0.15;
 	}
-	if (ContainsAnyToken(Lower, { TEXT("file"), TEXT("registry"), TEXT("process") }))
+	if (ContainsAnyToken(Text, { TEXT("file"), TEXT("registry"), TEXT("process") }, &MatchedToken))
 	{
-		OutReason = TEXT("sensitivity: file/registry/process surface");
+		OutReason = MatchedReason(TEXT("sensitivity: file/registry/process surface"), MatchedToken);
 		return 0.15;
 	}
 	return 0.0;
@@ -1425,6 +1582,7 @@ static const TCHAR* GCrgProjectionDdl =
 	TEXT(");")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_nodes_domain_native ON crg_nodes(domain, native_table, native_id);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_nodes_stable ON crg_nodes(domain, stable_key);")
+	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_native ON crg_edges(domain, native_table, native_id);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_source ON crg_edges(domain, source_node_id);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_target ON crg_edges(domain, target_node_id);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_kind_subkind ON crg_edges(domain, edge_kind, edge_subkind);")
@@ -1435,6 +1593,9 @@ static const TCHAR* GSourceReviewIndexDdl =
 	TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_parent_name_kind ON symbols(parent_symbol_id, name, kind);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_name_kind_parent ON symbols(name, kind, parent_symbol_id);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_symbols_override_signature ON symbols(kind, parent_symbol_id, name) WHERE kind='function' AND signature LIKE '%override%';")
+	TEXT("CREATE INDEX IF NOT EXISTS idx_references_to_symbol ON \"references\"(to_symbol_id, from_symbol_id, file_id);")
+	TEXT("CREATE INDEX IF NOT EXISTS idx_references_from_symbol ON \"references\"(from_symbol_id, to_symbol_id, file_id);")
+	TEXT("CREATE INDEX IF NOT EXISTS idx_references_file ON \"references\"(file_id);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_inheritance_parent_child ON inheritance(parent_id, child_id);")
 	TEXT("CREATE INDEX IF NOT EXISTS idx_inheritance_child_parent ON inheritance(child_id, parent_id);");
 
@@ -1579,14 +1740,15 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::GetSymbolsByName(const FS
 	{
 		const FString DuplicatedName = MakeDuplicatedQualifiedLookupName(Name);
 		const FString ShortOwnerDuplicatedName = MakeShortOwnerDuplicatedQualifiedLookupName(Name);
-		const FString KindClause = Kind.IsEmpty() ? TEXT("") : TEXT(" AND kind = ?");
+		const FString KindClause = Kind.IsEmpty() ? TEXT("") : TEXT(" AND s.kind = ?");
 		const FString LimitClause = SafeLimit > 0 ? TEXT(" LIMIT ?") : TEXT("");
 		const FString Sql = FString::Printf(TEXT(
-			"SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro "
-			"FROM symbols "
-			"WHERE (qualified_name = ? OR name = ? OR qualified_name = ? OR qualified_name = ?)%s "
-			"ORDER BY CASE WHEN qualified_name = ? THEN 0 WHEN name = ? THEN 1 WHEN qualified_name = ? THEN 2 WHEN qualified_name = ? THEN 3 ELSE 4 END, "
-			"         (line_end > line_start) DESC%s;"),
+			"SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro "
+			"FROM symbols s LEFT JOIN files f ON f.id = s.file_id "
+			"WHERE (s.qualified_name = ? OR s.name = ? OR s.qualified_name = ? OR s.qualified_name = ?)%s "
+			"ORDER BY CASE WHEN s.qualified_name = ? THEN 0 WHEN s.name = ? THEN 1 WHEN s.qualified_name = ? THEN 2 WHEN s.qualified_name = ? THEN 3 ELSE 4 END, "
+			"         CASE WHEN f.path IS NULL OR f.path = '' OR f.path = '<unknown>' THEN 1 ELSE 0 END, "
+			"         (s.line_end > s.line_start) DESC, s.id%s;"),
 			*KindClause, *LimitClause);
 		Stmt.Create(*Database, *Sql);
 		Stmt.SetBindingValueByIndex(1, Name);
@@ -1612,8 +1774,8 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::GetSymbolsByName(const FS
 		if (Kind.IsEmpty())
 		{
 			const FString Sql = SafeLimit > 0
-				? TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC LIMIT ?;")
-				: TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC;");
+				? TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols s LEFT JOIN files f ON f.id = s.file_id WHERE s.name = ? ORDER BY CASE WHEN f.path IS NULL OR f.path = '' OR f.path = '<unknown>' THEN 1 ELSE 0 END, (s.line_end > s.line_start) DESC, s.id LIMIT ?;")
+				: TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols s LEFT JOIN files f ON f.id = s.file_id WHERE s.name = ? ORDER BY CASE WHEN f.path IS NULL OR f.path = '' OR f.path = '<unknown>' THEN 1 ELSE 0 END, (s.line_end > s.line_start) DESC, s.id;");
 			Stmt.Create(*Database, *Sql);
 			Stmt.SetBindingValueByIndex(1, Name);
 			if (SafeLimit > 0)
@@ -1624,8 +1786,8 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::GetSymbolsByName(const FS
 		else
 		{
 			const FString Sql = SafeLimit > 0
-				? TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? AND kind = ? ORDER BY (line_end > line_start) DESC LIMIT ?;")
-				: TEXT("SELECT id, name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro FROM symbols WHERE name = ? AND kind = ? ORDER BY (line_end > line_start) DESC;");
+				? TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols s LEFT JOIN files f ON f.id = s.file_id WHERE s.name = ? AND s.kind = ? ORDER BY CASE WHEN f.path IS NULL OR f.path = '' OR f.path = '<unknown>' THEN 1 ELSE 0 END, (s.line_end > s.line_start) DESC, s.id LIMIT ?;")
+				: TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols s LEFT JOIN files f ON f.id = s.file_id WHERE s.name = ? AND s.kind = ? ORDER BY CASE WHEN f.path IS NULL OR f.path = '' OR f.path = '<unknown>' THEN 1 ELSE 0 END, (s.line_end > s.line_start) DESC, s.id;");
 			Stmt.Create(*Database, *Sql);
 			Stmt.SetBindingValueByIndex(1, Name);
 			Stmt.SetBindingValueByIndex(2, Kind);
@@ -1654,7 +1816,7 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::SearchSymbolsFTS(const FS
 	FString FTSQuery = EscapeFTS(Query);
 
 	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols_fts f JOIN symbols s ON s.id = f.rowid WHERE symbols_fts MATCH ? ORDER BY bm25(symbols_fts) LIMIT ?;"));
+	Stmt.Create(*Database, TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols_fts fts JOIN symbols s ON s.id = fts.rowid LEFT JOIN files f ON f.id = s.file_id WHERE symbols_fts MATCH ? ORDER BY CASE WHEN f.path IS NULL OR f.path = '' OR f.path = '<unknown>' THEN 1 ELSE 0 END, bm25(symbols_fts), s.id LIMIT ?;"));
 	Stmt.SetBindingValueByIndex(1, FTSQuery);
 	Stmt.SetBindingValueByIndex(2, static_cast<int64>(SafeLimit));
 
@@ -2503,21 +2665,50 @@ bool FMonolithSourceDatabase::CreateTablesIfNeeded()
 bool FMonolithSourceDatabase::ResetDatabase()
 {
 	FScopeLock Lock(&DbLock);
-	if (!Database || !Database->IsValid())
+	if (CachedDbPath.IsEmpty())
 	{
-		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DB not open"));
+		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: no cached DB path"));
 		return false;
 	}
 
-	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_Drop))
+	if (Database)
 	{
-		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: drop failed — %s"), *Database->GetLastError());
+		Database->Close();
+		delete Database;
+		Database = nullptr;
+	}
+
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+	PlatformFile.CreateDirectoryTree(*FPaths::GetPath(CachedDbPath));
+	if (!DeleteSourceDatabaseFileIfPresent(PlatformFile, CachedDbPath, /*bRequired=*/true))
+	{
+		return false;
+	}
+	DeleteSourceDatabaseFileIfPresent(PlatformFile, CachedDbPath + TEXT("-journal"), /*bRequired=*/false);
+	DeleteSourceDatabaseFileIfPresent(PlatformFile, CachedDbPath + TEXT("-wal"), /*bRequired=*/false);
+	DeleteSourceDatabaseFileIfPresent(PlatformFile, CachedDbPath + TEXT("-shm"), /*bRequired=*/false);
+
+	Database = new FSQLiteDatabase();
+	if (!Database->Open(*CachedDbPath, ESQLiteDatabaseOpenMode::ReadWriteCreate))
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: failed to recreate DB: %s"), *CachedDbPath);
+		delete Database;
+		Database = nullptr;
 		return false;
 	}
 
-	UE_LOG(LogMonolithSource, Log, TEXT("ResetDatabase: all tables dropped, recreating schema"));
+	if (!ApplyEngineSourceDeletePragmas(*Database, CachedDbPath))
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: failed to configure journal mode: %s"), *CachedDbPath);
+		Database->Close();
+		delete Database;
+		Database = nullptr;
+		return false;
+	}
+	Database->Execute(TEXT("PRAGMA cache_size=-64000;"));
 
-	// Execute DDL inline (we're already holding DbLock, can't call CreateTablesIfNeeded)
+	UE_LOG(LogMonolithSource, Log, TEXT("ResetDatabase: recreated DB file at %s; recreating schema"), *CachedDbPath);
+
 	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_Tables))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_Tables failed — %s"), *Database->GetLastError());
@@ -2535,10 +2726,18 @@ bool FMonolithSourceDatabase::ResetDatabase()
 	}
 
 	FSQLitePreparedStatement MetaStmt;
-	MetaStmt.Create(*Database, TEXT("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);"));
+	if (!MetaStmt.Create(*Database, TEXT("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);")))
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: meta statement failed — %s"), *Database->GetLastError());
+		return false;
+	}
 	MetaStmt.SetBindingValueByIndex(1, FString(TEXT("schema_version")));
 	MetaStmt.SetBindingValueByIndex(2, FString::FromInt(MonolithSourceSchema::SchemaVersion));
-	MetaStmt.Step();
+	if (MetaStmt.Step() != ESQLitePreparedStatementStepResult::Done)
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: meta write failed — %s"), *Database->GetLastError());
+		return false;
+	}
 
 	UE_LOG(LogMonolithSource, Log, TEXT("ResetDatabase: schema recreated successfully"));
 	return true;
@@ -2567,6 +2766,657 @@ bool FMonolithSourceDatabase::RollbackTransaction()
 	FScopeLock Lock(&DbLock);
 	if (!Database || !Database->IsValid()) return false;
 	return Database->Execute(TEXT("ROLLBACK;"));
+}
+
+int32 FMonolithSourceDatabase::PruneIndexedFilesUnderRoots(const TArray<FString>& RootPaths)
+{
+	FScopeLock Lock(&DbLock);
+	if (!Database || !Database->IsValid()) return -1;
+
+	TArray<FString> NormalizedRoots;
+	NormalizedRoots.Reserve(RootPaths.Num());
+	for (FString Root : RootPaths)
+	{
+		Root.TrimStartAndEndInline();
+		if (Root.IsEmpty())
+		{
+			continue;
+		}
+		Root = FPaths::ConvertRelativePathToFull(Root);
+		FPaths::NormalizeDirectoryName(Root);
+		Root.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (!Root.EndsWith(TEXT("/")))
+		{
+			Root += TEXT("/");
+		}
+		NormalizedRoots.AddUnique(Root);
+	}
+	if (NormalizedRoots.Num() == 0)
+	{
+		return 0;
+	}
+
+	TArray<int64> FileIds;
+	{
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Database, TEXT("SELECT id,path FROM files;")))
+		{
+			UE_LOG(LogMonolithSource, Warning, TEXT("PruneIndexedFilesUnderRoots failed to read files table: %s"), *Database->GetLastError());
+			return -1;
+		}
+		while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			int64 FileId = 0;
+			FString Path;
+			Stmt.GetColumnValueByIndex(0, FileId);
+			Stmt.GetColumnValueByIndex(1, Path);
+			Path.ReplaceInline(TEXT("\\"), TEXT("/"));
+			for (const FString& Root : NormalizedRoots)
+			{
+				if (Path.StartsWith(Root, ESearchCase::IgnoreCase))
+				{
+					FileIds.Add(FileId);
+					break;
+				}
+			}
+		}
+	}
+	if (FileIds.Num() == 0)
+	{
+		return 0;
+	}
+
+	auto ObjectExists = [&](const TCHAR* Type, const TCHAR* Name) -> bool
+	{
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Database, TEXT("SELECT 1 FROM sqlite_master WHERE type = ? AND name = ? LIMIT 1;")))
+		{
+			return false;
+		}
+		Stmt.SetBindingValueByIndex(1, FString(Type));
+		Stmt.SetBindingValueByIndex(2, FString(Name));
+		return Stmt.Step() == ESQLitePreparedStatementStepResult::Row;
+	};
+	auto Exec = [&](const TCHAR* Sql) -> bool
+	{
+		if (!Database->Execute(Sql))
+		{
+			UE_LOG(LogMonolithSource, Warning, TEXT("PruneIndexedFilesUnderRoots SQL failed: %s"), *Database->GetLastError());
+			return false;
+		}
+		return true;
+	};
+
+	bool bOk = Exec(TEXT("BEGIN;"));
+	if (bOk) bOk = Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_prune_files(id INTEGER PRIMARY KEY);"));
+	if (bOk) bOk = Exec(TEXT("DELETE FROM monolith_prune_files;"));
+	if (bOk) bOk = Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_prune_symbols(id INTEGER PRIMARY KEY);"));
+	if (bOk) bOk = Exec(TEXT("DELETE FROM monolith_prune_symbols;"));
+	if (bOk) bOk = Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_source_crg_pending_ids(id INTEGER PRIMARY KEY);"));
+	if (bOk) bOk = Exec(TEXT("DELETE FROM monolith_source_crg_pending_ids;"));
+
+	if (bOk)
+	{
+		FSQLitePreparedStatement InsertFile;
+		bOk = InsertFile.Create(*Database, TEXT("INSERT OR IGNORE INTO monolith_prune_files(id) VALUES(?);"));
+		for (int64 FileId : FileIds)
+		{
+			if (!bOk) break;
+			InsertFile.Reset();
+			InsertFile.SetBindingValueByIndex(1, FileId);
+			bOk = InsertFile.Step() == ESQLitePreparedStatementStepResult::Done;
+		}
+	}
+	if (bOk)
+	{
+		bOk = Exec(TEXT(
+			"INSERT OR IGNORE INTO monolith_prune_symbols(id) "
+			"SELECT id FROM symbols WHERE file_id IN (SELECT id FROM monolith_prune_files);"));
+	}
+	if (bOk)
+	{
+		bOk = Exec(TEXT(
+			"INSERT OR IGNORE INTO monolith_prune_symbols(id) "
+			"SELECT s.id FROM symbols s "
+			"LEFT JOIN files f ON f.id = s.file_id "
+			"WHERE f.id IS NULL;"));
+	}
+
+	const bool bHasCrgNodes = ObjectExists(TEXT("table"), TEXT("crg_nodes"));
+	const bool bHasCrgEdges = ObjectExists(TEXT("table"), TEXT("crg_edges"));
+	const bool bHasCrgMetrics = ObjectExists(TEXT("table"), TEXT("crg_node_metrics"));
+	if (bOk && bHasCrgNodes)
+	{
+		bOk = Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_prune_crg_nodes(id INTEGER PRIMARY KEY);"));
+	}
+	if (bOk && bHasCrgNodes)
+	{
+		bOk = Exec(TEXT("DELETE FROM monolith_prune_crg_nodes;"));
+	}
+	if (bOk && bHasCrgNodes)
+	{
+		bOk = Exec(TEXT(
+			"INSERT OR IGNORE INTO monolith_prune_crg_nodes(id) "
+			"SELECT id FROM crg_nodes "
+			"WHERE domain='source' AND native_table='symbols' "
+			"AND native_id IN (SELECT id FROM monolith_prune_symbols);"));
+	}
+	if (bOk)
+	{
+		bOk = Exec(TEXT(
+			"INSERT OR IGNORE INTO monolith_source_crg_pending_ids(id) "
+			"SELECT id FROM monolith_prune_symbols;"));
+	}
+	if (bOk && bHasCrgNodes && bHasCrgEdges)
+	{
+		bOk = Exec(TEXT(
+			"INSERT OR IGNORE INTO monolith_source_crg_pending_ids(id) "
+			"SELECT other.native_id FROM crg_edges e "
+			"JOIN monolith_prune_crg_nodes old ON old.id = e.source_node_id "
+			"JOIN crg_nodes other ON other.id = e.target_node_id "
+			"WHERE e.domain='source' AND other.domain='source' AND other.native_table='symbols';"));
+	}
+	if (bOk && bHasCrgNodes && bHasCrgEdges)
+	{
+		bOk = Exec(TEXT(
+			"INSERT OR IGNORE INTO monolith_source_crg_pending_ids(id) "
+			"SELECT other.native_id FROM crg_edges e "
+			"JOIN monolith_prune_crg_nodes old ON old.id = e.target_node_id "
+			"JOIN crg_nodes other ON other.id = e.source_node_id "
+			"WHERE e.domain='source' AND other.domain='source' AND other.native_table='symbols';"));
+	}
+	if (bOk && ObjectExists(TEXT("table"), TEXT("source_override_edges")))
+	{
+		bOk = Exec(TEXT(
+			"INSERT OR IGNORE INTO monolith_source_crg_pending_ids(id) "
+			"SELECT parent_symbol_id FROM source_override_edges "
+			"WHERE child_symbol_id IN (SELECT id FROM monolith_prune_symbols);"));
+	}
+	if (bOk && ObjectExists(TEXT("table"), TEXT("source_override_edges")))
+	{
+		bOk = Exec(TEXT(
+			"INSERT OR IGNORE INTO monolith_source_crg_pending_ids(id) "
+			"SELECT child_symbol_id FROM source_override_edges "
+			"WHERE parent_symbol_id IN (SELECT id FROM monolith_prune_symbols);"));
+	}
+	if (bOk && bHasCrgNodes && bHasCrgMetrics)
+	{
+		bOk = Exec(TEXT(
+			"DELETE FROM crg_node_metrics "
+			"WHERE node_id IN (SELECT id FROM monolith_prune_crg_nodes);"));
+	}
+	if (bOk && bHasCrgNodes && bHasCrgEdges)
+	{
+		bOk = Exec(TEXT(
+			"DELETE FROM crg_edges "
+			"WHERE domain='source' AND ("
+			"source_node_id IN (SELECT id FROM monolith_prune_crg_nodes) "
+			"OR target_node_id IN (SELECT id FROM monolith_prune_crg_nodes));"));
+	}
+	if (bOk && bHasCrgNodes)
+	{
+		bOk = Exec(TEXT("DELETE FROM crg_nodes WHERE id IN (SELECT id FROM monolith_prune_crg_nodes);"));
+	}
+	if (bOk && ObjectExists(TEXT("table"), TEXT("source_override_edges")))
+	{
+		bOk = Exec(TEXT(
+			"DELETE FROM source_override_edges "
+			"WHERE child_symbol_id IN (SELECT id FROM monolith_prune_symbols) "
+			"OR parent_symbol_id IN (SELECT id FROM monolith_prune_symbols);"));
+	}
+	if (bOk)
+	{
+		bOk = Exec(TEXT(
+			"DELETE FROM \"references\" "
+			"WHERE file_id IN (SELECT id FROM monolith_prune_files) "
+			"OR from_symbol_id IN (SELECT id FROM monolith_prune_symbols) "
+			"OR to_symbol_id IN (SELECT id FROM monolith_prune_symbols);"));
+	}
+	if (bOk)
+	{
+		bOk = Exec(TEXT(
+			"DELETE FROM inheritance "
+			"WHERE child_id IN (SELECT id FROM monolith_prune_symbols) "
+			"OR parent_id IN (SELECT id FROM monolith_prune_symbols);"));
+	}
+	if (bOk)
+	{
+		bOk = Exec(TEXT("DELETE FROM includes WHERE file_id IN (SELECT id FROM monolith_prune_files);"));
+	}
+	if (bOk)
+	{
+		bOk = Exec(TEXT("DELETE FROM source_fts WHERE file_id IN (SELECT id FROM monolith_prune_files);"));
+	}
+	if (bOk && ObjectExists(TEXT("table"), TEXT("symbol_deprecations")))
+	{
+		bOk = Exec(TEXT("DELETE FROM symbol_deprecations WHERE symbol_id IN (SELECT id FROM monolith_prune_symbols);"));
+	}
+	if (bOk)
+	{
+		bOk = Exec(TEXT("DELETE FROM symbols WHERE id IN (SELECT id FROM monolith_prune_symbols);"));
+	}
+	if (bOk)
+	{
+		bOk = Exec(TEXT("DELETE FROM files WHERE id IN (SELECT id FROM monolith_prune_files);"));
+	}
+
+	if (bOk)
+	{
+		if (!Exec(TEXT("COMMIT;")))
+		{
+			UE_LOG(LogMonolithSource, Warning, TEXT("Failed to commit project source prune before scoped source reindex"));
+			return -1;
+		}
+		UE_LOG(LogMonolithSource, Log, TEXT("Pruned %d indexed project source file(s) before scoped source reindex"), FileIds.Num());
+		return FileIds.Num();
+	}
+
+	Exec(TEXT("ROLLBACK;"));
+	UE_LOG(LogMonolithSource, Warning, TEXT("Failed to prune indexed project source files before scoped source reindex; rolled back"));
+	return -1;
+}
+
+TSharedPtr<FJsonObject> FMonolithSourceDatabase::RefreshCrgCacheForFiles(const TSet<int64>& FileIds, const FString& Context)
+{
+	FScopeLock Lock(&DbLock);
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("context"), Context);
+	TArray<TSharedPtr<FJsonValue>> FileIdValues;
+	TArray<int64> SortedFileIds = FileIds.Array();
+	SortedFileIds.Sort();
+	for (int64 FileId : SortedFileIds)
+	{
+		FileIdValues.Add(MakeShared<FJsonValueNumber>(static_cast<double>(FileId)));
+	}
+	Input->SetArrayField(TEXT("file_ids"), FileIdValues);
+	Root->SetObjectField(TEXT("input"), Input);
+
+	TArray<TSharedPtr<FJsonValue>> Warnings;
+	if (!Database || !Database->IsValid())
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("EngineSource DB is not open"));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.trigger_reindex"), TEXT("source.health") });
+		return Root;
+	}
+	if (FileIds.Num() == 0)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("ok"));
+		Root->SetStringField(TEXT("summary"), TEXT("No indexed source files; skipped scoped source CRG refresh."));
+		Root->SetStringField(TEXT("refresh_mode"), TEXT("skipped"));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.health"), TEXT("source.risk_score"), TEXT("source.review_context") });
+		return Root;
+	}
+
+	auto ObjectExists = [&](const TCHAR* Type, const TCHAR* Name) -> bool
+	{
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Database, TEXT("SELECT 1 FROM sqlite_master WHERE type = ? AND name = ? LIMIT 1;")))
+		{
+			return false;
+		}
+		Stmt.SetBindingValueByIndex(1, FString(Type));
+		Stmt.SetBindingValueByIndex(2, FString(Name));
+		return Stmt.Step() == ESQLitePreparedStatementStepResult::Row;
+	};
+	const bool bHasProjectionTables =
+		ObjectExists(TEXT("table"), TEXT("crg_nodes"))
+		&& ObjectExists(TEXT("table"), TEXT("crg_edges"))
+		&& ObjectExists(TEXT("table"), TEXT("crg_node_metrics"))
+		&& ObjectExists(TEXT("table"), TEXT("crg_meta"));
+	if (!bHasProjectionTables)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("ok"));
+		Root->SetStringField(TEXT("summary"), TEXT("Source CRG projection tables are missing; completion health-gate must run full source.repair_crg_cache."));
+		Root->SetStringField(TEXT("refresh_mode"), TEXT("full_required"));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNextActions(Root, { TEXT("source.repair_crg_cache execute=true"), TEXT("source.health") });
+		return Root;
+	}
+
+	bool bOk = ExecuteMulti(*Database, GCrgProjectionDdl);
+	if (bOk)
+	{
+		bOk = ExecuteMulti(*Database, GSourceReviewIndexDdl);
+	}
+	auto Exec = [&](const TCHAR* Sql, const TCHAR* Label)
+	{
+		if (!bOk) return;
+		const double StepStart = FPlatformTime::Seconds();
+		UE_LOG(LogMonolithSource, Log, TEXT("Scoped source CRG refresh step begin: %s"), Label);
+		if (!Database->Execute(Sql))
+		{
+			bOk = false;
+			const FString Error = Database->GetLastError();
+			UE_LOG(LogMonolithSource, Warning, TEXT("Scoped source CRG refresh step failed: %s error=%s"), Label, *Error);
+			Warnings.Add(MakeShared<FJsonValueString>(
+				Error.IsEmpty()
+					? FString::Printf(TEXT("Scoped source CRG refresh failed at %s"), Label)
+					: FString::Printf(TEXT("Scoped source CRG refresh failed at %s: %s"), Label, *Error)));
+			return;
+		}
+		const double ElapsedSeconds = FPlatformTime::Seconds() - StepStart;
+		UE_LOG(LogMonolithSource, Log, TEXT("Scoped source CRG refresh step end: %s elapsed=%.3fs"), Label, ElapsedSeconds);
+	};
+	auto CountTemp = [&](const TCHAR* TableName) -> int64
+	{
+		FSQLitePreparedStatement Stmt;
+		const FString Sql = FString::Printf(TEXT("SELECT COUNT(*) FROM %s;"), TableName);
+		if (!Stmt.Create(*Database, *Sql)) return 0;
+		int64 Count = 0;
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			Stmt.GetColumnValueByIndex(0, Count);
+		}
+		return Count;
+	};
+	auto CountSql = [&](const TCHAR* Sql) -> int64
+	{
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Database, Sql)) return -1;
+		int64 Count = 0;
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			Stmt.GetColumnValueByIndex(0, Count);
+		}
+		return Count;
+	};
+
+	if (bOk) bOk = Database->Execute(TEXT("BEGIN;"));
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_source_crg_files(id INTEGER PRIMARY KEY);"), TEXT("temp file ids"));
+	Exec(TEXT("DELETE FROM monolith_source_crg_files;"), TEXT("clear temp file ids"));
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_source_crg_seed_symbols(id INTEGER PRIMARY KEY);"), TEXT("temp seed symbols"));
+	Exec(TEXT("DELETE FROM monolith_source_crg_seed_symbols;"), TEXT("clear temp seed symbols"));
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_source_crg_node_symbols(id INTEGER PRIMARY KEY);"), TEXT("temp node symbols"));
+	Exec(TEXT("DELETE FROM monolith_source_crg_node_symbols;"), TEXT("clear temp node symbols"));
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_source_crg_refresh_symbols(id INTEGER PRIMARY KEY);"), TEXT("temp refresh symbols"));
+	Exec(TEXT("DELETE FROM monolith_source_crg_refresh_symbols;"), TEXT("clear temp refresh symbols"));
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_source_crg_old_nodes(id INTEGER PRIMARY KEY);"), TEXT("temp old nodes"));
+	Exec(TEXT("DELETE FROM monolith_source_crg_old_nodes;"), TEXT("clear temp old nodes"));
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_source_crg_pending_ids(id INTEGER PRIMARY KEY);"), TEXT("temp pending prune ids"));
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_source_crg_reference_ids(id INTEGER PRIMARY KEY);"), TEXT("temp reference ids"));
+	Exec(TEXT("DELETE FROM monolith_source_crg_reference_ids;"), TEXT("clear temp reference ids"));
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_source_crg_inheritance_ids(id INTEGER PRIMARY KEY);"), TEXT("temp inheritance ids"));
+	Exec(TEXT("DELETE FROM monolith_source_crg_inheritance_ids;"), TEXT("clear temp inheritance ids"));
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_source_override_refresh_children(id INTEGER PRIMARY KEY);"), TEXT("temp override refresh children"));
+	Exec(TEXT("DELETE FROM monolith_source_override_refresh_children;"), TEXT("clear temp override refresh children"));
+
+	if (bOk)
+	{
+		FSQLitePreparedStatement InsertFile;
+		bOk = InsertFile.Create(*Database, TEXT("INSERT OR IGNORE INTO monolith_source_crg_files(id) VALUES(?);"));
+		for (int64 FileId : SortedFileIds)
+		{
+			if (!bOk) break;
+			InsertFile.Reset();
+			InsertFile.SetBindingValueByIndex(1, FileId);
+			bOk = InsertFile.Step() == ESQLitePreparedStatementStepResult::Done;
+		}
+		if (!bOk)
+		{
+			Warnings.Add(MakeShared<FJsonValueString>(TEXT("Scoped source CRG refresh failed while binding file ids")));
+		}
+	}
+
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_seed_symbols(id) "
+		"SELECT id FROM symbols WHERE file_id IN (SELECT id FROM monolith_source_crg_files);"), TEXT("seed file symbols"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_node_symbols(id) "
+		"SELECT id FROM monolith_source_crg_seed_symbols;"), TEXT("copy seed node symbols"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_refresh_symbols(id) "
+		"SELECT s.id FROM symbols s "
+		"JOIN monolith_source_crg_pending_ids p ON p.id = s.id;"), TEXT("pending prune neighbor symbols"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_refresh_symbols(id) "
+		"SELECT id FROM monolith_source_crg_seed_symbols;"), TEXT("copy seed symbols"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_refresh_symbols(id) "
+		"SELECT from_symbol_id FROM \"references\" "
+		"WHERE to_symbol_id IN (SELECT id FROM monolith_source_crg_seed_symbols);"), TEXT("reference inbound neighbors"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_refresh_symbols(id) "
+		"SELECT to_symbol_id FROM \"references\" "
+		"WHERE from_symbol_id IN (SELECT id FROM monolith_source_crg_seed_symbols);"), TEXT("reference outbound neighbors"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_refresh_symbols(id) "
+		"SELECT child_id FROM inheritance "
+		"WHERE parent_id IN (SELECT id FROM monolith_source_crg_seed_symbols);"), TEXT("inheritance child neighbors"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_refresh_symbols(id) "
+		"SELECT parent_id FROM inheritance "
+		"WHERE child_id IN (SELECT id FROM monolith_source_crg_seed_symbols);"), TEXT("inheritance parent neighbors"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_old_nodes(id) "
+		"SELECT id FROM crg_nodes "
+		"WHERE domain='source' AND native_table='symbols' "
+		"AND native_id IN (SELECT id FROM monolith_source_crg_node_symbols);"), TEXT("old source CRG nodes"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_reference_ids(id) "
+		"SELECT id FROM \"references\" "
+		"WHERE from_symbol_id IN (SELECT id FROM monolith_source_crg_seed_symbols);"), TEXT("reference ids from seed symbols"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_reference_ids(id) "
+		"SELECT id FROM \"references\" "
+		"WHERE to_symbol_id IN (SELECT id FROM monolith_source_crg_seed_symbols);"), TEXT("reference ids to seed symbols"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_inheritance_ids(id) "
+		"SELECT id FROM inheritance "
+		"WHERE child_id IN (SELECT id FROM monolith_source_crg_seed_symbols);"), TEXT("inheritance ids from seed symbols"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_crg_inheritance_ids(id) "
+		"SELECT id FROM inheritance "
+		"WHERE parent_id IN (SELECT id FROM monolith_source_crg_seed_symbols);"), TEXT("inheritance ids to seed symbols"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_override_refresh_children(id) "
+		"SELECT id FROM symbols "
+		"WHERE kind='function' AND signature LIKE '%override%' "
+		"AND id IN (SELECT id FROM monolith_source_crg_refresh_symbols);"), TEXT("override child seed from scoped symbols"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_source_override_refresh_children(id) "
+		"SELECT child_symbol_id FROM source_override_edges "
+		"WHERE child_symbol_id IN (SELECT id FROM monolith_source_crg_refresh_symbols) "
+		"   OR parent_symbol_id IN (SELECT id FROM monolith_source_crg_refresh_symbols);"), TEXT("override child seed from existing edges"));
+	Exec(TEXT(
+		"WITH RECURSIVE refreshed_base(id,name,kind,parent_symbol_id) AS ("
+		"  SELECT id,name,kind,parent_symbol_id FROM symbols "
+		"  WHERE kind='function' AND id IN (SELECT id FROM monolith_source_crg_seed_symbols)"
+		"), descendants(child_class_id, ancestor_class_id) AS ("
+		"  SELECT child_id,parent_id FROM inheritance "
+		"  WHERE parent_id IN (SELECT parent_symbol_id FROM refreshed_base)"
+		"  UNION "
+		"  SELECT i.child_id,d.ancestor_class_id "
+		"  FROM inheritance i JOIN descendants d ON d.child_class_id = i.parent_id"
+		") "
+		"INSERT OR IGNORE INTO monolith_source_override_refresh_children(id) "
+		"SELECT child_fn.id "
+		"FROM refreshed_base base_fn "
+		"JOIN symbols base_cls ON base_cls.id = base_fn.parent_symbol_id "
+		"JOIN descendants d ON d.ancestor_class_id = base_fn.parent_symbol_id "
+		"JOIN symbols child_fn INDEXED BY idx_symbols_parent_name_kind ON child_fn.parent_symbol_id = d.child_class_id "
+		"  AND child_fn.kind = base_fn.kind "
+		"  AND (child_fn.name = base_fn.name OR base_fn.name = base_cls.name || '::' || child_fn.name) "
+		"WHERE child_fn.kind='function' AND child_fn.signature LIKE '%override%';"), TEXT("override child seed from refreshed bases"));
+
+	const int64 FileCount = bOk ? CountTemp(TEXT("monolith_source_crg_files")) : 0;
+	const int64 NodeSymbolCount = bOk ? CountTemp(TEXT("monolith_source_crg_node_symbols")) : 0;
+	const int64 RefreshSymbolCount = bOk ? CountTemp(TEXT("monolith_source_crg_refresh_symbols")) : 0;
+	const int64 OldNodeCount = bOk ? CountTemp(TEXT("monolith_source_crg_old_nodes")) : 0;
+	const int64 ReferenceEdgeCount = bOk ? CountTemp(TEXT("monolith_source_crg_reference_ids")) : 0;
+	const int64 InheritanceEdgeCount = bOk ? CountTemp(TEXT("monolith_source_crg_inheritance_ids")) : 0;
+	const int64 OverrideChildSeedCount = bOk ? CountTemp(TEXT("monolith_source_override_refresh_children")) : 0;
+
+	Exec(TEXT("DELETE FROM crg_node_metrics WHERE node_id IN (SELECT id FROM monolith_source_crg_refresh_symbols);"), TEXT("delete scoped metrics"));
+	Exec(TEXT(
+		"DELETE FROM crg_edges "
+		"WHERE domain='source' AND ("
+		"source_node_id IN (SELECT id FROM monolith_source_crg_old_nodes) "
+		"OR target_node_id IN (SELECT id FROM monolith_source_crg_old_nodes) "
+		"OR (native_table='references' AND native_id IN (SELECT id FROM monolith_source_crg_reference_ids)) "
+		"OR (native_table='inheritance' AND native_id IN (SELECT id FROM monolith_source_crg_inheritance_ids)));"), TEXT("delete scoped edges"));
+	Exec(TEXT("DELETE FROM crg_nodes WHERE id IN (SELECT id FROM monolith_source_crg_old_nodes);"), TEXT("delete scoped nodes"));
+	Exec(TEXT(
+		"INSERT OR REPLACE INTO crg_nodes(id,domain,native_table,native_id,stable_key,kind,name,path,module,source_revision,extra,updated_at) "
+		"SELECT s.id,'source','symbols',s.id,COALESCE(s.qualified_name,s.name) || '#' || s.id,"
+		"s.kind,s.name,COALESCE(f.path,''),COALESCE(m.name,''),'','{}',CAST(strftime('%s','now') AS INTEGER) "
+		"FROM symbols s "
+		"LEFT JOIN files f ON f.id = s.file_id "
+		"LEFT JOIN modules m ON m.id = f.module_id "
+		"JOIN monolith_source_crg_node_symbols ns ON ns.id = s.id;"), TEXT("insert scoped nodes"));
+	Exec(TEXT(
+		"INSERT INTO crg_edges(domain,source_node_id,target_node_id,edge_kind,edge_subkind,weight,native_table,native_id,updated_at) "
+		"SELECT 'source',r.from_symbol_id,r.to_symbol_id,COALESCE(r.ref_kind,'reference'),'reference',1.0,'references',r.id,CAST(strftime('%s','now') AS INTEGER) "
+		"FROM monolith_source_crg_reference_ids rid "
+		"JOIN \"references\" r ON r.id = rid.id "
+		"WHERE EXISTS (SELECT 1 FROM crg_nodes fs WHERE fs.id = r.from_symbol_id AND fs.domain='source' AND fs.native_table='symbols') "
+		"  AND EXISTS (SELECT 1 FROM crg_nodes ts WHERE ts.id = r.to_symbol_id AND ts.domain='source' AND ts.native_table='symbols');"), TEXT("insert scoped reference edges"));
+	Exec(TEXT(
+		"INSERT INTO crg_edges(domain,source_node_id,target_node_id,edge_kind,edge_subkind,weight,native_table,native_id,updated_at) "
+		"SELECT 'source',i.child_id,i.parent_id,'inheritance','extends',1.0,'inheritance',i.id,CAST(strftime('%s','now') AS INTEGER) "
+		"FROM monolith_source_crg_inheritance_ids iid "
+		"JOIN inheritance i ON i.id = iid.id "
+		"WHERE EXISTS (SELECT 1 FROM crg_nodes cs WHERE cs.id = i.child_id AND cs.domain='source' AND cs.native_table='symbols') "
+		"  AND EXISTS (SELECT 1 FROM crg_nodes ps WHERE ps.id = i.parent_id AND ps.domain='source' AND ps.native_table='symbols');"), TEXT("insert scoped inheritance edges"));
+	Exec(TEXT(
+		"WITH counts AS ("
+		" SELECT s.id AS native_id,"
+		"        (SELECT COUNT(*) FROM \"references\" r INDEXED BY idx_references_to_symbol WHERE r.to_symbol_id = s.id) AS fan_in,"
+		"        (SELECT COUNT(*) FROM \"references\" r INDEXED BY idx_references_from_symbol WHERE r.from_symbol_id = s.id) AS fan_out,"
+		"        (SELECT COUNT(*) FROM inheritance i INDEXED BY idx_inheritance_parent_child WHERE i.parent_id = s.id) AS descendants,"
+		"        (SELECT COUNT(*) FROM inheritance i INDEXED BY idx_inheritance_child_parent WHERE i.child_id = s.id) AS ancestors,"
+		"        (SELECT COUNT(DISTINCT r.file_id) FROM \"references\" r INDEXED BY idx_references_to_symbol WHERE r.to_symbol_id = s.id) AS caller_files,"
+		"        s.is_ue_macro AS is_ue_macro,"
+		"        CASE"
+		"          WHEN lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%ufunction%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%server%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%client%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%netmulticast%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%onrep%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%replication%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%rpc%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%network%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%save%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%serialize%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%archive%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%auth%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%login%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%account%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%session%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%purchase%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%iap%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%store%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%entitlement%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%anticheat%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%crypt%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%encrypt%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%decrypt%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%signature%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%signed%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%signing%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '% sign %'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '% sign'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%hash%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%exec%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%eval%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%command%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%file%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%registry%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%process%'"
+		"          THEN 1 ELSE 0 END AS sensitivity"
+		" FROM symbols s"
+		" JOIN monolith_source_crg_refresh_symbols rs ON rs.id = s.id"
+		"), scored AS ("
+		" SELECT c.*, MIN(1.0,"
+		"        MIN(c.fan_in,50) / 50.0 * 0.35 +"
+		"        MIN(c.descendants,30) / 30.0 * 0.25 +"
+		"        MIN(c.fan_out,50) / 50.0 * 0.10 +"
+		"        CASE WHEN c.is_ue_macro != 0 THEN 0.15 ELSE 0.0 END +"
+		"        MIN(c.caller_files,20) / 20.0 * 0.15 +"
+		"        CASE WHEN c.sensitivity != 0 THEN 0.15 ELSE 0.0 END) AS score"
+		" FROM counts c"
+		") "
+		"INSERT OR REPLACE INTO crg_node_metrics(node_id,fan_in,fan_out,hard_in,descendants,risk_score,risk_tier,reasons_json,raw_counts_json,scoring_version,computed_at) "
+		"SELECT s.native_id,s.fan_in,s.fan_out,0,s.descendants,ROUND(s.score,3),"
+		"       CASE WHEN s.score >= 0.66 THEN 'high' WHEN s.score >= 0.33 THEN 'medium' ELSE 'low' END,"
+		"       CASE WHEN s.sensitivity != 0 THEN"
+		"         printf('[\"caller fan-in: %d\",\"inheritance descendants (1-hop): %d\",\"callee fan-out: %d\",\"module/file boundary crossing: %d distinct caller file(s)\",\"sensitivity: UE-domain sensitive surface (token-boundary matched)\"]',"
+		"                s.fan_in,s.descendants,s.fan_out,s.caller_files)"
+		"       ELSE"
+		"         printf('[\"caller fan-in: %d\",\"inheritance descendants (1-hop): %d\",\"callee fan-out: %d\",\"module/file boundary crossing: %d distinct caller file(s)\"]',"
+		"                s.fan_in,s.descendants,s.fan_out,s.caller_files)"
+		"       END,"
+		"       printf('{\"callers\":%d,\"callees\":%d,\"descendants\":%d,\"ancestors\":%d,\"caller_files\":%d,\"is_ue_macro\":%d,\"sensitivity\":%d}',"
+		"              s.fan_in,s.fan_out,s.descendants,s.ancestors,s.caller_files,s.is_ue_macro,s.sensitivity),"
+		"       '3',CAST(strftime('%s','now') AS INTEGER) "
+		"FROM scored s;"), TEXT("insert scoped metrics"));
+
+	Exec(TEXT(
+		"DELETE FROM source_override_edges "
+		"WHERE child_symbol_id IN (SELECT id FROM monolith_source_override_refresh_children) "
+		"   OR parent_symbol_id IN (SELECT id FROM monolith_source_crg_seed_symbols);"), TEXT("delete scoped source override edges"));
+	int64 OverrideEdgeCount = 0;
+	if (bOk)
+	{
+		FString OverrideError;
+		if (!PopulateSourceOverrideEdgeCacheLocked(*Database, TEXT("monolith_source_override_refresh_children"), OverrideEdgeCount, OverrideError))
+		{
+			bOk = false;
+			Warnings.Add(MakeShared<FJsonValueString>(
+				OverrideError.IsEmpty()
+					? TEXT("Scoped source CRG refresh failed at source override edge cache")
+					: FString::Printf(TEXT("Scoped source CRG refresh failed at source override edge cache: %s"), *OverrideError)));
+		}
+	}
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('cache_version','1');"), TEXT("cache_version"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('scoring_version','3');"), TEXT("scoring_version"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_override_edges_version','2');"), TEXT("source_override_edges_version"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('source_last_scoped_refresh_at',datetime('now'));"), TEXT("source_last_scoped_refresh_at"));
+	Exec(TEXT("DELETE FROM monolith_source_crg_pending_ids;"), TEXT("clear pending prune ids"));
+
+	if (bOk) Database->Execute(TEXT("COMMIT;"));
+	else Database->Execute(TEXT("ROLLBACK;"));
+
+	TSharedPtr<FJsonObject> Counts = MakeShared<FJsonObject>();
+	Counts->SetNumberField(TEXT("file_ids"), static_cast<double>(FileCount));
+	Counts->SetNumberField(TEXT("node_symbols"), static_cast<double>(NodeSymbolCount));
+	Counts->SetNumberField(TEXT("affected_symbols"), static_cast<double>(RefreshSymbolCount));
+	Counts->SetNumberField(TEXT("old_nodes_replaced"), static_cast<double>(OldNodeCount));
+	Counts->SetNumberField(TEXT("reference_edges_refreshed"), static_cast<double>(ReferenceEdgeCount));
+	Counts->SetNumberField(TEXT("inheritance_edges_refreshed"), static_cast<double>(InheritanceEdgeCount));
+	Counts->SetNumberField(TEXT("source_override_child_seed"), static_cast<double>(OverrideChildSeedCount));
+	Counts->SetNumberField(TEXT("source_override_edges_refreshed"), static_cast<double>(OverrideEdgeCount));
+	Counts->SetNumberField(TEXT("source_override_edges"), static_cast<double>(
+		CountSql(TEXT("SELECT COUNT(*) FROM source_override_edges;"))));
+	Counts->SetNumberField(TEXT("crg_nodes"), static_cast<double>(
+		CountSql(TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain='source';"))));
+	Counts->SetNumberField(TEXT("crg_edges"), static_cast<double>(
+		CountSql(TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain='source';"))));
+	Counts->SetNumberField(TEXT("crg_node_metrics"), static_cast<double>(
+		CountSql(TEXT("SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain='source';"))));
+	Root->SetObjectField(TEXT("counts"), Counts);
+	Root->SetStringField(TEXT("refresh_mode"), TEXT("scoped_files"));
+	Root->SetStringField(TEXT("status"), bOk ? TEXT("ok") : TEXT("error"));
+	FString FailureDetail;
+	if (!bOk && Warnings.Num() > 0)
+	{
+		Warnings[0]->TryGetString(FailureDetail);
+	}
+	Root->SetStringField(TEXT("summary"), bOk
+		? FString::Printf(TEXT("Scoped source CRG projection/cache refreshed for %lld file(s), %lld affected symbol(s)"), FileCount, RefreshSymbolCount)
+		: (FailureDetail.IsEmpty()
+			? TEXT("Scoped source CRG projection/cache refresh failed; rolled back")
+			: FString::Printf(TEXT("Scoped source CRG projection/cache refresh failed; rolled back: %s"), *FailureDetail)));
+	Root->SetArrayField(TEXT("warnings"), Warnings);
+	Root->SetBoolField(TEXT("truncated"), false);
+	AddNextActions(Root, { TEXT("source.health"), TEXT("source.risk_score"), TEXT("source.review_context") });
+	return Root;
 }
 
 // ============================================================
@@ -2715,6 +3565,18 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	int64 SymFtsCnt = -1;
 	if (bRunExpensiveChecks)
 	{
+		const int64 OrphanSymbols = CountOf(TEXT(
+			"SELECT COUNT(*) FROM symbols s "
+			"LEFT JOIN files f ON f.id = s.file_id "
+			"WHERE f.id IS NULL;"));
+		if (OrphanSymbols != 0)
+		{
+			bNeedsReindex = true;
+		}
+		Check(TEXT("integrity:orphan_symbols"), OrphanSymbols == 0,
+			OrphanSymbols == 0 ? TEXT("no orphan symbol rows")
+				: FString::Printf(TEXT("%lld orphan symbol row(s); run project/source reindex so prune can remove invalid dependent rows"), OrphanSymbols));
+
 		OrphanRefs = CountOf(TEXT(
 			"SELECT COUNT(*) FROM \"references\" r "
 			"WHERE (r.from_symbol_id != 0 AND r.from_symbol_id NOT IN (SELECT id FROM symbols)) "
@@ -2739,6 +3601,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	}
 	else
 	{
+		Info(TEXT("integrity:orphan_symbols"), TEXT("skipped; pass include_deep_checks=true or include_counts=true"));
 		Info(TEXT("integrity:orphan_references"), TEXT("skipped; pass include_deep_checks=true or include_counts=true"));
 		Info(TEXT("fts:symbols_row_parity"), TEXT("skipped; pass include_deep_checks=true or include_counts=true"));
 	}
@@ -3522,7 +4385,11 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(const FString& S
 		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%crypt%'"
 		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%encrypt%'"
 		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%decrypt%'"
-		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%sign%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%signature%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%signed%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%signing%'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '% sign %'"
+		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '% sign'"
 		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%hash%'"
 		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%exec%'"
 		"            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%eval%'"
@@ -3550,7 +4417,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairCrgCache(const FString& S
 		"SELECT s.native_id,s.fan_in,s.fan_out,0,s.descendants,ROUND(s.score,3),"
 		"       CASE WHEN s.score >= 0.66 THEN 'high' WHEN s.score >= 0.33 THEN 'medium' ELSE 'low' END,"
 		"       CASE WHEN s.sensitivity != 0 THEN"
-		"         printf('[\"caller fan-in: %d\",\"inheritance descendants (1-hop): %d\",\"callee fan-out: %d\",\"module/file boundary crossing: %d distinct caller file(s)\",\"sensitivity: UE-domain sensitive surface\"]',"
+		"         printf('[\"caller fan-in: %d\",\"inheritance descendants (1-hop): %d\",\"callee fan-out: %d\",\"module/file boundary crossing: %d distinct caller file(s)\",\"sensitivity: UE-domain sensitive surface (token-boundary matched)\"]',"
 		"                s.fan_in,s.descendants,s.fan_out,s.caller_files)"
 		"       ELSE"
 		"         printf('[\"caller fan-in: %d\",\"inheritance descendants (1-hop): %d\",\"callee fan-out: %d\",\"module/file boundary crossing: %d distinct caller file(s)\"]',"
@@ -5067,22 +5934,23 @@ int64 FMonolithSourceDatabase::InsertModule(const FString& Name, const FString& 
 	FScopeLock Lock(&DbLock);
 	if (!Database || !Database->IsValid()) return 0;
 
-	// INSERT OR IGNORE — if UNIQUE(name,path) already exists, this is a no-op
 	FSQLitePreparedStatement InsStmt;
-	InsStmt.Create(*Database, TEXT("INSERT OR IGNORE INTO modules (name, path, module_type, build_cs_path) VALUES (?, ?, ?, ?);"));
-	InsStmt.SetBindingValueByIndex(1, Name);
-	InsStmt.SetBindingValueByIndex(2, Path);
-	InsStmt.SetBindingValueByIndex(3, ModuleType);
-	InsStmt.SetBindingValueByIndex(4, BuildCsPath);
-	InsStmt.Step();
-
-	int64 RowId = Database->GetLastInsertRowId();
-	if (RowId != 0)
+	if (!InsStmt.Create(*Database, TEXT("INSERT OR IGNORE INTO modules (name, path, module_type, build_cs_path) VALUES (?, ?, ?, ?);")))
 	{
-		return RowId;
+		UE_LOG(LogMonolithSource, Warning, TEXT("InsertModule: insert statement failed for '%s': %s"), *Name, *Database->GetLastError());
+	}
+	else
+	{
+		InsStmt.SetBindingValueByIndex(1, Name);
+		InsStmt.SetBindingValueByIndex(2, Path);
+		InsStmt.SetBindingValueByIndex(3, ModuleType);
+		InsStmt.SetBindingValueByIndex(4, BuildCsPath);
+		if (InsStmt.Step() != ESQLitePreparedStatementStepResult::Done)
+		{
+			UE_LOG(LogMonolithSource, Warning, TEXT("InsertModule: insert failed for '%s': %s"), *Name, *Database->GetLastError());
+		}
 	}
 
-	// Already existed — fetch its id
 	FSQLitePreparedStatement SelStmt;
 	SelStmt.Create(*Database, TEXT("SELECT id FROM modules WHERE name = ? AND path = ?;"));
 	SelStmt.SetBindingValueByIndex(1, Name);
@@ -5104,21 +5972,23 @@ int64 FMonolithSourceDatabase::InsertFile(const FString& FilePath, int64 ModuleI
 	if (!Database || !Database->IsValid()) return 0;
 
 	FSQLitePreparedStatement InsStmt;
-	InsStmt.Create(*Database, TEXT("INSERT OR IGNORE INTO files (path, module_id, file_type, line_count, last_modified) VALUES (?, ?, ?, ?, ?);"));
-	InsStmt.SetBindingValueByIndex(1, FilePath);
-	InsStmt.SetBindingValueByIndex(2, ModuleId);
-	InsStmt.SetBindingValueByIndex(3, FileType);
-	InsStmt.SetBindingValueByIndex(4, static_cast<int64>(LineCount));
-	InsStmt.SetBindingValueByIndex(5, LastModified);
-	InsStmt.Step();
-
-	int64 RowId = Database->GetLastInsertRowId();
-	if (RowId != 0)
+	if (!InsStmt.Create(*Database, TEXT("INSERT OR IGNORE INTO files (path, module_id, file_type, line_count, last_modified) VALUES (?, ?, ?, ?, ?);")))
 	{
-		return RowId;
+		UE_LOG(LogMonolithSource, Warning, TEXT("InsertFile: insert statement failed for '%s': %s"), *FilePath, *Database->GetLastError());
+	}
+	else
+	{
+		InsStmt.SetBindingValueByIndex(1, FilePath);
+		InsStmt.SetBindingValueByIndex(2, ModuleId);
+		InsStmt.SetBindingValueByIndex(3, FileType);
+		InsStmt.SetBindingValueByIndex(4, static_cast<int64>(LineCount));
+		InsStmt.SetBindingValueByIndex(5, LastModified);
+		if (InsStmt.Step() != ESQLitePreparedStatementStepResult::Done)
+		{
+			UE_LOG(LogMonolithSource, Warning, TEXT("InsertFile: insert failed for '%s': %s"), *FilePath, *Database->GetLastError());
+		}
 	}
 
-	// Already existed — fetch its id
 	FSQLitePreparedStatement SelStmt;
 	SelStmt.Create(*Database, TEXT("SELECT id FROM files WHERE path = ?;"));
 	SelStmt.SetBindingValueByIndex(1, FilePath);

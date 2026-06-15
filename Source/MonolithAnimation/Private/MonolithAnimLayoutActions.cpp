@@ -415,6 +415,14 @@ FMonolithActionResult FMonolithAnimLayoutActions::HandleAutoLayout(const TShared
 	FString Formatter = TEXT("auto");
 	Params->TryGetStringField(TEXT("formatter"), Formatter);
 
+	float ColumnSpacing = 150.0f;
+	float RowSpacing = 100.0f;
+	{
+		double Tmp = 0.0;
+		if (Params->TryGetNumberField(TEXT("column_spacing"), Tmp)) ColumnSpacing = static_cast<float>(Tmp);
+		if (Params->TryGetNumberField(TEXT("row_spacing"),    Tmp)) RowSpacing    = static_cast<float>(Tmp);
+	}
+
 	// Validate formatter param. 'monolith' is accepted as an alias for 'builtin'
 	// (the built-in layered layout IS the Monolith-native formatter now).
 	if (Formatter != TEXT("auto") && Formatter != TEXT("blueprint_assist")

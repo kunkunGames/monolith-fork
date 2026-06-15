@@ -78,12 +78,13 @@
 
 **Derived CRG Projection Cache:** `crg_nodes`, `crg_edges`, `crg_node_metrics`, `crg_meta`, `crg_snapshots`.
 These tables are rebuildable projections over `assets` and `dependencies`, not
-source-of-truth tables. `project.repair_crg_cache execute=true` purges stale/orphan metrics, recreates the
+source-of-truth tables. `project.health include_counts=true` reports stale CRG count parity when `assets`, `crg_nodes`, and `crg_node_metrics` diverge. `project.repair_crg_cache execute=true` purges stale/orphan metrics, recreates the
 projection, and `project.risk_score` reads `crg_node_metrics` first before
 falling back to query-time scoring. Rebuilt projection metrics use
-`crg_meta.scoring_version=3` for the UE-domain sensitivity factor. `crg_snapshots`
+`crg_meta.scoring_version=3` for the token-boundary/camel-case aware UE-domain sensitivity factor. `crg_snapshots`
 is a derived review aid created only by `project.snapshot execute=true`; it stores
 compact node/edge manifests and may be dropped/recreated without losing source data.
+Incremental startup catch-up and live Asset Registry drains collect changed package paths and call the internal `FMonolithIndexReview::RefreshCrgCacheForAssets` helper after the authoritative `assets`/`dependencies` transaction commits. That helper refreshes the changed assets plus one-hop dependency/referencer neighbors in `crg_*` and records `crg_meta.project_last_scoped_refresh_at`; for deleted assets whose authoritative row is already gone, it recovers neighbor asset ids from the old CRG edges before deleting the stale node so neighbor risk metrics are recomputed. It falls back to full `repair_crg_cache execute=true` only when the projection tables are missing. It must not call `source.build_crg_graph`, mutate `Saved\graph.db`, or introduce duplicate CRG edges when both endpoints are in the affected set.
 
 ### Incremental Indexing
 
@@ -96,6 +97,7 @@ On editor startup, `UMonolithIndexSubsystem` runs a fast delta engine:
 2. Hash comparison against the `saved_hash` column in the `assets` table identifies added, removed, and changed assets. Move detection uses a `TMultiMap<FIoHash, FString>` to match removed→added pairs with identical hashes.
 3. Delta application (inserts, updates, deletes, renames) executes in a single SQLite transaction.
 4. Hash updates are deferred until after commit for crash recovery — if the editor crashes mid-index, the next startup re-detects the delta.
+5. The same changed package paths are then used to refresh only the affected derived CRG projection rows. This preserves `project.risk_score`/`review_context` cache hits without a full projection rebuild on every incremental startup pass.
 
 Performance: ~14K assets compared in ~20ms. <1s total startup time with no changes.
 
@@ -107,7 +109,7 @@ Four AR delegates are registered at startup:
 - `OnAssetRenamed` — moved/renamed assets
 - `OnAssetsUpdatedOnDisk` — externally modified assets
 
-Events are batched into a pending queue and drained on a 2-second timer tick. The drain deduplicates entries (same asset touched multiple times within the window) and applies changes in a single transaction.
+Events are batched into a pending queue and drained on a 2-second timer tick. The drain deduplicates entries (same asset touched multiple times within the window) and applies changes in a single transaction. After the transaction, the drain refreshes the derived CRG projection for the added, removed, updated, and renamed paths plus their one-hop dependency neighborhood. Asset rows and dependency rows remain authoritative; the scoped CRG refresh is a disposable cache update.
 
 **Layer 3 — Forced Full Reindex (fallback)**
 
@@ -147,7 +149,7 @@ generic parser replacement (monolith-native: asset-domain, lexical/local). Logic
 specification now lives in this file and `Docs/API_REFERENCE.md`. Tests:
 `Monolith.IndexGuard.Project.*` in `Private/Tests/MonolithIndexQueryTests.cpp`,
 including cycle/truncation guards, orphan-dependency health warnings, repair dry-run/execute,
-CRG cache rebuild/cache-hit coverage, sensitivity scoring, review-hotspot ranking,
+CRG cache rebuild/cache-hit coverage, token-boundary sensitivity scoring, stale CRG parity repair, scoped CRG refresh parity, review-hotspot ranking,
 and minimal review-context output-contract coverage.
 
 Invariants honored by the implementation:
@@ -155,9 +157,10 @@ Invariants honored by the implementation:
 - `ProjectIndex.db` is **Schema v2** (`schema_version` meta key + `assets.saved_hash` column/index, `PRAGMA table_info` migration). `project.health` must validate v2, not generic v1.
 - 21 FTS triggers (seven project FTS tables × ai/ad/au) are external-content FTS5 → `'rebuild'` is valid for `repair_fts`.
 - `FMonolithIndexDatabase` exposes a raw `FSQLiteDatabase*` (`GetRawDatabase()`) with **no DB-internal lock**; writes are caller-serialized. `repair_fts` and `repair_crg_cache` must gate on `UMonolithIndexSubsystem::IsIndexing()` and run inside transaction-scoped helpers.
-- CRG projection rows are disposable: `crg_nodes` maps one row per asset, `crg_edges` maps one row per dependency, and `crg_node_metrics` stores `risk_score`, tier, reasons JSON, raw count JSON, and `scoring_version`. Missing projection rows are cache misses, not action failures; current scoring is v3 and includes a bounded UE-domain sensitivity signal.
+- CRG projection rows are disposable: `crg_nodes` maps one row per asset, `crg_edges` maps one row per dependency, and `crg_node_metrics` stores `risk_score`, tier, reasons JSON, raw count JSON, and `scoring_version`. Missing projection rows are cache misses, not action failures; current scoring is v3 and includes a bounded UE-domain sensitivity signal matched on token boundaries and camel-case segments rather than arbitrary substrings. `Design` and `Assignment` must not match signing sensitivity; `Signature`, `Crypto`, and `Hash` remain positive controls.
+- Incremental/live project indexing updates `crg_*` with a scoped changed-path refresh rather than a full rebuild when projection tables already exist. `Monolith.IndexGuard.Project.RefreshCrgCacheForAssetsScoped` covers a new asset plus dependency whose two endpoints both enter the affected set, then deletes that asset and proves the old CRG-edge neighbor metric is recomputed while node/edge/metric parity remains clean.
 - Direct lookup helpers to build bounded traversal on: `GetDependenciesForAsset` (out / `source_asset_id`), `GetReferencersOfAsset` (in / `target_asset_id`).
-- Review/search action outputs expose a stable contract: `input`, `limits`, `truncated`, and `next_actions` where applicable; `project.search` returns `match_source`, `match_table`, `match_field`, `match_object_path`, and `match_value` so agents can separate asset/node hits from content hits; `project.detect_changes` exposes top-level `changed_entity_count` / `impacted_count` plus `review_priorities` in every detail level and standard-mode `changed_entities[]` / `impact` / empty `test_gaps[]`, treats `_` and `%` literally when using path stems for package-path suffix matching, `project.find_unused` exposes capped `items[]` with `asset_path`, `asset_name`, `asset_class`, `confidence`, and `reasons[]` fields, `project.pre_merge_check` exposes `decision`, `checks[]`, `findings[]`, `risk_score`, and standard-mode nested `health` / `change_analysis` / `unused` payloads, `project.snapshot` exposes dry-run or stored snapshot metadata and uses high-resolution auto labels when omitted, `project.diff_snapshots` exposes capped `new_nodes[]`, `removed_nodes[]`, `new_edges[]`, `removed_edges[]`, and `summary_counts` and fails with `status=error` when the current CRG projection cannot be queried, `project.review_hotspots` exposes capped `hotspots[]` plus optional `questions[]`, while `project.review_context` additionally exposes compact `top_risks[]` and `context[]` fields so agents can triage without pulling full details.
+- Review/search action outputs expose a stable contract: `input`, `limits`, `truncated`, and `next_actions` where applicable; `project.search` returns `match_source`, `match_table`, `match_field`, `match_object_path`, and `match_value` so agents can separate asset/node hits from content hits; `project.health include_counts=true` is authoritative for stale CRG parity and must warn when `assets`, `crg_nodes`, and `crg_node_metrics` counts diverge; `project.risk_score` reasons identify sensitivity by token/category rather than broad substring hits; `project.detect_changes` exposes top-level `changed_entity_count` / `impacted_count` plus `review_priorities` in every detail level and standard-mode `changed_entities[]` / `impact` / empty `test_gaps[]`, treats `_` and `%` literally when using path stems for package-path suffix matching, `project.find_unused` exposes capped `items[]` with `asset_path`, `asset_name`, `asset_class`, `confidence`, and `reasons[]` fields, `project.pre_merge_check` exposes `decision`, `checks[]`, `findings[]`, `risk_score`, and standard-mode nested `health` / `change_analysis` / `unused` payloads, `project.snapshot` exposes dry-run or stored snapshot metadata and uses high-resolution auto labels when omitted, `project.diff_snapshots` exposes capped `new_nodes[]`, `removed_nodes[]`, `new_edges[]`, `removed_edges[]`, and `summary_counts` and fails with `status=error` when the current CRG projection cannot be queried, `project.review_hotspots` exposes capped `hotspots[]` plus optional `questions[]`, while `project.review_context` additionally exposes compact `top_risks[]` and `context[]` fields so agents can triage without pulling full details.
 - Test precedent: extend `Private/Tests/MonolithIndexQueryTests.cpp` (`Monolith.IndexGuard.Project.*`, temp-DB fixture) — do not introduce a new directory or `WITH_DEV_AUTOMATION_TESTS` guard.
 
 ---

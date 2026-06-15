@@ -1,5 +1,5 @@
 #include "Misc/AutomationTest.h"
-#include "MonolithEditorActions.h"
+#include "MonolithPieTimeseries.h"
 #include "Dom/JsonObject.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorSamplePieTimeseriesMalformedTest, "Monolith.ParamGuard.Editor.SamplePieTimeseriesMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -16,7 +16,7 @@ bool FMonolithEditorSamplePieTimeseriesMalformedTest::RunTest(const FString& Par
 		// Malformed parameter: string instead of number
 		Payload->SetStringField(TEXT("duration_seconds"), TEXT("not_a_number"));
 
-		FMonolithActionResult Result = FMonolithEditorActions::HandleSamplePieTimeseries(Payload);
+		FMonolithActionResult Result = FMonolithPieTimeseries::HandleSamplePieTimeseries(Payload);
 
 		TestFalse(TEXT("Malformed duration_seconds should return an error, not crash"), Result.bSuccess);
 		TestTrue(TEXT("Error should come from parameter validation"), Result.ErrorMessage.Contains(TEXT("duration_seconds")));
@@ -32,7 +32,7 @@ bool FMonolithEditorSamplePieTimeseriesMalformedTest::RunTest(const FString& Par
 		// Malformed parameter: string instead of number
 		Payload->SetStringField(TEXT("sample_interval"), TEXT("not_a_number"));
 
-		FMonolithActionResult Result = FMonolithEditorActions::HandleSamplePieTimeseries(Payload);
+		FMonolithActionResult Result = FMonolithPieTimeseries::HandleSamplePieTimeseries(Payload);
 
 		TestFalse(TEXT("Malformed sample_interval should return an error, not crash"), Result.bSuccess);
 		TestTrue(TEXT("Error should come from parameter validation"), Result.ErrorMessage.Contains(TEXT("sample_interval")));
@@ -48,7 +48,7 @@ bool FMonolithEditorSamplePieTimeseriesMalformedTest::RunTest(const FString& Par
 		// Malformed parameter: string instead of number
 		Payload->SetStringField(TEXT("max_samples"), TEXT("not_a_number"));
 
-		FMonolithActionResult Result = FMonolithEditorActions::HandleSamplePieTimeseries(Payload);
+		FMonolithActionResult Result = FMonolithPieTimeseries::HandleSamplePieTimeseries(Payload);
 
 		TestFalse(TEXT("Malformed max_samples should return an error, not crash"), Result.bSuccess);
 		TestTrue(TEXT("Error should come from parameter validation"), Result.ErrorMessage.Contains(TEXT("max_samples")));

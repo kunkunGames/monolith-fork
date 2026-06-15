@@ -2,6 +2,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "MonolithCoreTools.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithTestSupport.h"
 #include "MonolithToolProfileActions.h"
@@ -14,6 +15,11 @@ void RegisterMonolithExecutionGuardActions();
 static FMonolithActionResult MonolithFindScoringNoop(const TSharedPtr<FJsonObject>&)
 {
 	return FMonolithActionResult::Success(MakeShared<FJsonObject>());
+}
+
+static FMonolithActionResult MonolithGuidanceFailureNoop(const TSharedPtr<FJsonObject>&)
+{
+	return FMonolithActionResult::Error(TEXT("forced handler failure"), FMonolithJsonUtils::ErrInvalidParams);
 }
 
 // FMonolithParamSchema alias rewriting test
@@ -170,7 +176,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamSchemaTypedValidationTest,
 bool FMonolithParamSchemaTypedValidationTest::RunTest(const FString& Parameters)
 {
 	TSharedPtr<FJsonObject> Schema = FParamSchemaBuilder()
-		.EnableValidation()
 		.Required(TEXT("mode"), TEXT("string"), TEXT(""))
 		.Enum(TEXT("mode"), { TEXT("summary"), TEXT("actions"), TEXT("schema") })
 		.Optional(TEXT("limit"), TEXT("integer"), TEXT(""), TEXT("10"))
@@ -212,7 +217,265 @@ bool FMonolithParamSchemaTypedValidationTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("Integer error reports expected type"), Errors.Num() > 0 && Errors[0].Contains(TEXT("integer")));
 	}
 
+	{
+		TSharedPtr<FJsonObject> OptOutSchema = FParamSchemaBuilder()
+			.DisableValidation()
+			.Required(TEXT("mode"), TEXT("string"), TEXT(""))
+			.Build();
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("mode"), 42.0);
+
+		TArray<FString> Errors;
+		TestTrue(TEXT("Explicit validation opt-out bypasses typed validation"), FMonolithParamSchema::ValidateTypedParams(OptOutSchema, Params, Errors));
+		TestEqual(TEXT("Opt-out produces no validation errors"), Errors.Num(), 0);
+	}
+
 	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionFailureGuidanceTest,
+	"Monolith.ParamValidation.ActionFailureGuidance",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionFailureGuidanceTest::RunTest(const FString& Parameters)
+{
+	FMonolithScopedTestNamespace Scope(TEXT("guidance"));
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	Registry.RegisterAction(
+		TEXT("guidance"),
+		TEXT("needs_target"),
+		TEXT("Fails after schema validation so registry guidance can be verified."),
+		FMonolithActionHandler::CreateStatic(&MonolithGuidanceFailureNoop),
+		FParamSchemaBuilder()
+			.Required(TEXT("target"), TEXT("string"), TEXT("Target identifier"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum result count"))
+			.Build());
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("target"), TEXT("Example"));
+	FMonolithActionResult Result = Registry.ExecuteAction(TEXT("guidance"), TEXT("needs_target"), Params);
+
+	bool bOk = true;
+	bOk &= TestFalse(TEXT("Action fails as intended"), Result.bSuccess);
+	bOk &= TestTrue(TEXT("Discover is a related recovery action"), Result.RelatedActions.Contains(TEXT("monolith.discover")));
+	bOk &= TestTrue(TEXT("Find is a related recovery action"), Result.RelatedActions.Contains(TEXT("monolith.find")));
+	bOk &= TestTrue(TEXT("Guidance hint points to schema discovery"),
+		Result.Hints.ContainsByPredicate([](const FString& Hint)
+		{
+			return Hint.Contains(TEXT("monolith_discover")) && Hint.Contains(TEXT("needs_target"));
+		}));
+	bOk &= TestTrue(TEXT("Structured error data exists"), Result.ErrorData.IsValid());
+	if (Result.ErrorData.IsValid())
+	{
+		bOk &= TestEqual(TEXT("Action id included"), Result.ErrorData->GetStringField(TEXT("action_id")), TEXT("guidance.needs_target"));
+		bOk &= TestEqual(TEXT("Failure stage is handler"), Result.ErrorData->GetStringField(TEXT("failure_stage")), TEXT("handler"));
+		bOk &= TestEqual(TEXT("MCP tool included"), Result.ErrorData->GetStringField(TEXT("mcp_tool")), TEXT("guidance_query"));
+		bOk &= TestEqual(TEXT("Fallback skill included"), Result.ErrorData->GetStringField(TEXT("skill")), TEXT("monolith-mcp"));
+		bOk &= TestEqual(TEXT("Failure cause is handler error"), Result.ErrorData->GetStringField(TEXT("failure_cause")), TEXT("handler_error"));
+		bOk &= TestEqual(TEXT("Retryability is handler-dependent"), Result.ErrorData->GetStringField(TEXT("retryability")), TEXT("depends_on_handler_error"));
+
+		const TArray<TSharedPtr<FJsonValue>>* RequiredParams = nullptr;
+		bOk &= TestTrue(TEXT("Required params are included"),
+			Result.ErrorData->TryGetArrayField(TEXT("required_params"), RequiredParams) && RequiredParams && RequiredParams->Num() == 1);
+		if (RequiredParams && RequiredParams->Num() == 1)
+		{
+			const TSharedPtr<FJsonObject> Required = (*RequiredParams)[0]->AsObject();
+			bOk &= TestTrue(TEXT("Required param object is valid"), Required.IsValid());
+			if (Required.IsValid())
+			{
+				bOk &= TestEqual(TEXT("Required param name"), Required->GetStringField(TEXT("name")), TEXT("target"));
+				bOk &= TestEqual(TEXT("Required param type"), Required->GetStringField(TEXT("type")), TEXT("string"));
+			}
+		}
+	}
+
+	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionFailureMissingRequiredDiagnosticShapeTest,
+	"Monolith.ParamValidation.ActionFailureDiagnosticShape.MissingRequired",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionFailureMissingRequiredDiagnosticShapeTest::RunTest(const FString& Parameters)
+{
+	FMonolithScopedTestNamespace Scope(TEXT("guidance_missing"));
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	Registry.RegisterAction(
+		TEXT("guidance_missing"),
+		TEXT("needs_target"),
+		TEXT("Requires a target so missing-param diagnostic shape can be verified."),
+		FMonolithActionHandler::CreateStatic(&MonolithFindScoringNoop),
+		FParamSchemaBuilder()
+			.Required(TEXT("target"), TEXT("string"), TEXT("Target identifier"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum result count"))
+			.Build());
+
+	FMonolithActionResult Result = Registry.ExecuteAction(TEXT("guidance_missing"), TEXT("needs_target"), MakeShared<FJsonObject>());
+
+	bool bOk = true;
+	bOk &= TestFalse(TEXT("Missing required param fails before handler dispatch"), Result.bSuccess);
+	bOk &= TestTrue(TEXT("Discover is a related recovery action"), Result.RelatedActions.Contains(TEXT("monolith.discover")));
+	bOk &= TestTrue(TEXT("Find is a related recovery action"), Result.RelatedActions.Contains(TEXT("monolith.find")));
+	bOk &= TestTrue(TEXT("Structured error data exists"), Result.ErrorData.IsValid());
+	if (Result.ErrorData.IsValid())
+	{
+		bOk &= TestEqual(TEXT("Action id included"), Result.ErrorData->GetStringField(TEXT("action_id")), TEXT("guidance_missing.needs_target"));
+		bOk &= TestEqual(TEXT("Namespace included"), Result.ErrorData->GetStringField(TEXT("namespace")), TEXT("guidance_missing"));
+		bOk &= TestEqual(TEXT("Action included"), Result.ErrorData->GetStringField(TEXT("action")), TEXT("needs_target"));
+		bOk &= TestEqual(TEXT("MCP tool included"), Result.ErrorData->GetStringField(TEXT("mcp_tool")), TEXT("guidance_missing_query"));
+		bOk &= TestEqual(TEXT("Fallback skill included"), Result.ErrorData->GetStringField(TEXT("skill")), TEXT("monolith-mcp"));
+		bOk &= TestEqual(TEXT("Failure stage is schema"), Result.ErrorData->GetStringField(TEXT("failure_stage")), TEXT("schema"));
+		bOk &= TestEqual(TEXT("Failure cause is missing required param"), Result.ErrorData->GetStringField(TEXT("failure_cause")), TEXT("missing_required_param"));
+		bOk &= TestEqual(TEXT("Retryability explains required params"), Result.ErrorData->GetStringField(TEXT("retryability")), TEXT("retry_with_required_params"));
+		bOk &= TestTrue(TEXT("Type validation flag included"), Result.ErrorData->HasField(TEXT("type_validation")));
+
+		const TSharedPtr<FJsonObject>* DiscoverArgs = nullptr;
+		bOk &= TestTrue(TEXT("Discover args object exists"),
+			Result.ErrorData->TryGetObjectField(TEXT("discover_args"), DiscoverArgs) && DiscoverArgs && DiscoverArgs->IsValid());
+		if (DiscoverArgs && DiscoverArgs->IsValid())
+		{
+			bOk &= TestEqual(TEXT("Discover namespace"), (*DiscoverArgs)->GetStringField(TEXT("namespace")), TEXT("guidance_missing"));
+			bOk &= TestEqual(TEXT("Discover action"), (*DiscoverArgs)->GetStringField(TEXT("action")), TEXT("needs_target"));
+			bOk &= TestEqual(TEXT("Discover mode"), (*DiscoverArgs)->GetStringField(TEXT("mode")), TEXT("schema"));
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* RequiredParams = nullptr;
+		bOk &= TestTrue(TEXT("Required params included"),
+			Result.ErrorData->TryGetArrayField(TEXT("required_params"), RequiredParams) && RequiredParams && RequiredParams->Num() == 1);
+		if (RequiredParams && RequiredParams->Num() == 1)
+		{
+			const TSharedPtr<FJsonObject> Required = (*RequiredParams)[0]->AsObject();
+			bOk &= TestTrue(TEXT("Required param object valid"), Required.IsValid());
+			if (Required.IsValid())
+			{
+				bOk &= TestEqual(TEXT("Required param name"), Required->GetStringField(TEXT("name")), TEXT("target"));
+				bOk &= TestEqual(TEXT("Required param type"), Required->GetStringField(TEXT("type")), TEXT("string"));
+			}
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* OptionalParams = nullptr;
+		bOk &= TestTrue(TEXT("Optional params included"),
+			Result.ErrorData->TryGetArrayField(TEXT("optional_params"), OptionalParams) && OptionalParams && OptionalParams->Num() == 1);
+
+		const TArray<TSharedPtr<FJsonValue>>* MissingParams = nullptr;
+		bOk &= TestTrue(TEXT("Missing required params included"),
+			Result.ErrorData->TryGetArrayField(TEXT("missing_required_params"), MissingParams) && MissingParams && MissingParams->Num() == 1);
+		if (MissingParams && MissingParams->Num() == 1)
+		{
+			FString MissingParam;
+			bOk &= TestTrue(TEXT("Missing param is string"), (*MissingParams)[0]->TryGetString(MissingParam));
+			bOk &= TestEqual(TEXT("Missing param name"), MissingParam, TEXT("target"));
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* PlanningSignals = nullptr;
+		bOk &= TestTrue(TEXT("Generated planning signals included"),
+			Result.ErrorData->TryGetArrayField(TEXT("planning_signals"), PlanningSignals) && PlanningSignals && PlanningSignals->Num() > 0);
+	}
+
+	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionFailureUnknownParamGuidanceTest,
+	"Monolith.ParamValidation.ActionFailureUnknownParamGuidance",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionFailureUnknownParamGuidanceTest::RunTest(const FString& Parameters)
+{
+	const FString OriginalStrictParams = FPlatformMisc::GetEnvironmentVariable(TEXT("STRICT_PARAMS"));
+	FPlatformMisc::SetEnvironmentVar(TEXT("STRICT_PARAMS"), TEXT("0"));
+
+	FMonolithScopedTestNamespace Scope(TEXT("guidance_unknown"));
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	Registry.RegisterAction(
+		TEXT("guidance_unknown"),
+		TEXT("needs_target"),
+		TEXT("Fails after schema validation while carrying an unknown param."),
+		FMonolithActionHandler::CreateStatic(&MonolithGuidanceFailureNoop),
+		FParamSchemaBuilder()
+			.Required(TEXT("target"), TEXT("string"), TEXT("Target identifier"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum result count"))
+			.Build());
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("target"), TEXT("Example"));
+	Params->SetNumberField(TEXT("limt"), 5.0);
+	FMonolithActionResult Result = Registry.ExecuteAction(TEXT("guidance_unknown"), TEXT("needs_target"), Params);
+
+	bool bOk = true;
+	bOk &= TestFalse(TEXT("Action fails as intended"), Result.bSuccess);
+	bOk &= TestTrue(TEXT("Structured error data exists"), Result.ErrorData.IsValid());
+	if (Result.ErrorData.IsValid())
+	{
+		bOk &= TestEqual(TEXT("Failure stage is handler"), Result.ErrorData->GetStringField(TEXT("failure_stage")), TEXT("handler"));
+		bOk &= TestEqual(TEXT("Failure cause is handler error"), Result.ErrorData->GetStringField(TEXT("failure_cause")), TEXT("handler_error"));
+		const TArray<TSharedPtr<FJsonValue>>* UnknownParams = nullptr;
+		bOk &= TestTrue(TEXT("Unknown params are included on failed handler result"),
+			Result.ErrorData->TryGetArrayField(TEXT("unknown_params"), UnknownParams) && UnknownParams && UnknownParams->Num() == 1);
+		if (UnknownParams && UnknownParams->Num() == 1)
+		{
+			FString UnknownName;
+			bOk &= TestTrue(TEXT("Unknown param string"), (*UnknownParams)[0]->TryGetString(UnknownName));
+			bOk &= TestEqual(TEXT("Unknown param name"), UnknownName, TEXT("limt"));
+		}
+		bOk &= TestFalse(TEXT("STRICT_PARAMS was disabled for soft warning path"), Result.ErrorData->GetBoolField(TEXT("strict_params")));
+		const TArray<TSharedPtr<FJsonValue>>* ContributingCauses = nullptr;
+		bOk &= TestTrue(TEXT("Unknown param is reported as possible contributing cause"),
+			Result.ErrorData->TryGetArrayField(TEXT("possible_contributing_causes"), ContributingCauses) && ContributingCauses && ContributingCauses->Num() == 1);
+	}
+	bOk &= TestTrue(TEXT("Unknown-param hint is included"),
+		Result.Hints.ContainsByPredicate([](const FString& Hint)
+		{
+			return Hint.Contains(TEXT("Remove unknown params")) && Hint.Contains(TEXT("limt"));
+		}));
+
+	FPlatformMisc::SetEnvironmentVar(TEXT("STRICT_PARAMS"), *OriginalStrictParams);
+	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionFailureValidationErrorsStructuredTest,
+	"Monolith.ParamValidation.ActionFailureValidationErrorsStructured",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionFailureValidationErrorsStructuredTest::RunTest(const FString& Parameters)
+{
+	FMonolithScopedTestNamespace Scope(TEXT("guidance_validation"));
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	Registry.RegisterAction(
+		TEXT("guidance_validation"),
+		TEXT("needs_integer"),
+		TEXT("Succeeds only if schema validation allows dispatch."),
+		FMonolithActionHandler::CreateStatic(&MonolithFindScoringNoop),
+		FParamSchemaBuilder()
+			.Required(TEXT("target"), TEXT("string"), TEXT("Target identifier"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum result count"))
+			.Build());
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("target"), TEXT("Example"));
+	Params->SetStringField(TEXT("limit"), TEXT("not_an_integer"));
+	FMonolithActionResult Result = Registry.ExecuteAction(TEXT("guidance_validation"), TEXT("needs_integer"), Params);
+
+	bool bOk = true;
+	bOk &= TestFalse(TEXT("Validation failure prevents dispatch"), Result.bSuccess);
+	bOk &= TestTrue(TEXT("Structured error data exists"), Result.ErrorData.IsValid());
+	if (Result.ErrorData.IsValid())
+	{
+		bOk &= TestEqual(TEXT("Failure stage is schema"), Result.ErrorData->GetStringField(TEXT("failure_stage")), TEXT("schema"));
+		bOk &= TestEqual(TEXT("Failure cause is invalid param"), Result.ErrorData->GetStringField(TEXT("failure_cause")), TEXT("invalid_param"));
+		bOk &= TestEqual(TEXT("Retryability explains typed params"), Result.ErrorData->GetStringField(TEXT("retryability")), TEXT("retry_with_validated_param_types_or_ranges"));
+		const TArray<TSharedPtr<FJsonValue>>* ValidationErrors = nullptr;
+		bOk &= TestTrue(TEXT("Validation errors are structured"),
+			Result.ErrorData->TryGetArrayField(TEXT("validation_errors"), ValidationErrors) && ValidationErrors && ValidationErrors->Num() == 1);
+		if (ValidationErrors && ValidationErrors->Num() == 1)
+		{
+			FString ValidationError;
+			bOk &= TestTrue(TEXT("Validation error string"), (*ValidationErrors)[0]->TryGetString(ValidationError));
+			bOk &= TestTrue(TEXT("Validation error names param and type"),
+				ValidationError.Contains(TEXT("limit")) && ValidationError.Contains(TEXT("integer")));
+		}
+	}
+
+	return bOk;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithFindWeightedScoringTest,
@@ -439,6 +702,7 @@ bool FMonolithCoreTypedParamsTest::RunTest(const FString& Parameters)
 			{ TEXT("terminate_mcp_session"), true, TEXT("monolith.terminate_mcp_session registers") },
 			{ TEXT("set_mcp_compatibility_options"), true, TEXT("monolith.set_mcp_compatibility_options registers") },
 			{ TEXT("get_mcp_discovery_state"), true, TEXT("monolith.get_mcp_discovery_state registers") },
+			{ TEXT("get_action_metadata_coverage"), true, TEXT("monolith.get_action_metadata_coverage registers") },
 			{ TEXT("get_onboarding_state"), true, TEXT("monolith.get_onboarding_state registers") },
 			{ TEXT("set_onboarding_state"), true, TEXT("monolith.set_onboarding_state registers") },
 			{ TEXT("get_readiness_status"), true, TEXT("monolith.get_readiness_status registers") },
@@ -530,6 +794,15 @@ bool FMonolithCoreTypedParamsTest::RunTest(const FString& Parameters)
 				},
 				TEXT("options"),
 				TEXT("monolith.set_mcp_compatibility_options rejects non-object options")
+			},
+			{
+				TEXT("get_action_metadata_coverage"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetNumberField(TEXT("sample_limit"), 51.0);
+				},
+				TEXT("sample_limit"),
+				TEXT("monolith.get_action_metadata_coverage rejects out-of-range sample_limit")
 			},
 			{
 				TEXT("set_onboarding_state"),

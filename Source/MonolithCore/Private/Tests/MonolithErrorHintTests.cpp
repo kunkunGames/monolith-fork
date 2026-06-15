@@ -11,7 +11,7 @@
 //  These tests verify:
 //  1. FMonolithActionResult new fields default to empty (byte-identical legacy).
 //  2. FindSimilarActions returns sensible "did you mean" candidates.
-//  3. Unknown action dispatch auto-populates RelatedActions.
+//  3. Unknown action dispatch separates candidate actions from recovery actions.
 //  4. Chain helpers (WithHint / WithRelatedAction) preserve fluent style.
 // =============================================================================
 
@@ -125,13 +125,34 @@ bool FMonolithUnknownActionAutoHintsTest::RunTest(const FString& Parameters)
 	Reg.RegisterAction(TestNs, TEXT("list_graphs"), TEXT("d"), NoopHandler);
 	Reg.RegisterAction(TestNs, TEXT("get_graph_data"), TEXT("d"), NoopHandler);
 
-	// Calling a typoed action must (a) error out, (b) carry related_actions,
-	// (c) carry the proper JSON-RPC error code.
+	// Calling a typoed action must (a) error out, (b) carry candidate actions
+	// separately from recovery actions, (c) carry the proper JSON-RPC error code.
 	FMonolithActionResult R = Reg.ExecuteAction(TestNs, TEXT("list_grafs"), MakeShared<FJsonObject>());
 	TestFalse(TEXT("typo dispatch fails"), R.bSuccess);
 	TestEqual(TEXT("typo dispatch uses MethodNotFound code"),
 		R.ErrorCode, FMonolithJsonUtils::ErrMethodNotFound);
-	TestTrue(TEXT("typo dispatch surfaces RelatedActions"), R.RelatedActions.Num() > 0);
+	TestTrue(TEXT("typo dispatch suggests discovery recovery"), R.RelatedActions.Contains(TEXT("monolith.discover")));
+	TestTrue(TEXT("typo dispatch suggests find recovery"), R.RelatedActions.Contains(TEXT("monolith.find")));
+	TestFalse(TEXT("candidate action is not mixed into related actions"), R.RelatedActions.Contains(TEXT("list_graphs")));
+	TestTrue(TEXT("typo dispatch has structured error data"), R.ErrorData.IsValid());
+	if (R.ErrorData.IsValid())
+	{
+		TestEqual(TEXT("typo failure cause"), R.ErrorData->GetStringField(TEXT("failure_cause")), TEXT("unknown_action"));
+		TestEqual(TEXT("typo retryability"), R.ErrorData->GetStringField(TEXT("retryability")), TEXT("retry_with_candidate_action_or_discovery"));
+		const TArray<TSharedPtr<FJsonValue>>* CandidateActions = nullptr;
+		TestTrue(TEXT("typo dispatch surfaces candidate actions"),
+			R.ErrorData->TryGetArrayField(TEXT("candidate_actions"), CandidateActions) && CandidateActions && CandidateActions->Num() > 0);
+		if (CandidateActions && CandidateActions->Num() > 0)
+		{
+			const TSharedPtr<FJsonObject> FirstCandidate = (*CandidateActions)[0]->AsObject();
+			TestTrue(TEXT("candidate action object valid"), FirstCandidate.IsValid());
+			if (FirstCandidate.IsValid())
+			{
+				TestEqual(TEXT("candidate action id"), FirstCandidate->GetStringField(TEXT("action_id")), TestNs + TEXT(".list_graphs"));
+				TestEqual(TEXT("candidate action name"), FirstCandidate->GetStringField(TEXT("action")), TEXT("list_graphs"));
+			}
+		}
+	}
 
 	// Calling something completely unrelated should still produce a guidance hint
 	// pointing the agent at monolith_discover.
@@ -141,6 +162,53 @@ bool FMonolithUnknownActionAutoHintsTest::RunTest(const FString& Parameters)
 	{
 		TestTrue(TEXT("unrelated dispatch falls back to discover hint"), R2.Hints.Num() > 0);
 	}
+
+	Reg.UnregisterNamespace(TestNs);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithHandlerUnboundGuidanceTest,
+	"Monolith.Core.ErrorHints.HandlerUnboundGuidance",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithHandlerUnboundGuidanceTest::RunTest(const FString& Parameters)
+{
+	const FString TestNs(TEXT("__cc05_unbound_ns__"));
+	FMonolithToolRegistry& Reg = FMonolithToolRegistry::Get();
+
+	Reg.RegisterAction(
+		TestNs,
+		TEXT("registered_without_handler"),
+		TEXT("Registered action with intentionally unbound handler."),
+		FMonolithActionHandler());
+
+	FMonolithActionResult R = Reg.ExecuteAction(TestNs, TEXT("registered_without_handler"), MakeShared<FJsonObject>());
+	TestFalse(TEXT("unbound dispatch fails"), R.bSuccess);
+	TestTrue(TEXT("unbound failure has error data"), R.ErrorData.IsValid());
+	if (R.ErrorData.IsValid())
+	{
+		TestEqual(TEXT("unbound action id"), R.ErrorData->GetStringField(TEXT("action_id")), TestNs + TEXT(".registered_without_handler"));
+		TestEqual(TEXT("unbound namespace"), R.ErrorData->GetStringField(TEXT("namespace")), TestNs);
+		TestEqual(TEXT("unbound action"), R.ErrorData->GetStringField(TEXT("action")), TEXT("registered_without_handler"));
+		TestEqual(TEXT("unbound mcp tool"), R.ErrorData->GetStringField(TEXT("mcp_tool")), TestNs + TEXT("_query"));
+		TestEqual(TEXT("unbound skill"), R.ErrorData->GetStringField(TEXT("skill")), TEXT("monolith-mcp"));
+		TestEqual(TEXT("unbound failure stage"), R.ErrorData->GetStringField(TEXT("failure_stage")), TEXT("handler_unbound"));
+		TestEqual(TEXT("unbound failure cause"), R.ErrorData->GetStringField(TEXT("failure_cause")), TEXT("handler_unbound"));
+		TestEqual(TEXT("unbound retryability"), R.ErrorData->GetStringField(TEXT("retryability")), TEXT("not_retryable_until_handler_is_registered"));
+		TestEqual(TEXT("unbound bug class"), R.ErrorData->GetStringField(TEXT("bug_class")), TEXT("handler_unbound"));
+		const TSharedPtr<FJsonObject>* DiscoverArgs = nullptr;
+		TestTrue(TEXT("unbound discovery args included"), R.ErrorData->TryGetObjectField(TEXT("discover_args"), DiscoverArgs) && DiscoverArgs && DiscoverArgs->IsValid());
+		const TArray<TSharedPtr<FJsonValue>>* PlanningSignals = nullptr;
+		TestTrue(TEXT("unbound generated planning signals included"),
+			R.ErrorData->TryGetArrayField(TEXT("planning_signals"), PlanningSignals) && PlanningSignals && PlanningSignals->Num() > 0);
+	}
+	TestTrue(TEXT("unbound related actions include discover"), R.RelatedActions.Contains(TEXT("monolith.discover")));
+	TestTrue(TEXT("unbound related actions include find"), R.RelatedActions.Contains(TEXT("monolith.find")));
+	TestTrue(TEXT("unbound hint explains schema will not fix it"),
+		R.Hints.ContainsByPredicate([](const FString& Hint)
+		{
+			return Hint.Contains(TEXT("handler delegate is null")) && Hint.Contains(TEXT("Schema changes will not fix"));
+		}));
 
 	Reg.UnregisterNamespace(TestNs);
 	return true;

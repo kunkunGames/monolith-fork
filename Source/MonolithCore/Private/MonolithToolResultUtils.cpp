@@ -72,6 +72,7 @@ TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildMcpToolResult(
 		}
 		if (ActionResult.ErrorData.IsValid())
 		{
+			Result->SetObjectField(TEXT("error_data"), ActionResult.ErrorData);
 			for (const auto& Pair : ActionResult.ErrorData->Values)
 			{
 				Result->SetField(Pair.Key, Pair.Value);

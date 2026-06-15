@@ -3,7 +3,9 @@
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceReview.h"
 #include "HAL/PlatformFilemanager.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "SQLiteDatabase.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -19,6 +21,33 @@ namespace
 		{
 			FMonolithSourceActions::RegisterAll();
 		}
+	}
+
+	int64 CountSourceRows(FMonolithSourceDatabase& Db, const TCHAR* Sql)
+	{
+		FScopeLock Lock(&Db.GetLock());
+		FSQLiteDatabase* Raw = Db.GetRawHandle();
+		if (!Raw)
+		{
+			return -1;
+		}
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Raw, Sql))
+		{
+			return -1;
+		}
+		int64 Count = -1;
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			Stmt.GetColumnValueByIndex(0, Count);
+		}
+		return Count;
+	}
+
+	FString NormalizeTestPath(FString Path)
+	{
+		FPaths::NormalizeFilename(Path);
+		return Path;
 	}
 }
 
@@ -140,6 +169,31 @@ bool FSourceDatabaseUsesDeleteJournalModeTest::RunTest(const FString& Parameters
 
 	DB.Close();
 	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*DbPath);
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-wal")));
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-shm")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceResetDatabaseRecreatesMalformedFileTest, "Monolith.IndexGuard.Source.ResetDatabaseRecreatesMalformedFile", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceResetDatabaseRecreatesMalformedFileTest::RunTest(const FString& Parameters)
+{
+	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithSourceMalformed"), TEXT(".sqlite"));
+
+	FMonolithSourceDatabase DB;
+	TestTrue(TEXT("Temporary DB opens for writing"), DB.OpenForWriting(DbPath));
+	DB.Close();
+
+	TestTrue(TEXT("Malformed DB fixture written"), FFileHelper::SaveStringToFile(TEXT("not a sqlite database"), *DbPath));
+	TestTrue(TEXT("Reset recreates malformed DB file"), DB.ResetDatabase());
+	TestEqual(TEXT("Reset leaves empty module table"), CountSourceRows(DB, TEXT("SELECT COUNT(*) FROM modules;")), static_cast<int64>(0));
+	const int64 ModuleId = DB.InsertModule(TEXT("Recovered"), TEXT("/tmp/Recovered"), TEXT("Runtime"));
+	TestTrue(TEXT("Recovered DB accepts writes"), ModuleId > 0);
+
+	DB.Close();
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*DbPath);
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-journal")));
 	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-wal")));
 	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-shm")));
 
@@ -602,6 +656,117 @@ bool FSourceRepairCrgCacheTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourcePruneIndexedFilesUnderRootsRemovesProjectSliceTest, "Monolith.IndexGuard.Source.PruneIndexedFilesUnderRootsRemovesProjectSlice", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourcePruneIndexedFilesUnderRootsRemovesProjectSliceTest::RunTest(const FString& Parameters)
+{
+	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithSourcePrune"), TEXT(".sqlite"));
+	FMonolithSourceDatabase Db;
+	TestTrue(TEXT("temporary source DB opens for writing"), Db.OpenForWriting(DbPath));
+	TestTrue(TEXT("temporary source DB creates schema"), Db.CreateTablesIfNeeded());
+
+	FString ProjectSourceRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("Source"));
+	FPaths::NormalizeDirectoryName(ProjectSourceRoot);
+	ProjectSourceRoot.ReplaceInline(TEXT("\\"), TEXT("/"));
+	const FString ProjectFilePath = NormalizeTestPath(FPaths::Combine(ProjectSourceRoot, TEXT("Game"), TEXT("PruneTouched.cpp")));
+	const FString EngineFilePath = NormalizeTestPath(TEXT("/tmp/Engine/Runtime/Core/Public/CoreMinimal.h"));
+
+	const int64 EngineModule = Db.InsertModule(TEXT("Core"), TEXT("/tmp/Engine/Runtime/Core"), TEXT("Runtime"));
+	const int64 ProjectModule = Db.InsertModule(TEXT("Game"), ProjectSourceRoot, TEXT("Project"));
+	const int64 EngineFile = Db.InsertFile(EngineFilePath, EngineModule, TEXT("h"), 50, 0.0);
+	const int64 ProjectFile = Db.InsertFile(ProjectFilePath, ProjectModule, TEXT("cpp"), 80, 0.0);
+	TestEqual(TEXT("duplicate module insert returns existing row id"), Db.InsertModule(TEXT("Game"), ProjectSourceRoot, TEXT("Project")), ProjectModule);
+	TestEqual(TEXT("duplicate file insert returns existing row id"), Db.InsertFile(ProjectFilePath, ProjectModule, TEXT("cpp"), 80, 0.0), ProjectFile);
+	const int64 EngineSymbol = Db.InsertSymbol(TEXT("EngineKeep"), TEXT("Core::EngineKeep"), TEXT("function"), EngineFile, 1, 3, 0, TEXT("public"), TEXT("void EngineKeep()"), TEXT(""), false);
+	const int64 EngineLeafSymbol = Db.InsertSymbol(TEXT("EngineLeaf"), TEXT("Core::EngineLeaf"), TEXT("function"), EngineFile, 5, 7, 0, TEXT("public"), TEXT("void EngineLeaf()"), TEXT(""), false);
+	const int64 ProjectSymbol = Db.InsertSymbol(TEXT("ProjectTouched"), TEXT("Game::ProjectTouched"), TEXT("function"), ProjectFile, 10, 20, 0, TEXT("public"), TEXT("void ProjectTouched()"), TEXT(""), false);
+	const int64 OrphanBaseSymbol = Db.InsertSymbol(TEXT("OrphanBase"), TEXT("Game::OrphanBase"), TEXT("class"), 999999, 1, 2, 0, TEXT("public"), TEXT("class OrphanBase"), TEXT(""), false);
+	const int64 OrphanDerivedSymbol = Db.InsertSymbol(TEXT("OrphanDerived"), TEXT("Game::OrphanDerived"), TEXT("class"), 999999, 3, 4, 0, TEXT("public"), TEXT("class OrphanDerived : public OrphanBase"), TEXT(""), false);
+	TestTrue(TEXT("engine symbol inserted"), EngineSymbol > 0);
+	TestTrue(TEXT("engine leaf symbol inserted"), EngineLeafSymbol > 0);
+	TestTrue(TEXT("project symbol inserted"), ProjectSymbol > 0);
+	TestTrue(TEXT("orphan base symbol inserted"), OrphanBaseSymbol > 0);
+	TestTrue(TEXT("orphan derived symbol inserted"), OrphanDerivedSymbol > 0);
+	Db.InsertReference(ProjectSymbol, EngineSymbol, TEXT("call"), ProjectFile, 12);
+	Db.InsertReference(EngineSymbol, ProjectSymbol, TEXT("type"), EngineFile, 2);
+	Db.InsertReference(EngineSymbol, EngineLeafSymbol, TEXT("call"), EngineFile, 6);
+	Db.InsertInheritance(OrphanDerivedSymbol, OrphanBaseSymbol);
+	Db.SetMeta(TEXT("schema_version"), TEXT("1"));
+
+	TSharedPtr<FJsonObject> Built = Db.RepairCrgCache(true);
+	TestEqual(TEXT("initial CRG cache build ok"), Built->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("initial source CRG node count includes orphan fixture"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain='source';")), static_cast<int64>(5));
+	TestEqual(TEXT("initial source CRG edge count includes orphan fixture"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain='source';")), static_cast<int64>(4));
+
+	TArray<FString> Roots;
+	Roots.Add(ProjectSourceRoot);
+	const int32 PrunedFiles = Db.PruneIndexedFilesUnderRoots(Roots);
+	TestEqual(TEXT("one project source file pruned"), PrunedFiles, 1);
+	TestEqual(TEXT("project symbol removed"), Db.GetSymbolsByName(TEXT("ProjectTouched"), TEXT("function"), 10).Num(), 0);
+	TestEqual(TEXT("engine symbol preserved"), Db.GetSymbolsByName(TEXT("EngineKeep"), TEXT("function"), 10).Num(), 1);
+	TestEqual(TEXT("references to/from pruned symbols removed"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM \"references\";")), static_cast<int64>(1));
+	TestEqual(TEXT("orphan symbols removed during project prune"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM symbols s LEFT JOIN files f ON f.id = s.file_id WHERE f.id IS NULL;")), static_cast<int64>(0));
+	TestEqual(TEXT("orphan inheritance removed during project prune"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM inheritance i LEFT JOIN symbols cs ON cs.id = i.child_id LEFT JOIN symbols ps ON ps.id = i.parent_id WHERE cs.id IS NULL OR ps.id IS NULL;")), static_cast<int64>(0));
+	TestEqual(TEXT("CRG nodes for pruned symbols removed"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain='source';")), static_cast<int64>(2));
+	TestEqual(TEXT("CRG edges for pruned symbols removed"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain='source';")), static_cast<int64>(1));
+	TestEqual(TEXT("CRG metrics for pruned symbols removed"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain='source';")), static_cast<int64>(2));
+
+	const int64 ReindexedFile = Db.InsertFile(ProjectFilePath, ProjectModule, TEXT("cpp"), 90, 1.0);
+	const int64 ReindexedSymbol = Db.InsertSymbol(TEXT("ProjectTouched"), TEXT("Game::ProjectTouched"), TEXT("function"), ReindexedFile, 11, 21, 0, TEXT("public"), TEXT("void ProjectTouched()"), TEXT(""), false);
+	TestTrue(TEXT("project file reinserted after prune"), ReindexedFile > 0);
+	TestTrue(TEXT("project symbol reinserted after prune"), ReindexedSymbol > 0);
+	const TArray<FMonolithSourceSymbol> Reindexed = Db.GetSymbolsByName(TEXT("ProjectTouched"), TEXT("function"), 10);
+	TestEqual(TEXT("project reindex does not duplicate old project symbol"), Reindexed.Num(), 1);
+	if (Reindexed.Num() == 1)
+	{
+		TestEqual(TEXT("remaining project symbol is the reindexed row"), Reindexed[0].Id, ReindexedSymbol);
+	}
+
+	TSet<int64> ReindexedFiles;
+	ReindexedFiles.Add(ReindexedFile);
+	TSharedPtr<FJsonObject> ScopedRefresh = Db.RefreshCrgCacheForFiles(ReindexedFiles, TEXT("automation project source scoped refresh"));
+	TestEqual(TEXT("scoped source CRG refresh ok"), ScopedRefresh->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TestEqual(TEXT("scoped source CRG refresh mode"), ScopedRefresh->GetStringField(TEXT("refresh_mode")), FString(TEXT("scoped_files")));
+	const TSharedPtr<FJsonObject> ScopedCounts = ScopedRefresh->GetObjectField(TEXT("counts"));
+	TestEqual(TEXT("scoped refresh keeps affected set to changed and pending neighbor symbols"), ScopedCounts->GetNumberField(TEXT("affected_symbols")), 2.0);
+	TestEqual(TEXT("scoped refresh restores source CRG node parity"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain='source';")), static_cast<int64>(3));
+	TestEqual(TEXT("scoped refresh restores source CRG edge parity"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain='source';")), static_cast<int64>(1));
+	TestEqual(TEXT("scoped refresh restores source CRG metric parity"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain='source';")), static_cast<int64>(3));
+
+	TSharedPtr<FJsonObject> Health = Db.ComputeHealth(false, true);
+	TestEqual(TEXT("source health clean after scoped refresh"), Health->GetStringField(TEXT("status")), FString(TEXT("ok")));
+
+	TSharedPtr<FJsonObject> EngineRisk = FMonolithSourceReview::RiskScore(Db, TEXT("EngineKeep"), 10, TEXT("low"));
+	const TArray<TSharedPtr<FJsonValue>>* RiskItems = nullptr;
+	TestTrue(TEXT("engine risk item present after scoped refresh"), EngineRisk->TryGetArrayField(TEXT("items"), RiskItems) && RiskItems && RiskItems->Num() == 1);
+	if (RiskItems && RiskItems->Num() == 1)
+	{
+		TSharedPtr<FJsonObject> Item = (*RiskItems)[0]->AsObject();
+		TestTrue(TEXT("engine risk item object"), Item.IsValid());
+		if (Item.IsValid())
+		{
+			TSharedPtr<FJsonObject> Cache = Item->GetObjectField(TEXT("cache"));
+			TestTrue(TEXT("engine risk reads refreshed cache"), Cache.IsValid());
+			if (Cache.IsValid())
+			{
+				TestEqual(TEXT("engine risk cache hit"), Cache->GetStringField(TEXT("status")), FString(TEXT("hit")));
+			}
+			TSharedPtr<FJsonObject> Raw = Item->GetObjectField(TEXT("raw_counts"));
+			TestTrue(TEXT("engine raw counts present"), Raw.IsValid());
+			if (Raw.IsValid())
+			{
+				TestEqual(TEXT("old neighbor caller count recomputed after prune"), Raw->GetNumberField(TEXT("callers")), 0.0);
+			}
+		}
+	}
+
+	Db.Close();
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+	PlatformFile.DeleteFile(*DbPath);
+	PlatformFile.DeleteFile(*(DbPath + TEXT("-wal")));
+	PlatformFile.DeleteFile(*(DbPath + TEXT("-shm")));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceSnapshotDiffTest, "Monolith.IndexGuard.Source.SnapshotDiff", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FSourceSnapshotDiffTest::RunTest(const FString& Parameters)
 {
@@ -922,6 +1087,35 @@ bool FSourceReviewContextMinimalTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("has top risks"), R->HasField(TEXT("top_risks")));
 	TestTrue(TEXT("has compact context"), R->HasField(TEXT("context")));
 	TestTrue(TEXT("has next_actions"), R->HasField(TEXT("next_actions")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceKnownPathSymbolPreferredTest, "Monolith.IndexGuard.Source.KnownPathSymbolPreferred", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceKnownPathSymbolPreferredTest::RunTest(const FString& Parameters)
+{
+	FTempSourceDb T;
+	TestTrue(TEXT("temp source db built"), T.Build());
+	const int64 MissingPathSymbol = T.Db.InsertSymbol(
+		TEXT("Beta"), TEXT("M::BetaMissingPath"), TEXT("function"),
+		999999, 1, 200, 0, TEXT("public"), TEXT("void Beta()"), TEXT(""), false);
+	TestTrue(TEXT("missing-path duplicate inserted"), MissingPathSymbol > 0);
+
+	const TArray<FMonolithSourceSymbol> Symbols = T.Db.GetSymbolsByName(TEXT("Beta"), TEXT("function"), 5);
+	TestTrue(TEXT("duplicate symbol query returns rows"), Symbols.Num() >= 2);
+	if (Symbols.Num() >= 2)
+	{
+		TestEqual(TEXT("known-path symbol is preferred over larger missing-path span"), Symbols[0].Id, T.Sb);
+	}
+
+	TSharedPtr<FJsonObject> R = FMonolithSourceReview::ReviewContext(T.Db, TEXT("Beta"), TEXT("both"), 2, 200, TEXT("minimal"));
+	TestEqual(TEXT("status ok"), R->GetStringField(TEXT("status")), FString(TEXT("ok")));
+	TSharedPtr<FJsonObject> Seed = R->GetObjectField(TEXT("seed"));
+	TestTrue(TEXT("seed object present"), Seed.IsValid());
+	if (Seed.IsValid())
+	{
+		TestEqual(TEXT("review_context seed uses known path"), Seed->GetStringField(TEXT("path_status")), FString(TEXT("known")));
+		TestEqual(TEXT("review_context seed path"), Seed->GetStringField(TEXT("file")), FString(TEXT("/tmp/M/M.cpp")));
+	}
 	return true;
 }
 

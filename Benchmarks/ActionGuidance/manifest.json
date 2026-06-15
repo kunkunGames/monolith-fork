@@ -1,0 +1,225 @@
+{
+  "generated_at": "2026-06-15T15:14:54.223679+00:00",
+  "mcp_url": "http://localhost:9316/mcp",
+  "task_count": 161,
+  "min_tasks_requested": 120,
+  "catalog_namespace_count": 51,
+  "catalog_action_count": 1766,
+  "namespace_coverage": [
+    {
+      "namespace": "asset",
+      "action_count": 12
+    },
+    {
+      "namespace": "blueprint",
+      "action_count": 138
+    },
+    {
+      "namespace": "material",
+      "action_count": 64
+    },
+    {
+      "namespace": "paper2d",
+      "action_count": 3
+    },
+    {
+      "namespace": "animation",
+      "action_count": 194
+    },
+    {
+      "namespace": "cloth",
+      "action_count": 2
+    },
+    {
+      "namespace": "metahuman",
+      "action_count": 2
+    },
+    {
+      "namespace": "chooser",
+      "action_count": 16
+    },
+    {
+      "namespace": "niagara",
+      "action_count": 129
+    },
+    {
+      "namespace": "editor",
+      "action_count": 78
+    },
+    {
+      "namespace": "scene",
+      "action_count": 56
+    },
+    {
+      "namespace": "config",
+      "action_count": 11
+    },
+    {
+      "namespace": "localization",
+      "action_count": 10
+    },
+    {
+      "namespace": "project",
+      "action_count": 24
+    },
+    {
+      "namespace": "collection",
+      "action_count": 13
+    },
+    {
+      "namespace": "source",
+      "action_count": 37
+    },
+    {
+      "namespace": "bridge",
+      "action_count": 5
+    },
+    {
+      "namespace": "source_control",
+      "action_count": 9
+    },
+    {
+      "namespace": "ui",
+      "action_count": 136
+    },
+    {
+      "namespace": "slate",
+      "action_count": 1
+    },
+    {
+      "namespace": "mesh",
+      "action_count": 70
+    },
+    {
+      "namespace": "level_instance",
+      "action_count": 16
+    },
+    {
+      "namespace": "hlod",
+      "action_count": 12
+    },
+    {
+      "namespace": "leveldesign",
+      "action_count": 43
+    },
+    {
+      "namespace": "worldgen",
+      "action_count": 36
+    },
+    {
+      "namespace": "modelgen",
+      "action_count": 7
+    },
+    {
+      "namespace": "imagegen",
+      "action_count": 10
+    },
+    {
+      "namespace": "sprite",
+      "action_count": 9
+    },
+    {
+      "namespace": "interchange",
+      "action_count": 16
+    },
+    {
+      "namespace": "ndisplay",
+      "action_count": 2
+    },
+    {
+      "namespace": "dataflow",
+      "action_count": 8
+    },
+    {
+      "namespace": "gamefeatures",
+      "action_count": 1
+    },
+    {
+      "namespace": "chaos_fracture",
+      "action_count": 3
+    },
+    {
+      "namespace": "pcg",
+      "action_count": 4
+    },
+    {
+      "namespace": "water",
+      "action_count": 2
+    },
+    {
+      "namespace": "input",
+      "action_count": 10
+    },
+    {
+      "namespace": "gas",
+      "action_count": 142
+    },
+    {
+      "namespace": "ai",
+      "action_count": 245
+    },
+    {
+      "namespace": "audio",
+      "action_count": 98
+    },
+    {
+      "namespace": "level_sequence",
+      "action_count": 13
+    },
+    {
+      "namespace": "movie_render",
+      "action_count": 13
+    },
+    {
+      "namespace": "world_conditions",
+      "action_count": 4
+    },
+    {
+      "namespace": "decision",
+      "action_count": 5
+    },
+    {
+      "namespace": "risk",
+      "action_count": 5
+    },
+    {
+      "namespace": "cppreflect",
+      "action_count": 6
+    },
+    {
+      "namespace": "network",
+      "action_count": 4
+    },
+    {
+      "namespace": "pipeline",
+      "action_count": 2
+    },
+    {
+      "namespace": "reflect",
+      "action_count": 1
+    },
+    {
+      "namespace": "monolith",
+      "action_count": 34
+    },
+    {
+      "namespace": "bulk_fill",
+      "action_count": 2
+    },
+    {
+      "namespace": "describe",
+      "action_count": 3
+    }
+  ],
+  "category_counts": {
+    "discovery_planning": 51,
+    "invalid_param_type": 34,
+    "missing_required_param": 25,
+    "unknown_action_recovery": 51
+  },
+  "task_file": "Plugins/Monolith/Benchmarks/ActionGuidance/tasks.jsonl",
+  "scoring": {
+    "effectiveness_score": "0.30*task_success_rate + 0.20*first_recovery_success_rate + 0.15*action_selection_accuracy + 0.15*param_correction_accuracy + 0.10*(1-normalized_tool_calls) + 0.10*(1-hallucinated_workflow_rate)",
+    "normalized_tool_calls": "clamp((mean_tool_calls_to_success - 1) / 3, 0, 1)"
+  }
+}

@@ -25,6 +25,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `monolith_status` | (none) | Health check: version, uptime, port, registered action count, module status. |
 | `monolith_reindex` | `[w]` `force=false` | Re-index the project DB. Incremental (delta) by default; `force=true` for full wipe+rebuild. |
 | `monolith_guide` | `section?` (onboarding/recipes/decisions/errors/skills_map/gotchas) | Cross-namespace workflow guide: recipes, X-vs-Y decision matrices, error-to-recovery maps, gotchas. Pass `section` to bound context cost; omit for the full index. |
+| `monolith_query("get_action_metadata_coverage", {...})` | `namespace?`, `skill?`, `sample_limit=10` (0..50) | Measure factual planning-metadata coverage for profile-allowed actions. Use this to find coverage gaps; do not treat `not_declared` as permission to invent outputs or next-action predictions. |
 
 ### Standard discovery flow
 
@@ -35,6 +36,18 @@ monolith_discover({ namespace: "scene", action: "place_light", mode: "schema" })
 ```
 
 Then call the namespace tool: `scene_query("place_light", { type: "spot", location: [...] })`.
+
+Discovery rows include planning fields for agents:
+
+- `skill`: owning skill to read before planning that action.
+- `preconditions` / `preconditions_status` / `precondition_details`: factual requirements derived from declared metadata, required params, or execution policy. Treat `none_required` as "no required params or mutation precondition found", not as a guarantee the handler cannot fail.
+- `outputs` / `output_contract_status`: declared result contract only. `not_declared` means no factual output contract has been declared.
+- `next_actions` / `next_actions_status`: declared follow-up actions only. `not_declared` means no factual workflow edge has been declared.
+- `planning_signals`: generated facts for planning, not hand-authored workflow predictions. Signals summarize the owning skill, MCP tool name, schema status and param names/counts, validation status, execution policy mutation risk, and search metadata coverage.
+
+On failed calls, inspect the tool error result before retrying. Legacy results expose fields both at top level and under `error_data`; structured-result mode exposes the same data under `structuredContent.error_data`. Stable fields include `failure_stage`, `failure_cause`, `retryability`, `discover_args`, `skill`, `planning_signals`, `required_params`, `optional_params`, `missing_required_params`, `unknown_params`, `validation_errors`, `possible_contributing_causes`, and `candidate_actions`. Use `candidate_actions` for typo recovery and `related_actions` for recovery tools such as `monolith.discover` or `monolith.find`.
+
+Do not broad-fill `outputs` or `next_actions` by hand. If a contract is factual and worth declaring, cite handler code, schema, tests, or existing docs; otherwise leave the status as `not_declared` and rely on generated `planning_signals`, schema discovery, and failure diagnostics for planning.
 
 ## Namespace map (skill per namespace)
 
@@ -62,6 +75,7 @@ Beyond the core tools, the `monolith` namespace carries server-management action
 | `guide` | `section?` (onboarding/recipes/decisions/errors/skills_map/gotchas) | Cross-namespace workflow guide. |
 | `get_effective_discovery` | `namespace?`, `category?` | Discovery output after the active tool profile is applied. |
 | `get_mcp_discovery_state` | (none) | Current live-registry discovery snapshot + refresh semantics. |
+| `get_action_metadata_coverage` | `namespace?`, `skill?`, `sample_limit=10` (0..50) | Count `skill`, `preconditions_status`, `planning_signals_status`, `output_contract_status`, and `next_actions_status` coverage; `not_declared` is an explicit absence state, not predicted workflow data. |
 
 **Tool profiles** (scope the action surface)
 

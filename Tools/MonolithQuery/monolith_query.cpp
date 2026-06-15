@@ -796,36 +796,131 @@ static bool is_numeric_string(const std::string& value) {
         [](unsigned char ch) { return std::isdigit(ch); });
 }
 
-static bool contains_any_token(const std::string& lower_text,
-                               std::initializer_list<const char*> tokens) {
-    for (const char* token : tokens) {
-        if (lower_text.find(token) != std::string::npos)
-            return true;
+static bool sensitivity_prefix_allowed(const std::string& token) {
+    return token == "save"
+        || token == "serialize"
+        || token == "archive"
+        || token == "auth"
+        || token == "login"
+        || token == "account"
+        || token == "session"
+        || token == "purchase"
+        || token == "store"
+        || token == "entitlement"
+        || token == "anticheat"
+        || token == "crypto"
+        || token == "crypt"
+        || token == "encrypt"
+        || token == "decrypt"
+        || token == "signature"
+        || token == "signed"
+        || token == "signing"
+        || token == "hash"
+        || token == "exec"
+        || token == "eval"
+        || token == "command"
+        || token == "file"
+        || token == "registry"
+        || token == "process"
+        || token == "ufunction"
+        || token == "server"
+        || token == "client"
+        || token == "netmulticast"
+        || token == "onrep"
+        || token == "replication"
+        || token == "rpc"
+        || token == "network";
+}
+
+static bool sensitivity_token_matches(const std::string& candidate,
+                                      const std::string& sensitive_token) {
+    if (candidate == sensitive_token) return true;
+    return sensitivity_prefix_allowed(sensitive_token)
+        && candidate.rfind(sensitive_token, 0) == 0;
+}
+
+static std::vector<std::string> sensitivity_candidate_tokens(const std::string& text) {
+    std::vector<std::string> tokens;
+    std::set<std::string> seen;
+    auto add_token = [&](std::string token) {
+        std::transform(token.begin(), token.end(), token.begin(),
+            [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        if (token.empty() || seen.count(token)) return;
+        seen.insert(token);
+        tokens.push_back(std::move(token));
+    };
+
+    std::string normalized = lower_copy(text);
+    for (char& ch : normalized) {
+        if (!std::isalnum(static_cast<unsigned char>(ch))) ch = ' ';
+    }
+    std::istringstream stream(normalized);
+    std::string token;
+    while (stream >> token) add_token(token);
+
+    std::string current;
+    unsigned char previous = 0;
+    for (unsigned char ch : text) {
+        if (!std::isalnum(ch)) {
+            add_token(current);
+            current.clear();
+            previous = 0;
+            continue;
+        }
+        if (!current.empty()
+            && std::isupper(ch)
+            && (std::islower(previous) || std::isdigit(previous))) {
+            add_token(current);
+            current.clear();
+        }
+        current.push_back(static_cast<char>(ch));
+        previous = ch;
+    }
+    add_token(current);
+    return tokens;
+}
+
+static bool contains_any_token(const std::string& text,
+                               std::initializer_list<const char*> tokens,
+                               std::string* matched_token = nullptr) {
+    for (const std::string& candidate : sensitivity_candidate_tokens(text)) {
+        for (const char* token : tokens) {
+            std::string sensitive_token(token);
+            if (sensitivity_token_matches(candidate, sensitive_token)) {
+                if (matched_token) *matched_token = candidate;
+                return true;
+            }
+        }
     }
     return false;
 }
 
+static std::string sensitivity_reason(const std::string& reason,
+                                      const std::string& token) {
+    return token.empty() ? reason : reason + " (token=" + token + ")";
+}
+
 static std::pair<double, std::string> sensitivity_factor(const std::string& text,
                                                          bool source_domain) {
-    std::string lower = lower_copy(text);
-    if (source_domain && contains_any_token(lower, {"ufunction", "server", "client", "netmulticast", "onrep", "replication", "rpc", "network"}))
-        return {0.15, "sensitivity: replication/RPC or network surface"};
-    if (!source_domain && contains_any_token(lower, {"replication", "network", "rpc", "netmulticast", "onrep", "server", "client"}))
-        return {0.15, "sensitivity: replication/RPC or network surface"};
-    if (contains_any_token(lower, {"save", "serialize", "archive"}))
-        return {0.15, "sensitivity: save/serialization surface"};
-    if (contains_any_token(lower, {"auth", "login", "account", "session"}))
-        return {0.15, "sensitivity: auth/account/session surface"};
-    if (contains_any_token(lower, {"purchase", "iap", "store", "entitlement"}))
-        return {0.15, "sensitivity: purchase/store entitlement surface"};
-    if (contains_any_token(lower, {"anticheat", "anti_cheat", "cheat"}))
-        return {0.15, "sensitivity: anticheat surface"};
-    if (contains_any_token(lower, {"crypt", "encrypt", "decrypt", "sign", "hash"}))
-        return {0.15, "sensitivity: crypto/signing/hash surface"};
-    if (contains_any_token(lower, {"exec", "eval", "command"}))
-        return {0.15, "sensitivity: exec/eval/command surface"};
-    if (contains_any_token(lower, {"file", "registry", "process"}))
-        return {0.15, "sensitivity: file/registry/process surface"};
+    std::string matched;
+    if (source_domain && contains_any_token(text, {"ufunction", "server", "client", "netmulticast", "onrep", "replication", "rpc", "network"}, &matched))
+        return {0.15, sensitivity_reason("sensitivity: replication/RPC or network surface", matched)};
+    if (!source_domain && contains_any_token(text, {"replication", "network", "rpc", "netmulticast", "onrep", "server", "client"}, &matched))
+        return {0.15, sensitivity_reason("sensitivity: replication/RPC or network surface", matched)};
+    if (contains_any_token(text, {"save", "serialize", "archive"}, &matched))
+        return {0.15, sensitivity_reason("sensitivity: save/serialization surface", matched)};
+    if (contains_any_token(text, {"auth", "login", "account", "session"}, &matched))
+        return {0.15, sensitivity_reason("sensitivity: auth/account/session surface", matched)};
+    if (contains_any_token(text, {"purchase", "iap", "store", "entitlement"}, &matched))
+        return {0.15, sensitivity_reason("sensitivity: purchase/store entitlement surface", matched)};
+    if (contains_any_token(text, {"anticheat", "anti_cheat", "cheat"}, &matched))
+        return {0.15, sensitivity_reason("sensitivity: anticheat surface", matched)};
+    if (contains_any_token(text, {"crypt", "crypto", "encrypt", "decrypt", "sign", "signature", "signed", "signing", "hash"}, &matched))
+        return {0.15, sensitivity_reason("sensitivity: crypto/signing/hash surface", matched)};
+    if (contains_any_token(text, {"exec", "eval", "command"}, &matched))
+        return {0.15, sensitivity_reason("sensitivity: exec/eval/command surface", matched)};
+    if (contains_any_token(text, {"file", "registry", "process"}, &matched))
+        return {0.15, sensitivity_reason("sensitivity: file/registry/process surface", matched)};
     return {0.0, ""};
 }
 
@@ -989,6 +1084,14 @@ public:
         return rows.empty() ? "<unknown>" : rows[0].get("path");
     }
 
+    static bool known_source_path(const std::string& path) {
+        return !path.empty() && path != "<unknown>";
+    }
+
+    static std::string source_path_status(const std::string& path) {
+        return known_source_path(path) ? "known" : "missing";
+    }
+
     // --- search_source ---
     void search_source(const Args& args) {
         if (args.positional.empty()) die("search_source requires a query argument");
@@ -1004,12 +1107,13 @@ public:
         {
             std::string sql = "SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, "
                               "s.line_start, s.line_end, s.access, s.signature, s.docstring "
-                              "FROM symbols_fts f JOIN symbols s ON s.id = f.rowid";
+                              "FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
+                              "LEFT JOIN files p ON p.id = s.file_id";
             std::vector<std::string> conditions = {"symbols_fts MATCH ?"};
             std::vector<std::string> params = {fts_q};
 
             if (!module.empty()) {
-                sql += " JOIN files fi ON fi.id = s.file_id JOIN modules m ON m.id = fi.module_id";
+                sql += " JOIN modules m ON m.id = p.module_id";
                 conditions.push_back("m.name = ?");
                 params.push_back(module);
             }
@@ -1023,15 +1127,18 @@ public:
                 if (i > 0) sql += " AND ";
                 sql += conditions[i];
             }
-            sql += " ORDER BY bm25(symbols_fts) LIMIT " + std::to_string(limit);
+            sql += " ORDER BY CASE WHEN p.path IS NULL OR p.path = '' OR p.path = '<unknown>' THEN 1 ELSE 0 END, bm25(symbols_fts) LIMIT " + std::to_string(limit);
 
             auto rows = query(db, sql, params);
             if (!rows.empty()) {
                 out << "=== Symbol Matches ===\n";
                 for (auto& r : rows) {
-                    std::string fp = short_path(get_file_path(r.get_int("file_id")));
+                    std::string raw_fp = get_file_path(r.get_int("file_id"));
+                    std::string fp = short_path(raw_fp);
                     out << "  [" << r.get("kind") << "] " << r.get("qualified_name")
-                        << " (" << fp << ":" << r.get("line_start") << ")\n";
+                        << " (" << fp << ":" << r.get("line_start") << ")";
+                    if (source_path_status(raw_fp) == "missing") out << " [path_status=missing]";
+                    out << "\n";
                     std::string sig = r.get("signature");
                     if (!sig.empty())
                         out << "         " << sig << "\n";
@@ -1489,27 +1596,33 @@ public:
             std::string duplicated = duplicated_qualified_lookup_name(symbol);
             std::string short_owner_duplicated = short_owner_duplicated_qualified_lookup_name(symbol);
             rows = query(db,
-                "SELECT id, name, qualified_name, kind, file_id, line_start, line_end, "
-                "parent_symbol_id, access, signature, docstring, is_ue_macro "
-                "FROM symbols "
-                "WHERE (qualified_name = ? OR name = ? OR qualified_name = ? OR qualified_name = ?) "
-                "ORDER BY CASE WHEN qualified_name = ? THEN 0 WHEN name = ? THEN 1 WHEN qualified_name = ? THEN 2 WHEN qualified_name = ? THEN 3 ELSE 4 END, "
-                "         (line_end > line_start) DESC "
+                "SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, "
+                "s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro "
+                "FROM symbols s LEFT JOIN files f ON f.id = s.file_id "
+                "WHERE (s.qualified_name = ? OR s.name = ? OR s.qualified_name = ? OR s.qualified_name = ?) "
+                "ORDER BY CASE WHEN s.qualified_name = ? THEN 0 WHEN s.name = ? THEN 1 WHEN s.qualified_name = ? THEN 2 WHEN s.qualified_name = ? THEN 3 ELSE 4 END, "
+                "         CASE WHEN f.path IS NULL OR f.path = '' OR f.path = '<unknown>' THEN 1 ELSE 0 END, "
+                "         (s.line_end > s.line_start) DESC, s.id "
                 "LIMIT " + std::to_string(limit),
                 {symbol, symbol, duplicated, short_owner_duplicated, symbol, symbol, duplicated, short_owner_duplicated});
         } else {
             rows = query(db,
-                "SELECT id, name, qualified_name, kind, file_id, line_start, line_end, "
-                "parent_symbol_id, access, signature, docstring, is_ue_macro "
-                "FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC LIMIT " + std::to_string(limit),
+                "SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, "
+                "s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro "
+                "FROM symbols s LEFT JOIN files f ON f.id = s.file_id "
+                "WHERE s.name = ? "
+                "ORDER BY CASE WHEN f.path IS NULL OR f.path = '' OR f.path = '<unknown>' THEN 1 ELSE 0 END, "
+                "         (s.line_end > s.line_start) DESC, s.id LIMIT " + std::to_string(limit),
                 {symbol});
         }
         if (rows.empty()) {
             rows = query(db,
                 "SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, "
                 "s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro "
-                "FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
-                "WHERE symbols_fts MATCH ? ORDER BY bm25(symbols_fts) LIMIT " + std::to_string(limit),
+                "FROM symbols_fts fts JOIN symbols s ON s.id = fts.rowid LEFT JOIN files f ON f.id = s.file_id "
+                "WHERE symbols_fts MATCH ? "
+                "ORDER BY CASE WHEN f.path IS NULL OR f.path = '' OR f.path = '<unknown>' THEN 1 ELSE 0 END, "
+                "         bm25(symbols_fts), s.id LIMIT " + std::to_string(limit),
                 {escape_fts(symbol)});
         }
         return rows;
@@ -1524,12 +1637,14 @@ public:
     }
 
     json symbol_json(const Row& r, int depth = -1) {
+        std::string file_path = get_file_path(r.get_int("file_id"));
         json o = {
             {"id", r.get_int64("id")},
             {"name", r.get("name")},
             {"qualified_name", r.get("qualified_name")},
             {"kind", r.get("kind")},
-            {"file", short_path(get_file_path(r.get_int("file_id")))},
+            {"file", short_path(file_path)},
+            {"path_status", source_path_status(file_path)},
             {"line_start", r.get_int("line_start")},
             {"line_end", r.get_int("line_end")},
         };
@@ -1727,6 +1842,14 @@ LIMIT ?
         int64_t sym_cnt = -1;
         int64_t source_fts_cnt = -1;
         if (run_expensive_checks) {
+            int64_t orphan_symbols = count_rows(db,
+                "SELECT COUNT(*) FROM symbols s "
+                "LEFT JOIN files f ON f.id = s.file_id "
+                "WHERE f.id IS NULL;");
+            if (orphan_symbols != 0) needs_reindex = true;
+            check("integrity:orphan_symbols", orphan_symbols == 0,
+                  orphan_symbols == 0 ? "no orphan symbol rows" : std::to_string(orphan_symbols) + " orphan symbol row(s); run project/source reindex so prune can remove invalid dependent rows");
+
             int64_t orphan_refs = count_rows(db,
                 "SELECT COUNT(*) FROM \"references\" r "
                 "WHERE (r.from_symbol_id != 0 AND r.from_symbol_id NOT IN (SELECT id FROM symbols)) "
@@ -1743,6 +1866,7 @@ LIMIT ?
             source_fts_cnt = count_rows(db, "SELECT COUNT(*) FROM source_fts;");
             info("fts:source_fts_info", "source_fts rows=" + std::to_string(source_fts_cnt) + " (plain fts5; not rebuildable; reindex to repair)");
         } else {
+            info("integrity:orphan_symbols", "skipped; pass --include-deep-checks=true or --include-counts=true");
             info("integrity:orphan_references", "skipped; pass --include-deep-checks=true or --include-counts=true");
             info("fts:symbols_row_parity", "skipped; pass --include-deep-checks=true or --include-counts=true");
             info("fts:source_fts_info", "source_fts row count skipped; pass --include-deep-checks=true or --include-counts=true");
@@ -2216,7 +2340,7 @@ LIMIT ?
                 sql += " AND lower(n.kind) = lower(?)";
                 params.push_back(kind);
             }
-            sql += " ORDER BY rank LIMIT " + std::to_string(cap + 1);
+            sql += " ORDER BY CASE WHEN n.file_path IS NULL OR n.file_path = '' OR n.file_path = '<unknown>' THEN 1 ELSE 0 END, rank LIMIT " + std::to_string(cap + 1);
             rows = query(graph, sql, params);
             used_fts = !rows.empty();
         }
@@ -2230,7 +2354,7 @@ LIMIT ?
                 sql += " AND lower(kind) = lower(?)";
                 params.push_back(kind);
             }
-            sql += " ORDER BY CASE WHEN lower(name)=lower(?) THEN 0 WHEN lower(name) LIKE lower(?) THEN 1 ELSE 2 END, name LIMIT " + std::to_string(cap + 1);
+            sql += " ORDER BY CASE WHEN file_path IS NULL OR file_path = '' OR file_path = '<unknown>' THEN 1 ELSE 0 END, CASE WHEN lower(name)=lower(?) THEN 0 WHEN lower(name) LIKE lower(?) THEN 1 ELSE 2 END, name LIMIT " + std::to_string(cap + 1);
             params.push_back(q);
             params.push_back(q + "%");
             rows = query(graph, sql, params);
@@ -2240,14 +2364,19 @@ LIMIT ?
         if (truncated) rows.pop_back();
 
         json results = json::array();
+        std::set<std::string> seen;
         for (const auto& row : rows) {
             double rank = row.get_double("rank", 0.0);
+            std::string file_path = row.get("file_path");
+            std::string key = row.get("qualified_name") + "|" + row.get("kind") + "|" + file_path;
+            if (!seen.insert(key).second) continue;
             results.push_back({
                 {"id", row.get_int64("id")},
                 {"kind", row.get("kind")},
                 {"name", row.get("name")},
                 {"qualified_name", row.get("qualified_name")},
-                {"file_path", short_path(row.get("file_path"))},
+                {"file_path", short_path(file_path)},
+                {"path_status", source_path_status(file_path)},
                 {"line_start", row.get_int("line_start")},
                 {"line_end", row.get_int("line_end")},
                 {"language", row.get("language")},
@@ -2860,10 +2989,29 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
         json summary = {{"truncated", impact.value("truncated", false)}};
         summary["impacted_count"] = impact["impacted_symbols"].size();
         summary["top_impacted"] = json::array();
-        for (size_t i = 0; i < impact["impacted_symbols"].size() && i < (minimal ? 5u : 25u); ++i) summary["top_impacted"].push_back(impact["impacted_symbols"][i]);
+        std::set<std::string> exact_impacted;
+        std::set<std::string> known_impacted;
+        size_t top_limit = minimal ? 5u : 25u;
+        for (size_t i = 0; i < impact["impacted_symbols"].size() && summary["top_impacted"].size() < top_limit; ++i) {
+            const json& item = impact["impacted_symbols"][i];
+            std::string qualified_name = item.value("qualified_name", "");
+            std::string name = item.value("name", "");
+            std::string kind = item.value("kind", "");
+            std::string file = item.value("file", "");
+            std::string status = item.value("path_status", source_path_status(file));
+            std::string symbol_key = (qualified_name.empty() ? name : qualified_name) + "|" + kind;
+            std::string exact_key = symbol_key + "|" + file;
+            bool known = status == "known" || known_source_path(file);
+            if (exact_impacted.count(exact_key)) continue;
+            if (!known && known_impacted.count(symbol_key)) continue;
+            exact_impacted.insert(exact_key);
+            if (known) known_impacted.insert(symbol_key);
+            summary["top_impacted"].push_back(item);
+        }
         root["impact"] = summary;
         root["seed"] = symbol_json(seed, 0);
-        root["context"] = json::array({{{"type", "seed_symbol"}, {"name", seed.get("name")}, {"qualified_name", seed.get("qualified_name")}, {"file", short_path(get_file_path(seed.get_int("file_id")))}, {"line", seed.get_int("line_start")}}});
+        std::string seed_file = get_file_path(seed.get_int("file_id"));
+        root["context"] = json::array({{{"type", "seed_symbol"}, {"name", seed.get("name")}, {"qualified_name", seed.get("qualified_name")}, {"file", short_path(seed_file)}, {"path_status", source_path_status(seed_file)}, {"line", seed.get_int("line_start")}}});
         if (!minimal) root["details"] = symbol_json(seed, 0);
         root["status"] = "ok";
         root["summary"] = seed.get("name") + " risk=" + risk["tier"].get<std::string>() + " (" + (minimal ? "minimal" : "standard") + "); review the top impacted symbols and high-risk reasons";

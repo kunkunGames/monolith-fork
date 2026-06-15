@@ -68,6 +68,11 @@ namespace
 			TEXT("Policy metadata default test action."),
 			FMonolithActionHandler::CreateStatic(&MakePolicySliceTestResult));
 
+		FMonolithActionPlanningMetadata ExplicitPlanning;
+		ExplicitPlanning.Skill = TEXT("monolith-mcp");
+		ExplicitPlanning.Outputs = { TEXT("Policy test JSON payload with ok=true on success.") };
+		ExplicitPlanning.NextActions = { TEXT("policytest.default_action") };
+
 		Registry.RegisterAction(
 			TEXT("policytest"),
 			TEXT("explicit_action"),
@@ -78,7 +83,9 @@ namespace
 				.Required(TEXT("target"), TEXT("string"), TEXT("Target identifier for discover schema filtering."))
 				.Build(),
 			TEXT("Test"),
-			MakePolicySliceExplicitMutationPolicy());
+			MakePolicySliceExplicitMutationPolicy(),
+			FMonolithActionSearchMetadata(),
+			ExplicitPlanning);
 
 		Registry.RegisterAction(
 			TEXT("policytest"),
@@ -110,6 +117,30 @@ namespace
 					|| ((*Row)->TryGetStringField(TEXT("name"), ActualName) && ActualName == ActionName)))
 			{
 				return Row;
+			}
+		}
+		return nullptr;
+	}
+
+	TSharedPtr<FJsonObject> FindPolicySlicePlanningSignal(const TSharedPtr<FJsonObject>& Row, const FString& Kind)
+	{
+		if (!Row.IsValid())
+		{
+			return nullptr;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Signals = nullptr;
+		if (!Row->TryGetArrayField(TEXT("planning_signals"), Signals) || !Signals)
+		{
+			return nullptr;
+		}
+
+		for (const TSharedPtr<FJsonValue>& SignalValue : *Signals)
+		{
+			TSharedPtr<FJsonObject> Signal = SignalValue.IsValid() ? SignalValue->AsObject() : nullptr;
+			if (Signal.IsValid() && Signal->GetStringField(TEXT("kind")) == Kind)
+			{
+				return Signal;
 			}
 		}
 		return nullptr;
@@ -147,6 +178,15 @@ bool FMonolithActionExecutionPolicyDiscoverTest::RunTest(const FString& Paramete
 				TestTrue(TEXT("Default policy is marked defaulted"), (*Policy)->GetBoolField(TEXT("defaulted")));
 				TestFalse(TEXT("Default policy is not enforced"), (*Policy)->GetBoolField(TEXT("enforced")));
 			}
+			TestEqual(TEXT("Default output contract is not invented"), (*DefaultRow)->GetStringField(TEXT("output_contract_status")), TEXT("not_declared"));
+			TestEqual(TEXT("Default next actions are not invented"), (*DefaultRow)->GetStringField(TEXT("next_actions_status")), TEXT("not_declared"));
+			TSharedPtr<FJsonObject> DefaultSchemaSignal = FindPolicySlicePlanningSignal(*DefaultRow, TEXT("schema"));
+			TestTrue(TEXT("Default row has generated schema planning signal"), DefaultSchemaSignal.IsValid());
+			if (DefaultSchemaSignal.IsValid())
+			{
+				TestEqual(TEXT("Default schema signal reports absent schema"), DefaultSchemaSignal->GetStringField(TEXT("status")), TEXT("absent"));
+				TestEqual(TEXT("Default schema signal has zero required params"), static_cast<int32>(DefaultSchemaSignal->GetNumberField(TEXT("required_param_count"))), 0);
+			}
 		}
 
 		const TSharedPtr<FJsonObject>* ExplicitRow = FindPolicySliceActionRow(Actions, TEXT("explicit_action"));
@@ -161,6 +201,138 @@ bool FMonolithActionExecutionPolicyDiscoverTest::RunTest(const FString& Paramete
 				TestFalse(TEXT("Explicit policy is not defaulted"), (*Policy)->GetBoolField(TEXT("defaulted")));
 				TestTrue(TEXT("Explicit policy requests transaction metadata"), (*Policy)->GetBoolField(TEXT("transaction_wrapping")));
 				TestTrue(TEXT("Explicit policy is enforced"), (*Policy)->GetBoolField(TEXT("enforced")));
+			}
+
+			TestEqual(TEXT("Explicit row skill"), (*ExplicitRow)->GetStringField(TEXT("skill")), TEXT("monolith-mcp"));
+			TestEqual(TEXT("Explicit output contract declared"), (*ExplicitRow)->GetStringField(TEXT("output_contract_status")), TEXT("declared"));
+			TestEqual(TEXT("Explicit next actions declared"), (*ExplicitRow)->GetStringField(TEXT("next_actions_status")), TEXT("declared"));
+			TSharedPtr<FJsonObject> ExplicitSchemaSignal = FindPolicySlicePlanningSignal(*ExplicitRow, TEXT("schema"));
+			TestTrue(TEXT("Explicit row has generated schema planning signal"), ExplicitSchemaSignal.IsValid());
+			if (ExplicitSchemaSignal.IsValid())
+			{
+				TestEqual(TEXT("Explicit schema signal reports declared schema"), ExplicitSchemaSignal->GetStringField(TEXT("status")), TEXT("declared"));
+				TestEqual(TEXT("Explicit schema signal has one required param"), static_cast<int32>(ExplicitSchemaSignal->GetNumberField(TEXT("required_param_count"))), 1);
+				const TArray<TSharedPtr<FJsonValue>>* RequiredSignalParams = nullptr;
+				TestTrue(TEXT("Explicit schema signal names required param"),
+					ExplicitSchemaSignal->TryGetArrayField(TEXT("required_params"), RequiredSignalParams) && RequiredSignalParams && RequiredSignalParams->Num() == 1);
+			}
+			TSharedPtr<FJsonObject> ExplicitPolicySignal = FindPolicySlicePlanningSignal(*ExplicitRow, TEXT("execution_policy"));
+			TestTrue(TEXT("Explicit row has generated execution policy planning signal"), ExplicitPolicySignal.IsValid());
+			if (ExplicitPolicySignal.IsValid())
+			{
+				TestEqual(TEXT("Explicit policy signal id"), ExplicitPolicySignal->GetStringField(TEXT("policy_id")), TEXT("transaction_required"));
+				TestTrue(TEXT("Explicit policy signal reports mutation possibility"), ExplicitPolicySignal->GetBoolField(TEXT("can_mutate")));
+			}
+
+			const TArray<TSharedPtr<FJsonValue>>* Preconditions = nullptr;
+			TestTrue(TEXT("Explicit preconditions array exists"), (*ExplicitRow)->TryGetArrayField(TEXT("preconditions"), Preconditions));
+			if (Preconditions)
+			{
+				bool bSawTargetPrecondition = false;
+				for (const TSharedPtr<FJsonValue>& Precondition : *Preconditions)
+				{
+					FString Text;
+					if (Precondition.IsValid() && Precondition->TryGetString(Text) && Text.Contains(TEXT("target")))
+					{
+						bSawTargetPrecondition = true;
+						break;
+					}
+				}
+				TestTrue(TEXT("Required param appears as factual precondition"), bSawTargetPrecondition);
+			}
+			TestEqual(TEXT("Preconditions status is derived"), (*ExplicitRow)->GetStringField(TEXT("preconditions_status")), TEXT("declared_or_derived"));
+
+			const TArray<TSharedPtr<FJsonValue>>* PreconditionDetails = nullptr;
+			TestTrue(TEXT("Explicit precondition details array exists"), (*ExplicitRow)->TryGetArrayField(TEXT("precondition_details"), PreconditionDetails));
+			if (PreconditionDetails)
+			{
+				bool bSawTargetDetail = false;
+				for (const TSharedPtr<FJsonValue>& DetailValue : *PreconditionDetails)
+				{
+					const TSharedPtr<FJsonObject> Detail = DetailValue.IsValid() ? DetailValue->AsObject() : nullptr;
+					if (Detail.IsValid()
+						&& Detail->GetStringField(TEXT("source")) == TEXT("schema_required_param")
+						&& Detail->GetStringField(TEXT("param")) == TEXT("target")
+						&& Detail->GetStringField(TEXT("type")) == TEXT("string"))
+					{
+						bSawTargetDetail = true;
+						break;
+					}
+				}
+				TestTrue(TEXT("Required param precondition detail includes source and type"), bSawTargetDetail);
+			}
+		}
+	}
+
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("policytest"));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyMetadataCoverageReportTest,
+	"Monolith.Core.ActionExecutionPolicy.MetadataCoverageReport",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionExecutionPolicyMetadataCoverageReportTest::RunTest(const FString& Parameters)
+{
+	RegisterPolicySliceTestNamespace();
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("namespace"), TEXT("policytest"));
+	Params->SetNumberField(TEXT("sample_limit"), 5.0);
+	FMonolithActionResult Result = FMonolithCoreTools::HandleGetActionMetadataCoverage(Params);
+	TestTrue(TEXT("Coverage report succeeds"), Result.bSuccess);
+	TestTrue(TEXT("Coverage result valid"), Result.Result.IsValid());
+
+	if (Result.Result.IsValid())
+	{
+		TestEqual(TEXT("Coverage status"), Result.Result->GetStringField(TEXT("status")), TEXT("ok"));
+		TestEqual(TEXT("Coverage scope is active profile registry"), Result.Result->GetStringField(TEXT("scope")), TEXT("active_profile_registry"));
+		TestTrue(TEXT("Coverage semantics warn against invented metadata"),
+			Result.Result->GetStringField(TEXT("report_semantics")).Contains(TEXT("must not infer or fabricate")));
+
+		const TSharedPtr<FJsonObject>* Totals = nullptr;
+		TestTrue(TEXT("Coverage totals object exists"), Result.Result->TryGetObjectField(TEXT("totals"), Totals));
+		if (Totals && Totals->IsValid())
+		{
+			TestEqual(TEXT("Coverage action count"), static_cast<int32>((*Totals)->GetNumberField(TEXT("action_count"))), 3);
+
+			const TSharedPtr<FJsonObject>* Skill = nullptr;
+			TestTrue(TEXT("Skill coverage object exists"), (*Totals)->TryGetObjectField(TEXT("skill"), Skill));
+			if (Skill && Skill->IsValid())
+			{
+				TestEqual(TEXT("One action has declared skill"), static_cast<int32>((*Skill)->GetNumberField(TEXT("declared"))), 1);
+				TestEqual(TEXT("Two actions derive skill from namespace"), static_cast<int32>((*Skill)->GetNumberField(TEXT("derived_from_namespace"))), 2);
+			}
+
+			const TSharedPtr<FJsonObject>* OutputStatus = nullptr;
+			TestTrue(TEXT("Output status coverage object exists"), (*Totals)->TryGetObjectField(TEXT("output_contract_status"), OutputStatus));
+			if (OutputStatus && OutputStatus->IsValid())
+			{
+				TestEqual(TEXT("Only explicit output contract is declared"), static_cast<int32>((*OutputStatus)->GetNumberField(TEXT("declared"))), 1);
+				TestEqual(TEXT("Undeclared output contracts stay not_declared"), static_cast<int32>((*OutputStatus)->GetNumberField(TEXT("not_declared"))), 2);
+			}
+
+			const TSharedPtr<FJsonObject>* NextStatus = nullptr;
+			TestTrue(TEXT("Next action status coverage object exists"), (*Totals)->TryGetObjectField(TEXT("next_actions_status"), NextStatus));
+			if (NextStatus && NextStatus->IsValid())
+			{
+				TestEqual(TEXT("Only explicit next action is declared"), static_cast<int32>((*NextStatus)->GetNumberField(TEXT("declared"))), 1);
+				TestEqual(TEXT("Undeclared next actions stay not_declared"), static_cast<int32>((*NextStatus)->GetNumberField(TEXT("not_declared"))), 2);
+			}
+
+			const TSharedPtr<FJsonObject>* PlanningSignalsStatus = nullptr;
+			TestTrue(TEXT("Planning signals status coverage object exists"), (*Totals)->TryGetObjectField(TEXT("planning_signals_status"), PlanningSignalsStatus));
+			if (PlanningSignalsStatus && PlanningSignalsStatus->IsValid())
+			{
+				TestEqual(TEXT("All actions receive generated planning signals"), static_cast<int32>((*PlanningSignalsStatus)->GetNumberField(TEXT("generated"))), 3);
+			}
+
+			const TSharedPtr<FJsonObject>* PreconditionsStatus = nullptr;
+			TestTrue(TEXT("Preconditions status coverage object exists"), (*Totals)->TryGetObjectField(TEXT("preconditions_status"), PreconditionsStatus));
+			if (PreconditionsStatus && PreconditionsStatus->IsValid())
+			{
+				TestEqual(TEXT("One action requires no params"), static_cast<int32>((*PreconditionsStatus)->GetNumberField(TEXT("none_required"))), 1);
+				TestEqual(TEXT("Two actions have declared or derived preconditions"), static_cast<int32>((*PreconditionsStatus)->GetNumberField(TEXT("declared_or_derived"))), 2);
 			}
 		}
 	}
@@ -195,6 +367,7 @@ bool FMonolithActionExecutionPolicyDiscoverActionSchemaModeTest::RunTest(const F
 		if (Schema && Schema->IsValid())
 		{
 			TestEqual(TEXT("Schema row action"), (*Schema)->GetStringField(TEXT("action")), TEXT("explicit_action"));
+			TestEqual(TEXT("Schema row output status"), (*Schema)->GetStringField(TEXT("output_contract_status")), TEXT("declared"));
 
 			const TSharedPtr<FJsonObject>* ParamsSchema = nullptr;
 			TestTrue(TEXT("Param schema object exists"), (*Schema)->TryGetObjectField(TEXT("params"), ParamsSchema));
@@ -254,6 +427,7 @@ bool FMonolithActionExecutionPolicyDomainCatalogTest::RunTest(const FString& Par
 			{
 				TestEqual(TEXT("Domain policy id"), (*Policy)->GetStringField(TEXT("policy_id")), TEXT("transaction_required"));
 			}
+			TestEqual(TEXT("Domain row exposes output status"), (*ExplicitRow)->GetStringField(TEXT("output_contract_status")), TEXT("declared"));
 		}
 	}
 

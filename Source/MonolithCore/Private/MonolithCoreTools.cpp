@@ -115,6 +115,172 @@ static TArray<TSharedPtr<FJsonValue>> StringArrayToJson(const TArray<FString>& V
 	return Result;
 }
 
+static void AddUniqueString(TArray<FString>& Values, const FString& Value)
+{
+	if (!Value.IsEmpty() && !Values.Contains(Value))
+	{
+		Values.Add(Value);
+	}
+}
+
+static FString GetPlanningSkill(const FMonolithActionInfo& ActionInfo)
+{
+	return ActionInfo.PlanningMetadata.Skill.IsEmpty()
+		? FMonolithToolRegistry::ResolveSkillForNamespace(ActionInfo.Namespace)
+		: ActionInfo.PlanningMetadata.Skill;
+}
+
+static bool TryGetParamRequiredAndType(const TSharedPtr<FJsonValue>& Value, bool& bOutRequired, FString& OutType)
+{
+	bOutRequired = false;
+	OutType.Reset();
+
+	const TSharedPtr<FJsonObject>* ParamDef = nullptr;
+	if (!Value.IsValid() || !Value->TryGetObject(ParamDef) || !ParamDef || !ParamDef->IsValid())
+	{
+		return false;
+	}
+
+	(*ParamDef)->TryGetBoolField(TEXT("required"), bOutRequired);
+	(*ParamDef)->TryGetStringField(TEXT("type"), OutType);
+	return true;
+}
+
+static void AddPreconditionDetail(
+	TArray<FString>& Preconditions,
+	TArray<TSharedPtr<FJsonValue>>& Details,
+	const FString& Text,
+	const FString& Source,
+	const FString& ParamName = FString(),
+	const FString& ParamType = FString(),
+	const FMonolithActionExecutionPolicy* Policy = nullptr,
+	bool bDestructiveHint = false)
+{
+	if (Text.IsEmpty() || Preconditions.Contains(Text))
+	{
+		return;
+	}
+
+	Preconditions.Add(Text);
+
+	TSharedPtr<FJsonObject> Detail = MakeShared<FJsonObject>();
+	Detail->SetStringField(TEXT("text"), Text);
+	Detail->SetStringField(TEXT("source"), Source);
+	if (!ParamName.IsEmpty())
+	{
+		Detail->SetStringField(TEXT("param"), ParamName);
+	}
+	if (!ParamType.IsEmpty())
+	{
+		Detail->SetStringField(TEXT("type"), ParamType);
+	}
+	if (Policy)
+	{
+		Detail->SetStringField(TEXT("policy_id"), Policy->PolicyId);
+		Detail->SetBoolField(TEXT("policy_defaulted"), Policy->bDefaulted);
+		Detail->SetBoolField(TEXT("dirty_package_tracking"), Policy->bDirtyPackageTracking);
+		Detail->SetBoolField(TEXT("transaction_wrapping"), Policy->bTransactionWrapping);
+		Detail->SetBoolField(TEXT("destructive_hint"), bDestructiveHint);
+	}
+	Details.Add(MakeShared<FJsonValueObject>(Detail));
+}
+
+static TArray<TSharedPtr<FJsonValue>> BuildPlanningPreconditionDetails(
+	const FMonolithActionInfo& ActionInfo,
+	TArray<FString>& OutPreconditions,
+	FString& OutStatus)
+{
+	OutPreconditions.Reset();
+	TArray<TSharedPtr<FJsonValue>> Details;
+
+	for (const FString& DeclaredPrecondition : ActionInfo.PlanningMetadata.Preconditions)
+	{
+		AddPreconditionDetail(OutPreconditions, Details, DeclaredPrecondition, TEXT("declared"));
+	}
+
+	if (ActionInfo.ParamSchema.IsValid())
+	{
+		for (const auto& Pair : ActionInfo.ParamSchema->Values)
+		{
+			if (Pair.Key.StartsWith(TEXT("_")))
+			{
+				continue;
+			}
+
+			bool bRequired = false;
+			FString Type;
+			if (TryGetParamRequiredAndType(Pair.Value, bRequired, Type) && bRequired)
+			{
+				const FString TypeSuffix = Type.IsEmpty() ? FString() : FString::Printf(TEXT(" (%s)"), *Type);
+				AddPreconditionDetail(
+					OutPreconditions,
+					Details,
+					FString::Printf(TEXT("Supply required param '%s'%s."), *Pair.Key, *TypeSuffix),
+					TEXT("schema_required_param"),
+					Pair.Key,
+					Type);
+			}
+		}
+	}
+
+	if (ActionInfo.ExecutionPolicy.bDirtyPackageTracking || ActionInfo.ExecutionPolicy.bTransactionWrapping || ActionInfo.bDestructiveHint)
+	{
+		AddPreconditionDetail(
+			OutPreconditions,
+			Details,
+			TEXT("Review execution_policy before running because the action can mutate editor or project state."),
+			TEXT("execution_policy"),
+			FString(),
+			FString(),
+			&ActionInfo.ExecutionPolicy,
+			ActionInfo.bDestructiveHint);
+	}
+
+	if (OutPreconditions.Num() == 0)
+	{
+		AddPreconditionDetail(
+			OutPreconditions,
+			Details,
+			TEXT("No required params."),
+			TEXT("none_required"));
+		OutStatus = TEXT("none_required");
+	}
+	else
+	{
+		OutStatus = TEXT("declared_or_derived");
+	}
+
+	return Details;
+}
+
+static TArray<FString> BuildPlanningOutputs(const FMonolithActionInfo& ActionInfo)
+{
+	return ActionInfo.PlanningMetadata.Outputs;
+}
+
+static TArray<FString> BuildPlanningNextActions(const FMonolithActionInfo& ActionInfo)
+{
+	return ActionInfo.PlanningMetadata.NextActions;
+}
+
+static void AddPlanningFields(TSharedPtr<FJsonObject>& ActionObj, const FMonolithActionInfo& ActionInfo)
+{
+	const TArray<FString> Outputs = BuildPlanningOutputs(ActionInfo);
+	const TArray<FString> NextActions = BuildPlanningNextActions(ActionInfo);
+	TArray<FString> Preconditions;
+	FString PreconditionsStatus;
+	const TArray<TSharedPtr<FJsonValue>> PreconditionDetails = BuildPlanningPreconditionDetails(ActionInfo, Preconditions, PreconditionsStatus);
+	ActionObj->SetStringField(TEXT("skill"), GetPlanningSkill(ActionInfo));
+	ActionObj->SetArrayField(TEXT("preconditions"), StringArrayToJson(Preconditions));
+	ActionObj->SetStringField(TEXT("preconditions_status"), PreconditionsStatus);
+	ActionObj->SetArrayField(TEXT("precondition_details"), PreconditionDetails);
+	ActionObj->SetArrayField(TEXT("outputs"), StringArrayToJson(Outputs));
+	ActionObj->SetStringField(TEXT("output_contract_status"), Outputs.Num() > 0 ? TEXT("declared") : TEXT("not_declared"));
+	ActionObj->SetArrayField(TEXT("next_actions"), StringArrayToJson(NextActions));
+	ActionObj->SetStringField(TEXT("next_actions_status"), NextActions.Num() > 0 ? TEXT("declared") : TEXT("not_declared"));
+	ActionObj->SetArrayField(TEXT("planning_signals"), FMonolithToolRegistry::BuildPlanningSignals(ActionInfo));
+}
+
 // MCP routing alias table for monolith.find query expansion. The fuzzy primitives
 // (normalize / tokenize / distance / score) now live in FMonolithFuzzyMatch; only this
 // find-specific alias policy stays here and is passed to FMonolithFuzzyMatch::Tokenize.
@@ -286,6 +452,10 @@ static FString BuildFindSearchMetadataText(const FMonolithActionInfo& Info)
 	Parts.Append(Info.SearchMetadata.Keywords);
 	Parts.Append(Info.SearchMetadata.Aliases);
 	Parts.Append(Info.SearchMetadata.Examples);
+	Parts.Add(GetPlanningSkill(Info));
+	Parts.Append(Info.PlanningMetadata.Preconditions);
+	Parts.Append(Info.PlanningMetadata.Outputs);
+	Parts.Append(Info.PlanningMetadata.NextActions);
 	AppendDerivedFindMetadata(Info, Parts);
 	return FString::Join(Parts, TEXT(" "));
 }
@@ -321,7 +491,149 @@ static TSharedPtr<FJsonObject> MakeDiscoverActionRow(const FMonolithActionInfo& 
 	{
 		ActionObj->SetObjectField(TEXT("params"), ActionInfo.ParamSchema);
 	}
+	AddPlanningFields(ActionObj, ActionInfo);
 	return ActionObj;
+}
+
+struct FMetadataCoverageBucket
+{
+	int32 ActionCount = 0;
+	int32 SkillDeclared = 0;
+	int32 SkillDerived = 0;
+	TMap<FString, int32> PreconditionsStatus;
+	TMap<FString, int32> OutputContractStatus;
+	TMap<FString, int32> NextActionsStatus;
+	TMap<FString, int32> PlanningSignalsStatus;
+	TArray<FString> OutputNotDeclaredSamples;
+	TArray<FString> NextActionsNotDeclaredSamples;
+	TArray<FString> PreconditionsNoneRequiredSamples;
+	TArray<FString> PlanningSignalsMissingSamples;
+};
+
+static void IncrementCoverageCounter(TMap<FString, int32>& Counts, const FString& Key)
+{
+	const FString NormalizedKey = Key.IsEmpty() ? TEXT("missing") : Key;
+	++Counts.FindOrAdd(NormalizedKey);
+}
+
+static TSharedPtr<FJsonObject> CoverageCountsToJson(const TMap<FString, int32>& Counts)
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	TArray<FString> Keys;
+	Counts.GetKeys(Keys);
+	Keys.Sort();
+	for (const FString& Key : Keys)
+	{
+		Obj->SetNumberField(Key, Counts.FindChecked(Key));
+	}
+	return Obj;
+}
+
+static void AddCoverageSample(TArray<FString>& Samples, const FString& ActionId, int32 SampleLimit)
+{
+	if (SampleLimit > 0 && Samples.Num() < SampleLimit)
+	{
+		Samples.Add(ActionId);
+	}
+}
+
+static void AccumulateMetadataCoverage(
+	FMetadataCoverageBucket& Bucket,
+	const FMonolithActionInfo& ActionInfo,
+	const TSharedPtr<FJsonObject>& ActionRow,
+	int32 SampleLimit)
+{
+	++Bucket.ActionCount;
+	if (ActionInfo.PlanningMetadata.Skill.IsEmpty())
+	{
+		++Bucket.SkillDerived;
+	}
+	else
+	{
+		++Bucket.SkillDeclared;
+	}
+
+	FString PreconditionsStatus;
+	FString OutputContractStatus;
+	FString NextActionsStatus;
+	ActionRow->TryGetStringField(TEXT("preconditions_status"), PreconditionsStatus);
+	ActionRow->TryGetStringField(TEXT("output_contract_status"), OutputContractStatus);
+	ActionRow->TryGetStringField(TEXT("next_actions_status"), NextActionsStatus);
+	const TArray<TSharedPtr<FJsonValue>>* PlanningSignals = nullptr;
+	const FString PlanningSignalsStatus = (ActionRow->TryGetArrayField(TEXT("planning_signals"), PlanningSignals) && PlanningSignals && PlanningSignals->Num() > 0)
+		? TEXT("generated")
+		: TEXT("missing");
+
+	IncrementCoverageCounter(Bucket.PreconditionsStatus, PreconditionsStatus);
+	IncrementCoverageCounter(Bucket.OutputContractStatus, OutputContractStatus);
+	IncrementCoverageCounter(Bucket.NextActionsStatus, NextActionsStatus);
+	IncrementCoverageCounter(Bucket.PlanningSignalsStatus, PlanningSignalsStatus);
+
+	const FString ActionId = ActionInfo.Namespace + TEXT(".") + ActionInfo.Action;
+	if (OutputContractStatus == TEXT("not_declared"))
+	{
+		AddCoverageSample(Bucket.OutputNotDeclaredSamples, ActionId, SampleLimit);
+	}
+	if (NextActionsStatus == TEXT("not_declared"))
+	{
+		AddCoverageSample(Bucket.NextActionsNotDeclaredSamples, ActionId, SampleLimit);
+	}
+	if (PreconditionsStatus == TEXT("none_required"))
+	{
+		AddCoverageSample(Bucket.PreconditionsNoneRequiredSamples, ActionId, SampleLimit);
+	}
+	if (PlanningSignalsStatus == TEXT("missing"))
+	{
+		AddCoverageSample(Bucket.PlanningSignalsMissingSamples, ActionId, SampleLimit);
+	}
+}
+
+static TSharedPtr<FJsonObject> CoverageBucketToJson(const FMetadataCoverageBucket& Bucket, int32 SampleLimit)
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetNumberField(TEXT("action_count"), Bucket.ActionCount);
+
+	TSharedPtr<FJsonObject> SkillObj = MakeShared<FJsonObject>();
+	SkillObj->SetNumberField(TEXT("declared"), Bucket.SkillDeclared);
+	SkillObj->SetNumberField(TEXT("derived_from_namespace"), Bucket.SkillDerived);
+	Obj->SetObjectField(TEXT("skill"), SkillObj);
+
+	Obj->SetObjectField(TEXT("preconditions_status"), CoverageCountsToJson(Bucket.PreconditionsStatus));
+	Obj->SetObjectField(TEXT("output_contract_status"), CoverageCountsToJson(Bucket.OutputContractStatus));
+	Obj->SetObjectField(TEXT("next_actions_status"), CoverageCountsToJson(Bucket.NextActionsStatus));
+	Obj->SetObjectField(TEXT("planning_signals_status"), CoverageCountsToJson(Bucket.PlanningSignalsStatus));
+
+	if (SampleLimit > 0)
+	{
+		TSharedPtr<FJsonObject> Samples = MakeShared<FJsonObject>();
+		Samples->SetArrayField(TEXT("outputs_not_declared"), StringArrayToJson(Bucket.OutputNotDeclaredSamples));
+		Samples->SetArrayField(TEXT("next_actions_not_declared"), StringArrayToJson(Bucket.NextActionsNotDeclaredSamples));
+		Samples->SetArrayField(TEXT("preconditions_none_required"), StringArrayToJson(Bucket.PreconditionsNoneRequiredSamples));
+		Samples->SetArrayField(TEXT("planning_signals_missing"), StringArrayToJson(Bucket.PlanningSignalsMissingSamples));
+		Obj->SetObjectField(TEXT("samples"), Samples);
+	}
+
+	return Obj;
+}
+
+static TArray<TSharedPtr<FJsonValue>> CoverageBucketMapToRows(
+	const TMap<FString, FMetadataCoverageBucket>& Buckets,
+	const FString& KeyField,
+	int32 SampleLimit)
+{
+	TArray<FString> Keys;
+	Buckets.GetKeys(Keys);
+	Keys.Sort();
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(Keys.Num());
+	for (const FString& Key : Keys)
+	{
+		TSharedPtr<FJsonObject> Row = CoverageBucketToJson(Buckets.FindChecked(Key), SampleLimit);
+		Row->SetStringField(KeyField, Key);
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+	return Rows;
 }
 
 static FString GetBrowserAccessMode(const UMonolithSettings* Settings)
@@ -784,6 +1096,19 @@ void FMonolithCoreTools::RegisterAll()
 			.Build()
 	);
 
+	Registry.RegisterAction(
+		TEXT("monolith"), TEXT("get_action_metadata_coverage"),
+		TEXT("Measure factual discovery-planning metadata coverage across profile-allowed actions without fabricating outputs or next-action predictions."),
+		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetActionMetadataCoverage),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Optional(TEXT("namespace"), TEXT("string"), TEXT("Optional namespace filter such as source, blueprint, or monolith."))
+			.Optional(TEXT("skill"), TEXT("string"), TEXT("Optional owning-skill filter such as unreal-cpp or monolith-mcp."))
+			.Optional(TEXT("sample_limit"), TEXT("integer"), TEXT("Maximum per-bucket action-id samples for missing factual metadata."), TEXT("10"))
+			.Range(TEXT("sample_limit"), 0, 50)
+			.Build()
+	);
+
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
 	if (IsDeferredDomainCatalogEnabled(Settings))
 	{
@@ -1080,6 +1405,7 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 		{
 			Row->SetObjectField(TEXT("params"), Match.Info.ParamSchema);
 		}
+		AddPlanningFields(Row, Match.Info);
 		Rows.Add(MakeShared<FJsonValueObject>(Row));
 	}
 
@@ -1097,6 +1423,74 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 	TArray<TSharedPtr<FJsonValue>> NextActions;
 	NextActions.Add(MakeShared<FJsonValueString>(TEXT("monolith.discover")));
 	Result->SetArrayField(TEXT("next_actions"), NextActions);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithCoreTools::HandleGetActionMetadataCoverage(const TSharedPtr<FJsonObject>& Params)
+{
+	FString FilterNamespace;
+	FString FilterSkill;
+	double SampleLimitValue = 10.0;
+	if (Params.IsValid())
+	{
+		FString ErrMsg;
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("namespace"), FilterNamespace, ErrMsg, TEXT(""), true))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("skill"), FilterSkill, ErrMsg, TEXT(""), true))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (!MonolithParamUtils::GetOptionalClampedDoubleParam(Params, TEXT("sample_limit"), SampleLimitValue, ErrMsg, SampleLimitValue, 0, 50))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+	FilterNamespace.TrimStartAndEndInline();
+	FilterSkill.TrimStartAndEndInline();
+	const int32 SampleLimit = FMath::Clamp(static_cast<int32>(SampleLimitValue), 0, 50);
+
+	TArray<FMonolithActionInfo> Actions = FilterNamespace.IsEmpty()
+		? FMonolithToolRegistry::Get().GetAllActions()
+		: FMonolithToolRegistry::Get().GetActions(FilterNamespace);
+
+	FMetadataCoverageBucket Totals;
+	TMap<FString, FMetadataCoverageBucket> ByNamespace;
+	TMap<FString, FMetadataCoverageBucket> BySkill;
+
+	for (const FMonolithActionInfo& ActionInfo : Actions)
+	{
+		const FString Skill = GetPlanningSkill(ActionInfo);
+		if (!FilterSkill.IsEmpty() && !Skill.Equals(FilterSkill, ESearchCase::IgnoreCase))
+		{
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> ActionRow = MakeDiscoverActionRow(ActionInfo);
+		AccumulateMetadataCoverage(Totals, ActionInfo, ActionRow, SampleLimit);
+		AccumulateMetadataCoverage(ByNamespace.FindOrAdd(ActionInfo.Namespace), ActionInfo, ActionRow, SampleLimit);
+		AccumulateMetadataCoverage(BySkill.FindOrAdd(Skill), ActionInfo, ActionRow, SampleLimit);
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("status"), TEXT("ok"));
+	Result->SetStringField(TEXT("scope"), TEXT("active_profile_registry"));
+	Result->SetStringField(TEXT("active_profile"), FMonolithToolProfileManager::Get().GetActiveProfileId());
+	Result->SetStringField(TEXT("report_semantics"),
+		TEXT("not_declared means no factual output or next-action contract has been declared; agents must not infer or fabricate workflow edges from this report. planning_signals are generated from registry facts such as skill mapping, schemas, search metadata, and execution policy."));
+	Result->SetNumberField(TEXT("sample_limit"), SampleLimit);
+	if (!FilterNamespace.IsEmpty())
+	{
+		Result->SetStringField(TEXT("namespace"), FilterNamespace);
+	}
+	if (!FilterSkill.IsEmpty())
+	{
+		Result->SetStringField(TEXT("skill"), FilterSkill);
+	}
+	Result->SetObjectField(TEXT("totals"), CoverageBucketToJson(Totals, SampleLimit));
+	Result->SetArrayField(TEXT("by_namespace"), CoverageBucketMapToRows(ByNamespace, TEXT("namespace"), SampleLimit));
+	Result->SetArrayField(TEXT("by_skill"), CoverageBucketMapToRows(BySkill, TEXT("skill"), SampleLimit));
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -2235,6 +2629,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDescribeDomain(const TSharedPtr<
 			Row->SetObjectField(TEXT("inputSchema"), Action.ParamSchema);
 			Row->SetObjectField(TEXT("params"), Action.ParamSchema);
 		}
+		AddPlanningFields(Row, Action);
 		ActionRows.Add(MakeShared<FJsonValueObject>(Row));
 	}
 

@@ -65,6 +65,12 @@ public:
 		return *this;
 	}
 
+	FParamSchemaBuilder& DisableValidation()
+	{
+		Schema->SetBoolField(TEXT("_validate_types"), false);
+		return *this;
+	}
+
 	FParamSchemaBuilder& Enum(const FString& Name, std::initializer_list<const TCHAR*> Values)
 	{
 		if (TSharedPtr<FJsonObject>* Param = ParamsByName.Find(Name))
@@ -260,6 +266,8 @@ private:
  *   Returns false if both alias and canonical are supplied (caller treats as ErrInvalidParams).
  * - FindUnknownKeys: returns Params keys that are neither canonical nor declared aliases.
  *   Used by K3 unknown-param warnings.
+ * - ValidateTypedParams: validates by default for any schema. A schema may set
+ *   "_validate_types": false only for deliberate legacy compatibility.
  * - IsStrictParamsEnabled: env-var STRICT_PARAMS=1 promotes K3 warnings to hard errors.
  */
 class MONOLITHCORE_API FMonolithParamSchema

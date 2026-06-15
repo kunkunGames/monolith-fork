@@ -45,6 +45,9 @@ public:
 	/** monolith_get_mcp_discovery_state — Return current discovery snapshot status */
 	static FMonolithActionResult HandleGetMcpDiscoveryState(const TSharedPtr<FJsonObject>& Params);
 
+	/** monolith_get_action_metadata_coverage — Measure factual planning metadata coverage */
+	static FMonolithActionResult HandleGetActionMetadataCoverage(const TSharedPtr<FJsonObject>& Params);
+
 	/** monolith_list_domains — Return cheap profile-filtered domain metadata */
 	static FMonolithActionResult HandleListDomains(const TSharedPtr<FJsonObject>& Params);
 

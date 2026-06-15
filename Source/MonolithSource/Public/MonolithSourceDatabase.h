@@ -245,6 +245,11 @@ public:
 	bool CommitTransaction();
 	bool RollbackTransaction();
 
+	/** Remove indexed files and dependent rows under the supplied roots before a scoped reindex. Returns -1 on failure. */
+	int32 PruneIndexedFilesUnderRoots(const TArray<FString>& RootPaths);
+	/** Refresh derived source CRG rows for newly indexed files plus pending prune neighbors. */
+	TSharedPtr<FJsonObject> RefreshCrgCacheForFiles(const TSet<int64>& FileIds, const FString& Context);
+
 	int64 InsertModule(const FString& Name, const FString& Path, const FString& ModuleType, const FString& BuildCsPath = TEXT(""));
 	int64 InsertFile(const FString& FilePath, int64 ModuleId, const FString& FileType, int32 LineCount, double LastModified);
 	int64 InsertSymbol(const FString& Name, const FString& QualifiedName, const FString& Kind, int64 FileId, int32 LineStart, int32 LineEnd, int64 ParentSymbolId, const FString& Access, const FString& Signature, const FString& Docstring, bool bIsUEMacro);

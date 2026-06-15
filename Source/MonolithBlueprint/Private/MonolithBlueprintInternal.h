@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithPropertyAccessReader.h"
 #include "Misc/PackageName.h"
 #include "Engine/Blueprint.h"
 #include "Engine/LevelScriptBlueprint.h"

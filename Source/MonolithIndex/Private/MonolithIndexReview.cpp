@@ -1,6 +1,7 @@
 #include "MonolithIndexReview.h"
 #include "MonolithIndexDatabase.h"
 #include "MonolithIndexLog.h"
+#include "MonolithFuzzyMatch.h"
 #include "SQLiteDatabase.h"
 #include "Dom/JsonValue.h"
 #include "Misc/Paths.h"
@@ -105,13 +106,117 @@ namespace
 		return 1;
 	}
 
-	bool ContainsAnyToken(const FString& LowerText, std::initializer_list<const TCHAR*> Tokens)
+	bool AllowsSensitivityPrefix(const FString& Token)
 	{
-		for (const TCHAR* Token : Tokens)
+		return Token == TEXT("save")
+			|| Token == TEXT("serialize")
+			|| Token == TEXT("archive")
+			|| Token == TEXT("auth")
+			|| Token == TEXT("login")
+			|| Token == TEXT("account")
+			|| Token == TEXT("session")
+			|| Token == TEXT("purchase")
+			|| Token == TEXT("store")
+			|| Token == TEXT("entitlement")
+			|| Token == TEXT("anticheat")
+			|| Token == TEXT("crypto")
+			|| Token == TEXT("crypt")
+			|| Token == TEXT("encrypt")
+			|| Token == TEXT("decrypt")
+			|| Token == TEXT("signature")
+			|| Token == TEXT("signed")
+			|| Token == TEXT("signing")
+			|| Token == TEXT("hash")
+			|| Token == TEXT("exec")
+			|| Token == TEXT("eval")
+			|| Token == TEXT("command")
+			|| Token == TEXT("file")
+			|| Token == TEXT("registry")
+			|| Token == TEXT("process")
+			|| Token == TEXT("server")
+			|| Token == TEXT("client")
+			|| Token == TEXT("netmulticast")
+			|| Token == TEXT("onrep")
+			|| Token == TEXT("replication")
+			|| Token == TEXT("rpc")
+			|| Token == TEXT("network");
+	}
+
+	bool MatchesSensitivityToken(const FString& CandidateToken, const FString& SensitiveToken)
+	{
+		if (CandidateToken == SensitiveToken)
 		{
-			if (LowerText.Contains(FString(Token)))
+			return true;
+		}
+		return AllowsSensitivityPrefix(SensitiveToken) && CandidateToken.StartsWith(SensitiveToken);
+	}
+
+	void AddSensitivityCandidateToken(TArray<FString>& Tokens, TSet<FString>& Seen, FString Token)
+	{
+		Token.ToLowerInline();
+		if (Token.IsEmpty() || Seen.Contains(Token))
+		{
+			return;
+		}
+		Seen.Add(Token);
+		Tokens.Add(MoveTemp(Token));
+	}
+
+	TArray<FString> BuildSensitivityCandidateTokens(const FString& Text)
+	{
+		TArray<FString> Tokens;
+		TSet<FString> Seen;
+		for (const FString& Token : FMonolithFuzzyMatch::Tokenize(Text))
+		{
+			AddSensitivityCandidateToken(Tokens, Seen, Token);
+		}
+
+		FString Current;
+		TCHAR Previous = TEXT('\0');
+		for (int32 Index = 0; Index < Text.Len(); ++Index)
+		{
+			const TCHAR Ch = Text[Index];
+			if (!FChar::IsAlnum(Ch))
 			{
-				return true;
+				AddSensitivityCandidateToken(Tokens, Seen, Current);
+				Current.Empty();
+				Previous = TEXT('\0');
+				continue;
+			}
+			if (!Current.IsEmpty()
+				&& FChar::IsUpper(Ch)
+				&& (FChar::IsLower(Previous) || FChar::IsDigit(Previous)))
+			{
+				AddSensitivityCandidateToken(Tokens, Seen, Current);
+				Current.Empty();
+			}
+			Current.AppendChar(Ch);
+			Previous = Ch;
+		}
+		AddSensitivityCandidateToken(Tokens, Seen, Current);
+		return Tokens;
+	}
+
+	bool ContainsAnyToken(const FString& Text, std::initializer_list<const TCHAR*> Tokens, FString* OutMatchedToken = nullptr)
+	{
+		const TArray<FString> CandidateTokens = BuildSensitivityCandidateTokens(Text);
+		for (const FString& CandidateToken : CandidateTokens)
+		{
+			if (CandidateToken.IsEmpty())
+			{
+				continue;
+			}
+			for (const TCHAR* Token : Tokens)
+			{
+				const FString SensitiveToken(Token);
+				if (MatchesSensitivityToken(CandidateToken, SensitiveToken))
+				{
+					if (OutMatchedToken)
+					{
+						*OutMatchedToken = CandidateToken;
+					}
+					return true;
+				}
 			}
 		}
 		return false;
@@ -119,45 +224,52 @@ namespace
 
 	double SensitivityFactor(const FString& Text, FString& OutReason)
 	{
-		const FString Lower = Text.ToLower();
-		if (ContainsAnyToken(Lower, { TEXT("replication"), TEXT("network"), TEXT("rpc"), TEXT("netmulticast"), TEXT("onrep"), TEXT("server"), TEXT("client") }))
+		auto MatchedReason = [](const TCHAR* Reason, const FString& Token)
 		{
-			OutReason = TEXT("sensitivity: replication/RPC or network surface");
+			return Token.IsEmpty()
+				? FString(Reason)
+				: FString::Printf(TEXT("%s (token=%s)"), Reason, *Token);
+		};
+
+		FString MatchedToken;
+		if (ContainsAnyToken(Text, { TEXT("replication"), TEXT("network"), TEXT("rpc"), TEXT("netmulticast"), TEXT("onrep"), TEXT("server"), TEXT("client") }, &MatchedToken))
+		{
+			OutReason = MatchedReason(TEXT("sensitivity: replication/RPC or network surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("save"), TEXT("serialize"), TEXT("archive") }))
+		if (ContainsAnyToken(Text, { TEXT("save"), TEXT("serialize"), TEXT("archive") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: save/serialization surface");
+			OutReason = MatchedReason(TEXT("sensitivity: save/serialization surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("auth"), TEXT("login"), TEXT("account"), TEXT("session") }))
+		if (ContainsAnyToken(Text, { TEXT("auth"), TEXT("login"), TEXT("account"), TEXT("session") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: auth/account/session surface");
+			OutReason = MatchedReason(TEXT("sensitivity: auth/account/session surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("purchase"), TEXT("iap"), TEXT("store"), TEXT("entitlement") }))
+		if (ContainsAnyToken(Text, { TEXT("purchase"), TEXT("iap"), TEXT("store"), TEXT("entitlement") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: purchase/store entitlement surface");
+			OutReason = MatchedReason(TEXT("sensitivity: purchase/store entitlement surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("anticheat"), TEXT("anti_cheat"), TEXT("cheat") }))
+		if (ContainsAnyToken(Text, { TEXT("anticheat"), TEXT("anti_cheat"), TEXT("cheat") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: anticheat surface");
+			OutReason = MatchedReason(TEXT("sensitivity: anticheat surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("crypt"), TEXT("encrypt"), TEXT("decrypt"), TEXT("sign"), TEXT("hash") }))
+		if (ContainsAnyToken(Text, { TEXT("crypt"), TEXT("crypto"), TEXT("encrypt"), TEXT("decrypt"), TEXT("sign"), TEXT("signature"), TEXT("signed"), TEXT("signing"), TEXT("hash") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: crypto/signing/hash surface");
+			OutReason = MatchedReason(TEXT("sensitivity: crypto/signing/hash surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("exec"), TEXT("eval"), TEXT("command") }))
+		if (ContainsAnyToken(Text, { TEXT("exec"), TEXT("eval"), TEXT("command") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: exec/eval/command surface");
+			OutReason = MatchedReason(TEXT("sensitivity: exec/eval/command surface"), MatchedToken);
 			return 0.15;
 		}
-		if (ContainsAnyToken(Lower, { TEXT("file"), TEXT("registry"), TEXT("process") }))
+		if (ContainsAnyToken(Text, { TEXT("file"), TEXT("registry"), TEXT("process") }, &MatchedToken))
 		{
-			OutReason = TEXT("sensitivity: file/registry/process surface");
+			OutReason = MatchedReason(TEXT("sensitivity: file/registry/process surface"), MatchedToken);
 			return 0.15;
 		}
 		return 0.0;
@@ -565,6 +677,7 @@ namespace
 		TEXT(");"),
 		TEXT("CREATE INDEX IF NOT EXISTS idx_crg_nodes_domain_native ON crg_nodes(domain, native_table, native_id);"),
 		TEXT("CREATE INDEX IF NOT EXISTS idx_crg_nodes_stable ON crg_nodes(domain, stable_key);"),
+		TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_native ON crg_edges(domain, native_table, native_id);"),
 		TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_source ON crg_edges(domain, source_node_id);"),
 		TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_domain_target ON crg_edges(domain, target_node_id);"),
 		TEXT("CREATE INDEX IF NOT EXISTS idx_crg_edges_kind_subkind ON crg_edges(domain, edge_kind, edge_subkind);"),
@@ -1287,7 +1400,7 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RepairCrgCache(FMonolithIndexDatab
 		"FROM assets a;"), TEXT("project nodes"));
 	Exec(TEXT(
 		"INSERT INTO crg_edges(domain,source_node_id,target_node_id,edge_kind,edge_subkind,weight,native_table,native_id,updated_at) "
-		"SELECT 'project',sn.id,tn.id,'dependency',COALESCE(d.dependency_type,''),"
+		"SELECT DISTINCT 'project',sn.id,tn.id,'dependency',COALESCE(d.dependency_type,''),"
 		"CASE WHEN d.dependency_type = 'Hard' THEN 1.0 ELSE 0.5 END,"
 		"'dependencies',d.id,CAST(strftime('%s','now') AS INTEGER) "
 		"FROM dependencies d "
@@ -1331,7 +1444,12 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RepairCrgCache(FMonolithIndexDatab
 		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%crypt%'"
 		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%encrypt%'"
 		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%decrypt%'"
-		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%sign%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%signature%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%signed%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%signing%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '% sign %'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '% sign'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%/sign/%'"
 		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%hash%'"
 		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%exec%'"
 		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%eval%'"
@@ -1356,7 +1474,7 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RepairCrgCache(FMonolithIndexDatab
 		"SELECT n.id,s.fan_in,s.fan_out,s.hard_in,0,ROUND(s.score,3),"
 		"       CASE WHEN s.score >= 0.66 THEN 'high' WHEN s.score >= 0.33 THEN 'medium' ELSE 'low' END,"
 		"       CASE WHEN s.sensitivity != 0 THEN"
-		"         printf('[\"inbound dependency fan-in: %d referencer(s)\",\"hard inbound dependencies: %d\",\"outbound dependencies: %d\",\"sensitivity: UE-domain sensitive surface\",\"graph density: %d node(s)\"]',"
+		"         printf('[\"inbound dependency fan-in: %d referencer(s)\",\"hard inbound dependencies: %d\",\"outbound dependencies: %d\",\"sensitivity: UE-domain sensitive surface (token-boundary matched)\",\"graph density: %d node(s)\"]',"
 		"                s.fan_in,s.hard_in,s.fan_out,s.node_count)"
 		"       ELSE"
 		"         printf('[\"inbound dependency fan-in: %d referencer(s)\",\"hard inbound dependencies: %d\",\"outbound dependencies: %d\",\"graph density: %d node(s)\"]',"
@@ -1390,6 +1508,278 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::RepairCrgCache(FMonolithIndexDatab
 	Root->SetStringField(TEXT("summary"), bOk
 		? TEXT("Rebuilt project CRG projection/cache from ProjectIndex assets and dependencies")
 		: TEXT("Project CRG projection/cache rebuild failed; rolled back"));
+	Root->SetArrayField(TEXT("warnings"), Warnings);
+	Root->SetBoolField(TEXT("truncated"), false);
+	AddNext(Root, { TEXT("project.health"), TEXT("project.risk_score"), TEXT("project.review_context") });
+	return Root;
+}
+
+TSharedPtr<FJsonObject> FMonolithIndexReview::RefreshCrgCacheForAssets(
+	FMonolithIndexDatabase& Db,
+	const TSet<FString>& AssetPaths,
+	const FString& Context)
+{
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("context"), Context);
+	Input->SetArrayField(TEXT("asset_paths"), SetToJsonArray(AssetPaths));
+	Root->SetObjectField(TEXT("input"), Input);
+
+	FJsonArr Warnings;
+	if (!Db.IsOpen() || !Db.GetRawDatabase())
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("ProjectIndex DB is not open"));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNext(Root, { TEXT("project.get_stats"), TEXT("project.health") });
+		return Root;
+	}
+
+	if (AssetPaths.Num() == 0)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("ok"));
+		Root->SetStringField(TEXT("summary"), TEXT("No changed assets; skipped scoped project CRG refresh."));
+		Root->SetStringField(TEXT("refresh_mode"), TEXT("skipped"));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		Root->SetBoolField(TEXT("truncated"), false);
+		AddNext(Root, { TEXT("project.health"), TEXT("project.risk_score"), TEXT("project.review_context") });
+		return Root;
+	}
+
+	if (!HasCrgProjectionTables(Db))
+	{
+		TSharedPtr<FJsonObject> Full = RepairCrgCache(Db, true);
+		if (Full.IsValid())
+		{
+			Full->SetStringField(TEXT("refresh_mode"), TEXT("full_bootstrap"));
+			Full->SetStringField(TEXT("context"), Context);
+		}
+		return Full;
+	}
+
+	FSQLiteDatabase* Raw = Db.GetRawDatabase();
+	bool bOk = EnsureCrgProjectionTables(Db);
+	auto Exec = [&](const TCHAR* Sql, const TCHAR* Label)
+	{
+		if (!bOk) return;
+		if (!Raw->Execute(Sql))
+		{
+			bOk = false;
+			Warnings.Add(MakeShared<FJsonValueString>(
+				FString::Printf(TEXT("Scoped project CRG refresh failed at %s"), Label)));
+		}
+	};
+	auto CountTemp = [&](const TCHAR* TableName) -> int64
+	{
+		FSQLitePreparedStatement Stmt;
+		const FString Sql = FString::Printf(TEXT("SELECT COUNT(*) FROM %s;"), TableName);
+		if (!Stmt.Create(*Raw, *Sql)) return 0;
+		int64 N = 0;
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			Stmt.GetColumnValueByIndex(0, N);
+		}
+		return N;
+	};
+
+	if (bOk)
+	{
+		bOk = Db.BeginTransaction();
+	}
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_project_crg_paths(path TEXT PRIMARY KEY);"), TEXT("temp paths"));
+	Exec(TEXT("DELETE FROM monolith_project_crg_paths;"), TEXT("clear temp paths"));
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_project_crg_seed_ids(id INTEGER PRIMARY KEY);"), TEXT("temp seed ids"));
+	Exec(TEXT("DELETE FROM monolith_project_crg_seed_ids;"), TEXT("clear temp seed ids"));
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_project_crg_affected_ids(id INTEGER PRIMARY KEY);"), TEXT("temp affected ids"));
+	Exec(TEXT("DELETE FROM monolith_project_crg_affected_ids;"), TEXT("clear temp affected ids"));
+	Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_project_crg_old_nodes(id INTEGER PRIMARY KEY);"), TEXT("temp old nodes"));
+	Exec(TEXT("DELETE FROM monolith_project_crg_old_nodes;"), TEXT("clear temp old nodes"));
+
+	if (bOk)
+	{
+		FSQLitePreparedStatement InsertPath;
+		bOk = InsertPath.Create(*Raw, TEXT("INSERT OR IGNORE INTO monolith_project_crg_paths(path) VALUES(?);"));
+		TArray<FString> SortedPaths = AssetPaths.Array();
+		SortedPaths.Sort();
+		for (const FString& Path : SortedPaths)
+		{
+			if (!bOk) break;
+			const FString Normalized = NormalizeChangedPath(Path);
+			if (Normalized.IsEmpty()) continue;
+			InsertPath.Reset();
+			InsertPath.SetBindingValueByIndex(1, Normalized);
+			bOk = InsertPath.Step() == ESQLitePreparedStatementStepResult::Done;
+		}
+		if (!bOk)
+		{
+			Warnings.Add(MakeShared<FJsonValueString>(TEXT("Scoped project CRG refresh failed while binding changed paths")));
+		}
+	}
+
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_project_crg_seed_ids(id) "
+		"SELECT id FROM assets WHERE package_path IN (SELECT path FROM monolith_project_crg_paths);"), TEXT("seed ids"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_project_crg_affected_ids(id) "
+		"SELECT id FROM monolith_project_crg_seed_ids;"), TEXT("affected seeds"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_project_crg_affected_ids(id) "
+		"SELECT source_asset_id FROM dependencies "
+		"WHERE target_asset_id IN (SELECT id FROM monolith_project_crg_seed_ids);"), TEXT("affected referencers"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_project_crg_affected_ids(id) "
+		"SELECT target_asset_id FROM dependencies "
+		"WHERE source_asset_id IN (SELECT id FROM monolith_project_crg_seed_ids);"), TEXT("affected dependencies"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_project_crg_old_nodes(id) "
+		"SELECT id FROM crg_nodes "
+		"WHERE domain='project' AND ("
+		"(native_table='assets' AND native_id IN (SELECT id FROM monolith_project_crg_affected_ids)) "
+		"OR stable_key IN (SELECT path FROM monolith_project_crg_paths));"), TEXT("old node ids"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_project_crg_affected_ids(id) "
+		"SELECT other.native_id FROM crg_edges e "
+		"JOIN monolith_project_crg_old_nodes old ON old.id = e.source_node_id "
+		"JOIN crg_nodes other ON other.id = e.target_node_id "
+		"WHERE e.domain='project' AND other.domain='project' AND other.native_table='assets';"), TEXT("old outbound neighbors"));
+	Exec(TEXT(
+		"INSERT OR IGNORE INTO monolith_project_crg_affected_ids(id) "
+		"SELECT other.native_id FROM crg_edges e "
+		"JOIN monolith_project_crg_old_nodes old ON old.id = e.target_node_id "
+		"JOIN crg_nodes other ON other.id = e.source_node_id "
+		"WHERE e.domain='project' AND other.domain='project' AND other.native_table='assets';"), TEXT("old inbound neighbors"));
+
+	const int64 PathCount = bOk ? CountTemp(TEXT("monolith_project_crg_paths")) : 0;
+	const int64 AffectedCount = bOk ? CountTemp(TEXT("monolith_project_crg_affected_ids")) : 0;
+	const int64 OldNodeCount = bOk ? CountTemp(TEXT("monolith_project_crg_old_nodes")) : 0;
+
+	Exec(TEXT(
+		"DELETE FROM crg_node_metrics "
+		"WHERE node_id IN (SELECT id FROM monolith_project_crg_old_nodes);"), TEXT("delete scoped metrics"));
+	Exec(TEXT(
+		"DELETE FROM crg_edges "
+		"WHERE domain='project' AND ("
+		"source_node_id IN (SELECT id FROM monolith_project_crg_old_nodes) "
+		"OR target_node_id IN (SELECT id FROM monolith_project_crg_old_nodes) "
+		"OR native_id IN ("
+		"  SELECT id FROM dependencies "
+		"  WHERE source_asset_id IN (SELECT id FROM monolith_project_crg_affected_ids) "
+		"     OR target_asset_id IN (SELECT id FROM monolith_project_crg_affected_ids)"
+		"));"), TEXT("delete scoped edges"));
+	Exec(TEXT("DELETE FROM crg_nodes WHERE id IN (SELECT id FROM monolith_project_crg_old_nodes);"), TEXT("delete scoped nodes"));
+	Exec(TEXT(
+		"INSERT OR REPLACE INTO crg_nodes(domain,native_table,native_id,stable_key,kind,name,path,module,source_revision,extra,updated_at) "
+		"SELECT 'project','assets',a.id,a.package_path,a.asset_class,a.asset_name,a.package_path,a.module_name,COALESCE(a.saved_hash,''),'{}',"
+		"CAST(strftime('%s','now') AS INTEGER) "
+		"FROM assets a "
+		"JOIN monolith_project_crg_affected_ids ai ON ai.id = a.id;"), TEXT("insert scoped nodes"));
+	Exec(TEXT(
+		"INSERT INTO crg_edges(domain,source_node_id,target_node_id,edge_kind,edge_subkind,weight,native_table,native_id,updated_at) "
+		"SELECT DISTINCT 'project',sn.id,tn.id,'dependency',COALESCE(d.dependency_type,''),"
+		"CASE WHEN d.dependency_type = 'Hard' THEN 1.0 ELSE 0.5 END,"
+		"'dependencies',d.id,CAST(strftime('%s','now') AS INTEGER) "
+		"FROM dependencies d "
+		"JOIN monolith_project_crg_affected_ids ai ON ai.id = d.source_asset_id OR ai.id = d.target_asset_id "
+		"JOIN crg_nodes sn ON sn.domain='project' AND sn.native_table='assets' AND sn.native_id=d.source_asset_id "
+		"JOIN crg_nodes tn ON tn.domain='project' AND tn.native_table='assets' AND tn.native_id=d.target_asset_id;"), TEXT("insert scoped edges"));
+	Exec(TEXT(
+		"WITH counts AS ("
+		" SELECT a.id AS native_id,"
+		"        (SELECT COUNT(*) FROM dependencies d WHERE d.target_asset_id = a.id) AS fan_in,"
+		"        (SELECT COUNT(*) FROM dependencies d WHERE d.source_asset_id = a.id) AS fan_out,"
+		"        (SELECT COUNT(*) FROM dependencies d WHERE d.target_asset_id = a.id AND d.dependency_type = 'Hard') AS hard_in,"
+		"        (SELECT COUNT(*) FROM nodes x WHERE x.asset_id = a.id) AS node_count,"
+		"        (SELECT COUNT(*) FROM variables x WHERE x.asset_id = a.id) AS var_count,"
+		"        (SELECT COUNT(*) FROM parameters x WHERE x.asset_id = a.id) AS param_count,"
+		"        (SELECT COUNT(*) FROM tag_references x WHERE x.asset_id = a.id) AS tag_refs,"
+		"        CASE"
+		"          WHEN a.asset_class LIKE '%World%' OR a.asset_class LIKE '%Level%' THEN 5"
+		"          WHEN a.asset_class LIKE '%GameplayAbility%' OR a.asset_class LIKE '%AttributeSet%' OR a.asset_class LIKE '%GameplayEffect%' THEN 4"
+		"          WHEN a.asset_class LIKE '%Blueprint%' THEN 3"
+		"          WHEN a.asset_class LIKE '%NiagaraSystem%' OR a.asset_class LIKE '%Material%' THEN 2"
+		"          WHEN a.asset_class LIKE '%DataTable%' OR a.asset_class LIKE '%DataAsset%' THEN 2"
+		"          ELSE 1"
+		"        END AS class_weight,"
+		"        CASE"
+		"          WHEN lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%network%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%replication%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%rpc%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%netmulticast%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%onrep%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%save%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%serialize%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%archive%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%auth%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%login%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%account%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%session%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%purchase%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%store%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%entitlement%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%anticheat%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%crypt%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%encrypt%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%decrypt%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%signature%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%signed%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%signing%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '% sign %'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '% sign'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%/sign/%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%hash%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%exec%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%eval%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%command%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%file%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%registry%'"
+		"            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%process%'"
+		"          THEN 1 ELSE 0 END AS sensitivity"
+		" FROM assets a "
+		" JOIN monolith_project_crg_affected_ids ai ON ai.id = a.id"
+		"), scored AS ("
+		" SELECT c.*, MIN(1.0,"
+		"        MIN(c.fan_in,30) / 30.0 * 0.30 +"
+		"        MIN(c.hard_in,20) / 20.0 * 0.20 +"
+		"        MIN(c.fan_out,30) / 30.0 * 0.10 +"
+		"        (c.class_weight - 1) / 4.0 * 0.20 +"
+		"        CASE WHEN c.sensitivity != 0 THEN 0.15 ELSE 0.0 END +"
+		"        MIN(c.node_count,400) / 400.0 * 0.15 +"
+		"        MIN(c.tag_refs,20) / 20.0 * 0.05) AS score"
+		" FROM counts c"
+		") "
+		"INSERT OR REPLACE INTO crg_node_metrics(node_id,fan_in,fan_out,hard_in,descendants,risk_score,risk_tier,reasons_json,raw_counts_json,scoring_version,computed_at) "
+		"SELECT n.id,s.fan_in,s.fan_out,s.hard_in,0,ROUND(s.score,3),"
+		"       CASE WHEN s.score >= 0.66 THEN 'high' WHEN s.score >= 0.33 THEN 'medium' ELSE 'low' END,"
+		"       CASE WHEN s.sensitivity != 0 THEN"
+		"         printf('[\"inbound dependency fan-in: %d referencer(s)\",\"hard inbound dependencies: %d\",\"outbound dependencies: %d\",\"sensitivity: UE-domain sensitive surface (token-boundary matched)\",\"graph density: %d node(s)\"]',"
+		"                s.fan_in,s.hard_in,s.fan_out,s.node_count)"
+		"       ELSE"
+		"         printf('[\"inbound dependency fan-in: %d referencer(s)\",\"hard inbound dependencies: %d\",\"outbound dependencies: %d\",\"graph density: %d node(s)\"]',"
+		"                s.fan_in,s.hard_in,s.fan_out,s.node_count)"
+		"       END,"
+		"       printf('{\"inbound\":%d,\"inbound_hard\":%d,\"outbound\":%d,\"nodes\":%d,\"variables\":%d,\"parameters\":%d,\"tag_references\":%d,\"class_weight\":%d,\"sensitivity\":%d}',"
+		"              s.fan_in,s.hard_in,s.fan_out,s.node_count,s.var_count,s.param_count,s.tag_refs,s.class_weight,s.sensitivity),"
+		"       '3',CAST(strftime('%s','now') AS INTEGER) "
+		"FROM scored s "
+		"JOIN crg_nodes n ON n.domain='project' AND n.native_table='assets' AND n.native_id=s.native_id;"), TEXT("insert scoped metrics"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('cache_version','1');"), TEXT("cache_version"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('scoring_version','3');"), TEXT("scoring_version"));
+	Exec(TEXT("INSERT OR REPLACE INTO crg_meta(key,value) VALUES('project_last_scoped_refresh_at',datetime('now'));"), TEXT("project_last_scoped_refresh_at"));
+
+	if (bOk) { Db.CommitTransaction(); }
+	else { Db.RollbackTransaction(); }
+
+	TSharedPtr<FJsonObject> Counts = MakeShared<FJsonObject>();
+	Counts->SetNumberField(TEXT("changed_paths"), static_cast<double>(PathCount));
+	Counts->SetNumberField(TEXT("affected_assets"), static_cast<double>(AffectedCount));
+	Counts->SetNumberField(TEXT("old_nodes_replaced"), static_cast<double>(OldNodeCount));
+	Root->SetObjectField(TEXT("counts"), Counts);
+	Root->SetStringField(TEXT("refresh_mode"), TEXT("scoped_1hop"));
+	Root->SetStringField(TEXT("status"), bOk ? TEXT("ok") : TEXT("error"));
+	Root->SetStringField(TEXT("summary"), bOk
+		? FString::Printf(TEXT("Scoped project CRG projection/cache refreshed for %lld changed path(s), %lld affected asset(s)"), PathCount, AffectedCount)
+		: TEXT("Scoped project CRG projection/cache refresh failed; rolled back"));
 	Root->SetArrayField(TEXT("warnings"), Warnings);
 	Root->SetBoolField(TEXT("truncated"), false);
 	AddNext(Root, { TEXT("project.health"), TEXT("project.risk_score"), TEXT("project.review_context") });

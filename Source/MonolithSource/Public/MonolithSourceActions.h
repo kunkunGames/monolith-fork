@@ -97,6 +97,9 @@ public:
 
 private:
 	// Action handlers
+	static FMonolithActionResult HandleGetIncludePath(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleGetSignature(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleCheckDeprecations(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleReadSource(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleFindReferences(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleFindCallers(const TSharedPtr<FJsonObject>& Params);
@@ -127,6 +130,10 @@ private:
 	static FMonolithActionResult HandleDiffSnapshots(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleReviewHotspots(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleReviewContext(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleVerifySymbols(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleFindExampleUsage(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleLintHeader(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleGenerateClassStub(const TSharedPtr<FJsonObject>& Params);
 
 	// Helpers
 	static FMonolithSourceDatabase* GetDB();

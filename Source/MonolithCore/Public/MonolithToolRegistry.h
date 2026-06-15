@@ -101,6 +101,23 @@ struct MONOLITHCORE_API FMonolithActionSearchMetadata
 	}
 };
 
+/** Planning metadata emitted by discovery so agents can choose skills and compose follow-up calls. */
+struct MONOLITHCORE_API FMonolithActionPlanningMetadata
+{
+	FString Skill;
+	TArray<FString> Preconditions;
+	TArray<FString> Outputs;
+	TArray<FString> NextActions;
+
+	bool IsEmpty() const
+	{
+		return Skill.IsEmpty()
+			&& Preconditions.Num() == 0
+			&& Outputs.Num() == 0
+			&& NextActions.Num() == 0;
+	}
+};
+
 /** Metadata describing a registered action */
 struct FMonolithActionInfo
 {
@@ -110,6 +127,7 @@ struct FMonolithActionInfo
 	FString Category;                     // Optional sub-grouping within a namespace (e.g. "CommonUI" inside "ui"). Empty = uncategorized.
 	FMonolithActionExecutionPolicy ExecutionPolicy;
 	FMonolithActionSearchMetadata SearchMetadata;
+	FMonolithActionPlanningMetadata PlanningMetadata;
 	TSharedPtr<FJsonObject> ParamSchema;  // JSON Schema for parameter validation
 
 	// Survivor A (plan §3.A) — MCP-spec tool annotation hints. Only emitted on
@@ -171,7 +189,8 @@ public:
 		const TSharedPtr<FJsonObject>& ParamSchema = nullptr,
 		const FString& Category = FString(),  // Optional sub-group within namespace — defaults to uncategorized
 		const FMonolithActionExecutionPolicy& ExecutionPolicy = FMonolithActionExecutionPolicy::DefaultReadOnly(),
-		const FMonolithActionSearchMetadata& SearchMetadata = FMonolithActionSearchMetadata()
+		const FMonolithActionSearchMetadata& SearchMetadata = FMonolithActionSearchMetadata(),
+		const FMonolithActionPlanningMetadata& PlanningMetadata = FMonolithActionPlanningMetadata()
 	);
 
 	/**
@@ -191,6 +210,19 @@ public:
 		const TArray<FString>& Examples = TArray<FString>());
 
 	/**
+	 * Attach planning metadata to an already-registered action. Discovery emits
+	 * derived defaults for every action; this setter adds domain-specific
+	 * preconditions, outputs, next action hints, or a skill override.
+	 */
+	bool SetActionPlanningMetadata(
+		const FString& Namespace,
+		const FString& Action,
+		const FString& Skill,
+		const TArray<FString>& Preconditions = TArray<FString>(),
+		const TArray<FString>& Outputs = TArray<FString>(),
+		const TArray<FString>& NextActions = TArray<FString>());
+
+	/**
 	 * Register a batch of actions as owned by a module or action bundle.
 	 * Owner tags allow module shutdown to remove only its own actions from shared namespaces.
 	 */
@@ -207,6 +239,12 @@ public:
 
 	/** Execute an action by namespace + action name */
 	FMonolithActionResult ExecuteAction(const FString& Namespace, const FString& Action, const TSharedPtr<FJsonObject>& Params);
+
+	/** Resolve the agent skill that owns workflow guidance for a namespace. */
+	static FString ResolveSkillForNamespace(const FString& Namespace);
+
+	/** Build factual, registry-derived planning signals for discovery rows and failure diagnostics. */
+	static TArray<TSharedPtr<FJsonValue>> BuildPlanningSignals(const FMonolithActionInfo& ActionInfo);
 
 	/** Get all registered namespaces */
 	TArray<FString> GetNamespaces() const;

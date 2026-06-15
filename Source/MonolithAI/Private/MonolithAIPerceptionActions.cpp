@@ -1,4 +1,4 @@
-#include "MonolithAIPerceptionActions.h"
+﻿#include "MonolithAIPerceptionActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
 
@@ -145,8 +145,6 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 		FMonolithActionHandler::CreateStatic(&HandleGetAISystemConfig),
 		FParamSchemaBuilder()
 			.Build());
-}
-
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_perception_component"),
 		{ TEXT("AIPerceptionComponent"), TEXT("pawn sensing"), TEXT("give ai senses"), TEXT("detect player") },
 		{ TEXT("add_ai_perception"), TEXT("attach_perception"), TEXT("enable_senses") },
@@ -168,6 +166,7 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 		{ TEXT("check_perception"), TEXT("verify_senses") },
 		{ TEXT("validate that the AI controller has senses and affiliation set up correctly") });
 
+}
 // ============================================================
 //  Helpers
 // ============================================================

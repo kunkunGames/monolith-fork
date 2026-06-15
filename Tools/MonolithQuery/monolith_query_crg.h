@@ -1060,7 +1060,11 @@ WITH ref_in AS (
             OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%crypt%'
             OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%encrypt%'
             OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%decrypt%'
-            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%sign%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%signature%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%signed%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%signing%'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '% sign %'
+            OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '% sign'
             OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%hash%'
             OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%exec%'
             OR lower(COALESCE(s.qualified_name,'') || ' ' || COALESCE(s.name,'') || ' ' || COALESCE(s.signature,'')) LIKE '%eval%'
@@ -1088,7 +1092,7 @@ INSERT INTO crg_node_metrics(node_id,fan_in,fan_out,hard_in,descendants,risk_sco
 SELECT s.native_id,s.fan_in,s.fan_out,0,s.descendants,ROUND(s.score,3),
        CASE WHEN s.score >= 0.66 THEN 'high' WHEN s.score >= 0.33 THEN 'medium' ELSE 'low' END,
        CASE WHEN s.sensitivity != 0 THEN
-         printf('["caller fan-in: %d","inheritance descendants (1-hop): %d","callee fan-out: %d","module/file boundary crossing: %d distinct caller file(s)","sensitivity: UE-domain sensitive surface"]',
+         printf('["caller fan-in: %d","inheritance descendants (1-hop): %d","callee fan-out: %d","module/file boundary crossing: %d distinct caller file(s)","sensitivity: UE-domain sensitive surface (token-boundary matched)"]',
                 s.fan_in,s.descendants,s.fan_out,s.caller_files)
        ELSE
          printf('["caller fan-in: %d","inheritance descendants (1-hop): %d","callee fan-out: %d","module/file boundary crossing: %d distinct caller file(s)"]',
@@ -1164,7 +1168,12 @@ WITH counts AS (
             OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%crypt%'
             OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%encrypt%'
             OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%decrypt%'
-            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%sign%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%signature%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%signed%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%signing%'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '% sign %'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '% sign'
+            OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%/sign/%'
             OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%hash%'
             OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%exec%'
             OR lower(a.asset_class || ' ' || a.package_path || ' ' || a.asset_name) LIKE '%eval%'
@@ -1189,7 +1198,7 @@ INSERT INTO crg_node_metrics(node_id,fan_in,fan_out,hard_in,descendants,risk_sco
 SELECT n.id,s.fan_in,s.fan_out,s.hard_in,0,ROUND(s.score,3),
        CASE WHEN s.score >= 0.66 THEN 'high' WHEN s.score >= 0.33 THEN 'medium' ELSE 'low' END,
        CASE WHEN s.sensitivity != 0 THEN
-         printf('["inbound dependency fan-in: %d referencer(s)","hard inbound dependencies: %d","outbound dependencies: %d","sensitivity: UE-domain sensitive surface","graph density: %d node(s)"]',
+         printf('["inbound dependency fan-in: %d referencer(s)","hard inbound dependencies: %d","outbound dependencies: %d","sensitivity: UE-domain sensitive surface (token-boundary matched)","graph density: %d node(s)"]',
                 s.fan_in,s.hard_in,s.fan_out,s.node_count)
        ELSE
          printf('["inbound dependency fan-in: %d referencer(s)","hard inbound dependencies: %d","outbound dependencies: %d","graph density: %d node(s)"]',

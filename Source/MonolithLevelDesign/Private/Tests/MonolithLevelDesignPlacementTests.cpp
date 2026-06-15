@@ -28,8 +28,8 @@ bool FMonolithLevelDesignRandomizeTransformsTest::RunTest(const FString& Paramet
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		FMonolithActionResult Result = ExecutePlacementAction(TEXT("randomize_transforms"), Params);
-		TestTrue(TEXT("Missing actor_names should fail"), Result.bHasError);
-		TestTrue(TEXT("Error message should mention actor_names"), Result.bHasError && Result.ErrorStr.Contains(TEXT("actor_names")));
+		TestFalse(TEXT("Missing actor_names should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention actor_names"), Result.ErrorMessage.Contains(TEXT("actor_names")));
 	}
 
 	// 2. Empty actor_names
@@ -38,8 +38,8 @@ bool FMonolithLevelDesignRandomizeTransformsTest::RunTest(const FString& Paramet
 		TArray<TSharedPtr<FJsonValue>> EmptyArray;
 		Params->SetArrayField(TEXT("actor_names"), EmptyArray);
 		FMonolithActionResult Result = ExecutePlacementAction(TEXT("randomize_transforms"), Params);
-		TestTrue(TEXT("Empty actor_names should fail"), Result.bHasError);
-		TestTrue(TEXT("Error message should mention actor_names"), Result.bHasError && Result.ErrorStr.Contains(TEXT("actor_names")));
+		TestFalse(TEXT("Empty actor_names should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention actor_names"), Result.ErrorMessage.Contains(TEXT("actor_names")));
 	}
 
 	// 3. Wrong type actor_names
@@ -47,8 +47,8 @@ bool FMonolithLevelDesignRandomizeTransformsTest::RunTest(const FString& Paramet
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("actor_names"), TEXT("NotAnArray"));
 		FMonolithActionResult Result = ExecutePlacementAction(TEXT("randomize_transforms"), Params);
-		TestTrue(TEXT("Wrong type actor_names should fail"), Result.bHasError);
-		TestTrue(TEXT("Error message should mention actor_names"), Result.bHasError && Result.ErrorStr.Contains(TEXT("actor_names")));
+		TestFalse(TEXT("Wrong type actor_names should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention actor_names"), Result.ErrorMessage.Contains(TEXT("actor_names")));
 	}
 
 	// 4. Valid actor_names
@@ -60,7 +60,7 @@ bool FMonolithLevelDesignRandomizeTransformsTest::RunTest(const FString& Paramet
 
 		FMonolithActionResult Result = ExecutePlacementAction(TEXT("randomize_transforms"), Params);
 		// It might succeed with 0 modified, or fail with "No editor world available" if there's no world
-		bool bIsExpectedResult = (!Result.bHasError) || (Result.bHasError && Result.ErrorStr.Contains(TEXT("No editor world available")));
+		bool bIsExpectedResult = Result.bSuccess || Result.ErrorMessage.Contains(TEXT("No editor world available"));
 		TestTrue(TEXT("Valid params should succeed or fail cleanly on missing world"), bIsExpectedResult);
 	}
 

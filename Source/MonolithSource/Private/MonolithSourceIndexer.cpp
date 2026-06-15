@@ -116,7 +116,8 @@ uint32 FMonolithSourceIndexer::Run()
 	bIsRunning = true;
 
 	FMonolithSourceDatabase DB;
-	if (!DB.OpenForWriting(DbPath))
+	const bool bOpenedForWriting = DB.OpenForWriting(DbPath);
+	if (!bOpenedForWriting && !bCleanBuild)
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to open DB for writing: %s"), *DbPath);
 		bIsRunning = false;
@@ -125,11 +126,23 @@ uint32 FMonolithSourceIndexer::Run()
 
 	if (bCleanBuild)
 	{
-		DB.ResetDatabase();
+		if (!DB.ResetDatabase())
+		{
+			UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to reset/recreate DB for clean source reindex: %s"), *DbPath);
+			DB.Close();
+			bIsRunning = false;
+			return 1;
+		}
 	}
 	else
 	{
-		DB.CreateTablesIfNeeded();
+		if (!DB.CreateTablesIfNeeded())
+		{
+			UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to create/verify DB schema before source reindex: %s"), *DbPath);
+			DB.Close();
+			bIsRunning = false;
+			return 1;
+		}
 	}
 
 	// --- Engine phase ---
@@ -154,6 +167,17 @@ uint32 FMonolithSourceIndexer::Run()
 		// If NOT clean build, load existing engine symbols for cross-reference resolution
 		if (!bCleanBuild)
 		{
+			TArray<FString> PruneRoots;
+			PruneRoots.Add(ProjectPath / TEXT("Source"));
+			PruneRoots.Add(ProjectPath / TEXT("Plugins"));
+			const int32 PrunedFiles = DB.PruneIndexedFilesUnderRoots(PruneRoots);
+			if (PrunedFiles < 0)
+			{
+				UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to prune project source rows before scoped source reindex"));
+				DB.Close();
+				bIsRunning = false;
+				return 1;
+			}
 			UE_LOG(LogMonolithSource, Log, TEXT("Indexer: Loading existing symbols for incremental indexing..."));
 			DB.LoadExistingSymbols(SymbolNameToId, ClassNameToId, SymbolSpans, ClassSpans);
 		}
@@ -175,6 +199,25 @@ uint32 FMonolithSourceIndexer::Run()
 	if (!bShouldStop)
 	{
 		Finalize(DB);
+		if (!bCleanBuild && bIndexProjectSource)
+		{
+			TSharedPtr<FJsonObject> ScopedCrg = DB.RefreshCrgCacheForFiles(NewFileIds, TEXT("Project source indexing complete"));
+			FString Status;
+			FString Summary;
+			if (ScopedCrg.IsValid())
+			{
+				ScopedCrg->TryGetStringField(TEXT("status"), Status);
+				ScopedCrg->TryGetStringField(TEXT("summary"), Summary);
+			}
+			if (Status == TEXT("ok"))
+			{
+				UE_LOG(LogMonolithSource, Log, TEXT("Indexer: %s"), *Summary);
+			}
+			else
+			{
+				UE_LOG(LogMonolithSource, Warning, TEXT("Indexer: scoped source CRG refresh did not complete cleanly: %s"), *Summary);
+			}
+		}
 	}
 
 	DB.Close();

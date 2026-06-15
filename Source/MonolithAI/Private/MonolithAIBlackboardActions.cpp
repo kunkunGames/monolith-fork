@@ -1,4 +1,4 @@
-#include "MonolithAIBlackboardActions.h"
+﻿#include "MonolithAIBlackboardActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
 
@@ -397,8 +397,6 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 			.RequiredAssetPath(TEXT("path_a"), TEXT("First blackboard asset path"))
 			.RequiredAssetPath(TEXT("path_b"), TEXT("Second blackboard asset path"))
 			.Build());
-}
-
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("create_blackboard"),
 		{ TEXT("BB data asset"), TEXT("ai memory store"), TEXT("shared brain data"), TEXT("blackboard key container") },
 		{ TEXT("new_blackboard"), TEXT("make_bb"), TEXT("add_blackboard_asset") },
@@ -416,6 +414,7 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 		{ TEXT("read_blackboard"), TEXT("inspect_bb"), TEXT("list_bb_keys") },
 		{ TEXT("show all keys on this blackboard including inherited ones") });
 
+}
 // ============================================================
 //  1. create_blackboard
 // ============================================================
