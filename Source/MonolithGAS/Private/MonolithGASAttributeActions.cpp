@@ -2118,6 +2118,7 @@ namespace
 	TArray<TSharedPtr<FJsonValue>> TemplateDefsToJsonArray(const TArray<FAttributeTemplateDef>& Defs)
 	{
 		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Reserve(Defs.Num());
 		for (const FAttributeTemplateDef& Def : Defs)
 		{
 			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
@@ -3255,6 +3256,7 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleValidateAttributeSet(c
 
 	// List all attributes
 	TArray<TSharedPtr<FJsonValue>> AttrList;
+	AttrList.Reserve(AttrProps.Num());
 	for (FProperty* Prop : AttrProps)
 	{
 		TSharedPtr<FJsonObject> AttrObj = MakeShared<FJsonObject>();
@@ -3734,6 +3736,7 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleGetAttributeDependency
 
 	// JSON output
 	TArray<TSharedPtr<FJsonValue>> NodeArr;
+	NodeArr.Reserve(AllNodes.Num());
 	for (const FAttrNode& N : AllNodes)
 	{
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
@@ -3746,6 +3749,7 @@ FMonolithActionResult FMonolithGASAttributeActions::HandleGetAttributeDependency
 	}
 
 	TArray<TSharedPtr<FJsonValue>> EdgeArr;
+	EdgeArr.Reserve(Edges.Num());
 	for (const FDependencyEdge& E : Edges)
 	{
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
