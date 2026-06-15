@@ -402,6 +402,7 @@ FMonolithActionResult FMonolithMeshValidationActions::SuggestLodStrategy(const T
 	{
 		// Build ready-to-execute params for generate_lods
 		TArray<TSharedPtr<FJsonValue>> LodSteps;
+		LodSteps.Reserve(RecommendedLODs - 1);
 
 		int32 CurrentTris = LOD0Tris;
 		for (int32 LODIdx = 1; LODIdx < RecommendedLODs; LODIdx++)
@@ -685,7 +686,9 @@ FMonolithActionResult FMonolithMeshValidationActions::CompareLodChain(const TSha
 	Result->SetNumberField(TEXT("lod_count"), NumLODs);
 
 	TArray<TSharedPtr<FJsonValue>> StepsArr;
+	StepsArr.Reserve(NumLODs - 1);
 	TArray<TSharedPtr<FJsonValue>> WarningsArr;
+	WarningsArr.Reserve(NumLODs - 1);
 
 	for (int32 i = 1; i < NumLODs; i++)
 	{
