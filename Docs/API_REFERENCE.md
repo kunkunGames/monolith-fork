@@ -1018,6 +1018,24 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the full action catal
 
 ---
 
+## sprite
+
+Optional sprite asset production orchestration and validation actions.
+
+| Action | Params |
+|--------|--------|
+| `build_candidate_plan` | `spec_path` (string) |
+| `build_preview_contact_sheet` | `spec_path` (string), `output_path` (optional string), `thumbnail_size` (optional integer) |
+| `export_metadata` | `spec_path` (string), `output_path` (optional string), `sheet_path` (optional string) |
+| `get_status` | none |
+| `prepare_imagegen_requests` | `spec_path` (string) |
+| `run_generation_batch` | `spec_path` (string), `execute` (optional bool), `provider_action` (optional string), `max_requests` (optional integer), `manifest_path` (optional string), `stop_on_error` (optional bool) |
+| `validate_asset_spec` | `spec_path` (string) |
+| `validate_guides` | `spec_path` (string) |
+| `validate_sheet` | `spec_path` (string), `sheet_path` (string), `metadata_path` (optional string) |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithSprite.md` for the deep dive.
+
 ## ui
 
 UMG widget Blueprint CRUD, templates, styling, animation (v1 + v2), the schema-driven **Spec / EffectSurface** architecture, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. **138 curated actions** — 79 module-owned always-on actions + 55 CommonUI actions (registered when `WITH_COMMONUI=1`) + 4 GAS UI binding aliases. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated; `apply_token_binding` is validation/probe only until BP graph writes ship and returns non-success `status:"not_implemented"` for the deferred write.
