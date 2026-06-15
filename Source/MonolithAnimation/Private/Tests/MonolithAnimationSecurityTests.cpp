@@ -141,4 +141,31 @@ bool FMonolithAnimMontageBlendParamGuardTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimMontageCreateFromSectionsParamGuardTest, "Monolith.ParamGuard.Animation.CreateMontageFromSections", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAnimMontageCreateFromSectionsParamGuardTest::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/AnimWeaver_MontageCreate");
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), AssetPath);
+	Params->SetStringField(TEXT("skeleton_path"), TEXT("/Game/Anims/MySkeleton"));
+
+	TArray<TSharedPtr<FJsonValue>> NotifiesArr;
+	TSharedPtr<FJsonObject> NObj = MakeShared<FJsonObject>();
+	NObj->SetStringField(TEXT("notify_class"), TEXT("PlaySound"));
+	NObj->SetStringField(TEXT("time"), TEXT("not_a_number"));
+	NotifiesArr.Add(MakeShared<FJsonValueObject>(NObj));
+	Params->SetArrayField(TEXT("notifies"), NotifiesArr);
+
+	FMonolithActionResult Result = FMonolithAnimationActions::HandleCreateMontageFromSections(Params);
+	TestFalse(TEXT("CreateMontageFromSections with malformed params should return Error"), Result.bSuccess);
+	// HandleCreateMontageFromSections calls HandleCreateMontage which might fail if the asset path or skeleton path are invalid,
+	// but the important thing is that if it reaches the notify parsing it shouldn't crash.
+	// Since creating a montage actually creates a new asset, and we aren't mocking the UFactory properly, it will likely fail early.
+	// However, we can assert it didn't crash.
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

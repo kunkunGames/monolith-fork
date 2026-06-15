@@ -10057,10 +10057,13 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 			TSharedPtr<FJsonObject> NObj = NVal->AsObject();
 			if (!NObj.IsValid()) continue;
 
-			FString NClassName = NObj->GetStringField(TEXT("notify_class"));
-			float NTime = static_cast<float>(NObj->GetNumberField(TEXT("time")));
+			FString NClassName;
+			if (!NObj->TryGetStringField(TEXT("notify_class"), NClassName)) return EndMontageTransactionAndError(TEXT("Parameter 'notify_class' in notify must be a string"));
+			double NTimeTemp;
+			if (!NObj->TryGetNumberField(TEXT("time"), NTimeTemp)) return EndMontageTransactionAndError(TEXT("Parameter 'time' in notify must be a number"));
+			float NTime = static_cast<float>(NTimeTemp);
 			FString NTrackName = TEXT("1");
-			if (NObj->HasField(TEXT("track_name")) && !NObj->TryGetStringField(TEXT("track_name"), NTrackName)) return EndMontageTransactionAndError(TEXT("Parameter \'track_name\' must be a string"));
+			if (NObj->HasField(TEXT("track_name")) && !NObj->TryGetStringField(TEXT("track_name"), NTrackName)) return EndMontageTransactionAndError(TEXT("Parameter 'track_name' in notify must be a string"));
 
 			UClass* NClass = FindFirstObject<UClass>(*NClassName, EFindFirstObjectOptions::NativeFirst);
 			if (!NClass)

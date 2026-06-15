@@ -32,3 +32,8 @@ AnimWeaver PRs improve animation and PoseSearch action safety while preserving t
 **Learning:** Checking `HasField` is insufficient to guarantee type safety for JSON parameters.
 **Prevention:** Replaced these specific `HasField` and blind getter patterns with `TryGetNumberField` that returns a structured error for invalid types.
 **Avoid:** Trusting `HasField` for optional parameters within complex action arrays.
+## 2026-05-19 - Replace remaining HasField accesses in HandleCreateMontageFromSections
+**Reliability issue:** `HandleCreateMontageFromSections` used unsafe `HasField` followed by `GetNumberField` for optional notify parameters (`time`, etc).
+**Learning:** Checking `HasField` is insufficient to guarantee type safety for JSON parameters.
+**Prevention:** Replaced these specific `HasField` and blind getter patterns with `TryGetNumberField` that returns a structured error for invalid types.
+**Avoid:** Trusting `HasField` for optional parameters within complex action arrays.
