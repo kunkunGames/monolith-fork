@@ -8156,15 +8156,29 @@ FMonolithActionResult FMonolithEditorActions::StartTimeseriesSession(const TShar
 	}
 
 	double Duration = 6.0;
-	if (Params->HasField(TEXT("duration_seconds"))) { Duration = Params->GetNumberField(TEXT("duration_seconds")); }
+	if (Params->HasField(TEXT("duration_seconds")) && !Params->TryGetNumberField(TEXT("duration_seconds"), Duration))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameter: 'duration_seconds' must be a number"));
+	}
 	Duration = FMath::Clamp(Duration, 0.0, 120.0);
 
 	double SampleInterval = 0.0;
-	if (Params->HasField(TEXT("sample_interval"))) { SampleInterval = Params->GetNumberField(TEXT("sample_interval")); }
+	if (Params->HasField(TEXT("sample_interval")) && !Params->TryGetNumberField(TEXT("sample_interval"), SampleInterval))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameter: 'sample_interval' must be a number"));
+	}
 	SampleInterval = FMath::Max(0.0, SampleInterval);
 
 	int32 MaxSamples = 2048;
-	if (Params->HasField(TEXT("max_samples"))) { MaxSamples = (int32)Params->GetNumberField(TEXT("max_samples")); }
+	if (Params->HasField(TEXT("max_samples")))
+	{
+		double TempMaxSamples;
+		if (!Params->TryGetNumberField(TEXT("max_samples"), TempMaxSamples))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid parameter: 'max_samples' must be a number"));
+		}
+		MaxSamples = (int32)TempMaxSamples;
+	}
 	MaxSamples = FMath::Clamp(MaxSamples, 1, 100000);
 
 	if (FindActivePieWorld())
