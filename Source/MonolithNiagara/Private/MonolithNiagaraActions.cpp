@@ -501,7 +501,7 @@ namespace MonolithNiagaraHelpers
 	}
 
 	// Parse JSON keys array into an FRichCurve
-	void ParseKeysIntoCurve(FRichCurve& Curve, const TArray<TSharedPtr<FJsonValue>>& Keys)
+	bool ParseKeysIntoCurve(FRichCurve& Curve, const TArray<TSharedPtr<FJsonValue>>& Keys)
 	{
 		Curve.Reset();
 		TArray<FRichCurveKey> NewKeys;
@@ -510,19 +510,28 @@ namespace MonolithNiagaraHelpers
 		{
 			const TSharedPtr<FJsonObject>& KO = KeyVal->AsObject();
 			if (!KO.IsValid()) continue;
-			float Time = static_cast<float>(KO->GetNumberField(TEXT("time")));
-			float Value = static_cast<float>(KO->GetNumberField(TEXT("value")));
+			double Time_Double = 0.0;
+			if (!KO->TryGetNumberField(TEXT("time"), Time_Double)) return false;
+			float Time = static_cast<float>(Time_Double);
+
+			double Value_Double = 0.0;
+			if (!KO->TryGetNumberField(TEXT("value"), Value_Double)) return false;
+			float Value = static_cast<float>(Value_Double);
+
 			float ArriveTangent = 0.f;
 			double ArriveTangent_Double = ArriveTangent;
-			if (KO->TryGetNumberField(TEXT("arrive_tangent"), ArriveTangent_Double)) ArriveTangent = static_cast<float>(ArriveTangent_Double);
+			if (KO->HasField(TEXT("arrive_tangent")) && !KO->TryGetNumberField(TEXT("arrive_tangent"), ArriveTangent_Double)) return false;
+			if (KO->HasField(TEXT("arrive_tangent"))) ArriveTangent = static_cast<float>(ArriveTangent_Double);
 			float LeaveTangent = 0.f;
 			double LeaveTangent_Double = LeaveTangent;
-			if (KO->TryGetNumberField(TEXT("leave_tangent"), LeaveTangent_Double)) LeaveTangent = static_cast<float>(LeaveTangent_Double);
+			if (KO->HasField(TEXT("leave_tangent")) && !KO->TryGetNumberField(TEXT("leave_tangent"), LeaveTangent_Double)) return false;
+			if (KO->HasField(TEXT("leave_tangent"))) LeaveTangent = static_cast<float>(LeaveTangent_Double);
 
 			ERichCurveInterpMode InterpMode = RCIM_Linear;
-			if (KO->HasField(TEXT("interp_mode")))
+			FString Mode;
+			if (KO->HasField(TEXT("interp_mode")) && !KO->TryGetStringField(TEXT("interp_mode"), Mode)) return false;
+			if (!Mode.IsEmpty())
 			{
-				FString Mode = KO->GetStringField(TEXT("interp_mode"));
 				if (Mode == TEXT("constant")) InterpMode = RCIM_Constant;
 				else if (Mode == TEXT("cubic")) InterpMode = RCIM_Cubic;
 			}
@@ -530,6 +539,7 @@ namespace MonolithNiagaraHelpers
 			NewKeys.Add(FRichCurveKey(Time, Value, ArriveTangent, LeaveTangent, InterpMode));
 		}
 		Curve.SetKeys(NewKeys);
+		return true;
 	}
 
 	// Apply curve keys from config JSON to a DI curve object.
@@ -562,7 +572,7 @@ namespace MonolithNiagaraHelpers
 		{
 			TArray<TSharedPtr<FJsonValue>> Keys = GetKeysArray(TEXT("keys"));
 			if (Keys.Num() == 0) Keys = GetKeysArray(TEXT("curve"));
-			if (Keys.Num() > 0) { ParseKeysIntoCurve(FloatCurve->Curve, Keys); return true; }
+			if (Keys.Num() > 0) { return ParseKeysIntoCurve(FloatCurve->Curve, Keys); }
 		}
 		else if (UNiagaraDataInterfaceColorCurve* ColorCurve = Cast<UNiagaraDataInterfaceColorCurve>(DI))
 		{
@@ -573,11 +583,13 @@ namespace MonolithNiagaraHelpers
 			bool bAny = R.Num() > 0 || G.Num() > 0 || B.Num() > 0 || A.Num() > 0;
 			if (bAny)
 			{
+				bool bSuccess = true;
 				// Full replace: specified channels get new keys, unspecified channels are cleared
-				if (R.Num() > 0) ParseKeysIntoCurve(ColorCurve->RedCurve, R); else ColorCurve->RedCurve.Reset();
-				if (G.Num() > 0) ParseKeysIntoCurve(ColorCurve->GreenCurve, G); else ColorCurve->GreenCurve.Reset();
-				if (B.Num() > 0) ParseKeysIntoCurve(ColorCurve->BlueCurve, B); else ColorCurve->BlueCurve.Reset();
-				if (A.Num() > 0) ParseKeysIntoCurve(ColorCurve->AlphaCurve, A); else ColorCurve->AlphaCurve.Reset();
+				if (R.Num() > 0) bSuccess &= ParseKeysIntoCurve(ColorCurve->RedCurve, R); else ColorCurve->RedCurve.Reset();
+				if (G.Num() > 0) bSuccess &= ParseKeysIntoCurve(ColorCurve->GreenCurve, G); else ColorCurve->GreenCurve.Reset();
+				if (B.Num() > 0) bSuccess &= ParseKeysIntoCurve(ColorCurve->BlueCurve, B); else ColorCurve->BlueCurve.Reset();
+				if (A.Num() > 0) bSuccess &= ParseKeysIntoCurve(ColorCurve->AlphaCurve, A); else ColorCurve->AlphaCurve.Reset();
+				return bSuccess;
 			}
 			return bAny;
 		}
@@ -588,8 +600,10 @@ namespace MonolithNiagaraHelpers
 			bool bAny = X.Num() > 0 || Y.Num() > 0;
 			if (bAny)
 			{
-				if (X.Num() > 0) ParseKeysIntoCurve(Vec2Curve->XCurve, X); else Vec2Curve->XCurve.Reset();
-				if (Y.Num() > 0) ParseKeysIntoCurve(Vec2Curve->YCurve, Y); else Vec2Curve->YCurve.Reset();
+				bool bSuccess = true;
+				if (X.Num() > 0) bSuccess &= ParseKeysIntoCurve(Vec2Curve->XCurve, X); else Vec2Curve->XCurve.Reset();
+				if (Y.Num() > 0) bSuccess &= ParseKeysIntoCurve(Vec2Curve->YCurve, Y); else Vec2Curve->YCurve.Reset();
+				return bSuccess;
 			}
 			return bAny;
 		}
@@ -601,9 +615,11 @@ namespace MonolithNiagaraHelpers
 			bool bAny = X.Num() > 0 || Y.Num() > 0 || Z.Num() > 0;
 			if (bAny)
 			{
-				if (X.Num() > 0) ParseKeysIntoCurve(Vec3Curve->XCurve, X); else Vec3Curve->XCurve.Reset();
-				if (Y.Num() > 0) ParseKeysIntoCurve(Vec3Curve->YCurve, Y); else Vec3Curve->YCurve.Reset();
-				if (Z.Num() > 0) ParseKeysIntoCurve(Vec3Curve->ZCurve, Z); else Vec3Curve->ZCurve.Reset();
+				bool bSuccess = true;
+				if (X.Num() > 0) bSuccess &= ParseKeysIntoCurve(Vec3Curve->XCurve, X); else Vec3Curve->XCurve.Reset();
+				if (Y.Num() > 0) bSuccess &= ParseKeysIntoCurve(Vec3Curve->YCurve, Y); else Vec3Curve->YCurve.Reset();
+				if (Z.Num() > 0) bSuccess &= ParseKeysIntoCurve(Vec3Curve->ZCurve, Z); else Vec3Curve->ZCurve.Reset();
+				return bSuccess;
 			}
 			return bAny;
 		}
@@ -616,93 +632,175 @@ namespace MonolithNiagaraHelpers
 			bool bAny = X.Num() > 0 || Y.Num() > 0 || Z.Num() > 0 || W.Num() > 0;
 			if (bAny)
 			{
-				if (X.Num() > 0) ParseKeysIntoCurve(Vec4Curve->XCurve, X); else Vec4Curve->XCurve.Reset();
-				if (Y.Num() > 0) ParseKeysIntoCurve(Vec4Curve->YCurve, Y); else Vec4Curve->YCurve.Reset();
-				if (Z.Num() > 0) ParseKeysIntoCurve(Vec4Curve->ZCurve, Z); else Vec4Curve->ZCurve.Reset();
-				if (W.Num() > 0) ParseKeysIntoCurve(Vec4Curve->WCurve, W); else Vec4Curve->WCurve.Reset();
+				bool bSuccess = true;
+				if (X.Num() > 0) bSuccess &= ParseKeysIntoCurve(Vec4Curve->XCurve, X); else Vec4Curve->XCurve.Reset();
+				if (Y.Num() > 0) bSuccess &= ParseKeysIntoCurve(Vec4Curve->YCurve, Y); else Vec4Curve->YCurve.Reset();
+				if (Z.Num() > 0) bSuccess &= ParseKeysIntoCurve(Vec4Curve->ZCurve, Z); else Vec4Curve->ZCurve.Reset();
+				if (W.Num() > 0) bSuccess &= ParseKeysIntoCurve(Vec4Curve->WCurve, W); else Vec4Curve->WCurve.Reset();
+				return bSuccess;
 			}
 			return bAny;
 		}
 		return false;
 	}
 
+	bool ReadOptionalGridNumber(const TSharedPtr<FJsonObject>& Config, const TCHAR* FieldName, double& OutValue, FString* OutError)
+	{
+		if (!Config->HasField(FieldName)) return true;
+		if (Config->TryGetNumberField(FieldName, OutValue)) return true;
+		if (OutError) *OutError = FString::Printf(TEXT("Parameter '%s' in grid config must be a number"), FieldName);
+		return false;
+	}
+
+	bool ReadOptionalGridBool(const TSharedPtr<FJsonObject>& Config, const TCHAR* FieldName, bool& OutValue, FString* OutError)
+	{
+		if (!Config->HasField(FieldName)) return true;
+		if (Config->TryGetBoolField(FieldName, OutValue)) return true;
+		if (OutError) *OutError = FString::Printf(TEXT("Parameter '%s' in grid config must be a boolean"), FieldName);
+		return false;
+	}
+
+	bool ReadOptionalGridString(const TSharedPtr<FJsonObject>& Config, const TCHAR* FieldName, FString& OutValue, FString* OutError)
+	{
+		if (!Config->HasField(FieldName)) return true;
+		if (Config->TryGetStringField(FieldName, OutValue)) return true;
+		if (OutError) *OutError = FString::Printf(TEXT("Parameter '%s' in grid config must be a string"), FieldName);
+		return false;
+	}
+
+	bool ReadGridBBox2(const TSharedPtr<FJsonObject>& Config, const TCHAR* FieldName, double& OutX, double& OutY, FString* OutError)
+	{
+		if (!Config->HasField(FieldName)) return true;
+		const TSharedPtr<FJsonObject>* BBoxPtr = nullptr;
+		if (!Config->TryGetObjectField(FieldName, BBoxPtr) || !BBoxPtr || !BBoxPtr->IsValid())
+		{
+			if (OutError) *OutError = FString::Printf(TEXT("Parameter '%s' in grid config must be an object"), FieldName);
+			return false;
+		}
+		if (!(*BBoxPtr)->TryGetNumberField(TEXT("x"), OutX) || !(*BBoxPtr)->TryGetNumberField(TEXT("y"), OutY))
+		{
+			if (OutError) *OutError = FString::Printf(TEXT("Parameter '%s' in grid config must contain numeric x and y"), FieldName);
+			return false;
+		}
+		return true;
+	}
+
+	bool ReadGridBBox3(const TSharedPtr<FJsonObject>& Config, const TCHAR* FieldName, double& OutX, double& OutY, double& OutZ, FString* OutError)
+	{
+		if (!Config->HasField(FieldName)) return true;
+		const TSharedPtr<FJsonObject>* BBoxPtr = nullptr;
+		if (!Config->TryGetObjectField(FieldName, BBoxPtr) || !BBoxPtr || !BBoxPtr->IsValid())
+		{
+			if (OutError) *OutError = FString::Printf(TEXT("Parameter '%s' in grid config must be an object"), FieldName);
+			return false;
+		}
+		if (!(*BBoxPtr)->TryGetNumberField(TEXT("x"), OutX) || !(*BBoxPtr)->TryGetNumberField(TEXT("y"), OutY) || !(*BBoxPtr)->TryGetNumberField(TEXT("z"), OutZ))
+		{
+			if (OutError) *OutError = FString::Printf(TEXT("Parameter '%s' in grid config must contain numeric x, y, and z"), FieldName);
+			return false;
+		}
+		return true;
+	}
+
 	// Apply Grid2D/Grid3D/NeighborGrid3D configuration from JSON
-	bool ApplyGridConfig(UNiagaraDataInterface* DI, const TSharedPtr<FJsonObject>& Config)
+	bool ApplyGridConfig(UNiagaraDataInterface* DI, const TSharedPtr<FJsonObject>& Config, FString* OutError = nullptr)
 	{
 		if (!DI || !Config.IsValid()) return false;
 
 		if (UNiagaraDataInterfaceGrid2DCollection* Grid2D = Cast<UNiagaraDataInterfaceGrid2DCollection>(DI))
 		{
+			double DblVal;
+			if (!ReadOptionalGridNumber(Config, TEXT("num_cells_x"), DblVal, OutError)) return false;
 			if (Config->HasField(TEXT("num_cells_x")))
 			{
-				Grid2D->NumCellsX = static_cast<int32>(Config->GetNumberField(TEXT("num_cells_x")));
+				Grid2D->NumCellsX = static_cast<int32>(DblVal);
 			}
+			if (!ReadOptionalGridNumber(Config, TEXT("num_cells_y"), DblVal, OutError)) return false;
 			if (Config->HasField(TEXT("num_cells_y")))
 			{
-				Grid2D->NumCellsY = static_cast<int32>(Config->GetNumberField(TEXT("num_cells_y")));
+				Grid2D->NumCellsY = static_cast<int32>(DblVal);
 			}
+			if (!ReadOptionalGridNumber(Config, TEXT("num_cells_max_axis"), DblVal, OutError)) return false;
 			if (Config->HasField(TEXT("num_cells_max_axis")))
 			{
-				Grid2D->NumCellsMaxAxis = static_cast<int32>(Config->GetNumberField(TEXT("num_cells_max_axis")));
+				Grid2D->NumCellsMaxAxis = static_cast<int32>(DblVal);
 			}
+			if (!ReadOptionalGridNumber(Config, TEXT("num_attributes"), DblVal, OutError)) return false;
 			if (Config->HasField(TEXT("num_attributes")))
 			{
-				Grid2D->NumAttributes = static_cast<int32>(Config->GetNumberField(TEXT("num_attributes")));
+				Grid2D->NumAttributes = static_cast<int32>(DblVal);
 			}
+
+			double BBoxX = 0.0, BBoxY = 0.0;
+			if (!ReadGridBBox2(Config, TEXT("world_bbox_size"), BBoxX, BBoxY, OutError)) return false;
 			if (Config->HasField(TEXT("world_bbox_size")))
 			{
-				TSharedPtr<FJsonObject> BBox = Config->GetObjectField(TEXT("world_bbox_size"));
-				if (BBox.IsValid() && BBox->HasField(TEXT("x")) && BBox->HasField(TEXT("y")))
-				{
-					Grid2D->WorldBBoxSize.X = static_cast<float>(BBox->GetNumberField(TEXT("x")));
-					Grid2D->WorldBBoxSize.Y = static_cast<float>(BBox->GetNumberField(TEXT("y")));
-				}
+				Grid2D->WorldBBoxSize.X = static_cast<float>(BBoxX);
+				Grid2D->WorldBBoxSize.Y = static_cast<float>(BBoxY);
 			}
+
+			bool bVal;
+			if (!ReadOptionalGridBool(Config, TEXT("set_grid_from_max_axis"), bVal, OutError)) return false;
 			if (Config->HasField(TEXT("set_grid_from_max_axis")))
 			{
-				Grid2D->SetGridFromMaxAxis = Config->GetBoolField(TEXT("set_grid_from_max_axis"));
+				Grid2D->SetGridFromMaxAxis = bVal;
 			}
+			if (!ReadOptionalGridBool(Config, TEXT("clear_before_non_iteration_stage"), bVal, OutError)) return false;
 			if (Config->HasField(TEXT("clear_before_non_iteration_stage")))
 			{
-				Grid2D->ClearBeforeNonIterationStage = Config->GetBoolField(TEXT("clear_before_non_iteration_stage"));
+				Grid2D->ClearBeforeNonIterationStage = bVal;
 			}
 			return true;
 		}
 		else if (UNiagaraDataInterfaceGrid3DCollection* Grid3D = Cast<UNiagaraDataInterfaceGrid3DCollection>(DI))
 		{
 			// Grid3D uses FIntVector NumCells instead of separate X/Y/Z properties
-			if (Config->HasField(TEXT("num_cells_x")) || Config->HasField(TEXT("num_cells_y")) || Config->HasField(TEXT("num_cells_z")))
+			double DblX, DblY, DblZ;
+			if (!ReadOptionalGridNumber(Config, TEXT("num_cells_x"), DblX, OutError)) return false;
+			if (!ReadOptionalGridNumber(Config, TEXT("num_cells_y"), DblY, OutError)) return false;
+			if (!ReadOptionalGridNumber(Config, TEXT("num_cells_z"), DblZ, OutError)) return false;
+			bool bHasX = Config->HasField(TEXT("num_cells_x"));
+			bool bHasY = Config->HasField(TEXT("num_cells_y"));
+			bool bHasZ = Config->HasField(TEXT("num_cells_z"));
+
+			if (bHasX || bHasY || bHasZ)
 			{
-				int32 X = Config->HasField(TEXT("num_cells_x")) ? static_cast<int32>(Config->GetNumberField(TEXT("num_cells_x"))) : Grid3D->NumCells.X;
-				int32 Y = Config->HasField(TEXT("num_cells_y")) ? static_cast<int32>(Config->GetNumberField(TEXT("num_cells_y"))) : Grid3D->NumCells.Y;
-				int32 Z = Config->HasField(TEXT("num_cells_z")) ? static_cast<int32>(Config->GetNumberField(TEXT("num_cells_z"))) : Grid3D->NumCells.Z;
+				int32 X = bHasX ? static_cast<int32>(DblX) : Grid3D->NumCells.X;
+				int32 Y = bHasY ? static_cast<int32>(DblY) : Grid3D->NumCells.Y;
+				int32 Z = bHasZ ? static_cast<int32>(DblZ) : Grid3D->NumCells.Z;
 				Grid3D->NumCells = FIntVector(X, Y, Z);
 			}
+
+			double DblVal;
+			if (!ReadOptionalGridNumber(Config, TEXT("num_cells_max_axis"), DblVal, OutError)) return false;
 			if (Config->HasField(TEXT("num_cells_max_axis")))
 			{
-				Grid3D->NumCellsMaxAxis = static_cast<int32>(Config->GetNumberField(TEXT("num_cells_max_axis")));
+				Grid3D->NumCellsMaxAxis = static_cast<int32>(DblVal);
 			}
+			if (!ReadOptionalGridNumber(Config, TEXT("num_attributes"), DblVal, OutError)) return false;
 			if (Config->HasField(TEXT("num_attributes")))
 			{
-				Grid3D->NumAttributes = static_cast<int32>(Config->GetNumberField(TEXT("num_attributes")));
+				Grid3D->NumAttributes = static_cast<int32>(DblVal);
 			}
+			if (!ReadOptionalGridNumber(Config, TEXT("cell_size"), DblVal, OutError)) return false;
 			if (Config->HasField(TEXT("cell_size")))
 			{
-				Grid3D->CellSize = static_cast<float>(Config->GetNumberField(TEXT("cell_size")));
+				Grid3D->CellSize = static_cast<float>(DblVal);
 			}
+
+			double BBoxX = 0.0, BBoxY = 0.0, BBoxZ = 0.0;
+			if (!ReadGridBBox3(Config, TEXT("world_bbox_size"), BBoxX, BBoxY, BBoxZ, OutError)) return false;
 			if (Config->HasField(TEXT("world_bbox_size")))
 			{
-				TSharedPtr<FJsonObject> BBox = Config->GetObjectField(TEXT("world_bbox_size"));
-				if (BBox.IsValid() && BBox->HasField(TEXT("x")) && BBox->HasField(TEXT("y")) && BBox->HasField(TEXT("z")))
-				{
-					Grid3D->WorldBBoxSize.X = static_cast<float>(BBox->GetNumberField(TEXT("x")));
-					Grid3D->WorldBBoxSize.Y = static_cast<float>(BBox->GetNumberField(TEXT("y")));
-					Grid3D->WorldBBoxSize.Z = static_cast<float>(BBox->GetNumberField(TEXT("z")));
-				}
+				Grid3D->WorldBBoxSize.X = static_cast<float>(BBoxX);
+				Grid3D->WorldBBoxSize.Y = static_cast<float>(BBoxY);
+				Grid3D->WorldBBoxSize.Z = static_cast<float>(BBoxZ);
 			}
+
+			FString Method;
+			if (!ReadOptionalGridString(Config, TEXT("set_resolution_method"), Method, OutError)) return false;
 			if (Config->HasField(TEXT("set_resolution_method")))
 			{
-				FString Method = Config->GetStringField(TEXT("set_resolution_method"));
 				if (Method.Equals(TEXT("Independent"), ESearchCase::IgnoreCase))
 				{
 					Grid3D->SetResolutionMethod = ESetResolutionMethod::Independent;
@@ -715,48 +813,70 @@ namespace MonolithNiagaraHelpers
 				{
 					Grid3D->SetResolutionMethod = ESetResolutionMethod::CellSize;
 				}
+				else
+				{
+					if (OutError) *OutError = FString::Printf(TEXT("Parameter 'set_resolution_method' in grid config has unsupported value '%s'"), *Method);
+					return false;
+				}
 			}
+
+			bool bVal;
+			if (!ReadOptionalGridBool(Config, TEXT("clear_before_non_iteration_stage"), bVal, OutError)) return false;
 			if (Config->HasField(TEXT("clear_before_non_iteration_stage")))
 			{
-				Grid3D->ClearBeforeNonIterationStage = Config->GetBoolField(TEXT("clear_before_non_iteration_stage"));
+				Grid3D->ClearBeforeNonIterationStage = bVal;
 			}
 			return true;
 		}
 		else if (UNiagaraDataInterfaceNeighborGrid3D* NeighborGrid = Cast<UNiagaraDataInterfaceNeighborGrid3D>(DI))
 		{
 			// NeighborGrid3D inherits from Grid3D, so it also uses FIntVector NumCells
-			if (Config->HasField(TEXT("num_cells_x")) || Config->HasField(TEXT("num_cells_y")) || Config->HasField(TEXT("num_cells_z")))
+			double DblX, DblY, DblZ;
+			if (!ReadOptionalGridNumber(Config, TEXT("num_cells_x"), DblX, OutError)) return false;
+			if (!ReadOptionalGridNumber(Config, TEXT("num_cells_y"), DblY, OutError)) return false;
+			if (!ReadOptionalGridNumber(Config, TEXT("num_cells_z"), DblZ, OutError)) return false;
+			bool bHasX = Config->HasField(TEXT("num_cells_x"));
+			bool bHasY = Config->HasField(TEXT("num_cells_y"));
+			bool bHasZ = Config->HasField(TEXT("num_cells_z"));
+
+			if (bHasX || bHasY || bHasZ)
 			{
-				int32 X = Config->HasField(TEXT("num_cells_x")) ? static_cast<int32>(Config->GetNumberField(TEXT("num_cells_x"))) : NeighborGrid->NumCells.X;
-				int32 Y = Config->HasField(TEXT("num_cells_y")) ? static_cast<int32>(Config->GetNumberField(TEXT("num_cells_y"))) : NeighborGrid->NumCells.Y;
-				int32 Z = Config->HasField(TEXT("num_cells_z")) ? static_cast<int32>(Config->GetNumberField(TEXT("num_cells_z"))) : NeighborGrid->NumCells.Z;
+				int32 X = bHasX ? static_cast<int32>(DblX) : NeighborGrid->NumCells.X;
+				int32 Y = bHasY ? static_cast<int32>(DblY) : NeighborGrid->NumCells.Y;
+				int32 Z = bHasZ ? static_cast<int32>(DblZ) : NeighborGrid->NumCells.Z;
 				NeighborGrid->NumCells = FIntVector(X, Y, Z);
 			}
+
+			double DblVal;
+			if (!ReadOptionalGridNumber(Config, TEXT("num_cells_max_axis"), DblVal, OutError)) return false;
 			if (Config->HasField(TEXT("num_cells_max_axis")))
 			{
-				NeighborGrid->NumCellsMaxAxis = static_cast<int32>(Config->GetNumberField(TEXT("num_cells_max_axis")));
+				NeighborGrid->NumCellsMaxAxis = static_cast<int32>(DblVal);
 			}
+			if (!ReadOptionalGridNumber(Config, TEXT("max_neighbors_per_cell"), DblVal, OutError)) return false;
 			if (Config->HasField(TEXT("max_neighbors_per_cell")))
 			{
-				NeighborGrid->MaxNeighborsPerCell = static_cast<uint32>(Config->GetNumberField(TEXT("max_neighbors_per_cell")));
+				NeighborGrid->MaxNeighborsPerCell = static_cast<uint32>(DblVal);
 			}
+			if (!ReadOptionalGridNumber(Config, TEXT("cell_size"), DblVal, OutError)) return false;
 			if (Config->HasField(TEXT("cell_size")))
 			{
-				NeighborGrid->CellSize = static_cast<float>(Config->GetNumberField(TEXT("cell_size")));
+				NeighborGrid->CellSize = static_cast<float>(DblVal);
 			}
+
+			double BBoxX = 0.0, BBoxY = 0.0, BBoxZ = 0.0;
+			if (!ReadGridBBox3(Config, TEXT("world_bbox_size"), BBoxX, BBoxY, BBoxZ, OutError)) return false;
 			if (Config->HasField(TEXT("world_bbox_size")))
 			{
-				TSharedPtr<FJsonObject> BBox = Config->GetObjectField(TEXT("world_bbox_size"));
-				if (BBox.IsValid() && BBox->HasField(TEXT("x")) && BBox->HasField(TEXT("y")) && BBox->HasField(TEXT("z")))
-				{
-					NeighborGrid->WorldBBoxSize.X = static_cast<float>(BBox->GetNumberField(TEXT("x")));
-					NeighborGrid->WorldBBoxSize.Y = static_cast<float>(BBox->GetNumberField(TEXT("y")));
-					NeighborGrid->WorldBBoxSize.Z = static_cast<float>(BBox->GetNumberField(TEXT("z")));
-				}
+				NeighborGrid->WorldBBoxSize.X = static_cast<float>(BBoxX);
+				NeighborGrid->WorldBBoxSize.Y = static_cast<float>(BBoxY);
+				NeighborGrid->WorldBBoxSize.Z = static_cast<float>(BBoxZ);
 			}
+
+			FString Method;
+			if (!ReadOptionalGridString(Config, TEXT("set_resolution_method"), Method, OutError)) return false;
 			if (Config->HasField(TEXT("set_resolution_method")))
 			{
-				FString Method = Config->GetStringField(TEXT("set_resolution_method"));
 				if (Method.Equals(TEXT("Independent"), ESearchCase::IgnoreCase))
 				{
 					NeighborGrid->SetResolutionMethod = ESetResolutionMethod::Independent;
@@ -769,10 +889,17 @@ namespace MonolithNiagaraHelpers
 				{
 					NeighborGrid->SetResolutionMethod = ESetResolutionMethod::CellSize;
 				}
+				else
+				{
+					if (OutError) *OutError = FString::Printf(TEXT("Parameter 'set_resolution_method' in grid config has unsupported value '%s'"), *Method);
+					return false;
+				}
 			}
+			bool bVal;
+			if (!ReadOptionalGridBool(Config, TEXT("clear_before_non_iteration_stage"), bVal, OutError)) return false;
 			if (Config->HasField(TEXT("clear_before_non_iteration_stage")))
 			{
-				NeighborGrid->ClearBeforeNonIterationStage = Config->GetBoolField(TEXT("clear_before_non_iteration_stage"));
+				NeighborGrid->ClearBeforeNonIterationStage = bVal;
 			}
 			return true;
 		}
@@ -5377,10 +5504,41 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputDI(const TSha
 		bool bCurveApplied = MonolithNiagaraHelpers::ApplyCurveConfig(DIInst, DIConfig);
 		bCurveConfigApplied = bCurveApplied;
 
+		if (Cast<UNiagaraDataInterfaceCurveBase>(DIInst) && !bCurveApplied && (DIConfig->HasField(TEXT("keys")) || DIConfig->HasField(TEXT("red")) || DIConfig->HasField(TEXT("x"))))
+		{
+			return FMonolithActionResult::Error(TEXT("Failed to parse curve keys from config. Ensure keys contain valid numbers."));
+		}
+
 		// Try grid-specific config (handles Grid2D, Grid3D, NeighborGrid3D)
 		if (!bCurveApplied)
 		{
-			bGridApplied = MonolithNiagaraHelpers::ApplyGridConfig(DIInst, DIConfig);
+			FString GridConfigError;
+			bGridApplied = MonolithNiagaraHelpers::ApplyGridConfig(DIInst, DIConfig, &GridConfigError);
+			if (!GridConfigError.IsEmpty())
+			{
+				return FMonolithActionResult::Error(GridConfigError);
+			}
+
+			const bool bHadGridFields =
+				DIConfig->HasField(TEXT("num_cells_x")) ||
+				DIConfig->HasField(TEXT("num_cells_y")) ||
+				DIConfig->HasField(TEXT("num_cells_z")) ||
+				DIConfig->HasField(TEXT("num_cells_max_axis")) ||
+				DIConfig->HasField(TEXT("num_attributes")) ||
+				DIConfig->HasField(TEXT("world_bbox_size")) ||
+				DIConfig->HasField(TEXT("set_grid_from_max_axis")) ||
+				DIConfig->HasField(TEXT("set_resolution_method")) ||
+				DIConfig->HasField(TEXT("max_neighbors_per_cell")) ||
+				DIConfig->HasField(TEXT("cell_size")) ||
+				DIConfig->HasField(TEXT("clear_before_non_iteration_stage"));
+			const bool bIsGridDIForParse =
+				Cast<UNiagaraDataInterfaceGrid2DCollection>(DIInst) != nullptr ||
+				Cast<UNiagaraDataInterfaceGrid3DCollection>(DIInst) != nullptr ||
+				Cast<UNiagaraDataInterfaceNeighborGrid3D>(DIInst) != nullptr;
+			if (!bGridApplied && bIsGridDIForParse && bHadGridFields)
+			{
+				return FMonolithActionResult::Error(TEXT("Failed to parse grid config. Ensure grid fields match the selected data interface type."));
+			}
 		}
 
 		// Check if config had curve-like fields that ApplyCurveConfig didn't handle
@@ -9009,7 +9167,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureCurveKeys(const TS
 	}
 
 	bool bApplied = MonolithNiagaraHelpers::ApplyCurveConfig(DI, Config);
-	if (!bApplied) return FMonolithActionResult::Error(TEXT("Failed to apply curve keys — DI type may not be a supported curve type"));
+	if (!bApplied) return FMonolithActionResult::Error(TEXT("Failed to apply curve keys — DI type may not be a supported curve type or keys were malformed"));
 
 	// Refresh GPU LUT
 	if (UNiagaraDataInterfaceCurveBase* CurveBase = Cast<UNiagaraDataInterfaceCurveBase>(DI))
