@@ -3011,7 +3011,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 
 		// Load Widget Blueprint. UMG widget assets live in UWidgetBlueprint with
 		// the runtime UClass on GeneratedClass.
-		UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+		UWidgetBlueprint* WBP = FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(AssetPath);
 		if (!WBP)
 		{
 			return FMonolithActionResult::Error(
