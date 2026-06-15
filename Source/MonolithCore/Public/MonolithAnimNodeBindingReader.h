@@ -253,7 +253,16 @@ namespace MonolithAnimNodeBindingReader
 			const TSharedPtr<FJsonObject>* FullObj;
 			if (!V->TryGetObject(FullObj) || !FullObj->IsValid()) continue;
 			TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
-			C->SetStringField(TEXT("pin"), (*FullObj)->GetStringField(TEXT("pin")));
+			FString PinName;
+			if ((*FullObj)->TryGetStringField(TEXT("pin"), PinName))
+			{
+				C->SetStringField(TEXT("pin"), PinName);
+			}
+			else
+			{
+				// Note: if the required pin field is missing, we skip this malformed entry completely
+				continue;
+			}
 			const TArray<TSharedPtr<FJsonValue>>* PathArr;
 			if ((*FullObj)->TryGetArrayField(TEXT("path"), PathArr))
 			{
