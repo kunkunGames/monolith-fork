@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Parameter Hardening** — Standardized parameter parsing to use `TryGetStringField()` and similar safe accessors across multiple modules, rejecting malformed input with explicit JSON-RPC errors instead of crashing or returning empty strings (e.g., 12ed4b6, 3940803).
+- **Performance Optimizations** — Added `TArray::Reserve()` pre-allocations across multiple modules to avoid repeated memory reallocations when sizing arrays for JSON responses (e.g., a12d6ad, f6d9b3d).
+- **Asset Loading Refactoring** — Standardized asset loading across modules by replacing raw `LoadObject`/`StaticLoadObject` calls with the unified `FMonolithAssetUtils::LoadAssetByPath<T>` (e.g., e176978).
 - **Level Sequence** — Removed redundant COUNT(*) queries used for local array sizing, preserving result shapes (73e820c).
 
 ## [0.18.1] - 2026-06-07
