@@ -37,9 +37,9 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 
 | Action | Params (req* opt? =default) |
 | --- | --- |
-| `schema` [w] | `target_namespace?` (alias `namespace`/`domain`; omit for registered-namespace guidance), `target?` (asset path or action name; omit/empty for namespace-level writable-shape summary) |
+| `schema` | `target_namespace?` (alias `namespace`/`domain`; omit for registered-namespace guidance), `target?` (asset path or action name; omit/empty for namespace-level writable-shape summary) |
 | `list_targets` | `target_namespace?` (alias `namespace`/`domain`; if `inventory_supported=false`, use `schema` instead) |
-| `action_schema` [w] | `target_namespace*` (alias `namespace`/`domain`), `target_action*` (alias `action`) |
+| `action_schema` | `target_namespace*` (alias `namespace`/`domain`), `target_action*` (alias `action`) |
 
 ### bulk_fill
 
