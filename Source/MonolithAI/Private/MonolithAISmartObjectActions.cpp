@@ -550,68 +550,95 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleAddSOSlot(const TShar
 		return FMonolithActionResult::Error(Error);
 	}
 
+	// Validate and parse every requested field BEFORE mutating the definition, so a request
+	// rejected on a later field never leaves a partially initialized slot appended (Codex P2).
+	bool bHasOffset = false;
+	double OffX = 0, OffY = 0, OffZ = 0;
+	const TSharedPtr<FJsonObject>* OffsetObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("offset"), OffsetObj) && OffsetObj && (*OffsetObj)->Values.Num() > 0)
+	{
+		if (!(*OffsetObj)->TryGetNumberField(TEXT("x"), OffX) ||
+			!(*OffsetObj)->TryGetNumberField(TEXT("y"), OffY) ||
+			!(*OffsetObj)->TryGetNumberField(TEXT("z"), OffZ))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'offset' fields (x, y, z) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		bHasOffset = true;
+	}
+
+	bool bHasRotation = false;
+	double RotPitch = 0, RotYaw = 0, RotRoll = 0;
+	const TSharedPtr<FJsonObject>* RotObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj && (*RotObj)->Values.Num() > 0)
+	{
+		if (!(*RotObj)->TryGetNumberField(TEXT("pitch"), RotPitch) ||
+			!(*RotObj)->TryGetNumberField(TEXT("yaw"), RotYaw) ||
+			!(*RotObj)->TryGetNumberField(TEXT("roll"), RotRoll))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'rotation' fields (pitch, yaw, roll) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		bHasRotation = true;
+	}
+
+	// Activity tags + user tags — F.7a: surface dropped tags as warnings on the response
+	const bool bHasActivityTags = Params->HasField(TEXT("activity_tags"));
+	FGameplayTagContainer ActivityTags;
+	TArray<FString> SkippedActivity, SkippedUser;
+	if (bHasActivityTags)
+	{
+		ParseTagContainerWithSkipped(Params, TEXT("activity_tags"), ActivityTags, SkippedActivity);
+	}
+
+	const bool bHasUserTags = Params->HasField(TEXT("user_tags"));
+	FGameplayTagContainer UserTags;
+	if (bHasUserTags)
+	{
+		ParseTagContainerWithSkipped(Params, TEXT("user_tags"), UserTags, SkippedUser);
+	}
+
+	bool bHasEnabled = false;
+	bool bEnabled = false;
+	if (Params->HasField(TEXT("enabled")))
+	{
+		if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"));
+		}
+		bHasEnabled = true;
+	}
+
+	// All inputs validated — safe to mutate the definition.
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Add Smart Object Slot")));
 	Def->Modify();
 
 	FSmartObjectSlotDefinition& NewSlot = Def->DebugAddSlot();
 
-	// Offset
-	const TSharedPtr<FJsonObject>* OffsetObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("offset"), OffsetObj) && OffsetObj && (*OffsetObj)->Values.Num() > 0)
+	if (bHasOffset)
 	{
-		double X = 0, Y = 0, Z = 0;
-		if (!(*OffsetObj)->TryGetNumberField(TEXT("x"), X) ||
-			!(*OffsetObj)->TryGetNumberField(TEXT("y"), Y) ||
-			!(*OffsetObj)->TryGetNumberField(TEXT("z"), Z))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'offset' fields (x, y, z) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
-		}
-		NewSlot.Offset.X = static_cast<float>(X);
-		NewSlot.Offset.Y = static_cast<float>(Y);
-		NewSlot.Offset.Z = static_cast<float>(Z);
+		NewSlot.Offset.X = static_cast<float>(OffX);
+		NewSlot.Offset.Y = static_cast<float>(OffY);
+		NewSlot.Offset.Z = static_cast<float>(OffZ);
 	}
 
-	// Rotation
-	const TSharedPtr<FJsonObject>* RotObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj && (*RotObj)->Values.Num() > 0)
+	if (bHasRotation)
 	{
-		double Pitch = 0, Yaw = 0, Roll = 0;
-		if (!(*RotObj)->TryGetNumberField(TEXT("pitch"), Pitch) ||
-			!(*RotObj)->TryGetNumberField(TEXT("yaw"), Yaw) ||
-			!(*RotObj)->TryGetNumberField(TEXT("roll"), Roll))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'rotation' fields (pitch, yaw, roll) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
-		}
-		NewSlot.Rotation.Pitch = static_cast<float>(Pitch);
-		NewSlot.Rotation.Yaw = static_cast<float>(Yaw);
-		NewSlot.Rotation.Roll = static_cast<float>(Roll);
+		NewSlot.Rotation.Pitch = static_cast<float>(RotPitch);
+		NewSlot.Rotation.Yaw = static_cast<float>(RotYaw);
+		NewSlot.Rotation.Roll = static_cast<float>(RotRoll);
 	}
 
-	// Activity tags + user tags — F.7a: surface dropped tags as warnings on the response
-	TArray<FString> SkippedActivity, SkippedUser;
-	if (Params->HasField(TEXT("activity_tags")))
+	if (bHasActivityTags)
 	{
-		ParseTagContainerWithSkipped(Params, TEXT("activity_tags"), NewSlot.ActivityTags, SkippedActivity);
+		NewSlot.ActivityTags = ActivityTags;
 	}
 
-	if (Params->HasField(TEXT("user_tags")))
+	if (bHasUserTags && !UserTags.IsEmpty())
 	{
-		FGameplayTagContainer UserTags;
-		ParseTagContainerWithSkipped(Params, TEXT("user_tags"), UserTags, SkippedUser);
-		if (!UserTags.IsEmpty())
-		{
-			NewSlot.UserTagFilter = FGameplayTagQuery::MakeQuery_MatchAllTags(UserTags);
-		}
+		NewSlot.UserTagFilter = FGameplayTagQuery::MakeQuery_MatchAllTags(UserTags);
 	}
 
-	// Enabled
-	if (Params->HasField(TEXT("enabled")))
+	if (bHasEnabled)
 	{
-		bool bEnabled = false;
-		if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"));
-		}
 		NewSlot.bEnabled = bEnabled;
 	}
 
@@ -718,54 +745,103 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleConfigureSOSlot(const
 			TEXT("Invalid slot_index %d (definition has %d slots)"), SlotIndex, Def->GetSlots().Num()));
 	}
 
+	// Validate and parse every requested field BEFORE mutating the slot, so a request rejected
+	// on a later field (e.g. malformed rotation or slot_name) never leaves the slot partially
+	// updated with no rollback (Codex P2).
+	bool bHasOffset = false;
+	double OffX = 0, OffY = 0, OffZ = 0;
+	const TSharedPtr<FJsonObject>* OffsetObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("offset"), OffsetObj) && OffsetObj && (*OffsetObj)->Values.Num() > 0)
+	{
+		if (!(*OffsetObj)->TryGetNumberField(TEXT("x"), OffX) ||
+			!(*OffsetObj)->TryGetNumberField(TEXT("y"), OffY) ||
+			!(*OffsetObj)->TryGetNumberField(TEXT("z"), OffZ))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'offset' fields (x, y, z) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		bHasOffset = true;
+	}
+
+	bool bHasRotation = false;
+	double RotPitch = 0, RotYaw = 0, RotRoll = 0;
+	const TSharedPtr<FJsonObject>* RotObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj && (*RotObj)->Values.Num() > 0)
+	{
+		if (!(*RotObj)->TryGetNumberField(TEXT("pitch"), RotPitch) ||
+			!(*RotObj)->TryGetNumberField(TEXT("yaw"), RotYaw) ||
+			!(*RotObj)->TryGetNumberField(TEXT("roll"), RotRoll))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'rotation' fields (pitch, yaw, roll) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		bHasRotation = true;
+	}
+
+	// Activity tags + user tags — F.7a: surface dropped tags as warnings on the response
+	const bool bHasActivityTags = Params->HasField(TEXT("activity_tags"));
+	FGameplayTagContainer ActivityTags;
+	TArray<FString> SkippedActivity, SkippedUser;
+	if (bHasActivityTags)
+	{
+		ParseTagContainerWithSkipped(Params, TEXT("activity_tags"), ActivityTags, SkippedActivity);
+	}
+
+	const bool bHasUserTags = Params->HasField(TEXT("user_tags"));
+	FGameplayTagContainer UserTags;
+	if (bHasUserTags)
+	{
+		ParseTagContainerWithSkipped(Params, TEXT("user_tags"), UserTags, SkippedUser);
+	}
+
+	bool bHasEnabled = false;
+	bool bEnabled = false;
+	if (Params->HasField(TEXT("enabled")))
+	{
+		if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"));
+		}
+		bHasEnabled = true;
+	}
+
+	// Slot name (editor-only data — FSmartObjectSlotDefinition::Name is gated on WITH_EDITORONLY_DATA).
+	bool bRequestedSlotName = false;
+	FString RequestedSlotName;
+	if (Params->HasField(TEXT("slot_name")))
+	{
+		if (!Params->TryGetStringField(TEXT("slot_name"), RequestedSlotName))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'slot_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		bRequestedSlotName = true;
+	}
+
+	// All inputs validated — safe to mutate the slot.
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Configure Smart Object Slot")));
 	Def->Modify();
 
 	FSmartObjectSlotDefinition& Slot = Def->GetMutableSlot(SlotIndex);
 
-	// Offset
-	const TSharedPtr<FJsonObject>* OffsetObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("offset"), OffsetObj) && OffsetObj && (*OffsetObj)->Values.Num() > 0)
+	if (bHasOffset)
 	{
-		double X = 0, Y = 0, Z = 0;
-		if (!(*OffsetObj)->TryGetNumberField(TEXT("x"), X) ||
-			!(*OffsetObj)->TryGetNumberField(TEXT("y"), Y) ||
-			!(*OffsetObj)->TryGetNumberField(TEXT("z"), Z))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'offset' fields (x, y, z) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
-		}
-		Slot.Offset.X = static_cast<float>(X);
-		Slot.Offset.Y = static_cast<float>(Y);
-		Slot.Offset.Z = static_cast<float>(Z);
+		Slot.Offset.X = static_cast<float>(OffX);
+		Slot.Offset.Y = static_cast<float>(OffY);
+		Slot.Offset.Z = static_cast<float>(OffZ);
 	}
 
-	// Rotation
-	const TSharedPtr<FJsonObject>* RotObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj && (*RotObj)->Values.Num() > 0)
+	if (bHasRotation)
 	{
-		double Pitch = 0, Yaw = 0, Roll = 0;
-		if (!(*RotObj)->TryGetNumberField(TEXT("pitch"), Pitch) ||
-			!(*RotObj)->TryGetNumberField(TEXT("yaw"), Yaw) ||
-			!(*RotObj)->TryGetNumberField(TEXT("roll"), Roll))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'rotation' fields (pitch, yaw, roll) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
-		}
-		Slot.Rotation.Pitch = static_cast<float>(Pitch);
-		Slot.Rotation.Yaw = static_cast<float>(Yaw);
-		Slot.Rotation.Roll = static_cast<float>(Roll);
+		Slot.Rotation.Pitch = static_cast<float>(RotPitch);
+		Slot.Rotation.Yaw = static_cast<float>(RotYaw);
+		Slot.Rotation.Roll = static_cast<float>(RotRoll);
 	}
 
-	// Activity tags + user tags — F.7a: surface dropped tags as warnings on the response
-	TArray<FString> SkippedActivity, SkippedUser;
-	if (Params->HasField(TEXT("activity_tags")))
+	if (bHasActivityTags)
 	{
-		ParseTagContainerWithSkipped(Params, TEXT("activity_tags"), Slot.ActivityTags, SkippedActivity);
+		Slot.ActivityTags = ActivityTags;
 	}
 
-	if (Params->HasField(TEXT("user_tags")))
+	if (bHasUserTags)
 	{
-		FGameplayTagContainer UserTags;
-		ParseTagContainerWithSkipped(Params, TEXT("user_tags"), UserTags, SkippedUser);
 		if (!UserTags.IsEmpty())
 		{
 			Slot.UserTagFilter = FGameplayTagQuery::MakeQuery_MatchAllTags(UserTags);
@@ -776,28 +852,14 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleConfigureSOSlot(const
 		}
 	}
 
-	// Enabled
-	if (Params->HasField(TEXT("enabled")))
+	if (bHasEnabled)
 	{
-		bool bEnabled = false;
-		if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"));
-		}
 		Slot.bEnabled = bEnabled;
 	}
 
-	// Slot name (editor-only data — FSmartObjectSlotDefinition::Name is gated on WITH_EDITORONLY_DATA).
-	bool bRequestedSlotName = false;
-	FString RequestedSlotName;
 	bool bSlotNameAppliedAtRuntime = false;
-	if (Params->HasField(TEXT("slot_name")))
+	if (bRequestedSlotName)
 	{
-		if (!Params->TryGetStringField(TEXT("slot_name"), RequestedSlotName))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'slot_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
-		}
-		bRequestedSlotName = true;
 #if WITH_EDITORONLY_DATA
 		Slot.Name = FName(*RequestedSlotName);
 		bSlotNameAppliedAtRuntime = true;
@@ -1195,6 +1257,20 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandlePlaceSmartObjectActor
 		Rotation.Roll = RotRoll;
 	}
 
+	// Folder path — validate before spawning so a rejected request leaves no orphaned actor (Codex P2).
+	FString FolderPath;
+	if (Params->HasField(TEXT("folder_path")))
+	{
+		if (!Params->TryGetStringField(TEXT("folder_path"), FolderPath))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'folder_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+	if (FolderPath.IsEmpty())
+	{
+		FolderPath = TEXT("AI/SmartObjects");
+	}
+
 	// Get the editor world
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
 	if (!World)
@@ -1239,19 +1315,7 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandlePlaceSmartObjectActor
 
 	NewActor->MarkPackageDirty();
 
-	// Folder path — MUST organize in World Outliner
-	FString FolderPath;
-	if (Params->HasField(TEXT("folder_path")))
-	{
-		if (!Params->TryGetStringField(TEXT("folder_path"), FolderPath))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'folder_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
-		}
-	}
-	if (FolderPath.IsEmpty())
-	{
-		FolderPath = TEXT("AI/SmartObjects");
-	}
+	// Folder path — MUST organize in World Outliner (validated above before spawn).
 	NewActor->SetFolderPath(FName(*FolderPath));
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
