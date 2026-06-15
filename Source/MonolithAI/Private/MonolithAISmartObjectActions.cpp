@@ -1,6 +1,7 @@
 #include "MonolithAISmartObjectActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 
 #if WITH_SMARTOBJECTS
 #include "SmartObjectDefinition.h"
@@ -198,8 +199,7 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 USmartObjectDefinition* FMonolithAISmartObjectActions::LoadSODefinition(
 	const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)
 {
-	OutAssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (OutAssetPath.IsEmpty())
+	if (!Params->TryGetStringField(TEXT("asset_path"), OutAssetPath) || OutAssetPath.IsEmpty())
 	{
 		OutError = TEXT("Missing required parameter: asset_path");
 		return nullptr;
@@ -403,7 +403,15 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleCreateSmartObjectDefi
 		return ErrResult;
 	}
 
-	FString AssetName = Params->GetStringField(TEXT("name"));
+	FString AssetName;
+	if (Params->HasField(TEXT("name")))
+	{
+		if (!Params->TryGetStringField(TEXT("name"), AssetName))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+
 	if (AssetName.IsEmpty())
 	{
 		AssetName = FPackageName::GetShortName(SavePath);
@@ -465,7 +473,14 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleListSmartObjectDefini
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(USmartObjectDefinition::StaticClass()->GetClassPathName(), Assets);
 
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString PathFilter;
+	if (Params->HasField(TEXT("path_filter")))
+	{
+		if (!Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'path_filter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Items;
 	for (const FAssetData& Asset : Assets)
@@ -544,18 +559,32 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleAddSOSlot(const TShar
 	const TSharedPtr<FJsonObject>* OffsetObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("offset"), OffsetObj) && OffsetObj && (*OffsetObj)->Values.Num() > 0)
 	{
-		NewSlot.Offset.X = static_cast<float>((*OffsetObj)->GetNumberField(TEXT("x")));
-		NewSlot.Offset.Y = static_cast<float>((*OffsetObj)->GetNumberField(TEXT("y")));
-		NewSlot.Offset.Z = static_cast<float>((*OffsetObj)->GetNumberField(TEXT("z")));
+		double X = 0, Y = 0, Z = 0;
+		if (!(*OffsetObj)->TryGetNumberField(TEXT("x"), X) ||
+			!(*OffsetObj)->TryGetNumberField(TEXT("y"), Y) ||
+			!(*OffsetObj)->TryGetNumberField(TEXT("z"), Z))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'offset' fields (x, y, z) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		NewSlot.Offset.X = static_cast<float>(X);
+		NewSlot.Offset.Y = static_cast<float>(Y);
+		NewSlot.Offset.Z = static_cast<float>(Z);
 	}
 
 	// Rotation
 	const TSharedPtr<FJsonObject>* RotObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj && (*RotObj)->Values.Num() > 0)
 	{
-		NewSlot.Rotation.Pitch = static_cast<float>((*RotObj)->GetNumberField(TEXT("pitch")));
-		NewSlot.Rotation.Yaw = static_cast<float>((*RotObj)->GetNumberField(TEXT("yaw")));
-		NewSlot.Rotation.Roll = static_cast<float>((*RotObj)->GetNumberField(TEXT("roll")));
+		double Pitch = 0, Yaw = 0, Roll = 0;
+		if (!(*RotObj)->TryGetNumberField(TEXT("pitch"), Pitch) ||
+			!(*RotObj)->TryGetNumberField(TEXT("yaw"), Yaw) ||
+			!(*RotObj)->TryGetNumberField(TEXT("roll"), Roll))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'rotation' fields (pitch, yaw, roll) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		NewSlot.Rotation.Pitch = static_cast<float>(Pitch);
+		NewSlot.Rotation.Yaw = static_cast<float>(Yaw);
+		NewSlot.Rotation.Roll = static_cast<float>(Roll);
 	}
 
 	// Activity tags + user tags — F.7a: surface dropped tags as warnings on the response
@@ -621,7 +650,13 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleRemoveSOSlot(const TS
 		return FMonolithActionResult::Error(Error);
 	}
 
-	int32 SlotIndex = static_cast<int32>(Params->GetNumberField(TEXT("slot_index")));
+	double TempSlotIndex = 0;
+	if (!Params->TryGetNumberField(TEXT("slot_index"), TempSlotIndex))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'slot_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	int32 SlotIndex = static_cast<int32>(TempSlotIndex);
+
 	if (!Def->IsValidSlotIndex(SlotIndex))
 	{
 		return FMonolithActionResult::Error(FString::Printf(
@@ -670,7 +705,13 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleConfigureSOSlot(const
 		return FMonolithActionResult::Error(Error);
 	}
 
-	int32 SlotIndex = static_cast<int32>(Params->GetNumberField(TEXT("slot_index")));
+	double TempSlotIndex = 0;
+	if (!Params->TryGetNumberField(TEXT("slot_index"), TempSlotIndex))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'slot_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	int32 SlotIndex = static_cast<int32>(TempSlotIndex);
+
 	if (!Def->IsValidSlotIndex(SlotIndex))
 	{
 		return FMonolithActionResult::Error(FString::Printf(
@@ -686,18 +727,32 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleConfigureSOSlot(const
 	const TSharedPtr<FJsonObject>* OffsetObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("offset"), OffsetObj) && OffsetObj && (*OffsetObj)->Values.Num() > 0)
 	{
-		Slot.Offset.X = static_cast<float>((*OffsetObj)->GetNumberField(TEXT("x")));
-		Slot.Offset.Y = static_cast<float>((*OffsetObj)->GetNumberField(TEXT("y")));
-		Slot.Offset.Z = static_cast<float>((*OffsetObj)->GetNumberField(TEXT("z")));
+		double X = 0, Y = 0, Z = 0;
+		if (!(*OffsetObj)->TryGetNumberField(TEXT("x"), X) ||
+			!(*OffsetObj)->TryGetNumberField(TEXT("y"), Y) ||
+			!(*OffsetObj)->TryGetNumberField(TEXT("z"), Z))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'offset' fields (x, y, z) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		Slot.Offset.X = static_cast<float>(X);
+		Slot.Offset.Y = static_cast<float>(Y);
+		Slot.Offset.Z = static_cast<float>(Z);
 	}
 
 	// Rotation
 	const TSharedPtr<FJsonObject>* RotObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj && (*RotObj)->Values.Num() > 0)
 	{
-		Slot.Rotation.Pitch = static_cast<float>((*RotObj)->GetNumberField(TEXT("pitch")));
-		Slot.Rotation.Yaw = static_cast<float>((*RotObj)->GetNumberField(TEXT("yaw")));
-		Slot.Rotation.Roll = static_cast<float>((*RotObj)->GetNumberField(TEXT("roll")));
+		double Pitch = 0, Yaw = 0, Roll = 0;
+		if (!(*RotObj)->TryGetNumberField(TEXT("pitch"), Pitch) ||
+			!(*RotObj)->TryGetNumberField(TEXT("yaw"), Yaw) ||
+			!(*RotObj)->TryGetNumberField(TEXT("roll"), Roll))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'rotation' fields (pitch, yaw, roll) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		Slot.Rotation.Pitch = static_cast<float>(Pitch);
+		Slot.Rotation.Yaw = static_cast<float>(Yaw);
+		Slot.Rotation.Roll = static_cast<float>(Roll);
 	}
 
 	// Activity tags + user tags — F.7a: surface dropped tags as warnings on the response
@@ -738,7 +793,10 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleConfigureSOSlot(const
 	bool bSlotNameAppliedAtRuntime = false;
 	if (Params->HasField(TEXT("slot_name")))
 	{
-		RequestedSlotName = Params->GetStringField(TEXT("slot_name"));
+		if (!Params->TryGetStringField(TEXT("slot_name"), RequestedSlotName))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'slot_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		bRequestedSlotName = true;
 #if WITH_EDITORONLY_DATA
 		Slot.Name = FName(*RequestedSlotName);
@@ -802,7 +860,13 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleAddSOBehaviorDefiniti
 		return FMonolithActionResult::Error(Error);
 	}
 
-	int32 SlotIndex = static_cast<int32>(Params->GetNumberField(TEXT("slot_index")));
+	double TempSlotIndex = 0;
+	if (!Params->TryGetNumberField(TEXT("slot_index"), TempSlotIndex))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'slot_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	int32 SlotIndex = static_cast<int32>(TempSlotIndex);
+
 	if (!Def->IsValidSlotIndex(SlotIndex))
 	{
 		return FMonolithActionResult::Error(FString::Printf(
@@ -875,14 +939,26 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleRemoveSOBehaviorDefin
 		return FMonolithActionResult::Error(Error);
 	}
 
-	int32 SlotIndex = static_cast<int32>(Params->GetNumberField(TEXT("slot_index")));
+	double TempSlotIndex = 0;
+	if (!Params->TryGetNumberField(TEXT("slot_index"), TempSlotIndex))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'slot_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	int32 SlotIndex = static_cast<int32>(TempSlotIndex);
+
 	if (!Def->IsValidSlotIndex(SlotIndex))
 	{
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Invalid slot_index %d (definition has %d slots)"), SlotIndex, Def->GetSlots().Num()));
 	}
 
-	int32 BehaviorIndex = static_cast<int32>(Params->GetNumberField(TEXT("behavior_index")));
+	double TempBehaviorIndex = 0;
+	if (!Params->TryGetNumberField(TEXT("behavior_index"), TempBehaviorIndex))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'behavior_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	int32 BehaviorIndex = static_cast<int32>(TempBehaviorIndex);
+
 	FSmartObjectSlotDefinition& Slot = Def->GetMutableSlot(SlotIndex);
 	if (!Slot.BehaviorDefinitions.IsValidIndex(BehaviorIndex))
 	{
@@ -1093,20 +1169,30 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandlePlaceSmartObjectActor
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: location {x, y, z}"));
 	}
 
-	FVector Location(
-		(*LocObj)->GetNumberField(TEXT("x")),
-		(*LocObj)->GetNumberField(TEXT("y")),
-		(*LocObj)->GetNumberField(TEXT("z"))
-	);
+	double LocX = 0, LocY = 0, LocZ = 0;
+	if (!(*LocObj)->TryGetNumberField(TEXT("x"), LocX) ||
+		!(*LocObj)->TryGetNumberField(TEXT("y"), LocY) ||
+		!(*LocObj)->TryGetNumberField(TEXT("z"), LocZ))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'location' fields (x, y, z) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FVector Location(LocX, LocY, LocZ);
 
 	// Parse rotation (optional)
 	FRotator Rotation = FRotator::ZeroRotator;
 	const TSharedPtr<FJsonObject>* RotObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj && (*RotObj)->Values.Num() > 0)
 	{
-		Rotation.Pitch = (*RotObj)->GetNumberField(TEXT("pitch"));
-		Rotation.Yaw = (*RotObj)->GetNumberField(TEXT("yaw"));
-		Rotation.Roll = (*RotObj)->GetNumberField(TEXT("roll"));
+		double RotPitch = 0, RotYaw = 0, RotRoll = 0;
+		if (!(*RotObj)->TryGetNumberField(TEXT("pitch"), RotPitch) ||
+			!(*RotObj)->TryGetNumberField(TEXT("yaw"), RotYaw) ||
+			!(*RotObj)->TryGetNumberField(TEXT("roll"), RotRoll))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'rotation' fields (pitch, yaw, roll) must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		Rotation.Pitch = RotPitch;
+		Rotation.Yaw = RotYaw;
+		Rotation.Roll = RotRoll;
 	}
 
 	// Get the editor world
@@ -1154,7 +1240,14 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandlePlaceSmartObjectActor
 	NewActor->MarkPackageDirty();
 
 	// Folder path — MUST organize in World Outliner
-	FString FolderPath = Params->GetStringField(TEXT("folder_path"));
+	FString FolderPath;
+	if (Params->HasField(TEXT("folder_path")))
+	{
+		if (!Params->TryGetStringField(TEXT("folder_path"), FolderPath))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'folder_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 	if (FolderPath.IsEmpty())
 	{
 		FolderPath = TEXT("AI/SmartObjects");
@@ -1189,8 +1282,23 @@ FMonolithActionResult FMonolithAISmartObjectActions::HandleFindSmartObjectsInLev
 		return FMonolithActionResult::Error(TEXT("No editor world available"));
 	}
 
-	FString LevelFilter = Params->GetStringField(TEXT("level"));
-	FString DefinitionFilter = Params->GetStringField(TEXT("definition_filter"));
+	FString LevelFilter;
+	if (Params->HasField(TEXT("level")))
+	{
+		if (!Params->TryGetStringField(TEXT("level"), LevelFilter))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'level' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+
+	FString DefinitionFilter;
+	if (Params->HasField(TEXT("definition_filter")))
+	{
+		if (!Params->TryGetStringField(TEXT("definition_filter"), DefinitionFilter))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'definition_filter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 
 	FGameplayTagContainer TagFilter;
 	TArray<FString> SkippedTagFilter;
