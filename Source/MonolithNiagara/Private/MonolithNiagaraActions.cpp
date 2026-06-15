@@ -15704,8 +15704,16 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterParent(const TSha
 FMonolithActionResult FMonolithNiagaraActions::HandleRenameUserParameter(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString OldName = Params->GetStringField(TEXT("old_name"));
-	FString NewName = Params->GetStringField(TEXT("new_name"));
+	FString OldName;
+	if (!Params->TryGetStringField(TEXT("old_name"), OldName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'old_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString NewName;
+	if (!Params->TryGetStringField(TEXT("new_name"), NewName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'new_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (SystemPath.IsEmpty() || OldName.IsEmpty() || NewName.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("asset_path, old_name, and new_name are required"));
